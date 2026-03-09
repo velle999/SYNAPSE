@@ -1,0 +1,38 @@
+# ~/.config/synui/synuirc
+# synui compositor configuration
+# Reload: synui --reload  (or send SIGHUP)
+
+# ── Terminal emulator ──────────────────────────────────────
+terminal = foot
+
+# ── Startup applications ───────────────────────────────────
+# Run on first launch
+autostart = foot
+# autostart = firefox
+# autostart = synguard-tray  (future)
+
+# ── Appearance ─────────────────────────────────────────────
+border_width    = 2
+gap             = 8
+master_factor   = 0.60
+
+# ── AI features ────────────────────────────────────────────
+# AI layout suggestions (requires synapd)
+ai_layout       = on
+
+# Show AI_CTX intent in window title bar
+ai_ctx_decor    = on
+
+# Startup overlay
+start_overlay   = off
+
+# ── Workspace intents (natural language) ───────────────────
+# Used by AI layout engine to suggest arrangements
+workspace_1_intent = main workspace
+workspace_2_intent = web browsing and research
+workspace_3_intent = writing code and running tests
+workspace_4_intent = terminal and system administration
+workspace_5_intent = media and entertainment
+
+# ── Keybind overrides ──────────────────────────────────────
+# (reserved for future use)

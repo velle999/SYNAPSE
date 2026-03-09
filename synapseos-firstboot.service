@@ -1,0 +1,15 @@
+[Unit]
+Description=SynapseOS First Boot Setup
+ConditionPathExists=!/var/lib/synapseos/firstboot.done
+After=network-online.target synapd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/synapseos/firstboot.sh
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
