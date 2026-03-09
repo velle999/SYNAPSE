@@ -96,14 +96,70 @@ step "Preflight checks"
 
 [[ "$(id -u)" -eq 0 ]] || err "Must run as root (needed for mkarchiso)"
 
-# Required tools
-for cmd in mkarchiso pacman makepkg git cmake meson ninja gcc; do
+# Detect distro — only Arch and Arch-based are supported
+if ! command -v pacman &>/dev/null; then
+    err "pacman not found. SynapseOS must be built on Arch Linux or an Arch-based distro."
+fi
+
+# ── Auto-install missing build dependencies ───────────────────
+#
+# Map each required command → the pacman package that provides it.
+# If a tool is missing, we install it rather than aborting.
+#
+declare -A TOOL_PKG=(
+    [mkarchiso]="archiso"
+    [makepkg]="pacman"          # already implied by pacman existing
+    [git]="git"
+    [cmake]="cmake"
+    [meson]="meson"
+    [ninja]="ninja"
+    [gcc]="gcc"
+    [curl]="curl"
+    [rsync]="rsync"
+    [dialog]="dialog"
+    [parted]="parted"
+    [repo-add]="pacman"         # part of pacman itself
+)
+
+MISSING_PKGS=()
+for cmd in "${!TOOL_PKG[@]}"; do
     if command -v "$cmd" &>/dev/null; then
-        ok "$cmd found"
+        ok "$cmd"
     else
-        err "Required tool not found: $cmd (install archiso, base-devel)"
+        pkg="${TOOL_PKG[$cmd]}"
+        warn "$cmd not found — will install package: $pkg"
+        MISSING_PKGS+=("$pkg")
     fi
 done
+
+# Deduplicate
+MISSING_PKGS=($(printf '%s\n' "${MISSING_PKGS[@]}" | sort -u))
+
+if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+    log "Installing missing dependencies: ${MISSING_PKGS[*]}"
+    pacman -Sy --noconfirm --needed "${MISSING_PKGS[@]}" \
+        2>&1 | sed 's/^/  /' \
+        || err "pacman failed to install dependencies. Check your internet connection and /etc/pacman.conf."
+
+    # Verify everything is now present
+    STILL_MISSING=()
+    for cmd in "${!TOOL_PKG[@]}"; do
+        command -v "$cmd" &>/dev/null || STILL_MISSING+=("$cmd")
+    done
+    if [[ ${#STILL_MISSING[@]} -gt 0 ]]; then
+        err "Still missing after install: ${STILL_MISSING[*]}"
+    fi
+    ok "All dependencies installed"
+else
+    ok "All build dependencies present"
+fi
+
+# base-devel group — needed for makepkg/PKGBUILDs
+if ! pacman -Qq base-devel &>/dev/null 2>&1; then
+    log "Installing base-devel group..."
+    pacman -Sy --noconfirm --needed base-devel 2>&1 | sed 's/^/  /'
+    ok "base-devel installed"
+fi
 
 # Disk space check (~20GB required with model, ~8GB without)
 REQUIRED_GB=$([[ "$WITH_MODEL" == "true" ]] && echo 22 || echo 9)
