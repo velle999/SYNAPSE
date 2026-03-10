@@ -26,6 +26,8 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/atomic.h>
+#include <linux/utsname.h>
+#include <linux/timer.h>
 #include <linux/spinlock.h>
 #include <linux/ktime.h>
 #include <linux/workqueue.h>
@@ -282,7 +284,7 @@ static void __exit synapse_kmod_exit(void)
     pr_info("synapse_kmod: unloading\n");
 
     /* Stop watchdog */
-    del_timer_sync(&synapse_state.watchdog);
+    timer_delete_sync(&synapse_state.watchdog);
 
     /* Drain and destroy workqueue */
     if (synapse_state.wq) {

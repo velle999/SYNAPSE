@@ -1,0 +1,25 @@
+# /etc/synsh/synshrc
+# SynapseOS synsh — system-wide defaults
+#
+# Users can override in ~/.synshrc
+
+# AI behavior
+set ai_confirm on      # ask before running AI-generated commands
+set ai_explain on      # show exit codes
+set color on
+
+# Useful aliases
+alias ll='ls -la --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# SynapseOS specific
+alias syn-logs='journalctl -u synapd -f'
+alias syn-restart='systemctl restart synapd'
+
+# Environment
+export EDITOR=nvim
+export PAGER=less
+export LESS='-R'

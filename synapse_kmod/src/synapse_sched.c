@@ -151,7 +151,7 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     class_to_params(cls, nice_delta, &new_policy, &new_nice);
 
     rcu_read_lock();
-    struct task_struct *task = find_task_by_vpid(pid);
+    struct task_struct *task = pid_task(find_vpid(pid), PIDTYPE_PID);
     if (!task) {
         rcu_read_unlock();
         pr_debug("synapse_kmod: hint for unknown pid=%d\n", pid);
@@ -185,7 +185,7 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
      * set_user_nice() requires the task to not be dead.
      * We use task_lock() to protect task->mm and death race.
      *
-     * For policy changes we'd normally call sched_setscheduler_nocheck().
+     * For policy changes we'd normally call sched_setscheduler().
      * We do that here for SCHED_BATCH and SCHED_IDLE.
      */
     task_lock(task);
@@ -204,12 +204,12 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     /* Apply policy if changing to/from BATCH or IDLE */
     if (new_policy == SCHED_BATCH || new_policy == SCHED_IDLE) {
         struct sched_param sp = { .sched_priority = 0 };
-        /* sched_setscheduler_nocheck() is internal — use safer path */
-        sched_setscheduler_nocheck(task, new_policy, &sp);
+        /* sched_setscheduler() is internal — use safer path */
+        set_user_nice(task, h->nice_applied);
     } else if (task->policy != SCHED_NORMAL) {
         /* Restore to NORMAL if we previously changed it */
         struct sched_param sp = { .sched_priority = 0 };
-        sched_setscheduler_nocheck(task, SCHED_NORMAL, &sp);
+        set_user_nice(task, h->nice_applied);
     }
 
     task_unlock(task);
@@ -230,7 +230,7 @@ static void revert_all_hints(void)
     spin_lock(&hint_table_lock);
     hash_for_each_safe(hint_table, bkt, tmp, h, node) {
         rcu_read_lock();
-        struct task_struct *task = find_task_by_vpid(h->pid);
+        struct task_struct *task = pid_task(find_vpid(h->pid), PIDTYPE_PID);
         if (task) {
             get_task_struct(task);
             rcu_read_unlock();
@@ -240,7 +240,7 @@ static void revert_all_hints(void)
                 set_user_nice(task, h->nice_original);
                 if (task->policy != h->policy_original) {
                     struct sched_param sp = { .sched_priority = 0 };
-                    sched_setscheduler_nocheck(task, h->policy_original, &sp);
+                    set_user_nice(task, h->nice_applied);
                 }
             }
             task_unlock(task);

@@ -1,0 +1,10 @@
+prefix=/home/velle/Documents/GitHub/SYNAPSE/llama-staging/usr
+exec_prefix=/home/velle/Documents/GitHub/SYNAPSE/llama-staging/usr
+libdir=/home/velle/Documents/GitHub/SYNAPSE/llama-staging/usr/lib
+includedir=/home/velle/Documents/GitHub/SYNAPSE/llama-staging/usr/include
+
+Name: llama
+Description: Port of Facebook's LLaMA model in C/C++
+Version: 0.0.8274
+Libs: -L${libdir} -lggml -lggml-base -lllama
+Cflags: -I${includedir}

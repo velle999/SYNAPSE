@@ -15,6 +15,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/utsname.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/string.h>
