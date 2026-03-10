@@ -14,3 +14,6 @@ archiso
 mkinitcpio-archiso
 synnet
 synguard
+synui
+seatd
+wlroots0.19
