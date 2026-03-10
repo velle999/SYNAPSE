@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=SynapseOS
+Comment=SynapseOS AI-native Wayland Compositor
+Exec=synui
+Type=Application
+DesktopNames=SynapseOS

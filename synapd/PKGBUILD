@@ -1,0 +1,28 @@
+# Maintainer: SynapseOS Project <dev@synapseos.dev>
+pkgname=synapd
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
+arch=('x86_64')
+url="https://github.com/synapseos/synapseos"
+license=('GPL2')
+depends=('glibc' 'systemd-libs')
+makedepends=('meson' 'ninja' 'gcc' 'pkg-config')
+optdepends=('synapseos-kmod: kernel module for syscall hooks')
+backup=('etc/synapd/synapd.conf')
+source=("synapd-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/synapd-0.1.0"
+    meson setup build --buildtype=release --prefix=/usr
+    meson compile -C build
+}
+
+package() {
+    cd "$srcdir/synapd-0.1.0"
+    DESTDIR="$pkgdir" meson install -C build
+    install -dm750 "$pkgdir/var/lib/synapd/models"
+    install -dm750 "$pkgdir/var/log/synapd"
+    install -dm750 "$pkgdir/run/synapd"
+}
