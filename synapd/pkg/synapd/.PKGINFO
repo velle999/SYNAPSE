@@ -6,7 +6,7 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS AI inference daemon — persistent llama.cpp backend
 url = https://github.com/synapseos/synapseos
-builddate = 1773158000
+builddate = 1773173410
 packager = Unknown Packager
 size = 1132421
 arch = x86_64

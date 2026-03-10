@@ -6,9 +6,9 @@ xdata = pkgtype=debug
 pkgver = 0.1.0-1
 pkgdesc = Detached debugging symbols for synapd
 url = https://github.com/synapseos/synapseos
-builddate = 1773158000
+builddate = 1773173410
 packager = Unknown Packager
-size = 146475
+size = 146436
 arch = x86_64
 license = GPL2
 makedepend = meson

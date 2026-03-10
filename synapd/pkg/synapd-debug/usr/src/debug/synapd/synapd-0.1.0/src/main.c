@@ -259,9 +259,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (inference_init(&g_state) < 0) {
-        syn_log(LOG_ERR, "synapd: inference_init failed — is model at %s?",
-                 g_state.config.model_path);
-        return EXIT_FAILURE;
+        syn_log(LOG_WARNING, "synapd: no model loaded — running in shell-assist mode only");
+        g_state.inference = NULL;
     }
 
     if (socket_server_start(&g_state) < 0) {
