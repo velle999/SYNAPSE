@@ -4,7 +4,7 @@ pkgrel=1
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL2')
-depends=('bash' 'systemd' 'syn-model')
+depends=('bash' 'systemd')
 source=("syn.sh")
 sha256sums=('SKIP')
 
