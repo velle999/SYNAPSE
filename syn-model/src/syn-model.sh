@@ -1,0 +1,1 @@
+/home/velle/Documents/GitHub/SYNAPSE/syn-model/syn-model.sh

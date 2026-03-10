@@ -1,0 +1,13 @@
+pkgname=syn-model
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS model manager — download and manage LLM models"
+arch=('any')
+license=('GPL2')
+depends=('curl' 'systemd')
+source=("syn-model.sh")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "$srcdir/syn-model.sh" "$pkgdir/usr/bin/syn-model"
+}
