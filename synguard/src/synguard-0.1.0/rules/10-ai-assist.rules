@@ -1,0 +1,120 @@
+# /etc/synguard/rules.d/10-ai-assist.rules
+# AI-assisted rules — these escalate to the AI classifier
+# for context-aware threat scoring.
+#
+# Requires synguard to be running with --mode enforce or --mode audit
+# and synapd to be online.
+
+# ── Python / scripting execution ─────────────────────────────
+# Python executing scripts from unusual locations warrants review
+
+rule escalate-python-tmp {
+    event   exec
+    comm    python*
+    path    /tmp/*
+    verdict escalate
+    priority 38
+}
+
+rule escalate-python-home-hidden {
+    event   exec
+    comm    python*
+    path    /home/*/.*/
+    verdict escalate
+    priority 39
+}
+
+# ── curl / wget downloading executables ──────────────────────
+
+rule alert-curl-exec {
+    event   exec
+    comm    curl
+    verdict alert
+    priority 45
+}
+
+rule alert-wget-exec {
+    event   exec
+    comm    wget
+    verdict alert
+    priority 45
+}
+
+# ── Shell spawned from unexpected parent ─────────────────────
+# bash/sh executed from a web server or database process
+
+rule escalate-shell-from-web {
+    event   exec
+    comm    bash
+    path    /usr/bin/bash
+    verdict escalate
+    priority 42
+}
+
+rule escalate-sh-unusual {
+    event   exec
+    comm    sh
+    path    /tmp/*
+    verdict deny
+    priority 43
+}
+
+# ── Kernel boot path modification ────────────────────────────
+
+rule alert-boot-write {
+    event   open
+    path    /boot/*
+    verdict alert
+    priority 22
+}
+
+rule deny-grub-cfg-write {
+    event   open
+    path    /boot/grub/grub.cfg
+    verdict deny
+    priority 21
+}
+
+# ── crontab modification ──────────────────────────────────────
+
+rule alert-cron-write {
+    event   open
+    path    /etc/cron*
+    verdict alert
+    priority 28
+}
+
+rule alert-crontab-user {
+    event   open
+    path    /var/spool/cron/*
+    verdict alert
+    priority 28
+}
+
+# ── systemd unit modification ─────────────────────────────────
+
+rule alert-systemd-unit-write {
+    event   open
+    path    /etc/systemd/system/*
+    verdict alert
+    priority 29
+}
+
+# ── LD_PRELOAD / dynamic linker ───────────────────────────────
+
+rule alert-ld-preload {
+    event   open
+    path    /etc/ld.so.preload
+    verdict alert
+    priority 23
+}
+
+# ── Unusual mount activity ────────────────────────────────────
+
+rule escalate-bind-mount {
+    event   mount
+    verdict escalate
+    priority 45
+}
+
+# ── End of AI-assist rules ────────────────────────────────────

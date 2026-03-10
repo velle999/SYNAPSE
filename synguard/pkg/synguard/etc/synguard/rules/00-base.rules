@@ -1,0 +1,153 @@
+# /etc/synguard/rules.d/00-base.rules
+# SynapseOS synguard — base security rules
+#
+# Priority ordering: lower = checked first
+# Safe to edit — SIGHUP or 'systemctl reload synguard' hot-reloads rules
+
+# ── Self-exemption ────────────────────────────────────────────
+# synguard and synapd must never be blocked by their own rules
+
+rule allow-synguard {
+    comm    synguard
+    verdict allow
+    priority 1
+}
+
+rule allow-synapd {
+    comm    synapd
+    verdict allow
+    priority 1
+}
+
+rule allow-root-exec {
+    event   exec
+    uid     0
+    verdict log
+    priority 5
+}
+
+# ── Kernel module loads ───────────────────────────────────────
+# Always alert on module loads — legitimate ones are expected at boot
+# AI classifies whether this is anomalous for the context
+
+rule alert-module-load {
+    event   module
+    verdict alert
+    priority 10
+}
+
+# ── Privilege escalation ──────────────────────────────────────
+
+rule deny-setuid-root-unknown {
+    event   setuid
+    verdict escalate
+    priority 15
+}
+
+# ── Sensitive file access ─────────────────────────────────────
+
+rule deny-shadow-access {
+    event   open
+    path    /etc/shadow
+    verdict deny
+    priority 20
+}
+
+rule deny-sudoers-write {
+    event   open
+    path    /etc/sudoers
+    verdict deny
+    priority 20
+}
+
+rule alert-ssh-key-access {
+    event   open
+    path    /root/.ssh/*
+    verdict alert
+    priority 25
+}
+
+rule alert-ssh-key-user {
+    event   open
+    path    /home/*/.ssh/id_*
+    verdict alert
+    priority 25
+}
+
+rule alert-passwd-access {
+    event   open
+    path    /etc/passwd
+    verdict log
+    priority 30
+}
+
+# ── Execution from suspicious paths ──────────────────────────
+
+rule escalate-exec-from-tmp {
+    event   exec
+    path    /tmp/*
+    verdict escalate
+    priority 35
+}
+
+rule escalate-exec-from-dev {
+    event   exec
+    path    /dev/*
+    verdict deny
+    priority 35
+}
+
+rule escalate-exec-from-proc {
+    event   exec
+    path    /proc/*
+    verdict deny
+    priority 35
+}
+
+rule escalate-exec-from-var {
+    event   exec
+    path    /var/tmp/*
+    verdict escalate
+    priority 36
+}
+
+# ── ptrace ───────────────────────────────────────────────────
+# ptrace-attach to a foreign process is worth AI review
+
+rule escalate-ptrace {
+    event   ptrace
+    verdict escalate
+    priority 40
+}
+
+# ── Network from unusual processes ───────────────────────────
+# Socket creation alone is not suspicious; we log it for baseline
+
+rule log-socket-creation {
+    event   socket
+    verdict log
+    priority 50
+}
+
+# ── Package manager exec ──────────────────────────────────────
+# pacman, yay, npm etc are expected to exec things — log it
+
+rule log-package-managers {
+    comm    pacman
+    verdict log
+    priority 55
+}
+
+rule log-package-managers-yay {
+    comm    yay
+    verdict log
+    priority 55
+}
+
+# ── Default catch-all ─────────────────────────────────────────
+# Everything else: log it, let the baseline engine catch anomalies
+
+rule default-log {
+    verdict log
+    priority 100
+}
