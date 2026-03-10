@@ -1,0 +1,61 @@
+# Maintainer: SynapseOS Project <dev@synapseos.dev>
+# PKGBUILD — synui (SynapseOS AI-Native Wayland Compositor)
+
+pkgname=synui
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS AI-native Wayland compositor built on wlroots"
+arch=('x86_64')
+url="https://github.com/synapseos/synapseos"
+license=('GPL2')
+depends=(
+    'glibc'
+    'wlroots'
+    'wayland'
+    'libxkbcommon'
+    'pixman'
+    'cairo'
+    'pango'
+)
+makedepends=(
+    'meson'
+    'ninja'
+    'gcc'
+    'pkg-config'
+    'wayland-protocols'
+)
+optdepends=(
+    'synapd: AI layout engine and command bar'
+    'foot: default terminal emulator'
+    'xorg-xwayland: XWayland support for legacy apps'
+)
+backup=('etc/synui/synuirc')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/synapseos/synapseos/archive/refs/tags/synui-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/synapseos-synui-$pkgver"
+    meson setup build \
+        --prefix=/usr \
+        --buildtype=release \
+        -Db_lto=true \
+        -Db_pie=true
+    meson compile -C build
+}
+
+package() {
+    cd "$srcdir/synapseos-synui-$pkgver"
+    meson install -C build --destdir="$pkgdir"
+
+    # Default config
+    install -dm755 "$pkgdir/etc/synui"
+    install -Dm644 config/synuirc "$pkgdir/etc/synui/synuirc"
+
+    # Wayland session entry
+    install -Dm644 config/synui.desktop \
+        "$pkgdir/usr/share/wayland-sessions/synui.desktop"
+
+    # systemd user service
+    install -Dm644 systemd/synui.service \
+        "$pkgdir/usr/lib/systemd/user/synui.service"
+}

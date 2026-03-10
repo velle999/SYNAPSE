@@ -1,0 +1,60 @@
+# Maintainer: SynapseOS Project <dev@synapseos.dev>
+# PKGBUILD — synguard (SynapseOS AI Security Monitor)
+
+pkgname=synguard
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
+arch=('x86_64')
+url="https://github.com/synapseos/synapseos"
+license=('GPL2')
+depends=(
+    'glibc'
+    'systemd-libs'
+)
+makedepends=(
+    'meson'
+    'ninja'
+    'gcc'
+    'pkg-config'
+)
+optdepends=(
+    'synapd: AI threat classification (required for AI features)'
+    'synapseos-kmod: kernel syscall event stream'
+)
+backup=(
+    'etc/synguard/rules.d/00-base.rules'
+    'etc/synguard/rules.d/10-ai-assist.rules'
+)
+source=("$pkgname-$pkgver.tar.gz::https://github.com/synapseos/synapseos/archive/refs/tags/synguard-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/synapseos-synguard-$pkgver"
+    meson setup build \
+        --prefix=/usr \
+        --buildtype=release \
+        -Db_lto=true \
+        -Db_pie=true
+    meson compile -C build
+}
+
+package() {
+    cd "$srcdir/synapseos-synguard-$pkgver"
+    meson install -C build --destdir="$pkgdir"
+
+    # Rules directory
+    install -dm750 "$pkgdir/etc/synguard/rules.d"
+    install -Dm640 rules/00-base.rules \
+        "$pkgdir/etc/synguard/rules.d/00-base.rules"
+    install -Dm640 rules/10-ai-assist.rules \
+        "$pkgdir/etc/synguard/rules.d/10-ai-assist.rules"
+
+    # Runtime directories
+    install -dm750 "$pkgdir/var/lib/synguard"
+    install -dm750 "$pkgdir/var/log/synguard"
+
+    # systemd service
+    install -Dm644 systemd/synguard.service \
+        "$pkgdir/usr/lib/systemd/system/synguard.service"
+}
