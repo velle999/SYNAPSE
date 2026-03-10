@@ -1,0 +1,13 @@
+pkgname=syn
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS unified CLI"
+arch=('any')
+license=('GPL2')
+depends=('bash' 'systemd' 'syn-model')
+source=("syn.sh")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "$srcdir/syn.sh" "$pkgdir/usr/bin/syn"
+}
