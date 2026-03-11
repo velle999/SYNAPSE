@@ -1,4 +1,8 @@
-# SynapseOS — auto-start synsh on tty1
+# SynapseOS — first boot wizard then synsh
 if [ "$(tty)" = "/dev/tty1" ]; then
-    exec /usr/bin/synsh
+    if [ ! -f /var/lib/synguard/.firstboot_done ]; then
+        exec /usr/bin/syn-firstboot
+    else
+        exec /usr/bin/synsh
+    fi
 fi

@@ -1,0 +1,13 @@
+pkgname=syn-firstboot
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS first boot setup wizard"
+arch=('any')
+license=('GPL2')
+depends=('bash' 'networkmanager' 'syn-model')
+source=("syn-firstboot.sh")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "$srcdir/syn-firstboot.sh" "$pkgdir/usr/bin/syn-firstboot"
+}
