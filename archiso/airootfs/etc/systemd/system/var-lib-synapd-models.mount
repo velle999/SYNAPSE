@@ -1,0 +1,12 @@
+[Unit]
+Description=SynapseOS model storage (tmpfs)
+Before=synapd.service
+
+[Mount]
+What=tmpfs
+Where=/var/lib/synapd/models
+Type=tmpfs
+Options=mode=0755,size=6G
+
+[Install]
+WantedBy=multi-user.target
