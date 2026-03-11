@@ -52,17 +52,20 @@ prompt() {
 }
 
 # ── Check if already done ─────────────────────────────────
-if [ -f "$DONE_FLAG" ] && [ -f "$MODEL_PATH" ]; then
+# On live ISO always run firstboot
+if mountpoint -q /run/archiso/airootfs 2>/dev/null; then
+    LIVE_ISO=1
+else
+    LIVE_ISO=0
+fi
+
+if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ] && [ -f "$MODEL_PATH" ]; then
     exit 0
 fi
 
 
 # ── Detect if running from live ISO ──────────────────────
-if [ -f /run/archiso/airootfs/.archiso.img ] || mountpoint -q /run/archiso/airootfs 2>/dev/null; then
-    LIVE_ISO=1
-else
-    LIVE_ISO=0
-fi
+# already set above
 
 if [ "$LIVE_ISO" = "1" ]; then
     header
