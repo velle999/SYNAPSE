@@ -151,29 +151,3 @@ rule default-log {
     verdict log
     priority 100
 }
-
-# — Trusted system processes — allow without logging
-rule allow-udev {
-    event   module
-    comm    udevd
-    verdict allow
-    priority 1
-}
-
-rule allow-udev-worker {
-    comm    (udev-worker)
-    verdict allow
-    priority 1
-}
-
-rule allow-modprobe {
-    comm    modprobe
-    verdict allow
-    priority 1
-}
-
-rule allow-kmod {
-    comm    kmod
-    verdict allow
-    priority 1
-}
