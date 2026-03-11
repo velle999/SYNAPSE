@@ -22,3 +22,14 @@ syn-model
 syn
 systemd
 syn-firstboot
+parted
+dosfstools
+e2fsprogs
+arch-install-scripts
+grub
+efibootmgr
+syn-install
+parted
+dosfstools
+e2fsprogs
+arch-install-scripts

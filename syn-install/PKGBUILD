@@ -1,0 +1,13 @@
+pkgname=syn-install
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS disk installer"
+arch=('any')
+license=('GPL2')
+depends=('bash' 'parted' 'e2fsprogs' 'dosfstools' 'arch-install-scripts' 'grub')
+source=("syn-install.sh")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "$srcdir/syn-install.sh" "$pkgdir/usr/bin/syn-install"
+}

@@ -14,6 +14,7 @@ Usage:
   syn guard <cmd>         Security monitor (status/mode/alerts)
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
+  syn install             Install SynapseOS to disk
   syn help                This help
 
 HELP
@@ -95,6 +96,7 @@ case "${1:-help}" in
     model)          shift; cmd_model "$@" ;;
     net)            shift; cmd_net "$@" ;;
     guard)          shift; cmd_guard "$@" ;;
+    install)        exec syn-install ;;
     shell)          exec synsh ;;
     ui)             exec synui ;;
     help|-h|--help) usage ;;
