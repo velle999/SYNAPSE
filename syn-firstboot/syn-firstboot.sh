@@ -56,6 +56,31 @@ if [ -f "$DONE_FLAG" ] && [ -f "$MODEL_PATH" ]; then
     exit 0
 fi
 
+
+# ── Detect if running from live ISO ──────────────────────
+if [ -f /run/archiso/airootfs/.archiso.img ] || mountpoint -q /run/archiso/airootfs 2>/dev/null; then
+    LIVE_ISO=1
+else
+    LIVE_ISO=0
+fi
+
+if [ "$LIVE_ISO" = "1" ]; then
+    header
+    echo "  SynapseOS is running from a live ISO."
+    echo ""
+    echo "  Would you like to install SynapseOS to a disk?"
+    echo ""
+    echo "    $(bold '1)') Install to disk   — permanent installation"
+    echo "    $(bold '2)') Try live session  — continue without installing"
+    echo ""
+    prompt "Choice [1-2]:"
+    read -r install_choice
+
+    if [ "${install_choice:-2}" = "1" ]; then
+        exec /usr/bin/syn-install
+    fi
+fi
+
 # ── Welcome ───────────────────────────────────────────────
 header
 echo "  Welcome to SynapseOS."
