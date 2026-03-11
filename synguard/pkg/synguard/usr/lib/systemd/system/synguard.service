@@ -17,7 +17,7 @@ Group=root
 ExecStartPre=/bin/mkdir -p /var/log/synguard /var/lib/synguard
 ExecStart=/usr/bin/synguard \
     --foreground \
-    --mode audit \
+    --mode enforce \
     --rules /etc/synguard/rules/
 
 ExecReload=/bin/kill -HUP $MAINPID

@@ -6,7 +6,7 @@ xdata = pkgtype=debug
 pkgver = 0.1.0-1
 pkgdesc = Detached debugging symbols for synguard
 url = 
-builddate = 1773178552
+builddate = 1773260194
 packager = Unknown Packager
 size = 160692
 arch = x86_64
