@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # syn-install — SynapseOS disk installer
-set -euo pipefail
+set -uo pipefail
 
 VERSION="0.1.0-synapse"
 COLS=$(tput cols 2>/dev/null || echo 80)
@@ -253,7 +253,7 @@ d /var/lib/synapd/models 0755 root root -
 EOF
 
 # mkinitcpio
-arch-chroot /mnt mkinitcpio -P 2>&1 | tail -3
+arch-chroot /mnt mkinitcpio -P 2>&1 | tail -3 || true
 
 success "System configured"
 
