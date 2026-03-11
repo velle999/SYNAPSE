@@ -6,7 +6,7 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS AI Network Policy Daemon
 url = 
-builddate = 1773175724
+builddate = 1773259875
 packager = Unknown Packager
 size = 14352
 arch = x86_64
