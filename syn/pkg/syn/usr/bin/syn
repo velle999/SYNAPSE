@@ -24,7 +24,7 @@ cmd_status() {
     echo "  ┌─ SynapseOS $VERSION ──────────────────────────────┐"
     echo ""
     local synapd_status=$(systemctl is-active synapd 2>/dev/null)
-    local model_status=$(journalctl -t synapd -n 3 --no-pager 2>/dev/null | grep -o "model=[^ ]*" | tail -1)
+    local model_status=$(journalctl -t synapd -n 3 --no-pager 2>/dev/null | grep -o "model=[^ ]*" | grep -v "unloaded" | tail -1)
     printf "  %-12s %s  %s\n" "synapd" "$([ "$synapd_status" = "active" ] && echo "✓ running" || echo "✗ stopped")" "${model_status:-}"
     local synnet_status=$(systemctl is-active synnet 2>/dev/null)
     printf "  %-12s %s\n" "synnet" "$([ "$synnet_status" = "active" ] && echo "✓ running" || echo "✗ stopped")"
