@@ -144,6 +144,10 @@ step "Step 3/6 — Installing Base System"
 echo "  This may take several minutes..."
 echo ""
 
+# Fix mirrorlist
+echo 'Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch' > /etc/pacman.d/mirrorlist
+pacman -Sy --noconfirm 2>/dev/null || true
+
 # Use pacstrap to install base system
 pacstrap /mnt \
     base linux linux-firmware \
