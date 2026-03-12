@@ -33,3 +33,4 @@ parted
 dosfstools
 e2fsprogs
 arch-install-scripts
+openssh
