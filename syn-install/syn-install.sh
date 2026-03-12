@@ -148,14 +148,16 @@ echo ""
 echo 'Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch' > /etc/pacman.d/mirrorlist
 pacman -Sy --noconfirm 2>/dev/null || true
 
+# Fix mirrorlist on both live system and target
+MIRROR='Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch'
+echo "\$MIRROR" > /etc/pacman.d/mirrorlist
+mkdir -p /mnt/etc/pacman.d
+echo "\$MIRROR" > /mnt/etc/pacman.d/mirrorlist
+pacman -Sy --noconfirm 2>/dev/null || true
+
 # Use pacstrap to install base system
-pacstrap /mnt \
-    base linux linux-firmware \
-    grub efibootmgr \
-    networkmanager openssh sudo \
-    seatd \
-    wlroots0.19 wayland \
-    mkinitcpio 2>&1 | tail -3
+pacstrap /mnt     base linux linux-firmware     grub efibootmgr     networkmanager openssh sudo     seatd     mkinitcpio 2>&1
+echo "pacstrap exit code: $?"
 
 success "Base system installed"
 
