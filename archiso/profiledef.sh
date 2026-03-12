@@ -20,3 +20,6 @@ declare -A file_permissions=(
     ["/usr/bin/synapd"]="0:0:755"
     ["/usr/bin/synsh"]="0:0:755"
 )
+
+# Set root password
+airootfs_image_type="squashfs"
