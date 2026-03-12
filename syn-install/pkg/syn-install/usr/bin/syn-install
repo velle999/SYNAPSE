@@ -301,6 +301,19 @@ echo ""
 echo "  On first boot, the setup wizard will guide you through"
 echo "  downloading an AI model and configuring your system."
 echo ""
+# Verify GRUB was installed
+if [ ! -f /mnt/boot/grub/grub.cfg ]; then
+    warn "GRUB config missing — reinstalling..."
+    if [ "$BOOT_MODE" = "uefi" ]; then
+        arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=SynapseOS --recheck 2>&1
+    else
+        arch-chroot /mnt grub-install --target=i386-pc "$DISK" --recheck 2>&1
+    fi
+    arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1
+fi
+
+ls /mnt/boot/grub/grub.cfg && success "GRUB verified" || fail "GRUB still missing!"
+
 prompt "Remove installation media and press ENTER to reboot..."
 read -r
 umount -R /mnt
