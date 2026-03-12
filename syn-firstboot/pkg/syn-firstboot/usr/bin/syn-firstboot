@@ -7,12 +7,12 @@ MODEL_PATH="$MODEL_DIR/synapse.gguf"
 DONE_FLAG="/var/lib/synguard/.firstboot_done"
 COLS=$(tput cols 2>/dev/null || echo 80)
 
-# ── UI helpers ────────────────────────────────────────────
+# -- UI helpers --------------------------------------------
 cyan()  { printf '\033[1;36m%s\033[0m' "$*"; }
 green() { printf '\033[1;32m%s\033[0m' "$*"; }
 red()   { printf '\033[1;31m%s\033[0m' "$*"; }
 bold()  { printf '\033[1m%s\033[0m' "$*"; }
-line()  { printf '%*s\n' "$COLS" '' | tr ' ' '─'; }
+line()  { printf '%*s\n' "$COLS" '' | tr ' ' '-'; }
 
 header() {
     clear
@@ -51,7 +51,7 @@ prompt() {
     printf "  $(bold "$1") "
 }
 
-# ── Check if already done ─────────────────────────────────
+# -- Check if already done ---------------------------------
 # On live ISO always run firstboot
 if mountpoint -q /run/archiso/airootfs 2>/dev/null; then
     LIVE_ISO=1
@@ -64,7 +64,7 @@ if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ] && [ -f "$MODEL_PATH" ]; then
 fi
 
 
-# ── Detect if running from live ISO ──────────────────────
+# -- Detect if running from live ISO ----------------------
 # already set above
 
 if [ "$LIVE_ISO" = "1" ]; then
@@ -84,7 +84,7 @@ if [ "$LIVE_ISO" = "1" ]; then
     fi
 fi
 
-# ── Welcome ───────────────────────────────────────────────
+# -- Welcome -----------------------------------------------
 header
 echo "  Welcome to SynapseOS."
 echo ""
@@ -96,7 +96,7 @@ echo ""
 prompt "Press ENTER to begin, or Ctrl+C to skip..."
 read -r
 
-# ── Step 1: Network ───────────────────────────────────────
+# -- Step 1: Network ---------------------------------------
 header
 step "Step 1/3 — Network"
 
@@ -120,7 +120,7 @@ else
     fi
 fi
 
-# ── Step 2: Model ─────────────────────────────────────────
+# -- Step 2: Model -----------------------------------------
 header
 step "Step 2/3 — AI Model"
 
@@ -164,7 +164,7 @@ else
     fi
 fi
 
-# ── Step 3: Verify ────────────────────────────────────────
+# -- Step 3: Verify ----------------------------------------
 header
 step "Step 3/3 — System Check"
 
@@ -186,7 +186,7 @@ check "synapse_kmod"  "lsmod | grep -q synapse_kmod"
 check "AI model"      "test -f $MODEL_PATH"
 check "network"       "ping -c1 -W2 8.8.8.8"
 
-# ── Done ──────────────────────────────────────────────────
+# -- Done --------------------------------------------------
 echo ""
 line
 echo ""

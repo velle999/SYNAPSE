@@ -22,7 +22,7 @@ HELP
 
 cmd_status() {
     echo ""
-    echo "  ┌─ SynapseOS $VERSION ──────────────────────────────┐"
+    echo "  +- SynapseOS $VERSION ------------------------------+"
     echo ""
     local synapd_status=$(systemctl is-active synapd 2>/dev/null)
     local model_status=$(journalctl -t synapd -n 3 --no-pager 2>/dev/null | grep -o "model=[^ ]*" | grep -v "unloaded" | tail -1)
@@ -44,7 +44,7 @@ cmd_status() {
         printf "  %-12s %s\n" "model" "✗ not installed — run: syn model download"
     fi
     echo ""
-    echo "  └────────────────────────────────────────────────────┘"
+    echo "  +----------------------------------------------------+"
     echo ""
 }
 

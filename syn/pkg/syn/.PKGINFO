@@ -6,9 +6,9 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS unified CLI
 url = 
-builddate = 1773261906
+builddate = 1773319817
 packager = Unknown Packager
-size = 4522
+size = 4348
 arch = any
 license = GPL2
 depend = bash
