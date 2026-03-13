@@ -212,6 +212,14 @@ arch-chroot /mnt pacman -Sy --noconfirm \
     syn syn-model syn-firstboot \
     2>&1 || warn "Some SynapseOS packages failed to install"
 
+# Copy llama.cpp shared libraries from live ISO to installed system
+echo "  Copying AI runtime libraries..."
+for lib in /run/archiso/airootfs/usr/lib/libllama* \
+           /run/archiso/airootfs/usr/lib/libggml*; do
+    [ -f "$lib" ] && cp "$lib" /mnt/usr/lib/ && echo "    $(basename $lib)"
+done
+arch-chroot /mnt ldconfig
+
 success "SynapseOS packages installed"
 
 # ── Configure system ──────────────────────────────────────
