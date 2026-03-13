@@ -1,0 +1,14 @@
+[Unit]
+Description=SynapseOS AI Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/synapd --foreground \
+    --model /var/lib/synapd/models/synapse.gguf
+ExecStartPost=/bin/bash -c 'sleep 10 && chmod 755 /run/synapd && chmod 777 /run/synapd/synapd.sock'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

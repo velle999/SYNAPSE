@@ -132,7 +132,6 @@ else
     mount "$PART_ROOT" /mnt || die "Failed to mount root"
 fi
 
-# Inform kernel of new partition table
 partprobe "$DISK" 2>/dev/null || true
 sleep 1
 
@@ -142,8 +141,14 @@ success "Disk partitioned and mounted at /mnt"
 header
 step "Step 3/6 — Installing Base System"
 
-echo "  Refreshing mirrors..."
-echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+# Fix mirrorlist on live system (single quotes preserve $repo/$arch literals
+# which pacman expands itself — do NOT use a variable here)
+cat > /etc/pacman.d/mirrorlist << 'MIRROREOF'
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
+Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
+MIRROREOF
+
 pacman -Sy --noconfirm 2>/dev/null || true
 
 echo "  Running pacstrap (this may take several minutes)..."
@@ -153,13 +158,13 @@ pacstrap -K /mnt \
     networkmanager openssh sudo \
     seatd \
     mkinitcpio \
-    2>&1 || die "pacstrap failed — check network and mirrors"
+    2>&1 || die "pacstrap failed — check network connection"
 
-# Verify grub actually landed in the chroot before going further
+# Hard verify grub landed in the chroot
 if ! arch-chroot /mnt which grub-install &>/dev/null; then
-    echo "  grub-install not found in chroot — installing grub directly..."
+    warn "grub-install not found in chroot — attempting recovery..."
     arch-chroot /mnt pacman -S --noconfirm grub efibootmgr 2>&1 \
-        || die "Could not install grub into target system"
+        || die "Could not install grub into target — check network"
 fi
 
 success "Base system installed"
@@ -168,21 +173,23 @@ success "Base system installed"
 header
 step "Step 4/6 — Installing SynapseOS"
 
-mkdir -p /mnt/var/cache/synapseos-repo
-
 SYNAPSE_PKGS=(
     synapd synsh synnet synguard synui
     syn syn-model syn-firstboot
 )
 
 for pkg in "${SYNAPSE_PKGS[@]}"; do
-    PKG_FILE=$(find /run/archiso/bootmnt /run/archiso/airootfs \
+    PKG_FILE=$(find \
+        /run/archiso/bootmnt \
+        /run/archiso/airootfs \
+        /run/archiso/bootmnt/arch/pkgs \
         -name "${pkg}-*.pkg.tar.zst" 2>/dev/null | head -1)
     if [ -n "$PKG_FILE" ]; then
         echo "  Installing $pkg..."
         cp "$PKG_FILE" /mnt/tmp/
-        arch-chroot /mnt pacman -U "/tmp/$(basename "$PKG_FILE")" --noconfirm 2>/dev/null || \
-            warn "Could not install $pkg — skipping"
+        arch-chroot /mnt pacman -U "/tmp/$(basename "$PKG_FILE")" \
+            --noconfirm 2>/dev/null \
+            || warn "Could not install $pkg — skipping"
     else
         warn "$pkg not found on ISO — skipping"
     fi
@@ -229,19 +236,22 @@ ANSI_COLOR="1;36"
 HOME_URL="https://synapseos.dev"
 EOF
 
-# Copy SynapseOS configs from live ISO
-for f in /etc/systemd/system/synapd.service \
-          /etc/systemd/system/synnet.service \
-          /etc/systemd/system/synguard.service \
-          /etc/synguard/rules.d/; do
+# Copy SynapseOS service files from live ISO
+for f in \
+    /etc/systemd/system/synapd.service \
+    /etc/systemd/system/synnet.service \
+    /etc/systemd/system/synguard.service \
+    /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
 
 # Enable services
-arch-chroot /mnt systemctl enable NetworkManager synapd synnet synguard seatd 2>/dev/null || true
+arch-chroot /mnt systemctl enable \
+    NetworkManager synapd synnet synguard seatd \
+    2>/dev/null || true
 echo "  Services enabled"
 
-# Auto-login to synsh
+# Auto-login to synsh on tty1
 mkdir -p /mnt/etc/systemd/system/getty@tty1.service.d/
 cat > /mnt/etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
 [Service]
@@ -259,16 +269,15 @@ if [ "$(tty)" = "/dev/tty1" ]; then
 fi
 EOF
 
-# tmpfiles for synapd
+# tmpfiles for synapd runtime dirs
 cat > /mnt/etc/tmpfiles.d/synapd.conf << 'EOF'
 d /run/synapd 0755 root root -
 d /var/lib/synapd 0755 root root -
 d /var/lib/synapd/models 0755 root root -
 EOF
 
-# mkinitcpio
 echo "  Generating initramfs..."
-arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors — check manually"
+arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors"
 
 success "System configured"
 
@@ -276,7 +285,7 @@ success "System configured"
 header
 step "Step 6/6 — Installing Bootloader"
 
-# Write grub defaults BEFORE running grub-install/grub-mkconfig
+# Write grub defaults BEFORE grub-mkconfig runs
 cat > /mnt/etc/default/grub << 'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
@@ -308,8 +317,7 @@ echo "  Generating GRUB config..."
 arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 \
     || die "grub-mkconfig failed"
 
-# Hard verify
-[ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg not found after install — something went very wrong"
+[ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
 
 success "Bootloader installed"
 
@@ -323,12 +331,8 @@ echo "  $(bold 'Hostname:') synapse"
 echo ""
 line
 echo ""
-echo "  On first boot, the setup wizard will guide you through"
+echo "  On first boot, syn-firstboot will guide you through"
 echo "  downloading an AI model and configuring your system."
-echo ""
-echo "  $(bold 'Installed:')"
-echo "    /boot/grub/grub.cfg  ✓"
-[ "$BOOT_MODE" = "uefi" ] && echo "    /boot/efi/EFI/SynapseOS/  ✓"
 echo ""
 
 prompt "Remove installation media and press ENTER to reboot..."

@@ -1,0 +1,15 @@
+# This file documents the SynapseOS boot sequence.
+# Actual unit files are copied from each component's systemd/ directory
+# by build.sh into airootfs/etc/systemd/system/.
+#
+# Boot order:
+#
+#  basic.target
+#     └─ synapse_kmod (modprobe via modules-load.d)
+#           └─ synapd.service          ← AI daemon (must come first)
+#                 └─ synguard.service  ← security monitor
+#                       └─ display-manager.service
+#                             └─ synui (via graphical-session.target)
+#
+# The AI daemon starts before the display manager so the compositor
+# can connect to it immediately on first frame.

@@ -1,6 +1,6 @@
-set(LLAMA_VERSION      0.0.8274)
-set(LLAMA_BUILD_COMMIT 8d880ac01)
-set(LLAMA_BUILD_NUMBER 8274)
+set(LLAMA_VERSION      0.0.1)
+set(LLAMA_BUILD_COMMIT d7ba99c)
+set(LLAMA_BUILD_NUMBER 1)
 set(LLAMA_SHARED_LIB   ON)
 
 
@@ -9,6 +9,16 @@ set(LLAMA_SHARED_LIB   ON)
 ####### The input file was llama-config.cmake.in                            ########
 
 get_filename_component(PACKAGE_PREFIX_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../" ABSOLUTE)
+
+# Use original install prefix when loaded through a "/usr move"
+# cross-prefix symbolic link such as /lib -> /usr/lib.
+get_filename_component(_realCurr "${CMAKE_CURRENT_LIST_DIR}" REALPATH)
+get_filename_component(_realOrig "/usr/lib/cmake/llama" REALPATH)
+if(_realCurr STREQUAL _realOrig)
+  set(PACKAGE_PREFIX_DIR "/usr")
+endif()
+unset(_realOrig)
+unset(_realCurr)
 
 macro(set_and_check _var _file)
   set(${_var} "${_file}")

@@ -1,0 +1,402 @@
+#!/usr/bin/env bash
+# syninstall — SynapseOS Guided Installer
+#
+# A minimal, readable bash TUI installer.
+# No Python, no Qt, no Calamares — just bash + dialog.
+#
+# Installs SynapseOS to a target disk using pacstrap.
+#
+# Usage:
+#   syninstall            — guided mode (recommended)
+#   syninstall --auto     — non-interactive with defaults (dangerous!)
+#   syninstall --help
+#
+# SynapseOS Project — GPLv2
+
+set -euo pipefail
+
+SYNAPSEOS_VERSION="0.1.0"
+LOG="/tmp/syninstall.log"
+MOUNT_POINT="/mnt"
+
+# ── Colors (no dialog for these) ──────────────────────────────
+C_BRAND='\033[38;5;51m'
+C_OK='\033[38;5;82m'
+C_ERR='\033[38;5;196m'
+C_RESET='\033[0m'
+
+log()  { echo "[$(date +%H:%M:%S)] $*" >> "$LOG"; echo -e "${C_BRAND}▶${C_RESET} $*"; }
+ok()   { echo "[$(date +%H:%M:%S)] OK: $*" >> "$LOG"; echo -e "${C_OK}✓${C_RESET} $*"; }
+err()  { echo "[$(date +%H:%M:%S)] ERR: $*" >> "$LOG"; echo -e "${C_ERR}✗${C_RESET} $*" >&2; exit 1; }
+
+# ── Preflight ─────────────────────────────────────────────────
+[[ "$(id -u)" -eq 0 ]] || err "Run as root: sudo syninstall"
+command -v dialog &>/dev/null || pacman -Sy --noconfirm dialog
+
+# ── dialog helpers ────────────────────────────────────────────
+d_msg() {
+    dialog --backtitle "SynapseOS Installer" \
+           --title "$1" --msgbox "$2" 12 60
+}
+d_yesno() {
+    dialog --backtitle "SynapseOS Installer" \
+           --title "$1" --yesno "$2" 10 60
+}
+d_input() {
+    dialog --backtitle "SynapseOS Installer" \
+           --title "$1" --inputbox "$2" 10 60 "$3" \
+           3>&1 1>&2 2>&3
+}
+d_menu() {
+    dialog --backtitle "SynapseOS Installer" \
+           --title "$1" --menu "$2" 20 60 12 "${@:3}" \
+           3>&1 1>&2 2>&3
+}
+d_checklist() {
+    dialog --backtitle "SynapseOS Installer" \
+           --title "$1" --checklist "$2" 20 70 12 "${@:3}" \
+           3>&1 1>&2 2>&3
+}
+d_progress() {
+    dialog --backtitle "SynapseOS Installer" \
+           --title "$1" --gauge "$2" 8 60 "$3"
+}
+
+# ── Welcome ───────────────────────────────────────────────────
+clear
+dialog --backtitle "SynapseOS Installer" \
+       --title "⚡ Welcome to SynapseOS ${SYNAPSEOS_VERSION}" \
+       --msgbox "\n\
+SynapseOS — Where the kernel thinks.\n\
+\n\
+This installer will guide you through installing SynapseOS\n\
+to your hard drive.\n\
+\n\
+What will be installed:\n\
+  • Linux kernel with AI_CTX extensions\n\
+  • synapd  — AI inference daemon\n\
+  • synguard — AI security monitor\n\
+  • synui    — AI-native Wayland compositor\n\
+  • synsh    — Natural language shell\n\
+  • synapse-7b model (~4GB)\n\
+\n\
+The installer will partition your disk. Make sure you have\n\
+backed up any important data.\n\
+" 20 65
+
+# ── Locale ────────────────────────────────────────────────────
+LOCALE=$(d_menu "Locale" "Select your locale:" \
+    "en_US.UTF-8" "English (US)" \
+    "en_GB.UTF-8" "English (UK)" \
+    "de_DE.UTF-8" "Deutsch" \
+    "fr_FR.UTF-8" "Français" \
+    "ja_JP.UTF-8" "日本語" \
+    "zh_CN.UTF-8" "中文 (简体)" \
+    "es_ES.UTF-8" "Español" \
+    "other"       "Enter manually..."
+)
+[[ "$LOCALE" == "other" ]] && LOCALE=$(d_input "Locale" "Enter locale (e.g. pt_BR.UTF-8):" "")
+
+TIMEZONE=$(d_input "Timezone" \
+    "Enter timezone (e.g. America/New_York, Europe/London):" \
+    "UTC")
+
+KEYMAP=$(d_menu "Keyboard" "Select keymap:" \
+    "us"     "US" \
+    "uk"     "UK" \
+    "de"     "German" \
+    "fr"     "French" \
+    "es"     "Spanish" \
+    "dvorak" "Dvorak" \
+    "other"  "Enter manually..."
+)
+[[ "$KEYMAP" == "other" ]] && KEYMAP=$(d_input "Keymap" "Enter keymap:" "us")
+
+# ── Hostname ──────────────────────────────────────────────────
+HOSTNAME=$(d_input "Hostname" "Enter hostname for this machine:" "synapse")
+
+# ── User account ──────────────────────────────────────────────
+USERNAME=$(d_input "User" "Enter your username:" "syn")
+USER_FULL=$(d_input "Full Name" "Enter your full name (optional):" "")
+
+# Password (dialog --passwordbox)
+USER_PASS=$(dialog --backtitle "SynapseOS Installer" \
+    --title "Password" --passwordbox \
+    "Enter password for ${USERNAME}:" 10 50 \
+    3>&1 1>&2 2>&3)
+
+USER_PASS2=$(dialog --backtitle "SynapseOS Installer" \
+    --title "Password" --passwordbox \
+    "Confirm password:" 10 50 \
+    3>&1 1>&2 2>&3)
+
+[[ "$USER_PASS" == "$USER_PASS2" ]] || { d_msg "Error" "Passwords do not match!"; exec "$0"; }
+
+# ── Disk selection ────────────────────────────────────────────
+# Build disk list from lsblk
+DISK_ARGS=()
+while IFS= read -r line; do
+    DEV=$(echo "$line" | awk '{print $1}')
+    SIZE=$(echo "$line" | awk '{print $2}')
+    MODEL=$(echo "$line" | awk '{$1=$2=""; print $0}' | xargs)
+    DISK_ARGS+=("/dev/${DEV}" "${SIZE} — ${MODEL}")
+done < <(lsblk -d -n -o NAME,SIZE,MODEL | grep -v "loop\|sr")
+
+TARGET_DISK=$(d_menu "Target Disk" \
+    "⚠ WARNING: All data on the selected disk will be ERASED.\n\nSelect installation target:" \
+    "${DISK_ARGS[@]}")
+
+d_yesno "Confirm" \
+    "Are you SURE you want to erase ${TARGET_DISK} and install SynapseOS?\n\nThis CANNOT be undone." \
+    || exec "$0"
+
+# ── Partition scheme ──────────────────────────────────────────
+SCHEME=$(d_menu "Partition Scheme" "Select partition layout:" \
+    "auto_btrfs"  "Auto — Btrfs with subvolumes (recommended)" \
+    "auto_ext4"   "Auto — ext4" \
+    "manual"      "Manual — open fdisk/cfdisk"
+)
+
+# ── AI features ───────────────────────────────────────────────
+AI_FEATURES=$(d_checklist "AI Features" \
+    "Select which AI features to enable:" \
+    "synapd"    "synapd — AI inference daemon"  "on" \
+    "synguard"  "synguard — AI security monitor" "on" \
+    "synui"     "synui — AI compositor"         "on" \
+    "model"     "Embed synapse-7b model (~4GB)" "on"
+) || AI_FEATURES="synapd synguard synui model"
+
+# ── Summary ───────────────────────────────────────────────────
+d_yesno "Summary — Review before installing" \
+"The following will be configured:\n\
+\n\
+  Locale:    ${LOCALE}\n\
+  Timezone:  ${TIMEZONE}\n\
+  Keymap:    ${KEYMAP}\n\
+  Hostname:  ${HOSTNAME}\n\
+  User:      ${USERNAME}\n\
+  Disk:      ${TARGET_DISK} (WILL BE ERASED)\n\
+  Scheme:    ${SCHEME}\n\
+  AI:        ${AI_FEATURES}\n\
+\n\
+Proceed with installation?" || exec "$0"
+
+# ── Installation ──────────────────────────────────────────────
+clear
+echo -e "${C_BRAND}⚡ Installing SynapseOS...${C_RESET}"
+echo   "   Log: $LOG"
+echo
+
+do_install() {
+
+# ── Partition ──────────────────────────────────────────────
+log "Partitioning ${TARGET_DISK}..."
+if [[ "$SCHEME" == "manual" ]]; then
+    cfdisk "${TARGET_DISK}"
+    # User partitions manually
+    BOOT_PART=$(lsblk -n -o NAME "${TARGET_DISK}" | grep -v "$(basename "${TARGET_DISK}")" | head -1)
+    ROOT_PART=$(lsblk -n -o NAME "${TARGET_DISK}" | grep -v "$(basename "${TARGET_DISK}")" | sed -n '2p')
+    BOOT_PART="/dev/${BOOT_PART}"
+    ROOT_PART="/dev/${ROOT_PART}"
+else
+    # Auto partitioning: 1GB EFI + rest for root
+    parted -s "${TARGET_DISK}" \
+        mklabel gpt \
+        mkpart ESP fat32 1MiB 1025MiB \
+        set 1 esp on \
+        mkpart root 1025MiB 100%
+
+    # Kernel needs to re-read partition table
+    partprobe "${TARGET_DISK}" 2>/dev/null || true
+    sleep 1
+
+    # Determine partition names (nvme uses p1/p2, sda uses 1/2)
+    if [[ "${TARGET_DISK}" == *"nvme"* ]]; then
+        BOOT_PART="${TARGET_DISK}p1"
+        ROOT_PART="${TARGET_DISK}p2"
+    else
+        BOOT_PART="${TARGET_DISK}1"
+        ROOT_PART="${TARGET_DISK}2"
+    fi
+fi
+
+# ── Format ────────────────────────────────────────────────
+log "Formatting partitions..."
+mkfs.fat -F32 -n "SYNBOOT" "${BOOT_PART}"
+
+case "$SCHEME" in
+    auto_btrfs)
+        mkfs.btrfs -f -L "SynapseOS" "${ROOT_PART}"
+        mount "${ROOT_PART}" "${MOUNT_POINT}"
+        btrfs subvolume create "${MOUNT_POINT}/@"
+        btrfs subvolume create "${MOUNT_POINT}/@home"
+        btrfs subvolume create "${MOUNT_POINT}/@var"
+        btrfs subvolume create "${MOUNT_POINT}/@snapshots"
+        umount "${MOUNT_POINT}"
+        MOUNT_OPTS="compress=zstd:3,noatime,ssd,space_cache=v2"
+        mount -o "${MOUNT_OPTS},subvol=@"          "${ROOT_PART}" "${MOUNT_POINT}"
+        mkdir -p "${MOUNT_POINT}"/{home,var,.snapshots,boot}
+        mount -o "${MOUNT_OPTS},subvol=@home"      "${ROOT_PART}" "${MOUNT_POINT}/home"
+        mount -o "${MOUNT_OPTS},subvol=@var"       "${ROOT_PART}" "${MOUNT_POINT}/var"
+        mount -o "${MOUNT_OPTS},subvol=@snapshots" "${ROOT_PART}" "${MOUNT_POINT}/.snapshots"
+        ;;
+    auto_ext4)
+        mkfs.ext4 -L "SynapseOS" "${ROOT_PART}"
+        mount "${ROOT_PART}" "${MOUNT_POINT}"
+        mkdir -p "${MOUNT_POINT}/boot"
+        ;;
+esac
+
+mkdir -p "${MOUNT_POINT}/boot/efi"
+mount "${BOOT_PART}" "${MOUNT_POINT}/boot/efi"
+
+ok "Partitions mounted"
+
+# ── pacstrap ──────────────────────────────────────────────
+log "Installing base system (this takes a while)..."
+pacstrap -K "${MOUNT_POINT}" \
+    base base-devel linux linux-firmware \
+    networkmanager grub efibootmgr \
+    sudo nano vim \
+    2>&1 | tee -a "$LOG"
+
+# ── SynapseOS packages ────────────────────────────────────
+log "Installing SynapseOS packages..."
+# Copy local repo into the new system temporarily
+if [[ -d /run/archiso/repo ]]; then
+    mkdir -p "${MOUNT_POINT}/var/cache/synapseos-repo"
+    cp /run/archiso/repo/*.pkg.tar.zst "${MOUNT_POINT}/var/cache/synapseos-repo/" 2>/dev/null || true
+fi
+
+arch-chroot "${MOUNT_POINT}" /bin/bash -s << CHROOT
+set -e
+
+# Add local repo
+cat >> /etc/pacman.conf << 'REPO'
+
+[synapseos]
+SigLevel = Optional TrustAll
+Server = file:///var/cache/synapseos-repo
+REPO
+
+pacman -Sy 2>/dev/null || true
+
+# Install SynapseOS components
+for pkg in synapseos-synapd synapseos-synsh synapseos-synguard synapseos-synui synapseos-kmod; do
+    pacman -S --noconfirm "\$pkg" 2>/dev/null || echo "Note: \$pkg not in local repo"
+done
+
+CHROOT
+
+# ── Copy model ────────────────────────────────────────────
+if echo "${AI_FEATURES}" | grep -q "model"; then
+    MODEL_SRC="/var/lib/synapd/models/synapse-7b-q4_k_m.gguf"
+    MODEL_DST="${MOUNT_POINT}/var/lib/synapd/models/"
+    if [[ -f "${MODEL_SRC}" ]]; then
+        log "Copying AI model (~4GB)..."
+        mkdir -p "${MODEL_DST}"
+        cp "${MODEL_SRC}" "${MODEL_DST}"
+        ok "Model installed"
+    else
+        log "Model not found on live ISO — will download on first boot"
+        mkdir -p "${MOUNT_POINT}/etc/synapseos"
+        echo "download_model=true" >> "${MOUNT_POINT}/etc/synapseos/firstboot.conf"
+    fi
+fi
+
+# ── fstab ─────────────────────────────────────────────────
+log "Generating fstab..."
+genfstab -U "${MOUNT_POINT}" > "${MOUNT_POINT}/etc/fstab"
+ok "fstab written"
+
+# ── chroot config ─────────────────────────────────────────
+log "Configuring installed system..."
+arch-chroot "${MOUNT_POINT}" /bin/bash -s << CHROOT
+set -e
+
+# Locale
+echo "${LOCALE} UTF-8" >> /etc/locale.gen
+locale-gen
+echo "LANG=${LOCALE}" > /etc/locale.conf
+echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
+
+# Timezone
+ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
+hwclock --systohc
+
+# Hostname
+echo "${HOSTNAME}" > /etc/hostname
+cat > /etc/hosts << 'HOSTS'
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   ${HOSTNAME}.localdomain ${HOSTNAME}
+HOSTS
+
+# User
+useradd -m -G wheel,audio,video,input,synapse -s /usr/bin/synsh -c "${USER_FULL}" "${USERNAME}" 2>/dev/null || true
+echo "${USERNAME}:${USER_PASS}" | chpasswd
+echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
+
+# Groups
+groupadd -r synapse  2>/dev/null || true
+groupadd -r synguard 2>/dev/null || true
+
+# Services
+systemctl enable synapd
+systemctl enable synguard
+systemctl enable NetworkManager
+systemctl enable synapse_kmod 2>/dev/null || modprobe synapse_kmod 2>/dev/null || true
+
+# GRUB
+grub-install --target=x86_64-efi \
+    --efi-directory=/boot/efi \
+    --bootloader-id=SynapseOS \
+    --recheck
+
+# Customize GRUB
+cat >> /etc/default/grub << 'GRUBCONF'
+GRUB_DISTRIBUTOR="SynapseOS"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 nowatchdog"
+GRUB_COLOR_NORMAL="cyan/black"
+GRUB_COLOR_HIGHLIGHT="white/cyan"
+GRUBCONF
+
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# initramfs
+mkinitcpio -P
+
+CHROOT
+
+ok "System configured"
+
+# ── Unmount ───────────────────────────────────────────────
+log "Unmounting..."
+umount -R "${MOUNT_POINT}"
+ok "Done"
+
+} # end do_install
+
+do_install 2>&1 | tee -a "$LOG"
+
+# ── Done ──────────────────────────────────────────────────────
+clear
+dialog --backtitle "SynapseOS Installer" \
+       --title "✓ Installation Complete" \
+       --msgbox "\n\
+SynapseOS has been installed successfully!\n\
+\n\
+What to do next:\n\
+  1. Remove the installation media\n\
+  2. Reboot\n\
+\n\
+On first boot:\n\
+  • synapd will start and load the AI model (~30s)\n\
+  • synguard starts in AUDIT mode (safe default)\n\
+  • Log in as '${USERNAME}'\n\
+  • Type 'syn ask anything' to get started\n\
+\n\
+Installation log saved to: ${LOG}\n\
+" 20 65
+
+d_yesno "Reboot" "Reboot now?" && reboot || true

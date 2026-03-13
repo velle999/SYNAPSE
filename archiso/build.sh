@@ -45,13 +45,16 @@ SYNAPSEOS_VERSION="0.1.0"
 BUILD_DIR="${SCRIPT_DIR}/build"
 OUT_DIR="${SCRIPT_DIR}/out"
 WORK_DIR="${SCRIPT_DIR}/work"
-LOCAL_REPO="${BUILD_DIR}/repo"
+# LOCAL_REPO lives inside archiso/ so mkarchiso includes it in the ISO image.
+# On the live system it will be accessible at /run/archiso/bootmnt/arch/pkgs
+# via the loop-mount — we reference it as file:///run/archiso/airootfs/local-repo
+# in the live pacman.conf.
+LOCAL_REPO="${SCRIPT_DIR}/local-repo"
 LLAMA_DIR="${BUILD_DIR}/llama.cpp"
 MODEL_DIR="${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
 
 # Model to embed
 MODEL_NAME="synapse-7b-q4_k_m.gguf"
-# Use Mistral-7B-Instruct as the base (fine-tuned for SynapseOS in production)
 MODEL_HF_REPO="TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
 MODEL_HF_FILE="mistral-7b-instruct-v0.2.Q4_K_M.gguf"
 
@@ -62,7 +65,7 @@ CLEAN=true
 SIGN=false
 
 # ── Colors ────────────────────────────────────────────────────
-C_BRAND='\033[38;5;51m'   # electric cyan
+C_BRAND='\033[38;5;51m'
 C_OK='\033[38;5;82m'
 C_WARN='\033[38;5;214m'
 C_ERR='\033[38;5;196m'
@@ -96,19 +99,11 @@ step "Preflight checks"
 
 [[ "$(id -u)" -eq 0 ]] || err "Must run as root (needed for mkarchiso)"
 
-# Detect distro — only Arch and Arch-based are supported
-if ! command -v pacman &>/dev/null; then
-    err "pacman not found. SynapseOS must be built on Arch Linux or an Arch-based distro."
-fi
+command -v pacman &>/dev/null || err "pacman not found — must build on Arch Linux"
 
-# ── Auto-install missing build dependencies ───────────────────
-#
-# Map each required command → the pacman package that provides it.
-# If a tool is missing, we install it rather than aborting.
-#
 declare -A TOOL_PKG=(
     [mkarchiso]="archiso"
-    [makepkg]="pacman"          # already implied by pacman existing
+    [makepkg]="pacman"
     [git]="git"
     [cmake]="cmake"
     [meson]="meson"
@@ -118,7 +113,7 @@ declare -A TOOL_PKG=(
     [rsync]="rsync"
     [dialog]="dialog"
     [parted]="parted"
-    [repo-add]="pacman"         # part of pacman itself
+    [repo-add]="pacman"
 )
 
 MISSING_PKGS=()
@@ -127,49 +122,41 @@ for cmd in "${!TOOL_PKG[@]}"; do
         ok "$cmd"
     else
         pkg="${TOOL_PKG[$cmd]}"
-        warn "$cmd not found — will install package: $pkg"
+        warn "$cmd not found — will install: $pkg"
         MISSING_PKGS+=("$pkg")
     fi
 done
 
-# Deduplicate
 MISSING_PKGS=($(printf '%s\n' "${MISSING_PKGS[@]}" | sort -u))
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
     log "Installing missing dependencies: ${MISSING_PKGS[*]}"
     pacman -Sy --noconfirm --needed "${MISSING_PKGS[@]}" \
         2>&1 | sed 's/^/  /' \
-        || err "pacman failed to install dependencies. Check your internet connection and /etc/pacman.conf."
+        || err "pacman failed to install dependencies"
 
-    # Verify everything is now present
     STILL_MISSING=()
     for cmd in "${!TOOL_PKG[@]}"; do
         command -v "$cmd" &>/dev/null || STILL_MISSING+=("$cmd")
     done
-    if [[ ${#STILL_MISSING[@]} -gt 0 ]]; then
-        err "Still missing after install: ${STILL_MISSING[*]}"
-    fi
+    [[ ${#STILL_MISSING[@]} -eq 0 ]] || err "Still missing: ${STILL_MISSING[*]}"
     ok "All dependencies installed"
 else
     ok "All build dependencies present"
 fi
 
-# base-devel group — needed for makepkg/PKGBUILDs
-if ! pacman -Qq base-devel &>/dev/null 2>&1; then
-    log "Installing base-devel group..."
+pacman -Qq base-devel &>/dev/null || {
+    log "Installing base-devel..."
     pacman -Sy --noconfirm --needed base-devel 2>&1 | sed 's/^/  /'
     ok "base-devel installed"
-fi
+}
 
-# Disk space check (~20GB required with model, ~8GB without)
 REQUIRED_GB=$([[ "$WITH_MODEL" == "true" ]] && echo 22 || echo 9)
 AVAIL_GB=$(df -BG "${SCRIPT_DIR}" | awk 'NR==2{print $4}' | tr -d G)
-if [[ "$AVAIL_GB" -lt "$REQUIRED_GB" ]]; then
-    err "Insufficient disk space: need ${REQUIRED_GB}GB, have ${AVAIL_GB}GB"
-fi
+[[ "$AVAIL_GB" -ge "$REQUIRED_GB" ]] \
+    || err "Insufficient disk space: need ${REQUIRED_GB}GB, have ${AVAIL_GB}GB"
 ok "Disk space: ${AVAIL_GB}GB available"
 
-# GPU detection for llama.cpp
 if [[ "$WITH_GPU" == "auto" ]]; then
     if lspci 2>/dev/null | grep -qi "nvidia"; then
         WITH_GPU="cuda"
@@ -225,46 +212,51 @@ cmake .. "${CMAKE_ARGS[@]}"
 log "Building llama.cpp (${JOBS} jobs)..."
 make -j"${JOBS}"
 
+# Stage into llama-staging/ at project root (referenced by synapd PKGBUILD)
+LLAMA_STAGING="${PROJECT_ROOT}/llama-staging"
 log "Installing llama.cpp to staging area..."
-DESTDIR="${BUILD_DIR}/llama-staging" make install
+DESTDIR="${LLAMA_STAGING}" make install
+ok "llama.cpp built and staged to ${LLAMA_STAGING}"
 
-ok "llama.cpp built successfully"
 cd "${SCRIPT_DIR}"
 
 # ── Build SynapseOS packages ──────────────────────────────────
 step "Building SynapseOS packages"
 
+# All packages with a PKGBUILD in the project root
 PACKAGES=(
-    "synapd"
-    "synsh"
-    "synguard"
-    "synapse_kmod"
-    "synui"
+    synapd
+    synsh
+    synguard
+    synnet
+    synui
+    synapse_kmod
+    syn
+    syn-firstboot
+    syn-model
+    syn-install
 )
+
+# Create build user for makepkg (can't run as root)
+id -u synbuild &>/dev/null || useradd -r -s /bin/bash -m synbuild
 
 build_package() {
     local pkg="$1"
     local pkgdir="${PROJECT_ROOT}/${pkg}"
 
     if [[ ! -f "${pkgdir}/PKGBUILD" ]]; then
-        warn "No PKGBUILD for ${pkg} — skipping (add to ${pkgdir}/PKGBUILD)"
+        warn "No PKGBUILD for ${pkg} — skipping"
         return 0
     fi
 
     log "Building ${pkg}..."
     cd "${pkgdir}"
+    chown -R synbuild: "${pkgdir}"
 
-    # Build as non-root (makepkg requirement)
-    # We use a build user if running as root
-    if [[ "$(id -u)" -eq 0 ]]; then
-        # Create build user if needed
-        id -u synbuild &>/dev/null || useradd -r -s /bin/bash -m synbuild
-        chown -R synbuild: "${pkgdir}"
-        sudo -u synbuild makepkg -sf --noconfirm \
-            PKGDEST="${LOCAL_REPO}" 2>&1 | sed 's/^/  /'
-    else
-        makepkg -sf --noconfirm PKGDEST="${LOCAL_REPO}"
-    fi
+    sudo -u synbuild makepkg -sf --noconfirm \
+        PKGDEST="${LOCAL_REPO}" \
+        2>&1 | sed 's/^/  /' \
+        || { warn "${pkg} build failed — skipping"; cd "${SCRIPT_DIR}"; return 0; }
 
     ok "${pkg} built"
     cd "${SCRIPT_DIR}"
@@ -274,18 +266,16 @@ for pkg in "${PACKAGES[@]}"; do
     build_package "$pkg"
 done
 
-# Add llama.cpp staging to a package
-log "Packaging llama.cpp staging..."
-rsync -a "${BUILD_DIR}/llama-staging/" "${SCRIPT_DIR}/airootfs/"
-ok "llama.cpp staged into airootfs"
+# ── Rebuild local repo database ───────────────────────────────
+step "Updating local pacman repo"
 
-# Initialize the local repo database
-log "Initializing local pacman repo..."
 if ls "${LOCAL_REPO}"/*.pkg.tar.zst &>/dev/null; then
+    # Remove stale db files before regenerating
+    rm -f "${LOCAL_REPO}"/synapseos.db* "${LOCAL_REPO}"/synapseos.files*
     repo-add "${LOCAL_REPO}/synapseos.db.tar.gz" "${LOCAL_REPO}"/*.pkg.tar.zst
-    ok "Local repo initialized with $(ls "${LOCAL_REPO}"/*.pkg.tar.zst | wc -l) packages"
+    ok "Local repo: $(ls "${LOCAL_REPO}"/*.pkg.tar.zst | wc -l) packages"
 else
-    warn "No local packages found — ISO will not include SynapseOS binaries"
+    warn "No packages in local-repo — ISO will not include SynapseOS binaries"
 fi
 
 # ── Download AI model ─────────────────────────────────────────
@@ -297,9 +287,7 @@ if [[ "$WITH_MODEL" == "true" ]]; then
     if [[ -f "${MODEL_PATH}" ]]; then
         ok "Model already present: $(du -h "${MODEL_PATH}" | cut -f1)"
     else
-        log "Downloading ${MODEL_HF_FILE} from HuggingFace..."
-        log "This is ~4.1GB — grab a coffee ☕"
-
+        log "Downloading ${MODEL_HF_FILE} from HuggingFace (~4.1GB)..."
         HF_URL="https://huggingface.co/${MODEL_HF_REPO}/resolve/main/${MODEL_HF_FILE}"
 
         curl -L \
@@ -307,15 +295,13 @@ if [[ "$WITH_MODEL" == "true" ]]; then
             --retry 5 \
             --retry-delay 10 \
             -o "${MODEL_PATH}.tmp" \
-            "${HF_URL}"
+            "${HF_URL}" \
+            || err "Model download failed"
 
         mv "${MODEL_PATH}.tmp" "${MODEL_PATH}"
-
-        # Rename to our canonical name
         ok "Model downloaded: $(du -h "${MODEL_PATH}" | cut -f1)"
     fi
 
-    # Write a model manifest
     cat > "${MODEL_DIR}/manifest.txt" << EOF
 # SynapseOS Model Manifest
 # Generated by build.sh $(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -327,59 +313,72 @@ format         = GGUF Q4_K_M
 size_class     = 7B
 context_window = 4096
 quantization   = Q4_K_M  (4-bit, medium quality)
-
-# For SynapseOS production: replace with a fine-tuned model
-# trained on OS-specific tasks (syscall analysis, shell translation,
-# scheduling decisions). See docs/model-finetuning.md
 EOF
 fi
 
 # ── Configure airootfs ────────────────────────────────────────
 step "Configuring airootfs"
 
-# Ensure airootfs directory structure exists
-mkdir -p "${SCRIPT_DIR}/airootfs/etc/synguard/rules.d"
-mkdir -p "${SCRIPT_DIR}/airootfs/etc/synui"
-mkdir -p "${SCRIPT_DIR}/airootfs/etc/modprobe.d"
-mkdir -p "${SCRIPT_DIR}/airootfs/etc/modules-load.d"
-mkdir -p "${SCRIPT_DIR}/airootfs/etc/systemd/system"
-mkdir -p "${SCRIPT_DIR}/airootfs/usr/bin"
-mkdir -p "${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
-mkdir -p "${SCRIPT_DIR}/airootfs/var/lib/synguard"
-mkdir -p "${SCRIPT_DIR}/airootfs/var/log/synguard"
+mkdir -p \
+    "${SCRIPT_DIR}/airootfs/etc/synguard/rules.d" \
+    "${SCRIPT_DIR}/airootfs/etc/synui" \
+    "${SCRIPT_DIR}/airootfs/etc/modprobe.d" \
+    "${SCRIPT_DIR}/airootfs/etc/modules-load.d" \
+    "${SCRIPT_DIR}/airootfs/etc/systemd/system" \
+    "${SCRIPT_DIR}/airootfs/etc/pacman.d" \
+    "${SCRIPT_DIR}/airootfs/usr/bin" \
+    "${SCRIPT_DIR}/airootfs/var/lib/synapd/models" \
+    "${SCRIPT_DIR}/airootfs/var/lib/synguard" \
+    "${SCRIPT_DIR}/airootfs/var/log/synguard"
 
-# Add local repo to pacman.conf
-PACMAN_CONF="${SCRIPT_DIR}/airootfs/etc/pacman.conf"
-if [[ ! -f "${PACMAN_CONF}" ]]; then
-    cp /etc/pacman.conf "${PACMAN_CONF}"
-fi
+# ── Mirrorlist (must exist or pacman on live ISO has no servers) ──
+cat > "${SCRIPT_DIR}/airootfs/etc/pacman.d/mirrorlist" << 'MIRROREOF'
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
+Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
+MIRROREOF
+ok "mirrorlist written"
 
-# Inject local SynapseOS repo at the top
-if ! grep -q "\[synapseos\]" "${PACMAN_CONF}"; then
-    sed -i '1a [synapseos]\nSigLevel = Optional TrustAll\nServer = file://'"${LOCAL_REPO}" \
-        "${PACMAN_CONF}"
-    ok "Local repo added to pacman.conf"
-fi
+# ── pacman.conf for live ISO ──────────────────────────────────
+# The local-repo is accessible on the live system at:
+#   /run/archiso/airootfs/local-repo  (squashfs mount)
+# We do NOT embed the build machine's absolute path here.
+cat > "${SCRIPT_DIR}/pacman.conf" << 'PACMANEOF'
+[options]
+HoldPkg     = pacman glibc
+Architecture = auto
+ParallelDownloads = 5
+SigLevel    = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+[core]
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+
+# SynapseOS local packages — on the live ISO
+[synapseos]
+SigLevel = Optional TrustAll
+Server = file:///run/archiso/airootfs/local-repo
+PACMANEOF
+ok "pacman.conf written (live-ISO paths)"
 
 # ── Run mkarchiso ─────────────────────────────────────────────
 step "Building ISO (mkarchiso)"
 
-ISO_LABEL="SYNAPSEOS_$(date +%Y%m)"
-log "Building ISO: label=${ISO_LABEL}"
+log "Building ISO..."
 log "This step takes 10-30 minutes depending on download speed..."
 
 mkarchiso \
     -v \
     -w "${WORK_DIR}" \
     -o "${OUT_DIR}" \
-    "${SCRIPT_DIR}"
+    "${SCRIPT_DIR}" \
+    || err "mkarchiso failed — check work/ for logs"
 
 ISO_FILE=$(ls -t "${OUT_DIR}"/*.iso 2>/dev/null | head -1)
-
-if [[ -z "$ISO_FILE" ]]; then
-    err "ISO not found in ${OUT_DIR} — mkarchiso may have failed"
-fi
-
+[[ -n "$ISO_FILE" ]] || err "ISO not found in ${OUT_DIR}"
 ok "ISO built: ${ISO_FILE}"
 
 # ── Sign ──────────────────────────────────────────────────────
@@ -389,7 +388,7 @@ if [[ "$SIGN" == "true" ]]; then
     ok "Signed: ${ISO_FILE}.asc"
 fi
 
-# ── Checksum ──────────────────────────────────────────────────
+# ── Checksums ─────────────────────────────────────────────────
 step "Generating checksums"
 cd "${OUT_DIR}"
 sha256sum "$(basename "${ISO_FILE}")" > "$(basename "${ISO_FILE}").sha256"
@@ -411,5 +410,5 @@ echo -e "  ${C_BRAND}To write to USB:${C_RESET}"
 echo -e "  ${C_DIM}dd if=${ISO_FILE} of=/dev/sdX bs=4M status=progress${C_RESET}"
 echo
 echo -e "  ${C_BRAND}To test in QEMU:${C_RESET}"
-echo -e "  ${C_DIM}./scripts/qemu-test.sh ${ISO_FILE}${C_RESET}"
+echo -e "  ${C_DIM}./build_scripts/qemu-test.sh ${ISO_FILE}${C_RESET}"
 echo
