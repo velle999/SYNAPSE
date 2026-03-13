@@ -1,21 +1,4 @@
 # /etc/synsh/synshrc
-# SynapseOS synsh — system-wide defaults
-
-# AI behavior
 set ai_confirm on
 set ai_explain on
 set color on
-
-# Aliases
-alias ll=ls -la --color=auto
-alias la=ls -A --color=auto
-alias l=ls -CF --color=auto
-alias ..=cd ..
-alias ...=cd ../..
-alias syn-logs=journalctl -u synapd -f
-alias syn-restart=systemctl restart synapd
-
-# Environment
-export EDITOR=nvim
-export PAGER=less
-export LESS=-R

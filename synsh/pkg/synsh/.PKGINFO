@@ -6,9 +6,9 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS natural language shell — AI-native command interface
 url = https://github.com/synapseos/synapseos
-builddate = 1773439544
+builddate = 1773443932
 packager = Unknown Packager
-size = 39800
+size = 39310
 arch = x86_64
 license = GPL2
 backup = etc/synsh/synshrc
