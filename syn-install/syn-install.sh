@@ -284,9 +284,11 @@ GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="SynapseOS"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet"
 GRUB_CMDLINE_LINUX=""
+GRUB_DISABLE_OS_PROBER=true
 EOF
 
-arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | tail -3
+mkdir -p /mnt/boot/grub
+arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1
 
 success "Bootloader installed"
 
