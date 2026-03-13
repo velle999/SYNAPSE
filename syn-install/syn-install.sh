@@ -77,6 +77,9 @@ prompt "Type 'yes' to confirm:"
 read -r confirm
 [ "$confirm" = "yes" ] || die "Aborted"
 
+# Clean up any previous failed install attempt
+umount -R /mnt 2>/dev/null || true
+
 # ── Detect boot mode ──────────────────────────────────────
 if [ -d /sys/firmware/efi/efivars ]; then
     BOOT_MODE="uefi"
@@ -105,6 +108,9 @@ if [ "$BOOT_MODE" = "uefi" ]; then
         PART_ROOT="${DISK}2"
     fi
 
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 2
+
     echo "  Formatting EFI partition..."
     mkfs.fat -F32 "$PART_EFI" || die "Failed to format EFI partition"
     echo "  Formatting root partition..."
@@ -126,14 +132,14 @@ else
         PART_ROOT="${DISK}1"
     fi
 
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 2
+
     echo "  Formatting root partition..."
     mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
     echo "  Mounting..."
     mount "$PART_ROOT" /mnt || die "Failed to mount root"
 fi
-
-partprobe "$DISK" 2>/dev/null || true
-sleep 1
 
 success "Disk partitioned and mounted at /mnt"
 
@@ -151,8 +157,12 @@ MIRROREOF
 
 pacman -Sy --noconfirm 2>/dev/null || true
 
+echo "  Initializing pacman keyring..."
+pacman-key --init
+pacman-key --populate archlinux
+
 echo "  Running pacstrap (this may take several minutes)..."
-pacstrap -K /mnt \
+pacstrap /mnt \
     base linux linux-firmware \
     grub efibootmgr \
     networkmanager openssh sudo \

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # syn-firstboot — SynapseOS first boot setup wizard
-set -euo pipefail
+# Note: intentionally no set -euo pipefail — failures must be handled gracefully
 
 MODEL_DIR="/var/lib/synapd/models"
 MODEL_PATH="$MODEL_DIR/synapse.gguf"
 DONE_FLAG="/var/lib/synguard/.firstboot_done"
 COLS=$(tput cols 2>/dev/null || echo 80)
 
-# -- UI helpers --------------------------------------------
+# ── UI helpers ────────────────────────────────────────────
 cyan()  { printf '\033[1;36m%s\033[0m' "$*"; }
 green() { printf '\033[1;32m%s\033[0m' "$*"; }
 red()   { printf '\033[1;31m%s\033[0m' "$*"; }
@@ -29,44 +29,23 @@ header() {
     echo ""
 }
 
-step() {
-    echo ""
-    cyan "  ▶ $*"
-    echo ""
-}
+step()    { echo ""; cyan "  ▶ $*"; echo ""; }
+success() { echo ""; green "  ✓ $*"; echo ""; }
+fail()    { echo ""; red "  ✗ $*"; echo ""; }
+prompt()  { printf "  $(bold "$1") "; }
 
-success() {
-    echo ""
-    green "  ✓ $*"
-    echo ""
-}
+# ── Safety net — always land in a shell on error ──────────
+trap 'echo ""; red "  firstboot error — dropping to synsh"; echo ""; exec /usr/bin/synsh' ERR
 
-fail() {
-    echo ""
-    red "  ✗ $*"
-    echo ""
-}
+# ── Check if already done ─────────────────────────────────
+LIVE_ISO=0
+mountpoint -q /run/archiso/airootfs 2>/dev/null && LIVE_ISO=1
 
-prompt() {
-    printf "  $(bold "$1") "
-}
-
-# -- Check if already done ---------------------------------
-# On live ISO always run firstboot
-if mountpoint -q /run/archiso/airootfs 2>/dev/null; then
-    LIVE_ISO=1
-else
-    LIVE_ISO=0
+if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ]; then
+    exec /usr/bin/synsh
 fi
 
-if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ] && [ -f "$MODEL_PATH" ]; then
-    exit 0
-fi
-
-
-# -- Detect if running from live ISO ----------------------
-# already set above
-
+# ── Live ISO — offer install or live session ──────────────
 if [ "$LIVE_ISO" = "1" ]; then
     header
     echo "  SynapseOS is running from a live ISO."
@@ -77,55 +56,65 @@ if [ "$LIVE_ISO" = "1" ]; then
     echo "    $(bold '2)') Try live session  — continue without installing"
     echo ""
     prompt "Choice [1-2]:"
-    read -r install_choice
+    read -r install_choice || true
 
     if [ "${install_choice:-2}" = "1" ]; then
         exec /usr/bin/syn-install
     fi
+    # Live session — skip firstboot wizard, go straight to synsh
+    exec /usr/bin/synsh
 fi
 
-# -- Welcome -----------------------------------------------
+# ── Welcome ───────────────────────────────────────────────
 header
 echo "  Welcome to SynapseOS."
 echo ""
 echo "  This wizard will set up your system in a few steps:"
-echo "    1. Network check"
-echo "    2. AI model download"
-echo "    3. System verification"
+echo "    1. Set root password"
+echo "    2. Network check"
+echo "    3. AI model download"
+echo "    4. System verification"
 echo ""
-prompt "Press ENTER to begin, or Ctrl+C to skip..."
-read -r
+prompt "Press ENTER to begin, or Ctrl+C to skip to shell..."
+read -r || true
 
-# -- Step 1: Network ---------------------------------------
+# ── Step 1: Root password ─────────────────────────────────
 header
-step "Step 1/3 — Network"
+step "Step 1/4 — Set Root Password"
+
+echo "  Set a password for the root account."
+echo "  (Leave blank to keep no password)"
+echo ""
+passwd root || true
+
+# ── Step 2: Network ───────────────────────────────────────
+header
+step "Step 2/4 — Network"
 
 echo "  Checking network connectivity..."
+HAVE_NET=0
 if ping -c 1 -W 3 8.8.8.8 &>/dev/null; then
     success "Network is up"
     HAVE_NET=1
 else
-    echo "  No network detected. Attempting to connect..."
+    echo "  No network detected. Starting NetworkManager..."
     systemctl start NetworkManager 2>/dev/null || true
     sleep 3
-    nmcli device connect "$(nmcli -t -f DEVICE d | head -1)" 2>/dev/null || true
-    sleep 5
     if ping -c 1 -W 3 8.8.8.8 &>/dev/null; then
         success "Network connected"
         HAVE_NET=1
     else
         fail "No network available"
-        HAVE_NET=0
         echo "  You can download a model later with: $(cyan 'syn model download')"
     fi
 fi
 
-# -- Step 2: Model -----------------------------------------
+# ── Step 3: Model ─────────────────────────────────────────
 header
-step "Step 2/3 — AI Model"
+step "Step 3/4 — AI Model"
 
 if [ -f "$MODEL_PATH" ]; then
-    success "Model already installed ($(du -sh "$MODEL_PATH" | cut -f1))"
+    success "Model already installed ($(du -sh "$MODEL_PATH" 2>/dev/null | cut -f1))"
 elif [ "$HAVE_NET" = "0" ]; then
     echo "  Skipping model download (no network)"
     echo "  Run $(cyan 'syn model download') when connected"
@@ -139,22 +128,20 @@ else
     echo "    $(bold '4)') skip      Skip for now"
     echo ""
     prompt "Choice [1-4]:"
-    read -r choice
+    read -r choice || true
 
-    case "$choice" in
+    case "${choice:-4}" in
         1) MODEL="tiny" ;;
         2) MODEL="phi3" ;;
         3) MODEL="mistral-7b" ;;
-        4) MODEL="" ;;
-        *) MODEL="tiny" ;;
+        *) MODEL="" ;;
     esac
 
     if [ -n "$MODEL" ]; then
         echo ""
         echo "  Downloading $(bold "$MODEL")..."
-        echo ""
         mkdir -p "$MODEL_DIR"
-        if syn-model download "$MODEL"; then
+        if syn-model download "$MODEL" 2>/dev/null; then
             success "Model downloaded"
         else
             fail "Download failed — run: syn model download $MODEL"
@@ -164,14 +151,14 @@ else
     fi
 fi
 
-# -- Step 3: Verify ----------------------------------------
+# ── Step 4: System check ──────────────────────────────────
 header
-step "Step 3/3 — System Check"
+step "Step 4/4 — System Check"
 
 check() {
     local name="$1" cmd="$2"
     printf "  %-20s" "$name"
-    if eval "$cmd" &>/dev/null; then
+    if eval "$cmd" &>/dev/null 2>&1; then
         green "✓"
     else
         red "✗"
@@ -186,24 +173,23 @@ check "synapse_kmod"  "lsmod | grep -q synapse_kmod"
 check "AI model"      "test -f $MODEL_PATH"
 check "network"       "ping -c1 -W2 8.8.8.8"
 
-# -- Done --------------------------------------------------
+# ── Done ──────────────────────────────────────────────────
 echo ""
 line
 echo ""
 green "  SynapseOS is ready."
 echo ""
-echo "  $(bold 'synsh')  — AI shell (type naturally or use commands)"
-echo "  $(bold 'syn status')  — system dashboard"
-echo "  $(bold 'syn info')    — system info"
-echo "  $(bold 'syn model')   — manage AI models"
+echo "  $(bold 'synsh')          — AI shell"
+echo "  $(bold 'syn status')     — system dashboard"
+echo "  $(bold 'syn model')      — manage AI models"
 echo ""
 line
 echo ""
 
-# Mark done
-mkdir -p "$(dirname "$DONE_FLAG")"
-touch "$DONE_FLAG"
+# Mark firstboot complete
+mkdir -p "$(dirname "$DONE_FLAG")" 2>/dev/null || true
+touch "$DONE_FLAG" 2>/dev/null || true
 
 prompt "Press ENTER to launch synsh..."
-read -r
+read -r || true
 exec /usr/bin/synsh
