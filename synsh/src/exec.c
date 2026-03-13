@@ -165,6 +165,31 @@ static int run_cmd(synsh_state_t *s,
 }
 
 /* ── Execute a pipeline string ────────────────────────────── */
+
+/* ── Alias expansion ──────────────────────────────────────── */
+/*
+ * Expands the first word of 'line' if it matches an alias.
+ * Writes expanded result into 'out' (max out_len bytes).
+ * Returns 1 if expanded, 0 if not.
+ */
+static int alias_expand(synsh_state_t *s, const char *line, char *out, size_t out_len) {
+    if (!s->alias_count) return 0;
+
+    /* Find end of first word */
+    const char *p = line;
+    while (*p && *p != ' ' && *p != '\t') p++;
+    size_t wlen = (size_t)(p - line);
+
+    for (int i = 0; i < s->alias_count; i++) {
+        if (strlen(s->alias_names[i]) == wlen &&
+            strncmp(s->alias_names[i], line, wlen) == 0) {
+            snprintf(out, out_len, "%s%s", s->alias_values[i], p);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int execute_pipeline(synsh_state_t *s, const char *line) {
     if (!line || !*line) return 0;
 

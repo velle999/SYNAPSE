@@ -25,6 +25,9 @@ int synsh_init(synsh_state_t *s, int argc, char *argv[]) {
     memset(s, 0, sizeof(*s));
 
     s->running    = 1;
+    s->alias_count = 0;
+    memset(s->alias_names,  0, sizeof(s->alias_names));
+    memset(s->alias_values, 0, sizeof(s->alias_values));
     s->ai_confirm = 1;   /* ask before running AI commands by default */
     s->ai_explain = 1;
     s->color      = isatty(STDOUT_FILENO) ? 1 : 0;
@@ -107,6 +110,16 @@ void synsh_load_rc(synsh_state_t *s) {
                 continue;
             }
 
+            /* Handle 'alias' directives */
+            if (strncmp(line, "alias ", 6) == 0) {
+                execute_builtin_line(s, line);
+                continue;
+            }
+            /* Handle 'export' directives */
+            if (strncmp(line, "export ", 7) == 0) {
+                execute_builtin_line(s, line);
+                continue;
+            }
             /* Execute other lines as shell commands */
             execute_pipeline(s, line);
         }
@@ -128,5 +141,9 @@ void synsh_destroy(synsh_state_t *s) {
     free(s->home);
     free(s->user);
     free(s->cwd);
+    for (int i = 0; i < s->alias_count; i++) {
+        free(s->alias_names[i]);
+        free(s->alias_values[i]);
+    }
     memset(s, 0, sizeof(*s));
 }

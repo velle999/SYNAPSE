@@ -201,6 +201,8 @@ typedef struct { const char *name; int (*fn)(synsh_state_t *, int, char **); } b
 
 static builtin_t BUILTIN_TABLE[] = {
     {"cd",     builtin_cd},
+    {"alias",   builtin_alias},
+    {"unalias", builtin_unalias},
     {"export", builtin_export},
     {"jobs",   builtin_jobs},
     {"syn",    builtin_syn},

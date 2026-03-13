@@ -183,27 +183,34 @@ success "Base system installed"
 header
 step "Step 4/6 — Installing SynapseOS"
 
-SYNAPSE_PKGS=(
-    synapd synsh synnet synguard synui
-    syn syn-model syn-firstboot
-)
+# Copy local-repo into chroot and install via pacman
+LIVE_REPO="/run/archiso/airootfs/local-repo"
+CHROOT_REPO="/mnt/var/cache/synapseos"
 
-for pkg in "${SYNAPSE_PKGS[@]}"; do
-    PKG_FILE=$(find \
-        /run/archiso/bootmnt \
-        /run/archiso/airootfs \
-        /run/archiso/bootmnt/arch/pkgs \
-        -name "${pkg}-*.pkg.tar.zst" 2>/dev/null | head -1)
-    if [ -n "$PKG_FILE" ]; then
-        echo "  Installing $pkg..."
-        cp "$PKG_FILE" /mnt/tmp/
-        arch-chroot /mnt pacman -U "/tmp/$(basename "$PKG_FILE")" \
-            --noconfirm 2>/dev/null \
-            || warn "Could not install $pkg — skipping"
-    else
-        warn "$pkg not found on ISO — skipping"
-    fi
-done
+mkdir -p "$CHROOT_REPO"
+cp "$LIVE_REPO"/*.pkg.tar.zst "$CHROOT_REPO/" 2>/dev/null || true
+
+# Build repo db inside chroot
+arch-chroot /mnt bash -c "
+    cd /var/cache/synapseos && \
+    repo-add synapseos.db.tar.gz *.pkg.tar.zst 2>/dev/null && \
+    ln -sf synapseos.db.tar.gz synapseos.db && \
+    ln -sf synapseos.files.tar.gz synapseos.files
+"
+
+# Add synapseos repo to chroot pacman.conf
+cat >> /mnt/etc/pacman.conf << REPOEOF
+
+[synapseos]
+SigLevel = Optional TrustAll
+Server = file:///var/cache/synapseos
+REPOEOF
+
+# Install all SynapseOS packages
+arch-chroot /mnt pacman -Sy --noconfirm \
+    synapd synsh synnet synguard synui \
+    syn syn-model syn-firstboot \
+    2>&1 || warn "Some SynapseOS packages failed to install"
 
 success "SynapseOS packages installed"
 

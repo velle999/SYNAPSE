@@ -114,6 +114,10 @@ typedef struct synsh_state {
     unsigned long ai_assists;
     syn_job_t  *jobs;
     int         next_job_id;
+    /* Alias table */
+    char       *alias_names[128];
+    char       *alias_values[128];
+    int         alias_count;
 } synsh_state_t;
 
 /* Function declarations */
