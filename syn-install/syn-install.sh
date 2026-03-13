@@ -78,13 +78,11 @@ read -r confirm
 [ "$confirm" = "yes" ] || die "Aborted"
 
 # ── Detect boot mode ──────────────────────────────────────
-if [ -d /sys/firmware/efi ]; then
+if [ -d /sys/firmware/efi/efivars ]; then
     BOOT_MODE="uefi"
-    echo ""
     success "Boot mode: UEFI"
 else
     BOOT_MODE="bios"
-    echo ""
     success "Boot mode: BIOS/Legacy"
 fi
 
@@ -99,7 +97,6 @@ if [ "$BOOT_MODE" = "uefi" ]; then
     parted -s "$DISK" set 1 esp on
     parted -s "$DISK" mkpart root ext4 513MiB 100%
 
-    # Partition names
     if [[ "$DISK" == *"nvme"* ]]; then
         PART_EFI="${DISK}p1"
         PART_ROOT="${DISK}p2"
@@ -109,14 +106,14 @@ if [ "$BOOT_MODE" = "uefi" ]; then
     fi
 
     echo "  Formatting EFI partition..."
-    mkfs.fat -F32 "$PART_EFI"
+    mkfs.fat -F32 "$PART_EFI" || die "Failed to format EFI partition"
     echo "  Formatting root partition..."
-    mkfs.ext4 -F "$PART_ROOT"
+    mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
 
     echo "  Mounting..."
-    mount "$PART_ROOT" /mnt
+    mount "$PART_ROOT" /mnt || die "Failed to mount root"
     mkdir -p /mnt/boot/efi
-    mount "$PART_EFI" /mnt/boot/efi
+    mount "$PART_EFI" /mnt/boot/efi || die "Failed to mount EFI"
 else
     echo "  Creating MBR partition table..."
     parted -s "$DISK" mklabel msdos
@@ -130,10 +127,14 @@ else
     fi
 
     echo "  Formatting root partition..."
-    mkfs.ext4 -F "$PART_ROOT"
+    mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
     echo "  Mounting..."
-    mount "$PART_ROOT" /mnt
+    mount "$PART_ROOT" /mnt || die "Failed to mount root"
 fi
+
+# Inform kernel of new partition table
+partprobe "$DISK" 2>/dev/null || true
+sleep 1
 
 success "Disk partitioned and mounted at /mnt"
 
@@ -141,23 +142,25 @@ success "Disk partitioned and mounted at /mnt"
 header
 step "Step 3/6 — Installing Base System"
 
-echo "  This may take several minutes..."
-echo ""
-
-# Fix mirrorlist
-echo 'Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch' > /etc/pacman.d/mirrorlist
+echo "  Refreshing mirrors..."
+echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist
 pacman -Sy --noconfirm 2>/dev/null || true
 
-# Fix mirrorlist on both live system and target
-MIRROR='Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch'
-echo "\$MIRROR" > /etc/pacman.d/mirrorlist
-mkdir -p /mnt/etc/pacman.d
-echo "\$MIRROR" > /mnt/etc/pacman.d/mirrorlist
-pacman -Sy --noconfirm 2>/dev/null || true
+echo "  Running pacstrap (this may take several minutes)..."
+pacstrap -K /mnt \
+    base linux linux-firmware \
+    grub efibootmgr \
+    networkmanager openssh sudo \
+    seatd \
+    mkinitcpio \
+    2>&1 || die "pacstrap failed — check network and mirrors"
 
-# Use pacstrap to install base system
-pacstrap /mnt     base linux linux-firmware     grub efibootmgr     networkmanager openssh sudo     seatd     mkinitcpio 2>&1
-echo "pacstrap exit code: $?"
+# Verify grub actually landed in the chroot before going further
+if ! arch-chroot /mnt which grub-install &>/dev/null; then
+    echo "  grub-install not found in chroot — installing grub directly..."
+    arch-chroot /mnt pacman -S --noconfirm grub efibootmgr 2>&1 \
+        || die "Could not install grub into target system"
+fi
 
 success "Base system installed"
 
@@ -165,15 +168,11 @@ success "Base system installed"
 header
 step "Step 4/6 — Installing SynapseOS"
 
-# Copy local repo to target
 mkdir -p /mnt/var/cache/synapseos-repo
-cp /run/archiso/bootmnt/arch/pkgs/*.pkg.tar.zst /mnt/var/cache/synapseos-repo/ 2>/dev/null || true
 
-# Find packages from the live ISO local repo
 SYNAPSE_PKGS=(
     synapd synsh synnet synguard synui
     syn syn-model syn-firstboot
-    mkinitcpio-archiso archiso
 )
 
 for pkg in "${SYNAPSE_PKGS[@]}"; do
@@ -182,7 +181,10 @@ for pkg in "${SYNAPSE_PKGS[@]}"; do
     if [ -n "$PKG_FILE" ]; then
         echo "  Installing $pkg..."
         cp "$PKG_FILE" /mnt/tmp/
-        arch-chroot /mnt pacman -U "/tmp/$(basename "$PKG_FILE")" --noconfirm 2>/dev/null || true
+        arch-chroot /mnt pacman -U "/tmp/$(basename "$PKG_FILE")" --noconfirm 2>/dev/null || \
+            warn "Could not install $pkg — skipping"
+    else
+        warn "$pkg not found on ISO — skipping"
     fi
 done
 
@@ -198,6 +200,11 @@ echo "  fstab generated"
 
 # hostname
 echo "synapse" > /mnt/etc/hostname
+cat > /mnt/etc/hosts << 'EOF'
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   synapse.localdomain synapse
+EOF
 echo "  Hostname: synapse"
 
 # locale
@@ -208,6 +215,7 @@ echo "  Locale configured"
 
 # timezone
 arch-chroot /mnt ln -sf /usr/share/zoneinfo/UTC /etc/localtime 2>/dev/null || true
+arch-chroot /mnt hwclock --systohc 2>/dev/null || true
 echo "  Timezone: UTC"
 
 # os-release
@@ -259,7 +267,8 @@ d /var/lib/synapd/models 0755 root root -
 EOF
 
 # mkinitcpio
-arch-chroot /mnt mkinitcpio -P 2>&1 | tail -3 || true
+echo "  Generating initramfs..."
+arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors — check manually"
 
 success "System configured"
 
@@ -267,17 +276,7 @@ success "System configured"
 header
 step "Step 6/6 — Installing Bootloader"
 
-if [ "$BOOT_MODE" = "uefi" ]; then
-    arch-chroot /mnt grub-install \
-        --target=x86_64-efi \
-        --efi-directory=/boot/efi \
-        --bootloader-id=SynapseOS 2>&1
-else
-    arch-chroot /mnt grub-install \
-        --target=i386-pc "$DISK" 2>&1
-fi
-
-# SynapseOS grub config
+# Write grub defaults BEFORE running grub-install/grub-mkconfig
 cat > /mnt/etc/default/grub << 'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
@@ -288,7 +287,29 @@ GRUB_DISABLE_OS_PROBER=true
 EOF
 
 mkdir -p /mnt/boot/grub
-arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1
+
+echo "  Installing GRUB ($BOOT_MODE)..."
+if [ "$BOOT_MODE" = "uefi" ]; then
+    arch-chroot /mnt grub-install \
+        --target=x86_64-efi \
+        --efi-directory=/boot/efi \
+        --bootloader-id=SynapseOS \
+        --recheck \
+        2>&1 || die "grub-install (UEFI) failed"
+else
+    arch-chroot /mnt grub-install \
+        --target=i386-pc \
+        --recheck \
+        "$DISK" \
+        2>&1 || die "grub-install (BIOS) failed"
+fi
+
+echo "  Generating GRUB config..."
+arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 \
+    || die "grub-mkconfig failed"
+
+# Hard verify
+[ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg not found after install — something went very wrong"
 
 success "Bootloader installed"
 
@@ -305,20 +326,12 @@ echo ""
 echo "  On first boot, the setup wizard will guide you through"
 echo "  downloading an AI model and configuring your system."
 echo ""
-# Verify GRUB was installed
-if [ ! -f /mnt/boot/grub/grub.cfg ]; then
-    warn "GRUB config missing — reinstalling..."
-    if [ "$BOOT_MODE" = "uefi" ]; then
-        arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=SynapseOS --recheck 2>&1
-    else
-        arch-chroot /mnt grub-install --target=i386-pc "$DISK" --recheck 2>&1
-    fi
-    arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1
-fi
-
-ls /mnt/boot/grub/grub.cfg && success "GRUB verified" || fail "GRUB still missing!"
+echo "  $(bold 'Installed:')"
+echo "    /boot/grub/grub.cfg  ✓"
+[ "$BOOT_MODE" = "uefi" ] && echo "    /boot/efi/EFI/SynapseOS/  ✓"
+echo ""
 
 prompt "Remove installation media and press ENTER to reboot..."
 read -r
-umount -R /mnt
+umount -R /mnt 2>/dev/null || true
 reboot
