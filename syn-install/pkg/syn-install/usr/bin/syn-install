@@ -208,7 +208,7 @@ REPOEOF
 
 # Install all SynapseOS packages
 arch-chroot /mnt pacman -Sy --noconfirm \
-    synapd synsh synnet synguard synui \
+    synapd synsh synnet synguard synui synapse_kmod \
     syn syn-model syn-firstboot \
     2>&1 || warn "Some SynapseOS packages failed to install"
 
