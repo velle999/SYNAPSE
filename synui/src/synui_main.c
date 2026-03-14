@@ -402,6 +402,24 @@ int synui_run(syn_server_t *s)
         wlr_log(WLR_ERROR, "synui: failed to start backend");
         return -1;
     }
+    /* Autostart: launch foot terminal with synsh */
+    pid_t pid = fork();
+    if (pid == 0) {
+        sleep(1);
+        execl("/usr/bin/foot", "foot", "-e", "/usr/bin/synsh", NULL);
+        execl("/usr/bin/foot", "foot", NULL);
+        _exit(1);
+    }
+
+    /* Autostart: launch foot terminal with synsh */
+    pid_t pid = fork();
+    if (pid == 0) {
+        sleep(1);
+        execl("/usr/bin/foot", "foot", "-e", "/usr/bin/synsh", NULL);
+        execl("/usr/bin/foot", "foot", NULL);
+        _exit(1);
+    }
+
     wl_display_run(s->display);
     return 0;
 }
