@@ -29,3 +29,4 @@ syn-firstboot
 syn-install
 synapse_kmod
 foot
+virtualbox-guest-utils

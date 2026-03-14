@@ -405,18 +405,32 @@ int synui_run(syn_server_t *s)
     /* Autostart: launch foot terminal with synsh */
     pid_t pid = fork();
     if (pid == 0) {
-        sleep(1);
+        sleep(2);
+        /* Ensure WAYLAND_DISPLAY is set in child */
+        setenv("WAYLAND_DISPLAY", getenv("WAYLAND_DISPLAY") ?: "wayland-1", 1);
+        setenv("XDG_RUNTIME_DIR", "/run/user/0", 1);
         execl("/usr/bin/foot", "foot", "-e", "/usr/bin/synsh", NULL);
         execl("/usr/bin/foot", "foot", NULL);
+        /* Fallback: try via sh */
+        execl("/bin/sh", "sh", "-c",
+              "WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR=/run/user/0 foot -e synsh",
+              NULL);
         _exit(1);
     }
 
     /* Autostart: launch foot terminal with synsh */
     pid_t pid = fork();
     if (pid == 0) {
-        sleep(1);
+        sleep(2);
+        /* Ensure WAYLAND_DISPLAY is set in child */
+        setenv("WAYLAND_DISPLAY", getenv("WAYLAND_DISPLAY") ?: "wayland-1", 1);
+        setenv("XDG_RUNTIME_DIR", "/run/user/0", 1);
         execl("/usr/bin/foot", "foot", "-e", "/usr/bin/synsh", NULL);
         execl("/usr/bin/foot", "foot", NULL);
+        /* Fallback: try via sh */
+        execl("/bin/sh", "sh", "-c",
+              "WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR=/run/user/0 foot -e synsh",
+              NULL);
         _exit(1);
     }
 

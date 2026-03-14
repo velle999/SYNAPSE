@@ -272,7 +272,7 @@ done
 
 # Enable services
 arch-chroot /mnt systemctl enable \
-    NetworkManager synapd synnet synguard seatd \
+    NetworkManager synapd synnet synguard seatd vboxservice \
     2>/dev/null || true
 echo "  Services enabled"
 
@@ -289,7 +289,7 @@ if [ "$(tty)" = "/dev/tty1" ]; then
     if [ ! -f /var/lib/synguard/.firstboot_done ]; then
         exec /usr/bin/syn-firstboot
     else
-        exec /usr/bin/synui
+        exec /usr/bin/synsh
     fi
 fi
 EOF
