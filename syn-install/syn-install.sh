@@ -271,9 +271,9 @@ for f in \
 done
 
 # Enable services
-arch-chroot /mnt systemctl enable \
-    NetworkManager synapd synnet synguard seatd vboxservice \
-    2>/dev/null || true
+arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
+arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
+arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 echo "  Services enabled"
 
 # Auto-login to synsh on tty1

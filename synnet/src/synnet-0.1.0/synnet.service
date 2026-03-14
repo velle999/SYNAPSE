@@ -1,0 +1,15 @@
+[Unit]
+Description=SynapseOS AI Network Policy Daemon
+After=network.target synapd.service
+Wants=synapd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/synnet
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

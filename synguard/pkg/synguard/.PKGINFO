@@ -6,7 +6,7 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS AI-driven security monitor and threat classifier
 url = 
-builddate = 1773260707
+builddate = 1773462293
 packager = Unknown Packager
 size = 50924
 arch = x86_64
