@@ -387,6 +387,10 @@ int synui_init(syn_server_t *s)
     setenv("WAYLAND_DISPLAY", socket, 1);
     wlr_log(WLR_INFO, "synui: running on WAYLAND_DISPLAY=%s", socket);
 
+    /* Write socket name for synui-foot.service */
+    FILE *sf = fopen("/tmp/synui-display", "w");
+    if (sf) { fprintf(sf, "%s\n", socket); fclose(sf); }
+
     /* Start AI thread */
     ai_thread_start(s);
 

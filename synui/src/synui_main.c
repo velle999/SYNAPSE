@@ -400,6 +400,10 @@ int synui_init(syn_server_t *s)
     setenv("WAYLAND_DISPLAY", socket, 1);
     wlr_log(WLR_INFO, "synui: running on WAYLAND_DISPLAY=%s", socket);
 
+    /* Write socket name for synui-foot.service */
+    FILE *sf = fopen("/tmp/synui-display", "w");
+    if (sf) { fprintf(sf, "%s\n", socket); fclose(sf); }
+
     /* Start AI thread */
     ai_thread_start(s);
 
@@ -416,25 +420,6 @@ int synui_run(syn_server_t *s)
         wlr_log(WLR_ERROR, "synui: failed to start backend");
         return -1;
     }
-    /* Autostart: launch foot terminal with synsh */
-    pid_t autostart_pid = fork();
-    if (autostart_pid == 0) {
-        sleep(2);
-        const char *wd = getenv("WAYLAND_DISPLAY");
-        if (!wd || !wd[0]) wd = "wayland-1";
-        setenv("WAYLAND_DISPLAY", wd, 1);
-        setenv("XDG_RUNTIME_DIR", "/run/user/0", 1);
-        setenv("XDG_SESSION_TYPE", "wayland", 1);
-        execl("/usr/bin/foot", "foot", "-e", "/usr/bin/synsh", NULL);
-        /* fallback: foot without synsh */
-        execl("/usr/bin/foot", "foot", NULL);
-        /* last resort: via shell with logging */
-        execl("/bin/sh", "sh", "-c",
-              "foot -e synsh 2>/tmp/foot.log", NULL);
-        fprintf(stderr, "synui: autostart: failed to exec foot: %s\n", strerror(errno));
-        _exit(1);
-    }
-
     wl_display_run(s->display);
     return 0;
 }
