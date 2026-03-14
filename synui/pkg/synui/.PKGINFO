@@ -6,9 +6,9 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS Wayland Compositor
 url = 
-builddate = 1773489540
+builddate = 1773491003
 packager = Unknown Packager
-size = 18440
+size = 19352
 arch = x86_64
 license = GPL2
 depend = wlroots0.19

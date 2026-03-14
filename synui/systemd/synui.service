@@ -1,28 +1,21 @@
-# ~/.config/systemd/user/synui.service  (or /etc/systemd/user/)
-# SynapseOS Wayland Compositor — user session unit
-
 [Unit]
-Description=SynapseOS Wayland Compositor (synui)
-BindsTo=graphical-session.target
-Wants=graphical-session-pre.target
-After=graphical-session-pre.target
-Before=graphical-session.target
+Description=SynapseOS Wayland Compositor
+After=synapd.service seatd.service
+Wants=synapd.service synui-foot.service
 
 [Service]
 Type=simple
+User=root
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=XDG_SESSION_TYPE=wayland
+ExecStartPre=/bin/mkdir -p /run/user/0
 ExecStart=/usr/bin/synui
 Restart=on-failure
 RestartSec=3
 
-# Wayland environment
-Environment=XDG_SESSION_TYPE=wayland
-Environment=XDG_CURRENT_DESKTOP=SynapseOS
-
-# AI stack
-Environment=SYNAPD_SOCKET=/run/synapd/synapd.sock
-
-StandardOutput=journal
-StandardError=journal
-
 [Install]
-WantedBy=graphical-session.target
+WantedBy=multi-user.target

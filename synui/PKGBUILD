@@ -18,4 +18,9 @@ build() {
 package() {
     cd "$srcdir/synui-0.1.0"
     DESTDIR="$pkgdir" ninja -C build install
+
+    install -Dm644 systemd/synui.service \
+        "$pkgdir/usr/lib/systemd/system/synui.service"
+    install -Dm644 systemd/synui-foot.service \
+        "$pkgdir/usr/lib/systemd/system/synui-foot.service"
 }

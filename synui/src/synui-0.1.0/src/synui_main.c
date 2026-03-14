@@ -287,7 +287,7 @@ int synui_init(syn_server_t *s)
     setenv("SYNUI_RUNNING", "1", 1);
     setenv("XDG_SESSION_TYPE", "wayland", 1);
     setenv("XDG_CURRENT_DESKTOP", "SynapseOS", 1);
-    setenv("WAYLAND_DISPLAY", "", 0);  /* will be set after display creation */
+    /* WAYLAND_DISPLAY will be set after socket creation below */
 
     /* Declare AI intent to the kernel */
     struct {
@@ -306,21 +306,34 @@ int synui_init(syn_server_t *s)
 
     /* Create Wayland display */
     s->display = wl_display_create();
-    if (!s->display) return -1;
+    if (!s->display) {
+        fprintf(stderr, "synui: wl_display_create() failed\n");
+        return -1;
+    }
 
     /* Create wlroots backend */
     s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display), NULL);
     if (!s->backend) {
+        fprintf(stderr, "synui: wlr_backend_autocreate() failed (WLR_BACKENDS=%s WLR_RENDERER=%s)\n",
+                getenv("WLR_BACKENDS") ? getenv("WLR_BACKENDS") : "(auto)",
+                getenv("WLR_RENDERER") ? getenv("WLR_RENDERER") : "(auto)");
         wlr_log(WLR_ERROR, "synui: failed to create backend");
         return -1;
     }
 
     s->renderer = wlr_renderer_autocreate(s->backend);
-    if (!s->renderer) return -1;
+    if (!s->renderer) {
+        fprintf(stderr, "synui: wlr_renderer_autocreate() failed (WLR_RENDERER=%s)\n",
+                getenv("WLR_RENDERER") ? getenv("WLR_RENDERER") : "(auto)");
+        return -1;
+    }
     wlr_renderer_init_wl_display(s->renderer, s->display);
 
     s->allocator = wlr_allocator_autocreate(s->backend, s->renderer);
-    if (!s->allocator) return -1;
+    if (!s->allocator) {
+        fprintf(stderr, "synui: wlr_allocator_autocreate() failed\n");
+        return -1;
+    }
 
     /* Compositor protocols */
     s->compositor = wlr_compositor_create(s->display, 5, s->renderer);
@@ -403,6 +416,7 @@ int synui_init(syn_server_t *s)
 int synui_run(syn_server_t *s)
 {
     if (!wlr_backend_start(s->backend)) {
+        fprintf(stderr, "synui: wlr_backend_start() failed — check DRM/KMS access and kernel logs\n");
         wlr_log(WLR_ERROR, "synui: failed to start backend");
         return -1;
     }
@@ -419,6 +433,28 @@ void synui_destroy(syn_server_t *s)
     wlr_output_layout_destroy(s->output_layout);
     wlr_backend_destroy(s->backend);
     wl_display_destroy(s->display);
+}
+
+/* ── VM detection ────────────────────────────────────────── */
+/*
+ * Reads /sys/class/dmi/id/sys_vendor to detect hypervisors.
+ * Returns 1 if running in VirtualBox, VMware, or QEMU; 0 otherwise.
+ */
+static int detect_vm(void)
+{
+    static const char *const vendors[] = {
+        "VirtualBox", "VMware", "QEMU", "innotek", "KVM", "Xen", NULL
+    };
+    FILE *f = fopen("/sys/class/dmi/id/sys_vendor", "r");
+    if (!f) return 0;
+    char buf[128] = {0};
+    fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    for (int i = 0; vendors[i]; i++) {
+        if (strstr(buf, vendors[i]))
+            return 1;
+    }
+    return 0;
 }
 
 /* ── Entry point ─────────────────────────────────────────── */
@@ -479,6 +515,17 @@ int main(int argc, char *argv[])
 
     wlr_log_init(debug ? WLR_DEBUG : WLR_INFO, NULL);
 
+    /* Detect VM and force software rendering before any wlroots init */
+    if (detect_vm()) {
+        fprintf(stderr, "synui: VM/hypervisor detected — forcing pixman renderer\n");
+        setenv("WLR_RENDERER", "pixman", 1);
+        /* Only set WLR_BACKENDS if caller hasn't already chosen one */
+        if (!getenv("WLR_BACKENDS"))
+            setenv("WLR_BACKENDS", "drm,libinput", 1);
+        /* Disable hardware cursor; vmwgfx can't do it */
+        setenv("WLR_NO_HARDWARE_CURSORS", "1", 1);
+    }
+
     syn_server_t server = {0};
     if (no_ai) {
         atomic_store(&server.ai_connected, 0);
@@ -486,6 +533,10 @@ int main(int argc, char *argv[])
     if (start_overlay) {
         server.overlay.visible = 1;
     }
+
+    fprintf(stderr, "synui: starting (WLR_RENDERER=%s WLR_BACKENDS=%s)\n",
+            getenv("WLR_RENDERER") ? getenv("WLR_RENDERER") : "(auto)",
+            getenv("WLR_BACKENDS") ? getenv("WLR_BACKENDS") : "(auto)");
 
     if (synui_init(&server) < 0) {
         fprintf(stderr, "synui: initialization failed\n");

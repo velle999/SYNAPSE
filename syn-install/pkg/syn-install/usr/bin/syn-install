@@ -266,6 +266,8 @@ for f in \
     /etc/systemd/system/synapd.service \
     /etc/systemd/system/synnet.service \
     /etc/systemd/system/synguard.service \
+    /etc/systemd/system/synui.service \
+    /etc/systemd/system/synui-foot.service \
     /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
@@ -273,6 +275,7 @@ done
 # Enable services
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
+arch-chroot /mnt systemctl enable synui synui-foot 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 echo "  Services enabled"
 
