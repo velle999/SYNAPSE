@@ -1,12 +1,12 @@
 [Unit]
 Description=SynapseOS Wayland Compositor
-After=synapd.service seatd.service systemd-logind.service
+After=synapd.service seatd.service
 Wants=synapd.service synui-foot.service
+Requires=seatd.service
 
 [Service]
 Type=simple
 User=root
-PAMName=login
 TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=tty
@@ -19,4 +19,4 @@ Restart=on-failure
 RestartSec=3
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target

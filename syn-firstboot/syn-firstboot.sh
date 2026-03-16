@@ -4,8 +4,26 @@
 
 MODEL_DIR="/var/lib/synapd/models"
 MODEL_PATH="$MODEL_DIR/synapse.gguf"
-DONE_FLAG="/var/lib/synguard/.firstboot_done"
+DONE_FLAG="/var/lib/synapseos/firstboot.done"
+DE_CONF="/etc/synapseos/desktop.conf"
 COLS=$(tput cols 2>/dev/null || echo 80)
+
+# ── Background setup (runs in parallel with wizard display) ───
+# Builds synapse_kmod via DKMS and ensures synapd is running.
+_bg_setup() {
+    local kver; kver="$(uname -r)"
+    local src="/usr/src/synapse_kmod-0.1.0"
+    if [[ -d "$src" ]] && command -v dkms &>/dev/null; then
+        dkms add synapse_kmod/0.1.0 2>/dev/null || true
+        dkms build synapse_kmod/0.1.0 -k "$kver" 2>/dev/null || true
+        dkms install synapse_kmod/0.1.0 -k "$kver" 2>/dev/null || true
+        depmod -a "$kver" 2>/dev/null || true
+        modprobe synapse_kmod 2>/dev/null || true
+    fi
+    systemctl start synapd 2>/dev/null || true
+}
+_bg_setup &
+BG_PID=$!
 
 # ── UI helpers ────────────────────────────────────────────
 cyan()  { printf '\033[1;36m%s\033[0m' "$*"; }
@@ -42,7 +60,17 @@ LIVE_ISO=0
 mountpoint -q /run/archiso/airootfs 2>/dev/null && LIVE_ISO=1
 
 if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ]; then
-    exec /usr/bin/synsh
+    # Already configured — start the chosen DE directly
+    if [ -f "$DE_CONF" ]; then
+        source "$DE_CONF" 2>/dev/null || true
+        case "${DE:-synui}" in
+            kde)   exec systemctl start sddm.service ;;
+            gnome) exec systemctl start gdm.service ;;
+            tty)   exec /usr/bin/synsh ;;
+            *)     exec systemctl start synui.service ;;
+        esac
+    fi
+    exec systemctl start synui.service
 fi
 
 # ── Live ISO — offer install or live session ──────────────
@@ -74,13 +102,14 @@ echo "    1. Set root password"
 echo "    2. Network check"
 echo "    3. AI model download"
 echo "    4. System verification"
+echo "    5. Desktop environment"
 echo ""
 prompt "Press ENTER to begin, or Ctrl+C to skip to shell..."
 read -r || true
 
 # ── Step 1: Root password ─────────────────────────────────
 header
-step "Step 1/4 — Set Root Password"
+step "Step 1/5 — Set Root Password"
 
 echo "  Set a password for the root account."
 echo "  (Leave blank to keep no password)"
@@ -89,7 +118,7 @@ passwd root || true
 
 # ── Step 2: Network ───────────────────────────────────────
 header
-step "Step 2/4 — Network"
+step "Step 2/5 — Network"
 
 echo "  Checking network connectivity..."
 HAVE_NET=0
@@ -111,7 +140,7 @@ fi
 
 # ── Step 3: Model ─────────────────────────────────────────
 header
-step "Step 3/4 — AI Model"
+step "Step 3/5 — AI Model"
 
 if [ -f "$MODEL_PATH" ]; then
     success "Model already installed ($(du -sh "$MODEL_PATH" 2>/dev/null | cut -f1))"
@@ -153,7 +182,10 @@ fi
 
 # ── Step 4: System check ──────────────────────────────────
 header
-step "Step 4/4 — System Check"
+step "Step 4/5 — System Check"
+
+# Wait for background DKMS build to finish before checking kmod
+wait "$BG_PID" 2>/dev/null || true
 
 check() {
     local name="$1" cmd="$2"
@@ -173,7 +205,62 @@ check "synapse_kmod"  "lsmod | grep -q synapse_kmod"
 check "AI model"      "test -f $MODEL_PATH"
 check "network"       "ping -c1 -W2 8.8.8.8"
 
-# ── Done ──────────────────────────────────────────────────
+# ── Step 5: Desktop Environment ───────────────────────────
+header
+step "Step 5/5 — Desktop Environment"
+
+echo "  Choose your desktop environment:"
+echo "  (SynapseUI is the native AI-first compositor)"
+echo ""
+echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
+echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
+echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
+echo ""
+prompt "Choice [1-4, default=1]:"
+read -r de_choice || true
+
+mkdir -p /etc/synapseos
+
+case "${de_choice:-1}" in
+    2)
+        echo "  Enabling KDE Plasma with SDDM..."
+        echo "DE=kde" > "$DE_CONF"
+        mkdir -p /etc/sddm.conf.d
+        cat > /etc/sddm.conf.d/synapseos.conf << 'SDDM'
+[Autologin]
+Session=plasmawayland
+User=syn
+SDDM
+        systemctl disable synui.service 2>/dev/null || true
+        systemctl enable sddm.service 2>/dev/null || true
+        success "KDE Plasma selected — SDDM enabled"
+        ;;
+    3)
+        echo "  Enabling GNOME with GDM..."
+        echo "DE=gnome" > "$DE_CONF"
+        systemctl disable synui.service 2>/dev/null || true
+        systemctl enable gdm.service 2>/dev/null || true
+        success "GNOME selected — GDM enabled"
+        ;;
+    4)
+        echo "  No GUI selected."
+        echo "DE=tty" > "$DE_CONF"
+        systemctl disable synui.service 2>/dev/null || true
+        ;;
+    *)
+        echo "  Keeping SynapseUI (default)."
+        echo "DE=synui" > "$DE_CONF"
+        systemctl enable synui.service 2>/dev/null || true
+        success "SynapseUI selected"
+        ;;
+esac
+
+# ── Mark firstboot complete ────────────────────────────────
+mkdir -p "$(dirname "$DONE_FLAG")"
+echo "firstboot completed: $(date)" > "$DONE_FLAG"
+
+# ── Summary ───────────────────────────────────────────────
 echo ""
 line
 echo ""
@@ -186,10 +273,24 @@ echo ""
 line
 echo ""
 
-# Mark firstboot complete
-mkdir -p "$(dirname "$DONE_FLAG")" 2>/dev/null || true
-touch "$DONE_FLAG" 2>/dev/null || true
-
-prompt "Press ENTER to launch synsh..."
-read -r || true
-exec /usr/bin/synsh
+# ── Launch chosen desktop ─────────────────────────────────
+case "${de_choice:-1}" in
+    2)
+        prompt "Press ENTER to launch KDE Plasma..."
+        read -r || true
+        exec systemctl start sddm.service
+        ;;
+    3)
+        prompt "Press ENTER to launch GNOME..."
+        read -r || true
+        exec systemctl start gdm.service
+        ;;
+    4)
+        exec /usr/bin/synsh
+        ;;
+    *)
+        prompt "Press ENTER to launch SynapseUI..."
+        read -r || true
+        exec systemctl start synui.service
+        ;;
+esac
