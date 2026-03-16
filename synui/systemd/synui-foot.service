@@ -7,8 +7,8 @@ PartOf=synui.service
 Type=simple
 User=root
 Environment=XDG_RUNTIME_DIR=/run/user/0
-ExecStartPre=/bin/sh -c 'while [ ! -S /run/user/0/wayland-0 ] && [ ! -S /run/user/0/wayland-1 ]; do sleep 0.5; done'
-ExecStart=/bin/sh -c 'WAYLAND_DISPLAY=$(cat /tmp/synui-display) foot -e synsh'
+ExecStartPre=/usr/bin/sh -c 'while [ ! -S /run/user/0/wayland-0 ] && [ ! -S /run/user/0/wayland-1 ]; do sleep 0.5; done'
+ExecStart=/usr/bin/sh -c 'WAYLAND_DISPLAY=$(cat /tmp/synui-display) foot -e synsh'
 Restart=on-failure
 RestartSec=2
 

@@ -13,7 +13,7 @@ StandardOutput=tty
 StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
-ExecStartPre=/usr/bin/mkdir -p /run/user/0
+ExecStartPre=/usr/usr/bin/mkdir -p /run/user/0
 ExecStart=/usr/bin/synui
 Restart=on-failure
 RestartSec=3
