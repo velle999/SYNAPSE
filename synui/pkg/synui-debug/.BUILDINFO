@@ -1,11 +1,11 @@
 format = 2
 pkgname = synui-debug
 pkgbase = synui
-pkgver = 0.1.0-1
+pkgver = 0.1.0-2
 pkgarch = x86_64
-pkgbuild_sha256sum = 4c70807fe380b8e160c958ce968c772acca6a478198f2c4210b40b88f752a3f4
+pkgbuild_sha256sum = 855f8a62864e923c7f7716208a0c009f5a38707ebb47e206ef9141204513d502
 packager = Unknown Packager
-builddate = 1773698075
+builddate = 1773699944
 builddir = /home/velle/Documents/GitHub/SYNAPSE/synui
 startdir = /home/velle/Documents/GitHub/SYNAPSE/synui
 buildtool = makepkg

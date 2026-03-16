@@ -3,7 +3,8 @@
     "allow": [
       "Bash(unsquashfs -p 1 -d /tmp/airootfs_check /tmp/arch/x86_64/airootfs.sfs etc/synsh/synshrc usr/lib/libllama.so* usr/lib/libggml*.so* 2>&1 | tail -10)",
       "Read(//tmp/airootfs_check/etc/synsh/**)",
-      "Read(//tmp/airootfs_check/usr/lib/**)"
+      "Read(//tmp/airootfs_check/usr/lib/**)",
+      "Bash(cd:*)"
     ]
   }
 }

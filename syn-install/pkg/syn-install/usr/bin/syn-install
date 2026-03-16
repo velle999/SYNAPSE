@@ -272,6 +272,17 @@ for f in \
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
 
+# Copy synapse_kmod build infrastructure to installed system
+echo "  Copying synapse_kmod build infrastructure..."
+[ -d /usr/src/synapse_kmod ] && cp -r /usr/src/synapse_kmod /mnt/usr/src/synapse_kmod 2>/dev/null || true
+[ -f /usr/bin/synapse-kmod-build ] && cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
+[ -f /etc/systemd/system/synapse-kmod-build.service ] && \
+    cp /etc/systemd/system/synapse-kmod-build.service \
+       /mnt/etc/systemd/system/synapse-kmod-build.service 2>/dev/null || true
+mkdir -p /mnt/etc/systemd/system/multi-user.target.wants
+ln -sf /etc/systemd/system/synapse-kmod-build.service \
+    /mnt/etc/systemd/system/multi-user.target.wants/synapse-kmod-build.service 2>/dev/null || true
+
 # Enable services
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
