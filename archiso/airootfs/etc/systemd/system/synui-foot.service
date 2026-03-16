@@ -1,7 +1,5 @@
 [Unit]
 Description=SynapseOS foot terminal autostart
-After=synui.service
-PartOf=synui.service
 
 [Service]
 Type=simple
@@ -13,4 +11,4 @@ Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
