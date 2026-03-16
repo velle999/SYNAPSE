@@ -10,16 +10,24 @@ COLS=$(tput cols 2>/dev/null || echo 80)
 
 # ── Background setup (runs in parallel with wizard display) ───
 # Builds synapse_kmod via DKMS and ensures synapd is running.
+KMOD_LOG="/var/log/synapse_kmod-dkms.log"
 _bg_setup() {
     local kver; kver="$(uname -r)"
     local src="/usr/src/synapse_kmod-0.1.0"
-    if [[ -d "$src" ]] && command -v dkms &>/dev/null; then
-        dkms add synapse_kmod/0.1.0 2>/dev/null || true
-        dkms build synapse_kmod/0.1.0 -k "$kver" 2>/dev/null || true
-        dkms install synapse_kmod/0.1.0 -k "$kver" 2>/dev/null || true
-        depmod -a "$kver" 2>/dev/null || true
-        modprobe synapse_kmod 2>/dev/null || true
-    fi
+    {
+        echo "=== synapse_kmod DKMS build: $(date) ==="
+        echo "kernel: $kver"
+        if [[ -d "$src" ]] && command -v dkms &>/dev/null; then
+            dkms add synapse_kmod/0.1.0 2>&1 || true
+            dkms build synapse_kmod/0.1.0 -k "$kver" 2>&1 || true
+            dkms install synapse_kmod/0.1.0 -k "$kver" 2>&1 || true
+            depmod -a "$kver" 2>&1 || true
+            modprobe synapse_kmod 2>&1 || true
+            echo "dkms status: $(dkms status synapse_kmod 2>&1)"
+        else
+            echo "SKIP: src=$src exists=$([ -d "$src" ] && echo y || echo n) dkms=$(command -v dkms || echo missing)"
+        fi
+    } >> "$KMOD_LOG" 2>&1
     systemctl start synapd 2>/dev/null || true
 }
 _bg_setup &
@@ -201,7 +209,12 @@ check() {
 check "synapd"        "systemctl is-active synapd"
 check "synnet"        "systemctl is-active synnet"
 check "synguard"      "systemctl is-active synguard"
-check "synapse_kmod"  "lsmod | grep -q synapse_kmod"
+printf "  %-20s" "synapse_kmod"
+if lsmod | grep -q synapse_kmod 2>/dev/null; then
+    green "✓"; echo ""
+else
+    red "✗"; echo "  (see $KMOD_LOG)"
+fi
 check "AI model"      "test -f $MODEL_PATH"
 check "network"       "ping -c1 -W2 8.8.8.8"
 
