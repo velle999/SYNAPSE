@@ -273,15 +273,46 @@ for f in \
 done
 
 # Copy synapse_kmod build infrastructure to installed system
-echo "  Copying synapse_kmod build infrastructure..."
-[ -d /usr/src/synapse_kmod ] && cp -r /usr/src/synapse_kmod /mnt/usr/src/synapse_kmod 2>/dev/null || true
-[ -f /usr/bin/synapse-kmod-build ] && cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
-[ -f /etc/systemd/system/synapse-kmod-build.service ] && \
-    cp /etc/systemd/system/synapse-kmod-build.service \
-       /mnt/etc/systemd/system/synapse-kmod-build.service 2>/dev/null || true
+echo "  [DEBUG] === synapse_kmod copy block starting ==="
+echo "  [DEBUG] Checking source paths on live ISO:"
+echo "  [DEBUG] /usr/src/synapse_kmod -> $(ls /usr/src/synapse_kmod/ 2>&1)"
+echo "  [DEBUG] /usr/bin/synapse-kmod-build -> $(ls /usr/bin/synapse-kmod-build 2>&1)"
+echo "  [DEBUG] /etc/systemd/system/synapse-kmod-build.service -> $(ls /etc/systemd/system/synapse-kmod-build.service 2>&1)"
+
+echo "  [DEBUG] Copying /usr/src/synapse_kmod/..."
+if [ -d /usr/src/synapse_kmod ]; then
+    cp -rv /usr/src/synapse_kmod /mnt/usr/src/synapse_kmod && echo "  [DEBUG] kmod source copied OK" || echo "  [DEBUG] kmod source copy FAILED"
+else
+    echo "  [DEBUG] SKIP: /usr/src/synapse_kmod not found on live ISO"
+fi
+
+echo "  [DEBUG] Copying /usr/bin/synapse-kmod-build..."
+if [ -f /usr/bin/synapse-kmod-build ]; then
+    cp -v /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build && echo "  [DEBUG] kmod build script copied OK" || echo "  [DEBUG] kmod build script copy FAILED"
+else
+    echo "  [DEBUG] SKIP: /usr/bin/synapse-kmod-build not found on live ISO"
+fi
+
+echo "  [DEBUG] Copying synapse-kmod-build.service..."
+if [ -f /etc/systemd/system/synapse-kmod-build.service ]; then
+    cp -v /etc/systemd/system/synapse-kmod-build.service \
+        /mnt/etc/systemd/system/synapse-kmod-build.service && echo "  [DEBUG] kmod service copied OK" || echo "  [DEBUG] kmod service copy FAILED"
+else
+    echo "  [DEBUG] SKIP: /etc/systemd/system/synapse-kmod-build.service not found on live ISO"
+fi
+
+echo "  [DEBUG] Creating multi-user.target.wants symlink..."
 mkdir -p /mnt/etc/systemd/system/multi-user.target.wants
-ln -sf /etc/systemd/system/synapse-kmod-build.service \
-    /mnt/etc/systemd/system/multi-user.target.wants/synapse-kmod-build.service 2>/dev/null || true
+ln -sfv /etc/systemd/system/synapse-kmod-build.service \
+    /mnt/etc/systemd/system/multi-user.target.wants/synapse-kmod-build.service \
+    && echo "  [DEBUG] symlink created OK" || echo "  [DEBUG] symlink FAILED"
+
+echo "  [DEBUG] Final check — contents of /mnt after copy:"
+echo "  [DEBUG] /mnt/usr/src/synapse_kmod -> $(ls /mnt/usr/src/synapse_kmod/ 2>&1)"
+echo "  [DEBUG] /mnt/usr/bin/synapse-kmod-build -> $(ls /mnt/usr/bin/synapse-kmod-build 2>&1)"
+echo "  [DEBUG] /mnt/etc/systemd/system/synapse-kmod-build.service -> $(ls /mnt/etc/systemd/system/synapse-kmod-build.service 2>&1)"
+echo "  [DEBUG] symlink -> $(ls -la /mnt/etc/systemd/system/multi-user.target.wants/synapse-kmod-build.service 2>&1)"
+echo "  [DEBUG] === synapse_kmod copy block done ==="
 
 # Enable services
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true

@@ -1,11 +1,11 @@
 format = 2
 pkgname = syn-install
 pkgbase = syn-install
-pkgver = 0.1.0-2
+pkgver = 0.1.0-3
 pkgarch = any
-pkgbuild_sha256sum = 4efd82f24b53e804c008183bf782739c39a9d0a793628a47378ee2413cabb13c
+pkgbuild_sha256sum = 02ff8d3cbf925fde2ed5ee916dc731bcf77df6858a90d045e5d44fba50c09a84
 packager = Unknown Packager
-builddate = 1773699934
+builddate = 1773701814
 builddir = /home/velle/Documents/GitHub/SYNAPSE/syn-install
 startdir = /home/velle/Documents/GitHub/SYNAPSE/syn-install
 buildtool = makepkg
