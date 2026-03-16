@@ -163,7 +163,7 @@ pacman-key --populate archlinux
 
 echo "  Running pacstrap (this may take several minutes)..."
 pacstrap /mnt \
-    base linux linux-firmware linux-headers \
+    base linux linux-firmware linux-headers foot \
     grub efibootmgr \
     networkmanager openssh sudo \
     seatd \
