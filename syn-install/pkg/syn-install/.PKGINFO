@@ -6,7 +6,7 @@ xdata = pkgtype=pkg
 pkgver = 0.1.0-1
 pkgdesc = SynapseOS disk installer
 url = 
-builddate = 1773697801
+builddate = 1773699177
 packager = Unknown Packager
 size = 12586
 arch = any
