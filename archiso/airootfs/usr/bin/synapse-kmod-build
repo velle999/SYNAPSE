@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -e
+KVER=$(uname -r)
+SRC=/usr/src/synapse_kmod
+
+if [ ! -d "$SRC" ]; then
+    echo "synapse-kmod-build: no source at $SRC"
+    exit 1
+fi
+
+echo "synapse-kmod-build: building for kernel $KVER"
+make -C /lib/modules/$KVER/build M=$SRC modules
+mkdir -p /lib/modules/$KVER/extra
+cp $SRC/synapse_kmod.ko /lib/modules/$KVER/extra/
+depmod -a
+modprobe synapse_kmod
+echo "synapse-kmod-build: done"

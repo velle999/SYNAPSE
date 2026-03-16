@@ -34,7 +34,6 @@ virtualbox-guest-utils
 dkms
 # KDE Plasma (Wayland)
 plasma-desktop
-plasma-wayland-session
 sddm
 konsole
 kscreen
@@ -47,3 +46,4 @@ gnome-control-center
 gdm
 gnome-terminal
 xdg-desktop-portal-gnome
+linux-headers

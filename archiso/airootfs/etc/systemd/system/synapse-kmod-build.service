@@ -1,0 +1,12 @@
+[Unit]
+Description=Build synapse_kmod for current kernel
+ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/synapse-kmod-build
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

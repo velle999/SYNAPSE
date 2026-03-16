@@ -163,7 +163,7 @@ pacman-key --populate archlinux
 
 echo "  Running pacstrap (this may take several minutes)..."
 pacstrap /mnt \
-    base linux linux-firmware \
+    base linux linux-firmware linux-headers \
     grub efibootmgr \
     networkmanager openssh sudo \
     seatd \
@@ -306,6 +306,24 @@ EOF
 
 echo "  Generating initramfs..."
 arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors"
+
+# Build synapse_kmod for installed kernel
+echo "  Building synapse_kmod for installed kernel..."
+KVER=$(arch-chroot /mnt uname -r 2>/dev/null || ls /mnt/lib/modules/ | tail -1)
+echo "  Kernel version: $KVER"
+
+# Copy kmod source into chroot
+mkdir -p /mnt/tmp/synapse_kmod
+cp -r /run/archiso/airootfs/tmp/synapse_kmod/* /mnt/tmp/synapse_kmod/ 2>/dev/null || true
+
+# Install kernel headers and build
+arch-chroot /mnt pacman -S --noconfirm linux-headers 2>&1 | tail -3
+arch-chroot /mnt bash -c "cd /tmp/synapse_kmod && make -C /lib/modules/\$(uname -r)/build M=/tmp/synapse_kmod modules 2>&1 | tail -5" || true
+arch-chroot /mnt bash -c "if [ -f /tmp/synapse_kmod/synapse_kmod.ko ]; then
+    cp /tmp/synapse_kmod/synapse_kmod.ko /lib/modules/\$(uname -r)/extra/
+    depmod -a
+    echo 'synapse_kmod installed'
+fi" || true
 
 success "System configured"
 
