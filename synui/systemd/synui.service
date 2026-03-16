@@ -2,6 +2,7 @@
 Description=SynapseOS Wayland Compositor
 After=synapd.service seatd.service
 Wants=synapd.service synui-foot.service
+Requires=seatd.service
 
 [Service]
 Type=simple
