@@ -1,10 +1,10 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL2')
-depends=('linux')
+depends=('dkms' 'linux-headers')
 options=('!strip')
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
@@ -12,8 +12,13 @@ sha256sums=('SKIP')
 package() {
     cd "$srcdir/$pkgname-$pkgver"
 
-    install -Dm644 synapse_kmod.ko \
-        "$pkgdir/usr/lib/modules/6.19.6-arch1-1/extra/synapse_kmod.ko"
+    # Install source tree for DKMS (builds against the running kernel at install time)
+    install -dm755 "$pkgdir/usr/src/$pkgname-$pkgver"
+    cp -r . "$pkgdir/usr/src/$pkgname-$pkgver/"
+
+    # DKMS configuration
+    install -Dm644 dkms.conf \
+        "$pkgdir/usr/src/$pkgname-$pkgver/dkms.conf"
 
     install -Dm755 tools/syn-kmod-status \
         "$pkgdir/usr/bin/syn-kmod-status" 2>/dev/null || true

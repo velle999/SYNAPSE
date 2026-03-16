@@ -1,6 +1,7 @@
 base
 linux
 linux-firmware
+linux-headers
 mkinitcpio
 grub
 efibootmgr
@@ -30,3 +31,19 @@ syn-install
 synapse_kmod
 foot
 virtualbox-guest-utils
+dkms
+# KDE Plasma (Wayland)
+plasma-desktop
+plasma-wayland-session
+sddm
+konsole
+kscreen
+plasma-nm
+plasma-pa
+xdg-desktop-portal-kde
+# GNOME (Wayland)
+gnome-shell
+gnome-control-center
+gdm
+gnome-terminal
+xdg-desktop-portal-gnome

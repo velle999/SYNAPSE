@@ -52,12 +52,22 @@ if [[ "$DOWNLOAD_MODEL" == "true" ]] && \
     echo "Model downloaded: $(du -h "${MODEL_DIR}/${MODEL_NAME}" | cut -f1)"
 fi
 
-# ── Build synapse_kmod via DKMS ───────────────────────────────
-if command -v dkms &>/dev/null; then
-    KERNEL_VER="$(uname -r)"
-    echo "Building synapse_kmod for kernel ${KERNEL_VER}..."
-    dkms install synapse_kmod/0.1.0 -k "$KERNEL_VER" 2>/dev/null || \
-        echo "Note: synapse_kmod DKMS build failed (non-fatal)"
+# ── Register and build synapse_kmod via DKMS ─────────────────
+KERNEL_VER="$(uname -r)"
+KMOD_SRC="/usr/src/synapse_kmod-0.1.0"
+
+if [[ -d "$KMOD_SRC" ]] && command -v dkms &>/dev/null; then
+    echo "Registering synapse_kmod with DKMS for kernel ${KERNEL_VER}..."
+    dkms add synapse_kmod/0.1.0 2>/dev/null || true
+    if dkms build synapse_kmod/0.1.0 -k "$KERNEL_VER" && \
+       dkms install synapse_kmod/0.1.0 -k "$KERNEL_VER"; then
+        echo "synapse_kmod built and installed via DKMS"
+        depmod -a "$KERNEL_VER"
+    else
+        echo "Warning: DKMS build failed — module may not load"
+    fi
+else
+    echo "Note: DKMS or synapse_kmod source not available (non-fatal)"
 fi
 
 # ── Load kernel module ────────────────────────────────────────
