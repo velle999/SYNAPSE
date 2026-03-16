@@ -3,7 +3,8 @@ Description=SynapseOS First Boot Setup Wizard
 ConditionPathExists=!/var/lib/synapseos/firstboot.done
 After=network-online.target synapd.service seatd.service
 Wants=network-online.target
-Before=synui.service
+Before=synui.service sddm.service gdm.service getty@tty1.service
+Conflicts=getty@tty1.service
 
 [Service]
 Type=oneshot

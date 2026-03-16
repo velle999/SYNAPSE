@@ -6,6 +6,7 @@ arch=('x86_64')
 license=('GPL2')
 depends=('dkms' 'linux-headers')
 options=('!strip')
+install=synapse_kmod.install
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
