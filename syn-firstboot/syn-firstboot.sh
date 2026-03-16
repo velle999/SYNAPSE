@@ -274,23 +274,26 @@ line
 echo ""
 
 # ── Launch chosen desktop ─────────────────────────────────
+# NOTE: Do NOT use "exec systemctl start" here — this script runs inside
+# synapseos-firstboot.service which has Before=synui.service.  Calling
+# systemctl start synui would deadlock (synui waits for firstboot to
+# finish, but firstboot is blocked waiting for synui).  Instead, just
+# exit and let systemd's ordering start the chosen DE automatically.
 case "${de_choice:-1}" in
     2)
-        prompt "Press ENTER to launch KDE Plasma..."
+        prompt "Press ENTER to start KDE Plasma..."
         read -r || true
-        exec systemctl start sddm.service
         ;;
     3)
-        prompt "Press ENTER to launch GNOME..."
+        prompt "Press ENTER to start GNOME..."
         read -r || true
-        exec systemctl start gdm.service
         ;;
     4)
-        exec /usr/bin/synsh
+        prompt "Press ENTER to continue to shell..."
+        read -r || true
         ;;
     *)
-        prompt "Press ENTER to launch SynapseUI..."
+        prompt "Press ENTER to start SynapseUI..."
         read -r || true
-        exec systemctl start synui.service
         ;;
 esac

@@ -1,0 +1,14 @@
+post_install() {
+    dkms add synapse_kmod/0.1.0 2>/dev/null || true
+    dkms install synapse_kmod/0.1.0 --no-initrd 2>/dev/null || true
+    depmod -A
+}
+
+post_upgrade() {
+    dkms remove synapse_kmod/0.1.0 --all 2>/dev/null || true
+    post_install
+}
+
+pre_remove() {
+    dkms remove synapse_kmod/0.1.0 --all 2>/dev/null || true
+}
