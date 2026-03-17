@@ -1,7 +1,6 @@
 [Unit]
 Description=SynapseOS Wayland Compositor
 After=synapd.service seatd.service systemd-logind.service
-Conflicts=getty@tty1.service
 Wants=synapd.service synui-foot.service
 Requires=seatd.service
 
@@ -16,6 +15,8 @@ Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
 Environment=LIBSEAT_BACKEND=seatd
 ExecStartPre=/bin/mkdir -p /run/user/0
+ExecStartPre=/bin/sh -c 'if [ -f /sys/class/dmi/id/sys_vendor ] && grep -qiE "VirtualBox|VMware|QEMU|KVM|Xen|innotek" /sys/class/dmi/id/sys_vendor; then mkdir -p /run/synui; printf "WLR_RENDERER=pixman\nWLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n" > /run/synui/env; else mkdir -p /run/synui; : > /run/synui/env; fi'
+EnvironmentFile=-/run/synui/env
 ExecStart=/usr/bin/synui
 Restart=on-failure
 RestartSec=3
