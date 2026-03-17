@@ -5,7 +5,7 @@
 set -euo pipefail
 
 KVER=$(uname -r)
-SRC=$(ls -d /usr/src/synapse_kmod-* 2>/dev/null | head -1)
+SRC=$(ls -d /usr/src/synapse_kmod-* 2>/dev/null | head -1) || true
 [ -z "$SRC" ] && SRC=/usr/src/synapse_kmod
 
 if [ ! -d "$SRC" ]; then

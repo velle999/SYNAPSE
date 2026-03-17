@@ -256,6 +256,7 @@ ok "Partitions mounted"
 log "Installing base system (this takes a while)..."
 pacstrap -K "${MOUNT_POINT}" \
     base base-devel linux linux-firmware \
+    linux-headers dkms \
     networkmanager grub efibootmgr \
     sudo nano vim \
     2>&1 | tee -a "$LOG"
