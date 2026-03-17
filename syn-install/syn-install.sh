@@ -261,34 +261,37 @@ ANSI_COLOR="1;36"
 HOME_URL="https://synapseos.dev"
 EOF
 
-# Copy SynapseOS service files from live ISO
+# Copy SynapseOS service files from live ISO.
+# These must be in place BEFORE systemctl enable so the [Install]
+# section is available for symlink creation.
 for f in \
     /etc/systemd/system/synapd.service \
     /etc/systemd/system/synnet.service \
     /etc/systemd/system/synguard.service \
     /etc/systemd/system/synui.service \
     /etc/systemd/system/synui-foot.service \
+    /etc/systemd/system/synapseos-firstboot.service \
+    /etc/systemd/system/synapse-kmod-build.service \
     /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
 
+# Copy kmod build script (fallback if DKMS fails during firstboot)
+[ -f /usr/bin/synapse-kmod-build ] && \
+    cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
+
 # Enable services
 # synapseos-firstboot.service runs the interactive setup wizard on first boot.
 # It has Before=synui.service so the wizard completes before synui starts.
+# synapse-kmod-build.service is a fallback that builds the kernel module
+# if DKMS failed during firstboot (After=synapseos-firstboot.service).
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synui synui-foot 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapseos-firstboot 2>/dev/null || true
+arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 echo "  Services enabled"
-
-# Copy firstboot and synui service files from live ISO so the installed
-# system has the same unit configuration as the live environment.
-for f in \
-    /etc/systemd/system/synui.service \
-    /etc/systemd/system/synapseos-firstboot.service; do
-    [ -e "$f" ] && cp "$f" "/mnt$f" 2>/dev/null || true
-done
 
 # Auto-login as root on tty1 so synapseos-firstboot.service can run
 # interactively. After firstboot, synui owns tty1 via Conflicts=getty@tty1.

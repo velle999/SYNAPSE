@@ -1,5 +1,7 @@
 [Unit]
 Description=SynapseOS foot terminal autostart
+After=synui.service
+PartOf=synui.service
 
 [Service]
 Type=simple

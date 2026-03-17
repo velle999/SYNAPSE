@@ -1,12 +1,15 @@
 [Unit]
 Description=Build synapse_kmod for current kernel
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko
-After=network.target
+ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.zst
+After=synapseos-firstboot.service
+Before=synapd.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/synapse-kmod-build
 RemainAfterExit=yes
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target
