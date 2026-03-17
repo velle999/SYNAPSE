@@ -52,7 +52,7 @@ cat > /etc/profile.d/synapseos.sh << 'EOF'
 # SynapseOS environment
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=SynapseOS
-export WAYLAND_DISPLAY=wayland-1
+# WAYLAND_DISPLAY is set by synui at runtime — do not hard-code it here
 
 # Compositor hint
 export SYNUI_RUNNING=0  # will be 1 when synui is active

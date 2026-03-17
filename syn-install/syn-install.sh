@@ -301,10 +301,16 @@ EOF
 # Primary boot handler on tty1.
 # First boot:  getty autologin → .bash_profile → syn-firstboot wizard
 # Later boots: synui.service starts via systemd (enabled by firstboot)
-#              → Conflicts=getty@tty1 prevents getty → .bash_profile never runs
+#              synui takes over tty1 via DRM; getty still runs but invisible.
+#              If synui crashes, ExecStopPost restarts getty so user gets shell.
 cat > /mnt/root/.bash_profile << 'PROFILEEOF'
 echo "SynapseOS — booting..."
 if [ "$(tty)" = "/dev/tty1" ]; then
+    # Already running under synui — skip (synui-foot launches synsh)
+    if systemctl is-active --quiet synui.service 2>/dev/null; then
+        exec /usr/bin/synsh 2>/dev/null || true
+    fi
+
     if [ ! -f /var/lib/synapseos/firstboot.done ]; then
         echo "Running first boot setup..."
         /usr/bin/syn-firstboot || echo "firstboot exited with error $?"
@@ -315,8 +321,12 @@ if [ "$(tty)" = "/dev/tty1" ]; then
             systemctl enable synui.service
         fi
         echo "Starting SynapseUI..."
-        systemctl start synui.service 2>&1 || echo "synui failed to start"
-        sleep 2
+        systemctl start synui.service 2>&1
+        # Give synui a moment to claim the DRM display
+        sleep 3
+        if ! systemctl is-active --quiet synui.service 2>/dev/null; then
+            echo "synui failed to start — falling back to shell"
+        fi
     fi
 fi
 PROFILEEOF
