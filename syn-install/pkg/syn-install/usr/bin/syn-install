@@ -166,7 +166,7 @@ pacstrap /mnt \
     base linux linux-firmware linux-headers foot \
     grub efibootmgr \
     networkmanager openssh sudo \
-    seatd \
+    seatd ttf-dejavu \
     mkinitcpio \
     2>&1 || die "pacstrap failed — check network connection"
 
@@ -261,67 +261,36 @@ ANSI_COLOR="1;36"
 HOME_URL="https://synapseos.dev"
 EOF
 
-# Copy SynapseOS service files from live ISO
+# Copy SynapseOS service files from live ISO.
+# These must be in place BEFORE systemctl enable so the [Install]
+# section is available for symlink creation.
 for f in \
     /etc/systemd/system/synapd.service \
     /etc/systemd/system/synnet.service \
     /etc/systemd/system/synguard.service \
     /etc/systemd/system/synui.service \
     /etc/systemd/system/synui-foot.service \
+    /etc/systemd/system/synapseos-firstboot.service \
+    /etc/systemd/system/synapse-kmod-build.service \
     /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
 
-# Copy synapse_kmod build infrastructure to installed system
-echo "  [DEBUG] === synapse_kmod copy block starting ==="
-echo "  [DEBUG] Checking source paths on live ISO:"
-echo "  [DEBUG] /usr/src/synapse_kmod -> $(ls /usr/src/synapse_kmod/ 2>&1)"
-echo "  [DEBUG] /usr/bin/synapse-kmod-build -> $(ls /usr/bin/synapse-kmod-build 2>&1)"
-echo "  [DEBUG] /etc/systemd/system/synapse-kmod-build.service -> $(ls /etc/systemd/system/synapse-kmod-build.service 2>&1)"
+# Copy kmod build script (fallback if DKMS fails during firstboot)
+[ -f /usr/bin/synapse-kmod-build ] && \
+    cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
 
-echo "  [DEBUG] Copying /usr/src/synapse_kmod/..."
-if [ -d /usr/src/synapse_kmod ]; then
-    cp -rv /usr/src/synapse_kmod /mnt/usr/src/synapse_kmod && echo "  [DEBUG] kmod source copied OK" || echo "  [DEBUG] kmod source copy FAILED"
-else
-    echo "  [DEBUG] SKIP: /usr/src/synapse_kmod not found on live ISO"
-fi
-
-echo "  [DEBUG] Copying /usr/bin/synapse-kmod-build..."
-if [ -f /usr/bin/synapse-kmod-build ]; then
-    cp -v /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build && echo "  [DEBUG] kmod build script copied OK" || echo "  [DEBUG] kmod build script copy FAILED"
-else
-    echo "  [DEBUG] SKIP: /usr/bin/synapse-kmod-build not found on live ISO"
-fi
-
-echo "  [DEBUG] Copying synapse-kmod-build.service..."
-if [ -f /etc/systemd/system/synapse-kmod-build.service ]; then
-    cp -v /etc/systemd/system/synapse-kmod-build.service \
-        /mnt/etc/systemd/system/synapse-kmod-build.service && echo "  [DEBUG] kmod service copied OK" || echo "  [DEBUG] kmod service copy FAILED"
-else
-    echo "  [DEBUG] SKIP: /etc/systemd/system/synapse-kmod-build.service not found on live ISO"
-fi
-
-echo "  [DEBUG] Creating multi-user.target.wants symlink..."
-mkdir -p /mnt/etc/systemd/system/multi-user.target.wants
-ln -sfv /etc/systemd/system/synapse-kmod-build.service \
-    /mnt/etc/systemd/system/multi-user.target.wants/synapse-kmod-build.service \
-    && echo "  [DEBUG] symlink created OK" || echo "  [DEBUG] symlink FAILED"
-
-echo "  [DEBUG] Final check — contents of /mnt after copy:"
-echo "  [DEBUG] /mnt/usr/src/synapse_kmod -> $(ls /mnt/usr/src/synapse_kmod/ 2>&1)"
-echo "  [DEBUG] /mnt/usr/bin/synapse-kmod-build -> $(ls /mnt/usr/bin/synapse-kmod-build 2>&1)"
-echo "  [DEBUG] /mnt/etc/systemd/system/synapse-kmod-build.service -> $(ls /mnt/etc/systemd/system/synapse-kmod-build.service 2>&1)"
-echo "  [DEBUG] symlink -> $(ls -la /mnt/etc/systemd/system/multi-user.target.wants/synapse-kmod-build.service 2>&1)"
-echo "  [DEBUG] === synapse_kmod copy block done ==="
-
-# Enable services
+# Enable services — background daemons only.
+# synui is NOT enabled here: on first boot, .bash_profile runs syn-firstboot
+# which enables synui for all subsequent boots.  This prevents synui from
+# racing ahead of the firstboot wizard.
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
-arch-chroot /mnt systemctl enable synui synui-foot 2>/dev/null || true
+arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 echo "  Services enabled"
 
-# Auto-login to synsh on tty1
+# Auto-login as root on tty1.
 mkdir -p /mnt/etc/systemd/system/getty@tty1.service.d/
 cat > /mnt/etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
 [Service]
@@ -329,15 +298,24 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
 EOF
 
-cat > /mnt/root/.bash_profile << 'EOF'
+# Primary boot handler on tty1.
+# First boot:  getty autologin → .bash_profile → syn-firstboot wizard
+# Later boots: synui.service starts via systemd (enabled by firstboot)
+#              → Conflicts=getty@tty1 prevents getty → .bash_profile never runs
+cat > /mnt/root/.bash_profile << 'PROFILEEOF'
+echo "SynapseOS — booting..."
 if [ "$(tty)" = "/dev/tty1" ]; then
-    if [ ! -f /var/lib/synguard/.firstboot_done ]; then
-        exec /usr/bin/syn-firstboot
-    else
-        exec /usr/bin/synsh
+    if [ ! -f /var/lib/synapseos/firstboot.done ]; then
+        echo "Running first boot setup..."
+        /usr/bin/syn-firstboot || echo "firstboot exited with error $?"
+    fi
+    if [ -f /var/lib/synapseos/firstboot.done ]; then
+        echo "Starting SynapseUI..."
+        systemctl start synui.service 2>&1 || echo "synui failed to start"
+        sleep 2
     fi
 fi
-EOF
+PROFILEEOF
 
 # tmpfiles for synapd runtime dirs
 cat > /mnt/etc/tmpfiles.d/synapd.conf << 'EOF'
@@ -349,23 +327,10 @@ EOF
 echo "  Generating initramfs..."
 arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors"
 
-# Build synapse_kmod for installed kernel
-echo "  Building synapse_kmod for installed kernel..."
-KVER=$(arch-chroot /mnt uname -r 2>/dev/null || ls /mnt/lib/modules/ | tail -1)
-echo "  Kernel version: $KVER"
-
-# Copy kmod source into chroot
-mkdir -p /mnt/tmp/synapse_kmod
-cp -r /run/archiso/airootfs/tmp/synapse_kmod/* /mnt/tmp/synapse_kmod/ 2>/dev/null || true
-
-# Install kernel headers and build
-arch-chroot /mnt pacman -S --noconfirm linux-headers 2>&1 | tail -3
-arch-chroot /mnt bash -c "cd /tmp/synapse_kmod && make -C /lib/modules/\$(uname -r)/build M=/tmp/synapse_kmod modules 2>&1 | tail -5" || true
-arch-chroot /mnt bash -c "if [ -f /tmp/synapse_kmod/synapse_kmod.ko ]; then
-    cp /tmp/synapse_kmod/synapse_kmod.ko /lib/modules/\$(uname -r)/extra/
-    depmod -a
-    echo 'synapse_kmod installed'
-fi" || true
+# synapse_kmod is built by DKMS during first boot (via syn-firstboot's
+# _bg_setup). The synapse_kmod package already installed the DKMS source
+# tree to /usr/src/synapse_kmod-0.1.0/ and linux-headers is a dependency.
+# Nothing further is needed here.
 
 success "System configured"
 
@@ -378,7 +343,7 @@ cat > /mnt/etc/default/grub << 'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="SynapseOS"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX_DEFAULT=""
 GRUB_CMDLINE_LINUX=""
 GRUB_DISABLE_OS_PROBER=true
 EOF

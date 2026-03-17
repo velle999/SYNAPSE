@@ -1,0 +1,4 @@
+# /etc/synsh/synshrc
+set ai_confirm on
+set ai_explain on
+set color on

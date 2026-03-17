@@ -78,39 +78,32 @@ systemctl enable sshd.service
 systemctl enable bluetooth.service
 systemctl enable pipewire.service
 systemctl enable pipewire-pulse.service
-systemctl --global enable synui.service   2>/dev/null || true
+# synui.service is enabled via multi-user.target.wants/ symlink in airootfs
+# seatd provides seat/DRM access for synui (Wayland compositor)
+systemctl enable seatd.service
+usermod -aG seat syn
 
-# Display manager — greetd with synui autologin for live ISO
-if command -v greetd &>/dev/null; then
-    systemctl enable greetd.service
-    mkdir -p /etc/greetd
-    cat > /etc/greetd/config.toml << 'GREETD'
-[terminal]
-vt = 1
-
-[default_session]
-command = "agreety --cmd synui"
-user = "greetd"
-
-[initial_session]
-command = "synui"
-user = "syn"
-GREETD
-else
-    # Fallback: autologin on tty1 → start synui
-    mkdir -p /etc/systemd/system/getty@tty1.service.d
-    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
+# Display manager — firstboot wizard on tty1 handles DE selection.
+# synui starts via synui.service (multi-user.target) after firstboot completes.
+# Autologin as root so firstboot service can run interactively on tty1.
+mkdir -p /etc/systemd/system/getty@tty1.service.d
+cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty -o '-p -f -- \\u' --noclear --autologin syn %I $TERM
+ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
 EOF
-    # .bash_profile for syn user starts synui on tty1
-    cat > /home/syn/.bash_profile << 'PROFILE'
-# Auto-start synui on tty1
-if [ -z "$DISPLAY" ] && [ "$XDG_VTNR" = "1" ]; then
-    exec synui
-fi
-PROFILE
+
+# SDDM base config (activated by firstboot wizard when KDE is selected)
+if command -v sddm &>/dev/null; then
+    mkdir -p /etc/sddm.conf.d
+    cat > /etc/sddm.conf.d/synapseos-base.conf << 'SDDM'
+[Theme]
+Current=breeze
+
+[General]
+DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
+SDDM
 fi
 
 # ── Pacman configuration ──────────────────────────────────────

@@ -3,7 +3,6 @@ Description=SynapseOS Wayland Compositor
 After=synapd.service seatd.service
 Wants=synapd.service synui-foot.service
 Requires=seatd.service
-Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
@@ -14,10 +13,15 @@ StandardOutput=tty
 StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
+Environment=LIBSEAT_BACKEND=seatd
 ExecStartPre=/bin/mkdir -p /run/user/0
 ExecStart=/usr/bin/synui
 Restart=on-failure
 RestartSec=3
+# If synui fails 3 times, stop trying and let getty take over
+StartLimitBurst=3
+StartLimitIntervalSec=30
+ExecStopPost=-/usr/bin/systemctl start getty@tty1.service
 
 [Install]
 WantedBy=multi-user.target

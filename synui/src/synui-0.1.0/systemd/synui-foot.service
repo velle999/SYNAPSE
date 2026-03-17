@@ -13,4 +13,4 @@ Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target

@@ -9,3 +9,5 @@ DOCUMENTATION_URL="https://synapseos.dev/docs"
 SUPPORT_URL="https://synapseos.dev/community"
 BUG_REPORT_URL="https://github.com/synapseos/synapseos/issues"
 LOGO=synapseos
+IMAGE_ID=SynapseOS
+IMAGE_VERSION=0.1.0

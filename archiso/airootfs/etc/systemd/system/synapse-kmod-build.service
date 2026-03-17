@@ -2,8 +2,7 @@
 Description=Build synapse_kmod for current kernel
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.zst
-After=synapseos-firstboot.service
-Before=synapd.service
+After=network.target
 
 [Service]
 Type=oneshot

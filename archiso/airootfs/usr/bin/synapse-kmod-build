@@ -21,6 +21,11 @@ fi
 # Try DKMS first (preferred — tracks module properly)
 if command -v dkms &>/dev/null; then
     echo "synapse-kmod-build: attempting DKMS build for kernel $KVER"
+    # DKMS expects source at /usr/src/<name>-<version>/
+    DKMS_SRC="/usr/src/synapse_kmod-0.1.0"
+    if [ ! -d "$DKMS_SRC" ] && [ -d "$SRC" ]; then
+        ln -sf "$SRC" "$DKMS_SRC"
+    fi
     dkms add synapse_kmod/0.1.0 2>/dev/null || true
     if dkms build synapse_kmod/0.1.0 -k "$KVER" && \
        dkms install synapse_kmod/0.1.0 -k "$KVER"; then

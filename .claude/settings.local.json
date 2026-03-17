@@ -5,7 +5,10 @@
       "Read(//tmp/airootfs_check/etc/synsh/**)",
       "Read(//tmp/airootfs_check/usr/lib/**)",
       "Bash(cd:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(pacman:*)"
     ]
   }
 }

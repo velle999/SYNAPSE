@@ -166,7 +166,7 @@ pacstrap /mnt \
     base linux linux-firmware linux-headers foot \
     grub efibootmgr \
     networkmanager openssh sudo \
-    seatd \
+    seatd ttf-dejavu \
     mkinitcpio \
     2>&1 || die "pacstrap failed — check network connection"
 
@@ -280,21 +280,17 @@ done
 [ -f /usr/bin/synapse-kmod-build ] && \
     cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
 
-# Enable services
-# synapseos-firstboot.service runs the interactive setup wizard on first boot.
-# It has Before=synui.service so the wizard completes before synui starts.
-# synapse-kmod-build.service is a fallback that builds the kernel module
-# if DKMS failed during firstboot (After=synapseos-firstboot.service).
+# Enable services — background daemons only.
+# synui is NOT enabled here: on first boot, .bash_profile runs syn-firstboot
+# which enables synui for all subsequent boots.  This prevents synui from
+# racing ahead of the firstboot wizard.
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
-arch-chroot /mnt systemctl enable synui synui-foot 2>/dev/null || true
-arch-chroot /mnt systemctl enable synapseos-firstboot 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 echo "  Services enabled"
 
-# Auto-login as root on tty1 so synapseos-firstboot.service can run
-# interactively. After firstboot, synui owns tty1 via Conflicts=getty@tty1.
+# Auto-login as root on tty1.
 mkdir -p /mnt/etc/systemd/system/getty@tty1.service.d/
 cat > /mnt/etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
 [Service]
@@ -302,16 +298,28 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
 EOF
 
-# Fallback .bash_profile: synapseos-firstboot.service handles first boot
-# via systemd. This profile is only reached if the service didn't run
-# (e.g., user dropped to a shell manually).
-cat > /mnt/root/.bash_profile << 'EOF'
+# Primary boot handler on tty1.
+# First boot:  getty autologin → .bash_profile → syn-firstboot wizard
+# Later boots: synui.service starts via systemd (enabled by firstboot)
+#              → Conflicts=getty@tty1 prevents getty → .bash_profile never runs
+cat > /mnt/root/.bash_profile << 'PROFILEEOF'
+echo "SynapseOS — booting..."
 if [ "$(tty)" = "/dev/tty1" ]; then
     if [ ! -f /var/lib/synapseos/firstboot.done ]; then
-        exec /usr/bin/syn-firstboot
+        echo "Running first boot setup..."
+        /usr/bin/syn-firstboot || echo "firstboot exited with error $?"
+    fi
+    if [ -f /var/lib/synapseos/firstboot.done ]; then
+        # Enable synui permanently so it starts via systemd on future boots
+        if ! systemctl is-enabled synui.service &>/dev/null; then
+            systemctl enable synui.service
+        fi
+        echo "Starting SynapseUI..."
+        systemctl start synui.service 2>&1 || echo "synui failed to start"
+        sleep 2
     fi
 fi
-EOF
+PROFILEEOF
 
 # tmpfiles for synapd runtime dirs
 cat > /mnt/etc/tmpfiles.d/synapd.conf << 'EOF'
@@ -339,7 +347,7 @@ cat > /mnt/etc/default/grub << 'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="SynapseOS"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX_DEFAULT=""
 GRUB_CMDLINE_LINUX=""
 GRUB_DISABLE_OS_PROBER=true
 EOF

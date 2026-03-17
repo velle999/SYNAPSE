@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo rm:*)",
+      "Bash(sudo ./build.sh --no-model --no-clean)",
+      "Bash(find /home/velle/Documents/GitHub/SYNAPSE -name seatd* -type f)",
+      "Bash(ln -sf /etc/systemd/system/synui.service airootfs/etc/systemd/system/multi-user.target.wants/synui.service)",
+      "Bash(ln -sf /etc/systemd/system/synapseos-firstboot.service airootfs/etc/systemd/system/multi-user.target.wants/synapseos-firstboot.service)",
+      "Bash(ln -sf /etc/systemd/system/synui-foot.service airootfs/etc/systemd/system/multi-user.target.wants/synui-foot.service)"
+    ]
+  }
+}

@@ -343,7 +343,8 @@ ok "mirrorlist written"
 # The local-repo is accessible on the live system at:
 #   /run/archiso/airootfs/local-repo  (squashfs mount)
 # We do NOT embed the build machine's absolute path here.
-cat > "${SCRIPT_DIR}/pacman.conf" << 'PACMANEOF'
+# Build-time pacman.conf — points to the actual local-repo on the build host
+cat > "${SCRIPT_DIR}/pacman.conf" << PACMANEOF
 [options]
 HoldPkg     = pacman glibc
 Architecture = auto
@@ -357,12 +358,33 @@ Include = /etc/pacman.d/mirrorlist
 [extra]
 Include = /etc/pacman.d/mirrorlist
 
-# SynapseOS local packages — on the live ISO
+# SynapseOS local packages — build-time path
+[synapseos]
+SigLevel = Optional TrustAll
+Server = file://${LOCAL_REPO}
+PACMANEOF
+ok "pacman.conf written (build-time paths)"
+
+# Live-ISO pacman.conf — written into airootfs for the running system
+cat > "${SCRIPT_DIR}/airootfs/etc/pacman.conf" << 'LIVEPACMANEOF'
+[options]
+HoldPkg     = pacman glibc
+Architecture = auto
+ParallelDownloads = 5
+SigLevel    = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+[core]
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+
 [synapseos]
 SigLevel = Optional TrustAll
 Server = file:///run/archiso/airootfs/local-repo
-PACMANEOF
-ok "pacman.conf written (live-ISO paths)"
+LIVEPACMANEOF
+ok "airootfs/etc/pacman.conf written (live-ISO paths)"
 
 # ── Run mkarchiso ─────────────────────────────────────────────
 step "Building ISO (mkarchiso)"
