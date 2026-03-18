@@ -18,5 +18,5 @@ build() {
 package() {
     cd "$srcdir/synnet-0.1.0"
     DESTDIR="$pkgdir" ninja -C build install
-    install -Dm644 synnet.service         "$pkgdir/usr/lib/systemd/system/synnet.service"
+    install -Dm644 systemd/synnet.service "$pkgdir/usr/lib/systemd/system/synnet.service"
 }

@@ -22,4 +22,6 @@ package() {
     DESTDIR="$pkgdir" meson install -C build
     install -dm750 "$pkgdir/var/lib/synapd/models"
     install -dm750 "$pkgdir/var/log/synapd"
+    install -Dm644 systemd/synapd.service \
+        "$pkgdir/usr/lib/systemd/system/synapd.service"
 }

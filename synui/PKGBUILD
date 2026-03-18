@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -23,4 +23,6 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synui.service"
     install -Dm644 systemd/synui-foot.service \
         "$pkgdir/usr/lib/systemd/system/synui-foot.service"
+    install -Dm644 config/synui.desktop \
+        "$pkgdir/usr/share/wayland-sessions/synui.desktop"
 }

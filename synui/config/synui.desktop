@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=SynapseOS
+Name=SynapseUI
 Comment=SynapseOS AI-native Wayland Compositor
-Exec=synui
+Exec=/usr/bin/synui
 Type=Application
-DesktopNames=SynapseOS
+DesktopNames=SynapseOS;

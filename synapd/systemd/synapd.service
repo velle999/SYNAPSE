@@ -10,22 +10,16 @@ Documentation=https://synapseos.dev/docs/synapd
 After=local-fs.target network.target
 Before=display-manager.service synguard.service synnet.service
 Wants=local-fs.target
-DefaultDependencies=no
 
 [Service]
-Type=notify
-NotifyAccess=main
-
-# Root required for synapse_kmod sysfs interface
-# Future: capability drop after init via setuid to 'synapse' user
+Type=simple
 User=root
-Group=synapse
 
 ExecStartPre=/bin/mkdir -p /run/synapd /var/lib/synapd /var/log/synapd
-ExecStartPre=/bin/chmod 0750 /run/synapd
+ExecStartPre=/bin/chmod 0755 /run/synapd
 ExecStart=/usr/bin/synapd \
     --foreground \
-    --model /var/lib/synapd/models/synapse-7b-q4_k_m.gguf \
+    --model /var/lib/synapd/models/synapse.gguf \
     --socket /run/synapd/synapd.sock \
     --threads 4 \
     --context 4096
@@ -42,11 +36,6 @@ TimeoutStopSec=30s
 LimitNOFILE=65536
 LimitMEMLOCK=infinity   # needed for model mmap
 LimitNICE=-20
-
-# Security hardening
-ProtectProc=invisible
-PrivateTmp=true
-NoNewPrivileges=false   # needs capabilities for sysfs
 
 # Logging
 StandardOutput=journal

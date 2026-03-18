@@ -53,8 +53,8 @@ LOCAL_REPO="${SCRIPT_DIR}/local-repo"
 LLAMA_DIR="${BUILD_DIR}/llama.cpp"
 MODEL_DIR="${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
 
-# Model to embed
-MODEL_NAME="synapse-7b-q4_k_m.gguf"
+# Model to embed — filename must match what synapd.service and syn-model expect
+MODEL_NAME="synapse.gguf"
 MODEL_HF_REPO="TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
 MODEL_HF_FILE="mistral-7b-instruct-v0.2.Q4_K_M.gguf"
 

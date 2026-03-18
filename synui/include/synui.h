@@ -12,6 +12,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
 
 #define SYNUI_VERSION "0.1.0-synapse"
@@ -43,6 +44,9 @@ struct synui_server {
     struct wlr_output_layout   *output_layout;
     struct wl_list              outputs;
     struct wl_listener          new_output;
+
+    struct wl_listener          new_input;
+    struct wl_list              keyboards;
 };
 
 struct synui_output {
@@ -67,6 +71,15 @@ struct synui_toplevel {
     struct wl_listener          request_move;
     struct wl_listener          request_resize;
     struct wl_listener          request_maximize;
+};
+
+struct synui_keyboard {
+    struct wl_list              link;
+    struct synui_server        *server;
+    struct wlr_keyboard        *wlr_keyboard;
+    struct wl_listener          modifiers;
+    struct wl_listener          key;
+    struct wl_listener          destroy;
 };
 
 /* cursor modes */

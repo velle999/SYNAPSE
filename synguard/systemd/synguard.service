@@ -18,7 +18,7 @@ ExecStartPre=/bin/mkdir -p /var/log/synguard /var/lib/synguard
 ExecStart=/usr/bin/synguard \
     --foreground \
     --mode enforce \
-    --rules /etc/synguard/rules/
+    --rules /etc/synguard/rules.d/
 
 ExecReload=/bin/kill -HUP $MAINPID
 

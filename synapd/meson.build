@@ -5,14 +5,15 @@ cc = meson.get_compiler('c')
 dep_threads = dependency('threads')
 dep_systemd = dependency('libsystemd', required: false)
 
-# llama.cpp — adjust path to where you built it
+# llama.cpp — look in llama-staging relative to repo root, or system paths
+llama_staging = join_paths(meson.source_root(), '..', 'llama-staging', 'usr')
 llama_inc = include_directories(
     'include',
-    '/home/velle/Documents/GitHub/SYNAPSE/llama-staging/usr/include'
+    join_paths(llama_staging, 'include'),
 )
 
 dep_llama = cc.find_library('llama',
-    dirs: ['/home/velle/Documents/GitHub/SYNAPSE/llama-staging/usr/lib'],
+    dirs: [join_paths(llama_staging, 'lib')],
     required: false)
 
 if dep_systemd.found()

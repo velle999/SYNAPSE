@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
@@ -15,7 +16,10 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_pointer.h>
 #include <wlr/util/log.h>
+#include <xkbcommon/xkbcommon.h>
 #include "../include/synui.h"
 
 /* ── Output handling ─────────────────────────────────────── */
@@ -79,6 +83,16 @@ static void server_new_output(struct wl_listener *listener, void *data) {
         wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout,
                                        layout_output, output->scene_output);
+
+    /* Load xcursor for this output's scale */
+    wlr_xcursor_manager_load(server->cursor_mgr, wlr_output->scale);
+
+    /* Warp cursor to center of new output so it's visible immediately */
+    wlr_cursor_warp(server->cursor, NULL,
+                    wlr_output->width / 2.0, wlr_output->height / 2.0);
+
+    /* Set initial cursor image */
+    wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "left_ptr");
 }
 
 /* ── Toplevel (window) handling ──────────────────────────── */
@@ -135,6 +149,8 @@ static void server_cursor_motion(struct wl_listener *listener, void *data) {
     struct wlr_pointer_motion_event *event = data;
     wlr_cursor_move(server->cursor, &event->pointer->base,
                     event->delta_x, event->delta_y);
+    wlr_seat_pointer_notify_motion(server->seat, event->time_msec,
+                                   server->cursor->x, server->cursor->y);
 }
 
 static void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
@@ -143,6 +159,8 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
     struct wlr_pointer_motion_absolute_event *event = data;
     wlr_cursor_warp_absolute(server->cursor, &event->pointer->base,
                              event->x, event->y);
+    wlr_seat_pointer_notify_motion(server->seat, event->time_msec,
+                                   server->cursor->x, server->cursor->y);
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data) {
@@ -187,6 +205,123 @@ static void server_request_set_selection(struct wl_listener *listener, void *dat
                            event->serial);
 }
 
+/* ── Input handling ──────────────────────────────────────── */
+static bool handle_keybinding(struct synui_server *server, uint32_t modifiers,
+                              xkb_keysym_t sym) {
+    /* Super+Shift+Q → quit */
+    if ((modifiers & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT)) ==
+        (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT) &&
+        sym == XKB_KEY_Q) {
+        wl_display_terminate(server->display);
+        return true;
+    }
+    return false;
+}
+
+static void keyboard_key(struct wl_listener *listener, void *data) {
+    struct synui_keyboard *keyboard =
+        wl_container_of(listener, keyboard, key);
+    struct synui_server *server = keyboard->server;
+    struct wlr_keyboard_key_event *event = data;
+
+    /* Translate libinput keycode → xkb keysym */
+    uint32_t keycode = event->keycode + 8;
+    const xkb_keysym_t *syms;
+    int nsyms = xkb_state_key_get_syms(
+        keyboard->wlr_keyboard->xkb_state, keycode, &syms);
+
+    bool handled = false;
+    uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        for (int i = 0; i < nsyms; i++) {
+            handled = handle_keybinding(server, modifiers, syms[i]);
+            if (handled) break;
+        }
+    }
+
+    if (!handled) {
+        wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
+        wlr_seat_keyboard_notify_key(server->seat,
+            event->time_msec, event->keycode, event->state);
+    }
+}
+
+static void keyboard_modifiers(struct wl_listener *listener, void *data) {
+    struct synui_keyboard *keyboard =
+        wl_container_of(listener, keyboard, modifiers);
+    wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
+    wlr_seat_keyboard_notify_modifiers(keyboard->server->seat,
+        &keyboard->wlr_keyboard->modifiers);
+}
+
+static void keyboard_destroy(struct wl_listener *listener, void *data) {
+    struct synui_keyboard *keyboard =
+        wl_container_of(listener, keyboard, destroy);
+    wl_list_remove(&keyboard->modifiers.link);
+    wl_list_remove(&keyboard->key.link);
+    wl_list_remove(&keyboard->destroy.link);
+    wl_list_remove(&keyboard->link);
+    free(keyboard);
+}
+
+static void server_new_keyboard(struct synui_server *server,
+                                struct wlr_input_device *device) {
+    struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
+
+    struct synui_keyboard *keyboard = calloc(1, sizeof(*keyboard));
+    keyboard->server = server;
+    keyboard->wlr_keyboard = wlr_keyboard;
+
+    /* Set up default XKB keymap */
+    struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, NULL,
+        XKB_KEYMAP_COMPILE_NO_FLAGS);
+    wlr_keyboard_set_keymap(wlr_keyboard, keymap);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(context);
+
+    wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
+
+    keyboard->modifiers.notify = keyboard_modifiers;
+    wl_signal_add(&wlr_keyboard->events.modifiers, &keyboard->modifiers);
+    keyboard->key.notify = keyboard_key;
+    wl_signal_add(&wlr_keyboard->events.key, &keyboard->key);
+    keyboard->destroy.notify = keyboard_destroy;
+    wl_signal_add(&device->events.destroy, &keyboard->destroy);
+
+    wlr_seat_set_keyboard(server->seat, wlr_keyboard);
+    wl_list_insert(&server->keyboards, &keyboard->link);
+}
+
+static void server_new_pointer(struct synui_server *server,
+                               struct wlr_input_device *device) {
+    wlr_cursor_attach_input_device(server->cursor, device);
+}
+
+static void server_new_input(struct wl_listener *listener, void *data) {
+    struct synui_server *server =
+        wl_container_of(listener, server, new_input);
+    struct wlr_input_device *device = data;
+
+    switch (device->type) {
+    case WLR_INPUT_DEVICE_KEYBOARD:
+        server_new_keyboard(server, device);
+        break;
+    case WLR_INPUT_DEVICE_POINTER:
+        server_new_pointer(server, device);
+        break;
+    default:
+        break;
+    }
+
+    /* Update seat capabilities */
+    uint32_t caps = 0;
+    if (!wl_list_empty(&server->keyboards))
+        caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    caps |= WL_SEAT_CAPABILITY_POINTER;
+    wlr_seat_set_capabilities(server->seat, caps);
+}
+
 /* ── Init / Run / Destroy ────────────────────────────────── */
 int synui_server_init(struct synui_server *server) {
     server->display = wl_display_create();
@@ -217,6 +352,10 @@ int synui_server_init(struct synui_server *server) {
     server->scene_layout = wlr_scene_attach_output_layout(server->scene,
                                                            server->output_layout);
 
+    /* Dark grey background (0x1a1a2e) so the screen is never blank */
+    float bg_color[4] = { 0x1a / 255.0f, 0x1a / 255.0f, 0x2e / 255.0f, 1.0f };
+    wlr_scene_rect_create(&server->scene->tree, 8192, 8192, bg_color);
+
     server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
     wl_list_init(&server->toplevels);
     server->new_xdg_toplevel.notify = server_new_xdg_toplevel;
@@ -226,6 +365,7 @@ int synui_server_init(struct synui_server *server) {
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
     server->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+    wlr_xcursor_manager_load(server->cursor_mgr, 1);
 
     server->cursor_motion.notify = server_cursor_motion;
     wl_signal_add(&server->cursor->events.motion, &server->cursor_motion);
@@ -247,11 +387,23 @@ int synui_server_init(struct synui_server *server) {
     wl_signal_add(&server->seat->events.request_set_selection,
                   &server->request_set_selection);
 
+    /* Input device handling */
+    wl_list_init(&server->keyboards);
+    server->new_input.notify = server_new_input;
+    wl_signal_add(&server->backend->events.new_input, &server->new_input);
+
     const char *socket = wl_display_add_socket_auto(server->display);
     if (!socket) return -1;
     setenv("WAYLAND_DISPLAY", socket, 1);
 
+    /* Write socket name for synui-foot.service */
+    FILE *sf = fopen("/tmp/synui-display", "w");
+    if (sf) { fprintf(sf, "%s\n", socket); fclose(sf); }
+
     if (!wlr_backend_start(server->backend)) return -1;
+
+    /* Set initial cursor image after backend starts */
+    wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "left_ptr");
 
     wlr_log(WLR_INFO, "synui: compositor ready on %s", socket);
     return 0;

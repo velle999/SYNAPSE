@@ -1,6 +1,6 @@
 [Unit]
 Description=SynapseOS Wayland Compositor
-After=synapd.service seatd.service systemd-logind.service
+After=synapd.service seatd.service
 Wants=synapd.service synui-foot.service
 Requires=seatd.service
 Conflicts=getty@tty1.service
@@ -14,10 +14,17 @@ StandardOutput=tty
 StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
-ExecStartPre=/usr/bin/mkdir -p /run/user/0
+Environment=LIBSEAT_BACKEND=seatd
+ExecStartPre=/bin/mkdir -p /run/user/0
+ExecStartPre=/bin/sh -c 'if [ -f /sys/class/dmi/id/sys_vendor ] && grep -qiE "VirtualBox|VMware|QEMU|KVM|Xen|innotek" /sys/class/dmi/id/sys_vendor; then mkdir -p /run/synui; printf "WLR_RENDERER=pixman\nWLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n" > /run/synui/env; else mkdir -p /run/synui; : > /run/synui/env; fi'
+EnvironmentFile=-/run/synui/env
 ExecStart=/usr/bin/synui
 Restart=on-failure
 RestartSec=3
+# If synui fails 3 times, stop trying and let getty take over
+StartLimitBurst=3
+StartLimitIntervalSec=30
+ExecStopPost=-/usr/bin/systemctl start getty@tty1.service
 
 [Install]
 WantedBy=multi-user.target
