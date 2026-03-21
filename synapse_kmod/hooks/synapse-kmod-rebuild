@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# synapse-kmod-rebuild — called by pacman hook after kernel upgrades
+# Rebuilds synapse_kmod via DKMS for every installed kernel with headers.
+set -uo pipefail
+
+MODULE="synapse_kmod"
+VERSION="0.1.0"
+
+# Ensure DKMS knows about the module
+dkms status "$MODULE/$VERSION" &>/dev/null || \
+    dkms add "$MODULE/$VERSION" 2>/dev/null || true
+
+built=0
+failed=0
+
+for kdir in /lib/modules/*/build; do
+    [ -d "$kdir" ] || continue
+    kver="${kdir%/build}"
+    kver="${kver##*/}"
+
+    # Skip if already built for this exact kernel
+    if dkms status "$MODULE/$VERSION" -k "$kver" 2>/dev/null | grep -q "installed"; then
+        continue
+    fi
+
+    echo ":: Building $MODULE for kernel $kver ..."
+    if dkms install "$MODULE/$VERSION" -k "$kver" --no-initrd 2>&1; then
+        built=$((built + 1))
+    else
+        echo "   warning: build failed for $kver"
+        failed=$((failed + 1))
+    fi
+done
+
+# Remove modules for kernels that no longer exist
+for entry in $(dkms status "$MODULE/$VERSION" 2>/dev/null | awk -F'[ ,]+' '{print $4}'); do
+    if [ ! -d "/lib/modules/$entry" ]; then
+        echo ":: Removing stale $MODULE build for $entry"
+        dkms remove "$MODULE/$VERSION" -k "$entry" --no-initrd 2>/dev/null || true
+    fi
+done
+
+depmod -A 2>/dev/null || true
+
+[ "$built" -gt 0 ] && echo ":: $MODULE rebuilt for $built kernel(s)"
+[ "$failed" -gt 0 ] && echo ":: $MODULE failed for $failed kernel(s)"
+exit 0

@@ -1,0 +1,19 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = linux
+Target = linux-lts
+Target = linux-zen
+Target = linux-hardened
+Target = linux-headers
+Target = linux-lts-headers
+Target = linux-zen-headers
+Target = linux-hardened-headers
+
+[Action]
+Description = Rebuilding synapse_kmod for updated kernels...
+When = PostTransaction
+Exec = /usr/bin/synapse-kmod-rebuild
+Depends = dkms
+NeedsTargets

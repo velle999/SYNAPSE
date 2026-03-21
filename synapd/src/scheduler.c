@@ -4,9 +4,10 @@
  * Writes scheduling hints and daemon status to the sysfs
  * interface exposed by synapse_kmod (/sys/kernel/synapse/).
  *
- * If synapse_kmod is not loaded, this subsystem degrades
- * gracefully — synapd continues to work, just without
- * kernel-level scheduling integration.
+ * If synapse_kmod is not loaded, this subsystem will attempt
+ * to load it via modprobe and periodically retry connecting.
+ * synapd continues to work in userspace-only mode if the
+ * kernel module remains unavailable.
  *
  * SynapseOS Project — GPLv2
  * https://synapseos.dev
@@ -21,33 +22,50 @@
 #include <fcntl.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include "synapd.h"
 #include "scheduler.h"
 #include "log.h"
 
-/* ── Init ─────────────────────────────────────────────────── */
-int scheduler_init(synapd_state_t *s) {
-    synapd_scheduler_t *sch = &s->scheduler;
-    sch->sysfs_fd    = -1;
-    sch->kmod_present = 0;
+/* How often to retry connecting if kmod was not available (seconds) */
+#define KMOD_RETRY_INTERVAL 30
 
-    /* Check if synapse_kmod is loaded */
-    struct stat st;
-    if (stat(SYNAPD_SYSFS_PATH, &st) < 0) {
-        syn_log(LOG_INFO, "scheduler: %s not found — synapse_kmod not loaded", SYNAPD_SYSFS_PATH);
-        syn_log(LOG_INFO, "scheduler: running in userspace-only mode");
-        return -1;  /* non-fatal */
+/* ── Try to modprobe the kernel module ───────────────────── */
+static int try_load_kmod(void) {
+    syn_log(LOG_INFO, "scheduler: attempting modprobe synapse_kmod");
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        /* Child — try modprobe silently */
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) { dup2(devnull, STDERR_FILENO); close(devnull); }
+        execl("/usr/bin/modprobe", "modprobe", "synapse_kmod", NULL);
+        execl("/sbin/modprobe", "modprobe", "synapse_kmod", NULL);
+        _exit(1);
     }
+    int status;
+    waitpid(pid, &status, 0);
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+}
+
+/* ── Try to connect to the kmod sysfs interface ──────────── */
+static int try_connect_kmod(synapd_state_t *s) {
+    synapd_scheduler_t *sch = &s->scheduler;
+
+    struct stat st;
+    if (stat(SYNAPD_SYSFS_PATH, &st) < 0)
+        return -1;
 
     /* Open hints file for writing */
-    sch->sysfs_fd = open(SYNAPD_SYSFS_HINTS, O_WRONLY | O_CLOEXEC);
-    if (sch->sysfs_fd < 0) {
+    int fd = open(SYNAPD_SYSFS_HINTS, O_WRONLY | O_CLOEXEC);
+    if (fd < 0) {
         syn_log(LOG_WARNING, "scheduler: cannot open %s: %s",
                  SYNAPD_SYSFS_HINTS, strerror(errno));
         return -1;
     }
 
+    sch->sysfs_fd     = fd;
     sch->kmod_present = 1;
     syn_log(LOG_INFO, "scheduler: connected to synapse_kmod sysfs interface");
 
@@ -55,13 +73,53 @@ int scheduler_init(synapd_state_t *s) {
     return 0;
 }
 
+/* ── Init ─────────────────────────────────────────────────── */
+int scheduler_init(synapd_state_t *s) {
+    synapd_scheduler_t *sch = &s->scheduler;
+    sch->sysfs_fd       = -1;
+    sch->kmod_present   = 0;
+    sch->last_heartbeat = 0;
+    sch->last_retry     = 0;
+
+    /* Try connecting to already-loaded kmod */
+    if (try_connect_kmod(s) == 0)
+        return 0;
+
+    /* Not loaded yet — attempt modprobe */
+    if (try_load_kmod() == 0) {
+        /* Give the module a moment to create sysfs entries */
+        usleep(500000);
+        if (try_connect_kmod(s) == 0)
+            return 0;
+    }
+
+    syn_log(LOG_INFO, "scheduler: synapse_kmod not available — "
+                       "running in userspace-only mode (will retry every %ds)",
+                       KMOD_RETRY_INTERVAL);
+    return -1;  /* non-fatal */
+}
+
 /* ── Heartbeat (called every second from main loop) ──────── */
 void scheduler_heartbeat(synapd_state_t *s) {
     synapd_scheduler_t *sch = &s->scheduler;
-    if (!sch->kmod_present) return;
-
     time_t now = time(NULL);
-    if (now - sch->last_heartbeat < 5) return;  /* every 5 seconds */
+
+    /* If kmod not connected, periodically retry */
+    if (!sch->kmod_present) {
+        if (now - sch->last_retry < KMOD_RETRY_INTERVAL)
+            return;
+        sch->last_retry = now;
+
+        if (try_connect_kmod(s) == 0) {
+            syn_log(LOG_INFO, "scheduler: synapse_kmod became available — connected");
+            return;
+        }
+        /* Still not available — stay quiet, try again later */
+        return;
+    }
+
+    /* Normal heartbeat every 5 seconds */
+    if (now - sch->last_heartbeat < 5) return;
     sch->last_heartbeat = now;
 
     char buf[128];
@@ -97,7 +155,12 @@ int scheduler_write_hint(synapd_state_t *s, pid_t pid,
 
     ssize_t w = write(sch->sysfs_fd, buf, n);
     if (w < 0) {
-        syn_log(LOG_WARNING, "scheduler: sysfs write failed: %s", strerror(errno));
+        /* sysfs write failed — kmod may have been unloaded */
+        syn_log(LOG_WARNING, "scheduler: sysfs write failed: %s — "
+                              "marking kmod disconnected", strerror(errno));
+        close(sch->sysfs_fd);
+        sch->sysfs_fd     = -1;
+        sch->kmod_present = 0;
         return -1;
     }
     return 0;
@@ -106,7 +169,17 @@ int scheduler_write_hint(synapd_state_t *s, pid_t pid,
 /* ── Write status string ──────────────────────────────────── */
 void scheduler_write_status(synapd_state_t *s, const char *status) {
     int fd = open(SYNAPD_SYSFS_STATUS, O_WRONLY | O_CLOEXEC);
-    if (fd < 0) return;
+    if (fd < 0) {
+        /* sysfs gone — kmod was unloaded */
+        if (s->scheduler.kmod_present) {
+            syn_log(LOG_WARNING, "scheduler: lost connection to synapse_kmod");
+            if (s->scheduler.sysfs_fd >= 0)
+                close(s->scheduler.sysfs_fd);
+            s->scheduler.sysfs_fd     = -1;
+            s->scheduler.kmod_present = 0;
+        }
+        return;
+    }
     write(fd, status, strlen(status));
     close(fd);
 }

@@ -113,6 +113,7 @@ typedef struct {
     int     sysfs_fd;           /* fd to /sys/kernel/synapse/ai_hints */
     int     kmod_present;       /* 1 if synapse_kmod is loaded */
     time_t  last_heartbeat;
+    time_t  last_retry;         /* last kmod reconnection attempt */
 } synapd_scheduler_t;
 
 /* ── Global daemon state ──────────────────────────────────── */

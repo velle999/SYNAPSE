@@ -1,8 +1,11 @@
 [Unit]
 Description=Build synapse_kmod for current kernel
+# Only run if the module is not already built (any compression format)
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.zst
-After=network.target
+ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.xz
+ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.gz
+After=local-fs.target
 
 [Service]
 Type=oneshot

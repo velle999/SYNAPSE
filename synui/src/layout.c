@@ -27,7 +27,7 @@
 
 #include "synui.h"
 
-#define BORDER_WIDTH   2
+/* BORDER_WIDTH defined in synui.h */
 #define GAP            8
 #define MASTER_FACTOR  0.60f   /* master window takes 60% of width */
 
@@ -309,7 +309,8 @@ void workspace_switch(syn_server_t *s, int index)
 void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
 {
     if (ws_index < 0 || ws_index >= WORKSPACE_MAX) return;
-    if (view->workspace->index == ws_index) return;
+    int old_ws = view->workspace->index;
+    if (old_ws == ws_index) return;
 
     wl_list_remove(&view->link);
     wlr_scene_node_set_enabled(&view->scene_tree->node,
@@ -318,6 +319,6 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
     view->workspace = &s->workspaces[ws_index];
     wl_list_insert(&view->workspace->windows, &view->link);
 
-    layout_apply(s, &s->workspaces[view->workspace->index]);
+    layout_apply(s, &s->workspaces[old_ws]);
     layout_apply(s, &s->workspaces[ws_index]);
 }

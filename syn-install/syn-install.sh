@@ -44,8 +44,10 @@ header
 echo "  This installer will:"
 echo "    1. Partition a disk"
 echo "    2. Install SynapseOS base system"
-echo "    3. Configure bootloader (GRUB)"
-echo "    4. Set up all SynapseOS services"
+echo "    3. Install SynapseOS packages"
+echo "    4. Choose desktop environment"
+echo "    5. Configure system"
+echo "    6. Install bootloader (GRUB)"
 echo ""
 warn "ALL DATA ON THE TARGET DISK WILL BE ERASED"
 echo ""
@@ -54,7 +56,7 @@ read -r
 
 # ── Disk selection ────────────────────────────────────────
 header
-step "Step 1/6 — Select Target Disk"
+step "Step 1/7 — Select Target Disk"
 
 echo "  Available disks:"
 echo ""
@@ -91,7 +93,7 @@ fi
 
 # ── Partition ─────────────────────────────────────────────
 header
-step "Step 2/6 — Partitioning $DISK"
+step "Step 2/7 — Partitioning $DISK"
 
 if [ "$BOOT_MODE" = "uefi" ]; then
     echo "  Creating GPT partition table..."
@@ -145,7 +147,7 @@ success "Disk partitioned and mounted at /mnt"
 
 # ── Install base system ───────────────────────────────────
 header
-step "Step 3/6 — Installing Base System"
+step "Step 3/7 — Installing Base System"
 
 # Fix mirrorlist on live system (single quotes preserve $repo/$arch literals
 # which pacman expands itself — do NOT use a variable here)
@@ -181,7 +183,7 @@ success "Base system installed"
 
 # ── Install SynapseOS packages ────────────────────────────
 header
-step "Step 4/6 — Installing SynapseOS"
+step "Step 4/7 — Installing SynapseOS"
 
 # Copy local-repo into chroot and install via pacman
 LIVE_REPO="/run/archiso/airootfs/local-repo"
@@ -222,9 +224,54 @@ arch-chroot /mnt ldconfig
 
 success "SynapseOS packages installed"
 
+# ── GUI selection ────────────────────────────────────────
+header
+step "Step 5/7 — Desktop Environment"
+
+echo "  Choose a desktop environment for the installed system:"
+echo "  (SynapseUI is the native AI-first Wayland compositor)"
+echo ""
+echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
+echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
+echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
+echo ""
+prompt "Choice [1-4, default=1]:"
+read -r de_choice || true
+
+DE_CHOICE="${de_choice:-1}"
+
+case "$DE_CHOICE" in
+    2)
+        echo ""
+        echo "  Installing KDE Plasma..."
+        arch-chroot /mnt pacman -S --noconfirm \
+            plasma-meta sddm kde-applications-meta \
+            2>&1 || warn "Some KDE packages failed to install"
+        success "KDE Plasma installed"
+        ;;
+    3)
+        echo ""
+        echo "  Installing GNOME..."
+        arch-chroot /mnt pacman -S --noconfirm \
+            gnome gdm \
+            2>&1 || warn "Some GNOME packages failed to install"
+        success "GNOME installed"
+        ;;
+    4)
+        echo ""
+        echo "  No GUI will be installed."
+        ;;
+    *)
+        echo ""
+        echo "  SynapseUI is included — no extra packages needed."
+        success "SynapseUI selected"
+        ;;
+esac
+
 # ── Configure system ──────────────────────────────────────
 header
-step "Step 5/6 — Configuring System"
+step "Step 6/7 — Configuring System"
 
 # fstab
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -288,6 +335,35 @@ arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
+
+# Configure desktop environment based on user selection
+mkdir -p /mnt/etc/synapseos
+case "$DE_CHOICE" in
+    2)
+        echo "DE=kde" > /mnt/etc/synapseos/desktop.conf
+        mkdir -p /mnt/etc/sddm.conf.d
+        cat > /mnt/etc/sddm.conf.d/synapseos.conf << 'SDDM'
+[Autologin]
+Session=plasmawayland
+User=root
+SDDM
+        arch-chroot /mnt systemctl enable sddm.service 2>/dev/null || true
+        echo "  Desktop: KDE Plasma (SDDM)"
+        ;;
+    3)
+        echo "DE=gnome" > /mnt/etc/synapseos/desktop.conf
+        arch-chroot /mnt systemctl enable gdm.service 2>/dev/null || true
+        echo "  Desktop: GNOME (GDM)"
+        ;;
+    4)
+        echo "DE=tty" > /mnt/etc/synapseos/desktop.conf
+        echo "  Desktop: TTY only (no GUI)"
+        ;;
+    *)
+        echo "DE=synui" > /mnt/etc/synapseos/desktop.conf
+        echo "  Desktop: SynapseUI"
+        ;;
+esac
 echo "  Services enabled"
 
 # Auto-login as root on tty1.
@@ -350,7 +426,7 @@ success "System configured"
 
 # ── Bootloader ────────────────────────────────────────────
 header
-step "Step 6/6 — Installing Bootloader"
+step "Step 7/7 — Installing Bootloader"
 
 # Write grub defaults BEFORE grub-mkconfig runs
 cat > /mnt/etc/default/grub << 'EOF'
@@ -392,8 +468,15 @@ success "Bootloader installed"
 header
 green "  SynapseOS installation complete!"
 echo ""
+DE_NAME="SynapseUI"
+case "$DE_CHOICE" in
+    2) DE_NAME="KDE Plasma" ;;
+    3) DE_NAME="GNOME" ;;
+    4) DE_NAME="TTY only" ;;
+esac
 echo "  $(bold 'Disk:')     $DISK"
 echo "  $(bold 'Boot:')     $BOOT_MODE"
+echo "  $(bold 'Desktop:')  $DE_NAME"
 echo "  $(bold 'Hostname:') synapse"
 echo ""
 line

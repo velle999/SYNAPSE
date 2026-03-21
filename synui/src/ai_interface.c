@@ -41,7 +41,6 @@
 #include <stdatomic.h>
 
 #include <wlr/render/wlr_renderer.h>
-#include <wlr/types/wlr_matrix.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "synui.h"
@@ -441,25 +440,21 @@ void overlay_render(syn_server_t *s, struct wlr_renderer *renderer,
      * path for the background rectangle.
      */
 
-    int ov_x = width - 420;
-    int ov_y = 10;
-    int ov_w = 410;
-    int ov_h = 200;
-
-    /* Background */
-    float bg[] = COLOR_OVERLAY_BG;
-    struct wlr_box box = { ov_x, ov_y, ov_w, ov_h };
-    wlr_render_rect(renderer, &box, bg, NULL);
-
-    /* Brand accent line */
-    float brand[] = COLOR_BRAND;
-    struct wlr_box accent = { ov_x, ov_y, ov_w, 2 };
-    wlr_render_rect(renderer, &accent, brand, NULL);
-
     /*
-     * Text rendering happens via the layer-shell overlay surface
-     * (overlay_layer.c) which uses cairo. The structs above establish
-     * the visual region; the layer surface draws on top of it.
+     * The neural overlay is rendered as a layer-shell surface
+     * (wlr-layer-shell protocol) composited via the scene graph.
+     * Direct renderer calls (wlr_render_rect) were removed in wlroots 0.18+.
+     *
+     * The overlay background and accent line are created as wlr_scene_rect
+     * nodes in overlay_toggle() and positioned here based on output size.
+     * Text is drawn by a cairo layer surface (overlay_layer.c, future).
+     *
+     * For now the overlay state is updated; the scene rects handle display.
      */
-    (void)ov;  /* used by layer surface, not direct renderer */
+    (void)renderer;
+    (void)width;
+    (void)height;
+
+    overlay_update(s);
+    (void)ov;
 }

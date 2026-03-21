@@ -28,13 +28,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_keyboard.h>
-#include <wlr/types/wlr_input_device.h>
-#include <wlr/types/wlr_pointer.h>
-#include <xkbcommon/xkbcommon.h>
-
 #include "synui.h"
 
 /* ── Focus ───────────────────────────────────────────────── */
@@ -122,7 +115,7 @@ void view_update_borders(syn_view_t *view)
     /* Create borders as scene rects if they don't exist yet */
     #define MAKE_BORDER(field, bx, by, bw2, bh) do { \
         if (!view->field) \
-            view->field = wlr_scene_rect_create(&view->scene_tree->node.parent->tree, \
+            view->field = wlr_scene_rect_create(view->scene_tree->node.parent, \
                                                 bw2, bh, color); \
         else \
             wlr_scene_rect_set_color(view->field, color); \

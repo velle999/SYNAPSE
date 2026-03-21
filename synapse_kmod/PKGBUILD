@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL2')
@@ -13,21 +13,32 @@ sha256sums=('SKIP')
 package() {
     cd "$srcdir/$pkgname-$pkgver"
 
-    # Install source tree for DKMS (builds against the running kernel at install time)
+    # Install source tree for DKMS (builds against any kernel at install time)
     install -dm755 "$pkgdir/usr/src/$pkgname-$pkgver"
-    cp -r . "$pkgdir/usr/src/$pkgname-$pkgver/"
+    cp -r src include Makefile dkms.conf \
+        "$pkgdir/usr/src/$pkgname-$pkgver/"
 
     # DKMS configuration
     install -Dm644 dkms.conf \
         "$pkgdir/usr/src/$pkgname-$pkgver/dkms.conf"
 
+    # Pacman hook — rebuilds module automatically on kernel upgrades
+    install -Dm644 hooks/71-synapse-kmod.hook \
+        "$pkgdir/usr/share/libalpm/hooks/71-synapse-kmod.hook"
+
+    # Rebuild script called by the pacman hook
+    install -Dm755 hooks/synapse-kmod-rebuild \
+        "$pkgdir/usr/bin/synapse-kmod-rebuild"
+
     install -Dm755 tools/syn-kmod-status \
         "$pkgdir/usr/bin/syn-kmod-status" 2>/dev/null || true
 
+    # Auto-load module at boot
     install -Dm644 /dev/null \
         "$pkgdir/usr/lib/modules-load.d/synapse.conf"
     echo "synapse_kmod" > "$pkgdir/usr/lib/modules-load.d/synapse.conf"
 
+    # Default module parameters
     install -Dm644 /dev/null \
         "$pkgdir/usr/lib/modprobe.d/synapse.conf"
     echo "options synapse_kmod synapse_events=1 synapse_sched=1 synapse_daemon_timeout=30 synapse_ring_size=4096" \

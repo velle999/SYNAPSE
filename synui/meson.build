@@ -7,6 +7,7 @@ wayland   = dependency('wayland-server')
 wayland_protos = dependency('wayland-protocols')
 xkbcommon = dependency('xkbcommon')
 pixman    = dependency('pixman-1')
+threads   = dependency('threads')
 
 wl_scanner = find_program('wayland-scanner')
 
@@ -25,8 +26,15 @@ xdg_shell_c = custom_target('xdg-shell-protocol.c',
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
 executable('synui',
-  sources : ['src/main.c', 'src/server.c', xdg_shell_h, xdg_shell_c],
-  include_directories : [include_directories('include'), include_directories('.')],
-  dependencies : [wlroots, wayland, xkbcommon, pixman],
+  sources : [
+    'src/synui_main.c',
+    'src/input.c',
+    'src/layout.c',
+    'src/ai_interface.c',
+    xdg_shell_h,
+    xdg_shell_c,
+  ],
+  include_directories : [include_directories('src'), include_directories('.')],
+  dependencies : [wlroots, wayland, xkbcommon, pixman, threads],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)

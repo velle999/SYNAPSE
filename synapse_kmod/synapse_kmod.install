@@ -1,6 +1,15 @@
 post_install() {
     dkms add synapse_kmod/0.1.0 2>/dev/null || true
-    dkms install synapse_kmod/0.1.0 --no-initrd 2>/dev/null || true
+
+    # Build for every installed kernel that has headers available
+    for kver in /lib/modules/*/build; do
+        kver="${kver%/build}"
+        kver="${kver##*/}"
+        [ -d "/lib/modules/$kver/build" ] || continue
+        echo ":: Building synapse_kmod for kernel $kver ..."
+        dkms install synapse_kmod/0.1.0 -k "$kver" --no-initrd 2>&1 || \
+            echo "   (failed for $kver — will retry at boot)"
+    done
     depmod -A
 }
 

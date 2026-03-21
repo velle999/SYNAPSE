@@ -17,13 +17,26 @@ _bg_setup() {
     {
         echo "=== synapse_kmod DKMS build: $(date) ==="
         echo "kernel: $kver"
-        if [[ -d "$src" ]] && command -v dkms &>/dev/null; then
+
+        # Check if already built for this kernel (any compression format)
+        local already_built=0
+        for ext in .ko .ko.zst .ko.xz .ko.gz; do
+            [ -f "/lib/modules/$kver/extra/synapse_kmod${ext}" ] && already_built=1
+        done
+
+        if [ "$already_built" = "1" ]; then
+            echo "synapse_kmod already built for $kver — loading"
+            depmod -a "$kver" 2>&1 || true
+            modprobe synapse_kmod 2>&1 || true
+        elif [[ -d "$src" ]] && command -v dkms &>/dev/null; then
             dkms add synapse_kmod/0.1.0 2>&1 || true
-            dkms build synapse_kmod/0.1.0 -k "$kver" 2>&1 || true
             dkms install synapse_kmod/0.1.0 -k "$kver" 2>&1 || true
             depmod -a "$kver" 2>&1 || true
             modprobe synapse_kmod 2>&1 || true
             echo "dkms status: $(dkms status synapse_kmod 2>&1)"
+        elif [ -x /usr/bin/synapse-kmod-build ]; then
+            echo "DKMS unavailable — trying direct build"
+            /usr/bin/synapse-kmod-build "$kver" 2>&1 || true
         else
             echo "SKIP: src=$src exists=$([ -d "$src" ] && echo y || echo n) dkms=$(command -v dkms || echo missing)"
         fi
@@ -222,52 +235,65 @@ check "network"       "ping -c1 -W2 8.8.8.8"
 header
 step "Step 5/5 — Desktop Environment"
 
-echo "  Choose your desktop environment:"
-echo "  (SynapseUI is the native AI-first compositor)"
-echo ""
-echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
-echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
-echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
-echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
-echo ""
-prompt "Choice [1-4, default=1]:"
-read -r de_choice || true
+# Skip if DE was already configured by the installer
+if [ -f "$DE_CONF" ]; then
+    source "$DE_CONF" 2>/dev/null || true
+    case "${DE:-}" in
+        kde)    success "Desktop pre-configured by installer: KDE Plasma" ;;
+        gnome)  success "Desktop pre-configured by installer: GNOME" ;;
+        tty)    success "Desktop pre-configured by installer: TTY only" ;;
+        synui)  success "Desktop pre-configured by installer: SynapseUI" ;;
+        *)      success "Desktop pre-configured by installer: ${DE:-unknown}" ;;
+    esac
+    de_choice=""
+else
+    echo "  Choose your desktop environment:"
+    echo "  (SynapseUI is the native AI-first compositor)"
+    echo ""
+    echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+    echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
+    echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
+    echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
+    echo ""
+    prompt "Choice [1-4, default=1]:"
+    read -r de_choice || true
 
-mkdir -p /etc/synapseos
+    mkdir -p /etc/synapseos
 
-case "${de_choice:-1}" in
-    2)
-        echo "  Enabling KDE Plasma with SDDM..."
-        echo "DE=kde" > "$DE_CONF"
-        mkdir -p /etc/sddm.conf.d
-        cat > /etc/sddm.conf.d/synapseos.conf << 'SDDM'
+    case "${de_choice:-1}" in
+        2)
+            echo "  Enabling KDE Plasma with SDDM..."
+            echo "DE=kde" > "$DE_CONF"
+            mkdir -p /etc/sddm.conf.d
+            cat > /etc/sddm.conf.d/synapseos.conf << 'SDDM'
 [Autologin]
 Session=plasmawayland
 User=syn
 SDDM
-        systemctl disable synui.service 2>/dev/null || true
-        systemctl enable sddm.service 2>/dev/null || true
-        success "KDE Plasma selected — SDDM enabled"
-        ;;
-    3)
-        echo "  Enabling GNOME with GDM..."
-        echo "DE=gnome" > "$DE_CONF"
-        systemctl disable synui.service 2>/dev/null || true
-        systemctl enable gdm.service 2>/dev/null || true
-        success "GNOME selected — GDM enabled"
-        ;;
-    4)
-        echo "  No GUI selected."
-        echo "DE=tty" > "$DE_CONF"
-        systemctl disable synui.service 2>/dev/null || true
-        ;;
-    *)
-        echo "  Keeping SynapseUI (default)."
-        echo "DE=synui" > "$DE_CONF"
-        systemctl enable synui.service 2>/dev/null || true
-        success "SynapseUI selected"
-        ;;
-esac
+            systemctl disable synui.service 2>/dev/null || true
+            systemctl enable sddm.service 2>/dev/null || true
+            success "KDE Plasma selected — SDDM enabled"
+            ;;
+        3)
+            echo "  Enabling GNOME with GDM..."
+            echo "DE=gnome" > "$DE_CONF"
+            systemctl disable synui.service 2>/dev/null || true
+            systemctl enable gdm.service 2>/dev/null || true
+            success "GNOME selected — GDM enabled"
+            ;;
+        4)
+            echo "  No GUI selected."
+            echo "DE=tty" > "$DE_CONF"
+            systemctl disable synui.service 2>/dev/null || true
+            ;;
+        *)
+            echo "  Keeping SynapseUI (default)."
+            echo "DE=synui" > "$DE_CONF"
+            systemctl enable synui.service 2>/dev/null || true
+            success "SynapseUI selected"
+            ;;
+    esac
+fi
 
 # ── Mark firstboot complete ────────────────────────────────
 mkdir -p "$(dirname "$DONE_FLAG")"

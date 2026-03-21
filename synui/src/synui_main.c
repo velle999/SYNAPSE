@@ -34,24 +34,9 @@
 #include <assert.h>
 #include <sys/syscall.h>
 
-#include <wayland-server-core.h>
-#include <wlr/backend.h>
-#include <wlr/render/wlr_renderer.h>
-#include <wlr/render/allocator.h>
-#include <wlr/types/wlr_compositor.h>
-#include <wlr/types/wlr_data_device.h>
-#include <wlr/types/wlr_output.h>
-#include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_xcursor_manager.h>
-#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
-#include <wlr/types/wlr_presentation_time.h>
-#include <wlr/util/log.h>
+#include <wlr/types/wlr_presentation.h>
 
 #include "synui.h"
 
@@ -59,19 +44,11 @@
 static void output_frame(struct wl_listener *listener, void *data)
 {
     syn_output_t *output = wl_container_of(listener, output, frame);
-    struct wlr_scene *scene = output->server->scene;
     struct wlr_scene_output *scene_output = output->scene_output;
 
-    /* Render the scene graph */
-    struct wlr_scene_output_state state;
-    wlr_scene_output_build_state(scene_output, &state, NULL);
-
-    /* Neural overlay is drawn here by overlay_render() if visible */
-    if (output->server->overlay.visible) {
-        struct wlr_output *wlr_out = output->wlr_output;
-        overlay_render(output->server, output->server->renderer,
-                       wlr_out->width, wlr_out->height);
-    }
+    /* Update overlay state each frame if visible */
+    if (output->server->overlay.visible)
+        overlay_update(output->server);
 
     wlr_scene_output_commit(scene_output, NULL);
 
@@ -149,10 +126,8 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, map);
     view->mapped = 1;
-    focus_view(view->workspace->link.next ?
-               (syn_server_t *)wl_container_of(view->workspace, struct { struct wl_list l; }, l) : NULL,
-               view, view->xdg_surface->surface);
-    layout_apply(NULL /* retrieved from view */, view->workspace);
+    focus_view(view->server, view, view->xdg_surface->surface);
+    layout_apply(view->server, view->workspace);
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data)
@@ -173,6 +148,8 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&view->unmap.link);
     wl_list_remove(&view->destroy.link);
     wl_list_remove(&view->commit.link);
+    wl_list_remove(&view->request_maximize.link);
+    wl_list_remove(&view->request_fullscreen.link);
     wl_list_remove(&view->link);
     free(view);
 }
@@ -246,8 +223,13 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data)
     wl_signal_add(&xdg_surface->toplevel->events.request_fullscreen,
                   &view->request_fullscreen);
 
+    /* Assign server pointer so view callbacks can reach it */
+    view->server = server;
+
     /* Check if process has AI_CTX set */
-    pid_t pid = xdg_surface->client->pid;
+    pid_t pid = 0;
+    wl_client_get_credentials(wl_resource_get_client(xdg_surface->resource),
+                              &pid, NULL, NULL);
     if (pid > 0) {
         char path[64];
         snprintf(path, sizeof(path), "/proc/%d/comm", pid);
@@ -340,7 +322,7 @@ int synui_init(syn_server_t *s)
     wlr_subcompositor_create(s->display);
     wlr_data_device_manager_create(s->display);
     wlr_viewporter_create(s->display);
-    wlr_presentation_create(s->display, s->backend);
+    wlr_presentation_create(s->display);
 
     /* Output layout */
     s->output_layout = wlr_output_layout_create(s->display);

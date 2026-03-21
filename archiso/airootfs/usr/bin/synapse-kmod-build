@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # synapse-kmod-build — build synapse_kmod for the running kernel
-# Fallback for when DKMS build (via syn-firstboot) didn't produce a .ko.
-# Called by synapse-kmod-build.service (ConditionPathExists guards it).
-set -euo pipefail
+# Called by synapse-kmod-build.service at boot when no prebuilt .ko exists.
+# Also usable as a manual recovery tool.
+set -uo pipefail
 
-KVER=$(uname -r)
-SRC=$(ls -d /usr/src/synapse_kmod-* 2>/dev/null | head -1) || true
-[ -z "$SRC" ] && SRC=/usr/src/synapse_kmod
+MODULE="synapse_kmod"
+VERSION="0.1.0"
+KVER="${1:-$(uname -r)}"
+
+SRC=$(ls -d /usr/src/${MODULE}-* 2>/dev/null | head -1) || true
+[ -z "$SRC" ] && SRC="/usr/src/${MODULE}"
 
 if [ ! -d "$SRC" ]; then
     echo "synapse-kmod-build: no source at $SRC" >&2
@@ -15,37 +18,50 @@ fi
 
 if [ ! -d "/lib/modules/$KVER/build" ]; then
     echo "synapse-kmod-build: no kernel headers for $KVER" >&2
+    echo "synapse-kmod-build: install linux-headers for your kernel" >&2
     exit 1
 fi
 
-# Try DKMS first (preferred — tracks module properly)
+# Check if already built (any compression format)
+for ext in .ko .ko.zst .ko.xz .ko.gz; do
+    if [ -f "/lib/modules/$KVER/extra/${MODULE}${ext}" ]; then
+        echo "synapse-kmod-build: ${MODULE} already built for $KVER"
+        modprobe "$MODULE" 2>/dev/null || true
+        exit 0
+    fi
+done
+
+# ── Try DKMS first (preferred — tracks module properly) ──────────
 if command -v dkms &>/dev/null; then
     echo "synapse-kmod-build: attempting DKMS build for kernel $KVER"
-    # DKMS expects source at /usr/src/<name>-<version>/
-    DKMS_SRC="/usr/src/synapse_kmod-0.1.0"
+
+    # Ensure DKMS source link exists
+    DKMS_SRC="/usr/src/${MODULE}-${VERSION}"
     if [ ! -d "$DKMS_SRC" ] && [ -d "$SRC" ]; then
         ln -sf "$SRC" "$DKMS_SRC"
     fi
-    dkms add synapse_kmod/0.1.0 2>/dev/null || true
-    if dkms build synapse_kmod/0.1.0 -k "$KVER" && \
-       dkms install synapse_kmod/0.1.0 -k "$KVER"; then
+
+    dkms add "$MODULE/$VERSION" 2>/dev/null || true
+
+    if dkms install "$MODULE/$VERSION" -k "$KVER" --no-initrd 2>&1; then
         depmod -a "$KVER"
-        modprobe synapse_kmod 2>/dev/null || true
-        echo "synapse-kmod-build: done (DKMS)"
+        modprobe "$MODULE" 2>/dev/null || true
+        echo "synapse-kmod-build: done (DKMS) for $KVER"
         exit 0
     fi
     echo "synapse-kmod-build: DKMS failed, falling back to direct build"
 fi
 
-# Direct build fallback — use a temp copy to avoid polluting DKMS source
+# ── Direct build fallback ────────────────────────────────────────
 BUILDDIR=$(mktemp -d /tmp/synapse_kmod-build.XXXXXX)
 trap 'rm -rf "$BUILDDIR"' EXIT
 cp -a "$SRC"/. "$BUILDDIR"/
 
-echo "synapse-kmod-build: building for kernel $KVER"
+echo "synapse-kmod-build: building for kernel $KVER (direct)"
 make -C "/lib/modules/$KVER/build" M="$BUILDDIR" modules
+
 mkdir -p "/lib/modules/$KVER/extra"
-cp "$BUILDDIR/synapse_kmod.ko" "/lib/modules/$KVER/extra/"
+cp "$BUILDDIR/${MODULE}.ko" "/lib/modules/$KVER/extra/"
 depmod -a "$KVER"
-modprobe synapse_kmod 2>/dev/null || true
-echo "synapse-kmod-build: done (direct)"
+modprobe "$MODULE" 2>/dev/null || true
+echo "synapse-kmod-build: done (direct) for $KVER"
