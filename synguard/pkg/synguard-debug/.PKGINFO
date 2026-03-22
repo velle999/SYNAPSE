@@ -3,12 +3,12 @@
 pkgname = synguard-debug
 pkgbase = synguard
 xdata = pkgtype=debug
-pkgver = 0.1.0-1
+pkgver = 0.1.0-2
 pkgdesc = Detached debugging symbols for synguard
 url = 
-builddate = 1773462293
+builddate = 1774209100
 packager = Unknown Packager
-size = 160692
+size = 172724
 arch = x86_64
 license = GPL2
 makedepend = meson

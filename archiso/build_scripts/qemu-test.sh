@@ -22,10 +22,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ISO="${1:-$(ls -t "${SCRIPT_DIR}/../out"/*.iso 2>/dev/null | head -1)}"
-DISK="${SCRIPT_DIR}/../build/test-disk.qcow2"
+shift || true   # Remove ISO from $@ so it isn't passed to QEMU as a bare arg
+DISK="${SCRIPT_DIR}/../out/test-disk.qcow2"
 
 [[ -z "$ISO" ]] && { echo "Usage: $0 <iso>"; exit 1; }
 [[ -f "$ISO" ]] || { echo "ISO not found: $ISO"; exit 1; }
+
+# Build creates files as root — fix ownership so QEMU can open them
+if [[ -f "$ISO" && "$(stat -c %U "$ISO")" != "$(whoami)" ]]; then
+    echo "ISO owned by root — fixing ownership with sudo..."
+    sudo chown "$(whoami):$(id -gn)" "$ISO"
+fi
 
 RAM="${QEMU_RAM:-4G}"
 CPUS="${QEMU_CPUS:-4}"
@@ -78,8 +85,8 @@ qemu-system-x86_64 \
     -smp "$CPUS" \
     -vga "$VGA" \
     -display gtk,zoom-to-fit=on \
-    -cdrom "$ISO" \
     -drive file="$DISK",if=virtio,format=qcow2 \
+    -cdrom "$ISO" \
     -boot order=dc \
     -netdev user,id=net0 \
     -device virtio-net-pci,netdev=net0 \

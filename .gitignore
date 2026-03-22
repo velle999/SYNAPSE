@@ -4,3 +4,5 @@ SynapseOS-0.1.0-x86_64.iso
 /archiso/work/x86_64
 /archiso/work
 archiso/airootfs/var/lib/synapd/models/synapse-7b-q4_k_m.gguf
+archiso/airootfs/var/lib/synapd/models/synapse.gguf
+archiso/out/test-disk.qcow2

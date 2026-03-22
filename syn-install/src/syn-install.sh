@@ -1,1 +1,1 @@
-/home/velle/Documents/GitHub/SYNAPSE/syn-install/syn-install.sh
+/home/velle/Documents/SYNAPSE/syn-install/syn-install.sh

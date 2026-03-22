@@ -166,6 +166,15 @@ AI_FEATURES=$(d_checklist "AI Features" \
     "model"     "Embed synapse-7b model (~4GB)" "on"
 ) || AI_FEATURES="synapd synguard synui model"
 
+# ── Desktop environment ──────────────────────────────────────
+DESKTOP=$(d_menu "Desktop Environment" \
+    "Select your desktop environment:" \
+    "synui"   "SynapseUI — AI-native Wayland compositor (default)" \
+    "kde"     "KDE Plasma — Full-featured Wayland desktop" \
+    "gnome"   "GNOME — Clean, modern Wayland desktop" \
+    "tty"     "TTY only — No GUI (headless/server)"
+)
+
 # ── Summary ───────────────────────────────────────────────────
 d_yesno "Summary — Review before installing" \
 "The following will be configured:\n\
@@ -177,6 +186,7 @@ d_yesno "Summary — Review before installing" \
   User:      ${USERNAME}\n\
   Disk:      ${TARGET_DISK} (WILL BE ERASED)\n\
   Scheme:    ${SCHEME}\n\
+  Desktop:   ${DESKTOP}\n\
   AI:        ${AI_FEATURES}\n\
 \n\
 Proceed with installation?" || exec "$0"
@@ -254,19 +264,48 @@ ok "Partitions mounted"
 
 # ── pacstrap ──────────────────────────────────────────────
 log "Installing base system (this takes a while)..."
+
+# Build DE-specific package list
+DE_PKGS=""
+case "${DESKTOP}" in
+    synui)
+        DE_PKGS="foot xdg-desktop-portal"
+        ;;
+    kde)
+        DE_PKGS="plasma-desktop sddm konsole kscreen plasma-nm plasma-pa xdg-desktop-portal-kde"
+        ;;
+    gnome)
+        DE_PKGS="gnome-shell gnome-control-center gdm gnome-terminal xdg-desktop-portal-gnome"
+        ;;
+    tty)
+        DE_PKGS=""
+        ;;
+esac
+
 pacstrap -K "${MOUNT_POINT}" \
     base base-devel linux linux-firmware \
     linux-headers dkms \
     networkmanager grub efibootmgr \
+    seatd \
     sudo nano vim \
+    ${DE_PKGS} \
     2>&1 | tee -a "$LOG"
 
 # ── SynapseOS packages ────────────────────────────────────
 log "Installing SynapseOS packages..."
-# Copy local repo into the new system temporarily
-if [[ -d /run/archiso/repo ]]; then
+# Copy local repo (packages + database) into the new system
+LIVE_REPO="/run/archiso/airootfs/local-repo"
+# Fallback: on some archiso layouts the repo is at /local-repo
+[[ -d "$LIVE_REPO" ]] || LIVE_REPO="/local-repo"
+
+if [[ -d "$LIVE_REPO" ]]; then
     mkdir -p "${MOUNT_POINT}/var/cache/synapseos-repo"
-    cp /run/archiso/repo/*.pkg.tar.zst "${MOUNT_POINT}/var/cache/synapseos-repo/" 2>/dev/null || true
+    cp "$LIVE_REPO"/*.pkg.tar.zst "${MOUNT_POINT}/var/cache/synapseos-repo/" 2>/dev/null || true
+    cp "$LIVE_REPO"/synapseos.db* "${MOUNT_POINT}/var/cache/synapseos-repo/" 2>/dev/null || true
+    cp "$LIVE_REPO"/synapseos.files* "${MOUNT_POINT}/var/cache/synapseos-repo/" 2>/dev/null || true
+    ok "Local repo copied to installed system"
+else
+    log "Warning: local repo not found — SynapseOS packages may be missing"
 fi
 
 arch-chroot "${MOUNT_POINT}" /bin/bash -s << CHROOT
@@ -283,11 +322,53 @@ REPO
 pacman -Sy 2>/dev/null || true
 
 # Install SynapseOS components
-for pkg in synapseos-synapd synapseos-synsh synapseos-synguard synapseos-synui synapseos-kmod; do
+for pkg in synapd synsh synguard synui synapse_kmod syn-firstboot syn-install; do
     pacman -S --noconfirm "\$pkg" 2>/dev/null || echo "Note: \$pkg not in local repo"
 done
 
+# Regenerate repo database if it wasn't copied
+if [[ ! -f /var/cache/synapseos-repo/synapseos.db.tar.gz ]] && \
+   ls /var/cache/synapseos-repo/*.pkg.tar.zst &>/dev/null; then
+    repo-add /var/cache/synapseos-repo/synapseos.db.tar.gz \
+        /var/cache/synapseos-repo/*.pkg.tar.zst 2>/dev/null || true
+    pacman -Sy 2>/dev/null || true
+    for pkg in synapd synsh synguard synui synapse_kmod syn-firstboot syn-install; do
+        pacman -S --noconfirm "\$pkg" 2>/dev/null || true
+    done
+fi
+
 CHROOT
+
+# ── Fallback: copy DKMS source and kmod-build if pkg missed them ──
+if [[ ! -d "${MOUNT_POINT}/usr/src/synapse_kmod-0.1.0" ]]; then
+    KMOD_SRC="/usr/src/synapse_kmod-0.1.0"
+    [[ -d "$KMOD_SRC" ]] || KMOD_SRC=$(ls -d /usr/src/synapse_kmod* 2>/dev/null | head -1) || true
+    if [[ -n "$KMOD_SRC" && -d "$KMOD_SRC" ]]; then
+        log "Copying DKMS source tree as fallback..."
+        mkdir -p "${MOUNT_POINT}/usr/src/synapse_kmod-0.1.0"
+        cp -a "$KMOD_SRC"/. "${MOUNT_POINT}/usr/src/synapse_kmod-0.1.0/"
+        ok "DKMS source installed"
+    fi
+fi
+# Copy kmod-build script as fallback
+if [[ ! -f "${MOUNT_POINT}/usr/bin/synapse-kmod-build" ]] && \
+   [[ -f /usr/bin/synapse-kmod-build ]]; then
+    cp /usr/bin/synapse-kmod-build "${MOUNT_POINT}/usr/bin/synapse-kmod-build"
+    chmod 755 "${MOUNT_POINT}/usr/bin/synapse-kmod-build"
+fi
+# Copy synapse-kmod-build.service if not installed by package
+if [[ ! -f "${MOUNT_POINT}/usr/lib/systemd/system/synapse-kmod-build.service" ]] && \
+   [[ ! -f "${MOUNT_POINT}/etc/systemd/system/synapse-kmod-build.service" ]]; then
+    if [[ -f /etc/systemd/system/synapse-kmod-build.service ]]; then
+        mkdir -p "${MOUNT_POINT}/etc/systemd/system"
+        cp /etc/systemd/system/synapse-kmod-build.service \
+            "${MOUNT_POINT}/etc/systemd/system/"
+    elif [[ -f /usr/lib/systemd/system/synapse-kmod-build.service ]]; then
+        mkdir -p "${MOUNT_POINT}/usr/lib/systemd/system"
+        cp /usr/lib/systemd/system/synapse-kmod-build.service \
+            "${MOUNT_POINT}/usr/lib/systemd/system/"
+    fi
+fi
 
 # ── Copy model ────────────────────────────────────────────
 if echo "${AI_FEATURES}" | grep -q "model"; then
@@ -333,20 +414,133 @@ cat > /etc/hosts << 'HOSTS'
 127.0.1.1   ${HOSTNAME}.localdomain ${HOSTNAME}
 HOSTS
 
-# User
-useradd -m -G wheel,audio,video,input,synapse -s /usr/bin/synsh -c "${USER_FULL}" "${USERNAME}" 2>/dev/null || true
-echo "${USERNAME}:${USER_PASS}" | chpasswd
-echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
-
 # Groups
 groupadd -r synapse  2>/dev/null || true
 groupadd -r synguard 2>/dev/null || true
 
-# Services
-systemctl enable synapd
-systemctl enable synguard
-systemctl enable NetworkManager
-systemctl enable synapse_kmod 2>/dev/null || modprobe synapse_kmod 2>/dev/null || true
+# User — add to seat group for seatd/DRM access
+useradd -m -G wheel,audio,video,input,synapse,seat -s /usr/bin/synsh -c "${USER_FULL}" "${USERNAME}" 2>/dev/null || true
+echo "${USERNAME}:${USER_PASS}" | chpasswd
+echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
+
+# ── Desktop environment configuration ────────────────────
+mkdir -p /etc/synapseos
+echo "DE=${DESKTOP}" > /etc/synapseos/desktop.conf
+
+USER_UID=\$(id -u "${USERNAME}")
+
+case "${DESKTOP}" in
+    synui)
+        # Override synui.service to run as the created user
+        mkdir -p /etc/systemd/system/synui.service.d
+        cat > /etc/systemd/system/synui.service.d/user.conf << SYNUI_OVERRIDE
+[Unit]
+Conflicts=getty@tty1.service
+
+[Service]
+User=${USERNAME}
+Environment=XDG_RUNTIME_DIR=/run/user/\${USER_UID}
+ExecStartPre=
+ExecStartPre=/bin/mkdir -p /run/user/\${USER_UID}
+ExecStartPre=/bin/chown ${USERNAME}:${USERNAME} /run/user/\${USER_UID}
+ExecStartPre=/bin/sh -c 'if [ -f /sys/class/dmi/id/sys_vendor ] && grep -qiE "VirtualBox|VMware|QEMU|KVM|Xen|innotek" /sys/class/dmi/id/sys_vendor; then mkdir -p /run/synui; printf "WLR_RENDERER=pixman\nWLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n" > /run/synui/env; else mkdir -p /run/synui; : > /run/synui/env; fi'
+SYNUI_OVERRIDE
+
+        # Override synui-foot.service to run as the user
+        mkdir -p /etc/systemd/system/synui-foot.service.d
+        cat > /etc/systemd/system/synui-foot.service.d/user.conf << FOOT_OVERRIDE
+[Service]
+User=${USERNAME}
+Environment=XDG_RUNTIME_DIR=/run/user/\${USER_UID}
+FOOT_OVERRIDE
+
+        # User's .bash_profile — launch synui when logging in on tty1
+        cat > /home/${USERNAME}/.bash_profile << 'BASH_PROFILE'
+# SynapseOS — launch compositor on tty1
+if [ "\$(tty)" = "/dev/tty1" ] && [ -z "\$WAYLAND_DISPLAY" ]; then
+    export XDG_RUNTIME_DIR="/run/user/\$(id -u)"
+    mkdir -p "\$XDG_RUNTIME_DIR"
+    # VM detection — software renderer fallback
+    if [ -f /sys/class/dmi/id/sys_vendor ] && \
+       grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+        export WLR_RENDERER=pixman
+        export WLR_BACKENDS=drm,libinput
+        export WLR_NO_HARDWARE_CURSORS=1
+    fi
+    export XDG_SESSION_TYPE=wayland
+    export LIBSEAT_BACKEND=seatd
+    exec synui
+fi
+BASH_PROFILE
+        chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.bash_profile
+
+        # synui config for the user
+        mkdir -p /home/${USERNAME}/.config/synui
+        cat > /home/${USERNAME}/.config/synui/synuirc << 'SYNUIRC'
+# synui compositor configuration
+terminal = foot
+autostart = foot
+border_width    = 2
+gap             = 8
+master_factor   = 0.60
+ai_layout       = on
+ai_ctx_decor    = on
+start_overlay   = off
+workspace_1_intent = main workspace
+workspace_2_intent = web browsing and research
+workspace_3_intent = writing code and running tests
+workspace_4_intent = terminal and system administration
+workspace_5_intent = media and entertainment
+SYNUIRC
+        chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.config
+
+        # Enable synui services
+        systemctl enable synui.service
+        systemctl enable seatd.service
+        ;;
+
+    kde)
+        # KDE Plasma with SDDM display manager
+        systemctl enable sddm.service
+        systemctl enable seatd.service
+        ;;
+
+    gnome)
+        # GNOME with GDM display manager
+        systemctl enable gdm.service
+        systemctl enable seatd.service
+        ;;
+
+    tty)
+        # TTY only — no compositor, no display manager
+        ;;
+esac
+
+# ── Core services (always enabled) ───────────────────────
+systemctl enable synapd.service
+systemctl enable synguard.service
+systemctl enable NetworkManager.service
+systemctl enable synapse-kmod-build.service 2>/dev/null || true
+
+# Mark firstboot done — installer already configured everything
+mkdir -p /var/lib/synapseos
+echo "firstboot completed by installer: \$(date)" > /var/lib/synapseos/firstboot.done
+
+# Kernel module — DKMS builds it for the installed kernel
+dkms autoinstall 2>/dev/null || true
+
+# Ensure module loads at boot even if DKMS built it outside modules-load.d
+if [[ ! -f /usr/lib/modules-load.d/synapse.conf ]] && \
+   [[ ! -f /etc/modules-load.d/synapse.conf ]]; then
+    mkdir -p /etc/modules-load.d
+    echo "synapse_kmod" > /etc/modules-load.d/synapse.conf
+fi
+if [[ ! -f /usr/lib/modprobe.d/synapse.conf ]] && \
+   [[ ! -f /etc/modprobe.d/synapse.conf ]]; then
+    mkdir -p /etc/modprobe.d
+    echo "options synapse_kmod synapse_events=1 synapse_sched=1 synapse_daemon_timeout=30 synapse_ring_size=4096" \
+        > /etc/modprobe.d/synapse.conf
+fi
 
 # GRUB
 grub-install --target=x86_64-efi \
@@ -382,6 +576,14 @@ do_install 2>&1 | tee -a "$LOG"
 
 # ── Done ──────────────────────────────────────────────────────
 clear
+
+case "${DESKTOP}" in
+    synui) DE_LABEL="SynapseUI (AI compositor)" ;;
+    kde)   DE_LABEL="KDE Plasma" ;;
+    gnome) DE_LABEL="GNOME" ;;
+    tty)   DE_LABEL="TTY only" ;;
+esac
+
 dialog --backtitle "SynapseOS Installer" \
        --title "✓ Installation Complete" \
        --msgbox "\n\
@@ -392,9 +594,10 @@ What to do next:\n\
   2. Reboot\n\
 \n\
 On first boot:\n\
+  • Desktop: ${DE_LABEL}\n\
+  • Log in as '${USERNAME}'\n\
   • synapd will start and load the AI model (~30s)\n\
   • synguard starts in AUDIT mode (safe default)\n\
-  • Log in as '${USERNAME}'\n\
   • Type 'syn ask anything' to get started\n\
 \n\
 Installation log saved to: ${LOG}\n\

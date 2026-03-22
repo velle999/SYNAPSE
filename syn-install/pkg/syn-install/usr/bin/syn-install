@@ -44,8 +44,10 @@ header
 echo "  This installer will:"
 echo "    1. Partition a disk"
 echo "    2. Install SynapseOS base system"
-echo "    3. Configure bootloader (GRUB)"
-echo "    4. Set up all SynapseOS services"
+echo "    3. Install SynapseOS packages"
+echo "    4. Create user account"
+echo "    5. Choose desktop environment"
+echo "    6. Configure system & bootloader"
 echo ""
 warn "ALL DATA ON THE TARGET DISK WILL BE ERASED"
 echo ""
@@ -54,7 +56,7 @@ read -r
 
 # ── Disk selection ────────────────────────────────────────
 header
-step "Step 1/6 — Select Target Disk"
+step "Step 1 — Select Target Disk"
 
 echo "  Available disks:"
 echo ""
@@ -91,7 +93,7 @@ fi
 
 # ── Partition ─────────────────────────────────────────────
 header
-step "Step 2/6 — Partitioning $DISK"
+step "Step 2 — Partitioning $DISK"
 
 if [ "$BOOT_MODE" = "uefi" ]; then
     echo "  Creating GPT partition table..."
@@ -145,10 +147,8 @@ success "Disk partitioned and mounted at /mnt"
 
 # ── Install base system ───────────────────────────────────
 header
-step "Step 3/6 — Installing Base System"
+step "Step 3 — Installing Base System"
 
-# Fix mirrorlist on live system (single quotes preserve $repo/$arch literals
-# which pacman expands itself — do NOT use a variable here)
 cat > /etc/pacman.d/mirrorlist << 'MIRROREOF'
 Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
@@ -181,16 +181,14 @@ success "Base system installed"
 
 # ── Install SynapseOS packages ────────────────────────────
 header
-step "Step 4/6 — Installing SynapseOS"
+step "Step 4 — Installing SynapseOS"
 
-# Copy local-repo into chroot and install via pacman
 LIVE_REPO="/run/archiso/airootfs/local-repo"
 CHROOT_REPO="/mnt/var/cache/synapseos"
 
 mkdir -p "$CHROOT_REPO"
 cp "$LIVE_REPO"/*.pkg.tar.zst "$CHROOT_REPO/" 2>/dev/null || true
 
-# Build repo db inside chroot
 arch-chroot /mnt bash -c "
     cd /var/cache/synapseos && \
     repo-add synapseos.db.tar.gz *.pkg.tar.zst 2>/dev/null && \
@@ -198,7 +196,6 @@ arch-chroot /mnt bash -c "
     ln -sf synapseos.files.tar.gz synapseos.files
 "
 
-# Add synapseos repo to chroot pacman.conf
 cat >> /mnt/etc/pacman.conf << REPOEOF
 
 [synapseos]
@@ -206,25 +203,99 @@ SigLevel = Optional TrustAll
 Server = file:///var/cache/synapseos
 REPOEOF
 
-# Install all SynapseOS packages
 arch-chroot /mnt pacman -Sy --noconfirm \
     synapd synsh synnet synguard synui synapse_kmod \
     syn syn-model syn-firstboot \
     2>&1 || warn "Some SynapseOS packages failed to install"
 
-# Copy llama.cpp shared libraries from live ISO to installed system
+# Copy llama.cpp shared libraries from live ISO
 echo "  Copying AI runtime libraries..."
 for lib in /run/archiso/airootfs/usr/lib/libllama* \
            /run/archiso/airootfs/usr/lib/libggml*; do
-    [ -f "$lib" ] && cp "$lib" /mnt/usr/lib/ && echo "    $(basename $lib)"
+    [ -f "$lib" ] && cp "$lib" /mnt/usr/lib/ && echo "    $(basename "$lib")"
 done
 arch-chroot /mnt ldconfig
 
+# Copy AI model if present on live ISO
+MODEL_SRC=""
+for f in /run/archiso/airootfs/var/lib/synapd/models/*.gguf \
+         /var/lib/synapd/models/*.gguf; do
+    [ -f "$f" ] && MODEL_SRC="$f" && break
+done
+if [ -n "$MODEL_SRC" ]; then
+    echo "  Copying AI model ($(du -sh "$MODEL_SRC" | cut -f1))..."
+    mkdir -p /mnt/var/lib/synapd/models
+    cp "$MODEL_SRC" /mnt/var/lib/synapd/models/synapse.gguf
+    success "AI model installed"
+else
+    warn "No AI model on live ISO — download later with: syn model download"
+fi
+
 success "SynapseOS packages installed"
+
+# ── User account ─────────────────────────────────────────
+header
+step "Step 5 — Create User Account"
+
+echo "  Create a user account for the installed system."
+echo ""
+prompt "Username [default: syn]:"
+read -r NEW_USER || true
+NEW_USER="${NEW_USER:-syn}"
+
+prompt "Full name (optional):"
+read -r NEW_FULLNAME || true
+
+while true; do
+    prompt "Password:"
+    read -rs NEW_PASS; echo
+    prompt "Confirm password:"
+    read -rs NEW_PASS2; echo
+    if [ "$NEW_PASS" = "$NEW_PASS2" ] && [ -n "$NEW_PASS" ]; then
+        break
+    fi
+    fail "Passwords do not match or are empty — try again"
+done
+
+success "User '$NEW_USER' will be created"
+
+# ── Desktop environment ──────────────────────────────────
+header
+step "Step 6 — Desktop Environment"
+
+echo "  Choose a desktop environment:"
+echo ""
+echo "    $(bold '1)') SynapseUI  — AI-native Wayland compositor  (default)"
+echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
+echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
+echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
+echo ""
+prompt "Choice [1-4, default=1]:"
+read -r de_choice || true
+DE_CHOICE="${de_choice:-1}"
+
+case "$DE_CHOICE" in
+    2)
+        echo "  Installing KDE Plasma..."
+        arch-chroot /mnt pacman -S --noconfirm \
+            plasma-meta sddm kde-applications-meta \
+            2>&1 || warn "Some KDE packages failed to install"
+        success "KDE Plasma installed"
+        ;;
+    3)
+        echo "  Installing GNOME..."
+        arch-chroot /mnt pacman -S --noconfirm \
+            gnome gdm \
+            2>&1 || warn "Some GNOME packages failed to install"
+        success "GNOME installed"
+        ;;
+    4) echo "  No GUI will be installed." ;;
+    *) success "SynapseUI selected (included)" ;;
+esac
 
 # ── Configure system ──────────────────────────────────────
 header
-step "Step 5/6 — Configuring System"
+step "Configuring System"
 
 # fstab
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -243,7 +314,7 @@ echo "  Hostname: synapse"
 echo "en_US.UTF-8 UTF-8" >> /mnt/etc/locale.gen
 arch-chroot /mnt locale-gen 2>/dev/null
 echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
-echo "  Locale configured"
+echo "  Locale: en_US.UTF-8"
 
 # timezone
 arch-chroot /mnt ln -sf /usr/share/zoneinfo/UTC /etc/localtime 2>/dev/null || true
@@ -261,63 +332,142 @@ ANSI_COLOR="1;36"
 HOME_URL="https://synapseos.dev"
 EOF
 
-# Copy SynapseOS service files from live ISO.
-# These must be in place BEFORE systemctl enable so the [Install]
-# section is available for symlink creation.
+# ── Copy service files from live ISO ─────────────────────
 for f in \
     /etc/systemd/system/synapd.service \
     /etc/systemd/system/synnet.service \
     /etc/systemd/system/synguard.service \
     /etc/systemd/system/synui.service \
     /etc/systemd/system/synui-foot.service \
-    /etc/systemd/system/synapseos-firstboot.service \
     /etc/systemd/system/synapse-kmod-build.service \
     /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
-
-# Copy kmod build script (fallback if DKMS fails during firstboot)
 [ -f /usr/bin/synapse-kmod-build ] && \
     cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
 
-# Enable services — background daemons only.
-# synui is NOT enabled here: on first boot, .bash_profile runs syn-firstboot
-# which enables synui for all subsequent boots.  This prevents synui from
-# racing ahead of the firstboot wizard.
+# ── Fix synguard: don't hard-require synapd ──────────────
+# synguard handles missing synapd gracefully in code, but Requires=
+# in the unit file kills it before it gets the chance.
+if [ -f /mnt/etc/systemd/system/synguard.service ]; then
+    sed -i 's/^Requires=synapd.service/Wants=synapd.service/' \
+        /mnt/etc/systemd/system/synguard.service
+    sed -i '/^PartOf=synapd.service/d' \
+        /mnt/etc/systemd/system/synguard.service
+fi
+
+# ── Create user and groups ────────────────────────────────
+echo "  Creating user '$NEW_USER'..."
+arch-chroot /mnt bash -c "
+    groupadd -r synapse  2>/dev/null || true
+    groupadd -r synguard 2>/dev/null || true
+    useradd -m -G wheel,audio,video,input,synapse,seat \
+        -s /usr/bin/synsh -c '$NEW_FULLNAME' '$NEW_USER' 2>/dev/null || true
+    echo '$NEW_USER:$NEW_PASS' | chpasswd
+    echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
+"
+USER_UID=$(arch-chroot /mnt id -u "$NEW_USER" 2>/dev/null || echo 1000)
+echo "  User '$NEW_USER' created (uid=$USER_UID)"
+
+# ── Enable services ──────────────────────────────────────
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
-echo "  Services enabled"
 
-# Auto-login as root on tty1.
-mkdir -p /mnt/etc/systemd/system/getty@tty1.service.d/
-cat > /mnt/etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
+# ── Desktop environment setup ────────────────────────────
+mkdir -p /mnt/etc/synapseos
+case "$DE_CHOICE" in
+    2)
+        echo "DE=kde" > /mnt/etc/synapseos/desktop.conf
+        arch-chroot /mnt systemctl enable sddm.service 2>/dev/null || true
+        echo "  Desktop: KDE Plasma (SDDM login screen)"
+        ;;
+    3)
+        echo "DE=gnome" > /mnt/etc/synapseos/desktop.conf
+        arch-chroot /mnt systemctl enable gdm.service 2>/dev/null || true
+        echo "  Desktop: GNOME (GDM login screen)"
+        ;;
+    4)
+        echo "DE=tty" > /mnt/etc/synapseos/desktop.conf
+        echo "  Desktop: TTY only"
+        ;;
+    *)
+        echo "DE=synui" > /mnt/etc/synapseos/desktop.conf
+
+        # synui.service override — run as user, not root
+        mkdir -p /mnt/etc/systemd/system/synui.service.d
+        cat > /mnt/etc/systemd/system/synui.service.d/user.conf << SYNUI_EOF
+[Unit]
+Conflicts=getty@tty1.service
+
 [Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
-EOF
+User=$NEW_USER
+Environment=XDG_RUNTIME_DIR=/run/user/$USER_UID
+ExecStartPre=
+ExecStartPre=+/bin/mkdir -p /run/user/$USER_UID
+ExecStartPre=+/bin/chown $NEW_USER:$NEW_USER /run/user/$USER_UID
+ExecStartPre=+/bin/sh -c 'if [ -f /sys/class/dmi/id/sys_vendor ] && grep -qiE "VirtualBox|VMware|QEMU|KVM|Xen|innotek" /sys/class/dmi/id/sys_vendor; then mkdir -p /run/synui; printf "WLR_RENDERER=pixman\nWLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n" > /run/synui/env; else mkdir -p /run/synui; : > /run/synui/env; fi'
+SYNUI_EOF
 
-# Primary boot handler on tty1.
-# First boot:  getty autologin → .bash_profile → syn-firstboot wizard
-# Later boots: synui.service starts via systemd (enabled by firstboot)
-#              → Conflicts=getty@tty1 prevents getty → .bash_profile never runs
-cat > /mnt/root/.bash_profile << 'PROFILEEOF'
-echo "SynapseOS — booting..."
-if [ "$(tty)" = "/dev/tty1" ]; then
-    if [ ! -f /var/lib/synapseos/firstboot.done ]; then
-        echo "Running first boot setup..."
-        /usr/bin/syn-firstboot || echo "firstboot exited with error $?"
-    fi
-    if [ -f /var/lib/synapseos/firstboot.done ]; then
-        echo "Starting SynapseUI..."
-        systemctl start synui.service 2>&1 || echo "synui failed to start"
-        sleep 2
+        # synui-foot override — run terminal as user
+        mkdir -p /mnt/etc/systemd/system/synui-foot.service.d
+        cat > /mnt/etc/systemd/system/synui-foot.service.d/user.conf << FOOT_EOF
+[Service]
+User=$NEW_USER
+Environment=XDG_RUNTIME_DIR=/run/user/$USER_UID
+FOOT_EOF
+
+        arch-chroot /mnt systemctl enable synui.service 2>/dev/null || true
+        echo "  Desktop: SynapseUI (as $NEW_USER)"
+        ;;
+esac
+
+# ── User home setup ──────────────────────────────────────
+# .bash_profile — launches synui on tty1 login as fallback
+cat > "/mnt/home/$NEW_USER/.bash_profile" << 'PROFILEEOF'
+if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+    if ! systemctl is-active --quiet synui.service 2>/dev/null; then
+        export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+        mkdir -p "$XDG_RUNTIME_DIR"
+        if [ -f /sys/class/dmi/id/sys_vendor ] && \
+           grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+            export WLR_RENDERER=pixman
+            export WLR_BACKENDS=drm,libinput
+            export WLR_NO_HARDWARE_CURSORS=1
+        fi
+        export XDG_SESSION_TYPE=wayland
+        export LIBSEAT_BACKEND=seatd
+        exec synui
     fi
 fi
 PROFILEEOF
 
-# tmpfiles for synapd runtime dirs
+# synui config
+mkdir -p "/mnt/home/$NEW_USER/.config/synui"
+cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
+terminal = foot
+autostart = foot
+border_width    = 2
+gap             = 8
+master_factor   = 0.60
+ai_layout       = on
+ai_ctx_decor    = on
+start_overlay   = off
+workspace_1_intent = main workspace
+workspace_2_intent = web browsing and research
+workspace_3_intent = writing code and running tests
+workspace_4_intent = terminal and system administration
+workspace_5_intent = media and entertainment
+SYNUIRC
+
+arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
+
+# ── Mark firstboot done ──────────────────────────────────
+mkdir -p /mnt/var/lib/synapseos
+echo "firstboot completed by installer: $(date)" > /mnt/var/lib/synapseos/firstboot.done
+
+# tmpfiles for synapd
 cat > /mnt/etc/tmpfiles.d/synapd.conf << 'EOF'
 d /run/synapd 0755 root root -
 d /var/lib/synapd 0755 root root -
@@ -327,18 +477,12 @@ EOF
 echo "  Generating initramfs..."
 arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors"
 
-# synapse_kmod is built by DKMS during first boot (via syn-firstboot's
-# _bg_setup). The synapse_kmod package already installed the DKMS source
-# tree to /usr/src/synapse_kmod-0.1.0/ and linux-headers is a dependency.
-# Nothing further is needed here.
-
 success "System configured"
 
 # ── Bootloader ────────────────────────────────────────────
 header
-step "Step 6/6 — Installing Bootloader"
+step "Installing Bootloader"
 
-# Write grub defaults BEFORE grub-mkconfig runs
 cat > /mnt/etc/default/grub << 'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
@@ -378,14 +522,22 @@ success "Bootloader installed"
 header
 green "  SynapseOS installation complete!"
 echo ""
+DE_NAME="SynapseUI"
+case "$DE_CHOICE" in
+    2) DE_NAME="KDE Plasma" ;;
+    3) DE_NAME="GNOME" ;;
+    4) DE_NAME="TTY only" ;;
+esac
 echo "  $(bold 'Disk:')     $DISK"
 echo "  $(bold 'Boot:')     $BOOT_MODE"
+echo "  $(bold 'Desktop:')  $DE_NAME"
+echo "  $(bold 'User:')     $NEW_USER"
 echo "  $(bold 'Hostname:') synapse"
 echo ""
 line
 echo ""
-echo "  On first boot, syn-firstboot will guide you through"
-echo "  downloading an AI model and configuring your system."
+echo "  Log in as '$(bold "$NEW_USER")' after reboot."
+echo "  Type '$(bold "syn ask anything")' to get started."
 echo ""
 
 prompt "Remove installation media and press ENTER to reboot..."

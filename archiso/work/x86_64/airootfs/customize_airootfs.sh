@@ -39,8 +39,9 @@ useradd -m -G wheel,audio,video,input,synapse -s /bin/bash syn 2>/dev/null || tr
 echo "syn:synapse" | chpasswd
 echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" >> /etc/sudoers.d/wheel
 
-# Root password disabled on live ISO
-passwd -d root
+# Root password — set to "synapse" for live ISO
+# (user can change it during firstboot wizard)
+echo 'root:synapse' | chpasswd
 
 # ── Shell defaults ────────────────────────────────────────────
 # Make synsh the default for the syn user

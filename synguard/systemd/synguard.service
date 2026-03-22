@@ -5,8 +5,7 @@
 Description=SynapseOS AI Security Monitor (synguard)
 Documentation=https://synapseos.dev/docs/synguard
 After=synapd.service local-fs.target
-Requires=synapd.service
-PartOf=synapd.service
+Wants=synapd.service
 
 [Service]
 Type=notify

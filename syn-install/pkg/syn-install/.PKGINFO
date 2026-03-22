@@ -3,12 +3,12 @@
 pkgname = syn-install
 pkgbase = syn-install
 xdata = pkgtype=pkg
-pkgver = 0.1.0-3
+pkgver = 0.1.0-4
 pkgdesc = SynapseOS disk installer
 url = 
-builddate = 1773720381
+builddate = 1774210525
 packager = Unknown Packager
-size = 13201
+size = 18799
 arch = any
 license = GPL2
 depend = bash

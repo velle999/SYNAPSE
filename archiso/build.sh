@@ -201,7 +201,13 @@ CMAKE_ARGS=(
 )
 
 case "$WITH_GPU" in
-    cuda)  CMAKE_ARGS+=("-DGGML_CUDA=ON") ;;
+    cuda)
+        CMAKE_ARGS+=("-DGGML_CUDA=ON")
+        # Ensure CMake can find CUDA even under sudo (which strips env vars)
+        if [[ -d /opt/cuda ]]; then
+            CMAKE_ARGS+=("-DCUDAToolkit_ROOT=/opt/cuda" "-DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc")
+        fi
+        ;;
     rocm)  CMAKE_ARGS+=("-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
     cpu)   CMAKE_ARGS+=("-DGGML_NATIVE=ON") ;;
 esac
@@ -416,6 +422,14 @@ cd "${OUT_DIR}"
 sha256sum "$(basename "${ISO_FILE}")" > "$(basename "${ISO_FILE}").sha256"
 b2sum    "$(basename "${ISO_FILE}")" > "$(basename "${ISO_FILE}").b2sum"
 ok "sha256: $(cat "$(basename "${ISO_FILE}").sha256" | cut -d' ' -f1)"
+
+# ── Fix output ownership ─────────────────────────────────────
+# mkarchiso runs as root, so fix ownership of output files
+# so the user who invoked sudo can read/test the ISO without issues.
+if [[ -n "${SUDO_USER:-}" ]]; then
+    chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" "${OUT_DIR}"/*.iso "${OUT_DIR}"/*.sha256 "${OUT_DIR}"/*.b2sum 2>/dev/null || true
+    ok "Output files owned by ${SUDO_USER}"
+fi
 
 # ── Summary ───────────────────────────────────────────────────
 step "Build complete"

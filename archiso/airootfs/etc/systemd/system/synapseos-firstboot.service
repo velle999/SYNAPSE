@@ -1,17 +1,20 @@
+# synapseos-firstboot.service is intentionally a no-op.
+#
+# The first-boot wizard is launched interactively from ~/.bash_profile
+# via the getty@tty1 autologin path.  Running an interactive TUI as a
+# systemd service is fragile (TTY races, Conflicts= killing getty,
+# TTYVHangup destroying the terminal after exit).
+#
+# This unit file is kept so that Before=/After= references in other
+# units don't produce warnings, but it does nothing.
+
 [Unit]
-Description=SynapseOS First Boot Setup Wizard
-ConditionPathExists=!/var/lib/synapseos/firstboot.done
-Before=synui.service sddm.service gdm.service getty@tty1.service
-Conflicts=getty@tty1.service
+Description=SynapseOS First Boot (no-op — see .bash_profile)
+ConditionPathExists=/dev/null-never-matches
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/syn-firstboot
-StandardInput=tty
-StandardOutput=tty
-StandardError=journal
-TTYPath=/dev/tty1
-TTYVHangup=yes
+ExecStart=/bin/true
 
 [Install]
 WantedBy=multi-user.target

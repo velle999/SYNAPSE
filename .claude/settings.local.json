@@ -22,7 +22,18 @@
       "Bash(sudo -S dkms install synapse_kmod/0.1.0)",
       "Bash(sudo -S chown -R velle:velle /home/velle/Documents/GitHub/SYNAPSE/synapse_kmod/)",
       "Bash(sudo -S pacman -Syu --noconfirm linux)",
-      "Bash(sudo -S bash -c ':*)"
+      "Bash(sudo -S bash -c ':*)",
+      "Bash(wc:*)",
+      "Bash(tar xzf:*)",
+      "Bash(tar tzf:*)",
+      "Bash(bash -n /tmp/syn-install-edit.sh 2>&1)",
+      "Bash(install -m 755 /tmp/syn-install-edit.sh /home/velle/Documents/SYNAPSE/syn-install/syn-install.sh)",
+      "Bash(bash -n /home/velle/Documents/SYNAPSE/syn-install/syn-install.sh)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(makepkg -sf --noconfirm PKGDEST=\"/home/velle/Documents/SYNAPSE/archiso/local-repo\")",
+      "Bash(sudo rm:*)",
+      "Bash(sudo ./build.sh --no-model)",
+      "Bash(repo-add synapseos.db.tar.gz *.pkg.tar.zst)"
     ]
   }
 }

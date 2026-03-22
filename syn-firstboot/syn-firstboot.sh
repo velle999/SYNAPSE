@@ -74,24 +74,15 @@ fail()    { echo ""; red "  ✗ $*"; echo ""; }
 prompt()  { printf "  $(bold "$1") "; }
 
 # ── Safety net — always land in a shell on error ──────────
-trap 'echo ""; red "  firstboot error — dropping to synsh"; echo ""; exec /usr/bin/synsh' ERR
+trap 'echo ""; red "  firstboot error — dropping to shell"; echo ""; exit 1' ERR
 
 # ── Check if already done ─────────────────────────────────
 LIVE_ISO=0
 mountpoint -q /run/archiso/airootfs 2>/dev/null && LIVE_ISO=1
 
 if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ]; then
-    # Already configured — start the chosen DE directly
-    if [ -f "$DE_CONF" ]; then
-        source "$DE_CONF" 2>/dev/null || true
-        case "${DE:-synui}" in
-            kde)   exec systemctl start sddm.service ;;
-            gnome) exec systemctl start gdm.service ;;
-            tty)   exec /usr/bin/synsh ;;
-            *)     exec systemctl start synui.service ;;
-        esac
-    fi
-    exec systemctl start synui.service
+    # Already configured — return to caller (.bash_profile handles DE launch)
+    exit 0
 fi
 
 # ── Live ISO — offer install or live session ──────────────
@@ -108,10 +99,10 @@ if [ "$LIVE_ISO" = "1" ]; then
     read -r install_choice || true
 
     if [ "${install_choice:-2}" = "1" ]; then
-        exec /usr/bin/syn-install
+        /usr/bin/syn-install || echo "syn-install failed"
     fi
-    # Live session — skip firstboot wizard, go straight to synsh
-    exec /usr/bin/synsh
+    # Live session — return to .bash_profile (falls through to shell)
+    exit 0
 fi
 
 # ── Welcome ───────────────────────────────────────────────
@@ -312,27 +303,6 @@ echo ""
 line
 echo ""
 
-# ── Launch chosen desktop ─────────────────────────────────
-# NOTE: Do NOT use "exec systemctl start" here — this script runs inside
-# synapseos-firstboot.service which has Before=synui.service.  Calling
-# systemctl start synui would deadlock (synui waits for firstboot to
-# finish, but firstboot is blocked waiting for synui).  Instead, just
-# exit and let systemd's ordering start the chosen DE automatically.
-case "${de_choice:-1}" in
-    2)
-        prompt "Press ENTER to start KDE Plasma..."
-        read -r || true
-        ;;
-    3)
-        prompt "Press ENTER to start GNOME..."
-        read -r || true
-        ;;
-    4)
-        prompt "Press ENTER to continue to shell..."
-        read -r || true
-        ;;
-    *)
-        prompt "Press ENTER to start SynapseUI..."
-        read -r || true
-        ;;
-esac
+# ── Done — return to .bash_profile which handles DE launch ──
+prompt "Press ENTER to continue..."
+read -r || true
