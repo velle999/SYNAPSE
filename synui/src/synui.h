@@ -201,6 +201,7 @@ struct syn_server {
     struct wlr_compositor      *compositor;
     struct wlr_scene           *scene;
     struct wlr_scene_output_layout *scene_layout;
+    struct wlr_scene_rect      *bg_rect;
 
     struct wlr_xdg_shell      *xdg_shell;
     struct wlr_layer_shell_v1  *layer_shell;

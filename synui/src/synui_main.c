@@ -331,6 +331,12 @@ int synui_init(syn_server_t *s)
     s->scene = wlr_scene_create();
     s->scene_layout = wlr_scene_attach_output_layout(s->scene, s->output_layout);
 
+    /* Background: dark rect so the compositor isn't pure black */
+    float bg_color[4] = { 0.07f, 0.07f, 0.12f, 1.0f };
+    s->bg_rect = wlr_scene_rect_create(&s->scene->tree, 8192, 8192, bg_color);
+    wlr_scene_node_set_position(&s->bg_rect->node, -4096, -4096);
+    wlr_scene_node_lower_to_bottom(&s->bg_rect->node);
+
     /* XDG shell */
     s->xdg_shell = wlr_xdg_shell_create(s->display, 3);
 

@@ -362,6 +362,27 @@ static void server_cursor_motion(struct wl_listener *listener, void *data)
     }
 }
 
+static void server_cursor_motion_absolute(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, cursor_motion_absolute);
+    struct wlr_pointer_motion_absolute_event *event = data;
+    wlr_cursor_warp_absolute(s->cursor, &event->pointer->base,
+                             event->x, event->y);
+    s->cursor_x = s->cursor->x;
+    s->cursor_y = s->cursor->y;
+
+    double sx, sy;
+    struct wlr_surface *surface = NULL;
+    syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
+    if (view) {
+        wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
+        wlr_seat_pointer_notify_motion(s->seat, event->time_msec, sx, sy);
+    } else {
+        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+        wlr_seat_pointer_notify_clear_focus(s->seat);
+    }
+}
+
 static void server_cursor_button(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_button);
@@ -434,6 +455,9 @@ void input_setup(syn_server_t *s)
 
     s->cursor_motion.notify = server_cursor_motion;
     wl_signal_add(&s->cursor->events.motion, &s->cursor_motion);
+
+    s->cursor_motion_absolute.notify = server_cursor_motion_absolute;
+    wl_signal_add(&s->cursor->events.motion_absolute, &s->cursor_motion_absolute);
 
     s->cursor_button.notify = server_cursor_button;
     wl_signal_add(&s->cursor->events.button, &s->cursor_button);

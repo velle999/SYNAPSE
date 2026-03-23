@@ -3,7 +3,6 @@ Description=SynapseOS Wayland Compositor
 After=synapd.service seatd.service
 Wants=synapd.service synui-foot.service
 Requires=seatd.service
-Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
