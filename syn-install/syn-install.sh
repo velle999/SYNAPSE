@@ -358,14 +358,26 @@ fi
 
 # ── Create user and groups ────────────────────────────────
 echo "  Creating user '$NEW_USER'..."
+
 arch-chroot /mnt bash -c "
     groupadd -r synapse  2>/dev/null || true
     groupadd -r synguard 2>/dev/null || true
+    groupadd -r seat     2>/dev/null || true
+
+    grep -qxF '/usr/bin/synsh' /etc/shells 2>/dev/null || echo '/usr/bin/synsh' >> /etc/shells
+
     useradd -m -G wheel,audio,video,input,synapse,seat \
-        -s /usr/bin/synsh -c '$NEW_FULLNAME' '$NEW_USER' 2>/dev/null || true
-    echo '$NEW_USER:$NEW_PASS' | chpasswd
+        -s /bin/bash -c '$NEW_FULLNAME' '$NEW_USER' 2>/dev/null || true
+
     echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
 "
+
+# Set password directly — pipe to chpasswd outside bash -c to avoid
+# quoting/escaping issues and ensure errors are visible
+printf '%s:%s' "$NEW_USER" "$NEW_PASS" | arch-chroot /mnt chpasswd \
+    || { fail "Failed to set password"; }
+success "Password set for '$NEW_USER'"
+
 USER_UID=$(arch-chroot /mnt id -u "$NEW_USER" 2>/dev/null || echo 1000)
 echo "  User '$NEW_USER' created (uid=$USER_UID)"
 
@@ -380,6 +392,18 @@ mkdir -p /mnt/etc/synapseos
 case "$DE_CHOICE" in
     2)
         echo "DE=kde" > /mnt/etc/synapseos/desktop.conf
+        mkdir -p /mnt/etc/sddm.conf.d
+        cat > /mnt/etc/sddm.conf.d/synapseos.conf << 'SDDMEOF'
+[General]
+DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
+
+[Theme]
+Current=breeze
+
+[Autologin]
+Session=plasma
+SDDMEOF
         arch-chroot /mnt systemctl enable sddm.service 2>/dev/null || true
         echo "  Desktop: KDE Plasma (SDDM login screen)"
         ;;

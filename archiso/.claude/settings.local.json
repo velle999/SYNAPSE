@@ -6,7 +6,11 @@
       "Bash(find /home/velle/Documents/GitHub/SYNAPSE -name seatd* -type f)",
       "Bash(ln -sf /etc/systemd/system/synui.service airootfs/etc/systemd/system/multi-user.target.wants/synui.service)",
       "Bash(ln -sf /etc/systemd/system/synapseos-firstboot.service airootfs/etc/systemd/system/multi-user.target.wants/synapseos-firstboot.service)",
-      "Bash(ln -sf /etc/systemd/system/synui-foot.service airootfs/etc/systemd/system/multi-user.target.wants/synui-foot.service)"
+      "Bash(ln -sf /etc/systemd/system/synui-foot.service airootfs/etc/systemd/system/multi-user.target.wants/synui-foot.service)",
+      "Bash(find /home/velle/Documents/SYNAPSE/archiso/airootfs -path */sddm* -o -path *KDE* -o -path *Plasma*)",
+      "Bash(find /home/velle/Documents/SYNAPSE/archiso -name firstboot* -o -name *desktop*)",
+      "Bash(pacman -Ql sddm)",
+      "Read(//etc/pam.d/**)"
     ]
   }
 }

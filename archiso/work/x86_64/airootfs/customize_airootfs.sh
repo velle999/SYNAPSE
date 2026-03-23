@@ -52,8 +52,19 @@ chsh -s /usr/bin/synsh syn
 cat > /etc/profile.d/synapseos.sh << 'EOF'
 # SynapseOS environment
 export XDG_SESSION_TYPE=wayland
-export XDG_CURRENT_DESKTOP=SynapseOS
 # WAYLAND_DISPLAY is set by synui at runtime — do not hard-code it here
+
+# Only set SynapseOS desktop ID when synui is the active compositor;
+# KDE/GNOME need their own XDG_CURRENT_DESKTOP to function.
+if [ -z "${XDG_CURRENT_DESKTOP:-}" ]; then
+    DE=synui
+    [ -f /etc/synapseos/desktop.conf ] && . /etc/synapseos/desktop.conf 2>/dev/null
+    case "${DE:-synui}" in
+        kde)   export XDG_CURRENT_DESKTOP=KDE ;;
+        gnome) export XDG_CURRENT_DESKTOP=GNOME ;;
+        *)     export XDG_CURRENT_DESKTOP=SynapseOS ;;
+    esac
+fi
 
 # Compositor hint
 export SYNUI_RUNNING=0  # will be 1 when synui is active

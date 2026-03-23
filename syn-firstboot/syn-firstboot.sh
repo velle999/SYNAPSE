@@ -258,7 +258,7 @@ else
             mkdir -p /etc/sddm.conf.d
             cat > /etc/sddm.conf.d/synapseos.conf << 'SDDM'
 [Autologin]
-Session=plasmawayland
+Session=plasma
 User=syn
 SDDM
             systemctl disable synui.service 2>/dev/null || true

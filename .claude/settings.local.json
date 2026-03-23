@@ -33,7 +33,20 @@
       "Bash(makepkg -sf --noconfirm PKGDEST=\"/home/velle/Documents/SYNAPSE/archiso/local-repo\")",
       "Bash(sudo rm:*)",
       "Bash(sudo ./build.sh --no-model)",
-      "Bash(repo-add synapseos.db.tar.gz *.pkg.tar.zst)"
+      "Bash(repo-add synapseos.db.tar.gz *.pkg.tar.zst)",
+      "Bash(cat /home/velle/Documents/SYNAPSE/archiso/work/x86_64/airootfs/usr/lib/sddm/sddm.conf.d/*.conf)",
+      "Bash(tar -xf synsh/synsh-0.1.0-1-x86_64.pkg.tar.zst .PKGINFO -O)",
+      "Bash(tar -tf archiso/local-repo/synapseos.db.tar.gz)",
+      "Bash(cat /home/velle/Documents/SYNAPSE/archiso/work/x86_64/airootfs/etc/sddm.conf*)",
+      "Bash(cat /home/velle/Documents/SYNAPSE/archiso/airootfs/etc/systemd/system/multi-user.target.wants/*)",
+      "Bash(tar -tzf /home/velle/Documents/SYNAPSE/archiso/local-repo/synapseos.db.tar.gz)",
+      "Bash(for pkg:*)",
+      "Bash(do echo:*)",
+      "Bash(tar -xf $pkg .PKGINFO -O)",
+      "Bash(done)",
+      "Bash(BUILDDIR=/tmp/syn-inst PKGDEST=/tmp/syn-inst SRCDEST=/tmp/syn-inst SRCPKGDEST=/tmp/syn-inst LOGDEST=/tmp/syn-inst makepkg -f -d)",
+      "Bash(cp /tmp/syn-inst/syn-install-0.1.0-4-any.pkg.tar.zst /home/velle/Documents/SYNAPSE/archiso/local-repo/)",
+      "Bash(rm -f synapseos.db* synapseos.files*)"
     ]
   }
 }
