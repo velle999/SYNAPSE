@@ -34,10 +34,61 @@ fail()    { echo ""; red "  ✗ $*"; echo ""; }
 warn()    { echo ""; yellow "  ⚠ $*"; echo ""; }
 prompt()  { printf "  $(bold "$1") "; }
 
-die() { fail "$*"; exit 1; }
+# Unmount the target on failure so a stale /mnt doesn't block a retry.
+cleanup() { umount -R /mnt 2>/dev/null || true; }
+die() { fail "$*"; cleanup; exit 1; }
+
+# ── Minimum target disk size (base system + SynapseOS + model headroom) ──
+MIN_DISK_BYTES=$((8 * 1024 * 1024 * 1024))   # 8 GiB
+
+# ── Pre-flight safety helpers ─────────────────────────────
+# Connectivity: pacstrap downloads the base system, so being offline must
+# fail *before* we touch the disk, not after.
+have_net() {
+    ping -c1 -W3 8.8.8.8 &>/dev/null || ping -c1 -W3 1.1.1.1 &>/dev/null
+}
+
+# Disks that must never be wiped: whatever backs the running live system
+# (the boot media, the root fs, the archiso cow/airootfs mounts). Echoes
+# one /dev/<disk> per line.
+live_disks() {
+    local mnt src disk
+    for mnt in / /run/archiso/bootmnt /run/archiso/airootfs /run/archiso/cowspace /boot; do
+        src=$(findmnt -no SOURCE --target "$mnt" 2>/dev/null) || continue
+        [ -n "$src" ] || continue
+        case "$src" in /dev/*) ;; *) continue ;; esac   # skip overlay/tmpfs
+        # Map a partition back to its parent disk; if src is already a disk,
+        # PKNAME is empty and we use src itself.
+        disk=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1)
+        if [ -n "$disk" ]; then
+            echo "/dev/$disk"
+        else
+            echo "$src"
+        fi
+    done | sort -u
+}
+
+is_live_disk() {
+    local target="$1" d
+    while read -r d; do
+        [ -n "$d" ] && [ "$d" = "$target" ] && return 0
+    done < <(live_disks)
+    return 1
+}
+
+# Total size of a whole disk in bytes (empty if unknown).
+disk_size_bytes() { lsblk -bdno SIZE "$1" 2>/dev/null | head -1; }
+
+# True (0) if any partition of the disk is currently mounted.
+disk_busy() {
+    lsblk -nro MOUNTPOINT "$1" 2>/dev/null | grep -q .
+}
 
 # ── Must be root ──────────────────────────────────────────
 [ "$(id -u)" = "0" ] || die "syn-install must be run as root"
+
+# Best-effort unmount of the target area on any unexpected exit.
+trap cleanup EXIT
 
 # ── Welcome ───────────────────────────────────────────────
 header
@@ -54,6 +105,23 @@ echo ""
 prompt "Press ENTER to continue or Ctrl+C to abort..."
 read -r
 
+# ── Network pre-flight (before anything destructive) ──────
+header
+step "Checking network"
+if have_net; then
+    success "Network is up"
+else
+    echo "  No network detected. Starting NetworkManager..."
+    systemctl start NetworkManager 2>/dev/null || true
+    sleep 3
+    if have_net; then
+        success "Network connected"
+    else
+        die "No network connection. SynapseOS install downloads the base
+  system, so a connection is required. Connect (e.g. 'nmtui') and re-run."
+    fi
+fi
+
 # ── Disk selection ────────────────────────────────────────
 header
 step "Step 1 — Select Target Disk"
@@ -69,6 +137,27 @@ read -r DISK
 DISK="/dev/$DISK"
 
 [ -b "$DISK" ] || die "Disk $DISK not found"
+
+# Never wipe the disk we booted from / are running on.
+if is_live_disk "$DISK"; then
+    die "$DISK is the live/boot device — refusing to install onto it.
+  Pick the disk you want SynapseOS installed to, not the install media."
+fi
+
+# Refuse a disk that's too small to hold the system.
+DISK_BYTES=$(disk_size_bytes "$DISK")
+if [[ "$DISK_BYTES" =~ ^[0-9]+$ ]] && [ "$DISK_BYTES" -lt "$MIN_DISK_BYTES" ]; then
+    die "$DISK is too small ($((DISK_BYTES / 1024 / 1024 / 1024)) GiB).
+  SynapseOS needs at least $((MIN_DISK_BYTES / 1024 / 1024 / 1024)) GiB."
+fi
+
+# Refuse a disk with mounted partitions (in use / risk of corruption).
+if disk_busy "$DISK"; then
+    echo ""
+    warn "$DISK has mounted partitions:"
+    lsblk -no NAME,MOUNTPOINT "$DISK" | sed 's/^/    /'
+    die "Target disk is in use. Unmount its partitions and re-run."
+fi
 
 echo ""
 echo "  $(bold 'Target:') $DISK"

@@ -139,7 +139,7 @@ typedef struct {
 - [x] synnet — active connection monitoring and AI verdict enforcement
 - [x] synguard — ENFORCE mode with process isolation
 - [ ] os-release / neofetch integration
-- [ ] SynapseOS installer
+- [x] SynapseOS installer
 
 ---
 
