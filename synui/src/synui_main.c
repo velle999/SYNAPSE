@@ -407,11 +407,15 @@ int synui_init(syn_server_t *s)
     FILE *sf = fopen("/tmp/synui-display", "w");
     if (sf) { fprintf(sf, "%s\n", socket); fclose(sf); }
 
-    /* Start AI thread */
-    ai_thread_start(s);
-
-    /* Connect to synapd */
-    synui_synapd_connect(s);
+    /* Start AI thread (it owns the synapd connection). Skipped under --no-ai;
+     * mark the pipes invalid so send/poll become no-ops. */
+    if (s->ai_disabled) {
+        s->ai_pipe_req[0]  = s->ai_pipe_req[1]  = -1;
+        s->ai_pipe_resp[0] = s->ai_pipe_resp[1] = -1;
+        wlr_log(WLR_INFO, "synui: AI disabled (--no-ai)");
+    } else {
+        ai_thread_start(s);
+    }
 
     /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
     synui_ui_init(s);
@@ -535,6 +539,15 @@ int main(int argc, char *argv[])
 
     wlr_log_init(debug ? WLR_DEBUG : WLR_INFO, NULL);
 
+    /*
+     * Ignore SIGPIPE: the AI thread writes to the synapd socket, and if
+     * synapd disconnects mid-write an unhandled SIGPIPE would take down the
+     * whole compositor. Auto-reap children (autostart + AI "CMD:" launches)
+     * by ignoring SIGCHLD so they don't pile up as zombies.
+     */
+    signal(SIGPIPE, SIG_IGN);
+    signal(SIGCHLD, SIG_IGN);
+
     /* Detect VM and force software rendering before any wlroots init */
     if (detect_vm()) {
         fprintf(stderr, "synui: VM/hypervisor detected — forcing pixman renderer\n");
@@ -550,6 +563,7 @@ int main(int argc, char *argv[])
     synui_config_load(&server.config);
 
     if (no_ai) {
+        server.ai_disabled = 1;
         atomic_store(&server.ai_connected, 0);
     }
     if (start_overlay || server.config.start_overlay) {

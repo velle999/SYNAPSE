@@ -262,9 +262,19 @@ struct syn_server {
 
     /* AI thread communication */
     atomic_int      ai_connected;
+    int             ai_disabled;        /* --no-ai: AI thread never starts */
     int             ai_pipe_req[2];
     int             ai_pipe_resp[2];
     pthread_t       ai_thread;
+    /*
+     * Reassembly buffer for the response pipe. A syn_ai_response_t exceeds
+     * PIPE_BUF, so a write is not atomic and the non-blocking reader in the
+     * frame loop may see it in fragments — accumulate here across frames.
+     */
+    struct {
+        char   buf[sizeof(syn_ai_response_t)];
+        size_t have;
+    } ai_resp_rx;
 
     /* Listeners */
     struct wl_listener new_output;
@@ -304,7 +314,6 @@ void workspace_switch(syn_server_t *s, int index);
 void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index);
 
 /* ── ai_interface.c ──────────────────────────────────────── */
-int  synui_synapd_connect(syn_server_t *s);
 int  ai_thread_start(syn_server_t *s);
 void ai_thread_send(syn_server_t *s, const syn_ai_request_t *req);
 int  ai_thread_poll(syn_server_t *s, syn_ai_response_t *resp);

@@ -65,29 +65,22 @@ typedef struct {
 } syn_hdr_t;
 #pragma pack(pop)
 
-/* ── synapd IPC ──────────────────────────────────────────── */
-int synui_synapd_connect(syn_server_t *s)
+/* Write the whole buffer, tolerating partial writes and EINTR. Returns 0 on
+ * success, -1 on error. Needed because the request/response structs can
+ * exceed PIPE_BUF, so a single write() may transfer only part of them. */
+static int write_all(int fd, const void *buf, size_t n)
 {
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (fd < 0) return -1;
-
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, SYNAPD_SOCKET, sizeof(addr.sun_path) - 1);
-
-    struct timeval tv = { .tv_sec = 3 };
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(fd);
-        return -1;
+    const char *p = buf;
+    size_t off = 0;
+    while (off < n) {
+        ssize_t w = write(fd, p + off, n - off);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            return -1;
+        }
+        off += (size_t)w;
     }
-
-    /* Store fd in ai_pipe_req[1] — reused as the synapd fd */
-    /* Actually stored in a thread-local in the AI thread */
-    close(fd);
-    return fd;
+    return 0;
 }
 
 /* Called from AI thread only */
@@ -207,13 +200,15 @@ static void *ai_thread_fn(void *arg)
             continue;
         }
 
-        /* Write response back to compositor */
+        /* Write response back to compositor. The struct exceeds PIPE_BUF, so
+         * use write_all; the reader reassembles fragments across frames. */
         syn_ai_response_t resp = {
             .request_id = req.id,
             .ok         = 1,
         };
         strncpy(resp.response, response, sizeof(resp.response) - 1);
-        write(s->ai_pipe_resp[1], &resp, sizeof(resp));
+        if (write_all(s->ai_pipe_resp[1], &resp, sizeof(resp)) < 0)
+            wlr_log(WLR_ERROR, "ai_thread: failed to write response to compositor");
     }
 
     if (synapd_fd >= 0) close(synapd_fd);
@@ -237,13 +232,37 @@ int ai_thread_start(syn_server_t *s)
 
 void ai_thread_send(syn_server_t *s, const syn_ai_request_t *req)
 {
-    write(s->ai_pipe_req[1], req, sizeof(*req));
+    if (s->ai_disabled || s->ai_pipe_req[1] < 0) return;
+    if (write_all(s->ai_pipe_req[1], req, sizeof(*req)) < 0)
+        wlr_log(WLR_ERROR, "ai_thread_send: failed to queue request");
 }
 
+/*
+ * Non-blocking poll for a complete response. Because a syn_ai_response_t is
+ * larger than PIPE_BUF its write isn't atomic, so we accumulate fragments
+ * into s->ai_resp_rx across calls and only return 0 once a whole struct has
+ * arrived. Never blocks the render loop (resp pipe read end is O_NONBLOCK).
+ */
 int ai_thread_poll(syn_server_t *s, syn_ai_response_t *resp)
 {
-    ssize_t n = read(s->ai_pipe_resp[0], resp, sizeof(*resp));
-    return n == sizeof(*resp) ? 0 : -1;
+    if (s->ai_disabled || s->ai_pipe_resp[0] < 0) return -1;
+
+    const size_t need = sizeof(*resp);
+    while (s->ai_resp_rx.have < need) {
+        ssize_t n = read(s->ai_pipe_resp[0],
+                         s->ai_resp_rx.buf + s->ai_resp_rx.have,
+                         need - s->ai_resp_rx.have);
+        if (n > 0) {
+            s->ai_resp_rx.have += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR) continue;
+        return -1;   /* EAGAIN (no more bytes yet) or closed — try next frame */
+    }
+
+    memcpy(resp, s->ai_resp_rx.buf, need);
+    s->ai_resp_rx.have = 0;
+    return 0;
 }
 
 /* ── Command bar ─────────────────────────────────────────── */
