@@ -134,7 +134,7 @@ typedef struct {
 
 ## Roadmap
 
-- [ ] First-boot model downloader
+- [x] First-boot model downloader
 - [ ] synui — full Wayland compositor with AI-aware window management
 - [x] synnet — active connection monitoring and AI verdict enforcement
 - [x] synguard — ENFORCE mode with process isolation

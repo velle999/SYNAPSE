@@ -182,7 +182,9 @@ else
         echo ""
         echo "  Downloading $(bold "$MODEL")..."
         mkdir -p "$MODEL_DIR"
-        if syn-model download "$MODEL" 2>/dev/null; then
+        # --yes: don't prompt during first boot. Let progress/errors show so a
+        # multi-GB download isn't a frozen screen; syn-model verifies the file.
+        if syn-model download "$MODEL" --yes; then
             success "Model downloaded"
         else
             fail "Download failed — run: syn model download $MODEL"
