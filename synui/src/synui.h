@@ -277,6 +277,13 @@ struct syn_server {
         size_t have;
     } ai_resp_rx;
 
+    /* synguard security-verdict feed: a thread subscribes to the synguard
+     * broadcast socket and forwards records over sec_pipe; the frame loop
+     * drains it and colours the matching window's border. */
+    int       sec_pipe[2];
+    pthread_t sec_thread;
+    int       sec_disabled;
+
     /* Listeners */
     struct wl_listener new_output;
     struct wl_listener new_xdg_surface;
@@ -329,6 +336,10 @@ void overlay_update(syn_server_t *s);
 void overlay_render(syn_server_t *s, struct wlr_renderer *renderer,
                     int width, int height);
 void execute_ai_action(syn_server_t *s, const char *response);
+
+/* ── secfeed.c ───────────────────────────────────────────── */
+void secfeed_start(syn_server_t *s);     /* subscribe to synguard verdicts */
+void secfeed_dispatch(syn_server_t *s);  /* drain feed, colour windows (frame loop) */
 
 /* ── config.c ────────────────────────────────────────────── */
 void synui_config_load(syn_config_t *cfg);

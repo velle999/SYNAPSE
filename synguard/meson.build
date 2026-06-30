@@ -15,6 +15,7 @@ sources = files(
   'src/ai_classifier.c',
   'src/action_engine.c',
   'src/isolation.c',
+  'src/secfeed.c',
   'src/core.c',
 )
 

@@ -47,6 +47,15 @@
 /* ── Paths ────────────────────────────────────────────────── */
 #define SYNGUARD_SOCKET_PATH  "/run/synapd/synguard.sock"
 #define SYNGUARD_PID_FILE     "/run/synapd/synguard.pid"
+
+/* Security-verdict broadcast feed ("syn guard watch"). Placed directly in
+ * /run (world-traversable) with a 0666 socket so the unprivileged compositor
+ * can subscribe and colour windows by verdict. Read-only stream of records. */
+#ifndef SYNGUARD_SECFEED_SOCKET   /* overridable for packaging / tests */
+#define SYNGUARD_SECFEED_SOCKET "/run/synguard.sock"
+#endif
+#define SG_SECFEED_MAGIC        0x53474656u   /* "SGFV" */
+#define SG_SECFEED_VERSION      1
 #define SYNGUARD_AUDIT_LOG    "/var/log/synguard/audit.log"
 #define SYNGUARD_RULES_DIR    "/etc/synguard/rules.d/"
 #define SYNGUARD_STATE_DIR    "/var/lib/synguard/"
@@ -247,6 +256,26 @@ int synguard_ai_classify(synguard_state_t *s,
 void action_deny(synguard_state_t *s, const sg_event_t *e, const char *reason);
 void action_alert(synguard_state_t *s, const sg_alert_t *alert);
 void action_quarantine(synguard_state_t *s, const sg_event_t *e);
+
+/* Security-verdict broadcast feed (secfeed.c). A fixed-size record is sent to
+ * every subscriber whenever a window-relevant verdict is taken, so the
+ * compositor can colour the offending window's border. */
+#pragma pack(push, 1)
+typedef struct {
+    uint32_t magic;      /* SG_SECFEED_MAGIC */
+    uint32_t version;    /* SG_SECFEED_VERSION */
+    uint32_t pid;
+    uint32_t uid;
+    int32_t  verdict;    /* sg_verdict_t */
+    int32_t  threat;     /* sg_threat_t */
+    char     comm[16];
+    char     reason[112];
+} sg_secfeed_msg_t;      /* 152 bytes, fixed layout (< PIPE_BUF) */
+#pragma pack(pop)
+
+int  secfeed_init(void);                       /* start listener + accept thread */
+void secfeed_publish(const sg_alert_t *alert); /* broadcast one verdict */
+void secfeed_close(void);
 
 /* Process isolation (isolation.c)
  *

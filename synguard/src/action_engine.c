@@ -87,10 +87,12 @@ void action_alert(synguard_state_t *s, const sg_alert_t *alert)
             e->filename[0] ? e->filename : "-",
             alert->reason);
 
+    /* Broadcast to subscribers (e.g. synui colours the offending window). */
+    secfeed_publish(alert);
+
     /*
-     * In a full implementation: broadcast to connected 'syn guard watch'
-     * clients via the IPC socket server. For now write a structured
-     * JSON line to stderr so sinks can parse it.
+     * Also write a structured JSON line to stderr in debug so sinks can
+     * parse it.
      */
     if (s->debug) {
         fprintf(stderr,

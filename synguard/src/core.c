@@ -237,12 +237,16 @@ int synguard_init(synguard_state_t *s)
     /* Open audit log */
     audit_init(s);
 
+    /* Start the security-verdict broadcast feed (non-fatal if it fails). */
+    secfeed_init();
+
     return 0;
 }
 
 void synguard_destroy(synguard_state_t *s)
 {
     s->running = 0;
+    secfeed_close();
     pthread_join(s->reader_thread, NULL);
     rules_free(s);
     free(s->baseline);

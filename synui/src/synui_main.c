@@ -46,6 +46,9 @@ static void output_frame(struct wl_listener *listener, void *data)
     syn_output_t *output = wl_container_of(listener, output, frame);
     struct wlr_scene_output *scene_output = output->scene_output;
 
+    /* Apply any pending synguard security verdicts to window borders. */
+    secfeed_dispatch(output->server);
+
     /* Poll for AI responses (non-blocking) and route by request type. */
     syn_ai_response_t resp;
     if (ai_thread_poll(output->server, &resp) == 0) {
@@ -436,6 +439,11 @@ int synui_init(syn_server_t *s)
     } else {
         ai_thread_start(s);
     }
+
+    /* Subscribe to synguard's security-verdict feed (shares --no-ai gate:
+     * with AI disabled we run a plain compositor with no daemon coupling). */
+    s->sec_disabled = s->ai_disabled;
+    secfeed_start(s);
 
     /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
     synui_ui_init(s);

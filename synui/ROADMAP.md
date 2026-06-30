@@ -21,8 +21,7 @@ Partial / broken:
   only route command-bar replies. (Fixed in Phase A.)
 - **Per-window AI context**: `ai_ctx.has_ctx` drives the AI border colour but
   nothing set it. (Addressed in Phase A.)
-- **Security borders**: `view_set_security()` exists but no synguard verdict
-  feed drives it.
+- **Security borders**: driven by the synguard verdict feed (Phase A2).
 - **Multi-output**: layout/UI always use `output[0]`; AI prompt hardcodes
   `1920x1080`.
 - Interactive move/resize: `SYNUI_CURSOR_MOVE/RESIZE` enum unused.
@@ -43,9 +42,13 @@ The distinguishing SynapseOS feature, currently non-functional.
       dead path); route STATUS_UPDATE replies to the neural overlay.
 - [x] Mark AI-placed windows as AI-managed (`ai_ctx`) so they get the AI
       border; clear it under non-AI layouts.
-- [ ] **A2 (next):** feed synguard verdicts into `view_set_security()` —
-      requires a synguard alert consumer + matching surface client pid
-      (`wl_client_get_credentials`) to synguard events.
+- [x] **A2:** feed synguard verdicts into `view_set_security()`. synguard now
+      broadcasts verdict records over `/run/synguard.sock` (the long-stubbed
+      "syn guard watch" feed, world-connectable so the unprivileged compositor
+      can read it); synui subscribes on a thread, hands records to the frame
+      loop, and matches each verdict's pid to a window via
+      `wl_client_get_credentials` → DENY/QUARANTINE = red "denied", ALERT =
+      "alert" border.
 
 ### Phase B — Interactive & complete window management
 Cursor move/resize for floating windows (the unused enum); finish the
