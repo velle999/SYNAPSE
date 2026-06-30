@@ -204,6 +204,7 @@ static void *ai_thread_fn(void *arg)
          * use write_all; the reader reassembles fragments across frames. */
         syn_ai_response_t resp = {
             .request_id = req.id,
+            .type       = req.type,   /* so the compositor can route the reply */
             .ok         = 1,
         };
         strncpy(resp.response, response, sizeof(resp.response) - 1);

@@ -46,13 +46,33 @@ static void output_frame(struct wl_listener *listener, void *data)
     syn_output_t *output = wl_container_of(listener, output, frame);
     struct wlr_scene_output *scene_output = output->scene_output;
 
-    /* Poll for AI responses (non-blocking) */
+    /* Poll for AI responses (non-blocking) and route by request type. */
     syn_ai_response_t resp;
     if (ai_thread_poll(output->server, &resp) == 0) {
-        if (output->server->cmdbar.visible && output->server->cmdbar.waiting) {
-            output->server->cmdbar.waiting = 0;
-            execute_ai_action(output->server, resp.response);
-            synui_render_cmdbar(output->server);
+        syn_server_t *server = output->server;
+        switch (resp.type) {
+        case AI_MSG_QUERY_CMD:
+            if (server->cmdbar.visible && server->cmdbar.waiting) {
+                server->cmdbar.waiting = 0;
+                execute_ai_action(server, resp.response);
+                synui_render_cmdbar(server);
+            }
+            break;
+        case AI_MSG_QUERY_LAYOUT:
+            /* request_id carries the target workspace index */
+            if (resp.request_id < WORKSPACE_MAX) {
+                syn_workspace_t *ws = &server->workspaces[resp.request_id];
+                if (ws->layout == LAYOUT_AI)
+                    layout_apply_ai_response(server, ws, resp.response);
+            }
+            break;
+        case AI_MSG_STATUS_UPDATE:
+            /* Surface the AI's status text in the neural overlay. */
+            snprintf(server->overlay.ai_context,
+                     sizeof(server->overlay.ai_context), "%s", resp.response);
+            if (server->overlay.visible)
+                synui_render_overlay(server);
+            break;
         }
     }
 

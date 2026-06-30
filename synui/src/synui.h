@@ -97,9 +97,10 @@ typedef struct {
 } syn_ai_request_t;
 
 typedef struct {
-    uint64_t request_id;
-    int      ok;
-    char     response[4096];
+    uint64_t          request_id;   /* echoes request id; for LAYOUT = ws index */
+    syn_ai_msg_type_t type;         /* echoes request type, for dispatch */
+    int               ok;
+    char              response[4096];
 } syn_ai_response_t;
 
 /* ── Command bar ─────────────────────────────────────────── */
@@ -310,6 +311,8 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws);
 void layout_request_ai(syn_server_t *s, syn_workspace_t *ws);
 void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                const char *json_response);
+int  parse_ai_layout_line(const char *line, char *app_id, size_t app_len,
+                          float *x, float *y, float *w, float *h);
 void workspace_switch(syn_server_t *s, int index);
 void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index);
 

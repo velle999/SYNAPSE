@@ -191,14 +191,41 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
 
     syn_ai_request_t req = {
         .type = AI_MSG_QUERY_LAYOUT,
-        .id   = (uint64_t)(uintptr_t)ws,
+        .id   = (uint64_t)ws->index,   /* response routes back by workspace index */
     };
     strncpy(req.prompt, prompt, sizeof(req.prompt) - 1);
     ai_thread_send(s, &req);
 
-    /* Apply tiling immediately as placeholder; AI response will
-     * arrive asynchronously and trigger layout_apply_ai_response() */
+    /* Apply tiling immediately as placeholder; the AI response arrives
+     * asynchronously and the frame loop calls layout_apply_ai_response(). */
     layout_tile(s, ws);
+}
+
+/* ── Parse one AI layout line ────────────────────────────── */
+/*
+ * Parses a single line of the AI layout response:
+ *   {"app":"APP_ID","x":FRAC,"y":FRAC,"w":FRAC,"h":FRAC}
+ * Returns 1 and fills the outputs on success, 0 on a malformed line.
+ * Fractions are validated to the sane 0.0–1.0 range (w/h must be > 0) so a
+ * bad model reply can't place a window off-screen or at zero size. Pure
+ * function (no wlroots deps) so it can be unit-tested directly.
+ */
+int parse_ai_layout_line(const char *line, char *app_id, size_t app_len,
+                         float *x, float *y, float *w, float *h)
+{
+    char app[128] = {0};
+    float fx, fy, fw, fh;
+    if (sscanf(line, " {\"app\":\"%127[^\"]\",\"x\":%f,\"y\":%f,\"w\":%f,\"h\":%f}",
+               app, &fx, &fy, &fw, &fh) != 5)
+        return 0;
+
+    if (fx < 0.0f || fx > 1.0f || fy < 0.0f || fy > 1.0f) return 0;
+    if (fw <= 0.0f || fw > 1.0f || fh <= 0.0f || fh > 1.0f) return 0;
+    if (fx + fw > 1.001f || fy + fh > 1.001f) return 0;   /* must fit on screen */
+
+    snprintf(app_id, app_len, "%s", app);
+    *x = fx; *y = fy; *w = fw; *h = fh;
+    return 1;
 }
 
 /* ── Apply AI layout response ────────────────────────────── */
@@ -208,19 +235,18 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
     struct wlr_box area;
     get_output_geom(s, &area);
 
-    /* Parse each JSON line */
     char copy[2048];
     strncpy(copy, json_response, sizeof(copy) - 1);
+    copy[sizeof(copy) - 1] = '\0';
 
-    char *line = strtok(copy, "\n");
+    int applied = 0;
+    char *save = NULL;
+    char *line = strtok_r(copy, "\n", &save);
     while (line) {
-        char app_id[64] = {0};
+        char app_id[128];
         float fx, fy, fw, fh;
-
-        if (sscanf(line, "{\"app\":\"%63[^\"]\",\"x\":%f,\"y\":%f,\"w\":%f,\"h\":%f}",
-                   app_id, &fx, &fy, &fw, &fh) == 5) {
-
-            /* Find matching window */
+        if (parse_ai_layout_line(line, app_id, sizeof(app_id),
+                                 &fx, &fy, &fw, &fh)) {
             syn_view_t *v;
             wl_list_for_each(v, &ws->windows, link) {
                 if (!v->mapped || v->floating) continue;
@@ -230,16 +256,25 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                     int ny = area.y + (int)(fy * area.height);
                     int nw = (int)(fw * area.width);
                     int nh = (int)(fh * area.height);
-                    /* Clamp and apply gap */
                     nw = nw > GAP * 2 ? nw - GAP : nw;
                     nh = nh > GAP * 2 ? nh - GAP : nh;
+                    /* Mark AI-managed before placing so the border picks the
+                     * AI colour, and record the app as the window's intent. */
+                    v->ai_ctx.has_ctx = 1;
+                    snprintf(v->ai_ctx.intent, sizeof(v->ai_ctx.intent),
+                             "%s", app_id);
                     place_view(v, nx + GAP/2, ny + GAP/2, nw, nh);
+                    applied++;
                     break;
                 }
             }
         }
-        line = strtok(NULL, "\n");
+        line = strtok_r(NULL, "\n", &save);
     }
+
+    /* If the model returned nothing usable, keep the tiling placeholder. */
+    if (!applied)
+        wlr_log(WLR_DEBUG, "synui: AI layout response had no usable windows");
 }
 
 /* ── Main dispatch ───────────────────────────────────────── */
@@ -252,6 +287,12 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     wl_list_for_each(v, &ws->windows, link)
         if (v->mapped)
             wlr_scene_node_set_enabled(&v->scene_tree->node, true);
+
+    /* AI-managed marking (and its cyan border) only persists under the AI
+     * layout; clear it for the other layouts so the border reflects reality. */
+    if (ws->layout != LAYOUT_AI)
+        wl_list_for_each(v, &ws->windows, link)
+            v->ai_ctx.has_ctx = 0;
 
     switch (ws->layout) {
     case LAYOUT_TILING:   layout_tile(s, ws);        break;
