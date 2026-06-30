@@ -1,0 +1,123 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Pinned llama.cpp build tag. Local llama-staging is build 8274
+# (libllama.so.0.0.8274). Bump this to move synapd to a newer llama.cpp;
+# the cache key follows it automatically.
+env:
+  LLAMA_REF: b8274
+
+jobs:
+  # ── Fast structural guards (no toolchain) ──────────────────
+  # Catches the regressions the repo just recovered from: tracked build
+  # artifacts, absolute/dangling symlinks, and meson sources that were
+  # never committed.
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No tracked build artifacts
+        run: |
+          hits=$(git ls-files \
+            | grep -E '\.(pkg\.tar\.zst|o|ko|cmd|symvers)$|(^|/)pkg/|/src/[A-Za-z0-9_]+-0\.1\.0/|^llama-staging/|^archiso/build/' \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "::error::tracked build artifacts must not be committed:"; echo "$hits"; exit 1
+          fi
+          echo "ok: no tracked build artifacts"
+
+      - name: No symlinks leaking a local checkout path
+        run: |
+          # Guards the regression we fixed: makepkg-dropped symlinks pointing
+          # at an absolute developer path (/home/.../SYNAPSE). Legitimate
+          # systemd .wants/ symlinks into /usr and /etc are fine.
+          fail=0
+          while IFS= read -r l; do
+            [ -z "$l" ] && continue
+            tgt=$(readlink "$l")
+            case "$tgt" in
+              /home/*|/Users/*|/root/*|*/SYNAPSE/*|*/GitHub/*)
+                echo "::error::symlink leaks a local checkout path: $l -> $tgt"; fail=1 ;;
+            esac
+          done < <(git ls-files -s | awk '$1=="120000"{ $1=$2=$3=""; sub(/^   /,""); print }')
+          [ "$fail" -eq 0 ] && echo "ok: no checkout-path symlinks"
+          exit $fail
+
+      - name: Every meson source is tracked
+        run: |
+          fail=0
+          for c in synapd synsh synguard synnet synui; do
+            for f in $(grep -oE "src/[A-Za-z0-9_]+\.c" "$c/meson.build" | sort -u); do
+              if ! git ls-files --error-unmatch "$c/$f" >/dev/null 2>&1; then
+                echo "::error::$c/meson.build references untracked source $f"; fail=1
+              fi
+            done
+          done
+          [ "$fail" -eq 0 ] && echo "ok: all meson sources tracked"
+          exit $fail
+
+      - name: build-all.sh keeps its anti-nesting guard
+        run: |
+          grep -q 're-ingests a previous extraction' build-all.sh \
+            || { echo "::error::build-all.sh lost the tarball pre-clean guard"; exit 1; }
+          echo "ok: anti-nesting guard present"
+
+  # ── Real compile of every component on a current Arch toolchain ─
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install toolchain and dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git cmake meson ninja pkgconf \
+            readline systemd-libs \
+            wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo \
+            linux-headers
+
+      - uses: actions/checkout@v4
+
+      - name: Cache llama.cpp staging
+        id: llama-cache
+        uses: actions/cache@v4
+        with:
+          path: llama-staging
+          key: llama-${{ env.LLAMA_REF }}-${{ runner.os }}
+
+      - name: Build llama.cpp (CPU-only) → llama-staging
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 --branch "$LLAMA_REF" \
+            https://github.com/ggerganov/llama.cpp /tmp/llama
+          cmake -S /tmp/llama -B /tmp/llama/build \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=OFF -DGGML_NATIVE=OFF
+          cmake --build /tmp/llama/build -j"$(nproc)"
+          DESTDIR="$PWD/llama-staging" cmake --install /tmp/llama/build
+
+      - name: Build userspace components
+        run: |
+          set -e
+          for c in synapd synsh synguard synnet synui; do
+            echo "::group::build $c"
+            meson setup "$c/_ci" "$c" --buildtype=release
+            meson compile -C "$c/_ci"
+            test -x "$c/_ci/$c"
+            echo "::endgroup::"
+          done
+          echo "all userspace components built"
+
+      - name: Build kernel module
+        run: |
+          KDIR=$(ls -d /usr/lib/modules/*/build | head -1)
+          echo "building synapse_kmod against $KDIR"
+          make -C synapse_kmod KERNELDIR="$KDIR"
+          test -f synapse_kmod/synapse_kmod.ko
+          echo "synapse_kmod.ko built"

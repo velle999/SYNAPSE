@@ -7,18 +7,19 @@ dep_systemd = dependency('libsystemd', required: false)
 
 # llama.cpp — look in llama-staging (symlinked into srcdir by PKGBUILD),
 # then fall back to system paths.
-_staging = join_paths(meson.source_root(), '..', 'llama-staging', 'usr')
+_staging = join_paths(meson.project_source_root(), '..', 'llama-staging', 'usr')
 _has_staging = run_command('test', '-d', join_paths(_staging, 'lib'), check: false).returncode() == 0
 
 _lib_dirs = []
-_inc_dirs = ['include']
 if _has_staging
     _lib_dirs += [join_paths(_staging, 'lib')]
-    _inc_dirs += [join_paths(_staging, 'include')]
+    # Pass the staging include as a compile arg: include_directories()
+    # rejects absolute paths that point near the source tree.
+    add_project_arguments('-I' + join_paths(_staging, 'include'), language: 'c')
 endif
 
 dep_llama = cc.find_library('llama', dirs: _lib_dirs, required: false)
-llama_inc = include_directories(_inc_dirs)
+llama_inc = include_directories('include')
 
 if dep_systemd.found()
   add_project_arguments('-DHAVE_LIBSYSTEMD', language: 'c')

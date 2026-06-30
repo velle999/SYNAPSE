@@ -335,7 +335,7 @@ int synui_init(syn_server_t *s)
     wlr_subcompositor_create(s->display);
     wlr_data_device_manager_create(s->display);
     wlr_viewporter_create(s->display);
-    wlr_presentation_create(s->display);
+    wlr_presentation_create(s->display, s->backend, 1);
 
     /* Output layout */
     s->output_layout = wlr_output_layout_create(s->display);
@@ -353,8 +353,10 @@ int synui_init(syn_server_t *s)
     /* XDG shell */
     s->xdg_shell = wlr_xdg_shell_create(s->display, 3);
 
-    /* Layer shell */
-    s->layer_shell = wlr_layer_shell_v1_create(s->display, 4);
+    /* Layer shell: deferred. wlr-layer-shell is an out-of-tree protocol
+     * whose generated code wlroots does not export; wiring it up means
+     * vendoring the XML and handling layer surfaces. Re-add when the
+     * compositor actually places panels/overlays via layer surfaces. */
 
     /* Seat */
     s->seat = wlr_seat_create(s->display, "seat0");

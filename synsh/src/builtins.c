@@ -196,6 +196,92 @@ static int builtin_help(synsh_state_t *s, int argc, char **argv) {
     return 0;
 }
 
+/* ── alias / unalias ──────────────────────────────────────── */
+static int alias_find(synsh_state_t *s, const char *name) {
+    for (int i = 0; i < s->alias_count; i++)
+        if (strcmp(s->alias_names[i], name) == 0) return i;
+    return -1;
+}
+
+static void alias_print(synsh_state_t *s, int i) {
+    printf("alias %s='%s'\n", s->alias_names[i], s->alias_values[i]);
+}
+
+static int builtin_alias(synsh_state_t *s, int argc, char **argv) {
+    if (argc < 2) {
+        for (int i = 0; i < s->alias_count; i++) alias_print(s, i);
+        return 0;
+    }
+
+    int rc = 0;
+    for (int a = 1; a < argc; a++) {
+        char *eq = strchr(argv[a], '=');
+        if (!eq) {
+            /* No '=' → query an existing alias */
+            int i = alias_find(s, argv[a]);
+            if (i >= 0) {
+                alias_print(s, i);
+            } else {
+                fprintf(stderr, "alias: %s: not found\n", argv[a]);
+                rc = 1;
+            }
+            continue;
+        }
+
+        *eq = '\0';
+        const char *name  = argv[a];
+        const char *value = eq + 1;
+        if (!*name) {
+            fprintf(stderr, "alias: invalid alias name\n");
+            rc = 1;
+            continue;
+        }
+
+        int i = alias_find(s, name);
+        if (i >= 0) {
+            /* Redefine in place */
+            free(s->alias_values[i]);
+            s->alias_values[i] = strdup(value);
+        } else if (s->alias_count >= 128) {
+            fprintf(stderr, "alias: table full (max 128)\n");
+            rc = 1;
+        } else {
+            s->alias_names[s->alias_count]  = strdup(name);
+            s->alias_values[s->alias_count] = strdup(value);
+            s->alias_count++;
+        }
+    }
+    return rc;
+}
+
+static int builtin_unalias(synsh_state_t *s, int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "unalias: usage: unalias name [name ...]\n");
+        return 1;
+    }
+
+    int rc = 0;
+    for (int a = 1; a < argc; a++) {
+        int i = alias_find(s, argv[a]);
+        if (i < 0) {
+            fprintf(stderr, "unalias: %s: not found\n", argv[a]);
+            rc = 1;
+            continue;
+        }
+        free(s->alias_names[i]);
+        free(s->alias_values[i]);
+        /* Compact the table so lookups stay contiguous */
+        for (int j = i; j < s->alias_count - 1; j++) {
+            s->alias_names[j]  = s->alias_names[j + 1];
+            s->alias_values[j] = s->alias_values[j + 1];
+        }
+        s->alias_count--;
+        s->alias_names[s->alias_count]  = NULL;
+        s->alias_values[s->alias_count] = NULL;
+    }
+    return rc;
+}
+
 /* ── Dispatch table ───────────────────────────────────────── */
 typedef struct { const char *name; int (*fn)(synsh_state_t *, int, char **); } builtin_t;
 

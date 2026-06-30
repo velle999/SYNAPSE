@@ -281,10 +281,13 @@ void synapse_ctx_complete_query(u32 request_id, const char *response)
  * This is the compatibility approach that works on 6.8+.
  */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+#if defined(SYNAPSE_NATIVE_AI_CTX)
 /*
- * Linux 7.0: register via the AI_CTX syscall registration API.
- * This is a SynapseOS kernel patch.
+ * Native path: register via the AI_CTX syscall registration API.
+ * These symbols are provided ONLY by a patched SynapseOS kernel, so this
+ * path is opt-in via -DSYNAPSE_NATIVE_AI_CTX (set by the SynapseOS kernel
+ * build). On a stock kernel the symbols are absent and the module would
+ * fail to link, so the default below uses a self-contained kprobe shim.
  */
 extern int ai_ctx_register_handlers(
     long (*set_fn)(struct ai_ctx_set_args __user *),
@@ -315,9 +318,9 @@ void synapse_ctx_exit(void)
 
 #else
 /*
- * Fallback for Linux < 7.0: intercept via kprobe on do_syscall_64.
- * We check the syscall nr and dispatch to our handlers.
- * Less efficient but works on 6.8+.
+ * Default path (stock kernels): intercept via kprobe on do_syscall_64.
+ * We check the syscall nr and dispatch to our handlers. Less efficient
+ * than the native API but needs no kernel patch — works on 6.8+.
  */
 
 static int syscall64_pre_handler(struct kprobe *p, struct pt_regs *regs)
@@ -369,4 +372,4 @@ void synapse_ctx_exit(void)
 {
     unregister_kprobe(&kp_syscall64);
 }
-#endif  /* LINUX_VERSION_CODE */
+#endif  /* SYNAPSE_NATIVE_AI_CTX */
