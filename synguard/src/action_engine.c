@@ -3,11 +3,16 @@
  *
  * Implements the three enforcement actions:
  *
- *   DENY       → SIGKILL the process immediately
+ *   DENY       → kill the process and its descendant subtree
+ *                (isolation.c::sg_kill_tree)
  *   ALERT      → Log to audit, emit structured alert to any
  *                connected 'syn guard watch' clients
- *   QUARANTINE → SIGSTOP + write to cgroup to isolate resources
- *                (process is frozen, not killed; admin can inspect)
+ *   QUARANTINE → freeze the process subtree via SIGSTOP + cgroup v2
+ *                (isolation.c::sg_freeze_tree); not killed, admin can inspect
+ *
+ * Both DENY and QUARANTINE run through the sg_is_protected() guard, so they
+ * never touch PID 0/1, kernel threads, synguard itself, or core SynapseOS
+ * daemons.
  *
  * In AUDIT and LEARNING modes, DENY becomes a logged warning.
  * Only ENFORCE and LOCKDOWN modes actually kill processes.
@@ -31,21 +36,17 @@
 #include "synguard.h"
 #include "sg_log.h"
 
-/* ── DENY: SIGKILL ────────────────────────────────────────── */
+/* ── DENY: kill the offending process and its descendants ─── */
+/*
+ * The actual termination (protected-pid guard, subtree teardown, kill
+ * verification) lives in isolation.c::sg_kill_tree(). If the target is
+ * protected, sg_kill_tree() refuses and returns -1; we do nothing further
+ * (no kmod hint) so a spoofed/critical pid is never touched.
+ */
 void action_deny(synguard_state_t *s, const sg_event_t *e, const char *reason)
 {
-    sg_log(LOG_WARNING,
-           "⚡ DENY: killing pid=%u (%s) — %s",
-           e->pid, e->comm, reason);
-
-    if (kill((pid_t)e->pid, SIGKILL) < 0) {
-        if (errno == ESRCH)
-            sg_log(LOG_INFO, "deny: pid=%u already gone", e->pid);
-        else
-            sg_log(LOG_WARNING, "deny: kill(%u): %s", e->pid, strerror(errno));
-    } else {
-        sg_log(LOG_INFO, "deny: SIGKILL sent to pid=%u (%s)", e->pid, e->comm);
-    }
+    if (sg_kill_tree(s, (pid_t)e->pid, reason) < 0)
+        return;
 
     /* Write a hint to kmod so it can track the kill */
     char hint[128];
@@ -123,42 +124,17 @@ void action_quarantine(synguard_state_t *s, const sg_event_t *e)
            "🔒 QUARANTINE: freezing pid=%u (%s)",
            e->pid, e->comm);
 
-    /* SIGSTOP freezes the process */
-    if (kill((pid_t)e->pid, SIGSTOP) < 0) {
-        if (errno == ESRCH)
-            sg_log(LOG_INFO, "quarantine: pid=%u already gone", e->pid);
-        else
-            sg_log(LOG_WARNING, "quarantine: SIGSTOP(%u): %s",
-                   e->pid, strerror(errno));
+    /*
+     * Freeze the process and its whole subtree (protected-pid guard,
+     * SIGSTOP, cgroup v2 freeze) in isolation.c::sg_freeze_tree(). If the
+     * target is protected it returns -1 and we leave no forensic note.
+     */
+    if (sg_freeze_tree(s, (pid_t)e->pid) < 0)
         return;
-    }
 
-    sg_log(LOG_INFO, "quarantine: pid=%u frozen. Resume with: kill -CONT %u",
-           e->pid, e->pid);
+    sg_log(LOG_INFO, "quarantine: pid=%u frozen. Resume with: kill -CONT %u "
+           "(and clear cgroup.freeze if set)", e->pid, e->pid);
 
-    /* Try cgroupv2 isolation */
-    char cg_path[256];
-    snprintf(cg_path, sizeof(cg_path),
-             "/sys/fs/cgroup/synguard/quarantine_%u", e->pid);
-
-    if (mkdir("/sys/fs/cgroup/synguard", 0755) < 0 && errno != EEXIST)
-        goto cg_skip;
-    if (mkdir(cg_path, 0755) < 0 && errno != EEXIST)
-        goto cg_skip;
-
-    /* Move process to quarantine cgroup */
-    char cg_procs[300];
-    snprintf(cg_procs, sizeof(cg_procs), "%s/cgroup.procs", cg_path);
-    int fd = open(cg_procs, O_WRONLY);
-    if (fd >= 0) {
-        char pidstr[16];
-        snprintf(pidstr, sizeof(pidstr), "%u\n", e->pid);
-        write(fd, pidstr, strlen(pidstr));
-        close(fd);
-        sg_log(LOG_INFO, "quarantine: pid=%u moved to cgroup %s", e->pid, cg_path);
-    }
-
-cg_skip:
     /* Write a "quarantine note" to /var/lib/synguard/ for admin reference */
     char note_path[256];
     snprintf(note_path, sizeof(note_path),
@@ -176,12 +152,13 @@ cg_skip:
             "uid:       %u\n"
             "event:     0x%02x\n"
             "file:      %s\n"
-            "status:    FROZEN (SIGSTOP)\n"
-            "resume:    kill -CONT %u\n"
+            "status:    FROZEN (subtree SIGSTOP + cgroup.freeze)\n"
+            "cgroup:    /sys/fs/cgroup/synguard.quarantine.%u\n"
+            "resume:    echo 0 > /sys/fs/cgroup/synguard.quarantine.%u/cgroup.freeze && kill -CONT %u\n"
             "kill:      kill -9 %u\n",
             tbuf, e->pid, e->comm, e->uid,
             e->evt_type, e->filename[0] ? e->filename : "-",
-            e->pid, e->pid
+            e->pid, e->pid, e->pid
         );
         fclose(f);
         sg_log(LOG_INFO, "quarantine: report at %s", note_path);

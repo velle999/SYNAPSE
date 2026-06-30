@@ -177,6 +177,7 @@ typedef struct {
     uint64_t  denials;
     uint64_t  alerts;
     uint64_t  quarantines;
+    uint64_t  protected_skips;   /* actions refused on a protected pid */
     time_t    start_time;
 } sg_stats_t;
 
@@ -246,6 +247,20 @@ int synguard_ai_classify(synguard_state_t *s,
 void action_deny(synguard_state_t *s, const sg_event_t *e, const char *reason);
 void action_alert(synguard_state_t *s, const sg_alert_t *alert);
 void action_quarantine(synguard_state_t *s, const sg_event_t *e);
+
+/* Process isolation (isolation.c)
+ *
+ * sg_is_protected() is the hard guard: it returns nonzero (and fills `why`,
+ * if non-NULL) when a pid must never be killed or frozen — PID 0/1, synguard
+ * itself, synguard's own process group, kernel threads, and the core
+ * SynapseOS daemons. It is always enforced and cannot be disabled.
+ *
+ * sg_kill_tree() / sg_freeze_tree() apply DENY / QUARANTINE to a process and
+ * its entire descendant subtree; both return -1 (and take no action) if the
+ * target is protected, 0 otherwise. Must run in process context as root. */
+int  sg_is_protected(pid_t pid, char *why, size_t wlen);
+int  sg_kill_tree(synguard_state_t *s, pid_t target, const char *reason);
+int  sg_freeze_tree(synguard_state_t *s, pid_t target);
 
 /* Audit log */
 int  audit_init(synguard_state_t *s);

@@ -14,6 +14,7 @@ sources = files(
   'src/event_processor.c',
   'src/ai_classifier.c',
   'src/action_engine.c',
+  'src/isolation.c',
   'src/core.c',
 )
 
