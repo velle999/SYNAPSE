@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034
 iso_name="SynapseOS"
 iso_label="SYNAPSEOS_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
-iso_publisher="SynapseOS Project <https://synapseos.dev>"
+iso_publisher="SynapseOS Project <https://github.com/velle999/SYNAPSE>"
 iso_application="SynapseOS — Where the kernel thinks."
 iso_version="0.1.0"
 install_dir="arch"

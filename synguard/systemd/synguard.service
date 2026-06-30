@@ -3,7 +3,7 @@
 
 [Unit]
 Description=SynapseOS AI Security Monitor (synguard)
-Documentation=https://synapseos.dev/docs/synguard
+Documentation=https://github.com/velle999/SYNAPSE
 After=synapd.service local-fs.target
 Wants=synapd.service
 

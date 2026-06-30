@@ -23,7 +23,7 @@
  *     AI_CTX_QUERY  — process asks AI directly (routed through kmod)
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 #pragma once
 

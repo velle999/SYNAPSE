@@ -27,7 +27,7 @@
  * common case safe and the dangerous case impossible.
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE

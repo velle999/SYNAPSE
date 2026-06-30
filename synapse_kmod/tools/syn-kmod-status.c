@@ -15,7 +15,7 @@
  *   syn-kmod-status --ctx-set "I am compiling a large project"
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE

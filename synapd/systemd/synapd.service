@@ -6,7 +6,7 @@
 
 [Unit]
 Description=SynapseOS AI Daemon (synapd)
-Documentation=https://synapseos.dev/docs/synapd
+Documentation=https://github.com/velle999/SYNAPSE
 After=local-fs.target network.target
 Before=display-manager.service synguard.service synnet.service
 Wants=local-fs.target

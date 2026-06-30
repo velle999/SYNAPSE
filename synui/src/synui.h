@@ -2,7 +2,7 @@
  * synui.h — SynapseOS Wayland Compositor internal header
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #pragma once

@@ -138,7 +138,7 @@ typedef struct {
 - [ ] synui — full Wayland compositor with AI-aware window management
 - [x] synnet — active connection monitoring and AI verdict enforcement
 - [x] synguard — ENFORCE mode with process isolation
-- [ ] os-release / neofetch integration
+- [x] os-release / neofetch integration
 - [x] SynapseOS installer
 
 ---

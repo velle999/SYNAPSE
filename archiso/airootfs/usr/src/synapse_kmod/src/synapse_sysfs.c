@@ -11,7 +11,7 @@
  *   version      (r)  — module version string
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #include <linux/kernel.h>

@@ -15,7 +15,7 @@
  *   - Linux 7.0 strongly preferred (AI_CTX syscall hooks)
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #include <linux/module.h>

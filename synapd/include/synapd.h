@@ -3,7 +3,7 @@
  * synapd.h — Core types and constants for the SynapseOS AI Daemon
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 #pragma once
 

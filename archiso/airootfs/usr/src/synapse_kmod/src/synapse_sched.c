@@ -22,7 +22,7 @@
  *   AI_SCHED_INFERENCE   → SCHED_NORMAL, nice -15 (synapd inference threads)
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #include <linux/kernel.h>

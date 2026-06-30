@@ -8,7 +8,7 @@ syn $VERSION — SynapseOS CLI
 
 Usage:
   syn status              Overall system status
-  syn info                System info (neofetch-style)
+  syn info                System info (fastfetch, with built-in fallback)
   syn model <cmd>         Model manager (download/list/status/remove)
   syn net <cmd>           Network policy (allow/block/status)
   syn guard <cmd>         Security monitor (status/mode/alerts)
@@ -49,6 +49,12 @@ cmd_status() {
 }
 
 cmd_info() {
+    # Prefer fastfetch (ships with a branded SynapseOS logo config); fall back
+    # to the built-in ASCII fetch when fastfetch isn't installed.
+    if command -v fastfetch &>/dev/null; then
+        exec fastfetch "$@"
+    fi
+
     local kernel=$(uname -r)
     local uptime=$(uptime -p 2>/dev/null | sed 's/up //')
     local mem=$(free -m | awk '/Mem:/ {printf "%dMB / %dMB", $3, $2}')

@@ -410,16 +410,19 @@ arch-chroot /mnt ln -sf /usr/share/zoneinfo/UTC /etc/localtime 2>/dev/null || tr
 arch-chroot /mnt hwclock --systohc 2>/dev/null || true
 echo "  Timezone: UTC"
 
-# os-release
-cat > /mnt/etc/os-release << 'EOF'
-NAME="SynapseOS"
-PRETTY_NAME="SynapseOS 0.1.0"
-ID=synapseos
-ID_LIKE=arch
-BUILD_ID=0.1.0
-ANSI_COLOR="1;36"
-HOME_URL="https://synapseos.dev"
-EOF
+# os-release — copy the live system's canonical file so the installed
+# system's identity always matches the ISO (no drift). Fall back to the
+# package-provided file if for some reason the live one is missing.
+if [ -f /etc/os-release ]; then
+    cp /etc/os-release /mnt/etc/os-release
+    echo "  os-release: copied from live system"
+fi
+
+# Branded fastfetch logo, if shipped on the live ISO.
+if [ -f /usr/share/synapseos/logo.txt ]; then
+    mkdir -p /mnt/usr/share/synapseos
+    cp /usr/share/synapseos/logo.txt /mnt/usr/share/synapseos/logo.txt
+fi
 
 # ── Copy service files from live ISO ─────────────────────
 for f in \
@@ -573,6 +576,14 @@ workspace_3_intent = writing code and running tests
 workspace_4_intent = terminal and system administration
 workspace_5_intent = media and entertainment
 SYNUIRC
+
+# fastfetch config — reuse the branded one from the live ISO so `syn info`
+# / fastfetch shows the SynapseOS logo on the installed system too.
+if [ -f /home/syn/.config/fastfetch/config.jsonc ]; then
+    mkdir -p "/mnt/home/$NEW_USER/.config/fastfetch"
+    cp /home/syn/.config/fastfetch/config.jsonc \
+       "/mnt/home/$NEW_USER/.config/fastfetch/config.jsonc"
+fi
 
 arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
 

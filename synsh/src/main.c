@@ -16,7 +16,7 @@
  *   synsh --no-ai      — disable AI translation (pure shell mode)
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE

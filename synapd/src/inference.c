@@ -11,7 +11,7 @@
  *   - NPU offload via RKNN (Rockchip, ARM SBCs)
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #include <stdio.h>

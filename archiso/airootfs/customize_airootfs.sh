@@ -13,21 +13,8 @@ set -euo pipefail
 echo "SynapseOS" > /etc/hostname
 echo "synapseos" > /etc/machine-id
 
-cat > /etc/os-release << 'EOF'
-NAME="SynapseOS"
-PRETTY_NAME="SynapseOS 0.1.0"
-ID=synapseos
-ID_LIKE=arch
-VERSION="0.1.0"
-VERSION_ID="0.1.0"
-BUILD_ID=rolling
-ANSI_COLOR="38;5;51"
-HOME_URL="https://synapseos.dev"
-DOCUMENTATION_URL="https://synapseos.dev/docs"
-SUPPORT_URL="https://synapseos.dev/support"
-BUG_REPORT_URL="https://github.com/synapseos/synapseos/issues"
-LOGO="synapseos"
-EOF
+# /etc/os-release is the canonical file shipped in airootfs/etc/os-release —
+# do not rewrite it here (that is what caused the live-vs-installed drift).
 
 # ── Users ─────────────────────────────────────────────────────
 # Create system groups
@@ -196,7 +183,8 @@ cat > /home/syn/.config/fastfetch/config.jsonc << 'FETCH'
     "color": { "keys": "38;5;51", "title": "38;5;51" }
   },
   "logo": {
-    "source": "synapseos",
+    "type": "file-raw",
+    "source": "/usr/share/synapseos/logo.txt",
     "padding": { "left": 2, "top": 1 }
   },
   "modules": [

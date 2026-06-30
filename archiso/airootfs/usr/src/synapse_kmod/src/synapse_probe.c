@@ -21,7 +21,7 @@
  * whether we need pre or post-syscall inspection.
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #include <linux/kernel.h>

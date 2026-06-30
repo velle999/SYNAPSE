@@ -17,7 +17,7 @@
  * Gap between windows: 8px.
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE

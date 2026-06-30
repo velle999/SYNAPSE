@@ -9,7 +9,7 @@
  * has never generated before AND the event type is sensitive.
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE

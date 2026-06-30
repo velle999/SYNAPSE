@@ -16,7 +16,7 @@
  * also ships a lightweight LSM stub for the true TOCTOU cases.
  *
  * SynapseOS Project — GPLv2
- * https://synapseos.dev
+ * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE
