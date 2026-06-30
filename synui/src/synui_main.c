@@ -36,7 +36,7 @@
 
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
-#include <wlr/types/wlr_presentation.h>
+#include <wlr/types/wlr_presentation_time.h>
 
 #include "synui.h"
 
@@ -46,9 +46,15 @@ static void output_frame(struct wl_listener *listener, void *data)
     syn_output_t *output = wl_container_of(listener, output, frame);
     struct wlr_scene_output *scene_output = output->scene_output;
 
-    /* Update overlay state each frame if visible */
-    if (output->server->overlay.visible)
-        overlay_update(output->server);
+    /* Poll for AI responses (non-blocking) */
+    syn_ai_response_t resp;
+    if (ai_thread_poll(output->server, &resp) == 0) {
+        if (output->server->cmdbar.visible && output->server->cmdbar.waiting) {
+            output->server->cmdbar.waiting = 0;
+            execute_ai_action(output->server, resp.response);
+            synui_render_cmdbar(output->server);
+        }
+    }
 
     wlr_scene_output_commit(scene_output, NULL);
 
@@ -119,6 +125,10 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     /* Re-apply layout for current workspace */
     layout_apply(server, &server->workspaces[server->active_workspace]);
+
+    /* Reposition UI elements for actual output size */
+    if (server->welcome_ui.shown)
+        synui_render_welcome(server);
 }
 
 /* ── XDG surface events ──────────────────────────────────── */
@@ -128,6 +138,9 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
     view->mapped = 1;
     focus_view(view->server, view, view->xdg_surface->surface);
     layout_apply(view->server, view->workspace);
+
+    /* Hide welcome screen when first window opens */
+    synui_welcome_hide(view->server);
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data)
@@ -398,6 +411,9 @@ int synui_init(syn_server_t *s)
     /* Connect to synapd */
     synui_synapd_connect(s);
 
+    /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
+    synui_ui_init(s);
+
     return 0;
 }
 
@@ -408,6 +424,20 @@ int synui_run(syn_server_t *s)
         wlr_log(WLR_ERROR, "synui: failed to start backend");
         return -1;
     }
+
+    /* Set initial cursor image so it's visible immediately */
+    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+
+    /* Autostart configured applications */
+    for (int i = 0; i < s->config.autostart_count; i++) {
+        wlr_log(WLR_INFO, "synui: autostart: %s", s->config.autostart[i]);
+        if (fork() == 0) {
+            setsid();
+            execl("/bin/sh", "sh", "-c", s->config.autostart[i], NULL);
+            _exit(1);
+        }
+    }
+
     wl_display_run(s->display);
     return 0;
 }
@@ -515,10 +545,12 @@ int main(int argc, char *argv[])
     }
 
     syn_server_t server = {0};
+    synui_config_load(&server.config);
+
     if (no_ai) {
         atomic_store(&server.ai_connected, 0);
     }
-    if (start_overlay) {
+    if (start_overlay || server.config.start_overlay) {
         server.overlay.visible = 1;
     }
 

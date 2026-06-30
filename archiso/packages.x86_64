@@ -15,6 +15,8 @@ dosfstools
 e2fsprogs
 arch-install-scripts
 terminus-font
+ttf-dejavu
+fontconfig
 wlroots0.19
 archiso
 mkinitcpio-archiso
@@ -32,19 +34,3 @@ synapse_kmod
 foot
 virtualbox-guest-utils
 dkms
-# KDE Plasma (Wayland)
-plasma-desktop
-sddm
-konsole
-kscreen
-plasma-nm
-plasma-pa
-xdg-desktop-portal-kde
-# GNOME (Wayland)
-gnome-shell
-gnome-control-center
-gdm
-gnome-terminal
-xdg-desktop-portal-gnome
-linux-headers
-foot

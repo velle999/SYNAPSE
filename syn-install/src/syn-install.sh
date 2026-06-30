@@ -1,1 +1,0 @@
-/home/velle/Documents/SYNAPSE/syn-install/syn-install.sh

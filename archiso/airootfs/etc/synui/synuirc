@@ -1,0 +1,16 @@
+# SynapseOS compositor configuration
+# See synui(1) for all options
+
+terminal = foot
+
+# Programs to launch on compositor start
+autostart = foot
+
+# Window appearance
+border_width = 2
+gap = 8
+master_factor = 0.60
+
+# AI features
+ai_layout = on
+ai_ctx_decor = on

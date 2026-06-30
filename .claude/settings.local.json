@@ -46,7 +46,16 @@
       "Bash(done)",
       "Bash(BUILDDIR=/tmp/syn-inst PKGDEST=/tmp/syn-inst SRCDEST=/tmp/syn-inst SRCPKGDEST=/tmp/syn-inst LOGDEST=/tmp/syn-inst makepkg -f -d)",
       "Bash(cp /tmp/syn-inst/syn-install-0.1.0-4-any.pkg.tar.zst /home/velle/Documents/SYNAPSE/archiso/local-repo/)",
-      "Bash(rm -f synapseos.db* synapseos.files*)"
+      "Bash(rm -f synapseos.db* synapseos.files*)",
+      "Bash(find /home/velle/Documents/SYNAPSE -maxdepth 3 -type f \\\\\\(-name *.txt -o -name *.md -o -name README* \\\\\\) ! -path */work/* ! -path */build/*)",
+      "Bash(ldd /home/velle/Documents/SYNAPSE/llama-staging/usr/bin/llama-server)",
+      "Read(//home/velle/Documents/SYNAPSE/**)",
+      "Bash(meson setup:*)",
+      "Bash(ninja -C builddir)",
+      "Bash(gcc -fsyntax-only -std=gnu17 -DWLR_USE_UNSTABLE -DSYNUI_VERSION='\"\"\"\"test\"\"\"\"' -DNR_AI_CTX_SET=451 synui/src/config.c)",
+      "Bash(git ls-files *)",
+      "Bash(awk '{print $2}')",
+      "Bash(awk '$1==\"-\"&&$2==\"-\"{print \"BINARY: \"$3}')"
     ]
   }
 }

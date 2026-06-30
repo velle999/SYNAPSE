@@ -1,1 +1,0 @@
-/home/velle/Documents/GitHub/SYNAPSE/syn/syn.sh

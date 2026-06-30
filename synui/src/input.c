@@ -101,7 +101,7 @@ void view_update_borders(syn_view_t *view)
     } else if (view->ai_ctx.has_ctx) {
         float c[] = COLOR_BORDER_AI;
         memcpy(color, c, sizeof(color));
-    } else if (/* focused */ 0) {
+    } else if (view->server && view == view->server->focused_view) {
         float c[] = COLOR_BORDER_FOCUS;
         memcpy(color, c, sizeof(color));
     } else {
@@ -168,14 +168,17 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
 
     if (!super) return false;
 
+    /* Normalize shifted keysyms to lowercase for consistent matching */
+    xkb_keysym_t lower = xkb_keysym_to_lower(sym);
+
     /* Super+Shift+Q — quit */
-    if (shift && sym == XKB_KEY_q) {
+    if (shift && lower == XKB_KEY_q) {
         wl_display_terminate(s->display);
         return true;
     }
 
     /* Super+Q — close focused window */
-    if (!shift && sym == XKB_KEY_q) {
+    if (!shift && lower == XKB_KEY_q) {
         if (s->focused_view)
             wlr_xdg_toplevel_send_close(s->focused_view->xdg_surface->toplevel);
         return true;
@@ -200,13 +203,13 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
     }
 
     /* Super+A — neural overlay */
-    if (!shift && sym == XKB_KEY_a) {
+    if (!shift && lower == XKB_KEY_a) {
         overlay_toggle(s);
         return true;
     }
 
     /* Super+L — cycle layout */
-    if (!shift && sym == XKB_KEY_l) {
+    if (!shift && lower == XKB_KEY_l) {
         syn_workspace_t *ws = &s->workspaces[s->active_workspace];
         ws->layout = (ws->layout + 1) % 4;
         static const char *lnames[] = {"tiling","floating","monocle","AI"};
@@ -216,18 +219,18 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
     }
 
     /* Super+J/K — focus next/prev */
-    if (sym == XKB_KEY_j) { focus_next(s, 1);  return true; }
-    if (sym == XKB_KEY_k) { focus_next(s, -1); return true; }
+    if (lower == XKB_KEY_j) { focus_next(s, 1);  return true; }
+    if (lower == XKB_KEY_k) { focus_next(s, -1); return true; }
 
     /* Super+F — toggle floating */
-    if (sym == XKB_KEY_f && s->focused_view) {
+    if (lower == XKB_KEY_f && s->focused_view) {
         s->focused_view->floating = !s->focused_view->floating;
         layout_apply(s, &s->workspaces[s->active_workspace]);
         return true;
     }
 
     /* Super+M — maximize */
-    if (sym == XKB_KEY_m && s->focused_view) {
+    if (lower == XKB_KEY_m && s->focused_view) {
         s->focused_view->maximized = !s->focused_view->maximized;
         wlr_xdg_toplevel_set_maximized(
             s->focused_view->xdg_surface->toplevel,
@@ -245,16 +248,29 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
         return true;
     }
 
-    /* Super+1..9 — switch workspace */
+    /* Super+1..9 / Super+Shift+1..9 — workspace switch / move window
+     * With Shift held, number keysyms become symbols (!@#$...),
+     * so we map them back to their number equivalents. */
     if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
         int ws = sym - XKB_KEY_1;
-        if (shift) {
-            if (s->focused_view)
-                workspace_move_view(s, s->focused_view, ws);
-        } else {
-            workspace_switch(s, ws);
-        }
+        workspace_switch(s, ws);
         return true;
+    }
+
+    /* Shifted number keys: !@#$%^&*( → workspace 1..9 (move window) */
+    {
+        static const xkb_keysym_t shifted_nums[] = {
+            XKB_KEY_exclam, XKB_KEY_at, XKB_KEY_numbersign,
+            XKB_KEY_dollar, XKB_KEY_percent, XKB_KEY_asciicircum,
+            XKB_KEY_ampersand, XKB_KEY_asterisk, XKB_KEY_parenleft
+        };
+        for (int i = 0; i < 9; i++) {
+            if (sym == shifted_nums[i] && shift) {
+                if (s->focused_view)
+                    workspace_move_view(s, s->focused_view, i);
+                return true;
+            }
+        }
     }
 
     return false;

@@ -2,15 +2,20 @@ post_install() {
     dkms add synapse_kmod/0.1.0 2>/dev/null || true
 
     # Build for every installed kernel that has headers available
+    # Gracefully skip if no kernel modules exist (e.g. archiso chroot)
+    local built=0
     for kver in /lib/modules/*/build; do
+        [ -d "$kver" ] || continue
         kver="${kver%/build}"
         kver="${kver##*/}"
-        [ -d "/lib/modules/$kver/build" ] || continue
         echo ":: Building synapse_kmod for kernel $kver ..."
-        dkms install synapse_kmod/0.1.0 -k "$kver" --no-initrd 2>&1 || \
-            echo "   (failed for $kver — will retry at boot)"
+        if dkms install synapse_kmod/0.1.0 -k "$kver" --no-initrd 2>&1; then
+            built=1
+        else
+            echo "   (failed for $kver — will be built at boot via synapse-kmod-build.service)"
+        fi
     done
-    depmod -A
+    [ "$built" -eq 1 ] && depmod -A || true
 }
 
 post_upgrade() {

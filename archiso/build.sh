@@ -246,6 +246,56 @@ PACKAGES=(
 # Create build user for makepkg (can't run as root)
 id -u synbuild &>/dev/null || useradd -r -s /bin/bash -m synbuild
 
+create_source_tarball() {
+    local pkg="$1"
+    local pkgdir="${PROJECT_ROOT}/${pkg}"
+    local tarball="${pkgdir}/${pkg}-${SYNAPSEOS_VERSION}.tar.gz"
+
+    # Check if PKGBUILD uses a tarball source (skip script packages like syn)
+    if ! grep -q "${pkg}-${SYNAPSEOS_VERSION}.tar.gz" "${pkgdir}/PKGBUILD"; then
+        return 0
+    fi
+
+    log "Creating source tarball for ${pkg}..."
+    cd "${PROJECT_ROOT}"
+
+    # Collect directories/files that exist in the package
+    local items=()
+    [ -d "${pkg}/src" ]     && items+=("${pkg}/src/")
+    [ -d "${pkg}/include" ] && items+=("${pkg}/include/")
+    [ -f "${pkg}/meson.build" ] && items+=("${pkg}/meson.build")
+    [ -d "${pkg}/config" ]  && items+=("${pkg}/config/")
+    [ -d "${pkg}/systemd" ] && items+=("${pkg}/systemd/")
+    [ -d "${pkg}/rules" ]   && items+=("${pkg}/rules/")
+    # synapse_kmod extras
+    [ -f "${pkg}/Makefile" ]  && items+=("${pkg}/Makefile")
+    [ -f "${pkg}/dkms.conf" ] && items+=("${pkg}/dkms.conf")
+    [ -d "${pkg}/hooks" ]     && items+=("${pkg}/hooks/")
+    [ -d "${pkg}/tools" ]     && items+=("${pkg}/tools/")
+    [ -f "${pkg}/synapse_kmod.install" ] && items+=("${pkg}/synapse_kmod.install")
+
+    if [[ ${#items[@]} -eq 0 ]]; then
+        warn "No source files found for ${pkg}"
+        return 1
+    fi
+
+    tar czf "${tarball}" \
+        --transform "s|^${pkg}/|${pkg}-${SYNAPSEOS_VERSION}/|" \
+        --exclude="${pkg}/src/${pkg}-*" \
+        --exclude="${pkg}/pkg" \
+        --exclude="${pkg}/*.pkg.tar*" \
+        --exclude="${pkg}/*.tar.gz" \
+        --exclude="${pkg}/*.ko" \
+        --exclude="${pkg}/*.o" \
+        --exclude="${pkg}/*.mod*" \
+        --exclude="${pkg}/modules.order" \
+        --exclude="${pkg}/Module.symvers" \
+        "${items[@]}" 2>/dev/null
+
+    ok "Source tarball: ${tarball}"
+    cd "${SCRIPT_DIR}"
+}
+
 build_package() {
     local pkg="$1"
     local pkgdir="${PROJECT_ROOT}/${pkg}"
@@ -256,9 +306,23 @@ build_package() {
     fi
 
     log "Building ${pkg}..."
-    cd "${pkgdir}"
-    chown -R synbuild: "${pkgdir}"
 
+    # Create source tarball for packages that need it
+    create_source_tarball "${pkg}"
+
+    # Copy package dir to a temp build area so we don't chown the source tree
+    local tmpbuild="${BUILD_DIR}/pkg-${pkg}"
+    rm -rf "${tmpbuild}"
+    cp -a "${pkgdir}" "${tmpbuild}"
+
+    # Make llama-staging accessible for packages that link against it (synapd)
+    if [[ -d "${PROJECT_ROOT}/llama-staging" ]]; then
+        ln -sf "${PROJECT_ROOT}/llama-staging" "${tmpbuild}/llama-staging"
+    fi
+
+    chown -R synbuild: "${tmpbuild}"
+
+    cd "${tmpbuild}"
     sudo -u synbuild makepkg -sf --noconfirm \
         PKGDEST="${LOCAL_REPO}" \
         2>&1 | sed 's/^/  /' \
@@ -266,6 +330,7 @@ build_package() {
 
     ok "${pkg} built"
     cd "${SCRIPT_DIR}"
+    rm -rf "${tmpbuild}"
 }
 
 for pkg in "${PACKAGES[@]}"; do
@@ -320,6 +385,31 @@ size_class     = 7B
 context_window = 4096
 quantization   = Q4_K_M  (4-bit, medium quality)
 EOF
+fi
+
+# ── Stage llama.cpp libraries into airootfs ──────────────────
+step "Staging llama.cpp libraries"
+
+LLAMA_STAGING="${PROJECT_ROOT}/llama-staging"
+if [[ -d "${LLAMA_STAGING}/usr/lib" ]]; then
+    mkdir -p "${SCRIPT_DIR}/airootfs/usr/lib"
+    # Copy shared libraries (follow symlinks to get actual files + create symlinks)
+    for lib in "${LLAMA_STAGING}"/usr/lib/lib*.so*; do
+        [[ -e "$lib" ]] || continue
+        cp -a "$lib" "${SCRIPT_DIR}/airootfs/usr/lib/"
+    done
+    ok "llama.cpp libraries staged into airootfs"
+
+    # Also stage llama-server and key binaries synapd needs
+    mkdir -p "${SCRIPT_DIR}/airootfs/usr/bin"
+    for bin in llama-server llama-cli; do
+        if [[ -f "${LLAMA_STAGING}/usr/bin/${bin}" ]]; then
+            cp -a "${LLAMA_STAGING}/usr/bin/${bin}" "${SCRIPT_DIR}/airootfs/usr/bin/"
+        fi
+    done
+    ok "llama.cpp binaries staged"
+else
+    warn "llama-staging/usr/lib not found — synapd will run without llama"
 fi
 
 # ── Configure airootfs ────────────────────────────────────────

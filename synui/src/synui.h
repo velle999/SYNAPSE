@@ -27,7 +27,6 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
-#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -126,6 +125,21 @@ typedef struct {
     char intent[128];
 } syn_ai_ctx_t;
 
+/* ── Configuration ───────────────────────────────────────── */
+#define SYN_AUTOSTART_MAX 8
+
+typedef struct {
+    char  terminal[64];
+    char  autostart[SYN_AUTOSTART_MAX][128];
+    int   autostart_count;
+    int   border_width;
+    int   gap;
+    float master_factor;
+    int   ai_layout;
+    int   ai_ctx_decor;
+    int   start_overlay;
+} syn_config_t;
+
 /* ── Workspace ───────────────────────────────────────────── */
 struct syn_workspace {
     int              index;
@@ -221,6 +235,30 @@ struct syn_server {
 
     syn_cmdbar_t    cmdbar;
     syn_overlay_t   overlay;
+    syn_config_t    config;
+
+    /* UI scene nodes (render.c) */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } cmdbar_ui;
+
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } overlay_ui;
+
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+        int shown;
+    } welcome_ui;
 
     /* AI thread communication */
     atomic_int      ai_connected;
@@ -278,3 +316,14 @@ void overlay_toggle(syn_server_t *s);
 void overlay_update(syn_server_t *s);
 void overlay_render(syn_server_t *s, struct wlr_renderer *renderer,
                     int width, int height);
+void execute_ai_action(syn_server_t *s, const char *response);
+
+/* ── config.c ────────────────────────────────────────────── */
+void synui_config_load(syn_config_t *cfg);
+
+/* ── render.c ────────────────────────────────────────────── */
+void synui_ui_init(syn_server_t *s);
+void synui_render_welcome(syn_server_t *s);
+void synui_welcome_hide(syn_server_t *s);
+void synui_render_cmdbar(syn_server_t *s);
+void synui_render_overlay(syn_server_t *s);

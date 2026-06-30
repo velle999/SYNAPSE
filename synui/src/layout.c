@@ -292,6 +292,10 @@ void workspace_switch(syn_server_t *s, int index)
             focus_view(s, first, first->xdg_surface->surface);
     }
 
+    /* Refresh overlay if visible */
+    if (s->overlay.visible)
+        synui_render_overlay(s);
+
     /* Notify AI about workspace switch */
     if (atomic_load(&s->ai_connected)) {
         char prompt[256];

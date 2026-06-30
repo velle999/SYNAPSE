@@ -8,6 +8,7 @@ wayland_protos = dependency('wayland-protocols')
 xkbcommon = dependency('xkbcommon')
 pixman    = dependency('pixman-1')
 threads   = dependency('threads')
+cairo     = dependency('cairo')
 
 wl_scanner = find_program('wayland-scanner')
 
@@ -31,10 +32,12 @@ executable('synui',
     'src/input.c',
     'src/layout.c',
     'src/ai_interface.c',
+    'src/config.c',
+    'src/render.c',
     xdg_shell_h,
     xdg_shell_c,
   ],
-  include_directories : [include_directories('src'), include_directories('.')],
-  dependencies : [wlroots, wayland, xkbcommon, pixman, threads],
+  include_directories : include_directories('src'),
+  dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)

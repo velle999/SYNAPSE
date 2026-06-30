@@ -11,14 +11,31 @@ build_component() {
     echo "=== Building $name ==="
     cd "$BASE/$name"
 
+    # Clean prior makepkg droppings so the source tarball never
+    # re-ingests a previous extraction (this is what caused the
+    # nested src/$name-0.1.0/src/$name-0.1.0/... recursion).
+    rm -rf "$BASE/$name/pkg" \
+           "$BASE/$name/src/$name-"* \
+           "$BASE/$name"/*.pkg.tar.zst \
+           "$BASE/$name/$name-0.1.0.tar.gz"
+
     # Create tarball
     cd "$BASE"
 
     # Collect directories that exist
-    local dirs=("$name/src/" "$name/include/" "$name/meson.build")
-    [ -d "$name/config" ] && dirs+=("$name/config/")
+    local dirs=()
+    [ -d "$name/src" ]     && dirs+=("$name/src/")
+    [ -d "$name/include" ] && dirs+=("$name/include/")
+    [ -f "$name/meson.build" ] && dirs+=("$name/meson.build")
+    [ -d "$name/config" ]  && dirs+=("$name/config/")
     [ -d "$name/systemd" ] && dirs+=("$name/systemd/")
-    [ -d "$name/rules" ] && dirs+=("$name/rules/")
+    [ -d "$name/rules" ]   && dirs+=("$name/rules/")
+    # synapse_kmod extras
+    [ -f "$name/Makefile" ]  && dirs+=("$name/Makefile")
+    [ -f "$name/dkms.conf" ] && dirs+=("$name/dkms.conf")
+    [ -d "$name/hooks" ]     && dirs+=("$name/hooks/")
+    [ -d "$name/tools" ]     && dirs+=("$name/tools/")
+    [ -f "$name/synapse_kmod.install" ] && dirs+=("$name/synapse_kmod.install")
 
     tar czf "$name/$name-0.1.0.tar.gz" \
         --transform "s|^$name/|$name-0.1.0/|" \
@@ -27,6 +44,11 @@ build_component() {
         --exclude="$name/src/pkg" \
         --exclude="$name/*.pkg.tar*" \
         --exclude="$name/*.tar.gz" \
+        --exclude="$name/*.ko" \
+        --exclude="$name/*.o" \
+        --exclude="$name/*.mod*" \
+        --exclude="$name/modules.order" \
+        --exclude="$name/Module.symvers" \
         "${dirs[@]}" 2>/dev/null || true
 
     cd "$BASE/$name"
@@ -70,6 +92,9 @@ build_component synsh
 build_component synnet
 build_component synguard
 build_component synui
+
+# Build kernel module (DKMS — no meson, uses kbuild)
+build_component synapse_kmod
 
 # Build script packages
 build_script_pkg syn

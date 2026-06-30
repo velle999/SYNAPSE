@@ -1,11 +1,11 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot')
-makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config')
+depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'fontconfig' 'ttf-dejavu')
+makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
 

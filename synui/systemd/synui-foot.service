@@ -7,8 +7,9 @@ PartOf=synui.service
 Type=simple
 User=root
 Environment=XDG_RUNTIME_DIR=/run/user/0
-ExecStartPre=/bin/sh -c 'n=0; while [ ! -S /run/user/0/wayland-0 ] && [ ! -S /run/user/0/wayland-1 ]; do sleep 0.5; n=$((n+1)); if [ $n -ge 30 ]; then echo "Timed out waiting for Wayland socket" >&2; exit 1; fi; done'
-ExecStart=/bin/sh -c 'WAYLAND_DISPLAY=$(cat /tmp/synui-display) exec foot -e synsh'
+# Wait for synui to write its display name, checking any wayland-N socket
+ExecStartPre=/bin/sh -c 'n=0; while [ ! -f /tmp/synui-display ]; do sleep 0.5; n=$((n+1)); if [ $n -ge 30 ]; then echo "Timed out waiting for synui" >&2; exit 1; fi; done; sleep 1'
+ExecStart=/bin/sh -c 'export WAYLAND_DISPLAY=$(cat /tmp/synui-display | tr -d "[:space:]"); exec foot'
 Restart=on-failure
 RestartSec=2
 

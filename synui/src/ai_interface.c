@@ -254,12 +254,14 @@ void cmdbar_show(syn_server_t *s)
     s->cmdbar.input[0]  = '\0';
     s->cmdbar.response[0] = '\0';
     s->cmdbar.waiting   = 0;
+    synui_render_cmdbar(s);
     wlr_log(WLR_DEBUG, "cmdbar: shown");
 }
 
 void cmdbar_hide(syn_server_t *s)
 {
     s->cmdbar.visible = 0;
+    synui_render_cmdbar(s);
     wlr_log(WLR_DEBUG, "cmdbar: hidden");
 }
 
@@ -274,12 +276,14 @@ void cmdbar_key(syn_server_t *s, uint32_t keysym)
 
     if (keysym == XKB_KEY_Return) {
         cmdbar_submit(s);
+        synui_render_cmdbar(s);
         return;
     }
 
     if (keysym == XKB_KEY_BackSpace) {
         if (bar->input_len > 0)
             bar->input[--bar->input_len] = '\0';
+        synui_render_cmdbar(s);
         return;
     }
 
@@ -289,9 +293,10 @@ void cmdbar_key(syn_server_t *s, uint32_t keysym)
         bar->input[bar->input_len++] = (char)keysym;
         bar->input[bar->input_len]   = '\0';
     }
+    synui_render_cmdbar(s);
 }
 
-static void execute_ai_action(syn_server_t *s, const char *response)
+void execute_ai_action(syn_server_t *s, const char *response)
 {
     /* Parse structured actions from AI response */
 
@@ -388,6 +393,7 @@ void overlay_toggle(syn_server_t *s)
     s->overlay.visible = !s->overlay.visible;
     if (s->overlay.visible)
         overlay_update(s);
+    synui_render_overlay(s);
 }
 
 void overlay_update(syn_server_t *s)
@@ -429,32 +435,8 @@ void overlay_update(syn_server_t *s)
 void overlay_render(syn_server_t *s, struct wlr_renderer *renderer,
                     int width, int height)
 {
-    syn_overlay_t *ov = &s->overlay;
-    if (!ov->visible) return;
-
-    /*
-     * In practice synui renders the overlay as a layer-shell surface
-     * (wlr-layer-shell protocol) so it composites cleanly over all
-     * other windows. The layer surface is managed by overlay_layer.c
-     * and drawn with cairo. Here we demonstrate the direct renderer
-     * path for the background rectangle.
-     */
-
-    /*
-     * The neural overlay is rendered as a layer-shell surface
-     * (wlr-layer-shell protocol) composited via the scene graph.
-     * Direct renderer calls (wlr_render_rect) were removed in wlroots 0.18+.
-     *
-     * The overlay background and accent line are created as wlr_scene_rect
-     * nodes in overlay_toggle() and positioned here based on output size.
-     * Text is drawn by a cairo layer surface (overlay_layer.c, future).
-     *
-     * For now the overlay state is updated; the scene rects handle display.
-     */
     (void)renderer;
     (void)width;
     (void)height;
-
-    overlay_update(s);
-    (void)ov;
+    synui_render_overlay(s);
 }

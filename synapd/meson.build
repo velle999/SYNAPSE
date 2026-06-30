@@ -5,16 +5,20 @@ cc = meson.get_compiler('c')
 dep_threads = dependency('threads')
 dep_systemd = dependency('libsystemd', required: false)
 
-# llama.cpp — look in llama-staging relative to repo root, or system paths
-llama_staging = join_paths(meson.source_root(), '..', 'llama-staging', 'usr')
-llama_inc = include_directories(
-    'include',
-    join_paths(llama_staging, 'include'),
-)
+# llama.cpp — look in llama-staging (symlinked into srcdir by PKGBUILD),
+# then fall back to system paths.
+_staging = join_paths(meson.source_root(), '..', 'llama-staging', 'usr')
+_has_staging = run_command('test', '-d', join_paths(_staging, 'lib'), check: false).returncode() == 0
 
-dep_llama = cc.find_library('llama',
-    dirs: [join_paths(llama_staging, 'lib')],
-    required: false)
+_lib_dirs = []
+_inc_dirs = ['include']
+if _has_staging
+    _lib_dirs += [join_paths(_staging, 'lib')]
+    _inc_dirs += [join_paths(_staging, 'include')]
+endif
+
+dep_llama = cc.find_library('llama', dirs: _lib_dirs, required: false)
+llama_inc = include_directories(_inc_dirs)
 
 if dep_systemd.found()
   add_project_arguments('-DHAVE_LIBSYSTEMD', language: 'c')
