@@ -175,6 +175,13 @@ void synapse_stat_query(void)      { atomic64_inc(&synapse_state.ai_queries_rout
 void synapse_ctx_inc(void)  { atomic_inc(&synapse_state.active_contexts); }
 void synapse_ctx_dec(void)  { atomic_dec(&synapse_state.active_contexts); }
 
+/*
+ * Accessor for the deferred-work queue. synapse_sched.c uses this to queue
+ * hint reverts that must run in process context. May return NULL if the
+ * workqueue has not been created yet or has already been torn down.
+ */
+struct workqueue_struct *synapse_get_wq(void) { return synapse_state.wq; }
+
 /* Fill a stats struct for sysfs output */
 void synapse_get_stats(struct synapse_stats *out)
 {

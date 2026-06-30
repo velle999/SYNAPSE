@@ -28,12 +28,15 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
+#include <uapi/linux/sched/types.h>   /* struct sched_attr */
 #include <linux/pid.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/hashtable.h>
 #include <linux/atomic.h>
 #include <linux/rcupdate.h>
+#include <linux/workqueue.h>
+#include <linux/list.h>
 
 #include "synapse_kmod.h"
 #include "synapse_sched.h"
@@ -43,6 +46,7 @@ extern void synapse_stat_hint_fail(void);
 extern bool synapse_sched_enabled(void);
 extern void synapse_ctx_inc(void);
 extern void synapse_ctx_dec(void);
+extern struct workqueue_struct *synapse_get_wq(void);
 
 /* ── Per-PID hint record ──────────────────────────────────── */
 #define SYNAPSE_HINT_HASH_BITS  8   /* 256-bucket hash table */
@@ -60,6 +64,13 @@ static DEFINE_HASHTABLE(hint_table, SYNAPSE_HINT_HASH_BITS);
 static DEFINE_SPINLOCK(hint_table_lock);
 static bool g_sched_enabled = true;
 static bool g_daemon_alive  = false;
+
+/*
+ * Reverting hints calls sched_setscheduler_nocheck(), which may sleep, so it
+ * cannot run in the watchdog timer (softirq) context that detects daemon
+ * loss. We defer the revert to this work item, which runs in process context.
+ */
+static struct work_struct revert_work;
 
 /* ── Lookup / insert / remove ─────────────────────────────── */
 static struct pid_hint *hint_find(pid_t pid)
@@ -139,6 +150,23 @@ static void class_to_params(ai_sched_class_t cls,
     }
 }
 
+/*
+ * Set a task's scheduling policy. We only ever use non-RT policies
+ * (SCHED_NORMAL/BATCH/IDLE), so sched_priority is always 0 and the nice
+ * value carries the priority. sched_setattr_nocheck() is the module-exported
+ * entry point (sched_setscheduler_nocheck() is not exported); it may sleep,
+ * so callers must be in process context. Returns 0 on success.
+ */
+static int synapse_set_policy(struct task_struct *task, int policy, int nice)
+{
+    struct sched_attr attr = {
+        .size         = sizeof(attr),
+        .sched_policy = policy,
+        .sched_nice   = nice,
+    };
+    return sched_setattr_nocheck(task, &attr);
+}
+
 /* ── Apply hint to a task ─────────────────────────────────── */
 void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
 {
@@ -180,39 +208,39 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     spin_unlock(&hint_table_lock);
 
     /*
-     * Actually adjust the task.
+     * Adjust the task. We're in process context (sysfs store), so it is
+     * safe to call sched_setattr_nocheck(), which may sleep.
      *
-     * set_user_nice() requires the task to not be dead.
-     * We use task_lock() to protect task->mm and death race.
-     *
-     * For policy changes we'd normally call sched_setscheduler().
-     * We do that here for SCHED_BATCH and SCHED_IDLE.
+     * Kernel threads (no mm) are not user-reschedulable. Read task->mm
+     * under task_lock to avoid racing with exit, then drop the lock before
+     * touching the scheduler — set_user_nice() and sched_setattr_nocheck()
+     * take their own rq/pi locks and must not be called under task_lock.
      */
     task_lock(task);
+    bool is_kthread = (task->mm == NULL);
+    task_unlock(task);
 
-    if (!task->mm) {
-        /* kernel thread — skip nice adjustment */
-        task_unlock(task);
+    if (is_kthread) {
         put_task_struct(task);
         synapse_stat_hint_fail();
         return;
     }
 
-    /* Apply nice */
+    /* Apply nice. */
     set_user_nice(task, new_nice);
 
-    /* Apply policy if changing to/from BATCH or IDLE */
-    if (new_policy == SCHED_BATCH || new_policy == SCHED_IDLE) {
-        struct sched_param sp = { .sched_priority = 0 };
-        /* sched_setscheduler() is internal — use safer path */
-        set_user_nice(task, h->nice_applied);
-    } else if (task->policy != SCHED_NORMAL) {
-        /* Restore to NORMAL if we previously changed it */
-        struct sched_param sp = { .sched_priority = 0 };
-        set_user_nice(task, h->nice_applied);
+    /*
+     * Apply scheduling policy. All classes we map to are non-RT
+     * (SCHED_NORMAL/BATCH/IDLE), so sched_priority is always 0.
+     * Only call when the policy actually changes.
+     */
+    if (task->policy != new_policy) {
+        int rc = synapse_set_policy(task, new_policy, new_nice);
+        if (rc)
+            pr_debug("synapse_kmod: sched_setattr(pid=%d policy=%d) "
+                     "failed: %d\n", pid, new_policy, rc);
     }
 
-    task_unlock(task);
     put_task_struct(task);
 
     pr_debug("synapse_kmod: pid=%d → policy=%d nice=%d class=%d\n",
@@ -220,39 +248,68 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     synapse_stat_hint_ok();
 }
 
-/* ── Revert all hints (called on daemon loss or module unload) */
+/* ── Revert all hints (process context only) ──────────────────
+ *
+ * Restores each tracked task's original nice and policy. Because
+ * sched_setattr_nocheck() may sleep, we first detach every node from
+ * the hash table under the spinlock into a local list, then do the actual
+ * scheduler calls with no lock held. Concurrent reverters are safe: the
+ * first to take the lock claims all nodes, the rest find the table empty.
+ *
+ * Must NOT be called from atomic context — use schedule_revert() for that.
+ */
 static void revert_all_hints(void)
 {
     struct pid_hint *h;
     struct hlist_node *tmp;
     unsigned int bkt;
+    HLIST_HEAD(drain);
 
     spin_lock(&hint_table_lock);
     hash_for_each_safe(hint_table, bkt, tmp, h, node) {
-        rcu_read_lock();
-        struct task_struct *task = pid_task(find_vpid(h->pid), PIDTYPE_PID);
-        if (task) {
-            get_task_struct(task);
-            rcu_read_unlock();
-
-            task_lock(task);
-            if (task->mm) {
-                set_user_nice(task, h->nice_original);
-                if (task->policy != h->policy_original) {
-                    struct sched_param sp = { .sched_priority = 0 };
-                    set_user_nice(task, h->nice_applied);
-                }
-            }
-            task_unlock(task);
-            put_task_struct(task);
-        } else {
-            rcu_read_unlock();
-        }
-
         hash_del(&h->node);
-        kfree(h);
+        hlist_add_head(&h->node, &drain);
     }
     spin_unlock(&hint_table_lock);
+
+    hlist_for_each_entry_safe(h, tmp, &drain, node) {
+        rcu_read_lock();
+        struct task_struct *task = pid_task(find_vpid(h->pid), PIDTYPE_PID);
+        if (task)
+            get_task_struct(task);
+        rcu_read_unlock();
+
+        if (task) {
+            set_user_nice(task, h->nice_original);
+            if (task->policy != h->policy_original)
+                synapse_set_policy(task, h->policy_original, h->nice_original);
+            put_task_struct(task);
+        }
+
+        hlist_del(&h->node);
+        kfree(h);
+        synapse_ctx_dec();   /* balances the inc in hint_alloc() */
+    }
+}
+
+static void revert_work_fn(struct work_struct *w)
+{
+    (void)w;
+    revert_all_hints();
+}
+
+/*
+ * Queue a revert from any context (callable under a spinlock / in softirq).
+ * The work item runs revert_all_hints() in process context where sleeping
+ * is allowed.
+ */
+static void schedule_revert(void)
+{
+    struct workqueue_struct *wq = synapse_get_wq();
+    if (wq)
+        queue_work(wq, &revert_work);
+    else
+        pr_warn("synapse_kmod: no workqueue — hints not reverted\n");
 }
 
 /* ── Daemon state callbacks ───────────────────────────────── */
@@ -266,13 +323,14 @@ void synapse_sched_daemon_lost(void)
 {
     g_daemon_alive = false;
     pr_warn("synapse_kmod: daemon lost — reverting AI scheduling hints\n");
-    revert_all_hints();
+    /* Called from the watchdog timer (softirq) — must defer the revert. */
+    schedule_revert();
 }
 
 void synapse_sched_set_enabled(bool enabled)
 {
     g_sched_enabled = enabled;
-    if (!enabled) revert_all_hints();
+    if (!enabled) schedule_revert();
     pr_info("synapse_kmod: sched_enabled → %d\n", (int)enabled);
 }
 
@@ -280,6 +338,7 @@ void synapse_sched_set_enabled(bool enabled)
 int synapse_sched_init(void)
 {
     hash_init(hint_table);
+    INIT_WORK(&revert_work, revert_work_fn);
     g_sched_enabled = true;
     g_daemon_alive  = false;
     pr_info("synapse_kmod: AI scheduler subsystem initialized\n");
@@ -288,6 +347,15 @@ int synapse_sched_init(void)
 
 void synapse_sched_exit(void)
 {
+    g_sched_enabled = false;
+    g_daemon_alive  = false;
+    /*
+     * Module teardown stops the watchdog and flushes/destroys the workqueue
+     * before calling us, so no revert_work should be in flight. cancel_work_sync
+     * is a defensive barrier (also covers the init error path), then a final
+     * synchronous drain restores any still-live tasks. Always process context.
+     */
+    cancel_work_sync(&revert_work);
     revert_all_hints();
     pr_info("synapse_kmod: AI scheduler subsystem exited\n");
 }
