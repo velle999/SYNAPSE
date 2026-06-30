@@ -136,8 +136,8 @@ typedef struct {
 
 - [ ] First-boot model downloader
 - [ ] synui — full Wayland compositor with AI-aware window management
-- [ ] synnet — active connection monitoring and AI verdict enforcement
-- [ ] synguard — ENFORCE mode with process isolation
+- [x] synnet — active connection monitoring and AI verdict enforcement
+- [x] synguard — ENFORCE mode with process isolation
 - [ ] os-release / neofetch integration
 - [ ] SynapseOS installer
 

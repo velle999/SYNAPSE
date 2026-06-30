@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -143,6 +144,151 @@ static int is_private_ip(uint32_t ip) {
            ((h >> 16) == (192 << 8 | 168));
 }
 
+/* ── nftables enforcement (named-set model) ──────────────────
+ *
+ * One drop rule "ip daddr @blocked drop" lives in an output-hook chain;
+ * blocking an IP just adds it to the set. This is idempotent (re-adding an
+ * element or the table/chain is a no-op) and blocks the *outbound* path,
+ * which is the direction of the connections we flag.
+ */
+
+/* Only ever hand inet_pton-validated dotted-quad strings to nft, so a value
+ * that reached us from the network (or argv) can't inject shell. */
+static int is_valid_ipv4(const char *ip) {
+    struct in_addr a;
+    return ip && inet_pton(AF_INET, ip, &a) == 1;
+}
+
+static int run_nft(const char *fmt, ...) {
+    char cmd[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(cmd, sizeof(cmd), fmt, ap);
+    va_end(ap);
+    return system(cmd);
+}
+
+int synnet_nft_ensure(void) {
+    /* Additive and idempotent — never flushes, so the set's contents (and
+     * thus active blocks) survive a daemon restart. */
+    run_nft("nft add table inet " SYNNET_NFT_TABLE " 2>/dev/null");
+    run_nft("nft add set inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
+            " { type ipv4_addr\\; } 2>/dev/null");
+    run_nft("nft add chain inet " SYNNET_NFT_TABLE " " SYNNET_NFT_CHAIN
+            " { type filter hook output priority 0\\; } 2>/dev/null");
+    /* Add the drop rule only if it isn't already present, so repeated
+     * ensure() calls don't stack duplicate rules. */
+    return run_nft(
+        "sh -c 'nft list chain inet " SYNNET_NFT_TABLE " " SYNNET_NFT_CHAIN
+        " 2>/dev/null | grep -q \"@" SYNNET_NFT_SET " drop\" || "
+        "nft add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_CHAIN
+        " ip daddr @" SYNNET_NFT_SET " drop comment \\\"synnet-ai\\\"'");
+}
+
+/* ── Persistent blocklist (one IPv4 per line) ─────────────── */
+static int blocklist_contains(const char *ip) {
+    FILE *f = fopen(SYNNET_STATE_FILE, "r");
+    if (!f) return 0;
+    char line[64];
+    int found = 0;
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (strcmp(line, ip) == 0) { found = 1; break; }
+    }
+    fclose(f);
+    return found;
+}
+
+static void blocklist_persist(const char *ip) {
+    if (blocklist_contains(ip)) return;   /* idempotent */
+    FILE *f = fopen(SYNNET_STATE_FILE, "a");
+    if (!f) return;
+    fprintf(f, "%s\n", ip);
+    fclose(f);
+}
+
+/* Rewrite the file without `ip` (used by --allow / unblock). */
+static void blocklist_remove(const char *ip) {
+    FILE *f = fopen(SYNNET_STATE_FILE, "r");
+    if (!f) return;
+
+    char tmp[] = SYNNET_STATE_FILE ".tmp";
+    FILE *o = fopen(tmp, "w");
+    if (!o) { fclose(f); return; }
+
+    char line[64];
+    while (fgets(line, sizeof(line), f)) {
+        char trimmed[64];
+        snprintf(trimmed, sizeof(trimmed), "%s", line);
+        trimmed[strcspn(trimmed, "\r\n")] = '\0';
+        if (strcmp(trimmed, ip) != 0)
+            fputs(line, o);
+    }
+    fclose(f);
+    fclose(o);
+    rename(tmp, SYNNET_STATE_FILE);
+}
+
+/* ── Per-run dedup set of destination IPs ─────────────────── */
+static int seen_contains(synnet_state_t *s, uint32_t ip) {
+    for (size_t i = 0; i < s->seen_count; i++)
+        if (s->seen_dst[i] == ip) return 1;
+    return 0;
+}
+
+static void seen_add(synnet_state_t *s, uint32_t ip) {
+    if (seen_contains(s, ip)) return;
+    if (s->seen_count == s->seen_cap) {
+        size_t cap = s->seen_cap ? s->seen_cap * 2 : 64;
+        uint32_t *p = realloc(s->seen_dst, cap * sizeof(*p));
+        if (!p) return;   /* drop the dedup entry rather than crash */
+        s->seen_dst = p;
+        s->seen_cap = cap;
+    }
+    s->seen_dst[s->seen_count++] = ip;
+}
+
+/* Add an IP to the kernel block set + persist it. Honours dry-run. */
+static void block_dst(synnet_state_t *s, const char *ip_str) {
+    if (!is_valid_ipv4(ip_str)) return;
+
+    if (s->dry_run) {
+        syslog(LOG_WARNING, "synnet: [dry-run] WOULD-BLOCK %s", ip_str);
+        return;
+    }
+    if (run_nft("nft add element inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
+                " { %s }", ip_str) == 0) {
+        blocklist_persist(ip_str);
+        s->events_blocked++;
+        syslog(LOG_WARNING, "synnet: blocked %s (AI verdict)", ip_str);
+    } else {
+        syslog(LOG_WARNING, "synnet: nft add element failed for %s", ip_str);
+    }
+}
+
+/* Reload persisted blocks into the kernel set and the dedup table at start,
+ * so existing blocks are re-enforced and not re-queried after a restart. */
+static void blocklist_reload(synnet_state_t *s) {
+    FILE *f = fopen(SYNNET_STATE_FILE, "r");
+    if (!f) return;
+
+    char line[64];
+    int n = 0;
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (!is_valid_ipv4(line)) continue;
+        struct in_addr a;
+        inet_pton(AF_INET, line, &a);
+        seen_add(s, a.s_addr);
+        if (!s->dry_run)
+            run_nft("nft add element inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
+                    " { %s } 2>/dev/null", line);
+        n++;
+    }
+    fclose(f);
+    if (n) syslog(LOG_INFO, "synnet: reloaded %d persisted block(s)", n);
+}
+
 /* ── inet_diag: dump active TCP connections ──────────────── */
 static void check_connections(synnet_state_t *s) {
     int fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_INET_DIAG);
@@ -185,37 +331,47 @@ static void check_connections(synnet_state_t *s) {
 
             s->events_seen++;
 
-            if (is_suspicious_port(dst_port)) {
-                char ip_str[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &dst_ip, ip_str, sizeof(ip_str));
+            if (!is_suspicious_port(dst_port)) continue;
 
-                syslog(LOG_WARNING, "synnet: suspicious connection to %s:%u",
+            /* Dedup: a long-lived connection shows up on every poll. Only
+             * query the AI / act on each destination once per run. */
+            if (seen_contains(s, dst_ip)) continue;
+
+            char ip_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &dst_ip, ip_str, sizeof(ip_str));
+            syslog(LOG_WARNING, "synnet: suspicious connection to %s:%u",
+                   ip_str, dst_port);
+
+            if (s->synapd_fd < 0) {
+                /* No AI available — flag once, but stay conservative and
+                 * don't auto-block (avoid false positives breaking traffic).
+                 * Mark seen so we don't log it every poll. */
+                seen_add(s, dst_ip);
+                syslog(LOG_WARNING,
+                       "synnet: no AI verdict available for %s:%u — not blocking",
                        ip_str, dst_port);
-                s->events_blocked++;
-
-                /* query synapd for verdict */
-                if (s->synapd_fd >= 0) {
-                    char prompt[512], response[1024];
-                    snprintf(prompt, sizeof(prompt),
-                        "A process is connecting to %s port %u which is a known malware/C2 port. "
-                        "Should this be blocked? Reply with just BLOCK or ALLOW and one sentence reason.",
-                        ip_str, dst_port);
-
-                    s->ai_queries++;
-                    if (synapd_query(s->synapd_fd, prompt, response, sizeof(response)) == 0) {
-                        syslog(LOG_WARNING, "synnet: AI verdict for %s:%u — %s",
-                               ip_str, dst_port, response);
-
-                        if (strncmp(response, "BLOCK", 5) == 0) {
-                            synnet_apply_rule(ip_str, SYNNET_ACTION_BLOCK);
-                            syslog(LOG_WARNING, "synnet: blocked %s (AI verdict)", ip_str);
-                        }
-                    }
-                    /* reconnect for next query */
-                    close(s->synapd_fd);
-                    s->synapd_fd = synapd_connect();
-                }
+                continue;
             }
+
+            char prompt[512], response[1024];
+            snprintf(prompt, sizeof(prompt),
+                "A process is connecting to %s port %u which is a known malware/C2 port. "
+                "Should this be blocked? Reply with just BLOCK or ALLOW and one sentence reason.",
+                ip_str, dst_port);
+
+            s->ai_queries++;
+            if (synapd_query(s->synapd_fd, prompt, response, sizeof(response)) == 0) {
+                /* Got a verdict: record it so we don't re-ask. */
+                seen_add(s, dst_ip);
+                syslog(LOG_WARNING, "synnet: AI verdict for %s:%u — %s",
+                       ip_str, dst_port, response);
+                if (strncmp(response, "BLOCK", 5) == 0)
+                    block_dst(s, ip_str);
+            }
+            /* else: transient query failure — leave unseen so we retry next
+             * poll. Reconnect for the next query. */
+            close(s->synapd_fd);
+            s->synapd_fd = synapd_connect();
         }
     }
 done:
@@ -237,6 +393,17 @@ int synnet_init(synnet_state_t *s) {
         syslog(LOG_WARNING, "synnet: synapd not available — AI verdicts disabled");
     else
         syslog(LOG_INFO, "synnet: connected to synapd");
+
+    /* Set up the enforcement table/set/chain and re-apply persisted blocks
+     * (unless dry-run, where we only watch). */
+    if (!s->dry_run) {
+        if (synnet_nft_ensure() != 0)
+            syslog(LOG_WARNING, "synnet: nftables setup incomplete — "
+                                "enforcement may not work (running as root?)");
+    } else {
+        syslog(LOG_INFO, "synnet: dry-run — monitoring only, nftables untouched");
+    }
+    blocklist_reload(s);
 
     s->running = 1;
     syslog(LOG_INFO, "synnet: initialized");
@@ -266,25 +433,50 @@ void synnet_shutdown(synnet_state_t *s) {
     s->running = 0;
     if (s->netlink_fd >= 0) close(s->netlink_fd);
     if (s->synapd_fd >= 0) close(s->synapd_fd);
+    free(s->seen_dst);
+    s->seen_dst = NULL;
+    s->seen_count = s->seen_cap = 0;
     syslog(LOG_INFO, "synnet: shutdown complete");
 }
 
+/* CLI entry for `--block <ip>` / `--allow <ip>`. ALLOW means "unblock":
+ * remove the IP from the drop set. */
 int synnet_apply_rule(const char *ip, synnet_action_t action) {
-    const char *act = action == SYNNET_ACTION_ALLOW ? "accept" : "drop";
-    char cmd[256];
+    if (!is_valid_ipv4(ip)) {
+        fprintf(stderr, "synnet: invalid IPv4 address: %s\n", ip);
+        syslog(LOG_ERR, "synnet: invalid IP '%s'", ip ? ip : "(null)");
+        return 1;
+    }
 
-    /* ensure nftables table exists */
-    system("nft add table inet synnet 2>/dev/null");
-    system("nft add chain inet synnet input { type filter hook input priority 0\\; } 2>/dev/null");
+    synnet_nft_ensure();
 
-    snprintf(cmd, sizeof(cmd),
-        "nft add rule inet synnet input ip saddr %s %s comment \\\"synnet-ai\\\"",
-        ip, act);
-    int r = system(cmd);
-    if (r == 0)
-        syslog(LOG_INFO, "synnet: rule applied — %s %s",
-               action == SYNNET_ACTION_ALLOW ? "allow" : "block", ip);
+    int r;
+    if (action == SYNNET_ACTION_ALLOW) {
+        r = run_nft("nft delete element inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
+                    " { %s } 2>/dev/null", ip);
+        blocklist_remove(ip);
+        syslog(LOG_INFO, "synnet: unblocked %s", ip);
+        r = 0;   /* deleting a non-present element is not an error for us */
+    } else {
+        r = run_nft("nft add element inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
+                    " { %s }", ip);
+        if (r == 0) {
+            blocklist_persist(ip);
+            syslog(LOG_INFO, "synnet: blocked %s", ip);
+        }
+    }
     return r == 0 ? 0 : 1;
+}
+
+/* Print the current block set and synnet ruleset (for `--status`). */
+int synnet_status(void) {
+    printf("synnet %s — nftables enforcement status\n\n", SYNNET_VERSION);
+    fflush(stdout);
+    int r = run_nft("nft list set inet " SYNNET_NFT_TABLE " " SYNNET_NFT_SET
+                    " 2>/dev/null");
+    if (r != 0)
+        printf("(no synnet table loaded — daemon has not run or nft unavailable)\n");
+    return 0;
 }
 
 int synnet_query_ai(synnet_state_t *s, synnet_event_t *ev, char *out, size_t outlen) {

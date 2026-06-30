@@ -9,11 +9,12 @@
 #include "../include/synnet.h"
 
 static synnet_state_t g_state;
-static volatile int g_running = 1;
 
 static void sig_handler(int sig) {
     (void)sig;
-    g_running = 0;
+    /* The monitor loop runs on g_state.running — clear that, not a separate
+     * flag, or the daemon would never stop. */
+    g_state.running = 0;
 }
 
 static void usage(void) {
@@ -31,32 +32,43 @@ static void usage(void) {
 }
 
 int main(int argc, char *argv[]) {
-    int foreground = 0, dry_run = 0;
+    int foreground = 0, dry_run = 0, debug = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--foreground")) foreground = 1;
         else if (!strcmp(argv[i], "--dry-run"))   dry_run = 1;
-        else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+        else if (!strcmp(argv[i], "--debug"))      debug = 1;
+        else if (!strcmp(argv[i], "--status")) {
+            return synnet_status();
+        } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             usage(); return 0;
         } else if (!strcmp(argv[i], "--allow") && i+1 < argc) {
             return synnet_apply_rule(argv[++i], SYNNET_ACTION_ALLOW);
         } else if (!strcmp(argv[i], "--block") && i+1 < argc) {
             return synnet_apply_rule(argv[++i], SYNNET_ACTION_BLOCK);
+        } else {
+            fprintf(stderr, "synnet: unknown option '%s'\n", argv[i]);
+            usage();
+            return 1;
         }
     }
 
-    openlog("synnet", LOG_PID | LOG_CONS, LOG_DAEMON);
-    syslog(LOG_INFO, "synnet %s starting", SYNNET_VERSION);
+    openlog("synnet", LOG_PID | (foreground ? LOG_PERROR : 0) | LOG_CONS,
+            LOG_DAEMON);
+    setlogmask(LOG_UPTO(debug ? LOG_DEBUG : LOG_INFO));
+    syslog(LOG_INFO, "synnet %s starting%s", SYNNET_VERSION,
+           dry_run ? " (dry-run)" : "");
 
     signal(SIGINT,  sig_handler);
     signal(SIGTERM, sig_handler);
+
+    g_state.dry_run = dry_run;
 
     if (synnet_init(&g_state) < 0) {
         syslog(LOG_ERR, "synnet_init failed");
         return EXIT_FAILURE;
     }
 
-    (void)dry_run;
     synnet_run(&g_state);
     synnet_shutdown(&g_state);
     closelog();
