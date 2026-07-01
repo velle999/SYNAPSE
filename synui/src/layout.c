@@ -29,7 +29,10 @@
 
 /* BORDER_WIDTH defined in synui.h */
 #define GAP            8
-#define MASTER_FACTOR  0.60f   /* master window takes 60% of width */
+#define MASTER_FACTOR  0.60f   /* default master column width fraction */
+#define MASTER_MIN     0.10f
+#define MASTER_MAX     0.90f
+#define MIN_WIN        40      /* smallest interactive window size, px */
 
 /* ── Get output geometry for a workspace ─────────────────── */
 static void get_output_geom(syn_server_t *s, struct wlr_box *out)
@@ -58,8 +61,9 @@ static int count_windows(syn_workspace_t *ws)
     return n;
 }
 
-/* ── Tile a view ─────────────────────────────────────────── */
-static void place_view(syn_view_t *view, int x, int y, int w, int h)
+/* ── Place / size a view ─────────────────────────────────── */
+/* Public so input.c (interactive move/resize) reuses the same path. */
+void view_resize(syn_view_t *view, int x, int y, int w, int h)
 {
     view->x = x;
     view->y = y;
@@ -76,6 +80,7 @@ static void place_view(syn_view_t *view, int x, int y, int w, int h)
 
     view_update_borders(view);
 }
+#define place_view(v, x, y, w, h) view_resize((v), (x), (y), (w), (h))
 
 /* ── TILING layout (master-stack) ────────────────────────── */
 void layout_tile(syn_server_t *s, syn_workspace_t *ws)
@@ -92,7 +97,9 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     int n = count_windows(ws);
     if (n == 0) return;
 
-    int master_w = (n == 1) ? W : (int)(W * MASTER_FACTOR) - GAP / 2;
+    float mf = ws->master_factor;
+    if (mf < MASTER_MIN || mf > MASTER_MAX) mf = MASTER_FACTOR;
+    int master_w = (n == 1) ? W : (int)(W * mf) - GAP / 2;
     int stack_w  = W - master_w - GAP;
     int stack_x  = x + master_w + GAP;
 
@@ -366,4 +373,67 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
 
     layout_apply(s, &s->workspaces[old_ws]);
     layout_apply(s, &s->workspaces[ws_index]);
+}
+
+/* ── Floating placement ──────────────────────────────────── */
+/*
+ * Give a newly-floating window a sane geometry: prefer the client's own
+ * preferred size, clamp it to the output, and centre it. Called when a
+ * window is toggled floating (Super+F) or auto-floated for a drag.
+ */
+void layout_float_place(syn_server_t *s, syn_view_t *view)
+{
+    struct wlr_box area;
+    get_output_geom(s, &area);
+
+    int w = view->w, h = view->h;
+
+    /* Prefer the surface's committed geometry (its natural size). */
+    struct wlr_box geo = view->xdg_surface->geometry;
+    if (geo.width > 0 && geo.height > 0) {
+        w = geo.width  + 2 * BORDER_WIDTH;
+        h = geo.height + 2 * BORDER_WIDTH;
+    }
+
+    /* Fall back to two-thirds of the output if the size is unusable. */
+    if (w < MIN_WIN || w > area.width)  w = area.width  * 2 / 3;
+    if (h < MIN_WIN || h > area.height) h = area.height * 2 / 3;
+
+    int x = area.x + (area.width  - w) / 2;
+    int y = area.y + (area.height - h) / 2;
+    view_resize(view, x, y, w, h);
+}
+
+/* ── Move focused view within the tiling stack ───────────── */
+/* dir > 0 → toward tail (down the stack), dir < 0 → toward head (master). */
+void layout_move_in_stack(syn_server_t *s, syn_view_t *view, int dir)
+{
+    if (!view) return;
+    syn_workspace_t *ws = view->workspace;
+    if (wl_list_length(&ws->windows) < 2) return;
+
+    struct wl_list *head = &ws->windows;
+    struct wl_list *self = &view->link;
+    struct wl_list *anchor;   /* self is re-inserted immediately after this node */
+
+    if (dir > 0)
+        anchor = (self->next == head) ? head : self->next;
+    else
+        anchor = (self->prev == head) ? head->prev : self->prev->prev;
+
+    wl_list_remove(self);
+    wl_list_insert(anchor, self);
+    layout_apply(s, ws);
+}
+
+/* ── Adjust the master column width ──────────────────────── */
+void layout_adjust_master(syn_server_t *s, syn_workspace_t *ws, float delta)
+{
+    float mf = ws->master_factor;
+    if (mf < MASTER_MIN || mf > MASTER_MAX) mf = MASTER_FACTOR;
+    mf += delta;
+    if (mf < MASTER_MIN) mf = MASTER_MIN;
+    if (mf > MASTER_MAX) mf = MASTER_MAX;
+    ws->master_factor = mf;
+    layout_apply(s, ws);
 }

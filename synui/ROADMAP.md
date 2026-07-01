@@ -22,11 +22,15 @@ Partial / broken:
 - **Per-window AI context**: `ai_ctx.has_ctx` drives the AI border colour but
   nothing set it. (Addressed in Phase A.)
 - **Security borders**: driven by the synguard verdict feed (Phase A2).
+- **Surface lifecycle**: subscribed to `xdg_shell.new_surface` and asserted the
+  role, which under wlroots 0.19 fires before the role is set — the compositor
+  aborted on the first client window. Now subscribes to `new_toplevel` /
+  `new_popup`. (Fixed in Phase B.)
 - **Multi-output**: layout/UI always use `output[0]`; AI prompt hardcodes
   `1920x1080`.
-- Interactive move/resize: `SYNUI_CURSOR_MOVE/RESIZE` enum unused.
-- Documented binds Super+H/L (master factor) and Super+Shift+J/K (move in
-  stack) are not implemented.
+- Interactive move/resize (`SYNUI_CURSOR_MOVE/RESIZE`) and the documented
+  Super+H/L (master factor) / Super+Shift+J/K (move in stack) binds. (Done in
+  Phase B.)
 
 Missing: layer-shell (panels/bars/wallpaper/lock), XWayland, xdg-decoration,
 output-management, fractional-scale, session-lock, idle, foreign-toplevel,
@@ -50,10 +54,20 @@ The distinguishing SynapseOS feature, currently non-functional.
       `wl_client_get_credentials` → DENY/QUARANTINE = red "denied", ALERT =
       "alert" border.
 
-### Phase B — Interactive & complete window management
-Cursor move/resize for floating windows (the unused enum); finish the
-documented binds (master factor, move-in-stack); sane floating placement and
-min/max-size handling.
+### Phase B — Interactive & complete window management  *(done)*
+- [x] Cursor move/resize for floating windows (resurrect `SYNUI_CURSOR_MOVE/
+      RESIZE`): Super+Left-drag moves, Super+Right-drag resizes from the nearest
+      corner; a tiled window is auto-floated and the workspace reflows.
+- [x] Documented binds: Super+H/L adjust the per-workspace master factor
+      (0.10–0.90); Super+Shift+J/K move the focused window down/up the stack.
+      Layout-cycle moved from Super+L to Super+Tab to free H/L.
+- [x] Sane floating placement (`layout_float_place`): prefer the client's own
+      geometry, clamp to the output, centre it.
+- [x] min/max-size handling during interactive resize (honours the toplevel's
+      client-set constraints with a hard floor; anchors the opposite edge).
+- [x] Fixed a wlroots-0.19 surface-lifecycle crash (`new_surface` → role assert)
+      by migrating to `new_toplevel` / `new_popup` — the compositor could not
+      map any client window before this.
 
 ### Phase C — Multi-output correctness
 Per-output geometry (stop hardcoding `output[0]`), output-aware workspaces/UI,

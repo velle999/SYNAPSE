@@ -170,6 +170,11 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, unmap);
     view->mapped = 0;
+    /* Cancel any interactive grab targeting this window */
+    if (view->server->grabbed_view == view) {
+        view->server->grabbed_view = NULL;
+        view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+    }
     /* Remove borders from scene */
     if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
     if (view->border_bottom) { wlr_scene_node_destroy(&view->border_bottom->node); view->border_bottom = NULL; }
@@ -180,6 +185,10 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 static void xdg_surface_destroy(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, destroy);
+    if (view->server->grabbed_view == view) {
+        view->server->grabbed_view = NULL;
+        view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+    }
     wl_list_remove(&view->map.link);
     wl_list_remove(&view->unmap.link);
     wl_list_remove(&view->destroy.link);
@@ -214,20 +223,28 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
     wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel, view->fullscreen);
 }
 
-static void server_new_xdg_surface(struct wl_listener *listener, void *data)
+/*
+ * wlroots 0.19 splits surface creation into role-specific signals that fire
+ * only once the role is known — new_surface no longer guarantees a role, so we
+ * subscribe to new_toplevel / new_popup instead of asserting the role here.
+ */
+static void server_new_xdg_popup(struct wl_listener *listener, void *data)
 {
-    syn_server_t *server = wl_container_of(listener, server, new_xdg_surface);
-    struct wlr_xdg_surface *xdg_surface = data;
+    (void)listener;
+    struct wlr_xdg_popup *popup = data;
+    struct wlr_xdg_surface *parent =
+        wlr_xdg_surface_try_from_wlr_surface(popup->parent);
+    assert(parent);
+    struct wlr_scene_tree *parent_tree = parent->data;
+    popup->base->data =
+        wlr_scene_xdg_surface_create(parent_tree, popup->base);
+}
 
-    if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
-        struct wlr_xdg_surface *parent =
-            wlr_xdg_surface_try_from_wlr_surface(xdg_surface->popup->parent);
-        assert(parent);
-        struct wlr_scene_tree *parent_tree = parent->data;
-        xdg_surface->data = wlr_scene_xdg_surface_create(parent_tree, xdg_surface);
-        return;
-    }
-    assert(xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
+static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
+{
+    syn_server_t *server = wl_container_of(listener, server, new_xdg_toplevel);
+    struct wlr_xdg_toplevel *toplevel = data;
+    struct wlr_xdg_surface *xdg_surface = toplevel->base;
 
     syn_view_t *view = calloc(1, sizeof(*view));
     view->xdg_surface = xdg_surface;
@@ -399,6 +416,7 @@ int synui_init(syn_server_t *s)
         s->workspaces[i].index   = i;
         s->workspaces[i].layout  = LAYOUT_TILING;
         s->workspaces[i].visible = (i == 0);
+        s->workspaces[i].master_factor = s->config.master_factor;
         strncpy(s->workspaces[i].name, ws_names[i], WORKSPACE_NAME_LEN - 1);
         wl_list_init(&s->workspaces[i].windows);
     }
@@ -408,8 +426,10 @@ int synui_init(syn_server_t *s)
     s->new_output.notify = server_new_output;
     wl_signal_add(&s->backend->events.new_output, &s->new_output);
 
-    s->new_xdg_surface.notify = server_new_xdg_surface;
-    wl_signal_add(&s->xdg_shell->events.new_surface, &s->new_xdg_surface);
+    s->new_xdg_toplevel.notify = server_new_xdg_toplevel;
+    wl_signal_add(&s->xdg_shell->events.new_toplevel, &s->new_xdg_toplevel);
+    s->new_xdg_popup.notify = server_new_xdg_popup;
+    wl_signal_add(&s->xdg_shell->events.new_popup, &s->new_xdg_popup);
 
     wl_list_init(&s->outputs);
     wl_list_init(&s->keyboards);

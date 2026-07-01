@@ -8,15 +8,19 @@
  *   Super+A              Toggle neural overlay
  *   Super+Q              Close focused window
  *   Super+Shift+Q        Quit synui
- *   Super+L              Cycle layout (tile → monocle → AI → floating → tile)
+ *   Super+Tab            Cycle layout (tile → floating → monocle → AI → tile)
  *   Super+J/K            Focus next/prev window
- *   Super+Shift+J/K      Move window in stack
- *   Super+H/L            Adjust master factor
- *   Super+F              Toggle floating
+ *   Super+Shift+J/K      Move window down/up the stack
+ *   Super+H/L            Shrink / grow the master column
+ *   Super+F              Toggle floating (centred placement)
  *   Super+M              Toggle maximize
  *   Super+1..9           Switch to workspace N
  *   Super+Shift+1..9     Move focused window to workspace N
  *   Super+Backspace      Spawn: syn ask (quick AI query)
+ *
+ * Pointer (interactive floating window management):
+ *   Super + Left-drag    Move the window under the cursor
+ *   Super + Right-drag   Resize it from the nearest corner
  *
  * SynapseOS Project — GPLv2
  * https://github.com/velle999/SYNAPSE
@@ -27,6 +31,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <linux/input-event-codes.h>
+#include <wlr/util/edges.h>
 
 #include "synui.h"
 
@@ -208,8 +215,8 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
         return true;
     }
 
-    /* Super+L — cycle layout */
-    if (!shift && lower == XKB_KEY_l) {
+    /* Super+Tab — cycle layout */
+    if (sym == XKB_KEY_Tab) {
         syn_workspace_t *ws = &s->workspaces[s->active_workspace];
         ws->layout = (ws->layout + 1) % 4;
         static const char *lnames[] = {"tiling","floating","monocle","AI"};
@@ -218,14 +225,40 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
         return true;
     }
 
+    /* Super+H / Super+L — shrink / grow the master column */
+    if (!shift && lower == XKB_KEY_h) {
+        layout_adjust_master(s, &s->workspaces[s->active_workspace], -0.05f);
+        return true;
+    }
+    if (!shift && lower == XKB_KEY_l) {
+        layout_adjust_master(s, &s->workspaces[s->active_workspace], +0.05f);
+        return true;
+    }
+
+    /* Super+Shift+J/K — move focused window down/up the stack */
+    if (shift && lower == XKB_KEY_j) {
+        if (s->focused_view) layout_move_in_stack(s, s->focused_view, 1);
+        return true;
+    }
+    if (shift && lower == XKB_KEY_k) {
+        if (s->focused_view) layout_move_in_stack(s, s->focused_view, -1);
+        return true;
+    }
+
     /* Super+J/K — focus next/prev */
     if (lower == XKB_KEY_j) { focus_next(s, 1);  return true; }
     if (lower == XKB_KEY_k) { focus_next(s, -1); return true; }
 
-    /* Super+F — toggle floating */
+    /* Super+F — toggle floating (centred placement when floated) */
     if (lower == XKB_KEY_f && s->focused_view) {
-        s->focused_view->floating = !s->focused_view->floating;
+        syn_view_t *v = s->focused_view;
+        v->floating = !v->floating;
+        /* Reflow the remaining tiled windows first, then place this one. */
         layout_apply(s, &s->workspaces[s->active_workspace]);
+        if (v->floating) {
+            layout_float_place(s, v);
+            wlr_scene_node_raise_to_top(&v->scene_tree->node);
+        }
         return true;
     }
 
@@ -350,6 +383,93 @@ static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
     wl_list_insert(&s->keyboards, &kb->link);
 }
 
+/* ── Interactive move / resize (Super + mouse drag) ──────── */
+/*
+ * Begin an interactive grab of `view`. Tiled windows are auto-floated so the
+ * drag doesn't fight the layout engine; the workspace reflows around them.
+ * For a resize we grab from whichever corner the cursor is nearest.
+ */
+static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
+{
+    syn_server_t *s = view->server;
+    if (!view->mapped || view->fullscreen) return;
+
+    if (!view->floating) {
+        view->floating = 1;
+        layout_apply(s, view->workspace);   /* reflow remaining tiled windows */
+    }
+    wlr_scene_node_raise_to_top(&view->scene_tree->node);
+    focus_view(s, view, view->xdg_surface->surface);
+
+    s->grabbed_view = view;
+    s->cursor_mode  = mode;
+
+    if (mode == SYNUI_CURSOR_MOVE) {
+        s->grab_x = s->cursor->x - view->x;
+        s->grab_y = s->cursor->y - view->y;
+    } else {
+        /* Anchor the drag and pick edges from the cursor's quadrant. */
+        s->grab_x = s->cursor->x;
+        s->grab_y = s->cursor->y;
+        s->grab_geobox = (struct wlr_box){ view->x, view->y, view->w, view->h };
+        uint32_t edges = 0;
+        edges |= (s->cursor->x < view->x + view->w / 2)
+                     ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
+        edges |= (s->cursor->y < view->y + view->h / 2)
+                     ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
+        s->resize_edges = edges;
+    }
+}
+
+static void process_cursor_move(syn_server_t *s)
+{
+    syn_view_t *v = s->grabbed_view;
+    v->x = (int)(s->cursor->x - s->grab_x);
+    v->y = (int)(s->cursor->y - s->grab_y);
+    wlr_scene_node_set_position(&v->scene_tree->node, v->x, v->y);
+    view_update_borders(v);
+}
+
+static void process_cursor_resize(syn_server_t *s)
+{
+    syn_view_t *v = s->grabbed_view;
+    struct wlr_box g = s->grab_geobox;
+    double dx = s->cursor->x - s->grab_x;
+    double dy = s->cursor->y - s->grab_y;
+
+    int left = g.x, right = g.x + g.width;
+    int top  = g.y, bottom = g.y + g.height;
+
+    if (s->resize_edges & WLR_EDGE_LEFT)   left   = g.x + (int)dx;
+    else if (s->resize_edges & WLR_EDGE_RIGHT)  right  = g.x + g.width  + (int)dx;
+    if (s->resize_edges & WLR_EDGE_TOP)    top    = g.y + (int)dy;
+    else if (s->resize_edges & WLR_EDGE_BOTTOM) bottom = g.y + g.height + (int)dy;
+
+    /* Honour the client's min/max size, with a hard floor so a window can
+     * never collapse to nothing. Clamp against the edge being dragged so the
+     * opposite edge stays anchored. */
+    struct wlr_xdg_toplevel *top_l = v->xdg_surface->toplevel;
+    int min_w = top_l->current.min_width  > 0 ? top_l->current.min_width  : 0;
+    int min_h = top_l->current.min_height > 0 ? top_l->current.min_height : 0;
+    int max_w = top_l->current.max_width  > 0 ? top_l->current.max_width  : 0;
+    int max_h = top_l->current.max_height > 0 ? top_l->current.max_height : 0;
+    if (min_w < 2 * BORDER_WIDTH + 20) min_w = 2 * BORDER_WIDTH + 20;
+    if (min_h < 2 * BORDER_WIDTH + 20) min_h = 2 * BORDER_WIDTH + 20;
+
+    int w = right - left, h = bottom - top;
+    if (w < min_w) w = min_w;
+    if (h < min_h) h = min_h;
+    if (max_w && w > max_w) w = max_w;
+    if (max_h && h > max_h) h = max_h;
+
+    if (s->resize_edges & WLR_EDGE_LEFT)  left = right - w;
+    else                                   right = left + w;
+    if (s->resize_edges & WLR_EDGE_TOP)   top  = bottom - h;
+    else                                   bottom = top + h;
+
+    view_resize(v, left, top, w, h);
+}
+
 /* ── Pointer ─────────────────────────────────────────────── */
 static void server_new_pointer(syn_server_t *s, struct wlr_input_device *dev)
 {
@@ -364,6 +484,9 @@ static void server_cursor_motion(struct wl_listener *listener, void *data)
                     event->delta_x, event->delta_y);
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
+
+    if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
+    if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
     /* Pass to focused surface */
     double sx, sy;
@@ -387,6 +510,9 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
 
+    if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
+    if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
+
     double sx, sy;
     struct wlr_surface *surface = NULL;
     syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
@@ -403,15 +529,40 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_button);
     struct wlr_pointer_button_event *event = data;
-    wlr_seat_pointer_notify_button(s->seat, event->time_msec,
-                                    event->button, event->state);
+
+    /* A release always ends an in-progress grab and is swallowed. */
+    if (event->state == WL_POINTER_BUTTON_STATE_RELEASED &&
+        s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
+        s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+        s->grabbed_view = NULL;
+        return;
+    }
+
     if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
         double sx, sy;
         struct wlr_surface *surface = NULL;
         syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y,
                                     &surface, &sx, &sy);
+
+        /* Super + drag begins an interactive move/resize; the button is not
+         * forwarded to the client. */
+        struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
+        uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;
+        if (view && (mods & WLR_MODIFIER_LOGO)) {
+            if (event->button == BTN_LEFT) {
+                begin_interactive(view, SYNUI_CURSOR_MOVE);
+                return;
+            }
+            if (event->button == BTN_RIGHT) {
+                begin_interactive(view, SYNUI_CURSOR_RESIZE);
+                return;
+            }
+        }
         if (view) focus_view(s, view, surface);
     }
+
+    wlr_seat_pointer_notify_button(s->seat, event->time_msec,
+                                    event->button, event->state);
 }
 
 static void server_cursor_axis(struct wl_listener *listener, void *data)

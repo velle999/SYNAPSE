@@ -27,6 +27,7 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -148,6 +149,7 @@ struct syn_workspace {
     char             intent[256];
     syn_layout_t     layout;
     int              visible;
+    float            master_factor;  /* master column width, 0.10–0.90 */
     struct wl_list   windows;   /* syn_view_t::link */
 };
 
@@ -238,6 +240,13 @@ struct syn_server {
     syn_overlay_t   overlay;
     syn_config_t    config;
 
+    /* Interactive move/resize grab state (Super + mouse drag). */
+    syn_cursor_mode_t cursor_mode;      /* PASSTHROUGH / MOVE / RESIZE */
+    syn_view_t       *grabbed_view;
+    double            grab_x, grab_y;   /* MOVE: cursor→view offset; RESIZE: cursor anchor */
+    struct wlr_box    grab_geobox;      /* RESIZE: view geometry at grab start */
+    uint32_t          resize_edges;     /* RESIZE: WLR_EDGE_* being dragged */
+
     /* UI scene nodes (render.c) */
     struct {
         struct wlr_scene_tree   *tree;
@@ -286,7 +295,8 @@ struct syn_server {
 
     /* Listeners */
     struct wl_listener new_output;
-    struct wl_listener new_xdg_surface;
+    struct wl_listener new_xdg_toplevel;
+    struct wl_listener new_xdg_popup;
     struct wl_listener new_input;
     struct wl_listener cursor_motion;
     struct wl_listener cursor_motion_absolute;
@@ -315,6 +325,10 @@ void view_update_borders(syn_view_t *view);
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);
 void layout_tile(syn_server_t *s, syn_workspace_t *ws);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws);
+void view_resize(syn_view_t *view, int x, int y, int w, int h);
+void layout_float_place(syn_server_t *s, syn_view_t *view);
+void layout_move_in_stack(syn_server_t *s, syn_view_t *view, int dir);
+void layout_adjust_master(syn_server_t *s, syn_workspace_t *ws, float delta);
 void layout_request_ai(syn_server_t *s, syn_workspace_t *ws);
 void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                const char *json_response);
