@@ -63,10 +63,17 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
     view->w = w;
     view->h = h;
 
-    /* Commit the size to the xdg toplevel */
-    wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel,
-                               w - 2 * BORDER_WIDTH,
-                               h - 2 * BORDER_WIDTH);
+    int iw = w - 2 * BORDER_WIDTH;
+    int ih = h - 2 * BORDER_WIDTH;
+    if (iw < 1) iw = 1;
+    if (ih < 1) ih = 1;
+
+    /* Commit the size to the client. X11 clients also need their absolute
+     * layout position, which the xdg path derives from the scene node. */
+    if (view->is_xwayland)
+        wlr_xwayland_surface_configure(view->xsurface, x, y, iw, ih);
+    else
+        wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, iw, ih);
 
     /* Move the scene tree node */
     wlr_scene_node_set_position(&view->scene_tree->node, x, y);
@@ -159,10 +166,8 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->floating) continue;
-        const char *title = v->xdg_surface->toplevel->title
-                            ? v->xdg_surface->toplevel->title : "unknown";
-        const char *app   = v->xdg_surface->toplevel->app_id
-                            ? v->xdg_surface->toplevel->app_id : "unknown";
+        const char *title = view_title(v) ? view_title(v) : "unknown";
+        const char *app   = view_app_id(v) ? view_app_id(v) : "unknown";
         pos += snprintf(win_list + pos, sizeof(win_list) - pos,
                         "  - app=%s title=\"%.30s\"\n", app, title);
         if (pos >= (int)sizeof(win_list) - 64) break;
@@ -254,7 +259,7 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
             syn_view_t *v;
             wl_list_for_each(v, &ws->windows, link) {
                 if (!v->mapped || v->floating) continue;
-                const char *aid = v->xdg_surface->toplevel->app_id;
+                const char *aid = view_app_id(v);
                 if (aid && strcmp(aid, app_id) == 0) {
                     int nx = area.x + (int)(fx * area.width);
                     int ny = area.y + (int)(fy * area.height);
@@ -334,7 +339,7 @@ void workspace_switch(syn_server_t *s, int index)
         syn_view_t *first = wl_container_of(
             s->workspaces[index].windows.next, first, link);
         if (first->mapped)
-            focus_view(s, first, first->xdg_surface->surface);
+            focus_view(s, first, view_surface(first));
     }
 
     /* Refresh overlay if visible */
@@ -385,11 +390,18 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
 
     int w = view->w, h = view->h;
 
-    /* Prefer the surface's committed geometry (its natural size). */
-    struct wlr_box geo = view->xdg_surface->geometry;
-    if (geo.width > 0 && geo.height > 0) {
-        w = geo.width  + 2 * BORDER_WIDTH;
-        h = geo.height + 2 * BORDER_WIDTH;
+    /* Prefer the surface's natural size. */
+    if (view->is_xwayland) {
+        if (view->xsurface->width > 0 && view->xsurface->height > 0) {
+            w = view->xsurface->width  + 2 * BORDER_WIDTH;
+            h = view->xsurface->height + 2 * BORDER_WIDTH;
+        }
+    } else {
+        struct wlr_box geo = view->xdg_surface->geometry;
+        if (geo.width > 0 && geo.height > 0) {
+            w = geo.width  + 2 * BORDER_WIDTH;
+            h = geo.height + 2 * BORDER_WIDTH;
+        }
     }
 
     /* Fall back to two-thirds of the output if the size is unusable. */

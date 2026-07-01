@@ -10,6 +10,11 @@ pixman    = dependency('pixman-1')
 threads   = dependency('threads')
 cairo     = dependency('cairo')
 
+# XWayland pulls xcb headers in via wlr/xwayland.h
+xcb       = dependency('xcb')
+xcb_icccm = dependency('xcb-icccm')
+xcb_ewmh  = dependency('xcb-ewmh')
+
 wl_scanner = find_program('wayland-scanner')
 
 xdg_shell_xml = join_paths(
@@ -47,6 +52,7 @@ executable('synui',
     'src/input.c',
     'src/layout.c',
     'src/layer.c',
+    'src/xwayland.c',
     'src/ai_interface.c',
     'src/secfeed.c',
     'src/config.c',
@@ -57,6 +63,7 @@ executable('synui',
     layer_shell_c,
   ],
   include_directories : include_directories('src'),
-  dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo],
+  dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,
+                  xcb, xcb_icccm, xcb_ewmh],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)

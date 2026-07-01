@@ -10,6 +10,7 @@
 
 #include <stdatomic.h>
 #include <pthread.h>
+#include <sys/types.h>
 #include <time.h>
 
 #include <wayland-server-core.h>
@@ -30,6 +31,7 @@
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland.h>
 #include <xkbcommon/xkbcommon.h>
 
 /* ── Version ─────────────────────────────────────────────── */
@@ -160,8 +162,13 @@ struct syn_view {
     syn_server_t           *server;
     syn_workspace_t        *workspace;
 
-    struct wlr_xdg_surface *xdg_surface;
-    struct wlr_scene_tree  *scene_tree;
+    /* A view wraps either an xdg_toplevel (Wayland) or an xwayland_surface
+     * (X11). Exactly one of these is set; is_xwayland selects which. */
+    int                          is_xwayland;
+    int                          override_redirect;  /* X11 OR: menus/tooltips */
+    struct wlr_xdg_surface      *xdg_surface;
+    struct wlr_xwayland_surface *xsurface;
+    struct wlr_scene_tree       *scene_tree;
 
     int mapped;
     int floating;
@@ -178,13 +185,18 @@ struct syn_view {
     struct wlr_scene_rect *border_left;
     struct wlr_scene_rect *border_right;
 
-    /* Listeners */
+    /* Listeners (shared: xdg + xwayland reuse map/unmap/destroy/request_*) */
     struct wl_listener map;
     struct wl_listener unmap;
     struct wl_listener destroy;
     struct wl_listener commit;
     struct wl_listener request_maximize;
     struct wl_listener request_fullscreen;
+    /* xwayland-only */
+    struct wl_listener associate;
+    struct wl_listener dissociate;
+    struct wl_listener request_configure;
+    struct wl_listener request_activate;
 };
 
 /* ── Layer-shell surface (panels, bars, wallpaper, launchers) ── */
@@ -241,6 +253,7 @@ struct syn_server {
 
     struct wlr_xdg_shell      *xdg_shell;
     struct wlr_layer_shell_v1  *layer_shell;
+    struct wlr_xwayland        *xwayland;
     struct wlr_seat            *seat;
 
     /* Scene-graph z-order (bottom→top): bg_rect, layer[BACKGROUND],
@@ -326,6 +339,9 @@ struct syn_server {
     struct wl_listener new_xdg_toplevel;
     struct wl_listener new_xdg_popup;
     struct wl_listener new_layer_surface;
+    struct wl_listener new_xwayland_surface;
+    struct wl_listener xwayland_ready;
+    struct wl_listener new_decoration;
     struct wl_listener new_input;
     struct wl_listener cursor_motion;
     struct wl_listener cursor_motion_absolute;
@@ -352,6 +368,19 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box);
 void layer_shell_init(syn_server_t *s);            /* create global + wire signal */
 void layer_arrange_output(syn_output_t *output);   /* place layers, update usable */
 void layer_output_destroy(syn_output_t *output);   /* close surfaces on a dead output */
+
+/* ── view accessors (xdg / xwayland agnostic) ────────────── */
+struct wlr_surface *view_surface(syn_view_t *v);
+const char *view_app_id(syn_view_t *v);   /* xdg app_id / X11 class */
+const char *view_title(syn_view_t *v);
+pid_t       view_pid(syn_view_t *v);
+void        view_close(syn_view_t *v);
+void        view_set_activated(syn_view_t *v, int activated);
+void        view_set_maximized(syn_view_t *v, int maximized);
+void        view_set_fullscreen(syn_view_t *v, int fullscreen);
+
+/* ── xwayland.c ──────────────────────────────────────────── */
+void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable */
 
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);

@@ -128,15 +128,10 @@ static syn_view_t *view_for_pid(syn_server_t *s, pid_t pid)
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link) {
-            if (!v->mapped || !v->xdg_surface || !v->xdg_surface->surface)
-                continue;
-            struct wl_resource *res = v->xdg_surface->surface->resource;
-            if (!res) continue;
-            struct wl_client *c = wl_resource_get_client(res);
-            if (!c) continue;
-            pid_t cpid = 0;
-            wl_client_get_credentials(c, &cpid, NULL, NULL);
-            if (cpid == pid) return v;
+            if (!v->mapped) continue;
+            /* view_pid() returns the real X11 app pid for xwayland views
+             * (all of which otherwise share the Xwayland client). */
+            if (view_pid(v) == pid) return v;
         }
     }
     return NULL;

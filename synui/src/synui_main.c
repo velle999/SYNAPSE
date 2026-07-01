@@ -38,6 +38,7 @@
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 
 #include "synui.h"
 
@@ -249,7 +250,9 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, unmap);
     view->mapped = 0;
-    /* Cancel any interactive grab targeting this window */
+    /* Drop focus/grab references to this window */
+    if (view->server->focused_view == view)
+        view->server->focused_view = NULL;
     if (view->server->grabbed_view == view) {
         view->server->grabbed_view = NULL;
         view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
@@ -264,6 +267,8 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 static void xdg_surface_destroy(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, destroy);
+    if (view->server->focused_view == view)
+        view->server->focused_view = NULL;
     if (view->server->grabbed_view == view) {
         view->server->grabbed_view = NULL;
         view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
@@ -415,6 +420,64 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     wlr_log(WLR_DEBUG, "synui: new toplevel");
 }
 
+/* ── xdg-decoration ──────────────────────────────────────── */
+/* synui draws its own borders, so we ask clients to skip client-side
+ * titlebars. set_mode() schedules a configure, which asserts the surface is
+ * initialized — but a client may create the decoration before its first
+ * commit, so we defer the mode until an initialized commit arrives. */
+struct syn_decoration {
+    struct wlr_xdg_toplevel_decoration_v1 *deco;
+    struct wl_listener commit;
+    struct wl_listener destroy;
+};
+
+static void decoration_apply(struct syn_decoration *d)
+{
+    wlr_xdg_toplevel_decoration_v1_set_mode(
+        d->deco, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+}
+
+static void decoration_commit(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct syn_decoration *d = wl_container_of(listener, d, commit);
+    if (d->deco->toplevel->base->initialized) {
+        decoration_apply(d);
+        /* Only needed once; stop listening to further commits. */
+        wl_list_remove(&d->commit.link);
+        wl_list_init(&d->commit.link);
+    }
+}
+
+static void decoration_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct syn_decoration *d = wl_container_of(listener, d, destroy);
+    wl_list_remove(&d->commit.link);
+    wl_list_remove(&d->destroy.link);
+    free(d);
+}
+
+static void server_new_decoration(struct wl_listener *listener, void *data)
+{
+    (void)listener;
+    struct wlr_xdg_toplevel_decoration_v1 *deco = data;
+
+    struct syn_decoration *d = calloc(1, sizeof(*d));
+    d->deco = deco;
+    d->destroy.notify = decoration_destroy;
+    wl_signal_add(&deco->events.destroy, &d->destroy);
+    d->commit.notify = decoration_commit;
+    wl_signal_add(&deco->toplevel->base->surface->events.commit, &d->commit);
+
+    /* If the surface is already initialized, set the mode straight away. */
+    if (deco->toplevel->base->initialized) {
+        decoration_apply(d);
+        wl_list_remove(&d->commit.link);
+        wl_list_init(&d->commit.link);
+    }
+}
+
 /* ── Server init ─────────────────────────────────────────── */
 int synui_init(syn_server_t *s)
 {
@@ -520,6 +583,12 @@ int synui_init(syn_server_t *s)
     /* xdg-output — bars/panels (waybar) need it to enumerate output geometry. */
     wlr_xdg_output_manager_v1_create(s->display, s->output_layout);
 
+    /* xdg-decoration — negotiate server-side decorations (we draw borders). */
+    struct wlr_xdg_decoration_manager_v1 *deco_mgr =
+        wlr_xdg_decoration_manager_v1_create(s->display);
+    s->new_decoration.notify = server_new_decoration;
+    wl_signal_add(&deco_mgr->events.new_toplevel_decoration, &s->new_decoration);
+
     /* Seat */
     s->seat = wlr_seat_create(s->display, "seat0");
 
@@ -528,6 +597,9 @@ int synui_init(syn_server_t *s)
     wlr_cursor_attach_output_layout(s->cursor, s->output_layout);
     s->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
     wlr_xcursor_manager_load(s->cursor_mgr, 1);
+
+    /* XWayland — X11 app support (lazy: Xwayland starts on first X client). */
+    xwayland_setup(s);
 
     /* Initialize workspaces */
     const char *ws_names[WORKSPACE_MAX] = {
@@ -621,6 +693,16 @@ int synui_run(syn_server_t *s)
 void synui_destroy(syn_server_t *s)
 {
     s->shutting_down = 1;
+
+    /* Tear down Xwayland first so its surfaces/listeners are gone before we
+     * destroy the display and scene. */
+    if (s->xwayland) {
+        wl_list_remove(&s->new_xwayland_surface.link);
+        wl_list_remove(&s->xwayland_ready.link);
+        wlr_xwayland_destroy(s->xwayland);
+        s->xwayland = NULL;
+    }
+    wl_list_remove(&s->new_decoration.link);
 
     /* Detach the compositor's singleton listeners before destroying the
      * objects they hang off — wlroots asserts empty listener lists on destroy

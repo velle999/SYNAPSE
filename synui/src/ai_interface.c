@@ -350,9 +350,9 @@ void execute_ai_action(syn_server_t *s, const char *response)
             syn_view_t *v;
             wl_list_for_each(v, &ws->windows, link) {
                 if (!v->mapped) continue;
-                const char *aid = v->xdg_surface->toplevel->app_id;
+                const char *aid = view_app_id(v);
                 if (aid && strstr(aid, app_id)) {
-                    focus_view(s, v, v->xdg_surface->surface);
+                    focus_view(s, v, view_surface(v));
                     break;
                 }
             }

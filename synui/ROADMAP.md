@@ -4,7 +4,7 @@
 the gap between its current state and the roadmap goal, *"full Wayland
 compositor with AI-aware window management."*
 
-## Current state (real `src/`, ~3,700 LOC)
+## Current state (real `src/`, ~4,100 LOC)
 
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
@@ -16,6 +16,7 @@ Working:
 - Security-border colour states (rendering only)
 - Interactive move/resize; per-workspace master factor; multi-output aware
 - layer-shell (panels/bars/wallpaper/launchers) + xdg-output
+- XWayland (X11 apps, managed + override-redirect) + xdg-decoration (SSD)
 
 Partial / broken:
 - **AI layout**: request path exists but `layout_apply_ai_response()` was never
@@ -41,9 +42,9 @@ Partial / broken:
   Super+H/L (master factor) / Super+Shift+J/K (move in stack) binds. (Done in
   Phase B.)
 
-Missing: XWayland, xdg-decoration, output-management, fractional-scale,
-session-lock, idle, foreign-toplevel, screencopy, pointer-constraints,
-touch/tablet, libinput config.
+Missing: output-management, fractional-scale, session-lock, idle,
+foreign-toplevel, screencopy, pointer-constraints, touch/tablet,
+libinput config.
 
 ## Phases (ordered by value ÷ effort)
 
@@ -121,9 +122,32 @@ per-output workspaces land.
       exclusive zone (usable area 1280x720 → 1280x690+0+30, tiling follows) and
       **wofi** maps as a keyboard-interactive launcher; both without crashing.
 
-### Phase E — App compatibility: XWayland + decorations
-X11 app support (separate surface type, override-redirect, focus) and
-`xdg-decoration` negotiation. The largest single chunk.
+### Phase E — App compatibility: XWayland + decorations  *(done)*
+- [x] View abstraction: `syn_view_t` now wraps either an xdg toplevel or an
+      `wlr_xwayland_surface`, behind accessors (`view_surface/app_id/title/pid/
+      close/set_activated/set_maximized/set_fullscreen`). Layout, focus, the AI
+      prompt and the security feed are surface-type agnostic.
+- [x] `xwayland.c`: run a (lazy) Xwayland server; publish `DISPLAY`; set the X
+      cursor; associate/dissociate/map/unmap/destroy; request_configure /
+      _maximize / _fullscreen / _activate. Managed windows tile/float with
+      borders + focus; override-redirect windows (menus/tooltips) go to the
+      overlay layer at absolute coords and self-focus if they ask.
+- [x] `focus_view` now toggles activation (X11 needs it); hardened focus/grab
+      pointers to clear on unmap/destroy (fixes a latent xdg use-after-free).
+- [x] `view_pid()` uses the real X11 pid (`xsurface->pid`) so synguard verdicts
+      match individual X apps, not the shared Xwayland client.
+- [x] xdg-decoration: force SERVER_SIDE mode (we draw borders), deferred to the
+      surface's first initialized commit to avoid a `schedule_configure` assert.
+- [x] Vendored no new protocol (wlroots ships XWayland); added xcb/xcb-icccm/
+      xcb-ewmh build deps.
+
+Verified: builds clean; the Xwayland server is created, `DISPLAY` published, and
+lazy-start triggers on the first X client; xdg clients (foot) map with SSD; two
+real crashes were found and fixed along the way (decoration configure-before-
+init, and border rects with not-yet-sized geometry). Full X11 *window* mapping
+could not be exercised in this sandbox because Xwayland's own XKB keymap
+compilation fails here (host xkeyboard-config / nested-Xwayland limitation,
+external to synui); synui degrades gracefully when Xwayland can't start.
 
 ### Phase F — Output & session management
 `wlr-output-management` (scale/mode/rotation), fractional-scale, DPMS,

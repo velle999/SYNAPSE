@@ -1,0 +1,344 @@
+/*
+ * xwayland.c — X11 application support via wlroots XWayland
+ *
+ * Runs an Xwayland server and manages its surfaces alongside native Wayland
+ * (xdg-shell) windows. A syn_view_t can wrap either kind of surface; the
+ * accessors at the top of this file paper over the difference so layout, focus
+ * and the security feed treat them uniformly.
+ *
+ * Two flavours of X11 window are handled:
+ *   - managed windows      → tiled/floated in a workspace like xdg toplevels,
+ *                            with borders and focus/activation.
+ *   - override-redirect    → menus, tooltips, dropdowns; positioned at their
+ *                            own absolute coordinates in the overlay layer,
+ *                            never tiled, focused only if they ask for it.
+ *
+ * SynapseOS Project — GPLv2
+ * https://github.com/velle999/SYNAPSE
+ */
+
+#define _GNU_SOURCE
+#include <stdlib.h>
+#include <unistd.h>
+
+#include <wlr/types/wlr_xcursor_manager.h>
+
+#include "synui.h"
+
+/* BORDER_WIDTH lives in synui.h */
+
+/* ── View accessors (xdg / xwayland agnostic) ────────────── */
+struct wlr_surface *view_surface(syn_view_t *v)
+{
+    if (!v) return NULL;
+    if (v->is_xwayland)
+        return v->xsurface ? v->xsurface->surface : NULL;
+    return v->xdg_surface ? v->xdg_surface->surface : NULL;
+}
+
+const char *view_app_id(syn_view_t *v)
+{
+    if (v->is_xwayland) return v->xsurface->class;
+    return v->xdg_surface->toplevel->app_id;
+}
+
+const char *view_title(syn_view_t *v)
+{
+    if (v->is_xwayland) return v->xsurface->title;
+    return v->xdg_surface->toplevel->title;
+}
+
+pid_t view_pid(syn_view_t *v)
+{
+    if (v->is_xwayland) return v->xsurface->pid;
+    struct wlr_surface *surf = view_surface(v);
+    if (!surf) return 0;
+    pid_t pid = 0;
+    wl_client_get_credentials(wl_resource_get_client(surf->resource),
+                              &pid, NULL, NULL);
+    return pid;
+}
+
+void view_close(syn_view_t *v)
+{
+    if (v->is_xwayland) wlr_xwayland_surface_close(v->xsurface);
+    else                wlr_xdg_toplevel_send_close(v->xdg_surface->toplevel);
+}
+
+void view_set_activated(syn_view_t *v, int activated)
+{
+    if (v->is_xwayland)
+        wlr_xwayland_surface_activate(v->xsurface, activated);
+    else
+        wlr_xdg_toplevel_set_activated(v->xdg_surface->toplevel, activated);
+}
+
+void view_set_maximized(syn_view_t *v, int maximized)
+{
+    if (v->is_xwayland)
+        wlr_xwayland_surface_set_maximized(v->xsurface, maximized, maximized);
+    else
+        wlr_xdg_toplevel_set_maximized(v->xdg_surface->toplevel, maximized);
+}
+
+void view_set_fullscreen(syn_view_t *v, int fullscreen)
+{
+    if (v->is_xwayland)
+        wlr_xwayland_surface_set_fullscreen(v->xsurface, fullscreen);
+    else
+        wlr_xdg_toplevel_set_fullscreen(v->xdg_surface->toplevel, fullscreen);
+}
+
+/* ── Managed-window mapping ──────────────────────────────── */
+static void xw_map(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, map);
+    struct wlr_xwayland_surface *xs = view->xsurface;
+    syn_server_t *s = view->server;
+
+    view->override_redirect = xs->override_redirect;
+    view->mapped = 1;
+    wlr_log(WLR_INFO, "synui: X11 window mapped: '%s' (%s)",
+            xs->title ? xs->title : "?",
+            view->override_redirect ? "override-redirect" : "managed");
+
+    if (view->override_redirect) {
+        /* Unmanaged surface (menu/tooltip): overlay layer, absolute position. */
+        view->scene_tree = wlr_scene_subsurface_tree_create(
+            s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY], xs->surface);
+        view->x = xs->x; view->y = xs->y;
+        view->w = xs->width; view->h = xs->height;
+        wlr_scene_node_set_position(&view->scene_tree->node, xs->x, xs->y);
+        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+
+        /* Some OR windows (rofi/dmenu) grab the keyboard themselves. */
+        if (wlr_xwayland_surface_override_redirect_wants_focus(xs)) {
+            struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
+            if (kb)
+                wlr_seat_keyboard_notify_enter(s->seat, xs->surface,
+                    kb->keycodes, kb->num_keycodes, &kb->modifiers);
+        }
+        return;
+    }
+
+    /* Managed toplevel: join the active workspace and tile/float it. */
+    view->scene_tree = wlr_scene_subsurface_tree_create(s->window_tree, xs->surface);
+    view->scene_tree->node.data = view;   /* so view_at() finds it */
+
+    view->workspace = &s->workspaces[s->active_workspace];
+    if (xs->modal || xs->parent)
+        view->floating = 1;
+    wl_list_insert(&view->workspace->windows, &view->link);
+
+    layout_apply(s, view->workspace);
+    if (view->floating) {
+        layout_float_place(s, view);
+        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+    }
+    focus_view(s, view, xs->surface);
+    synui_welcome_hide(s);
+}
+
+static void xw_unmap(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, unmap);
+    syn_server_t *s = view->server;
+
+    view->mapped = 0;
+    if (s->focused_view == view) s->focused_view = NULL;
+    if (s->grabbed_view == view) {
+        s->grabbed_view = NULL;
+        s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+    }
+
+    /* Drop borders */
+    if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
+    if (view->border_bottom) { wlr_scene_node_destroy(&view->border_bottom->node); view->border_bottom = NULL; }
+    if (view->border_left)   { wlr_scene_node_destroy(&view->border_left->node);   view->border_left   = NULL; }
+    if (view->border_right)  { wlr_scene_node_destroy(&view->border_right->node);  view->border_right  = NULL; }
+
+    if (!view->override_redirect) {
+        wl_list_remove(&view->link);
+        wl_list_init(&view->link);
+    }
+    if (view->scene_tree) {
+        wlr_scene_node_destroy(&view->scene_tree->node);
+        view->scene_tree = NULL;
+    }
+    if (!view->override_redirect && !s->shutting_down)
+        layout_apply(s, &s->workspaces[s->active_workspace]);
+}
+
+static void xw_associate(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, associate);
+    view->map.notify = xw_map;
+    wl_signal_add(&view->xsurface->surface->events.map, &view->map);
+    view->unmap.notify = xw_unmap;
+    wl_signal_add(&view->xsurface->surface->events.unmap, &view->unmap);
+}
+
+static void xw_dissociate(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, dissociate);
+    wl_list_remove(&view->map.link);
+    wl_list_remove(&view->unmap.link);
+}
+
+static void xw_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, destroy);
+    syn_server_t *s = view->server;
+
+    if (s->focused_view == view) s->focused_view = NULL;
+    if (s->grabbed_view == view) {
+        s->grabbed_view = NULL;
+        s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+    }
+
+    wl_list_remove(&view->associate.link);
+    wl_list_remove(&view->dissociate.link);
+    wl_list_remove(&view->destroy.link);
+    wl_list_remove(&view->request_configure.link);
+    wl_list_remove(&view->request_maximize.link);
+    wl_list_remove(&view->request_fullscreen.link);
+    wl_list_remove(&view->request_activate.link);
+    free(view);
+}
+
+static void xw_request_configure(struct wl_listener *listener, void *data)
+{
+    syn_view_t *view = wl_container_of(listener, view, request_configure);
+    struct wlr_xwayland_surface_configure_event *ev = data;
+    struct wlr_xwayland_surface *xs = view->xsurface;
+
+    /* Honour the client's geometry before it is mapped, and for floating /
+     * override-redirect windows; for tiled windows we own the geometry and
+     * simply re-assert it so the client gets its configure-notify. */
+    if (!view->mapped || view->override_redirect || view->floating) {
+        wlr_xwayland_surface_configure(xs, ev->x, ev->y, ev->width, ev->height);
+        if (view->mapped && view->scene_tree) {
+            view->x = ev->x; view->y = ev->y;
+            view->w = ev->width; view->h = ev->height;
+            wlr_scene_node_set_position(&view->scene_tree->node, ev->x, ev->y);
+        }
+    } else {
+        wlr_xwayland_surface_configure(xs, view->x, view->y,
+            view->w - 2 * BORDER_WIDTH, view->h - 2 * BORDER_WIDTH);
+    }
+}
+
+static void xw_request_maximize(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, request_maximize);
+    struct wlr_xwayland_surface *xs = view->xsurface;
+    /* Ack the request; tiling still governs the actual size. */
+    wlr_xwayland_surface_set_maximized(xs, xs->maximized_horz, xs->maximized_vert);
+}
+
+static void xw_request_fullscreen(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, request_fullscreen);
+    struct wlr_xwayland_surface *xs = view->xsurface;
+    view->fullscreen = xs->fullscreen;
+    wlr_xwayland_surface_set_fullscreen(xs, xs->fullscreen);
+
+    if (!view->mapped) return;
+    syn_server_t *s = view->server;
+    if (view->fullscreen) {
+        struct wlr_box area;
+        server_output_box(s, &area);
+        wlr_xwayland_surface_configure(xs, area.x, area.y, area.width, area.height);
+        wlr_scene_node_set_position(&view->scene_tree->node, area.x, area.y);
+        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+    } else {
+        layout_apply(s, &s->workspaces[s->active_workspace]);
+    }
+}
+
+static void xw_request_activate(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, request_activate);
+    if (view->mapped && !view->override_redirect)
+        focus_view(view->server, view, view->xsurface->surface);
+}
+
+static void server_new_xwayland_surface(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, new_xwayland_surface);
+    struct wlr_xwayland_surface *xs = data;
+
+    syn_view_t *view = calloc(1, sizeof(*view));
+    view->server = s;
+    view->is_xwayland = 1;
+    view->xsurface = xs;
+    view->override_redirect = xs->override_redirect;
+    xs->data = view;
+    wl_list_init(&view->link);
+
+    view->associate.notify = xw_associate;
+    wl_signal_add(&xs->events.associate, &view->associate);
+    view->dissociate.notify = xw_dissociate;
+    wl_signal_add(&xs->events.dissociate, &view->dissociate);
+    view->destroy.notify = xw_destroy;
+    wl_signal_add(&xs->events.destroy, &view->destroy);
+    view->request_configure.notify = xw_request_configure;
+    wl_signal_add(&xs->events.request_configure, &view->request_configure);
+    view->request_maximize.notify = xw_request_maximize;
+    wl_signal_add(&xs->events.request_maximize, &view->request_maximize);
+    view->request_fullscreen.notify = xw_request_fullscreen;
+    wl_signal_add(&xs->events.request_fullscreen, &view->request_fullscreen);
+    view->request_activate.notify = xw_request_activate;
+    wl_signal_add(&xs->events.request_activate, &view->request_activate);
+}
+
+/* ── Server ready: publish DISPLAY, set the X cursor ─────── */
+static void xwayland_ready(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_server_t *s = wl_container_of(listener, s, xwayland_ready);
+    setenv("DISPLAY", s->xwayland->display_name, 1);
+    wlr_log(WLR_INFO, "synui: Xwayland ready on DISPLAY=%s",
+            s->xwayland->display_name);
+
+    struct wlr_xcursor *xc =
+        wlr_xcursor_manager_get_xcursor(s->cursor_mgr, "default", 1);
+    if (xc && xc->image_count > 0) {
+        struct wlr_xcursor_image *img = xc->images[0];
+        wlr_xwayland_set_cursor(s->xwayland, img->buffer, img->width * 4,
+                                img->width, img->height,
+                                img->hotspot_x, img->hotspot_y);
+    }
+}
+
+/* ── Public entry point ──────────────────────────────────── */
+void xwayland_setup(syn_server_t *s)
+{
+    s->xwayland = wlr_xwayland_create(s->display, s->compositor, true /*lazy*/);
+    if (!s->xwayland) {
+        wlr_log(WLR_ERROR, "synui: failed to start Xwayland — X11 apps disabled");
+        return;
+    }
+
+    s->new_xwayland_surface.notify = server_new_xwayland_surface;
+    wl_signal_add(&s->xwayland->events.new_surface, &s->new_xwayland_surface);
+    s->xwayland_ready.notify = xwayland_ready;
+    wl_signal_add(&s->xwayland->events.ready, &s->xwayland_ready);
+
+    wlr_xwayland_set_seat(s->xwayland, s->seat);
+
+    /* display_name is assigned at create even in lazy mode. */
+    if (s->xwayland->display_name) {
+        setenv("DISPLAY", s->xwayland->display_name, 1);
+        wlr_log(WLR_INFO, "synui: Xwayland X11 DISPLAY=%s (lazy start)",
+                s->xwayland->display_name);
+    }
+}

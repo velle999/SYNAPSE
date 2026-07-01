@@ -52,9 +52,13 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
     /* Raise to top of scene */
     wlr_scene_node_raise_to_top(&view->scene_tree->node);
 
-    /* Update border colors */
-    if (prev && prev != view)
+    /* Toggle activated state (X11 clients need this to accept input) and
+     * refresh border colours. */
+    if (prev && prev != view) {
+        view_set_activated(prev, 0);
         view_update_borders(prev);
+    }
+    view_set_activated(view, 1);
     view_update_borders(view);
 
     /* Notify seat */
@@ -111,6 +115,9 @@ void view_set_security(syn_view_t *view, win_security_t state)
 void view_update_borders(syn_view_t *view)
 {
     if (!view->mapped) return;
+    /* No sane geometry yet (e.g. focused at map before the first layout) — the
+     * borders will be (re)created once the window is sized. */
+    if (view->w <= 0 || view->h <= 0) return;
 
     /* Pick border color */
     float color[4];
@@ -132,6 +139,8 @@ void view_update_borders(syn_view_t *view)
 
     int x = view->x, y = view->y, w = view->w, h = view->h;
     int bw = BORDER_WIDTH;
+    int side_h = h - 2 * bw;      /* side borders sit between top/bottom */
+    if (side_h < 0) side_h = 0;   /* scene rects must be non-negative */
 
     /* Create borders as scene rects if they don't exist yet */
     #define MAKE_BORDER(field, bx, by, bw2, bh) do { \
@@ -145,8 +154,8 @@ void view_update_borders(syn_view_t *view)
 
     MAKE_BORDER(border_top,    x,        y,        w,  bw);
     MAKE_BORDER(border_bottom, x,        y+h-bw,   w,  bw);
-    MAKE_BORDER(border_left,   x,        y+bw,     bw, h-2*bw);
-    MAKE_BORDER(border_right,  x+w-bw,   y+bw,     bw, h-2*bw);
+    MAKE_BORDER(border_left,   x,        y+bw,     bw, side_h);
+    MAKE_BORDER(border_right,  x+w-bw,   y+bw,     bw, side_h);
 
     #undef MAKE_BORDER
 }
@@ -178,7 +187,7 @@ static void focus_next(syn_server_t *s, int dir)
     if (target == &ws->windows) return;
     syn_view_t *next = wl_container_of(target, next, link);
     if (next->mapped)
-        focus_view(s, next, next->xdg_surface->surface);
+        focus_view(s, next, view_surface(next));
 }
 
 static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
@@ -201,7 +210,7 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
     /* Super+Q — close focused window */
     if (!shift && lower == XKB_KEY_q) {
         if (s->focused_view)
-            wlr_xdg_toplevel_send_close(s->focused_view->xdg_surface->toplevel);
+            view_close(s->focused_view);
         return true;
     }
 
@@ -279,9 +288,7 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
     /* Super+M — maximize */
     if (lower == XKB_KEY_m && s->focused_view) {
         s->focused_view->maximized = !s->focused_view->maximized;
-        wlr_xdg_toplevel_set_maximized(
-            s->focused_view->xdg_surface->toplevel,
-            s->focused_view->maximized);
+        view_set_maximized(s->focused_view, s->focused_view->maximized);
         return true;
     }
 
@@ -413,7 +420,7 @@ static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
         layout_apply(s, view->workspace);   /* reflow remaining tiled windows */
     }
     wlr_scene_node_raise_to_top(&view->scene_tree->node);
-    focus_view(s, view, view->xdg_surface->surface);
+    focus_view(s, view, view_surface(view));
 
     s->grabbed_view = view;
     s->cursor_mode  = mode;
@@ -462,11 +469,22 @@ static void process_cursor_resize(syn_server_t *s)
     /* Honour the client's min/max size, with a hard floor so a window can
      * never collapse to nothing. Clamp against the edge being dragged so the
      * opposite edge stays anchored. */
-    struct wlr_xdg_toplevel *top_l = v->xdg_surface->toplevel;
-    int min_w = top_l->current.min_width  > 0 ? top_l->current.min_width  : 0;
-    int min_h = top_l->current.min_height > 0 ? top_l->current.min_height : 0;
-    int max_w = top_l->current.max_width  > 0 ? top_l->current.max_width  : 0;
-    int max_h = top_l->current.max_height > 0 ? top_l->current.max_height : 0;
+    int min_w = 0, min_h = 0, max_w = 0, max_h = 0;
+    if (v->is_xwayland) {
+        xcb_size_hints_t *sh = v->xsurface->size_hints;
+        if (sh) {
+            min_w = sh->min_width;  min_h = sh->min_height;
+            max_w = sh->max_width;  max_h = sh->max_height;
+        }
+    } else {
+        struct wlr_xdg_toplevel *top_l = v->xdg_surface->toplevel;
+        min_w = top_l->current.min_width;   min_h = top_l->current.min_height;
+        max_w = top_l->current.max_width;   max_h = top_l->current.max_height;
+    }
+    if (min_w < 0) min_w = 0;
+    if (min_h < 0) min_h = 0;
+    if (max_w < 0) max_w = 0;
+    if (max_h < 0) max_h = 0;
     if (min_w < 2 * BORDER_WIDTH + 20) min_w = 2 * BORDER_WIDTH + 20;
     if (min_h < 2 * BORDER_WIDTH + 20) min_h = 2 * BORDER_WIDTH + 20;
 
