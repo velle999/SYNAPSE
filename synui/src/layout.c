@@ -36,10 +36,11 @@
 
 /* ── Get output geometry for a workspace ─────────────────── */
 /* Lay out on the output the user is currently working on (cursor / focus),
- * not a hardcoded first output, so tiling follows the active monitor. */
+ * minus any layer-shell exclusive zones, so tiling follows the active monitor
+ * and doesn't cover panels/bars. */
 static void get_output_geom(syn_server_t *s, struct wlr_box *out)
 {
-    server_output_box(s, out);
+    server_usable_box(s, out);
 }
 
 /* ── Count mapped windows in workspace ───────────────────── */

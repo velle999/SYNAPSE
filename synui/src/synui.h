@@ -26,6 +26,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
@@ -186,12 +187,30 @@ struct syn_view {
     struct wl_listener request_fullscreen;
 };
 
+/* ── Layer-shell surface (panels, bars, wallpaper, launchers) ── */
+typedef struct syn_layer_surface {
+    struct wl_list                     link;    /* in syn_output::layer_surfaces */
+    syn_server_t                      *server;
+    syn_output_t                      *output;
+    struct wlr_layer_surface_v1       *layer_surface;
+    struct wlr_scene_layer_surface_v1 *scene;   /* wlroots geometry helper */
+    enum zwlr_layer_shell_v1_layer     layer;   /* cached; may change on commit */
+
+    struct wl_listener map;
+    struct wl_listener unmap;
+    struct wl_listener destroy;
+    struct wl_listener commit;
+} syn_layer_surface_t;
+
 /* ── Output ──────────────────────────────────────────────── */
 struct syn_output {
     struct wl_list           link;
     syn_server_t            *server;
     struct wlr_output       *wlr_output;
     struct wlr_scene_output *scene_output;
+
+    struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
+    struct wlr_box           usable_area;     /* full box minus exclusive zones */
 
     struct wl_listener frame;
     struct wl_listener request_state;
@@ -223,6 +242,11 @@ struct syn_server {
     struct wlr_xdg_shell      *xdg_shell;
     struct wlr_layer_shell_v1  *layer_shell;
     struct wlr_seat            *seat;
+
+    /* Scene-graph z-order (bottom→top): bg_rect, layer[BACKGROUND],
+     * layer[BOTTOM], window_tree, layer[TOP], layer[OVERLAY], then UI. */
+    struct wlr_scene_tree     *window_tree;    /* xdg toplevels + borders */
+    struct wlr_scene_tree     *layer_tree[4];  /* zwlr_layer_shell_v1_layer */
     struct wlr_cursor          *cursor;
     struct wlr_xcursor_manager *cursor_mgr;
     struct wlr_output_layout   *output_layout;
@@ -301,6 +325,7 @@ struct syn_server {
     struct wl_listener new_output;
     struct wl_listener new_xdg_toplevel;
     struct wl_listener new_xdg_popup;
+    struct wl_listener new_layer_surface;
     struct wl_listener new_input;
     struct wl_listener cursor_motion;
     struct wl_listener cursor_motion_absolute;
@@ -320,6 +345,13 @@ void synui_destroy(syn_server_t *s);
 syn_output_t *server_focused_output(syn_server_t *s);
 /* Layout-space box of the focused output (falls back to 1920x1080 @ 0,0). */
 void server_output_box(syn_server_t *s, struct wlr_box *box);
+/* Like server_output_box but minus layer-shell exclusive zones (for tiling). */
+void server_usable_box(syn_server_t *s, struct wlr_box *box);
+
+/* ── layer.c ─────────────────────────────────────────────── */
+void layer_shell_init(syn_server_t *s);            /* create global + wire signal */
+void layer_arrange_output(syn_output_t *output);   /* place layers, update usable */
+void layer_output_destroy(syn_output_t *output);   /* close surfaces on a dead output */
 
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);
@@ -327,6 +359,8 @@ void focus_view(syn_server_t *s, syn_view_t *view,
                 struct wlr_surface *surface);
 syn_view_t *view_at(syn_server_t *s, double lx, double ly,
                     struct wlr_surface **surface, double *sx, double *sy);
+struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
+                               syn_view_t **view_out, double *sx, double *sy);
 void view_set_security(syn_view_t *view, win_security_t state);
 void view_update_borders(syn_view_t *view);
 

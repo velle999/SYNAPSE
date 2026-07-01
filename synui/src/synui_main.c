@@ -37,6 +37,7 @@
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_xdg_output_v1.h>
 
 #include "synui.h"
 
@@ -81,6 +82,16 @@ void server_output_box(syn_server_t *s, struct wlr_box *box)
         if (box->width > 0 && box->height > 0) return;
     }
     *box = (struct wlr_box){ 0, 0, 1920, 1080 };
+}
+
+void server_usable_box(syn_server_t *s, struct wlr_box *box)
+{
+    syn_output_t *o = server_focused_output(s);
+    if (o && o->usable_area.width > 0 && o->usable_area.height > 0) {
+        *box = o->usable_area;
+        return;
+    }
+    server_output_box(s, box);
 }
 
 /* ── Output events ───────────────────────────────────────── */
@@ -140,6 +151,8 @@ static void output_destroy(struct wl_listener *listener, void *data)
 {
     syn_output_t *output = wl_container_of(listener, output, destroy);
     syn_server_t *server = output->server;
+    /* Close any layer surfaces (panels/bars) anchored to this output. */
+    layer_output_destroy(output);
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
@@ -185,6 +198,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
     output->wlr_output = wlr_output;
     output->server = server;
     wlr_output->data = output;
+    wl_list_init(&output->layer_surfaces);
 
     output->frame.notify = output_frame;
     wl_signal_add(&wlr_output->events.frame, &output->frame);
@@ -207,7 +221,9 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wlr_log(WLR_INFO, "synui: new output %s %dx%d",
             wlr_output->name, wlr_output->width, wlr_output->height);
 
-    /* Re-apply layout and re-home all UI for the newly-available geometry. */
+    /* Seed the usable area (full box; no layer surfaces yet), then re-apply
+     * layout and re-home all UI for the newly-available geometry. */
+    layer_arrange_output(output);
     layout_apply(server, &server->workspaces[server->active_workspace]);
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
@@ -295,10 +311,27 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
 {
     (void)listener;
     struct wlr_xdg_popup *popup = data;
-    struct wlr_xdg_surface *parent =
+
+    /* Resolve the scene tree of the popup's parent. The parent may be another
+     * xdg surface (toplevel/popup) or a layer-shell surface (e.g. a wofi menu);
+     * both stash their scene tree so the popup nests in the right place. */
+    struct wlr_scene_tree *parent_tree = NULL;
+    struct wlr_xdg_surface *xdg_parent =
         wlr_xdg_surface_try_from_wlr_surface(popup->parent);
-    assert(parent);
-    struct wlr_scene_tree *parent_tree = parent->data;
+    if (xdg_parent) {
+        parent_tree = xdg_parent->data;
+    } else {
+        struct wlr_layer_surface_v1 *layer_parent =
+            wlr_layer_surface_v1_try_from_wlr_surface(popup->parent);
+        if (layer_parent && layer_parent->data) {
+            syn_layer_surface_t *ls = layer_parent->data;
+            if (ls->scene) parent_tree = ls->scene->tree;
+        }
+    }
+    if (!parent_tree) {
+        wlr_log(WLR_ERROR, "synui: xdg popup with no resolvable parent tree");
+        return;
+    }
     popup->base->data =
         wlr_scene_xdg_surface_create(parent_tree, popup->base);
 }
@@ -311,7 +344,7 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
 
     syn_view_t *view = calloc(1, sizeof(*view));
     view->xdg_surface = xdg_surface;
-    view->scene_tree = wlr_scene_xdg_surface_create(&server->scene->tree, xdg_surface);
+    view->scene_tree = wlr_scene_xdg_surface_create(server->window_tree, xdg_surface);
     view->scene_tree->node.data = view;
     xdg_surface->data = view->scene_tree;
 
@@ -464,13 +497,28 @@ int synui_init(syn_server_t *s)
     wlr_scene_node_set_position(&s->bg_rect->node, -4096, -4096);
     wlr_scene_node_lower_to_bottom(&s->bg_rect->node);
 
+    /* Scene z-order layers, created bottom→top so insertion order is the stack:
+     * layer[BACKGROUND] < layer[BOTTOM] < window_tree < layer[TOP] <
+     * layer[OVERLAY]. The compositor UI trees (render.c) are created later and
+     * therefore sit above all of these. */
+    s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND] =
+        wlr_scene_tree_create(&s->scene->tree);
+    s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM] =
+        wlr_scene_tree_create(&s->scene->tree);
+    s->window_tree = wlr_scene_tree_create(&s->scene->tree);
+    s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_TOP] =
+        wlr_scene_tree_create(&s->scene->tree);
+    s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY] =
+        wlr_scene_tree_create(&s->scene->tree);
+
     /* XDG shell */
     s->xdg_shell = wlr_xdg_shell_create(s->display, 3);
 
-    /* Layer shell: deferred. wlr-layer-shell is an out-of-tree protocol
-     * whose generated code wlroots does not export; wiring it up means
-     * vendoring the XML and handling layer surfaces. Re-add when the
-     * compositor actually places panels/overlays via layer surfaces. */
+    /* Layer shell — panels, bars, wallpaper, launchers (waybar/swaybg/wofi). */
+    layer_shell_init(s);
+
+    /* xdg-output — bars/panels (waybar) need it to enumerate output geometry. */
+    wlr_xdg_output_manager_v1_create(s->display, s->output_layout);
 
     /* Seat */
     s->seat = wlr_seat_create(s->display, "seat0");
@@ -582,6 +630,7 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->new_input.link);
     wl_list_remove(&s->new_xdg_toplevel.link);
     wl_list_remove(&s->new_xdg_popup.link);
+    wl_list_remove(&s->new_layer_surface.link);
     wl_list_remove(&s->cursor_motion.link);
     wl_list_remove(&s->cursor_motion_absolute.link);
     wl_list_remove(&s->cursor_button.link);

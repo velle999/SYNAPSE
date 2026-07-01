@@ -4,7 +4,7 @@
 the gap between its current state and the roadmap goal, *"full Wayland
 compositor with AI-aware window management."*
 
-## Current state (real `src/`, ~3,300 LOC)
+## Current state (real `src/`, ~3,700 LOC)
 
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
@@ -14,6 +14,8 @@ Working:
 - Cairo-rendered UI: welcome screen, AI command bar, neural overlay
 - AI thread IPC to synapd (hardened: framed `write_all` + reassembling poll)
 - Security-border colour states (rendering only)
+- Interactive move/resize; per-workspace master factor; multi-output aware
+- layer-shell (panels/bars/wallpaper/launchers) + xdg-output
 
 Partial / broken:
 - **AI layout**: request path exists but `layout_apply_ai_response()` was never
@@ -39,9 +41,9 @@ Partial / broken:
   Super+H/L (master factor) / Super+Shift+J/K (move in stack) binds. (Done in
   Phase B.)
 
-Missing: layer-shell (panels/bars/wallpaper/lock), XWayland, xdg-decoration,
-output-management, fractional-scale, session-lock, idle, foreign-toplevel,
-screencopy, pointer-constraints, touch/tablet, libinput config.
+Missing: XWayland, xdg-decoration, output-management, fractional-scale,
+session-lock, idle, foreign-toplevel, screencopy, pointer-constraints,
+touch/tablet, libinput config.
 
 ## Phases (ordered by value ÷ effort)
 
@@ -98,9 +100,26 @@ action, so windows don't auto-migrate the instant the cursor crosses monitors;
 and monitor 2 mirrors the active workspace rather than showing its own until
 per-output workspaces land.
 
-### Phase D — Desktop shell surfaces: layer-shell
-Create `wlr_layer_shell_v1`; handle the four layers + exclusive zones. Unlocks
-waybar / swaybg / mako / wofi.
+### Phase D — Desktop shell surfaces: layer-shell  *(done)*
+- [x] Vendored `protocols/wlr-layer-shell-unstable-v1.xml` (wlroots doesn't
+      export the generated code) and wired wayland-scanner in `meson.build`.
+- [x] `layer.c`: create `wlr_layer_shell_v1`; per-surface map/unmap/commit/
+      destroy; assign an output when the client leaves it NULL; set_layer
+      reparents between layer trees.
+- [x] Scene z-order reworked into ordered trees: bg_rect < layer[BACKGROUND] <
+      layer[BOTTOM] < window_tree < layer[TOP] < layer[OVERLAY] < compositor UI.
+      Toplevels now parent to `window_tree`.
+- [x] `layer_arrange_output()`: two-pass (exclusive then non-exclusive, top
+      layers first) using `wlr_scene_layer_surface_v1_configure`; the leftover
+      usable area feeds the tiling layout (`server_usable_box`).
+- [x] Pointer reaches layer surfaces (`surface_at` refactor); keyboard focus for
+      interactive surfaces (launchers), restored to a toplevel on unmap.
+- [x] Layer-surface xdg popups routed through the shared popup handler; output
+      destroy closes its layer surfaces.
+- [x] Added `xdg-output-manager` (waybar and other bars require it).
+- [x] Verified against real clients headless: **waybar** reserves a 30px top
+      exclusive zone (usable area 1280x720 → 1280x690+0+30, tiling follows) and
+      **wofi** maps as a keyboard-interactive launcher; both without crashing.
 
 ### Phase E — App compatibility: XWayland + decorations
 X11 app support (separate surface type, override-redirect, focus) and

@@ -67,9 +67,14 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
         wlr_seat_keyboard_notify_enter(s->seat, surface, NULL, 0, NULL);
 }
 
-syn_view_t *view_at(syn_server_t *s, double lx, double ly,
-                    struct wlr_surface **surface, double *sx, double *sy)
+/* Topmost surface (of any role) under the given layout coordinates. Also
+ * returns the owning toplevel view if the surface belongs to one (NULL for
+ * layer surfaces, popups, and the compositor's own UI). */
+struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
+                               syn_view_t **view_out, double *sx, double *sy)
 {
+    if (view_out) *view_out = NULL;
+
     struct wlr_scene_node *node =
         wlr_scene_node_at(&s->scene->tree.node, lx, ly, sx, sy);
     if (!node || node->type != WLR_SCENE_NODE_BUFFER) return NULL;
@@ -78,13 +83,22 @@ syn_view_t *view_at(syn_server_t *s, double lx, double ly,
     struct wlr_scene_surface *scene_surf = wlr_scene_surface_try_from_buffer(buf);
     if (!scene_surf) return NULL;
 
-    *surface = scene_surf->surface;
+    if (view_out) {
+        struct wlr_scene_tree *tree = node->parent;
+        while (tree && !tree->node.data)
+            tree = tree->node.parent;
+        if (tree) *view_out = tree->node.data;
+    }
+    return scene_surf->surface;
+}
 
-    struct wlr_scene_tree *tree = node->parent;
-    while (tree && !tree->node.data)
-        tree = tree->node.parent;
-
-    return tree ? tree->node.data : NULL;
+syn_view_t *view_at(syn_server_t *s, double lx, double ly,
+                    struct wlr_surface **surface, double *sx, double *sy)
+{
+    syn_view_t *view = NULL;
+    struct wlr_surface *surf = surface_at(s, lx, ly, &view, sx, sy);
+    if (surf && surface) *surface = surf;
+    return surf ? view : NULL;
 }
 
 /* ── View borders ────────────────────────────────────────── */
@@ -488,11 +502,11 @@ static void server_cursor_motion(struct wl_listener *listener, void *data)
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
-    /* Pass to focused surface */
+    /* Pass to the surface under the cursor (toplevel, layer surface, or popup) */
     double sx, sy;
-    struct wlr_surface *surface = NULL;
-    syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
-    if (view) {
+    struct wlr_surface *surface =
+        surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);
+    if (surface) {
         wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
         wlr_seat_pointer_notify_motion(s->seat, event->time_msec, sx, sy);
     } else {
@@ -514,9 +528,9 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
     double sx, sy;
-    struct wlr_surface *surface = NULL;
-    syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
-    if (view) {
+    struct wlr_surface *surface =
+        surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);
+    if (surface) {
         wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
         wlr_seat_pointer_notify_motion(s->seat, event->time_msec, sx, sy);
     } else {
