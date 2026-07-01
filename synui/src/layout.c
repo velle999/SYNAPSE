@@ -35,19 +35,11 @@
 #define MIN_WIN        40      /* smallest interactive window size, px */
 
 /* ── Get output geometry for a workspace ─────────────────── */
+/* Lay out on the output the user is currently working on (cursor / focus),
+ * not a hardcoded first output, so tiling follows the active monitor. */
 static void get_output_geom(syn_server_t *s, struct wlr_box *out)
 {
-    /* Use the first connected output */
-    syn_output_t *output;
-    wl_list_for_each(output, &s->outputs, link) {
-        struct wlr_box box;
-        wlr_output_layout_get_box(s->output_layout,
-                                   output->wlr_output, &box);
-        *out = box;
-        return;
-    }
-    /* Fallback */
-    out->x = 0; out->y = 0; out->width = 1920; out->height = 1080;
+    server_output_box(s, out);
 }
 
 /* ── Count mapped windows in workspace ───────────────────── */
@@ -180,20 +172,24 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
         return;
     }
 
+    struct wlr_box area;
+    get_output_geom(s, &area);
+
     char prompt[2048];
     snprintf(prompt, sizeof(prompt),
         "[LAYOUT_REQUEST]\n"
         "workspace: %s\n"
         "intent: %s\n"
         "windows:\n%s\n"
-        "output: 1920x1080\n"
+        "output: %dx%d\n"
         "\n"
         "Suggest a tiling layout. For each window reply with one JSON object per line:\n"
         "{\"app\":\"APP_ID\",\"x\":FRAC,\"y\":FRAC,\"w\":FRAC,\"h\":FRAC}\n"
         "x,y,w,h are fractions 0.0-1.0 of output dimensions. No explanation.",
         ws->name,
         ws->intent[0] ? ws->intent : "general use",
-        win_list
+        win_list,
+        area.width, area.height
     );
 
     syn_ai_request_t req = {

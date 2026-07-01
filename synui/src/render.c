@@ -90,16 +90,11 @@ static struct wlr_buffer *create_cairo_buf(int w, int h, cairo_t **cr_out)
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
-static void get_output_size(syn_server_t *s, int *w, int *h)
+/* Layout-space box of the output the UI should appear on (the focused one),
+ * so panels centre on the active monitor rather than always output[0]. */
+static void get_output_box(syn_server_t *s, struct wlr_box *box)
 {
-    syn_output_t *output;
-    wl_list_for_each(output, &s->outputs, link) {
-        *w = output->wlr_output->width;
-        *h = output->wlr_output->height;
-        return;
-    }
-    *w = 1920;
-    *h = 1080;
+    server_output_box(s, box);
 }
 
 /*
@@ -132,11 +127,11 @@ static void cairo_begin(cairo_t *cr)
 
 void synui_render_welcome(syn_server_t *s)
 {
-    int ow, oh;
-    get_output_size(s, &ow, &oh);
+    struct wlr_box ob;
+    get_output_box(s, &ob);
 
     int pw = 460, ph = 340;
-    int px = (ow - pw) / 2, py = (oh - ph) / 2;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
 
@@ -179,8 +174,8 @@ void synui_render_welcome(syn_server_t *s)
         { "Super+Space",    "AI Command Bar" },
         { "Super+A",        "Neural Overlay" },
         { "Super+1-9",      "Workspaces"     },
-        { "Super+L",        "Cycle Layout"   },
-        { "Super+J/K",      "Focus Windows"  },
+        { "Super+Tab",      "Cycle Layout"   },
+        { "Super+H/L",      "Master Width"   },
         { "Super+Q",        "Close Window"   },
         { "Super+Shift+Q",  "Quit"           },
     };
@@ -224,11 +219,11 @@ void synui_welcome_hide(syn_server_t *s)
 
 void synui_render_cmdbar(syn_server_t *s)
 {
-    int ow, oh;
-    get_output_size(s, &ow, &oh);
+    struct wlr_box ob;
+    get_output_box(s, &ob);
 
     int bw = 620, bh = 56;
-    int bx = (ow - bw) / 2, by = oh - bh - 48;
+    int bx = ob.x + (ob.width - bw) / 2, by = ob.y + ob.height - bh - 48;
 
     wlr_scene_node_set_position(&s->cmdbar_ui.tree->node, bx, by);
 
@@ -299,12 +294,11 @@ void synui_render_cmdbar(syn_server_t *s)
 
 void synui_render_overlay(syn_server_t *s)
 {
-    int ow, oh;
-    get_output_size(s, &ow, &oh);
-    (void)oh;
+    struct wlr_box ob;
+    get_output_box(s, &ob);
 
     int pw = 340, ph = 200;
-    int px = ow - pw - 20, py = 20;
+    int px = ob.x + ob.width - pw - 20, py = ob.y + 20;
 
     wlr_scene_node_set_position(&s->overlay_ui.tree->node, px, py);
 

@@ -293,6 +293,10 @@ struct syn_server {
     pthread_t sec_thread;
     int       sec_disabled;
 
+    /* Set once teardown begins so output_destroy (fired by the backend during
+     * shutdown, after the scene graph is gone) skips its re-layout path. */
+    int       shutting_down;
+
     /* Listeners */
     struct wl_listener new_output;
     struct wl_listener new_xdg_toplevel;
@@ -311,6 +315,11 @@ struct syn_server {
 int  synui_init(syn_server_t *s);
 int  synui_run(syn_server_t *s);
 void synui_destroy(syn_server_t *s);
+/* The output the user is currently working on: the one under the cursor,
+ * else the one holding the focused window, else the first connected output. */
+syn_output_t *server_focused_output(syn_server_t *s);
+/* Layout-space box of the focused output (falls back to 1920x1080 @ 0,0). */
+void server_output_box(syn_server_t *s, struct wlr_box *box);
 
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);

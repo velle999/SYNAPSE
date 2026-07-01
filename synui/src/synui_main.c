@@ -40,6 +40,49 @@
 
 #include "synui.h"
 
+/* ── Signal handling ─────────────────────────────────────── */
+static int handle_terminate_signal(int sig, void *data)
+{
+    struct wl_display *display = data;
+    wlr_log(WLR_INFO, "synui: caught signal %d — terminating", sig);
+    wl_display_terminate(display);
+    return 0;
+}
+
+/* ── Active output resolution ────────────────────────────── */
+syn_output_t *server_focused_output(syn_server_t *s)
+{
+    /* 1. The output under the cursor. */
+    struct wlr_output *wo =
+        wlr_output_layout_output_at(s->output_layout, s->cursor->x, s->cursor->y);
+    if (wo && wo->data) return wo->data;
+
+    /* 2. The output holding the focused window (by its centre). */
+    if (s->focused_view && s->focused_view->mapped) {
+        double cx = s->focused_view->x + s->focused_view->w / 2.0;
+        double cy = s->focused_view->y + s->focused_view->h / 2.0;
+        wo = wlr_output_layout_output_at(s->output_layout, cx, cy);
+        if (wo && wo->data) return wo->data;
+    }
+
+    /* 3. The first connected output. */
+    if (!wl_list_empty(&s->outputs)) {
+        syn_output_t *o = wl_container_of(s->outputs.next, o, link);
+        return o;
+    }
+    return NULL;
+}
+
+void server_output_box(syn_server_t *s, struct wlr_box *box)
+{
+    syn_output_t *o = server_focused_output(s);
+    if (o) {
+        wlr_output_layout_get_box(s->output_layout, o->wlr_output, box);
+        if (box->width > 0 && box->height > 0) return;
+    }
+    *box = (struct wlr_box){ 0, 0, 1920, 1080 };
+}
+
 /* ── Output events ───────────────────────────────────────── */
 static void output_frame(struct wl_listener *listener, void *data)
 {
@@ -96,11 +139,29 @@ static void output_request_state(struct wl_listener *listener, void *data)
 static void output_destroy(struct wl_listener *listener, void *data)
 {
     syn_output_t *output = wl_container_of(listener, output, destroy);
+    syn_server_t *server = output->server;
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
     wl_list_remove(&output->link);
+    /* Clear the back-pointer before freeing: the dying wlr_output may still be
+     * momentarily reachable via the output layout, and server_focused_output()
+     * dereferences ->data — leave it NULL so that lookup skips this output. */
+    output->wlr_output->data = NULL;
     free(output);
+
+    /* Re-flow the active workspace and UI onto a surviving output so windows
+     * and panels don't vanish with the unplugged monitor. Skipped during
+     * shutdown, when the scene graph has already been torn down. */
+    if (!server->shutting_down && !wl_list_empty(&server->outputs)) {
+        layout_apply(server, &server->workspaces[server->active_workspace]);
+        if (server->welcome_ui.shown)
+            synui_render_welcome(server);
+        if (server->overlay.visible)
+            synui_render_overlay(server);
+        if (server->cmdbar.visible)
+            synui_render_cmdbar(server);
+    }
 }
 
 static void server_new_output(struct wl_listener *listener, void *data)
@@ -146,12 +207,14 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wlr_log(WLR_INFO, "synui: new output %s %dx%d",
             wlr_output->name, wlr_output->width, wlr_output->height);
 
-    /* Re-apply layout for current workspace */
+    /* Re-apply layout and re-home all UI for the newly-available geometry. */
     layout_apply(server, &server->workspaces[server->active_workspace]);
-
-    /* Reposition UI elements for actual output size */
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
+    if (server->overlay.visible)
+        synui_render_overlay(server);
+    if (server->cmdbar.visible)
+        synui_render_cmdbar(server);
 }
 
 /* ── XDG surface events ──────────────────────────────────── */
@@ -262,8 +325,12 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     view->unmap.notify = xdg_surface_unmap;
     wl_signal_add(&xdg_surface->surface->events.unmap, &view->unmap);
 
+    /* Listen on the toplevel's destroy, not the surface's: under wlroots 0.19
+     * the toplevel is torn down first and asserts its own signal listener
+     * lists are empty, so our request_maximize/fullscreen listeners must be
+     * removed before then. */
     view->destroy.notify = xdg_surface_destroy;
-    wl_signal_add(&xdg_surface->events.destroy, &view->destroy);
+    wl_signal_add(&xdg_surface->toplevel->events.destroy, &view->destroy);
 
     view->commit.notify = xdg_surface_commit;
     wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
@@ -345,6 +412,13 @@ int synui_init(syn_server_t *s)
         fprintf(stderr, "synui: wl_display_create() failed\n");
         return -1;
     }
+
+    /* Terminate cleanly on SIGINT/SIGTERM. Registered before the AI/security
+     * threads are spawned (in synui_run) so they inherit the blocked signal
+     * mask and only the event loop's signalfd handles them. */
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    wl_event_loop_add_signal(loop, SIGINT,  handle_terminate_signal, s->display);
+    wl_event_loop_add_signal(loop, SIGTERM, handle_terminate_signal, s->display);
 
     /* Create wlroots backend */
     s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display), NULL);
@@ -498,6 +572,24 @@ int synui_run(syn_server_t *s)
 
 void synui_destroy(syn_server_t *s)
 {
+    s->shutting_down = 1;
+
+    /* Detach the compositor's singleton listeners before destroying the
+     * objects they hang off — wlroots asserts empty listener lists on destroy
+     * (wlr_cursor_destroy, etc.). Per-output/-keyboard/-view listeners are
+     * removed by their own destroy handlers during the teardown below. */
+    wl_list_remove(&s->new_output.link);
+    wl_list_remove(&s->new_input.link);
+    wl_list_remove(&s->new_xdg_toplevel.link);
+    wl_list_remove(&s->new_xdg_popup.link);
+    wl_list_remove(&s->cursor_motion.link);
+    wl_list_remove(&s->cursor_motion_absolute.link);
+    wl_list_remove(&s->cursor_button.link);
+    wl_list_remove(&s->cursor_axis.link);
+    wl_list_remove(&s->cursor_frame.link);
+    wl_list_remove(&s->request_cursor.link);
+    wl_list_remove(&s->request_set_selection.link);
+
     wl_display_destroy_clients(s->display);
     wlr_scene_node_destroy(&s->scene->tree.node);
     wlr_xcursor_manager_destroy(s->cursor_mgr);
