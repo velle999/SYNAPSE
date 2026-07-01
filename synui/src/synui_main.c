@@ -39,6 +39,9 @@
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_idle_inhibit_v1.h>
 
 #include "synui.h"
 
@@ -176,6 +179,8 @@ static void output_destroy(struct wl_listener *listener, void *data)
         if (server->cmdbar.visible)
             synui_render_cmdbar(server);
     }
+    if (!server->shutting_down)
+        output_mgmt_update(server);
 }
 
 static void server_new_output(struct wl_listener *listener, void *data)
@@ -232,6 +237,8 @@ static void server_new_output(struct wl_listener *listener, void *data)
         synui_render_overlay(server);
     if (server->cmdbar.visible)
         synui_render_cmdbar(server);
+
+    output_mgmt_update(server);
 }
 
 /* ── XDG surface events ──────────────────────────────────── */
@@ -478,6 +485,39 @@ static void server_new_decoration(struct wl_listener *listener, void *data)
     }
 }
 
+/* ── Idle inhibit ────────────────────────────────────────── */
+/* Each inhibitor (e.g. a video player) suppresses idle-notify so swayidle-style
+ * clients don't blank/lock the screen while it's active. */
+struct syn_idle_inhibitor {
+    syn_server_t      *server;
+    struct wl_listener destroy;
+};
+
+static void idle_inhibitor_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct syn_idle_inhibitor *inh = wl_container_of(listener, inh, destroy);
+    syn_server_t *s = inh->server;
+    if (--s->idle_inhibitors < 0) s->idle_inhibitors = 0;
+    wlr_idle_notifier_v1_set_inhibited(s->idle_notifier, s->idle_inhibitors > 0);
+    wl_list_remove(&inh->destroy.link);
+    free(inh);
+}
+
+static void server_new_idle_inhibitor(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, new_idle_inhibitor);
+    struct wlr_idle_inhibitor_v1 *wlr_inh = data;
+
+    struct syn_idle_inhibitor *inh = calloc(1, sizeof(*inh));
+    inh->server = s;
+    inh->destroy.notify = idle_inhibitor_destroy;
+    wl_signal_add(&wlr_inh->events.destroy, &inh->destroy);
+
+    s->idle_inhibitors++;
+    wlr_idle_notifier_v1_set_inhibited(s->idle_notifier, true);
+}
+
 /* ── Server init ─────────────────────────────────────────── */
 int synui_init(syn_server_t *s)
 {
@@ -588,6 +628,21 @@ int synui_init(syn_server_t *s)
         wlr_xdg_decoration_manager_v1_create(s->display);
     s->new_decoration.notify = server_new_decoration;
     wl_signal_add(&deco_mgr->events.new_toplevel_decoration, &s->new_decoration);
+
+    /* fractional-scale — HiDPI clients negotiate sub-integer scale factors. */
+    wlr_fractional_scale_manager_v1_create(s->display, 1);
+
+    /* idle-notify (swayidle) + idle-inhibit (players suppress it). */
+    s->idle_notifier = wlr_idle_notifier_v1_create(s->display);
+    s->idle_inhibit  = wlr_idle_inhibit_v1_create(s->display);
+    s->new_idle_inhibitor.notify = server_new_idle_inhibitor;
+    wl_signal_add(&s->idle_inhibit->events.new_inhibitor, &s->new_idle_inhibitor);
+
+    /* output-management (wlr-randr/kanshi) + output-power (DPMS). */
+    output_mgmt_setup(s);
+
+    /* ext-session-lock (swaylock). */
+    session_lock_setup(s);
 
     /* Seat */
     s->seat = wlr_seat_create(s->display, "seat0");
@@ -703,6 +758,11 @@ void synui_destroy(syn_server_t *s)
         s->xwayland = NULL;
     }
     wl_list_remove(&s->new_decoration.link);
+    wl_list_remove(&s->new_idle_inhibitor.link);
+    wl_list_remove(&s->output_mgr_apply.link);
+    wl_list_remove(&s->output_mgr_test.link);
+    wl_list_remove(&s->output_power_set_mode.link);
+    wl_list_remove(&s->new_session_lock.link);
 
     /* Detach the compositor's singleton listeners before destroying the
      * objects they hang off — wlroots asserts empty listener lists on destroy

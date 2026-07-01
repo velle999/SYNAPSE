@@ -256,6 +256,17 @@ struct syn_server {
     struct wlr_xwayland        *xwayland;
     struct wlr_seat            *seat;
 
+    /* Phase F: output & session management. */
+    struct wlr_idle_notifier_v1        *idle_notifier;
+    struct wlr_idle_inhibit_manager_v1 *idle_inhibit;
+    struct wlr_output_manager_v1        *output_mgr;
+    struct wlr_output_power_manager_v1  *power_mgr;
+    struct wlr_session_lock_manager_v1  *lock_mgr;
+    struct wlr_session_lock_v1          *cur_lock;   /* active lock, if any */
+    struct wlr_scene_tree               *lock_tree;  /* lock surfaces, top-most */
+    int                                  locked;     /* session is locked */
+    int                                  idle_inhibitors;  /* active inhibitor count */
+
     /* Scene-graph z-order (bottom→top): bg_rect, layer[BACKGROUND],
      * layer[BOTTOM], window_tree, layer[TOP], layer[OVERLAY], then UI. */
     struct wlr_scene_tree     *window_tree;    /* xdg toplevels + borders */
@@ -342,6 +353,14 @@ struct syn_server {
     struct wl_listener new_xwayland_surface;
     struct wl_listener xwayland_ready;
     struct wl_listener new_decoration;
+    struct wl_listener new_idle_inhibitor;
+    struct wl_listener output_mgr_apply;
+    struct wl_listener output_mgr_test;
+    struct wl_listener output_power_set_mode;
+    struct wl_listener new_session_lock;
+    struct wl_listener lock_new_surface;
+    struct wl_listener lock_unlock;
+    struct wl_listener lock_destroy;
     struct wl_listener new_input;
     struct wl_listener cursor_motion;
     struct wl_listener cursor_motion_absolute;
@@ -381,6 +400,14 @@ void        view_set_fullscreen(syn_view_t *v, int fullscreen);
 
 /* ── xwayland.c ──────────────────────────────────────────── */
 void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable */
+
+/* ── output_mgmt.c ───────────────────────────────────────── */
+void output_mgmt_setup(syn_server_t *s);        /* output-management + DPMS */
+void output_mgmt_update(syn_server_t *s);        /* push current config to clients */
+
+/* ── session.c ───────────────────────────────────────────── */
+void session_lock_setup(syn_server_t *s);        /* ext-session-lock */
+void session_lock_arrange(syn_server_t *s);      /* re-place lock surfaces */
 
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);

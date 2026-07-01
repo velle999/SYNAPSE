@@ -4,7 +4,7 @@
 the gap between its current state and the roadmap goal, *"full Wayland
 compositor with AI-aware window management."*
 
-## Current state (real `src/`, ~4,100 LOC)
+## Current state (real `src/`, ~4,550 LOC)
 
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
@@ -17,6 +17,7 @@ Working:
 - Interactive move/resize; per-workspace master factor; multi-output aware
 - layer-shell (panels/bars/wallpaper/launchers) + xdg-output
 - XWayland (X11 apps, managed + override-redirect) + xdg-decoration (SSD)
+- output-management + DPMS, fractional-scale, idle-notify/inhibit, session-lock
 
 Partial / broken:
 - **AI layout**: request path exists but `layout_apply_ai_response()` was never
@@ -42,9 +43,8 @@ Partial / broken:
   Super+H/L (master factor) / Super+Shift+J/K (move in stack) binds. (Done in
   Phase B.)
 
-Missing: output-management, fractional-scale, session-lock, idle,
-foreign-toplevel, screencopy, pointer-constraints, touch/tablet,
-libinput config.
+Missing: foreign-toplevel, screencopy, gamma-control, pointer-constraints,
+touch/tablet, libinput config.
 
 ## Phases (ordered by value ÷ effort)
 
@@ -149,9 +149,26 @@ could not be exercised in this sandbox because Xwayland's own XKB keymap
 compilation fails here (host xkeyboard-config / nested-Xwayland limitation,
 external to synui); synui degrades gracefully when Xwayland can't start.
 
-### Phase F — Output & session management
-`wlr-output-management` (scale/mode/rotation), fractional-scale, DPMS,
-`ext-session-lock`, idle-notify / idle-inhibit.
+### Phase F — Output & session management  *(done)*
+- [x] fractional-scale (`wp_fractional_scale_v1`) — HiDPI sub-integer scaling.
+- [x] idle-notify (`ext_idle_notifier_v1`) fed from every input event, plus
+      idle-inhibit (`zwp_idle_inhibit`): each inhibitor suppresses idle-notify.
+- [x] output-management (`output_mgmt.c`): `wlr_output_manager_v1` with all-or-
+      nothing apply/test, position via the output layout, and `set_configuration`
+      broadcast on hotplug/apply (wlr-randr / kanshi / wdisplays).
+- [x] DPMS (`wlr_output_power_manager_v1`): set_mode toggles output enable.
+      Vendored `protocols/wlr-output-power-management-unstable-v1.xml` (its
+      wlroots header needs the generated enum).
+- [x] session-lock (`session.c`, `ext-session-lock`): black backstop above all
+      layers, per-output lock surfaces sized to their output, keyboard routed to
+      the lock surface, all compositor bindings disabled while locked, and the
+      session stays blanked if the lock client dies without unlocking.
+
+Verified headless: all six globals advertised; a purpose-built lock client
+drove new_lock → per-output lock surfaces → `locked` → unlock/destroy across two
+outputs, and a SIGKILL'd lock client left the session locked (secure) without
+crashing. output-management/DPMS apply couldn't be exercised (wlr-randr not
+installed) but the config-broadcast path is hit by any manager client.
 
 ### Phase G — Input completeness
 Pointer constraints + relative pointer (games), touch/tablet/gestures,

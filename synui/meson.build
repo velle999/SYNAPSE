@@ -46,6 +46,21 @@ layer_shell_c = custom_target('wlr-layer-shell-unstable-v1-protocol.c',
   input   : layer_shell_xml,
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# wlr-output-power-management: its wlroots header exposes the mode enum from the
+# generated protocol header, so we vendor + generate it too.
+output_power_xml = join_paths(meson.project_source_root(),
+  'protocols/wlr-output-power-management-unstable-v1.xml')
+
+output_power_h = custom_target('wlr-output-power-management-unstable-v1-protocol.h',
+  output  : 'wlr-output-power-management-unstable-v1-protocol.h',
+  input   : output_power_xml,
+  command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
+
+output_power_c = custom_target('wlr-output-power-management-unstable-v1-protocol.c',
+  output  : 'wlr-output-power-management-unstable-v1-protocol.c',
+  input   : output_power_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 executable('synui',
   sources : [
     'src/synui_main.c',
@@ -53,6 +68,8 @@ executable('synui',
     'src/layout.c',
     'src/layer.c',
     'src/xwayland.c',
+    'src/output_mgmt.c',
+    'src/session.c',
     'src/ai_interface.c',
     'src/secfeed.c',
     'src/config.c',
@@ -61,6 +78,8 @@ executable('synui',
     xdg_shell_c,
     layer_shell_h,
     layer_shell_c,
+    output_power_h,
+    output_power_c,
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,

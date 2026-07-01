@@ -34,8 +34,16 @@
 
 #include <linux/input-event-codes.h>
 #include <wlr/util/edges.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
 
 #include "synui.h"
+
+/* Report user activity to idle-notify clients (swayidle). */
+static inline void notify_activity(syn_server_t *s)
+{
+    if (s->idle_notifier)
+        wlr_idle_notifier_v1_notify_activity(s->idle_notifier, s->seat);
+}
 
 /* ── Focus ───────────────────────────────────────────────── */
 void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
@@ -337,6 +345,8 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     struct wlr_keyboard_key_event *event = data;
     struct wlr_keyboard *wlr_kb = kb->wlr_keyboard;
 
+    notify_activity(s);
+
     /* Translate keycode to keysym */
     uint32_t keycode = event->keycode + 8;
     const xkb_keysym_t *syms;
@@ -344,6 +354,15 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     uint32_t modifiers = wlr_keyboard_get_modifiers(wlr_kb);
 
     bool handled = false;
+
+    /* While the session is locked, compositor bindings are disabled and keys
+     * go straight to the lock surface (which holds keyboard focus). */
+    if (s->locked) {
+        wlr_seat_set_keyboard(s->seat, wlr_kb);
+        wlr_seat_keyboard_notify_key(s->seat, event->time_msec,
+                                      event->keycode, event->state);
+        return;
+    }
 
     /* Command bar absorbs all input when open */
     if (s->cmdbar.visible && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
@@ -512,6 +531,7 @@ static void server_cursor_motion(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_motion);
     struct wlr_pointer_motion_event *event = data;
+    notify_activity(s);
     wlr_cursor_move(s->cursor, &event->pointer->base,
                     event->delta_x, event->delta_y);
     s->cursor_x = s->cursor->x;
@@ -537,6 +557,7 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_motion_absolute);
     struct wlr_pointer_motion_absolute_event *event = data;
+    notify_activity(s);
     wlr_cursor_warp_absolute(s->cursor, &event->pointer->base,
                              event->x, event->y);
     s->cursor_x = s->cursor->x;
@@ -561,6 +582,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_button);
     struct wlr_pointer_button_event *event = data;
+    notify_activity(s);
 
     /* A release always ends an in-progress grab and is swallowed. */
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED &&
@@ -601,6 +623,7 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_axis);
     struct wlr_pointer_axis_event *event = data;
+    notify_activity(s);
     wlr_seat_pointer_notify_axis(s->seat, event->time_msec,
         event->orientation, event->delta, event->delta_discrete, event->source,
         event->relative_direction);
