@@ -59,6 +59,40 @@ static int handle_terminate_signal(int sig, void *data)
     return 0;
 }
 
+static int handle_reload_signal(int sig, void *data)
+{
+    (void)sig;
+    synui_config_reload(data);
+    return 0;
+}
+
+/* Reparse synuirc and apply everything that makes sense at runtime:
+ * keybindings (the bind table is read per keypress), keymap + repeat,
+ * libinput options, border_width/gap (re-tile + redraw borders), and the
+ * ai/terminal knobs (read at use). Autostart entries are start-only, and
+ * per-workspace master factors keep any interactively adjusted value. */
+void synui_config_reload(syn_server_t *s)
+{
+    syn_config_t fresh = {0};
+    synui_config_load(&fresh);
+    s->config = fresh;
+
+    input_reload_config(s);
+
+    /* Re-tile the visible workspace with the new gap/border, and refresh
+     * every mapped view's border rects (floating windows aren't touched by
+     * the layout pass). Hidden workspaces re-flow on switch. */
+    layout_apply(s, &s->workspaces[s->active_workspace]);
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link)
+            view_update_borders(v);
+    }
+
+    wlr_log(WLR_INFO, "synui: config reloaded (%d binds, gap %d, border %d)",
+            s->config.bind_count, s->config.gap, s->config.border_width);
+}
+
 /* ── Active output resolution ────────────────────────────── */
 syn_output_t *server_focused_output(syn_server_t *s)
 {
@@ -578,6 +612,8 @@ int synui_init(syn_server_t *s)
                                               handle_terminate_signal, s->display);
     s->sigterm_src = wl_event_loop_add_signal(loop, SIGTERM,
                                               handle_terminate_signal, s->display);
+    s->sighup_src  = wl_event_loop_add_signal(loop, SIGHUP,
+                                              handle_reload_signal, s);
 
     /* Create wlroots backend */
     s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display), NULL);
@@ -863,6 +899,7 @@ void synui_destroy(syn_server_t *s)
     wlr_backend_destroy(s->backend);
     if (s->sigint_src)  wl_event_source_remove(s->sigint_src);
     if (s->sigterm_src) wl_event_source_remove(s->sigterm_src);
+    if (s->sighup_src)  wl_event_source_remove(s->sighup_src);
     wl_display_destroy(s->display);
 }
 
@@ -915,7 +952,9 @@ static void usage(const char *prog) {
         "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc; $SYNUI_CONFIG\n"
         "overrides both) — keybinds, xkb_layout/variant/options,\n"
         "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
-        "terminal, autostart, gaps.\n",
+        "terminal, autostart, gap, border_width.\n"
+        "Send SIGHUP to reload the config at runtime (binds, keymap, libinput,\n"
+        "gap/border; autostart entries only run at startup).\n",
         prog
     );
 }

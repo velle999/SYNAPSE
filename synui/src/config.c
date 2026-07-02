@@ -146,8 +146,8 @@ void synui_config_load(syn_config_t *cfg)
     strncpy(cfg->terminal, "foot", sizeof(cfg->terminal) - 1);
     cfg->autostart_count = 1;
     strncpy(cfg->autostart[0], "foot", sizeof(cfg->autostart[0]) - 1);
-    cfg->border_width = 2;
-    cfg->gap = 8;
+    cfg->border_width = BORDER_WIDTH_DEFAULT;
+    cfg->gap = GAP_DEFAULT;
     cfg->master_factor = 0.60f;
     cfg->ai_layout = 1;
     cfg->ai_ctx_decor = 1;
@@ -208,10 +208,16 @@ void synui_config_load(syn_config_t *cfg)
             strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
         else if (strcmp(key, "autostart") == 0 && cfg->autostart_count < SYN_AUTOSTART_MAX)
             strncpy(cfg->autostart[cfg->autostart_count++], val, 127);
-        else if (strcmp(key, "border_width") == 0)
+        else if (strcmp(key, "border_width") == 0) {
             cfg->border_width = atoi(val);
-        else if (strcmp(key, "gap") == 0)
+            if (cfg->border_width < 0)  cfg->border_width = 0;
+            if (cfg->border_width > 32) cfg->border_width = 32;
+        }
+        else if (strcmp(key, "gap") == 0) {
             cfg->gap = atoi(val);
+            if (cfg->gap < 0)   cfg->gap = 0;
+            if (cfg->gap > 128) cfg->gap = 128;
+        }
         else if (strcmp(key, "master_factor") == 0)
             cfg->master_factor = strtof(val, NULL);
         else if (strcmp(key, "ai_layout") == 0)

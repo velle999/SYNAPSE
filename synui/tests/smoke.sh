@@ -9,9 +9,10 @@
 #      (wayland-info);
 #   3. a real client can map and unmap a toplevel (foot, if installed);
 #   4. screencopy produces a real image (grim, if installed);
-#   5. SIGTERM tears it down cleanly — exit 0, within a deadline (a hang
+#   5. SIGHUP reloads the config live (new gap/bind applied, still serving);
+#   6. SIGTERM tears it down cleanly — exit 0, within a deadline (a hang
 #      here is exactly the listener/thread-teardown class of bug);
-#   6. an ASan build reports no errors or leaks (when built with
+#   7. an ASan build reports no errors or leaks (when built with
 #      -Db_sanitize=address; harmless otherwise).
 #
 # Usage: smoke.sh /path/to/synui
@@ -111,7 +112,28 @@ else
     echo "ok 4 # SKIP grim not installed"
 fi
 
-# ── 5. Clean shutdown ──────────────────────────────────────
+# ── 5. Live config reload (SIGHUP) ─────────────────────────
+cat > "$TMP/synuirc" <<'EOF'
+gap = 20
+border_width = 4
+bind = super+shift+r spawn true
+EOF
+kill -HUP "$SYNUI_PID"
+i=0
+while ! grep -q "config reloaded" "$LOG"; do
+    [ $i -ge 50 ] && fail "no 'config reloaded' log within 5s of SIGHUP"
+    kill -0 "$SYNUI_PID" 2>/dev/null || fail "synui died on SIGHUP"
+    sleep 0.1
+    i=$((i + 1))
+done
+# the reload log line reports the applied values — pin them
+grep -q "config reloaded (.*gap 20, border 4)" "$LOG" \
+    || fail "reload did not apply gap/border from the new config"
+# and the compositor must still be serving clients afterwards
+wayland-info >/dev/null 2>&1 || fail "compositor unresponsive after reload"
+echo "ok 5 - SIGHUP reloaded the config live"
+
+# ── 6. Clean shutdown ──────────────────────────────────────
 kill -TERM "$SYNUI_PID"
 i=0
 while kill -0 "$SYNUI_PID" 2>/dev/null; do
@@ -122,14 +144,14 @@ done
 wait "$SYNUI_PID"
 rc=$?
 [ "$rc" -eq 0 ] || fail "synui exited $rc (expected 0)"
-echo "ok 5 - clean SIGTERM exit"
+echo "ok 6 - clean SIGTERM exit"
 
-# ── 6. Sanitizer verdict (ASan builds only) ────────────────
+# ── 7. Sanitizer verdict (ASan builds only) ────────────────
 # Match actual reports, not LSan's benign "ptrace blocked" warning.
 if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
     fail "sanitizer reported errors"
 fi
-echo "ok 6 - no sanitizer errors"
+echo "ok 7 - no sanitizer errors"
 
 SYNUI_PID=
 cleanup

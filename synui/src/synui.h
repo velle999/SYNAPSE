@@ -46,7 +46,10 @@
 #define WORKSPACE_MAX       9
 #define WORKSPACE_NAME_LEN  32
 #define CMDBAR_MAX_INPUT    256
-#define BORDER_WIDTH        2
+/* Defaults for synuirc `border_width` / `gap`; the live values come from
+ * s->config so a SIGHUP reload can change them at runtime. */
+#define BORDER_WIDTH_DEFAULT 2
+#define GAP_DEFAULT          8
 
 /* ── synapd IPC ──────────────────────────────────────────── */
 #define SYNAPD_SOCKET       "/run/synapd/synapd.sock"
@@ -287,13 +290,22 @@ struct syn_keyboard {
     struct wl_listener destroy;
 };
 
+/* Non-keyboard input device (pointer/touch/tablet), tracked so a SIGHUP
+ * config reload can reapply libinput options to it. */
+typedef struct syn_input_dev {
+    struct wl_list           link;
+    struct wlr_input_device *dev;
+    struct wl_listener       destroy;
+} syn_input_dev_t;
+
 /* ── Server (compositor state) ───────────────────────────── */
 struct syn_server {
     struct wl_display          *display;
-    /* SIGINT/SIGTERM sources; the event loop doesn't free sources it still
-     * holds at destroy, so we remove them ourselves in synui_destroy. */
+    /* SIGINT/SIGTERM/SIGHUP sources; the event loop doesn't free sources it
+     * still holds at destroy, so we remove them ourselves in synui_destroy. */
     struct wl_event_source     *sigint_src;
     struct wl_event_source     *sigterm_src;
+    struct wl_event_source     *sighup_src;
     struct wlr_backend         *backend;
     struct wlr_renderer        *renderer;
     struct wlr_allocator       *allocator;
@@ -343,6 +355,9 @@ struct syn_server {
 
     struct wl_list  outputs;     /* syn_output_t::link */
     struct wl_list  keyboards;   /* syn_keyboard_t::link */
+    struct wl_list  input_devs;  /* syn_input_dev_t::link — non-keyboard
+                                    devices, so a config reload can reapply
+                                    libinput options */
 
     syn_workspace_t workspaces[WORKSPACE_MAX];
     int             active_workspace;
@@ -466,6 +481,7 @@ struct syn_server {
 int  synui_init(syn_server_t *s);
 int  synui_run(syn_server_t *s);
 void synui_destroy(syn_server_t *s);
+void synui_config_reload(syn_server_t *s);   /* SIGHUP: reparse + reapply */
 /* The output the user is currently working on: the one under the cursor,
  * else the one holding the focused window, else the first connected output. */
 syn_output_t *server_focused_output(syn_server_t *s);
@@ -517,6 +533,7 @@ int  constraints_apply_motion(syn_server_t *s, double *dx, double *dy);
 
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);
+void input_reload_config(syn_server_t *s);   /* reapply keymap/repeat/libinput */
 void focus_view(syn_server_t *s, syn_view_t *view,
                 struct wlr_surface *surface);
 syn_view_t *view_at(syn_server_t *s, double lx, double ly,

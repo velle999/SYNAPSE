@@ -51,7 +51,7 @@ Partial / broken:
   seat also advertised no pointer capability until a device appeared, killing
   early `get_pointer` clients. (Both fixed in Phase G.)
 
-Missing: full tablet-v2, per-output workspaces, config reload (SIGHUP).
+Missing: full tablet-v2, per-output workspaces.
 
 ## Phases (ordered by value ÷ effort)
 
@@ -295,3 +295,28 @@ waybar's taskbar module, wlsunset, and any file manager drag.
 
 Verified: `meson test` green on both the release and ASan build dirs; the
 ASan run reports zero leaks with only the two library-static suppressions.
+
+### Phase J — Runtime config reload (SIGHUP)  *(done)*
+- [x] `SIGHUP` → `synui_config_reload()`: reparse synuirc and reapply at
+      runtime — keybindings (the bind table is read per keypress), xkb keymap
+      + repeat (helper extracted from `server_new_keyboard`, applied to every
+      keyboard in `s->keyboards`), libinput options (non-keyboard devices now
+      tracked in `s->input_devs` with their own destroy listeners),
+      gap/border (visible workspace re-tiled, every mapped view's borders
+      refreshed). Autostart entries are start-only; per-workspace master
+      factors keep interactively adjusted values.
+- [x] Made the `gap` and `border_width` config keys real: they were parsed
+      but never applied — layout and borders used the hardcoded `GAP` /
+      `BORDER_WIDTH` macros. All geometry now reads `s->config`; the macros
+      survive only as `*_DEFAULT` seeds. Values clamped (0–128 / 0–32) so a
+      bad config can't feed negative sizes into scene rects.
+- [x] Fixed a latent border bug the reload exposed: `view_update_borders()`
+      only positioned existing border rects, never resized them — a retiled
+      window kept its original border lengths. Now sets size too.
+- [x] Smoke test grew a reload check: rewrite the hermetic config (gap 20,
+      border 4, extra bind), SIGHUP, assert the "config reloaded" log line
+      reports the new values and the compositor still answers wayland-info;
+      runs green on release and ASan builds.
+
+Not exercisable headless: keymap/libinput reapplication needs real input
+devices — verify on hardware by switching `xkb_layout` and sending SIGHUP.

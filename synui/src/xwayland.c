@@ -25,7 +25,7 @@
 
 #include "synui.h"
 
-/* BORDER_WIDTH lives in synui.h */
+/* border width comes from s->config (live-reloadable via SIGHUP) */
 
 /* ── View accessors (xdg / xwayland agnostic) ────────────── */
 struct wlr_surface *view_surface(syn_view_t *v)
@@ -233,8 +233,9 @@ static void xw_request_configure(struct wl_listener *listener, void *data)
             wlr_scene_node_set_position(&view->scene_tree->node, ev->x, ev->y);
         }
     } else {
+        int bw = view->server->config.border_width;
         wlr_xwayland_surface_configure(xs, view->x, view->y,
-            view->w - 2 * BORDER_WIDTH, view->h - 2 * BORDER_WIDTH);
+            view->w - 2 * bw, view->h - 2 * bw);
     }
 }
 

@@ -160,17 +160,21 @@ void view_update_borders(syn_view_t *view)
     }
 
     int x = view->x, y = view->y, w = view->w, h = view->h;
-    int bw = BORDER_WIDTH;
+    int bw = view->server->config.border_width;
     int side_h = h - 2 * bw;      /* side borders sit between top/bottom */
     if (side_h < 0) side_h = 0;   /* scene rects must be non-negative */
 
-    /* Create borders as scene rects if they don't exist yet */
+    /* Create borders as scene rects if they don't exist yet. Existing rects
+     * are re-sized too: the view may have been resized (retile), and a config
+     * reload can change border_width. */
     #define MAKE_BORDER(field, bx, by, bw2, bh) do { \
         if (!view->field) \
             view->field = wlr_scene_rect_create(view->scene_tree->node.parent, \
                                                 bw2, bh, color); \
-        else \
+        else { \
             wlr_scene_rect_set_color(view->field, color); \
+            wlr_scene_rect_set_size(view->field, bw2, bh); \
+        } \
         wlr_scene_node_set_position(&view->field->node, bx, by); \
     } while(0)
 
@@ -379,15 +383,12 @@ static void keyboard_handle_destroy(struct wl_listener *listener, void *data)
     free(kb);
 }
 
-static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
+/* Compile the synuirc keymap (xkb_layout/variant/…) and apply it plus the
+ * repeat settings to one keyboard; empty fields fall through to the
+ * XKB_DEFAULT_* environment and the system default. Shared by device attach
+ * and SIGHUP config reload. */
+static void keyboard_apply_config(syn_server_t *s, struct wlr_keyboard *wlr_kb)
 {
-    struct wlr_keyboard *wlr_kb = wlr_keyboard_from_input_device(dev);
-    syn_keyboard_t *kb = calloc(1, sizeof(*kb));
-    kb->server = s;
-    kb->wlr_keyboard = wlr_kb;
-
-    /* Keymap from synuirc (xkb_layout/variant/…); empty fields fall through
-     * to the XKB_DEFAULT_* environment and the system default. */
     syn_config_t *cfg = &s->config;
     struct xkb_rule_names names = {
         .rules   = cfg->xkb_rules[0]   ? cfg->xkb_rules   : NULL,
@@ -409,6 +410,16 @@ static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
     xkb_keymap_unref(keymap);
     xkb_context_unref(ctx);
     wlr_keyboard_set_repeat_info(wlr_kb, cfg->repeat_rate, cfg->repeat_delay);
+}
+
+static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
+{
+    struct wlr_keyboard *wlr_kb = wlr_keyboard_from_input_device(dev);
+    syn_keyboard_t *kb = calloc(1, sizeof(*kb));
+    kb->server = s;
+    kb->wlr_keyboard = wlr_kb;
+
+    keyboard_apply_config(s, wlr_kb);
 
     kb->modifiers.notify = keyboard_handle_modifiers;
     wl_signal_add(&wlr_kb->events.modifiers, &kb->modifiers);
@@ -502,8 +513,9 @@ static void process_cursor_resize(syn_server_t *s)
     if (min_h < 0) min_h = 0;
     if (max_w < 0) max_w = 0;
     if (max_h < 0) max_h = 0;
-    if (min_w < 2 * BORDER_WIDTH + 20) min_w = 2 * BORDER_WIDTH + 20;
-    if (min_h < 2 * BORDER_WIDTH + 20) min_h = 2 * BORDER_WIDTH + 20;
+    int bw = s->config.border_width;
+    if (min_w < 2 * bw + 20) min_w = 2 * bw + 20;
+    if (min_h < 2 * bw + 20) min_h = 2 * bw + 20;
 
     int w = right - left, h = bottom - top;
     if (w < min_w) w = min_w;
@@ -898,6 +910,27 @@ static void server_hold_end(struct wl_listener *listener, void *data)
 }
 
 /* ── New input device ────────────────────────────────────── */
+/* Non-keyboard devices are tracked in s->input_devs so a SIGHUP config
+ * reload can revisit them with new libinput options. */
+static void input_dev_handle_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_input_dev_t *id = wl_container_of(listener, id, destroy);
+    wl_list_remove(&id->destroy.link);
+    wl_list_remove(&id->link);
+    free(id);
+}
+
+static void input_dev_track(syn_server_t *s, struct wlr_input_device *dev)
+{
+    syn_input_dev_t *id = calloc(1, sizeof(*id));
+    if (!id) return;
+    id->dev = dev;
+    id->destroy.notify = input_dev_handle_destroy;
+    wl_signal_add(&dev->events.destroy, &id->destroy);
+    wl_list_insert(&s->input_devs, &id->link);
+}
+
 static void server_new_input(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, new_input);
@@ -913,6 +946,7 @@ static void server_new_input(struct wl_listener *listener, void *data)
     case WLR_INPUT_DEVICE_POINTER:
     case WLR_INPUT_DEVICE_TABLET:
         input_apply_libinput_config(s, dev);
+        input_dev_track(s, dev);
         wlr_cursor_attach_input_device(s->cursor, dev);
         break;
     default:
@@ -991,9 +1025,24 @@ static void server_start_drag(struct wl_listener *listener, void *data)
     }
 }
 
+/* Reapply the input side of a reloaded config: keymap + repeat to every
+ * keyboard, libinput options to every tracked pointer/touch/tablet. */
+void input_reload_config(syn_server_t *s)
+{
+    syn_keyboard_t *kb;
+    wl_list_for_each(kb, &s->keyboards, link)
+        keyboard_apply_config(s, kb->wlr_keyboard);
+
+    syn_input_dev_t *id;
+    wl_list_for_each(id, &s->input_devs, link)
+        input_apply_libinput_config(s, id->dev);
+}
+
 /* ── Setup all input listeners ───────────────────────────── */
 void input_setup(syn_server_t *s)
 {
+    wl_list_init(&s->input_devs);
+
     /* The compositor always drives a cursor, so advertise the pointer
      * capability up front — before this, a seat with no input devices yet
      * (headless, or early clients racing the backend) had no capabilities

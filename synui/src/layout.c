@@ -27,8 +27,8 @@
 
 #include "synui.h"
 
-/* BORDER_WIDTH defined in synui.h */
-#define GAP            8
+/* border width and gap come from s->config (synuirc `border_width`/`gap`,
+ * live-reloadable via SIGHUP) */
 #define MASTER_FACTOR  0.60f   /* default master column width fraction */
 #define MASTER_MIN     0.10f
 #define MASTER_MAX     0.90f
@@ -63,8 +63,9 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
     view->w = w;
     view->h = h;
 
-    int iw = w - 2 * BORDER_WIDTH;
-    int ih = h - 2 * BORDER_WIDTH;
+    int bw = view->server->config.border_width;
+    int iw = w - 2 * bw;
+    int ih = h - 2 * bw;
     if (iw < 1) iw = 1;
     if (ih < 1) ih = 1;
 
@@ -89,19 +90,20 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     get_output_geom(s, &area);
 
     /* Apply outer gap */
-    int x = area.x + GAP;
-    int y = area.y + GAP;
-    int W = area.width  - 2 * GAP;
-    int H = area.height - 2 * GAP;
+    int gap = s->config.gap;
+    int x = area.x + gap;
+    int y = area.y + gap;
+    int W = area.width  - 2 * gap;
+    int H = area.height - 2 * gap;
 
     int n = count_windows(ws);
     if (n == 0) return;
 
     float mf = ws->master_factor;
     if (mf < MASTER_MIN || mf > MASTER_MAX) mf = MASTER_FACTOR;
-    int master_w = (n == 1) ? W : (int)(W * mf) - GAP / 2;
-    int stack_w  = W - master_w - GAP;
-    int stack_x  = x + master_w + GAP;
+    int master_w = (n == 1) ? W : (int)(W * mf) - gap / 2;
+    int stack_w  = W - master_w - gap;
+    int stack_x  = x + master_w + gap;
 
     int i = 0;
     syn_view_t *v;
@@ -114,8 +116,8 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
         } else {
             /* Stack */
             int nstack = n - 1;
-            int slot_h = (H - (nstack - 1) * GAP) / nstack;
-            int vy = y + (i - 1) * (slot_h + GAP);
+            int slot_h = (H - (nstack - 1) * gap) / nstack;
+            int vy = y + (i - 1) * (slot_h + gap);
             place_view(v, stack_x, vy, stack_w, slot_h);
         }
         i++;
@@ -261,18 +263,19 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                 if (!v->mapped || v->floating) continue;
                 const char *aid = view_app_id(v);
                 if (aid && strcmp(aid, app_id) == 0) {
+                    int gap = s->config.gap;
                     int nx = area.x + (int)(fx * area.width);
                     int ny = area.y + (int)(fy * area.height);
                     int nw = (int)(fw * area.width);
                     int nh = (int)(fh * area.height);
-                    nw = nw > GAP * 2 ? nw - GAP : nw;
-                    nh = nh > GAP * 2 ? nh - GAP : nh;
+                    nw = nw > gap * 2 ? nw - gap : nw;
+                    nh = nh > gap * 2 ? nh - gap : nh;
                     /* Mark AI-managed before placing so the border picks the
                      * AI colour, and record the app as the window's intent. */
                     v->ai_ctx.has_ctx = 1;
                     snprintf(v->ai_ctx.intent, sizeof(v->ai_ctx.intent),
                              "%s", app_id);
-                    place_view(v, nx + GAP/2, ny + GAP/2, nw, nh);
+                    place_view(v, nx + gap/2, ny + gap/2, nw, nh);
                     applied++;
                     break;
                 }
@@ -389,18 +392,19 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
     get_output_geom(s, &area);
 
     int w = view->w, h = view->h;
+    int bw = s->config.border_width;
 
     /* Prefer the surface's natural size. */
     if (view->is_xwayland) {
         if (view->xsurface->width > 0 && view->xsurface->height > 0) {
-            w = view->xsurface->width  + 2 * BORDER_WIDTH;
-            h = view->xsurface->height + 2 * BORDER_WIDTH;
+            w = view->xsurface->width  + 2 * bw;
+            h = view->xsurface->height + 2 * bw;
         }
     } else {
         struct wlr_box geo = view->xdg_surface->geometry;
         if (geo.width > 0 && geo.height > 0) {
-            w = geo.width  + 2 * BORDER_WIDTH;
-            h = geo.height + 2 * BORDER_WIDTH;
+            w = geo.width  + 2 * bw;
+            h = geo.height + 2 * bw;
         }
     }
 
