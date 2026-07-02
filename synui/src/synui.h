@@ -549,6 +549,7 @@ int  constraints_apply_motion(syn_server_t *s, double *dx, double *dy);
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);
 void input_reload_config(syn_server_t *s);   /* reapply keymap/repeat/libinput */
+void pointer_update_focus(syn_server_t *s, uint32_t time_msec);
 void focus_view(syn_server_t *s, syn_view_t *view,
                 struct wlr_surface *surface);
 syn_view_t *view_at(syn_server_t *s, double lx, double ly,
@@ -560,6 +561,8 @@ void view_update_borders(syn_view_t *view);
 
 /* ── layout.c ────────────────────────────────────────────── */
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);
+void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs);
+void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
 void layout_tile(syn_server_t *s, syn_workspace_t *ws);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws);
 void view_resize(syn_view_t *view, int x, int y, int w, int h);

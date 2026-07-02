@@ -83,6 +83,26 @@ static int write_all(int fd, const void *buf, size_t n)
     return 0;
 }
 
+/* Connect to synapd with send/receive timeouts. The timeouts matter on
+ * every connection (not just the first): without them a wedged synapd
+ * blocks the AI thread in recv() forever, and ai_thread_stop()'s join then
+ * hangs the whole shutdown. Called from AI thread only. */
+static int ai_connect_synapd(void)
+{
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return -1;
+    struct sockaddr_un addr = { .sun_family = AF_UNIX };
+    strncpy(addr.sun_path, SYNAPD_SOCKET, sizeof(addr.sun_path) - 1);
+    struct timeval tv = { .tv_sec = 3 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
 /* Called from AI thread only */
 static int ai_thread_synapd_query(int synapd_fd, uint32_t *req_id_ctr,
                                     const char *prompt,
@@ -109,11 +129,25 @@ static int ai_thread_synapd_query(int synapd_fd, uint32_t *req_id_ctr,
     if (recv(synapd_fd, &rhdr, sizeof(rhdr), MSG_WAITALL) != sizeof(rhdr))
         return -1;
     if (rhdr.magic != SYN_MAGIC || rhdr.msg_type == SYN_MSG_ERROR) return -1;
+    if (rhdr.payload_len > (1u << 20))
+        return -1;   /* implausible length — treat the stream as corrupt */
 
     uint32_t rlen = rhdr.payload_len < out_len ? rhdr.payload_len : out_len - 1;
     ssize_t r = recv(synapd_fd, out, rlen, MSG_WAITALL);
     if (r < 0) return -1;
     out[r] = '\0';
+
+    /* Drain any payload beyond our buffer: leaving it in the socket would
+     * desynchronise the stream — the next query would parse leftover
+     * payload bytes as a header, corrupting every response after it. */
+    uint32_t left = rhdr.payload_len - rlen;
+    while (left > 0) {
+        char junk[512];
+        size_t chunk = left < sizeof(junk) ? left : sizeof(junk);
+        ssize_t d = recv(synapd_fd, junk, chunk, MSG_WAITALL);
+        if (d <= 0) return -1;
+        left -= (uint32_t)d;
+    }
     return 0;
 }
 
@@ -135,29 +169,15 @@ static void *ai_thread_fn(void *arg)
     char response[4096];
 
     /* Connect to synapd */
-    {
-        int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-        if (fd >= 0) {
-            struct sockaddr_un addr = {0};
-            addr.sun_family = AF_UNIX;
-            strncpy(addr.sun_path, SYNAPD_SOCKET, sizeof(addr.sun_path) - 1);
-            struct timeval tv = { .tv_sec = 3 };
-            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-            if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
-                synapd_fd = fd;
-                atomic_store(&s->ai_connected, 1);
-                wlr_log(WLR_INFO, "ai_thread: connected to synapd");
-
-                /* Update overlay */
-                strncpy(s->overlay.synapd_status, "⚡ online",
-                        sizeof(s->overlay.synapd_status) - 1);
-            } else {
-                close(fd);
-                strncpy(s->overlay.synapd_status, "○ synapd offline",
-                        sizeof(s->overlay.synapd_status) - 1);
-            }
-        }
+    synapd_fd = ai_connect_synapd();
+    if (synapd_fd >= 0) {
+        atomic_store(&s->ai_connected, 1);
+        wlr_log(WLR_INFO, "ai_thread: connected to synapd");
+        strncpy(s->overlay.synapd_status, "⚡ online",
+                sizeof(s->overlay.synapd_status) - 1);
+    } else {
+        strncpy(s->overlay.synapd_status, "○ synapd offline",
+                sizeof(s->overlay.synapd_status) - 1);
     }
 
     while (atomic_load(&s->ai_connected) || synapd_fd < 0) {
@@ -171,20 +191,10 @@ static void *ai_thread_fn(void *arg)
         }
 
         if (synapd_fd < 0) {
-            /* Try reconnect */
-            int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-            if (fd >= 0) {
-                struct sockaddr_un addr = {0};
-                addr.sun_family = AF_UNIX;
-                strncpy(addr.sun_path, SYNAPD_SOCKET, sizeof(addr.sun_path)-1);
-                if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
-                    synapd_fd = fd;
-                    atomic_store(&s->ai_connected, 1);
-                } else {
-                    close(fd);
-                }
-            }
+            /* Try reconnect (same timeouts as the initial connection) */
+            synapd_fd = ai_connect_synapd();
             if (synapd_fd < 0) continue;
+            atomic_store(&s->ai_connected, 1);
         }
 
         memset(response, 0, sizeof(response));
@@ -373,6 +383,7 @@ void execute_ai_action(syn_server_t *s, const char *response)
         if (nl) *nl = '\0';
         wlr_log(WLR_INFO, "cmdbar: executing CMD: %s", cmdcopy);
         if (fork() == 0) {
+            setsid();   /* detach like spawn() so it outlives the compositor */
             execl("/bin/sh", "sh", "-c", cmdcopy, NULL);
             _exit(1);
         }

@@ -73,8 +73,7 @@ static void ft_handle_fullscreen(struct wl_listener *listener, void *data)
 {
     syn_view_t *v = wl_container_of(listener, v, ft_fullscreen);
     struct wlr_foreign_toplevel_handle_v1_fullscreen_event *event = data;
-    v->fullscreen = event->fullscreen;
-    view_set_fullscreen(v, v->fullscreen);
+    view_apply_fullscreen(v->server, v, event->fullscreen);
 }
 
 static void ft_handle_maximize(struct wl_listener *listener, void *data)

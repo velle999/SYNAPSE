@@ -361,20 +361,30 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
 static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, unmap);
+    syn_server_t *server = view->server;
+    int was_focused = (server->focused_view == view);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     /* Drop focus/grab references to this window */
-    if (view->server->focused_view == view)
-        view->server->focused_view = NULL;
-    if (view->server->grabbed_view == view) {
-        view->server->grabbed_view = NULL;
-        view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+    if (server->focused_view == view)
+        server->focused_view = NULL;
+    if (server->grabbed_view == view) {
+        server->grabbed_view = NULL;
+        server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
     }
     /* Remove borders from scene */
     if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
     if (view->border_bottom) { wlr_scene_node_destroy(&view->border_bottom->node); view->border_bottom = NULL; }
     if (view->border_left)   { wlr_scene_node_destroy(&view->border_left->node);   view->border_left   = NULL; }
     if (view->border_right)  { wlr_scene_node_destroy(&view->border_right->node);  view->border_right  = NULL; }
+
+    /* Reflow the remaining tiled windows and hand focus to one of them
+     * (the XWayland unmap path already re-tiled; this one never did). */
+    if (!server->shutting_down) {
+        layout_apply(server, view->workspace);
+        if (was_focused)
+            workspace_focus_first(server, view->workspace);
+    }
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data)
@@ -420,18 +430,23 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
 
 static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data)
 {
+    (void)data;
     syn_view_t *view = wl_container_of(listener, view, request_maximize);
-    view->maximized = !view->maximized;
+    /* Honour the requested state (not a blind toggle). Tiling still governs
+     * the geometry; set_maximized acks with the required configure. */
+    view->maximized = view->xdg_surface->toplevel->requested.maximized;
     wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
     foreign_toplevel_update_state(view);
 }
 
 static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data)
 {
+    (void)data;
     syn_view_t *view = wl_container_of(listener, view, request_fullscreen);
-    view->fullscreen = !view->fullscreen;
-    wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel, view->fullscreen);
-    foreign_toplevel_update_state(view);
+    /* Honour the state the client asked for (not a blind toggle), and give
+     * the window real fullscreen geometry / hand it back to the layout. */
+    view_apply_fullscreen(view->server, view,
+                          view->xdg_surface->toplevel->requested.fullscreen);
 }
 
 /*
@@ -534,9 +549,14 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
                      "suggest layout adjustment? Reply YES or NO only.",
                      comm, pid, view->workspace->name);
 
+            /* Advisory YES/NO query — id is a sentinel outside the workspace
+             * range so the frame loop's QUERY_LAYOUT router (which treats
+             * request_id as a workspace index) can never feed this reply
+             * into layout_apply_ai_response(). Previously the pid was used,
+             * which only worked because client pids are never < 9. */
             syn_ai_request_t req = {
                 .type = AI_MSG_QUERY_LAYOUT,
-                .id   = (uint64_t)pid,
+                .id   = UINT64_MAX,
             };
             strncpy(req.prompt, prompt, sizeof(req.prompt) - 1);
             ai_thread_send(server, &req);

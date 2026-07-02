@@ -62,6 +62,9 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
 {
     if (!s) return;
     if (!view) {
+        /* Clear focus entirely — forget the old view too, or keyboard input
+         * would keep flowing to a window that may no longer be visible. */
+        s->focused_view = NULL;
         wlr_seat_keyboard_notify_clear_focus(s->seat);
         return;
     }
@@ -141,6 +144,15 @@ void view_update_borders(syn_view_t *view)
      * borders will be (re)created once the window is sized. */
     if (view->w <= 0 || view->h <= 0) return;
 
+    /* Fullscreen covers the whole output; borders would poke out past it. */
+    if (view->fullscreen) {
+        if (view->border_top)    wlr_scene_node_set_enabled(&view->border_top->node,    false);
+        if (view->border_bottom) wlr_scene_node_set_enabled(&view->border_bottom->node, false);
+        if (view->border_left)   wlr_scene_node_set_enabled(&view->border_left->node,   false);
+        if (view->border_right)  wlr_scene_node_set_enabled(&view->border_right->node,  false);
+        return;
+    }
+
     /* Pick border color */
     float color[4];
 
@@ -175,6 +187,7 @@ void view_update_borders(syn_view_t *view)
             wlr_scene_rect_set_color(view->field, color); \
             wlr_scene_rect_set_size(view->field, bw2, bh); \
         } \
+        wlr_scene_node_set_enabled(&view->field->node, true); \
         wlr_scene_node_set_position(&view->field->node, bx, by); \
     } while(0)
 
@@ -200,9 +213,12 @@ static void focus_next(syn_server_t *s, int dir)
     syn_workspace_t *ws = server_active_workspace(s);
     if (wl_list_empty(&ws->windows)) return;
 
+    /* Only walk from the focused view if it actually lives on this
+     * workspace — its link is threaded through its *own* workspace's list,
+     * and mixing lists would run wl_container_of over the wrong sentinel. */
     struct wl_list *target;
-    if (!s->focused_view) {
-        target = ws->windows.next;
+    if (!s->focused_view || s->focused_view->workspace != ws) {
+        target = dir > 0 ? ws->windows.next : ws->windows.prev;
     } else {
         target = dir > 0 ? s->focused_view->link.next
                          : s->focused_view->link.prev;
@@ -562,8 +578,10 @@ static void input_apply_libinput_config(syn_server_t *s,
 }
 
 /* Give pointer focus to whatever lies under the cursor and (de)activate the
- * pointer constraint owned by that surface. */
-static void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
+ * pointer constraint owned by that surface. Public: workspace_switch's
+ * jump-focus warps the cursor and needs the focus re-derived immediately
+ * rather than on the next motion event. */
+void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
 {
     double sx, sy;
     struct wlr_surface *surface =

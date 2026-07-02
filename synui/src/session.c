@@ -141,6 +141,15 @@ static void server_new_session_lock(struct wl_listener *listener, void *data)
     s->cur_lock = lock;
     s->locked = 1;
 
+    /* A previous lock client may have died without unlocking, leaving its
+     * backstop in place (kept deliberately — the session must stay blanked).
+     * Destroy it now or it would outlive this lock's unlock and blank the
+     * session forever. */
+    if (s->lock_tree) {
+        wlr_scene_node_destroy(&s->lock_tree->node);
+        s->lock_tree = NULL;
+    }
+
     /* A scene tree above everything, with a black backstop covering the whole
      * layout so nothing shows through between lock surfaces. */
     s->lock_tree = wlr_scene_tree_create(&s->scene->tree);

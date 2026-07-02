@@ -356,3 +356,43 @@ layout); per-output `grim -o` captures both heads; clean SIGTERM. Not
 drivable headless: workspace switching / jump-focus need key input, and the
 orphan-on-unplug path needs a real disconnect — verify on hardware with two
 monitors (Super+N on each head, unplug/replug).
+
+### Post-K bug sweep  *(done)*
+A full review of the compositor sources fixed, in severity order:
+- **Crash**: `focus_next()` walked the focused view's workspace list but
+  bounds-checked against the cursor output's — when they differed
+  (movews to a hidden workspace, or focus on the other monitor),
+  `wl_container_of` ran over the wrong sentinel and dereferenced garbage.
+- **Lock**: a relock after a crashed lock client leaked the kept black
+  backstop; unlocking the new lock left the leaked one blanking the session
+  forever. `server_new_session_lock` now destroys a leftover tree.
+- **Tiling/focus**: closing an xdg window never re-tiled (XWayland did) and
+  left keyboard focus dangling; both unmap paths now reflow and hand focus
+  via the new `workspace_focus_first()`, which also fixes switch-to-empty
+  and movews leaving focus on an invisible window (`focus_view(NULL)` now
+  clears `focused_view` too).
+- **Fullscreen/maximize**: request handlers toggled state instead of
+  honouring `requested.*`, and xdg fullscreen never resized the window. New
+  shared `view_apply_fullscreen()`: full output-box geometry on the
+  workspace's own output, raised, borders hidden (view_update_borders
+  checks the flag); used by xdg, XWayland and taskbar request paths.
+- **Monocle**: keyed visibility off the *global* focused view, blanking the
+  whole workspace when focus was on another output or nothing; now shows
+  the focused view if it lives here, else the first mapped window.
+- **AI IPC**: the synapd reconnect socket had no SO_RCVTIMEO (a wedged
+  synapd would hang the thread and, since Phase I joins it, shutdown);
+  oversized responses left unread payload in the stream, desyncing every
+  later reply (now drained + implausible lengths rejected).
+- **output-management**: a successful apply now re-arranges layers (usable
+  areas + tiling), lock surfaces and the compositor UI instead of leaving
+  stale geometry until an unrelated re-layout.
+- Minor: tiling clamps against negative sizes (large gap on a tiny output);
+  the WINDOW_OPENED advisory query uses a sentinel id instead of the pid
+  (which only avoided the workspace-index router because pids are never
+  < 9); AI `CMD:` children get `setsid()` like `spawn()`; jump-focus
+  re-derives pointer focus right after the cursor warp.
+
+Not drivable headless (needs key/pointer input or real hardware): the
+focus_next crash path, monocle multi-head behaviour, fullscreen requests,
+and output-management apply — the fixes are compile-verified and the
+surrounding paths run leak-free under the ASan smoke test.

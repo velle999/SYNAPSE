@@ -149,6 +149,7 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     syn_view_t *view = wl_container_of(listener, view, unmap);
     syn_server_t *s = view->server;
 
+    int was_focused = (s->focused_view == view);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     if (s->focused_view == view) s->focused_view = NULL;
@@ -171,8 +172,11 @@ static void xw_unmap(struct wl_listener *listener, void *data)
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
     }
-    if (!view->override_redirect && !s->shutting_down)
+    if (!view->override_redirect && !s->shutting_down) {
         layout_apply(s, view->workspace);
+        if (was_focused)
+            workspace_focus_first(s, view->workspace);
+    }
 }
 
 static void xw_associate(struct wl_listener *listener, void *data)
@@ -252,21 +256,9 @@ static void xw_request_fullscreen(struct wl_listener *listener, void *data)
 {
     (void)data;
     syn_view_t *view = wl_container_of(listener, view, request_fullscreen);
-    struct wlr_xwayland_surface *xs = view->xsurface;
-    view->fullscreen = xs->fullscreen;
-    wlr_xwayland_surface_set_fullscreen(xs, xs->fullscreen);
-
-    if (!view->mapped) return;
-    syn_server_t *s = view->server;
-    if (view->fullscreen) {
-        struct wlr_box area;
-        server_output_box(s, &area);
-        wlr_xwayland_surface_configure(xs, area.x, area.y, area.width, area.height);
-        wlr_scene_node_set_position(&view->scene_tree->node, area.x, area.y);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
-    } else {
-        layout_apply(s, view->workspace);
-    }
+    /* Shared path: fullscreen on the workspace's own output, borders hidden;
+     * or back to the layout. */
+    view_apply_fullscreen(view->server, view, view->xsurface->fullscreen);
 }
 
 static void xw_request_activate(struct wl_listener *listener, void *data)

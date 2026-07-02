@@ -92,12 +92,16 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     struct wlr_box area;
     get_output_geom(s, ws, &area);
 
-    /* Apply outer gap */
+    /* Apply outer gap. Clamp the working area: a large configured gap on a
+     * small output must not go negative — negative sizes would flow into
+     * scene rects and client configures. */
     int gap = s->config.gap;
     int x = area.x + gap;
     int y = area.y + gap;
     int W = area.width  - 2 * gap;
     int H = area.height - 2 * gap;
+    if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
+    if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
 
     int n = count_windows(ws);
     if (n == 0) return;
@@ -105,7 +109,9 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     float mf = ws->master_factor;
     if (mf < MASTER_MIN || mf > MASTER_MAX) mf = MASTER_FACTOR;
     int master_w = (n == 1) ? W : (int)(W * mf) - gap / 2;
+    if (master_w < MIN_WIN) master_w = MIN_WIN;
     int stack_w  = W - master_w - gap;
+    if (stack_w < MIN_WIN) stack_w = MIN_WIN;
     int stack_x  = x + master_w + gap;
 
     int i = 0;
@@ -120,6 +126,7 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
             /* Stack */
             int nstack = n - 1;
             int slot_h = (H - (nstack - 1) * gap) / nstack;
+            if (slot_h < MIN_WIN) slot_h = MIN_WIN;
             int vy = y + (i - 1) * (slot_h + gap);
             place_view(v, stack_x, vy, stack_w, slot_h);
         }
@@ -133,15 +140,25 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws)
     struct wlr_box area;
     get_output_geom(s, ws, &area);
 
+    /* Show exactly one window: the focused view if it lives on this
+     * workspace, else the first mapped one. Keying off the *global* focused
+     * view would blank the whole workspace whenever focus sits on another
+     * output (or on nothing, right after a close). */
+    syn_view_t *top = NULL;
     syn_view_t *v;
+    if (s->focused_view && s->focused_view->workspace == ws &&
+        s->focused_view->mapped && !s->focused_view->floating)
+        top = s->focused_view;
+    else
+        wl_list_for_each(v, &ws->windows, link)
+            if (v->mapped && !v->floating) { top = v; break; }
+
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->floating) continue;
         place_view(v,
                    area.x, area.y,
                    area.width, area.height);
-        /* Only the focused view should be visible */
-        wlr_scene_node_set_enabled(&v->scene_tree->node,
-                                    v == s->focused_view);
+        wlr_scene_node_set_enabled(&v->scene_tree->node, v == top);
     }
 }
 
@@ -321,6 +338,56 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     }
 }
 
+/* ── Fullscreen ──────────────────────────────────────────── */
+/* Enter/leave fullscreen with real geometry: cover the workspace output's
+ * full box (raised, borders hidden — view_update_borders checks the flag),
+ * or hand the window back to the layout. Shared by the xdg and XWayland
+ * request handlers and the foreign-toplevel (taskbar) request. */
+void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
+{
+    view->fullscreen = fs ? 1 : 0;
+    view_set_fullscreen(view, view->fullscreen);   /* client + taskbar state */
+    if (!view->mapped) return;
+
+    if (view->fullscreen) {
+        syn_output_t *o = (view->workspace && view->workspace->output)
+                              ? view->workspace->output
+                              : server_focused_output(s);
+        struct wlr_box area;
+        output_box_of(s, o, &area);
+        view->x = area.x;    view->y = area.y;
+        view->w = area.width; view->h = area.height;
+        if (view->is_xwayland)
+            wlr_xwayland_surface_configure(view->xsurface, area.x, area.y,
+                                           area.width, area.height);
+        else
+            wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel,
+                                      area.width, area.height);
+        wlr_scene_node_set_position(&view->scene_tree->node, area.x, area.y);
+        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+        view_update_borders(view);
+    } else {
+        layout_apply(s, view->workspace);
+        if (view->floating)
+            layout_float_place(s, view);
+        view_update_borders(view);
+    }
+}
+
+/* Focus the first mapped window on ws — or clear focus entirely if there is
+ * none, so keyboard input can't keep flowing to a hidden window. */
+void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
+{
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (v->mapped) {
+            focus_view(s, v, view_surface(v));
+            return;
+        }
+    }
+    focus_view(s, NULL, NULL);
+}
+
 /* ── Workspace switching ─────────────────────────────────── */
 void workspace_switch(syn_server_t *s, int index)
 {
@@ -339,6 +406,8 @@ void workspace_switch(syn_server_t *s, int index)
         output_box_of(s, target->output, &b);
         wlr_cursor_warp(s->cursor, NULL,
                         b.x + b.width / 2.0, b.y + b.height / 2.0);
+        /* Warping doesn't emit a motion event; re-derive pointer focus now. */
+        pointer_update_focus(s, 0);
     } else {
         /* Hide this output's current workspace */
         syn_workspace_t *cur = &s->workspaces[o->active_workspace];
@@ -359,13 +428,9 @@ void workspace_switch(syn_server_t *s, int index)
         layout_apply(s, target);
     }
 
-    /* Focus first window on the target workspace */
-    if (!wl_list_empty(&target->windows)) {
-        syn_view_t *first = wl_container_of(
-            target->windows.next, first, link);
-        if (first->mapped)
-            focus_view(s, first, view_surface(first));
-    }
+    /* Focus the target workspace's first window (or clear focus if empty —
+     * the previous workspace's window is hidden now). */
+    workspace_focus_first(s, target);
 
     /* Refresh overlay if visible */
     if (s->overlay.visible)
@@ -401,6 +466,11 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
 
     layout_apply(s, &s->workspaces[old_ws]);
     layout_apply(s, &s->workspaces[ws_index]);
+
+    /* If the moved window was focused and is now hidden, hand focus to the
+     * old workspace so keys don't keep going to an invisible window. */
+    if (s->focused_view == view && !workspace_visible(view->workspace))
+        workspace_focus_first(s, &s->workspaces[old_ws]);
 }
 
 /* ── Floating placement ──────────────────────────────────── */
