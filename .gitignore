@@ -31,6 +31,9 @@ syn-install/src/
 # ── meson / ninja build dirs ────────────────────────────────
 build/
 builddir/
+builddir-asan/
+_ci/
+_asan/
 
 # ── kernel module (kbuild) artifacts ────────────────────────
 *.o

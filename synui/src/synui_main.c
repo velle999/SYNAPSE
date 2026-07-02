@@ -574,8 +574,10 @@ int synui_init(syn_server_t *s)
      * threads are spawned (in synui_run) so they inherit the blocked signal
      * mask and only the event loop's signalfd handles them. */
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
-    wl_event_loop_add_signal(loop, SIGINT,  handle_terminate_signal, s->display);
-    wl_event_loop_add_signal(loop, SIGTERM, handle_terminate_signal, s->display);
+    s->sigint_src  = wl_event_loop_add_signal(loop, SIGINT,
+                                              handle_terminate_signal, s->display);
+    s->sigterm_src = wl_event_loop_add_signal(loop, SIGTERM,
+                                              handle_terminate_signal, s->display);
 
     /* Create wlroots backend */
     s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display), NULL);
@@ -739,8 +741,11 @@ int synui_init(syn_server_t *s)
         s->ai_pipe_req[0]  = s->ai_pipe_req[1]  = -1;
         s->ai_pipe_resp[0] = s->ai_pipe_resp[1] = -1;
         wlr_log(WLR_INFO, "synui: AI disabled (--no-ai)");
-    } else {
-        ai_thread_start(s);
+    } else if (ai_thread_start(s) < 0) {
+        /* Pipes are already closed and marked -1; run as a plain compositor
+         * (send/poll are no-ops on invalid fds). */
+        wlr_log(WLR_ERROR, "synui: AI thread failed to start — AI disabled");
+        s->ai_disabled = 1;
     }
 
     /* Subscribe to synguard's security-verdict feed (shares --no-ai gate:
@@ -786,6 +791,12 @@ int synui_run(syn_server_t *s)
 void synui_destroy(syn_server_t *s)
 {
     s->shutting_down = 1;
+
+    /* Stop the background threads first: after this point nothing else
+     * touches the server struct while we tear it down, and their pipes and
+     * sockets are closed (they'd otherwise leak and trip LeakSanitizer). */
+    ai_thread_stop(s);
+    secfeed_stop(s);
 
     /* Tear down Xwayland first so its surfaces/listeners are gone before we
      * destroy the display and scene. */
@@ -847,7 +858,11 @@ void synui_destroy(syn_server_t *s)
     wlr_xcursor_manager_destroy(s->cursor_mgr);
     wlr_cursor_destroy(s->cursor);
     wlr_output_layout_destroy(s->output_layout);
+    wlr_allocator_destroy(s->allocator);
+    wlr_renderer_destroy(s->renderer);
     wlr_backend_destroy(s->backend);
+    if (s->sigint_src)  wl_event_source_remove(s->sigint_src);
+    if (s->sigterm_src) wl_event_source_remove(s->sigterm_src);
     wl_display_destroy(s->display);
 }
 
@@ -897,9 +912,10 @@ static void usage(const char *prog) {
         "  Super+Q            Close focused window\n"
         "  Super+Shift+Q      Quit compositor\n"
         "\n"
-        "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc) — keybinds,\n"
-        "xkb_layout/variant/options, repeat_rate/delay, tap, natural_scroll,\n"
-        "left_handed, accel_speed, terminal, autostart, gaps.\n",
+        "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc; $SYNUI_CONFIG\n"
+        "overrides both) — keybinds, xkb_layout/variant/options,\n"
+        "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
+        "terminal, autostart, gaps.\n",
         prog
     );
 }

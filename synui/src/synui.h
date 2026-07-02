@@ -290,6 +290,10 @@ struct syn_keyboard {
 /* ── Server (compositor state) ───────────────────────────── */
 struct syn_server {
     struct wl_display          *display;
+    /* SIGINT/SIGTERM sources; the event loop doesn't free sources it still
+     * holds at destroy, so we remove them ourselves in synui_destroy. */
+    struct wl_event_source     *sigint_src;
+    struct wl_event_source     *sigterm_src;
     struct wlr_backend         *backend;
     struct wlr_renderer        *renderer;
     struct wlr_allocator       *allocator;
@@ -384,6 +388,7 @@ struct syn_server {
     int             ai_pipe_req[2];
     int             ai_pipe_resp[2];
     pthread_t       ai_thread;
+    int             ai_running;         /* thread created; join on shutdown */
     /*
      * Reassembly buffer for the response pipe. A syn_ai_response_t exceeds
      * PIPE_BUF, so a write is not atomic and the non-blocking reader in the
@@ -397,9 +402,12 @@ struct syn_server {
     /* synguard security-verdict feed: a thread subscribes to the synguard
      * broadcast socket and forwards records over sec_pipe; the frame loop
      * drains it and colours the matching window's border. */
-    int       sec_pipe[2];
-    pthread_t sec_thread;
-    int       sec_disabled;
+    int        sec_pipe[2];
+    pthread_t  sec_thread;
+    int        sec_disabled;
+    int        sec_running;   /* thread created; join on shutdown */
+    atomic_int sec_stop;      /* tells the feed thread to exit */
+    atomic_int sec_fd;        /* feed socket, so stop can shutdown() it */
 
     /* Set once teardown begins so output_destroy (fired by the backend during
      * shutdown, after the scene graph is gone) skips its re-layout path. */
@@ -536,6 +544,7 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index);
 
 /* ── ai_interface.c ──────────────────────────────────────── */
 int  ai_thread_start(syn_server_t *s);
+void ai_thread_stop(syn_server_t *s);    /* join the thread, close the pipes */
 void ai_thread_send(syn_server_t *s, const syn_ai_request_t *req);
 int  ai_thread_poll(syn_server_t *s, syn_ai_response_t *resp);
 void cmdbar_show(syn_server_t *s);
@@ -550,6 +559,7 @@ void execute_ai_action(syn_server_t *s, const char *response);
 
 /* ── secfeed.c ───────────────────────────────────────────── */
 void secfeed_start(syn_server_t *s);     /* subscribe to synguard verdicts */
+void secfeed_stop(syn_server_t *s);      /* join the thread, close the pipe */
 void secfeed_dispatch(syn_server_t *s);  /* drain feed, colour windows (frame loop) */
 
 /* ── config.c ────────────────────────────────────────────── */

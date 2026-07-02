@@ -72,21 +72,30 @@ static void *secfeed_thread_fn(void *arg)
     syn_server_t *s = arg;
     int fd = -1;
 
-    for (;;) {
+    while (!atomic_load(&s->sec_stop)) {
         if (fd < 0) {
             fd = secfeed_connect();
             if (fd < 0) {
-                /* synguard may not be up yet — retry periodically. */
-                struct timespec ts = { 2, 0 };
-                nanosleep(&ts, NULL);
+                /* synguard may not be up yet — retry periodically, in short
+                 * slices so a shutdown request isn't stuck behind the sleep. */
+                for (int i = 0; i < 20 && !atomic_load(&s->sec_stop); i++) {
+                    struct timespec ts = { 0, 100 * 1000 * 1000 };
+                    nanosleep(&ts, NULL);
+                }
                 continue;
             }
+            /* Publish the fd so secfeed_stop() can shutdown() it to unblock
+             * the recv below. */
+            atomic_store(&s->sec_fd, fd);
             wlr_log(WLR_INFO, "synui: subscribed to synguard verdict feed");
         }
 
         secfeed_msg_t msg;
         ssize_t n = recv(fd, &msg, sizeof(msg), MSG_WAITALL);
+        if (atomic_load(&s->sec_stop))
+            break;
         if (n != (ssize_t)sizeof(msg)) {
+            atomic_store(&s->sec_fd, -1);
             close(fd);
             fd = -1;
             continue;   /* feed dropped — reconnect */
@@ -98,16 +107,23 @@ static void *secfeed_thread_fn(void *arg)
         if (write(s->sec_pipe[1], &msg, sizeof(msg)) != (ssize_t)sizeof(msg))
             wlr_log(WLR_ERROR, "synui: secfeed pipe write failed");
     }
+
+    atomic_store(&s->sec_fd, -1);
+    if (fd >= 0) close(fd);
     return NULL;
 }
 
 void secfeed_start(syn_server_t *s)
 {
+    atomic_store(&s->sec_stop, 0);
+    atomic_store(&s->sec_fd, -1);
     if (s->sec_disabled) {
         s->sec_pipe[0] = s->sec_pipe[1] = -1;
         return;
     }
-    if (pipe(s->sec_pipe) < 0) {
+    /* O_CLOEXEC so forked+exec'd children (autostart, AI "CMD:") don't hold
+     * the pipe open past our own close. */
+    if (pipe2(s->sec_pipe, O_CLOEXEC) < 0) {
         wlr_log(WLR_ERROR, "synui: secfeed pipe() failed");
         s->sec_pipe[0] = s->sec_pipe[1] = -1;
         return;
@@ -117,7 +133,27 @@ void secfeed_start(syn_server_t *s)
         wlr_log(WLR_ERROR, "synui: secfeed thread failed");
         close(s->sec_pipe[0]); close(s->sec_pipe[1]);
         s->sec_pipe[0] = s->sec_pipe[1] = -1;
+        return;
     }
+    s->sec_running = 1;
+}
+
+/* Shut the feed thread down: raise the stop flag, then shutdown() the feed
+ * socket so a blocking recv returns immediately (a reconnect sleep exits
+ * within ~100ms via the sliced wait). Join, then close the hand-off pipe.
+ * Safe to call unconditionally. */
+void secfeed_stop(syn_server_t *s)
+{
+    if (s->sec_running) {
+        atomic_store(&s->sec_stop, 1);
+        int fd = atomic_load(&s->sec_fd);
+        if (fd >= 0)
+            shutdown(fd, SHUT_RDWR);
+        pthread_join(s->sec_thread, NULL);
+        s->sec_running = 0;
+    }
+    if (s->sec_pipe[0] >= 0) { close(s->sec_pipe[0]); s->sec_pipe[0] = -1; }
+    if (s->sec_pipe[1] >= 0) { close(s->sec_pipe[1]); s->sec_pipe[1] = -1; }
 }
 
 /* ── Main-thread application ──────────────────────────────── */

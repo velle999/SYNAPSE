@@ -255,5 +255,43 @@ requests), gamma commits (pixman has no ramps — failure path exercised by
 design), and DnD (needs two real surfaces + a grab); verify on hardware with
 waybar's taskbar module, wlsunset, and any file manager drag.
 
-### Phase I — Robustness & CI
-Listener-leak / memory audit, headless smoke test in CI, a small test harness.
+### Phase I — Robustness & CI  *(done)*
+- [x] Listener audit: every `wl_signal_add` paired against its `wl_list_remove`
+      across all sources. Per-object listeners (views, outputs, keyboards,
+      layer/lock surfaces, decorations, inhibitors, constraints) all detach in
+      their destroy handlers; the drag listener re-arms safely (`wl_list_init`).
+- [x] Thread-lifecycle fixes found by the audit: the AI thread and the synguard
+      secfeed thread were never stopped or joined and their pipes leaked.
+      Added `ai_thread_stop()` (close the request pipe's write end → the
+      thread's blocking read returns 0 → join) and `secfeed_stop()` (atomic
+      stop flag + `shutdown()` on the feed socket + sliced retry sleep → join);
+      both called first thing in `synui_destroy`.
+- [x] The pipes are now `O_CLOEXEC` (`pipe2`): forked autostart / AI "CMD:"
+      children used to inherit the write ends across exec, so closing ours
+      never EOF'd the reader — shutdown would hang in `pthread_join` whenever
+      an autostart client was alive.
+- [x] `ai_thread_start()` failure paths harden: fds are closed and marked -1
+      (previously a half-built pipe could block the event loop on send, and
+      zeroed fds aliased stdin); `synui_init` now checks the return and falls
+      back to a plain compositor.
+- [x] Memory audit under ASan/LSan: `synui_destroy` now destroys the
+      renderer + allocator and removes the SIGINT/SIGTERM event sources
+      (the event loop doesn't free sources it still holds). Result: zero
+      leaks on a full run (AI + secfeed threads, autostarted client, foot
+      map/unmap, wayland-info, grim) — only fontconfig/cairo static caches
+      remain, suppressed via `tests/lsan.supp`.
+- [x] Test harness: `tests/smoke.sh`, wired as `meson test` ("smoke").
+      Boots headless/pixman in a private short-path XDG_RUNTIME_DIR (socket
+      paths cap at 108 bytes) with a hermetic empty config via the new
+      `$SYNUI_CONFIG` override (without it the machine's /etc/synui/synuirc
+      autostart leaked into the test), then asserts: socket up, all 29
+      required protocol globals advertised, a client maps/unmaps (foot,
+      skipped if absent), screencopy captures a frame (grim, skipped if
+      absent), SIGTERM exits 0 within a deadline (catches teardown hangs),
+      and no sanitizer errors in the log.
+- [x] CI: the build job now runs the smoke test on the release build **and**
+      on a fresh `-Db_sanitize=address` build, so the leak-free teardown is
+      enforced on every push.
+
+Verified: `meson test` green on both the release and ASan build dirs; the
+ASan run reports zero leaks with only the two library-static suppressions.

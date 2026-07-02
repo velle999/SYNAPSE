@@ -216,19 +216,60 @@ static void *ai_thread_fn(void *arg)
     return NULL;
 }
 
+/* On any failure leave every fd at -1 so ai_thread_send/_poll are no-ops —
+ * a half-set-up pipe with no consumer would eventually fill and block the
+ * event loop (and fd 0 would alias stdin).
+ *
+ * O_CLOEXEC matters: autostart and AI "CMD:" children fork+exec, and an
+ * inherited write end would keep the request pipe from ever reading EOF —
+ * ai_thread_stop would then join a thread that never exits. */
 int ai_thread_start(syn_server_t *s)
 {
-    if (pipe(s->ai_pipe_req)  < 0) return -1;
-    if (pipe(s->ai_pipe_resp) < 0) return -1;
+    if (pipe2(s->ai_pipe_req, O_CLOEXEC) < 0) {
+        s->ai_pipe_req[0]  = s->ai_pipe_req[1]  = -1;
+        s->ai_pipe_resp[0] = s->ai_pipe_resp[1] = -1;
+        return -1;
+    }
+    if (pipe2(s->ai_pipe_resp, O_CLOEXEC) < 0) {
+        close(s->ai_pipe_req[0]); close(s->ai_pipe_req[1]);
+        s->ai_pipe_req[0]  = s->ai_pipe_req[1]  = -1;
+        s->ai_pipe_resp[0] = s->ai_pipe_resp[1] = -1;
+        return -1;
+    }
 
     /* Make response pipe non-blocking for polling */
     fcntl(s->ai_pipe_resp[0], F_SETFL, O_NONBLOCK);
 
     atomic_store(&s->ai_connected, 0);
 
-    if (pthread_create(&s->ai_thread, NULL, ai_thread_fn, s) != 0)
+    if (pthread_create(&s->ai_thread, NULL, ai_thread_fn, s) != 0) {
+        close(s->ai_pipe_req[0]);  close(s->ai_pipe_req[1]);
+        close(s->ai_pipe_resp[0]); close(s->ai_pipe_resp[1]);
+        s->ai_pipe_req[0]  = s->ai_pipe_req[1]  = -1;
+        s->ai_pipe_resp[0] = s->ai_pipe_resp[1] = -1;
         return -1;
+    }
+    s->ai_running = 1;
     return 0;
+}
+
+/* Shut the AI thread down: closing the request pipe's write end makes its
+ * blocking read() return 0, which exits the loop. Join, then close the
+ * remaining pipe ends. Safe to call unconditionally. */
+void ai_thread_stop(syn_server_t *s)
+{
+    if (s->ai_pipe_req[1] >= 0) {
+        close(s->ai_pipe_req[1]);
+        s->ai_pipe_req[1] = -1;
+    }
+    if (s->ai_running) {
+        pthread_join(s->ai_thread, NULL);
+        s->ai_running = 0;
+    }
+    if (s->ai_pipe_req[0]  >= 0) { close(s->ai_pipe_req[0]);  s->ai_pipe_req[0]  = -1; }
+    if (s->ai_pipe_resp[0] >= 0) { close(s->ai_pipe_resp[0]); s->ai_pipe_resp[0] = -1; }
+    if (s->ai_pipe_resp[1] >= 0) { close(s->ai_pipe_resp[1]); s->ai_pipe_resp[1] = -1; }
+    atomic_store(&s->ai_connected, 0);
 }
 
 void ai_thread_send(syn_server_t *s, const syn_ai_request_t *req)

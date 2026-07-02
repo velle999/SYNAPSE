@@ -166,8 +166,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->bind_count = 0;
     seed_default_binds(cfg);
 
-    /* Try user config, then system-wide */
-    const char *paths[2] = { NULL, "/etc/synui/synuirc" };
+    /* SYNUI_CONFIG overrides everything (used by the test harness for a
+     * hermetic run), then user config, then system-wide. */
+    const char *paths[3] = { getenv("SYNUI_CONFIG"), NULL, "/etc/synui/synuirc" };
     char user_path[256] = {0};
     const char *xdg = getenv("XDG_CONFIG_HOME");
     const char *home = getenv("HOME");
@@ -175,10 +176,10 @@ void synui_config_load(syn_config_t *cfg)
         snprintf(user_path, sizeof(user_path), "%s/synui/synuirc", xdg);
     else if (home)
         snprintf(user_path, sizeof(user_path), "%s/.config/synui/synuirc", home);
-    paths[0] = user_path;
+    paths[1] = user_path;
 
     FILE *f = NULL;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         if (!paths[i] || !paths[i][0]) continue;
         f = fopen(paths[i], "r");
         if (f) break;

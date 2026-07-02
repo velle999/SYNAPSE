@@ -1,0 +1,6 @@
+# LeakSanitizer suppressions for the synui smoke test.
+#
+# One-time static caches inside system libraries — allocated on first use,
+# never released by design, and not reachable from synui's own teardown.
+leak:libfontconfig
+leak:libcairo

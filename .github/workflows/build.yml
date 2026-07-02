@@ -79,7 +79,8 @@ jobs:
             base-devel git cmake meson ninja pkgconf \
             readline systemd-libs \
             wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo \
-            linux-headers
+            linux-headers \
+            wayland-utils foot grim ttf-dejavu
 
       - uses: actions/checkout@v4
 
@@ -113,6 +114,16 @@ jobs:
             echo "::endgroup::"
           done
           echo "all userspace components built"
+
+      - name: synui headless smoke test
+        run: |
+          meson test -C synui/_ci smoke --print-errorlogs
+
+      - name: synui headless smoke test (ASan + LeakSanitizer)
+        run: |
+          meson setup synui/_asan synui -Dbuildtype=debug -Db_sanitize=address
+          meson compile -C synui/_asan
+          meson test -C synui/_asan smoke --print-errorlogs
 
       - name: Build kernel module
         run: |

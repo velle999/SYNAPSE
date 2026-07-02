@@ -74,7 +74,7 @@ pointer_constraints_h = custom_target('pointer-constraints-unstable-v1-protocol.
   input   : pointer_constraints_xml,
   command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
 
-executable('synui',
+synui_exe = executable('synui',
   sources : [
     'src/synui_main.c',
     'src/input.c',
@@ -102,3 +102,13 @@ executable('synui',
                   libinput, xcb, xcb_icccm, xcb_ewmh],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)
+
+# Headless smoke test: boots the compositor on the headless backend, checks
+# the advertised globals, maps a client (if foot is installed), screenshots
+# (if grim is installed) and asserts a clean SIGTERM teardown. Run with
+# `meson test`; add -Db_sanitize=address to a build dir for a leak-checked
+# run (tests/lsan.supp covers library-internal static caches).
+test('smoke',
+  find_program('tests/smoke.sh'),
+  args : [synui_exe],
+  timeout : 120)
