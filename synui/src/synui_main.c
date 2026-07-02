@@ -79,10 +79,12 @@ void synui_config_reload(syn_server_t *s)
 
     input_reload_config(s);
 
-    /* Re-tile the visible workspace with the new gap/border, and refresh
-     * every mapped view's border rects (floating windows aren't touched by
-     * the layout pass). Hidden workspaces re-flow on switch. */
-    layout_apply(s, &s->workspaces[s->active_workspace]);
+    /* Re-tile every output's visible workspace with the new gap/border, and
+     * refresh every mapped view's border rects (floating windows aren't
+     * touched by the layout pass). Hidden workspaces re-flow on switch. */
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        layout_apply(s, &s->workspaces[o->active_workspace]);
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link)
@@ -117,9 +119,21 @@ syn_output_t *server_focused_output(syn_server_t *s)
     return NULL;
 }
 
-void server_output_box(syn_server_t *s, struct wlr_box *box)
+syn_workspace_t *server_active_workspace(syn_server_t *s)
 {
     syn_output_t *o = server_focused_output(s);
+    int idx = o ? o->active_workspace : 0;
+    if (idx < 0 || idx >= WORKSPACE_MAX) idx = 0;
+    return &s->workspaces[idx];
+}
+
+int workspace_visible(syn_workspace_t *ws)
+{
+    return ws && ws->output && ws->output->active_workspace == ws->index;
+}
+
+void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
+{
     if (o) {
         wlr_output_layout_get_box(s->output_layout, o->wlr_output, box);
         if (box->width > 0 && box->height > 0) return;
@@ -127,14 +141,23 @@ void server_output_box(syn_server_t *s, struct wlr_box *box)
     *box = (struct wlr_box){ 0, 0, 1920, 1080 };
 }
 
-void server_usable_box(syn_server_t *s, struct wlr_box *box)
+void output_usable_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
 {
-    syn_output_t *o = server_focused_output(s);
     if (o && o->usable_area.width > 0 && o->usable_area.height > 0) {
         *box = o->usable_area;
         return;
     }
-    server_output_box(s, box);
+    output_box_of(s, o, box);
+}
+
+void server_output_box(syn_server_t *s, struct wlr_box *box)
+{
+    output_box_of(s, server_focused_output(s), box);
+}
+
+void server_usable_box(syn_server_t *s, struct wlr_box *box)
+{
+    output_usable_box_of(s, server_focused_output(s), box);
 }
 
 /* ── Output events ───────────────────────────────────────── */
@@ -204,13 +227,29 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * momentarily reachable via the output layout, and server_focused_output()
      * dereferences ->data — leave it NULL so that lookup skips this output. */
     output->wlr_output->data = NULL;
+
+    /* Orphan every workspace that lived on this output: hide its windows and
+     * mark it unassigned. The windows aren't lost — switching to the
+     * workspace (Super+N) re-homes it onto the focused output (i3/sway
+     * semantics). Skipped during shutdown, when the scene graph is gone. */
+    if (!server->shutting_down) {
+        for (int i = 0; i < WORKSPACE_MAX; i++) {
+            syn_workspace_t *ws = &server->workspaces[i];
+            if (ws->output != output) continue;
+            ws->output  = NULL;
+            ws->visible = 0;
+            syn_view_t *v;
+            wl_list_for_each(v, &ws->windows, link)
+                if (v->mapped)
+                    wlr_scene_node_set_enabled(&v->scene_tree->node, false);
+            wlr_log(WLR_INFO, "synui: workspace %d orphaned by output removal "
+                    "— switch to it to re-home its windows", i + 1);
+        }
+    }
     free(output);
 
-    /* Re-flow the active workspace and UI onto a surviving output so windows
-     * and panels don't vanish with the unplugged monitor. Skipped during
-     * shutdown, when the scene graph has already been torn down. */
+    /* Re-home the compositor UI onto a surviving output. */
     if (!server->shutting_down && !wl_list_empty(&server->outputs)) {
-        layout_apply(server, &server->workspaces[server->active_workspace]);
         if (server->welcome_ui.shown)
             synui_render_welcome(server);
         if (server->overlay.visible)
@@ -263,13 +302,39 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     wl_list_insert(&server->outputs, &output->link);
 
-    wlr_log(WLR_INFO, "synui: new output %s %dx%d",
-            wlr_output->name, wlr_output->width, wlr_output->height);
+    /* Give the new output its own workspace. Prefer an orphaned workspace
+     * that still has windows (its output was unplugged — replugging brings
+     * them back), then the lowest-numbered unassigned one. */
+    int assigned = -1;
+    for (int i = 0; i < WORKSPACE_MAX && assigned < 0; i++) {
+        syn_workspace_t *ws = &server->workspaces[i];
+        if (!ws->output && !wl_list_empty(&ws->windows))
+            assigned = i;
+    }
+    for (int i = 0; i < WORKSPACE_MAX && assigned < 0; i++) {
+        if (!server->workspaces[i].output)
+            assigned = i;
+    }
+    if (assigned < 0)   /* all 9 somehow assigned: fall back to ws 0 */
+        assigned = 0;
 
-    /* Seed the usable area (full box; no layer surfaces yet), then re-apply
-     * layout and re-home all UI for the newly-available geometry. */
+    syn_workspace_t *ws = &server->workspaces[assigned];
+    output->active_workspace = assigned;
+    ws->output  = output;
+    ws->visible = 1;
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link)
+        if (v->mapped)
+            wlr_scene_node_set_enabled(&v->scene_tree->node, true);
+
+    wlr_log(WLR_INFO, "synui: new output %s %dx%d — workspace %d",
+            wlr_output->name, wlr_output->width, wlr_output->height,
+            assigned + 1);
+
+    /* Seed the usable area (full box; no layer surfaces yet), then lay the
+     * workspace out on it and re-home all UI. */
     layer_arrange_output(output);
-    layout_apply(server, &server->workspaces[server->active_workspace]);
+    layout_apply(server, ws);
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
     if (server->overlay.visible)
@@ -415,8 +480,8 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     view->scene_tree->node.data = view;
     xdg_surface->data = view->scene_tree;
 
-    /* Assign to active workspace */
-    view->workspace = &server->workspaces[server->active_workspace];
+    /* Assign to the focused output's workspace */
+    view->workspace = server_active_workspace(server);
     wl_list_insert(&view->workspace->windows, &view->link);
 
     view->map.notify = xdg_surface_map;
@@ -467,8 +532,7 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
             snprintf(prompt, sizeof(prompt),
                      "[WINDOW_OPENED] app=%s pid=%d workspace=%s — "
                      "suggest layout adjustment? Reply YES or NO only.",
-                     comm, pid,
-                     server->workspaces[server->active_workspace].name);
+                     comm, pid, view->workspace->name);
 
             syn_ai_request_t req = {
                 .type = AI_MSG_QUERY_LAYOUT,
@@ -736,12 +800,12 @@ int synui_init(syn_server_t *s)
     for (int i = 0; i < WORKSPACE_MAX; i++) {
         s->workspaces[i].index   = i;
         s->workspaces[i].layout  = LAYOUT_TILING;
-        s->workspaces[i].visible = (i == 0);
+        s->workspaces[i].visible = 0;      /* new_output assigns and shows */
+        s->workspaces[i].output  = NULL;
         s->workspaces[i].master_factor = s->config.master_factor;
         strncpy(s->workspaces[i].name, ws_names[i], WORKSPACE_NAME_LEN - 1);
         wl_list_init(&s->workspaces[i].windows);
     }
-    s->active_workspace = 0;
 
     /* Wire up listeners */
     s->new_output.notify = server_new_output;

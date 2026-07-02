@@ -197,7 +197,7 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
 
 static void focus_next(syn_server_t *s, int dir)
 {
-    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+    syn_workspace_t *ws = server_active_workspace(s);
     if (wl_list_empty(&ws->windows)) return;
 
     struct wl_list *target;
@@ -229,7 +229,7 @@ static void spawn(const char *cmd)
 /* Execute a bind action (see config.c for the names and defaults). */
 static void binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
-    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+    syn_workspace_t *ws = server_active_workspace(s);
 
     if (strcmp(action, "spawn") == 0) {
         spawn(arg);

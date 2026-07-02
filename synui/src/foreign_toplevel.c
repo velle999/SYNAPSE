@@ -57,7 +57,7 @@ static void ft_handle_activate(struct wl_listener *listener, void *data)
     syn_server_t *s = v->server;
     if (!v->mapped || s->locked) return;
 
-    if (v->workspace && v->workspace->index != s->active_workspace)
+    if (v->workspace && !workspace_visible(v->workspace))
         workspace_switch(s, v->workspace->index);
     focus_view(s, v, view_surface(v));
 }

@@ -356,14 +356,13 @@ void synui_render_overlay(syn_server_t *s)
     y += 24;
 
     /* Workspace */
-    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+    syn_workspace_t *ws = server_active_workspace(s);
     cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
     cairo_move_to(cr, 14, y);
     cairo_show_text(cr, "workspace:");
     cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
     char ws_info[64];
-    snprintf(ws_info, sizeof(ws_info), "%s [%d]", ws->name,
-             s->active_workspace + 1);
+    snprintf(ws_info, sizeof(ws_info), "%s [%d]", ws->name, ws->index + 1);
     cairo_move_to(cr, 120, y);
     cairo_show_text(cr, ws_info);
     y += 24;

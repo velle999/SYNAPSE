@@ -13,7 +13,9 @@
 #   6. SIGTERM tears it down cleanly — exit 0, within a deadline (a hang
 #      here is exactly the listener/thread-teardown class of bug);
 #   7. an ASan build reports no errors or leaks (when built with
-#      -Db_sanitize=address; harmless otherwise).
+#      -Db_sanitize=address; harmless otherwise);
+#   8. a second instance with WLR_HEADLESS_OUTPUTS=2 gives each output its
+#      own workspace (per-output workspaces) and also shuts down cleanly.
 #
 # Usage: smoke.sh /path/to/synui
 # Run by `meson test -C <builddir>`; needs wayland-info (wayland-utils).
@@ -152,6 +154,37 @@ if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
     fail "sanitizer reported errors"
 fi
 echo "ok 7 - no sanitizer errors"
+
+# ── 8. Per-output workspaces (dual-head boot) ──────────────
+unset WAYLAND_DISPLAY
+LOG="$TMP/synui2.log"
+WLR_HEADLESS_OUTPUTS=2 "$SYNUI" >"$LOG" 2>&1 &
+SYNUI_PID=$!
+i=0
+while [ "$(grep -c 'new output' "$LOG")" -lt 2 ]; do
+    [ $i -ge 100 ] && fail "second instance: 2 outputs not up within 10s"
+    kill -0 "$SYNUI_PID" 2>/dev/null || fail "second instance died"
+    sleep 0.1
+    i=$((i + 1))
+done
+grep -q "new output .* workspace 1" "$LOG" \
+    || fail "dual-head: no output was assigned workspace 1"
+grep -q "new output .* workspace 2" "$LOG" \
+    || fail "dual-head: second output did not get its own workspace 2"
+kill -TERM "$SYNUI_PID"
+i=0
+while kill -0 "$SYNUI_PID" 2>/dev/null; do
+    [ $i -ge 100 ] && fail "second instance did not exit within 10s"
+    sleep 0.1
+    i=$((i + 1))
+done
+wait "$SYNUI_PID"
+rc=$?
+[ "$rc" -eq 0 ] || fail "second instance exited $rc (expected 0)"
+if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
+    fail "sanitizer reported errors (dual-head instance)"
+fi
+echo "ok 8 - dual-head boot: one workspace per output"
 
 SYNUI_PID=
 cleanup

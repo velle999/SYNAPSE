@@ -190,7 +190,10 @@ struct syn_workspace {
     char             name[WORKSPACE_NAME_LEN];
     char             intent[256];
     syn_layout_t     layout;
-    int              visible;
+    int              visible;        /* shown on its output right now */
+    syn_output_t    *output;         /* output this workspace lives on; NULL =
+                                        unassigned (never shown / its output
+                                        was unplugged) */
     float            master_factor;  /* master column width, 0.10–0.90 */
     struct wl_list   windows;   /* syn_view_t::link */
 };
@@ -270,6 +273,8 @@ struct syn_output {
     syn_server_t            *server;
     struct wlr_output       *wlr_output;
     struct wlr_scene_output *scene_output;
+
+    int                      active_workspace; /* workspace shown on this output */
 
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */
@@ -359,8 +364,11 @@ struct syn_server {
                                     devices, so a config reload can reapply
                                     libinput options */
 
+    /* Workspaces are global; each output shows one of them
+     * (syn_output_t::active_workspace). "The" active workspace — what
+     * keybinds, new windows and the overlay act on — is the one on the
+     * focused output: server_active_workspace(). */
     syn_workspace_t workspaces[WORKSPACE_MAX];
-    int             active_workspace;
     syn_view_t     *focused_view;
 
     syn_cmdbar_t    cmdbar;
@@ -485,6 +493,13 @@ void synui_config_reload(syn_server_t *s);   /* SIGHUP: reparse + reapply */
 /* The output the user is currently working on: the one under the cursor,
  * else the one holding the focused window, else the first connected output. */
 syn_output_t *server_focused_output(syn_server_t *s);
+/* The workspace on the focused output (never NULL; falls back to ws 0). */
+syn_workspace_t *server_active_workspace(syn_server_t *s);
+/* Is this workspace currently shown on its output? */
+int workspace_visible(syn_workspace_t *ws);
+/* Layout/usable box of a specific output (1920x1080 fallback). */
+void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box);
+void output_usable_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box);
 /* Layout-space box of the focused output (falls back to 1920x1080 @ 0,0). */
 void server_output_box(syn_server_t *s, struct wlr_box *box);
 /* Like server_output_box but minus layer-shell exclusive zones (for tiling). */

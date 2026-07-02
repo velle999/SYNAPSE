@@ -81,9 +81,9 @@ void layer_arrange_output(syn_output_t *output)
             output->wlr_output->name, usable.width, usable.height,
             usable.x, usable.y, full.width, full.height);
 
-    /* Re-tile the active workspace so windows fit the new usable area. */
+    /* Re-tile this output's workspace so windows fit the new usable area. */
     if (!s->shutting_down)
-        layout_apply(s, &s->workspaces[s->active_workspace]);
+        layout_apply(s, &s->workspaces[output->active_workspace]);
 }
 
 /* ── Layer surface events ────────────────────────────────── */

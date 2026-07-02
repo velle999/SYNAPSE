@@ -128,7 +128,7 @@ static void xw_map(struct wl_listener *listener, void *data)
     view->scene_tree = wlr_scene_subsurface_tree_create(s->window_tree, xs->surface);
     view->scene_tree->node.data = view;   /* so view_at() finds it */
 
-    view->workspace = &s->workspaces[s->active_workspace];
+    view->workspace = server_active_workspace(s);
     if (xs->modal || xs->parent)
         view->floating = 1;
     wl_list_insert(&view->workspace->windows, &view->link);
@@ -172,7 +172,7 @@ static void xw_unmap(struct wl_listener *listener, void *data)
         view->scene_tree = NULL;
     }
     if (!view->override_redirect && !s->shutting_down)
-        layout_apply(s, &s->workspaces[s->active_workspace]);
+        layout_apply(s, view->workspace);
 }
 
 static void xw_associate(struct wl_listener *listener, void *data)
@@ -265,7 +265,7 @@ static void xw_request_fullscreen(struct wl_listener *listener, void *data)
         wlr_scene_node_set_position(&view->scene_tree->node, area.x, area.y);
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
     } else {
-        layout_apply(s, &s->workspaces[s->active_workspace]);
+        layout_apply(s, view->workspace);
     }
 }
 

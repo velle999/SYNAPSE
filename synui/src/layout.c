@@ -35,12 +35,15 @@
 #define MIN_WIN        40      /* smallest interactive window size, px */
 
 /* ── Get output geometry for a workspace ─────────────────── */
-/* Lay out on the output the user is currently working on (cursor / focus),
- * minus any layer-shell exclusive zones, so tiling follows the active monitor
- * and doesn't cover panels/bars. */
-static void get_output_geom(syn_server_t *s, struct wlr_box *out)
+/* Lay out on the output the workspace is assigned to (falling back to the
+ * focused output for an unassigned one), minus any layer-shell exclusive
+ * zones so tiling doesn't cover panels/bars. */
+static void get_output_geom(syn_server_t *s, syn_workspace_t *ws,
+                            struct wlr_box *out)
 {
-    server_usable_box(s, out);
+    syn_output_t *o = (ws && ws->output) ? ws->output
+                                         : server_focused_output(s);
+    output_usable_box_of(s, o, out);
 }
 
 /* ── Count mapped windows in workspace ───────────────────── */
@@ -87,7 +90,7 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
 void layout_tile(syn_server_t *s, syn_workspace_t *ws)
 {
     struct wlr_box area;
-    get_output_geom(s, &area);
+    get_output_geom(s, ws, &area);
 
     /* Apply outer gap */
     int gap = s->config.gap;
@@ -128,7 +131,7 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws)
 {
     struct wlr_box area;
-    get_output_geom(s, &area);
+    get_output_geom(s, ws, &area);
 
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link) {
@@ -181,7 +184,7 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
     }
 
     struct wlr_box area;
-    get_output_geom(s, &area);
+    get_output_geom(s, ws, &area);
 
     char prompt[2048];
     snprintf(prompt, sizeof(prompt),
@@ -244,7 +247,7 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                const char *json_response)
 {
     struct wlr_box area;
-    get_output_geom(s, &area);
+    get_output_geom(s, ws, &area);
 
     char copy[2048];
     strncpy(copy, json_response, sizeof(copy) - 1);
@@ -294,6 +297,10 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 {
     if (!s || !ws) return;
 
+    /* A hidden workspace re-flows when it next becomes visible; laying it
+     * out now would re-enable its scene nodes on top of the visible one. */
+    if (!workspace_visible(ws)) return;
+
     /* Re-enable all nodes first */
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
@@ -318,29 +325,44 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 void workspace_switch(syn_server_t *s, int index)
 {
     if (index < 0 || index >= WORKSPACE_MAX) return;
-    if (index == s->active_workspace) return;
+    syn_output_t *o = server_focused_output(s);
+    if (!o) return;
+    if (o->active_workspace == index) return;
 
-    /* Hide current workspace windows */
-    syn_view_t *v;
-    wl_list_for_each(v, &s->workspaces[s->active_workspace].windows, link)
-        if (v->mapped)
-            wlr_scene_node_set_enabled(&v->scene_tree->node, false);
+    syn_workspace_t *target = &s->workspaces[index];
 
-    s->workspaces[s->active_workspace].visible = 0;
-    s->active_workspace = index;
-    s->workspaces[index].visible = 1;
+    /* Already visible on another output? Jump focus there instead of
+     * stealing the workspace (i3/sway semantics): warp the cursor onto that
+     * output so focused-output resolution follows the user. */
+    if (workspace_visible(target) && target->output != o) {
+        struct wlr_box b;
+        output_box_of(s, target->output, &b);
+        wlr_cursor_warp(s->cursor, NULL,
+                        b.x + b.width / 2.0, b.y + b.height / 2.0);
+    } else {
+        /* Hide this output's current workspace */
+        syn_workspace_t *cur = &s->workspaces[o->active_workspace];
+        syn_view_t *v;
+        wl_list_for_each(v, &cur->windows, link)
+            if (v->mapped)
+                wlr_scene_node_set_enabled(&v->scene_tree->node, false);
+        cur->visible = 0;
 
-    /* Show new workspace windows */
-    wl_list_for_each(v, &s->workspaces[index].windows, link)
-        if (v->mapped)
-            wlr_scene_node_set_enabled(&v->scene_tree->node, true);
+        /* Show the target here (re-homing it if it lived elsewhere) */
+        o->active_workspace = index;
+        target->output  = o;
+        target->visible = 1;
+        wl_list_for_each(v, &target->windows, link)
+            if (v->mapped)
+                wlr_scene_node_set_enabled(&v->scene_tree->node, true);
 
-    layout_apply(s, &s->workspaces[index]);
+        layout_apply(s, target);
+    }
 
-    /* Focus first window on new workspace */
-    if (!wl_list_empty(&s->workspaces[index].windows)) {
+    /* Focus first window on the target workspace */
+    if (!wl_list_empty(&target->windows)) {
         syn_view_t *first = wl_container_of(
-            s->workspaces[index].windows.next, first, link);
+            target->windows.next, first, link);
         if (first->mapped)
             focus_view(s, first, view_surface(first));
     }
@@ -369,12 +391,13 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
     int old_ws = view->workspace->index;
     if (old_ws == ws_index) return;
 
-    wl_list_remove(&view->link);
-    wlr_scene_node_set_enabled(&view->scene_tree->node,
-                                ws_index == s->active_workspace);
-
     view->workspace = &s->workspaces[ws_index];
+    wl_list_remove(&view->link);
     wl_list_insert(&view->workspace->windows, &view->link);
+
+    /* Visible only if the target workspace is shown on some output. */
+    wlr_scene_node_set_enabled(&view->scene_tree->node,
+                                workspace_visible(view->workspace));
 
     layout_apply(s, &s->workspaces[old_ws]);
     layout_apply(s, &s->workspaces[ws_index]);
@@ -389,7 +412,7 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
 void layout_float_place(syn_server_t *s, syn_view_t *view)
 {
     struct wlr_box area;
-    get_output_geom(s, &area);
+    get_output_geom(s, view->workspace, &area);
 
     int w = view->w, h = view->h;
     int bw = s->config.border_width;

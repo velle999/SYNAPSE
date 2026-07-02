@@ -387,7 +387,7 @@ void execute_ai_action(syn_server_t *s, const char *response)
         if (strncmp(act, "focus ", 6) == 0) {
             const char *app_id = act + 6;
             /* Find and focus matching window */
-            syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+            syn_workspace_t *ws = server_active_workspace(s);
             syn_view_t *v;
             wl_list_for_each(v, &ws->windows, link) {
                 if (!v->mapped) continue;
@@ -434,7 +434,7 @@ void cmdbar_submit(syn_server_t *s)
         "ACTION: focus <app_id>\n"
         "WORKSPACE: switch <N>\n"
         "Or plain text to display as answer.",
-        s->workspaces[s->active_workspace].name,
+        server_active_workspace(s)->name,
         bar->input
     );
 
@@ -462,7 +462,7 @@ void overlay_update(syn_server_t *s)
     syn_overlay_t *ov = &s->overlay;
 
     /* Workspace info */
-    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+    syn_workspace_t *ws = server_active_workspace(s);
     int win_count = 0;
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
@@ -470,7 +470,7 @@ void overlay_update(syn_server_t *s)
 
     snprintf(ov->ai_context, sizeof(ov->ai_context),
         "workspace: %s [%d]  windows: %d  layout: %s%s",
-        ws->name, s->active_workspace + 1, win_count,
+        ws->name, ws->index + 1, win_count,
         ws->layout == LAYOUT_TILING   ? "tiling"   :
         ws->layout == LAYOUT_MONOCLE  ? "monocle"  :
         ws->layout == LAYOUT_AI       ? "AI"       : "floating",

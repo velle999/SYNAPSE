@@ -51,7 +51,7 @@ Partial / broken:
   seat also advertised no pointer capability until a device appeared, killing
   early `get_pointer` clients. (Both fixed in Phase G.)
 
-Missing: full tablet-v2, per-output workspaces.
+Missing: full tablet-v2.
 
 ## Phases (ordered by value ÷ effort)
 
@@ -106,7 +106,7 @@ independent per-output workspace sets remain a possible follow-up).
 Follow-up (deferred): re-layout is recomputed on the next layout-triggering
 action, so windows don't auto-migrate the instant the cursor crosses monitors;
 and monitor 2 mirrors the active workspace rather than showing its own until
-per-output workspaces land.
+per-output workspaces land. *(Per-output workspaces landed in Phase K.)*
 
 ### Phase D — Desktop shell surfaces: layer-shell  *(done)*
 - [x] Vendored `protocols/wlr-layer-shell-unstable-v1.xml` (wlroots doesn't
@@ -320,3 +320,39 @@ ASan run reports zero leaks with only the two library-static suppressions.
 
 Not exercisable headless: keymap/libinput reapplication needs real input
 devices — verify on hardware by switching `xkb_layout` and sending SIGHUP.
+
+### Phase K — Per-output workspaces  *(done)*
+Each monitor now shows its own workspace instead of mirroring the active one.
+- [x] Model: `syn_output_t.active_workspace` (what this output shows) +
+      `syn_workspace_t.output` (where this workspace lives; NULL =
+      unassigned/orphaned). The global `s->active_workspace` field is gone —
+      "the" active workspace (keybinds, new windows, overlay, AI prompts) is
+      `server_active_workspace()`: the workspace on the focused output, which
+      follows the cursor. `workspace_visible()` = shown on its output now.
+- [x] Layout targets the workspace's *own* output: `get_output_geom()` takes
+      the workspace and resolves `ws->output`'s usable box (new
+      `output_box_of`/`output_usable_box_of` helpers; the focused-output
+      wrappers remain for the compositor UI). `layout_apply()` early-outs on
+      hidden workspaces so laying out an invisible one can't re-enable its
+      scene nodes over the visible one.
+- [x] `workspace_switch()` acts on the focused output; a workspace already
+      visible on another output isn't stolen — focus jumps there instead
+      (cursor warped to that output's centre, i3/sway semantics). Otherwise
+      the target is re-homed to the focused output and shown.
+- [x] Hotplug: a new output takes an orphaned workspace that still has
+      windows (replugging a monitor brings its windows back), else the
+      lowest unassigned one. Output removal orphans its workspaces: windows
+      hidden but reachable — switching to the workspace re-homes it.
+- [x] `workspace_move_view()` shows/hides the view by the target workspace's
+      actual visibility; layer-shell exclusive-zone changes re-tile the
+      *owning* output's workspace; SIGHUP reload re-tiles every output.
+- [x] Smoke test check 8: a dual-head boot (`WLR_HEADLESS_OUTPUTS=2`) must
+      assign workspace 1 and workspace 2 to the two outputs and exit
+      cleanly; green on release and ASan builds.
+
+Verified headless (2 outputs): distinct workspace per output; a tiled client
+sizes to one output's box (1260x700 on a 1280x720 head — not the 2560-wide
+layout); per-output `grim -o` captures both heads; clean SIGTERM. Not
+drivable headless: workspace switching / jump-focus need key input, and the
+orphan-on-unplug path needs a real disconnect — verify on hardware with two
+monitors (Super+N on each head, unplug/replug).
