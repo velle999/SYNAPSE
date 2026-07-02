@@ -293,11 +293,22 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data)
 static void xdg_surface_commit(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, commit);
-    if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-        /* Update borders when surface geometry changes */
-        if (view->mapped)
-            view_update_borders(view);
+    if (view->xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+        return;
+
+    /* wlroots 0.19 requires the compositor to answer the initial commit with
+     * a configure, or the client waits forever and never maps. (Clients using
+     * xdg-decoration used to get one as a side effect of our set_mode; plain
+     * xdg clients hung.) 0x0 lets the client pick its own size; the layout
+     * resizes it on map. */
+    if (view->xdg_surface->initial_commit) {
+        wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, 0, 0);
+        return;
     }
+
+    /* Update borders when surface geometry changes */
+    if (view->mapped)
+        view_update_borders(view);
 }
 
 static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data)
@@ -780,6 +791,24 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->cursor_frame.link);
     wl_list_remove(&s->request_cursor.link);
     wl_list_remove(&s->request_set_selection.link);
+    wl_list_remove(&s->new_constraint.link);
+    wl_list_remove(&s->touch_down.link);
+    wl_list_remove(&s->touch_up.link);
+    wl_list_remove(&s->touch_motion.link);
+    wl_list_remove(&s->touch_frame.link);
+    wl_list_remove(&s->touch_cancel.link);
+    wl_list_remove(&s->tablet_axis.link);
+    wl_list_remove(&s->tablet_proximity.link);
+    wl_list_remove(&s->tablet_tip.link);
+    wl_list_remove(&s->tablet_button.link);
+    wl_list_remove(&s->swipe_begin.link);
+    wl_list_remove(&s->swipe_update.link);
+    wl_list_remove(&s->swipe_end.link);
+    wl_list_remove(&s->pinch_begin.link);
+    wl_list_remove(&s->pinch_update.link);
+    wl_list_remove(&s->pinch_end.link);
+    wl_list_remove(&s->hold_begin.link);
+    wl_list_remove(&s->hold_end.link);
 
     wl_display_destroy_clients(s->display);
     wlr_scene_node_destroy(&s->scene->tree.node);
@@ -826,15 +855,19 @@ static void usage(const char *prog) {
         "  -v, --version  Print version\n"
         "  -h, --help     This help\n"
         "\n"
-        "Keybindings:\n"
+        "Default keybindings (override with 'bind =' lines in synuirc):\n"
         "  Super+Enter        Open terminal\n"
         "  Super+Space        Open AI command bar\n"
         "  Super+A            Toggle neural overlay\n"
         "  Super+1..9         Switch workspace\n"
         "  Super+Shift+1..9   Move window to workspace\n"
-        "  Super+L            Next layout mode\n"
+        "  Super+Tab          Next layout mode\n"
         "  Super+Q            Close focused window\n"
-        "  Super+Shift+Q      Quit compositor\n",
+        "  Super+Shift+Q      Quit compositor\n"
+        "\n"
+        "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc) — keybinds,\n"
+        "xkb_layout/variant/options, repeat_rate/delay, tap, natural_scroll,\n"
+        "left_handed, accel_speed, terminal, autostart, gaps.\n",
         prog
     );
 }

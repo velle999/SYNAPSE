@@ -4,7 +4,7 @@
 the gap between its current state and the roadmap goal, *"full Wayland
 compositor with AI-aware window management."*
 
-## Current state (real `src/`, ~4,550 LOC)
+## Current state (real `src/`, ~5,280 LOC)
 
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
@@ -18,6 +18,8 @@ Working:
 - layer-shell (panels/bars/wallpaper/launchers) + xdg-output
 - XWayland (X11 apps, managed + override-redirect) + xdg-decoration (SSD)
 - output-management + DPMS, fractional-scale, idle-notify/inhibit, session-lock
+- pointer-constraints + relative-pointer, touch, tablet (pointer emulation),
+  touchpad gestures, libinput config, configurable keymap + keybindings
 
 Partial / broken:
 - **AI layout**: request path exists but `layout_apply_ai_response()` was never
@@ -42,9 +44,13 @@ Partial / broken:
 - Interactive move/resize (`SYNUI_CURSOR_MOVE/RESIZE`) and the documented
   Super+H/L (master factor) / Super+Shift+J/K (move in stack) binds. (Done in
   Phase B.)
+- **Initial configure**: the initial xdg commit was never answered, so plain
+  xdg clients (anything not using xdg-decoration) hung unmapped forever; the
+  seat also advertised no pointer capability until a device appeared, killing
+  early `get_pointer` clients. (Both fixed in Phase G.)
 
-Missing: foreign-toplevel, screencopy, gamma-control, pointer-constraints,
-touch/tablet, libinput config.
+Missing: foreign-toplevel, screencopy, gamma-control, full tablet-v2,
+drag-and-drop.
 
 ## Phases (ordered by value ÷ effort)
 
@@ -170,9 +176,49 @@ outputs, and a SIGKILL'd lock client left the session locked (secure) without
 crashing. output-management/DPMS apply couldn't be exercised (wlr-randr not
 installed) but the config-broadcast path is hit by any manager client.
 
-### Phase G — Input completeness
-Pointer constraints + relative pointer (games), touch/tablet/gestures,
-libinput config, configurable keymap and keybindings.
+### Phase G — Input completeness  *(done)*
+- [x] relative-pointer (`zwp_relative_pointer_v1`): every motion (relative or
+      absolute-converted) is broadcast with raw + unaccelerated deltas.
+- [x] pointer-constraints (`zwp_pointer_constraints_v1`, `constraints.c`): the
+      constraint owned by the pointer-focused surface is activated; LOCKED
+      absorbs cursor motion (deltas still flow to relative-pointer — FPS look
+      input), CONFINED clamps the delta into the constraint region
+      (`wlr_region_confine`); cursor-hint warp on destroy of the active
+      constraint. Vendored nothing (protocol XML comes from wayland-protocols;
+      only the wlroots-required generated header is built).
+- [x] Touch: devices attach to `wlr_cursor`, seat advertises TOUCH; down maps
+      through the scene to the surface (and focuses its view), per-point focus
+      keeps motion on the surface the finger started on; up/cancel/frame.
+- [x] Tablet (pointer emulation): pen motion/proximity drives the cursor
+      (axis-partial updates honoured via NAN), tip = left button, stylus
+      buttons = right/middle, all through the shared button path so
+      Super+drag works with a pen. Full tablet-v2 is a follow-up.
+- [x] Touchpad gestures: `zwp_pointer_gestures_v1` relay (swipe/pinch/hold).
+- [x] libinput config from synuirc: `tap`, `natural_scroll`, `left_handed`,
+      `accel_speed` — applied per device where supported; unset keys leave
+      device defaults.
+- [x] Configurable keymap: `xkb_rules/model/layout/variant/options`,
+      `repeat_rate`, `repeat_delay` (empty = XKB_DEFAULT_* env / system).
+- [x] Configurable keybindings: the hardcoded bind table became data —
+      config.c seeds the old defaults, `bind = <mod>+<key> <action> [arg]`
+      lines add or replace (same-combo overrides). Actions cover all previous
+      behavior plus `spawn`; shifted-number normalization preserved.
+- [x] Fixed: seat advertises the pointer capability from startup (a client
+      calling `get_pointer` before any input device appeared was killed with
+      a protocol error — always the case on headless).
+- [x] Fixed: the initial xdg commit is now answered with a configure
+      (`set_size(0,0)`). Plain xdg clients (no xdg-decoration) previously
+      never got one and hung unmapped forever; foot only worked because our
+      decoration set_mode scheduled a configure as a side effect.
+
+Verified headless: `zwp_pointer_constraints_v1`, `zwp_relative_pointer_manager_v1`
+and `zwp_pointer_gestures_v1` advertised; a purpose-built client mapped a plain
+xdg toplevel (initial-commit fix) and created/destroyed a locked constraint
+with cursor hint, compositor surviving with a clean SIGTERM exit; bind parsing
+verified by table dump (33 defaults, user override of super+return, added
+combo, bad key/action rejected with log); foot regression-checked. Constraint
+*activation* needs real pointer focus, which headless input can't produce —
+verify on hardware with a game or `wlroots`' pointer-constraints example.
 
 ### Phase H — Ecosystem protocols
 foreign-toplevel (taskbars), screencopy (screenshots), data-control / primary

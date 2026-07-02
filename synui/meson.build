@@ -9,6 +9,7 @@ xkbcommon = dependency('xkbcommon')
 pixman    = dependency('pixman-1')
 threads   = dependency('threads')
 cairo     = dependency('cairo')
+libinput  = dependency('libinput')
 
 # XWayland pulls xcb headers in via wlr/xwayland.h
 xcb       = dependency('xcb')
@@ -61,10 +62,23 @@ output_power_c = custom_target('wlr-output-power-management-unstable-v1-protocol
   input   : output_power_xml,
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# pointer-constraints: wlroots' wlr_pointer_constraints_v1.h includes the
+# generated protocol header (for the lifetime enum). Ships with
+# wayland-protocols, so generate straight from pkgdatadir.
+pointer_constraints_xml = join_paths(
+  wayland_protos.get_variable('pkgdatadir'),
+  'unstable/pointer-constraints/pointer-constraints-unstable-v1.xml')
+
+pointer_constraints_h = custom_target('pointer-constraints-unstable-v1-protocol.h',
+  output  : 'pointer-constraints-unstable-v1-protocol.h',
+  input   : pointer_constraints_xml,
+  command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
+
 executable('synui',
   sources : [
     'src/synui_main.c',
     'src/input.c',
+    'src/constraints.c',
     'src/layout.c',
     'src/layer.c',
     'src/xwayland.c',
@@ -80,9 +94,10 @@ executable('synui',
     layer_shell_c,
     output_power_h,
     output_power_c,
+    pointer_constraints_h,
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,
-                  xcb, xcb_icccm, xcb_ewmh],
+                  libinput, xcb, xcb_icccm, xcb_ewmh],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)

@@ -1,6 +1,6 @@
 # ~/.config/synui/synuirc
 # synui compositor configuration
-# Reload: synui --reload  (or send SIGHUP)
+# Read at startup (restart synui to apply changes).
 
 # ── Terminal emulator ──────────────────────────────────────
 terminal = foot
@@ -34,5 +34,31 @@ workspace_3_intent = writing code and running tests
 workspace_4_intent = terminal and system administration
 workspace_5_intent = media and entertainment
 
-# ── Keybind overrides ──────────────────────────────────────
-# (reserved for future use)
+# ── Keyboard (XKB) ─────────────────────────────────────────
+# Empty = system default (or XKB_DEFAULT_* environment).
+# xkb_layout   = us
+# xkb_variant  = colemak
+# xkb_options  = ctrl:nocaps
+# xkb_model    =
+# xkb_rules    =
+repeat_rate  = 25
+repeat_delay = 600
+
+# ── Pointer / touchpad (libinput) ──────────────────────────
+# Unset options leave the device at its default.
+# tap            = on          # touchpad tap-to-click
+# natural_scroll = on
+# left_handed    = on
+# accel_speed    = 0.0         # -1.0 (slow) .. 1.0 (fast)
+
+# ── Keybindings ────────────────────────────────────────────
+# bind = <mod>+<key> <action> [arg]
+# Mods: super/logo/mod4, shift, ctrl, alt. Keys are XKB keysym names
+# (q, return, space, tab, backspace, f1, ...).
+# Actions: spawn <cmd>, term, cmdbar, overlay, close, quit, layout_cycle,
+#          focus_next/prev, stack_next/prev, master_shrink/grow,
+#          float_toggle, maximize_toggle, ai_ask, ws <1-9>, movews <1-9>
+# A bind on the same combo as a default replaces the default.
+# bind = super+d spawn wofi --show drun
+# bind = super+shift+s spawn swaylock
+# bind = super+e term

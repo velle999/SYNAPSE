@@ -29,6 +29,11 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
+#include <wlr/types/wlr_touch.h>
+#include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
@@ -130,6 +135,18 @@ typedef struct {
     char intent[128];
 } syn_ai_ctx_t;
 
+/* ── Keybinding (table-driven; syntax in config.c) ───────── */
+#define SYN_BINDS_MAX        96
+#define SYN_BIND_ACTION_LEN  24
+#define SYN_BIND_ARG_LEN     104
+
+typedef struct {
+    uint32_t     mods;      /* WLR_MODIFIER_* mask (LOGO/SHIFT/CTRL/ALT) */
+    xkb_keysym_t sym;       /* stored lower-cased */
+    char         action[SYN_BIND_ACTION_LEN];
+    char         arg[SYN_BIND_ARG_LEN];
+} syn_bind_t;
+
 /* ── Configuration ───────────────────────────────────────── */
 #define SYN_AUTOSTART_MAX 8
 
@@ -143,6 +160,25 @@ typedef struct {
     int   ai_layout;
     int   ai_ctx_decor;
     int   start_overlay;
+
+    /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
+    char  xkb_rules[64];
+    char  xkb_model[64];
+    char  xkb_layout[64];
+    char  xkb_variant[64];
+    char  xkb_options[256];
+    int   repeat_rate;       /* key repeats per second */
+    int   repeat_delay;      /* ms before repeat starts */
+
+    /* libinput device options; tri-states are -1 = leave device default. */
+    int   tap_to_click;
+    int   natural_scroll;
+    int   left_handed;
+    float accel_speed;       /* -1.0 .. 1.0 */
+    int   accel_speed_set;
+
+    syn_bind_t binds[SYN_BINDS_MAX];
+    int        bind_count;
 } syn_config_t;
 
 /* ── Workspace ───────────────────────────────────────────── */
@@ -267,6 +303,13 @@ struct syn_server {
     int                                  locked;     /* session is locked */
     int                                  idle_inhibitors;  /* active inhibitor count */
 
+    /* Phase G: input completeness. */
+    struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
+    struct wlr_pointer_constraints_v1      *pointer_constraints;
+    struct wlr_pointer_constraint_v1       *active_constraint;  /* on the pointer-focused surface */
+    struct wlr_pointer_gestures_v1         *pointer_gestures;
+    int                                     touch_devices;
+
     /* Scene-graph z-order (bottom→top): bg_rect, layer[BACKGROUND],
      * layer[BOTTOM], window_tree, layer[TOP], layer[OVERLAY], then UI. */
     struct wlr_scene_tree     *window_tree;    /* xdg toplevels + borders */
@@ -369,6 +412,24 @@ struct syn_server {
     struct wl_listener cursor_frame;
     struct wl_listener request_cursor;
     struct wl_listener request_set_selection;
+    struct wl_listener new_constraint;
+    struct wl_listener touch_down;
+    struct wl_listener touch_up;
+    struct wl_listener touch_motion;
+    struct wl_listener touch_frame;
+    struct wl_listener touch_cancel;
+    struct wl_listener tablet_axis;
+    struct wl_listener tablet_proximity;
+    struct wl_listener tablet_tip;
+    struct wl_listener tablet_button;
+    struct wl_listener swipe_begin;
+    struct wl_listener swipe_update;
+    struct wl_listener swipe_end;
+    struct wl_listener pinch_begin;
+    struct wl_listener pinch_update;
+    struct wl_listener pinch_end;
+    struct wl_listener hold_begin;
+    struct wl_listener hold_end;
 };
 
 /* ── synui_main.c ────────────────────────────────────────── */
@@ -408,6 +469,15 @@ void output_mgmt_update(syn_server_t *s);        /* push current config to clien
 /* ── session.c ───────────────────────────────────────────── */
 void session_lock_setup(syn_server_t *s);        /* ext-session-lock */
 void session_lock_arrange(syn_server_t *s);      /* re-place lock surfaces */
+
+/* ── constraints.c ───────────────────────────────────────── */
+void constraints_setup(syn_server_t *s);  /* pointer-constraints + relative-pointer */
+/* (De)activate the constraint owned by the surface now holding pointer focus
+ * (surface may be NULL — deactivates any active constraint). */
+void constraints_focus_surface(syn_server_t *s, struct wlr_surface *surface);
+/* Clamp a relative motion against the active constraint (confined) or absorb
+ * it entirely — returns 1 if the cursor must not move (locked pointer). */
+int  constraints_apply_motion(syn_server_t *s, double *dx, double *dy);
 
 /* ── input.c ─────────────────────────────────────────────── */
 void input_setup(syn_server_t *s);

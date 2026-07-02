@@ -1,7 +1,8 @@
 /*
- * input.c — Keyboard and pointer handling
+ * input.c — Keyboard, pointer, touch and tablet handling
  *
- * Keyboard bindings:
+ * Keybindings are table-driven (config.c seeds the defaults; `bind =` lines
+ * in synuirc add or override). Default table:
  *
  *   Super+Enter          Launch terminal (foot)
  *   Super+Space          Open AI command bar
@@ -22,17 +23,27 @@
  *   Super + Left-drag    Move the window under the cursor
  *   Super + Right-drag   Resize it from the nearest corner
  *
+ * Every relative motion is broadcast to relative-pointer clients and run
+ * through the active pointer constraint (constraints.c) — locked pointers
+ * swallow the move, confined ones clamp it. Touch is forwarded to the seat
+ * with proper per-point focus; tablet tools drive the cursor (pointer
+ * emulation: tip = left, stylus buttons = right/middle); touchpad gestures
+ * are relayed via pointer-gestures-v1; libinput device options (tap,
+ * natural scroll, accel, left-handed) come from synuirc.
+ *
  * SynapseOS Project — GPLv2
  * https://github.com/velle999/SYNAPSE
  */
 
 #define _GNU_SOURCE
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <linux/input-event-codes.h>
+#include <wlr/backend/libinput.h>
 #include <wlr/util/edges.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 
@@ -198,143 +209,111 @@ static void focus_next(syn_server_t *s, int dir)
         focus_view(s, next, view_surface(next));
 }
 
-static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
-                               uint32_t modifiers)
+static void spawn(const char *cmd)
 {
-    bool super = (modifiers & WLR_MODIFIER_LOGO) != 0;
-    bool shift = (modifiers & WLR_MODIFIER_SHIFT) != 0;
-
-    if (!super) return false;
-
-    /* Normalize shifted keysyms to lowercase for consistent matching */
-    xkb_keysym_t lower = xkb_keysym_to_lower(sym);
-
-    /* Super+Shift+Q — quit */
-    if (shift && lower == XKB_KEY_q) {
-        wl_display_terminate(s->display);
-        return true;
+    if (!cmd || !*cmd) return;
+    if (fork() == 0) {
+        setsid();
+        execl("/bin/sh", "sh", "-c", cmd, NULL);
+        _exit(1);
     }
+}
 
-    /* Super+Q — close focused window */
-    if (!shift && lower == XKB_KEY_q) {
-        if (s->focused_view)
-            view_close(s->focused_view);
-        return true;
-    }
+/* Execute a bind action (see config.c for the names and defaults). */
+static void binding_execute(syn_server_t *s, const char *action, const char *arg)
+{
+    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
 
-    /* Super+Enter — launch terminal */
-    if (sym == XKB_KEY_Return) {
-        if (fork() == 0) {
-            execl("/bin/sh", "sh", "-c", "foot || alacritty || xterm", NULL);
-            _exit(1);
-        }
-        return true;
-    }
-
-    /* Super+Space — AI command bar */
-    if (sym == XKB_KEY_space) {
-        if (s->cmdbar.visible)
-            cmdbar_hide(s);
+    if (strcmp(action, "spawn") == 0) {
+        spawn(arg);
+    } else if (strcmp(action, "term") == 0) {
+        /* Default config: fall back through common terminals. */
+        if (strcmp(s->config.terminal, "foot") == 0)
+            spawn("foot || alacritty || xterm");
         else
-            cmdbar_show(s);
-        return true;
-    }
-
-    /* Super+A — neural overlay */
-    if (!shift && lower == XKB_KEY_a) {
+            spawn(s->config.terminal);
+    } else if (strcmp(action, "cmdbar") == 0) {
+        if (s->cmdbar.visible) cmdbar_hide(s);
+        else                   cmdbar_show(s);
+    } else if (strcmp(action, "overlay") == 0) {
         overlay_toggle(s);
-        return true;
-    }
-
-    /* Super+Tab — cycle layout */
-    if (sym == XKB_KEY_Tab) {
-        syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+    } else if (strcmp(action, "close") == 0) {
+        if (s->focused_view) view_close(s->focused_view);
+    } else if (strcmp(action, "quit") == 0) {
+        wl_display_terminate(s->display);
+    } else if (strcmp(action, "layout_cycle") == 0) {
         ws->layout = (ws->layout + 1) % 4;
         static const char *lnames[] = {"tiling","floating","monocle","AI"};
         wlr_log(WLR_INFO, "synui: layout → %s", lnames[ws->layout]);
         layout_apply(s, ws);
-        return true;
-    }
-
-    /* Super+H / Super+L — shrink / grow the master column */
-    if (!shift && lower == XKB_KEY_h) {
-        layout_adjust_master(s, &s->workspaces[s->active_workspace], -0.05f);
-        return true;
-    }
-    if (!shift && lower == XKB_KEY_l) {
-        layout_adjust_master(s, &s->workspaces[s->active_workspace], +0.05f);
-        return true;
-    }
-
-    /* Super+Shift+J/K — move focused window down/up the stack */
-    if (shift && lower == XKB_KEY_j) {
+    } else if (strcmp(action, "master_shrink") == 0) {
+        layout_adjust_master(s, ws, -0.05f);
+    } else if (strcmp(action, "master_grow") == 0) {
+        layout_adjust_master(s, ws, +0.05f);
+    } else if (strcmp(action, "focus_next") == 0) {
+        focus_next(s, 1);
+    } else if (strcmp(action, "focus_prev") == 0) {
+        focus_next(s, -1);
+    } else if (strcmp(action, "stack_next") == 0) {
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, 1);
-        return true;
-    }
-    if (shift && lower == XKB_KEY_k) {
+    } else if (strcmp(action, "stack_prev") == 0) {
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, -1);
-        return true;
-    }
-
-    /* Super+J/K — focus next/prev */
-    if (lower == XKB_KEY_j) { focus_next(s, 1);  return true; }
-    if (lower == XKB_KEY_k) { focus_next(s, -1); return true; }
-
-    /* Super+F — toggle floating (centred placement when floated) */
-    if (lower == XKB_KEY_f && s->focused_view) {
+    } else if (strcmp(action, "float_toggle") == 0) {
         syn_view_t *v = s->focused_view;
+        if (!v) return;
         v->floating = !v->floating;
         /* Reflow the remaining tiled windows first, then place this one. */
-        layout_apply(s, &s->workspaces[s->active_workspace]);
+        layout_apply(s, ws);
         if (v->floating) {
             layout_float_place(s, v);
             wlr_scene_node_raise_to_top(&v->scene_tree->node);
         }
-        return true;
-    }
-
-    /* Super+M — maximize */
-    if (lower == XKB_KEY_m && s->focused_view) {
+    } else if (strcmp(action, "maximize_toggle") == 0) {
+        if (!s->focused_view) return;
         s->focused_view->maximized = !s->focused_view->maximized;
         view_set_maximized(s->focused_view, s->focused_view->maximized);
-        return true;
+    } else if (strcmp(action, "ai_ask") == 0) {
+        spawn("foot -e synsh -c 'syn ask'");
+    } else if (strcmp(action, "ws") == 0) {
+        int n = atoi(arg);
+        if (n >= 1 && n <= WORKSPACE_MAX)
+            workspace_switch(s, n - 1);
+    } else if (strcmp(action, "movews") == 0) {
+        int n = atoi(arg);
+        if (n >= 1 && n <= WORKSPACE_MAX && s->focused_view)
+            workspace_move_view(s, s->focused_view, n - 1);
+    } else {
+        wlr_log(WLR_ERROR, "synui: unknown bind action '%s'", action);
     }
+}
 
-    /* Super+Backspace — quick AI query via synsh */
-    if (sym == XKB_KEY_BackSpace) {
-        if (fork() == 0) {
-            execl("/bin/sh", "sh", "-c",
-                  "foot -e synsh -c 'syn ask'", NULL);
-            _exit(1);
-        }
-        return true;
-    }
+static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
+                               uint32_t modifiers)
+{
+    uint32_t mods = modifiers & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
+                                 WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT);
 
-    /* Super+1..9 / Super+Shift+1..9 — workspace switch / move window
-     * With Shift held, number keysyms become symbols (!@#$...),
-     * so we map them back to their number equivalents. */
-    if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
-        int ws = sym - XKB_KEY_1;
-        workspace_switch(s, ws);
-        return true;
-    }
-
-    /* Shifted number keys: !@#$%^&*( → workspace 1..9 (move window) */
-    {
+    /* With Shift held, number keys deliver symbols (!@#$…) — map them back to
+     * digits so binds like super+shift+1 match what the user wrote. */
+    if (mods & WLR_MODIFIER_SHIFT) {
         static const xkb_keysym_t shifted_nums[] = {
             XKB_KEY_exclam, XKB_KEY_at, XKB_KEY_numbersign,
             XKB_KEY_dollar, XKB_KEY_percent, XKB_KEY_asciicircum,
             XKB_KEY_ampersand, XKB_KEY_asterisk, XKB_KEY_parenleft
         };
         for (int i = 0; i < 9; i++) {
-            if (sym == shifted_nums[i] && shift) {
-                if (s->focused_view)
-                    workspace_move_view(s, s->focused_view, i);
-                return true;
-            }
+            if (sym == shifted_nums[i]) { sym = XKB_KEY_1 + i; break; }
         }
     }
+    xkb_keysym_t lower = xkb_keysym_to_lower(sym);
 
+    for (int i = 0; i < s->config.bind_count; i++) {
+        syn_bind_t *b = &s->config.binds[i];
+        if (b->mods == mods && b->sym == lower) {
+            binding_execute(s, b->action, b->arg);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -404,13 +383,29 @@ static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
     kb->server = s;
     kb->wlr_keyboard = wlr_kb;
 
+    /* Keymap from synuirc (xkb_layout/variant/…); empty fields fall through
+     * to the XKB_DEFAULT_* environment and the system default. */
+    syn_config_t *cfg = &s->config;
+    struct xkb_rule_names names = {
+        .rules   = cfg->xkb_rules[0]   ? cfg->xkb_rules   : NULL,
+        .model   = cfg->xkb_model[0]   ? cfg->xkb_model   : NULL,
+        .layout  = cfg->xkb_layout[0]  ? cfg->xkb_layout  : NULL,
+        .variant = cfg->xkb_variant[0] ? cfg->xkb_variant : NULL,
+        .options = cfg->xkb_options[0] ? cfg->xkb_options : NULL,
+    };
     struct xkb_context *ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    struct xkb_keymap *keymap = xkb_keymap_new_from_names(ctx, NULL,
+    struct xkb_keymap *keymap = xkb_keymap_new_from_names(ctx, &names,
                                    XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (!keymap) {
+        wlr_log(WLR_ERROR, "synui: configured keymap '%s/%s' failed to "
+                "compile — using default", cfg->xkb_layout, cfg->xkb_variant);
+        keymap = xkb_keymap_new_from_names(ctx, NULL,
+                                           XKB_KEYMAP_COMPILE_NO_FLAGS);
+    }
     wlr_keyboard_set_keymap(wlr_kb, keymap);
     xkb_keymap_unref(keymap);
     xkb_context_unref(ctx);
-    wlr_keyboard_set_repeat_info(wlr_kb, 25, 600);
+    wlr_keyboard_set_repeat_info(wlr_kb, cfg->repeat_rate, cfg->repeat_delay);
 
     kb->modifiers.notify = keyboard_handle_modifiers;
     wl_signal_add(&wlr_kb->events.modifiers, &kb->modifiers);
@@ -522,77 +517,120 @@ static void process_cursor_resize(syn_server_t *s)
 }
 
 /* ── Pointer ─────────────────────────────────────────────── */
-static void server_new_pointer(syn_server_t *s, struct wlr_input_device *dev)
+/* Apply synuirc device options to a libinput-backed device. Each option is
+ * only touched if set in the config and supported by the device. */
+static void input_apply_libinput_config(syn_server_t *s,
+                                        struct wlr_input_device *dev)
 {
-    wlr_cursor_attach_input_device(s->cursor, dev);
+    if (!wlr_input_device_is_libinput(dev)) return;
+    struct libinput_device *li = wlr_libinput_get_device_handle(dev);
+    if (!li) return;
+    syn_config_t *cfg = &s->config;
+
+    if (cfg->tap_to_click >= 0 &&
+        libinput_device_config_tap_get_finger_count(li) > 0)
+        libinput_device_config_tap_set_enabled(li, cfg->tap_to_click
+            ? LIBINPUT_CONFIG_TAP_ENABLED : LIBINPUT_CONFIG_TAP_DISABLED);
+
+    if (cfg->natural_scroll >= 0 &&
+        libinput_device_config_scroll_has_natural_scroll(li))
+        libinput_device_config_scroll_set_natural_scroll_enabled(
+            li, cfg->natural_scroll);
+
+    if (cfg->left_handed >= 0 &&
+        libinput_device_config_left_handed_is_available(li))
+        libinput_device_config_left_handed_set(li, cfg->left_handed);
+
+    if (cfg->accel_speed_set &&
+        libinput_device_config_accel_is_available(li))
+        libinput_device_config_accel_set_speed(li, cfg->accel_speed);
+}
+
+/* Give pointer focus to whatever lies under the cursor and (de)activate the
+ * pointer constraint owned by that surface. */
+static void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
+{
+    double sx, sy;
+    struct wlr_surface *surface =
+        surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);
+    if (surface) {
+        wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
+        wlr_seat_pointer_notify_motion(s->seat, time_msec, sx, sy);
+    } else {
+        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+        wlr_seat_pointer_notify_clear_focus(s->seat);
+    }
+    constraints_focus_surface(s, surface);
+}
+
+/* Shared relative-motion path: broadcast the raw delta to relative-pointer
+ * clients, let an active constraint absorb (locked) or clamp (confined) the
+ * move, then move the cursor and update pointer focus. */
+static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
+                                   struct wlr_input_device *device,
+                                   double dx, double dy,
+                                   double unaccel_dx, double unaccel_dy)
+{
+    notify_activity(s);
+
+    if (s->relative_pointer_mgr)
+        wlr_relative_pointer_manager_v1_send_relative_motion(
+            s->relative_pointer_mgr, s->seat,
+            (uint64_t)time_msec * 1000, dx, dy, unaccel_dx, unaccel_dy);
+
+    if (s->cursor_mode == SYNUI_CURSOR_PASSTHROUGH &&
+        constraints_apply_motion(s, &dx, &dy))
+        return;   /* locked pointer: the cursor stays put */
+
+    wlr_cursor_move(s->cursor, device, dx, dy);
+    s->cursor_x = s->cursor->x;
+    s->cursor_y = s->cursor->y;
+
+    if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
+    if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
+
+    pointer_update_focus(s, time_msec);
 }
 
 static void server_cursor_motion(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_motion);
     struct wlr_pointer_motion_event *event = data;
-    notify_activity(s);
-    wlr_cursor_move(s->cursor, &event->pointer->base,
-                    event->delta_x, event->delta_y);
-    s->cursor_x = s->cursor->x;
-    s->cursor_y = s->cursor->y;
-
-    if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
-    if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
-
-    /* Pass to the surface under the cursor (toplevel, layer surface, or popup) */
-    double sx, sy;
-    struct wlr_surface *surface =
-        surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);
-    if (surface) {
-        wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
-        wlr_seat_pointer_notify_motion(s->seat, event->time_msec, sx, sy);
-    } else {
-        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
-        wlr_seat_pointer_notify_clear_focus(s->seat);
-    }
+    process_pointer_motion(s, event->time_msec, &event->pointer->base,
+                           event->delta_x, event->delta_y,
+                           event->unaccel_dx, event->unaccel_dy);
 }
 
 static void server_cursor_motion_absolute(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_motion_absolute);
     struct wlr_pointer_motion_absolute_event *event = data;
-    notify_activity(s);
-    wlr_cursor_warp_absolute(s->cursor, &event->pointer->base,
-                             event->x, event->y);
-    s->cursor_x = s->cursor->x;
-    s->cursor_y = s->cursor->y;
 
-    if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
-    if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
-
-    double sx, sy;
-    struct wlr_surface *surface =
-        surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);
-    if (surface) {
-        wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
-        wlr_seat_pointer_notify_motion(s->seat, event->time_msec, sx, sy);
-    } else {
-        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
-        wlr_seat_pointer_notify_clear_focus(s->seat);
-    }
+    /* Convert to a delta so constraints and relative-pointer clients keep
+     * working on absolute devices (VMs, some tablets). */
+    double lx, ly;
+    wlr_cursor_absolute_to_layout_coords(s->cursor, &event->pointer->base,
+                                         event->x, event->y, &lx, &ly);
+    process_pointer_motion(s, event->time_msec, &event->pointer->base,
+                           lx - s->cursor->x, ly - s->cursor->y,
+                           lx - s->cursor->x, ly - s->cursor->y);
 }
 
-static void server_cursor_button(struct wl_listener *listener, void *data)
+/* Button handling shared between real pointers and tablet-tool emulation. */
+static void pointer_button(syn_server_t *s, uint32_t time_msec,
+                           uint32_t button, enum wl_pointer_button_state state)
 {
-    syn_server_t *s = wl_container_of(listener, s, cursor_button);
-    struct wlr_pointer_button_event *event = data;
     notify_activity(s);
 
     /* A release always ends an in-progress grab and is swallowed. */
-    if (event->state == WL_POINTER_BUTTON_STATE_RELEASED &&
+    if (state == WL_POINTER_BUTTON_STATE_RELEASED &&
         s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
         s->grabbed_view = NULL;
         return;
     }
 
-    if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
         double sx, sy;
         struct wlr_surface *surface = NULL;
         syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y,
@@ -603,11 +641,11 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
         struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
         uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;
         if (view && (mods & WLR_MODIFIER_LOGO)) {
-            if (event->button == BTN_LEFT) {
+            if (button == BTN_LEFT) {
                 begin_interactive(view, SYNUI_CURSOR_MOVE);
                 return;
             }
-            if (event->button == BTN_RIGHT) {
+            if (button == BTN_RIGHT) {
                 begin_interactive(view, SYNUI_CURSOR_RESIZE);
                 return;
             }
@@ -615,8 +653,14 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
         if (view) focus_view(s, view, surface);
     }
 
-    wlr_seat_pointer_notify_button(s->seat, event->time_msec,
-                                    event->button, event->state);
+    wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
+}
+
+static void server_cursor_button(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, cursor_button);
+    struct wlr_pointer_button_event *event = data;
+    pointer_button(s, event->time_msec, event->button, event->state);
 }
 
 static void server_cursor_axis(struct wl_listener *listener, void *data)
@@ -644,6 +688,206 @@ static void server_request_cursor(struct wl_listener *listener, void *data)
                                event->hotspot_x, event->hotspot_y);
 }
 
+/* ── Touch ───────────────────────────────────────────────── */
+/* Touch is forwarded to the seat with per-point focus: a finger belongs to
+ * the surface it landed on for its whole down→up arc. */
+static void server_touch_down(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, touch_down);
+    struct wlr_touch_down_event *event = data;
+    notify_activity(s);
+
+    double lx, ly, sx, sy;
+    wlr_cursor_absolute_to_layout_coords(s->cursor, &event->touch->base,
+                                         event->x, event->y, &lx, &ly);
+    syn_view_t *view = NULL;
+    struct wlr_surface *surface = surface_at(s, lx, ly, &view, &sx, &sy);
+    if (!surface) return;
+
+    wlr_seat_touch_notify_down(s->seat, surface, event->time_msec,
+                               event->touch_id, sx, sy);
+    if (view && !s->locked)
+        focus_view(s, view, surface);
+}
+
+static void server_touch_motion(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, touch_motion);
+    struct wlr_touch_motion_event *event = data;
+    notify_activity(s);
+
+    struct wlr_touch_point *point =
+        wlr_seat_touch_get_point(s->seat, event->touch_id);
+    if (!point) return;
+
+    /* Surface-local coordinates are only meaningful against the surface the
+     * finger went down on; skip motion once it slides off that surface. */
+    double lx, ly, sx, sy;
+    wlr_cursor_absolute_to_layout_coords(s->cursor, &event->touch->base,
+                                         event->x, event->y, &lx, &ly);
+    struct wlr_surface *surface = surface_at(s, lx, ly, NULL, &sx, &sy);
+    if (surface && surface == point->surface)
+        wlr_seat_touch_notify_motion(s->seat, event->time_msec,
+                                     event->touch_id, sx, sy);
+}
+
+static void server_touch_up(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, touch_up);
+    struct wlr_touch_up_event *event = data;
+    notify_activity(s);
+    if (wlr_seat_touch_get_point(s->seat, event->touch_id))
+        wlr_seat_touch_notify_up(s->seat, event->time_msec, event->touch_id);
+}
+
+static void server_touch_cancel(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, touch_cancel);
+    struct wlr_touch_cancel_event *event = data;
+    struct wlr_touch_point *point =
+        wlr_seat_touch_get_point(s->seat, event->touch_id);
+    if (point && point->client)
+        wlr_seat_touch_notify_cancel(s->seat, point->client);
+}
+
+static void server_touch_frame(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_server_t *s = wl_container_of(listener, s, touch_frame);
+    wlr_seat_touch_notify_frame(s->seat);
+}
+
+/* ── Tablet (pointer emulation) ──────────────────────────── */
+/* Tablet tools drive the regular cursor: pen motion moves the pointer, the
+ * tip is the left button, the stylus barrel buttons map to right/middle.
+ * Full tablet-v2 (pressure/tilt for drawing apps) is a Phase H+ follow-up. */
+static void tablet_warp_cursor(syn_server_t *s, struct wlr_tablet *tablet,
+                               double x, double y, uint32_t time_msec)
+{
+    wlr_cursor_warp_absolute(s->cursor, &tablet->base, x, y);
+    s->cursor_x = s->cursor->x;
+    s->cursor_y = s->cursor->y;
+    notify_activity(s);
+
+    if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
+    if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
+    pointer_update_focus(s, time_msec);
+}
+
+static void server_tablet_axis(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, tablet_axis);
+    struct wlr_tablet_tool_axis_event *event = data;
+    /* NAN = keep the cursor's current value on that axis. */
+    double x = (event->updated_axes & WLR_TABLET_TOOL_AXIS_X) ? event->x : NAN;
+    double y = (event->updated_axes & WLR_TABLET_TOOL_AXIS_Y) ? event->y : NAN;
+    if (isnan(x) && isnan(y)) return;
+    tablet_warp_cursor(s, event->tablet, x, y, event->time_msec);
+}
+
+static void server_tablet_proximity(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, tablet_proximity);
+    struct wlr_tablet_tool_proximity_event *event = data;
+    if (event->state == WLR_TABLET_TOOL_PROXIMITY_IN)
+        tablet_warp_cursor(s, event->tablet, event->x, event->y,
+                           event->time_msec);
+}
+
+static void server_tablet_tip(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, tablet_tip);
+    struct wlr_tablet_tool_tip_event *event = data;
+    pointer_button(s, event->time_msec, BTN_LEFT,
+                   event->state == WLR_TABLET_TOOL_TIP_DOWN
+                       ? WL_POINTER_BUTTON_STATE_PRESSED
+                       : WL_POINTER_BUTTON_STATE_RELEASED);
+    wlr_seat_pointer_notify_frame(s->seat);
+}
+
+static void server_tablet_button(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, tablet_button);
+    struct wlr_tablet_tool_button_event *event = data;
+    uint32_t button = (event->button == BTN_STYLUS2) ? BTN_MIDDLE : BTN_RIGHT;
+    pointer_button(s, event->time_msec, button,
+                   event->state == WLR_BUTTON_PRESSED
+                       ? WL_POINTER_BUTTON_STATE_PRESSED
+                       : WL_POINTER_BUTTON_STATE_RELEASED);
+    wlr_seat_pointer_notify_frame(s->seat);
+}
+
+/* ── Touchpad gestures (pointer-gestures-v1 relay) ───────── */
+static void server_swipe_begin(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, swipe_begin);
+    struct wlr_pointer_swipe_begin_event *event = data;
+    notify_activity(s);
+    wlr_pointer_gestures_v1_send_swipe_begin(s->pointer_gestures, s->seat,
+                                             event->time_msec, event->fingers);
+}
+
+static void server_swipe_update(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, swipe_update);
+    struct wlr_pointer_swipe_update_event *event = data;
+    wlr_pointer_gestures_v1_send_swipe_update(s->pointer_gestures, s->seat,
+                                              event->time_msec,
+                                              event->dx, event->dy);
+}
+
+static void server_swipe_end(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, swipe_end);
+    struct wlr_pointer_swipe_end_event *event = data;
+    wlr_pointer_gestures_v1_send_swipe_end(s->pointer_gestures, s->seat,
+                                           event->time_msec, event->cancelled);
+}
+
+static void server_pinch_begin(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, pinch_begin);
+    struct wlr_pointer_pinch_begin_event *event = data;
+    notify_activity(s);
+    wlr_pointer_gestures_v1_send_pinch_begin(s->pointer_gestures, s->seat,
+                                             event->time_msec, event->fingers);
+}
+
+static void server_pinch_update(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, pinch_update);
+    struct wlr_pointer_pinch_update_event *event = data;
+    wlr_pointer_gestures_v1_send_pinch_update(s->pointer_gestures, s->seat,
+                                              event->time_msec,
+                                              event->dx, event->dy,
+                                              event->scale, event->rotation);
+}
+
+static void server_pinch_end(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, pinch_end);
+    struct wlr_pointer_pinch_end_event *event = data;
+    wlr_pointer_gestures_v1_send_pinch_end(s->pointer_gestures, s->seat,
+                                           event->time_msec, event->cancelled);
+}
+
+static void server_hold_begin(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, hold_begin);
+    struct wlr_pointer_hold_begin_event *event = data;
+    notify_activity(s);
+    wlr_pointer_gestures_v1_send_hold_begin(s->pointer_gestures, s->seat,
+                                            event->time_msec, event->fingers);
+}
+
+static void server_hold_end(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, hold_end);
+    struct wlr_pointer_hold_end_event *event = data;
+    wlr_pointer_gestures_v1_send_hold_end(s->pointer_gestures, s->seat,
+                                          event->time_msec, event->cancelled);
+}
+
 /* ── New input device ────────────────────────────────────── */
 static void server_new_input(struct wl_listener *listener, void *data)
 {
@@ -651,14 +895,26 @@ static void server_new_input(struct wl_listener *listener, void *data)
     struct wlr_input_device *dev = data;
 
     switch (dev->type) {
-    case WLR_INPUT_DEVICE_KEYBOARD: server_new_keyboard(s, dev); break;
-    case WLR_INPUT_DEVICE_POINTER:  server_new_pointer(s, dev);  break;
-    default: break;
+    case WLR_INPUT_DEVICE_KEYBOARD:
+        server_new_keyboard(s, dev);
+        break;
+    case WLR_INPUT_DEVICE_TOUCH:
+        s->touch_devices++;
+        /* fallthrough */
+    case WLR_INPUT_DEVICE_POINTER:
+    case WLR_INPUT_DEVICE_TABLET:
+        input_apply_libinput_config(s, dev);
+        wlr_cursor_attach_input_device(s->cursor, dev);
+        break;
+    default:
+        break;
     }
 
     uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
     if (!wl_list_empty(&s->keyboards))
         caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    if (s->touch_devices > 0)
+        caps |= WL_SEAT_CAPABILITY_TOUCH;
     wlr_seat_set_capabilities(s->seat, caps);
 }
 
@@ -672,6 +928,12 @@ static void server_request_set_selection(struct wl_listener *listener, void *dat
 /* ── Setup all input listeners ───────────────────────────── */
 void input_setup(syn_server_t *s)
 {
+    /* The compositor always drives a cursor, so advertise the pointer
+     * capability up front — before this, a seat with no input devices yet
+     * (headless, or early clients racing the backend) had no capabilities
+     * and a client calling get_pointer was killed with a protocol error. */
+    wlr_seat_set_capabilities(s->seat, WL_SEAT_CAPABILITY_POINTER);
+
     s->new_input.notify = server_new_input;
     wl_signal_add(&s->backend->events.new_input, &s->new_input);
 
@@ -696,4 +958,48 @@ void input_setup(syn_server_t *s)
     s->request_set_selection.notify = server_request_set_selection;
     wl_signal_add(&s->seat->events.request_set_selection,
                    &s->request_set_selection);
+
+    /* Touch (wlr_cursor maps it into the output layout for us). */
+    s->touch_down.notify = server_touch_down;
+    wl_signal_add(&s->cursor->events.touch_down, &s->touch_down);
+    s->touch_up.notify = server_touch_up;
+    wl_signal_add(&s->cursor->events.touch_up, &s->touch_up);
+    s->touch_motion.notify = server_touch_motion;
+    wl_signal_add(&s->cursor->events.touch_motion, &s->touch_motion);
+    s->touch_cancel.notify = server_touch_cancel;
+    wl_signal_add(&s->cursor->events.touch_cancel, &s->touch_cancel);
+    s->touch_frame.notify = server_touch_frame;
+    wl_signal_add(&s->cursor->events.touch_frame, &s->touch_frame);
+
+    /* Tablet tools (pointer emulation). */
+    s->tablet_axis.notify = server_tablet_axis;
+    wl_signal_add(&s->cursor->events.tablet_tool_axis, &s->tablet_axis);
+    s->tablet_proximity.notify = server_tablet_proximity;
+    wl_signal_add(&s->cursor->events.tablet_tool_proximity, &s->tablet_proximity);
+    s->tablet_tip.notify = server_tablet_tip;
+    wl_signal_add(&s->cursor->events.tablet_tool_tip, &s->tablet_tip);
+    s->tablet_button.notify = server_tablet_button;
+    wl_signal_add(&s->cursor->events.tablet_tool_button, &s->tablet_button);
+
+    /* Touchpad gestures → pointer-gestures-v1 clients. */
+    s->pointer_gestures = wlr_pointer_gestures_v1_create(s->display);
+    s->swipe_begin.notify = server_swipe_begin;
+    wl_signal_add(&s->cursor->events.swipe_begin, &s->swipe_begin);
+    s->swipe_update.notify = server_swipe_update;
+    wl_signal_add(&s->cursor->events.swipe_update, &s->swipe_update);
+    s->swipe_end.notify = server_swipe_end;
+    wl_signal_add(&s->cursor->events.swipe_end, &s->swipe_end);
+    s->pinch_begin.notify = server_pinch_begin;
+    wl_signal_add(&s->cursor->events.pinch_begin, &s->pinch_begin);
+    s->pinch_update.notify = server_pinch_update;
+    wl_signal_add(&s->cursor->events.pinch_update, &s->pinch_update);
+    s->pinch_end.notify = server_pinch_end;
+    wl_signal_add(&s->cursor->events.pinch_end, &s->pinch_end);
+    s->hold_begin.notify = server_hold_begin;
+    wl_signal_add(&s->cursor->events.hold_begin, &s->hold_begin);
+    s->hold_end.notify = server_hold_end;
+    wl_signal_add(&s->cursor->events.hold_end, &s->hold_end);
+
+    /* pointer-constraints + relative-pointer (constraints.c). */
+    constraints_setup(s);
 }
