@@ -1,9 +1,10 @@
 /*
- * output_mgmt.c — output-management (wlr-randr / kanshi) and DPMS
+ * output_mgmt.c — output-management (wlr-randr / kanshi), DPMS, gamma
  *
  * wlr_output_manager_v1 lets clients query and reconfigure outputs (mode,
  * scale, transform, position, enable/disable). wlr_output_power_manager_v1
- * exposes per-output power (DPMS on/off).
+ * exposes per-output power (DPMS on/off). wlr_gamma_control_manager_v1 lets
+ * night-light tools (wlsunset, gammastep) set per-output gamma ramps.
  *
  * SynapseOS Project — GPLv2
  * https://github.com/velle999/SYNAPSE
@@ -14,6 +15,7 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
+#include <wlr/types/wlr_gamma_control_v1.h>
 
 #include "synui.h"
 
@@ -115,6 +117,30 @@ static void output_power_set_mode(struct wl_listener *listener, void *data)
     wlr_output_state_finish(&state);
 }
 
+/* ── Gamma (night light) ─────────────────────────────────── */
+static void gamma_set(struct wl_listener *listener, void *data)
+{
+    (void)listener;
+    struct wlr_gamma_control_manager_v1_set_gamma_event *ev = data;
+
+    /* control == NULL means "reset to identity"; apply() handles both. */
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    if (!wlr_gamma_control_v1_apply(ev->control, &state)) {
+        wlr_output_state_finish(&state);
+        return;
+    }
+    if (!wlr_output_commit_state(ev->output, &state)) {
+        /* Backend can't do gamma (e.g. headless/pixman) — tell the client
+         * rather than leaving it waiting for a ramp that never applies. */
+        wlr_log(WLR_INFO, "synui: gamma commit failed for %s",
+                ev->output->name);
+        if (ev->control)
+            wlr_gamma_control_v1_send_failed_and_destroy(ev->control);
+    }
+    wlr_output_state_finish(&state);
+}
+
 /* ── Setup ───────────────────────────────────────────────── */
 void output_mgmt_setup(syn_server_t *s)
 {
@@ -127,4 +153,8 @@ void output_mgmt_setup(syn_server_t *s)
     s->power_mgr = wlr_output_power_manager_v1_create(s->display);
     s->output_power_set_mode.notify = output_power_set_mode;
     wl_signal_add(&s->power_mgr->events.set_mode, &s->output_power_set_mode);
+
+    s->gamma_mgr = wlr_gamma_control_manager_v1_create(s->display);
+    s->gamma_set.notify = gamma_set;
+    wl_signal_add(&s->gamma_mgr->events.set_gamma, &s->gamma_set);
 }

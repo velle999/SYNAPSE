@@ -215,6 +215,17 @@ struct syn_view {
     win_security_t   security;
     syn_ai_ctx_t     ai_ctx;
 
+    /* foreign-toplevel handles (taskbars/docks); NULL while unmapped.
+     * zwlr carries state + requests; ext is the newer list-only protocol. */
+    struct wlr_foreign_toplevel_handle_v1     *foreign_handle;
+    struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_handle;
+    struct wl_listener ft_activate;
+    struct wl_listener ft_close;
+    struct wl_listener ft_fullscreen;
+    struct wl_listener ft_maximize;
+    struct wl_listener ft_title;
+    struct wl_listener ft_app_id;
+
     /* Border scene rects */
     struct wlr_scene_rect *border_top;
     struct wlr_scene_rect *border_bottom;
@@ -309,6 +320,12 @@ struct syn_server {
     struct wlr_pointer_constraint_v1       *active_constraint;  /* on the pointer-focused surface */
     struct wlr_pointer_gestures_v1         *pointer_gestures;
     int                                     touch_devices;
+
+    /* Phase H: ecosystem protocols. */
+    struct wlr_foreign_toplevel_manager_v1  *foreign_mgr;
+    struct wlr_ext_foreign_toplevel_list_v1 *foreign_list;
+    struct wlr_gamma_control_manager_v1     *gamma_mgr;
+    struct wlr_scene_tree                   *drag_icon_tree;  /* topmost; follows cursor */
 
     /* Scene-graph z-order (bottom→top): bg_rect, layer[BACKGROUND],
      * layer[BOTTOM], window_tree, layer[TOP], layer[OVERLAY], then UI. */
@@ -430,6 +447,11 @@ struct syn_server {
     struct wl_listener pinch_end;
     struct wl_listener hold_begin;
     struct wl_listener hold_end;
+    struct wl_listener request_set_primary_selection;
+    struct wl_listener request_start_drag;
+    struct wl_listener start_drag;
+    struct wl_listener drag_destroy;   /* linked only while a drag is live */
+    struct wl_listener gamma_set;
 };
 
 /* ── synui_main.c ────────────────────────────────────────── */
@@ -469,6 +491,12 @@ void output_mgmt_update(syn_server_t *s);        /* push current config to clien
 /* ── session.c ───────────────────────────────────────────── */
 void session_lock_setup(syn_server_t *s);        /* ext-session-lock */
 void session_lock_arrange(syn_server_t *s);      /* re-place lock surfaces */
+
+/* ── foreign_toplevel.c ──────────────────────────────────── */
+void foreign_toplevel_setup(syn_server_t *s);        /* create the manager */
+void foreign_toplevel_map(syn_view_t *v);            /* publish a mapped view */
+void foreign_toplevel_unmap(syn_view_t *v);          /* retract (sends closed) */
+void foreign_toplevel_update_state(syn_view_t *v);   /* activated/max/fullscreen */
 
 /* ── constraints.c ───────────────────────────────────────── */
 void constraints_setup(syn_server_t *s);  /* pointer-constraints + relative-pointer */

@@ -4,7 +4,7 @@
 the gap between its current state and the roadmap goal, *"full Wayland
 compositor with AI-aware window management."*
 
-## Current state (real `src/`, ~5,280 LOC)
+## Current state (real `src/`, ~5,640 LOC)
 
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
@@ -20,6 +20,8 @@ Working:
 - output-management + DPMS, fractional-scale, idle-notify/inhibit, session-lock
 - pointer-constraints + relative-pointer, touch, tablet (pointer emulation),
   touchpad gestures, libinput config, configurable keymap + keybindings
+- foreign-toplevel (zwlr + ext), screencopy + export-dmabuf, data-control
+  (zwlr + ext) + primary selection, gamma-control, drag-and-drop
 
 Partial / broken:
 - **AI layout**: request path exists but `layout_apply_ai_response()` was never
@@ -49,8 +51,7 @@ Partial / broken:
   seat also advertised no pointer capability until a device appeared, killing
   early `get_pointer` clients. (Both fixed in Phase G.)
 
-Missing: foreign-toplevel, screencopy, gamma-control, full tablet-v2,
-drag-and-drop.
+Missing: full tablet-v2, per-output workspaces, config reload (SIGHUP).
 
 ## Phases (ordered by value ÷ effort)
 
@@ -220,9 +221,39 @@ combo, bad key/action rejected with log); foot regression-checked. Constraint
 *activation* needs real pointer focus, which headless input can't produce —
 verify on hardware with a game or `wlroots`' pointer-constraints example.
 
-### Phase H — Ecosystem protocols
-foreign-toplevel (taskbars), screencopy (screenshots), data-control / primary
-selection, gamma-control (night light), drag-and-drop.
+### Phase H — Ecosystem protocols  *(done)*
+- [x] foreign-toplevel (`foreign_toplevel.c`): every mapped managed window is
+      published to taskbars via **both** zwlr-foreign-toplevel-management
+      (state + requests: activate focuses and switches workspace, close/
+      fullscreen/maximize reuse the client-request paths; minimize ignored)
+      and the newer list-only **ext-foreign-toplevel-list**. Title/app-id
+      changes stream live (xdg set_title/set_app_id, X11 set_title/set_class);
+      activated/maximized/fullscreen state synced from focus_view and the
+      view_set_* accessors.
+- [x] screencopy (`zwlr_screencopy_manager_v1`) + export-dmabuf — grim,
+      slurp-based tools, wf-recorder.
+- [x] data-control (zwlr v2 **and** ext) + primary-selection
+      (`zwp_primary_selection_device_manager_v1` + seat handler) — clipboard
+      managers work without focus; middle-click paste.
+- [x] gamma-control (`zwlr_gamma_control_manager_v1`, in output_mgmt.c):
+      set_gamma commits the ramp to the output; NULL control resets; a failed
+      commit (backend without gamma, e.g. pixman) sends failed_and_destroy so
+      wlsunset/gammastep aren't left hanging.
+- [x] drag-and-drop: seat request_start_drag validates the pointer/touch grab
+      serial and starts the wlroots drag; the drag icon lives in a topmost
+      scene tree that rides the cursor (mouse and tablet paths); when the
+      drag ends, pointer focus is re-derived from the surface under the
+      cursor.
+
+Verified headless: all 8 new globals advertised; **grim** captured a real
+1280x720 PNG (screencopy); **wl-copy/wl-paste** round-tripped the clipboard
+(zwlr data-control) and `-p` the primary selection; a purpose-built
+ext-foreign-toplevel-list client saw foot appear with correct title/app_id/
+identifier and an empty list after close; clean SIGTERM teardown. Not
+drivable headless: zwlr taskbar *requests* (same code paths as the client
+requests), gamma commits (pixman has no ramps — failure path exercised by
+design), and DnD (needs two real surfaces + a grab); verify on hardware with
+waybar's taskbar module, wlsunset, and any file manager drag.
 
 ### Phase I — Robustness & CI
 Listener-leak / memory audit, headless smoke test in CI, a small test harness.

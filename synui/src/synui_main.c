@@ -42,6 +42,11 @@
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
+#include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_data_control_v1.h>
+#include <wlr/types/wlr_ext_data_control_v1.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
 
 #include "synui.h"
 
@@ -248,6 +253,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
     view->mapped = 1;
     focus_view(view->server, view, view->xdg_surface->surface);
     layout_apply(view->server, view->workspace);
+    foreign_toplevel_map(view);
 
     /* Hide welcome screen when first window opens */
     synui_welcome_hide(view->server);
@@ -257,6 +263,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, unmap);
     view->mapped = 0;
+    foreign_toplevel_unmap(view);
     /* Drop focus/grab references to this window */
     if (view->server->focused_view == view)
         view->server->focused_view = NULL;
@@ -274,6 +281,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
 static void xdg_surface_destroy(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, destroy);
+    foreign_toplevel_unmap(view);   /* no-op if unmap already retracted it */
     if (view->server->focused_view == view)
         view->server->focused_view = NULL;
     if (view->server->grabbed_view == view) {
@@ -316,6 +324,7 @@ static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *da
     syn_view_t *view = wl_container_of(listener, view, request_maximize);
     view->maximized = !view->maximized;
     wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
+    foreign_toplevel_update_state(view);
 }
 
 static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data)
@@ -323,6 +332,7 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
     syn_view_t *view = wl_container_of(listener, view, request_fullscreen);
     view->fullscreen = !view->fullscreen;
     wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel, view->fullscreen);
+    foreign_toplevel_update_state(view);
 }
 
 /*
@@ -655,6 +665,19 @@ int synui_init(syn_server_t *s)
     /* ext-session-lock (swaylock). */
     session_lock_setup(s);
 
+    /* screencopy (grim, slurp-based tools) + export-dmabuf (wf-recorder). */
+    wlr_screencopy_manager_v1_create(s->display);
+    wlr_export_dmabuf_manager_v1_create(s->display);
+
+    /* Clipboard managers: zwlr data-control (wl-clipboard watch mode,
+     * cliphist) and its ext successor; plus middle-click primary selection. */
+    wlr_data_control_manager_v1_create(s->display);
+    wlr_ext_data_control_manager_v1_create(s->display, 1);
+    wlr_primary_selection_v1_device_manager_create(s->display);
+
+    /* foreign-toplevel — window lists for taskbars/docks. */
+    foreign_toplevel_setup(s);
+
     /* Seat */
     s->seat = wlr_seat_create(s->display, "seat0");
 
@@ -727,6 +750,10 @@ int synui_init(syn_server_t *s)
 
     /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
     synui_ui_init(s);
+
+    /* Drag-and-drop icon layer: created last so it stacks above everything,
+     * including the compositor UI. input.c moves it with the cursor. */
+    s->drag_icon_tree = wlr_scene_tree_create(&s->scene->tree);
 
     return 0;
 }
@@ -809,6 +836,11 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->pinch_end.link);
     wl_list_remove(&s->hold_begin.link);
     wl_list_remove(&s->hold_end.link);
+    wl_list_remove(&s->request_set_primary_selection.link);
+    wl_list_remove(&s->request_start_drag.link);
+    wl_list_remove(&s->start_drag.link);
+    wl_list_remove(&s->drag_destroy.link);   /* wl_list_init'd when idle */
+    wl_list_remove(&s->gamma_set.link);
 
     wl_display_destroy_clients(s->display);
     wlr_scene_node_destroy(&s->scene->tree.node);

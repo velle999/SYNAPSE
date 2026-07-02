@@ -46,6 +46,7 @@
 #include <wlr/backend/libinput.h>
 #include <wlr/util/edges.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_primary_selection.h>
 
 #include "synui.h"
 
@@ -76,9 +77,11 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
     if (prev && prev != view) {
         view_set_activated(prev, 0);
         view_update_borders(prev);
+        foreign_toplevel_update_state(prev);
     }
     view_set_activated(view, 1);
     view_update_borders(view);
+    foreign_toplevel_update_state(view);
 
     /* Notify seat */
     struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
@@ -586,6 +589,10 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
 
+    /* An in-flight DnD icon rides the cursor (tree is empty otherwise). */
+    wlr_scene_node_set_position(&s->drag_icon_tree->node,
+                                (int)s->cursor->x, (int)s->cursor->y);
+
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
@@ -767,6 +774,8 @@ static void tablet_warp_cursor(syn_server_t *s, struct wlr_tablet *tablet,
     wlr_cursor_warp_absolute(s->cursor, &tablet->base, x, y);
     s->cursor_x = s->cursor->x;
     s->cursor_y = s->cursor->y;
+    wlr_scene_node_set_position(&s->drag_icon_tree->node,
+                                (int)s->cursor->x, (int)s->cursor->y);
     notify_activity(s);
 
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
@@ -925,6 +934,63 @@ static void server_request_set_selection(struct wl_listener *listener, void *dat
     wlr_seat_set_selection(s->seat, event->source, event->serial);
 }
 
+static void server_request_set_primary_selection(struct wl_listener *listener,
+                                                 void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, request_set_primary_selection);
+    struct wlr_seat_request_set_primary_selection_event *event = data;
+    wlr_seat_set_primary_selection(s->seat, event->source, event->serial);
+}
+
+/* ── Drag-and-drop ───────────────────────────────────────── */
+/* When the drag (and its implicit grab) ends, the surface under the cursor
+ * regains normal pointer focus. */
+static void server_drag_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_server_t *s = wl_container_of(listener, s, drag_destroy);
+    wl_list_remove(&s->drag_destroy.link);
+    wl_list_init(&s->drag_destroy.link);
+    if (!s->shutting_down)
+        pointer_update_focus(s, 0);
+}
+
+static void server_request_start_drag(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, request_start_drag);
+    struct wlr_seat_request_start_drag_event *event = data;
+
+    if (wlr_seat_validate_pointer_grab_serial(s->seat, event->origin,
+                                              event->serial)) {
+        wlr_seat_start_pointer_drag(s->seat, event->drag, event->serial);
+        return;
+    }
+    struct wlr_touch_point *point;
+    if (wlr_seat_validate_touch_grab_serial(s->seat, event->origin,
+                                            event->serial, &point)) {
+        wlr_seat_start_touch_drag(s->seat, event->drag, event->serial, point);
+        return;
+    }
+    wlr_data_source_destroy(event->drag->source);
+}
+
+static void server_start_drag(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, start_drag);
+    struct wlr_drag *drag = data;
+
+    /* Only one drag per seat; re-arm the destroy listener for it. */
+    wl_list_remove(&s->drag_destroy.link);
+    s->drag_destroy.notify = server_drag_destroy;
+    wl_signal_add(&drag->events.destroy, &s->drag_destroy);
+
+    if (drag->icon) {
+        wlr_scene_drag_icon_create(s->drag_icon_tree, drag->icon);
+        wlr_scene_node_set_position(&s->drag_icon_tree->node,
+                                    (int)s->cursor->x, (int)s->cursor->y);
+    }
+}
+
 /* ── Setup all input listeners ───────────────────────────── */
 void input_setup(syn_server_t *s)
 {
@@ -958,6 +1024,18 @@ void input_setup(syn_server_t *s)
     s->request_set_selection.notify = server_request_set_selection;
     wl_signal_add(&s->seat->events.request_set_selection,
                    &s->request_set_selection);
+
+    s->request_set_primary_selection.notify = server_request_set_primary_selection;
+    wl_signal_add(&s->seat->events.request_set_primary_selection,
+                   &s->request_set_primary_selection);
+
+    /* Drag-and-drop: validate + start the grab, show the icon at the cursor.
+     * drag_destroy is armed per drag; init it so removal is always safe. */
+    s->request_start_drag.notify = server_request_start_drag;
+    wl_signal_add(&s->seat->events.request_start_drag, &s->request_start_drag);
+    s->start_drag.notify = server_start_drag;
+    wl_signal_add(&s->seat->events.start_drag, &s->start_drag);
+    wl_list_init(&s->drag_destroy.link);
 
     /* Touch (wlr_cursor maps it into the output layout for us). */
     s->touch_down.notify = server_touch_down;

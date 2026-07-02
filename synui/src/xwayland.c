@@ -79,6 +79,7 @@ void view_set_maximized(syn_view_t *v, int maximized)
         wlr_xwayland_surface_set_maximized(v->xsurface, maximized, maximized);
     else
         wlr_xdg_toplevel_set_maximized(v->xdg_surface->toplevel, maximized);
+    foreign_toplevel_update_state(v);
 }
 
 void view_set_fullscreen(syn_view_t *v, int fullscreen)
@@ -87,6 +88,7 @@ void view_set_fullscreen(syn_view_t *v, int fullscreen)
         wlr_xwayland_surface_set_fullscreen(v->xsurface, fullscreen);
     else
         wlr_xdg_toplevel_set_fullscreen(v->xdg_surface->toplevel, fullscreen);
+    foreign_toplevel_update_state(v);
 }
 
 /* ── Managed-window mapping ──────────────────────────────── */
@@ -137,6 +139,7 @@ static void xw_map(struct wl_listener *listener, void *data)
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
     }
     focus_view(s, view, xs->surface);
+    foreign_toplevel_map(view);
     synui_welcome_hide(s);
 }
 
@@ -147,6 +150,7 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     syn_server_t *s = view->server;
 
     view->mapped = 0;
+    foreign_toplevel_unmap(view);
     if (s->focused_view == view) s->focused_view = NULL;
     if (s->grabbed_view == view) {
         s->grabbed_view = NULL;
@@ -195,6 +199,7 @@ static void xw_destroy(struct wl_listener *listener, void *data)
     syn_view_t *view = wl_container_of(listener, view, destroy);
     syn_server_t *s = view->server;
 
+    foreign_toplevel_unmap(view);   /* no-op if unmap already retracted it */
     if (s->focused_view == view) s->focused_view = NULL;
     if (s->grabbed_view == view) {
         s->grabbed_view = NULL;
