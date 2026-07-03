@@ -55,8 +55,8 @@ Missing: full tablet-v2.
 
 ## Phases (ordered by value ÷ effort)
 
-### Phase A — Make AI window management actually work  *(in progress)*
-The distinguishing SynapseOS feature, currently non-functional.
+### Phase A — Make AI window management actually work  *(done)*
+The distinguishing SynapseOS feature.
 - [x] Add a `type` discriminator to `syn_ai_response_t`; AI thread preserves
       the request type so replies can be routed.
 - [x] Route AI-layout responses to `layout_apply_ai_response()` (resurrect the

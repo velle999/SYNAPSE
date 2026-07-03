@@ -128,30 +128,23 @@ model is embedded. Kernel/boot output is mirrored to the serial console
 
 ## Protocol
 
-`synsh` ↔ `synapd` communicate over a Unix socket using the SYN binary protocol:
+`synsh`, `synui`, and the kernel module talk to `synapd` over a Unix socket
+using the SYN binary protocol (`synapd/include/synapd.h`):
 ```c
+#pragma pack(push, 1)
 typedef struct {
     uint32_t magic;        // 0x53594E41 "SYNA"
-    uint8_t  version;      // 1
-    uint8_t  msg_type;     // SYN_MSG_QUERY | SYN_MSG_RESPONSE
+    uint8_t  version;      // SYNAPD_PROTOCOL_VER
+    uint8_t  msg_type;     // QUERY, SYSCALL_EVENT, SCHED_HINT, CONTEXT_PUSH/GET,
+                           // STATUS, RELOAD, SHUTDOWN; responses OR SYN_MSG_RESPONSE
     uint16_t flags;
-    uint32_t payload_len;
-    uint32_t request_id;
-    uint32_t client_pid;
-    uint64_t timestamp_ns;
-} syn_hdr_t;               // 28 bytes
+    uint32_t payload_len;  // bytes following this header, max 1 MiB
+    uint32_t request_id;   // echoed in response
+    uint32_t client_pid;   // sender PID for privilege checks
+    uint64_t timestamp_ns; // CLOCK_MONOTONIC_RAW
+} syn_msg_header_t;        // 28 bytes
+#pragma pack(pop)
 ```
-
----
-
-## Roadmap
-
-- [x] First-boot model downloader
-- [ ] synui — full Wayland compositor with AI-aware window management
-- [x] synnet — active connection monitoring and AI verdict enforcement
-- [x] synguard — ENFORCE mode with process isolation
-- [x] os-release / neofetch integration
-- [x] SynapseOS installer
 
 ---
 
