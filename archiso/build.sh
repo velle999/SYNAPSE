@@ -45,11 +45,13 @@ SYNAPSEOS_VERSION="0.1.0"
 BUILD_DIR="${SCRIPT_DIR}/build"
 OUT_DIR="${SCRIPT_DIR}/out"
 WORK_DIR="${SCRIPT_DIR}/work"
-# LOCAL_REPO lives inside archiso/ so mkarchiso includes it in the ISO image.
-# On the live system it will be accessible at /run/archiso/bootmnt/arch/pkgs
-# via the loop-mount — we reference it as file:///run/archiso/airootfs/local-repo
-# in the live pacman.conf.
-LOCAL_REPO="${SCRIPT_DIR}/local-repo"
+# LOCAL_REPO must live inside airootfs/ — mkarchiso only packs the airootfs
+# overlay, so that is the only way the package files reach the ISO. The live
+# system sees them at /run/archiso/airootfs/local-repo (squashfs root), which
+# is what the live pacman.conf and syn-install reference. A repo anywhere
+# else in archiso/ silently ships nothing and the installer falls back to
+# whatever stale copy exists in the overlay.
+LOCAL_REPO="${SCRIPT_DIR}/airootfs/local-repo"
 LLAMA_DIR="${BUILD_DIR}/llama.cpp"
 # Keep in sync with LLAMA_REF in .github/workflows/build.yml
 LLAMA_REF="b8272"
