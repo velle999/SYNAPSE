@@ -6,8 +6,9 @@
 terminal = foot
 
 # ── Startup applications ───────────────────────────────────
-# Run on first launch
-autostart = foot
+# Run on first launch. The terminal comes from synui-foot.service
+# (which runs synsh and restarts on failure) — don't also autostart
+# one here or every boot opens two.
 # autostart = firefox
 # autostart = synguard-tray  (future)
 

@@ -256,7 +256,7 @@ pacstrap /mnt \
     grub efibootmgr \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
-    mkinitcpio \
+    mkinitcpio dkms \
     2>&1 || die "pacstrap failed — check network connection"
 
 # Hard verify grub landed in the chroot
