@@ -8,3 +8,5 @@
   To enable AI: copy a GGUF model to /var/lib/synapd/models/synapse.gguf
                 then: systemctl restart synapd
 
+  To install to disk:  syn-install
+

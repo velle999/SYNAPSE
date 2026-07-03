@@ -3,7 +3,11 @@
 
 terminal = foot
 
-# Programs to launch on compositor start
+# Programs to launch on compositor start.
+# The live ISO execs synui from root's .bash_profile (no synui-foot.service),
+# so this is the only thing that opens a terminal there. Installed systems
+# run the service instead and shadow this file with a per-user synuirc that
+# has no autostart — keep both, or boots open zero or two terminals.
 autostart = foot
 
 # Window appearance

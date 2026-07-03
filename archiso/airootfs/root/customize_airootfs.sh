@@ -1,3 +1,96 @@
 #!/usr/bin/env bash
-set -e
+# customize_airootfs.sh — runs inside the airootfs chroot at ISO build time.
+#
+# Only things that can't be plain files in airootfs/ belong here: users,
+# groups, passwords, /etc/shells registration. Configs, units, and MOTD
+# are declarative files under archiso/airootfs/.
+#
+# SynapseOS Project — GPLv2
+set -euo pipefail
+
+# ── Passwords (live media only — changeable in firstboot) ─────
 echo 'root:synapse' | chpasswd
+
+# ── Groups ────────────────────────────────────────────────────
+groupadd -r synapse  2>/dev/null || true
+groupadd -r synguard 2>/dev/null || true
+
+# ── synsh is a valid login shell ──────────────────────────────
+grep -qxF '/usr/bin/synsh' /etc/shells || echo '/usr/bin/synsh' >> /etc/shells
+
+# ── Live user: syn (passwordless sudo for demo) ───────────────
+useradd -m -G wheel,audio,video,input,synapse,seat -s /usr/bin/synsh syn \
+    2>/dev/null || true
+echo 'syn:synapse' | chpasswd
+install -Dm440 /dev/null /etc/sudoers.d/wheel
+echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/wheel
+
+# ── syn user configs ──────────────────────────────────────────
+# foot terminal — Synapse brand colors
+install -dm755 /home/syn/.config/foot
+cat > /home/syn/.config/foot/foot.ini << 'EOF'
+[main]
+font=monospace:size=11
+
+[colors]
+background=0d0f14
+foreground=cdd6f4
+regular0=45475a
+regular1=f38ba8
+regular2=a6e3a1
+regular3=f9e2af
+regular4=89b4fa
+regular5=f5c2e7
+regular6=94e2d5
+regular7=bac2de
+bright0=585b70
+bright1=f38ba8
+bright2=a6e3a1
+bright3=f9e2af
+bright4=89b4fa
+bright5=f5c2e7
+bright6=94e2d5
+bright7=a6ef87
+
+[cursor]
+color=0d0f14 12d9f5
+EOF
+
+# fastfetch — branded logo config. fastfetch isn't on the ISO (`syn info`
+# falls back), but syn-install copies this to installed systems.
+install -dm755 /home/syn/.config/fastfetch
+cat > /home/syn/.config/fastfetch/config.jsonc << 'EOF'
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "display": {
+    "separator": "  ",
+    "color": { "keys": "38;5;51", "title": "38;5;51" }
+  },
+  "logo": {
+    "type": "file-raw",
+    "source": "/usr/share/synapseos/logo.txt",
+    "padding": { "left": 2, "top": 1 }
+  },
+  "modules": [
+    { "type": "title",  "format": "{user-name}@{host-name}" },
+    "separator",
+    { "type": "os",     "key": "OS" },
+    { "type": "kernel", "key": "Kernel" },
+    { "type": "packages","key": "Packages" },
+    { "type": "shell",  "key": "Shell" },
+    { "type": "display","key": "Resolution" },
+    { "type": "de",     "key": "WM" },
+    { "type": "cpu",    "key": "CPU" },
+    { "type": "gpu",    "key": "GPU" },
+    { "type": "memory", "key": "Memory" },
+    { "type": "disk",   "key": "Disk" },
+    "break",
+    { "type": "custom", "format": "  ⚡ synapd:  $(systemctl is-active synapd 2>/dev/null || echo offline)" },
+    { "type": "custom", "format": "  🛡 synguard: $(systemctl is-active synguard 2>/dev/null || echo offline)" }
+  ]
+}
+EOF
+
+chown -R syn:syn /home/syn
+
+echo "customize_airootfs.sh complete"
