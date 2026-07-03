@@ -16,6 +16,10 @@ if _has_staging
     # Pass the staging include as a compile arg: include_directories()
     # rejects absolute paths that point near the source tree.
     add_project_arguments('-I' + join_paths(_staging, 'include'), language: 'c')
+    # ld resolves libllama's own NEEDED libs (libggml, libggml-base,
+    # libggml-cpu) via -rpath-link, not -L — without this the link fails
+    # with undefined ggml_* references.
+    add_project_link_arguments('-Wl,-rpath-link,' + join_paths(_staging, 'lib'), language: 'c')
 endif
 
 dep_llama = cc.find_library('llama', dirs: _lib_dirs, required: false)

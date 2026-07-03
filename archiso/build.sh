@@ -51,6 +51,8 @@ WORK_DIR="${SCRIPT_DIR}/work"
 # in the live pacman.conf.
 LOCAL_REPO="${SCRIPT_DIR}/local-repo"
 LLAMA_DIR="${BUILD_DIR}/llama.cpp"
+# Keep in sync with LLAMA_REF in .github/workflows/build.yml
+LLAMA_REF="b8272"
 MODEL_DIR="${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
 
 # Model to embed — filename must match what synapd.service and syn-model expect
@@ -184,11 +186,12 @@ step "Building llama.cpp"
 
 if [[ ! -d "${LLAMA_DIR}" ]]; then
     log "Cloning llama.cpp..."
-    git clone --depth=1 https://github.com/ggerganov/llama.cpp "${LLAMA_DIR}"
+    git clone --depth=1 --branch "${LLAMA_REF}" \
+        https://github.com/ggerganov/llama.cpp "${LLAMA_DIR}"
 fi
 
 cd "${LLAMA_DIR}"
-git pull --ff-only 2>/dev/null || log "(using cached llama.cpp)"
+log "(llama.cpp pinned at ${LLAMA_REF})"
 
 mkdir -p build && cd build
 
@@ -221,6 +224,9 @@ make -j"${JOBS}"
 # Stage into llama-staging/ at project root (referenced by synapd PKGBUILD)
 LLAMA_STAGING="${PROJECT_ROOT}/llama-staging"
 log "Installing llama.cpp to staging area..."
+# Wipe first: layering installs from different llama.cpp builds leaves
+# mismatched libllama/libggml sonames that break linking against staging.
+rm -rf "${LLAMA_STAGING}"
 DESTDIR="${LLAMA_STAGING}" make install
 ok "llama.cpp built and staged to ${LLAMA_STAGING}"
 
@@ -251,8 +257,11 @@ create_source_tarball() {
     local pkgdir="${PROJECT_ROOT}/${pkg}"
     local tarball="${pkgdir}/${pkg}-${SYNAPSEOS_VERSION}.tar.gz"
 
-    # Check if PKGBUILD uses a tarball source (skip script packages like syn)
-    if ! grep -q "${pkg}-${SYNAPSEOS_VERSION}.tar.gz" "${pkgdir}/PKGBUILD"; then
+    # Check if PKGBUILD uses a tarball source (skip script packages like
+    # syn). Match both the literal name and the $pkgname-$pkgver form —
+    # synapse_kmod uses the latter and used to slip through this check,
+    # silently reusing a stale tarball.
+    if ! grep -qE "(\\\$pkgname-\\\$pkgver|${pkg}-${SYNAPSEOS_VERSION})\.tar\.gz" "${pkgdir}/PKGBUILD"; then
         return 0
     fi
 
@@ -267,6 +276,8 @@ create_source_tarball() {
     [ -d "${pkg}/config" ]  && items+=("${pkg}/config/")
     [ -d "${pkg}/systemd" ] && items+=("${pkg}/systemd/")
     [ -d "${pkg}/rules" ]   && items+=("${pkg}/rules/")
+    [ -d "${pkg}/protocols" ] && items+=("${pkg}/protocols/")
+    [ -d "${pkg}/tests" ]   && items+=("${pkg}/tests/")
     # synapse_kmod extras
     [ -f "${pkg}/Makefile" ]  && items+=("${pkg}/Makefile")
     [ -f "${pkg}/dkms.conf" ] && items+=("${pkg}/dkms.conf")
@@ -310,28 +321,51 @@ build_package() {
     # Create source tarball for packages that need it
     create_source_tarball "${pkg}"
 
-    # Copy package dir to a temp build area so we don't chown the source tree
-    local tmpbuild="${BUILD_DIR}/pkg-${pkg}"
-    rm -rf "${tmpbuild}"
-    cp -a "${pkgdir}" "${tmpbuild}"
+    # Copy package dir to a temp build area so we don't chown the source
+    # tree. Build under /var/tmp, not inside the project: synbuild cannot
+    # traverse /home/velle (mode 700), so paths under it are unreachable
+    # once makepkg drops privileges.
+    local tmpbuild
+    tmpbuild="$(mktemp -d "/var/tmp/synapse-pkg-${pkg}.XXXXXX")"
+    cp -a "${pkgdir}/." "${tmpbuild}/"
 
-    # Make llama-staging accessible for packages that link against it (synapd)
+    # Copy llama-staging for packages that link against it (synapd) — a
+    # symlink back into the project tree would be unreachable for synbuild.
     if [[ -d "${PROJECT_ROOT}/llama-staging" ]]; then
-        ln -sf "${PROJECT_ROOT}/llama-staging" "${tmpbuild}/llama-staging"
+        rm -rf "${tmpbuild}/llama-staging"
+        cp -a "${PROJECT_ROOT}/llama-staging" "${tmpbuild}/llama-staging"
     fi
+
+    # Drop stale artifacts copied along from the source tree: old packages
+    # (so the post-build copy only picks up fresh ones) and previous makepkg
+    # extractions (bsdtar overlays but never deletes, so a leftover meson
+    # build dir from an older meson version fails the build).
+    rm -f "${tmpbuild}"/*.pkg.tar.zst
+    rm -rf "${tmpbuild}/src/${pkg}-"* "${tmpbuild}/pkg"
 
     chown -R synbuild: "${tmpbuild}"
 
     cd "${tmpbuild}"
-    sudo -u synbuild makepkg -sf --noconfirm \
-        PKGDEST="${LOCAL_REPO}" \
+    # -d: intra-project deps (synapd, syn-model) aren't installable on the
+    #     host, and synbuild has no sudo rights for -s to use anyway.
+    # -H: keep root's HOME out of synbuild's makepkg environment.
+    # No PKGDEST: makepkg silently ignores it as a trailing argument, and
+    # local-repo isn't writable by synbuild — let the package land in the
+    # build dir and copy it over as root below.
+    sudo -u synbuild -H makepkg -fd --noconfirm \
         2>&1 | sed 's/^/  /' \
-        || { warn "${pkg} build failed — skipping"; cd "${SCRIPT_DIR}"; return 0; }
+        || err "${pkg} build failed — aborting (packages.x86_64 needs every package)"
+
+    cp "${tmpbuild}"/*.pkg.tar.zst "${LOCAL_REPO}/"
 
     ok "${pkg} built"
     cd "${SCRIPT_DIR}"
     rm -rf "${tmpbuild}"
 }
+
+# Start from a clean repo so stale packages from a previous run can't
+# mask a failed build — pacstrap must see exactly what this run produced.
+rm -f "${LOCAL_REPO}"/*.pkg.tar.zst
 
 for pkg in "${PACKAGES[@]}"; do
     build_package "$pkg"
@@ -393,6 +427,11 @@ step "Staging llama.cpp libraries"
 LLAMA_STAGING="${PROJECT_ROOT}/llama-staging"
 if [[ -d "${LLAMA_STAGING}/usr/lib" ]]; then
     mkdir -p "${SCRIPT_DIR}/airootfs/usr/lib"
+    # Clear llama libs staged by previous runs — mixed-build leftovers
+    # (different sonames) would otherwise ship in the ISO.
+    rm -f "${SCRIPT_DIR}"/airootfs/usr/lib/libllama*.so* \
+          "${SCRIPT_DIR}"/airootfs/usr/lib/libggml*.so* \
+          "${SCRIPT_DIR}"/airootfs/usr/lib/libmtmd*.so*
     # Copy shared libraries (follow symlinks to get actual files + create symlinks)
     for lib in "${LLAMA_STAGING}"/usr/lib/lib*.so*; do
         [[ -e "$lib" ]] || continue

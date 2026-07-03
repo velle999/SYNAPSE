@@ -30,6 +30,8 @@ build_component() {
     [ -d "$name/config" ]  && dirs+=("$name/config/")
     [ -d "$name/systemd" ] && dirs+=("$name/systemd/")
     [ -d "$name/rules" ]   && dirs+=("$name/rules/")
+    [ -d "$name/protocols" ] && dirs+=("$name/protocols/")
+    [ -d "$name/tests" ]   && dirs+=("$name/tests/")
     # synapse_kmod extras
     [ -f "$name/Makefile" ]  && dirs+=("$name/Makefile")
     [ -f "$name/dkms.conf" ] && dirs+=("$name/dkms.conf")
