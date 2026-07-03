@@ -31,7 +31,7 @@ SynapseOS boots to a branded TTY and auto-logs in as root, launching `synsh` —
 | **synapse_kmod** | Kernel module — syscall monitoring, AI scheduling hints, sysfs interface | ✅ 0.1.0 |
 | **synnet** | AI-assisted network policy daemon, nftables integration | ✅ 0.1.0 |
 | **synguard** | AI security monitor — syscall event classification, threat scoring | ✅ 0.1.0 |
-| **synui** | Wayland compositor skeleton (wlroots 0.19) | ✅ 0.1.0 |
+| **synui** | AI-aware Wayland compositor (wlroots 0.19) — tiling/monocle layouts, per-output workspaces, XWayland, layer-shell (see `synui/ROADMAP.md`) | ✅ 0.1.0 |
 
 ---
 
@@ -71,7 +71,10 @@ lsmod | grep synapse_kmod    # kernel module
 
 ## Enabling AI
 
-The live ISO ships without a model to keep the image size manageable. To enable full AI features:
+The default ISO build embeds Mistral 7B Instruct (Q4_K_M, ~4.1 GB) — AI is
+live out of the box. ISOs built with `--no-model` are ~4 GB smaller and
+download the model on first boot instead (`syn-firstboot`), or you can add
+one manually:
 ```bash
 # Copy a GGUF model (Mistral 7B recommended)
 cp your-model.gguf /var/lib/synapd/models/synapse.gguf
@@ -87,30 +90,39 @@ synsh
 ## Building
 
 ### Prerequisites
-- Arch Linux build VM
-- `archiso`, `mkinitcpio-archiso`, `meson`, `ninja`, `wlroots0.19`
-- llama.cpp built at `llama-staging/usr/`
+- Arch Linux host (or Arch-based)
+- `archiso`, `base-devel`, `meson`, `ninja`, `wlroots0.19`, `qemu`, `ovmf`
+- ~22 GB free disk space with the embedded model, ~9 GB without
 
-### Build
+### Build the ISO
+`archiso/build.sh` runs the whole pipeline: it builds llama.cpp (pinned at
+tag `b8272`, matching CI), packages all components via their PKGBUILDs into
+a local pacman repo, downloads the model, and runs mkarchiso.
 ```bash
-# Build all components
-LLAMA_INC=llama-staging/usr/include \
-LLAMA_LIB=llama-staging/usr/lib \
-bash build-all.sh
+sudo archiso/build.sh              # full build, GPU auto-detected
+sudo archiso/build.sh --no-gpu     # CPU-only llama.cpp (use for QEMU-targeted ISOs)
+sudo archiso/build.sh --no-model   # slim ISO, model downloaded on first boot
+sudo archiso/build.sh --no-clean   # keep previous llama.cpp build (faster rebuilds)
+```
+Output: `archiso/out/SynapseOS-0.1.0-x86_64.iso`
 
-# Build ISO
-sudo mkarchiso -v \
-  -w /tmp/synapse-work \
-  -o /tmp/synapse-out \
-  archiso/
+Package builds run as the `synbuild` user under `/var/tmp` — they must live
+outside `/home` (mode 0700). A failed package build aborts the run
+immediately rather than surfacing later as a pacstrap error.
+
+### Component-only builds (dev loop)
+```bash
+bash build-all.sh    # builds every component against llama-staging/usr/
 ```
 
 ### Test in QEMU
 ```bash
-qemu-system-x86_64 -m 4G -smp 2 -machine q35 \
-  -drive file=SynapseOS-0.1.0-x86_64.iso,media=cdrom,readonly=on \
-  -boot d -vga virtio -display sdl
+QEMU_RAM=8G ./archiso/build_scripts/qemu-test.sh   # auto-detects latest ISO
 ```
+The script enables KVM when available, boots UEFI via OVMF (falling back to
+BIOS), and attaches a persistent 20 GB test disk. Use 8 GB+ RAM when the
+model is embedded. Kernel/boot output is mirrored to the serial console
+(`View → serial0` in the QEMU window).
 
 ---
 
