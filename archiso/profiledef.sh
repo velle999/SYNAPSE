@@ -13,7 +13,11 @@ arch="x86_64"
 airootfs_image_type="squashfs"
 airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M' '-noappend')
 bootstrap_tarball_compression=('zstd' '-c' '-T0' '--auto-threads=logical' '--long' '-19')
-declare -A file_permissions=(
+# No `declare -A` here: mkarchiso sources this file inside a function, so
+# `declare` would create a function-local array that shadows mkarchiso's
+# global — every entry below would be silently ignored. Plain assignment
+# writes into the global mkarchiso already declared.
+file_permissions=(
     ["/etc/shadow"]="0:0:400"
     ["/etc/gshadow"]="0:0:400"
     ["/var/lib/synapd"]="0:0:750"
@@ -23,6 +27,3 @@ declare -A file_permissions=(
     ["/root/.ssh"]="0:0:700"
     ["/root/.ssh/authorized_keys"]="0:0:600"
 )
-
-# Set root password
-airootfs_image_type="squashfs"

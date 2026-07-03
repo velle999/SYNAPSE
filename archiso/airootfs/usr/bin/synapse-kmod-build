@@ -22,13 +22,16 @@ if [ ! -d "/lib/modules/$KVER/build" ]; then
     exit 1
 fi
 
-# Check if already built (any compression format)
-for ext in .ko .ko.zst .ko.xz .ko.gz; do
-    if [ -f "/lib/modules/$KVER/extra/${MODULE}${ext}" ]; then
-        echo "synapse-kmod-build: ${MODULE} already built for $KVER"
-        modprobe "$MODULE" 2>/dev/null || true
-        exit 0
-    fi
+# Check if already built (any compression format).
+# Arch's dkms installs into updates/dkms/, not extra/ — check both.
+for dir in extra updates/dkms; do
+    for ext in .ko .ko.zst .ko.xz .ko.gz; do
+        if [ -f "/lib/modules/$KVER/$dir/${MODULE}${ext}" ]; then
+            echo "synapse-kmod-build: ${MODULE} already built for $KVER"
+            modprobe "$MODULE" 2>/dev/null || true
+            exit 0
+        fi
+    done
 done
 
 # ── Try DKMS first (preferred — tracks module properly) ──────────

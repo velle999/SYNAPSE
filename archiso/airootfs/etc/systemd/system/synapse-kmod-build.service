@@ -1,10 +1,15 @@
 [Unit]
 Description=Build synapse_kmod for current kernel
-# Only run if the module is not already built (any compression format)
+# Only run if the module is not already built (any compression format).
+# Arch's dkms installs into updates/dkms/, not extra/ — check both.
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.zst
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.xz
 ConditionPathExists=!/lib/modules/%v/extra/synapse_kmod.ko.gz
+ConditionPathExists=!/lib/modules/%v/updates/dkms/synapse_kmod.ko
+ConditionPathExists=!/lib/modules/%v/updates/dkms/synapse_kmod.ko.zst
+ConditionPathExists=!/lib/modules/%v/updates/dkms/synapse_kmod.ko.xz
+ConditionPathExists=!/lib/modules/%v/updates/dkms/synapse_kmod.ko.gz
 After=local-fs.target
 
 [Service]

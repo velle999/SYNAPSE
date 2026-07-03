@@ -4,6 +4,10 @@ After=synapd.service seatd.service
 Wants=synapd.service synui-foot.service
 Requires=seatd.service
 Conflicts=getty@tty1.service
+# If synui fails 3 times in 30s, stop trying and let getty take over
+# (StartLimit* live in [Unit]; systemd ignores them in [Service])
+StartLimitBurst=3
+StartLimitIntervalSec=30
 
 [Service]
 Type=simple
@@ -23,9 +27,6 @@ EnvironmentFile=-/run/synui/env
 ExecStart=/usr/bin/synui
 Restart=on-failure
 RestartSec=3
-# If synui fails 3 times, stop trying and let getty take over
-StartLimitBurst=3
-StartLimitIntervalSec=30
 ExecStopPost=-/usr/bin/systemctl start getty@tty1.service
 
 [Install]

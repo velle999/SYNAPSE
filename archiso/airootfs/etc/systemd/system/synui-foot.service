@@ -10,7 +10,9 @@ Environment=XDG_RUNTIME_DIR=/run/user/0
 # Wait for synui to write its display name, checking any wayland-N socket
 ExecStartPre=/bin/sh -c 'n=0; while [ ! -f /tmp/synui-display ]; do sleep 0.5; n=$((n+1)); if [ $n -ge 30 ]; then echo "Timed out waiting for synui" >&2; exit 1; fi; done; sleep 1'
 ExecStart=/bin/sh -c 'export WAYLAND_DISPLAY=$(cat /tmp/synui-display | tr -d "[:space:]"); exec foot synsh'
-Restart=on-failure
+# always: this is the only terminal — respawn it even after a clean exit,
+# or closing synsh leaves the compositor with no way to open anything
+Restart=always
 RestartSec=2
 
 [Install]

@@ -435,8 +435,13 @@ for f in \
     /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
 done
-[ -f /usr/bin/synapse-kmod-build ] && \
-    cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null || true
+# chmod after copy: if the live media shipped the script non-executable
+# (broken file_permissions in an old ISO), the copy inherits that and the
+# boot service dies with 203/EXEC.
+if [ -f /usr/bin/synapse-kmod-build ]; then
+    cp /usr/bin/synapse-kmod-build /mnt/usr/bin/synapse-kmod-build 2>/dev/null \
+        && chmod 755 /mnt/usr/bin/synapse-kmod-build
+fi
 
 # ── Fix synguard: don't hard-require synapd ──────────────
 # synguard handles missing synapd gracefully in code, but Requires=
@@ -563,7 +568,8 @@ PROFILEEOF
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
 cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
 terminal = foot
-autostart = foot
+# The terminal comes from synui-foot.service — no autostart here,
+# or every boot opens two.
 border_width    = 2
 gap             = 8
 master_factor   = 0.60
