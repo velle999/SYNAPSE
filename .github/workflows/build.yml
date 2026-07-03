@@ -7,10 +7,11 @@ on:
   workflow_dispatch:
 
 # Pinned llama.cpp build tag. Local llama-staging is build 8274
-# (libllama.so.0.0.8274). Bump this to move synapd to a newer llama.cpp;
-# the cache key follows it automatically.
+# (libllama.so.0.0.8274), but upstream never tagged b8273–b8275, so we
+# pin the nearest tag at or below it. Bump this to move synapd to a
+# newer llama.cpp; the cache key follows it automatically.
 env:
-  LLAMA_REF: b8274
+  LLAMA_REF: b8272
 
 jobs:
   # ── Fast structural guards (no toolchain) ──────────────────
