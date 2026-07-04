@@ -380,9 +380,9 @@ case "$DE_CHOICE" in
         ;;
     4) echo "  No GUI will be installed." ;;
     *)
-        echo "  Installing greetd (login screen)..."
+        echo "  Installing greetd (login screen) + desktop extras..."
         arch-chroot /mnt pacman -S --noconfirm \
-            greetd greetd-tuigreet \
+            greetd greetd-tuigreet waybar swaybg \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
         success "SynapseUI selected (included)"
         ;;
@@ -549,7 +549,7 @@ SESSION_EOF
 vt = 1
 
 [default_session]
-command = "tuigreet --time --remember --cmd /usr/local/bin/synui-session"
+command = "tuigreet --time --remember --theme 'border=magenta;text=cyan;prompt=green;time=magenta;action=cyan;button=yellow;container=black;input=magenta' --cmd /usr/local/bin/synui-session"
 user = "greeter"
 GREETD_EOF
         arch-chroot /mnt systemctl enable greetd.service 2>/dev/null || true
@@ -583,10 +583,18 @@ cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
 terminal = foot
 # greetd launches synui after login; the synsh terminal is autostarted
 # here (synui-foot.service is only used on the live ISO).
+autostart = swaybg -c '#0b0b14'
+autostart = waybar
 autostart = foot synsh
 border_width    = 2
 gap             = 8
 master_factor   = 0.60
+
+# "night drive" palette — matches foot.ini and waybar style.css
+border_color_norm  = #2a2a40
+border_color_focus = #ff296d
+border_color_ai    = #05d9e8
+border_color_warn  = #ff3524
 ai_layout       = on
 ai_ctx_decor    = on
 start_overlay   = off
@@ -596,6 +604,92 @@ workspace_3_intent = writing code and running tests
 workspace_4_intent = terminal and system administration
 workspace_5_intent = media and entertainment
 SYNUIRC
+
+# foot terminal — "night drive" palette (matches synuirc border colors)
+mkdir -p "/mnt/home/$NEW_USER/.config/foot"
+cat > "/mnt/home/$NEW_USER/.config/foot/foot.ini" << 'FOOTEOF'
+[main]
+font=monospace:size=11
+pad=8x8
+
+[colors]
+alpha=0.92
+background=0b0b14
+foreground=c8e3ee
+regular0=16161e
+regular1=ff296d
+regular2=05ffa1
+regular3=ffd319
+regular4=2d9cee
+regular5=d817ff
+regular6=05d9e8
+regular7=94a3b8
+bright0=3b3b54
+bright1=ff5c8d
+bright2=57ffbe
+bright3=ffe14d
+bright4=5cb8ff
+bright5=e55cff
+bright6=4de8f4
+bright7=d6e5f5
+selection-foreground=0b0b14
+selection-background=05d9e8
+urls=05d9e8
+
+[cursor]
+color=0b0b14 05d9e8
+FOOTEOF
+
+# waybar HUD — clock + system telemetry in the same palette
+mkdir -p "/mnt/home/$NEW_USER/.config/waybar"
+cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << 'WAYBAREOF'
+{
+    "layer": "top",
+    "position": "top",
+    "height": 28,
+    "modules-left": ["custom/synapse"],
+    "modules-center": ["clock"],
+    "modules-right": ["cpu", "memory", "network"],
+    "custom/synapse": { "format": "◢ SYNAPSE", "tooltip": false },
+    "clock": { "format": "{:%H:%M:%S  %Y-%m-%d}", "interval": 1 },
+    "cpu": { "format": "CPU {usage}%", "interval": 2 },
+    "memory": { "format": "MEM {percentage}%", "interval": 5 },
+    "network": {
+        "format-wifi": "NET {essid}",
+        "format-ethernet": "NET {ipaddr}",
+        "format-disconnected": "NET offline",
+        "interval": 5
+    }
+}
+WAYBAREOF
+cat > "/mnt/home/$NEW_USER/.config/waybar/style.css" << 'WAYBARCSS'
+* {
+    font-family: monospace;
+    font-size: 12px;
+    min-height: 0;
+    border: none;
+}
+window#waybar {
+    background: rgba(11, 11, 20, 0.85);
+    color: #c8e3ee;
+    border-bottom: 2px solid #ff296d;
+}
+#custom-synapse {
+    color: #05d9e8;
+    font-weight: bold;
+    padding: 0 12px;
+}
+#clock {
+    color: #ffd319;
+}
+#cpu, #memory, #network {
+    color: #05d9e8;
+    padding: 0 10px;
+}
+#network.disconnected {
+    color: #ff296d;
+}
+WAYBARCSS
 
 # fastfetch config — reuse the branded one from the live ISO so `syn info`
 # / fastfetch shows the SynapseOS logo on the installed system too.

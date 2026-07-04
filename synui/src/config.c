@@ -107,6 +107,22 @@ static void config_bind(syn_config_t *cfg, const char *combo,
     snprintf(b->arg, sizeof(b->arg), "%s", sp);
 }
 
+/* Parse "#rrggbb" (or "rrggbb") into RGBA floats; alpha fixed at 1.0.
+ * Returns 0 and leaves out[] untouched on malformed input. */
+static int parse_hex_color(const char *val, float out[4])
+{
+    if (val[0] == '#') val++;
+    if (strlen(val) != 6) return 0;
+    char *end;
+    long v = strtol(val, &end, 16);
+    if (end != val + 6) return 0;
+    out[0] = (float)((v >> 16) & 0xff) / 255.0f;
+    out[1] = (float)((v >>  8) & 0xff) / 255.0f;
+    out[2] = (float)( v        & 0xff) / 255.0f;
+    out[3] = 1.0f;
+    return 1;
+}
+
 static void seed_default_binds(syn_config_t *cfg)
 {
     static const struct { const char *combo, *action; } defaults[] = {
@@ -153,6 +169,17 @@ void synui_config_load(syn_config_t *cfg)
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
 
+    {
+        static const float norm[4]  = COLOR_BORDER_NORM;
+        static const float focus[4] = COLOR_BORDER_FOCUS;
+        static const float ai[4]    = COLOR_BORDER_AI;
+        static const float warn[4]  = COLOR_BORDER_WARN;
+        memcpy(cfg->border_color_norm,  norm,  sizeof(norm));
+        memcpy(cfg->border_color_focus, focus, sizeof(focus));
+        memcpy(cfg->border_color_ai,    ai,    sizeof(ai));
+        memcpy(cfg->border_color_warn,  warn,  sizeof(warn));
+    }
+
     /* Input defaults: keymap fields stay empty (XKB_DEFAULT_* env / system
      * default); libinput tri-states -1 = leave the device alone. */
     cfg->repeat_rate    = 25;
@@ -191,11 +218,8 @@ void synui_config_load(syn_config_t *cfg)
 
     char line[512];
     while (fgets(line, sizeof(line), f)) {
-        char *hash = strchr(line, '#');
-        if (hash) *hash = '\0';
-
         char *s = strip(line);
-        if (!*s) continue;
+        if (!*s || *s == '#') continue;
 
         char *eq = strchr(s, '=');
         if (!eq) continue;
@@ -203,6 +227,19 @@ void synui_config_load(syn_config_t *cfg)
         *eq = '\0';
         char *key = strip(s);
         char *val = strip(eq + 1);
+
+        /* Inline comments: a whitespace-preceded '#' ends the value —
+         * unless it's the value's first character, so color values like
+         * `border_color_focus = #ff296d` survive. */
+        if (*val) {
+            for (char *p = val + 1; (p = strchr(p, '#')); p++) {
+                if (p[-1] == ' ' || p[-1] == '\t') {
+                    *p = '\0';
+                    break;
+                }
+            }
+            val = strip(val);
+        }
 
         if (strcmp(key, "terminal") == 0)
             strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
@@ -226,6 +263,14 @@ void synui_config_load(syn_config_t *cfg)
             cfg->ai_ctx_decor = strcmp(val, "on") == 0;
         else if (strcmp(key, "start_overlay") == 0)
             cfg->start_overlay = strcmp(val, "on") == 0;
+        else if (strcmp(key, "border_color_norm") == 0)
+            parse_hex_color(val, cfg->border_color_norm);
+        else if (strcmp(key, "border_color_focus") == 0)
+            parse_hex_color(val, cfg->border_color_focus);
+        else if (strcmp(key, "border_color_ai") == 0)
+            parse_hex_color(val, cfg->border_color_ai);
+        else if (strcmp(key, "border_color_warn") == 0)
+            parse_hex_color(val, cfg->border_color_warn);
         else if (strcmp(key, "xkb_rules") == 0)
             strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
         else if (strcmp(key, "xkb_model") == 0)

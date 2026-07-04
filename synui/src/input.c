@@ -153,23 +153,19 @@ void view_update_borders(syn_view_t *view)
         return;
     }
 
-    /* Pick border color */
+    /* Pick border color (config-driven; defaults COLOR_BORDER_*) */
     float color[4];
+    syn_config_t *cfg = &view->server->config;
 
     if (view->security == WIN_SECURE_ALERT ||
-        view->security == WIN_SECURE_DENIED) {
-        float c[] = COLOR_BORDER_WARN;
-        memcpy(color, c, sizeof(color));
-    } else if (view->ai_ctx.has_ctx) {
-        float c[] = COLOR_BORDER_AI;
-        memcpy(color, c, sizeof(color));
-    } else if (view->server && view == view->server->focused_view) {
-        float c[] = COLOR_BORDER_FOCUS;
-        memcpy(color, c, sizeof(color));
-    } else {
-        float c[] = COLOR_BORDER_NORM;
-        memcpy(color, c, sizeof(color));
-    }
+        view->security == WIN_SECURE_DENIED)
+        memcpy(color, cfg->border_color_warn, sizeof(color));
+    else if (view->ai_ctx.has_ctx)
+        memcpy(color, cfg->border_color_ai, sizeof(color));
+    else if (view == view->server->focused_view)
+        memcpy(color, cfg->border_color_focus, sizeof(color));
+    else
+        memcpy(color, cfg->border_color_norm, sizeof(color));
 
     int x = view->x, y = view->y, w = view->w, h = view->h;
     int bw = view->server->config.border_width;

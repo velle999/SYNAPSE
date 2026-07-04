@@ -1036,7 +1036,8 @@ static void usage(const char *prog) {
         "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc; $SYNUI_CONFIG\n"
         "overrides both) — keybinds, xkb_layout/variant/options,\n"
         "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
-        "terminal, autostart, gap, border_width.\n"
+        "terminal, autostart, gap, border_width,\n"
+        "border_color_norm/focus/ai/warn (#rrggbb).\n"
         "Send SIGHUP to reload the config at runtime (binds, keymap, libinput,\n"
         "gap/border; autostart entries only run at startup).\n",
         prog

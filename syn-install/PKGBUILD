@@ -1,6 +1,6 @@
 pkgname=syn-install
 pkgver=0.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL2')

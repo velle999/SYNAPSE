@@ -17,6 +17,14 @@ border_width    = 2
 gap             = 8
 master_factor   = 0.60
 
+# Border colors, #rrggbb (defaults shown — the "night drive" palette).
+# norm = unfocused, focus = focused, ai = window with AI_CTX intent,
+# warn = synguard ALERT/DENY verdict.
+# border_color_norm  = #2a2a40
+# border_color_focus = #ff296d
+# border_color_ai    = #05d9e8
+# border_color_warn  = #ff3524
+
 # ── AI features ────────────────────────────────────────────
 # AI layout suggestions (requires synapd)
 ai_layout       = on

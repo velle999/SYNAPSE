@@ -60,10 +60,12 @@
 #define NR_AI_CTX_QUERY     453
 
 /* ── Colors (RGBA float) ─────────────────────────────────── */
-#define COLOR_BORDER_NORM   { 0.30f, 0.30f, 0.40f, 1.0f }
-#define COLOR_BORDER_FOCUS  { 0.40f, 0.70f, 1.00f, 1.0f }
-#define COLOR_BORDER_AI     { 0.00f, 0.90f, 0.80f, 1.0f }
-#define COLOR_BORDER_WARN   { 1.00f, 0.30f, 0.20f, 1.0f }
+/* Default border palette ("night drive"): overridable per-role from
+ * synuirc via border_color_norm/focus/ai/warn = #rrggbb. */
+#define COLOR_BORDER_NORM   { 0.16f, 0.16f, 0.25f, 1.0f }  /* #2a2a40 dim indigo   */
+#define COLOR_BORDER_FOCUS  { 1.00f, 0.16f, 0.43f, 1.0f }  /* #ff296d neon magenta */
+#define COLOR_BORDER_AI     { 0.02f, 0.85f, 0.91f, 1.0f }  /* #05d9e8 neon cyan    */
+#define COLOR_BORDER_WARN   { 1.00f, 0.21f, 0.14f, 1.0f }  /* #ff3524 alarm red    */
 #define COLOR_OVERLAY_BG    { 0.05f, 0.05f, 0.10f, 0.85f }
 #define COLOR_BRAND         { 0.00f, 0.85f, 0.75f, 1.0f }
 
@@ -163,6 +165,12 @@ typedef struct {
     int   ai_layout;
     int   ai_ctx_decor;
     int   start_overlay;
+
+    /* Border colors (RGBA 0..1) by window role; defaults COLOR_BORDER_*. */
+    float border_color_norm[4];
+    float border_color_focus[4];
+    float border_color_ai[4];
+    float border_color_warn[4];
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];
