@@ -68,10 +68,12 @@ rule alert-boot-write {
     priority 22
 }
 
-rule deny-grub-cfg-write {
+# alert, not deny: the kmod reports opens without read/write flags, so
+# deny here SIGKILLs grub-mkconfig during kernel updates.
+rule alert-grub-cfg-access {
     event   open
     path    /boot/grub/grub.cfg
-    verdict deny
+    verdict alert
     priority 21
 }
 
