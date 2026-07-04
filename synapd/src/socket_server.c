@@ -126,6 +126,12 @@ static void handle_query(work_item_t *w) {
     }
     prompt[w->hdr.payload_len - 1] = '\0';
 
+    if (!w->state->model_loaded && atomic_load(&w->state->model_loading)) {
+        send_error(w->client_fd, w->hdr.request_id,
+                   "AI model is still loading — try again in a moment");
+        return;
+    }
+
     /* Fetch rolling system context */
     char sys_ctx[1024] = {0};
     context_get_summary(w->state, sys_ctx, sizeof(sys_ctx));
@@ -191,7 +197,8 @@ static void handle_status(work_item_t *w) {
     snprintf(buf, sizeof(buf),
         "synapd/%s model=%s requests=%lu active=%lu",
         SYNAPD_VERSION,
-        w->state->model_loaded ? "loaded" : "none",
+        w->state->model_loaded ? "loaded"
+            : atomic_load(&w->state->model_loading) ? "loading" : "none",
         (unsigned long)atomic_load(&w->state->requests_total),
         (unsigned long)atomic_load(&w->state->requests_active)
     );

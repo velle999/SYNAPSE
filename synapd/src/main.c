@@ -258,15 +258,21 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    if (inference_init(&g_state) < 0) {
-        syn_log(LOG_WARNING, "synapd: no model loaded — running in shell-assist mode only");
-        g_state.inference = NULL;
-    }
-
+    /* Socket first, model second: loading a multi-GB model takes tens of
+     * seconds, and clients (synsh at boot) connect exactly once. With the
+     * socket up-front they connect immediately; queries during the load
+     * get a "model still loading" error instead of no daemon at all. */
     if (socket_server_start(&g_state) < 0) {
         syn_log(LOG_ERR, "synapd: socket_server_start failed");
         return EXIT_FAILURE;
     }
+
+    atomic_store(&g_state.model_loading, 1);
+    if (inference_init(&g_state) < 0) {
+        syn_log(LOG_WARNING, "synapd: no model loaded — running in shell-assist mode only");
+        g_state.inference = NULL;
+    }
+    atomic_store(&g_state.model_loading, 0);
 
     if (scheduler_init(&g_state) < 0) {
         syn_log(LOG_WARNING, "synapd: scheduler_init failed — synapse_kmod not loaded?");

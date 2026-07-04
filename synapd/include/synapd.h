@@ -140,6 +140,9 @@ typedef struct synapd_state {
     _Atomic uint64_t    requests_total;
     _Atomic uint64_t    requests_active;
     int                 model_loaded;
+    /* Set while inference_init runs — the socket is already serving then,
+     * so handlers can tell "still loading" apart from "no model". */
+    _Atomic int         model_loading;
 
 } synapd_state_t;
 

@@ -151,6 +151,12 @@ static int run_interactive(synsh_state_t *s) {
              * Ask synapd to translate to a shell command,
              * optionally confirm, then execute.
              */
+            /* The startup connect races synapd's boot — retry here so a
+             * shell opened before the daemon was up heals on first use. */
+            if (!s->synapd_connected && synapd_connect(s) == 0) {
+                fprintf(stderr, COLOR_OK
+                    "synsh: connected to synapd — AI online\n" COLOR_RESET);
+            }
             if (!s->synapd_connected) {
                 fprintf(stderr, COLOR_WARN
                     "synsh: synapd not connected — running in shell-only mode\n"
