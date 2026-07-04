@@ -17,7 +17,12 @@
 #
 # Options:
 #   --no-model      Skip model download (build ISO without embedded model)
-#   --no-gpu        Build llama.cpp CPU-only
+#   --gpu=TYPE      Build llama.cpp with GPU backend: cuda, rocm, or auto.
+#                   Default is CPU-only: a GPU build links the shipped
+#                   libggml against the BUILD HOST's driver stack
+#                   (libcuda.so.1), and synapd dies with exit 127 on any
+#                   machine without that driver — including every VM.
+#   --no-gpu        (default; kept for compatibility)
 #   --no-clean      Skip cleaning previous build artifacts
 #   --jobs N        Parallel build jobs (default: nproc)
 #   --sign          GPG-sign the ISO
@@ -64,7 +69,8 @@ MODEL_HF_FILE="mistral-7b-instruct-v0.2.Q4_K_M.gguf"
 
 JOBS="$(nproc)"
 WITH_MODEL=true
-WITH_GPU=auto
+# CPU-only by default — see --gpu note in the header before changing this.
+WITH_GPU=cpu
 CLEAN=true
 SIGN=false
 
@@ -88,6 +94,7 @@ for arg in "$@"; do
     case "$arg" in
         --no-model)   WITH_MODEL=false ;;
         --no-gpu)     WITH_GPU=cpu ;;
+        --gpu=*)      WITH_GPU="${arg#--gpu=}" ;;
         --no-clean)   CLEAN=false ;;
         --sign)       SIGN=true ;;
         --jobs=*)     JOBS="${arg#--jobs=}" ;;
@@ -173,6 +180,15 @@ if [[ "$WITH_GPU" == "auto" ]]; then
         log "No discrete GPU detected — building llama.cpp CPU-only"
     fi
 fi
+
+case "$WITH_GPU" in
+    cpu) ;;
+    cuda|rocm)
+        warn "GPU build ($WITH_GPU): the ISO will only run AI features on"
+        warn "machines with the matching driver installed — synapd will fail"
+        warn "to start anywhere else (VMs included). CPU is the safe default." ;;
+    *) err "Invalid --gpu value: $WITH_GPU (expected cuda, rocm, or auto)" ;;
+esac
 
 # ── Clean ─────────────────────────────────────────────────────
 if [[ "$CLEAN" == "true" ]]; then
