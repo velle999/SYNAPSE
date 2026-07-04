@@ -28,6 +28,7 @@
 #include <sys/epoll.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <grp.h>
 
 #include "synapd.h"
 #include "socket_server.h"
@@ -338,6 +339,20 @@ int socket_server_start(synapd_state_t *s) {
         return -1;
     }
 
+    /* Unix-socket connect() needs write permission on the inode. synapd
+     * runs as root but clients (synsh in the user's terminal) don't, so
+     * root:root 0660 locked every non-root client out with EACCES. Hand
+     * the socket to the synapse group — the installer and live ISO both
+     * put the login user in it. */
+    struct group *gr = getgrnam("synapse");
+    if (gr) {
+        if (chown(s->config.socket_path, 0, gr->gr_gid) < 0)
+            syn_log(LOG_WARNING, "socket_server: chown(%s, :synapse): %s",
+                     s->config.socket_path, strerror(errno));
+    } else {
+        syn_log(LOG_WARNING,
+                 "socket_server: no 'synapse' group — only root can connect");
+    }
     chmod(s->config.socket_path, 0660);
 
     if (listen(fd, s->config.max_clients) < 0) {
