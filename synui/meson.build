@@ -11,6 +11,10 @@ threads   = dependency('threads')
 cairo     = dependency('cairo')
 libinput  = dependency('libinput')
 
+# effects.c drives the GLES2 renderer directly for the post-process pass
+egl       = dependency('egl')
+glesv2    = dependency('glesv2')
+
 # XWayland pulls xcb headers in via wlr/xwayland.h
 xcb       = dependency('xcb')
 xcb_icccm = dependency('xcb-icccm')
@@ -89,6 +93,7 @@ synui_exe = executable('synui',
     'src/secfeed.c',
     'src/config.c',
     'src/render.c',
+    'src/effects.c',
     xdg_shell_h,
     xdg_shell_c,
     layer_shell_h,
@@ -99,7 +104,7 @@ synui_exe = executable('synui',
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,
-                  libinput, xcb, xcb_icccm, xcb_ewmh],
+                  libinput, xcb, xcb_icccm, xcb_ewmh, egl, glesv2],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)
 

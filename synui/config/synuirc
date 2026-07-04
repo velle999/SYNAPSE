@@ -25,6 +25,14 @@ master_factor   = 0.60
 # border_color_ai    = #05d9e8
 # border_color_warn  = #ff3524
 
+# ── GLES post-process effects ──────────────────────────────
+# CRT-style pass on real GPUs; automatically off on pixman (VMs).
+# Strengths 0..1, 0 disables the individual effect (defaults shown).
+# effects           = on
+# effect_scanline   = 0.35
+# effect_curvature  = 0.25
+# effect_aberration = 0.40
+
 # ── AI features ────────────────────────────────────────────
 # AI layout suggestions (requires synapd)
 ai_layout       = on

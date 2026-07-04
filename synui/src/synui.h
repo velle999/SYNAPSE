@@ -103,6 +103,9 @@ typedef struct syn_workspace syn_workspace_t;
 typedef struct syn_output   syn_output_t;
 typedef struct syn_keyboard syn_keyboard_t;
 
+struct wlr_swapchain;   /* render/swapchain.h — only referenced by pointer */
+struct syn_effects;     /* effects.c private state */
+
 /* ── AI request / response ───────────────────────────────── */
 typedef struct {
     syn_ai_msg_type_t type;
@@ -171,6 +174,14 @@ typedef struct {
     float border_color_focus[4];
     float border_color_ai[4];
     float border_color_warn[4];
+
+    /* GLES post-process effects (effects.c). `effects` gates the pass;
+     * it silently stays off on non-GLES2 renderers (pixman VMs).
+     * Strengths are 0..1; 0 disables the individual effect. */
+    int   effects;
+    float effect_scanline;
+    float effect_curvature;
+    float effect_aberration;
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];
@@ -287,6 +298,10 @@ struct syn_output {
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */
 
+    /* effects.c: offscreen swapchain the scene renders into when the GLES
+     * post-process pass is active (NULL until first effects frame). */
+    struct wlr_swapchain    *fx_swapchain;
+
     struct wl_listener frame;
     struct wl_listener request_state;
     struct wl_listener destroy;
@@ -322,6 +337,7 @@ struct syn_server {
     struct wlr_backend         *backend;
     struct wlr_renderer        *renderer;
     struct wlr_allocator       *allocator;
+    struct syn_effects         *effects;   /* GLES post-process (effects.c); NULL = unavailable */
     struct wlr_compositor      *compositor;
     struct wlr_scene           *scene;
     struct wlr_scene_output_layout *scene_layout;

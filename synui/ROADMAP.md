@@ -357,6 +357,35 @@ drivable headless: workspace switching / jump-focus need key input, and the
 orphan-on-unplug path needs a real disconnect — verify on hardware with two
 monitors (Super+N on each head, unplug/replug).
 
+### Phase L — GLES post-process effects ("tier 3" cyberpunk pass)
+wlr_scene exposes no shader hooks, so `effects.c` renders the scene into a
+private per-output swapchain (`wlr_scene_output_build_state` with a custom
+swapchain) and draws that buffer to the real output buffer through a
+fullscreen-triangle GLES2 shader (raw EGL/GL against the wlroots renderer
+context, `wlr_gles2_renderer_get_buffer_fbo` for the target). Any failure
+falls back to the plain scene commit; pixman (VMs) never initializes the
+pass, so the ISO look is unchanged.
+
+- [x] L1 — pipeline + CRT pack: barrel curvature (black bezel outside the
+      tube), per-row scanlines, chromatic aberration; one shader, 2D and
+      external-OES sampler variants. synuirc: `effects = on/off` and
+      `effect_scanline/curvature/aberration = 0..1` (0 skips the pass
+      entirely), all SIGHUP-reloadable. Verified headless on GLES2: the
+      zero-strength pass is pixel-identical to effects-off (no flip, no
+      color shift), curvature blacks the corners, scanlines alternate rows
+      (1.00/0.74 at full strength), and the full smoke suite passes on both
+      pixman (fallback) and gles2 (pass active, dual-head, clean teardown).
+      Known limits: non-NORMAL output transforms take the plain path; a
+      hardware cursor plane is composited after the pass and stays crisp
+      (arguably correct); `glFinish()` before commit is conservative —
+      swap for a native-fence sync if it ever shows in frame times.
+- [ ] L2 — glitch-on-close: snapshot the closing window's buffer into a
+      scene_buffer and run a short slice-displacement animation.
+- [ ] L3 — focus pulse: briefly ramp `effect_aberration` on focus change
+      (needs a per-effect animation clock; wire a time uniform).
+- [ ] L4 — synguard tie-in: modulate scanline/aberration strength while any
+      window is in ALERT/DENY — the whole screen "glitches" under attack.
+
 ### Post-K bug sweep  *(done)*
 A full review of the compositor sources fixed, in severity order:
 - **Crash**: `focus_next()` walked the focused view's workspace list but

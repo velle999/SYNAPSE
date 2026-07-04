@@ -49,6 +49,7 @@
 #include <wlr/types/wlr_primary_selection_v1.h>
 
 #include "synui.h"
+#include "effects.h"
 
 /* ── Signal handling ─────────────────────────────────────── */
 static int handle_terminate_signal(int sig, void *data)
@@ -199,7 +200,10 @@ static void output_frame(struct wl_listener *listener, void *data)
         }
     }
 
-    wlr_scene_output_commit(scene_output, NULL);
+    /* GLES post-process pass when available; plain scene commit otherwise
+     * (and whenever any step of the effects pass fails). */
+    if (!effects_output_commit(output))
+        wlr_scene_output_commit(scene_output, NULL);
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -219,6 +223,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
     syn_server_t *server = output->server;
     /* Close any layer surfaces (panels/bars) anchored to this output. */
     layer_output_destroy(output);
+    effects_output_destroy(output);
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
@@ -723,6 +728,10 @@ int synui_init(syn_server_t *s)
         return -1;
     }
 
+    /* Optional GLES post-process (CRT/scanlines/aberration); logs and
+     * stays off on pixman. */
+    effects_init(s);
+
     /* Compositor protocols */
     s->compositor = wlr_compositor_create(s->display, 5, s->renderer);
     wlr_subcompositor_create(s->display);
@@ -917,6 +926,7 @@ void synui_destroy(syn_server_t *s)
      * sockets are closed (they'd otherwise leak and trip LeakSanitizer). */
     ai_thread_stop(s);
     secfeed_stop(s);
+    effects_finish(s);
 
     /* Tear down Xwayland first so its surfaces/listeners are gone before we
      * destroy the display and scene. */
@@ -1037,7 +1047,8 @@ static void usage(const char *prog) {
         "overrides both) — keybinds, xkb_layout/variant/options,\n"
         "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
         "terminal, autostart, gap, border_width,\n"
-        "border_color_norm/focus/ai/warn (#rrggbb).\n"
+        "border_color_norm/focus/ai/warn (#rrggbb),\n"
+        "effects on/off + effect_scanline/curvature/aberration (0..1, GLES2 only).\n"
         "Send SIGHUP to reload the config at runtime (binds, keymap, libinput,\n"
         "gap/border; autostart entries only run at startup).\n",
         prog

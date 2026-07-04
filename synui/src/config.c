@@ -107,6 +107,13 @@ static void config_bind(syn_config_t *cfg, const char *combo,
     snprintf(b->arg, sizeof(b->arg), "%s", sp);
 }
 
+static float clamp01(float v)
+{
+    if (v < 0.0f) return 0.0f;
+    if (v > 1.0f) return 1.0f;
+    return v;
+}
+
 /* Parse "#rrggbb" (or "rrggbb") into RGBA floats; alpha fixed at 1.0.
  * Returns 0 and leaves out[] untouched on malformed input. */
 static int parse_hex_color(const char *val, float out[4])
@@ -168,6 +175,13 @@ void synui_config_load(syn_config_t *cfg)
     cfg->ai_layout = 1;
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
+
+    /* GLES post-process: on by default, harmless on pixman (effects_init
+     * refuses and the plain path is used). Strengths tuned for subtlety. */
+    cfg->effects           = 1;
+    cfg->effect_scanline   = 0.35f;
+    cfg->effect_curvature  = 0.25f;
+    cfg->effect_aberration = 0.40f;
 
     {
         static const float norm[4]  = COLOR_BORDER_NORM;
@@ -271,6 +285,14 @@ void synui_config_load(syn_config_t *cfg)
             parse_hex_color(val, cfg->border_color_ai);
         else if (strcmp(key, "border_color_warn") == 0)
             parse_hex_color(val, cfg->border_color_warn);
+        else if (strcmp(key, "effects") == 0)
+            cfg->effects = strcmp(val, "on") == 0;
+        else if (strcmp(key, "effect_scanline") == 0)
+            cfg->effect_scanline = clamp01(strtof(val, NULL));
+        else if (strcmp(key, "effect_curvature") == 0)
+            cfg->effect_curvature = clamp01(strtof(val, NULL));
+        else if (strcmp(key, "effect_aberration") == 0)
+            cfg->effect_aberration = clamp01(strtof(val, NULL));
         else if (strcmp(key, "xkb_rules") == 0)
             strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
         else if (strcmp(key, "xkb_model") == 0)
