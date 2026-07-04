@@ -317,6 +317,21 @@ int ai_translate(synsh_state_t *s,
     for (int i = (int)clen - 1; i >= 0 && (cmd_buf[i] == ' ' || cmd_buf[i] == '\r'); i--)
         cmd_buf[i] = '\0';
 
+    /* Models habitually wrap the command in quotes or backticks
+     * ('df -h | awk ...'). Left in place, the whole pipeline parses as
+     * one giant argv[0] and exec fails with 127 — strip matched pairs. */
+    size_t blen = strlen(cmd_buf);
+    while (blen >= 2 &&
+           (cmd_buf[0] == '\'' || cmd_buf[0] == '"' || cmd_buf[0] == '`') &&
+           cmd_buf[blen-1] == cmd_buf[0]) {
+        memmove(cmd_buf, cmd_buf + 1, blen - 2);
+        cmd_buf[blen-2] = '\0';
+        blen -= 2;
+    }
+    /* ...and sometimes prefix a shell prompt marker */
+    if (cmd_buf[0] == '$' && cmd_buf[1] == ' ')
+        memmove(cmd_buf, cmd_buf + 2, strlen(cmd_buf + 2) + 1);
+
     if (why_line && explain_buf && explain_len > 0) {
         why_line += 4;
         while (*why_line == ' ') why_line++;
