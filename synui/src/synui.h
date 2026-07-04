@@ -182,6 +182,7 @@ typedef struct {
     float effect_scanline;
     float effect_curvature;
     float effect_aberration;
+    float effect_glitch;     /* strength of the alert/close glitch; 0 = off */
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];

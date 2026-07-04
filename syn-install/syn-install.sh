@@ -596,11 +596,14 @@ border_color_focus = #ff296d
 border_color_ai    = #05d9e8
 border_color_warn  = #ff3524
 
-# CRT post-process (GPU only; VMs fall back to the plain look)
+# CRT post-process (GPU only; VMs fall back to the plain look).
+# Glitch fires on window close and, sustained, while synguard holds
+# any window in ALERT/DENY — the screen corrupts under attack.
 effects           = on
 effect_scanline   = 0.35
 effect_curvature  = 0.25
 effect_aberration = 0.40
+effect_glitch     = 0.60
 ai_layout       = on
 ai_ctx_decor    = on
 start_overlay   = off

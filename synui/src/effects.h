@@ -24,4 +24,12 @@ bool effects_output_commit(syn_output_t *output);
 /* Release the per-output offscreen swapchain (output destroy). */
 void effects_output_destroy(syn_output_t *output);
 
+/* Animation triggers (no-ops when the pass is unavailable/disabled):
+ * focus change ramps chromatic aberration (L3); a window close fires a
+ * brief screen glitch (L2 interim). A synguard ALERT/DENY verdict on any
+ * mapped window sustains the glitch for as long as it stands (L4) — that
+ * one is detected per-frame, no trigger needed. */
+void effects_notify_focus(syn_server_t *s);
+void effects_notify_close(syn_server_t *s);
+
 #endif

@@ -368,6 +368,8 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
     syn_view_t *view = wl_container_of(listener, view, unmap);
     syn_server_t *server = view->server;
     int was_focused = (server->focused_view == view);
+    /* L2 (interim): a closing window fires a brief screen glitch. */
+    effects_notify_close(server);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     /* Drop focus/grab references to this window */
@@ -1048,7 +1050,7 @@ static void usage(const char *prog) {
         "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
         "terminal, autostart, gap, border_width,\n"
         "border_color_norm/focus/ai/warn (#rrggbb),\n"
-        "effects on/off + effect_scanline/curvature/aberration (0..1, GLES2 only).\n"
+        "effects on/off + effect_scanline/curvature/aberration/glitch (0..1, GLES2 only).\n"
         "Send SIGHUP to reload the config at runtime (binds, keymap, libinput,\n"
         "gap/border; autostart entries only run at startup).\n",
         prog

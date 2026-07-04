@@ -379,12 +379,26 @@ pass, so the ISO look is unchanged.
       hardware cursor plane is composited after the pass and stays crisp
       (arguably correct); `glFinish()` before commit is conservative —
       swap for a native-fence sync if it ever shows in frame times.
-- [ ] L2 — glitch-on-close: snapshot the closing window's buffer into a
-      scene_buffer and run a short slice-displacement animation.
-- [ ] L3 — focus pulse: briefly ramp `effect_aberration` on focus change
-      (needs a per-effect animation clock; wire a time uniform).
-- [ ] L4 — synguard tie-in: modulate scanline/aberration strength while any
-      window is in ALERT/DENY — the whole screen "glitches" under attack.
+- [x] L2 (interim) — close glitch: a window unmap (xdg + XWayland paths)
+      fires a 200ms decaying screen glitch via `effects_notify_close()`.
+      The full snapshot + per-window slice-displacement animation is still
+      open (needs buffer capture at unmap and a scene_buffer lifecycle).
+- [x] L3 — focus pulse: `focus_view()` calls `effects_notify_focus()` on an
+      actual focus change; chromatic aberration ramps +1.5 and decays over
+      250ms. Animation clocks live in `struct syn_effects`; while one is
+      running the pass adds whole-output damage and schedules the next
+      frame, so animations run at output refresh and stop costing anything
+      the moment they end.
+- [x] L4 — synguard tie-in: while any mapped window holds an ALERT/DENY
+      verdict (scanned per effects frame), the screen glitches for as long
+      as the verdict stands: 8px horizontal bands displace by a per-band
+      hash reseeded ~24x/s (`u_time`/`u_glitch` uniforms). Strength from
+      `effect_glitch` (0..1, 0 disables; also gates the close glitch).
+      Verified headless on GLES2 via SYNUI_EFFECTS_FORCE_GLITCH=1 (tests
+      only): ~25% of bands displaced per frame matching the shader's
+      step(0.75) gate, displaced rows are pure horizontal shifts of the
+      original, band sets differ between frames 0.7s apart (the animation
+      loop renders), clean SIGTERM mid-animation; both smoke suites green.
 
 ### Post-K bug sweep  *(done)*
 A full review of the compositor sources fixed, in severity order:

@@ -28,10 +28,14 @@ master_factor   = 0.60
 # ── GLES post-process effects ──────────────────────────────
 # CRT-style pass on real GPUs; automatically off on pixman (VMs).
 # Strengths 0..1, 0 disables the individual effect (defaults shown).
+# effect_glitch is event-driven: a brief screen glitch on window close,
+# a focus change pulses aberration, and a synguard ALERT/DENY verdict
+# on any window glitches the screen for as long as it stands.
 # effects           = on
 # effect_scanline   = 0.35
 # effect_curvature  = 0.25
 # effect_aberration = 0.40
+# effect_glitch     = 0.60
 
 # ── AI features ────────────────────────────────────────────
 # AI layout suggestions (requires synapd)

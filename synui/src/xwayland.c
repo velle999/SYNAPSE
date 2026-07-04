@@ -24,6 +24,7 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 
 #include "synui.h"
+#include "effects.h"
 
 /* border width comes from s->config (live-reloadable via SIGHUP) */
 
@@ -148,6 +149,9 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     (void)data;
     syn_view_t *view = wl_container_of(listener, view, unmap);
     syn_server_t *s = view->server;
+
+    /* L2 (interim): a closing window fires a brief screen glitch. */
+    effects_notify_close(s);
 
     int was_focused = (s->focused_view == view);
     view->mapped = 0;

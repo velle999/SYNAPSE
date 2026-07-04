@@ -182,6 +182,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->effect_scanline   = 0.35f;
     cfg->effect_curvature  = 0.25f;
     cfg->effect_aberration = 0.40f;
+    cfg->effect_glitch     = 0.60f;
 
     {
         static const float norm[4]  = COLOR_BORDER_NORM;
@@ -293,6 +294,8 @@ void synui_config_load(syn_config_t *cfg)
             cfg->effect_curvature = clamp01(strtof(val, NULL));
         else if (strcmp(key, "effect_aberration") == 0)
             cfg->effect_aberration = clamp01(strtof(val, NULL));
+        else if (strcmp(key, "effect_glitch") == 0)
+            cfg->effect_glitch = clamp01(strtof(val, NULL));
         else if (strcmp(key, "xkb_rules") == 0)
             strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
         else if (strcmp(key, "xkb_model") == 0)

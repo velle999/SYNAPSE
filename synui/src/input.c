@@ -49,6 +49,7 @@
 #include <wlr/types/wlr_primary_selection.h>
 
 #include "synui.h"
+#include "effects.h"
 
 /* Report user activity to idle-notify clients (swayidle). */
 static inline void notify_activity(syn_server_t *s)
@@ -71,6 +72,10 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
 
     syn_view_t *prev = s->focused_view;
     s->focused_view = view;
+
+    /* L3: brief chromatic-aberration pulse on an actual focus change. */
+    if (prev != view)
+        effects_notify_focus(s);
 
     /* Raise to top of scene */
     wlr_scene_node_raise_to_top(&view->scene_tree->node);
