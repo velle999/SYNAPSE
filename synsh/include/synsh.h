@@ -146,9 +146,25 @@ static inline int execute_builtin_line(synsh_state_t *s, const char *line) {
     char *av[SYNSH_MAX_ARGS];
     int ac = 0;
     strncpy(buf, line, sizeof(buf)-1); buf[sizeof(buf)-1] = '\0';
-    char *tok = strtok(buf, " \t");
-    while (tok && ac < SYNSH_MAX_ARGS-1) { av[ac++] = tok; tok = strtok(NULL, " \t"); }
+    /* Quote-aware split: 'ls -la' stays one token with the quotes
+     * stripped — plain strtok broke every quoted alias/export in
+     * synshrc into "alias: -la: not found" noise at startup. */
+    char *r = buf, *w = buf;
+    while (*r && ac < SYNSH_MAX_ARGS-1) {
+        while (*r == ' ' || *r == '\t') r++;
+        if (!*r) break;
+        av[ac++] = w;
+        char q = 0;
+        while (*r && (q || (*r != ' ' && *r != '\t'))) {
+            if (q && *r == q)                { q = 0;  r++; }
+            else if (!q && (*r == '\'' || *r == '"')) { q = *r++; }
+            else                             { *w++ = *r++; }
+        }
+        if (*r) r++;
+        *w++ = '\0';
+    }
     av[ac] = NULL;
+    if (ac == 0) return 0;
     return synsh_builtin(s, ac, av);
 }
 
