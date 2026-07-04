@@ -88,10 +88,16 @@ UEFI/BIOS
                  ├─ synapd.service        (AI daemon)
                  ├─ synguard.service      (security monitor, audit mode)
                  ├─ NetworkManager
-                 └─ greetd (display manager)
-                      └─ synui (Wayland compositor, autologin: syn)
-                           └─ foot (terminal)
+                 └─ synui.service (Wayland compositor, launched by
+                      │            systemd — the live ISO boots straight
+                      │            into the desktop, no login prompt)
+                      └─ synui-foot.service → foot (terminal, synsh)
 ```
+
+Installed systems boot differently: greetd + tuigreet show a login
+prompt on tty1 and launch synui as a PAM session for the user
+(`/usr/local/bin/synui-session`, written by the installer). KDE and
+GNOME installs use SDDM/GDM login screens.
 
 ## Live System Credentials
 

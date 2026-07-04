@@ -379,7 +379,13 @@ case "$DE_CHOICE" in
         success "GNOME installed"
         ;;
     4) echo "  No GUI will be installed." ;;
-    *) success "SynapseUI selected (included)" ;;
+    *)
+        echo "  Installing greetd (login screen)..."
+        arch-chroot /mnt pacman -S --noconfirm \
+            greetd greetd-tuigreet \
+            2>&1 || warn "greetd failed to install — boot falls back to getty login"
+        success "SynapseUI selected (included)"
+        ;;
 esac
 
 # ── Configure system ──────────────────────────────────────
@@ -500,9 +506,6 @@ GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
 
 [Theme]
 Current=breeze
-
-[Autologin]
-Session=plasma
 SDDMEOF
         arch-chroot /mnt systemctl enable sddm.service 2>/dev/null || true
         echo "  Desktop: KDE Plasma (SDDM login screen)"
@@ -519,31 +522,38 @@ SDDMEOF
     *)
         echo "DE=synui" > /mnt/etc/synapseos/desktop.conf
 
-        # synui.service override — run as user, not root
-        mkdir -p /mnt/etc/systemd/system/synui.service.d
-        cat > /mnt/etc/systemd/system/synui.service.d/user.conf << SYNUI_EOF
-[Unit]
-Conflicts=getty@tty1.service
+        # Session wrapper — greetd runs this as the user after login.
+        # Same VM detection as the .bash_profile fallback below.
+        mkdir -p /mnt/usr/local/bin
+        cat > /mnt/usr/local/bin/synui-session << 'SESSION_EOF'
+#!/bin/sh
+if [ -f /sys/class/dmi/id/sys_vendor ] && \
+   grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+    export WLR_RENDERER=pixman
+    export WLR_BACKENDS=drm,libinput
+    export WLR_NO_HARDWARE_CURSORS=1
+fi
+export XDG_SESSION_TYPE=wayland
+export LIBSEAT_BACKEND=seatd
+exec synui
+SESSION_EOF
+        chmod 755 /mnt/usr/local/bin/synui-session
 
-[Service]
-User=$NEW_USER
-Environment=XDG_RUNTIME_DIR=/run/user/$USER_UID
-ExecStartPre=
-ExecStartPre=+/bin/mkdir -p /run/user/$USER_UID
-ExecStartPre=+/bin/chown $NEW_USER:$NEW_USER /run/user/$USER_UID
-ExecStartPre=+/bin/sh -c 'if [ -f /sys/class/dmi/id/sys_vendor ] && grep -qiE "VirtualBox|VMware|QEMU|KVM|Xen|innotek" /sys/class/dmi/id/sys_vendor; then mkdir -p /run/synui; printf "WLR_RENDERER=pixman\nWLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n" > /run/synui/env; else mkdir -p /run/synui; : > /run/synui/env; fi'
-SYNUI_EOF
+        # greetd: tuigreet login prompt on tty1, session = synui.
+        # synui.service / synui-foot.service stay disabled on installs —
+        # the session goes through PAM so logind owns XDG_RUNTIME_DIR
+        # (they remain the no-login path for the live ISO only).
+        mkdir -p /mnt/etc/greetd
+        cat > /mnt/etc/greetd/config.toml << 'GREETD_EOF'
+[terminal]
+vt = 1
 
-        # synui-foot override — run terminal as user
-        mkdir -p /mnt/etc/systemd/system/synui-foot.service.d
-        cat > /mnt/etc/systemd/system/synui-foot.service.d/user.conf << FOOT_EOF
-[Service]
-User=$NEW_USER
-Environment=XDG_RUNTIME_DIR=/run/user/$USER_UID
-FOOT_EOF
-
-        arch-chroot /mnt systemctl enable synui.service 2>/dev/null || true
-        echo "  Desktop: SynapseUI (as $NEW_USER)"
+[default_session]
+command = "tuigreet --time --remember --cmd /usr/local/bin/synui-session"
+user = "greeter"
+GREETD_EOF
+        arch-chroot /mnt systemctl enable greetd.service 2>/dev/null || true
+        echo "  Desktop: SynapseUI (greetd login as $NEW_USER)"
         ;;
 esac
 
@@ -571,8 +581,9 @@ PROFILEEOF
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
 cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
 terminal = foot
-# The terminal comes from synui-foot.service — no autostart here,
-# or every boot opens two.
+# greetd launches synui after login; the synsh terminal is autostarted
+# here (synui-foot.service is only used on the live ISO).
+autostart = foot synsh
 border_width    = 2
 gap             = 8
 master_factor   = 0.60
