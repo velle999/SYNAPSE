@@ -230,7 +230,11 @@ case "$WITH_GPU" in
         fi
         ;;
     rocm)  CMAKE_ARGS+=("-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
-    cpu)   CMAKE_ARGS+=("-DGGML_NATIVE=ON") ;;
+    # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
+    # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
+    # CPU without those extensions — VMs without -cpu host included.
+    # The ISO must run on baseline x86-64.
+    cpu)   CMAKE_ARGS+=("-DGGML_NATIVE=OFF") ;;
 esac
 
 log "CMake configure (GPU: ${WITH_GPU})..."
