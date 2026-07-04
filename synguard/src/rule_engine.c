@@ -23,11 +23,11 @@
  *       priority 1
  *   }
  *
- *   rule deny-shadow-read {
+ *   rule alert-shadow-access {
  *       event   open
- *       path    /etc/shadow
+ *       path    /etc/shadow      # deny would kill PAM auth — see 00-base.rules
  *       uid     any
- *       verdict deny
+ *       verdict alert
  *       priority 10
  *   }
  *

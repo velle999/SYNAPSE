@@ -45,18 +45,22 @@ rule deny-setuid-root-unknown {
 }
 
 # ── Sensitive file access ─────────────────────────────────────
+# alert, not deny: every PAM authentication (greetd, login, sudo, su)
+# opens /etc/shadow to verify the password, and sudo reads /etc/sudoers
+# on every invocation. The kmod reports opens without read/write flags,
+# so a deny here SIGKILLs the login chain and locks the user out.
 
-rule deny-shadow-access {
+rule alert-shadow-access {
     event   open
     path    /etc/shadow
-    verdict deny
+    verdict alert
     priority 20
 }
 
-rule deny-sudoers-write {
+rule alert-sudoers-access {
     event   open
     path    /etc/sudoers
-    verdict deny
+    verdict alert
     priority 20
 }
 
