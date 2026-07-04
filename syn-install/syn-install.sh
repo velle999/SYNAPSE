@@ -471,8 +471,11 @@ arch-chroot /mnt bash -c "
 
 # Set password directly — pipe to chpasswd outside bash -c to avoid
 # quoting/escaping issues and ensure errors are visible
-printf '%s:%s' "$NEW_USER" "$NEW_PASS" | arch-chroot /mnt chpasswd \
+printf '%s:%s\n' "$NEW_USER" "$NEW_PASS" | arch-chroot /mnt chpasswd \
     || { fail "Failed to set password"; }
+
+# Root stays locked (pacstrap default, '*' in shadow) — admin goes
+# through sudo. Say so, or the first `su` looks like a broken password.
 success "Password set for '$NEW_USER'"
 
 USER_UID=$(arch-chroot /mnt id -u "$NEW_USER" 2>/dev/null || echo 1000)
@@ -668,6 +671,10 @@ line
 echo ""
 echo "  Log in as '$(bold "$NEW_USER")' after reboot."
 echo "  Type '$(bold "syn ask anything")' to get started."
+echo ""
+echo "  Admin: use $(bold "sudo") with your user password."
+echo "  The root account is locked (no root login / su)."
+echo "  Note: 3 wrong password attempts lock the account for 10 minutes."
 echo ""
 
 prompt "Remove installation media and press ENTER to reboot..."
