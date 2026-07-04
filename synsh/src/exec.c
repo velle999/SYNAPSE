@@ -287,6 +287,7 @@ int ai_translate(synsh_state_t *s,
         "- CMD must be a valid bash command\n"
         "- If the request is ambiguous, pick the safest interpretation\n"
         "- Never include rm -rf without explicit confirmation request\n"
+        "- Use sudo for privileged commands, NEVER su — the root account is locked\n"
         "- If no shell command makes sense, write CMD: # not possible\n",
         s->cwd   ? s->cwd   : "/",
         s->user  ? s->user  : "user",
@@ -331,6 +332,24 @@ int ai_translate(synsh_state_t *s,
     /* ...and sometimes prefix a shell prompt marker */
     if (cmd_buf[0] == '$' && cmd_buf[1] == ' ')
         memmove(cmd_buf, cmd_buf + 2, strlen(cmd_buf + 2) + 1);
+
+    /* Root is locked on installed systems, so a suggested `su` can never
+     * authenticate — it prompts for a password that does not exist. The
+     * prompt rule forbids it, but models still reach for it; rewrite the
+     * common forms to sudo. */
+    const char *su_rest = NULL;
+    if      (strncmp(cmd_buf, "su -c ", 6) == 0)       su_rest = cmd_buf + 6;
+    else if (strncmp(cmd_buf, "su - -c ", 8) == 0)     su_rest = cmd_buf + 8;
+    else if (strncmp(cmd_buf, "su root -c ", 11) == 0) su_rest = cmd_buf + 11;
+    if (su_rest) {
+        char *rest = strdup(su_rest);
+        if (rest && strlen(rest) + sizeof("sudo sh -c ") <= cmd_len)
+            snprintf(cmd_buf, cmd_len, "sudo sh -c %s", rest);
+        free(rest);
+    } else if (strcmp(cmd_buf, "su") == 0     || strcmp(cmd_buf, "su -") == 0 ||
+               strcmp(cmd_buf, "su root") == 0 || strcmp(cmd_buf, "su - root") == 0) {
+        snprintf(cmd_buf, cmd_len, "sudo -i");
+    }
 
     if (why_line && explain_buf && explain_len > 0) {
         why_line += 4;
