@@ -460,7 +460,17 @@ if [ -f /mnt/etc/systemd/system/synguard.service ]; then
 fi
 
 # ── Create user and groups ────────────────────────────────
+# Everything in this section aborts the install on failure. A system that
+# reaches "installation complete" with no working login is the worst
+# outcome — the target fs can flip read-only mid-install (disk errors,
+# errors=remount-ro) and a masked useradd/chpasswd here delivered exactly
+# that: a locked-out "successful" install.
 echo "  Creating user '$NEW_USER'..."
+
+# The target fs may have remounted read-only since pacstrap; catch it now
+# with a clear message instead of a cascade of masked failures.
+arch-chroot /mnt sh -c 'touch /etc/.rw-check && rm -f /etc/.rw-check' \
+    || die "Target filesystem is no longer writable (disk errors? check 'dmesg') — aborting"
 
 arch-chroot /mnt bash -c "
     groupadd -r synapse  2>/dev/null || true
@@ -469,20 +479,32 @@ arch-chroot /mnt bash -c "
 
     grep -qxF '/usr/bin/synsh' /etc/shells 2>/dev/null || echo '/usr/bin/synsh' >> /etc/shells
 
-    useradd -m -G wheel,audio,video,input,synapse,seat \
-        -s /bin/bash -c '$NEW_FULLNAME' '$NEW_USER' 2>/dev/null || true
-
     echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
 "
+
+# useradd runs outside the masked bash -c block: if it fails, nothing
+# after it can produce a bootable login, so fail loudly and stop.
+arch-chroot /mnt useradd -m -G wheel,audio,video,input,synapse,seat \
+    -s /bin/bash -c "$NEW_FULLNAME" "$NEW_USER" \
+    || die "useradd '$NEW_USER' failed — aborting (no login would be possible)"
 
 # Set password directly — pipe to chpasswd outside bash -c to avoid
 # quoting/escaping issues and ensure errors are visible
 printf '%s:%s\n' "$NEW_USER" "$NEW_PASS" | arch-chroot /mnt chpasswd \
-    || { fail "Failed to set password"; }
+    || die "chpasswd failed for '$NEW_USER' — aborting (login would be impossible)"
+
+# Verify the hash actually landed in /etc/shadow: chpasswd goes through
+# PAM, and a module failure can leave the account locked ('!' from
+# useradd) even when the command's own error output scrolled past.
+SHADOW_HASH=$(grep "^${NEW_USER}:" /mnt/etc/shadow | cut -d: -f2)
+case "$SHADOW_HASH" in
+    \$*) ;;  # real hash — good
+    *)  die "Password verification failed: shadow entry for '$NEW_USER' is '${SHADOW_HASH:-empty}' — login would be impossible" ;;
+esac
 
 # Root stays locked (pacstrap default, '*' in shadow) — admin goes
 # through sudo. Say so, or the first `su` looks like a broken password.
-success "Password set for '$NEW_USER'"
+success "Password set for '$NEW_USER' (verified in shadow)"
 
 USER_UID=$(arch-chroot /mnt id -u "$NEW_USER" 2>/dev/null || echo 1000)
 echo "  User '$NEW_USER' created (uid=$USER_UID)"
@@ -722,7 +744,10 @@ d /var/lib/synapd/models 0755 root root -
 EOF
 
 echo "  Generating initramfs..."
-arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 || warn "mkinitcpio had errors"
+arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 \
+    || die "mkinitcpio failed — the installed system would not boot"
+[ -s /mnt/boot/initramfs-linux.img ] \
+    || die "initramfs missing after mkinitcpio — the installed system would not boot"
 
 success "System configured"
 
