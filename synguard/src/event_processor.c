@@ -65,12 +65,16 @@ int kmod_parse_event(const char *line, sg_event_t *out)
 {
     char comm[32] = {0};
     char filename[256] = {0};
+    unsigned int wire_flags = 0;
+    unsigned long long arg0 = 0;
     memset(out, 0, sizeof(*out));
 
-    int n = sscanf(line, "%llu %u %u %u %31s %255s",
+    /* The kmod appends "flags arg0" after the filename (newer log format);
+     * older kmods stop at the filename, so those fields are optional. */
+    int n = sscanf(line, "%llu %u %u %u %31s %255s %x %llu",
                    (unsigned long long *)&out->timestamp_ns,
                    &out->pid, &out->uid, &out->syscall_nr,
-                   comm, filename);
+                   comm, filename, &wire_flags, &arg0);
 
     if (n < 5) return -1;
 
@@ -79,7 +83,13 @@ int kmod_parse_event(const char *line, sg_event_t *out)
     if (n >= 6 && strcmp(filename, "-") != 0)
         strncpy(out->filename, filename, sizeof(out->filename) - 1);
 
-    out->evt_type = syscall_to_evt(out->syscall_nr);
+    if (n >= 8) {
+        out->evt_type = (uint8_t)wire_flags;
+        out->arg0     = arg0;
+        out->has_arg0 = 1;
+    } else {
+        out->evt_type = syscall_to_evt(out->syscall_nr);
+    }
     return 0;
 }
 
@@ -108,11 +118,17 @@ static void build_ai_context(const sg_event_t *e, char *out, size_t out_len)
         [EVT_PTRACE] = "ptrace_attach",
         [EVT_MODULE] = "load_kernel_module",
         [EVT_MOUNT]  = "mount_filesystem",
-        [EVT_SETUID] = "setuid_to_root",
+        [EVT_SETUID] = "setuid_change",
     };
 
     const char *ename = (e->evt_type < 0x80 && evt_names[e->evt_type])
                         ? evt_names[e->evt_type] : "unknown";
+
+    /* Describe setuid by its target, not a fixed label: telling the model
+     * "setuid_to_root" for a root→user privilege drop poisons the verdict. */
+    if (e->evt_type == EVT_SETUID && e->has_arg0)
+        ename = (e->arg0 == 0) ? "setuid_to_root"
+                               : "setuid_drop_to_unprivileged_uid";
 
     snprintf(out, out_len,
         "syscall_event: %s\n"
@@ -173,9 +189,22 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
                    verdict_name(ai_result.verdict),
                    ai_result.confidence,
                    ai_result.reason);
-            /* AI verdict overrides rule verdict for ESCALATE */
-            if (verdict == VERDICT_ESCALATE)
-                verdict = ai_result.verdict;
+            /* AI verdict overrides rule verdict for ESCALATE — but the
+             * classifier is advisory unless ai_enforce is set: a model
+             * hallucination must never be able to SIGKILL a process tree.
+             * Only rules written by a human may carry a DENY. */
+            if (verdict == VERDICT_ESCALATE) {
+                if (ai_result.verdict >= VERDICT_DENY && !s->config.ai_enforce) {
+                    sg_log(LOG_WARNING,
+                           "AI recommended %s for pid=%u (%s) — clamped to "
+                           "alert (--ai-enforce not set): %.120s",
+                           verdict_name(ai_result.verdict),
+                           e->pid, e->comm, ai_result.reason);
+                    verdict = VERDICT_ALERT;
+                } else {
+                    verdict = ai_result.verdict;
+                }
+            }
         } else {
             sg_log(LOG_DEBUG, "AI classification failed — keeping rule verdict");
         }

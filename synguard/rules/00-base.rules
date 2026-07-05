@@ -37,8 +37,12 @@ rule alert-module-load {
 }
 
 # ── Privilege escalation ──────────────────────────────────────
+# The kmod only reports setuid(0) — privilege drops (root→user at login)
+# never generate events. escalate consults the AI, but AI verdicts are
+# advisory (clamped to alert) unless synguard runs with --ai-enforce, so
+# this can never kill the login chain on a hallucinated "deny".
 
-rule deny-setuid-root-unknown {
+rule escalate-setuid-to-root {
     event   setuid
     verdict escalate
     priority 15

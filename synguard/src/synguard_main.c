@@ -82,10 +82,11 @@ static void print_banner(const synguard_state_t *s)
         [MODE_LOCKDOWN] = "LOCKDOWN",
     };
     sg_log(LOG_INFO, "synguard %s starting", SYNGUARD_VERSION);
-    sg_log(LOG_INFO, "mode=%s rules=%d ai=%s kmod=%s",
+    sg_log(LOG_INFO, "mode=%s rules=%d ai=%s (%s) kmod=%s",
            mode_str[s->config.mode],
            s->rules_count,
            s->config.ai_enabled ? "on" : "off",
+           s->config.ai_enforce ? "enforcing" : "advisory",
            s->kmod_present ? "present" : "absent (degraded)");
 }
 
@@ -122,6 +123,10 @@ static void usage(const char *prog)
         "                       (default: audit — safe to start)\n"
         "  -r, --rules DIR      Rules directory (default: /etc/synguard/rules.d/)\n"
         "  --no-ai              Disable AI classification (rules only)\n"
+        "  --ai-enforce         Allow AI verdicts to DENY/QUARANTINE.\n"
+        "                       Off by default: the classifier is advisory and\n"
+        "                       its verdicts are clamped to alert. Only rule\n"
+        "                       verdicts can kill without this flag.\n"
         "  --no-audit           Disable audit log\n"
         "  -d, --debug          Debug mode (foreground, verbose)\n"
         "  -f, --foreground     Run in foreground\n"
@@ -191,6 +196,7 @@ int main(int argc, char *argv[])
         {"mode",       required_argument, 0, 'm'},
         {"rules",      required_argument, 0, 'r'},
         {"no-ai",      no_argument,       0, 'A'},
+        {"ai-enforce", no_argument,       0, 'E'},
         {"no-audit",   no_argument,       0, 'U'},
         {"debug",      no_argument,       0, 'd'},
         {"foreground", no_argument,       0, 'f'},
@@ -200,11 +206,12 @@ int main(int argc, char *argv[])
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "m:r:AUdfvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:r:AEUdfvh", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'm': mode_str = optarg; break;
         case 'r': g_state.config.rules_dir = optarg; break;
         case 'A': g_state.config.ai_enabled = 0; break;
+        case 'E': g_state.config.ai_enforce = 1; break;
         case 'U': g_state.config.audit_enabled = 0; break;
         case 'd': g_state.debug = 1; foreground = 1; break;
         case 'f': foreground = 1; break;

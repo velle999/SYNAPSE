@@ -88,6 +88,8 @@ typedef struct {
     uint32_t  uid;
     uint32_t  syscall_nr;
     uint8_t   evt_type;       /* EVT_* */
+    uint8_t   has_arg0;       /* wire carried arg0 (newer kmod log format) */
+    uint64_t  arg0;           /* first syscall arg (setuid: target uid) */
     char      comm[16];
     char      filename[128];
 } sg_event_t;
@@ -149,6 +151,10 @@ typedef enum {
 typedef struct {
     sg_mode_t   mode;
     int         ai_enabled;        /* use synapd for classification */
+    int         ai_enforce;        /* let an AI verdict escalate to DENY/QUARANTINE.
+                                      Off by default: the classifier is advisory, and a
+                                      hallucinated "deny" must never SIGKILL the login
+                                      chain. Rule-verdict denies are unaffected. */
     int         ai_timeout_ms;     /* max wait for AI verdict */
     float       ai_threshold;      /* escalate to AI if score > this */
     int         log_level;
