@@ -24,6 +24,7 @@ file_permissions=(
     ["/usr/bin/synapd"]="0:0:755"
     ["/usr/bin/synsh"]="0:0:755"
     ["/usr/bin/synapse-kmod-build"]="0:0:755"
+    ["/usr/local/bin/synui-gfx-env"]="0:0:755"
     ["/root/.ssh"]="0:0:700"
     ["/root/.ssh/authorized_keys"]="0:0:600"
 )

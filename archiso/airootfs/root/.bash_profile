@@ -24,11 +24,11 @@ if [ "$(tty)" = "/dev/tty1" ]; then
                 export XDG_SESSION_TYPE=wayland
                 export LIBSEAT_BACKEND=seatd
 
-                # VM detection — force software rendering
-                if [ -f /sys/class/dmi/id/sys_vendor ] && \
-                   grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-                    export WLR_RENDERER=pixman
-                    export WLR_NO_HARDWARE_CURSORS=1
+                # Renderer for this hardware — VMs and nouveau-driven
+                # cards fall back to software rendering so setup always
+                # completes; real drivers (nvidia/amdgpu/i915) get GLES2.
+                if [ -x /usr/local/bin/synui-gfx-env ]; then
+                    eval "$(/usr/local/bin/synui-gfx-env | sed 's/^/export /')"
                 fi
 
                 exec /usr/bin/synui

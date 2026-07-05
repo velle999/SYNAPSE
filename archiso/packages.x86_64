@@ -10,6 +10,8 @@ openssh
 sudo
 seatd
 systemd
+mesa
+nvidia-open
 parted
 dosfstools
 e2fsprogs
