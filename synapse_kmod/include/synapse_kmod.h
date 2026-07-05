@@ -110,6 +110,11 @@ struct ai_ctx_query_args {
 /*
  * Written to /sys/kernel/synapse/syscall_log by kprobes.
  * Read by synapd for security analysis and context tracking.
+ *
+ * sysfs line format (one event per line):
+ *   <timestamp_ns> <pid> <uid> <syscall_nr> <comm> <filename|-> <flags:hex> <arg0>
+ * The trailing "<flags> <arg0>" pair was appended in 0.1.1; readers must
+ * treat it as optional. For SYNAPSE_EVT_SETUID, arg0 is the target uid.
  */
 struct synapse_syscall_event {
     uint64_t  timestamp_ns;

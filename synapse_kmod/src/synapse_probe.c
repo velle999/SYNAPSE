@@ -110,13 +110,18 @@ ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
         struct synapse_syscall_event *e = &g_ring.events[idx];
 
         const char *fname = e->filename[0] ? e->filename : "-";
+        /* Trailing "flags arg0" lets userspace type events without guessing
+         * from syscall_nr and see arg0 (setuid: target uid). Readers that
+         * stop at the filename keep working — the fields only append. */
         pos += scnprintf(buf + pos, buf_len - pos,
-            "%llu %u %u %u %s %s\n",
+            "%llu %u %u %u %s %s %02x %llu\n",
             e->timestamp_ns,
             e->pid, e->uid,
             e->syscall_nr,
             e->comm,
-            fname
+            fname,
+            e->flags,
+            (unsigned long long)e->args[0]
         );
         atomic_inc(&g_ring.tail);
     }
@@ -336,6 +341,11 @@ static struct kprobe *all_probes[] = {
 
 #define N_PROBES  ARRAY_SIZE(all_probes)
 
+/* Track which probes were successfully registered — some symbols may not
+ * be kprobeable on a given kernel, and enable/disable/unregister on a
+ * never-registered kprobe is undefined. */
+static bool probe_registered[ARRAY_SIZE(all_probes)];
+
 /* ── Enable / disable ─────────────────────────────────────── */
 static bool g_probes_enabled = true;
 
@@ -348,11 +358,11 @@ void synapse_probe_set_enabled(bool enabled)
 
     if (enabled) {
         for (int i = 0; i < (int)N_PROBES; i++)
-            enable_kprobe(all_probes[i]);
+            if (probe_registered[i]) enable_kprobe(all_probes[i]);
         pr_info("synapse_kmod: probes enabled\n");
     } else {
         for (int i = 0; i < (int)N_PROBES; i++)
-            disable_kprobe(all_probes[i]);
+            if (probe_registered[i]) disable_kprobe(all_probes[i]);
         pr_info("synapse_kmod: probes disabled\n");
     }
 }
@@ -360,27 +370,44 @@ void synapse_probe_set_enabled(bool enabled)
 /* ── Init / exit ──────────────────────────────────────────── */
 int synapse_probe_init(int ring_size)
 {
-    int ret;
+    int ret, i, ok = 0;
 
     ret = ring_init(ring_size);
     if (ret) return ret;
 
-    ret = register_kprobes(all_probes, N_PROBES);
-    if (ret) {
-        pr_err("synapse_kmod: register_kprobes failed: %d\n", ret);
-        ring_free();
-        return ret;
+    /* Register probes individually — some symbols may not be
+     * kprobeable on this kernel, and that's fine. */
+    for (i = 0; i < (int)N_PROBES; i++) {
+        ret = register_kprobe(all_probes[i]);
+        if (ret) {
+            pr_warn("synapse_kmod: kprobe %s failed: %d (skipping)\n",
+                    all_probes[i]->symbol_name, ret);
+            probe_registered[i] = false;
+        } else {
+            probe_registered[i] = true;
+            ok++;
+        }
     }
 
-    pr_info("synapse_kmod: %zu kprobes registered, ring_size=%d\n",
-            N_PROBES, ring_size);
+    if (ok == 0) {
+        pr_err("synapse_kmod: no kprobes registered — probes disabled\n");
+        ring_free();
+        return -ENODEV;
+    }
+
+    pr_info("synapse_kmod: %d/%zu kprobes registered, ring_size=%d\n",
+            ok, N_PROBES, ring_size);
     return 0;
 }
 
 void synapse_probe_exit(void)
 {
+    int i;
     if (g_ring.events) {
-        unregister_kprobes(all_probes, N_PROBES);
+        for (i = 0; i < (int)N_PROBES; i++) {
+            if (probe_registered[i])
+                unregister_kprobe(all_probes[i]);
+        }
         ring_free();
     }
 }

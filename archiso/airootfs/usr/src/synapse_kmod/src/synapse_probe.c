@@ -110,13 +110,18 @@ ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
         struct synapse_syscall_event *e = &g_ring.events[idx];
 
         const char *fname = e->filename[0] ? e->filename : "-";
+        /* Trailing "flags arg0" lets userspace type events without guessing
+         * from syscall_nr and see arg0 (setuid: target uid). Readers that
+         * stop at the filename keep working — the fields only append. */
         pos += scnprintf(buf + pos, buf_len - pos,
-            "%llu %u %u %u %s %s\n",
+            "%llu %u %u %u %s %s %02x %llu\n",
             e->timestamp_ns,
             e->pid, e->uid,
             e->syscall_nr,
             e->comm,
-            fname
+            fname,
+            e->flags,
+            (unsigned long long)e->args[0]
         );
         atomic_inc(&g_ring.tail);
     }
@@ -336,6 +341,11 @@ static struct kprobe *all_probes[] = {
 
 #define N_PROBES  ARRAY_SIZE(all_probes)
 
+/* Track which probes were successfully registered — some symbols may not
+ * be kprobeable on a given kernel, and enable/disable/unregister on a
+ * never-registered kprobe is undefined. */
+static bool probe_registered[ARRAY_SIZE(all_probes)];
+
 /* ── Enable / disable ─────────────────────────────────────── */
 static bool g_probes_enabled = true;
 
@@ -356,9 +366,6 @@ void synapse_probe_set_enabled(bool enabled)
         pr_info("synapse_kmod: probes disabled\n");
     }
 }
-
-/* Track which probes were successfully registered */
-static bool probe_registered[ARRAY_SIZE(all_probes)];
 
 /* ── Init / exit ──────────────────────────────────────────── */
 int synapse_probe_init(int ring_size)
