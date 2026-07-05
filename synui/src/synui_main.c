@@ -261,6 +261,8 @@ static void output_destroy(struct wl_listener *listener, void *data)
             synui_render_overlay(server);
         if (server->cmdbar.visible)
             synui_render_cmdbar(server);
+        /* Drop the freed output from the display panel's arrangement. */
+        dispcfg_outputs_changed(server);
     }
     if (!server->shutting_down)
         output_mgmt_update(server);
@@ -346,6 +348,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
         synui_render_overlay(server);
     if (server->cmdbar.visible)
         synui_render_cmdbar(server);
+    dispcfg_outputs_changed(server);
 
     output_mgmt_update(server);
 }
@@ -1039,6 +1042,8 @@ static void usage(const char *prog) {
         "  Super+Enter        Open terminal\n"
         "  Super+Space        Open AI command bar\n"
         "  Super+A            Toggle neural overlay\n"
+        "  Super+D            Display settings (rotate/arrange monitors)\n"
+        "  Super+Escape       Toggle the welcome menu\n"
         "  Super+1..9         Switch workspace\n"
         "  Super+Shift+1..9   Move window to workspace\n"
         "  Super+Tab          Next layout mode\n"

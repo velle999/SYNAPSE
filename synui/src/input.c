@@ -7,6 +7,8 @@
  *   Super+Enter          Launch terminal (foot)
  *   Super+Space          Open AI command bar
  *   Super+A              Toggle neural overlay
+ *   Super+D              Toggle display settings (rotate/arrange monitors)
+ *   Super+Escape         Toggle the welcome menu
  *   Super+Q              Close focused window
  *   Super+Shift+Q        Quit synui
  *   Super+Tab            Cycle layout (tile → floating → monocle → AI → tile)
@@ -298,6 +300,11 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         view_set_maximized(s->focused_view, s->focused_view->maximized);
     } else if (strcmp(action, "ai_ask") == 0) {
         spawn("foot -e synsh -c 'syn ask'");
+    } else if (strcmp(action, "displays") == 0) {
+        dispcfg_toggle(s);
+    } else if (strcmp(action, "menu") == 0) {
+        if (s->welcome_ui.shown) synui_welcome_hide(s);
+        else                     synui_render_welcome(s);
     } else if (strcmp(action, "ws") == 0) {
         int n = atoi(arg);
         if (n >= 1 && n <= WORKSPACE_MAX)
@@ -309,6 +316,42 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
     } else {
         wlr_log(WLR_ERROR, "synui: unknown bind action '%s'", action);
     }
+}
+
+/* Welcome-menu navigation: only unmodified Up/Down/j/k, Enter and Escape are
+ * intercepted while the menu is shown; everything else falls through to the
+ * bind table and the focused client. */
+static bool welcome_menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
+{
+    if (!s->welcome_ui.shown) return false;
+    if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
+                WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
+        return false;
+
+    switch (sym) {
+    case XKB_KEY_Up:
+    case XKB_KEY_k:
+        s->welcome_ui.selected =
+            (s->welcome_ui.selected + synui_welcome_menu_len - 1)
+            % synui_welcome_menu_len;
+        synui_render_welcome(s);
+        return true;
+    case XKB_KEY_Down:
+    case XKB_KEY_j:
+        s->welcome_ui.selected =
+            (s->welcome_ui.selected + 1) % synui_welcome_menu_len;
+        synui_render_welcome(s);
+        return true;
+    case XKB_KEY_Return:
+    case XKB_KEY_KP_Enter:
+        binding_execute(s, synui_welcome_menu[s->welcome_ui.selected].action,
+                        "");
+        return true;
+    case XKB_KEY_Escape:
+        synui_welcome_hide(s);
+        return true;
+    }
+    return false;
 }
 
 static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
@@ -372,6 +415,21 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         for (int i = 0; i < nsyms; i++)
             cmdbar_key(s, syms[i]);
         return;
+    }
+
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        /* Display settings panel: modal for unmodified keys; modified
+         * combos (Super+…) fall through to the bind table below. */
+        bool absorbed = false;
+        for (int i = 0; i < nsyms; i++)
+            if (dispcfg_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Welcome menu: intercepts only its navigation keys. */
+        for (int i = 0; i < nsyms; i++)
+            if (welcome_menu_key(s, syms[i], modifiers))
+                return;
     }
 
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {

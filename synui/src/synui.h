@@ -143,6 +143,28 @@ typedef struct {
     char intent[128];
 } syn_ai_ctx_t;
 
+/* ── Welcome menu (render.c owns the table, input.c executes) ── */
+typedef struct {
+    const char *label;    /* shown in the menu */
+    const char *hint;     /* keybinding hint column */
+    const char *action;   /* bind action executed on Enter */
+} syn_welcome_entry_t;
+
+extern const syn_welcome_entry_t synui_welcome_menu[];
+extern const int                 synui_welcome_menu_len;
+
+/* ── Display settings panel (dispcfg.c) ──────────────────── */
+#define DISPCFG_MAX_OUTPUTS 8
+
+typedef struct {
+    int visible;
+    int selected;   /* index into order[] */
+    int column;     /* 0 = row (left→right), 1 = column (top→bottom) */
+    int count;
+    syn_output_t *order[DISPCFG_MAX_OUTPUTS];  /* arrangement order */
+    char status[96];   /* last action / error, shown in the panel */
+} syn_dispcfg_t;
+
 /* ── Keybinding (table-driven; syntax in config.c) ───────── */
 #define SYN_BINDS_MAX        96
 #define SYN_BIND_ACTION_LEN  24
@@ -428,7 +450,17 @@ struct syn_server {
         struct wlr_scene_rect   *accent;
         struct wlr_scene_buffer *text_buf;
         int shown;
+        int selected;   /* highlighted synui_welcome_menu entry */
     } welcome_ui;
+
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } dispcfg_ui;
+
+    syn_dispcfg_t   dispcfg;
 
     /* AI thread communication */
     atomic_int      ai_connected;
@@ -551,6 +583,22 @@ void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable *
 /* ── output_mgmt.c ───────────────────────────────────────── */
 void output_mgmt_setup(syn_server_t *s);        /* output-management + DPMS */
 void output_mgmt_update(syn_server_t *s);        /* push current config to clients */
+/* Reflow everything after output geometry changed: layer surfaces (which
+ * re-tile each output's workspace), lock surfaces, compositor UI, and
+ * broadcast the new config to management clients. */
+void output_layout_changed(syn_server_t *s);
+
+/* ── dispcfg.c ───────────────────────────────────────────── */
+void dispcfg_show(syn_server_t *s);
+void dispcfg_hide(syn_server_t *s);
+void dispcfg_toggle(syn_server_t *s);
+/* Modal key handling while the panel is open. Unmodified keys are absorbed
+ * (navigation/rotate/reorder); modified combos fall through to the bind
+ * table. Returns 1 if the key was consumed. */
+int  dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* Output hotplug while the panel is open: reseed the arrangement order
+ * (dropping dangling pointers) and re-render. No-op when hidden. */
+void dispcfg_outputs_changed(syn_server_t *s);
 
 /* ── session.c ───────────────────────────────────────────── */
 void session_lock_setup(syn_server_t *s);        /* ext-session-lock */
@@ -631,3 +679,4 @@ void synui_render_welcome(syn_server_t *s);
 void synui_welcome_hide(syn_server_t *s);
 void synui_render_cmdbar(syn_server_t *s);
 void synui_render_overlay(syn_server_t *s);
+void synui_render_dispcfg(syn_server_t *s);

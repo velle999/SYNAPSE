@@ -85,24 +85,31 @@ static void apply_configuration(syn_server_t *s,
         wlr_output_configuration_v1_send_failed(config);
     wlr_output_configuration_v1_destroy(config);
 
-    if (ok && !test_only) {
-        /* Geometry changed: re-place layer surfaces (which recomputes each
-         * output's usable area and re-tiles its workspace), lock surfaces,
-         * and the compositor UI — otherwise everything keeps the stale
-         * pre-apply geometry until an unrelated re-layout. */
-        syn_output_t *o;
-        wl_list_for_each(o, &s->outputs, link)
-            layer_arrange_output(o);
-        session_lock_arrange(s);
-        if (s->welcome_ui.shown)
-            synui_render_welcome(s);
-        if (s->overlay.visible)
-            synui_render_overlay(s);
-        if (s->cmdbar.visible)
-            synui_render_cmdbar(s);
+    if (ok && !test_only)
+        output_layout_changed(s);
+}
 
-        output_mgmt_update(s);
-    }
+/* Geometry changed (protocol apply or the built-in display panel): re-place
+ * layer surfaces (which recomputes each output's usable area and re-tiles
+ * its workspace), lock surfaces, and the compositor UI — otherwise
+ * everything keeps the stale pre-apply geometry until an unrelated
+ * re-layout. Finishes by broadcasting the new config to clients. */
+void output_layout_changed(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        layer_arrange_output(o);
+    session_lock_arrange(s);
+    if (s->welcome_ui.shown)
+        synui_render_welcome(s);
+    if (s->overlay.visible)
+        synui_render_overlay(s);
+    if (s->cmdbar.visible)
+        synui_render_cmdbar(s);
+    if (s->dispcfg.visible)
+        synui_render_dispcfg(s);
+
+    output_mgmt_update(s);
 }
 
 static void output_mgr_apply(struct wl_listener *listener, void *data)

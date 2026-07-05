@@ -125,6 +125,18 @@ static void cairo_begin(cairo_t *cr)
 
 /* ── Welcome screen ──────────────────────────────────────── */
 
+/* Menu entries: input.c navigates with Up/Down and executes the entry's
+ * bind action on Enter (welcome_menu_key). */
+const syn_welcome_entry_t synui_welcome_menu[] = {
+    { "Terminal",         "Super+Enter",   "term"     },
+    { "AI Command Bar",   "Super+Space",   "cmdbar"   },
+    { "Neural Overlay",   "Super+A",       "overlay"  },
+    { "Display Settings", "Super+D",       "displays" },
+    { "Quit synui",       "Super+Shift+Q", "quit"     },
+};
+const int synui_welcome_menu_len =
+    (int)(sizeof(synui_welcome_menu) / sizeof(synui_welcome_menu[0]));
+
 void synui_render_welcome(syn_server_t *s)
 {
     struct wlr_box ob;
@@ -168,31 +180,38 @@ void synui_render_welcome(syn_server_t *s)
     cairo_line_to(cr, pw - 30, 78);
     cairo_stroke(cr);
 
-    /* Keybinding table */
-    static const struct { const char *key; const char *desc; } binds[] = {
-        { "Super+Enter",    "Terminal"       },
-        { "Super+Space",    "AI Command Bar" },
-        { "Super+A",        "Neural Overlay" },
-        { "Super+1-9",      "Workspaces"     },
-        { "Super+Tab",      "Cycle Layout"   },
-        { "Super+H/L",      "Master Width"   },
-        { "Super+Q",        "Close Window"   },
-        { "Super+Shift+Q",  "Quit"           },
-    };
-
+    /* Selectable menu (input.c: Up/Down + Enter) */
     cairo_set_font_size(cr, 15);
-    int y = 108;
-    for (int i = 0; i < (int)(sizeof(binds) / sizeof(binds[0])); i++) {
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
-        cairo_move_to(cr, 44, y);
-        cairo_show_text(cr, binds[i].key);
+    int y = 112;
+    for (int i = 0; i < synui_welcome_menu_len; i++) {
+        int sel = (i == s->welcome_ui.selected);
 
-        cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
-        cairo_move_to(cr, 260, y);
-        cairo_show_text(cr, binds[i].desc);
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+            cairo_move_to(cr, 44, y);
+            cairo_show_text(cr, ">");
+            cairo_set_source_rgba(cr, 0.92, 0.98, 0.97, 1.0);
+        } else {
+            cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+        }
+        cairo_move_to(cr, 66, y);
+        cairo_show_text(cr, synui_welcome_menu[i].label);
 
-        y += 26;
+        cairo_set_source_rgba(cr, sel ? 0.0 : 0.45, sel ? 0.85 : 0.45,
+                              sel ? 0.75 : 0.55, sel ? 1.0 : 1.0);
+        cairo_move_to(cr, 280, y);
+        cairo_show_text(cr, synui_welcome_menu[i].hint);
+
+        y += 28;
     }
+
+    /* Footer hints */
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 44, y + 18);
+    cairo_show_text(cr, "Up/Down + Enter select");
+    cairo_move_to(cr, 44, y + 36);
+    cairo_show_text(cr, "Super+1-9 workspaces \xc2\xb7 Super+Tab cycle layout");
 
     /* Version */
     cairo_set_font_size(cr, 12);
@@ -408,6 +427,146 @@ void synui_render_overlay(syn_server_t *s)
     set_scene_buffer(&s->overlay_ui.text_buf, s->overlay_ui.tree, buf);
 }
 
+/* ── Display settings panel ──────────────────────────────── */
+
+static const char *transform_name(enum wl_output_transform t)
+{
+    switch (t) {
+    case WL_OUTPUT_TRANSFORM_NORMAL:      return "normal";
+    case WL_OUTPUT_TRANSFORM_90:          return "90\xc2\xb0";
+    case WL_OUTPUT_TRANSFORM_180:         return "180\xc2\xb0";
+    case WL_OUTPUT_TRANSFORM_270:         return "270\xc2\xb0";
+    case WL_OUTPUT_TRANSFORM_FLIPPED:     return "flipped";
+    case WL_OUTPUT_TRANSFORM_FLIPPED_90:  return "flip-90\xc2\xb0";
+    case WL_OUTPUT_TRANSFORM_FLIPPED_180: return "flip-180\xc2\xb0";
+    case WL_OUTPUT_TRANSFORM_FLIPPED_270: return "flip-270\xc2\xb0";
+    }
+    return "?";
+}
+
+void synui_render_dispcfg(syn_server_t *s)
+{
+    syn_dispcfg_t *d = &s->dispcfg;
+
+    if (!d->visible) {
+        wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int rows = d->count > 0 ? d->count : 1;
+    int pw = 560, ph = 196 + rows * 28;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->dispcfg_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->dispcfg_ui.tree->node);
+
+    /* Background + accent; the panel height depends on the monitor count,
+     * so resize them on every render (hotplug can change the count). */
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->dispcfg_ui.bg)
+        s->dispcfg_ui.bg = wlr_scene_rect_create(s->dispcfg_ui.tree,
+                                                 pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->dispcfg_ui.bg, pw, ph);
+    if (!s->dispcfg_ui.accent)
+        s->dispcfg_ui.accent = wlr_scene_rect_create(s->dispcfg_ui.tree,
+                                                     pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Title */
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "DISPLAY SETTINGS");
+
+    /* Separator */
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 42);
+    cairo_line_to(cr, pw - 18, 42);
+    cairo_stroke(cr);
+
+    /* Monitor rows: name, mode, rotation, layout position */
+    cairo_set_font_size(cr, 14);
+    int y = 70;
+    if (d->count == 0) {
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        cairo_move_to(cr, 40, y);
+        cairo_show_text(cr, "no outputs connected");
+        y += 28;
+    }
+    for (int i = 0; i < d->count; i++) {
+        struct wlr_output *wo = d->order[i]->wlr_output;
+        int sel = (i == d->selected);
+
+        int w, h;
+        wlr_output_effective_resolution(wo, &w, &h);
+        struct wlr_box box;
+        wlr_output_layout_get_box(s->output_layout, wo, &box);
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+            cairo_move_to(cr, 18, y);
+            cairo_show_text(cr, ">");
+            cairo_set_source_rgba(cr, 0.92, 0.98, 0.97, 1.0);
+        } else {
+            cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+        }
+        cairo_move_to(cr, 40, y);
+        cairo_show_text(cr, wo->name);
+
+        char col[48];
+        snprintf(col, sizeof(col), "%dx%d", w, h);
+        cairo_move_to(cr, 190, y);
+        cairo_show_text(cr, col);
+
+        cairo_move_to(cr, 310, y);
+        cairo_show_text(cr, transform_name(wo->transform));
+
+        snprintf(col, sizeof(col), "(%d,%d)", box.x, box.y);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        cairo_move_to(cr, 430, y);
+        cairo_show_text(cr, col);
+
+        y += 28;
+    }
+
+    /* Arrangement axis */
+    cairo_set_font_size(cr, 13);
+    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+    cairo_move_to(cr, 18, y + 8);
+    cairo_show_text(cr, d->column
+        ? "arrangement: column (top\xe2\x86\x92" "bottom)"
+        : "arrangement: row (left\xe2\x86\x92right)");
+
+    /* Status line (last action or error) */
+    if (d->status[0]) {
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, 18, y + 30);
+        cairo_show_text(cr, d->status);
+    }
+
+    /* Controls legend */
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 40);
+    cairo_show_text(cr, "Up/Down monitor \xc2\xb7 Left/Right rotate \xc2\xb7 [ ] reorder");
+    cairo_move_to(cr, 18, ph - 20);
+    cairo_show_text(cr, "a row/column \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->dispcfg_ui.text_buf, s->dispcfg_ui.tree, buf);
+}
+
 /* ── Initialize all UI scene trees ───────────────────────── */
 
 void synui_ui_init(syn_server_t *s)
@@ -415,11 +574,13 @@ void synui_ui_init(syn_server_t *s)
     /* Create scene trees — later children render on top */
     s->welcome_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->overlay_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->dispcfg_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
     /* All hidden until explicitly shown */
     wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->overlay_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 
     /* Render welcome screen (uses fallback 1920x1080 until output connects) */

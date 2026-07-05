@@ -12,9 +12,9 @@
  *   bind = super+ctrl+3 movews 3
  * Modifiers: super/logo/mod4, shift, ctrl/control, alt/mod1. Keys are XKB
  * keysym names (case-insensitive: q, return, space, tab, backspace, f1…).
- * Actions: spawn <cmd>, term, cmdbar, overlay, close, quit, layout_cycle,
- * focus_next/prev, stack_next/prev, master_shrink/grow, float_toggle,
- * maximize_toggle, ai_ask, ws <1-9>, movews <1-9>.
+ * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
+ * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
+ * float_toggle, maximize_toggle, ai_ask, ws <1-9>, movews <1-9>.
  * A bind with the same combo as a default replaces it.
  *
  * SynapseOS Project — GPLv2
@@ -136,6 +136,8 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+return",    "term" },
         { "super+space",     "cmdbar" },
         { "super+a",         "overlay" },
+        { "super+d",         "displays" },
+        { "super+escape",    "menu" },
         { "super+q",         "close" },
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },
