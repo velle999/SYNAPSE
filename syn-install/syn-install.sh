@@ -388,6 +388,59 @@ case "$DE_CHOICE" in
         ;;
 esac
 
+# ── Video driver ──────────────────────────────────────────
+header
+step "Configuring Video Driver"
+
+# synui needs a working EGL/Vulkan stack. On modern NVIDIA cards nouveau
+# provides neither, so the renderer autocreate fails and the session dies
+# — the driver has to be installed here, before mkinitcpio and grub run.
+# Detect display controllers from sysfs; the live ISO may not ship lspci.
+GPU_KERNEL_PARAMS=""
+HAS_NVIDIA="" NVIDIA_DEVID=0 HAS_AMD="" HAS_INTEL=""
+for dev in /sys/bus/pci/devices/*; do
+    case "$(cat "$dev/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+    case "$(cat "$dev/vendor" 2>/dev/null)" in
+        0x10de) HAS_NVIDIA=1; NVIDIA_DEVID=$(( $(cat "$dev/device") )) ;;
+        0x1002) HAS_AMD=1 ;;
+        0x8086) HAS_INTEL=1 ;;
+    esac
+done
+
+if grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' \
+        /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+    echo "  Virtual machine — installing mesa (synui uses pixman here)..."
+    arch-chroot /mnt pacman -S --noconfirm --needed mesa 2>&1 \
+        || warn "mesa failed to install"
+elif [ -n "$HAS_NVIDIA" ]; then
+    # nvidia-open supports Turing and newer (PCI device id >= 0x1e00);
+    # older cards need the proprietary kernel module.
+    NVIDIA_PKG="nvidia-dkms"
+    [ "$NVIDIA_DEVID" -ge $((0x1e00)) ] && NVIDIA_PKG="nvidia-open-dkms"
+    echo "  NVIDIA GPU detected — installing $NVIDIA_PKG (builds the module, takes a while)..."
+    arch-chroot /mnt pacman -S --noconfirm --needed \
+        "$NVIDIA_PKG" nvidia-utils egl-wayland mesa 2>&1 \
+        || die "NVIDIA driver install failed — the system would boot on
+  nouveau and synui's renderer would never start"
+
+    # Keep nouveau off the card, including in early boot: the 'kms'
+    # mkinitcpio hook loads nouveau from the initramfs, so blacklisting
+    # alone isn't enough — drop the hook too.
+    echo "blacklist nouveau" > /mnt/etc/modprobe.d/blacklist-nouveau.conf
+    sed -i '/^HOOKS=/s/ kms//' /mnt/etc/mkinitcpio.conf
+    # wlroots needs KMS on the nvidia driver
+    GPU_KERNEL_PARAMS="nvidia_drm.modeset=1"
+    success "NVIDIA driver installed ($NVIDIA_PKG, nouveau blacklisted)"
+else
+    GPU_PKGS="mesa"
+    [ -n "$HAS_AMD" ]   && GPU_PKGS="$GPU_PKGS vulkan-radeon"
+    [ -n "$HAS_INTEL" ] && GPU_PKGS="$GPU_PKGS vulkan-intel"
+    echo "  Installing video stack: $GPU_PKGS..."
+    arch-chroot /mnt pacman -S --noconfirm --needed $GPU_PKGS 2>&1 \
+        || warn "Video driver install failed — synui may fall back to software rendering"
+    success "Video drivers installed"
+fi
+
 # ── Configure system ──────────────────────────────────────
 header
 step "Configuring System"
@@ -554,6 +607,14 @@ if [ -f /sys/class/dmi/id/sys_vendor ] && \
     export WLR_RENDERER=pixman
     export WLR_BACKENDS=drm,libinput
     export WLR_NO_HARDWARE_CURSORS=1
+else
+    # nouveau has no usable EGL/Vulkan on modern cards — software-render
+    # instead of dying at renderer autocreate.
+    for drv in /sys/class/drm/card*/device/driver; do
+        case "$(readlink "$drv" 2>/dev/null)" in
+            *nouveau) export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+        esac
+    done
 fi
 export XDG_SESSION_TYPE=wayland
 export LIBSEAT_BACKEND=seatd
@@ -591,6 +652,12 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
             export WLR_RENDERER=pixman
             export WLR_BACKENDS=drm,libinput
             export WLR_NO_HARDWARE_CURSORS=1
+        else
+            for drv in /sys/class/drm/card*/device/driver; do
+                case "$(readlink "$drv" 2>/dev/null)" in
+                    *nouveau) export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+                esac
+            done
         fi
         export XDG_SESSION_TYPE=wayland
         export LIBSEAT_BACKEND=seatd
@@ -755,11 +822,11 @@ success "System configured"
 header
 step "Installing Bootloader"
 
-cat > /mnt/etc/default/grub << 'EOF'
+cat > /mnt/etc/default/grub << EOF
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="SynapseOS"
-GRUB_CMDLINE_LINUX_DEFAULT=""
+GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
 GRUB_CMDLINE_LINUX=""
 GRUB_DISABLE_OS_PROBER=true
 EOF
