@@ -307,6 +307,7 @@ typedef struct syn_layer_surface {
     struct wl_listener unmap;
     struct wl_listener destroy;
     struct wl_listener commit;
+    struct wl_listener new_popup;
 } syn_layer_surface_t;
 
 /* ── Output ──────────────────────────────────────────────── */

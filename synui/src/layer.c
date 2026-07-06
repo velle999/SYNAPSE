@@ -134,6 +134,66 @@ static void layer_surface_commit(struct wl_listener *listener, void *data)
         layer_arrange_output(ls->output);
 }
 
+/* An xdg_popup attached to a layer surface via get_popup (waybar menus,
+ * wofi submenus). It reached the xdg-shell new_popup signal parentless, so
+ * this is the only place its scene tree can be created. Unconstraining has
+ * to wait for the initial commit — the popup surface isn't initialized
+ * before then and scheduling a configure trips a wlroots assert. */
+typedef struct {
+    struct wlr_xdg_popup *popup;
+    syn_layer_surface_t  *ls;
+    struct wl_listener    commit;
+    struct wl_listener    destroy;
+} syn_layer_popup_t;
+
+static void layer_popup_commit(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_layer_popup_t *lp = wl_container_of(listener, lp, commit);
+    if (!lp->popup->base->initial_commit)
+        return;
+
+    /* Constrain to the output (in layer-surface-local coordinates) so a menu
+     * spawned at a screen edge flips/slides into view instead of clipping. */
+    syn_layer_surface_t *ls = lp->ls;
+    struct wlr_box out_box;
+    wlr_output_layout_get_box(ls->server->output_layout,
+                              ls->output->wlr_output, &out_box);
+    struct wlr_box constraint = {
+        .x = out_box.x - ls->scene->tree->node.x,
+        .y = out_box.y - ls->scene->tree->node.y,
+        .width = out_box.width,
+        .height = out_box.height,
+    };
+    wlr_xdg_popup_unconstrain_from_box(lp->popup, &constraint);
+}
+
+static void layer_popup_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_layer_popup_t *lp = wl_container_of(listener, lp, destroy);
+    wl_list_remove(&lp->commit.link);
+    wl_list_remove(&lp->destroy.link);
+    free(lp);
+}
+
+static void layer_surface_new_popup(struct wl_listener *listener, void *data)
+{
+    syn_layer_surface_t *ls = wl_container_of(listener, ls, new_popup);
+    struct wlr_xdg_popup *popup = data;
+
+    popup->base->data =
+        wlr_scene_xdg_surface_create(ls->scene->tree, popup->base);
+
+    syn_layer_popup_t *lp = calloc(1, sizeof(*lp));
+    lp->popup = popup;
+    lp->ls = ls;
+    lp->commit.notify = layer_popup_commit;
+    wl_signal_add(&popup->base->surface->events.commit, &lp->commit);
+    lp->destroy.notify = layer_popup_destroy;
+    wl_signal_add(&popup->events.destroy, &lp->destroy);
+}
+
 static void layer_surface_destroy(struct wl_listener *listener, void *data)
 {
     (void)data;
@@ -145,6 +205,7 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&ls->unmap.link);
     wl_list_remove(&ls->commit.link);
     wl_list_remove(&ls->destroy.link);
+    wl_list_remove(&ls->new_popup.link);
     wl_list_remove(&ls->link);
     free(ls);
 
@@ -196,6 +257,8 @@ static void server_new_layer_surface(struct wl_listener *listener, void *data)
     wl_signal_add(&lsurf->surface->events.commit, &ls->commit);
     ls->destroy.notify = layer_surface_destroy;
     wl_signal_add(&lsurf->events.destroy, &ls->destroy);
+    ls->new_popup.notify = layer_surface_new_popup;
+    wl_signal_add(&lsurf->events.new_popup, &ls->new_popup);
 
     wl_list_insert(&output->layer_surfaces, &ls->link);
 

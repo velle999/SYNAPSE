@@ -469,22 +469,18 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
     (void)listener;
     struct wlr_xdg_popup *popup = data;
 
-    /* Resolve the scene tree of the popup's parent. The parent may be another
-     * xdg surface (toplevel/popup) or a layer-shell surface (e.g. a wofi menu);
-     * both stash their scene tree so the popup nests in the right place. */
+    /* Layer-shell popups (waybar menus, wofi) are created parentless: the
+     * client makes the xdg_popup first and attaches it afterwards via
+     * zwlr_layer_surface_v1.get_popup, which fires the layer surface's own
+     * new_popup — layer.c handles those there. */
+    if (!popup->parent)
+        return;
+
     struct wlr_scene_tree *parent_tree = NULL;
     struct wlr_xdg_surface *xdg_parent =
         wlr_xdg_surface_try_from_wlr_surface(popup->parent);
-    if (xdg_parent) {
+    if (xdg_parent)
         parent_tree = xdg_parent->data;
-    } else {
-        struct wlr_layer_surface_v1 *layer_parent =
-            wlr_layer_surface_v1_try_from_wlr_surface(popup->parent);
-        if (layer_parent && layer_parent->data) {
-            syn_layer_surface_t *ls = layer_parent->data;
-            if (ls->scene) parent_tree = ls->scene->tree;
-        }
-    }
     if (!parent_tree) {
         wlr_log(WLR_ERROR, "synui: xdg popup with no resolvable parent tree");
         return;
