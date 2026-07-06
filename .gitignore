@@ -47,9 +47,10 @@ modules.order
 .tmp_versions/
 *.order
 
-# ── ISO output (tracked via LFS only if intended) ───────────
+# ── ISO output (released as split parts on GitHub Releases) ─
 SynapseOS-0.1.0-x86_64.iso
 archiso/out/*.iso
+archiso/out/*.iso.part*
 archiso/out/test-disk.qcow2
 
 # ── archiso work dir (12G of scratch) ───────────────────────
