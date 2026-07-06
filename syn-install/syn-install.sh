@@ -533,6 +533,13 @@ arch-chroot /mnt bash -c "
     grep -qxF '/usr/bin/synsh' /etc/shells 2>/dev/null || echo '/usr/bin/synsh' >> /etc/shells
 
     echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
+
+    # The SYNAPSE start menu's Reboot/Shut Down entries run with no
+    # terminal to type a password into, and the target has no polkit —
+    # allow exactly these two commands passwordless.
+    echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff' \
+        > /etc/sudoers.d/power-menu
+    chmod 440 /etc/sudoers.d/power-menu
 "
 
 # useradd runs outside the masked bash -c block: if it fails, nothing
@@ -738,9 +745,13 @@ urls=05d9e8
 color=0b0b14 05d9e8
 FOOTEOF
 
-# waybar HUD — clock + system telemetry in the same palette
+# waybar HUD — clock + system telemetry in the same palette.
+# The SYNAPSE badge doubles as the start menu (waybar's built-in GTK
+# dropdown; synui renders layer-shell xdg popups, so it just works).
+# Heredoc is unquoted so $NEW_USER lands in menu-file — keep the rest
+# of the config free of $ and backticks.
 mkdir -p "/mnt/home/$NEW_USER/.config/waybar"
-cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << 'WAYBAREOF'
+cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
 {
     "layer": "top",
     "position": "top",
@@ -748,7 +759,22 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << 'WAYBAREOF'
     "modules-left": ["custom/synapse"],
     "modules-center": ["clock"],
     "modules-right": ["cpu", "memory", "network"],
-    "custom/synapse": { "format": "◢ SYNAPSE", "tooltip": false },
+    "custom/synapse": {
+        "format": "◢ SYNAPSE",
+        "tooltip": false,
+        "menu": "on-click",
+        "menu-file": "/home/$NEW_USER/.config/waybar/synapse-menu.xml",
+        "menu-actions": {
+            "terminal": "foot",
+            "aishell": "foot synsh",
+            "status": "foot --hold syn status",
+            "network": "foot -e nmtui",
+            "monitor": "foot -e top",
+            "logout": "pkill -x synui",
+            "reboot": "sudo systemctl reboot",
+            "poweroff": "sudo systemctl poweroff"
+        }
+    },
     "clock": { "format": "{:%H:%M:%S  %Y-%m-%d}", "interval": 1 },
     "cpu": { "format": "CPU {usage}%", "interval": 2 },
     "memory": { "format": "MEM {percentage}%", "interval": 5 },
@@ -760,6 +786,62 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << 'WAYBAREOF'
     }
 }
 WAYBAREOF
+
+# Start menu behind the SYNAPSE badge — GtkBuilder XML; the object ids
+# map to menu-actions in config.jsonc. Entries only reference programs
+# the installer actually puts on the target (foot, synsh, syn, nmtui,
+# top from procps-ng).
+cat > "/mnt/home/$NEW_USER/.config/waybar/synapse-menu.xml" << 'MENUEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="terminal">
+        <property name="label">Terminal</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="aishell">
+        <property name="label">AI Shell (synsh)</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="status">
+        <property name="label">System Status</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="network">
+        <property name="label">Network Setup</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="monitor">
+        <property name="label">Process Monitor</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="sep1"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="logout">
+        <property name="label">Log Out</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="reboot">
+        <property name="label">Reboot</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="poweroff">
+        <property name="label">Shut Down</property>
+      </object>
+    </child>
+  </object>
+</interface>
+MENUEOF
+
 cat > "/mnt/home/$NEW_USER/.config/waybar/style.css" << 'WAYBARCSS'
 * {
     font-family: monospace;
@@ -776,6 +858,26 @@ window#waybar {
     color: #05d9e8;
     font-weight: bold;
     padding: 0 12px;
+}
+#custom-synapse:hover {
+    background: rgba(5, 217, 232, 0.15);
+}
+/* Start menu dropdown (GtkMenu spawned by the badge) */
+menu {
+    background: rgba(11, 11, 20, 0.97);
+    border: 1px solid #ff296d;
+    color: #c8e3ee;
+}
+menu menuitem {
+    padding: 6px 14px;
+}
+menu menuitem:hover {
+    background: #ff296d;
+    color: #0b0b14;
+}
+menu separator {
+    background: #2a2a40;
+    min-height: 1px;
 }
 #clock {
     color: #ffd319;
