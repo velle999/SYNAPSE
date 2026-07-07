@@ -72,7 +72,7 @@ static const struct wlr_buffer_impl cairo_buf_impl = {
  * Returns the buffer; writes the cairo context to *cr_out.
  * Caller must cairo_destroy(*cr_out) and wlr_buffer_drop(buf) when done.
  */
-static struct wlr_buffer *create_cairo_buf(int w, int h, cairo_t **cr_out)
+struct wlr_buffer *create_cairo_buf(int w, int h, cairo_t **cr_out)
 {
     struct synui_cairo_buf *buf = calloc(1, sizeof(*buf));
     if (!buf) return NULL;
@@ -101,9 +101,9 @@ static void get_output_box(syn_server_t *s, struct wlr_box *box)
  * Set a cairo buffer on a scene buffer node, creating the node if needed.
  * Drops our reference after the scene graph takes its own.
  */
-static void set_scene_buffer(struct wlr_scene_buffer **node,
-                             struct wlr_scene_tree *parent,
-                             struct wlr_buffer *buf)
+void set_scene_buffer(struct wlr_scene_buffer **node,
+                      struct wlr_scene_tree *parent,
+                      struct wlr_buffer *buf)
 {
     if (!*node)
         *node = wlr_scene_buffer_create(parent, buf);
@@ -113,7 +113,7 @@ static void set_scene_buffer(struct wlr_scene_buffer **node,
 }
 
 /* Start a cairo context cleared to transparent */
-static void cairo_begin(cairo_t *cr)
+void cairo_begin(cairo_t *cr)
 {
     cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     cairo_paint(cr);

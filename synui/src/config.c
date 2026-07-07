@@ -14,8 +14,16 @@
  * keysym names (case-insensitive: q, return, space, tab, backspace, f1…).
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
- * float_toggle, maximize_toggle, ai_ask, ws <1-9>, movews <1-9>.
+ * float_toggle, maximize_toggle, ai_ask, ws <1-9>, movews <1-9>,
+ * wallpaper_reload.
  * A bind with the same combo as a default replaces it.
+ *
+ * Wallpaper (wallpaper.c):
+ *   wallpaper = /path/to/image.png   (PNG or JPEG; ~ expands to $HOME)
+ *   wallpaper_mode = fill|fit|stretch|center   (default fill)
+ * Empty/absent path, or a decode failure, falls back to the solid
+ * background color. Super+Shift+W (or a SIGHUP) reloads synuirc and
+ * repaints from the current wallpaper path/mode.
  *
  * SynapseOS Project — GPLv2
  */
@@ -150,6 +158,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+f",         "float_toggle" },
         { "super+m",         "maximize_toggle" },
         { "super+backspace", "ai_ask" },
+        { "super+shift+w",   "wallpaper_reload" },
     };
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
         config_bind(cfg, defaults[i].combo, defaults[i].action);
@@ -206,6 +215,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->left_handed    = -1;
     cfg->accel_speed    = 0.0f;
     cfg->accel_speed_set = 0;
+
+    cfg->wallpaper[0]   = '\0';
+    cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
 
     cfg->bind_count = 0;
     seed_default_binds(cfg);
@@ -323,6 +335,15 @@ void synui_config_load(syn_config_t *cfg)
             if (cfg->accel_speed < -1.0f) cfg->accel_speed = -1.0f;
             if (cfg->accel_speed >  1.0f) cfg->accel_speed =  1.0f;
             cfg->accel_speed_set = 1;
+        }
+        else if (strcmp(key, "wallpaper") == 0)
+            strncpy(cfg->wallpaper, val, sizeof(cfg->wallpaper) - 1);
+        else if (strcmp(key, "wallpaper_mode") == 0) {
+            if      (strcmp(val, "fill")    == 0) cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
+            else if (strcmp(val, "fit")     == 0) cfg->wallpaper_mode = SYN_WALLPAPER_FIT;
+            else if (strcmp(val, "stretch") == 0) cfg->wallpaper_mode = SYN_WALLPAPER_STRETCH;
+            else if (strcmp(val, "center")  == 0) cfg->wallpaper_mode = SYN_WALLPAPER_CENTER;
+            else wlr_log(WLR_ERROR, "synui: wallpaper_mode: unknown '%s'", val);
         }
         else if (strcmp(key, "bind") == 0) {
             /* value = "<combo> <action> [arg]" — split on first whitespace */

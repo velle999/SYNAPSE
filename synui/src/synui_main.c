@@ -70,15 +70,17 @@ static int handle_reload_signal(int sig, void *data)
 
 /* Reparse synuirc and apply everything that makes sense at runtime:
  * keybindings (the bind table is read per keypress), keymap + repeat,
- * libinput options, border_width/gap (re-tile + redraw borders), and the
- * ai/terminal knobs (read at use). Autostart entries are start-only, and
- * per-workspace master factors keep any interactively adjusted value. */
+ * libinput options, border_width/gap (re-tile + redraw borders), wallpaper
+ * (re-decode + repaint every output), and the ai/terminal knobs (read at
+ * use). Autostart entries are start-only, and per-workspace master factors
+ * keep any interactively adjusted value. */
 void synui_config_reload(syn_server_t *s)
 {
     syn_config_t fresh = {0};
     synui_config_load(&fresh);
     s->config = fresh;
 
+    wallpaper_reload(s);
     input_reload_config(s);
 
     /* Re-tile every output's visible workspace with the new gap/border, and
@@ -239,6 +241,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * workspace (Super+N) re-homes it onto the focused output (i3/sway
      * semantics). Skipped during shutdown, when the scene graph is gone. */
     if (!server->shutting_down) {
+        wallpaper_output_destroy(output);
         for (int i = 0; i < WORKSPACE_MAX; i++) {
             syn_workspace_t *ws = &server->workspaces[i];
             if (ws->output != output) continue;
@@ -354,6 +357,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
     /* Seed the usable area (full box; no layer surfaces yet), then lay the
      * workspace out on it and re-home all UI. */
     layer_arrange_output(output);
+    wallpaper_output_created(output);
     layout_apply(server, ws);
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
@@ -777,6 +781,10 @@ int synui_init(syn_server_t *s)
     s->bg_rect = wlr_scene_rect_create(&s->scene->tree, 8192, 8192, bg_color);
     wlr_scene_node_set_position(&s->bg_rect->node, -4096, -4096);
     wlr_scene_node_lower_to_bottom(&s->bg_rect->node);
+
+    /* wallpaper.c: creates wallpaper_tree (just above bg_rect, since it's
+     * created next) and decodes the configured image, if any. */
+    wallpaper_init(s);
 
     /* Scene z-order layers, created bottom→top so insertion order is the stack:
      * layer[BACKGROUND] < layer[BOTTOM] < window_tree < layer[TOP] <

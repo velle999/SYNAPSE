@@ -10,6 +10,7 @@ pixman    = dependency('pixman-1')
 threads   = dependency('threads')
 cairo     = dependency('cairo')
 libinput  = dependency('libinput')
+libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
 
 # effects.c drives the GLES2 renderer directly for the post-process pass
 egl       = dependency('egl')
@@ -96,6 +97,7 @@ synui_exe = executable('synui',
     'src/config.c',
     'src/render.c',
     'src/effects.c',
+    'src/wallpaper.c',
     xdg_shell_h,
     xdg_shell_c,
     layer_shell_h,
@@ -106,7 +108,7 @@ synui_exe = executable('synui',
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,
-                  libinput, xcb, xcb_icccm, xcb_ewmh, egl, glesv2],
+                  libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, egl, glesv2],
   c_args : ['-DWLR_USE_UNSTABLE'],
   install : true)
 

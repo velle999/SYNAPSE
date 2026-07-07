@@ -38,6 +38,7 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 #include <xkbcommon/xkbcommon.h>
+#include <cairo.h>
 
 /* ── Version ─────────────────────────────────────────────── */
 #define SYNUI_VERSION "0.1.0-synapse"
@@ -180,6 +181,13 @@ typedef struct {
 /* ── Configuration ───────────────────────────────────────── */
 #define SYN_AUTOSTART_MAX 8
 
+typedef enum {
+    SYN_WALLPAPER_FILL = 0,   /* cover, cropped (default) */
+    SYN_WALLPAPER_FIT,        /* contain, letterboxed */
+    SYN_WALLPAPER_STRETCH,    /* non-uniform scale to exact size */
+    SYN_WALLPAPER_CENTER,     /* 1:1, cropped/padded */
+} syn_wallpaper_mode_t;
+
 typedef struct {
     char  terminal[64];
     char  autostart[SYN_AUTOSTART_MAX][128];
@@ -221,6 +229,11 @@ typedef struct {
     int   left_handed;
     float accel_speed;       /* -1.0 .. 1.0 */
     int   accel_speed_set;
+
+    /* Background image (wallpaper.c); empty path = no wallpaper (solid
+     * bg_color shows instead). */
+    char                  wallpaper[256];
+    syn_wallpaper_mode_t  wallpaper_mode;
 
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
@@ -331,6 +344,10 @@ struct syn_output {
      * post-process pass is active (NULL until first effects frame). */
     struct wlr_swapchain    *fx_swapchain;
 
+    /* wallpaper.c: this output's painted background, parented under
+     * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
+    struct wlr_scene_buffer *wallpaper_buf;
+
     struct wl_listener frame;
     struct wl_listener request_state;
     struct wl_listener destroy;
@@ -371,6 +388,11 @@ struct syn_server {
     struct wlr_scene           *scene;
     struct wlr_scene_output_layout *scene_layout;
     struct wlr_scene_rect      *bg_rect;
+    struct wlr_scene_tree      *wallpaper_tree;  /* wallpaper.c; above bg_rect,
+                                                   below layer[BACKGROUND] */
+    struct {
+        cairo_surface_t *src;   /* decoded source image; NULL = none/failed */
+    } wallpaper;
 
     struct wlr_xdg_shell      *xdg_shell;
     struct wlr_layer_shell_v1  *layer_shell;
@@ -401,8 +423,9 @@ struct syn_server {
     struct wlr_gamma_control_manager_v1     *gamma_mgr;
     struct wlr_scene_tree                   *drag_icon_tree;  /* topmost; follows cursor */
 
-    /* Scene-graph z-order (bottom→top): bg_rect, layer[BACKGROUND],
-     * layer[BOTTOM], window_tree, layer[TOP], layer[OVERLAY], then UI. */
+    /* Scene-graph z-order (bottom→top): bg_rect, wallpaper_tree,
+     * layer[BACKGROUND], layer[BOTTOM], window_tree, layer[TOP],
+     * layer[OVERLAY], then UI. */
     struct wlr_scene_tree     *window_tree;    /* xdg toplevels + borders */
     struct wlr_scene_tree     *layer_tree[4];  /* zwlr_layer_shell_v1_layer */
     struct wlr_cursor          *cursor;
@@ -699,3 +722,18 @@ void synui_welcome_hide(syn_server_t *s);
 void synui_render_cmdbar(syn_server_t *s);
 void synui_render_overlay(syn_server_t *s);
 void synui_render_dispcfg(syn_server_t *s);
+
+/* Shared cairo↔wlr_buffer bridge, reused by wallpaper.c: draw into a cairo
+ * surface with an offscreen wlr_buffer backing, then attach/replace it as a
+ * scene node's buffer. */
+struct wlr_buffer *create_cairo_buf(int w, int h, cairo_t **cr_out);
+void set_scene_buffer(struct wlr_scene_buffer **node,
+                       struct wlr_scene_tree *parent, struct wlr_buffer *buf);
+void cairo_begin(cairo_t *cr);   /* clear to transparent + set default font */
+
+/* ── wallpaper.c ─────────────────────────────────────────── */
+void wallpaper_init(syn_server_t *s);             /* create wallpaper_tree, decode initial config */
+void wallpaper_output_created(syn_output_t *o);   /* paint this output (server_new_output) */
+void wallpaper_output_destroy(syn_output_t *o);   /* destroy this output's buffer (output_destroy) */
+void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output_layout_changed) */
+void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from current config */

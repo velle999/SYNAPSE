@@ -99,6 +99,7 @@ void output_layout_changed(syn_server_t *s)
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link)
         layer_arrange_output(o);
+    wallpaper_relayout(s);
     session_lock_arrange(s);
     if (s->welcome_ui.shown)
         synui_render_welcome(s);

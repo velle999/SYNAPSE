@@ -302,6 +302,8 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         spawn("foot -e synsh -c 'syn ask'");
     } else if (strcmp(action, "displays") == 0) {
         dispcfg_toggle(s);
+    } else if (strcmp(action, "wallpaper_reload") == 0) {
+        synui_config_reload(s);
     } else if (strcmp(action, "menu") == 0) {
         if (s->welcome_ui.shown) synui_welcome_hide(s);
         else                     synui_render_welcome(s);
