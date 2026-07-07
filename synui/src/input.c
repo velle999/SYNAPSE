@@ -17,6 +17,8 @@
  *   Super+H/L            Shrink / grow the master column
  *   Super+F              Toggle floating (centred placement)
  *   Super+M              Toggle maximize
+ *   Super+N              Minimize focused window
+ *   Super+Shift+N        Restore a minimized window on this workspace
  *   Super+1..9           Switch to workspace N
  *   Super+Shift+1..9     Move focused window to workspace N
  *   Super+Backspace      Spawn: syn ask (quick AI query)
@@ -298,6 +300,17 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         if (!s->focused_view) return;
         s->focused_view->maximized = !s->focused_view->maximized;
         view_set_maximized(s->focused_view, s->focused_view->maximized);
+    } else if (strcmp(action, "minimize_toggle") == 0) {
+        /* Only ever minimizes: a minimized window has its scene node
+         * disabled, so it can never hold focus for this to toggle back. */
+        if (s->focused_view) view_apply_minimized(s, s->focused_view, 1);
+    } else if (strcmp(action, "minimize_restore") == 0) {
+        syn_view_t *v;
+        wl_list_for_each(v, &ws->windows, link)
+            if (v->mapped && v->minimized) {
+                view_apply_minimized(s, v, 0);
+                break;
+            }
     } else if (strcmp(action, "ai_ask") == 0) {
         spawn("foot -e synsh -c 'syn ask'");
     } else if (strcmp(action, "displays") == 0) {

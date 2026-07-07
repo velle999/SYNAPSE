@@ -3,9 +3,9 @@
  *
  * Publishes every mapped, managed window to taskbar/dock clients (waybar's
  * taskbar module, sfwbar, …) and honours their requests: activate raises and
- * focuses (switching workspace if needed), close/fullscreen/maximize map to
- * the same paths the client's own requests use. Minimize has no synui
- * equivalent and is ignored. Title/app-id changes are pushed live.
+ * focuses (switching workspace if needed), close/fullscreen/maximize/minimize
+ * map to the same paths the client's own requests use. Title/app-id changes
+ * are pushed live.
  *
  * SynapseOS Project — GPLv2
  * https://github.com/velle999/SYNAPSE
@@ -27,6 +27,8 @@ void foreign_toplevel_update_state(syn_view_t *v)
         v->foreign_handle, v->maximized);
     wlr_foreign_toplevel_handle_v1_set_fullscreen(
         v->foreign_handle, v->fullscreen);
+    wlr_foreign_toplevel_handle_v1_set_minimized(
+        v->foreign_handle, v->minimized);
 }
 
 static void ft_update_title(syn_view_t *v)
@@ -84,6 +86,19 @@ static void ft_handle_maximize(struct wl_listener *listener, void *data)
     view_set_maximized(v, v->maximized);
 }
 
+static void ft_handle_minimize(struct wl_listener *listener, void *data)
+{
+    syn_view_t *v = wl_container_of(listener, v, ft_minimize);
+    struct wlr_foreign_toplevel_handle_v1_minimized_event *event = data;
+    if (!v->mapped) return;
+    /* Restoring a window on a hidden workspace should bring it into view,
+     * mirroring ft_handle_activate — otherwise "restore" would silently
+     * un-hide a window nobody can see. */
+    if (!event->minimized && v->workspace && !workspace_visible(v->workspace))
+        workspace_switch(v->server, v->workspace->index);
+    view_apply_minimized(v->server, v, event->minimized);
+}
+
 /* ── Title / app-id change feeds (per surface type) ──────── */
 static void ft_handle_title(struct wl_listener *listener, void *data)
 {
@@ -137,6 +152,8 @@ void foreign_toplevel_map(syn_view_t *v)
         wl_signal_add(&v->foreign_handle->events.request_fullscreen, &v->ft_fullscreen);
         v->ft_maximize.notify = ft_handle_maximize;
         wl_signal_add(&v->foreign_handle->events.request_maximize, &v->ft_maximize);
+        v->ft_minimize.notify = ft_handle_minimize;
+        wl_signal_add(&v->foreign_handle->events.request_minimize, &v->ft_minimize);
     }
 
     if (!v->foreign_handle && !v->ext_foreign_handle) return;
@@ -164,6 +181,7 @@ void foreign_toplevel_unmap(syn_view_t *v)
         wl_list_remove(&v->ft_close.link);
         wl_list_remove(&v->ft_fullscreen.link);
         wl_list_remove(&v->ft_maximize.link);
+        wl_list_remove(&v->ft_minimize.link);
         wlr_foreign_toplevel_handle_v1_destroy(v->foreign_handle);
         v->foreign_handle = NULL;
     }

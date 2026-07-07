@@ -52,7 +52,7 @@ static int count_windows(syn_workspace_t *ws)
     int n = 0;
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
-        if (v->mapped && !v->floating && !v->fullscreen)
+        if (v->mapped && !v->floating && !v->fullscreen && !v->minimized)
             n++;
     return n;
 }
@@ -117,7 +117,7 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     int i = 0;
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link) {
-        if (!v->mapped || v->floating || v->fullscreen) continue;
+        if (!v->mapped || v->floating || v->fullscreen || v->minimized) continue;
 
         if (i == 0) {
             /* Master */
@@ -147,14 +147,15 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws)
     syn_view_t *top = NULL;
     syn_view_t *v;
     if (s->focused_view && s->focused_view->workspace == ws &&
-        s->focused_view->mapped && !s->focused_view->floating)
+        s->focused_view->mapped && !s->focused_view->floating &&
+        !s->focused_view->minimized)
         top = s->focused_view;
     else
         wl_list_for_each(v, &ws->windows, link)
-            if (v->mapped && !v->floating) { top = v; break; }
+            if (v->mapped && !v->floating && !v->minimized) { top = v; break; }
 
     wl_list_for_each(v, &ws->windows, link) {
-        if (!v->mapped || v->floating) continue;
+        if (!v->mapped || v->floating || v->minimized) continue;
         place_view(v,
                    area.x, area.y,
                    area.width, area.height);
@@ -318,10 +319,11 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
      * out now would re-enable its scene nodes on top of the visible one. */
     if (!workspace_visible(ws)) return;
 
-    /* Re-enable all nodes first */
+    /* Re-enable all nodes first (minimized ones stay hidden — their own
+     * apply path owns disabling/enabling the node). */
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
-        if (v->mapped)
+        if (v->mapped && !v->minimized)
             wlr_scene_node_set_enabled(&v->scene_tree->node, true);
 
     /* AI-managed marking (and its cyan border) only persists under the AI
@@ -374,13 +376,45 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
     }
 }
 
-/* Focus the first mapped window on ws — or clear focus entirely if there is
- * none, so keyboard input can't keep flowing to a hidden window. */
+/* ── Minimize (iconify) ──────────────────────────────────── */
+/* Same split as fullscreen: view_set_minimized tells the client (X11 only —
+ * xdg-shell has no minimize protocol) and taskbars; this makes it real by
+ * hiding the scene node and excluding the window from tiling/monocle, then
+ * reflowing. Restoring re-enables the node, raises and focuses it if its
+ * workspace is currently shown (a hidden workspace's window stays disabled
+ * until workspace_switch re-enables mapped, non-minimized nodes). */
+void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized)
+{
+    view->minimized = minimized ? 1 : 0;
+    view_set_minimized(view, view->minimized);
+    if (!view->mapped) return;
+
+    /* Only actually show it if its workspace is visible somewhere — a hidden
+     * workspace keeps all its nodes disabled regardless of minimized state
+     * (workspace_switch re-enables mapped, non-minimized nodes when it next
+     * becomes visible). */
+    int show = !view->minimized && workspace_visible(view->workspace);
+    wlr_scene_node_set_enabled(&view->scene_tree->node, show);
+
+    if (view->minimized) {
+        if (s->focused_view == view)
+            workspace_focus_first(s, view->workspace);
+    } else if (show) {
+        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+        focus_view(s, view, view_surface(view));
+    }
+
+    layout_apply(s, view->workspace);
+}
+
+/* Focus the first mapped, non-minimized window on ws — or clear focus
+ * entirely if there is none, so keyboard input can't keep flowing to a
+ * hidden window. */
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
 {
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link) {
-        if (v->mapped) {
+        if (v->mapped && !v->minimized) {
             focus_view(s, v, view_surface(v));
             return;
         }

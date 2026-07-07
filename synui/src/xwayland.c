@@ -92,6 +92,15 @@ void view_set_fullscreen(syn_view_t *v, int fullscreen)
     foreign_toplevel_update_state(v);
 }
 
+/* xdg-shell has no minimize request — a native client is never told; only
+ * X11 (ICCCM WM_STATE) and foreign-toplevel (taskbar) observers care. */
+void view_set_minimized(syn_view_t *v, int minimized)
+{
+    if (v->is_xwayland)
+        wlr_xwayland_surface_set_minimized(v->xsurface, minimized);
+    foreign_toplevel_update_state(v);
+}
+
 /* ── Managed-window mapping ──────────────────────────────── */
 static void xw_map(struct wl_listener *listener, void *data)
 {
@@ -221,6 +230,7 @@ static void xw_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&view->request_maximize.link);
     wl_list_remove(&view->request_fullscreen.link);
     wl_list_remove(&view->request_activate.link);
+    wl_list_remove(&view->request_minimize.link);
     free(view);
 }
 
@@ -273,6 +283,17 @@ static void xw_request_activate(struct wl_listener *listener, void *data)
         focus_view(view->server, view, view->xsurface->surface);
 }
 
+/* ICCCM iconify: X11 apps (and some window managers' pagers) toggle this via
+ * WM_CHANGE_STATE / _NET_WM_STATE_HIDDEN rather than a dedicated protocol
+ * request the way maximize/fullscreen do. */
+static void xw_request_minimize(struct wl_listener *listener, void *data)
+{
+    syn_view_t *view = wl_container_of(listener, view, request_minimize);
+    struct wlr_xwayland_minimize_event *event = data;
+    if (!view->mapped || view->override_redirect) return;
+    view_apply_minimized(view->server, view, event->minimize);
+}
+
 static void server_new_xwayland_surface(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, new_xwayland_surface);
@@ -300,6 +321,8 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
     wl_signal_add(&xs->events.request_fullscreen, &view->request_fullscreen);
     view->request_activate.notify = xw_request_activate;
     wl_signal_add(&xs->events.request_activate, &view->request_activate);
+    view->request_minimize.notify = xw_request_minimize;
+    wl_signal_add(&xs->events.request_minimize, &view->request_minimize);
 }
 
 /* ── Server ready: publish DISPLAY, set the X cursor ─────── */

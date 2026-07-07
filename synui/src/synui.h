@@ -271,6 +271,7 @@ struct syn_view {
     int floating;
     int fullscreen;
     int maximized;
+    int minimized;
     int x, y, w, h;
 
     win_security_t   security;
@@ -284,6 +285,7 @@ struct syn_view {
     struct wl_listener ft_close;
     struct wl_listener ft_fullscreen;
     struct wl_listener ft_maximize;
+    struct wl_listener ft_minimize;
     struct wl_listener ft_title;
     struct wl_listener ft_app_id;
 
@@ -305,6 +307,7 @@ struct syn_view {
     struct wl_listener dissociate;
     struct wl_listener request_configure;
     struct wl_listener request_activate;
+    struct wl_listener request_minimize;   /* ICCCM iconify; xdg-shell has no equivalent */
 };
 
 /* ── Layer-shell surface (panels, bars, wallpaper, launchers) ── */
@@ -605,6 +608,7 @@ void        view_close(syn_view_t *v);
 void        view_set_activated(syn_view_t *v, int activated);
 void        view_set_maximized(syn_view_t *v, int maximized);
 void        view_set_fullscreen(syn_view_t *v, int fullscreen);
+void        view_set_minimized(syn_view_t *v, int minimized);
 
 /* ── xwayland.c ──────────────────────────────────────────── */
 void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable */
@@ -677,6 +681,7 @@ void view_update_borders(syn_view_t *view);
 /* ── layout.c ────────────────────────────────────────────── */
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);
 void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs);
+void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized);
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
 void layout_tile(syn_server_t *s, syn_workspace_t *ws);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws);
