@@ -30,6 +30,103 @@
       <object class="GtkSeparatorMenuItem" id="sep1"/>
     </child>
     <child>
+      <object class="GtkMenuItem" id="applications">
+        <property name="label">Applications</property>
+        <child type="submenu">
+          <object class="GtkMenu" id="applications_menu">
+            <child>
+              <object class="GtkMenuItem" id="app_0">
+                <property name="label">Avahi SSH Server Browser</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_1">
+                <property name="label">Avahi VNC Server Browser</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_2">
+                <property name="label">Avahi Zeroconf Browser</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_3">
+                <property name="label">Firefox</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_4">
+                <property name="label">Foot</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_5">
+                <property name="label">Foot Client</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_6">
+                <property name="label">Foot Server</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_7">
+                <property name="label">Hardware Locality lstopo</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_8">
+                <property name="label">kitty</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_9">
+                <property name="label">Qt V4L2 test Utility</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_10">
+                <property name="label">Qt V4L2 video capture utility</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_11">
+                <property name="label">Stardew Valley</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_12">
+                <property name="label">Steam</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_13">
+                <property name="label">Undertale</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_14">
+                <property name="label">xgps</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_15">
+                <property name="label">xgpsspeed</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="app_16">
+                <property name="label">Yazi File Manager</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="sep2"/>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="logout">
         <property name="label">Log Out</property>
       </object>
