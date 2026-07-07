@@ -594,6 +594,19 @@ void output_mgmt_update(syn_server_t *s);        /* push current config to clien
  * broadcast the new config to management clients. */
 void output_layout_changed(syn_server_t *s);
 
+/* ── output_persist.c ────────────────────────────────────── */
+/* Restore this connector's saved mode/transform/scale/position (from
+ * ~/.config/synui/outputs.conf) if one exists. Returns the layout entry on
+ * success (as wlr_output_layout_add_auto() would), or NULL if there's
+ * nothing saved / the backend rejected it — caller should fall back to
+ * auto-placement. */
+struct wlr_output_layout_output *output_persist_apply(syn_server_t *s,
+                                                       syn_output_t *output);
+/* Snapshot every connected output's current mode/transform/scale/position
+ * to disk, merged with saved entries for disconnected outputs. Called from
+ * output_layout_changed() after any real apply. */
+void output_persist_save(syn_server_t *s);
+
 /* ── dispcfg.c ───────────────────────────────────────────── */
 void dispcfg_show(syn_server_t *s);
 void dispcfg_hide(syn_server_t *s);

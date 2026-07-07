@@ -110,6 +110,7 @@ void output_layout_changed(syn_server_t *s)
         synui_render_dispcfg(s);
 
     output_mgmt_update(s);
+    output_persist_save(s);
 }
 
 static void output_mgr_apply(struct wl_listener *listener, void *data)

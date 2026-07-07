@@ -307,8 +307,13 @@ static void server_new_output(struct wl_listener *listener, void *data)
     output->destroy.notify = output_destroy;
     wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 
+    /* Restore a saved mode/transform/scale/position for this connector, if
+     * one was persisted by a previous session; otherwise fall back to
+     * auto-placement beside whatever's already laid out. */
     struct wlr_output_layout_output *l_output =
-        wlr_output_layout_add_auto(server->output_layout, wlr_output);
+        output_persist_apply(server, output);
+    if (!l_output)
+        l_output = wlr_output_layout_add_auto(server->output_layout, wlr_output);
 
     output->scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout, l_output,
@@ -437,6 +442,11 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
      * resizes it on map. */
     if (view->xdg_surface->initial_commit) {
         wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, 0, 0);
+        /* Apply a maximize request the client made before this first
+         * commit (see xdg_toplevel_request_maximize) now that the surface
+         * is actually initialized. */
+        if (view->maximized)
+            wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
         return;
     }
 
@@ -452,6 +462,13 @@ static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *da
     /* Honour the requested state (not a blind toggle). Tiling still governs
      * the geometry; set_maximized acks with the required configure. */
     view->maximized = view->xdg_surface->toplevel->requested.maximized;
+    /* Clients may send set_maximized before their first commit, while
+     * xdg_surface->initialized is still false. wlroots asserts on that in
+     * wlr_xdg_surface_schedule_configure(), aborting the whole compositor.
+     * The state is already recorded above; xdg_surface_commit's
+     * initial_commit path will pick it up once the surface is ready. */
+    if (!view->xdg_surface->initialized)
+        return;
     wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
     foreign_toplevel_update_state(view);
 }

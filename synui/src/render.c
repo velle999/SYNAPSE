@@ -456,8 +456,32 @@ void synui_render_dispcfg(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
+    /* Mini-map geometry: one box per monitor, placed by grid cell (the same
+     * grid_x/grid_y dispcfg_rechain() packs into real pixel positions) so
+     * "where is what in the grid" has a visual answer instead of just the
+     * grid(x,y) numbers in the list below. */
+    const int cell_w = 96, cell_h = 60, cell_gap = 10, map_top = 54;
+    int min_gx = 0, max_gx = 0, min_gy = 0, max_gy = 0;
+    if (d->count > 0) {
+        min_gx = max_gx = d->order[0]->grid_x;
+        min_gy = max_gy = d->order[0]->grid_y;
+        for (int i = 1; i < d->count; i++) {
+            syn_output_t *o = d->order[i];
+            if (o->grid_x < min_gx) min_gx = o->grid_x;
+            if (o->grid_x > max_gx) max_gx = o->grid_x;
+            if (o->grid_y < min_gy) min_gy = o->grid_y;
+            if (o->grid_y > max_gy) max_gy = o->grid_y;
+        }
+    }
+    int map_cols = d->count > 0 ? max_gx - min_gx + 1 : 0;
+    int map_rows = d->count > 0 ? max_gy - min_gy + 1 : 0;
+    int map_w = map_cols > 0 ? map_cols * cell_w + (map_cols - 1) * cell_gap : 0;
+    int map_h = map_rows > 0 ? map_rows * cell_h + (map_rows - 1) * cell_gap : 0;
+
     int rows = d->count > 0 ? d->count : 1;
-    int pw = 620, ph = 196 + rows * 28;
+    int list_top = d->count > 0 ? map_top + map_h + 24 : 70;
+    int pw = d->count > 0 && map_w + 36 > 620 ? map_w + 36 : 620;
+    int ph = list_top + rows * 28 + 126;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->dispcfg_ui.tree->node, px, py);
@@ -495,9 +519,45 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_line_to(cr, pw - 18, 42);
     cairo_stroke(cr);
 
+    /* Mini-map: a box per monitor at its grid cell, selected one accented. */
+    for (int i = 0; i < d->count; i++) {
+        syn_output_t *o = d->order[i];
+        int sel = (i == d->selected);
+        int cx = 18 + (o->grid_x - min_gx) * (cell_w + cell_gap);
+        int cy = map_top + (o->grid_y - min_gy) * (cell_h + cell_gap);
+
+        if (sel)
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+        else
+            cairo_set_source_rgba(cr, 0.14, 0.14, 0.20, 1.0);
+        cairo_rectangle(cr, cx, cy, cell_w, cell_h);
+        cairo_fill(cr);
+
+        cairo_set_line_width(cr, sel ? 2 : 1);
+        if (sel)
+            cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+        else
+            cairo_set_source_rgba(cr, 0.35, 0.35, 0.45, 0.8);
+        cairo_rectangle(cr, cx + 0.5, cy + 0.5, cell_w - 1, cell_h - 1);
+        cairo_stroke(cr);
+
+        char label[64];
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.75, sel ? 1.0 : 0.75,
+                              sel ? 0.99 : 0.85, 1.0);
+        cairo_move_to(cr, cx + 8, cy + 24);
+        cairo_show_text(cr, o->wlr_output->name);
+
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        snprintf(label, sizeof(label), "(%d,%d)", o->grid_x, o->grid_y);
+        cairo_move_to(cr, cx + 8, cy + 42);
+        cairo_show_text(cr, label);
+    }
+
     /* Monitor rows: name, mode, rotation, layout position */
     cairo_set_font_size(cr, 14);
-    int y = 70;
+    int y = list_top;
     if (d->count == 0) {
         cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
         cairo_move_to(cr, 40, y);
