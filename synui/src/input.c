@@ -767,6 +767,9 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         struct wlr_surface *surface = NULL;
         syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y,
                                     &surface, &sx, &sy);
+        wlr_log(WLR_INFO, "synui: DEBUG pointer_button PRESS surf=%p role=%s view=%p seat_focus=%p",
+                (void *)surface, surface && surface->role ? surface->role->name : "none",
+                (void *)view, (void *)s->seat->pointer_state.focused_surface);
 
         /* Super + drag begins an interactive move/resize; the button is not
          * forwarded to the client. */
@@ -786,6 +789,8 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
     }
 
     wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
+    wlr_log(WLR_INFO, "synui: DEBUG pointer_button after-notify seat_focus=%p",
+            (void *)s->seat->pointer_state.focused_surface);
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data)
