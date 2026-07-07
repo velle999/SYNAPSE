@@ -493,6 +493,33 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
  * only once the role is known — new_surface no longer guarantees a role, so we
  * subscribe to new_toplevel / new_popup instead of asserting the role here.
  */
+struct syn_popup_watch {
+    struct wlr_xdg_popup *popup;
+    struct wl_listener commit;
+    struct wl_listener destroy;
+};
+
+static void popup_watch_destroy(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct syn_popup_watch *w = wl_container_of(listener, w, destroy);
+    wl_list_remove(&w->commit.link);
+    wl_list_remove(&w->destroy.link);
+    free(w);
+}
+
+/* wlroots 0.19 requires the compositor to answer a popup's initial commit
+ * with a configure the same way toplevels do (see xdg_surface_commit) — a
+ * client that waits for a real ack, like GTK4's, otherwise hangs unmapped
+ * forever and never shows or accepts input. */
+static void popup_watch_commit(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct syn_popup_watch *w = wl_container_of(listener, w, commit);
+    if (w->popup->base->initial_commit)
+        wlr_xdg_surface_schedule_configure(w->popup->base);
+}
+
 static void server_new_xdg_popup(struct wl_listener *listener, void *data)
 {
     (void)listener;
@@ -516,6 +543,13 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
     }
     popup->base->data =
         wlr_scene_xdg_surface_create(parent_tree, popup->base);
+
+    struct syn_popup_watch *w = calloc(1, sizeof(*w));
+    w->popup = popup;
+    w->commit.notify = popup_watch_commit;
+    wl_signal_add(&popup->base->surface->events.commit, &w->commit);
+    w->destroy.notify = popup_watch_destroy;
+    wl_signal_add(&popup->base->surface->events.destroy, &w->destroy);
 }
 
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
