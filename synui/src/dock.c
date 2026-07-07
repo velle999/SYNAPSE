@@ -210,3 +210,53 @@ void dock_output_destroy(syn_output_t *o)
         o->dock.icons_buf = NULL;
     }
 }
+
+/* ── Clicking ────────────────────────────────────────────── */
+
+syn_dock_entry_t *dock_entry_at(syn_server_t *s, double lx, double ly)
+{
+    if (!s->config.dock_enabled) return NULL;
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!o->dock.tree || !o->dock.shown) continue;
+
+        /* Entry hit-boxes are dock-canvas-local (identical on every
+         * output's mirror); the tree's scene position is that canvas's
+         * layout-coordinate origin. */
+        double rx = lx - o->dock.tree->node.x;
+        double ry = ly - o->dock.tree->node.y;
+
+        for (int i = 0; i < s->dock_entry_count; i++) {
+            syn_dock_entry_t *e = &s->dock_entries[i];
+            if (rx >= e->x && rx < e->x + e->w &&
+                ry >= e->y && ry < e->y + e->h)
+                return e;
+        }
+    }
+    return NULL;
+}
+
+void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
+{
+    syn_view_t *v = e->primary_view;
+    if (!v || !v->mapped) return;
+
+    if (v->minimized) {
+        /* view_apply_minimized() itself raises+focuses on restore once the
+         * workspace is visible — mirrors ft_handle_minimize. */
+        if (v->workspace && !workspace_visible(v->workspace))
+            workspace_switch(s, v->workspace->index);
+        view_apply_minimized(s, v, 0);
+        return;
+    }
+
+    if (s->focused_view == v) {
+        view_apply_minimized(s, v, 1);
+        return;
+    }
+
+    if (v->workspace && !workspace_visible(v->workspace))
+        workspace_switch(s, v->workspace->index);
+    focus_view(s, v, view_surface(v));
+}

@@ -754,6 +754,15 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
     }
 
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        if (button == BTN_LEFT) {
+            syn_dock_entry_t *dock_hit =
+                dock_entry_at(s, s->cursor->x, s->cursor->y);
+            if (dock_hit) {
+                dock_entry_click(s, dock_hit);
+                return;
+            }
+        }
+
         double sx, sy;
         struct wlr_surface *surface = NULL;
         syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y,

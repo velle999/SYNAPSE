@@ -837,3 +837,11 @@ void dock_view_unmapped(syn_view_t *v);           /* foreign_toplevel_unmap hook
 /* Re-render every output's dock without changing the entry model — used
  * after output geometry changes (output_layout_changed). */
 void dock_relayout(syn_server_t *s);
+/* Hit-test layout coordinates against every output's dock icon row; returns
+ * the entry under (lx, ly) or NULL. Used by input.c's pointer_button to
+ * route clicks before falling back to normal view hit-testing. */
+syn_dock_entry_t *dock_entry_at(syn_server_t *s, double lx, double ly);
+/* Click on a running entry's icon: focuses/raises primary_view, minimizes it
+ * if it was already focused, or restores+focuses it if minimized. No-op for
+ * pinned-but-not-running entries (launching is not implemented yet). */
+void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e);
