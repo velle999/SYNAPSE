@@ -33,6 +33,7 @@
 #include <time.h>
 #include <assert.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
@@ -1082,6 +1083,15 @@ static void usage(const char *prog) {
     );
 }
 
+static void reap_children(int sig)
+{
+    (void)sig;
+    int saved_errno = errno;
+    while (waitpid(-1, NULL, WNOHANG) > 0)
+        ;
+    errno = saved_errno;
+}
+
 int main(int argc, char *argv[])
 {
     int debug = 0;
@@ -1117,10 +1127,16 @@ int main(int argc, char *argv[])
      * Ignore SIGPIPE: the AI thread writes to the synapd socket, and if
      * synapd disconnects mid-write an unhandled SIGPIPE would take down the
      * whole compositor. Auto-reap children (autostart + AI "CMD:" launches)
-     * by ignoring SIGCHLD so they don't pile up as zombies.
+     * via a real SIGCHLD handler rather than SIG_IGN: SIG_IGN's "auto-reap"
+     * disposition survives exec() into any child we fork (e.g. wlroots'
+     * Xwayland helper), which broke Xwayland's own wait4() on its xkbcomp
+     * keymap-compile helper (got ECHILD instead of the real exit status,
+     * so it always assumed "compile failed" and aborted, even though
+     * xkbcomp succeeded). A caught handler resets to SIG_DFL across exec,
+     * so it can't leak into children the same way.
      */
     signal(SIGPIPE, SIG_IGN);
-    signal(SIGCHLD, SIG_IGN);
+    signal(SIGCHLD, reap_children);
 
     /* Detect VM and force software rendering before any wlroots init */
     if (detect_vm()) {
