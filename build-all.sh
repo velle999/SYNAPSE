@@ -56,7 +56,7 @@ build_component() {
     cd "$BASE/$name"
     makepkg -sf --noconfirm
     local pkg
-    pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | head -1)
+    pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | grep -v "^$name-debug-" | head -1)
     if [ -n "$pkg" ]; then
         sudo pacman -U --noconfirm --overwrite '*' "$pkg"
         echo "=== $name installed ==="
@@ -71,7 +71,7 @@ build_script_pkg() {
     cd "$BASE/$name"
     makepkg -sf --noconfirm
     local pkg
-    pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | head -1)
+    pkg=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null | grep -v "^$name-debug-" | head -1)
     if [ -n "$pkg" ]; then
         sudo pacman -U --noconfirm --overwrite '*' "$pkg"
         echo "=== $name installed ==="
