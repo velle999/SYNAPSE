@@ -25,6 +25,12 @@
  * background color. Super+Shift+W (or a SIGHUP) reloads synuirc and
  * repaints from the current wallpaper path/mode.
  *
+ * Dock (dock.c):
+ *   dock_enabled = on|off       (default on)
+ *   dock_height = 64            (px)
+ *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
+ *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
+ *
  * SynapseOS Project — GPLv2
  */
 
@@ -221,6 +227,11 @@ void synui_config_load(syn_config_t *cfg)
     cfg->wallpaper[0]   = '\0';
     cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
 
+    cfg->dock_enabled      = 1;
+    cfg->dock_height       = 64;
+    cfg->dock_hover_margin = 4;
+    cfg->dock_pin_count    = 0;
+
     cfg->bind_count = 0;
     seed_default_binds(cfg);
 
@@ -346,6 +357,29 @@ void synui_config_load(syn_config_t *cfg)
             else if (strcmp(val, "stretch") == 0) cfg->wallpaper_mode = SYN_WALLPAPER_STRETCH;
             else if (strcmp(val, "center")  == 0) cfg->wallpaper_mode = SYN_WALLPAPER_CENTER;
             else wlr_log(WLR_ERROR, "synui: wallpaper_mode: unknown '%s'", val);
+        }
+        else if (strcmp(key, "dock_enabled") == 0)
+            cfg->dock_enabled = strcmp(val, "on") == 0;
+        else if (strcmp(key, "dock_height") == 0) {
+            cfg->dock_height = atoi(val);
+            if (cfg->dock_height < 32)  cfg->dock_height = 32;
+            if (cfg->dock_height > 200) cfg->dock_height = 200;
+        }
+        else if (strcmp(key, "dock_hover_margin") == 0) {
+            cfg->dock_hover_margin = atoi(val);
+            if (cfg->dock_hover_margin < 1)  cfg->dock_hover_margin = 1;
+            if (cfg->dock_hover_margin > 32) cfg->dock_hover_margin = 32;
+        }
+        else if (strcmp(key, "dock_pin") == 0) {
+            /* space-separated app_ids/.desktop basenames */
+            char buf[512];
+            snprintf(buf, sizeof(buf), "%s", val);
+            char *save = NULL;
+            cfg->dock_pin_count = 0;
+            for (char *tok = strtok_r(buf, " \t", &save);
+                 tok && cfg->dock_pin_count < DOCK_PIN_MAX;
+                 tok = strtok_r(NULL, " \t", &save))
+                snprintf(cfg->dock_pin[cfg->dock_pin_count++], 128, "%s", tok);
         }
         else if (strcmp(key, "bind") == 0) {
             /* value = "<combo> <action> [arg]" — split on first whitespace */

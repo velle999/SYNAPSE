@@ -242,6 +242,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * semantics). Skipped during shutdown, when the scene graph is gone. */
     if (!server->shutting_down) {
         wallpaper_output_destroy(output);
+        dock_output_destroy(output);
         for (int i = 0; i < WORKSPACE_MAX; i++) {
             syn_workspace_t *ws = &server->workspaces[i];
             if (ws->output != output) continue;
@@ -358,6 +359,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * workspace out on it and re-home all UI. */
     layer_arrange_output(output);
     wallpaper_output_created(output);
+    dock_output_created(output);
     layout_apply(server, ws);
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
@@ -915,6 +917,11 @@ int synui_init(syn_server_t *s)
 
     wl_list_init(&s->outputs);
     wl_list_init(&s->keyboards);
+
+    /* dock.c: needs s->workspaces[].windows and s->outputs already
+     * wl_list_init'd (dock_rebuild walks both) — seeds pinned-only entries;
+     * no output exists yet for dock_relayout to actually paint into. */
+    dock_init(s);
 
     /* Input */
     input_setup(s);

@@ -235,9 +235,33 @@ typedef struct {
     char                  wallpaper[256];
     syn_wallpaper_mode_t  wallpaper_mode;
 
+    /* macOS-style auto-hide dock (dock.c). Mirrored on every output; never
+     * reserves an exclusive zone (see syn_output::dock's comment) — hidden
+     * it takes zero layout space, shown it floats above window content. */
+    int   dock_enabled;         /* default 1 */
+    int   dock_height;          /* px, default 64 */
+    int   dock_hover_margin;    /* px trigger strip at the bottom edge, default 4 */
+#define DOCK_PIN_MAX 16
+    char  dock_pin[DOCK_PIN_MAX][128];
+    int   dock_pin_count;
+
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
 } syn_config_t;
+
+/* ── Dock entry (dock.c) ──────────────────────────────────── */
+/* One pinned and/or running app, shared across every output's mirrored
+ * dock — rendering differs only by which output's box the tree sits in
+ * (see syn_output::dock), so hit-box coordinates here are dock-canvas-local
+ * and valid for every output alike. */
+#define DOCK_MAX_ENTRIES 32
+typedef struct {
+    char app_id[128];
+    int  pinned;             /* came from synuirc dock_pin */
+    int  running;            /* >=1 mapped view with this app_id */
+    syn_view_t *primary_view;   /* most-recently-focused running view; NULL if not running */
+    int  x, y, w, h;          /* icon hit-box, dock-canvas-local; set by dock_render() */
+} syn_dock_entry_t;
 
 /* ── Workspace ───────────────────────────────────────────── */
 struct syn_workspace {
@@ -351,6 +375,22 @@ struct syn_output {
      * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
     struct wlr_scene_buffer *wallpaper_buf;
 
+    /* dock.c: this output's own mirror of the auto-hide dock. A top-level
+     * scene tree (sibling of the welcome/overlay/dispcfg UI trees, not
+     * parented under window_tree/layer_tree) so a shown dock always floats
+     * above window content without needing an exclusive-zone reservation —
+     * hidden, it reserves no layout space at all. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_buffer *icons_buf;
+        int      shown;            /* currently slid in on this output */
+        double   slide_progress;   /* 0 = fully hidden, 1 = fully shown */
+        double   hover_since;      /* CLOCK_MONOTONIC secs cursor entered the
+                                     * trigger strip; 0 = not hovering */
+        double   unhover_since;    /* secs cursor left the dock area; 0 = still
+                                     * over it. Debounces the slide-out. */
+    } dock;
+
     struct wl_listener frame;
     struct wl_listener request_state;
     struct wl_listener destroy;
@@ -425,6 +465,18 @@ struct syn_server {
     struct wlr_ext_foreign_toplevel_list_v1 *foreign_list;
     struct wlr_gamma_control_manager_v1     *gamma_mgr;
     struct wlr_scene_tree                   *drag_icon_tree;  /* topmost; follows cursor */
+
+    /* virtual-keyboard-v1: lets a client (wtype) synthesize key events that
+     * flow through the exact same server_new_keyboard()/keyboard_handle_key
+     * path a physical keyboard takes — used by the waybar menu to trigger
+     * the activity overview without a bespoke IPC channel. */
+    struct wlr_virtual_keyboard_manager_v1  *virtual_keyboard_mgr;
+    struct wl_listener new_virtual_keyboard;
+
+    /* dock.c: shared entry model (pinned + running apps), rendered into
+     * every output's own syn_output::dock tree. */
+    syn_dock_entry_t dock_entries[DOCK_MAX_ENTRIES];
+    int              dock_entry_count;
 
     /* Scene-graph z-order (bottom→top): bg_rect, wallpaper_tree,
      * layer[BACKGROUND], layer[BOTTOM], window_tree, layer[TOP],
@@ -742,3 +794,43 @@ void wallpaper_output_created(syn_output_t *o);   /* paint this output (server_n
 void wallpaper_output_destroy(syn_output_t *o);   /* destroy this output's buffer (output_destroy) */
 void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output_layout_changed) */
 void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from current config */
+
+/* ── icons.c ─────────────────────────────────────────────── */
+/* Resolved .desktop info for one app_id, cached after first lookup. Matching
+ * is v1-simple: a .desktop file is only found if its basename equals the
+ * app_id exactly (no StartupWMClass/heuristic matching) — documented
+ * limitation, real app_id-to-.desktop mapping is fuzzy even in GNOME/KDE. */
+typedef struct {
+    char app_id[128];
+    char display_name[128];   /* .desktop Name=, or app_id if unresolved */
+    char exec[256];           /* .desktop Exec= (field codes stripped), or
+                                * app_id if unresolved — a literal spawn()able
+                                * shell command either way */
+    char icon_hint[128];      /* .desktop Icon= value; internal to icons.c's
+                                * resolution, not meaningful to callers */
+    cairo_surface_t *icon_surface;   /* decoded PNG; NULL = draw a monogram */
+} syn_icon_entry_t;
+
+/* Look up (and cache) name/exec/icon for an app_id. Always returns a valid
+ * pointer with app_id/display_name/exec populated (falling back to the
+ * app_id string itself when no .desktop file matches); icon_surface may be
+ * NULL, in which case the caller should fall back to icon_draw_monogram(). */
+const syn_icon_entry_t *icon_lookup(const char *app_id);
+/* Draw a coloured monogram chip (first letter of app_id, uppercased) into a
+ * size x size box at (x, y) — the fallback when icon_lookup() found no icon
+ * file (SVG icon themes, or nothing on disk at all: both out of scope). */
+void icon_draw_monogram(cairo_t *cr, const char *app_id,
+                        double x, double y, double size);
+
+/* ── dock.c ──────────────────────────────────────────────── */
+void dock_init(syn_server_t *s);                  /* load config; entries start empty */
+void dock_output_created(syn_output_t *o);        /* create this output's dock tree */
+void dock_output_destroy(syn_output_t *o);        /* destroy this output's dock tree */
+/* Re-merge pinned (config) + running (all workspaces') apps into
+ * s->dock_entries, then re-render every output. Called on view map/unmap. */
+void dock_rebuild(syn_server_t *s);
+void dock_view_mapped(syn_view_t *v);             /* foreign_toplevel_map hook */
+void dock_view_unmapped(syn_view_t *v);           /* foreign_toplevel_unmap hook */
+/* Re-render every output's dock without changing the entry model — used
+ * after output geometry changes (output_layout_changed). */
+void dock_relayout(syn_server_t *s);

@@ -51,6 +51,7 @@
 #include <wlr/util/edges.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
 
 #include "synui.h"
 #include "effects.h"
@@ -520,6 +521,17 @@ static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
 
     wlr_seat_set_keyboard(s->seat, wlr_kb);
     wl_list_insert(&s->keyboards, &kb->link);
+}
+
+/* A virtual keyboard (wtype, or anything else speaking virtual-keyboard-v1)
+ * wraps a real struct wlr_keyboard, so it takes the exact same path a
+ * physical keyboard does — this is what lets the waybar menu trigger
+ * compositor keybinds (e.g. the activity overview) with no bespoke IPC. */
+static void server_new_virtual_keyboard(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, new_virtual_keyboard);
+    struct wlr_virtual_keyboard_v1 *vkb = data;
+    server_new_keyboard(s, &vkb->keyboard.base);
 }
 
 /* ── Interactive move / resize (Super + mouse drag) ──────── */
@@ -1221,4 +1233,10 @@ void input_setup(syn_server_t *s)
 
     /* pointer-constraints + relative-pointer (constraints.c). */
     constraints_setup(s);
+
+    /* virtual-keyboard-v1 (wtype support — see server_new_virtual_keyboard). */
+    s->virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(s->display);
+    s->new_virtual_keyboard.notify = server_new_virtual_keyboard;
+    wl_signal_add(&s->virtual_keyboard_mgr->events.new_virtual_keyboard,
+                 &s->new_virtual_keyboard);
 }

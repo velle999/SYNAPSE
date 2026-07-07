@@ -118,8 +118,11 @@ static void ft_handle_app_id(struct wl_listener *listener, void *data)
 void foreign_toplevel_map(syn_view_t *v)
 {
     syn_server_t *s = v->server;
-    /* Menus/tooltips are not windows; don't offer them to taskbars. */
+    /* Menus/tooltips are not windows; don't offer them to taskbars (or the
+     * dock — same "not a real window" reasoning). */
     if (v->override_redirect) return;
+
+    dock_view_mapped(v);
 
     const char *title  = view_title(v);
     const char *app_id = view_app_id(v);
@@ -172,6 +175,8 @@ void foreign_toplevel_map(syn_view_t *v)
 
 void foreign_toplevel_unmap(syn_view_t *v)
 {
+    if (!v->override_redirect) dock_view_unmapped(v);
+
     if (!v->foreign_handle && !v->ext_foreign_handle) return;
 
     wl_list_remove(&v->ft_title.link);
