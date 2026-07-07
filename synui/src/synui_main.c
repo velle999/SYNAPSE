@@ -291,6 +291,13 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wlr_output->data = output;
     wl_list_init(&output->layer_surfaces);
 
+    /* Seed the dispcfg grid cell from connection order — one row, in the
+     * order outputs were plugged in — matching wlr_output_layout_add_auto's
+     * left-to-right placement below. The display panel (Super+D) is where
+     * this gets rearranged into an L-shape or whatever the desk needs. */
+    output->grid_x = wl_list_length(&server->outputs);
+    output->grid_y = 0;
+
     output->frame.notify = output_frame;
     wl_signal_add(&wlr_output->events.frame, &output->frame);
 

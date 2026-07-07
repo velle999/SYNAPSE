@@ -159,9 +159,9 @@ extern const int                 synui_welcome_menu_len;
 typedef struct {
     int visible;
     int selected;   /* index into order[] */
-    int column;     /* 0 = row (left→right), 1 = column (top→bottom) */
     int count;
-    syn_output_t *order[DISPCFG_MAX_OUTPUTS];  /* arrangement order */
+    syn_output_t *order[DISPCFG_MAX_OUTPUTS];  /* panel list, reading order
+                                                 * (grid_y then grid_x) */
     char status[96];   /* last action / error, shown in the panel */
 } syn_dispcfg_t;
 
@@ -318,6 +318,11 @@ struct syn_output {
     struct wlr_scene_output *scene_output;
 
     int                      active_workspace; /* workspace shown on this output */
+
+    /* Logical cell in the dispcfg arrangement grid (not pixels — see
+     * dispcfg_rechain). Seeded from connection order in server_new_output;
+     * moved with Shift+arrows in the display panel. */
+    int                      grid_x, grid_y;
 
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */

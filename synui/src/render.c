@@ -457,7 +457,7 @@ void synui_render_dispcfg(syn_server_t *s)
     get_output_box(s, &ob);
 
     int rows = d->count > 0 ? d->count : 1;
-    int pw = 560, ph = 196 + rows * 28;
+    int pw = 620, ph = 196 + rows * 28;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->dispcfg_ui.tree->node, px, py);
@@ -532,26 +532,23 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_move_to(cr, 310, y);
         cairo_show_text(cr, transform_name(wo->transform));
 
-        snprintf(col, sizeof(col), "(%d,%d)", box.x, box.y);
         cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        snprintf(col, sizeof(col), "grid(%d,%d)",
+                 d->order[i]->grid_x, d->order[i]->grid_y);
         cairo_move_to(cr, 430, y);
+        cairo_show_text(cr, col);
+
+        snprintf(col, sizeof(col), "(%d,%d)", box.x, box.y);
+        cairo_move_to(cr, 540, y);
         cairo_show_text(cr, col);
 
         y += 28;
     }
 
-    /* Arrangement axis */
-    cairo_set_font_size(cr, 13);
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
-    cairo_move_to(cr, 18, y + 8);
-    cairo_show_text(cr, d->column
-        ? "arrangement: column (top\xe2\x86\x92" "bottom)"
-        : "arrangement: row (left\xe2\x86\x92right)");
-
     /* Status line (last action or error) */
     if (d->status[0]) {
         cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
-        cairo_move_to(cr, 18, y + 30);
+        cairo_move_to(cr, 18, y + 8);
         cairo_show_text(cr, d->status);
     }
 
@@ -559,9 +556,9 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 40);
-    cairo_show_text(cr, "Up/Down monitor \xc2\xb7 Left/Right rotate \xc2\xb7 [ ] reorder");
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate");
     cairo_move_to(cr, 18, ph - 20);
-    cairo_show_text(cr, "a row/column \xc2\xb7 Esc close");
+    cairo_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->dispcfg_ui.text_buf, s->dispcfg_ui.tree, buf);
