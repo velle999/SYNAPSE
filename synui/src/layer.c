@@ -136,9 +136,10 @@ static void layer_surface_commit(struct wl_listener *listener, void *data)
 
 /* An xdg_popup attached to a layer surface via get_popup (waybar menus,
  * wofi submenus). It reached the xdg-shell new_popup signal parentless, so
- * this is the only place its scene tree can be created. Unconstraining has
- * to wait for the initial commit — the popup surface isn't initialized
- * before then and scheduling a configure trips a wlroots assert. */
+ * this is the only place its scene tree can be created. Unconstraining and
+ * the initial configure both have to wait for the initial commit — the
+ * popup surface isn't initialized before then and calling either trips a
+ * wlroots assert. */
 typedef struct {
     struct wlr_xdg_popup *popup;
     syn_layer_surface_t  *ls;
@@ -166,6 +167,13 @@ static void layer_popup_commit(struct wl_listener *listener, void *data)
         .height = out_box.height,
     };
     wlr_xdg_popup_unconstrain_from_box(lp->popup, &constraint);
+
+    /* wlroots 0.19 requires the compositor to answer the initial commit with
+     * a configure (see synui_main.c's popup_watch_commit) or the client waits
+     * forever and never maps/accepts input. Safe here because we're already
+     * gated on initial_commit being true — the earlier SIGABRT this file's
+     * comment warns about came from calling this before that point. */
+    wlr_xdg_surface_schedule_configure(lp->popup->base);
 }
 
 static void layer_popup_destroy(struct wl_listener *listener, void *data)
