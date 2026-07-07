@@ -1,0 +1,49 @@
+* {
+    font-family: monospace;
+    font-size: 12px;
+    min-height: 0;
+    border: none;
+}
+window#waybar {
+    background: rgba(11, 11, 20, 0.85);
+    color: #c8e3ee;
+    border-bottom: 2px solid #ff296d;
+}
+#custom-synapse {
+    color: #05d9e8;
+    font-weight: bold;
+    padding: 0 12px;
+}
+#custom-synapse:hover {
+    background: rgba(5, 217, 232, 0.15);
+}
+/* Start menu dropdown (GtkMenu spawned by the badge) */
+menu {
+    background: rgba(11, 11, 20, 0.97);
+    border: 1px solid #ff296d;
+    color: #c8e3ee;
+}
+menu menuitem {
+    padding: 6px 14px;
+}
+menu menuitem:hover {
+    background: #ff296d;
+    color: #0b0b14;
+}
+menu separator {
+    background: #2a2a40;
+    min-height: 1px;
+}
+#clock {
+    color: #ffd319;
+}
+#cpu, #memory, #network, #pulseaudio {
+    color: #05d9e8;
+    padding: 0 10px;
+}
+#network.disconnected {
+    color: #ff296d;
+}
+#pulseaudio.muted {
+    color: #ff296d;
+}

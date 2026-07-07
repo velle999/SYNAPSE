@@ -1,0 +1,43 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 28,
+    "modules-left": ["custom/synapse"],
+    "modules-center": ["clock"],
+    "modules-right": ["pulseaudio", "cpu", "memory", "network"],
+    "custom/synapse": {
+        "format": "◢ SYNAPSE",
+        "tooltip": false,
+        "menu": "on-click",
+        "menu-file": "/home/velle/.config/waybar/synapse-menu.xml",
+        "menu-actions": {
+            "terminal": "foot",
+            "aishell": "foot synsh",
+            "status": "foot --hold syn status",
+            "network": "foot -e nmtui",
+            "monitor": "foot -e top",
+            "logout": "pkill -x synui",
+            "reboot": "sudo systemctl reboot",
+            "poweroff": "sudo systemctl poweroff"
+        }
+    },
+    "clock": { "format": "{:%H:%M:%S  %Y-%m-%d}", "interval": 1 },
+    "cpu": { "format": "CPU {usage}%", "interval": 2 },
+    "memory": { "format": "MEM {percentage}%", "interval": 5 },
+    "network": {
+        "format-wifi": "NET {essid}",
+        "format-ethernet": "NET {ipaddr}",
+        "format-disconnected": "NET offline",
+        "interval": 5
+    },
+    "pulseaudio": {
+        "format": "VOL {volume}%",
+        "format-muted": "VOL muted",
+        "format-icons": {
+            "default": ["", "", ""]
+        },
+        "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
+        "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +5%",
+        "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -5%"
+    }
+}

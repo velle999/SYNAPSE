@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="terminal">
+        <property name="label">Terminal</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="aishell">
+        <property name="label">AI Shell (synsh)</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="status">
+        <property name="label">System Status</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="network">
+        <property name="label">Network Setup</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="monitor">
+        <property name="label">Process Monitor</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="sep1"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="logout">
+        <property name="label">Log Out</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="reboot">
+        <property name="label">Reboot</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="poweroff">
+        <property name="label">Shut Down</property>
+      </object>
+    </child>
+  </object>
+</interface>
