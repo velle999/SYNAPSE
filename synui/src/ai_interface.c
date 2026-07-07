@@ -83,6 +83,13 @@ static int write_all(int fd, const void *buf, size_t n)
     return 0;
 }
 
+/* Real on-device inference for even a short prompt has been observed to take
+ * ~38s (CPU-only local model, growing context) — a short timeout here isn't
+ * "safety margin", it fires on every normal query and permanently wedges the
+ * overlay in "reconnecting…" (see ai_thread_fn). 90s gives headroom above
+ * that observed worst case while still bounding a truly wedged synapd. */
+#define AI_QUERY_TIMEOUT_SEC 90
+
 /* Connect to synapd with send/receive timeouts. The timeouts matter on
  * every connection (not just the first): without them a wedged synapd
  * blocks the AI thread in recv() forever, and ai_thread_stop()'s join then
@@ -93,7 +100,7 @@ static int ai_connect_synapd(void)
     if (fd < 0) return -1;
     struct sockaddr_un addr = { .sun_family = AF_UNIX };
     strncpy(addr.sun_path, SYNAPD_SOCKET, sizeof(addr.sun_path) - 1);
-    struct timeval tv = { .tv_sec = 3 };
+    struct timeval tv = { .tv_sec = AI_QUERY_TIMEOUT_SEC };
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
@@ -201,6 +208,14 @@ static void *ai_thread_fn(void *arg)
         int ok = ai_thread_synapd_query(synapd_fd, &req_id,
                                          req.prompt,
                                          response, sizeof(response));
+        if (ok == 0) {
+            /* Clear a stale "reconnecting…"/"offline" label left over from an
+             * earlier failure — this is the only place a mid-run recovery
+             * gets reflected, since a successful reconnect above doesn't by
+             * itself mean the round trip will succeed. */
+            strncpy(s->overlay.synapd_status, "⚡ online",
+                    sizeof(s->overlay.synapd_status) - 1);
+        }
         if (ok < 0) {
             close(synapd_fd);
             synapd_fd = -1;
