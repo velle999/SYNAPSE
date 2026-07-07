@@ -548,6 +548,9 @@ struct syn_server {
 
     /* AI thread communication */
     atomic_int      ai_connected;
+    atomic_int      ai_synapd_fd;       /* live synapd socket, so stop can
+                                          * shutdown() it and unblock a
+                                          * mid-query recv() (see sec_fd) */
     int             ai_disabled;        /* --no-ai: AI thread never starts */
     int             ai_pipe_req[2];
     int             ai_pipe_resp[2];

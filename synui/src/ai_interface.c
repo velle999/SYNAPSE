@@ -179,6 +179,7 @@ static void *ai_thread_fn(void *arg)
     synapd_fd = ai_connect_synapd();
     if (synapd_fd >= 0) {
         atomic_store(&s->ai_connected, 1);
+        atomic_store(&s->ai_synapd_fd, synapd_fd);
         wlr_log(WLR_INFO, "ai_thread: connected to synapd");
         strncpy(s->overlay.synapd_status, "⚡ online",
                 sizeof(s->overlay.synapd_status) - 1);
@@ -202,6 +203,7 @@ static void *ai_thread_fn(void *arg)
             synapd_fd = ai_connect_synapd();
             if (synapd_fd < 0) continue;
             atomic_store(&s->ai_connected, 1);
+            atomic_store(&s->ai_synapd_fd, synapd_fd);
         }
 
         memset(response, 0, sizeof(response));
@@ -217,6 +219,7 @@ static void *ai_thread_fn(void *arg)
                     sizeof(s->overlay.synapd_status) - 1);
         }
         if (ok < 0) {
+            atomic_store(&s->ai_synapd_fd, -1);
             close(synapd_fd);
             synapd_fd = -1;
             atomic_store(&s->ai_connected, 0);
@@ -237,6 +240,7 @@ static void *ai_thread_fn(void *arg)
             wlr_log(WLR_ERROR, "ai_thread: failed to write response to compositor");
     }
 
+    atomic_store(&s->ai_synapd_fd, -1);
     if (synapd_fd >= 0) close(synapd_fd);
     return NULL;
 }
@@ -266,6 +270,7 @@ int ai_thread_start(syn_server_t *s)
     fcntl(s->ai_pipe_resp[0], F_SETFL, O_NONBLOCK);
 
     atomic_store(&s->ai_connected, 0);
+    atomic_store(&s->ai_synapd_fd, -1);
 
     if (pthread_create(&s->ai_thread, NULL, ai_thread_fn, s) != 0) {
         close(s->ai_pipe_req[0]);  close(s->ai_pipe_req[1]);
@@ -278,11 +283,18 @@ int ai_thread_start(syn_server_t *s)
     return 0;
 }
 
-/* Shut the AI thread down: closing the request pipe's write end makes its
- * blocking read() return 0, which exits the loop. Join, then close the
- * remaining pipe ends. Safe to call unconditionally. */
+/* Shut the AI thread down. Closing the request pipe's write end makes its
+ * blocking read() return 0 when it's idle waiting for work — but a query
+ * already in flight is blocked in recv() on synapd_fd instead, which that
+ * close doesn't touch, so shutdown() it too (same fix as secfeed_stop()'s
+ * sec_fd) or a slow/wedged synapd stalls the whole compositor shutdown for
+ * up to AI_QUERY_TIMEOUT_SEC. Join, then close the remaining pipe ends.
+ * Safe to call unconditionally. */
 void ai_thread_stop(syn_server_t *s)
 {
+    int fd = atomic_load(&s->ai_synapd_fd);
+    if (fd >= 0)
+        shutdown(fd, SHUT_RDWR);
     if (s->ai_pipe_req[1] >= 0) {
         close(s->ai_pipe_req[1]);
         s->ai_pipe_req[1] = -1;
