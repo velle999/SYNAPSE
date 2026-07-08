@@ -27,6 +27,7 @@ build_component() {
     [ -d "$name/src" ]     && dirs+=("$name/src/")
     [ -d "$name/include" ] && dirs+=("$name/include/")
     [ -f "$name/meson.build" ] && dirs+=("$name/meson.build")
+    [ -d "$name/data" ]    && dirs+=("$name/data/")
     [ -d "$name/config" ]  && dirs+=("$name/config/")
     [ -d "$name/systemd" ] && dirs+=("$name/systemd/")
     [ -d "$name/rules" ]   && dirs+=("$name/rules/")

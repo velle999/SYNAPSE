@@ -218,6 +218,26 @@ typedef enum {
     SYN_WP_SRC_MATRIX,        /* animated kanji rain (matrix.c) */
 } syn_wallpaper_src_t;
 
+/* Which screen edge the dock lives on (dock.c). BOTTOM/TOP render a
+ * horizontal bar; LEFT/RIGHT render a vertical column. Set in synuirc
+ * (`dock_edge`) or by dragging the dock to another edge. */
+typedef enum {
+    SYN_DOCK_EDGE_BOTTOM = 0,
+    SYN_DOCK_EDGE_TOP,
+    SYN_DOCK_EDGE_LEFT,
+    SYN_DOCK_EDGE_RIGHT,
+} syn_dock_edge_t;
+
+/* Dock right-click context-menu actions (dock.c / render.c). */
+typedef enum {
+    SYN_DOCKACT_PIN = 0,   /* add app_id to the pinned set */
+    SYN_DOCKACT_UNPIN,     /* remove it from the pinned set */
+    SYN_DOCKACT_OPEN,      /* launch (.desktop Exec) — not currently running */
+    SYN_DOCKACT_NEWWIN,    /* launch another instance — already running */
+    SYN_DOCKACT_QUIT,      /* close every mapped window of this app_id */
+} syn_dockact_t;
+#define SYN_DOCKMENU_MAX 6
+
 typedef struct {
     char  terminal[64];
     char  autostart[SYN_AUTOSTART_MAX][128];
@@ -270,9 +290,13 @@ typedef struct {
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
      * it takes zero layout space, shown it floats above window content. */
     int   dock_enabled;         /* default 1 */
-    int   dock_height;          /* px, default 64 */
-    int   dock_hover_margin;    /* px trigger strip at the bottom edge, default 4 */
+    int   dock_height;          /* px thickness, default 64 */
+    int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
+    syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
 #define DOCK_PIN_MAX 16
+    /* Runtime-mutable pinned set: seeded from synuirc `dock_pin`, then
+     * overridden by ~/.config/synui/dock.state and edited live via the dock
+     * context menu (dock_pin_toggle). */
     char  dock_pin[DOCK_PIN_MAX][128];
     int   dock_pin_count;
 
@@ -517,6 +541,33 @@ struct syn_server {
      * every output's own syn_output::dock tree. */
     syn_dock_entry_t dock_entries[DOCK_MAX_ENTRIES];
     int              dock_entry_count;
+
+    /* dock.c: drag-to-reposition state. While active on an output, that
+     * output's dock floats under the cursor and stays shown; on release it
+     * snaps to the nearest screen edge. */
+    struct {
+        int           active;   /* a press landed on a dock bar background */
+        int           moved;    /* passed the start threshold → really dragging */
+        syn_output_t *output;   /* output the drag started on */
+        double        start_x, start_y;   /* press point (layout coords) */
+        double        float_x, float_y;   /* current bar top-left while floating */
+    } dock_drag;
+
+    /* dock.c / render.c: right-click context menu for a dock icon. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } dockmenu_ui;
+    struct {
+        int  visible;
+        char app_id[128];                 /* snapshot (entries rebuild live) */
+        syn_dockact_t actions[SYN_DOCKMENU_MAX];
+        int  action_count;
+        int  selected;                    /* hovered item, -1 = none */
+        int  x, y, w, h;                  /* menu rect, layout coords */
+    } dockmenu;
 
     /* Scene-graph z-order (bottom→top): bg_rect, wallpaper_tree,
      * layer[BACKGROUND], layer[BOTTOM], window_tree, layer[TOP],
@@ -886,6 +937,12 @@ bool matrix_output_frame(syn_output_t *o);        /* render one frame; true = ke
 void matrix_output_destroy(syn_output_t *o);      /* drop this output's buffer + swapchain */
 
 /* ── wppick.c (wallpaper selector GUI) ───────────────────── */
+/* The picker's option table (shared with render.c). token is interpreted the
+ * same way the synuirc `wallpaper` key is. */
+struct wppick_option { const char *label; const char *desc; const char *token; };
+extern const struct wppick_option wppick_options[];
+extern const int wppick_option_count;
+
 void wppick_show(syn_server_t *s);
 void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
@@ -941,6 +998,36 @@ void dock_relayout(syn_server_t *s);
  * route clicks before falling back to normal view hit-testing. */
 syn_dock_entry_t *dock_entry_at(syn_server_t *s, double lx, double ly);
 /* Click on a running entry's icon: focuses/raises primary_view, minimizes it
- * if it was already focused, or restores+focuses it if minimized. No-op for
- * pinned-but-not-running entries (launching is not implemented yet). */
+ * if it was already focused, or restores+focuses it if minimized. A pinned-
+ * but-not-running entry launches its .desktop Exec. */
 void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e);
+
+/* Persisted dock state (~/.config/synui/dock.state): the edge + the pinned
+ * app_id set. Overrides synuirc when present (delete the file to revert). */
+void dock_state_load(syn_config_t *cfg);
+void dock_state_save(syn_server_t *s);
+/* Toggle app_id in the pinned set, persist, and rebuild the dock. */
+void dock_pin_toggle(syn_server_t *s, const char *app_id);
+
+/* Drag-to-reposition (input.c wires these to pointer button/motion). A press
+ * on a dock bar's background (not an icon) begins a drag; motion floats the
+ * bar under the cursor; release snaps it to the nearest screen edge. */
+void dock_drag_begin(syn_server_t *s, double lx, double ly);
+void dock_drag_motion(syn_server_t *s, double lx, double ly);
+void dock_drag_end(syn_server_t *s, double lx, double ly);
+/* True if (lx,ly) is over a shown dock bar's background (not an icon); sets
+ * *out to that output. Used to distinguish an icon click from a bar drag. */
+bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out);
+
+/* Right-click context menu (mouse-driven; rendered by synui_render_dockmenu).
+ * open() builds the item list for an entry and shows the menu at (lx,ly);
+ * motion() updates the hover highlight; click() runs the item under the
+ * cursor (or dismisses on an outside click); close() hides it. */
+void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly);
+void dockmenu_motion(syn_server_t *s, double lx, double ly);
+void dockmenu_click(syn_server_t *s, double lx, double ly);
+void dockmenu_close(syn_server_t *s);
+void synui_render_dockmenu(syn_server_t *s);
+
+/* Launch a shell command (fork/exec); exposed for dock launches. */
+void synui_spawn(const char *cmd);

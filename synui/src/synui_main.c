@@ -36,6 +36,7 @@
 #include <sys/wait.h>
 
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -209,6 +210,15 @@ static void output_frame(struct wl_listener *listener, void *data)
         }
     }
 
+    /* Animated matrix wallpaper: render this frame into the output's
+     * matrix_buf (a wallpaper_tree sibling) before compositing, then keep
+     * frames coming so it animates at the output's refresh rate. Damage the
+     * scene so the effects/plain commit below actually re-renders. */
+    if (matrix_output_frame(output)) {
+        wlr_damage_ring_add_whole(&scene_output->damage_ring);
+        wlr_output_schedule_frame(output->wlr_output);
+    }
+
     /* GLES post-process pass when available; plain scene commit otherwise
      * (and whenever any step of the effects pass fails). */
     if (!effects_output_commit(output))
@@ -248,6 +258,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * semantics). Skipped during shutdown, when the scene graph is gone. */
     if (!server->shutting_down) {
         wallpaper_output_destroy(output);
+        matrix_output_destroy(output);
         dock_output_destroy(output);
         for (int i = 0; i < WORKSPACE_MAX; i++) {
             syn_workspace_t *ws = &server->workspaces[i];
@@ -831,6 +842,11 @@ int synui_init(syn_server_t *s)
      * stays off on pixman. */
     effects_init(s);
 
+    /* Optional animated "matrix rain" wallpaper (matrix.c); like effects it
+     * needs GLES2 and stays disabled (falling back to the static wallpaper)
+     * otherwise. Must run after the renderer exists. */
+    matrix_init(s);
+
     /* Compositor protocols */
     s->compositor = wlr_compositor_create(s->display, 5, s->renderer);
     wlr_subcompositor_create(s->display);
@@ -1041,6 +1057,7 @@ void synui_destroy(syn_server_t *s)
     secfeed_stop(s);
     synmon_stop(s);
     effects_finish(s);
+    matrix_finish(s);
 
     /* Tear down Xwayland first so its surfaces/listeners are gone before we
      * destroy the display and scene. */

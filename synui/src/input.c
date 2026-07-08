@@ -248,6 +248,12 @@ static void spawn(const char *cmd)
     }
 }
 
+/* Public wrapper so dock.c can launch a pinned app's .desktop Exec. */
+void synui_spawn(const char *cmd)
+{
+    spawn(cmd);
+}
+
 /* Execute a bind action (see config.c for the names and defaults). */
 static void binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
@@ -316,6 +322,8 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         spawn("foot -e synsh -c 'syn ask'");
     } else if (strcmp(action, "displays") == 0) {
         dispcfg_toggle(s);
+    } else if (strcmp(action, "wallpaper") == 0) {
+        wppick_toggle(s);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
     } else if (strcmp(action, "menu") == 0) {
@@ -434,11 +442,23 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     }
 
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        /* Escape dismisses the dock context menu. */
+        if (s->dockmenu.visible) {
+            for (int i = 0; i < nsyms; i++)
+                if (syms[i] == XKB_KEY_Escape) { dockmenu_close(s); return; }
+        }
+
         /* Display settings panel: modal for unmodified keys; modified
          * combos (Super+…) fall through to the bind table below. */
         bool absorbed = false;
         for (int i = 0; i < nsyms; i++)
             if (dispcfg_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Wallpaper selector: same modal contract as the display panel. */
+        for (int i = 0; i < nsyms; i++)
+            if (wppick_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -721,7 +741,16 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
-    /* Let the auto-hide dock react to the cursor reaching the bottom edge. */
+    /* Dock drag-to-reposition floats the bar under the cursor. */
+    if (s->dock_drag.active) {
+        dock_drag_motion(s, s->cursor->x, s->cursor->y);
+        return;
+    }
+    /* Context menu hover highlight follows the cursor. */
+    if (s->dockmenu.visible)
+        dockmenu_motion(s, s->cursor->x, s->cursor->y);
+
+    /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);
 
     pointer_update_focus(s, time_msec);
@@ -757,6 +786,13 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
 {
     notify_activity(s);
 
+    /* A dock drag keeps cursor_mode == PASSTHROUGH, so catch its release
+     * before the generic grab-release below. */
+    if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->dock_drag.active) {
+        dock_drag_end(s, s->cursor->x, s->cursor->y);
+        return;
+    }
+
     /* A release always ends an in-progress grab and is swallowed. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED &&
         s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
@@ -766,11 +802,37 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
     }
 
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        /* The dock context menu is modal for the pointer while open: a left
+         * click runs the item under the cursor, any other click dismisses. */
+        if (s->dockmenu.visible) {
+            if (button == BTN_LEFT)
+                dockmenu_click(s, s->cursor->x, s->cursor->y);
+            else
+                dockmenu_close(s);
+            return;
+        }
+
+        /* Right-click a dock icon → its context menu. */
+        if (button == BTN_RIGHT) {
+            syn_dock_entry_t *e =
+                dock_entry_at(s, s->cursor->x, s->cursor->y);
+            if (e) {
+                dockmenu_open(s, e, s->cursor->x, s->cursor->y);
+                return;
+            }
+        }
+
         if (button == BTN_LEFT) {
             syn_dock_entry_t *dock_hit =
                 dock_entry_at(s, s->cursor->x, s->cursor->y);
             if (dock_hit) {
                 dock_entry_click(s, dock_hit);
+                return;
+            }
+            /* Press on the bar background (not an icon) begins a drag that,
+             * on release, snaps the dock to the nearest screen edge. */
+            if (dock_bar_at(s, s->cursor->x, s->cursor->y, NULL)) {
+                dock_drag_begin(s, s->cursor->x, s->cursor->y);
                 return;
             }
         }

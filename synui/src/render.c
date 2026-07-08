@@ -132,6 +132,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "AI Command Bar",   "Super+Space",   "cmdbar"   },
     { "Neural Overlay",   "Super+A",       "overlay"  },
     { "Display Settings", "Super+D",       "displays" },
+    { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Quit synui",       "Super+Shift+Q", "quit"     },
 };
 const int synui_welcome_menu_len =
@@ -655,6 +656,160 @@ void synui_render_dispcfg(syn_server_t *s)
     set_scene_buffer(&s->dispcfg_ui.text_buf, s->dispcfg_ui.tree, buf);
 }
 
+/* ── Wallpaper selector (wppick.c) ───────────────────────── */
+
+void synui_render_wppick(syn_server_t *s)
+{
+    if (!s->wppick.visible) {
+        wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 48, top = 58, pad = 22;
+    int pw = 440;
+    int ph = top + wppick_option_count * row_h + 56;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->wppick_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->wppick_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->wppick_ui.bg)
+        s->wppick_ui.bg = wlr_scene_rect_create(s->wppick_ui.tree,
+                                                pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->wppick_ui.bg, pw, ph);
+    if (!s->wppick_ui.accent)
+        s->wppick_ui.accent = wlr_scene_rect_create(s->wppick_ui.tree,
+                                                    pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Title */
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "WALLPAPER");
+
+    /* Separator */
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 42);
+    cairo_line_to(cr, pw - 18, 42);
+    cairo_stroke(cr);
+
+    /* Options: highlighted row gets a filled bar + accent border. */
+    for (int i = 0; i < wppick_option_count; i++) {
+        int sel = (i == s->wppick.selected);
+        int ry = top + i * row_h;
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 12, ry, pw - 24, row_h - 8);
+            cairo_fill(cr);
+            cairo_set_line_width(cr, 2);
+            cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+            cairo_rectangle(cr, 12.5, ry + 0.5, pw - 25, row_h - 9);
+            cairo_stroke(cr);
+        }
+
+        cairo_set_font_size(cr, 15);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 22);
+        cairo_show_text(cr, wppick_options[i].label);
+
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
+                              sel ? 0.85 : 0.60, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 38);
+        cairo_show_text(cr, wppick_options[i].desc);
+    }
+
+    /* Controls legend */
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 20);
+    cairo_show_text(cr, "Up/Down preview \xc2\xb7 Enter/Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->wppick_ui.text_buf, s->wppick_ui.tree, buf);
+}
+
+/* ── Dock right-click context menu (dock.c) ──────────────── */
+
+static const char *dockact_label(syn_dockact_t a)
+{
+    switch (a) {
+    case SYN_DOCKACT_PIN:    return "Pin to Dock";
+    case SYN_DOCKACT_UNPIN:  return "Unpin from Dock";
+    case SYN_DOCKACT_OPEN:   return "Open";
+    case SYN_DOCKACT_NEWWIN: return "New Window";
+    case SYN_DOCKACT_QUIT:   return "Quit";
+    }
+    return "?";
+}
+
+void synui_render_dockmenu(syn_server_t *s)
+{
+    if (!s->dockmenu.visible) {
+        wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
+        return;
+    }
+
+    int pw = s->dockmenu.w, ph = s->dockmenu.h;
+    const int item_h = 30;
+
+    wlr_scene_node_set_position(&s->dockmenu_ui.tree->node,
+                                s->dockmenu.x, s->dockmenu.y);
+    wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->dockmenu_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
+    if (!s->dockmenu_ui.bg)
+        s->dockmenu_ui.bg = wlr_scene_rect_create(s->dockmenu_ui.tree,
+                                                  pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->dockmenu_ui.bg, pw, ph);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Border */
+    cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 0.35);
+    cairo_set_line_width(cr, 1);
+    cairo_rectangle(cr, 0.5, 0.5, pw - 1, ph - 1);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < s->dockmenu.action_count; i++) {
+        int iy = 4 + i * item_h;
+        int sel = (i == s->dockmenu.selected);
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 3, iy, pw - 6, item_h);
+            cairo_fill(cr);
+        }
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.82, sel ? 1.0 : 0.82,
+                              sel ? 0.99 : 0.90, 1.0);
+        cairo_move_to(cr, 14, iy + 20);
+        cairo_show_text(cr, dockact_label(s->dockmenu.actions[i]));
+    }
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->dockmenu_ui.text_buf, s->dockmenu_ui.tree, buf);
+}
+
 /* ── Initialize all UI scene trees ───────────────────────── */
 
 void synui_ui_init(syn_server_t *s)
@@ -663,12 +818,16 @@ void synui_ui_init(syn_server_t *s)
     s->welcome_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->overlay_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dispcfg_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->wppick_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
+    s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
     /* All hidden until explicitly shown */
     wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->overlay_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 
     /* Render welcome screen (uses fallback 1920x1080 until output connects) */

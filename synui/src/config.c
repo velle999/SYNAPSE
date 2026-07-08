@@ -166,6 +166,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+n",         "minimize_toggle" },
         { "super+shift+n",   "minimize_restore" },
         { "super+backspace", "ai_ask" },
+        { "super+w",         "wallpaper" },
         { "super+shift+w",   "wallpaper_reload" },
     };
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
@@ -226,10 +227,12 @@ void synui_config_load(syn_config_t *cfg)
 
     cfg->wallpaper[0]   = '\0';
     cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
+    cfg->wallpaper_src  = SYN_WP_SRC_IMAGE;
 
     cfg->dock_enabled      = 1;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
+    cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
     cfg->dock_pin_count    = 0;
 
     cfg->bind_count = 0;
@@ -253,7 +256,12 @@ void synui_config_load(syn_config_t *cfg)
         f = fopen(paths[i], "r");
         if (f) break;
     }
-    if (!f) return;
+    if (!f) {
+        /* No config file: still honour persisted picker/dock choices. */
+        wallpaper_state_load(cfg);
+        dock_state_load(cfg);
+        return;
+    }
 
     /* Config file found — reset autostart so file entries replace defaults */
     cfg->autostart_count = 0;
@@ -349,8 +357,27 @@ void synui_config_load(syn_config_t *cfg)
             if (cfg->accel_speed >  1.0f) cfg->accel_speed =  1.0f;
             cfg->accel_speed_set = 1;
         }
-        else if (strcmp(key, "wallpaper") == 0)
-            strncpy(cfg->wallpaper, val, sizeof(cfg->wallpaper) - 1);
+        else if (strcmp(key, "wallpaper") == 0) {
+            /* Built-in keywords select a bundled wallpaper; anything else is
+             * a file path for the static wallpaper.c backend.
+             *   matrix  → animated GLES2 kanji rain (matrix.c)
+             *   default → the bundled Synapse image (/usr/share/synui)
+             *   none    → solid bg_color
+             * (see also the live wppick.c picker / wallpaper.state). */
+            if (strcmp(val, "matrix") == 0) {
+                cfg->wallpaper_src = SYN_WP_SRC_MATRIX;
+            } else if (strcmp(val, "default") == 0) {
+                cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+                strncpy(cfg->wallpaper, SYNUI_DATADIR "/wallpaper.png",
+                        sizeof(cfg->wallpaper) - 1);
+            } else if (strcmp(val, "none") == 0) {
+                cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+                cfg->wallpaper[0] = '\0';
+            } else {
+                cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+                strncpy(cfg->wallpaper, val, sizeof(cfg->wallpaper) - 1);
+            }
+        }
         else if (strcmp(key, "wallpaper_mode") == 0) {
             if      (strcmp(val, "fill")    == 0) cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
             else if (strcmp(val, "fit")     == 0) cfg->wallpaper_mode = SYN_WALLPAPER_FIT;
@@ -360,6 +387,13 @@ void synui_config_load(syn_config_t *cfg)
         }
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
+        else if (strcmp(key, "dock_edge") == 0) {
+            if      (strcmp(val, "bottom") == 0) cfg->dock_edge = SYN_DOCK_EDGE_BOTTOM;
+            else if (strcmp(val, "top")    == 0) cfg->dock_edge = SYN_DOCK_EDGE_TOP;
+            else if (strcmp(val, "left")   == 0) cfg->dock_edge = SYN_DOCK_EDGE_LEFT;
+            else if (strcmp(val, "right")  == 0) cfg->dock_edge = SYN_DOCK_EDGE_RIGHT;
+            else wlr_log(WLR_ERROR, "synui: dock_edge: unknown '%s'", val);
+        }
         else if (strcmp(key, "dock_height") == 0) {
             cfg->dock_height = atoi(val);
             if (cfg->dock_height < 32)  cfg->dock_height = 32;
@@ -394,4 +428,10 @@ void synui_config_load(syn_config_t *cfg)
     }
 
     fclose(f);
+
+    /* A live picker choice (wallpaper.state) is the most recent explicit
+     * intent, so it overrides the synuirc `wallpaper` line. Delete the state
+     * file to hand control back to synuirc. Same for the dock's edge/pins. */
+    wallpaper_state_load(cfg);
+    dock_state_load(cfg);
 }

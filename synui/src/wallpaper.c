@@ -230,6 +230,17 @@ static void paint_output(syn_output_t *o)
 {
     syn_server_t *s = o->server;
 
+    /* The animated matrix backend owns the background instead; keep the
+     * static buffer torn down so the two never both paint into
+     * wallpaper_tree. */
+    if (s->config.wallpaper_src == SYN_WP_SRC_MATRIX) {
+        if (o->wallpaper_buf) {
+            wlr_scene_node_destroy(&o->wallpaper_buf->node);
+            o->wallpaper_buf = NULL;
+        }
+        return;
+    }
+
     if (!s->wallpaper.src) {
         if (o->wallpaper_buf) {
             wlr_scene_node_destroy(&o->wallpaper_buf->node);
@@ -270,7 +281,8 @@ void wallpaper_init(syn_server_t *s)
     s->wallpaper_tree = wlr_scene_tree_create(&s->scene->tree);
     s->wallpaper.src = NULL;
 
-    if (s->config.wallpaper[0] != '\0')
+    if (s->config.wallpaper_src == SYN_WP_SRC_IMAGE &&
+        s->config.wallpaper[0] != '\0')
         s->wallpaper.src = wallpaper_decode(s->config.wallpaper);
 }
 
@@ -300,8 +312,80 @@ void wallpaper_reload(syn_server_t *s)
         cairo_surface_destroy(s->wallpaper.src);
         s->wallpaper.src = NULL;
     }
-    if (s->config.wallpaper[0] != '\0')
+    if (s->config.wallpaper_src == SYN_WP_SRC_IMAGE &&
+        s->config.wallpaper[0] != '\0')
         s->wallpaper.src = wallpaper_decode(s->config.wallpaper);
 
     wallpaper_relayout(s);
+}
+
+/* ── Persisted picker choice (~/.config/synui/wallpaper.state) ── */
+
+/* Resolve the state-file path into buf. Returns false if $HOME is unset. */
+static bool wallpaper_state_path(char *buf, size_t n)
+{
+    const char *home = getenv("HOME");
+    if (!home || !*home) return false;
+    snprintf(buf, n, "%s/.config/synui/wallpaper.state", home);
+    return true;
+}
+
+/* Interpret one token the same way the synuirc `wallpaper` key does. */
+static void wallpaper_apply_token(syn_config_t *cfg, const char *tok)
+{
+    if (strcmp(tok, "matrix") == 0) {
+        cfg->wallpaper_src = SYN_WP_SRC_MATRIX;
+    } else if (strcmp(tok, "default") == 0) {
+        cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+        strncpy(cfg->wallpaper, SYNUI_DATADIR "/wallpaper.png",
+                sizeof(cfg->wallpaper) - 1);
+        cfg->wallpaper[sizeof(cfg->wallpaper) - 1] = '\0';
+    } else if (strcmp(tok, "none") == 0) {
+        cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+        cfg->wallpaper[0] = '\0';
+    } else {
+        cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+        strncpy(cfg->wallpaper, tok, sizeof(cfg->wallpaper) - 1);
+        cfg->wallpaper[sizeof(cfg->wallpaper) - 1] = '\0';
+    }
+}
+
+void wallpaper_state_load(syn_config_t *cfg)
+{
+    char path[256];
+    if (!wallpaper_state_path(path, sizeof(path))) return;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;   /* no persisted choice — synuirc stands */
+
+    char line[256];
+    if (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p) wallpaper_apply_token(cfg, p);
+    }
+    fclose(f);
+}
+
+void wallpaper_state_save(syn_server_t *s)
+{
+    char path[256];
+    if (!wallpaper_state_path(path, sizeof(path))) return;
+
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: wallpaper: cannot write '%s': %s",
+                path, strerror(errno));
+        return;
+    }
+    /* Persist a token round-trippable by wallpaper_apply_token(). "default"
+     * is stored as the resolved bundled path, so a bare path is fine. */
+    if (s->config.wallpaper_src == SYN_WP_SRC_MATRIX)
+        fputs("matrix\n", f);
+    else if (s->config.wallpaper[0] == '\0')
+        fputs("none\n", f);
+    else
+        fprintf(f, "%s\n", s->config.wallpaper);
+    fclose(f);
 }
