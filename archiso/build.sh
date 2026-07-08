@@ -295,6 +295,7 @@ create_source_tarball() {
     [ -d "${pkg}/src" ]     && items+=("${pkg}/src/")
     [ -d "${pkg}/include" ] && items+=("${pkg}/include/")
     [ -f "${pkg}/meson.build" ] && items+=("${pkg}/meson.build")
+    [ -d "${pkg}/data" ]    && items+=("${pkg}/data/")
     [ -d "${pkg}/config" ]  && items+=("${pkg}/config/")
     [ -d "${pkg}/systemd" ] && items+=("${pkg}/systemd/")
     [ -d "${pkg}/rules" ]   && items+=("${pkg}/rules/")
