@@ -98,6 +98,17 @@ static void *secfeed_thread_fn(void *arg)
             atomic_store(&s->sec_fd, -1);
             close(fd);
             fd = -1;
+            /* Back off before reconnecting. Without this, a synguard that
+             * accepts the connection but immediately closes it (recv returns
+             * EOF on the first read) turns this into a tight
+             * connect→log→EOF→reconnect busy-loop that floods the journal
+             * with "subscribed" lines millions of times a second. Same
+             * sliced wait as the connect-failure path so a shutdown request
+             * isn't stuck behind the full delay. */
+            for (int i = 0; i < 20 && !atomic_load(&s->sec_stop); i++) {
+                struct timespec ts = { 0, 100 * 1000 * 1000 };
+                nanosleep(&ts, NULL);
+            }
             continue;   /* feed dropped — reconnect */
         }
         if (msg.magic != SECFEED_MAGIC || msg.version != SECFEED_VERSION)
