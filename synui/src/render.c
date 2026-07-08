@@ -316,7 +316,7 @@ void synui_render_overlay(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    int pw = 340, ph = 200;
+    int pw = 360, ph = 320;
     int px = ob.x + ob.width - pw - 20, py = ob.y + 20;
 
     wlr_scene_node_set_position(&s->overlay_ui.tree->node, px, py);
@@ -348,11 +348,32 @@ void synui_render_overlay(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    syn_overlay_t *ov = &s->overlay;
+
     /* Title */
     cairo_set_font_size(cr, 13);
     cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
     cairo_move_to(cr, 14, 24);
     cairo_show_text(cr, "NEURAL OVERLAY");
+
+    /* Model badge, right-aligned on the title row. Colour tracks state:
+     * teal = loaded, amber = loading, grey = none/offline. */
+    const char *badge;
+    double br, bg, bb;
+    if (!ov->mon_online) {
+        badge = "\xe2\x97\x8b offline"; br = 0.55; bg = 0.55; bb = 0.60;
+    } else if (strcmp(ov->model, "loaded") == 0) {
+        badge = "\xe2\x9a\xa1 loaded";  br = 0.0;  bg = 0.85; bb = 0.55;
+    } else if (strcmp(ov->model, "loading") == 0) {
+        badge = "\xe2\x97\x8b loading"; br = 0.95; bg = 0.70; bb = 0.20;
+    } else {
+        badge = "\xe2\x97\x8b no model"; br = 0.55; bg = 0.55; bb = 0.60;
+    }
+    cairo_text_extents_t bext;
+    cairo_text_extents(cr, badge, &bext);
+    cairo_set_source_rgba(cr, br, bg, bb, 1.0);
+    cairo_move_to(cr, pw - 14 - bext.width, 24);
+    cairo_show_text(cr, badge);
 
     /* Separator */
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
@@ -362,65 +383,75 @@ void synui_render_overlay(syn_server_t *s)
     cairo_stroke(cr);
 
     int y = 56;
+
+    /* Request counters */
     cairo_set_font_size(cr, 13);
-
-    /* synapd status */
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
-    cairo_move_to(cr, 14, y);
-    cairo_show_text(cr, "synapd:");
+    char stat[96];
+    snprintf(stat, sizeof(stat), "req %lu    active %lu",
+             ov->requests, ov->active);
     cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
-    cairo_move_to(cr, 100, y);
-    cairo_show_text(cr, s->overlay.synapd_status[0]
-                        ? s->overlay.synapd_status : "not connected");
-    y += 24;
-
-    /* Workspace */
-    syn_workspace_t *ws = server_active_workspace(s);
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
     cairo_move_to(cr, 14, y);
-    cairo_show_text(cr, "workspace:");
-    cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
-    char ws_info[64];
-    snprintf(ws_info, sizeof(ws_info), "%s [%d]", ws->name, ws->index + 1);
-    cairo_move_to(cr, 120, y);
-    cairo_show_text(cr, ws_info);
-    y += 24;
+    cairo_show_text(cr, stat);
+    /* Highlight in-flight work in teal when there is any. */
+    if (ov->active > 0) {
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+        cairo_move_to(cr, 14, y + 3);
+        cairo_arc(cr, pw - 22, y - 4, 4, 0, 2 * 3.14159);
+        cairo_fill(cr);
+    }
+    y += 22;
 
-    /* Layout */
-    static const char *layout_names[] = {
-        "tiling", "floating", "monocle", "AI"
-    };
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
-    cairo_move_to(cr, 14, y);
-    cairo_show_text(cr, "layout:");
-    cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
-    cairo_move_to(cr, 100, y);
-    cairo_show_text(cr, layout_names[ws->layout]);
-    y += 24;
-
-    /* Window count */
-    int wc = 0;
-    syn_view_t *v;
-    wl_list_for_each(v, &ws->windows, link)
-        if (v->mapped) wc++;
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
-    cairo_move_to(cr, 14, y);
-    cairo_show_text(cr, "windows:");
-    cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
-    char wcbuf[16];
-    snprintf(wcbuf, sizeof(wcbuf), "%d", wc);
-    cairo_move_to(cr, 110, y);
-    cairo_show_text(cr, wcbuf);
-    y += 24;
-
-    /* AI context line */
-    if (s->overlay.ai_context[0]) {
-        cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.8);
+    /* Context-window gauge */
+    if (ov->ctx_window > 0) {
+        char cbuf[64];
+        snprintf(cbuf, sizeof(cbuf), "ctx %u / %u tok",
+                 ov->ctx_used, ov->ctx_window);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
         cairo_move_to(cr, 14, y);
-        char ctx[52];
-        snprintf(ctx, sizeof(ctx), "%.50s", s->overlay.ai_context);
-        cairo_show_text(cr, ctx);
+        cairo_show_text(cr, cbuf);
+
+        /* Thin fill bar under the text. */
+        double frac = (double)ov->ctx_used / (double)ov->ctx_window;
+        if (frac > 1.0) frac = 1.0;
+        int bx = 14, bw = pw - 28, byy = y + 8, bh = 4;
+        cairo_set_source_rgba(cr, 0.25, 0.25, 0.32, 0.8);
+        cairo_rectangle(cr, bx, byy, bw, bh);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_rectangle(cr, bx, byy, (int)(bw * frac), bh);
+        cairo_fill(cr);
+        y += 26;
+    } else {
+        y += 4;
+    }
+
+    /* Activity feed heading */
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.45, 0.60, 0.65, 0.9);
+    cairo_move_to(cr, 14, y);
+    cairo_show_text(cr, "live activity");
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
+    cairo_move_to(cr, 92, y - 4);
+    cairo_line_to(cr, pw - 14, y - 4);
+    cairo_stroke(cr);
+    y += 18;
+
+    /* Recent synapd events (newest last). */
+    if (ov->activity_n == 0) {
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.7);
+        cairo_move_to(cr, 14, y);
+        cairo_show_text(cr, ov->mon_online ? "(idle — no recent events)"
+                                           : "(synapd unavailable)");
+    } else {
+        cairo_set_font_size(cr, 11);
+        for (int i = 0; i < ov->activity_n; i++) {
+            cairo_set_source_rgba(cr, 0.70, 0.72, 0.80, 0.95);
+            cairo_move_to(cr, 14, y);
+            char line[80];
+            snprintf(line, sizeof(line), "%.72s", ov->activity[i]);
+            cairo_show_text(cr, line);
+            y += 16;
+        }
     }
 
     cairo_destroy(cr);

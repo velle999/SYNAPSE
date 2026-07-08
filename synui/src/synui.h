@@ -131,11 +131,26 @@ typedef struct {
 } syn_cmdbar_t;
 
 /* ── Neural overlay ──────────────────────────────────────── */
+/* One line of synapd's recent-activity feed (from SYN_MSG_CONTEXT_GET). */
+#define OVERLAY_ACTIVITY_MAX  8
+
 typedef struct {
     int    visible;
     char   synapd_status[64];
     char   ai_context[256];
     time_t last_update;
+
+    /* Live snapshot of what synapd is doing, refreshed by synapd_mon.c while
+     * the overlay is visible. mon_online reflects the last poll, not just
+     * socket connectivity (synapd_status above). */
+    int           mon_online;
+    char          model[16];        /* "loaded" | "loading" | "none" */
+    unsigned long requests;         /* total served since start */
+    unsigned long active;           /* queries in flight right now */
+    unsigned      ctx_used;         /* context tokens used */
+    unsigned      ctx_window;       /* context window size (tokens) */
+    char          activity[OVERLAY_ACTIVITY_MAX][100];  /* recent events */
+    int           activity_n;
 } syn_overlay_t;
 
 /* ── AI context attached to a window ─────────────────────── */
@@ -181,12 +196,27 @@ typedef struct {
 /* ── Configuration ───────────────────────────────────────── */
 #define SYN_AUTOSTART_MAX 8
 
+/* Install prefix for bundled assets (wallpaper.png, kanji_atlas.png).
+ * Normally injected by meson (-DSYNUI_DATADIR); fall back to the default. */
+#ifndef SYNUI_DATADIR
+#define SYNUI_DATADIR "/usr/share/synui"
+#endif
+
 typedef enum {
     SYN_WALLPAPER_FILL = 0,   /* cover, cropped (default) */
     SYN_WALLPAPER_FIT,        /* contain, letterboxed */
     SYN_WALLPAPER_STRETCH,    /* non-uniform scale to exact size */
     SYN_WALLPAPER_CENTER,     /* 1:1, cropped/padded */
 } syn_wallpaper_mode_t;
+
+/* Which wallpaper backend paints the background. IMAGE is the static
+ * wallpaper.c path (config `wallpaper` = a file path, or empty = solid
+ * bg_color); MATRIX is the animated GLES2 rain (matrix.c). Selected in
+ * synuirc (`wallpaper = matrix`) or live via the wppick.c picker. */
+typedef enum {
+    SYN_WP_SRC_IMAGE = 0,     /* static image / solid (wallpaper.c) */
+    SYN_WP_SRC_MATRIX,        /* animated kanji rain (matrix.c) */
+} syn_wallpaper_src_t;
 
 typedef struct {
     char  terminal[64];
@@ -231,9 +261,10 @@ typedef struct {
     int   accel_speed_set;
 
     /* Background image (wallpaper.c); empty path = no wallpaper (solid
-     * bg_color shows instead). */
+     * bg_color shows instead). Ignored when wallpaper_src == MATRIX. */
     char                  wallpaper[256];
     syn_wallpaper_mode_t  wallpaper_mode;
+    syn_wallpaper_src_t   wallpaper_src;   /* IMAGE (default) or MATRIX */
 
     /* macOS-style auto-hide dock (dock.c). Mirrored on every output; never
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
@@ -374,6 +405,13 @@ struct syn_output {
     /* wallpaper.c: this output's painted background, parented under
      * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
     struct wlr_scene_buffer *wallpaper_buf;
+
+    /* matrix.c: the animated wallpaper's per-frame GPU buffer + swapchain,
+     * a sibling of wallpaper_buf under wallpaper_tree. Only one of the two
+     * is ever populated (chosen by config.wallpaper_src). NULL when the
+     * matrix wallpaper isn't active on this output. */
+    struct wlr_scene_buffer *matrix_buf;
+    struct wlr_swapchain    *matrix_swapchain;
 
     /* dock.c: this output's own mirror of the auto-hide dock. A top-level
      * scene tree (sibling of the welcome/overlay/dispcfg UI trees, not
@@ -548,6 +586,23 @@ struct syn_server {
 
     syn_dispcfg_t   dispcfg;
 
+    /* Wallpaper selector panel (wppick.c) — a compositor-drawn modal picker
+     * (Super+W) for switching between the built-in wallpapers live. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } wppick_ui;
+    struct {
+        int visible;
+        int selected;   /* highlighted entry into the wppick option table */
+    } wppick;
+
+    /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
+     * (non-GLES2 renderer) or never initialized. */
+    struct syn_matrix *matrix;
+
     /* AI thread communication */
     atomic_int      ai_connected;
     atomic_int      ai_synapd_fd;       /* live synapd socket, so stop can
@@ -577,6 +632,18 @@ struct syn_server {
     int        sec_running;   /* thread created; join on shutdown */
     atomic_int sec_stop;      /* tells the feed thread to exit */
     atomic_int sec_fd;        /* feed socket, so stop can shutdown() it */
+
+    /* synapd activity monitor: a thread polls synapd's STATUS + CONTEXT_GET
+     * while the neural overlay is open and forwards a snapshot over
+     * synmon_pipe; an event-loop fd source drains it and refreshes the
+     * overlay. Same shutdown-fd discipline as the feed above. */
+    int        synmon_pipe[2];
+    pthread_t  synmon_thread;
+    int        synmon_running;
+    atomic_int synmon_stop;    /* tells the monitor thread to exit */
+    atomic_int synmon_fd;      /* poll socket, so stop can shutdown() it */
+    atomic_int synmon_want;    /* 1 while the overlay is visible → poll fast */
+    struct wl_event_source *synmon_src;  /* pipe read-end in the event loop */
 
     /* Set once teardown begins so output_destroy (fired by the backend during
      * shutdown, after the scene graph is gone) skips its re-layout path. */
@@ -774,6 +841,11 @@ void secfeed_start(syn_server_t *s);     /* subscribe to synguard verdicts */
 void secfeed_stop(syn_server_t *s);      /* join the thread, close the pipe */
 void secfeed_dispatch(syn_server_t *s);  /* drain feed, colour windows (frame loop) */
 
+/* ── synapd_mon.c ────────────────────────────────────────── */
+void synmon_start(syn_server_t *s);      /* poll synapd status/activity */
+void synmon_stop(syn_server_t *s);       /* join the thread, close the pipe */
+void synmon_set_active(syn_server_t *s, int on);  /* poll fast while overlay open */
+
 /* ── config.c ────────────────────────────────────────────── */
 void synui_config_load(syn_config_t *cfg);
 
@@ -799,6 +871,26 @@ void wallpaper_output_created(syn_output_t *o);   /* paint this output (server_n
 void wallpaper_output_destroy(syn_output_t *o);   /* destroy this output's buffer (output_destroy) */
 void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output_layout_changed) */
 void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from current config */
+
+/* Persisted wallpaper choice (~/.config/synui/wallpaper.state). Written by
+ * the wppick.c picker; applied over the parsed config on every load so a
+ * GUI choice survives restart without rewriting synuirc. */
+void wallpaper_state_save(syn_server_t *s);
+void wallpaper_state_load(syn_config_t *cfg);
+
+/* ── matrix.c (animated wallpaper) ───────────────────────── */
+void matrix_init(syn_server_t *s);                /* compile shader, load atlas (no-op on non-GLES2) */
+void matrix_finish(syn_server_t *s);
+bool matrix_active(syn_server_t *s);              /* config selects matrix AND it initialized */
+bool matrix_output_frame(syn_output_t *o);        /* render one frame; true = keep animating */
+void matrix_output_destroy(syn_output_t *o);      /* drop this output's buffer + swapchain */
+
+/* ── wppick.c (wallpaper selector GUI) ───────────────────── */
+void wppick_show(syn_server_t *s);
+void wppick_hide(syn_server_t *s);
+void wppick_toggle(syn_server_t *s);
+int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+void synui_render_wppick(syn_server_t *s);
 
 /* ── icons.c ─────────────────────────────────────────────── */
 /* Resolved .desktop info for one app_id, cached after first lookup. Matching

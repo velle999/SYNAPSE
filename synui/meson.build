@@ -94,10 +94,13 @@ synui_exe = executable('synui',
     'src/session.c',
     'src/ai_interface.c',
     'src/secfeed.c',
+    'src/synapd_mon.c',
     'src/config.c',
     'src/render.c',
     'src/effects.c',
     'src/wallpaper.c',
+    'src/matrix.c',
+    'src/wppick.c',
     'src/icons.c',
     'src/dock.c',
     xdg_shell_h,
@@ -111,8 +114,15 @@ synui_exe = executable('synui',
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,
                   libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, egl, glesv2],
-  c_args : ['-DWLR_USE_UNSTABLE'],
+  c_args : ['-DWLR_USE_UNSTABLE',
+            '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
   install : true)
+
+# Built-in wallpaper assets (wallpaper selector: matrix.c / wppick.c).
+# SYNUI_DATADIR points the compositor at these at runtime.
+synui_datadir = get_option('prefix') / get_option('datadir') / 'synui'
+install_data('data/wallpaper.png',    install_dir : synui_datadir)
+install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
 
 # Headless smoke test: boots the compositor on the headless backend, checks
 # the advertised globals, maps a client (if foot is installed), screenshots

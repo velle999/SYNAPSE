@@ -490,6 +490,9 @@ void cmdbar_submit(syn_server_t *s)
 void overlay_toggle(syn_server_t *s)
 {
     s->overlay.visible = !s->overlay.visible;
+    /* Drive the synapd monitor: poll fast while the panel is on screen, idle
+     * when it's hidden. */
+    synmon_set_active(s, s->overlay.visible);
     if (s->overlay.visible)
         overlay_update(s);
     synui_render_overlay(s);

@@ -990,6 +990,11 @@ int synui_init(syn_server_t *s)
     s->sec_disabled = s->ai_disabled;
     secfeed_start(s);
 
+    /* Monitor synapd's live activity for the neural overlay (no-op without
+     * a synapd socket; polls only while the overlay is open). */
+    if (!s->ai_disabled)
+        synmon_start(s);
+
     /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
     synui_ui_init(s);
 
@@ -1034,6 +1039,7 @@ void synui_destroy(syn_server_t *s)
      * sockets are closed (they'd otherwise leak and trip LeakSanitizer). */
     ai_thread_stop(s);
     secfeed_stop(s);
+    synmon_stop(s);
     effects_finish(s);
 
     /* Tear down Xwayland first so its surfaces/listeners are gone before we
