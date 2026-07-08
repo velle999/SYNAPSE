@@ -20,12 +20,19 @@
 
 #include <cairo.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_output.h>
 #include <wlr/util/log.h>
 
 #include "synui.h"
 
 #define DOCK_ICON_SIZE 48
 #define DOCK_ICON_PAD  8
+
+/* Auto-hide timing. The dock slides fully in/out over DOCK_SLIDE_SECS; once
+ * the cursor leaves it stays put for DOCK_HIDE_DELAY before sliding away, so
+ * brushing past the edge doesn't make it flicker. */
+#define DOCK_SLIDE_SECS 0.16
+#define DOCK_HIDE_DELAY 0.45
 
 /* ── Entry model ─────────────────────────────────────────── */
 
@@ -100,6 +107,54 @@ static void rounded_rect(cairo_t *cr, double x, double y, double w, double h,
     cairo_close_path(cr);
 }
 
+/* Bar geometry for this output's mirror: fully-shown position (bx,by) and
+ * size. Shared by the renderer and the auto-hide tick so both agree on where
+ * the bar lives. */
+static bool dock_geometry(syn_output_t *o, int *bx, int *by,
+                          int *bar_w, int *bar_h)
+{
+    syn_server_t *s = o->server;
+    int n = s->dock_entry_count;
+    int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
+    int w = n > 0 ? n * icon + (n + 1) * pad : pad * 2;
+    int h = s->config.dock_height;
+
+    struct wlr_box ob;
+    output_box_of(s, o, &ob);
+    if (ob.width <= 0 || ob.height <= 0) return false;
+
+    int x = ob.x + (ob.width - w) / 2;
+    if (x < ob.x) x = ob.x;   /* wider than the output: left-align, clip */
+    *bx = x;
+    *by = ob.y + ob.height - h;
+    *bar_w = w;
+    *bar_h = h;
+    return true;
+}
+
+/* Place the tree at its slide offset and enable it only while any part is
+ * on-screen. slide_progress 1 = flush at the bottom edge, 0 = pushed fully
+ * below it. Called both after (re)rendering the buffer and every anim tick. */
+static void dock_apply_position(syn_output_t *o)
+{
+    if (!o->dock.tree) return;
+
+    int bx, by, bw, bh;
+    if (!o->server->config.dock_enabled || !dock_geometry(o, &bx, &by, &bw, &bh)) {
+        wlr_scene_node_set_enabled(&o->dock.tree->node, false);
+        return;
+    }
+
+    double p = o->dock.slide_progress;
+    int y = by + (int)lround((1.0 - p) * bh);
+    wlr_scene_node_set_position(&o->dock.tree->node, bx, y);
+
+    bool visible = p > 0.001;
+    wlr_scene_node_set_enabled(&o->dock.tree->node, visible);
+    if (visible)
+        wlr_scene_node_raise_to_top(&o->dock.tree->node);
+}
+
 static void dock_render_output(syn_output_t *o)
 {
     syn_server_t *s = o->server;
@@ -110,20 +165,10 @@ static void dock_render_output(syn_output_t *o)
         return;
     }
 
+    int bx, by, bar_w, bar_h;
+    if (!dock_geometry(o, &bx, &by, &bar_w, &bar_h)) return;
     int n = s->dock_entry_count;
     int icon = DOCK_ICON_SIZE, pad = DOCK_ICON_PAD;
-    int bar_w = n > 0 ? n * icon + (n + 1) * pad : pad * 2;
-    int bar_h = s->config.dock_height;
-
-    struct wlr_box ob;
-    output_box_of(s, o, &ob);
-    if (ob.width <= 0 || ob.height <= 0) return;
-
-    int bx = ob.x + (ob.width - bar_w) / 2;
-    if (bx < ob.x) bx = ob.x;   /* wider than the output: left-align, clip */
-    int by = ob.y + ob.height - bar_h;
-
-    wlr_scene_node_set_position(&o->dock.tree->node, bx, by);
 
     cairo_t *cr;
     struct wlr_buffer *buf = create_cairo_buf(bar_w, bar_h, &cr);
@@ -173,8 +218,9 @@ static void dock_render_output(syn_output_t *o)
     cairo_destroy(cr);
     set_scene_buffer(&o->dock.icons_buf, o->dock.tree, buf);
 
-    wlr_scene_node_set_enabled(&o->dock.tree->node, true);
-    wlr_scene_node_raise_to_top(&o->dock.tree->node);
+    /* Position/visibility follow the current slide state, not a forced
+     * "shown" — the auto-hide tick owns whether the bar is on-screen. */
+    dock_apply_position(o);
 }
 
 void dock_relayout(syn_server_t *s)
@@ -195,10 +241,13 @@ void dock_init(syn_server_t *s)
 void dock_output_created(syn_output_t *o)
 {
     o->dock.tree = wlr_scene_tree_create(&o->server->scene->tree);
-    /* Step-3 placeholder: always shown (no hover/slide gating yet — that
-     * lands with the auto-hide trigger logic). */
-    o->dock.shown = 1;
-    o->dock.slide_progress = 1.0;
+    /* Auto-hide: start hidden (pushed below the bottom edge). The tick slides
+     * it in when the cursor reaches the trigger strip. */
+    o->dock.shown = 0;
+    o->dock.slide_progress = 0.0;
+    o->dock.hover_since = 0.0;
+    o->dock.unhover_since = 0.0;
+    o->dock.last_tick = 0.0;
     dock_render_output(o);
 }
 
@@ -208,6 +257,102 @@ void dock_output_destroy(syn_output_t *o)
         wlr_scene_node_destroy(&o->dock.tree->node);
         o->dock.tree = NULL;
         o->dock.icons_buf = NULL;
+    }
+}
+
+/* ── Auto-hide ───────────────────────────────────────────── */
+
+/* Advance this output's slide animation one frame and re-evaluate hover.
+ * Returns true while more frames are needed (mid-slide, or shown-and-waiting
+ * for the hide delay to elapse) so output_frame keeps scheduling. `now` is
+ * CLOCK_MONOTONIC seconds. */
+bool dock_tick(syn_output_t *o, double now)
+{
+    syn_server_t *s = o->server;
+    if (!o->dock.tree) return false;
+
+    if (!s->config.dock_enabled) {
+        if (o->dock.shown || o->dock.slide_progress != 0.0) {
+            o->dock.shown = 0;
+            o->dock.slide_progress = 0.0;
+            o->dock.last_tick = 0.0;
+            dock_apply_position(o);
+        }
+        return false;
+    }
+
+    int bx, by, bw, bh;
+    if (!dock_geometry(o, &bx, &by, &bw, &bh)) return false;
+    struct wlr_box ob;
+    output_box_of(s, o, &ob);
+
+    double cx = s->cursor->x, cy = s->cursor->y;
+    int margin = s->config.dock_hover_margin;
+    if (margin < 1) margin = 1;
+
+    bool on_output = cx >= ob.x && cx < ob.x + ob.width &&
+                     cy >= ob.y && cy < ob.y + ob.height;
+    /* Reveal trigger: the bottom `margin` px under the bar's footprint. */
+    bool in_trigger = on_output && cy >= ob.y + ob.height - margin &&
+                      cx >= bx - DOCK_ICON_PAD && cx < bx + bw + DOCK_ICON_PAD;
+    /* Keep-shown region: anywhere over the fully-shown bar. */
+    bool in_bar = on_output && cx >= bx && cx < bx + bw &&
+                  cy >= by && cy < by + bh;
+    bool engaged = in_trigger || in_bar;
+
+    if (engaged) {
+        o->dock.unhover_since = 0.0;
+        o->dock.shown = 1;
+    } else if (o->dock.shown) {
+        if (o->dock.unhover_since == 0.0)
+            o->dock.unhover_since = now;
+        if (now - o->dock.unhover_since >= DOCK_HIDE_DELAY)
+            o->dock.shown = 0;
+    }
+
+    double goal = o->dock.shown ? 1.0 : 0.0;
+    if (o->dock.slide_progress != goal) {
+        double dt = (o->dock.last_tick > 0.0) ? now - o->dock.last_tick : 0.0;
+        if (dt <= 0.0 || dt > 0.5) dt = 0.016;   /* first frame / stall guard */
+        o->dock.last_tick = now;
+
+        double step = dt / DOCK_SLIDE_SECS;
+        if (o->dock.slide_progress < goal)
+            o->dock.slide_progress = fmin(goal, o->dock.slide_progress + step);
+        else
+            o->dock.slide_progress = fmax(goal, o->dock.slide_progress - step);
+
+        dock_apply_position(o);
+    } else {
+        o->dock.last_tick = 0.0;
+    }
+
+    bool animating = o->dock.slide_progress != goal;
+    /* Still shown but disengaged and not yet past the hide delay: keep frames
+     * coming so the delay can fire without a further pointer event. */
+    bool waiting_to_hide = !engaged && o->dock.shown;
+    return animating || waiting_to_hide;
+}
+
+/* Pointer moved: wake the outputs whose dock might need to react (cursor near
+ * the bottom edge, or a dock already on-screen that may now need to hide).
+ * dock_tick does the actual state work on the frame this schedules. */
+void dock_pointer_motion(syn_server_t *s)
+{
+    if (!s->config.dock_enabled) return;
+
+    double cx = s->cursor->x, cy = s->cursor->y;
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!o->dock.tree) continue;
+        struct wlr_box ob;
+        output_box_of(s, o, &ob);
+        bool near_bottom =
+            cx >= ob.x && cx < ob.x + ob.width &&
+            cy >= ob.y + ob.height - (s->config.dock_height + 8) &&
+            cy < ob.y + ob.height;
+        if (near_bottom || o->dock.shown)
+            wlr_output_schedule_frame(o->wlr_output);
     }
 }
 

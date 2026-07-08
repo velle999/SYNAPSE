@@ -173,6 +173,12 @@ static void output_frame(struct wl_listener *listener, void *data)
     /* Apply any pending synguard security verdicts to window borders. */
     secfeed_dispatch(output->server);
 
+    /* Drive the auto-hide dock's slide/hover; keep frames coming mid-slide. */
+    struct timespec dnow;
+    clock_gettime(CLOCK_MONOTONIC, &dnow);
+    if (dock_tick(output, (double)dnow.tv_sec + (double)dnow.tv_nsec / 1e9))
+        wlr_output_schedule_frame(output->wlr_output);
+
     /* Poll for AI responses (non-blocking) and route by request type. */
     syn_ai_response_t resp;
     if (ai_thread_poll(output->server, &resp) == 0) {

@@ -389,6 +389,8 @@ struct syn_output {
                                      * trigger strip; 0 = not hovering */
         double   unhover_since;    /* secs cursor left the dock area; 0 = still
                                      * over it. Debounces the slide-out. */
+        double   last_tick;        /* CLOCK_MONOTONIC secs of the last anim
+                                     * step; 0 while settled (no slide). */
     } dock;
 
     struct wl_listener frame;
@@ -834,6 +836,11 @@ void dock_output_destroy(syn_output_t *o);        /* destroy this output's dock 
 void dock_rebuild(syn_server_t *s);
 void dock_view_mapped(syn_view_t *v);             /* foreign_toplevel_map hook */
 void dock_view_unmapped(syn_view_t *v);           /* foreign_toplevel_unmap hook */
+/* Auto-hide: advance one output's slide animation + hover state for a frame
+ * (now = CLOCK_MONOTONIC secs); returns true while more frames are needed. */
+bool dock_tick(syn_output_t *o, double now);
+/* Pointer moved: schedule frames on outputs whose dock may need to react. */
+void dock_pointer_motion(syn_server_t *s);
 /* Re-render every output's dock without changing the entry model — used
  * after output geometry changes (output_layout_changed). */
 void dock_relayout(syn_server_t *s);

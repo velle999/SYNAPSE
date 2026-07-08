@@ -721,6 +721,9 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
+    /* Let the auto-hide dock react to the cursor reaching the bottom edge. */
+    dock_pointer_motion(s);
+
     pointer_update_focus(s, time_msec);
 }
 
