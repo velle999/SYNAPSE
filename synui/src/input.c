@@ -570,6 +570,16 @@ static void server_new_virtual_keyboard(struct wl_listener *listener, void *data
     server_new_keyboard(s, &vkb->keyboard.base);
 }
 
+/* The manager is owned by the display and torn down during wl_display_destroy.
+ * wlroots asserts nobody is still subscribed to new_virtual_keyboard when that
+ * happens, so drop our listeners here to keep shutdown clean (exit 0). */
+static void server_vkb_mgr_destroy(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, vkb_mgr_destroy);
+    wl_list_remove(&s->new_virtual_keyboard.link);
+    wl_list_remove(&s->vkb_mgr_destroy.link);
+}
+
 /* ── Interactive move / resize (Super + mouse drag) ──────── */
 /*
  * Begin an interactive grab of `view`. Tiled windows are auto-floated so the
@@ -1351,4 +1361,7 @@ void input_setup(syn_server_t *s)
     s->new_virtual_keyboard.notify = server_new_virtual_keyboard;
     wl_signal_add(&s->virtual_keyboard_mgr->events.new_virtual_keyboard,
                  &s->new_virtual_keyboard);
+    s->vkb_mgr_destroy.notify = server_vkb_mgr_destroy;
+    wl_signal_add(&s->virtual_keyboard_mgr->events.destroy,
+                 &s->vkb_mgr_destroy);
 }

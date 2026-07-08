@@ -536,6 +536,7 @@ struct syn_server {
      * the activity overview without a bespoke IPC channel. */
     struct wlr_virtual_keyboard_manager_v1  *virtual_keyboard_mgr;
     struct wl_listener new_virtual_keyboard;
+    struct wl_listener vkb_mgr_destroy;
 
     /* dock.c: shared entry model (pinned + running apps), rendered into
      * every output's own syn_output::dock tree. */
