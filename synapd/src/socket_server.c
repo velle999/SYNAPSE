@@ -196,12 +196,14 @@ static void handle_sched_hint(work_item_t *w) {
 static void handle_status(work_item_t *w) {
     char buf[256];
     snprintf(buf, sizeof(buf),
-        "synapd/%s model=%s requests=%lu active=%lu",
+        "synapd/%s model=%s requests=%lu active=%lu ctx_used=%u ctx_window=%u",
         SYNAPD_VERSION,
         w->state->model_loaded ? "loaded"
             : atomic_load(&w->state->model_loading) ? "loading" : "none",
         (unsigned long)atomic_load(&w->state->requests_total),
-        (unsigned long)atomic_load(&w->state->requests_active)
+        (unsigned long)atomic_load(&w->state->requests_active),
+        context_used_tokens(w->state),
+        w->state->config.context_window
     );
     send_response(w->client_fd, w->hdr.request_id,
                   SYN_MSG_STATUS, buf, strlen(buf) + 1);
