@@ -579,8 +579,12 @@ ok "sha256: $(cat "$(basename "${ISO_FILE}").sha256" | cut -d' ' -f1)"
 # mkarchiso runs as root, so fix ownership of output files
 # so the user who invoked sudo can read/test the ISO without issues.
 if [[ -n "${SUDO_USER:-}" ]]; then
-    chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" "${OUT_DIR}"/*.iso "${OUT_DIR}"/*.sha256 "${OUT_DIR}"/*.b2sum 2>/dev/null || true
-    ok "Output files owned by ${SUDO_USER}"
+    # Chown the out/ dir too, not just its files: publish-release.sh runs as
+    # the normal user and writes the split .part* files into out/, which fails
+    # if the mkarchiso-created directory stays root-owned.
+    chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" \
+        "${OUT_DIR}" "${OUT_DIR}"/*.iso "${OUT_DIR}"/*.sha256 "${OUT_DIR}"/*.b2sum 2>/dev/null || true
+    ok "Output dir + files owned by ${SUDO_USER}"
 fi
 
 # ── Summary ───────────────────────────────────────────────────
