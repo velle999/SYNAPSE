@@ -776,15 +776,21 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         struct wlr_surface *surface = NULL;
         syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y,
                                     &surface, &sx, &sy);
-        wlr_log(WLR_INFO, "synui: DEBUG pointer_button PRESS surf=%p role=%s view=%p seat_focus=%p",
-                (void *)surface, surface && surface->role ? surface->role->name : "none",
-                (void *)view, (void *)s->seat->pointer_state.focused_surface);
+
+        /* Is this click on one of the view's xdg_popups (a menu/tooltip)
+         * rather than the toplevel itself? The popup's scene node lives in
+         * the parent toplevel's scene_tree, so view_at resolves it to the
+         * parent view — but a popup owns its own wlroots popup-grab and we
+         * must NOT refocus/raise the parent on a popup click. */
+        struct wlr_surface *root =
+            surface ? wlr_surface_get_root_surface(surface) : NULL;
+        bool is_popup = root && wlr_xdg_popup_try_from_wlr_surface(root) != NULL;
 
         /* Super + drag begins an interactive move/resize; the button is not
          * forwarded to the client. */
         struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
         uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;
-        if (view && (mods & WLR_MODIFIER_LOGO)) {
+        if (view && !is_popup && (mods & WLR_MODIFIER_LOGO)) {
             if (button == BTN_LEFT) {
                 begin_interactive(view, SYNUI_CURSOR_MOVE);
                 return;
@@ -794,12 +800,14 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                 return;
             }
         }
-        if (view) focus_view(s, view, surface);
+        /* Skip focus_view for popup clicks: calling it re-sends a keyboard
+         * enter to the popup surface, disrupting the popup-grab and making
+         * GTK/XUL menus dismiss-without-activating. The working layer-shell
+         * popup path skips focus_view too (its view_at returns NULL). */
+        if (view && !is_popup) focus_view(s, view, surface);
     }
 
     wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
-    wlr_log(WLR_INFO, "synui: DEBUG pointer_button after-notify seat_focus=%p",
-            (void *)s->seat->pointer_state.focused_surface);
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data)

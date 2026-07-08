@@ -520,9 +520,6 @@ static void popup_watch_commit(struct wl_listener *listener, void *data)
 {
     (void)data;
     struct syn_popup_watch *w = wl_container_of(listener, w, commit);
-    wlr_log(WLR_INFO, "synui: DEBUG popup_watch_commit surf=%p initial_commit=%d mapped=%d",
-            (void *)w->popup->base->surface, w->popup->base->initial_commit,
-            w->popup->base->surface->mapped);
     if (!w->popup->base->initial_commit)
         return;
 
