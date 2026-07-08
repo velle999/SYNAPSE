@@ -1,0 +1,14 @@
+[Unit]
+Description=SynapseOS media idle-inhibit (hold off standby while audio plays)
+Documentation=man:pw-dump(1) man:swayidle(1)
+After=synui-idle.service
+PartOf=synui-idle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/synui/synui-media-inhibit
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

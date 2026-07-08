@@ -14,8 +14,11 @@ build_component() {
     # Clean prior makepkg droppings so the source tarball never
     # re-ingests a previous extraction (this is what caused the
     # nested src/$name-0.1.0/src/$name-0.1.0/... recursion).
+    # NB: match only the versioned extraction dir ($name-0.1.0), never the
+    # broad "$name-*" glob — that would also match (and delete) any real source
+    # file named "$name-*", e.g. a src/synui-foo.c.
     rm -rf "$BASE/$name/pkg" \
-           "$BASE/$name/src/$name-"* \
+           "$BASE/$name/src/$name-0.1.0" \
            "$BASE/$name"/*.pkg.tar.zst \
            "$BASE/$name/$name-0.1.0.tar.gz"
 
@@ -42,7 +45,7 @@ build_component() {
 
     tar czf "$name/$name-0.1.0.tar.gz" \
         --transform "s|^$name/|$name-0.1.0/|" \
-        --exclude="$name/src/$name-*" \
+        --exclude="$name/src/$name-0.1.0" \
         --exclude="$name/pkg" \
         --exclude="$name/src/pkg" \
         --exclude="$name/*.pkg.tar*" \

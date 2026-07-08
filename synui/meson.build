@@ -79,6 +79,25 @@ pointer_constraints_h = custom_target('pointer-constraints-unstable-v1-protocol.
   input   : pointer_constraints_xml,
   command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
 
+# idle-inhibit: the synui-idle-inhibit helper is a Wayland *client* (unlike the
+# compositor, which gets its server-side idle-inhibit code from wlroots), so it
+# needs the client-side glue generated from the stock wayland-protocols XML.
+idle_inhibit_client_xml = join_paths(
+  wayland_protos.get_variable('pkgdatadir'),
+  'unstable/idle-inhibit/idle-inhibit-unstable-v1.xml')
+
+idle_inhibit_client_h = custom_target('idle-inhibit-unstable-v1-client-protocol.h',
+  output  : 'idle-inhibit-unstable-v1-client-protocol.h',
+  input   : idle_inhibit_client_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+idle_inhibit_client_c = custom_target('idle-inhibit-unstable-v1-protocol.c',
+  output  : 'idle-inhibit-unstable-v1-protocol.c',
+  input   : idle_inhibit_client_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
+wayland_client = dependency('wayland-client')
+
 synui_exe = executable('synui',
   sources : [
     'src/synui_main.c',
@@ -117,6 +136,19 @@ synui_exe = executable('synui',
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
   install : true)
+
+# synui-idle-inhibit: standalone helper that holds a real Wayland idle inhibitor
+# on demand (fed by the synui-media-inhibit script). Installed under libdir/synui
+# alongside synui-idle-wrapper.
+executable('synui-idle-inhibit',
+  sources : [
+    'src/idle_inhibit.c',
+    idle_inhibit_client_h,
+    idle_inhibit_client_c,
+  ],
+  dependencies : [wayland_client],
+  install : true,
+  install_dir : get_option('libdir') / 'synui')
 
 # Built-in wallpaper assets (wallpaper selector: matrix.c / wppick.c).
 # SYNUI_DATADIR points the compositor at these at runtime.
