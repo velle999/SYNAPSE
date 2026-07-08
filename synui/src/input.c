@@ -49,6 +49,7 @@
 #include <linux/input-event-codes.h>
 #include <wlr/backend/libinput.h>
 #include <wlr/util/edges.h>
+#include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
@@ -326,6 +327,21 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         wppick_toggle(s);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
+    } else if (strcmp(action, "effects_toggle") == 0) {
+        /* Runtime on/off for the GLES post-process CRT filters. The pass is
+         * gated per-frame on config.effects, so flipping it takes effect on
+         * the next commit — but only if the output actually repaints, so
+         * damage every output whole (turning the filters *off* otherwise
+         * leaves the last post-processed frame on screen). */
+        s->config.effects = !s->config.effects;
+        wlr_log(WLR_INFO, "synui: filters %s",
+                s->config.effects ? "on" : "off");
+        syn_output_t *o;
+        wl_list_for_each(o, &s->outputs, link) {
+            if (o->scene_output)
+                wlr_damage_ring_add_whole(&o->scene_output->damage_ring);
+            wlr_output_schedule_frame(o->wlr_output);
+        }
     } else if (strcmp(action, "menu") == 0) {
         if (s->welcome_ui.shown) synui_welcome_hide(s);
         else                     synui_render_welcome(s);
