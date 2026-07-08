@@ -669,6 +669,15 @@ static void input_apply_libinput_config(syn_server_t *s,
  * rather than on the next motion event. */
 void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
 {
+    /* Mid-click: the Wayland implicit-grab rule requires motion/release to
+     * keep targeting whatever surface got the button-down, not whatever the
+     * cursor is over right now. Recomputing focus here can yank it away from
+     * a popup mid-click (e.g. if the popup's scene node was briefly resized
+     * by a client-side recommit), losing the matching release — GTK/XUL
+     * menus then look like clicking an item "does nothing". */
+    if (s->seat->pointer_state.button_count > 0)
+        return;
+
     double sx, sy;
     struct wlr_surface *surface =
         surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);

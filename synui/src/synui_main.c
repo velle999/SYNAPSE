@@ -497,6 +497,8 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
  */
 struct syn_popup_watch {
     struct wlr_xdg_popup *popup;
+    syn_server_t *server;
+    syn_view_t   *parent_view;
     struct wl_listener commit;
     struct wl_listener destroy;
 };
@@ -521,13 +523,36 @@ static void popup_watch_commit(struct wl_listener *listener, void *data)
     wlr_log(WLR_INFO, "synui: DEBUG popup_watch_commit surf=%p initial_commit=%d mapped=%d",
             (void *)w->popup->base->surface, w->popup->base->initial_commit,
             w->popup->base->surface->mapped);
-    if (w->popup->base->initial_commit)
-        wlr_xdg_surface_schedule_configure(w->popup->base);
+    if (!w->popup->base->initial_commit)
+        return;
+
+    /* layer.c's (working) popup path always unconstrains before the first
+     * configure; this toplevel-parented path never did, so a popup near a
+     * screen edge (e.g. Firefox's hamburger menu, which runs ~715px tall)
+     * could render extending past the output bounds instead of being
+     * flipped/slid into view. Matches layer_popup_commit's pattern. */
+    if (w->parent_view) {
+        struct wlr_output *output = w->parent_view->workspace && w->parent_view->workspace->output
+            ? w->parent_view->workspace->output->wlr_output : NULL;
+        if (output) {
+            struct wlr_box out_box;
+            wlr_output_layout_get_box(w->server->output_layout, output, &out_box);
+            struct wlr_box constraint = {
+                .x = out_box.x - w->parent_view->x,
+                .y = out_box.y - w->parent_view->y,
+                .width = out_box.width,
+                .height = out_box.height,
+            };
+            wlr_xdg_popup_unconstrain_from_box(w->popup, &constraint);
+        }
+    }
+
+    wlr_xdg_surface_schedule_configure(w->popup->base);
 }
 
 static void server_new_xdg_popup(struct wl_listener *listener, void *data)
 {
-    (void)listener;
+    syn_server_t *s = wl_container_of(listener, s, new_xdg_popup);
     struct wlr_xdg_popup *popup = data;
 
     /* Layer-shell popups (waybar menus, wofi) are created parentless: the
@@ -551,6 +576,8 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
 
     struct syn_popup_watch *w = calloc(1, sizeof(*w));
     w->popup = popup;
+    w->server = s;
+    w->parent_view = parent_tree->node.data;
     w->commit.notify = popup_watch_commit;
     wl_signal_add(&popup->base->surface->events.commit, &w->commit);
     w->destroy.notify = popup_watch_destroy;
