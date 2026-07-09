@@ -594,8 +594,12 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
     w->parent_view = parent_tree->node.data;
     w->commit.notify = popup_watch_commit;
     wl_signal_add(&popup->base->surface->events.commit, &w->commit);
+    /* The popup's own destroy signal, not the surface's: a client may destroy
+     * the xdg_popup role object and keep committing on the wl_surface, which
+     * would leave popup_watch_commit dereferencing a freed w->popup. Matches
+     * layer.c's layer_surface_new_popup. */
     w->destroy.notify = popup_watch_destroy;
-    wl_signal_add(&popup->base->surface->events.destroy, &w->destroy);
+    wl_signal_add(&popup->events.destroy, &w->destroy);
 }
 
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
