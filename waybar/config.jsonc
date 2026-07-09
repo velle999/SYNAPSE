@@ -48,7 +48,7 @@
         }
     },
     "clock": {
-        "format": "{:%H:%M:%S  %Y-%m-%d}",
+        "format": "{:%I:%M:%S %p  %Y-%m-%d}",
         "interval": 1
     },
     "cpu": {
