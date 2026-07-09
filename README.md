@@ -1,14 +1,5 @@
-# SynapseOS
+<div align="center">
 
-> **Where the kernel thinks.**
-
-SynapseOS is an Arch-based operating system where AI is woven into the kernel layer — not bolted on top. It boots directly into an AI-native shell, runs a local LLM daemon as a system service, and exposes AI scheduling hints through a custom kernel module.
-
----
-
-## Boot Experience
-
-SynapseOS boots to a branded TTY and auto-logs in as root, launching `synsh` — an AI-native shell where you can type naturally or use standard shell commands.
 ```
   ███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗
   ██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝
@@ -16,120 +7,203 @@ SynapseOS boots to a branded TTY and auto-logs in as root, launching `synsh` —
   ╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝
   ███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗
   ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝
-
-  Where the kernel thinks.
 ```
+
+# SynapseOS
+
+**Where the kernel thinks.**
+
+An Arch-based operating system with a local LLM wired into the system layer — not bolted on top.
+
+[![Build](https://github.com/velle999/SYNAPSE/actions/workflows/build.yml/badge.svg)](https://github.com/velle999/SYNAPSE/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/velle999/SYNAPSE)](https://github.com/velle999/SYNAPSE/releases/latest)
+[![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](#license)
+![Platform](https://img.shields.io/badge/platform-x86__64-1793d1)
+
+</div>
+
+---
+
+SynapseOS runs a local LLM daemon as a system service and lets the rest of the
+system talk to it over a Unix socket: the shell, the compositor, the security
+monitor, the network filter, and a kernel module that exports syscall telemetry
+and AI scheduling hints through sysfs. No network calls, no API keys — the model
+lives on the machine.
+
+It boots to `synsh`, a shell where you can type a command or just say what you
+want, and into `synui`, a wlroots compositor that knows the AI daemon exists.
+
+> **Status: alpha.** Version 0.1.x. This is a real, actively developed system —
+> the author daily-drives it — but it is early, moves fast, and will break.
+> Try it in a VM before you give it a disk.
+
+---
+
+## Quick start
+
+Grab the latest ISO from [Releases](https://github.com/velle999/SYNAPSE/releases/latest)
+and boot it. The default ISO embeds Mistral 7B Instruct (Q4_K_M, ~4.1 GB), so
+the AI is live on first boot with nothing to configure.
+
+To take it for a spin without touching hardware:
+
+```bash
+git clone https://github.com/velle999/SYNAPSE.git && cd SYNAPSE
+QEMU_RAM=8G ./archiso/build_scripts/qemu-test.sh   # auto-detects the newest ISO
+```
+
+The script uses KVM when available, boots UEFI via OVMF (falling back to BIOS),
+and attaches a persistent 20 GB test disk. Give it 8 GB+ of RAM when the model
+is embedded. Kernel and boot output are mirrored to the serial console —
+`View → serial0` in the QEMU window.
 
 ---
 
 ## Components
 
-| Component | Description | Status |
-|-----------|-------------|--------|
-| **synsh** | AI-native shell — type naturally or use shell commands | ✅ 0.1.0 |
-| **synapd** | Local LLM inference daemon, Unix socket IPC | ✅ 0.1.0 |
-| **synapse_kmod** | Kernel module — syscall monitoring, AI scheduling hints, sysfs interface | ✅ 0.1.0 |
-| **synnet** | AI-assisted network policy daemon, nftables integration | ✅ 0.1.0 |
-| **synguard** | AI security monitor — syscall event classification, threat scoring | ✅ 0.1.0 |
-| **synui** | AI-aware Wayland compositor (wlroots 0.19) — tiling/monocle layouts, per-output workspaces, XWayland, layer-shell (see `synui/ROADMAP.md`) | ✅ 0.1.0 |
+Each lives in its own directory with its own `PKGBUILD`.
+
+| Component | What it does |
+|---|---|
+| **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. |
+| **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell. |
+| **`synui`** | Wayland compositor on wlroots 0.19 — tiling and monocle layouts, per-output workspaces, XWayland, layer-shell. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
+| **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
+| **`synnet`** | Network policy daemon with nftables integration. |
+| **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
+
+Supporting pieces: `syn-install`, `syn-firstboot`, `syn-model`, `waybar/`
+(status bar config), and `archiso/` (install media).
 
 ---
 
 ## Architecture
+
 ```
   User
    │
    ▼
- synsh  ──────────────────────────────┐
-   │   natural language / commands    │
-   ▼                                  │
- synapd  (local LLM — Mistral 7B)    │
-   │   inference, socket IPC          │
-   ├──► synguard  (security verdicts) │
-   ├──► synnet    (network policy)    │
-   └──► synapse_kmod  (kernel sysfs)  │
-            │                         │
-            ▼                         ▼
-      /sys/kernel/synapse/        synui (Wayland)
-      syscall_log, ai_hints,
-      status, scheduler
+ synsh ─── natural language / commands ──┐
+   │                                     │
+   ▼                                     │
+ synapd  (local LLM — Mistral 7B)        │
+   │  inference over SYN socket protocol │
+   ├──► synguard      security verdicts ─┤
+   ├──► synnet        network policy     │
+   └──► synapse_kmod  kernel sysfs       │
+            │                            ▼
+            ▼                    synui (Wayland)
+     /sys/kernel/synapse/
+     syscall_log, ai_hints, stats,
+     status, config, version
 ```
+
+---
+
+## The desktop
+
+`synui` is a compositor written for this system rather than adapted to it. It
+draws its own display-settings panel, wallpaper picker, and dock; it renders an
+optional CRT-style post-process pass; and it holds a live subscription to
+`synguard`'s verdict feed and `synapd`'s activity.
+
+Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
+
+| Key | Action |
+|---|---|
+| `Super`+`Return` | Open a terminal |
+| `Super`+`Space` | Command bar |
+| `Super`+`Backspace` | Ask the AI |
+| `Super`+`A` | Neural activity overlay |
+| `Super`+`D` | Display settings |
+| `Super`+`W` | Wallpaper picker |
+| `Super`+`E` | Toggle visual effects |
+| `Super`+`Escape` | Menu |
+| `Super`+`Tab` | Cycle layout |
+| `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
+| `Super`+`J` / `Super`+`K` | Focus next / previous |
+| `Super`+`H` / `Super`+`L` | Shrink / grow master area |
+| `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
+| `Super`+`1`–`9` | Switch workspace |
+| `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
 ---
 
 ## Services
 
-All services start automatically on boot:
+Everything starts on boot:
+
 ```bash
 systemctl status synapd      # AI inference daemon
-systemctl status synnet      # network policy
 systemctl status synguard    # security monitor
+systemctl status synnet      # network policy
 lsmod | grep synapse_kmod    # kernel module
+cat /sys/kernel/synapse/status
 ```
 
 ---
 
-## Enabling AI
+## The model
 
-The default ISO build embeds Mistral 7B Instruct (Q4_K_M, ~4.1 GB) — AI is
-live out of the box. ISOs built with `--no-model` are ~4 GB smaller and
-download the model on first boot instead (`syn-firstboot`), or you can add
-one manually:
+ISOs built with `--no-model` are ~4 GB smaller and fetch the model on first boot
+via `syn-firstboot`. You can also drop one in by hand:
+
 ```bash
-# Copy a GGUF model (Mistral 7B recommended)
 cp your-model.gguf /var/lib/synapd/models/synapse.gguf
 systemctl restart synapd
 
-# Confirm AI is loaded
 synsh
 # ⚡ AI online — type naturally or use shell commands
 ```
+
+Any GGUF that llama.cpp can load will work; Mistral 7B Instruct is what the
+prompts are tuned against.
 
 ---
 
 ## Building
 
-### Prerequisites
-- Arch Linux host (or Arch-based)
-- `archiso`, `base-devel`, `meson`, `ninja`, `wlroots0.19`, `qemu`, `ovmf`
-- ~22 GB free disk space with the embedded model, ~9 GB without
+**Prerequisites** — an Arch (or Arch-based) host with `archiso`, `base-devel`,
+`meson`, `ninja`, `wlroots0.19`, `qemu`, and `ovmf`. Budget ~22 GB of free disk
+with the embedded model, ~9 GB without.
 
-### Build the ISO
-`archiso/build.sh` runs the whole pipeline: it builds llama.cpp (pinned at
-tag `b8272`, matching CI), packages all components via their PKGBUILDs into
-a local pacman repo, downloads the model, and runs mkarchiso.
+`archiso/build.sh` runs the whole pipeline: builds llama.cpp (pinned at tag
+`b8272`, matching CI), packages every component through its `PKGBUILD` into a
+local pacman repo, fetches the model, and invokes `mkarchiso`.
+
 ```bash
 sudo archiso/build.sh              # full build, GPU auto-detected
-sudo archiso/build.sh --no-gpu     # CPU-only llama.cpp (use for QEMU-targeted ISOs)
+sudo archiso/build.sh --no-gpu     # CPU-only llama.cpp — use for QEMU-targeted ISOs
 sudo archiso/build.sh --no-model   # slim ISO, model downloaded on first boot
-sudo archiso/build.sh --no-clean   # keep previous llama.cpp build (faster rebuilds)
+sudo archiso/build.sh --no-clean   # reuse the previous llama.cpp build
 ```
-Output: `archiso/out/SynapseOS-0.1.0-x86_64.iso`
 
-Package builds run as the `synbuild` user under `/var/tmp` — they must live
-outside `/home` (mode 0700). A failed package build aborts the run
-immediately rather than surfacing later as a pacstrap error.
+Output lands in `archiso/out/SynapseOS-<version>-x86_64.iso`.
 
-### Component-only builds (dev loop)
+Package builds run as the `synbuild` user under `/var/tmp`, because they must
+live outside `/home` (mode 0700). A failed package build aborts the run
+immediately rather than resurfacing later as a confusing pacstrap error.
+
+For the inner-loop, skip the ISO entirely:
+
 ```bash
-bash build-all.sh    # builds every component against llama-staging/usr/
+bash build-all.sh   # builds every component against llama-staging/usr/
 ```
 
-### Test in QEMU
-```bash
-QEMU_RAM=8G ./archiso/build_scripts/qemu-test.sh   # auto-detects latest ISO
-```
-The script enables KVM when available, boots UEFI via OVMF (falling back to
-BIOS), and attaches a persistent 20 GB test disk. Use 8 GB+ RAM when the
-model is embedded. Kernel/boot output is mirrored to the serial console
-(`View → serial0` in the QEMU window).
+### Cutting a release
+
+Bump **`iso_version`** in `archiso/profiledef.sh` and nothing else — in
+particular, leave `SYNAPSEOS_VERSION` in `archiso/build.sh` alone, as it tracks
+the component series rather than the image. Then run `archiso/publish-release.sh`.
 
 ---
 
 ## Protocol
 
-`synsh`, `synui`, and the kernel module talk to `synapd` over a Unix socket
-using the SYN binary protocol (`synapd/include/synapd.h`):
+`synsh`, `synui`, `synguard`, `synnet`, and the kernel module all speak to
+`synapd` over a Unix socket using a fixed 28-byte binary header
+([`synapd/include/synapd.h`](synapd/include/synapd.h)):
+
 ```c
 #pragma pack(push, 1)
 typedef struct {
@@ -139,8 +213,8 @@ typedef struct {
                            // STATUS, RELOAD, SHUTDOWN; responses OR SYN_MSG_RESPONSE
     uint16_t flags;
     uint32_t payload_len;  // bytes following this header, max 1 MiB
-    uint32_t request_id;   // echoed in response
-    uint32_t client_pid;   // sender PID for privilege checks
+    uint32_t request_id;   // echoed in the response
+    uint32_t client_pid;   // sender PID, for privilege checks
     uint64_t timestamp_ns; // CLOCK_MONOTONIC_RAW
 } syn_msg_header_t;        // 28 bytes
 #pragma pack(pop)
@@ -150,4 +224,4 @@ typedef struct {
 
 ## License
 
-GPLv2 — SynapseOS Project
+GPLv2 — the SynapseOS Project.
