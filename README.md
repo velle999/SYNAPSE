@@ -20,6 +20,10 @@ An Arch-based operating system with a local LLM wired into the system layer — 
 [![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](#license)
 ![Platform](https://img.shields.io/badge/platform-x86__64-1793d1)
 
+<img src="docs/screenshots/synui-desktop.jpg" alt="synui — the SynapseOS compositor" width="900">
+
+<sub><i>synui, the wlroots compositor: waybar status bar, auto-hiding dock, CRT post-process filters.</i></sub>
+
 </div>
 
 ---
