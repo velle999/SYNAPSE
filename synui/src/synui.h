@@ -581,6 +581,12 @@ struct syn_server {
 
     double cursor_x, cursor_y;
 
+    /* Implicit pointer grab: the cursor→surface-local offset of the surface
+     * that took the button-down, captured while it still had pointer focus.
+     * Lets motion during the grab stay in that surface's coordinate space
+     * even once the cursor wanders off it. See pointer_update_focus(). */
+    double ptr_grab_off_x, ptr_grab_off_y;
+
     struct wl_list  outputs;     /* syn_output_t::link */
     struct wl_list  keyboards;   /* syn_keyboard_t::link */
     struct wl_list  input_devs;  /* syn_input_dev_t::link — non-keyboard

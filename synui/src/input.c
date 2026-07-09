@@ -720,9 +720,21 @@ void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
      * cursor is over right now. Recomputing focus here can yank it away from
      * a popup mid-click (e.g. if the popup's scene node was briefly resized
      * by a client-side recommit), losing the matching release — GTK/XUL
-     * menus then look like clicking an item "does nothing". */
-    if (s->seat->pointer_state.button_count > 0)
+     * menus then look like clicking an item "does nothing".
+     *
+     * The focus must stay pinned, but motion still has to be delivered, or a
+     * client that tracks a drag (text selection, sliders, slurp's region
+     * select) sees the press and the release with nothing in between. Send it
+     * against the grab surface's origin rather than re-deriving coordinates
+     * from whatever is under the cursor now — the cursor is routinely dragged
+     * off the grab surface and even off-screen. */
+    if (s->seat->pointer_state.button_count > 0) {
+        if (s->seat->pointer_state.focused_surface)
+            wlr_seat_pointer_notify_motion(s->seat, time_msec,
+                                           s->cursor->x - s->ptr_grab_off_x,
+                                           s->cursor->y - s->ptr_grab_off_y);
         return;
+    }
 
     double sx, sy;
     struct wlr_surface *surface =
@@ -876,6 +888,16 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         struct wlr_surface *root =
             surface ? wlr_surface_get_root_surface(surface) : NULL;
         bool is_popup = root && wlr_xdg_popup_try_from_wlr_surface(root) != NULL;
+
+        /* This press opens an implicit grab if no other button is already
+         * down. Record where the grab surface's origin sits relative to the
+         * cursor now, while it still has pointer focus; pointer_update_focus
+         * replays that offset to keep motion in its coordinate space for as
+         * long as the grab lasts. */
+        if (surface && s->seat->pointer_state.button_count == 0) {
+            s->ptr_grab_off_x = s->cursor->x - sx;
+            s->ptr_grab_off_y = s->cursor->y - sy;
+        }
 
         /* Super + drag begins an interactive move/resize; the button is not
          * forwarded to the client. */
