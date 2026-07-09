@@ -398,6 +398,13 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
     layout_apply(view->server, view->workspace);
     foreign_toplevel_map(view);
 
+    /* A client that asked for fullscreen before it ever mapped only got the
+     * state recorded (see xdg_toplevel_request_fullscreen) — layout_apply just
+     * tiled it. Hand it the output now that it is mapped and has a taskbar
+     * handle for view_set_fullscreen() to update. */
+    if (view->fullscreen)
+        view_apply_fullscreen(view->server, view, 1);
+
     /* Hide welcome screen when first window opens */
     synui_welcome_hide(view->server);
 }
@@ -471,6 +478,10 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
          * is actually initialized. */
         if (view->maximized)
             wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
+        /* Same for a fullscreen request made before this first commit — the
+         * surface is initialized by now, so the configure is safe to send. */
+        if (view->fullscreen)
+            wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel, true);
         return;
     }
 
@@ -501,10 +512,23 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
 {
     (void)data;
     syn_view_t *view = wl_container_of(listener, view, request_fullscreen);
+    int fs = view->xdg_surface->toplevel->requested.fullscreen ? 1 : 0;
+
+    /* Same pre-initial-commit hazard as xdg_toplevel_request_maximize, and it
+     * aborts the compositor the same way: a client may set_fullscreen before
+     * its first commit (Firefox --kiosk does, which is how tepris starts), and
+     * view_apply_fullscreen() reaches wlr_xdg_toplevel_set_fullscreen() ->
+     * wlr_xdg_surface_schedule_configure(), which asserts on an uninitialized
+     * surface. Record the state; xdg_surface_commit's initial_commit path
+     * sends it and xdg_surface_map gives it the geometry. */
+    if (!view->xdg_surface->initialized) {
+        view->fullscreen = fs;
+        return;
+    }
+
     /* Honour the state the client asked for (not a blind toggle), and give
      * the window real fullscreen geometry / hand it back to the layout. */
-    view_apply_fullscreen(view->server, view,
-                          view->xdg_surface->toplevel->requested.fullscreen);
+    view_apply_fullscreen(view->server, view, fs);
 }
 
 /*
