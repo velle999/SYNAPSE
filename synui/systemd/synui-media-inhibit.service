@@ -1,8 +1,6 @@
 [Unit]
 Description=SynapseOS media idle-inhibit (hold off standby while audio plays)
-Documentation=man:pw-dump(1) man:swayidle(1)
-After=synui-idle.service
-PartOf=synui-idle.service
+Documentation=man:pw-dump(1)
 
 [Service]
 Type=simple

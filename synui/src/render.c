@@ -133,6 +133,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Neural Overlay",   "Super+A",       "overlay"  },
     { "Display Settings", "Super+D",       "displays" },
     { "Wallpaper",        "Super+W",       "wallpaper" },
+    { "Power Saving",     "Super+P",       "power"    },
     { "Quit synui",       "Super+Shift+Q", "quit"     },
 };
 const int synui_welcome_menu_len =
@@ -744,6 +745,116 @@ void synui_render_wppick(syn_server_t *s)
     set_scene_buffer(&s->wppick_ui.text_buf, s->wppick_ui.tree, buf);
 }
 
+/* ── Power saving panel (power.c) ────────────────────────── */
+
+void synui_render_power(syn_server_t *s)
+{
+    syn_power_t *p = &s->power;
+
+    if (!p->visible) {
+        wlr_scene_node_set_enabled(&s->power_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 30, top = 66, pad = 18;
+    int pw = 520;
+    int ph = top + POWER_ROW_COUNT * row_h + 96;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->power_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->power_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->power_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->power_ui.bg)
+        s->power_ui.bg = wlr_scene_rect_create(s->power_ui.tree,
+                                               pw, ph, bg_color);
+    if (!s->power_ui.accent)
+        s->power_ui.accent = wlr_scene_rect_create(s->power_ui.tree,
+                                                   pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Title */
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "POWER SAVING");
+
+    /* An inhibitor beats every timeout, so say so where it can't be missed
+     * rather than letting the panel imply the timeouts are counting down. */
+    cairo_set_font_size(cr, 12);
+    if (s->idle_inhibitors > 0) {
+        cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
+        cairo_move_to(cr, 18, 50);
+        cairo_show_text(cr, "idle inhibited (media playing) \xc2\xb7 timers held");
+    } else if (!s->config.power_enabled) {
+        cairo_set_source_rgba(cr, 0.75, 0.45, 0.45, 1.0);
+        cairo_move_to(cr, 18, 50);
+        cairo_show_text(cr, "disabled \xc2\xb7 no stage will fire");
+    }
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 58);
+    cairo_line_to(cr, pw - 18, 58);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < POWER_ROW_COUNT; i++) {
+        int sel = (i == p->selected);
+        int ry = top + i * row_h;
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 12, ry - 16, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+
+        char name[48], value[32];
+        power_panel_rows(s, i, name, sizeof(name), value, sizeof(value));
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        cairo_show_text(cr, name);
+
+        /* A stage at "never" is inert; grey it out so the panel reads at a
+         * glance as "these three are armed, those two are not". */
+        int off = (i == POWER_ROW_ENABLED) ? !s->config.power_enabled
+                                           : (strcmp(value, "never") == 0);
+        if (off) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        else     cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+        cairo_move_to(cr, 330, ry + 4);
+        cairo_show_text(cr, value);
+    }
+
+    if (p->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, 18, ph - 56);
+        cairo_show_text(cr, p->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 34);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space toggle");
+    cairo_move_to(cr, 18, ph - 16);
+    cairo_show_text(cr, p->dirty ? "s save (unsaved changes) \xc2\xb7 Esc close"
+                                 : "s save \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->power_ui.text_buf, s->power_ui.tree, buf);
+}
+
 /* ── Dock right-click context menu (dock.c) ──────────────── */
 
 static const char *dockact_label(syn_dockact_t a)
@@ -819,6 +930,11 @@ void synui_ui_init(syn_server_t *s)
     s->overlay_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dispcfg_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->wppick_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
+    s->power_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
+    /* The dim overlay covers the scene, so it needs a tree of its own that
+     * can be raised above every window without dragging the panel with it. */
+    s->power_ui.dim_tree = wlr_scene_tree_create(&s->scene->tree);
+    wlr_scene_node_set_enabled(&s->power_ui.dim_tree->node, true);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 

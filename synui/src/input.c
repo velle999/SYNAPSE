@@ -57,11 +57,15 @@
 #include "synui.h"
 #include "effects.h"
 
-/* Report user activity to idle-notify clients (swayidle). */
+/* Report user activity to idle-notify clients, and to our own idle stages. */
 static inline void notify_activity(syn_server_t *s)
 {
     if (s->idle_notifier)
         wlr_idle_notifier_v1_notify_activity(s->idle_notifier, s->seat);
+    /* Undoes a dim/blank and rearms the idle stages. Runs before the event is
+     * dispatched further, so the click that wakes the screen still lands on
+     * whatever is under the cursor rather than on the dim overlay. */
+    power_notify_activity(s);
 }
 
 /* ── Focus ───────────────────────────────────────────────── */
@@ -325,6 +329,8 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         dispcfg_toggle(s);
     } else if (strcmp(action, "wallpaper") == 0) {
         wppick_toggle(s);
+    } else if (strcmp(action, "power") == 0) {
+        power_toggle(s);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
     } else if (strcmp(action, "effects_toggle") == 0) {
@@ -475,6 +481,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Wallpaper selector: same modal contract as the display panel. */
         for (int i = 0; i < nsyms; i++)
             if (wppick_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Power saving panel: same modal contract as the display panel. */
+        for (int i = 0; i < nsyms; i++)
+            if (power_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

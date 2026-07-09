@@ -3,7 +3,7 @@
 #
 # Watches PipeWire for an actively *running* audio output stream and drives
 # synui-idle-inhibit, which holds a real Wayland idle inhibitor. synui then tells
-# its ext-idle-notify clients (swayidle, see synui-idle.service) to hold off, so
+# synui's own idle stages (power.c) to hold off, so
 # the screen won't lock or blank while sound is playing — and re-arms the instant
 # playback stops.
 #

@@ -1,10 +1,10 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=31
+pkgrel=32
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swayidle' 'swaylock' 'wlopm' 'libjpeg-turbo' 'pipewire' 'python')
+depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'pipewire' 'python')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'libjpeg-turbo')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
@@ -25,11 +25,6 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synui-foot.service"
     install -Dm644 config/synui.desktop \
         "$pkgdir/usr/share/wayland-sessions/synui.desktop"
-
-    install -Dm755 systemd/synui-idle-wrapper.sh \
-        "$pkgdir/usr/lib/synui/synui-idle-wrapper"
-    install -Dm644 systemd/synui-idle.service \
-        "$pkgdir/usr/lib/systemd/user/synui-idle.service"
 
     # Media idle-inhibit (synui-idle-inhibit binary is installed by meson).
     install -Dm755 systemd/synui-media-inhibit.sh \

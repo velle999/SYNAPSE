@@ -758,6 +758,8 @@ static void idle_inhibitor_destroy(struct wl_listener *listener, void *data)
     syn_server_t *s = inh->server;
     if (--s->idle_inhibitors < 0) s->idle_inhibitors = 0;
     wlr_idle_notifier_v1_set_inhibited(s->idle_notifier, s->idle_inhibitors > 0);
+    /* The last inhibitor going away starts the idle clock again. */
+    power_notify_activity(s);
     wl_list_remove(&inh->destroy.link);
     free(inh);
 }
@@ -774,6 +776,9 @@ static void server_new_idle_inhibitor(struct wl_listener *listener, void *data)
 
     s->idle_inhibitors++;
     wlr_idle_notifier_v1_set_inhibited(s->idle_notifier, true);
+    /* Disarms every stage (power_arm bails while an inhibitor is held) and
+     * undoes a dim/blank we may already be in. */
+    power_notify_activity(s);
 }
 
 /* ── Server init ─────────────────────────────────────────── */
@@ -1022,6 +1027,9 @@ int synui_init(syn_server_t *s)
      * including the compositor UI. input.c moves it with the cursor. */
     s->drag_icon_tree = wlr_scene_tree_create(&s->scene->tree);
 
+    /* Idle stages: needs the scene (dim overlay) and the loaded config. */
+    power_init(s);
+
     return 0;
 }
 
@@ -1117,6 +1125,8 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->start_drag.link);
     wl_list_remove(&s->drag_destroy.link);   /* wl_list_init'd when idle */
     wl_list_remove(&s->gamma_set.link);
+
+    power_finish(s);
 
     wl_display_destroy_clients(s->display);
     wlr_scene_node_destroy(&s->scene->tree.node);

@@ -15,7 +15,7 @@
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
- * ws <1-9>, movews <1-9>, wallpaper, wallpaper_reload, effects_toggle.
+ * ws <1-9>, movews <1-9>, wallpaper, wallpaper_reload, effects_toggle, power.
  * A bind with the same combo as a default replaces it.
  *
  * Wallpaper (wallpaper.c):
@@ -30,6 +30,18 @@
  *   dock_height = 64            (px)
  *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
+ *
+ * Power saving (power.c) — idle seconds per stage, 0 = never. Each is
+ * measured from the last input event, so they are independent, not
+ * cumulative. Super+P edits them live and writes power.state, which then
+ * overrides these lines (delete it to hand control back to synuirc):
+ *   power_enabled = on|off             (default on)
+ *   power_dim_timeout = 240
+ *   power_blank_timeout = 600
+ *   power_lock_timeout = 900
+ *   power_suspend_timeout = 0
+ *   power_lock_cmd = swaylock -f -c 000000
+ *   power_suspend_cmd = systemctl suspend
  *
  * SynapseOS Project — GPLv2
  */
@@ -169,6 +181,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+w",         "wallpaper" },
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "effects_toggle" },
+        { "super+p",         "power" },
     };
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
         config_bind(cfg, defaults[i].combo, defaults[i].action);
@@ -236,6 +249,20 @@ void synui_config_load(syn_config_t *cfg)
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
     cfg->dock_pin_count    = 0;
 
+    cfg->power_enabled = 1;
+    cfg->power_dim     = 240;
+    cfg->power_blank   = 600;
+    cfg->power_lock    = 900;
+    /* Suspending this box would take down anything it serves over the
+     * network, so idle-suspend is opt-in from the panel, never a default. */
+    cfg->power_suspend = 0;
+    /* The pgrep guard keeps a second idle period from stacking another
+     * swaylock on top of the one already covering the screen. */
+    snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd),
+             "pgrep -x swaylock >/dev/null || swaylock -f -c 000000");
+    snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
+             "systemctl suspend");
+
     cfg->bind_count = 0;
     seed_default_binds(cfg);
 
@@ -261,6 +288,7 @@ void synui_config_load(syn_config_t *cfg)
         /* No config file: still honour persisted picker/dock choices. */
         wallpaper_state_load(cfg);
         dock_state_load(cfg);
+        power_state_load(cfg);
         return;
     }
 
@@ -386,6 +414,20 @@ void synui_config_load(syn_config_t *cfg)
             else if (strcmp(val, "center")  == 0) cfg->wallpaper_mode = SYN_WALLPAPER_CENTER;
             else wlr_log(WLR_ERROR, "synui: wallpaper_mode: unknown '%s'", val);
         }
+        else if (strcmp(key, "power_enabled") == 0)
+            cfg->power_enabled = strcmp(val, "on") == 0;
+        else if (strcmp(key, "power_dim_timeout") == 0)
+            cfg->power_dim = atoi(val) < 0 ? 0 : atoi(val);
+        else if (strcmp(key, "power_blank_timeout") == 0)
+            cfg->power_blank = atoi(val) < 0 ? 0 : atoi(val);
+        else if (strcmp(key, "power_lock_timeout") == 0)
+            cfg->power_lock = atoi(val) < 0 ? 0 : atoi(val);
+        else if (strcmp(key, "power_suspend_timeout") == 0)
+            cfg->power_suspend = atoi(val) < 0 ? 0 : atoi(val);
+        else if (strcmp(key, "power_lock_cmd") == 0)
+            snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd), "%s", val);
+        else if (strcmp(key, "power_suspend_cmd") == 0)
+            snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_edge") == 0) {
@@ -435,4 +477,5 @@ void synui_config_load(syn_config_t *cfg)
      * file to hand control back to synuirc. Same for the dock's edge/pins. */
     wallpaper_state_load(cfg);
     dock_state_load(cfg);
+    power_state_load(cfg);
 }

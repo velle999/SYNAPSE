@@ -181,6 +181,34 @@ typedef struct {
     char status[96];   /* last action / error, shown in the panel */
 } syn_dispcfg_t;
 
+/* ── Power saving panel + idle state machine (power.c) ───── */
+/* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch;
+ * the rest each map to one syn_config_t timeout, in the same order. */
+typedef enum {
+    POWER_ROW_ENABLED = 0,
+    POWER_ROW_DIM,
+    POWER_ROW_BLANK,
+    POWER_ROW_LOCK,
+    POWER_ROW_SUSPEND,
+    POWER_ROW_COUNT,
+} syn_power_row_t;
+
+typedef struct {
+    int visible;
+    int selected;      /* syn_power_row_t */
+    int dirty;         /* edited since the last save — drives the panel hint */
+    char status[96];
+
+    /* Live stage state. Each timer is armed from the last input event with
+     * its own timeout and fires at most once per idle period; activity
+     * disarms, reverses what fired, and rearms. */
+    struct wl_event_source *t_dim, *t_blank, *t_lock, *t_suspend;
+    int dimmed;
+    int blanked;
+    int locked;        /* we spawned the locker and have seen no activity since */
+    uint32_t last_arm_ms;  /* rearm throttle — see power_notify_activity */
+} syn_power_t;
+
 /* ── Keybinding (table-driven; syntax in config.c) ───────── */
 #define SYN_BINDS_MAX        96
 #define SYN_BIND_ACTION_LEN  24
@@ -299,6 +327,19 @@ typedef struct {
      * context menu (dock_pin_toggle). */
     char  dock_pin[DOCK_PIN_MAX][128];
     int   dock_pin_count;
+
+    /* Idle power saving (power.c). Each stage is an idle timeout in seconds,
+     * measured from the last input event; 0 disables that stage. They are
+     * independent, not cumulative — a stage fires when the seat has been idle
+     * that long, whatever the other stages did. Runtime-mutable from the
+     * Super+P panel and persisted to ~/.config/synui/power.state. */
+    int   power_enabled;        /* master switch, default 1 */
+    int   power_dim;            /* fade a dim overlay over the scene */
+    int   power_blank;          /* DPMS the outputs off */
+    int   power_lock;           /* run power_lock_cmd */
+    int   power_suspend;        /* run power_suspend_cmd; default 0 (never) */
+    char  power_lock_cmd[192];
+    char  power_suspend_cmd[192];
 
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
@@ -644,6 +685,20 @@ struct syn_server {
 
     syn_dispcfg_t   dispcfg;
 
+    /* Power saving panel (Super+P) plus the full-layout dim overlay the
+     * dim stage fades in. `dim` lives in its own tree so it can be raised
+     * above every window without disturbing the panel's own stacking. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+        struct wlr_scene_tree   *dim_tree;
+        struct wlr_scene_rect   *dim;
+    } power_ui;
+
+    syn_power_t     power;
+
     /* Wallpaper selector panel (wppick.c) — a compositor-drawn modal picker
      * (Super+W) for switching between the built-in wallpapers live. */
     struct {
@@ -935,6 +990,29 @@ void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from cu
  * GUI choice survives restart without rewriting synuirc. */
 void wallpaper_state_save(syn_server_t *s);
 void wallpaper_state_load(syn_config_t *cfg);
+
+/* ── Power saving (power.c) ──────────────────────────────── */
+/* Create the idle timers and arm them from the current config. */
+void power_init(syn_server_t *s);
+void power_finish(syn_server_t *s);
+/* Called from every input event (via notify_activity) and whenever an idle
+ * inhibitor appears/disappears: undoes any stage that has fired and rearms. */
+void power_notify_activity(syn_server_t *s);
+/* Re-arm after the config changed (panel edit, config reload). */
+void power_reload(syn_server_t *s);
+
+void power_show(syn_server_t *s);
+void power_hide(syn_server_t *s);
+void power_toggle(syn_server_t *s);
+int  power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+void synui_render_power(syn_server_t *s);
+
+void power_state_save(syn_server_t *s);
+void power_state_load(syn_config_t *cfg);
+/* Name/value strings for one panel row; render.c draws, power.c owns the
+ * formatting so the ladder and the labels stay in one place. */
+void power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
+                      char *value, size_t vn);
 
 /* ── matrix.c (animated wallpaper) ───────────────────────── */
 void matrix_init(syn_server_t *s);                /* compile shader, load atlas (no-op on non-GLES2) */

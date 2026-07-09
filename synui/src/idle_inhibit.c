@@ -2,9 +2,9 @@
  * Installed as the executable "synui-idle-inhibit".
  *
  * synui implements zwp_idle_inhibit_manager_v1: creating an inhibitor makes the
- * compositor set wlr_idle_notifier_v1 inhibited, which stops the ext-idle-notify
- * ticks swayidle watches — so swayidle never reaches its lock/DPMS timeouts, and
- * re-arms cleanly the instant the inhibitor is released.
+ * compositor set wlr_idle_notifier_v1 inhibited (for any ext-idle-notify client)
+ * and disarms synui's own idle stages in power.c — so nothing dims, blanks or
+ * locks while one is held, and everything re-arms the instant it is released.
  *
  * This process reads a control stream on stdin: a byte '1' creates the inhibitor
  * (media active), '0' destroys it (media idle). EOF or a Wayland disconnect
