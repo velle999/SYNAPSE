@@ -25,6 +25,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <poll.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -41,15 +43,79 @@ static pthread_mutex_t clients_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t       accept_thread;
 static volatile int    running = 0;
 
+/*
+ * Drop subscribers whose peer has gone away. secfeed_publish() also prunes
+ * dead clients, but only when it has an alert to deliver — and alerts are
+ * rare (often one or none for a whole uptime). Without a reap here, every
+ * subscriber that exits (e.g. each synui restart) leaks its slot forever and
+ * the feed eventually wedges at SECFEED_MAX_CLIENTS, refusing everyone.
+ *
+ * Caller must hold clients_lock.
+ */
+static void clients_reap_locked(void)
+{
+    if (client_count == 0) return;
+
+    struct pollfd pfd[SECFEED_MAX_CLIENTS];
+    for (int i = 0; i < client_count; i++) {
+        pfd[i].fd      = clients[i];
+        pfd[i].events  = POLLRDHUP;   /* HUP/ERR/NVAL are reported regardless */
+        pfd[i].revents = 0;
+    }
+    if (poll(pfd, client_count, 0) <= 0)
+        return;
+
+    /* Walk backwards: compaction moves the tail element into slot i, and the
+     * tail has already been examined, so pfd[] stays aligned for i-1..0. */
+    const short gone = POLLRDHUP | POLLHUP | POLLERR | POLLNVAL;
+    for (int i = client_count - 1; i >= 0; i--) {
+        if (!(pfd[i].revents & gone)) continue;
+        close(clients[i]);
+        clients[i] = clients[--client_count];
+        sg_log(LOG_INFO, "secfeed: reaped a departed subscriber (%d left)",
+               client_count);
+    }
+}
+
+/*
+ * A refused subscriber reconnects in a loop, so an unthrottled warning here
+ * turns into millions of identical journal lines (1.7M in one boot, once).
+ * Caller must hold clients_lock, which is what makes the statics safe.
+ */
+static void log_refused_locked(void)
+{
+    static time_t        last_log   = 0;
+    static unsigned long suppressed = 0;
+
+    time_t now = time(NULL);
+    if (last_log != 0 && now - last_log < 60) {
+        suppressed++;
+        return;
+    }
+    if (suppressed)
+        sg_log(LOG_WARNING, "secfeed: subscriber refused (at capacity, %d clients); "
+               "%lu further refusals suppressed", client_count, suppressed);
+    else
+        sg_log(LOG_WARNING, "secfeed: subscriber refused (at capacity, %d clients)",
+               client_count);
+
+    last_log   = now;
+    suppressed = 0;
+}
+
 static void clients_add(int fd)
 {
     pthread_mutex_lock(&clients_lock);
+
+    if (client_count >= SECFEED_MAX_CLIENTS)
+        clients_reap_locked();   /* reclaim slots from subscribers that left */
+
     if (client_count < SECFEED_MAX_CLIENTS) {
         clients[client_count++] = fd;
         sg_log(LOG_INFO, "secfeed: subscriber connected (%d total)", client_count);
     } else {
-        close(fd);   /* at capacity — refuse */
-        sg_log(LOG_WARNING, "secfeed: subscriber refused (at capacity)");
+        close(fd);   /* genuinely at capacity — refuse */
+        log_refused_locked();
     }
     pthread_mutex_unlock(&clients_lock);
 }
