@@ -341,7 +341,39 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 }
 
 /* ── Fullscreen ──────────────────────────────────────────── */
-/* Enter/leave fullscreen with real geometry: cover the workspace output's
+/* Which monitor should a fullscreen window cover?
+ *
+ * A client names the monitor it wants in whatever way its protocol allows.
+ * xdg-shell clients pass a wl_output straight to set_fullscreen. X11 clients
+ * have no such argument, so SDL — and therefore Chibi, which picks the
+ * portrait monitor itself — moves the window onto the target monitor first
+ * and only then sets _NET_WM_STATE_FULLSCREEN; the window's own rectangle is
+ * the request. Honouring that also matches what X11 window managers do.
+ *
+ * Only called with a mapped view, so xsurface geometry is the placed one.
+ * A client that named no monitor falls back to its workspace's output, which
+ * for a window already on that output is the same answer as before. */
+static syn_output_t *fullscreen_target_output(syn_server_t *s, syn_view_t *view)
+{
+    struct wlr_output *wo = NULL;
+
+    if (view->is_xwayland) {
+        struct wlr_xwayland_surface *xs = view->xsurface;
+        if (xs->width > 0 && xs->height > 0)
+            wo = wlr_output_layout_output_at(s->output_layout,
+                                             xs->x + xs->width  / 2.0,
+                                             xs->y + xs->height / 2.0);
+    } else {
+        wo = view->xdg_surface->toplevel->requested.fullscreen_output;
+    }
+
+    if (wo && wo->data) return wo->data;
+    return (view->workspace && view->workspace->output)
+               ? view->workspace->output
+               : server_focused_output(s);
+}
+
+/* Enter/leave fullscreen with real geometry: cover the target output's
  * full box (raised, borders hidden — view_update_borders checks the flag),
  * or hand the window back to the layout. Shared by the xdg and XWayland
  * request handlers and the foreign-toplevel (taskbar) request. */
@@ -352,9 +384,12 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
     if (!view->mapped) return;
 
     if (view->fullscreen) {
-        syn_output_t *o = (view->workspace && view->workspace->output)
-                              ? view->workspace->output
-                              : server_focused_output(s);
+        syn_output_t *o = fullscreen_target_output(s, view);
+        /* Fullscreening onto another monitor hands the window to that
+         * monitor's workspace, so it stays put when the workspace it came
+         * from is switched away, and untiles back where it is shown. */
+        if (o && view->workspace && view->workspace->output != o)
+            workspace_move_view(s, view, o->active_workspace);
         struct wlr_box area;
         output_box_of(s, o, &area);
         view->x = area.x;    view->y = area.y;

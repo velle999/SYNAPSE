@@ -150,6 +150,18 @@ static void xw_map(struct wl_listener *listener, void *data)
     }
     focus_view(s, view, xs->surface);
     foreign_toplevel_map(view);
+
+    /* An X11 client that set _NET_WM_STATE_FULLSCREEN before it ever mapped
+     * (SDL does, so Chibi does) never got fullscreen geometry: the request
+     * arrived while view->mapped was 0, and layout_apply above skips
+     * fullscreen views, leaving the surface at the scene origin at its own
+     * size — straddling monitors. Apply it now that the view is mapped and
+     * has a taskbar handle, the way xdg_surface_map does. Read the state off
+     * the surface: wlroots sets it from the property without necessarily
+     * emitting request_fullscreen. */
+    if (xs->fullscreen)
+        view_apply_fullscreen(s, view, 1);
+
     synui_welcome_hide(s);
 }
 
