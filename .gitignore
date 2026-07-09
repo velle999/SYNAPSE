@@ -24,6 +24,18 @@ syn/src/
 syn-model/src/
 syn-firstboot/src/
 syn-install/src/
+# makepkg srcdir for the web-app packages — canonical source is each app's own
+# git repo, pinned by commit in its PKGBUILD; src/ is a throwaway clone
+nexus-chat/src/
+tepris/src/
+# makepkg's cached bare clone of each app's upstream repo — SRCDEST is the
+# PKGBUILD dir, so it lands as <pkg>/<pkg>/. The pinned _commit in the PKGBUILD
+# is the real reference; this is just a download cache.
+nexus-chat/nexus-chat/
+tepris/tepris/
+# vendored cdnjs libs makepkg downloads next to nexus-chat/PKGBUILD (their
+# sha256s are pinned there, so they're reproducible, not source)
+nexus-chat/*.min.js
 # built packages
 *.pkg.tar.zst
 *.pkg.tar.xz

@@ -269,6 +269,8 @@ PACKAGES=(
     syn-firstboot
     syn-model
     syn-install
+    nexus-chat
+    tepris
 )
 
 # Create build user for makepkg (can't run as root)

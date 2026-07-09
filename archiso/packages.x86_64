@@ -33,6 +33,9 @@ syn
 syn-firstboot
 syn-install
 synapse_kmod
+nexus-chat
+tepris
 foot
+firefox
 virtualbox-guest-utils
 dkms

@@ -1,0 +1,99 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+pkgname=nexus-chat
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="NEXUS P2P — end-to-end encrypted peer-to-peer chat with voice, files, and GIFs"
+arch=('any')
+url="https://github.com/velle999/nexus-chat"
+license=('MIT')
+depends=('firefox')
+makedepends=('git' 'python-pillow')
+
+# Pinned upstream commit — bump alongside pkgver/pkgrel when rolling the app.
+_commit=d372d6a1346dde0a9e891ee21575df0811c9d0f5
+
+# Upstream loads these three libs from cdnjs at page load. We vendor them so
+# the app keeps its "no server, no third-party contact" promise, works with no
+# network, and doesn't depend on synnet letting the CDN through. The versions
+# must match the <script src> tags upstream ships — prepare() enforces that.
+_mqttver=5.10.3
+_peerjsver=1.5.4
+_qrcodever=1.0.0
+
+source=("git+$url.git#commit=$_commit"
+        "mqtt-$_mqttver.min.js::https://cdnjs.cloudflare.com/ajax/libs/mqtt/$_mqttver/mqtt.min.js"
+        "peerjs-$_peerjsver.min.js::https://cdnjs.cloudflare.com/ajax/libs/peerjs/$_peerjsver/peerjs.min.js"
+        "qrcode-$_qrcodever.min.js::https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/$_qrcodever/qrcode.min.js"
+        "nexus-chat.sh"
+        "nexus-chat.desktop")
+sha256sums=('SKIP'
+            '1d32412a6abd0422278dd382bf914b2776b0bb933bb4295df6cf8aa1ca608cd5'
+            'ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5'
+            'c541ef06327885a8415bca8df6071e14189b4855336def4f36db54bde8484f36'
+            'SKIP'
+            'SKIP')
+
+prepare() {
+    cd "$pkgname"
+
+    sed -i \
+        -e "s|https://cdnjs.cloudflare.com/ajax/libs/mqtt/$_mqttver/mqtt.min.js|vendor/mqtt.min.js|g" \
+        -e "s|https://cdnjs.cloudflare.com/ajax/libs/peerjs/$_peerjsver/peerjs.min.js|vendor/peerjs.min.js|g" \
+        -e "s|https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/$_qrcodever/qrcode.min.js|vendor/qrcode.min.js|g" \
+        index.html
+
+    # The contract, not a sanity check: if upstream adds or bumps a CDN lib,
+    # fail the build rather than silently ship an app that phones home.
+    if grep -q 'cdnjs\.cloudflare\.com' index.html; then
+        error "unvendored cdnjs reference(s) remain in index.html:"
+        grep -n 'cdnjs\.cloudflare\.com' index.html >&2
+        return 1
+    fi
+}
+
+# Render a square PNG at the sizes synui's dock probes first (icons.c looks in
+# hicolor 64x64 then 48x48 then 128x128, PNG only — it never rasterizes SVG).
+# favicon.png is 631x580, so pad to a square before scaling or the dock draws
+# it stretched.
+_install_icons() {
+    local src=$1 size
+    for size in 64 128; do
+        python3 - "$src" "$size" "$srcdir/icon-$size.png" <<'PY'
+import sys
+from PIL import Image
+
+src, size, dst = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+im = Image.open(src).convert("RGBA")
+side = max(im.size)
+square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+square.paste(im, ((side - im.width) // 2, (side - im.height) // 2))
+square.resize((size, size), Image.Resampling.LANCZOS).save(dst)
+PY
+        install -Dm644 "$srcdir/icon-$size.png" \
+            "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/$pkgname.png"
+    done
+}
+
+package() {
+    cd "$pkgname"
+
+    # nexus-p2p.html is a byte-identical copy of index.html upstream; only one
+    # is packaged.
+    install -Dm644 index.html "$pkgdir/usr/share/$pkgname/index.html"
+    install -Dm644 assets/favicon.png assets/favicon.ico \
+        -t "$pkgdir/usr/share/$pkgname/assets/"
+
+    install -Dm644 "$srcdir/mqtt-$_mqttver.min.js" \
+        "$pkgdir/usr/share/$pkgname/vendor/mqtt.min.js"
+    install -Dm644 "$srcdir/peerjs-$_peerjsver.min.js" \
+        "$pkgdir/usr/share/$pkgname/vendor/peerjs.min.js"
+    install -Dm644 "$srcdir/qrcode-$_qrcodever.min.js" \
+        "$pkgdir/usr/share/$pkgname/vendor/qrcode.min.js"
+
+    install -Dm755 "$srcdir/$pkgname.sh" "$pkgdir/usr/bin/$pkgname"
+    install -Dm644 "$srcdir/$pkgname.desktop" \
+        "$pkgdir/usr/share/applications/$pkgname.desktop"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    _install_icons assets/favicon.png
+}

@@ -1,0 +1,60 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+pkgname=tepris
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="TEPRIS — arcade Tetris remix with CRT/VHS effects, gamepad support, and screen shake"
+arch=('any')
+url="https://github.com/velle999/tepris"
+license=('MIT')
+depends=('firefox')
+makedepends=('git' 'python-pillow')
+
+# Pinned upstream commit — bump alongside pkgver/pkgrel when rolling the app.
+_commit=b97e7fe2c778d92b54c9d2451dd733a4695d4375
+
+source=("git+$url.git#commit=$_commit"
+        "tepris.sh"
+        "tepris.desktop")
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP')
+
+# Render a square PNG at the sizes synui's dock probes first (icons.c looks in
+# hicolor 64x64 then 48x48 then 128x128, PNG only — it never rasterizes SVG).
+_install_icons() {
+    local src=$1 size
+    for size in 64 128; do
+        python3 - "$src" "$size" "$srcdir/icon-$size.png" <<'PY'
+import sys
+from PIL import Image
+
+src, size, dst = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+im = Image.open(src).convert("RGBA")
+side = max(im.size)
+square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+square.paste(im, ((side - im.width) // 2, (side - im.height) // 2))
+square.resize((size, size), Image.Resampling.LANCZOS).save(dst)
+PY
+        install -Dm644 "$srcdir/icon-$size.png" \
+            "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/$pkgname.png"
+    done
+}
+
+package() {
+    cd "$pkgname"
+
+    # The Electron wrapper upstream ships (main.js, preload.js, package.json)
+    # and its prebuilt dist/ are for the Windows build; on SynapseOS the app
+    # runs under Firefox via /usr/bin/tepris, so neither is packaged.
+    install -Dm644 index.html style.css tepris.js -t "$pkgdir/usr/share/$pkgname/"
+    install -Dm644 assets/* -t "$pkgdir/usr/share/$pkgname/assets/"
+
+    install -Dm755 "$srcdir/$pkgname.sh" "$pkgdir/usr/bin/$pkgname"
+    install -Dm644 "$srcdir/$pkgname.desktop" \
+        "$pkgdir/usr/share/applications/$pkgname.desktop"
+
+    # Upstream declares MIT in package.json but ships no LICENSE file, so
+    # there is no license text to install under /usr/share/licenses.
+
+    _install_icons assets/icon.png
+}

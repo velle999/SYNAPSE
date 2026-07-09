@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Nexus P2P
+GenericName=Encrypted Chat
+Comment=End-to-end encrypted peer-to-peer chat with voice, files, and GIFs
+Exec=nexus-chat
+Icon=nexus-chat
+Terminal=false
+Categories=Network;InstantMessaging;
+Keywords=chat;p2p;encrypted;webrtc;messaging;
+StartupNotify=false
+StartupWMClass=nexus-chat

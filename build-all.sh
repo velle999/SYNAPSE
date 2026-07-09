@@ -108,6 +108,11 @@ build_script_pkg syn-model
 build_script_pkg syn-install
 build_script_pkg syn-firstboot
 
+# Build web apps. No source tarball to stage — their PKGBUILDs pull a pinned
+# commit from each app's own git repo, so these need network at build time.
+build_script_pkg nexus-chat
+build_script_pkg tepris
+
 echo ""
 echo "=== All components built! ==="
 echo "Run: sudo systemctl start synapd"

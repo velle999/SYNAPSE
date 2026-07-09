@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=TEPRIS
+GenericName=Arcade Puzzle Game
+Comment=Arcade Tetris remix with CRT/VHS effects, gamepad support, and screen shake
+Exec=tepris
+Icon=tepris
+Terminal=false
+Categories=Game;BlockGame;ArcadeGame;
+Keywords=tetris;arcade;puzzle;game;blocks;
+StartupNotify=false
+StartupWMClass=tepris
