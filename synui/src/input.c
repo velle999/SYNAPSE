@@ -14,7 +14,8 @@
  *   Super+Tab            Cycle layout (tile → floating → monocle → AI → tile)
  *   Super+J/K            Focus next/prev window
  *   Super+Shift+J/K      Move window down/up the stack
- *   Super+H/L            Shrink / grow the master column
+ *   Super+H/Shift+L      Shrink / grow the master column
+ *   Super+L              Lock the screen (power_lock_cmd / swaylock)
  *   Super+F              Toggle floating (centred placement)
  *   Super+M              Toggle maximize
  *   Super+N              Minimize focused window
@@ -331,6 +332,10 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         wppick_toggle(s);
     } else if (strcmp(action, "power") == 0) {
         power_toggle(s);
+    } else if (strcmp(action, "lock") == 0) {
+        /* Same swaylock the idle timer and the power panel's Lock row run;
+         * power_lock_cmd already guards against stacking a second instance. */
+        spawn(s->config.power_lock_cmd);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
     } else if (strcmp(action, "effects_toggle") == 0) {

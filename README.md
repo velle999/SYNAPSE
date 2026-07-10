@@ -126,10 +126,11 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Tab` | Cycle layout |
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
-| `Super`+`H` / `Super`+`L` | Shrink / grow master area |
+| `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
 | `Super`+`O` / `Super`+`Shift`+`O` | Move window to next / previous monitor |
 | `Super`+`P` | Power saving panel |
+| `Super`+`L` | Lock screen |
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 

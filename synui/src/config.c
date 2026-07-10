@@ -16,7 +16,7 @@
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
- * effects_toggle, power.
+ * effects_toggle, power, lock.
  * A bind with the same combo as a default replaces it.
  *
  * Wallpaper (wallpaper.c):
@@ -169,7 +169,8 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },
         { "super+h",         "master_shrink" },
-        { "super+l",         "master_grow" },
+        { "super+shift+l",   "master_grow" },
+        { "super+l",         "lock" },
         { "super+j",         "focus_next" },
         { "super+k",         "focus_prev" },
         { "super+shift+j",   "stack_next" },
