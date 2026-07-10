@@ -20,6 +20,7 @@ terminus-font
 ttf-dejavu
 fontconfig
 wlroots0.19
+librsvg
 archiso
 mkinitcpio-archiso
 syslinux
