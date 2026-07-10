@@ -20,15 +20,24 @@ mkdir -p "$PROFILE"
 # A fresh Firefox profile otherwise opens the onboarding tab and the
 # "make me your default browser" prompt on top of the game on first launch.
 # The game keeps its high score in localStorage, which lives in this profile.
-if [ ! -e "$PROFILE/user.js" ]; then
-    cat >"$PROFILE/user.js" <<'EOF'
+#
+# user.js is fully generated (no user-editable content — the high score lives in
+# localStorage/prefs.js), so we rewrite it every launch. That makes new prefs
+# self-heal onto profiles seeded by an older launcher instead of being stuck
+# with whatever the very first run wrote.
+#
+# media.autoplay.default=0 / blocking_policy=0: without these Firefox blocks
+# audible autoplay until a user gesture, so the game's sounds+BGM stay silent.
+# This is a dedicated single-app kiosk profile, so allowing autoplay is safe.
+cat >"$PROFILE/user.js" <<'EOF'
 user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("media.autoplay.default", 0);
+user_pref("media.autoplay.blocking_policy", 0);
 EOF
-fi
 
 # --kiosk: fullscreen, no browser chrome. The game binds Space/arrows/Shift,
 # so a URL bar in the way would eat keystrokes as much as it would look wrong.

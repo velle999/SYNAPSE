@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=tepris
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="TEPRIS — arcade Tetris remix with CRT/VHS effects, gamepad support, and screen shake"
 arch=('any')
 url="https://github.com/velle999/tepris"
