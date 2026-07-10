@@ -191,10 +191,19 @@ case "$WITH_GPU" in
 esac
 
 # ── Clean ─────────────────────────────────────────────────────
+# Always wipe the mkarchiso work dir, even under --no-clean. It carries
+# per-stage stamp files AND the pacstrapped airootfs; a stale one from a
+# previous build makes mkarchiso skip straight to "Done!" — reusing the old
+# ISO with the old packages (e.g. an unbumped synui) and never picking up
+# freshly built ones. --no-clean is only meant to preserve the expensive
+# build/ (llama.cpp) compile.
+rm -rf "${WORK_DIR}"
 if [[ "$CLEAN" == "true" ]]; then
     step "Cleaning previous build"
-    rm -rf "${WORK_DIR}" "${BUILD_DIR}"
+    rm -rf "${BUILD_DIR}"
     log "Cleaned work/ and build/"
+else
+    log "Cleaned work/ (kept build/ — llama.cpp)"
 fi
 
 mkdir -p "${BUILD_DIR}" "${OUT_DIR}" "${LOCAL_REPO}" "${MODEL_DIR}"
@@ -364,9 +373,15 @@ build_package() {
     # Drop stale artifacts copied along from the source tree: old packages
     # (so the post-build copy only picks up fresh ones) and previous makepkg
     # extractions (bsdtar overlays but never deletes, so a leftover meson
-    # build dir from an older meson version fails the build).
+    # build dir from an older meson version fails the build). Wipe the whole
+    # src/ tree, not just src/${pkg}-*: git-sourced packages (nexus-chat,
+    # tepris) extract to a versionless src/${pkg} working copy whose .git
+    # alternates point back into the original tree at /home/velle, which the
+    # unprivileged synbuild user cannot read — leaving it makes makepkg abort
+    # with "does not appear to be a git repository". makepkg re-extracts src/
+    # (re-cloning git working copies from the cache dir copied alongside).
     rm -f "${tmpbuild}"/*.pkg.tar.zst
-    rm -rf "${tmpbuild}/src/${pkg}-"* "${tmpbuild}/pkg"
+    rm -rf "${tmpbuild}/src" "${tmpbuild}/pkg"
 
     chown -R synbuild: "${tmpbuild}"
 
