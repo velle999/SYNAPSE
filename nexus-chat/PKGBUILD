@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=nexus-chat
 pkgver=0.1.0
-pkgrel=1
+pkgrel=3
 pkgdesc="NEXUS P2P — end-to-end encrypted peer-to-peer chat with voice, files, and GIFs"
 arch=('any')
 url="https://github.com/velle999/nexus-chat"
@@ -10,7 +10,14 @@ depends=('firefox')
 makedepends=('git' 'python-pillow')
 
 # Pinned upstream commit — bump alongside pkgver/pkgrel when rolling the app.
-_commit=d372d6a1346dde0a9e891ee21575df0811c9d0f5
+# Must stay in lockstep with the GitHub Pages deploy (Pages serves main at /):
+# invites generated on file:// point a phone at Pages, and that copy has to
+# rendezvous with this one. Two wire-breaking parameters must match across
+# every build or peers silently never meet: the PBKDF2 iteration count (a
+# mismatch connects but drops every message) and the room-id derivation (a
+# mismatch puts peers on different MQTT topics entirely). Roll Pages + package
+# together.
+_commit=e28685d1933faa1bb43ae0c56e383d389b2f6ea7
 
 # Upstream loads these three libs from cdnjs at page load. We vendor them so
 # the app keeps its "no server, no third-party contact" promise, works with no
