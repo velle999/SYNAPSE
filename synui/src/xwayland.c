@@ -204,6 +204,73 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     }
 }
 
+/* ── Fullscreen upscale for sub-native X11 clients ───────────
+ * Old games (and other X11 clients) often keep rendering a fixed buffer —
+ * classically 1920x1080 — even after we configure them to a larger fullscreen
+ * box, leaving them unscaled in a corner of a higher-res monitor. When such a
+ * managed view is fullscreen and its surface is smaller than its fullscreen
+ * box, scale its scene buffer up to fill, aspect-preserving and centred (a
+ * non-matching aspect letterboxes rather than stretches). wlr_scene derives
+ * the matching input hit-test and damage for a scaled buffer, so no extra
+ * pointer bookkeeping is needed.
+ *
+ * Only single-buffer surfaces are scaled: a uniform buffer scale would
+ * misplace the sub-surfaces of a multi-surface client, so those are left as
+ * they are (gamescope remains the tool for games that need more). The scene
+ * subsurface-tree helper resets dest_size to the surface's logical size on
+ * every commit, so this is re-applied from the X11 surface commit handler. */
+struct fs_scale_probe { int count; struct wlr_scene_buffer *buf; };
+
+static void fs_scale_count(struct wlr_scene_buffer *b, int sx, int sy, void *data)
+{
+    (void)sx; (void)sy;
+    struct fs_scale_probe *p = data;
+    p->count++;
+    p->buf = b;
+}
+
+void view_fullscreen_rescale(syn_view_t *v)
+{
+    if (!v || !v->is_xwayland || v->override_redirect || !v->mapped ||
+        !v->scene_tree)
+        return;
+    struct wlr_surface *surf = v->xsurface ? v->xsurface->surface : NULL;
+    if (!surf) return;
+    int sw = surf->current.width, sh = surf->current.height;
+    if (sw <= 0 || sh <= 0) return;
+
+    struct fs_scale_probe p = {0};
+    wlr_scene_node_for_each_buffer(&v->scene_tree->node, fs_scale_count, &p);
+    if (p.count != 1 || !p.buf) return;   /* leave multi-surface clients alone */
+
+    if (v->fullscreen && v->w > 0 && v->h > 0 && (sw < v->w || sh < v->h)) {
+        double fx = (double)v->w / sw, fy = (double)v->h / sh;
+        double scale = fx < fy ? fx : fy;
+        int dw = (int)(sw * scale + 0.5), dh = (int)(sh * scale + 0.5);
+        wlr_scene_buffer_set_dest_size(p.buf, dw, dh);
+        wlr_scene_node_set_position(&v->scene_tree->node,
+                                    v->x + (v->w - dw) / 2,
+                                    v->y + (v->h - dh) / 2);
+    } else {
+        /* Not fullscreen, or the client already fills the box: hand the buffer
+         * back to its natural size at the view origin. (The helper also resets
+         * dest_size on the next commit, but do it now so an un-fullscreened or
+         * grown window isn't left scaled/offset for a frame.) */
+        wlr_scene_buffer_set_dest_size(p.buf, sw, sh);
+        wlr_scene_node_set_position(&v->scene_tree->node, v->x, v->y);
+    }
+}
+
+static void xw_surface_commit(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, commit);
+    /* Only fullscreen managed X11 windows need the per-frame re-apply; the
+     * un-fullscreen reset is driven once from view_apply_fullscreen. */
+    if (view->fullscreen)
+        view_fullscreen_rescale(view);
+}
+
 static void xw_associate(struct wl_listener *listener, void *data)
 {
     (void)data;
@@ -212,6 +279,8 @@ static void xw_associate(struct wl_listener *listener, void *data)
     wl_signal_add(&view->xsurface->surface->events.map, &view->map);
     view->unmap.notify = xw_unmap;
     wl_signal_add(&view->xsurface->surface->events.unmap, &view->unmap);
+    view->commit.notify = xw_surface_commit;
+    wl_signal_add(&view->xsurface->surface->events.commit, &view->commit);
 }
 
 static void xw_dissociate(struct wl_listener *listener, void *data)
@@ -220,6 +289,7 @@ static void xw_dissociate(struct wl_listener *listener, void *data)
     syn_view_t *view = wl_container_of(listener, view, dissociate);
     wl_list_remove(&view->map.link);
     wl_list_remove(&view->unmap.link);
+    wl_list_remove(&view->commit.link);
 }
 
 static void xw_destroy(struct wl_listener *listener, void *data)

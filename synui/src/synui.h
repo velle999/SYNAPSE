@@ -919,6 +919,9 @@ void view_update_borders(syn_view_t *view);
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);
 void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs);
 void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized);
+/* Scale a sub-native fullscreen X11 client up to fill its output (xwayland.c);
+ * no-op for xdg, override-redirect, multi-surface or already-filling clients. */
+void view_fullscreen_rescale(syn_view_t *view);
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
 void layout_tile(syn_server_t *s, syn_workspace_t *ws);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws);

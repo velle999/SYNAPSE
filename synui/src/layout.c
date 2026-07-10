@@ -403,11 +403,16 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
         wlr_scene_node_set_position(&view->scene_tree->node, area.x, area.y);
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
         view_update_borders(view);
+        /* A sub-native X11 client (old game locked to 1080p) fills the box by
+         * scaling its buffer; re-applied per-commit from xw_surface_commit. */
+        view_fullscreen_rescale(view);
     } else {
         layout_apply(s, view->workspace);
         if (view->floating)
             layout_float_place(s, view);
         view_update_borders(view);
+        /* Undo any fullscreen buffer scale now the view is back in the layout. */
+        view_fullscreen_rescale(view);
     }
 }
 
