@@ -361,18 +361,20 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
             workspace_move_view(s, s->focused_view, n - 1);
     } else if (strcmp(action, "move_output") == 0) {
         /* Throw the focused window to the next monitor (connection order,
-         * cyclic). Tiled/monocle/maximized windows are repositioned by the
-         * target output's layout via workspace_move_view; floating and
-         * fullscreen windows carry their own absolute geometry, so translate
-         * or re-cover them onto the new output explicitly. */
+         * cyclic); arg "prev" goes the other way. Tiled/monocle/maximized
+         * windows are repositioned by the target output's layout via
+         * workspace_move_view; floating and fullscreen windows carry their own
+         * absolute geometry, so translate or re-cover them onto it explicitly. */
         syn_view_t *v = s->focused_view;
         if (!v || !v->mapped) return;
         syn_output_t *cur = (v->workspace && v->workspace->output)
                                 ? v->workspace->output
                                 : server_focused_output(s);
         if (!cur) return;
-        struct wl_list *node = cur->link.next;
-        if (node == &s->outputs) node = s->outputs.next;   /* wrap past head */
+        bool prev = arg && strcmp(arg, "prev") == 0;
+        /* Step one element in the wl_list, wrapping past the head sentinel. */
+        struct wl_list *node = prev ? cur->link.prev : cur->link.next;
+        if (node == &s->outputs) node = prev ? s->outputs.prev : s->outputs.next;
         syn_output_t *next = wl_container_of(node, next, link);
         if (!next || next == cur) return;                  /* only one monitor */
 
