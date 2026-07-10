@@ -7,6 +7,10 @@ Type=simple
 ExecStart=/usr/lib/synui/synui-media-inhibit
 Restart=always
 RestartSec=3
+# Default is yes, which SIG_IGN's SIGPIPE for the script and every child it
+# execs. The audio monitor feeds a pipe into synui-idle-inhibit and must die
+# when that reader does, so systemd can reattach it to the next synui.
+IgnoreSIGPIPE=no
 
 [Install]
 WantedBy=default.target

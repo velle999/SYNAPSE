@@ -24,9 +24,13 @@ done
 WAYLAND_DISPLAY="$(tr -d '[:space:]' < /tmp/synui-display)"
 export WAYLAND_DISPLAY
 
-# Emit "1" when audio is playing, "0" when not — only on change — on stdout.
+# Emit "1" when audio is playing, "0" when not, on stdout — every poll, not just
+# on change. synui-idle-inhibit's set_inhibit() is idempotent (it only acts, and
+# only logs, on a real transition), so repeating the current state is free. The
+# steady write is what makes a dead reader observable: without it a stuck state
+# means nothing is ever written to the pipe and the client's death goes unnoticed
+# indefinitely. Now it surfaces within one poll interval.
 audio_monitor() {
-    prev=""
     while :; do
         cur=0
         if pw-dump 2>/dev/null | python3 -c '
@@ -48,15 +52,22 @@ sys.exit(1)
             continue
         fi
 
-        if [ "$cur" != "$prev" ]; then
-            printf '%s\n' "$cur"
-            prev="$cur"
+        # A failed write means synui-idle-inhibit is gone. Don't rely on SIGPIPE
+        # to end us: systemd's IgnoreSIGPIPE= defaults to yes, so the signal is
+        # SIG_IGN'd and inherited here, turning the would-be kill into a plain
+        # EPIPE that a bare `printf` would discard while the loop spins on.
+        # The unit sets IgnoreSIGPIPE=no; this check stands on its own anyway.
+        if ! printf '%s\n' "$cur" 2>/dev/null; then
+            echo "synui-media-inhibit: idle-inhibit client gone — restarting" >&2
+            exit 1
         fi
         sleep 2
     done
 }
 
-# If synui-idle-inhibit exits (e.g. synui restarted), the pipe closes, the
-# monitor gets SIGPIPE, this script exits, and systemd (Restart=always) brings
-# it back for the next session.
+# When synui restarts, its clients die; synui-idle-inhibit exits, the pipe
+# breaks, the monitor above notices on its next write and exits, and systemd
+# (Restart=always) brings the pair back against the new compositor.
 audio_monitor | /usr/lib/synui/synui-idle-inhibit
+echo "synui-media-inhibit: inhibit pipeline exited — restarting" >&2
+exit 1
