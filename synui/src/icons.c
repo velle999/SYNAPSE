@@ -3,18 +3,19 @@
  *
  * Resolves an app_id (as reported by view_app_id()/foreign-toplevel) to a
  * display name, a launch command, and an icon, for the dock (dock.c) and
- * anything else that wants to show an app by app_id. Two things are
- * deliberately out of scope for v1, both documented rather than worked
- * around:
+ * anything else that wants to show an app by app_id.
  *
- *   - .desktop matching is a direct "<app_id>.desktop" basename lookup, not
- *     a real StartupWMClass/heuristic match. This misses apps whose app_id
- *     doesn't equal their .desktop file's basename — the same fuzzy problem
- *     real desktop shells only partially solve.
- *   - Only PNG icons are decoded (via cairo, same as wallpaper.c's
- *     decode_png). SVG icon themes (common in hicolor/scalable) are not
- *     rasterized — would need librsvg, a new dependency. Callers fall back
- *     to icon_draw_monogram() when no PNG is found.
+ * Icons are looked up as a rasterized PNG first (hicolor's fixed-size dirs,
+ * then /usr/share/pixmaps), then as a scalable SVG rendered through librsvg.
+ * The SVG path is not optional polish: KDE and GNOME apps increasingly ship
+ * scalable/ only — org.kde.dolphin has no PNG on disk at any size — so
+ * without it those apps fall back to icon_draw_monogram() forever.
+ *
+ * One thing remains deliberately out of scope, documented rather than worked
+ * around: .desktop matching is a direct "<app_id>.desktop" basename lookup,
+ * not a real StartupWMClass/heuristic match. This misses apps whose app_id
+ * doesn't equal their .desktop file's basename — the same fuzzy problem real
+ * desktop shells only partially solve.
  *
  * SynapseOS Project — GPLv2
  */
@@ -27,11 +28,17 @@
 #include <ctype.h>
 
 #include <cairo.h>
+#include <librsvg/rsvg.h>
 #include <wlr/util/log.h>
 
 #include "synui.h"
 
 #define ICON_CACHE_MAX 64
+
+/* SVGs have no natural pixel size, so pick one. The dock scales whatever it
+ * gets down to DOCK_ICON_SIZE (48) with CAIRO_FILTER_GOOD; rasterizing at 128
+ * leaves headroom for larger consumers and downsamples cleanly. */
+#define ICON_RASTER_SIZE 128
 
 static syn_icon_entry_t icon_cache[ICON_CACHE_MAX];
 static int icon_cache_count = 0;
@@ -46,6 +53,45 @@ static cairo_surface_t *decode_png(const char *path)
         cairo_surface_destroy(surf);
         return NULL;
     }
+    return surf;
+}
+
+/* Render an SVG into a square ARGB32 surface. Same contract as decode_png:
+ * NULL on any failure, caller owns the surface. A missing file is the common
+ * case (callers probe several paths), so it is not logged. */
+static cairo_surface_t *decode_svg(const char *path, int size)
+{
+    GError *err = NULL;
+    RsvgHandle *h = rsvg_handle_new_from_file(path, &err);
+    if (!h) {
+        g_clear_error(&err);
+        return NULL;
+    }
+
+    cairo_surface_t *surf =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
+    if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(surf);
+        g_object_unref(h);
+        return NULL;
+    }
+
+    cairo_t *cr = cairo_create(surf);
+    RsvgRectangle viewport = { .x = 0, .y = 0,
+                               .width = size, .height = size };
+    gboolean ok = rsvg_handle_render_document(h, cr, &viewport, &err);
+    cairo_destroy(cr);
+    g_object_unref(h);
+
+    if (!ok) {
+        wlr_log(WLR_ERROR, "synui: icons: SVG render failed '%s': %s",
+                path, err && err->message ? err->message : "unknown error");
+        g_clear_error(&err);
+        cairo_surface_destroy(surf);
+        return NULL;
+    }
+
+    cairo_surface_flush(surf);
     return surf;
 }
 
@@ -150,25 +196,28 @@ static void parse_desktop_file(const char *path, syn_icon_entry_t *e)
 
 /* ── Icon file lookup ─────────────────────────────────────── */
 
-/* Try common hicolor sizes + /usr/share/pixmaps for a PNG matching `name`
- * (either an Icon= value or, as a last resort, the bare app_id). */
+/* Find an icon for `name` (either an Icon= value or, as a last resort, the
+ * bare app_id), preferring a pre-rasterized PNG at a fixed hicolor size, then
+ * the scalable SVG, then the legacy /usr/share/pixmaps drop. */
 static cairo_surface_t *find_and_decode_icon(const char *name)
 {
     if (!name || !*name) return NULL;
 
-    /* Icon= may already be an absolute path to a PNG. */
+    /* Icon= may already be an absolute path. */
     if (name[0] == '/') {
         size_t len = strlen(name);
         if (len > 4 && strcmp(name + len - 4, ".png") == 0)
             return decode_png(name);
-        return NULL;   /* absolute non-PNG (likely SVG) — out of scope */
+        if (len > 4 && strcmp(name + len - 4, ".svg") == 0)
+            return decode_svg(name, ICON_RASTER_SIZE);
+        return NULL;
     }
 
     static const char *sizes[] = { "64x64", "48x48", "128x128", "32x32" };
     const char *home = getenv("HOME");
+    char path[320];
 
     for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
-        char path[320];
         snprintf(path, sizeof(path),
                  "/usr/share/icons/hicolor/%s/apps/%s.png", sizes[i], name);
         cairo_surface_t *s = decode_png(path);
@@ -183,7 +232,20 @@ static cairo_surface_t *find_and_decode_icon(const char *name)
         }
     }
 
-    char path[320];
+    /* No fixed-size raster — try the scalable theme dir. */
+    snprintf(path, sizeof(path),
+             "/usr/share/icons/hicolor/scalable/apps/%s.svg", name);
+    cairo_surface_t *s = decode_svg(path, ICON_RASTER_SIZE);
+    if (s) return s;
+
+    if (home) {
+        snprintf(path, sizeof(path),
+                 "%s/.local/share/icons/hicolor/scalable/apps/%s.svg",
+                 home, name);
+        s = decode_svg(path, ICON_RASTER_SIZE);
+        if (s) return s;
+    }
+
     snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.png", name);
     return decode_png(path);
 }

@@ -9,6 +9,7 @@ xkbcommon = dependency('xkbcommon')
 pixman    = dependency('pixman-1')
 threads   = dependency('threads')
 cairo     = dependency('cairo')
+rsvg      = dependency('librsvg-2.0')  # icons.c rasterizes SVG-only app icons
 libinput  = dependency('libinput')
 libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
 
@@ -132,7 +133,7 @@ synui_exe = executable('synui',
     pointer_constraints_h,
   ],
   include_directories : include_directories('src'),
-  dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo,
+  dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
                   libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, egl, glesv2],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
