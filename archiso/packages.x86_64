@@ -21,6 +21,7 @@ ttf-dejavu
 fontconfig
 wlroots0.19
 librsvg
+plymouth
 archiso
 mkinitcpio-archiso
 syslinux

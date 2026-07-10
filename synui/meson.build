@@ -157,6 +157,7 @@ executable('synui-idle-inhibit',
 synui_datadir = get_option('prefix') / get_option('datadir') / 'synui'
 install_data('data/wallpaper.png',    install_dir : synui_datadir)
 install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
+install_data('data/logo.svg',         install_dir : synui_datadir)
 
 # Headless smoke test: boots the compositor on the headless backend, checks
 # the advertised globals, maps a client (if foot is installed), screenshots

@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <cairo.h>
+#include <librsvg/rsvg.h>
 
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/interfaces/wlr_buffer.h>
@@ -169,11 +170,25 @@ void synui_render_welcome(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    /* SynapseOS dendrite emblem, top-left of the header (transparent SVG
+     * rendered straight into the panel's cairo context via librsvg, the same
+     * path icons.c uses for app icons). Best-effort: a missing/broken asset
+     * just leaves the header text as before. */
+    {
+        RsvgHandle *lh =
+            rsvg_handle_new_from_file(SYNUI_DATADIR "/logo.svg", NULL);
+        if (lh) {
+            RsvgRectangle vp = { .x = 20, .y = 12, .width = 48, .height = 48 };
+            rsvg_handle_render_document(lh, cr, &vp, NULL);
+            g_object_unref(lh);
+        }
+    }
+
     /* Title */
     cairo_set_font_size(cr, 28);
     cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
-    cairo_move_to(cr, 76, 60);
-    cairo_show_text(cr, "S Y N A P S E O S");
+    cairo_move_to(cr, 84, 60);
+    cairo_show_text(cr, "SYNAPSEOS");
 
     /* Separator */
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);

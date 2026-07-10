@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=SynapseOS
+Description=SynapseOS dendrite boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/synapseos
+ScriptFile=/usr/share/plymouth/themes/synapseos/synapseos.script
