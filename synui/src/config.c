@@ -15,7 +15,8 @@
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
- * ws <1-9>, movews <1-9>, wallpaper, wallpaper_reload, effects_toggle, power.
+ * ws <1-9>, movews <1-9>, move_output, wallpaper, wallpaper_reload,
+ * effects_toggle, power.
  * A bind with the same combo as a default replaces it.
  *
  * Wallpaper (wallpaper.c):
@@ -182,6 +183,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "effects_toggle" },
         { "super+p",         "power" },
+        { "super+o",         "move_output" },
     };
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
         config_bind(cfg, defaults[i].combo, defaults[i].action);

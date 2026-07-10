@@ -359,6 +359,54 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         int n = atoi(arg);
         if (n >= 1 && n <= WORKSPACE_MAX && s->focused_view)
             workspace_move_view(s, s->focused_view, n - 1);
+    } else if (strcmp(action, "move_output") == 0) {
+        /* Throw the focused window to the next monitor (connection order,
+         * cyclic). Tiled/monocle/maximized windows are repositioned by the
+         * target output's layout via workspace_move_view; floating and
+         * fullscreen windows carry their own absolute geometry, so translate
+         * or re-cover them onto the new output explicitly. */
+        syn_view_t *v = s->focused_view;
+        if (!v || !v->mapped) return;
+        syn_output_t *cur = (v->workspace && v->workspace->output)
+                                ? v->workspace->output
+                                : server_focused_output(s);
+        if (!cur) return;
+        struct wl_list *node = cur->link.next;
+        if (node == &s->outputs) node = s->outputs.next;   /* wrap past head */
+        syn_output_t *next = wl_container_of(node, next, link);
+        if (!next || next == cur) return;                  /* only one monitor */
+
+        struct wlr_box from, to;
+        output_box_of(s, cur,  &from);
+        output_box_of(s, next, &to);
+
+        workspace_move_view(s, v, next->active_workspace);
+
+        if (v->fullscreen) {
+            v->x = to.x;      v->y = to.y;
+            v->w = to.width;  v->h = to.height;
+            if (v->is_xwayland)
+                wlr_xwayland_surface_configure(v->xsurface, to.x, to.y,
+                                               to.width, to.height);
+            else
+                wlr_xdg_toplevel_set_size(v->xdg_surface->toplevel,
+                                          to.width, to.height);
+            wlr_scene_node_set_position(&v->scene_tree->node, to.x, to.y);
+            wlr_scene_node_raise_to_top(&v->scene_tree->node);
+        } else if (v->floating) {
+            /* Keep the same on-screen position relative to the monitor. */
+            int nx = v->x + (to.x - from.x);
+            int ny = v->y + (to.y - from.y);
+            if (nx + v->w > to.x + to.width)  nx = to.x + to.width  - v->w;
+            if (ny + v->h > to.y + to.height) ny = to.y + to.height - v->h;
+            if (nx < to.x) nx = to.x;
+            if (ny < to.y) ny = to.y;
+            view_resize(v, nx, ny, v->w, v->h);
+            wlr_scene_node_raise_to_top(&v->scene_tree->node);
+        }
+        /* workspace_move_view keeps focus (the target workspace is visible on
+         * the new monitor); re-assert activation so the client repaints. */
+        focus_view(s, v, view_surface(v));
     } else {
         wlr_log(WLR_ERROR, "synui: unknown bind action '%s'", action);
     }
