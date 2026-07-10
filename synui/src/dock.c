@@ -409,9 +409,21 @@ bool dock_tick(syn_output_t *o, double now)
             break;
         }
     }
-    /* Keep-shown region: anywhere over the fully-shown bar. */
-    bool in_bar = on_output && cx >= bx && cx < bx + bw &&
+    /* Keep-shown region: anywhere over the bar, but only once some of it is
+     * actually on screen. dock_geometry() reports the *fully-shown* rect, so
+     * testing it unconditionally would treat the whole dock_height band as a
+     * reveal trigger and make `margin` meaningless. */
+    bool on_screen = o->dock.shown || o->dock.slide_progress > 0.0;
+    bool in_bar = on_screen && on_output &&
+                  cx >= bx && cx < bx + bw &&
                   cy >= by && cy < by + bh;
+
+    /* Don't summon a hidden dock mid-drag: a client holding an implicit
+     * pointer grab (rubber-band select, window drag) owns the cursor, and
+     * sliding the bar out from under it only covers what it is aimed at. */
+    if (!on_screen && s->seat && s->seat->pointer_state.button_count > 0)
+        in_trigger = false;
+
     bool engaged = in_trigger || in_bar;
 
     if (engaged) {

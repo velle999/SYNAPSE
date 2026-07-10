@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=35
+pkgrel=38
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -25,6 +25,11 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synui-foot.service"
     install -Dm644 config/synui.desktop \
         "$pkgdir/usr/share/wayland-sessions/synui.desktop"
+
+    # Without this, kbuildsycoca6 indexes no applications and every KDE app
+    # falls back to the "Open With" chooser. See config/applications.menu.
+    install -Dm644 config/applications.menu \
+        "$pkgdir/etc/xdg/menus/applications.menu"
 
     # Media idle-inhibit (synui-idle-inhibit binary is installed by meson).
     install -Dm755 systemd/synui-media-inhibit.sh \

@@ -1,0 +1,20 @@
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN" "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
+<!-- Minimal freedesktop application menu.
+
+     KDE's kbuildsycoca6 builds its application index by walking this file.
+     SynapseOS ships no Plasma, so nothing else provides one. Without it the
+     index holds mimetypes but zero applications, KApplicationTrader resolves
+     no handler for any mimetype, and KDE apps (Dolphin) fall back to the
+     "Open With" chooser on every file they open, even when
+     ~/.config/mimeapps.list already names a perfectly good default.
+
+     Keep this file free of double hyphens: XML forbids them inside comments,
+     and a parse error here silently empties the application index. -->
+<Menu>
+  <Name>Applications</Name>
+  <Directory>Applications.directory</Directory>
+  <DefaultAppDirs/>
+  <DefaultDirectoryDirs/>
+  <DefaultMergeDirs/>
+  <Include><All/></Include>
+</Menu>
