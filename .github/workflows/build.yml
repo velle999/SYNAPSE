@@ -79,7 +79,7 @@ jobs:
           pacman -Syu --noconfirm --needed \
             base-devel git cmake meson ninja pkgconf \
             readline systemd-libs \
-            wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo \
+            wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
             linux-headers \
             wayland-utils foot grim ttf-dejavu
 
