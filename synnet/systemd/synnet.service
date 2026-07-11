@@ -9,5 +9,19 @@ ExecStart=/usr/bin/synnet --foreground
 Restart=on-failure
 RestartSec=5
 
+# ── Hardening ────────────────────────────────────────────
+# No User= was set, so this was running as root with nothing fenced off at all.
+# It needs exactly two things: NETLINK_CONNECTOR (monitor.c) to watch processes,
+# and CAP_NET_ADMIN to manage its nftables set. Everything else is deniable.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectHostname=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,8 @@
 # SynapseOS environment
 export XDG_SESSION_TYPE=wayland
+# Portal backend routing keys off this (synui-portals.conf). Unset, portal falls
+# back to GTK, which cannot ScreenCast on wlroots — no screen sharing at all.
+export XDG_CURRENT_DESKTOP=synui
 # WAYLAND_DISPLAY is set by synui at runtime — do not hard-code it here
 
 # Only set SynapseOS desktop ID when synui is the active compositor;

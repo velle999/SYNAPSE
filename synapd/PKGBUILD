@@ -1,6 +1,6 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -12,11 +12,17 @@ source=("synapd-0.1.0.tar.gz")
 sha256sums=('SKIP')
 
 prepare() {
-    # Make llama-staging accessible for meson.build's library search
+    # Make llama-staging accessible for meson.build's library search.
+    #
+    # -n (--no-dereference) matters: this symlink survives in src/ from the last
+    # build, and plain `ln -sf` *follows* an existing symlink-to-a-directory and
+    # tries to create the link inside it — which fails, so every re-run of
+    # makepkg died in prepare() with "failed to create symbolic link
+    # '.../src/llama-staging/llama-staging'". Only a clean src/ ever worked.
     if [ -d "$startdir/llama-staging/usr" ]; then
-        ln -sf "$startdir/llama-staging" "$srcdir/llama-staging"
+        ln -sfn "$startdir/llama-staging" "$srcdir/llama-staging"
     elif [ -d "$startdir/../llama-staging/usr" ]; then
-        ln -sf "$startdir/../llama-staging" "$srcdir/llama-staging"
+        ln -sfn "$startdir/../llama-staging" "$srcdir/llama-staging"
     fi
 }
 

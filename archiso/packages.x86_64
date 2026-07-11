@@ -43,3 +43,9 @@ firefox
 gamescope
 virtualbox-guest-utils
 dkms
+xdg-desktop-portal
+xdg-desktop-portal-wlr
+xdg-desktop-portal-gtk
+slurp
+grim
+rtkit

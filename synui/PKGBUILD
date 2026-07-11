@@ -1,10 +1,15 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=49
+pkgrel=50
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'pipewire' 'python')
+# xdg-desktop-portal{,-wlr,-gtk}: screen sharing. Without the wlr backend, portal
+#   falls back to GTK, which cannot do ScreenCast on wlroots — so Firefox/OBS/
+#   Discord screen capture silently fails. slurp is xdpw's output chooser.
+# rtkit: pipewire/wireplumber cannot get realtime scheduling without it and the
+#   audio stack xruns under load (chibi's TTS, and anything playing during a game).
+depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
@@ -36,6 +41,14 @@ package() {
         "$pkgdir/usr/lib/synui/synui-media-inhibit"
     install -Dm644 systemd/synui-media-inhibit.service \
         "$pkgdir/usr/lib/systemd/user/synui-media-inhibit.service"
+
+    # Screen sharing. The portals file is keyed on XDG_CURRENT_DESKTOP=synui,
+    # which the session sets; both halves are needed or portal falls back to
+    # the GTK backend, which cannot ScreenCast on wlroots.
+    install -Dm644 config/synui-portals.conf \
+        "$pkgdir/usr/share/xdg-desktop-portal/synui-portals.conf"
+    install -Dm644 config/xdg-desktop-portal-wlr.conf \
+        "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/config"
 
     # AI backend GPU/CPU toggle (welcome menu "AI Backend" row spawns it).
     install -Dm755 systemd/synui-ai-backend.sh \

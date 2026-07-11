@@ -46,5 +46,24 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=synapd
 
+# ── Hardening ────────────────────────────────────────────
+# synapd runs as root and parses everything that comes in over its socket, so
+# it is the most valuable thing in the tree to fence in.
+#
+# Deliberately NOT set, because each of these would break it:
+#   PrivateDevices        — needs /dev/nvidia* for CUDA offload
+#   ProtectKernelModules  — it modprobes synapse_kmod (scheduler.c)
+#   MemoryDenyWriteExecute— CUDA generates code at runtime
+#   ProtectSystem=strict  — would make /run and /var read-only; `full` gives us
+#                           read-only /usr + /etc without that fallout
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectHostname=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=CAP_SYS_MODULE CAP_IPC_LOCK CAP_CHOWN CAP_DAC_OVERRIDE CAP_SYS_NICE
+
 [Install]
 WantedBy=multi-user.target

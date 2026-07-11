@@ -30,10 +30,22 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=synguard
 
-# Security hardening
+# ── Hardening ────────────────────────────────────────────
+# NoNewPrivileges was false here. Nothing synguard does needs to gain
+# privileges — it forks no setuid helper — and it is root already, so the flag
+# only ever gave away a free escalation path from a compromised monitor.
+#
+# ProtectHome is read-only rather than true: synguard classifies flagged
+# processes by resolving /proc/<pid>/exe, which for a user-run binary points
+# into /home. ProtectHome=true would make that path vanish and quietly weaken
+# detection instead of failing loudly.
 ProtectProc=invisible
 PrivateTmp=true
-NoNewPrivileges=false
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectHostname=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

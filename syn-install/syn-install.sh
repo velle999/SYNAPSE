@@ -256,6 +256,8 @@ pacstrap /mnt \
     grub efibootmgr \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
+    xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
+    rtkit \
     mkinitcpio dkms \
     2>&1 || die "pacstrap failed — check network connection"
 
@@ -635,6 +637,8 @@ else
     done
 fi
 export XDG_SESSION_TYPE=wayland
+# Portal backend routing (synui-portals.conf); unset ⇒ no screen sharing.
+export XDG_CURRENT_DESKTOP=synui
 export LIBSEAT_BACKEND=seatd
 # Pin cursor theme+size so Xwayland clients (Steam, games) match synui's own
 # 24px cursor; without XCURSOR_SIZE libXcursor auto-picks a much larger size.
@@ -682,6 +686,7 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
             done
         fi
         export XDG_SESSION_TYPE=wayland
+        export XDG_CURRENT_DESKTOP=synui
         export LIBSEAT_BACKEND=seatd
         export XCURSOR_THEME=Adwaita
         export XCURSOR_SIZE=24

@@ -3,8 +3,9 @@
  *
  * Implements the long-stubbed "syn guard watch" channel: a read-only stream
  * of verdict records that subscribers (notably synui, to colour window
- * borders) can consume. synguard runs as root and the compositor as the
- * user, so the socket lives directly in /run with 0666 permissions.
+ * borders) can consume. synguard runs as root and the compositor as the user,
+ * so the socket lives directly in /run, owned root:synapse and mode 0660 —
+ * see the rationale at the chmod in secfeed_init().
  *
  * Design: a listening AF_UNIX stream socket with a dedicated accept thread
  * that appends accepted client fds to a small array. secfeed_publish() — called
@@ -27,6 +28,7 @@
 #include <pthread.h>
 #include <poll.h>
 #include <time.h>
+#include <grp.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -155,8 +157,28 @@ int secfeed_init(void)
         return -1;
     }
 
-    /* World-accessible so the unprivileged compositor can subscribe. */
-    chmod(SYNGUARD_SECFEED_SOCKET, 0666);
+    /* The compositor runs unprivileged and has to subscribe, so this socket
+     * cannot be root-only — but it must not be 0666 either, which is what it
+     * used to be. The feed is a live stream of every verdict synguard reaches:
+     * world-readable, it hands any local process (a compromised browser tab, a
+     * Steam game) a running commentary on exactly what the host's security
+     * daemon detects and when — and lets any of them occupy all
+     * SECFEED_MAX_CLIENTS slots and starve the real subscriber.
+     *
+     * Gate it on the `synapse` group instead, the same way synapd gates its
+     * control socket (socket_server.c). Fail closed: if the group is missing,
+     * the socket stays root-only and the compositor loses border colouring —
+     * which is a visible, logged degradation rather than a silent open door. */
+    struct group *gr = getgrnam("synapse");
+    if (gr) {
+        if (chown(SYNGUARD_SECFEED_SOCKET, 0, gr->gr_gid) < 0)
+            sg_log(LOG_WARNING, "secfeed: chown(%s, :synapse): %s",
+                   SYNGUARD_SECFEED_SOCKET, strerror(errno));
+    } else {
+        sg_log(LOG_WARNING,
+               "secfeed: no 'synapse' group — only root can subscribe");
+    }
+    chmod(SYNGUARD_SECFEED_SOCKET, 0660);
 
     if (listen(listen_fd, SECFEED_MAX_CLIENTS) < 0) {
         sg_log(LOG_WARNING, "secfeed: listen(): %s", strerror(errno));

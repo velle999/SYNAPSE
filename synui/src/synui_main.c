@@ -1018,9 +1018,30 @@ int synui_init(syn_server_t *s)
     setenv("WAYLAND_DISPLAY", socket, 1);
     wlr_log(WLR_INFO, "synui: running on WAYLAND_DISPLAY=%s", socket);
 
-    /* Write socket name for synui-foot.service */
-    FILE *sf = fopen("/tmp/synui-display", "w");
+    /* Publish the socket name for synui-foot.service and synui-media-inhibit.
+     *
+     * This goes in XDG_RUNTIME_DIR (0700, owned by the session user), not in
+     * /tmp as it used to. synui-foot runs the session's only terminal as root,
+     * and it sets WAYLAND_DISPLAY from this file — but WAYLAND_DISPLAY may be
+     * an *absolute path*, so whoever wins the race to create a world-writable
+     * /tmp/synui-display could point a root `foot synsh` at a Wayland socket
+     * they control and type into a root shell. The runtime dir is not writable
+     * by other users, which closes that off.
+     *
+     * /tmp remains the fallback only for the case where XDG_RUNTIME_DIR is
+     * unset (synui started outside a session — e.g. the headless test rig),
+     * where there is no root consumer to attack. */
+    const char *rtdir = getenv("XDG_RUNTIME_DIR");
+    char dpath[256];
+    if (rtdir && *rtdir)
+        snprintf(dpath, sizeof(dpath), "%s/synui-display", rtdir);
+    else
+        snprintf(dpath, sizeof(dpath), "/tmp/synui-display");
+
+    FILE *sf = fopen(dpath, "w");
     if (sf) { fprintf(sf, "%s\n", socket); fclose(sf); }
+    else wlr_log(WLR_ERROR, "synui: cannot write '%s': %s",
+                 dpath, strerror(errno));
 
     /* Start AI thread (it owns the synapd connection). Skipped under --no-ai;
      * mark the pipes invalid so send/poll become no-ops. */

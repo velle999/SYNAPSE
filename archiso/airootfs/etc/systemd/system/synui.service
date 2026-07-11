@@ -20,6 +20,7 @@ StandardOutput=tty
 StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=synui
 Environment=LIBSEAT_BACKEND=seatd
 ExecStartPre=/bin/sh -c 'mkdir -p /run/user/0 && chmod 700 /run/user/0'
 ExecStartPre=/bin/sh -c 'mkdir -p /run/synui && /usr/local/bin/synui-gfx-env > /run/synui/env'

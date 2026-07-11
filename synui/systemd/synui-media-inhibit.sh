@@ -12,8 +12,20 @@
 set -u
 
 # Wait for synui to publish its Wayland display.
+#
+# synui writes this into XDG_RUNTIME_DIR now (see synui_main.c — /tmp was a
+# privilege hazard for the *root* synui-foot service). This runs as the user, so
+# /tmp is kept purely as a fallback, and only matters while an older synui that
+# still writes there is the one running.
+DISPLAY_FILE="${XDG_RUNTIME_DIR:-}/synui-display"
+[ -n "${XDG_RUNTIME_DIR:-}" ] || DISPLAY_FILE=/tmp/synui-display
+
 n=0
-while [ ! -f /tmp/synui-display ]; do
+while [ ! -f "$DISPLAY_FILE" ]; do
+    if [ -f /tmp/synui-display ]; then
+        DISPLAY_FILE=/tmp/synui-display
+        break
+    fi
     sleep 0.5
     n=$((n + 1))
     if [ "$n" -ge 30 ]; then
@@ -21,7 +33,7 @@ while [ ! -f /tmp/synui-display ]; do
         exit 1
     fi
 done
-WAYLAND_DISPLAY="$(tr -d '[:space:]' < /tmp/synui-display)"
+WAYLAND_DISPLAY="$(tr -d '[:space:]' < "$DISPLAY_FILE")"
 export WAYLAND_DISPLAY
 
 # Emit "1" when audio is playing, "0" when not, on stdout — every poll, not just
