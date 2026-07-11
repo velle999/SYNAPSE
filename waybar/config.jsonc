@@ -9,12 +9,28 @@
         "clock"
     ],
     "modules-right": [
+        "tray",
         "custom/gamemode",
         "pulseaudio",
         "cpu",
         "memory",
         "network"
     ],
+    // System tray (StatusNotifierItem). Nothing else on SYNAPSE runs an SNI
+    // watcher, so without this module org.kde.StatusNotifierWatcher is simply
+    // absent from the bus — and an app that "closes to tray" (Steam does it by
+    // default) unmaps its window and hands the icon to nobody. The window is
+    // then unreachable: no tray, no taskbar, and Steam will not raise it again.
+    //
+    // show-passive-items is on deliberately. Steam registers its item and only
+    // later marks it Active; waybar hides Passive items by default, so with the
+    // default the icon can be missing exactly when you need it — which is
+    // indistinguishable from the tray not working at all.
+    "tray": {
+        "icon-size": 16,
+        "spacing": 8,
+        "show-passive-items": true
+    },
     "custom/synapse": {
         "format": "◢ SYNAPSE",
         "tooltip": false,

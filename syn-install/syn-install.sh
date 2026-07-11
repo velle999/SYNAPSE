@@ -820,6 +820,13 @@ FOOTEOF
 # dropdown; synui renders layer-shell xdg popups, so it just works).
 # Heredoc is unquoted so $NEW_USER lands in menu-file — keep the rest
 # of the config free of $ and backticks.
+#
+# The tray module is load-bearing, not decoration: waybar is the only thing on
+# SYNAPSE that owns org.kde.StatusNotifierWatcher. Drop it and an app that
+# closes to tray (Steam, by default) unmaps its window and hands its icon to a
+# bus name nobody holds — the window is then unreachable, since we have no
+# taskbar either. show-passive-items is on because Steam registers its item
+# Passive first, and waybar hides Passive items by default.
 mkdir -p "/mnt/home/$NEW_USER/.config/waybar"
 # NB: no comments in this seed. It is JSONC and waybar would accept them, but
 # menu-actions below is rewritten in place by synapse-menu-gen.py, which reads
@@ -833,7 +840,12 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
     "height": 28,
     "modules-left": ["custom/synapse"],
     "modules-center": ["clock"],
-    "modules-right": ["custom/gamemode", "cpu", "memory", "network"],
+    "modules-right": ["tray", "custom/gamemode", "cpu", "memory", "network"],
+    "tray": {
+        "icon-size": 16,
+        "spacing": 8,
+        "show-passive-items": true
+    },
     "custom/synapse": {
         "format": "◢ SYNAPSE",
         "tooltip": false,
@@ -1318,6 +1330,21 @@ menu separator {
     color: #0b0b14;
     background: #ffd319;
     font-weight: bold;
+}
+/* System tray. Icons are client-supplied bitmaps, so the palette does not
+   apply — all we own is the spacing and the hover affordance. */
+#tray {
+    padding: 0 8px;
+}
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background: rgba(255, 41, 109, 0.2);
+}
+#tray > widget:hover {
+    background: rgba(5, 217, 232, 0.15);
 }
 WAYBARCSS
 

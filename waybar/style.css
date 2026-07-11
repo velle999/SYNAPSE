@@ -52,6 +52,23 @@ menu separator {
 #pulseaudio.muted {
     color: #ff296d;
 }
+/* System tray. Icons are client-supplied bitmaps, so the palette does not
+   apply — all we own is the spacing and the hover affordance. */
+#tray {
+    padding: 0 8px;
+}
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+/* An item that wants attention (Steam does this on a friend request) should
+   read as such rather than silently swapping its icon. */
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background: rgba(255, 41, 109, 0.2);
+}
+#tray > widget:hover {
+    background: rgba(5, 217, 232, 0.15);
+}
 /* Game mode. Always present, so "off" is legible as off rather than as a
    module that failed to load — greyed out when idle, lit when engaged. */
 #custom-gamemode.inactive {
