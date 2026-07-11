@@ -248,6 +248,95 @@ int execute_pipeline(synsh_state_t *s, const char *line) {
     return exit_code;
 }
 
+/* ── Command lists:  ;  &&  ||  ───────────────────────────── */
+/*
+ * execute_pipeline() understands a single pipeline and nothing else, and the
+ * built-ins used to be reachable only from the REPL's classifier. So
+ * `synsh -c 'cd /etc'` forked and exec'd a binary called "cd" (there isn't
+ * one), and `a && b` was handed to execve as literal argv.
+ *
+ * This layer sits above the pipeline: it splits a line on the top-level
+ * separators, short-circuits the way a POSIX shell does, and routes each
+ * segment to a built-in or a pipeline. Everything that runs a command line
+ * — the REPL, -c, scripts, stdin — goes through here, so `cd` behaves the
+ * same everywhere.
+ */
+typedef enum { SEP_END, SEP_SEQ, SEP_AND, SEP_OR } sep_t;
+
+/* One segment: a built-in, or a pipeline. */
+static int run_segment(synsh_state_t *s, char *seg) {
+    /* First word decides — built-ins never appear on $PATH. */
+    char first[64];
+    size_t i = 0;
+    const char *r = seg;
+    while (*r == ' ' || *r == '\t') r++;
+    while (*r && *r != ' ' && *r != '\t' && i < sizeof(first) - 1)
+        first[i++] = *r++;
+    first[i] = '\0';
+
+    if (synsh_is_builtin(first))
+        return execute_builtin_line(s, seg);
+
+    return execute_pipeline(s, seg);
+}
+
+int execute_command_line(synsh_state_t *s, const char *line) {
+    if (!line || !*line) return 0;
+
+    char *buf = strdup(line);
+    if (!buf) return 1;
+
+    int exit_code = 0;
+    char *p = buf;
+    sep_t pending = SEP_SEQ;  /* the first segment always runs */
+
+    while (1) {
+        char *seg = p;
+
+        /* Scan to the next separator that isn't inside quotes. A lone '|'
+         * (pipe) and a lone '&' (background) are left in the segment for
+         * execute_pipeline()/run_cmd() to deal with — only the doubled
+         * forms are list separators. */
+        int in_q = 0;
+        char q = 0;
+        sep_t sep = SEP_END;
+        while (*p) {
+            if (!in_q && (*p == '\'' || *p == '"')) { in_q = 1; q = *p; }
+            else if (in_q && *p == q)               { in_q = 0; }
+            else if (!in_q) {
+                if (p[0] == '&' && p[1] == '&') { sep = SEP_AND; break; }
+                if (p[0] == '|' && p[1] == '|') { sep = SEP_OR;  break; }
+                if (p[0] == ';')                { sep = SEP_SEQ; break; }
+            }
+            p++;
+        }
+
+        if (sep != SEP_END) {
+            int seplen = (sep == SEP_SEQ) ? 1 : 2;
+            *p = '\0';
+            p += seplen;
+        }
+
+        /* Short-circuit against the previous segment's status. Skipping a
+         * segment leaves exit_code alone, so `false && a || b` still sees
+         * the failure at the '||' and runs b. */
+        int run = (pending == SEP_SEQ) ||
+                  (pending == SEP_AND && exit_code == 0) ||
+                  (pending == SEP_OR  && exit_code != 0);
+
+        char *t = seg;
+        while (*t == ' ' || *t == '\t') t++;
+        if (*t && run)
+            exit_code = run_segment(s, t);
+
+        if (sep == SEP_END) break;
+        pending = sep;
+    }
+
+    free(buf);
+    return exit_code;
+}
+
 /* ── AI translation ───────────────────────────────────────── */
 /*
  * Ask synapd to translate natural language into a shell command.
@@ -410,8 +499,9 @@ int execute_ai_suggestion(synsh_state_t *s,
         /* Y or Enter = proceed */
     }
 
-    /* Execute */
-    int exit_code = execute_pipeline(s, suggested_cmd);
+    /* Execute. Goes through the command-line layer: the model happily
+     * emits things like `mkdir -p x && cd x`. */
+    int exit_code = execute_command_line(s, suggested_cmd);
 
     /* The exit line is reported whether or not colour is on — it used to be
      * gated on s->color, so --no-color silently swallowed the status. */

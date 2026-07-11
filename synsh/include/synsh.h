@@ -130,7 +130,7 @@ void  synsh_ai_disconnect(synsh_state_t *s);
 int   synsh_init(synsh_state_t *s, int argc, char *argv[]);
 void  synsh_destroy(synsh_state_t *s);
 void  synsh_load_rc(synsh_state_t *s);
-int   is_builtin(const char *cmd);
+bool  synsh_is_builtin(const char *cmd);
 
 static inline int execute_builtin_line(synsh_state_t *s, const char *line) {
     char buf[SYNSH_MAX_LINE];

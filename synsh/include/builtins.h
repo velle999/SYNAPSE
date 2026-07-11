@@ -2,5 +2,5 @@
 #define BUILTINS_H
 #include "synsh.h"
 int synsh_builtin(synsh_state_t *s, int argc, char **argv);
-int is_builtin(const char *cmd);
+bool synsh_is_builtin(const char *cmd);
 #endif

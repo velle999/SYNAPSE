@@ -136,13 +136,11 @@ static int run_interactive(synsh_state_t *s) {
 
         switch (cls) {
         case INPUT_BUILTIN:
-            /* Parse and run built-in */
-            execute_builtin_line(s, line);
-            break;
-
         case INPUT_SHELL:
-            /* Standard shell command — run directly */
-            s->last_exit = execute_pipeline(s, line);
+            /* Both go through the command-line layer: it splits on
+             * ; && || and dispatches built-ins per segment, so a line
+             * like `cd /etc && ls` works in either class. */
+            s->last_exit = execute_command_line(s, line);
             break;
 
         case INPUT_AI: {
@@ -161,7 +159,7 @@ static int run_interactive(synsh_state_t *s) {
                 fprintf(stderr,
                     "%ssynsh: synapd not connected — running in shell-only mode\n%s",
                     COLOR_WARN, COLOR_RESET);
-                s->last_exit = execute_pipeline(s, line);
+                s->last_exit = execute_command_line(s, line);
                 break;
             }
 
@@ -183,7 +181,7 @@ static int run_interactive(synsh_state_t *s) {
 
         case INPUT_HYBRID:
             /* Hybrid: try as shell, fall back to AI if it fails */
-            s->last_exit = execute_pipeline(s, line);
+            s->last_exit = execute_command_line(s, line);
             if (s->last_exit != 0 && s->synapd_connected) {
                 printf("%s  ↯ command failed, asking AI...\n%s",
                        COLOR_AI, COLOR_RESET);
@@ -225,17 +223,15 @@ static int run_script(synsh_state_t *s, const char *path) {
 
         input_class_t cls = classify_input(line);
 
-        if (cls == INPUT_BUILTIN) {
-            execute_builtin_line(s, line);
-        } else if (cls == INPUT_AI && s->synapd_connected) {
+        if (cls == INPUT_AI && s->synapd_connected) {
             char cmd_buf[SYNSH_MAX_LINE]     = {0};
             char explain_buf[SYNSH_MAX_LINE] = {0};
             if (ai_translate(s, line, cmd_buf, sizeof(cmd_buf),
                              explain_buf, sizeof(explain_buf)) == 0) {
-                exit_code = execute_pipeline(s, cmd_buf);
+                exit_code = execute_command_line(s, cmd_buf);
             }
         } else {
-            exit_code = execute_pipeline(s, line);
+            exit_code = execute_command_line(s, line);
         }
     }
 
@@ -362,7 +358,7 @@ int main(int argc, char *argv[]) {
 
     if (cmd_string) {
         /* -c mode: run single command string */
-        exit_code = execute_pipeline(&g_state, cmd_string);
+        exit_code = execute_command_line(&g_state, cmd_string);
     } else if (script_path) {
         /* Script mode */
         exit_code = run_script(&g_state, script_path);
@@ -376,7 +372,7 @@ int main(int argc, char *argv[]) {
             size_t len = strlen(line);
             if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
             if (line[0] == '#' || line[0] == '\0') continue;
-            exit_code = execute_pipeline(&g_state, line);
+            exit_code = execute_command_line(&g_state, line);
         }
     }
 

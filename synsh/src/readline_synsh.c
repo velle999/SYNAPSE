@@ -23,6 +23,11 @@
 #include "readline_synsh.h"
 #include "color.h"
 
+#ifdef HAVE_READLINE
+#include <readline/readline.h>
+#include <readline/history.h>
+#endif
+
 /* ── Prompt rendering ─────────────────────────────────────── */
 /*
  * Default prompt: [user@synapse cwd]⚡ or [user@synapse cwd]$
@@ -110,6 +115,13 @@ void synsh_history_add(synsh_state_t *s, const char *line) {
 
     s->history[s->history_count++] = strdup(line);
     s->history_pos = s->history_count;
+
+#ifdef HAVE_READLINE
+    /* readline keeps its own list — that's what Up/Down actually walk.
+     * Feed it here so it stays in step with s->history (which is what
+     * gets persisted), and so the de-duplication above applies to both. */
+    add_history(line);
+#endif
 }
 
 void synsh_history_load(synsh_state_t *s) {
@@ -127,6 +139,11 @@ void synsh_history_load(synsh_state_t *s) {
         if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
         if (*line) {
             s->history[s->history_count++] = strdup(line);
+#ifdef HAVE_READLINE
+            /* Seed readline too, so Up-arrow reaches back into
+             * previous sessions and not just this one. */
+            add_history(line);
+#endif
         }
     }
     fclose(f);
@@ -161,10 +178,17 @@ void synsh_history_save(synsh_state_t *s) {
  */
 
 #ifdef HAVE_READLINE
-#include <readline/readline.h>
-#include <readline/history.h>
 
 char *synsh_readline(synsh_state_t *s) {
+    /* Let ~/.inputrc target us with `$if synsh`, and keep readline from
+     * treating a stray SIGINT'd line as input. Cheap; set once. */
+    static int rl_ready = 0;
+    if (!rl_ready) {
+        rl_readline_name = "synsh";
+        rl_catch_signals = 1;
+        rl_ready = 1;
+    }
+
     char prompt[SYNSH_PROMPT_MAX];
     synsh_prompt(s, prompt, sizeof(prompt));
 
@@ -190,7 +214,10 @@ static void raw_mode_enter(void) {
     raw.c_lflag &= ~(ICANON | ECHO);
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    /* TCSANOW, not TCSAFLUSH: the latter discards input already queued on
+     * the tty, and since we switch to raw mode *after* printing the prompt
+     * it threw away anything typed (or piped) ahead of it. */
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 }
 
 static void raw_mode_exit(void) {
