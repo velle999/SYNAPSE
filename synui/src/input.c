@@ -349,6 +349,19 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
             layout_float_place(s, v);
             wlr_scene_node_raise_to_top(&v->scene_tree->node);
         }
+    } else if (strcmp(action, "fullscreen_toggle") == 0) {
+        /* Force fullscreen on the focused window regardless of whether it ever
+         * asked. Games that do "borderless fullscreen" (the KEX engine's
+         * v_windowmode 1, and plenty of others) never send a fullscreen
+         * request at all — they just ask for an undecorated window and expect
+         * the WM to leave its geometry alone, which a tiling compositor by
+         * definition does not. Without this there was no way to fullscreen
+         * them by hand. view_apply_fullscreen is the shared choke point, so
+         * this picks up the output targeting, the buffer rescale, the bar
+         * occlusion and the game-mode signal for free. */
+        if (s->focused_view)
+            view_apply_fullscreen(s, s->focused_view,
+                                  !s->focused_view->fullscreen);
     } else if (strcmp(action, "maximize_toggle") == 0) {
         if (!s->focused_view) return;
         s->focused_view->maximized = !s->focused_view->maximized;

@@ -128,6 +128,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
+| `Super`+`Shift`+`F` | Fullscreen (forces it — for games that only do "borderless") |
 | `Super`+`O` / `Super`+`Shift`+`O` | Move window to next / previous monitor |
 | `Super`+`P` | Power saving panel |
 | `Ctrl`+`Alt`+`Delete` / `Super`+`T` | Task manager (processes, CPU/RAM/GPU) |

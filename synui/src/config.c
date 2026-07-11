@@ -14,7 +14,8 @@
  * keysym names (case-insensitive: q, return, space, tab, backspace, f1…).
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
- * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
+ * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
+ * minimize_restore, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
  * filters, effects_toggle, power, lock, game, taskmgr, network.
  * A bind with the same combo as a default replaces it.
@@ -201,6 +202,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+j",   "stack_next" },
         { "super+shift+k",   "stack_prev" },
         { "super+f",         "float_toggle" },
+        { "super+shift+f",   "fullscreen_toggle" },
         { "super+m",         "maximize_toggle" },
         { "super+n",         "minimize_toggle" },
         { "super+shift+n",   "minimize_restore" },
