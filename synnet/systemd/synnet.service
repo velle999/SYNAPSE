@@ -1,7 +1,13 @@
 [Unit]
 Description=SynapseOS AI Network Policy Daemon
 After=synapd.service
-Requires=synapd.service
+# Wants=, deliberately not Requires=: synui's game mode stops synapd to free the
+# GPU, and Requires= propagated that stop to us — so launching a game silently
+# killed the network policy daemon, and starting synapd again did not bring it
+# back (the dependency only points one way). synnet does not need synapd to run:
+# it reconnects to it in the poll loop, and with no connection it degrades to
+# monitor-only, keeping the firewall and the blocklist up.
+Wants=synapd.service
 
 [Service]
 Type=simple

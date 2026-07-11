@@ -1,6 +1,6 @@
 pkgname=synnet
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="SynapseOS AI Network Policy Daemon"
 arch=('x86_64')
 license=('GPL2')
