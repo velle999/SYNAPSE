@@ -129,23 +129,42 @@ void cairo_begin(cairo_t *cr)
 /* Menu entries: input.c navigates with Up/Down and executes the entry's
  * bind action on Enter (welcome_menu_key). */
 const syn_welcome_entry_t synui_welcome_menu[] = {
-    { "Terminal",         "Super+Enter",   "term"     },
-    { "AI Command Bar",   "Super+Space",   "cmdbar"   },
-    { "Neural Overlay",   "Super+A",       "overlay"  },
-    { "Display Settings", "Super+D",       "displays" },
+    { "Terminal",         "Super+Enter",   "term"      },
+    { "AI Command Bar",   "Super+Space",   "cmdbar"    },
+    { "Neural Overlay",   "Super+A",       "overlay"   },
+    { "Display Settings", "Super+D",       "displays"  },
     { "Wallpaper",        "Super+W",       "wallpaper" },
-    { "Power Saving",     "Super+P",       "power"    },
-    { "Quit synui",       "Super+Shift+Q", "quit"     },
+    { "Power Saving",     "Super+P",       "power"     },
+    { "Lock Screen",      "Super+L",       "lock"      },
+    { "AI Backend",       "GPU/CPU",       "ai_backend"},
+    { "Quit synui",       "Super+Shift+Q", "quit"      },
 };
 const int synui_welcome_menu_len =
     (int)(sizeof(synui_welcome_menu) / sizeof(synui_welcome_menu[0]));
+
+/* Live AI-backend label for the "AI Backend" row's hint. synui-ai-backend
+ * writes "gpu" or "cpu" to /run/synapd/backend when it toggles synapd; if the
+ * file is absent (nothing toggled yet) synapd's own default is auto-detect, so
+ * show "auto". Kept tiny + best-effort — a read failure just falls back. */
+static const char *synui_ai_backend_label(void)
+{
+    FILE *f = fopen("/run/synapd/backend", "r");
+    if (!f) return "auto";
+    char b[16] = {0};
+    size_t n = fread(b, 1, sizeof(b) - 1, f);
+    fclose(f);
+    while (n > 0 && (b[n - 1] == '\n' || b[n - 1] == ' ')) b[--n] = 0;
+    if (strcmp(b, "gpu") == 0) return "GPU";
+    if (strcmp(b, "cpu") == 0) return "CPU";
+    return "auto";
+}
 
 void synui_render_welcome(syn_server_t *s)
 {
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    int pw = 460, ph = 340;
+    int pw = 500, ph = 474;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
@@ -178,28 +197,28 @@ void synui_render_welcome(syn_server_t *s)
         RsvgHandle *lh =
             rsvg_handle_new_from_file(SYNUI_DATADIR "/logo.svg", NULL);
         if (lh) {
-            RsvgRectangle vp = { .x = 20, .y = 12, .width = 48, .height = 48 };
+            RsvgRectangle vp = { .x = 26, .y = 18, .width = 64, .height = 64 };
             rsvg_handle_render_document(lh, cr, &vp, NULL);
             g_object_unref(lh);
         }
     }
 
-    /* Title */
-    cairo_set_font_size(cr, 28);
+    /* Title — vertically centred against the 64px emblem */
+    cairo_set_font_size(cr, 30);
     cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
-    cairo_move_to(cr, 84, 60);
+    cairo_move_to(cr, 106, 62);
     cairo_show_text(cr, "SYNAPSEOS");
 
-    /* Separator */
+    /* Separator, clear of the taller emblem */
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
     cairo_set_line_width(cr, 1);
-    cairo_move_to(cr, 30, 78);
-    cairo_line_to(cr, pw - 30, 78);
+    cairo_move_to(cr, 30, 96);
+    cairo_line_to(cr, pw - 30, 96);
     cairo_stroke(cr);
 
     /* Selectable menu (input.c: Up/Down + Enter) */
     cairo_set_font_size(cr, 15);
-    int y = 112;
+    int y = 128;
     for (int i = 0; i < synui_welcome_menu_len; i++) {
         int sel = (i == s->welcome_ui.selected);
 
@@ -214,10 +233,16 @@ void synui_render_welcome(syn_server_t *s)
         cairo_move_to(cr, 66, y);
         cairo_show_text(cr, synui_welcome_menu[i].label);
 
+        /* The AI Backend row shows the live synapd backend instead of a fixed
+         * keybind — it has no default bind, it toggles in place on Enter. */
+        const char *hint = synui_welcome_menu[i].hint;
+        if (strcmp(synui_welcome_menu[i].action, "ai_backend") == 0)
+            hint = synui_ai_backend_label();
+
         cairo_set_source_rgba(cr, sel ? 0.0 : 0.45, sel ? 0.85 : 0.45,
                               sel ? 0.75 : 0.55, sel ? 1.0 : 1.0);
-        cairo_move_to(cr, 280, y);
-        cairo_show_text(cr, synui_welcome_menu[i].hint);
+        cairo_move_to(cr, 290, y);
+        cairo_show_text(cr, hint);
 
         y += 28;
     }
@@ -225,15 +250,17 @@ void synui_render_welcome(syn_server_t *s)
     /* Footer hints */
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
-    cairo_move_to(cr, 44, y + 18);
+    cairo_move_to(cr, 44, y + 16);
     cairo_show_text(cr, "Up/Down + Enter select");
-    cairo_move_to(cr, 44, y + 36);
+    cairo_move_to(cr, 44, y + 34);
     cairo_show_text(cr, "Super+1-9 workspaces \xc2\xb7 Super+Tab cycle layout");
+    cairo_move_to(cr, 44, y + 52);
+    cairo_show_text(cr, "Super+E filters \xc2\xb7 Super+O move monitor \xc2\xb7 Super+Q close");
 
     /* Version */
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.35, 0.35, 0.45, 0.8);
-    cairo_move_to(cr, 175, ph - 20);
+    cairo_move_to(cr, 190, ph - 16);
     cairo_show_text(cr, SYNUI_VERSION);
 
     cairo_destroy(cr);

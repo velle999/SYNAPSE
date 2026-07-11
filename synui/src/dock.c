@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <cairo.h>
 #include <wlr/types/wlr_scene.h>
@@ -46,9 +47,37 @@
 /* Pointer travel (px) before a press on the bar becomes a real drag. */
 #define DOCK_DRAG_THRESHOLD 6.0
 
+/* Click feedback: a clicked icon dips in then springs back over this window so
+ * the dock reacts to a launch/activate instead of sitting static. */
+#define DOCK_CLICK_ANIM_SECS 0.22
+
 static bool edge_is_vertical(syn_dock_edge_t e)
 {
     return e == SYN_DOCK_EDGE_LEFT || e == SYN_DOCK_EDGE_RIGHT;
+}
+
+static double dock_now(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+/* Press-pop scale for an icon at time `now`: 1.0 when idle, dipping to ~0.82
+ * at the midpoint and springing back to 1.0 by the end (a single smooth
+ * sine hump). Returns 1.0 once the animation window has elapsed. */
+static double dock_click_scale(const syn_dock_entry_t *e, double now)
+{
+    if (e->anim_start <= 0.0) return 1.0;
+    double t = (now - e->anim_start) / DOCK_CLICK_ANIM_SECS;
+    if (t < 0.0 || t >= 1.0) return 1.0;
+    return 1.0 - 0.18 * sin(t * M_PI);
+}
+
+static bool dock_entry_animating(const syn_dock_entry_t *e, double now)
+{
+    return e->anim_start > 0.0 &&
+           (now - e->anim_start) < DOCK_CLICK_ANIM_SECS;
 }
 
 /* ── Entry model ─────────────────────────────────────────── */
@@ -243,6 +272,7 @@ static void dock_render_output(syn_output_t *o)
     cairo_set_line_width(cr, 1);
     cairo_stroke(cr);
 
+    double now = dock_now();
     for (int i = 0; i < n; i++) {
         syn_dock_entry_t *e = &s->dock_entries[i];
         int ix, iy;
@@ -252,6 +282,17 @@ static void dock_render_output(syn_output_t *o)
         } else {
             ix = pad + i * (icon + pad);
             iy = (bar_h - icon) / 2 - 4;   /* room for the dot below */
+        }
+
+        /* Press-pop: scale the icon about its centre. Only the icon glyph is
+         * transformed — the hit-box and running-dot stay put. */
+        double pop = dock_click_scale(e, now);
+        cairo_save(cr);
+        if (pop != 1.0) {
+            double cx = ix + icon / 2.0, cy = iy + icon / 2.0;
+            cairo_translate(cr, cx, cy);
+            cairo_scale(cr, pop, pop);
+            cairo_translate(cr, -cx, -cy);
         }
 
         const syn_icon_entry_t *ic = icon_lookup(e->app_id);
@@ -270,6 +311,7 @@ static void dock_render_output(syn_output_t *o)
         } else {
             icon_draw_monogram(cr, e->app_id, ix, iy, icon);
         }
+        cairo_restore(cr);
 
         if (e->running) {
             double dx, dy;
@@ -453,9 +495,19 @@ bool dock_tick(syn_output_t *o, double now)
         o->dock.last_tick = 0.0;
     }
 
+    /* Click press-pop: while any icon is mid-animation, re-render this output's
+     * dock canvas each frame (the slide path only repositions the tree, it
+     * doesn't repaint the icons) and keep frames coming until it settles. */
+    bool clicking = false;
+    for (int i = 0; i < s->dock_entry_count; i++) {
+        if (dock_entry_animating(&s->dock_entries[i], now)) { clicking = true; break; }
+    }
+    if (clicking && on_screen)
+        dock_render_output(o);
+
     bool animating = o->dock.slide_progress != goal;
     bool waiting_to_hide = !engaged && o->dock.shown;
-    return animating || waiting_to_hide;
+    return animating || waiting_to_hide || clicking;
 }
 
 /* Pointer moved: wake the outputs whose dock might need to react (cursor near
@@ -541,6 +593,13 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out)
 
 void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
 {
+    /* Kick off the press-pop and wake every output's dock so the animation
+     * actually plays (dock_tick re-renders while an entry is animating). */
+    e->anim_start = dock_now();
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
+
     syn_view_t *v = e->primary_view;
 
     /* Pinned-but-not-running: launch its .desktop Exec. */

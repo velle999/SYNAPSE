@@ -336,6 +336,12 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         /* Same swaylock the idle timer and the power panel's Lock row run;
          * power_lock_cmd already guards against stacking a second instance. */
         spawn(s->config.power_lock_cmd);
+    } else if (strcmp(action, "ai_backend") == 0) {
+        /* Toggle synapd between GPU and CPU inference. The helper owns the
+         * work (rewrite the systemd drop-in, record /run/synapd/backend,
+         * restart synapd); synui just fires it. The welcome-menu "AI Backend"
+         * row reflects the new state the next time the menu is opened. */
+        spawn("synui-ai-backend toggle");
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
     } else if (strcmp(action, "effects_toggle") == 0) {
@@ -954,7 +960,9 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
          * must NOT refocus/raise the parent on a popup click. */
         struct wlr_surface *root =
             surface ? wlr_surface_get_root_surface(surface) : NULL;
-        bool is_popup = root && wlr_xdg_popup_try_from_wlr_surface(root) != NULL;
+        struct wlr_xdg_popup *clicked_popup =
+            root ? wlr_xdg_popup_try_from_wlr_surface(root) : NULL;
+        bool is_popup = clicked_popup != NULL;
 
         /* This press opens an implicit grab if no other button is already
          * down. Record where the grab surface's origin sits relative to the
@@ -983,8 +991,18 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         /* Skip focus_view for popup clicks: calling it re-sends a keyboard
          * enter to the popup surface, disrupting the popup-grab and making
          * GTK/XUL menus dismiss-without-activating. The working layer-shell
-         * popup path skips focus_view too (its view_at returns NULL). */
-        if (view && !is_popup) focus_view(s, view, surface);
+         * popup path skips focus_view too (its view_at returns NULL).
+         *
+         * For non-popup clicks route KEYBOARD focus to the view's *toplevel*
+         * surface, not the raw surface under the cursor — that surface can be a
+         * render-only subsurface (e.g. Firefox draws its noautohide permission
+         * doorhanger as a subsurface of the toplevel). wl_keyboard.enter on a
+         * subsurface leaves GTK/Firefox unable to route Tab/activation into the
+         * panel (it never becomes the active modal), so clicks highlight but
+         * don't fire and Tab skips it. Pointer delivery above stays per-surface
+         * (hover highlight needs it); only keyboard focus follows the toplevel,
+         * matching every other focus_view() call site. */
+        if (view && !is_popup) focus_view(s, view, view_surface(view));
     }
 
     wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
@@ -1041,7 +1059,7 @@ static void server_touch_down(struct wl_listener *listener, void *data)
     wlr_seat_touch_notify_down(s->seat, surface, event->time_msec,
                                event->touch_id, sx, sy);
     if (view && !s->locked)
-        focus_view(s, view, surface);
+        focus_view(s, view, view_surface(view)); /* keyboard→toplevel, not a subsurface */
 }
 
 static void server_touch_motion(struct wl_listener *listener, void *data)

@@ -50,7 +50,7 @@ struct synapd_state g_state = {
         .model_path     = SYNAPD_DEFAULT_MODEL,
         .context_window = 4096,
         .n_threads      = 4,
-        .n_gpu_layers   = 0,   /* auto-detect at runtime */
+        .n_gpu_layers   = -1,  /* -1 = auto-detect+offload to GPU (0 forces CPU) */
         .log_level      = LOG_INFO,
         .max_clients    = 64,
     }

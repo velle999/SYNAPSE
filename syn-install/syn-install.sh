@@ -625,6 +625,10 @@ else
 fi
 export XDG_SESSION_TYPE=wayland
 export LIBSEAT_BACKEND=seatd
+# Pin cursor theme+size so Xwayland clients (Steam, games) match synui's own
+# 24px cursor; without XCURSOR_SIZE libXcursor auto-picks a much larger size.
+export XCURSOR_THEME=Adwaita
+export XCURSOR_SIZE=24
 exec synui
 SESSION_EOF
         chmod 755 /mnt/usr/local/bin/synui-session
@@ -668,6 +672,8 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         fi
         export XDG_SESSION_TYPE=wayland
         export LIBSEAT_BACKEND=seatd
+        export XCURSOR_THEME=Adwaita
+        export XCURSOR_SIZE=24
         exec synui
     fi
 fi

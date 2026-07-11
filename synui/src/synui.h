@@ -357,6 +357,8 @@ typedef struct {
     int  running;            /* >=1 mapped view with this app_id */
     syn_view_t *primary_view;   /* most-recently-focused running view; NULL if not running */
     int  x, y, w, h;          /* icon hit-box, dock-canvas-local; set by dock_render() */
+    double anim_start;        /* CLOCK_MONOTONIC secs of last click; 0 = idle. Drives
+                               * the press-pop scale in dock_render (see DOCK_CLICK_ANIM_SECS) */
 } syn_dock_entry_t;
 
 /* ── Workspace ───────────────────────────────────────────── */

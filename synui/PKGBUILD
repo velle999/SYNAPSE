@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=44
+pkgrel=46
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -36,4 +36,8 @@ package() {
         "$pkgdir/usr/lib/synui/synui-media-inhibit"
     install -Dm644 systemd/synui-media-inhibit.service \
         "$pkgdir/usr/lib/systemd/user/synui-media-inhibit.service"
+
+    # AI backend GPU/CPU toggle (welcome menu "AI Backend" row spawns it).
+    install -Dm755 systemd/synui-ai-backend.sh \
+        "$pkgdir/usr/bin/synui-ai-backend"
 }

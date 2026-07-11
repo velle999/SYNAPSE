@@ -220,6 +220,19 @@ fi
 cd "${LLAMA_DIR}"
 log "(llama.cpp pinned at ${LLAMA_REF})"
 
+# CUDA 13+ ships CCCL 3.4, which changed the cub/thrust APIs this pinned
+# llama.cpp (${LLAMA_REF}) uses in argsort.cu / top-k.cu (cuda::make_*_iterator,
+# DeviceTopK::MaxPairs) — the build fails with "namespace cuda has no member".
+# ggml only reaches for cub as a fast path and has portable fallback kernels, so
+# gate it off on CUDA 13+ (older toolkits keep cub). Idempotent, cuda-only.
+if [[ "$WITH_GPU" == "cuda" ]]; then
+    _cub_guard='ggml/src/ggml-cuda/common.cuh'
+    if grep -q 'CUDART_VERSION >= 11070$' "$_cub_guard" 2>/dev/null; then
+        log "Patching ggml to disable cub on CUDA 13+ (CCCL 3.4 API break)"
+        sed -i 's|\(CUDART_VERSION >= 11070\)$|\1 \&\& CUDART_VERSION < 13000|' "$_cub_guard"
+    fi
+fi
+
 mkdir -p build && cd build
 
 CMAKE_ARGS=(

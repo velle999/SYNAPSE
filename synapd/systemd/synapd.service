@@ -22,7 +22,11 @@ ExecStart=/usr/bin/synapd \
     --model /var/lib/synapd/models/synapse.gguf \
     --socket /run/synapd/synapd.sock \
     --threads 4 \
-    --context 4096
+    --context 4096 \
+    --gpu-layers -1
+# --gpu-layers -1 = auto-detect and offload to the GPU when one is present
+# (synapd falls back to CPU when it isn't). The welcome menu's AI Backend
+# toggle drops a synapd.service.d override here to force GPU or CPU.
 
 ExecReload=/bin/kill -HUP $MAINPID
 
