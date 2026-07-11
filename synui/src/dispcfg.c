@@ -214,6 +214,27 @@ static void dispcfg_rotate(syn_server_t *s, int dir)
     dispcfg_rechain(s);
 }
 
+/* Mark the selected monitor as the X11 primary — where SDL games and other
+ * X11 apps that ask for "the default display" will open. Exactly one output
+ * holds the flag, so promoting one demotes the rest. */
+static void dispcfg_make_primary(syn_server_t *s)
+{
+    syn_dispcfg_t *d = &s->dispcfg;
+    syn_output_t *sel = selected_output(s);
+    if (!sel) return;
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        o->primary = (o == sel);
+
+    output_persist_save(s);
+    xwayland_apply_primary(s);
+
+    snprintf(d->status, sizeof(d->status), "%s → primary (X11 default display)",
+             sel->wlr_output->name);
+    synui_render_dispcfg(s);
+}
+
 void dispcfg_show(syn_server_t *s)
 {
     s->dispcfg.visible = 1;
@@ -289,6 +310,9 @@ int dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_Right:
     case XKB_KEY_l:
         dispcfg_rotate(s, +1);
+        return 1;
+    case XKB_KEY_p:
+        dispcfg_make_primary(s);
         return 1;
     default:
         return 1;   /* modal: swallow other unmodified keys while open */

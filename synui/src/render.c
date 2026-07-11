@@ -568,7 +568,8 @@ void synui_render_dispcfg(syn_server_t *s)
 
     int rows = d->count > 0 ? d->count : 1;
     int list_top = d->count > 0 ? map_top + map_h + 24 : 70;
-    int pw = d->count > 0 && map_w + 36 > 620 ? map_w + 36 : 620;
+    /* 760 min: the rows run out to the PRIMARY tag at x=630. */
+    int pw = d->count > 0 && map_w + 36 > 760 ? map_w + 36 : 760;
     int ph = list_top + rows * 28 + 126;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
@@ -643,7 +644,8 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_show_text(cr, label);
     }
 
-    /* Monitor rows: name, mode, rotation, layout position */
+    /* Monitor rows: name, mode, rotation, layout position, primary */
+    syn_output_t *primary = server_primary_output(s);
     cairo_set_font_size(cr, 14);
     int y = list_top;
     if (d->count == 0) {
@@ -690,6 +692,17 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_move_to(cr, 540, y);
         cairo_show_text(cr, col);
 
+        /* The X11 primary — where SDL games open. Dimmer when it's only the
+         * largest-output fallback rather than a choice the user made, so the
+         * panel doesn't imply a setting that isn't actually stored. */
+        if (d->order[i] == primary) {
+            int explicit_choice = d->order[i]->primary;
+            cairo_set_source_rgba(cr, 0.0, 0.85, 0.75,
+                                  explicit_choice ? 0.95 : 0.45);
+            cairo_move_to(cr, 630, y);
+            cairo_show_text(cr, explicit_choice ? "PRIMARY" : "primary (auto)");
+        }
+
         y += 28;
     }
 
@@ -704,7 +717,8 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 40);
-    cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate");
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
+                        "p set primary (X11/game default)");
     cairo_move_to(cr, 18, ph - 20);
     cairo_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 Esc close");
 

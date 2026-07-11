@@ -588,6 +588,17 @@ struct syn_output {
      * moved with Shift+arrows in the display panel. */
     int                      grid_x, grid_y;
 
+    /* The "primary" monitor, in the X11 RandR sense: the one Xwayland
+     * reports with the primary flag. Wayland has no such concept, but X11
+     * toolkits do — SDL puts the primary output first in its display list,
+     * so a game that opens on "display 0" lands here. With no primary set,
+     * SDL falls back to RandR enumeration order, which is arbitrary (it
+     * followed connector order, not desk layout) and is why fullscreen
+     * games could open on whichever monitor happened to be listed first.
+     * At most one output has this set; xwayland_apply_primary() pushes it
+     * to the X server. Persisted in outputs.conf as primary=1. */
+    int                      primary;
+
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */
 
@@ -991,6 +1002,10 @@ void synui_config_reload(syn_server_t *s);   /* SIGHUP: reparse + reapply */
 /* The output the user is currently working on: the one under the cursor,
  * else the one holding the focused window, else the first connected output. */
 syn_output_t *server_focused_output(syn_server_t *s);
+
+/* The effective X11 primary: the output flagged ->primary, else the largest.
+ * NULL only when no outputs are connected. */
+syn_output_t *server_primary_output(syn_server_t *s);
 /* The workspace on the focused output (never NULL; falls back to ws 0). */
 syn_workspace_t *server_active_workspace(syn_server_t *s);
 /* Is this workspace currently shown on its output? */
@@ -1024,6 +1039,11 @@ void        view_set_minimized(syn_view_t *v, int minimized);
 
 /* ── xwayland.c ──────────────────────────────────────────── */
 void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable */
+
+/* Push the syn_output_t marked ->primary to the X server as the RandR primary
+ * output. Safe to call any time: a no-op until Xwayland is ready, and again
+ * whenever the primary changes (display panel) or a monitor is hotplugged. */
+void xwayland_apply_primary(syn_server_t *s);
 
 /* ── output_mgmt.c ───────────────────────────────────────── */
 void output_mgmt_setup(syn_server_t *s);        /* output-management + DPMS */

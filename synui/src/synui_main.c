@@ -132,6 +132,29 @@ syn_workspace_t *server_active_workspace(syn_server_t *s)
     return &s->workspaces[idx];
 }
 
+/* The monitor X11 should call primary (see xwayland_apply_primary). An
+ * explicit choice — the display panel's p key, persisted as primary=1 in
+ * outputs.conf — always wins. With nothing marked we fall back to the
+ * largest enabled output rather than leaving X with no primary at all,
+ * because "no primary" is what makes SDL games open on an arbitrary
+ * monitor. Biggest screen is a better guess than connector order. */
+syn_output_t *server_primary_output(syn_server_t *s)
+{
+    syn_output_t *o, *best = NULL;
+    int64_t best_area = -1;
+
+    wl_list_for_each(o, &s->outputs, link) {
+        if (o->primary) return o;          /* explicit choice */
+        if (!o->wlr_output->enabled) continue;
+
+        int w, h;
+        wlr_output_effective_resolution(o->wlr_output, &w, &h);
+        int64_t area = (int64_t)w * h;
+        if (area > best_area) { best_area = area; best = o; }
+    }
+    return best;
+}
+
 int workspace_visible(syn_workspace_t *ws)
 {
     return ws && ws->output && ws->output->active_workspace == ws->index;
@@ -385,6 +408,11 @@ static void server_new_output(struct wl_listener *listener, void *data)
     if (server->cmdbar.visible)
         synui_render_cmdbar(server);
     dispcfg_outputs_changed(server);
+
+    /* Plugging a monitor in can change which one is primary — either it is
+     * the saved primary coming back, or it is now the largest and so wins
+     * the fallback in server_primary_output(). */
+    xwayland_apply_primary(server);
 
     output_mgmt_update(server);
 }

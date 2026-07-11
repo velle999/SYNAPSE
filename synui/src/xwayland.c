@@ -19,7 +19,11 @@
 
 #define _GNU_SOURCE
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
+#include <xcb/randr.h>
+#include <xcb/xcb.h>
 
 #include <wlr/types/wlr_xcursor_manager.h>
 
@@ -412,6 +416,116 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
     wl_signal_add(&xs->events.request_minimize, &view->request_minimize);
 }
 
+/* ── X11 primary output ──────────────────────────────────────
+ *
+ * Wayland has no "primary monitor"; X11 does, and X11 apps lean on it hard.
+ * SDL sorts the primary output to the front of its display list, so a game
+ * opening on "display 0" — which is most of them, and everything Steam runs
+ * — opens on whatever X calls primary. Xwayland marks *nothing* primary by
+ * default, which leaves SDL falling back to RandR enumeration order: an
+ * arbitrary connector ordering with no relation to how the desk is actually
+ * laid out. That is how a fullscreen game ends up on a portrait side monitor.
+ *
+ * wlroots exposes no API for this and keeps its xwm xcb connection private,
+ * so we open a short-lived xcb connection of our own and set it directly.
+ * Called on Xwayland ready, on hotplug, and whenever the display panel moves
+ * the flag. */
+void xwayland_apply_primary(syn_server_t *s)
+{
+    if (!s->xwayland || !s->xwayland->display_name) return;
+
+    syn_output_t *primary = server_primary_output(s);
+    if (!primary) return;
+
+    const char *want = primary->wlr_output->name;
+
+    xcb_connection_t *xcb = xcb_connect(s->xwayland->display_name, NULL);
+    if (!xcb || xcb_connection_has_error(xcb)) {
+        /* Lazy Xwayland may not be up yet — the ready handler will retry. */
+        if (xcb) xcb_disconnect(xcb);
+        return;
+    }
+
+    const xcb_query_extension_reply_t *ext =
+        xcb_get_extension_data(xcb, &xcb_randr_id);
+    xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(xcb)).data;
+    if (!ext || !ext->present || !screen) {
+        wlr_log(WLR_ERROR, "synui: Xwayland has no RandR; can't set primary");
+        xcb_disconnect(xcb);
+        return;
+    }
+
+    /* Negotiate RandR >= 1.3 before using it. SetOutputPrimary is a 1.3
+     * request, and a client that never announces its version is treated as
+     * RandR 1.0 — the server then *silently discards* the request. No X
+     * error, no reply, the primary just never changes. This call is not
+     * optional politeness; without it the code below is a no-op. */
+    xcb_randr_query_version_reply_t *ver = xcb_randr_query_version_reply(xcb,
+        xcb_randr_query_version(xcb, 1, 3), NULL);
+    if (!ver || ver->major_version < 1 ||
+        (ver->major_version == 1 && ver->minor_version < 3)) {
+        wlr_log(WLR_ERROR, "synui: Xwayland RandR too old for a primary output");
+        free(ver);
+        xcb_disconnect(xcb);
+        return;
+    }
+    free(ver);
+
+    xcb_randr_get_screen_resources_current_reply_t *res =
+        xcb_randr_get_screen_resources_current_reply(xcb,
+            xcb_randr_get_screen_resources_current(xcb, screen->root), NULL);
+    if (!res) {
+        xcb_disconnect(xcb);
+        return;
+    }
+
+    xcb_randr_output_t *outs =
+        xcb_randr_get_screen_resources_current_outputs(res);
+    int n = xcb_randr_get_screen_resources_current_outputs_length(res);
+
+    xcb_randr_output_t match = XCB_NONE;
+    for (int i = 0; i < n && match == XCB_NONE; i++) {
+        xcb_randr_get_output_info_reply_t *info =
+            xcb_randr_get_output_info_reply(xcb,
+                xcb_randr_get_output_info(xcb, outs[i], res->config_timestamp),
+                NULL);
+        if (!info) continue;
+
+        /* The RandR name is not NUL-terminated. */
+        int len = xcb_randr_get_output_info_name_length(info);
+        const char *name = (const char *)xcb_randr_get_output_info_name(info);
+        if (len == (int)strlen(want) && !strncmp(name, want, (size_t)len))
+            match = outs[i];
+
+        free(info);
+    }
+    free(res);
+
+    if (match == XCB_NONE) {
+        /* Xwayland hadn't mirrored this wl_output yet (hotplug races the X
+         * server). Harmless: the next call — ready, or the next panel edit —
+         * picks it up. */
+        wlr_log(WLR_INFO,
+                "synui: no X11 RandR output named %s (yet); primary not set",
+                want);
+    } else {
+        /* Checked: this request fails quietly by design, so ask for the error
+         * rather than assuming it landed. */
+        xcb_generic_error_t *err = xcb_request_check(xcb,
+            xcb_randr_set_output_primary_checked(xcb, screen->root, match));
+        if (err) {
+            wlr_log(WLR_ERROR,
+                    "synui: setting X11 primary to %s failed (X error %u)",
+                    want, err->error_code);
+            free(err);
+        } else {
+            wlr_log(WLR_INFO, "synui: X11 primary output = %s", want);
+        }
+    }
+
+    xcb_disconnect(xcb);
+}
+
 /* ── Server ready: publish DISPLAY, set the X cursor ─────── */
 static void xwayland_ready(struct wl_listener *listener, void *data)
 {
@@ -420,6 +534,8 @@ static void xwayland_ready(struct wl_listener *listener, void *data)
     setenv("DISPLAY", s->xwayland->display_name, 1);
     wlr_log(WLR_INFO, "synui: Xwayland ready on DISPLAY=%s",
             s->xwayland->display_name);
+
+    xwayland_apply_primary(s);
 
     struct wlr_xcursor *xc =
         wlr_xcursor_manager_get_xcursor(s->cursor_mgr, "default", 1);

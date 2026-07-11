@@ -80,8 +80,9 @@ repeat_delay = 600
 #          layout_cycle, focus_next/prev, stack_next/prev,
 #          master_shrink/grow, float_toggle, maximize_toggle, ai_ask,
 #          ws <1-9>, movews <1-9>
-# displays = built-in display settings (rotate/arrange monitors,
-# default super+d); menu = the SYNAPSE OS welcome menu (default super+escape).
+# displays = built-in display settings (rotate/arrange monitors, and p to set
+# the primary monitor — where X11/SDL games open; default super+d);
+# menu = the SYNAPSE OS welcome menu (default super+escape).
 # A bind on the same combo as a default replaces the default.
 # bind = super+w spawn wofi --show drun
 # bind = super+shift+s spawn swaylock

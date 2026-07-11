@@ -23,6 +23,7 @@ glesv2    = dependency('glesv2')
 xcb       = dependency('xcb')
 xcb_icccm = dependency('xcb-icccm')
 xcb_ewmh  = dependency('xcb-ewmh')
+xcb_randr = dependency('xcb-randr')   # xwayland.c marks the primary output
 
 wl_scanner = find_program('wayland-scanner')
 
@@ -141,8 +142,8 @@ synui_exe = executable('synui',
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
-                  libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, egl, glesv2,
-                  libsystemd],
+                  libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
+                  egl, glesv2, libsystemd],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
   install : true)
