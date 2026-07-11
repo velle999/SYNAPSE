@@ -40,6 +40,9 @@
 #define EPOLL_MAX_EVENTS   64
 #define RECV_BUF_SIZE      (64 * 1024)   /* 64 KiB per client recv buf */
 
+/* synapd_header_valid() — the input gate — lives in src/wire.c, which is pure
+ * and dependency-free so the test can link it without dragging in llama. */
+
 /* ── Work queue ───────────────────────────────────────────── */
 typedef struct work_item {
     int              client_fd;
@@ -281,14 +284,10 @@ static void *server_thread_fn(void *arg) {
                     continue;
                 }
 
-                if (r != sizeof(hdr) || hdr.magic != SYN_MAGIC ||
-                    hdr.version != SYNAPD_PROTOCOL_VER) {
-                    close(cfd);
-                    continue;
-                }
-
-                if (hdr.payload_len > SYN_MAX_PAYLOAD) {
-                    syn_log(LOG_WARNING, "socket_server: oversized payload %u", hdr.payload_len);
+                if (!synapd_header_valid(&hdr, (size_t)r)) {
+                    if (r == sizeof(hdr) && hdr.payload_len > SYN_MAX_PAYLOAD)
+                        syn_log(LOG_WARNING, "socket_server: oversized payload %u",
+                                hdr.payload_len);
                     close(cfd);
                     continue;
                 }

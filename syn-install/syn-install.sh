@@ -113,13 +113,49 @@ if have_net; then
 else
     echo "  No network detected. Starting NetworkManager..."
     systemctl start NetworkManager 2>/dev/null || true
-    sleep 3
-    if have_net; then
-        success "Network connected"
-    else
-        die "No network connection. SynapseOS install downloads the base
-  system, so a connection is required. Connect (e.g. 'nmtui') and re-run."
-    fi
+
+    # NM needs a moment to bring a wired link up or reconnect a known network.
+    for _ in 1 2 3 4 5; do
+        have_net && break
+        sleep 1
+    done
+
+    # Still nothing. On a laptop that almost always means "no cable, needs
+    # Wi-Fi" — and this used to just die, telling the user to go run nmtui and
+    # start the installer over. That made installing over Wi-Fi a two-step dance
+    # you had to know about in advance. Offer the picker inline instead, and
+    # loop: associating can easily take two tries (typo'd passphrase, weak AP).
+    while ! have_net; do
+        if ls /sys/class/net/*/wireless >/dev/null 2>&1 && \
+           command -v nmtui >/dev/null 2>&1; then
+            echo ""
+            echo "  No connection — but this machine has Wi-Fi."
+            prompt "Open the Wi-Fi picker (nmtui)? [Y/n]:"
+            read -r wifi_ans
+            case "${wifi_ans:-y}" in
+                [Nn]*) die "No network connection. SynapseOS downloads the base
+  system during install, so a connection is required." ;;
+            esac
+
+            nmtui connect || true
+            header
+            step "Checking network"
+
+            # nmtui returns as soon as it has *associated*, but DHCP may not
+            # have finished — don't call it a failure until the lease has had a
+            # chance to land, or we'd send the user back round for no reason.
+            for _ in 1 2 3 4 5 6 7 8; do
+                have_net && break
+                sleep 1
+            done
+            have_net || echo "  Still offline — try again."
+        else
+            die "No network connection, and no Wi-Fi device to configure.
+  SynapseOS downloads the base system during install, so connect a cable
+  and re-run."
+        fi
+    done
+    success "Network connected"
 fi
 
 # ── Disk selection ────────────────────────────────────────

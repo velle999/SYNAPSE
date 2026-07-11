@@ -782,7 +782,7 @@ static void idle_inhibitor_destroy(struct wl_listener *listener, void *data)
     struct syn_idle_inhibitor *inh = wl_container_of(listener, inh, destroy);
     syn_server_t *s = inh->server;
     if (--s->idle_inhibitors < 0) s->idle_inhibitors = 0;
-    wlr_idle_notifier_v1_set_inhibited(s->idle_notifier, s->idle_inhibitors > 0);
+    wlr_idle_notifier_v1_set_inhibited(s->idle_notifier, idle_inhibited(s));
     /* The last inhibitor going away starts the idle clock again. */
     power_notify_activity(s);
     wl_list_remove(&inh->destroy.link);
@@ -1079,6 +1079,10 @@ int synui_init(syn_server_t *s)
     /* Task manager: creates its poll timer (disarmed) and probes for a GPU. */
     taskmgr_init(s);
 
+    /* org.freedesktop.ScreenSaver — lets apps inhibit idle the standard way.
+     * Best-effort; no session bus just means the feature stays off. */
+    screensaver_init(s);
+
     return 0;
 }
 
@@ -1092,6 +1096,7 @@ int synui_run(syn_server_t *s)
 
     /* Set initial cursor image so it's visible immediately */
     wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+
 
     /* Autostart configured applications */
     for (int i = 0; i < s->config.autostart_count; i++) {
@@ -1177,6 +1182,7 @@ void synui_destroy(syn_server_t *s)
 
     power_finish(s);
     taskmgr_finish(s);
+    screensaver_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */
     game_finish(s);

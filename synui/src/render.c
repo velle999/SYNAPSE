@@ -137,6 +137,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Power Saving",     "Super+P",       "power"     },
     { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
+    { "Network / Wi-Fi",  "Super+I",       "network"   },
     { "Game Mode",        "Super+G",       "game"      },
     { "Lock Screen",      "Super+L",       "lock"      },
     { "AI Backend",       "GPU/CPU",       "ai_backend"},
@@ -167,7 +168,16 @@ void synui_render_welcome(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    int pw = 500, ph = 474;
+    /* Height follows the menu rather than being a constant someone has to
+     * remember to bump: the rows start at MENU_TOP and step MENU_ROW_H, and the
+     * footer + version sit below them. With a hard-coded height, adding a menu
+     * entry silently pushed the footer off the bottom of the panel. */
+    /* FOOTER_H covers three hint lines (at y+16/+34/+52) *and* the version
+     * line, which is drawn from the bottom at ph-16 — too small a value and the
+     * two collide rather than the footer simply being cut off. */
+    const int MENU_TOP = 128, MENU_ROW_H = 28, FOOTER_H = 92;
+    int pw = 500;
+    int ph = MENU_TOP + synui_welcome_menu_len * MENU_ROW_H + FOOTER_H;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
@@ -221,7 +231,7 @@ void synui_render_welcome(syn_server_t *s)
 
     /* Selectable menu (input.c: Up/Down + Enter) */
     cairo_set_font_size(cr, 15);
-    int y = 128;
+    int y = MENU_TOP;
     for (int i = 0; i < synui_welcome_menu_len; i++) {
         int sel = (i == s->welcome_ui.selected);
 
@@ -247,7 +257,7 @@ void synui_render_welcome(syn_server_t *s)
         cairo_move_to(cr, 290, y);
         cairo_show_text(cr, hint);
 
-        y += 28;
+        y += MENU_ROW_H;
     }
 
     /* Footer hints */
@@ -714,16 +724,25 @@ void synui_render_wppick(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
+    /* The browse list can run to WPPICK_FOUND_MAX images, so the panel shows a
+     * window of WPPICK_ROWS rows and scrolls rather than growing off-screen. */
     const int row_h = 48, top = 58, pad = 22;
-    int pw = 440;
-    int ph = top + wppick_option_count * row_h + 56;
+    int total = wppick_total(s);
+    int shown = total < WPPICK_ROWS ? total : WPPICK_ROWS;
+    if (shown < 1) shown = 1;
+
+    int pw = 520;
+    int ph = top + shown * row_h + 56;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->wppick_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->wppick_ui.tree->node);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    /* More opaque than the 0.94 the sparser panels use: the browse list puts a
+     * small-type path under every row, and at 0.94 whatever is behind the panel
+     * (the welcome menu, or the wallpaper itself) reads straight through them. */
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
     float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
     if (!s->wppick_ui.bg)
         s->wppick_ui.bg = wlr_scene_rect_create(s->wppick_ui.tree,
@@ -753,9 +772,12 @@ void synui_render_wppick(syn_server_t *s)
     cairo_stroke(cr);
 
     /* Options: highlighted row gets a filled bar + accent border. */
-    for (int i = 0; i < wppick_option_count; i++) {
+    for (int r = 0; r < shown; r++) {
+        int i = s->wppick.scroll + r;
+        if (i >= total) break;
+
         int sel = (i == s->wppick.selected);
-        int ry = top + i * row_h;
+        int ry = top + r * row_h;
 
         if (sel) {
             cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
@@ -767,24 +789,44 @@ void synui_render_wppick(syn_server_t *s)
             cairo_stroke(cr);
         }
 
+        const char *label, *desc;
+        wppick_row(s, i, &label, &desc);
+
         cairo_set_font_size(cr, 15);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
         cairo_move_to(cr, pad + 8, ry + 22);
-        cairo_show_text(cr, wppick_options[i].label);
+        cairo_show_text(cr, label);
 
+        /* A found image's subtitle is its full path, which can be far wider
+         * than the panel — clip it to the row so it cannot spill over the
+         * border. */
+        cairo_save(cr);
+        cairo_rectangle(cr, pad, ry + 26, pw - 2 * pad - 8, 16);
+        cairo_clip(cr);
         cairo_set_font_size(cr, 12);
         cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
                               sel ? 0.85 : 0.60, 1.0);
         cairo_move_to(cr, pad + 8, ry + 38);
-        cairo_show_text(cr, wppick_options[i].desc);
+        cairo_show_text(cr, desc);
+        cairo_restore(cr);
+    }
+
+    /* Scroll position, when there is more than one screenful. */
+    if (total > shown) {
+        char pos[32];
+        snprintf(pos, sizeof(pos), "%d/%d", s->wppick.selected + 1, total);
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        cairo_move_to(cr, pw - 62, 30);
+        cairo_show_text(cr, pos);
     }
 
     /* Controls legend */
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 20);
-    cairo_show_text(cr, "Up/Down preview \xc2\xb7 Enter/Esc close");
+    cairo_show_text(cr, "Up/Down preview \xc2\xb7 r rescan \xc2\xb7 Enter/Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->wppick_ui.text_buf, s->wppick_ui.tree, buf);
@@ -836,7 +878,7 @@ void synui_render_power(syn_server_t *s)
     /* An inhibitor beats every timeout, so say so where it can't be missed
      * rather than letting the panel imply the timeouts are counting down. */
     cairo_set_font_size(cr, 12);
-    if (s->idle_inhibitors > 0) {
+    if (idle_inhibited(s)) {
         cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
         cairo_move_to(cr, 18, 50);
         cairo_show_text(cr, "idle inhibited (media playing) \xc2\xb7 timers held");

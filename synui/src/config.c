@@ -16,7 +16,7 @@
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
- * effects_toggle, power, lock, game.
+ * effects_toggle, power, lock, game, taskmgr, network.
  * A bind with the same combo as a default replaces it.
  *
  * Wallpaper (wallpaper.c):
@@ -43,6 +43,10 @@
  *   power_suspend_timeout = 0
  *   power_lock_cmd = swaylock -f -c 000000
  *   power_suspend_cmd = systemctl suspend
+ *
+ * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
+ * entry to type a passphrase into, so there is nothing native to point at yet:
+ *   network_cmd = foot -e nmtui
  *
  * Game mode (game.c) — a fullscreen XWayland client is taken to be a game, and
  * while one runs synapd is stopped (it holds ~4GB of VRAM and has no unload
@@ -198,6 +202,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+e",         "effects_toggle" },
         { "super+p",         "power" },
         { "super+t",         "taskmgr" },
+        { "super+i",         "network" },
         /* The one shortcut everybody already has in their fingers. Nothing
          * below us claims it: logind's ctrl-alt-del handling is a VT/console
          * thing, so inside a Wayland session the key reaches the compositor. */
@@ -285,6 +290,9 @@ void synui_config_load(syn_config_t *cfg)
              "pgrep -x swaylock >/dev/null || swaylock -f -c 000000");
     snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
              "systemctl suspend");
+
+    snprintf(cfg->network_cmd, sizeof(cfg->network_cmd),
+             "foot -e nmtui");
 
     cfg->game_mode         = 1;
     cfg->game_suspend_ai   = 1;
@@ -470,6 +478,8 @@ void synui_config_load(syn_config_t *cfg)
             snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd), "%s", val);
         else if (strcmp(key, "power_suspend_cmd") == 0)
             snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
+        else if (strcmp(key, "network_cmd") == 0)
+            snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_edge") == 0) {

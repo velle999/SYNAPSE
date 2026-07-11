@@ -11,6 +11,8 @@ threads   = dependency('threads')
 cairo     = dependency('cairo')
 rsvg      = dependency('librsvg-2.0')  # icons.c rasterizes SVG-only app icons
 libinput  = dependency('libinput')
+# screensaver.c: sd-bus, to own org.freedesktop.ScreenSaver
+libsystemd = dependency('libsystemd')
 libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
 
 # effects.c drives the GLES2 renderer directly for the post-process pass
@@ -115,6 +117,7 @@ synui_exe = executable('synui',
     'src/game.c',
     'src/gpu.c',
     'src/taskmgr.c',
+    'src/screensaver.c',
     'src/session.c',
     'src/ai_interface.c',
     'src/secfeed.c',
@@ -137,7 +140,8 @@ synui_exe = executable('synui',
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
-                  libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, egl, glesv2],
+                  libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, egl, glesv2,
+                  libsystemd],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
   install : true)

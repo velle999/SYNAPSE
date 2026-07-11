@@ -169,6 +169,10 @@ typedef struct {
 extern const syn_welcome_entry_t synui_welcome_menu[];
 extern const int                 synui_welcome_menu_len;
 
+/* ── Wallpaper picker (wppick.c) ─────────────────────────── */
+#define WPPICK_FOUND_MAX 64   /* images the browse scan will list */
+#define WPPICK_ROWS      10   /* rows visible at once; the rest scroll */
+
 /* ── Display settings panel (dispcfg.c) ──────────────────── */
 #define DISPCFG_MAX_OUTPUTS 8
 
@@ -426,6 +430,11 @@ typedef struct {
     int   power_lock;           /* run power_lock_cmd */
     int   power_suspend;        /* run power_suspend_cmd; default 0 (never) */
     char  power_lock_cmd[192];
+
+    /* Wi-Fi / network configuration UI. nmtui in a terminal by default: synui
+     * has no text entry to type a passphrase into, so there is nothing native
+     * to point this at yet. Overridable for non-NetworkManager setups. */
+    char  network_cmd[192];
     char  power_suspend_cmd[192];
 
     /* Game mode (game.c). A fullscreen XWayland client is taken to be a game
@@ -658,6 +667,14 @@ struct syn_server {
     int                                  locked;     /* session is locked */
     int                                  idle_inhibitors;  /* active inhibitor count */
 
+    /* Idle inhibits held over D-Bus (org.freedesktop.ScreenSaver — screensaver.c).
+     * Counted separately from idle_inhibitors, which belongs to the wlr
+     * idle-inhibit protocol: mixing them would make the Wayland counter lie
+     * about how many protocol objects exist. Use idle_inhibited() to ask the
+     * only question anyone actually has, which is whether *anything* is
+     * holding the screen on. */
+    int                                  screensaver_inhibitors;
+
     /* Phase G: input completeness. */
     struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
     struct wlr_pointer_constraints_v1      *pointer_constraints;
@@ -827,7 +844,15 @@ struct syn_server {
     } wppick_ui;
     struct {
         int visible;
-        int selected;   /* highlighted entry into the wppick option table */
+        int selected;   /* row index: built-ins first, then found[] */
+        int scroll;     /* first row drawn (the found list can be long) */
+
+        /* Images found on disk by the "browse" scan (wppick_scan), shown below
+         * the built-ins so you can pick your own wallpaper without editing
+         * synuirc. Rescanned every time the panel opens, so an image dropped
+         * into ~/Pictures shows up without restarting the compositor. */
+        char found[WPPICK_FOUND_MAX][256];
+        int  found_count;
     } wppick;
 
     /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
@@ -1187,6 +1212,12 @@ extern const struct wppick_option wppick_options[];
 extern const int wppick_option_count;
 
 void wppick_show(syn_server_t *s);
+/* Rescan the wallpaper directories into s->wppick.found[] (the "browse" list). */
+void wppick_scan(syn_server_t *s);
+/* Rows in the panel: the built-in options, then every image the scan found. */
+int  wppick_total(syn_server_t *s);
+/* Label + subtitle for one row; wppick.c owns the text, render.c draws it. */
+void wppick_row(syn_server_t *s, int row, const char **label, const char **desc);
 void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
 int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
@@ -1274,3 +1305,18 @@ void synui_render_dockmenu(syn_server_t *s);
 
 /* Launch a shell command (fork/exec); exposed for dock launches. */
 void synui_spawn(const char *cmd);
+
+/* ── screensaver.c (org.freedesktop.ScreenSaver over D-Bus) ── */
+/* Best-effort: no session bus, or the name already taken, just logs and leaves
+ * the feature off — synui runs fine on the Wayland idle-inhibit protocol alone. */
+void screensaver_init(syn_server_t *s);
+void screensaver_finish(syn_server_t *s);
+
+/* Is anything holding the screen on — a Wayland idle inhibitor (synui-media-
+ * inhibit, say) or a D-Bus ScreenSaver inhibit (Firefox playing a video)?
+ * The idle stages and the idle notifier both key off this, not off either
+ * counter alone. */
+static inline bool idle_inhibited(syn_server_t *s)
+{
+    return s->idle_inhibitors > 0 || s->screensaver_inhibitors > 0;
+}

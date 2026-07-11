@@ -216,7 +216,7 @@ static void power_arm(syn_server_t *s)
      * that counter belongs to the wlr idle-inhibit protocol and is mirrored to
      * the idle notifier. A gamepad produces no seat input, so without this a
      * controller-only session looks idle and the screen dims mid-game. */
-    if (!s->config.power_enabled || s->idle_inhibitors > 0) return;
+    if (!s->config.power_enabled || idle_inhibited(s)) return;
     if (s->game.active && s->config.game_inhibit_idle) return;
 
     struct { struct wl_event_source *src; int secs; } stage[] = {

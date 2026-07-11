@@ -60,9 +60,16 @@
         "interval": 5
     },
     "network": {
-        "format-wifi": "NET {essid}",
+        "format-wifi": "NET {essid} {signalStrength}%",
         "format-ethernet": "NET {ipaddr}",
         "format-disconnected": "NET offline",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%) - {ipaddr}",
+        "tooltip-format-ethernet": "{ifname} - {ipaddr}",
+        "tooltip-format-disconnected": "Disconnected - click to open the Wi-Fi picker",
+        // Clicking the module opens nmtui. It was reachable only from the
+        // SYNAPSE menu, which is not where anyone looks when the bar already
+        // says "NET offline".
+        "on-click": "foot -e nmtui",
         "interval": 5
     },
     "pulseaudio": {

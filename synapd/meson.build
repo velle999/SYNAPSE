@@ -43,11 +43,18 @@ endif
 add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 executable('synapd',
-  files('src/main.c','src/inference.c','src/socket_server.c',
+  files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
         'src/context.c','src/scheduler.c','src/log.c'),
   include_directories: llama_inc,
   dependencies: deps,
   install: true)
+
+# Unit test for the wire-protocol input gate. wire.c is pure (no llama, no
+# sockets), so the test links just it — no model, no daemon, runs in a blink.
+wire_test = executable('wire_test',
+  files('tests/wire_test.c','src/wire.c'),
+  include_directories: include_directories('include'))
+test('wire', wire_test)
 
 install_data('systemd/synapd.service',
   install_dir: '/usr/lib/systemd/system')

@@ -346,6 +346,14 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
          * restart synapd); synui just fires it. The welcome-menu "AI Backend"
          * row reflects the new state the next time the menu is opened. */
         spawn("synui-ai-backend toggle");
+    } else if (strcmp(action, "network") == 0) {
+        /* Wi-Fi / network configuration. NetworkManager's nmtui is the whole
+         * UI here — synui has no text entry to type a passphrase into, so a
+         * compositor-native picker would need one built first. Reaching it took
+         * knowing it was buried in waybar's SYNAPSE menu; this puts it on a
+         * keybind and in the welcome menu. Configurable (network_cmd) so a box
+         * running iwd rather than NM can point it somewhere else. */
+        spawn(s->config.network_cmd);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
     } else if (strcmp(action, "effects_toggle") == 0) {
