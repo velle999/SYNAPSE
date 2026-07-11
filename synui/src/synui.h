@@ -217,6 +217,84 @@ typedef struct {
     char app[64];       /* app_id that triggered it (for the log) */
 } syn_game_t;
 
+/* ── GPU telemetry (gpu.c) ───────────────────────────────── */
+#define SYN_GPU_MAX       4    /* devices reported in the panel */
+#define SYN_GPU_PROC_MAX  256  /* pids in the per-process VRAM table */
+
+/* One device's last sample. util/temp_c/power_w are -1 when the back end
+ * cannot report that figure (common on amdgpu); vram_total_kb 0 means the
+ * whole VRAM reading is unavailable, not that the card has no memory. */
+typedef struct {
+    char          name[64];
+    int           util;            /* percent, or -1 */
+    int           temp_c;          /* or -1 */
+    int           power_w;         /* or -1 */
+    unsigned long vram_used_kb;
+    unsigned long vram_total_kb;
+    char          sysfs[256];      /* amdgpu back end only; empty under NVML */
+} syn_gpu_t;
+
+/* ── Task manager (taskmgr.c) ────────────────────────────── */
+#define TASKMGR_MAX_PROCS 512  /* sampled; the table shows the top rows */
+#define TASKMGR_ROWS      14   /* rows visible at once */
+
+typedef enum {
+    TM_SORT_CPU = 0,
+    TM_SORT_MEM,
+    TM_SORT_GPU,
+    TM_SORT_PID,
+} syn_tm_sort_t;
+
+/* A kill is armed, not sent: the panel shows a confirmation line and only
+ * signals once the user answers it. */
+typedef enum {
+    TM_CONFIRM_NONE = 0,
+    TM_CONFIRM_TERM,
+    TM_CONFIRM_KILL,
+} syn_tm_confirm_t;
+
+typedef struct {
+    pid_t              pid;
+    uid_t              uid;
+    char               name[40];
+    double             cpu;        /* percent of one core, top-style */
+    unsigned long      rss_kb;
+    unsigned long      vram_kb;    /* 0 = none, or the back end cannot say */
+    unsigned long long jiffies;    /* utime+stime; next poll's CPU% baseline */
+    int                has_window; /* owns a window synui is managing */
+} syn_tm_proc_t;
+
+typedef struct {
+    int              visible;
+    int              selected;     /* index into procs[] */
+    pid_t            sel_pid;      /* what selected *means* across a re-sort */
+    int              scroll;       /* first row drawn */
+    syn_tm_sort_t    sort;
+    int              own_only;     /* 'u': hide other users' processes */
+    char             status[96];
+
+    syn_tm_confirm_t confirm;
+    pid_t            confirm_pid;  /* pinned when the confirmation is armed, so
+                                    * a re-sort under it cannot redirect the
+                                    * signal at a different process */
+    char             confirm_name[40];
+
+    syn_tm_proc_t    procs[TASKMGR_MAX_PROCS];
+    int              n;
+
+    /* Previous poll, for the CPU% deltas. */
+    struct { pid_t pid; unsigned long long jiffies; } prev[TASKMGR_MAX_PROCS];
+    int                prev_n;
+    unsigned long long prev_total, prev_busy;
+
+    /* System totals, refreshed each poll. */
+    double        cpu_pct;
+    unsigned long mem_used_kb, mem_total_kb;
+    unsigned long swap_used_kb, swap_total_kb;
+
+    struct wl_event_source *timer;  /* 1 Hz, armed only while visible */
+} syn_taskmgr_t;
+
 /* ── Keybinding (table-driven; syntax in config.c) ───────── */
 #define SYN_BINDS_MAX        96
 #define SYN_BIND_ACTION_LEN  24
@@ -722,6 +800,23 @@ struct syn_server {
     syn_power_t     power;
     syn_game_t      game;
 
+    /* Task manager panel (Super+T) — process table + resource overview. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } taskmgr_ui;
+
+    syn_taskmgr_t   taskmgr;
+
+    /* GPU telemetry (gpu.c), refreshed by the task manager's poll. gpu_n is 0
+     * when no supported GPU was found — every consumer must handle that. */
+    syn_gpu_t       gpu[SYN_GPU_MAX];
+    int             gpu_n;
+    struct { pid_t pid; unsigned long vram_kb; } gpu_proc[SYN_GPU_PROC_MAX];
+    int             gpu_proc_n;
+
     /* Wallpaper selector panel (wppick.c) — a compositor-drawn modal picker
      * (Super+W) for switching between the built-in wallpapers live. */
     struct {
@@ -1026,6 +1121,33 @@ void power_finish(syn_server_t *s);
 void power_notify_activity(syn_server_t *s);
 /* Re-arm after the config changed (panel edit, config reload). */
 void power_reload(syn_server_t *s);
+
+/* ── GPU telemetry (gpu.c) ───────────────────────────────── */
+/* Probes NVML (dlopen) then amdgpu sysfs; leaves gpu_n at 0 if neither is
+ * there, which is a normal outcome, not a failure. */
+void gpu_init(syn_server_t *s);
+void gpu_finish(syn_server_t *s);
+/* Refresh s->gpu[] and the per-pid VRAM table. Called from the task manager's
+ * poll, so it only runs while that panel is open. */
+void gpu_sample(syn_server_t *s);
+/* VRAM charged to one pid at the last gpu_sample; 0 if it uses none, or if the
+ * back end cannot attribute VRAM per process (amdgpu). */
+unsigned long gpu_proc_vram_kb(syn_server_t *s, pid_t pid);
+
+/* ── Task manager (taskmgr.c) ────────────────────────────── */
+void taskmgr_init(syn_server_t *s);
+void taskmgr_finish(syn_server_t *s);
+void taskmgr_show(syn_server_t *s);
+void taskmgr_hide(syn_server_t *s);
+void taskmgr_toggle(syn_server_t *s);
+/* Modal key handling while the panel is open, as in power_key: unmodified keys
+ * are absorbed, Super+… still reaches the global binds. Returns 1 if handled. */
+int  taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* One /proc + GPU poll into s->taskmgr. Public so the panel can resample
+ * immediately after a sort or a kill instead of waiting for the next tick. */
+void taskmgr_sample(syn_server_t *s);
+const char *taskmgr_sort_label(syn_tm_sort_t sort);
+void synui_render_taskmgr(syn_server_t *s);
 
 /* ── Game mode (game.c) ──────────────────────────────────── */
 /* Idempotent decision point: call after any fullscreen change, map, or unmap.

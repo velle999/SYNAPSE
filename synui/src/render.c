@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <cairo.h>
 #include <librsvg/rsvg.h>
 
@@ -135,6 +136,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Display Settings", "Super+D",       "displays"  },
     { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Power Saving",     "Super+P",       "power"     },
+    { "Task Manager",     "Super+T",       "taskmgr"   },
     { "Game Mode",        "Super+G",       "game"      },
     { "Lock Screen",      "Super+L",       "lock"      },
     { "AI Backend",       "GPU/CPU",       "ai_backend"},
@@ -898,6 +900,312 @@ void synui_render_power(syn_server_t *s)
     set_scene_buffer(&s->power_ui.text_buf, s->power_ui.tree, buf);
 }
 
+/* ── Task manager (taskmgr.c) ────────────────────────────── */
+
+/* Panel geometry. The column x's are tuned for the 13px monospace face the
+ * rows are drawn in; the number columns are right-aligned to their x, so they
+ * line up under headings whose text is a different width. */
+#define TM_W        660
+#define TM_ROW_H    22
+#define TM_COL_PID   18
+#define TM_COL_NAME  92
+#define TM_COL_CPU  372   /* right edge */
+#define TM_COL_MEM  462   /* right edge */
+#define TM_COL_VRAM 560   /* right edge */
+#define TM_COL_WIN  580
+
+static void draw_right(cairo_t *cr, double x_right, double y, const char *text)
+{
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, text, &ext);
+    cairo_move_to(cr, x_right - ext.width, y);
+    cairo_show_text(cr, text);
+}
+
+/* A meter. frac < 0 means "this back end can't report the value" — draw the
+ * trough only, so an unknown reads as unknown rather than as zero. */
+static void draw_bar(cairo_t *cr, double x, double y, double w, double h,
+                     double frac, double r, double g, double b)
+{
+    cairo_set_source_rgba(cr, 0.16, 0.16, 0.22, 1.0);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_fill(cr);
+
+    if (frac < 0) return;
+    if (frac > 1.0) frac = 1.0;
+
+    cairo_set_source_rgba(cr, r, g, b, 1.0);
+    cairo_rectangle(cr, x, y, w * frac, h);
+    cairo_fill(cr);
+}
+
+/* Hot values go amber then red: the point of a resource panel is that a
+ * saturated bar catches the eye without being read. */
+static void bar_color(double frac, double *r, double *g, double *b)
+{
+    if (frac >= 0.90)      { *r = 0.90; *g = 0.30; *b = 0.35; }
+    else if (frac >= 0.70) { *r = 0.95; *g = 0.75; *b = 0.25; }
+    else                   { *r = 0.00; *g = 0.85; *b = 0.75; }
+}
+
+/* KiB → the largest unit that keeps the number under four digits. */
+static void fmt_kb(unsigned long kb, char *buf, size_t n)
+{
+    if (kb >= 1024UL * 1024UL)
+        snprintf(buf, n, "%.1fG", (double)kb / (1024.0 * 1024.0));
+    else if (kb >= 1024UL)
+        snprintf(buf, n, "%.0fM", (double)kb / 1024.0);
+    else
+        snprintf(buf, n, "%luK", kb);
+}
+
+/* "6.9 / 12.0G" — used against total, for the meter labels. */
+static void fmt_kb_pair(unsigned long used, unsigned long total,
+                        char *buf, size_t n)
+{
+    if (!total) { snprintf(buf, n, "n/a"); return; }
+    snprintf(buf, n, "%.1f / %.1fG",
+             (double)used / (1024.0 * 1024.0),
+             (double)total / (1024.0 * 1024.0));
+}
+
+/* One "LABEL [====----] value" line of the system overview. */
+static double draw_meter(cairo_t *cr, double y, const char *label,
+                         double frac, const char *value)
+{
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.62, 0.66, 0.72, 1.0);
+    cairo_move_to(cr, 18, y);
+    cairo_show_text(cr, label);
+
+    double r, g, b;
+    bar_color(frac < 0 ? 0 : frac, &r, &g, &b);
+    draw_bar(cr, 76, y - 9, 200, 10, frac, r, g, b);
+
+    cairo_set_source_rgba(cr, 0.86, 0.90, 0.94, 1.0);
+    cairo_move_to(cr, 292, y);
+    cairo_show_text(cr, value);
+
+    return y + 22;
+}
+
+void synui_render_taskmgr(syn_server_t *s)
+{
+    syn_taskmgr_t *t = &s->taskmgr;
+
+    if (!t->visible) {
+        wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    /* A machine with no GPU still gets one line saying so, so the panel does
+     * not silently look like it forgot to draw the GPU section. */
+    int gpu_lines = s->gpu_n ? s->gpu_n * 2 : 1;
+
+    const int sys_top = 62;
+    int table_top = sys_top + (2 + gpu_lines) * 22 + 22;
+    int pw = TM_W;
+    int ph = table_top + 20 + TASKMGR_ROWS * TM_ROW_H + 74;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->taskmgr_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->taskmgr_ui.tree->node);
+
+    /* Denser than the other panels, so it is more opaque than their 0.94: at
+     * that alpha the wallpaper (the Matrix one animates) and the welcome
+     * screen's menu text ghost straight through the rows and the small type
+     * stops being readable. */
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->taskmgr_ui.bg)
+        s->taskmgr_ui.bg = wlr_scene_rect_create(s->taskmgr_ui.tree,
+                                                 pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->taskmgr_ui.bg, pw, ph);
+    if (!s->taskmgr_ui.accent)
+        s->taskmgr_ui.accent = wlr_scene_rect_create(s->taskmgr_ui.tree,
+                                                     pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Title, with the live sort key — the table's order is not otherwise
+     * self-evident once every column has plausible-looking numbers in it. */
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "TASK MANAGER");
+
+    char sub[96];
+    snprintf(sub, sizeof(sub), "%d procs \xc2\xb7 sort: %s%s",
+             t->n, taskmgr_sort_label(t->sort), t->own_only ? " \xc2\xb7 mine" : "");
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    draw_right(cr, pw - 18, 30, sub);
+
+    /* System overview */
+    double y = sys_top;
+    char val[96];
+
+    double cpu_frac = t->cpu_pct / 100.0;
+    snprintf(val, sizeof(val), "%.0f%%  (%ld cores)", t->cpu_pct,
+             sysconf(_SC_NPROCESSORS_ONLN));
+    y = draw_meter(cr, y, "CPU", cpu_frac, val);
+
+    double mem_frac = t->mem_total_kb
+                        ? (double)t->mem_used_kb / (double)t->mem_total_kb : 0;
+    fmt_kb_pair(t->mem_used_kb, t->mem_total_kb, val, sizeof(val));
+    if (t->swap_used_kb) {
+        char sw[32];
+        fmt_kb(t->swap_used_kb, sw, sizeof(sw));
+        size_t used = strlen(val);
+        snprintf(val + used, sizeof(val) - used, "  \xc2\xb7 swap %s", sw);
+    }
+    y = draw_meter(cr, y, "RAM", mem_frac, val);
+
+    if (!s->gpu_n) {
+        y = draw_meter(cr, y, "GPU", -1.0, "no GPU telemetry available");
+    } else {
+        for (int i = 0; i < s->gpu_n; i++) {
+            syn_gpu_t *g = &s->gpu[i];
+
+            if (g->util >= 0) snprintf(val, sizeof(val), "%d%%  \xc2\xb7 %s",
+                                       g->util, g->name);
+            else              snprintf(val, sizeof(val), "n/a  \xc2\xb7 %s", g->name);
+            y = draw_meter(cr, y, "GPU", g->util >= 0 ? g->util / 100.0 : -1.0,
+                           val);
+
+            double vf = g->vram_total_kb
+                          ? (double)g->vram_used_kb / (double)g->vram_total_kb
+                          : -1.0;
+            fmt_kb_pair(g->vram_used_kb, g->vram_total_kb, val, sizeof(val));
+
+            /* Temperature and draw ride along on the VRAM line rather than
+             * taking a third one: they are glanceable, not scanned. */
+            size_t used = strlen(val);
+            if (g->temp_c >= 0)
+                used += (size_t)snprintf(val + used, sizeof(val) - used,
+                                         "  \xc2\xb7 %d\xc2\xb0\x43", g->temp_c);
+            if (g->power_w >= 0)
+                snprintf(val + used, sizeof(val) - used, "  %dW", g->power_w);
+
+            y = draw_meter(cr, y, "VRAM", vf, val);
+        }
+    }
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, table_top - 26);
+    cairo_line_to(cr, pw - 18, table_top - 26);
+    cairo_stroke(cr);
+
+    /* Column headings */
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    cairo_move_to(cr, TM_COL_PID, table_top - 8);
+    cairo_show_text(cr, "PID");
+    cairo_move_to(cr, TM_COL_NAME, table_top - 8);
+    cairo_show_text(cr, "NAME");
+    draw_right(cr, TM_COL_CPU,  table_top - 8, "CPU%");
+    draw_right(cr, TM_COL_MEM,  table_top - 8, "MEM");
+    draw_right(cr, TM_COL_VRAM, table_top - 8, "VRAM");
+
+    for (int row = 0; row < TASKMGR_ROWS; row++) {
+        int i = t->scroll + row;
+        if (i >= t->n) break;
+
+        syn_tm_proc_t *p = &t->procs[i];
+        int sel = (i == t->selected);
+        int ry = table_top + 14 + row * TM_ROW_H;
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 12, ry - 14, pw - 24, TM_ROW_H - 2);
+            cairo_fill(cr);
+        }
+
+        cairo_set_font_size(cr, 13);
+
+        char txt[48];
+        snprintf(txt, sizeof(txt), "%d", (int)p->pid);
+        cairo_set_source_rgba(cr, 0.50, 0.54, 0.62, 1.0);
+        cairo_move_to(cr, TM_COL_PID, ry);
+        cairo_show_text(cr, txt);
+
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.80, sel ? 1.00 : 0.84,
+                              sel ? 0.99 : 0.90, 1.0);
+        cairo_move_to(cr, TM_COL_NAME, ry);
+        cairo_show_text(cr, p->name);
+
+        /* Colour the CPU figure by load so a runaway process is visible in
+         * peripheral vision even when the table is sorted by something else. */
+        double load = p->cpu / 100.0;
+        if (load >= 0.9)      cairo_set_source_rgba(cr, 0.90, 0.30, 0.35, 1.0);
+        else if (load >= 0.3) cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
+        else                  cairo_set_source_rgba(cr, 0.62, 0.66, 0.72, 1.0);
+        snprintf(txt, sizeof(txt), "%.1f", p->cpu);
+        draw_right(cr, TM_COL_CPU, ry, txt);
+
+        cairo_set_source_rgba(cr, 0.62, 0.66, 0.72, 1.0);
+        fmt_kb(p->rss_kb, txt, sizeof(txt));
+        draw_right(cr, TM_COL_MEM, ry, txt);
+
+        if (p->vram_kb) {
+            cairo_set_source_rgba(cr, 0.45, 0.80, 0.55, 1.0);
+            fmt_kb(p->vram_kb, txt, sizeof(txt));
+        } else {
+            cairo_set_source_rgba(cr, 0.32, 0.34, 0.42, 1.0);
+            snprintf(txt, sizeof(txt), "\xe2\x80\x93");   /* en dash */
+        }
+        draw_right(cr, TM_COL_VRAM, ry, txt);
+
+        if (p->has_window) {
+            cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 0.9);
+            cairo_move_to(cr, TM_COL_WIN, ry);
+            cairo_show_text(cr, "\xe2\x96\xa3");          /* has a window */
+        }
+    }
+
+    /* Confirmation line, or the last action's result. The confirmation gets
+     * the whole width and a red bar behind it: it is the one place in this
+     * panel where the next keystroke is destructive. */
+    int foot = ph - 52;
+    if (t->confirm != TM_CONFIRM_NONE) {
+        cairo_set_source_rgba(cr, 0.45, 0.10, 0.14, 1.0);
+        cairo_rectangle(cr, 12, foot - 16, pw - 24, 24);
+        cairo_fill(cr);
+
+        char q[160];
+        snprintf(q, sizeof(q), "%s %s (%d)?  y / n",
+                 t->confirm == TM_CONFIRM_KILL ? "SIGKILL" : "SIGTERM",
+                 t->confirm_name, (int)t->confirm_pid);
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 1.0, 0.86, 0.86, 1.0);
+        cairo_move_to(cr, 18, foot);
+        cairo_show_text(cr, q);
+    } else if (t->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, 18, foot);
+        cairo_show_text(cr, t->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 20);
+    cairo_show_text(cr, "j/k move \xc2\xb7 c/m/g/p sort \xc2\xb7 u mine \xc2\xb7 "
+                        "x term \xc2\xb7 X kill \xc2\xb7 r refresh \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->taskmgr_ui.text_buf, s->taskmgr_ui.tree, buf);
+}
+
 /* ── Dock right-click context menu (dock.c) ──────────────── */
 
 static const char *dockact_label(syn_dockact_t a)
@@ -978,6 +1286,7 @@ void synui_ui_init(syn_server_t *s)
      * can be raised above every window without dragging the panel with it. */
     s->power_ui.dim_tree = wlr_scene_tree_create(&s->scene->tree);
     wlr_scene_node_set_enabled(&s->power_ui.dim_tree->node, true);
+    s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -986,6 +1295,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->overlay_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

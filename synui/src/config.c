@@ -197,6 +197,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "effects_toggle" },
         { "super+p",         "power" },
+        { "super+t",         "taskmgr" },
         { "super+g",         "game" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },

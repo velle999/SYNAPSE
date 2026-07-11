@@ -130,6 +130,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
 | `Super`+`O` / `Super`+`Shift`+`O` | Move window to next / previous monitor |
 | `Super`+`P` | Power saving panel |
+| `Super`+`T` | Task manager (processes, CPU/RAM/GPU) |
+| `Super`+`G` | Game mode |
 | `Super`+`L` | Lock screen |
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |

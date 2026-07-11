@@ -1055,6 +1055,9 @@ int synui_init(syn_server_t *s)
     /* Idle stages: needs the scene (dim overlay) and the loaded config. */
     power_init(s);
 
+    /* Task manager: creates its poll timer (disarmed) and probes for a GPU. */
+    taskmgr_init(s);
+
     return 0;
 }
 
@@ -1152,6 +1155,7 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->gamma_set.link);
 
     power_finish(s);
+    taskmgr_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */
     game_finish(s);

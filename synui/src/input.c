@@ -332,6 +332,8 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         wppick_toggle(s);
     } else if (strcmp(action, "power") == 0) {
         power_toggle(s);
+    } else if (strcmp(action, "taskmgr") == 0) {
+        taskmgr_toggle(s);
     } else if (strcmp(action, "game") == 0) {
         game_toggle(s);
     } else if (strcmp(action, "lock") == 0) {
@@ -550,6 +552,13 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Power saving panel: same modal contract as the display panel. */
         for (int i = 0; i < nsyms; i++)
             if (power_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Task manager: same modal contract, except that it also claims bare
+         * Shift, since Shift+X is its SIGKILL. Super+… still falls through. */
+        for (int i = 0; i < nsyms; i++)
+            if (taskmgr_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
