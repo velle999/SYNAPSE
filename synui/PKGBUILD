@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=51
+pkgrel=52
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -53,4 +53,8 @@ package() {
     # AI backend GPU/CPU toggle (welcome menu "AI Backend" row spawns it).
     install -Dm755 systemd/synui-ai-backend.sh \
         "$pkgdir/usr/bin/synui-ai-backend"
+
+    # Game mode indicator for waybar (custom/gamemode polls this).
+    install -Dm755 systemd/synui-game-status.sh \
+        "$pkgdir/usr/bin/synui-game-status"
 }

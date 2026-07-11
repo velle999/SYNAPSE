@@ -37,13 +37,28 @@ menu separator {
 #clock {
     color: #ffd319;
 }
-#cpu, #memory, #network, #pulseaudio {
+#cpu, #memory, #network, #pulseaudio, #custom-gamemode {
     color: #05d9e8;
     padding: 0 10px;
 }
 #network.disconnected {
     color: #ff296d;
 }
+/* rfkill'd radio is not the same failure as "no route", and the bar should not
+   make you guess which one you are looking at. */
+#network.disabled {
+    color: #ffd319;
+}
 #pulseaudio.muted {
     color: #ff296d;
+}
+/* Game mode. Always present, so "off" is legible as off rather than as a
+   module that failed to load — greyed out when idle, lit when engaged. */
+#custom-gamemode.inactive {
+    color: #3a4a52;
+}
+#custom-gamemode.active {
+    color: #0b0b14;
+    background: #ffd319;
+    font-weight: bold;
 }

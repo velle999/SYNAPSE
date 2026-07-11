@@ -5,6 +5,13 @@
 # starts (see synuirc's autostart line) — never crashes the caller: any
 # failure leaves the existing files untouched and exits 0, so waybar still
 # launches with whatever menu it had last.
+#
+# The two files are a matched pair: waybar looks a clicked item's GtkMenuItem
+# id ("app_7") up in menu-actions to find the command to run. Let them drift
+# apart and the menu misfires in silence — ids past the end of menu-actions do
+# nothing at all, and ids still in range launch whatever app now sits at that
+# index. So: parse tolerantly, write both files or neither, and refuse to write
+# a pair whose ids don't line up.
 
 import configparser
 import glob
@@ -12,6 +19,8 @@ import json
 import os
 import re
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
 WAYBAR_DIR = os.path.expanduser("~/.config/waybar")
@@ -40,6 +49,86 @@ POWER_ITEMS = [
     ("reboot", "Reboot", "sudo systemctl reboot"),
     ("poweroff", "Shut Down", "sudo systemctl poweroff"),
 ]
+
+
+def strip_jsonc(text):
+    """Drop // and /* */ comments and trailing commas from JSONC.
+
+    waybar's config is JSONC and ours carries comments, but json.load only
+    speaks strict JSON. It used to be handed the raw file: the first comment to
+    land in config.jsonc made the load raise, the blanket except in main()
+    swallowed it, and the menu quietly stopped regenerating — which is how the
+    XML and menu-actions drifted apart to begin with.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':                    # copy strings verbatim, escapes and all
+            out.append(c)
+            i += 1
+            while i < n:
+                out.append(text[i])
+                if text[i] == "\\" and i + 1 < n:
+                    out.append(text[i + 1])
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "/" and i + 1 < n:
+            if text[i + 1] == "/":
+                nl = text.find("\n", i)
+                if nl < 0:
+                    break
+                i = nl
+                continue
+            if text[i + 1] == "*":
+                end = text.find("*/", i + 2)
+                i = n if end < 0 else end + 2
+                continue
+        out.append(c)
+        i += 1
+    # Legal in JSONC, fatal in JSON.
+    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+
+
+def clickable_ids(menu_xml):
+    """Ids of GtkMenuItems that actually dispatch an action when clicked.
+
+    A menu item holding a <child type="submenu"> only opens that submenu, so it
+    needs no entry in menu-actions; every other item does.
+    """
+    root = ET.fromstring(menu_xml)
+    ids = set()
+    for obj in root.iter("object"):
+        if obj.get("class") != "GtkMenuItem":
+            continue
+        if any(c.get("type") == "submenu" for c in obj.findall("child")):
+            continue
+        ids.add(obj.get("id"))
+    return ids
+
+
+def write_atomic(path, data):
+    """Write to a temp file in the same dir, then rename over the target.
+
+    waybar may be starting while we run; a rename is atomic, so it reads one
+    whole version or the other and never a half-written menu.
+    """
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".menu-gen-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def find_apps():
@@ -142,7 +231,7 @@ def main():
         menu_xml, app_actions = build_menu_xml(apps)
 
         with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
+            config = json.loads(strip_jsonc(f.read()))
 
         actions = {}
         for id_, _, cmd in STATIC_ITEMS:
@@ -150,13 +239,20 @@ def main():
         actions.update(app_actions)
         for id_, _, cmd in POWER_ITEMS:
             actions[id_] = cmd
+
+        # Every item the XML can emit needs a command behind it, or clicking it
+        # is a silent no-op. Cheap check; the bug it catches is invisible at
+        # runtime. Items that only open a submenu ("Applications") are skipped —
+        # they are containers, and GTK never dispatches an action for them.
+        missing = clickable_ids(menu_xml) - set(actions)
+        if missing:
+            raise ValueError(f"menu items with no action: {sorted(missing)}")
+
         config["custom/synapse"]["menu-actions"] = actions
 
-        with open(MENU_PATH, "w", encoding="utf-8") as f:
-            f.write(menu_xml)
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
-            f.write("\n")
+        # Both files or neither — they only mean anything as a matched pair.
+        write_atomic(MENU_PATH, menu_xml)
+        write_atomic(CONFIG_PATH, json.dumps(config, indent=4) + "\n")
     except Exception as exc:  # noqa: BLE001 - never block waybar's launch
         print(f"synapse-menu-gen: {exc}", file=sys.stderr)
         return 0

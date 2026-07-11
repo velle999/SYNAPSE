@@ -42,6 +42,7 @@
 
 #define _GNU_SOURCE
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -244,11 +245,50 @@ static void focus_next(syn_server_t *s, int dir)
         focus_view(s, next, view_surface(next));
 }
 
+/* Hand the child a clean signal environment.
+ *
+ * Both halves of a process's signal state survive exec: the blocked mask
+ * always, and SIG_IGN dispositions (SIG_DFL and handlers are reset, ignores are
+ * not). synui has both kinds set, and neither is anything a child should be
+ * born with:
+ *
+ *   - wl_event_loop_add_signal() is built on signalfd, so it *blocks*
+ *     SIGINT/SIGTERM/SIGHUP process-wide to keep them off the default
+ *     dispositions. Inherited, that makes every app synui launches unkillable
+ *     by SIGTERM — `pkill waybar` returns success and nothing happens, and an
+ *     app that shuts down on SIGTERM never gets the chance.
+ *   - SIGPIPE is SIG_IGN (synui must not die writing to a departed client), and
+ *     SIGCHLD carries our reaper. A child that inherits an ignored SIGPIPE sees
+ *     EPIPE where it expected to die quietly at the end of a pipeline.
+ *
+ * This is the third time this family of bug has bitten this project (SIGCHLD
+ * into Xwayland, systemd's IgnoreSIGPIPE into the idle-inhibit helper), so:
+ * reset the lot, right before exec, for every child. Public because synui forks
+ * in three places (here, the cmdbar's CMD:, and autostart) and every one of them
+ * needs this — autostart most of all: that is what launches waybar.
+ *
+ * Every signal, not just the ones synui sets. An ignored disposition can be
+ * inherited from anywhere up the chain — systemd's IgnoreSIGPIPE=yes is how it
+ * got us the second time, and it was a SIGQUIT ignored by a *test runner* that
+ * exposed the hole here. Enumerating the signals we happen to know about would
+ * only fix the leaks we already know about. */
+void synui_child_reset_signals(void)
+{
+    sigset_t empty;
+    sigemptyset(&empty);
+    sigprocmask(SIG_SETMASK, &empty, NULL);
+
+    /* SIGKILL and SIGSTOP cannot be reset; signal() just fails on them. */
+    for (int sig = 1; sig < NSIG; sig++)
+        signal(sig, SIG_DFL);
+}
+
 static void spawn(const char *cmd)
 {
     if (!cmd || !*cmd) return;
     if (fork() == 0) {
         setsid();
+        synui_child_reset_signals();
         execl("/bin/sh", "sh", "-c", cmd, NULL);
         _exit(1);
     }
@@ -356,6 +396,11 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
         spawn(s->config.network_cmd);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
+    } else if (strcmp(action, "filters") == 0) {
+        /* Super+E: the filter panel (sliders for each strength). The blind
+         * on/off toggle it replaced is still available as "effects_toggle"
+         * for anyone who bound it — the panel's Space key does the same. */
+        filters_toggle(s);
     } else if (strcmp(action, "effects_toggle") == 0) {
         /* Runtime on/off for the GLES post-process CRT filters. The pass is
          * gated per-frame on config.effects, so flipping it takes effect on
@@ -567,6 +612,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
          * Shift, since Shift+X is its SIGKILL. Super+… still falls through. */
         for (int i = 0; i < nsyms; i++)
             if (taskmgr_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* CRT filter panel: same modal contract as the power panel. */
+        for (int i = 0; i < nsyms; i++)
+            if (filters_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

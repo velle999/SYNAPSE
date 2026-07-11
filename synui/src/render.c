@@ -942,6 +942,153 @@ void synui_render_power(syn_server_t *s)
     set_scene_buffer(&s->power_ui.text_buf, s->power_ui.tree, buf);
 }
 
+/* ── CRT filter panel (filters.c) ────────────────────────── */
+
+/* The slider itself: a trough with a filled portion. Drawn rather than spelled
+ * out because these values are judged by eye, and a bar you can see moving is
+ * the whole difference between tuning a look and typing numbers at it. */
+static void draw_slider(cairo_t *cr, double x, double y, double w, double h,
+                        double frac, int sel, int dimmed)
+{
+    cairo_set_source_rgba(cr, 0.16, 0.16, 0.24, 1.0);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_fill(cr);
+
+    if (frac > 0.0) {
+        if (dimmed)   cairo_set_source_rgba(cr, 0.35, 0.35, 0.44, 1.0);
+        else if (sel) cairo_set_source_rgba(cr, 0.00, 0.95, 0.85, 1.0);
+        else          cairo_set_source_rgba(cr, 0.00, 0.62, 0.56, 1.0);
+        cairo_rectangle(cr, x, y, w * frac, h);
+        cairo_fill(cr);
+    }
+
+    /* The selected row gets an outline, so which slider the arrow keys will
+     * move is obvious even when its fill is at zero. */
+    if (sel) {
+        cairo_set_source_rgba(cr, 0.00, 0.95, 0.85, 0.9);
+        cairo_set_line_width(cr, 1);
+        cairo_rectangle(cr, x - 0.5, y - 0.5, w + 1, h + 1);
+        cairo_stroke(cr);
+    }
+}
+
+void synui_render_filters(syn_server_t *s)
+{
+    syn_filters_t *fl = &s->filters;
+
+    if (!fl->visible) {
+        wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 34, top = 66, pad = 18;
+    int pw = 560;
+    int ph = top + FILTER_ROW_COUNT * row_h + 96;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->filters_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->filters_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->filters_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->filters_ui.bg)
+        s->filters_ui.bg = wlr_scene_rect_create(s->filters_ui.tree,
+                                                 pw, ph, bg_color);
+    if (!s->filters_ui.accent)
+        s->filters_ui.accent = wlr_scene_rect_create(s->filters_ui.tree,
+                                                     pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "CRT FILTERS");
+
+    /* Two ways for a slider to do nothing, and the panel names both: the master
+     * switch is off, or there is no GLES pass to configure at all (pixman). */
+    cairo_set_font_size(cr, 12);
+    if (!s->effects) {
+        cairo_set_source_rgba(cr, 0.75, 0.45, 0.45, 1.0);
+        cairo_move_to(cr, 18, 50);
+        cairo_show_text(cr, "no GLES renderer \xc2\xb7 filters unavailable on this display");
+    } else if (!s->config.effects) {
+        cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
+        cairo_move_to(cr, 18, 50);
+        cairo_show_text(cr, "filters off \xc2\xb7 Space to turn them on");
+    }
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 58);
+    cairo_line_to(cr, pw - 18, 58);
+    cairo_stroke(cr);
+
+    /* A slider that cannot bite is drawn as such: master off (or no GLES pass)
+     * greys every strength, because none of them is doing anything. */
+    int dimmed = (!s->config.effects || !s->effects);
+
+    for (int i = 0; i < FILTER_ROW_COUNT; i++) {
+        int sel = (i == fl->selected);
+        int ry = top + i * row_h;
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+
+        char value[32];
+        float frac = filters_row_value(s, i, value, sizeof(value));
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        cairo_show_text(cr, filters_row_label(i));
+
+        if (frac < 0.0f) {              /* master switch: a word, not a bar */
+            if (s->config.effects) cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+            else                   cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            cairo_move_to(cr, 250, ry + 4);
+            cairo_show_text(cr, value);
+        } else {
+            draw_slider(cr, 250, ry - 9, 220, 12, frac, sel, dimmed);
+
+            cairo_set_font_size(cr, 12);
+            if (dimmed) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            else        cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+            cairo_move_to(cr, 484, ry + 4);
+            cairo_show_text(cr, value);
+        }
+    }
+
+    if (fl->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, 18, ph - 56);
+        cairo_show_text(cr, fl->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 34);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space on/off");
+    cairo_move_to(cr, 18, ph - 16);
+    cairo_show_text(cr, fl->dirty ? "s save (unsaved changes) \xc2\xb7 Esc close"
+                                  : "s save \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->filters_ui.text_buf, s->filters_ui.tree, buf);
+}
+
 /* ── Task manager (taskmgr.c) ────────────────────────────── */
 
 /* Panel geometry. The column x's are tuned for the 13px monospace face the
@@ -1329,6 +1476,7 @@ void synui_ui_init(syn_server_t *s)
     s->power_ui.dim_tree = wlr_scene_tree_create(&s->scene->tree);
     wlr_scene_node_set_enabled(&s->power_ui.dim_tree->node, true);
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -1338,6 +1486,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

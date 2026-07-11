@@ -1083,6 +1083,13 @@ int synui_init(syn_server_t *s)
      * Best-effort; no session bus just means the feature stays off. */
     screensaver_init(s);
 
+    /* Stamp game mode "off" for waybar's indicator. */
+    game_init(s);
+
+    /* Filter strengths tuned in the Super+E panel and saved there, applied over
+     * the config defaults. */
+    filters_state_load(s);
+
     return 0;
 }
 
@@ -1103,6 +1110,7 @@ int synui_run(syn_server_t *s)
         wlr_log(WLR_INFO, "synui: autostart: %s", s->config.autostart[i]);
         if (fork() == 0) {
             setsid();
+            synui_child_reset_signals();
             execl("/bin/sh", "sh", "-c", s->config.autostart[i], NULL);
             _exit(1);
         }

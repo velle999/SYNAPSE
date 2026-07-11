@@ -36,8 +36,59 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
 
 #include "synui.h"
+
+/* Publish the current state for the waybar indicator (custom/gamemode, which
+ * runs synui-game-status). synui has no IPC to ask, so the state is pushed to a
+ * file in XDG_RUNTIME_DIR — same reasoning as synui-display: 0700 and owned by
+ * the session user, so nobody else can forge it.
+ *
+ * Written on every transition *and* once at startup, because a synui that died
+ * mid-game would otherwise leave a file reading "on" and the bar would insist a
+ * game was running until the next one ended.
+ *
+ * The app id lands in a file a shell-adjacent helper reads, and it comes from
+ * the client's WM_CLASS — so it is quoted, not trusted: synui-game-status parses
+ * it as data and JSON-escapes it. */
+static void game_publish(syn_server_t *s)
+{
+    const char *rtdir = getenv("XDG_RUNTIME_DIR");
+    if (!rtdir || !*rtdir) return;   /* headless test rig: nothing reads this */
+
+    char path[256], tmp[256];
+    snprintf(path, sizeof(path), "%s/synui-game", rtdir);
+    snprintf(tmp,  sizeof(tmp),  "%s/synui-game.tmp", rtdir);
+
+    FILE *f = fopen(tmp, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: game: cannot write '%s': %s",
+                tmp, strerror(errno));
+        return;
+    }
+    fprintf(f, "state=%s\n", s->game.active ? "on" : "off");
+    fprintf(f, "mode=%s\n", s->game.forced > 0 ? "forced-on" :
+                            s->game.forced < 0 ? "forced-off" : "auto");
+    fprintf(f, "app=%s\n", s->game.app);
+    fclose(f);
+
+    /* Rename, so the poller never reads a half-written file. */
+    if (rename(tmp, path) != 0) {
+        wlr_log(WLR_ERROR, "synui: game: cannot publish '%s': %s",
+                path, strerror(errno));
+        unlink(tmp);
+    }
+}
+
+/* Startup: stamp a known state, so a leftover file from a crashed synui cannot
+ * leave the bar showing a game that is not running. */
+void game_init(syn_server_t *s)
+{
+    game_publish(s);
+}
 
 /* Is this app_id one of the fullscreen-X11 things that is NOT a game?
  * Case-insensitive substring, so "firefox" also covers "Firefox"/"firefox-esr". */
@@ -94,6 +145,8 @@ static void game_enter(syn_server_t *s, syn_view_t *v)
     /* Re-run the idle arming with game mode now set: power_arm() sees it and
      * leaves every stage disarmed. Also undoes a dim that already landed. */
     if (s->config.game_inhibit_idle) power_notify_activity(s);
+
+    game_publish(s);
 }
 
 static void game_leave(syn_server_t *s)
@@ -115,6 +168,8 @@ static void game_leave(syn_server_t *s)
 
     /* Rearm the idle stages from now, not from whenever the game started. */
     power_notify_activity(s);
+
+    game_publish(s);
 }
 
 /* The single decision point. Cheap and idempotent, so it is safe to call from
@@ -155,6 +210,10 @@ void game_toggle(syn_server_t *s)
             s->game.forced > 0 ? "forced ON" :
             s->game.forced < 0 ? "forced OFF" : "auto");
     game_reevaluate(s);
+    /* reevaluate only publishes when active flips; the override can change
+     * `mode` on its own (auto → forced-off with no game up), and the bar's
+     * tooltip shows it. */
+    game_publish(s);
 }
 
 /* Compositor shutdown. If we stopped synapd, start it again — otherwise a synui
@@ -168,4 +227,5 @@ void game_finish(syn_server_t *s)
                           "— restoring it");
     }
     s->game.active = 0;
+    game_publish(s);
 }

@@ -411,6 +411,7 @@ void execute_ai_action(syn_server_t *s, const char *response)
         wlr_log(WLR_INFO, "cmdbar: executing CMD: %s", cmdcopy);
         if (fork() == 0) {
             setsid();   /* detach like spawn() so it outlives the compositor */
+            synui_child_reset_signals();
             execl("/bin/sh", "sh", "-c", cmdcopy, NULL);
             _exit(1);
         }

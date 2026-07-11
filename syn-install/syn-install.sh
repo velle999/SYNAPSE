@@ -578,6 +578,15 @@ arch-chroot /mnt bash -c "
     echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff' \
         > /etc/sudoers.d/power-menu
     chmod 440 /etc/sudoers.d/power-menu
+
+    # Game mode stops synapd to hand the GPU to the game (synui/src/game.c).
+    # synapd is a system unit, so the session user's plain 'systemctl stop'
+    # is refused by polkit — and synui spawns it fire-and-forget, so the
+    # refusal was silent: game mode said it had suspended synapd while
+    # synapd carried on holding ~4GB of VRAM. sudo -n, scoped to these two.
+    echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl stop synapd, /usr/bin/systemctl start synapd' \
+        > /etc/sudoers.d/synapd-gamemode
+    chmod 440 /etc/sudoers.d/synapd-gamemode
 "
 
 # useradd runs outside the masked bash -c block: if it fails, nothing
@@ -812,6 +821,11 @@ FOOTEOF
 # Heredoc is unquoted so $NEW_USER lands in menu-file — keep the rest
 # of the config free of $ and backticks.
 mkdir -p "/mnt/home/$NEW_USER/.config/waybar"
+# NB: no comments in this seed. It is JSONC and waybar would accept them, but
+# menu-actions below is rewritten in place by synapse-menu-gen.py, which reads
+# the file back with json — and json.dump would drop any comment it did not
+# choke on first. The repo copy (SYNAPSE/waybar/config.jsonc) is the annotated
+# one; this stays plain.
 cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
 {
     "layer": "top",
@@ -819,7 +833,7 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
     "height": 28,
     "modules-left": ["custom/synapse"],
     "modules-center": ["clock"],
-    "modules-right": ["cpu", "memory", "network"],
+    "modules-right": ["custom/gamemode", "cpu", "memory", "network"],
     "custom/synapse": {
         "format": "◢ SYNAPSE",
         "tooltip": false,
@@ -836,17 +850,84 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
             "poweroff": "sudo systemctl poweroff"
         }
     },
+    "custom/gamemode": {
+        "exec": "/usr/bin/synui-game-status",
+        "return-type": "json",
+        "interval": 2,
+        "tooltip": true
+    },
     "clock": { "format": "{:%H:%M:%S  %Y-%m-%d}", "interval": 1 },
     "cpu": { "format": "CPU {usage}%", "interval": 2 },
     "memory": { "format": "MEM {percentage}%", "interval": 5 },
     "network": {
-        "format-wifi": "NET {essid}",
+        "format-wifi": "NET {essid} {signalStrength}%",
         "format-ethernet": "NET {ipaddr}",
         "format-disconnected": "NET offline",
+        "format-disabled": "NET wifi off",
+        "tooltip-format-disabled": "Wi-Fi is switched off - click to turn it back on",
+        "tooltip-format-disconnected": "Disconnected - click for network options",
+        "menu": "on-click",
+        "menu-file": "/home/$NEW_USER/.config/waybar/network-menu.xml",
+        "menu-actions": {
+            "wifi_on": "nmcli radio wifi on",
+            "wifi_off": "nmcli radio wifi off",
+            "wifi_pick": "foot -e nmtui-connect",
+            "wifi_rescan": "nmcli device wifi rescan",
+            "settings": "foot -e nmtui",
+            "info": "foot --hold nmcli device show"
+        },
         "interval": 5
     }
 }
 WAYBAREOF
+
+# Network menu behind the NET module. A machine that boots with the Wi-Fi radio
+# switched off shows "NET wifi off" and has, without this, no way back short of
+# a terminal — "nmcli radio wifi on" also clears an rfkill soft block and needs
+# no root, so the bar alone is enough to recover.
+cat > "/mnt/home/$NEW_USER/.config/waybar/network-menu.xml" << 'NETMENUEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="wifi_pick">
+        <property name="label">Wi-Fi Networks…</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="wifi_rescan">
+        <property name="label">Rescan</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="netsep1"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="wifi_on">
+        <property name="label">Turn Wi-Fi On</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="wifi_off">
+        <property name="label">Turn Wi-Fi Off</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="netsep2"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="settings">
+        <property name="label">Network Settings</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="info">
+        <property name="label">Connection Info</property>
+      </object>
+    </child>
+  </object>
+</interface>
+NETMENUEOF
 
 # Start menu behind the SYNAPSE badge — GtkBuilder XML; the object ids
 # map to menu-actions in config.jsonc. Entries only reference programs
@@ -917,6 +998,13 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/synapse-menu-gen.py" << 'GENEOF'
 # starts (see synuirc's autostart line) — never crashes the caller: any
 # failure leaves the existing files untouched and exits 0, so waybar still
 # launches with whatever menu it had last.
+#
+# The two files are a matched pair: waybar looks a clicked item's GtkMenuItem
+# id ("app_7") up in menu-actions to find the command to run. Let them drift
+# apart and the menu misfires in silence — ids past the end of menu-actions do
+# nothing at all, and ids still in range launch whatever app now sits at that
+# index. So: parse tolerantly, write both files or neither, and refuse to write
+# a pair whose ids don't line up.
 
 import configparser
 import glob
@@ -924,6 +1012,8 @@ import json
 import os
 import re
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
 WAYBAR_DIR = os.path.expanduser("~/.config/waybar")
@@ -952,6 +1042,86 @@ POWER_ITEMS = [
     ("reboot", "Reboot", "sudo systemctl reboot"),
     ("poweroff", "Shut Down", "sudo systemctl poweroff"),
 ]
+
+
+def strip_jsonc(text):
+    """Drop // and /* */ comments and trailing commas from JSONC.
+
+    waybar's config is JSONC and ours carries comments, but json.load only
+    speaks strict JSON. It used to be handed the raw file: the first comment to
+    land in config.jsonc made the load raise, the blanket except in main()
+    swallowed it, and the menu quietly stopped regenerating — which is how the
+    XML and menu-actions drifted apart to begin with.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':                    # copy strings verbatim, escapes and all
+            out.append(c)
+            i += 1
+            while i < n:
+                out.append(text[i])
+                if text[i] == "\\" and i + 1 < n:
+                    out.append(text[i + 1])
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "/" and i + 1 < n:
+            if text[i + 1] == "/":
+                nl = text.find("\n", i)
+                if nl < 0:
+                    break
+                i = nl
+                continue
+            if text[i + 1] == "*":
+                end = text.find("*/", i + 2)
+                i = n if end < 0 else end + 2
+                continue
+        out.append(c)
+        i += 1
+    # Legal in JSONC, fatal in JSON.
+    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+
+
+def clickable_ids(menu_xml):
+    """Ids of GtkMenuItems that actually dispatch an action when clicked.
+
+    A menu item holding a <child type="submenu"> only opens that submenu, so it
+    needs no entry in menu-actions; every other item does.
+    """
+    root = ET.fromstring(menu_xml)
+    ids = set()
+    for obj in root.iter("object"):
+        if obj.get("class") != "GtkMenuItem":
+            continue
+        if any(c.get("type") == "submenu" for c in obj.findall("child")):
+            continue
+        ids.add(obj.get("id"))
+    return ids
+
+
+def write_atomic(path, data):
+    """Write to a temp file in the same dir, then rename over the target.
+
+    waybar may be starting while we run; a rename is atomic, so it reads one
+    whole version or the other and never a half-written menu.
+    """
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".menu-gen-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def find_apps():
@@ -1054,7 +1224,7 @@ def main():
         menu_xml, app_actions = build_menu_xml(apps)
 
         with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
+            config = json.loads(strip_jsonc(f.read()))
 
         actions = {}
         for id_, _, cmd in STATIC_ITEMS:
@@ -1062,13 +1232,20 @@ def main():
         actions.update(app_actions)
         for id_, _, cmd in POWER_ITEMS:
             actions[id_] = cmd
+
+        # Every item the XML can emit needs a command behind it, or clicking it
+        # is a silent no-op. Cheap check; the bug it catches is invisible at
+        # runtime. Items that only open a submenu ("Applications") are skipped —
+        # they are containers, and GTK never dispatches an action for them.
+        missing = clickable_ids(menu_xml) - set(actions)
+        if missing:
+            raise ValueError(f"menu items with no action: {sorted(missing)}")
+
         config["custom/synapse"]["menu-actions"] = actions
 
-        with open(MENU_PATH, "w", encoding="utf-8") as f:
-            f.write(menu_xml)
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
-            f.write("\n")
+        # Both files or neither — they only mean anything as a matched pair.
+        write_atomic(MENU_PATH, menu_xml)
+        write_atomic(CONFIG_PATH, json.dumps(config, indent=4) + "\n")
     except Exception as exc:  # noqa: BLE001 - never block waybar's launch
         print(f"synapse-menu-gen: {exc}", file=sys.stderr)
         return 0
@@ -1120,12 +1297,27 @@ menu separator {
 #clock {
     color: #ffd319;
 }
-#cpu, #memory, #network {
+#cpu, #memory, #network, #custom-gamemode {
     color: #05d9e8;
     padding: 0 10px;
 }
 #network.disconnected {
     color: #ff296d;
+}
+/* A switched-off radio is not the same failure as "no route" — do not make the
+   user guess which one the bar is showing. */
+#network.disabled {
+    color: #ffd319;
+}
+/* Game mode. Always on the bar, so "off" reads as off rather than as a module
+   that failed to load. */
+#custom-gamemode.inactive {
+    color: #3a4a52;
+}
+#custom-gamemode.active {
+    color: #0b0b14;
+    background: #ffd319;
+    font-weight: bold;
 }
 WAYBARCSS
 

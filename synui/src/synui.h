@@ -185,6 +185,25 @@ typedef struct {
     char status[96];   /* last action / error, shown in the panel */
 } syn_dispcfg_t;
 
+/* ── CRT filter panel (filters.c) ────────────────────────── */
+/* Panel rows, in display order. FILTER_ROW_ENABLED toggles the master switch;
+ * the rest each map to one syn_config_t effect_* strength, in the same order. */
+typedef enum {
+    FILTER_ROW_ENABLED = 0,
+    FILTER_ROW_SCANLINE,
+    FILTER_ROW_CURVATURE,
+    FILTER_ROW_ABERRATION,
+    FILTER_ROW_GLITCH,
+    FILTER_ROW_COUNT,
+} syn_filter_row_t;
+
+typedef struct {
+    int  visible;
+    int  selected;     /* syn_filter_row_t */
+    int  dirty;        /* edited since the last save — drives the panel hint */
+    char status[96];
+} syn_filters_t;
+
 /* ── Power saving panel + idle state machine (power.c) ───── */
 /* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch;
  * the rest each map to one syn_config_t timeout, in the same order. */
@@ -817,6 +836,16 @@ struct syn_server {
     syn_power_t     power;
     syn_game_t      game;
 
+    /* CRT filter panel (Super+E) — sliders for the effects.c strengths. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } filters_ui;
+
+    syn_filters_t   filters;
+
     /* Task manager panel (Super+T) — process table + resource overview. */
     struct {
         struct wlr_scene_tree   *tree;
@@ -1175,6 +1204,9 @@ const char *taskmgr_sort_label(syn_tm_sort_t sort);
 void synui_render_taskmgr(syn_server_t *s);
 
 /* ── Game mode (game.c) ──────────────────────────────────── */
+/* Startup: publish the (off) state for waybar's indicator, so a file left
+ * behind by a synui that died mid-game cannot show a phantom game. */
+void game_init(syn_server_t *s);
 /* Idempotent decision point: call after any fullscreen change, map, or unmap.
  * Enters/leaves game mode (suspend synapd, hold off idle) as needed. */
 void game_reevaluate(syn_server_t *s);
@@ -1188,6 +1220,22 @@ void power_show(syn_server_t *s);
 void power_hide(syn_server_t *s);
 void power_toggle(syn_server_t *s);
 int  power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+
+/* ── CRT filter panel (filters.c) ────────────────────────── */
+void filters_show(syn_server_t *s);
+void filters_hide(syn_server_t *s);
+void filters_toggle(syn_server_t *s);
+/* Modal key handling while the panel is open, as in power_key. */
+int  filters_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* Persisted strengths (~/.config/synui/filters.state), applied over the config
+ * defaults at startup so a look tuned by eye survives a restart. */
+void filters_state_load(syn_server_t *s);
+void filters_state_save(syn_server_t *s);
+/* Name/value for one panel row; render.c draws. The return is the row's 0..1
+ * fraction for its slider, or -1.0f for the master switch (which has no bar). */
+const char *filters_row_label(int row);
+float filters_row_value(syn_server_t *s, int row, char *buf, size_t n);
+void synui_render_filters(syn_server_t *s);
 void synui_render_power(syn_server_t *s);
 
 void power_state_save(syn_server_t *s);
@@ -1305,6 +1353,11 @@ void synui_render_dockmenu(syn_server_t *s);
 
 /* Launch a shell command (fork/exec); exposed for dock launches. */
 void synui_spawn(const char *cmd);
+/* Call in the child between fork() and exec(): drops synui's blocked signal
+ * mask (signalfd blocks SIGINT/SIGTERM/SIGHUP) and its SIG_IGN dispositions,
+ * both of which survive exec. Without it, nothing synui launches can be killed
+ * with SIGTERM. See input.c. */
+void synui_child_reset_signals(void);
 
 /* ── screensaver.c (org.freedesktop.ScreenSaver over D-Bus) ── */
 /* Best-effort: no session bus, or the name already taken, just logs and leaves

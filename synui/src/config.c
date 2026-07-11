@@ -16,8 +16,10 @@
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
- * effects_toggle, power, lock, game, taskmgr, network.
+ * filters, effects_toggle, power, lock, game, taskmgr, network.
  * A bind with the same combo as a default replaces it.
+ * "filters" (Super+E) opens the CRT filter panel; "effects_toggle" is the older
+ * blind on/off flip, kept for anyone who bound it.
  *
  * Wallpaper (wallpaper.c):
  *   wallpaper = /path/to/image.png   (PNG or JPEG; ~ expands to $HOME)
@@ -58,8 +60,14 @@
  *   game_exclude = firefox chibi tepris nexus-chat foot
  *       Space-separated app_ids that are NOT games; REPLACES the built-in list.
  *       This is what keeps a fullscreen Firefox video from stopping the AI.
- *   game_ai_stop_cmd = systemctl stop synapd
- *   game_ai_start_cmd = systemctl start synapd
+ *   game_ai_stop_cmd = sudo -n systemctl stop synapd
+ *   game_ai_start_cmd = sudo -n systemctl start synapd
+ *       synapd is a *system* unit, so a plain `systemctl stop` from the session
+ *       user gets bounced by polkit ("interactive authentication required") —
+ *       and synui_spawn is fire-and-forget, so that failure was invisible: game
+ *       mode logged that it had suspended synapd while synapd kept running.
+ *       sudo -n never prompts; the grant is /etc/sudoers.d/synapd-gamemode,
+ *       exactly these two commands (see syn-install.sh).
  *
  * SynapseOS Project — GPLv2
  */
@@ -199,7 +207,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+backspace", "ai_ask" },
         { "super+w",         "wallpaper" },
         { "super+shift+w",   "wallpaper_reload" },
-        { "super+e",         "effects_toggle" },
+        { "super+e",         "filters" },
         { "super+p",         "power" },
         { "super+t",         "taskmgr" },
         { "super+i",         "network" },
@@ -239,7 +247,10 @@ void synui_config_load(syn_config_t *cfg)
     cfg->start_overlay = 0;
 
     /* GLES post-process: on by default, harmless on pixman (effects_init
-     * refuses and the plain path is used). Strengths tuned for subtlety. */
+     * refuses and the plain path is used). Strengths tuned for subtlety.
+     * These are the defaults; the Super+E panel edits them live and saves to
+     * ~/.config/synui/filters.state, which filters_state_load() lays over the
+     * top at startup. */
     cfg->effects           = 1;
     cfg->effect_scanline   = 0.35f;
     cfg->effect_curvature  = 0.25f;
@@ -298,9 +309,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->game_suspend_ai   = 1;
     cfg->game_inhibit_idle = 1;
     snprintf(cfg->game_ai_stop_cmd,  sizeof(cfg->game_ai_stop_cmd),
-             "systemctl stop synapd");
+             "sudo -n systemctl stop synapd");
     snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd),
-             "systemctl start synapd");
+             "sudo -n systemctl start synapd");
     /* The fullscreen X11 clients on this system that are NOT games. Without
      * these, going fullscreen on a YouTube video would stop synapd. The
      * firefox-app-mode apps (tepris, nexus-chat) report their own app_id via

@@ -15,7 +15,10 @@
 #   7. an ASan build reports no errors or leaks (when built with
 #      -Db_sanitize=address; harmless otherwise);
 #   8. a second instance with WLR_HEADLESS_OUTPUTS=2 gives each output its
-#      own workspace (per-output workspaces) and also shuts down cleanly.
+#      own workspace (per-output workspaces) and also shuts down cleanly;
+#   9. spawned children inherit neither synui's blocked signal mask nor its
+#      SIG_IGN dispositions — both survive exec, and leaking them makes every
+#      app synui launches immune to SIGTERM.
 #
 # Usage: smoke.sh /path/to/synui
 # Run by `meson test -C <builddir>`; needs wayland-info (wayland-utils).
@@ -185,6 +188,63 @@ if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
     fail "sanitizer reported errors (dual-head instance)"
 fi
 echo "ok 8 - dual-head boot: one workspace per output"
+
+# ── 9. Children get a clean signal slate ───────────────────
+# A process's blocked signal mask survives exec, and so do its SIG_IGN
+# dispositions. synui has both: wl_event_loop_add_signal() is signalfd-based,
+# so it blocks SIGINT/SIGTERM/SIGHUP process-wide, and SIGPIPE is ignored.
+# Leak either into a child and every app the compositor launches becomes
+# unkillable by SIGTERM (`pkill waybar` succeeds and nothing happens).
+#
+# This family of bug has hit this project three times now — SIGCHLD into
+# Xwayland, systemd's IgnoreSIGPIPE into the idle-inhibit helper, and the
+# signalfd mask into every autostart child. Hence a test.
+unset WAYLAND_DISPLAY
+LOG="$TMP/synui3.log"
+cat > "$TMP/synuirc" <<'EOF'
+autostart = sleep 120
+EOF
+"$SYNUI" >"$LOG" 2>&1 &
+SYNUI_PID=$!
+
+CHILD=
+i=0
+while [ $i -lt 100 ]; do
+    CHILD=$(pgrep -P "$SYNUI_PID" -x sleep 2>/dev/null | head -1)
+    [ -n "$CHILD" ] && break
+    kill -0 "$SYNUI_PID" 2>/dev/null || fail "signal test: synui died during startup"
+    sleep 0.1
+    i=$((i + 1))
+done
+[ -n "$CHILD" ] || fail "autostart child never appeared"
+
+# SigBlk/SigIgn are hex bitmasks, signal N = bit N-1. Both must be empty in the
+# child: it should start life with the default disposition for everything.
+sigblk=$(sed -n 's/^SigBlk:\s*//p' "/proc/$CHILD/status")
+sigign=$(sed -n 's/^SigIgn:\s*//p' "/proc/$CHILD/status")
+[ "$sigblk" = "0000000000000000" ] \
+    || fail "autostart child inherited a blocked signal mask (SigBlk=$sigblk) — SIGTERM would not reach it"
+[ "$sigign" = "0000000000000000" ] \
+    || fail "autostart child inherited ignored signals (SigIgn=$sigign)"
+
+# And prove it: the child must actually die on SIGTERM.
+kill -TERM "$CHILD" 2>/dev/null
+i=0
+while kill -0 "$CHILD" 2>/dev/null; do
+    [ $i -ge 30 ] && fail "autostart child survived SIGTERM"
+    sleep 0.1
+    i=$((i + 1))
+done
+
+kill -TERM "$SYNUI_PID"
+i=0
+while kill -0 "$SYNUI_PID" 2>/dev/null; do
+    [ $i -ge 100 ] && fail "signal-test instance did not exit within 10s"
+    sleep 0.1
+    i=$((i + 1))
+done
+wait "$SYNUI_PID"
+echo "ok 9 - spawned children get a clean signal slate and die on SIGTERM"
 
 SYNUI_PID=
 cleanup

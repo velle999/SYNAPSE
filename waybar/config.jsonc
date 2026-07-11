@@ -9,43 +9,42 @@
         "clock"
     ],
     "modules-right": [
+        "custom/gamemode",
         "pulseaudio",
         "cpu",
         "memory",
         "network"
     ],
     "custom/synapse": {
-        "format": "\u25e2 SYNAPSE",
+        "format": "◢ SYNAPSE",
         "tooltip": false,
         "menu": "on-click",
         "menu-file": "/home/velle/.config/waybar/synapse-menu.xml",
+        // menu-actions is *generated*: synapse-menu-gen.py rewrites this key
+        // and synapse-menu.xml together from the installed .desktop files,
+        // before waybar starts. Only the fixed entries are seeded here. Do not
+        // hand-write app_N entries — the generator owns those ids, and a stale
+        // hand-written set is worse than none: waybar maps a clicked item's id
+        // to a command positionally, so a stale list launches the wrong app.
         "menu-actions": {
             "terminal": "foot",
             "aishell": "foot synsh",
             "status": "foot --hold syn status",
             "network": "foot -e nmtui",
             "monitor": "foot -e top",
-            "app_0": "/usr/bin/bssh",
-            "app_1": "/usr/bin/bvnc",
-            "app_2": "/usr/bin/avahi-discover",
-            "app_3": "/usr/lib/firefox/firefox",
-            "app_4": "foot",
-            "app_5": "footclient",
-            "app_6": "foot --server",
-            "app_7": "lstopo",
-            "app_8": "kitty",
-            "app_9": "qv4l2",
-            "app_10": "qvidcap",
-            "app_11": "steam steam://rungameid/413150",
-            "app_12": "/usr/bin/steam",
-            "app_13": "steam steam://rungameid/391540",
-            "app_14": "xgps",
-            "app_15": "xgpsspeed",
-            "app_16": "foot -e yazi",
             "logout": "pkill -x synui",
             "reboot": "sudo systemctl reboot",
             "poweroff": "sudo systemctl poweroff"
         }
+    },
+    // Game mode (synui). synui writes its state to $XDG_RUNTIME_DIR/synui/game
+    // on every enter/leave; synui-game-status turns that into waybar JSON. The
+    // module only ever reports — Super+G is what toggles it.
+    "custom/gamemode": {
+        "exec": "/usr/bin/synui-game-status",
+        "return-type": "json",
+        "interval": 2,
+        "tooltip": true
     },
     "clock": {
         "format": "{:%I:%M:%S %p  %Y-%m-%d}",
@@ -63,13 +62,26 @@
         "format-wifi": "NET {essid} {signalStrength}%",
         "format-ethernet": "NET {ipaddr}",
         "format-disconnected": "NET offline",
-        "tooltip-format-wifi": "{essid} ({signalStrength}%) - {ipaddr}",
-        "tooltip-format-ethernet": "{ifname} - {ipaddr}",
-        "tooltip-format-disconnected": "Disconnected - click to open the Wi-Fi picker",
-        // Clicking the module opens nmtui. It was reachable only from the
-        // SYNAPSE menu, which is not where anyone looks when the bar already
-        // says "NET offline".
-        "on-click": "foot -e nmtui",
+        // rfkill'd wlan reads as plain "offline" otherwise, which is what sent
+        // us hunting for a driver bug when the radio was only switched off.
+        "format-disabled": "NET wifi off",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%) - {ipaddr}\nClick for network options",
+        "tooltip-format-ethernet": "{ifname} - {ipaddr}\nClick for network options",
+        "tooltip-format-disconnected": "Disconnected - click for network options",
+        "tooltip-format-disabled": "Wi-Fi is switched off - click to turn it back on",
+        "menu": "on-click",
+        "menu-file": "/home/velle/.config/waybar/network-menu.xml",
+        // "nmcli radio wifi on" also clears an rfkill soft block, and needs no
+        // root (polkit lets the active local session do network-control), so
+        // the bar alone is enough to dig out of a switched-off radio.
+        "menu-actions": {
+            "wifi_on": "nmcli radio wifi on",
+            "wifi_off": "nmcli radio wifi off",
+            "wifi_pick": "foot -e nmtui-connect",
+            "wifi_rescan": "nmcli device wifi rescan",
+            "settings": "foot -e nmtui",
+            "info": "foot --hold nmcli device show"
+        },
         "interval": 5
     },
     "pulseaudio": {

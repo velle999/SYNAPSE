@@ -92,6 +92,12 @@ sudo ldconfig
 sudo mkdir -p /etc/synsh
 sudo touch /etc/synsh/synshrc
 
+# syn-install.sh writes a new user's ~/.config/waybar from heredocs that embed
+# copies of waybar/synapse-menu-gen.py and waybar/network-menu.xml. They drifted
+# once and shipped a start menu whose entries launched the wrong app — so the
+# copies are checked, not trusted. `python3 waybar/sync-installer.py` re-splices.
+python3 "$BASE/waybar/check-installer-sync.py" || exit 1
+
 # Build C components
 build_component synapd
 build_component synsh

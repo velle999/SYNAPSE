@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="wifi_pick">
+        <property name="label">Wi-Fi Networks…</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="wifi_rescan">
+        <property name="label">Rescan</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="netsep1"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="wifi_on">
+        <property name="label">Turn Wi-Fi On</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="wifi_off">
+        <property name="label">Turn Wi-Fi Off</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="netsep2"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="settings">
+        <property name="label">Network Settings</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="info">
+        <property name="label">Connection Info</property>
+      </object>
+    </child>
+  </object>
+</interface>
