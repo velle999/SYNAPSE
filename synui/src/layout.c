@@ -415,6 +415,10 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
         view_fullscreen_rescale(view);
     }
 
+    /* A fullscreen view has to cover the bar, and it may have just been handed
+     * to another output — refresh every output, not just the target. */
+    layer_update_occlusion_all(s);
+
     /* Fullscreen is the game-mode signal, and this is the one choke point every
      * path (xdg, XWayland, foreign-toplevel) funnels through. */
     game_reevaluate(s);
@@ -509,6 +513,10 @@ void workspace_switch(syn_server_t *s, int index)
     /* Focus the target workspace's first window (or clear focus if empty —
      * the previous workspace's window is hidden now). */
     workspace_focus_first(s, target);
+
+    /* Switching away from a fullscreen window must bring the bar back — and
+     * switching onto one must hide it again. */
+    layer_update_occlusion_all(s);
 
     /* Refresh overlay if visible */
     if (s->overlay.visible)

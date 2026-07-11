@@ -1007,6 +1007,9 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box);
 void layer_shell_init(syn_server_t *s);            /* create global + wire signal */
 void layer_arrange_output(syn_output_t *output);   /* place layers, update usable */
 void layer_output_destroy(syn_output_t *output);   /* close surfaces on a dead output */
+/* Hide/show an output's TOP-layer panels so a fullscreen view can cover them. */
+void layer_update_occlusion(syn_server_t *s, syn_output_t *o);
+void layer_update_occlusion_all(syn_server_t *s);
 
 /* ── view accessors (xdg / xwayland agnostic) ────────────── */
 struct wlr_surface *view_surface(syn_view_t *v);

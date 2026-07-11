@@ -418,6 +418,9 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
     effects_notify_close(server);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
+    /* A fullscreen client that exits never un-fullscreens itself: bring back
+     * any bar it was covering. */
+    layer_update_occlusion_all(server);
     game_reevaluate(server);
     /* Drop focus/grab references to this window */
     if (server->focused_view == view)

@@ -178,7 +178,9 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     /* A game exiting is an unmap, not an un-fullscreen — without this, game
-     * mode would stay engaged (and synapd stopped) after the game quit. */
+     * mode would stay engaged (and synapd stopped) after the game quit, and
+     * the bar this view was covering would never come back. */
+    layer_update_occlusion_all(s);
     game_reevaluate(s);
     if (s->focused_view == view) s->focused_view = NULL;
     if (s->grabbed_view == view) {

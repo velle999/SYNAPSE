@@ -84,6 +84,46 @@ void layer_arrange_output(syn_output_t *output)
     /* Re-tile this output's workspace so windows fit the new usable area. */
     if (!s->shutting_down)
         layout_apply(s, &s->workspaces[output->active_workspace]);
+
+    /* A bar that (un)mapped or re-anchored must re-check the fullscreen rule. */
+    layer_update_occlusion(s, output);
+}
+
+/* ── Fullscreen occlusion ────────────────────────────────── */
+/* The scene z-order is fixed at startup — layer[BOTTOM] < window_tree <
+ * layer[TOP] — so a fullscreen window can never be raised over a panel:
+ * view_apply_fullscreen's raise_to_top only reorders within window_tree. The
+ * only way to let a fullscreen window cover the bar is to take this output's
+ * TOP-layer surfaces out of the scene while it shows one.
+ *
+ * OVERLAY is deliberately left alone: the lock screen and the OSDs must stay
+ * visible over a game. The bar keeps its exclusive zone either way, so the
+ * usable area (and therefore the tiling of every non-fullscreen window) is
+ * unchanged — fullscreen views are laid out from the full output box, not the
+ * usable one, so they cover the vacated strip. */
+void layer_update_occlusion(syn_server_t *s, syn_output_t *o)
+{
+    if (!o) return;
+
+    int hide = 0;
+    syn_view_t *v;
+    wl_list_for_each(v, &s->workspaces[o->active_workspace].windows, link) {
+        if (v->mapped && v->fullscreen && !v->minimized) { hide = 1; break; }
+    }
+
+    syn_layer_surface_t *ls;
+    wl_list_for_each(ls, &o->layer_surfaces, link) {
+        if (ls->layer != ZWLR_LAYER_SHELL_V1_LAYER_TOP) continue;
+        if (ls->scene && ls->scene->tree)
+            wlr_scene_node_set_enabled(&ls->scene->tree->node, !hide);
+    }
+}
+
+void layer_update_occlusion_all(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        layer_update_occlusion(s, o);
 }
 
 /* ── Layer surface events ────────────────────────────────── */
