@@ -136,7 +136,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Display Settings", "Super+D",       "displays"  },
     { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Power Saving",     "Super+P",       "power"     },
-    { "Task Manager",     "Super+T",       "taskmgr"   },
+    { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
     { "Game Mode",        "Super+G",       "game"      },
     { "Lock Screen",      "Super+L",       "lock"      },
     { "AI Backend",       "GPU/CPU",       "ai_backend"},

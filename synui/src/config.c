@@ -198,6 +198,10 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+e",         "effects_toggle" },
         { "super+p",         "power" },
         { "super+t",         "taskmgr" },
+        /* The one shortcut everybody already has in their fingers. Nothing
+         * below us claims it: logind's ctrl-alt-del handling is a VT/console
+         * thing, so inside a Wayland session the key reaches the compositor. */
+        { "ctrl+alt+delete", "taskmgr" },
         { "super+g",         "game" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
