@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Chibi
+GenericName=AI Companion
+Comment=Voice-interactive AI companion with a synguard security aspect
+Exec=chibi
+Icon=chibi
+Terminal=false
+Categories=Utility;
+Keywords=chibi;ai;companion;assistant;llm;voice;security;sentinel;
+StartupNotify=false
+StartupWMClass=chibi

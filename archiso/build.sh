@@ -293,6 +293,7 @@ PACKAGES=(
     syn-install
     nexus-chat
     tepris
+    chibi
 )
 
 # Create build user for makepkg (can't run as root)

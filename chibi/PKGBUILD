@@ -1,0 +1,178 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+pkgname=chibi
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
+arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
+url="https://github.com/velle999/chibi-llm"
+# chibi-llm ships no LICENSE file, so there is nothing to install and nothing
+# to truthfully claim here. Add one upstream and set this properly.
+license=('unknown')
+
+# Pinned upstream commit — bump alongside pkgrel when rolling the app.
+_commit=29b8f625ed2b5aceaf4b9d2ffbec4eb54fa30bf7
+
+# Runtime deps.
+#
+# NOTE: pipewire-alsa is NOT optional and NOT redundant with pipewire-audio.
+# It is the package that ships /etc/alsa/conf.d/99-pipewire-default.conf, the
+# symlink that points ALSA's `default` PCM at PipeWire. Without it `default`
+# falls back to dmix on card 0 — and on a machine whose card 0 is an HDMI-only
+# GPU there is no device 0 at all, so every aplay/arecord dies with "unable to
+# open slave" and Chibi comes up mute and deaf with no error. This bit us on a
+# live box; do not drop it.
+#
+# The base ISO ships no audio stack at all, so chibi is what pulls the whole
+# thing in (pipewire + wireplumber + alsa-utils).
+depends=(
+    'python'
+    'pipewire'
+    'pipewire-audio'
+    'pipewire-alsa'
+    'pipewire-pulse'
+    'wireplumber'
+    'alsa-utils'          # aplay / arecord — Chibi's playback + capture path
+    'sox'                 # TTS pitch shift (the "cute" voice)
+    'espeak-ng'           # last-resort TTS fallback if piper fails
+    'sdl2'                # pygame's backend
+    'synapd'              # default LLM backend on SynapseOS (no Ollama needed)
+    'synguard'            # security mode subscribes to its verdict feed
+)
+makedepends=('git' 'python-pip')
+optdepends=('ollama: alternative LLM backend (set CHIBI_LLM_BACKEND=ollama)')
+
+# Python deps are vendored into /usr/lib/chibi/pydeps with `pip --target`
+# rather than a venv: a venv bakes its own build-time absolute path into
+# pyvenv.cfg and console-script shebangs, which is exactly the kind of thing
+# that breaks when the tree is built in /var/tmp and installed elsewhere.
+# --target produces a plain, relocatable directory that the launcher puts on
+# PYTHONPATH.
+#
+# openwakeword is deliberately NOT vendored: oww_enabled is False by default,
+# and it drags in a tflite runtime for a feature nothing turns on.
+_pydeps=(
+    'pygame'
+    'numpy'
+    'requests'
+    'faster-whisper'          # STT
+    'piper-tts'               # TTS
+    'yfinance'                # market ticker
+    'opencv-python-headless'  # webcam vision
+    'psutil'                  # soul: system monitoring
+    'Pillow'                  # soul: screen awareness
+)
+
+# Voice model (Piper). voice_output.py searches /usr/share/piper-voices.
+_voice=en_GB-cori-medium
+_piperrev=v1.0.0
+
+# STT model (faster-whisper tiny), pinned to an upstream HF revision.
+# Shipping it is what lets a freshly imaged machine hear you with NO network:
+# faster-whisper given a bare model name ("tiny") downloads ~75MB from
+# HuggingFace on first run, so without this the ISO would boot up deaf.
+_whisperrev=d90ca5fe260221311c53c58e660288d3deb8d356
+_hf=https://huggingface.co
+
+source=(
+    "git+$url.git#commit=$_commit"
+    "$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx"
+    "$_hf/rhasspy/piper-voices/resolve/$_piperrev/en/en_GB/cori/medium/$_voice.onnx.json"
+    "whisper-model.bin::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/model.bin"
+    "whisper-config.json::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/config.json"
+    "whisper-tokenizer.json::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/tokenizer.json"
+    "whisper-vocabulary.txt::$_hf/Systran/faster-whisper-tiny/resolve/$_whisperrev/vocabulary.txt"
+    "chibi.sh"
+    "chibi.desktop"
+    "chibi-64.png"
+    "chibi-128.png"
+)
+sha256sums=(
+    'SKIP'
+    '1899f98e5fb8310154f3c2973f4b8a929ba7245e722b3d3a85680b833d95f10d'
+    'e262c16d7f192f69d4edd6b4ef8a5915379e67495fcc402f1ab15eeb33da3d36'
+    'dcb76c6586fc06cbdac6dd21f14cfd129cc4cdd9dce19bf4ffa62e59cbe6e6d1'
+    'a73a28cdfe1c43ccc7202fa333d1f89c202477271407ae9a7f19afa52039cac8'
+    'fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab'
+    '34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913'
+    'SKIP'
+    'SKIP'
+    'b1a06457cb55d7389bd08383842f04cd873b41b3d1597f30d0182a27cdaa0ca0'
+    '967d7f9481e27383d09ec460a0c238974ae76658af9cbbc0cc2f34012de11243'
+)
+
+build() {
+    # Vendored wheels are built against the ABI of the python this runs under,
+    # so the package is tied to that python minor version. Record it, and let
+    # package() bake the same version into the launcher's PYTHONPATH — a python
+    # upgrade then produces a loud "no module named pygame" instead of a subtly
+    # half-working Chibi.
+    _pyver="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    msg2 "Vendoring python deps for python $_pyver"
+
+    pip install \
+        --target="$srcdir/pydeps" \
+        --no-cache-dir \
+        --no-compile \
+        --upgrade \
+        "${_pydeps[@]}"
+}
+
+package() {
+    _pyver="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+
+    # ── The app ──────────────────────────────────────────────────────────
+    # 1080x1920-linux is the self-contained Linux app (all modules + the Thoth
+    # corpus/index); it is the directory the upstream launcher runs from.
+    cd "$srcdir/chibi-llm/1080x1920-linux"
+
+    install -d "$pkgdir/usr/lib/chibi/app"
+    cp -a ./*.py thoth_corpus thoth_index.json thoth_index.npz thoth_lexicon.json \
+        "$pkgdir/usr/lib/chibi/app/"
+
+    # A gitignored config.local.py must never be packaged — it carries the
+    # building machine's identity (name, city, LAN peers). Belt and braces: the
+    # clone shouldn't have one, but fail loudly rather than ship someone's
+    # personal config to every user of the ISO.
+    if [[ -e "$pkgdir/usr/lib/chibi/app/config.local.py" ]]; then
+        error "config.local.py leaked into the package — refusing to ship it"
+        return 1
+    fi
+
+    # The app dir is read-only at runtime, so .pyc can't be written on import.
+    # Precompile now, or every start pays full parse cost.
+    python -m compileall -q "$pkgdir/usr/lib/chibi/app" || true
+
+    # ── Vendored python deps ─────────────────────────────────────────────
+    install -d "$pkgdir/usr/lib/chibi"
+    cp -a "$srcdir/pydeps" "$pkgdir/usr/lib/chibi/pydeps"
+    python -m compileall -q "$pkgdir/usr/lib/chibi/pydeps" || true
+
+    # ── Models ───────────────────────────────────────────────────────────
+    install -Dm644 "$srcdir/$_voice.onnx" \
+        "$pkgdir/usr/share/piper-voices/$_voice.onnx"
+    install -Dm644 "$srcdir/$_voice.onnx.json" \
+        "$pkgdir/usr/share/piper-voices/$_voice.onnx.json"
+
+    install -Dm644 "$srcdir/whisper-model.bin" \
+        "$pkgdir/usr/share/faster-whisper/tiny/model.bin"
+    install -Dm644 "$srcdir/whisper-config.json" \
+        "$pkgdir/usr/share/faster-whisper/tiny/config.json"
+    install -Dm644 "$srcdir/whisper-tokenizer.json" \
+        "$pkgdir/usr/share/faster-whisper/tiny/tokenizer.json"
+    install -Dm644 "$srcdir/whisper-vocabulary.txt" \
+        "$pkgdir/usr/share/faster-whisper/tiny/vocabulary.txt"
+
+    # ── Launcher, desktop entry, icons ───────────────────────────────────
+    install -Dm755 "$srcdir/chibi.sh" "$pkgdir/usr/bin/chibi"
+    sed -i "s|@PYVER@|$_pyver|g" "$pkgdir/usr/bin/chibi"
+
+    install -Dm644 "$srcdir/chibi.desktop" \
+        "$pkgdir/usr/share/applications/chibi.desktop"
+    install -Dm644 "$srcdir/chibi-64.png" \
+        "$pkgdir/usr/share/icons/hicolor/64x64/apps/chibi.png"
+    install -Dm644 "$srcdir/chibi-128.png" \
+        "$pkgdir/usr/share/icons/hicolor/128x128/apps/chibi.png"
+
+    install -Dm644 "$srcdir/chibi-llm/docs/security-overview.md" \
+        "$pkgdir/usr/share/doc/$pkgname/security-overview.md"
+}

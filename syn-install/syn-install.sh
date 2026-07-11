@@ -575,6 +575,17 @@ arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 
+# Audio (PipeWire). --global, not --enable: these are *user* units, and they
+# have to be on for every user, before any user has logged in.
+#
+# Installing the pipewire packages does NOT enable them — nothing in Arch ships
+# a preset or a sockets.target.wants symlink for them. Without this, chibi's
+# audio is worse than absent: pipewire-alsa repoints ALSA's `default` PCM at a
+# PipeWire daemon that never starts, so aplay/arecord fail and Chibi comes up
+# mute and deaf with no error at all.
+arch-chroot /mnt systemctl --global enable \
+    pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+
 # ── Desktop environment setup ────────────────────────────
 mkdir -p /mnt/etc/synapseos
 case "$DE_CHOICE" in
