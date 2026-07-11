@@ -737,10 +737,13 @@ cat > "/mnt/home/$NEW_USER/.config/foot/foot.ini" << 'FOOTEOF'
 font=monospace:size=11
 pad=8x8
 
-[colors]
+# [colors] is deprecated in foot >= 1.17 and [cursor].color was removed
+# outright — the palette and the cursor colour both live in [colors-dark].
+[colors-dark]
 alpha=0.92
 background=0b0b14
 foreground=c8e3ee
+cursor=0b0b14 05d9e8
 regular0=16161e
 regular1=ff296d
 regular2=05ffa1
@@ -760,9 +763,6 @@ bright7=d6e5f5
 selection-foreground=0b0b14
 selection-background=05d9e8
 urls=05d9e8
-
-[cursor]
-color=0b0b14 05d9e8
 FOOTEOF
 
 # waybar HUD — clock + system telemetry in the same palette.

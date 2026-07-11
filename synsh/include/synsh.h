@@ -29,18 +29,9 @@
 #define SYN_MSG_STATUS      0x06
 #define SYN_MAX_PAYLOAD     4096
 
-#define COL_RESET   "\033[0m"
-#define COL_BOLD    "\033[1m"
-#define COL_RED     "\033[31m"
-#define COL_GREEN   "\033[32m"
-#define COL_YELLOW  "\033[33m"
-#define COL_BLUE    "\033[34m"
-#define COL_CYAN    "\033[36m"
-#define COL_BRED    "\033[1;31m"
-#define COL_BGREEN  "\033[1;32m"
-#define COL_BYELLOW "\033[1;33m"
-#define COL_BBLUE   "\033[1;34m"
-#define COL_BCYAN   "\033[1;36m"
+/* The COL_ and COLOR_ palettes live in color.h — they are runtime pointers,
+ * so that a single switch turns colour off everywhere. */
+#include "color.h"
 
 typedef struct {
     uint32_t magic;

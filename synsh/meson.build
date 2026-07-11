@@ -8,7 +8,7 @@ add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 executable('synsh',
   files('src/main.c','src/classify.c','src/exec.c','src/builtins.c',
-        'src/ipc.c','src/readline_synsh.c','src/init.c'),
+        'src/ipc.c','src/readline_synsh.c','src/init.c','src/color.c'),
   include_directories: include_directories('include'),
   dependencies: [dep_readline, dep_threads],
   install: true)

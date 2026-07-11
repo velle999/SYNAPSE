@@ -154,13 +154,13 @@ static int run_interactive(synsh_state_t *s) {
             /* The startup connect races synapd's boot — retry here so a
              * shell opened before the daemon was up heals on first use. */
             if (!s->synapd_connected && synapd_connect(s) == 0) {
-                fprintf(stderr, COLOR_OK
-                    "synsh: connected to synapd — AI online\n" COLOR_RESET);
+                fprintf(stderr, "%ssynsh: connected to synapd — AI online\n%s",
+                        COLOR_OK, COLOR_RESET);
             }
             if (!s->synapd_connected) {
-                fprintf(stderr, COLOR_WARN
-                    "synsh: synapd not connected — running in shell-only mode\n"
-                    COLOR_RESET);
+                fprintf(stderr,
+                    "%ssynsh: synapd not connected — running in shell-only mode\n%s",
+                    COLOR_WARN, COLOR_RESET);
                 s->last_exit = execute_pipeline(s, line);
                 break;
             }
@@ -171,8 +171,8 @@ static int run_interactive(synsh_state_t *s) {
             int r = ai_translate(s, line, cmd_buf, sizeof(cmd_buf),
                                  explain_buf, sizeof(explain_buf));
             if (r < 0) {
-                fprintf(stderr, COLOR_ERR
-                    "synsh: AI translation failed\n" COLOR_RESET);
+                fprintf(stderr, "%ssynsh: AI translation failed\n%s",
+                        COLOR_ERR, COLOR_RESET);
                 break;
             }
 
@@ -185,10 +185,8 @@ static int run_interactive(synsh_state_t *s) {
             /* Hybrid: try as shell, fall back to AI if it fails */
             s->last_exit = execute_pipeline(s, line);
             if (s->last_exit != 0 && s->synapd_connected) {
-                if (s->color)
-                    printf(COLOR_AI "  ↯ command failed, asking AI...\n" COLOR_RESET);
-                else
-                    printf("  ↯ command failed, asking AI...\n");
+                printf("%s  ↯ command failed, asking AI...\n%s",
+                       COLOR_AI, COLOR_RESET);
 
                 char cmd_buf[SYNSH_MAX_LINE]     = {0};
                 char explain_buf[SYNSH_MAX_LINE] = {0};
@@ -249,6 +247,7 @@ static int run_script(synsh_state_t *s, const char *path) {
 int main(int argc, char *argv[]) {
     int force_interactive = 0;
     int no_ai = 0;
+    int no_color = 0;
     char *cmd_string = NULL;
     char *script_path = NULL;
 
@@ -271,7 +270,7 @@ int main(int argc, char *argv[]) {
             else if (strcmp(long_opts[longidx].name, "no-confirm") == 0)
                 g_state.ai_confirm = 0;
             else if (strcmp(long_opts[longidx].name, "no-color") == 0)
-                g_state.color = 0;
+                no_color = 1;  /* applied after the rc load, so it wins */
             break;
         case 'c': cmd_string = optarg; break;
         case 'i': force_interactive = 1; break;
@@ -304,15 +303,23 @@ int main(int argc, char *argv[]) {
     /* Load config */
     synsh_load_rc(&g_state);
 
+    /* Colour precedence, lowest to highest: auto-detect (tty/NO_COLOR/TERM),
+     * then the rc file, then the command line. --no-color is applied last so
+     * that it always wins — the rc files ship `set color on`, which used to
+     * silently override it. Once resolved, hand the answer to the palette;
+     * from here on nothing needs to check g_state.color to print safely. */
+    if (no_color) g_state.color = 0;
+    synsh_color_init(g_state.color);
+
     /* Connect to synapd */
     if (!no_ai) {
         if (synapd_connect(&g_state) == 0) {
             if (g_state.verbose)
-                printf(COLOR_OK "synsh: connected to synapd\n" COLOR_RESET);
+                printf("%ssynsh: connected to synapd\n%s", COLOR_OK, COLOR_RESET);
         } else {
-            fprintf(stderr, COLOR_WARN
-                "synsh: warning — synapd not available, AI features disabled\n"
-                COLOR_RESET);
+            fprintf(stderr,
+                "%ssynsh: warning — synapd not available, AI features disabled\n%s",
+                COLOR_WARN, COLOR_RESET);
         }
     }
 
@@ -322,19 +329,33 @@ int main(int argc, char *argv[]) {
 
     /* Print banner in interactive mode */
     if (g_state.interactive) {
-        printf(COLOR_BRAND
-            "  ╭─────────────────────────────────────╮\n"
+        /* The box interior is BANNER_W columns wide; every row pads to it.
+         * The border rows are drawn rather than spelled out so they cannot
+         * drift out of step with the text rows again. */
+        enum { BANNER_W = 37 };
+        char rule[BANNER_W * 3 + 1];  /* ─ is 3 bytes in UTF-8 */
+        char *p = rule;
+        for (int i = 0; i < BANNER_W; i++) p = stpcpy(p, "─");
+
+        printf("%s"
+            "  ╭%s╮\n"
             "  │  SynapseOS  ·  synsh %s%*s│\n"
-            "  │  Where the kernel thinks             │\n"
-            "  ╰─────────────────────────────────────╯\n"
-            COLOR_RESET "\n",
-            SYNSH_VERSION,
-            (int)(14 - strlen(SYNSH_VERSION)), ""
+            "  │  Where the kernel thinks%*s│\n"
+            "  ╰%s╯\n"
+            "%s\n",
+            COLOR_BRAND,
+            rule,
+            SYNSH_VERSION, (int)(BANNER_W - 22 - strlen(SYNSH_VERSION)), "",
+            (int)(BANNER_W - 25), "",
+            rule,
+            COLOR_RESET
         );
         if (g_state.synapd_connected)
-            printf(COLOR_AI "  ⚡ AI online" COLOR_RESET " — type naturally or use shell commands\n\n");
+            printf("%s  ⚡ AI online%s — type naturally or use shell commands\n\n",
+                   COLOR_AI, COLOR_RESET);
         else
-            printf(COLOR_WARN "  ⚠  AI offline" COLOR_RESET " — shell-only mode\n\n");
+            printf("%s  ⚠  AI offline%s — shell-only mode\n\n",
+                   COLOR_WARN, COLOR_RESET);
     }
 
     int exit_code = 0;

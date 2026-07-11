@@ -375,34 +375,21 @@ int execute_ai_suggestion(synsh_state_t *s,
 
     /* Don't run "# not possible" */
     if (suggested_cmd[0] == '#') {
-        if (s->color)
-            printf(COLOR_WARN "  Synapse: %s\n" COLOR_RESET,
-                   explanation ? explanation : "No shell equivalent found.");
-        else
-            printf("  Synapse: %s\n",
-                   explanation ? explanation : "No shell equivalent found.");
+        printf("%s  Synapse: %s\n%s", COLOR_WARN,
+               explanation ? explanation : "No shell equivalent found.",
+               COLOR_RESET);
         return 1;
     }
 
     /* Display the suggested command */
-    if (s->color) {
-        printf(COLOR_AI "  ⚡ " COLOR_RESET
-               COLOR_CMD "%s" COLOR_RESET "\n",
-               suggested_cmd);
-        if (explanation && *explanation)
-            printf(COLOR_DIM "     %s\n" COLOR_RESET, explanation);
-    } else {
-        printf("  > %s\n", suggested_cmd);
-        if (explanation && *explanation)
-            printf("    %s\n", explanation);
-    }
+    printf("%s  ⚡ %s%s%s%s\n", COLOR_AI, COLOR_RESET,
+           COLOR_CMD, suggested_cmd, COLOR_RESET);
+    if (explanation && *explanation)
+        printf("%s     %s\n%s", COLOR_DIM, explanation, COLOR_RESET);
 
     /* Confirmation step (if enabled) */
     if (s->ai_confirm) {
-        if (s->color)
-            printf(COLOR_PROMPT "  Run? [Y/n/e] " COLOR_RESET);
-        else
-            printf("  Run? [Y/n/e] ");
+        printf("%s  Run? [Y/n/e] %s", COLOR_PROMPT, COLOR_RESET);
         fflush(stdout);
 
         char ans[8] = {0};
@@ -426,10 +413,12 @@ int execute_ai_suggestion(synsh_state_t *s,
     /* Execute */
     int exit_code = execute_pipeline(s, suggested_cmd);
 
-    if (s->ai_explain && exit_code == 0 && s->color)
-        printf(COLOR_DIM "  ✓ exit %d\n" COLOR_RESET, exit_code);
-    else if (exit_code != 0 && s->color)
-        printf(COLOR_ERR "  ✗ exit %d\n" COLOR_RESET, exit_code);
+    /* The exit line is reported whether or not colour is on — it used to be
+     * gated on s->color, so --no-color silently swallowed the status. */
+    if (s->ai_explain && exit_code == 0)
+        printf("%s  ✓ exit %d\n%s", COLOR_DIM, exit_code, COLOR_RESET);
+    else if (exit_code != 0)
+        printf("%s  ✗ exit %d\n%s", COLOR_ERR, exit_code, COLOR_RESET);
 
     return exit_code;
 }

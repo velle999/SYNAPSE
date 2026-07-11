@@ -104,10 +104,10 @@ static int builtin_syn(synsh_state_t *s, int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "status") == 0) {
-        printf("synapd: %s\n",
-            s->synapd_online
-                ? COL_BGREEN "online" COL_RESET
-                : COL_YELLOW "offline" COL_RESET);
+        printf("synapd: %s%s%s\n",
+            s->synapd_online ? COL_BGREEN : COL_YELLOW,
+            s->synapd_online ? "online" : "offline",
+            COL_RESET);
         printf("socket: %s\n", SYN_SOCKET_PATH);
         printf("ai: %s\n", s->ai_enabled ? "enabled" : "disabled");
         printf("explain: %s\n", s->explain_mode ? "on" : "off");
@@ -319,49 +319,6 @@ int synsh_builtin(synsh_state_t *s, int argc, char **argv) {
             return BUILTIN_TABLE[i].fn(s, argc, argv);
     }
     return 1;
-}
-
-/* ═══════════════════════════════════════════════════════════ */
-/*  prompt.c — Dynamic prompt rendering                        */
-/* ═══════════════════════════════════════════════════════════ */
-
-#include <pwd.h>
-
-char *synsh_render_prompt(synsh_state_t *s) {
-    char *buf = malloc(512);
-    if (!buf) return strdup("synsh$ ");
-
-    /* Shorten home dir to ~ */
-    const char *cwd = s->cwd ? s->cwd : "/";
-    const char *home = getenv("HOME");
-    char short_cwd[256];
-    if (home && strncmp(cwd, home, strlen(home)) == 0) {
-        snprintf(short_cwd, sizeof(short_cwd), "~%s", cwd + strlen(home));
-    } else {
-        strncpy(short_cwd, cwd, sizeof(short_cwd) - 1);
-    }
-
-    /* AI indicator */
-    const char *ai_dot = s->synapd_online
-        ? COL_BCYAN "⚡" COL_RESET " "
-        : COL_YELLOW "·" COL_RESET " ";
-
-    /* Exit code color */
-    const char *code_col = s->last_exit_code == 0 ? COL_BGREEN : COL_BRED;
-
-    bool is_root = geteuid() == 0;
-
-    snprintf(buf, 512,
-        "%s%s%s%s%s %s%s%s ",
-        ai_dot,
-        COL_BOLD, short_cwd, COL_RESET,
-        s->last_exit_code ? " " : "",
-        s->last_exit_code ? code_col : "",
-        is_root ? "#" : "❯",
-        COL_RESET
-    );
-
-    return buf;
 }
 
 /* ═══════════════════════════════════════════════════════════ */

@@ -53,19 +53,42 @@ void synsh_prompt(synsh_state_t *s, char *buf, size_t len) {
 
     const char *sigil = s->synapd_connected ? "⚡" : "$";
 
-    if (s->color) {
-        snprintf(buf, len,
-            COLOR_BRAND "[" COLOR_RESET
-            COLOR_USER "%s" COLOR_RESET
-            COLOR_DIM "@synapse " COLOR_RESET
-            COLOR_PATH "%s" COLOR_RESET
-            COLOR_BRAND "]" COLOR_RESET
-            "%s " COLOR_RESET,
-            user, short_cwd, sigil
-        );
-    } else {
-        snprintf(buf, len, "[%s@synapse %s]%s ", user, short_cwd, sigil);
-    }
+    /*
+     * GNU readline counts every byte of the prompt as a visible column unless
+     * the non-printing runs are bracketed with \001..\002 — without them it
+     * thinks this prompt is ~60 columns wide instead of ~18 and puts the
+     * cursor in the wrong place on every redraw. The fallback editor below
+     * writes the prompt straight to the tty, where those two bytes would show
+     * up as garbage, so they are only emitted when readline is really in use.
+     */
+#ifdef HAVE_READLINE
+    static const char *np_beg = "\001", *np_end = "\002";
+#else
+    static const char *np_beg = "", *np_end = "";
+#endif
+
+    /* Colour pointers are "" when colour is off (see color.c), so the same
+     * format serves both cases. */
+    char *p = buf;
+    char *end = buf + len;
+
+    #define PUT(...) do {                                        \
+        if (p < end) {                                           \
+            int n_ = snprintf(p, (size_t)(end - p), __VA_ARGS__);\
+            p = (n_ < 0 || n_ >= end - p) ? end : p + n_;        \
+        }                                                        \
+    } while (0)
+    #define COL(c) PUT("%s%s%s", np_beg, (c), np_end)
+
+    COL(COLOR_BRAND);  PUT("[");
+    COL(COLOR_USER);   PUT("%s", user);
+    COL(COLOR_DIM);    PUT("@synapse ");
+    COL(COLOR_PATH);   PUT("%s", short_cwd);
+    COL(COLOR_BRAND);  PUT("]");
+    COL(COLOR_RESET);  PUT("%s ", sigil);
+
+    #undef COL
+    #undef PUT
 }
 
 /* ── History management ───────────────────────────────────── */

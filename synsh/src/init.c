@@ -30,7 +30,7 @@ int synsh_init(synsh_state_t *s, int argc, char *argv[]) {
     memset(s->alias_values, 0, sizeof(s->alias_values));
     s->ai_confirm = 1;   /* ask before running AI commands by default */
     s->ai_explain = 1;
-    s->color      = isatty(STDOUT_FILENO) ? 1 : 0;
+    s->color      = synsh_color_supported();
     s->pid        = getpid();
     s->synapd_fd  = -1;
 
@@ -102,8 +102,14 @@ void synsh_load_rc(synsh_state_t *s) {
                         s->ai_confirm = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
                     else if (strcmp(key, "ai_explain") == 0)
                         s->ai_explain = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
-                    else if (strcmp(key, "color") == 0)
-                        s->color = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
+                    else if (strcmp(key, "color") == 0) {
+                        /* `set color on` means "colour when the terminal can
+                         * take it", not "always". Forcing it on unconditionally
+                         * pushed escape codes into pipes and log files, since
+                         * the shipped synshrc sets it. */
+                        int want = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
+                        s->color = want && synsh_color_supported();
+                    }
                     else if (strcmp(key, "verbose") == 0)
                         s->verbose = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
                 }

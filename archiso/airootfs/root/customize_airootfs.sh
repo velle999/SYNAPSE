@@ -32,9 +32,12 @@ cat > /home/syn/.config/foot/foot.ini << 'EOF'
 [main]
 font=monospace:size=11
 
-[colors]
+# [colors] is deprecated in foot >= 1.17 and [cursor].color was removed
+# outright — the palette and the cursor colour both live in [colors-dark].
+[colors-dark]
 background=0d0f14
 foreground=cdd6f4
+cursor=0d0f14 12d9f5
 regular0=45475a
 regular1=f38ba8
 regular2=a6e3a1
@@ -51,9 +54,6 @@ bright4=89b4fa
 bright5=f5c2e7
 bright6=94e2d5
 bright7=a6ef87
-
-[cursor]
-color=0d0f14 12d9f5
 EOF
 
 # fastfetch — branded logo config. fastfetch isn't on the ISO (`syn info`
