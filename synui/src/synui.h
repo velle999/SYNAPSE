@@ -209,6 +209,14 @@ typedef struct {
     uint32_t last_arm_ms;  /* rearm throttle — see power_notify_activity */
 } syn_power_t;
 
+/* ── Game mode (game.c) ───────────────────────────────────── */
+typedef struct {
+    int  active;        /* engaged right now */
+    int  forced;        /* Super+G: -1 forced off, 0 auto, +1 forced on */
+    int  ai_suspended;  /* we stopped synapd and owe it a restart */
+    char app[64];       /* app_id that triggered it (for the log) */
+} syn_game_t;
+
 /* ── Keybinding (table-driven; syntax in config.c) ───────── */
 #define SYN_BINDS_MAX        96
 #define SYN_BIND_ACTION_LEN  24
@@ -322,6 +330,7 @@ typedef struct {
     int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
 #define DOCK_PIN_MAX 16
+#define GAME_EXCLUDE_MAX 16
     /* Runtime-mutable pinned set: seeded from synuirc `dock_pin`, then
      * overridden by ~/.config/synui/dock.state and edited live via the dock
      * context menu (dock_pin_toggle). */
@@ -340,6 +349,17 @@ typedef struct {
     int   power_suspend;        /* run power_suspend_cmd; default 0 (never) */
     char  power_lock_cmd[192];
     char  power_suspend_cmd[192];
+
+    /* Game mode (game.c). A fullscreen XWayland client is taken to be a game
+     * unless its app_id matches game_exclude — that list is what keeps a
+     * fullscreen Firefox video from suspending the AI. */
+    int   game_mode;            /* master switch, default 1 */
+    int   game_suspend_ai;      /* stop synapd while a game runs, default 1 */
+    int   game_inhibit_idle;    /* hold off dim/blank/lock, default 1 */
+    char  game_exclude[GAME_EXCLUDE_MAX][64];
+    int   game_exclude_count;
+    char  game_ai_stop_cmd[192];
+    char  game_ai_start_cmd[192];
 
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
@@ -700,6 +720,7 @@ struct syn_server {
     } power_ui;
 
     syn_power_t     power;
+    syn_game_t      game;
 
     /* Wallpaper selector panel (wppick.c) — a compositor-drawn modal picker
      * (Super+W) for switching between the built-in wallpapers live. */
@@ -1005,6 +1026,16 @@ void power_finish(syn_server_t *s);
 void power_notify_activity(syn_server_t *s);
 /* Re-arm after the config changed (panel edit, config reload). */
 void power_reload(syn_server_t *s);
+
+/* ── Game mode (game.c) ──────────────────────────────────── */
+/* Idempotent decision point: call after any fullscreen change, map, or unmap.
+ * Enters/leaves game mode (suspend synapd, hold off idle) as needed. */
+void game_reevaluate(syn_server_t *s);
+/* Super+G — cycle auto → forced-on → forced-off → auto. */
+void game_toggle(syn_server_t *s);
+/* Shutdown: restart synapd if we suspended it, so synui exiting mid-game
+ * doesn't leave the box with no AI. */
+void game_finish(syn_server_t *s);
 
 void power_show(syn_server_t *s);
 void power_hide(syn_server_t *s);

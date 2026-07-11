@@ -418,6 +418,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
     effects_notify_close(server);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
+    game_reevaluate(server);
     /* Drop focus/grab references to this window */
     if (server->focused_view == view)
         server->focused_view = NULL;
@@ -1151,6 +1152,9 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->gamma_set.link);
 
     power_finish(s);
+    /* Before anything else tears down: if game mode stopped synapd, start it
+     * again. A synui that exits mid-game must not leave the box with no AI. */
+    game_finish(s);
 
     wl_display_destroy_clients(s->display);
     wlr_scene_node_destroy(&s->scene->tree.node);

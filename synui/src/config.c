@@ -16,7 +16,7 @@
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, maximize_toggle, minimize_toggle, minimize_restore, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
- * effects_toggle, power, lock.
+ * effects_toggle, power, lock, game.
  * A bind with the same combo as a default replaces it.
  *
  * Wallpaper (wallpaper.c):
@@ -43,6 +43,19 @@
  *   power_suspend_timeout = 0
  *   power_lock_cmd = swaylock -f -c 000000
  *   power_suspend_cmd = systemctl suspend
+ *
+ * Game mode (game.c) — a fullscreen XWayland client is taken to be a game, and
+ * while one runs synapd is stopped (it holds ~4GB of VRAM and has no unload
+ * IPC) and the idle stages are held off (a gamepad is not seat input, so the
+ * screen would otherwise dim mid-game). Super+G forces it on/off:
+ *   game_mode = on|off                 (default on)
+ *   game_suspend_ai = on|off           (default on — stop synapd while gaming)
+ *   game_inhibit_idle = on|off         (default on — no dim/blank/lock)
+ *   game_exclude = firefox chibi tepris nexus-chat foot
+ *       Space-separated app_ids that are NOT games; REPLACES the built-in list.
+ *       This is what keeps a fullscreen Firefox video from stopping the AI.
+ *   game_ai_stop_cmd = systemctl stop synapd
+ *   game_ai_start_cmd = systemctl start synapd
  *
  * SynapseOS Project — GPLv2
  */
@@ -184,6 +197,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "effects_toggle" },
         { "super+p",         "power" },
+        { "super+g",         "game" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
     };
@@ -266,6 +280,25 @@ void synui_config_load(syn_config_t *cfg)
              "pgrep -x swaylock >/dev/null || swaylock -f -c 000000");
     snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
              "systemctl suspend");
+
+    cfg->game_mode         = 1;
+    cfg->game_suspend_ai   = 1;
+    cfg->game_inhibit_idle = 1;
+    snprintf(cfg->game_ai_stop_cmd,  sizeof(cfg->game_ai_stop_cmd),
+             "systemctl stop synapd");
+    snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd),
+             "systemctl start synapd");
+    /* The fullscreen X11 clients on this system that are NOT games. Without
+     * these, going fullscreen on a YouTube video would stop synapd. The
+     * firefox-app-mode apps (tepris, nexus-chat) report their own app_id via
+     * MOZ_APP_REMOTINGNAME, so they need naming separately from firefox. */
+    static const char *const defaults[] = {
+        "firefox", "chibi", "tepris", "nexus-chat", "foot",
+    };
+    cfg->game_exclude_count = 0;
+    for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
+        snprintf(cfg->game_exclude[cfg->game_exclude_count++],
+                 sizeof(cfg->game_exclude[0]), "%s", defaults[i]);
 
     cfg->bind_count = 0;
     seed_default_binds(cfg);
@@ -461,6 +494,29 @@ void synui_config_load(syn_config_t *cfg)
                  tok && cfg->dock_pin_count < DOCK_PIN_MAX;
                  tok = strtok_r(NULL, " \t", &save))
                 snprintf(cfg->dock_pin[cfg->dock_pin_count++], 128, "%s", tok);
+        }
+        else if (strcmp(key, "game_mode") == 0)
+            cfg->game_mode = strcmp(val, "on") == 0;
+        else if (strcmp(key, "game_suspend_ai") == 0)
+            cfg->game_suspend_ai = strcmp(val, "on") == 0;
+        else if (strcmp(key, "game_inhibit_idle") == 0)
+            cfg->game_inhibit_idle = strcmp(val, "on") == 0;
+        else if (strcmp(key, "game_ai_stop_cmd") == 0)
+            snprintf(cfg->game_ai_stop_cmd, sizeof(cfg->game_ai_stop_cmd), "%s", val);
+        else if (strcmp(key, "game_ai_start_cmd") == 0)
+            snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd), "%s", val);
+        else if (strcmp(key, "game_exclude") == 0) {
+            /* space-separated app_ids that are NOT games. Replaces the built-in
+             * list rather than adding to it, so a user can widen or narrow it. */
+            char buf[512];
+            snprintf(buf, sizeof(buf), "%s", val);
+            char *save = NULL;
+            cfg->game_exclude_count = 0;
+            for (char *tok = strtok_r(buf, " \t", &save);
+                 tok && cfg->game_exclude_count < GAME_EXCLUDE_MAX;
+                 tok = strtok_r(NULL, " \t", &save))
+                snprintf(cfg->game_exclude[cfg->game_exclude_count++],
+                         sizeof(cfg->game_exclude[0]), "%s", tok);
         }
         else if (strcmp(key, "bind") == 0) {
             /* value = "<combo> <action> [arg]" — split on first whitespace */

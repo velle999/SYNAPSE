@@ -414,6 +414,10 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
         /* Undo any fullscreen buffer scale now the view is back in the layout. */
         view_fullscreen_rescale(view);
     }
+
+    /* Fullscreen is the game-mode signal, and this is the one choke point every
+     * path (xdg, XWayland, foreign-toplevel) funnels through. */
+    game_reevaluate(s);
 }
 
 /* ── Minimize (iconify) ──────────────────────────────────── */
