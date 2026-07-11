@@ -191,6 +191,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+a",         "overlay" },
         { "super+d",         "displays" },
         { "super+escape",    "menu" },
+        { "super+c",         "control" },
         { "super+q",         "close" },
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },

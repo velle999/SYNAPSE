@@ -43,6 +43,7 @@
         // hand-written set is worse than none: waybar maps a clicked item's id
         // to a command positionally, so a stale list launches the wrong app.
         "menu-actions": {
+            "control": "wtype -M logo -k c -m logo",
             "terminal": "foot",
             "aishell": "foot synsh",
             "status": "foot --hold syn status",

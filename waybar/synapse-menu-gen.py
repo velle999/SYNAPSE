@@ -38,6 +38,12 @@ APP_DIRS = [
 FIELD_CODE_RE = re.compile(r"%[fFuUdDnNickvm]")
 
 STATIC_ITEMS = [
+    # The control panel is synui's, not a program we can exec: the compositor
+    # draws it. wtype speaks virtual-keyboard-v1, which synui wires to the same
+    # path a physical keyboard takes, so pressing its bind is how a client asks
+    # the compositor for a panel — there is no other IPC into synui.
+    # Keep this in step with the `control` bind in synui's config.c.
+    ("control", "Control Panel", "wtype -M logo -k c -m logo"),
     ("terminal", "Terminal", "foot"),
     ("aishell", "AI Shell (synsh)", "foot synsh"),
     ("status", "System Status", "foot --hold syn status"),

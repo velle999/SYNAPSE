@@ -300,8 +300,100 @@ void synui_spawn(const char *cmd)
     spawn(cmd);
 }
 
+/* ── Start menu (Super-tap) ──────────────────────────────── */
+
+/* Where in the bar the start button is. waybar's "◢ SYNAPSE" module is the sole
+ * entry in modules-left, so it sits hard against the bar's left edge and a click
+ * a couple of dozen pixels in lands on it. This is the one brittle assumption
+ * here: reorder modules-left and the tap opens whatever moved into that corner.
+ * waybar exposes no geometry (and no IPC to open a menu), so there is nothing
+ * better to key off than position. */
+#define START_MENU_HIT_X  24
+
+/* The bar that owns the start menu. Matched on the layer-shell namespace rather
+ * than "the first top-layer surface", so an unrelated panel can't be clicked. */
+static syn_layer_surface_t *bar_on(syn_output_t *o)
+{
+    syn_layer_surface_t *ls;
+    wl_list_for_each(ls, &o->layer_surfaces, link) {
+        struct wlr_layer_surface_v1 *lsurf = ls->layer_surface;
+        if (!lsurf || !lsurf->surface || !lsurf->surface->mapped) continue;
+        if (lsurf->namespace && strcmp(lsurf->namespace, "waybar") == 0)
+            return ls;
+    }
+    return NULL;
+}
+
+static syn_layer_surface_t *find_bar(syn_server_t *s)
+{
+    /* The bar on the output you are looking at, if it has one; otherwise any
+     * bar at all, so the tap still works from a monitor that carries none. */
+    syn_output_t *f = server_focused_output(s);
+    if (f) {
+        syn_layer_surface_t *ls = bar_on(f);
+        if (ls) return ls;
+    }
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        syn_layer_surface_t *ls = bar_on(o);
+        if (ls) return ls;
+    }
+    return NULL;
+}
+
+static uint32_t now_msec(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
+
+/* Open waybar's start menu.
+ *
+ * waybar's menu is a GTK popup that opens on a click on the module's widget:
+ * there is no IPC, no signal and no protocol to open it from outside. So synui
+ * does what a user does — it clicks the button, by sending the bar surface a
+ * pointer enter/press/release through the seat. The physical cursor is left
+ * where it is; only the seat's pointer focus moves, and the next real pointer
+ * motion puts that back.
+ *
+ * Nothing here is load-bearing: if the bar isn't running, or waybar changes its
+ * layout, the click misses and nothing happens. That is the intended failure —
+ * a tap that does nothing, not a compositor that breaks. */
+void synui_start_menu_open(syn_server_t *s)
+{
+    syn_layer_surface_t *bar = find_bar(s);
+    if (!bar) {
+        wlr_log(WLR_DEBUG, "synui: start menu: no waybar surface to click");
+        return;
+    }
+
+    struct wlr_surface *surf = bar->layer_surface->surface;
+    double sx = START_MENU_HIT_X;
+    double sy = surf->current.height / 2.0;
+
+    /* Clicking outside the surface would be silently ignored by the client, so
+     * a bar too narrow for the hit point is worth a word rather than a mystery. */
+    if (sx >= surf->current.width || surf->current.height <= 0) {
+        wlr_log(WLR_DEBUG, "synui: start menu: bar is %dx%d, hit point outside it",
+                surf->current.width, surf->current.height);
+        return;
+    }
+
+    uint32_t t = now_msec();
+    wlr_seat_pointer_notify_enter(s->seat, surf, sx, sy);
+    wlr_seat_pointer_notify_motion(s->seat, t, sx, sy);
+    wlr_seat_pointer_notify_button(s->seat, t, BTN_LEFT,
+                                   WL_POINTER_BUTTON_STATE_PRESSED);
+    wlr_seat_pointer_notify_frame(s->seat);
+    wlr_seat_pointer_notify_button(s->seat, now_msec(), BTN_LEFT,
+                                   WL_POINTER_BUTTON_STATE_RELEASED);
+    wlr_seat_pointer_notify_frame(s->seat);
+}
+
 /* Execute a bind action (see config.c for the names and defaults). */
-static void binding_execute(syn_server_t *s, const char *action, const char *arg)
+void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     syn_workspace_t *ws = server_active_workspace(s);
 
@@ -432,6 +524,10 @@ static void binding_execute(syn_server_t *s, const char *action, const char *arg
     } else if (strcmp(action, "menu") == 0) {
         if (s->welcome_ui.shown) synui_welcome_hide(s);
         else                     synui_render_welcome(s);
+    } else if (strcmp(action, "control") == 0) {
+        ctlpanel_toggle(s);
+    } else if (strcmp(action, "start_menu") == 0) {
+        synui_start_menu_open(s);
     } else if (strcmp(action, "ws") == 0) {
         int n = atoi(arg);
         if (n >= 1 && n <= WORKSPACE_MAX)
@@ -521,7 +617,7 @@ static bool welcome_menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return true;
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
-        binding_execute(s, synui_welcome_menu[s->welcome_ui.selected].action,
+        synui_binding_execute(s, synui_welcome_menu[s->welcome_ui.selected].action,
                         "");
         return true;
     case XKB_KEY_Escape:
@@ -554,7 +650,7 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
     for (int i = 0; i < s->config.bind_count; i++) {
         syn_bind_t *b = &s->config.binds[i];
         if (b->mods == mods && b->sym == lower) {
-            binding_execute(s, b->action, b->arg);
+            synui_binding_execute(s, b->action, b->arg);
             return true;
         }
     }
@@ -594,6 +690,32 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         return;
     }
 
+    /* Super-tap opens the start menu (see syn_server::super_armed). Super is
+     * first and foremost a modifier, so the tap is defined by what did *not*
+     * happen: armed on a bare Super press, disarmed by any other key here and
+     * by any pointer button in server_cursor_button. Only a Super release that
+     * survives both is a tap.
+     *
+     * The release is deliberately not swallowed — it falls through to the
+     * normal forwarding path below. Returning early here would leave the
+     * focused client holding a Super it never saw released, i.e. a stuck
+     * modifier for as long as it keeps focus. */
+    bool is_super = false;
+    for (int i = 0; i < nsyms; i++)
+        if (syms[i] == XKB_KEY_Super_L || syms[i] == XKB_KEY_Super_R)
+            is_super = true;
+
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        /* A Super pressed while another modifier is already down is someone
+         * building a chord, not tapping. */
+        s->super_armed = is_super &&
+            !(modifiers & (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT |
+                           WLR_MODIFIER_SHIFT));
+    } else if (is_super && s->super_armed) {
+        s->super_armed = 0;
+        synui_start_menu_open(s);
+    }
+
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
         /* Escape dismisses the dock context menu. */
         if (s->dockmenu.visible) {
@@ -631,6 +753,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* CRT filter panel: same modal contract as the power panel. */
         for (int i = 0; i < nsyms; i++)
             if (filters_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Control panel: same modal contract again. */
+        for (int i = 0; i < nsyms; i++)
+            if (ctlpanel_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -1095,6 +1223,11 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, cursor_button);
     struct wlr_pointer_button_event *event = data;
+
+    /* Super+click (move/resize a window) is Super used as a modifier, so it
+     * must not also open the start menu when Super is finally released. */
+    s->super_armed = 0;
+
     pointer_button(s, event->time_msec, event->button, event->state);
 }
 

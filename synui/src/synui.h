@@ -204,6 +204,45 @@ typedef struct {
     char status[96];
 } syn_filters_t;
 
+/* ── Control panel (ctlpanel.c) ──────────────────────────── */
+/* The settings column, in display order. The *shortcuts* column deliberately
+ * has no table here: it is generated from the live bind table (syn_config_t::
+ * binds) every time the panel renders, so it cannot drift out of step with the
+ * binds actually in force — the failure the waybar start menu shipped once,
+ * where a stale hand-maintained list mapped entries to the wrong actions. */
+typedef enum {
+    CTL_ROW_EFFECTS = 0,   /* toggles: act in place, no panel */
+    CTL_ROW_GAME,
+    CTL_ROW_AI_BACKEND,
+    CTL_ROW_DOCK,
+    CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
+    CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
+    CTL_ROW_FILTERS,
+    CTL_ROW_WALLPAPER,
+    CTL_ROW_POWER,
+    CTL_ROW_TASKMGR,
+    CTL_ROW_NETWORK,
+    CTL_ROW_LOCK,
+    CTL_ROW_COUNT,
+} syn_ctl_row_t;
+
+/* A shortcuts-column line. The nine workspace binds (and the nine move-to-
+ * workspace binds) are collapsed into one row each — listed literally they are
+ * 18 of ~40 rows and drown everything worth reading. */
+typedef struct {
+    char combo[48];
+    char desc[64];
+} syn_ctl_shortcut_t;
+
+#define CTL_SHORTCUTS_MAX  SYN_BINDS_MAX
+
+typedef struct {
+    int  visible;
+    int  selected;     /* syn_ctl_row_t, always a selectable row */
+    int  scroll;       /* first shortcuts row drawn */
+    char status[96];
+} syn_ctlpanel_t;
+
 /* ── Power saving panel + idle state machine (power.c) ───── */
 /* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch;
  * the rest each map to one syn_config_t timeout, in the same order. */
@@ -857,6 +896,24 @@ struct syn_server {
 
     syn_filters_t   filters;
 
+    /* Control panel (Super+C, and the top entry of the waybar start menu) —
+     * the live keybind list plus the toggles and panel jump-offs. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } ctlpanel_ui;
+
+    syn_ctlpanel_t  ctlpanel;
+
+    /* Super-tap: Super pressed and released with nothing in between opens the
+     * start menu, the way it does on every other desktop. Armed on the Super
+     * press and disarmed by *any* intervening key or pointer button, so Super
+     * used as a modifier (Super+E, Super+drag) never opens the menu on release.
+     * Without that disarm the modifier and the tap are indistinguishable. */
+    int             super_armed;
+
     /* Task manager panel (Super+T) — process table + resource overview. */
     struct {
         struct wlr_scene_tree   *tree;
@@ -1265,6 +1322,33 @@ const char *filters_row_label(int row);
 float filters_row_value(syn_server_t *s, int row, char *buf, size_t n);
 void synui_render_filters(syn_server_t *s);
 void synui_render_power(syn_server_t *s);
+
+/* ── Control panel (ctlpanel.c) ──────────────────────────── */
+void ctlpanel_show(syn_server_t *s);
+void ctlpanel_hide(syn_server_t *s);
+void ctlpanel_toggle(syn_server_t *s);
+/* Modal key handling while the panel is open, as in filters_key. */
+int  ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* Settings-column row text. value[] is filled with the row's current state
+ * ("on"/"off"/"GPU"), or left empty for a jump-off row, which has none. */
+const char *ctlpanel_row_label(int row);
+void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n);
+int  ctlpanel_row_selectable(int row);
+/* The shortcuts column, rebuilt from the live bind table on every render.
+ * Returns how many rows were written into out[] (at most max). */
+int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
+/* How many shortcut rows the panel has room to draw — render.c owns the
+ * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
+#define CTL_SHORTCUT_ROWS  16
+void synui_render_ctlpanel(syn_server_t *s);
+
+/* Run a bind action by name (input.c owns the dispatch table). The control
+ * panel's rows are actions, so they go through exactly the path a keybind
+ * does rather than reimplementing it. */
+void synui_binding_execute(syn_server_t *s, const char *action, const char *arg);
+/* Open the waybar start menu, by synthesizing a click on its bar surface —
+ * waybar's menu is a GTK popup with no IPC to open it. See input.c. */
+void synui_start_menu_open(syn_server_t *s);
 
 void power_state_save(syn_server_t *s);
 void power_state_load(syn_config_t *cfg);

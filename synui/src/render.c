@@ -130,6 +130,7 @@ void cairo_begin(cairo_t *cr)
 /* Menu entries: input.c navigates with Up/Down and executes the entry's
  * bind action on Enter (welcome_menu_key). */
 const syn_welcome_entry_t synui_welcome_menu[] = {
+    { "Control Panel",    "Super+C",       "control"   },
     { "Terminal",         "Super+Enter",   "term"      },
     { "AI Command Bar",   "Super+Space",   "cmdbar"    },
     { "Neural Overlay",   "Super+A",       "overlay"   },
@@ -958,6 +959,16 @@ void synui_render_power(syn_server_t *s)
 
 /* ── CRT filter panel (filters.c) ────────────────────────── */
 
+/* Right-align text to x_right. Shared by the control panel and the task
+ * manager, whose number columns only line up if they end on the same x. */
+static void draw_right(cairo_t *cr, double x_right, double y, const char *text)
+{
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, text, &ext);
+    cairo_move_to(cr, x_right - ext.width, y);
+    cairo_show_text(cr, text);
+}
+
 /* The slider itself: a trough with a filled portion. Drawn rather than spelled
  * out because these values are judged by eye, and a bar you can see moving is
  * the whole difference between tuning a look and typing numbers at it. */
@@ -1103,6 +1114,174 @@ void synui_render_filters(syn_server_t *s)
     set_scene_buffer(&s->filters_ui.text_buf, s->filters_ui.tree, buf);
 }
 
+/* ── Control panel (ctlpanel.c) ──────────────────────────── */
+
+/* Two columns: shortcuts left, settings right. The column x's are tuned for the
+ * 13px monospace face; CTL_SHORTCUT_ROWS (synui.h) is how many shortcut rows fit
+ * between the header and the footer, and the panel height is derived from it, so
+ * the two cannot disagree about how much room there is. */
+#define CTL_W          860
+#define CTL_ROW_H       26
+#define CTL_TOP         92
+#define CTL_FOOTER      64
+#define CTL_COL_RIGHT  470   /* x of the settings column */
+#define CTL_SETTING_V  790   /* right edge of the settings value column */
+
+void synui_render_ctlpanel(syn_server_t *s)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+
+    if (!cp->visible) {
+        wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    /* The taller of the two columns sets the height — the settings column is a
+     * fixed CTL_ROW_COUNT, the shortcuts column scrolls within its window. */
+    int body_rows = CTL_ROW_COUNT > CTL_SHORTCUT_ROWS
+                  ? CTL_ROW_COUNT : CTL_SHORTCUT_ROWS;
+    int pw = CTL_W;
+    int ph = CTL_TOP + body_rows * CTL_ROW_H + CTL_FOOTER;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->ctlpanel_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->ctlpanel_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->ctlpanel_ui.bg)
+        s->ctlpanel_ui.bg = wlr_scene_rect_create(s->ctlpanel_ui.tree,
+                                                  pw, ph, bg_color);
+    if (!s->ctlpanel_ui.accent)
+        s->ctlpanel_ui.accent = wlr_scene_rect_create(s->ctlpanel_ui.tree,
+                                                      pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "CONTROL PANEL");
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 44);
+    cairo_line_to(cr, pw - 18, 44);
+    cairo_stroke(cr);
+
+    /* Column headings */
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    cairo_move_to(cr, 18, 70);
+    cairo_show_text(cr, "SHORTCUTS");
+    cairo_move_to(cr, CTL_COL_RIGHT, 70);
+    cairo_show_text(cr, "SETTINGS");
+
+    /* Divider between the columns */
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.35);
+    cairo_move_to(cr, CTL_COL_RIGHT - 24, 56);
+    cairo_line_to(cr, CTL_COL_RIGHT - 24, ph - CTL_FOOTER + 8);
+    cairo_stroke(cr);
+
+    /* ── Shortcuts column (live bind table) ── */
+    syn_ctl_shortcut_t sc[CTL_SHORTCUTS_MAX];
+    int n = ctlpanel_shortcuts(s, sc, CTL_SHORTCUTS_MAX);
+
+    int first = cp->scroll;
+    if (first > n - CTL_SHORTCUT_ROWS) first = n - CTL_SHORTCUT_ROWS;
+    if (first < 0) first = 0;
+
+    cairo_set_font_size(cr, 13);
+    for (int i = 0; i < CTL_SHORTCUT_ROWS && first + i < n; i++) {
+        int ry = CTL_TOP + i * CTL_ROW_H;
+
+        cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 0.95);
+        cairo_move_to(cr, 18, ry);
+        cairo_show_text(cr, sc[first + i].combo);
+
+        cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+        cairo_move_to(cr, 190, ry);
+        cairo_show_text(cr, sc[first + i].desc);
+    }
+
+    /* Say so when the list runs off the window, rather than silently truncating
+     * it — a shortcut you cannot see is a shortcut you do not have. */
+    if (n > CTL_SHORTCUT_ROWS) {
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        char more[64];
+        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+                 first + 1,
+                 first + CTL_SHORTCUT_ROWS < n ? first + CTL_SHORTCUT_ROWS : n,
+                 n);
+        cairo_move_to(cr, 18, CTL_TOP + CTL_SHORTCUT_ROWS * CTL_ROW_H + 6);
+        cairo_show_text(cr, more);
+    }
+
+    /* ── Settings column ── */
+    for (int i = 0; i < CTL_ROW_COUNT; i++) {
+        int ry = CTL_TOP + i * CTL_ROW_H;
+
+        if (i == CTL_ROW_SEP) {          /* a rule, not a row */
+            cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
+            cairo_move_to(cr, CTL_COL_RIGHT, ry - 8);
+            cairo_line_to(cr, CTL_SETTING_V + 40, ry - 8);
+            cairo_stroke(cr);
+            continue;
+        }
+
+        int sel = (i == cp->selected);
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, CTL_COL_RIGHT - 12, ry - 16,
+                            (CTL_SETTING_V + 52) - (CTL_COL_RIGHT - 12), CTL_ROW_H - 4);
+            cairo_fill(cr);
+        }
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, CTL_COL_RIGHT, ry);
+        cairo_show_text(cr, ctlpanel_row_label(i));
+
+        char value[32];
+        ctlpanel_row_value(s, i, value, sizeof(value));
+        if (value[0]) {
+            /* "on" reads as live, everything else (off/n/a) as inert. */
+            if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0)
+                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            else
+                cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+            cairo_set_font_size(cr, 13);
+            draw_right(cr, CTL_SETTING_V + 40, ry, value);
+        }
+    }
+
+    /* ── Footer ── */
+    if (cp->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, 18, ph - 38);
+        cairo_show_text(cr, cp->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 18);
+    cairo_show_text(cr,
+        "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 PgUp/PgDn scroll shortcuts \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
+}
+
 /* ── Task manager (taskmgr.c) ────────────────────────────── */
 
 /* Panel geometry. The column x's are tuned for the 13px monospace face the
@@ -1116,14 +1295,6 @@ void synui_render_filters(syn_server_t *s)
 #define TM_COL_MEM  462   /* right edge */
 #define TM_COL_VRAM 560   /* right edge */
 #define TM_COL_WIN  580
-
-static void draw_right(cairo_t *cr, double x_right, double y, const char *text)
-{
-    cairo_text_extents_t ext;
-    cairo_text_extents(cr, text, &ext);
-    cairo_move_to(cr, x_right - ext.width, y);
-    cairo_show_text(cr, text);
-}
 
 /* A meter. frac < 0 means "this back end can't report the value" — draw the
  * trough only, so an unknown reads as unknown rather than as zero. */
@@ -1491,6 +1662,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->power_ui.dim_tree->node, true);
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -1501,6 +1673,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

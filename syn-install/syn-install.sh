@@ -419,8 +419,11 @@ case "$DE_CHOICE" in
     4) echo "  No GUI will be installed." ;;
     *)
         echo "  Installing greetd (login screen) + desktop extras..."
+        # wtype is not optional decoration: it is how waybar's start menu asks
+        # synui to open the control panel (virtual-keyboard-v1 is the only IPC
+        # into the compositor). Without it that menu entry silently does nothing.
         arch-chroot /mnt pacman -S --noconfirm \
-            greetd greetd-tuigreet waybar swaybg python \
+            greetd greetd-tuigreet waybar swaybg python wtype \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
         success "SynapseUI selected (included)"
         ;;
@@ -852,6 +855,7 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
         "menu": "on-click",
         "menu-file": "/home/$NEW_USER/.config/waybar/synapse-menu.xml",
         "menu-actions": {
+            "control": "wtype -M logo -k c -m logo",
             "terminal": "foot",
             "aishell": "foot synsh",
             "status": "foot --hold syn status",
@@ -1043,6 +1047,12 @@ APP_DIRS = [
 FIELD_CODE_RE = re.compile(r"%[fFuUdDnNickvm]")
 
 STATIC_ITEMS = [
+    # The control panel is synui's, not a program we can exec: the compositor
+    # draws it. wtype speaks virtual-keyboard-v1, which synui wires to the same
+    # path a physical keyboard takes, so pressing its bind is how a client asks
+    # the compositor for a panel — there is no other IPC into synui.
+    # Keep this in step with the `control` bind in synui's config.c.
+    ("control", "Control Panel", "wtype -M logo -k c -m logo"),
     ("terminal", "Terminal", "foot"),
     ("aishell", "AI Shell (synsh)", "foot synsh"),
     ("status", "System Status", "foot --hold syn status"),

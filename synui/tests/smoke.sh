@@ -18,7 +18,9 @@
 #      own workspace (per-output workspaces) and also shuts down cleanly;
 #   9. spawned children inherit neither synui's blocked signal mask nor its
 #      SIG_IGN dispositions — both survive exec, and leaking them makes every
-#      app synui launches immune to SIGTERM.
+#      app synui launches immune to SIGTERM;
+#  10. the control panel opens over virtual-keyboard-v1 (wtype), which is the
+#      path waybar's start menu uses to reach the compositor.
 #
 # Usage: smoke.sh /path/to/synui
 # Run by `meson test -C <builddir>`; needs wayland-info (wayland-utils).
@@ -245,6 +247,56 @@ while kill -0 "$SYNUI_PID" 2>/dev/null; do
 done
 wait "$SYNUI_PID"
 echo "ok 9 - spawned children get a clean signal slate and die on SIGTERM"
+
+# ── 10. Control panel over the virtual-keyboard bridge ─────
+# waybar's start menu cannot call synui directly — there is no IPC into the
+# compositor. Its "Control Panel" entry runs `wtype -M logo -k c -m logo`, which
+# reaches synui through virtual-keyboard-v1 and lands on the ordinary keybind
+# path. That makes wtype load-bearing for a menu entry, and a silent failure
+# (wtype missing, the bind renamed, the protocol unadvertised) would look like
+# a menu item that just does nothing. So drive the real thing.
+unset WAYLAND_DISPLAY
+LOG="$TMP/synui4.log"
+: > "$TMP/synuirc"
+"$SYNUI" >"$LOG" 2>&1 &
+SYNUI_PID=$!
+
+SOCK=
+i=0
+while [ $i -lt 100 ]; do
+    SOCK=$(sed -n 's/.*running on WAYLAND_DISPLAY=\(wayland-[0-9]*\).*/\1/p' "$LOG" | head -1)
+    [ -n "$SOCK" ] && break
+    kill -0 "$SYNUI_PID" 2>/dev/null || fail "control-panel test: synui died during startup"
+    sleep 0.1
+    i=$((i + 1))
+done
+[ -n "$SOCK" ] || fail "control-panel test: no Wayland socket within 10s"
+export WAYLAND_DISPLAY="$SOCK"
+
+if command -v wtype >/dev/null; then
+    wtype -M logo -k c -m logo || fail "wtype could not reach the compositor"
+    i=0
+    while ! grep -q "control panel shown" "$LOG"; do
+        [ $i -ge 30 ] && fail "Super+C over virtual-keyboard-v1 did not open the control panel"
+        kill -0 "$SYNUI_PID" 2>/dev/null || fail "synui died handling Super+C"
+        sleep 0.1
+        i=$((i + 1))
+    done
+    echo "ok 10 - waybar's menu path (wtype Super+C) opens the control panel"
+else
+    echo "ok 10 # SKIP wtype not installed"
+fi
+
+kill -TERM "$SYNUI_PID"
+i=0
+while kill -0 "$SYNUI_PID" 2>/dev/null; do
+    [ $i -ge 100 ] && fail "control-panel instance did not exit within 10s"
+    sleep 0.1
+    i=$((i + 1))
+done
+wait "$SYNUI_PID"
+rc=$?
+[ "$rc" -eq 0 ] || fail "control-panel instance exited $rc (expected 0)"
 
 SYNUI_PID=
 cleanup

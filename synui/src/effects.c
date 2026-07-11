@@ -80,10 +80,12 @@ static const char *vert_src =
 
 /* %s is the sampler prelude; %s2 the sampler type. Curvature warps UVs,
  * out-of-bounds goes to black (the CRT bezel), aberration splits R/B
- * around the center, scanlines darken alternate output rows. */
+ * around the center, scanlines modulate physical output rows. */
 static const char *frag_fmt =
     "%s"
     "precision highp float;\n"
+    "#define SCAN_PITCH 3.0\n"
+    "#define SCAN_DEPTH 0.55\n"
     "varying vec2 v_uv;\n"
     "uniform %s u_tex;\n"
     "uniform float u_scan;\n"
@@ -117,8 +119,15 @@ static const char *frag_fmt =
     "    float r = texture2D(u_tex, uv - d).r;\n"
     "    vec4  g = texture2D(u_tex, uv);\n"
     "    float b = texture2D(u_tex, uv + d).b;\n"
-    "    float scan = 1.0 - u_scan * 0.25 *\n"
-    "                 mod(floor(uv.y * u_size.y), 2.0);\n"
+    "    /* Scanlines run on gl_FragCoord, i.e. physical output rows: keyed\n"
+    "     * off the curved uv instead they beat against the pixel grid and\n"
+    "     * alias into a haze. SCAN_PITCH px per line (a 1px period is past\n"
+    "     * what the eye resolves on a HiDPI panel - it just reads as dim),\n"
+    "     * and the gain divisor holds mean brightness so the effect adds\n"
+    "     * contrast rather than simply darkening the screen. */\n"
+    "    float beam = 0.5 + 0.5 * cos(gl_FragCoord.y * 6.2831853 / SCAN_PITCH);\n"
+    "    float k    = u_scan * SCAN_DEPTH;\n"
+    "    float scan = (1.0 - k * (1.0 - beam)) / (1.0 - 0.5 * k);\n"
     "    vec2 vg = uv * (1.0 - uv);\n"
     "    float vig = 1.0 - u_curv * 0.35 *\n"
     "                (1.0 - clamp(vg.x * vg.y * 18.0, 0.0, 1.0));\n"

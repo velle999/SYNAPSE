@@ -115,6 +115,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 
 | Key | Action |
 |---|---|
+| `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) |
+| `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
 | `Super`+`Return` | Open a terminal |
 | `Super`+`Space` | Command bar |
 | `Super`+`Backspace` | Ask the AI |
