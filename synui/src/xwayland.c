@@ -18,6 +18,8 @@
  */
 
 #define _GNU_SOURCE
+#include <pthread.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -429,19 +431,19 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
  * wlroots exposes no API for this and keeps its xwm xcb connection private,
  * so we open a short-lived xcb connection of our own and set it directly.
  * Called on Xwayland ready, on hotplug, and whenever the display panel moves
- * the flag. */
-void xwayland_apply_primary(syn_server_t *s)
+ * the flag.
+ *
+ * This talks to X on a worker thread, and never before Xwayland is ready.
+ * Both rules exist because breaking either one deadlocks the compositor:
+ * Xwayland is one of our own Wayland clients, so any X round-trip made from
+ * the main thread blocks the event loop that Xwayland itself needs serviced
+ * to answer us. It hangs on both ends, with a black screen and dead input —
+ * no crash, no core, nothing in the log. See the ready-flag note below. */
+static void primary_push(const char *display, const char *want)
 {
-    if (!s->xwayland || !s->xwayland->display_name) return;
-
-    syn_output_t *primary = server_primary_output(s);
-    if (!primary) return;
-
-    const char *want = primary->wlr_output->name;
-
-    xcb_connection_t *xcb = xcb_connect(s->xwayland->display_name, NULL);
+    xcb_connection_t *xcb = xcb_connect(display, NULL);
     if (!xcb || xcb_connection_has_error(xcb)) {
-        /* Lazy Xwayland may not be up yet — the ready handler will retry. */
+        /* Xwayland exited, or never came up — nothing to mark. */
         if (xcb) xcb_disconnect(xcb);
         return;
     }
@@ -526,6 +528,76 @@ void xwayland_apply_primary(syn_server_t *s)
     xcb_disconnect(xcb);
 }
 
+/* Hotplug and the display panel can queue several of these in a row, so the
+ * pushes are serialised and the newest wins: an older worker that loses the
+ * race for the lock must not land its stale primary on top of a newer one. */
+static pthread_mutex_t primary_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t primary_gen;    /* requests handed out */
+static uint64_t primary_done;   /* newest request already pushed to X */
+
+struct primary_job {
+    char    *display;   /* owned */
+    char    *want;      /* owned; wl_output name, e.g. "DP-3" */
+    uint64_t gen;
+};
+
+static void *primary_worker(void *data)
+{
+    struct primary_job *job = data;
+
+    pthread_mutex_lock(&primary_lock);
+    if (job->gen > primary_done) {   /* else: overtaken while we queued */
+        primary_done = job->gen;
+        primary_push(job->display, job->want);
+    }
+    pthread_mutex_unlock(&primary_lock);
+
+    free(job->display);
+    free(job->want);
+    free(job);
+    return NULL;
+}
+
+void xwayland_apply_primary(syn_server_t *s)
+{
+    /* Not merely "not up yet": with lazy Xwayland, display_name is set as
+     * soon as the socket is *listening*, so this is reachable long before
+     * the X server exists — and connecting is what starts it. Do that from
+     * the output handler at startup and the compositor wedges: we block on
+     * the X handshake, Xwayland blocks on the Wayland handshake we are no
+     * longer dispatching. Wait for ready; it fires an apply of its own. */
+    if (!s->xwayland_up || !s->xwayland->display_name) return;
+
+    syn_output_t *primary = server_primary_output(s);
+    if (!primary) return;
+
+    struct primary_job *job = calloc(1, sizeof *job);
+    if (!job) return;
+
+    job->display = strdup(s->xwayland->display_name);
+    job->want    = strdup(primary->wlr_output->name);
+    if (!job->display || !job->want) goto fail;
+
+    /* Snapshot above, thread below: the worker touches no server state, so it
+     * needs no lock on ours and cannot be tripped by a hotplug mid-flight. */
+    pthread_mutex_lock(&primary_lock);
+    job->gen = ++primary_gen;
+    pthread_mutex_unlock(&primary_lock);
+
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, primary_worker, job) != 0) {
+        wlr_log(WLR_ERROR, "synui: can't spawn X11 primary-output worker");
+        goto fail;
+    }
+    pthread_detach(tid);
+    return;
+
+fail:
+    free(job->display);
+    free(job->want);
+    free(job);
+}
+
 /* ── Server ready: publish DISPLAY, set the X cursor ─────── */
 static void xwayland_ready(struct wl_listener *listener, void *data)
 {
@@ -535,6 +607,9 @@ static void xwayland_ready(struct wl_listener *listener, void *data)
     wlr_log(WLR_INFO, "synui: Xwayland ready on DISPLAY=%s",
             s->xwayland->display_name);
 
+    /* Only now is it safe to speak X: an earlier connect would have *started*
+     * lazy Xwayland from inside our own event loop and deadlocked us. */
+    s->xwayland_up = 1;
     xwayland_apply_primary(s);
 
     struct wlr_xcursor *xc =

@@ -952,6 +952,9 @@ struct syn_server {
     struct wl_listener new_layer_surface;
     struct wl_listener new_xwayland_surface;
     struct wl_listener xwayland_ready;
+    int xwayland_up;    /* the X server is actually running (ready has fired),
+                         * not merely socket-listening — see the lazy-start
+                         * deadlock note in xwayland_apply_primary() */
     struct wl_listener new_decoration;
     struct wl_listener new_idle_inhibitor;
     struct wl_listener output_mgr_apply;
@@ -1041,8 +1044,10 @@ void        view_set_minimized(syn_view_t *v, int minimized);
 void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable */
 
 /* Push the syn_output_t marked ->primary to the X server as the RandR primary
- * output. Safe to call any time: a no-op until Xwayland is ready, and again
- * whenever the primary changes (display panel) or a monitor is hotplugged. */
+ * output. Safe to call from the event loop: a no-op until Xwayland is ready,
+ * and the X round-trips themselves run on a worker thread — doing them inline
+ * deadlocks the compositor against Xwayland. Call whenever the primary changes
+ * (display panel) or a monitor is hotplugged. */
 void xwayland_apply_primary(syn_server_t *s);
 
 /* ── output_mgmt.c ───────────────────────────────────────── */
