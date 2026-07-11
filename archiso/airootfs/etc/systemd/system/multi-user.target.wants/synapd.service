@@ -1,1 +1,1 @@
-/etc/systemd/system/synapd.service
+/usr/lib/systemd/system/synapd.service

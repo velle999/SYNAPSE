@@ -1,1 +1,1 @@
-/etc/systemd/system/synnet.service
+/usr/lib/systemd/system/synnet.service

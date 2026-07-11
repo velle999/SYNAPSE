@@ -522,12 +522,18 @@ if [ -f /usr/share/synapseos/logo.txt ]; then
 fi
 
 # ── Copy service files from live ISO ─────────────────────
+# Only units no package owns. synapd/synnet/synguard/synui/synui-foot are all
+# shipped by their packages at /usr/lib/systemd/system, and `systemctl enable`
+# below resolves them from there — so copying the ISO's /etc copies on top was
+# not just redundant, it was harmful: /etc/systemd/system *overrides*
+# /usr/lib/systemd/system, so every install permanently shadowed the packaged
+# units with whatever stale copy the ISO happened to carry. That is how synapd
+# and synnet ran with none of their hardening (NoNewPrivileges, ProtectSystem,
+# CapabilityBoundingSet) for as long as they did: the hardening was added to the
+# packaged units, and the /etc copies silently won.
+#
+# Anything genuinely unpackaged still has to be copied.
 for f in \
-    /etc/systemd/system/synapd.service \
-    /etc/systemd/system/synnet.service \
-    /etc/systemd/system/synguard.service \
-    /etc/systemd/system/synui.service \
-    /etc/systemd/system/synui-foot.service \
     /etc/systemd/system/synapse-kmod-build.service \
     /etc/synguard/rules.d/; do
     [ -e "$f" ] && cp -r "$f" "/mnt$f" 2>/dev/null || true
@@ -540,15 +546,9 @@ if [ -f /usr/bin/synapse-kmod-build ]; then
         && chmod 755 /mnt/usr/bin/synapse-kmod-build
 fi
 
-# ── Fix synguard: don't hard-require synapd ──────────────
-# synguard handles missing synapd gracefully in code, but Requires=
-# in the unit file kills it before it gets the chance.
-if [ -f /mnt/etc/systemd/system/synguard.service ]; then
-    sed -i 's/^Requires=synapd.service/Wants=synapd.service/' \
-        /mnt/etc/systemd/system/synguard.service
-    sed -i '/^PartOf=synapd.service/d' \
-        /mnt/etc/systemd/system/synguard.service
-fi
+# The synguard Requires=synapd → Wants= sed that used to live here is gone: it
+# patched the /etc copy we no longer make, and synguard's packaged unit (like
+# synnet's) already says Wants=.
 
 # ── Create user and groups ────────────────────────────────
 # Everything in this section aborts the install on failure. A system that

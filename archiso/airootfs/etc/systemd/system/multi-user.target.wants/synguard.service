@@ -1,1 +1,1 @@
-/etc/systemd/system/synguard.service
+/usr/lib/systemd/system/synguard.service
