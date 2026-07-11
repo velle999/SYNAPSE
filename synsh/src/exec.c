@@ -147,6 +147,15 @@ static int run_cmd(synsh_state_t *s,
         signal(SIGINT, SIG_DFL);
         signal(SIGCHLD, SIG_DFL);
 
+        /* A built-in used as a pipeline stage (`syn status | grep foo`) runs
+         * here, in the child, with the redirections above already in place.
+         * Its side effects don't escape — same as a real shell, where a
+         * built-in in a pipeline runs in a subshell. A built-in on its own
+         * never reaches this path; run_segment() runs it in-process so that
+         * `cd` can actually change synsh's directory. */
+        if (synsh_is_builtin(filtered[0]))
+            exit(synsh_builtin(s, fargc, filtered));
+
         execvp(filtered[0], filtered);
         /* execvp failed */
         fprintf(stderr, "synsh: %s: %s\n", filtered[0], strerror(errno));
@@ -168,26 +177,111 @@ static int run_cmd(synsh_state_t *s,
 
 /* ── Alias expansion ──────────────────────────────────────── */
 /*
- * Expands the first word of 'line' if it matches an alias.
- * Writes expanded result into 'out' (max out_len bytes).
- * Returns 1 if expanded, 0 if not.
+ * Aliases were parsed out of synshrc into s->alias_* and then never used —
+ * the expander was written but never called, so every alias the shipped
+ * synshrc defines was dead ('ll' was "not found", and '..' tried to *execute*
+ * the directory).
+ *
+ * Expansion happens at each command position — the start of the segment and
+ * just after an unquoted '|' — like a real shell, so `foo | ll` expands too.
+ * A quoted first word is left alone, and an alias is never expanded twice in
+ * the same position, so the usual `alias ls='ls --color'` self-reference
+ * terminates instead of looping.
  */
-static int alias_expand(synsh_state_t *s, const char *line, char *out, size_t out_len) {
-    if (!s->alias_count) return 0;
+static int alias_lookup(synsh_state_t *s, const char *name) {
+    for (int i = 0; i < s->alias_count; i++)
+        if (strcmp(s->alias_names[i], name) == 0) return i;
+    return -1;
+}
 
-    /* Find end of first word */
+/* Expand the command word at the head of 'cmd' (in place, bounded). */
+static void alias_expand_word(synsh_state_t *s, char *cmd, size_t cap) {
+    const char *seen[8];
+    int nseen = 0;
+
+    for (int iter = 0; iter < 8; iter++) {
+        /* First word of the current expansion. */
+        char word[128];
+        size_t wl = 0;
+        const char *p = cmd;
+        while (*p == ' ' || *p == '\t') p++;
+        while (*p && *p != ' ' && *p != '\t' && wl < sizeof(word) - 1)
+            word[wl++] = *p++;
+        word[wl] = '\0';
+        if (!wl) return;
+
+        int idx = alias_lookup(s, word);
+        if (idx < 0) return;
+
+        for (int k = 0; k < nseen; k++)
+            if (strcmp(seen[k], word) == 0) return;  /* already used here */
+        seen[nseen++] = s->alias_names[idx];
+
+        /* value + whatever followed the word */
+        char next[SYNSH_MAX_LINE];
+        snprintf(next, sizeof(next), "%s%s", s->alias_values[idx], p);
+        snprintf(cmd, cap, "%s", next);
+
+        if (nseen >= (int)(sizeof(seen) / sizeof(seen[0]))) return;
+    }
+}
+
+/* Returns a malloc'd copy of 'line' with aliases expanded, or NULL. */
+static char *alias_expand_line(synsh_state_t *s, const char *line) {
+    if (!s->alias_count) return NULL;
+
+    char *out = malloc(SYNSH_MAX_LINE);
+    if (!out) return NULL;
+    size_t olen = 0;
+
     const char *p = line;
-    while (*p && *p != ' ' && *p != '\t') p++;
-    size_t wlen = (size_t)(p - line);
+    int at_cmd = 1;
 
-    for (int i = 0; i < s->alias_count; i++) {
-        if (strlen(s->alias_names[i]) == wlen &&
-            strncmp(s->alias_names[i], line, wlen) == 0) {
-            snprintf(out, out_len, "%s%s", s->alias_values[i], p);
-            return 1;
+    while (*p && olen < SYNSH_MAX_LINE - 1) {
+        if (at_cmd) {
+            while ((*p == ' ' || *p == '\t') && olen < SYNSH_MAX_LINE - 1)
+                out[olen++] = *p++;
+
+            /* A quoted command word is never an alias. */
+            if (*p && *p != '\'' && *p != '"' && *p != '|') {
+                char word[128];
+                size_t wl = 0;
+                const char *w = p;
+                while (*w && *w != ' ' && *w != '\t' && *w != '|' &&
+                       wl < sizeof(word) - 1)
+                    word[wl++] = *w++;
+                word[wl] = '\0';
+
+                if (wl && alias_lookup(s, word) >= 0) {
+                    char cmd[SYNSH_MAX_LINE];
+                    snprintf(cmd, sizeof(cmd), "%s", word);
+                    alias_expand_word(s, cmd, sizeof(cmd));
+                    for (const char *e = cmd; *e && olen < SYNSH_MAX_LINE - 1; e++)
+                        out[olen++] = *e;
+                    p = w;  /* the original word is consumed */
+                }
+            }
+            at_cmd = 0;
+            continue;
+        }
+
+        /* Copy the rest of this command verbatim, minding quotes; an
+         * unquoted '|' opens a new command position. */
+        if (*p == '\'' || *p == '"') {
+            char q = *p;
+            out[olen++] = *p++;
+            while (*p && *p != q && olen < SYNSH_MAX_LINE - 1) out[olen++] = *p++;
+            if (*p && olen < SYNSH_MAX_LINE - 1) out[olen++] = *p++;
+        } else if (*p == '|') {
+            out[olen++] = *p++;
+            at_cmd = 1;
+        } else {
+            out[olen++] = *p++;
         }
     }
-    return 0;
+
+    out[olen] = '\0';
+    return out;
 }
 
 int execute_pipeline(synsh_state_t *s, const char *line) {
@@ -263,21 +357,171 @@ int execute_pipeline(synsh_state_t *s, const char *line) {
  */
 typedef enum { SEP_END, SEP_SEQ, SEP_AND, SEP_OR } sep_t;
 
+/* Does this segment contain an unquoted '|'? */
+static int has_pipe(const char *seg) {
+    int in_q = 0;
+    char q = 0;
+    for (const char *p = seg; *p; p++) {
+        if (!in_q && (*p == '\'' || *p == '"')) { in_q = 1; q = *p; }
+        else if (in_q && *p == q)               { in_q = 0; }
+        else if (!in_q && *p == '|')            return 1;
+    }
+    return 0;
+}
+
+/*
+ * Run a built-in in-process, applying any redirections to synsh's own fds.
+ * Built-ins don't fork, so there is no child to dup2 — we save the real fds,
+ * swap them, run, then put them back. Without this, `cd x > log` passed ">"
+ * and "log" to the built-in as plain arguments.
+ */
+/*
+ * Pull the redirections out of a command line at the *string* level, leaving
+ * the command itself for execute_builtin_line() to tokenize. Doing it this way
+ * (rather than filtering an argv) matters: the built-in arg splitter strips
+ * quotes mid-token, which is what makes `alias ll='ls -la'` parse — exec.c's
+ * tokenize() only honours a quote at the start of a word and would mangle it.
+ */
+static int split_redirs(const char *line,
+                        char *clean, size_t clean_cap,
+                        char *in_f,  size_t in_cap,
+                        char *out_f, size_t out_cap, int *append)
+{
+    size_t cl = 0;
+    int in_q = 0;
+    char q = 0;
+
+    *append = 0;
+    in_f[0] = out_f[0] = '\0';
+
+    for (const char *p = line; *p; ) {
+        if (!in_q && (*p == '\'' || *p == '"')) {
+            in_q = 1; q = *p;
+            if (cl < clean_cap - 1) clean[cl++] = *p;
+            p++;
+            continue;
+        }
+        if (in_q && *p == q) {
+            in_q = 0;
+            if (cl < clean_cap - 1) clean[cl++] = *p;
+            p++;
+            continue;
+        }
+        if (!in_q && (*p == '>' || *p == '<')) {
+            int is_out = (*p == '>');
+            int app = 0;
+            p++;
+            if (is_out && *p == '>') { app = 1; p++; }
+            while (*p == ' ' || *p == '\t') p++;
+
+            char fbuf[512];
+            size_t fl = 0;
+            if (*p == '\'' || *p == '"') {
+                char fq = *p++;
+                while (*p && *p != fq && fl < sizeof(fbuf) - 1) fbuf[fl++] = *p++;
+                if (*p) p++;
+            } else {
+                while (*p && *p != ' ' && *p != '\t' && fl < sizeof(fbuf) - 1)
+                    fbuf[fl++] = *p++;
+            }
+            fbuf[fl] = '\0';
+            if (!fl) return -1;  /* redirection with no target */
+
+            if (is_out) { snprintf(out_f, out_cap, "%s", fbuf); *append = app; }
+            else        { snprintf(in_f,  in_cap,  "%s", fbuf); }
+            continue;
+        }
+        if (cl < clean_cap - 1) clean[cl++] = *p;
+        p++;
+    }
+
+    clean[cl] = '\0';
+    return 0;
+}
+
+static int run_builtin_redirected(synsh_state_t *s, const char *line) {
+    char clean[SYNSH_MAX_LINE];
+    char in_f[512], out_f[512];
+    int append = 0;
+
+    if (split_redirs(line, clean, sizeof(clean),
+                     in_f, sizeof(in_f), out_f, sizeof(out_f), &append) < 0) {
+        fprintf(stderr, "synsh: syntax error near redirection\n");
+        return 1;
+    }
+
+    /* No redirection: the common case, nothing to save or restore. */
+    if (!*in_f && !*out_f)
+        return execute_builtin_line(s, clean);
+
+    int saved_in = -1, saved_out = -1;
+
+    if (*in_f) {
+        char *path = expand_tilde(in_f, s->home);
+        int fd = open(path, O_RDONLY);
+        free(path);
+        if (fd < 0) {
+            fprintf(stderr, "synsh: %s: %s\n", in_f, strerror(errno));
+            return 1;
+        }
+        saved_in = dup(STDIN_FILENO);
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+    }
+
+    if (*out_f) {
+        char *path = expand_tilde(out_f, s->home);
+        int flags = O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC);
+        int fd = open(path, flags, 0644);
+        free(path);
+        if (fd < 0) {
+            fprintf(stderr, "synsh: %s: %s\n", out_f, strerror(errno));
+            if (saved_in >= 0) { dup2(saved_in, STDIN_FILENO); close(saved_in); }
+            return 1;
+        }
+        saved_out = dup(STDOUT_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+
+    int rc = execute_builtin_line(s, clean);
+
+    /* Flush before restoring, or the built-in's buffered output lands on
+     * whatever fd we restore rather than in the file. */
+    fflush(stdout);
+    if (saved_out >= 0) { dup2(saved_out, STDOUT_FILENO); close(saved_out); }
+    if (saved_in  >= 0) { dup2(saved_in,  STDIN_FILENO);  close(saved_in);  }
+
+    return rc;
+}
+
 /* One segment: a built-in, or a pipeline. */
 static int run_segment(synsh_state_t *s, char *seg) {
-    /* First word decides — built-ins never appear on $PATH. */
+    /* Aliases first — an alias may expand *to* a built-in (`..` → `cd ..`),
+     * so this has to happen before we decide what this segment is. */
+    char *expanded = alias_expand_line(s, seg);
+    char *cmd = expanded ? expanded : seg;
+
+    /* First word decides — built-ins never appear on $PATH. A built-in that
+     * is part of a pipeline goes down the pipeline path instead, where it
+     * runs in the forked child (see run_cmd). */
     char first[64];
     size_t i = 0;
-    const char *r = seg;
+    const char *r = cmd;
     while (*r == ' ' || *r == '\t') r++;
-    while (*r && *r != ' ' && *r != '\t' && i < sizeof(first) - 1)
+    while (*r && *r != ' ' && *r != '\t' && *r != '<' && *r != '>' &&
+           i < sizeof(first) - 1)
         first[i++] = *r++;
     first[i] = '\0';
 
-    if (synsh_is_builtin(first))
-        return execute_builtin_line(s, seg);
+    int rc;
+    if (synsh_is_builtin(first) && !has_pipe(cmd))
+        rc = run_builtin_redirected(s, cmd);
+    else
+        rc = execute_pipeline(s, cmd);
 
-    return execute_pipeline(s, seg);
+    free(expanded);
+    return rc;
 }
 
 int execute_command_line(synsh_state_t *s, const char *line) {
