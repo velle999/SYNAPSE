@@ -293,7 +293,7 @@ pacstrap /mnt \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
-    rtkit \
+    rtkit polkit-gnome \
     mkinitcpio dkms \
     2>&1 || die "pacstrap failed — check network connection"
 
@@ -755,6 +755,11 @@ autostart = swaybg -c '#0b0b14'
 # generator failure still leaves waybar starting with the prior menu.
 autostart = python3 $HOME/.config/waybar/synapse-menu-gen.py; exec waybar
 autostart = foot synsh
+# Any GUI app that needs root goes through polkit, and pkexec refuses to
+# prompt on a terminal it doesn't have — without an authentication agent
+# registered for the session it fails instantly and, launched from a menu,
+# silently (gparted, for one). This is the agent that shows the dialog.
+autostart = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
 border_width    = 2
 gap             = 8
 master_factor   = 0.60
