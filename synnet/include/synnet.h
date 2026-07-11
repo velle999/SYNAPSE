@@ -18,6 +18,14 @@
 #define SYNNET_NFT_SET     "blocked"
 #define SYNNET_NFT_CHAIN   "output"
 
+/* Base input firewall (synnet_nft_ensure_firewall). A default-drop input chain
+ * that trusts loopback, established/related replies, ICMP, and private-range
+ * (RFC1918 / IPv6 ULA + link-local) sources — so LAN services stay reachable
+ * and dynamic-port apps (Plex, Steam) are not a maintenance burden — while the
+ * box answers nothing unsolicited from a public network it roams onto. Lives in
+ * the same `inet synnet` table as the egress set, in its own base chain. */
+#define SYNNET_NFT_INPUT   "input"
+
 typedef enum {
     SYNNET_ACTION_ALLOW  = 0,
     SYNNET_ACTION_BLOCK  = 1,
@@ -60,4 +68,5 @@ int  synnet_query_ai(synnet_state_t *s, synnet_event_t *ev, char *out, size_t ou
 
 /* nftables enforcement (monitor.c) */
 int  synnet_nft_ensure(void);                 /* idempotent table/set/chain/rule */
+int  synnet_nft_ensure_firewall(void);        /* base input firewall (atomic, idempotent) */
 int  synnet_status(void);                      /* print nft set + ruleset, for --status */

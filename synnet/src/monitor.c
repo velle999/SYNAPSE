@@ -160,11 +160,17 @@ static int is_valid_ipv4(const char *ip) {
 }
 
 static int run_nft(const char *fmt, ...) {
-    char cmd[512];
+    char cmd[2048];   /* the input-firewall script (ensure_firewall) is ~1KB */
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(cmd, sizeof(cmd), fmt, ap);
+    int n = vsnprintf(cmd, sizeof(cmd), fmt, ap);
     va_end(ap);
+    /* Refuse a truncated command rather than run half an nft rule — a clipped
+     * ruleset could silently narrow (or widen) the firewall. */
+    if (n < 0 || (size_t)n >= sizeof(cmd)) {
+        syslog(LOG_ERR, "synnet: nft command too long (%d bytes) — not run", n);
+        return -1;
+    }
     return system(cmd);
 }
 
@@ -183,6 +189,60 @@ int synnet_nft_ensure(void) {
         " 2>/dev/null | grep -q \"@" SYNNET_NFT_SET " drop\" || "
         "nft add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_CHAIN
         " ip daddr @" SYNNET_NFT_SET " drop comment \\\"synnet-ai\\\"'");
+}
+
+/* ── Base input firewall (LAN-trust, default-drop) ───────────
+ *
+ * synnet_nft_ensure() above is egress: it drops connections *out* to flagged
+ * IPs. This is the ingress side — the system firewall the box otherwise did not
+ * have (nftables.service is disabled, nothing else filters input). A default-
+ * drop input chain that accepts:
+ *
+ *   - loopback (covers ::1)
+ *   - established/related — replies to anything we connected out to
+ *   - ICMP / ICMPv6 — ping, path-MTU, and IPv6 ND (without which IPv6 breaks)
+ *   - private-range sources: RFC1918, IPv6 ULA + link-local — so every service
+ *     on the home LAN (Plex, Steam, the python:8077, …) stays reachable without
+ *     enumerating their ports, and their dynamic UDP ports are not a problem
+ *   - DHCP client replies, whose source may not be in a trusted range yet
+ *
+ * Everything else — unsolicited inbound from a public address, e.g. on the
+ * café/hotel Wi-Fi the box can now roam onto — hits the drop policy. ollama's
+ * own guard table still independently fences :11434; the two compose (a packet
+ * traverses both input base chains, and any drop is final).
+ *
+ * Built in ONE `nft -f` load so it is atomic — there is never a window where the
+ * chain exists half-populated — and idempotent across restarts via the
+ * add/delete/re-add-as-base-chain idiom (redefining a chain in place would
+ * otherwise stack duplicate rules every boot).
+ *
+ * Trust boundary caveat: "private ranges" means public Wi-Fi that also hands out
+ * 192.168.x addresses is trusted too. That is the standard pragmatic tradeoff
+ * for this model; per-subnet trust would be stricter but breaks on every roam.
+ */
+int synnet_nft_ensure_firewall(void) {
+    static const char *script =
+        "nft -f - <<'SYNNET_FW'\n"
+        "add table inet " SYNNET_NFT_TABLE "\n"
+        /* add-then-delete so the delete cannot fail on a first run where the
+         * chain does not exist yet; then (re)create it as a fresh base chain. */
+        "add chain inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT "\n"
+        "delete chain inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT "\n"
+        "add chain inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+        " { type filter hook input priority 0 ; policy drop ; }\n"
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " iif \"lo\" accept\n"
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+        " ct state established,related accept\n"
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " meta l4proto icmp accept\n"
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " meta l4proto icmpv6 accept\n"
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+        " ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } accept\n"
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT
+        " ip6 saddr { fc00::/7, fe80::/10 } accept\n"
+        /* DHCP client: offer/ack can arrive before we hold a trusted-range IP. */
+        "add rule inet " SYNNET_NFT_TABLE " " SYNNET_NFT_INPUT " udp dport { 68, 546 } accept\n"
+        "SYNNET_FW\n";
+    return run_nft("%s", script);
 }
 
 /* ── Persistent blocklist (one IPv4 per line) ─────────────── */
@@ -400,6 +460,14 @@ int synnet_init(synnet_state_t *s) {
         if (synnet_nft_ensure() != 0)
             syslog(LOG_WARNING, "synnet: nftables setup incomplete — "
                                 "enforcement may not work (running as root?)");
+        /* Bring up the base input firewall too. Rebuilt from scratch each start
+         * (atomic + idempotent), so it self-heals a manual `nft flush`. */
+        if (synnet_nft_ensure_firewall() != 0)
+            syslog(LOG_WARNING, "synnet: input firewall setup failed — "
+                                "the box is not ingress-filtered");
+        else
+            syslog(LOG_INFO, "synnet: base input firewall active "
+                             "(LAN-trust, default-drop)");
     } else {
         syslog(LOG_INFO, "synnet: dry-run — monitoring only, nftables untouched");
     }
