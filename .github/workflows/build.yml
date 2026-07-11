@@ -116,6 +116,11 @@ jobs:
           done
           echo "all userspace components built"
 
+      - name: Daemon unit tests (synapd wire gate, synguard verdict feed)
+        run: |
+          meson test -C synapd/_ci wire --print-errorlogs
+          meson test -C synguard/_ci secfeed --print-errorlogs
+
       - name: synui headless smoke test
         run: |
           meson test -C synui/_ci smoke --print-errorlogs

@@ -28,6 +28,18 @@ executable('synguard', sources,
   install_dir: get_option('bindir'),
 )
 
+# Verdict-feed slot management (the leak that once wedged the feed at capacity).
+# secfeed.c depends only on the header-only logger + types, so the test links
+# just it — no daemon, no kmod. The socket path is overridden to a temp file so
+# the test needs neither root nor /run.
+secfeed_test = executable('secfeed_test',
+  files('tests/secfeed_test.c', 'src/secfeed.c'),
+  include_directories: inc,
+  dependencies: [dep_threads],
+  c_args: ['-DSYNGUARD_SECFEED_SOCKET="@0@/synguard-secfeed-test.sock"'.format(
+    meson.current_build_dir())])
+test('secfeed', secfeed_test, timeout: 60)
+
 install_data('systemd/synguard.service', install_dir: '/etc/systemd/system')
 
 install_subdir('rules', install_dir: '/etc/synguard', strip_directory: false)
