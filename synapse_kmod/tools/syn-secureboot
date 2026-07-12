@@ -49,6 +49,49 @@ untrusted_module_loaded() {
 
 sig_enforce_live() { cat /sys/module/module/parameters/sig_enforce 2>/dev/null || echo '?'; }
 
+# ── Setup Mode ───────────────────────────────────────────────
+# Setup Mode == "the firmware holds no Platform Key". It is the ONLY window in
+# which keys can be enrolled: with a PK present the firmware rejects any
+# enrollment not signed by that PK, so sbctl cannot talk its way in from Linux.
+# You leave/enter Setup Mode ONLY by deleting the PK inside firmware setup.
+# sbctl's own error here says "Please reboot your machine and reset secure boot
+# keys", which reads like a plain reboot is enough. It is not, and never can be
+# — a reboot does not remove a PK. Hence this preflight.
+setup_mode_enabled() {
+    local f v
+    f=$(ls /sys/firmware/efi/efivars/SetupMode-* 2>/dev/null | head -1) || return 1
+    [ -n "$f" ] || return 1
+    v=$(od -An -t u1 "$f" 2>/dev/null | awk '{print $NF}')
+    [ "$v" = "1" ]
+}
+
+# Best-effort vendor-specific path to the "delete the PK" menu item.
+bios_key_path() {
+    local vendor; vendor=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || echo '')
+    case "$vendor" in
+        *ASUS*|*ASUSTeK*) cat <<'EOF'
+    Del at power-on → F7 (Advanced Mode) → Boot → Secure Boot → Key Management
+      → "Clear Secure Boot Keys"
+        NOT "Restore Factory Keys" — that re-installs the vendor PK and puts
+        you straight back to where you started.
+    While you are in that menu, also set OS Type = "Windows UEFI mode".
+      ASUS's "Other OS" silently disables SB enforcement, so you would enroll
+      keys and still boot unsigned — looking enrolled but protecting nothing.
+EOF
+            ;;
+        *) cat <<'EOF'
+    Enter firmware setup at power-on (Del / F2) and find the Secure Boot key
+    menu — usually under Boot or Security, named "Key Management",
+    "Expert Key Management", or similar. Choose the option that ERASES /
+    CLEARS / DELETES the keys (wording varies: "Clear Secure Boot Keys",
+    "Erase all Secure Boot Settings", "Delete PK"). Deleting the Platform Key
+    is what enters Setup Mode. Do NOT pick "Restore/Install Factory Keys" —
+    that is the opposite operation.
+EOF
+            ;;
+    esac
+}
+
 cmdline_has_token() {
     [ -f "$GRUB_DEFAULT" ] && grep -q -- "$CMDLINE_TOKEN" "$GRUB_DEFAULT"
 }
@@ -119,6 +162,38 @@ cmd_status() {
 
 # ── enroll (interactive, real hardware) ──────────────────────
 cmd_enroll() {
+    # Preflight: report the two firmware states that actually gate enrollment,
+    # before printing steps the machine may not be able to carry out yet.
+    echo "Firmware state:"
+    if sb_enabled; then
+        echo "  Secure Boot: ON  — turn it OFF in BIOS before enrolling (see THE RULE below)."
+    else
+        echo "  Secure Boot: off (correct for enrolling)"
+    fi
+
+    if setup_mode_enabled; then
+        echo "  Setup Mode:  ENABLED — no Platform Key present, you can enroll now."
+        echo
+    else
+        cat <<EOF
+  Setup Mode:  DISABLED — the firmware still holds a Platform Key.
+
+  ==> STOP. \`sbctl enroll-keys\` CANNOT succeed in this state, and REBOOTING
+      WILL NOT CHANGE IT. sbctl will tell you to "reboot your machine and reset
+      secure boot keys" — that message is misleading: the reset it means happens
+      inside firmware setup, not in the OS. Setup Mode simply means the firmware
+      holds no Platform Key, and only the firmware can delete one.
+
+      Clear the Secure Boot keys in BIOS:
+
+$(bios_key_path)
+      Save (F10), boot back into SynapseOS, and re-run \`syn-secureboot enroll\`.
+      This preflight should then read "Setup Mode: ENABLED".
+
+EOF
+        return 1
+    fi
+
     cat <<'EOF'
 Guided Secure Boot enrollment (real hardware, physical presence required).
 
@@ -139,8 +214,8 @@ Guided Secure Boot enrollment (real hardware, physical presence required).
          # -m ALSO enrolls Microsoft's UEFI CA. On this machine that is
          # important: it signs the nvidia GPU option ROM. Without it the GPU
          # may not initialise under SB (no display).
-         # If this errors "not in setup mode", clear the Secure Boot keys in
-         # BIOS (Setup Mode), then re-run.
+         # (If this errors "not in setup mode" you should never have got here —
+         # the preflight above gates it. See the BIOS instructions it prints.)
     4. sbctl sign -s /boot/efi/EFI/SynapseOS/grubx64.efi
        sbctl sign -s /boot/vmlinuz-linux
          # re-sign after each grub/kernel update (a pacman hook can automate it)
