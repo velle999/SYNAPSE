@@ -41,6 +41,11 @@ tepris
 chibi
 foot
 firefox
+# File manager. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
+# /etc/xdg files KDE-outside-Plasma needs to actually work: menus/applications.menu
+# (or every file opens the "Open With" chooser) and kdeglobals (or "Open Terminal"
+# silently does nothing, KIO's fallback being a konsole we don't ship).
+dolphin
 gamescope
 virtualbox-guest-utils
 dkms
