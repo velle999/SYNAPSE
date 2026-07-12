@@ -401,6 +401,15 @@ create_source_tarball() {
     [ -d "${pkg}/hooks" ]     && items+=("${pkg}/hooks/")
     [ -d "${pkg}/tools" ]     && items+=("${pkg}/tools/")
     [ -f "${pkg}/synapse_kmod.install" ] && items+=("${pkg}/synapse_kmod.install")
+    # Top-level docs: PKGBUILDs install them (synapse_kmod ships HARDENING.md to
+    # /usr/share/doc), so omitting them fails package() with "cannot stat".
+    # Globbed rather than named, because this collector is a SECOND COPY of the
+    # one in build-all.sh and the two drift: build-all.sh grew a HARDENING.md
+    # line and this one did not, so the ISO build broke the first time anyone
+    # cut a release after that file was added.
+    for _md in "${pkg}"/*.md; do
+        [ -f "$_md" ] && items+=("$_md")
+    done
 
     if [[ ${#items[@]} -eq 0 ]]; then
         warn "No source files found for ${pkg}"
