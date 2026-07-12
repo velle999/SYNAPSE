@@ -1,0 +1,55 @@
+# /etc/synguard/rules.d/20-input-devices.rules
+# SynapseOS synguard — raw input device (keylogger) monitoring
+#
+# The synapse_kmod openat probe now reports opens of /dev/input/*.
+# Under a Wayland session the ONLY process that legitimately opens the
+# raw evdev nodes is the compositor (synui); libinput inside it reads
+# every device. Anything else opening /dev/input/event* is reading raw
+# keystrokes — the signature of a userland keylogger.
+#
+# Policy: allow the compositor, alert on everyone else. We alert (not
+# deny) because the open is reported pre-check and a false positive must
+# never SIGKILL a legitimate input consumer at login. Flip the catch-all
+# to 'escalate' to have synapd weigh in, or 'deny' once you trust it.
+
+# ── Legitimate input readers ─────────────────────────────────
+rule allow-synui-input {
+    event   open
+    comm    synui
+    path    /dev/input/*
+    verdict allow
+    priority 12
+}
+
+# systemd-logind / seatd hand evdev fds to the session; udev probes them.
+rule allow-logind-input {
+    event   open
+    comm    systemd-logind
+    path    /dev/input/*
+    verdict allow
+    priority 12
+}
+
+rule allow-seatd-input {
+    event   open
+    comm    seatd
+    path    /dev/input/*
+    verdict allow
+    priority 12
+}
+
+rule allow-udev-input {
+    event   open
+    comm    (udev-worker)
+    path    /dev/input/*
+    verdict allow
+    priority 12
+}
+
+# ── Everyone else reading raw input = suspected keylogger ─────
+rule alert-input-device-open {
+    event   open
+    path    /dev/input/*
+    verdict alert
+    priority 13
+}

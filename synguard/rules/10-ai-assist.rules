@@ -51,11 +51,13 @@ rule escalate-shell-from-web {
     priority 42
 }
 
+# escalate, not deny: a shell binary executing out of /tmp warrants AI review,
+# but a static deny is an instant SIGKILL. Promote to 'deny' after baselining.
 rule escalate-sh-unusual {
     event   exec
     comm    sh
     path    /tmp/*
-    verdict deny
+    verdict escalate
     priority 43
 }
 

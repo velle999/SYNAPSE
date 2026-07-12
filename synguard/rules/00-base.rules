@@ -98,17 +98,38 @@ rule escalate-exec-from-tmp {
     priority 35
 }
 
+# Re-executing /proc/self/exe (and /proc/<pid>/exe) is how systemd, runc/
+# podman, Go programs, and every Chromium/Electron sandbox helper legitimately
+# start. Must be allowed before the /proc/* catch below, or enforce mode
+# SIGKILLs Firefox/vesktop/systemd on launch.
+rule allow-reexec-self {
+    event   exec
+    path    /proc/self/exe
+    verdict log
+    priority 33
+}
+
+rule allow-reexec-pid {
+    event   exec
+    path    /proc/*/exe
+    verdict log
+    priority 33
+}
+
+# escalate (→ alert when the AI is advisory), not deny: a static deny here
+# is an instant SIGKILL. Executing directly out of /dev or /proc is unusual
+# enough to review, but promote to 'deny' only after baselining.
 rule escalate-exec-from-dev {
     event   exec
     path    /dev/*
-    verdict deny
+    verdict escalate
     priority 35
 }
 
 rule escalate-exec-from-proc {
     event   exec
     path    /proc/*
-    verdict deny
+    verdict escalate
     priority 35
 }
 

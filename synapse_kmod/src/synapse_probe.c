@@ -147,6 +147,25 @@ static void fill_event(struct synapse_syscall_event *e,
     e->filename[0]  = '\0';
 }
 
+/*
+ * syscall_uregs — recover the real syscall-argument registers.
+ *
+ * On x86_64 with CONFIG_ARCH_HAS_SYSCALL_WRAPPER (the only config where the
+ * __x64_sys_* symbols we kprobe exist), each wrapper is called as
+ * long __x64_sys_foo(const struct pt_regs *regs), so at kprobe entry the
+ * SysV first argument — regs->di — is a *pointer* to the user task's
+ * pt_regs. The actual syscall arguments (di, si, dx, r10, r8, r9) live
+ * there, not in the wrapper's own register frame.
+ *
+ * Reading the wrapper frame directly (the previous behaviour) yielded the
+ * pt_regs pointer itself as "arg0" and an unreadable userspace address for
+ * every filename, so all path/arg-based detection silently never matched.
+ */
+static inline struct pt_regs *syscall_uregs(struct pt_regs *regs)
+{
+    return (struct pt_regs *)regs->di;
+}
+
 /* ── Sensitive path filter ────────────────────────────────── */
 /*
  * We don't hook every open() — only opens of sensitive paths.
@@ -159,6 +178,10 @@ static bool is_sensitive_path(const char *path)
         "/etc/ssh/",   "/root/",      "/proc/kcore",
         "/dev/mem",    "/dev/kmem",   "/boot/",
         "/sys/kernel/", "/proc/sysrq-trigger",
+        /* Raw input devices: a userland keylogger reads keystrokes from
+         * these. Only the compositor (synui) legitimately opens them, so
+         * any other opener is worth a synguard verdict. */
+        "/dev/input/",
         NULL
     };
     for (int i = 0; sensitive[i]; i++)
@@ -180,10 +203,11 @@ static int execve_pre_handler(struct kprobe *p, struct pt_regs *regs)
     fill_event(&e, __NR_execve, SYNAPSE_EVT_EXEC);
 
     /*
-     * regs->di (x86_64) holds the first argument = filename pointer.
-     * We use strncpy_from_user to safely copy from userspace.
+     * execve(filename, argv, envp): the filename pointer is the user
+     * pt_regs' first argument. Recover it via syscall_uregs().
      */
-    const char __user *filename = (const char __user *)regs->di;
+    struct pt_regs *u = syscall_uregs(regs);
+    const char __user *filename = (const char __user *)u->di;
     if (filename)
         strncpy_from_user(e.filename, filename, sizeof(e.filename) - 1);
 
@@ -208,7 +232,9 @@ static int openat_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
 
-    const char __user *filename = (const char __user *)regs->si;
+    /* openat(dfd, filename, flags, mode): filename is the 2nd user arg. */
+    struct pt_regs *u = syscall_uregs(regs);
+    const char __user *filename = (const char __user *)u->si;
     if (!filename) return 0;
 
     char kbuf[128] = {0};
@@ -238,9 +264,10 @@ static int socket_pre_handler(struct kprobe *p, struct pt_regs *regs)
 
     struct synapse_syscall_event e = {0};
     fill_event(&e, __NR_socket, SYNAPSE_EVT_SOCKET);
-    e.args[0] = regs->di;  /* domain */
-    e.args[1] = regs->si;  /* type   */
-    e.args[2] = regs->dx;  /* proto  */
+    struct pt_regs *u = syscall_uregs(regs);
+    e.args[0] = u->di;  /* domain */
+    e.args[1] = u->si;  /* type   */
+    e.args[2] = u->dx;  /* proto  */
 
     ring_push(&e);
     synapse_stat_event();
@@ -257,15 +284,16 @@ static int ptrace_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
 
-    long request = (long)regs->di;
+    struct pt_regs *u = syscall_uregs(regs);
+    long request = (long)u->di;
     /* Only report ATTACH and PEEKTEXT/DATA */
     if (request != PTRACE_ATTACH && request != 0 && request != 1)
         return 0;
 
     struct synapse_syscall_event e = {0};
     fill_event(&e, __NR_ptrace, SYNAPSE_EVT_PTRACE);
-    e.args[0] = regs->di;  /* request */
-    e.args[1] = regs->si;  /* pid */
+    e.args[0] = u->di;  /* request */
+    e.args[1] = u->si;  /* pid */
 
     ring_push(&e);
     synapse_stat_event();
@@ -309,7 +337,8 @@ static int setuid_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
 
-    uid_t target_uid = (uid_t)regs->di;
+    struct pt_regs *u = syscall_uregs(regs);
+    uid_t target_uid = (uid_t)u->di;
     /* Only interesting if escalating to root */
     if (target_uid != 0) return 0;
 
