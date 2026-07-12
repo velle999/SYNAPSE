@@ -200,7 +200,12 @@ static void output_frame(struct wl_listener *listener, void *data)
     /* Drive the auto-hide dock's slide/hover; keep frames coming mid-slide. */
     struct timespec dnow;
     clock_gettime(CLOCK_MONOTONIC, &dnow);
-    if (dock_tick(output, (double)dnow.tv_sec + (double)dnow.tv_nsec / 1e9))
+    double now_s = (double)dnow.tv_sec + (double)dnow.tv_nsec / 1e9;
+    if (dock_tick(output, now_s))
+        wlr_output_schedule_frame(output->wlr_output);
+
+    /* Walk the kitty (cat mode). After the dock, so it stays on top of it. */
+    if (cat_tick(output, now_s))
         wlr_output_schedule_frame(output->wlr_output);
 
     /* Poll for AI responses (non-blocking) and route by request type. */
@@ -1189,6 +1194,11 @@ int synui_run(syn_server_t *s)
     /* Set initial cursor image so it's visible immediately */
     wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
 
+
+    /* Cat mode, if synuirc asked for it. After backend start, so the outputs it
+     * needs to pick a starting spot and a destination already exist. */
+    if (s->config.cat_start)
+        cat_toggle(s);
 
     /* Autostart configured applications */
     for (int i = 0; i < s->config.autostart_count; i++) {

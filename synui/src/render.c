@@ -140,6 +140,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
     { "Network / Wi-Fi",  "Super+I",       "network"   },
     { "Game Mode",        "Super+G",       "game"      },
+    { "Cat Mode",         "Super+Shift+C", "cat"       },
     { "Lock Screen",      "Super+L",       "lock"      },
     { "AI Backend",       "GPU/CPU",       "ai_backend"},
     { "Quit synui",       "Super+Shift+Q", "quit"      },

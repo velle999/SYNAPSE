@@ -481,6 +481,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         taskmgr_toggle(s);
     } else if (strcmp(action, "game") == 0) {
         game_toggle(s);
+    } else if (strcmp(action, "cat") == 0) {
+        cat_toggle(s);
     } else if (strcmp(action, "lock") == 0) {
         /* Same swaylock the idle timer and the power panel's Lock row run;
          * power_lock_cmd already guards against stacking a second instance. */

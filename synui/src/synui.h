@@ -462,6 +462,10 @@ typedef struct {
     syn_wallpaper_mode_t  wallpaper_mode;
     syn_wallpaper_src_t   wallpaper_src;   /* IMAGE (default) or MATRIX */
 
+    /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
+     * Off by default — Super+Shift+C toggles it at runtime. */
+    int   cat_start;
+
     /* macOS-style auto-hide dock (dock.c). Mirrored on every output; never
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
      * it takes zero layout space, shown it floats above window content. */
@@ -769,6 +773,23 @@ struct syn_server {
      * every output's own syn_output::dock tree. */
     syn_dock_entry_t dock_entries[DOCK_MAX_ENTRIES];
     int              dock_entry_count;
+
+    /* cat.c: the wandering kitty (Super+Shift+C). One animal for the whole
+     * layout, so its tree is top-level and its position is in LAYOUT coords —
+     * that is what lets it walk between monitors with no seam handling. */
+    struct {
+        int    enabled;
+        struct wlr_scene_tree   *tree;   /* top-level; raised above everything */
+        struct wlr_scene_buffer *buf;    /* the cairo-drawn kitty */
+        double x, y;                     /* layout coords (roughly its feet) */
+        double tx, ty;                   /* where it is headed */
+        double last_t;                   /* clock of the last simulation step */
+        double state_until;              /* when the current sit/nap ends */
+        double phase;                    /* walk cycle */
+        double blink_until;
+        int    state;                    /* CAT_WALK / CAT_SIT / CAT_SLEEP */
+        int    facing;                   /* +1 right, -1 left */
+    } cat;
 
     /* dock.c: drag-to-reposition state. While active on an output, that
      * output's dock floats under the cursor and stays shown; on release it
@@ -1297,6 +1318,30 @@ void game_init(syn_server_t *s);
 void game_reevaluate(syn_server_t *s);
 /* Super+G — cycle auto → forced-on → forced-off → auto. */
 void game_toggle(syn_server_t *s);
+
+/* ── Cat mode (cat.c) ────────────────────────────────────── */
+
+/* Canvas the kitty is drawn into. Deliberately small — a desk pet, not a
+ * mascot: at 64x48 it reads clearly without burying what is under it. */
+#define CAT_W 64
+#define CAT_H 48
+
+enum { CAT_WALK, CAT_SIT, CAT_SLEEP };
+
+/* Everything cat_paint needs. Kept free of syn_server_t so the drawing can be
+ * rendered to a PNG by tests/cat_render_test.c — "it doesn't look like a cat"
+ * is the one bug here that no assertion will ever catch. */
+typedef struct {
+    int    state;      /* CAT_WALK / CAT_SIT / CAT_SLEEP */
+    double phase;      /* walk cycle */
+    double now;        /* drives tail sway, ear twitch, z's */
+    bool   blinking;
+} cat_pose_t;
+
+void cat_paint(cairo_t *cr, const cat_pose_t *pose);   /* faces right */
+void cat_toggle(syn_server_t *s);
+/* Advance + redraw the kitty; true if this output wants another frame. */
+bool cat_tick(syn_output_t *o, double now);
 /* Shutdown: restart synapd if we suspended it, so synui exiting mid-game
  * doesn't leave the box with no AI. */
 void game_finish(syn_server_t *s);

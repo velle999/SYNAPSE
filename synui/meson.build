@@ -133,6 +133,8 @@ synui_exe = executable('synui',
     'src/wppick.c',
     'src/icons.c',
     'src/dock.c',
+    'src/cat.c',
+    'src/cat_draw.c',
     xdg_shell_h,
     xdg_shell_c,
     layer_shell_h,
@@ -178,3 +180,16 @@ test('smoke',
   find_program('tests/smoke.sh'),
   args : [synui_exe],
   timeout : 120)
+
+# The kitty (cat.c). Links only the drawing half — cat_draw.c is pure cairo, no
+# wlroots — and renders every pose to a contact sheet. As a test it can only
+# assert the mechanical parts (each pose drew something, inside its canvas, and
+# the poses differ); the actual question, "does that read as a cat", is answered
+# by looking at the PNG it writes.
+cat_render_test = executable('cat_render_test',
+  ['tests/cat_render_test.c', 'src/cat_draw.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
+  build_by_default : false)
+test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])

@@ -29,6 +29,9 @@
  * background color. Super+Shift+W (or a SIGHUP) reloads synuirc and
  * repaints from the current wallpaper path/mode.
  *
+ * Cat mode (cat.c):
+ *   cat = on|off                (default off; Super+Shift+C toggles at runtime)
+ *
  * Dock (dock.c):
  *   dock_enabled = on|off       (default on)
  *   dock_height = 64            (px)
@@ -219,6 +222,7 @@ static void seed_default_binds(syn_config_t *cfg)
          * thing, so inside a Wayland session the key reaches the compositor. */
         { "ctrl+alt+delete", "taskmgr" },
         { "super+g",         "game" },
+        { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
     };
@@ -284,6 +288,8 @@ void synui_config_load(syn_config_t *cfg)
     cfg->wallpaper[0]   = '\0';
     cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
     cfg->wallpaper_src  = SYN_WP_SRC_IMAGE;
+
+    cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
 
     cfg->dock_enabled      = 1;
     cfg->dock_height       = 64;
@@ -494,6 +500,8 @@ void synui_config_load(syn_config_t *cfg)
             snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
         else if (strcmp(key, "network_cmd") == 0)
             snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
+        else if (strcmp(key, "cat") == 0)
+            cfg->cat_start = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_edge") == 0) {
