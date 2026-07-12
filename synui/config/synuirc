@@ -64,6 +64,17 @@ workspace_5_intent = media and entertainment
 # xkb_rules    =
 repeat_rate  = 25
 repeat_delay = 600
+# Lock NumLock on as each keyboard is attached, so the numpad types digits
+# from login onwards — including on the lock screen, where swaylock is the
+# only thing on screen. Off leaves it to whoever presses the key.
+numlock      = on
+
+# ── Welcome menu (Super+Escape) ────────────────────────────
+# Whether the menu greets you on login. Super+Escape opens it either way, so
+# turning this off never strands it. The menu's own "Show At Startup" row
+# toggles this and writes ~/.config/synui/welcome.state, which from then on
+# overrides this line — delete that file to hand control back here.
+welcome_at_startup = on
 
 # ── Pointer / touchpad (libinput) ──────────────────────────
 # Unset options leave the device at its default.

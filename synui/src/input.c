@@ -49,10 +49,15 @@
 #include <unistd.h>
 
 #include <linux/input-event-codes.h>
+#include <xkbcommon/xkbcommon-names.h>
 #include <wlr/backend/libinput.h>
 #include <wlr/util/edges.h>
 #include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_keyboard.h>
+/* wlr_keyboard_notify_modifiers() — pushing synthetic modifier state (the
+ * NumLock lock below) is only declared on the backend-facing interface. */
+#include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 
@@ -537,6 +542,14 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                 wlr_damage_ring_add_whole(&o->scene_output->damage_ring);
             wlr_output_schedule_frame(o->wlr_output);
         }
+    } else if (strcmp(action, "welcome_startup") == 0) {
+        /* The menu's own "Show At Startup" checkbox. Toggles in place and
+         * re-renders so the box visibly ticks — unlike the rows that launch
+         * something, there is nothing else to show for it. Persisted, so the
+         * choice survives the restart it is about. */
+        s->config.welcome_at_startup = !s->config.welcome_at_startup;
+        welcome_state_save(&s->config);
+        synui_render_welcome(s);
     } else if (strcmp(action, "menu") == 0) {
         if (s->welcome_ui.shown) synui_welcome_hide(s);
         else                     synui_render_welcome(s);
@@ -817,6 +830,29 @@ static void keyboard_handle_destroy(struct wl_listener *listener, void *data)
     free(kb);
 }
 
+/*
+ * Lock the NumLock modifier on. A keymap that has just been compiled comes
+ * with an xkb state in which nothing is locked, so the numpad emits arrows and
+ * Home/End until someone presses NumLock — every login, and again after every
+ * SIGHUP reload, which recompiles the keymap. It bites hardest on the lock
+ * screen, where swaylock is the only thing on screen and the numpad is how a
+ * digit-heavy password gets typed.
+ *
+ * wlroots derives the keyboard LEDs from this same xkb state, so the NumLock
+ * indicator follows for free on keyboards that have one.
+ */
+static void keyboard_lock_numlock(struct wlr_keyboard *wlr_kb)
+{
+    xkb_mod_index_t idx =
+        xkb_keymap_mod_get_index(wlr_kb->keymap, XKB_MOD_NAME_NUM);
+    if (idx == XKB_MOD_INVALID) return;    /* keymap has no NumLock */
+
+    struct wlr_keyboard_modifiers *m = &wlr_kb->modifiers;
+    wlr_keyboard_notify_modifiers(wlr_kb, m->depressed, m->latched,
+                                  m->locked | ((xkb_mod_mask_t)1 << idx),
+                                  m->group);
+}
+
 /* Compile the synuirc keymap (xkb_layout/variant/…) and apply it plus the
  * repeat settings to one keyboard; empty fields fall through to the
  * XKB_DEFAULT_* environment and the system default. Shared by device attach
@@ -844,6 +880,10 @@ static void keyboard_apply_config(syn_server_t *s, struct wlr_keyboard *wlr_kb)
     xkb_keymap_unref(keymap);
     xkb_context_unref(ctx);
     wlr_keyboard_set_repeat_info(wlr_kb, cfg->repeat_rate, cfg->repeat_delay);
+
+    /* After set_keymap, which is what resets the lock to begin with. */
+    if (cfg->numlock)
+        keyboard_lock_numlock(wlr_kb);
 }
 
 static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
@@ -853,14 +893,16 @@ static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
     kb->server = s;
     kb->wlr_keyboard = wlr_kb;
 
-    keyboard_apply_config(s, wlr_kb);
-
     kb->modifiers.notify = keyboard_handle_modifiers;
     wl_signal_add(&wlr_kb->events.modifiers, &kb->modifiers);
     kb->key.notify = keyboard_handle_key;
     wl_signal_add(&wlr_kb->events.key, &kb->key);
     kb->destroy.notify = keyboard_handle_destroy;
     wl_signal_add(&dev->events.destroy, &kb->destroy);
+
+    /* Listeners first: applying the config locks NumLock, and the modifier
+     * event that carries it has to reach the seat like any other. */
+    keyboard_apply_config(s, wlr_kb);
 
     wlr_seat_set_keyboard(s->seat, wlr_kb);
     wl_list_insert(&s->keyboards, &kb->link);

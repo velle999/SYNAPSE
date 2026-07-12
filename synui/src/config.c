@@ -32,6 +32,16 @@
  * Cat mode (cat.c):
  *   cat = on|off                (default off; Super+Shift+C toggles at runtime)
  *
+ * Welcome menu (render.c) — Super+Escape opens it regardless; this is only
+ * whether it greets you on login. The menu's "Show At Startup" row toggles it
+ * live and writes welcome.state, which then overrides this line:
+ *   welcome_at_startup = on|off (default on)
+ *
+ * Keyboard (input.c):
+ *   numlock = on|off            (default on — lock NumLock at attach so the
+ *                                numpad types digits from login onwards,
+ *                                including on the swaylock screen)
+ *
  * Dock (dock.c):
  *   dock_enabled = on|off       (default on)
  *   dock_height = 64            (px)
@@ -300,6 +310,9 @@ void synui_config_load(syn_config_t *cfg)
 
     cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
 
+    cfg->welcome_at_startup = 1;
+    cfg->numlock            = 1;
+
     cfg->dock_enabled      = 1;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
@@ -368,6 +381,7 @@ void synui_config_load(syn_config_t *cfg)
         wallpaper_state_load(cfg);
         dock_state_load(cfg);
         power_state_load(cfg);
+        welcome_state_load(cfg);
         return;
     }
 
@@ -511,6 +525,10 @@ void synui_config_load(syn_config_t *cfg)
             snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
         else if (strcmp(key, "cat") == 0)
             cfg->cat_start = strcmp(val, "on") == 0;
+        else if (strcmp(key, "welcome_at_startup") == 0)
+            cfg->welcome_at_startup = strcmp(val, "on") == 0;
+        else if (strcmp(key, "numlock") == 0)
+            cfg->numlock = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_edge") == 0) {
@@ -584,4 +602,5 @@ void synui_config_load(syn_config_t *cfg)
     wallpaper_state_load(cfg);
     dock_state_load(cfg);
     power_state_load(cfg);
+    welcome_state_load(cfg);
 }

@@ -14,6 +14,7 @@
  */
 
 #define _GNU_SOURCE
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -143,6 +144,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Cat Mode",         "Super+Shift+C", "cat"       },
     { "Lock Screen",      "Super+L",       "lock"      },
     { "AI Backend",       "GPU/CPU",       "ai_backend"},
+    { "Show At Startup",  "[x]",           "welcome_startup" },
     { "Quit synui",       "Super+Shift+Q", "quit"      },
 };
 const int synui_welcome_menu_len =
@@ -249,10 +251,13 @@ void synui_render_welcome(syn_server_t *s)
         cairo_show_text(cr, synui_welcome_menu[i].label);
 
         /* The AI Backend row shows the live synapd backend instead of a fixed
-         * keybind — it has no default bind, it toggles in place on Enter. */
+         * keybind — it has no default bind, it toggles in place on Enter. So
+         * does Show At Startup, whose hint is its own checkbox. */
         const char *hint = synui_welcome_menu[i].hint;
         if (strcmp(synui_welcome_menu[i].action, "ai_backend") == 0)
             hint = synui_ai_backend_label();
+        else if (strcmp(synui_welcome_menu[i].action, "welcome_startup") == 0)
+            hint = s->config.welcome_at_startup ? "[x]" : "[ ]";
 
         cairo_set_source_rgba(cr, sel ? 0.0 : 0.45, sel ? 0.85 : 0.45,
                               sel ? 0.75 : 0.55, sel ? 1.0 : 1.0);
@@ -291,6 +296,46 @@ void synui_welcome_hide(syn_server_t *s)
     if (!s->welcome_ui.shown) return;
     wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
     s->welcome_ui.shown = 0;
+}
+
+/* Resolve ~/.config/synui/welcome.state; false if $HOME is unset. */
+static bool welcome_state_path(char *buf, size_t n)
+{
+    const char *home = getenv("HOME");
+    if (!home || !*home) return false;
+    snprintf(buf, n, "%s/.config/synui/welcome.state", home);
+    return true;
+}
+
+void welcome_state_load(syn_config_t *cfg)
+{
+    char path[256];
+    if (!welcome_state_path(path, sizeof(path))) return;
+    FILE *f = fopen(path, "r");
+    if (!f) return;   /* never toggled — the synuirc line stands */
+
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (strncmp(line, "show_at_startup=", 16) == 0)
+            cfg->welcome_at_startup = atoi(line + 16) ? 1 : 0;
+    }
+    fclose(f);
+}
+
+void welcome_state_save(syn_config_t *cfg)
+{
+    char path[256];
+    if (!welcome_state_path(path, sizeof(path))) return;
+
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: welcome: cannot write '%s': %s",
+                path, strerror(errno));
+        return;
+    }
+    fprintf(f, "show_at_startup=%d\n", cfg->welcome_at_startup ? 1 : 0);
+    fclose(f);
 }
 
 /* ── Command bar ─────────────────────────────────────────── */
@@ -1679,6 +1724,10 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 
-    /* Render welcome screen (uses fallback 1920x1080 until output connects) */
-    synui_render_welcome(s);
+    /* Render welcome screen (uses fallback 1920x1080 until output connects).
+     * Opted out of via the menu's own "Show At Startup" row: leave the tree
+     * empty and disabled — synui_render_welcome builds its nodes lazily, so
+     * the first Super+Escape still brings up a complete menu. */
+    if (s->config.welcome_at_startup)
+        synui_render_welcome(s);
 }

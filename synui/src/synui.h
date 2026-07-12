@@ -453,6 +453,12 @@ typedef struct {
     char  xkb_options[256];
     int   repeat_rate;       /* key repeats per second */
     int   repeat_delay;      /* ms before repeat starts */
+    /* Lock the NumLock modifier on every keyboard as it is attached (and
+     * again after a SIGHUP, which recompiles the keymap and so resets the
+     * xkb state). A freshly compiled xkb state has NumLock off, which leaves
+     * the numpad emitting arrows until someone presses the key — including on
+     * the lock screen. Default 1. */
+    int   numlock;
 
     /* libinput device options; tri-states are -1 = leave device default. */
     int   tap_to_click;
@@ -470,6 +476,12 @@ typedef struct {
     /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
      * Off by default — Super+Shift+C toggles it at runtime. */
     int   cat_start;
+
+    /* Show the welcome menu on login. The menu's own "Show At Startup" row
+     * toggles this and writes welcome.state, which then overrides the synuirc
+     * line (delete it to hand control back). Super+Escape opens the menu
+     * either way, so turning this off never strands it. Default 1. */
+    int   welcome_at_startup;
 
     /* macOS-style auto-hide dock (dock.c). Mirrored on every output; never
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
@@ -1253,6 +1265,10 @@ void synui_config_load(syn_config_t *cfg);
 void synui_ui_init(syn_server_t *s);
 void synui_render_welcome(syn_server_t *s);
 void synui_welcome_hide(syn_server_t *s);
+/* welcome.state — persists the menu's "Show At Startup" row across restarts.
+ * Loaded from config.c (after synuirc), saved when the row is toggled. */
+void welcome_state_load(syn_config_t *cfg);
+void welcome_state_save(syn_config_t *cfg);
 void synui_render_cmdbar(syn_server_t *s);
 void synui_render_overlay(syn_server_t *s);
 void synui_render_dispcfg(syn_server_t *s);
