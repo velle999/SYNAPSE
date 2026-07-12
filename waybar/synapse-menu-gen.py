@@ -37,6 +37,48 @@ APP_DIRS = [
 
 FIELD_CODE_RE = re.compile(r"%[fFuUdDnNickvm]")
 
+# XDG main categories → the submenu we file them under, in the order we test
+# them. An app usually lists several ("Game;Emulator;"), so precedence matters:
+# the catch-alls (Settings/System/Utility) have to come last or they swallow
+# half the menu.
+CATEGORIES = [
+    ("Game",        "Games"),
+    ("Development", "Development"),
+    ("Graphics",    "Graphics"),
+    ("AudioVideo",  "Multimedia"),
+    ("Audio",       "Multimedia"),
+    ("Video",       "Multimedia"),
+    ("Office",      "Office"),
+    ("Science",     "Science"),
+    ("Education",   "Education"),
+    ("Network",     "Internet"),
+    ("Settings",    "Settings"),
+    ("System",      "System"),
+    ("Utility",     "Accessories"),
+]
+OTHER_CATEGORY = "Other"
+
+# A GTK3 menu renders at its natural height and *ignores* the size the
+# compositor grants it in xdg_popup.configure — it even asks for resize_y in
+# the positioner's constraint adjustment, then discards the answer. So a
+# submenu taller than the monitor is hard-clipped: no scroll arrows, and the
+# entries past the bottom edge are simply unreachable. synui already clamps the
+# popup surface to the output; it cannot make GTK reflow. The only fix is to
+# never build a submenu that doesn't fit.
+#
+# Rows are ~27px, so this bounds a submenu at ~700px — comfortable even on a
+# 768px laptop panel, and it keeps a category scannable besides.
+MAX_ITEMS_PER_SUBMENU = 25
+
+
+def category_of(entry):
+    """The submenu an app belongs in, from its .desktop Categories= list."""
+    cats = {c for c in (entry.get("Categories") or "").split(";") if c}
+    for key, display in CATEGORIES:
+        if key in cats:
+            return display
+    return OTHER_CATEGORY
+
 STATIC_ITEMS = [
     # The control panel is synui's, not a program we can exec: the compositor
     # draws it. wtype speaks virtual-keyboard-v1, which synui wires to the same
@@ -176,10 +218,55 @@ def find_apps():
             if e.getboolean("Terminal", fallback=False):
                 cmd = f"foot -e {cmd}"
 
-            apps.append((name, cmd))
+            apps.append((name, cmd, category_of(e)))
 
     apps.sort(key=lambda a: a[0].lower())
     return apps
+
+
+def group_apps(apps):
+    """[(name, cmd, category)] → [(category, [(name, cmd), …])], menu order.
+
+    Alphabetical by category, except "Other" which sinks to the bottom.
+    """
+    buckets = {}
+    for name, cmd, cat in apps:
+        buckets.setdefault(cat, []).append((name, cmd))
+    order = sorted(c for c in buckets if c != OTHER_CATEGORY)
+    if OTHER_CATEGORY in buckets:
+        order.append(OTHER_CATEGORY)
+    return [(c, buckets[c]) for c in order]
+
+
+def paginate(items):
+    """Split an oversized category into pages that each fit on screen.
+
+    Returns None when the category already fits, else [(label, items), …] with
+    the pages balanced so you never get a page of one. Labels are initial
+    ranges ("A–L"), falling back to item numbers when two pages would otherwise
+    carry the same label (a category dominated by one letter).
+    """
+    n = len(items)
+    if n <= MAX_ITEMS_PER_SUBMENU:
+        return None
+
+    pages = -(-n // MAX_ITEMS_PER_SUBMENU)   # ceil
+    size = -(-n // pages)                    # …then even them out
+    chunks = [items[i:i + size] for i in range(0, n, size)]
+
+    def initial(entry):
+        for ch in entry[0]:
+            if ch.isalnum():
+                return ch.upper()
+        return "#"
+
+    labels = [f"{initial(c[0])}–{initial(c[-1])}" for c in chunks]
+    if len(set(labels)) != len(labels):
+        labels, first = [], 1
+        for c in chunks:
+            labels.append(f"{first}–{first + len(c) - 1}")
+            first += len(c)
+    return list(zip(labels, chunks))
 
 
 def build_menu_xml(apps):
@@ -203,24 +290,57 @@ def build_menu_xml(apps):
         lines.append(f'{pad}  <object class="GtkSeparatorMenuItem" id="{id_}"/>')
         lines.append(f"{pad}</child>")
 
+    # A GtkMenuItem's submenu must be <child type="submenu"><object
+    # class="GtkMenu">, NOT <property name="submenu">. The latter SIGSEGVs
+    # waybar 0.15 inside GtkBuilder's own g_set_error() path.
+    def open_submenu(indent, id_, label):
+        pad = "  " * indent
+        lines.append(f"{pad}<child>")
+        lines.append(f'{pad}  <object class="GtkMenuItem" id="{id_}">')
+        lines.append(f'{pad}    <property name="label">{escape(label)}</property>')
+        lines.append(f'{pad}    <child type="submenu">')
+        lines.append(f'{pad}      <object class="GtkMenu" id="{id_}_menu">')
+
+    def close_submenu(indent):
+        pad = "  " * indent
+        lines.append(f"{pad}      </object>")
+        lines.append(f"{pad}    </child>")
+        lines.append(f"{pad}  </object>")
+        lines.append(f"{pad}</child>")
+
     for id_, label, _ in STATIC_ITEMS:
         item(2, id_, label)
     separator(2, "sep1")
 
+    # Ids are handed out as items are emitted, and the action map is built in
+    # the same pass, so the XML and menu-actions cannot drift out of lockstep
+    # no matter how the categories shake out.
     app_actions = {}
-    lines.append("    <child>")
-    lines.append('      <object class="GtkMenuItem" id="applications">')
-    lines.append('        <property name="label">Applications</property>')
-    lines.append('        <child type="submenu">')
-    lines.append('          <object class="GtkMenu" id="applications_menu">')
-    for i, (name, cmd) in enumerate(apps):
-        aid = f"app_{i}"
+    counter = 0
+
+    def app_item(indent, name, cmd):
+        nonlocal counter
+        aid = f"app_{counter}"
+        counter += 1
         app_actions[aid] = cmd
-        item(6, aid, name)
-    lines.append("          </object>")
-    lines.append("        </child>")
-    lines.append("      </object>")
-    lines.append("    </child>")
+        item(indent, aid, name)
+
+    open_submenu(2, "applications", "Applications")
+    for cat, items in group_apps(apps):
+        cid = "cat_" + re.sub(r"[^a-z0-9]+", "_", cat.lower()).strip("_")
+        open_submenu(6, cid, cat)
+        pages = paginate(items)
+        if pages is None:
+            for name, cmd in items:
+                app_item(10, name, cmd)
+        else:
+            for n, (label, page) in enumerate(pages):
+                open_submenu(10, f"{cid}_{n}", label)
+                for name, cmd in page:
+                    app_item(14, name, cmd)
+                close_submenu(10)
+        close_submenu(6)
+    close_submenu(2)
 
     separator(2, "sep2")
     for id_, label, _ in POWER_ITEMS:
