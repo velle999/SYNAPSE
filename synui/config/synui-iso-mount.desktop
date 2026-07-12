@@ -1,0 +1,28 @@
+# Dolphin (KIO 6) right-click service menu for disc images.
+#
+# The mimetype of a .iso is application/x-iso9660-image; application/x-cd-image
+# is the older name, still emitted by some magic databases, and
+# x-raw-disk-image covers .img. Listing all three avoids a menu that silently
+# never appears.
+#
+# KIO 6 wants the new-style format (Type=Application with Actions=), not the
+# KF5 Type=Service / ServiceTypes=KonqPopupMenu/Plugin one, and reads it from
+# $XDG_DATA_DIRS/kio/servicemenus/. Installed executable: KIO ignores
+# service-menu desktop files without the exec bit.
+[Desktop Entry]
+Type=Application
+Name=Disc Image
+Icon=media-optical
+MimeType=application/x-iso9660-image;application/x-cd-image;application/x-raw-disk-image;
+Actions=synuiIsoMount;synuiIsoUnmount;
+X-KDE-Priority=TopLevel
+
+[Desktop Action synuiIsoMount]
+Name=Mount Image
+Icon=media-mount
+Exec=synui-iso-mount mount %f
+
+[Desktop Action synuiIsoUnmount]
+Name=Unmount Image
+Icon=media-eject
+Exec=synui-iso-mount unmount %f
