@@ -249,6 +249,19 @@ if [[ "$WITH_GPU" == "cuda" ]]; then
     fi
 fi
 
+# Belt and braces to the explicit -D flags below: if the reused build/ dir was
+# configured for a DIFFERENT backend, wipe it. The -D flags alone would fix the
+# configuration, but stale artifacts (a leftover libggml-cuda.so) would still be
+# sitting there for `make install` to pick up.
+if [[ -f build/CMakeCache.txt ]]; then
+    _want_cuda=OFF; [[ "$WITH_GPU" == cuda ]] && _want_cuda=ON
+    _have_cuda=$(sed -n 's/^GGML_CUDA:BOOL=//p' build/CMakeCache.txt | head -1)
+    if [[ -n "$_have_cuda" && "$_have_cuda" != "$_want_cuda" ]]; then
+        log "llama.cpp build/ was configured GGML_CUDA=${_have_cuda}, want ${_want_cuda} — wiping it"
+        rm -rf build
+    fi
+fi
+
 mkdir -p build && cd build
 
 CMAKE_ARGS=(
@@ -259,6 +272,14 @@ CMAKE_ARGS=(
     "-DLLAMA_SERVER=ON"
 )
 
+# EVERY backend toggle is stated explicitly on EVERY path, never left to
+# default. `build/` is reused across runs (--no-clean), so CMakeCache.txt
+# survives — and a cached `GGML_CUDA:BOOL=ON` from an earlier cuda build is
+# STICKY: an option() not passed with -D keeps its cached value. A `cpu` build
+# would then silently reconfigure with the CUDA backend still on, log
+# "CMake configure (GPU: cpu)" while printing "Including CUDA backend", and
+# produce an ISO whose synapd links libcuda.so.1 — so it fails to start on any
+# machine without an NVIDIA driver. Which is most of them.
 case "$WITH_GPU" in
     cuda)
         CMAKE_ARGS+=("-DGGML_CUDA=ON")
@@ -267,12 +288,12 @@ case "$WITH_GPU" in
             CMAKE_ARGS+=("-DCUDAToolkit_ROOT=/opt/cuda" "-DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc")
         fi
         ;;
-    rocm)  CMAKE_ARGS+=("-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
+    rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
     # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
     # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
     # CPU without those extensions — VMs without -cpu host included.
     # The ISO must run on baseline x86-64.
-    cpu)   CMAKE_ARGS+=("-DGGML_NATIVE=OFF") ;;
+    cpu)   CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_NATIVE=OFF") ;;
 esac
 
 log "CMake configure (GPU: ${WITH_GPU})..."
