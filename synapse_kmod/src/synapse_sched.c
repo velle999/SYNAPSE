@@ -167,6 +167,35 @@ static int synapse_set_policy(struct task_struct *task, int policy, int nice)
     return sched_setattr_nocheck(task, &attr);
 }
 
+/*
+ * synapse_sched_pid_protected — processes the AI scheduler must never touch,
+ * even on an explicit /sys/kernel/synapse/ai_hints write.
+ *
+ * Mirrors synguard's userspace sg_is_protected(): PID 0/1, the global init,
+ * kernel threads, and the core SynapseOS/session daemons. Without this a
+ * writer to ai_hints could "HINT pid=1 class=idle" and drop init (or the
+ * compositor / the security monitor itself) to SCHED_IDLE — a trivial local
+ * DoS. The check is enforced in the kernel, below the sysfs permission gate,
+ * so it holds regardless of who managed to open the file.
+ */
+static bool synapse_sched_pid_protected(pid_t pid, struct task_struct *task)
+{
+    static const char *const protected_comm[] = {
+        "systemd", "systemd-logind", "synguard", "synapd",
+        "synui", "synnet", "seatd", "greetd", NULL
+    };
+    int i;
+
+    if (pid <= 1)                 return true;   /* swapper, init/systemd */
+    if (is_global_init(task))     return true;
+    if (task->flags & PF_KTHREAD) return true;   /* kernel thread */
+
+    for (i = 0; protected_comm[i]; i++)
+        if (strncmp(task->comm, protected_comm[i], TASK_COMM_LEN) == 0)
+            return true;
+    return false;
+}
+
 /* ── Apply hint to a task ─────────────────────────────────── */
 void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
 {
@@ -188,6 +217,15 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
     }
     get_task_struct(task);
     rcu_read_unlock();
+
+    if (synapse_sched_pid_protected(pid, task)) {
+        pr_warn_ratelimited(
+            "synapse_kmod: refused AI scheduling hint for protected pid=%d (%s)\n",
+            pid, task->comm);
+        put_task_struct(task);
+        synapse_stat_hint_fail();
+        return;
+    }
 
     spin_lock(&hint_table_lock);
     struct pid_hint *h = hint_find(pid);

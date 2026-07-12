@@ -36,6 +36,9 @@ extern void synapse_daemon_shutdown(void);
 extern void synapse_get_stats(struct synapse_stats *);
 extern bool synapse_events_enabled(void);
 extern bool synapse_sched_enabled(void);
+extern int  synapse_kmod_set_pinned(bool pin);
+extern bool synapse_kmod_is_pinned(void);
+extern u64  synapse_integrity_alert_count(void);
 
 /* ── /sys/kernel/synapse/status ──────────────────────────── */
 /*
@@ -86,8 +89,10 @@ static ssize_t status_store(struct kobject *kobj,
     return (ssize_t)count;
 }
 
+/* 0644, not 0664: status is world-readable (status tools) but only root
+ * (the file owner) may write the heartbeat — no group-write surface. */
 static struct kobj_attribute status_attr =
-    __ATTR(status, 0664, status_show, status_store);
+    __ATTR(status, 0644, status_show, status_store);
 
 /* ── /sys/kernel/synapse/ai_hints ────────────────────────── */
 /*
@@ -155,8 +160,9 @@ static ssize_t ai_hints_store(struct kobject *kobj,
     return (ssize_t)count;
 }
 
+/* 0200, not 0220: write-only, owner (root) only — drop the group-write bit. */
 static struct kobj_attribute ai_hints_attr =
-    __ATTR(ai_hints, 0220, NULL, ai_hints_store);
+    __ATTR(ai_hints, 0200, NULL, ai_hints_store);
 
 /* ── /sys/kernel/synapse/syscall_log ─────────────────────── */
 /*
@@ -193,6 +199,8 @@ static ssize_t stats_show(struct kobject *kobj,
         "daemon_heartbeats=%llu\n"
         "daemon_timeouts=%llu\n"
         "active_contexts=%u\n"
+        "integrity_alerts=%llu\n"
+        "lockdown=%d\n"
         "kmod_version=0x%08x\n",
         st.events_captured,
         st.hints_applied,
@@ -202,6 +210,8 @@ static ssize_t stats_show(struct kobject *kobj,
         st.daemon_heartbeats,
         st.daemon_timeouts,
         st.active_contexts,
+        synapse_integrity_alert_count(),
+        synapse_kmod_is_pinned() ? 1 : 0,
         st.kmod_version
     );
 }
@@ -229,7 +239,13 @@ static ssize_t config_store(struct kobject *kobj,
     /* Simple key=value parser */
     int val;
     if (sscanf(buf, "events_enabled=%d", &val) == 1) {
-        pr_info("synapse_kmod: events_enabled → %d\n", val);
+        /* Disabling event capture blinds the whole security monitor.
+         * That must never happen quietly — log it at warning level. */
+        if (val == 0)
+            pr_warn("synapse_kmod: SECURITY: syscall event capture DISABLED "
+                    "via sysfs — monitoring is now blind\n");
+        else
+            pr_info("synapse_kmod: events_enabled → %d\n", val);
         synapse_probe_set_enabled(val != 0);
     } else if (sscanf(buf, "sched_enabled=%d", &val) == 1) {
         pr_info("synapse_kmod: sched_enabled → %d\n", val);
@@ -238,8 +254,33 @@ static ssize_t config_store(struct kobject *kobj,
     return (ssize_t)count;
 }
 
+/* 0644, not 0664: config is world-readable but only root may flip the knobs. */
 static struct kobj_attribute config_attr =
-    __ATTR(config, 0664, config_show, config_store);
+    __ATTR(config, 0644, config_show, config_store);
+
+/* ── /sys/kernel/synapse/lockdown ────────────────────────────
+ * Anti-hijack self-pin toggle. "1" pins the module so rmmod is refused;
+ * "0" unpins. Reading returns "lockdown=<0|1>". Owner(root)-write only. */
+static ssize_t lockdown_show(struct kobject *kobj,
+                             struct kobj_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "lockdown=%d\n",
+                     synapse_kmod_is_pinned() ? 1 : 0);
+}
+
+static ssize_t lockdown_store(struct kobject *kobj,
+                              struct kobj_attribute *attr,
+                              const char *buf, size_t count)
+{
+    int val, rc;
+    if (sscanf(buf, "%d", &val) != 1)
+        return -EINVAL;
+    rc = synapse_kmod_set_pinned(val != 0);
+    return rc ? rc : (ssize_t)count;
+}
+
+static struct kobj_attribute lockdown_attr =
+    __ATTR(lockdown, 0640, lockdown_show, lockdown_store);
 
 /* ── /sys/kernel/synapse/version ─────────────────────────── */
 static ssize_t version_show(struct kobject *kobj,
@@ -261,6 +302,7 @@ static struct attribute *synapse_attrs[] = {
     &syscall_log_attr.attr,
     &stats_attr.attr,
     &config_attr.attr,
+    &lockdown_attr.attr,
     &version_attr.attr,
     NULL,
 };

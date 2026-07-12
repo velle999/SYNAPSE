@@ -98,6 +98,11 @@ struct synapse_module_state {
     bool                 events_enabled;
     bool                 sched_enabled;
     int                  daemon_timeout_secs;
+
+    /* Tamper / anti-hijack state */
+    atomic64_t           integrity_alerts;   /* probe-disarm detections */
+    bool                 self_pinned;         /* lockdown: refuse rmmod */
+    spinlock_t           pin_lock;
 };
 
 /* Single global instance */
@@ -124,8 +129,69 @@ static void synapse_watchdog_fn(struct timer_list *t)
     }
     spin_unlock(&s->daemon_lock);
 
+    /*
+     * Self-integrity: if any of our syscall kprobes has been disarmed while
+     * we still intend to be monitoring, the module has been (partially)
+     * blinded. Log loudly at every check so it cannot pass unnoticed, and
+     * count it for the stats/'syn guard' surface.
+     */
+    {
+        int tampered = synapse_probe_integrity_check();
+        if (tampered > 0) {
+            atomic64_inc(&s->integrity_alerts);
+            pr_crit("synapse_kmod: SECURITY: %d monitoring probe(s) disarmed "
+                    "— possible tampering/blinding attempt\n", tampered);
+        }
+    }
+
     /* Reschedule watchdog */
     mod_timer(&s->watchdog, now + secs_to_jiffies(5));
+}
+
+/* ── Anti-hijack: module self-pin (lockdown mode) ─────────────
+ *
+ * When pinned, the module holds a reference to itself so `rmmod
+ * synapse_kmod` fails with EBUSY — a root attacker cannot silently unload
+ * the security monitor without first, deliberately and loggably, writing
+ * lockdown=0. This is a tripwire + speed bump, not a wall: a determined root
+ * can still unpin. Real unload-proofing needs kernel lockdown / signature
+ * enforcement (Tier C). Default is unpinned so DKMS upgrades can unload.
+ */
+int synapse_kmod_set_pinned(bool pin)
+{
+    int rc = 0;
+
+    spin_lock(&synapse_state.pin_lock);
+    if (pin && !synapse_state.self_pinned) {
+        if (try_module_get(THIS_MODULE)) {
+            synapse_state.self_pinned = true;
+            pr_warn("synapse_kmod: lockdown ENABLED — module pinned "
+                    "(rmmod refused until lockdown=0)\n");
+        } else {
+            rc = -EBUSY;   /* module already going away */
+        }
+    } else if (!pin && synapse_state.self_pinned) {
+        synapse_state.self_pinned = false;
+        module_put(THIS_MODULE);
+        pr_warn("synapse_kmod: lockdown DISABLED — module unpinned "
+                "(rmmod now permitted)\n");
+    }
+    spin_unlock(&synapse_state.pin_lock);
+    return rc;
+}
+
+bool synapse_kmod_is_pinned(void)
+{
+    bool p;
+    spin_lock(&synapse_state.pin_lock);
+    p = synapse_state.self_pinned;
+    spin_unlock(&synapse_state.pin_lock);
+    return p;
+}
+
+u64 synapse_integrity_alert_count(void)
+{
+    return atomic64_read(&synapse_state.integrity_alerts);
 }
 
 /* Called by sysfs status attribute write handler when
@@ -207,6 +273,9 @@ static int __init synapse_kmod_init(void)
     /* Initialize global state */
     memset(&synapse_state, 0, sizeof(synapse_state));
     spin_lock_init(&synapse_state.daemon_lock);
+    spin_lock_init(&synapse_state.pin_lock);
+    synapse_state.self_pinned = false;
+    atomic64_set(&synapse_state.integrity_alerts,  0);
     atomic64_set(&synapse_state.events_captured,   0);
     atomic64_set(&synapse_state.hints_applied,     0);
     atomic64_set(&synapse_state.hints_rejected,    0);

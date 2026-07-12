@@ -396,6 +396,33 @@ void synapse_probe_set_enabled(bool enabled)
     }
 }
 
+/* ── Self-integrity: are our probes still armed? ──────────── */
+/*
+ * Returns the number of probes we registered and intend to be active that
+ * have been disarmed or removed out from under us (KPROBE_FLAG_DISABLED via
+ * an external disable_kprobe(), or KPROBE_FLAG_GONE). 0 == healthy.
+ *
+ * This detects a targeted attempt to blind the monitor by disarming its
+ * probes. It reads flags only, so it is safe from the watchdog timer
+ * (softirq) context. Note: the global `echo 0 > .../kprobes/enabled` switch
+ * disarms without setting per-probe flags and is not visible here — that
+ * remains a known gap (no exported kprobes_all_disarmed).
+ */
+int synapse_probe_integrity_check(void)
+{
+    int i, tampered = 0;
+
+    if (!g_probes_enabled) return 0;   /* we disabled them on purpose */
+
+    for (i = 0; i < (int)N_PROBES; i++) {
+        if (!probe_registered[i]) continue;
+        if (all_probes[i]->flags &
+            (KPROBE_FLAG_DISABLED | KPROBE_FLAG_GONE))
+            tampered++;
+    }
+    return tampered;
+}
+
 /* ── Init / exit ──────────────────────────────────────────── */
 int synapse_probe_init(int ring_size)
 {

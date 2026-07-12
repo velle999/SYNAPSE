@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL2')
@@ -58,4 +58,8 @@ package() {
         "$pkgdir/usr/lib/modprobe.d/synapse.conf"
     echo "options synapse_kmod synapse_events=1 synapse_sched=1 synapse_daemon_timeout=30 synapse_ring_size=4096" \
         > "$pkgdir/usr/lib/modprobe.d/synapse.conf"
+
+    # Kernel hardening sysctls (kptr_restrict, dmesg_restrict, kexec latch)
+    install -Dm644 config/90-synapse-hardening.conf \
+        "$pkgdir/usr/lib/sysctl.d/90-synapse-hardening.conf"
 }
