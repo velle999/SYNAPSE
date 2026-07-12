@@ -86,6 +86,7 @@ build_component() {
     [ -d "$name/hooks" ]     && dirs+=("$name/hooks/")
     [ -d "$name/tools" ]     && dirs+=("$name/tools/")
     [ -f "$name/synapse_kmod.install" ] && dirs+=("$name/synapse_kmod.install")
+    [ -f "$name/HARDENING.md" ]         && dirs+=("$name/HARDENING.md")
 
     tar czf "$name/$name-0.1.0.tar.gz" \
         --transform "s|^$name/|$name-0.1.0/|" \

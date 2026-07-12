@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL2')
@@ -62,4 +62,12 @@ package() {
     # Kernel hardening sysctls (kptr_restrict, dmesg_restrict, kexec latch)
     install -Dm644 config/90-synapse-hardening.conf \
         "$pkgdir/usr/lib/sysctl.d/90-synapse-hardening.conf"
+
+    # Opt-in "seal module loading" unit — installed DISABLED (see HARDENING.md)
+    install -Dm644 systemd/synapse-lock-modules.service \
+        "$pkgdir/usr/lib/systemd/system/synapse-lock-modules.service"
+
+    # Hardening documentation
+    install -Dm644 HARDENING.md \
+        "$pkgdir/usr/share/doc/synapse_kmod/HARDENING.md"
 }

@@ -1,0 +1,23 @@
+[Unit]
+Description=SynapseOS: seal kernel module loading (anti-rootkit)
+Documentation=file:/usr/share/doc/synapse_kmod/HARDENING.md
+# Run LATE — after everything that loads modules (nvidia, synapse_kmod,
+# graphical session bring-up). Once sealed, NO module can load or unload for
+# the rest of this boot, so anything needed must already be resident.
+After=multi-user.target graphical.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# One-way latch until reboot. An attacker who gains root can no longer insmod
+# a rootkit or rmmod the monitor. Trade-off: hot-plugging hardware whose driver
+# is not already loaded will fail until reboot; a kernel-upgrade module rebuild
+# only takes effect on the next boot anyway.
+ExecStart=/usr/sbin/sysctl -w kernel.modules_disabled=1
+
+[Install]
+# DISABLED by default. Enable deliberately once you have confirmed all needed
+# modules load at boot:  systemctl enable synapse-lock-modules.service
+WantedBy=multi-user.target
