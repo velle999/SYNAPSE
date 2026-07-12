@@ -38,6 +38,10 @@
 #include <linux/atomic.h>
 #include <linux/ktime.h>
 #include <linux/syscalls.h>
+#include <linux/socket.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <linux/fcntl.h>
 
 #include "synapse_kmod.h"
 #include "synapse_probe.h"
@@ -182,10 +186,37 @@ static bool is_sensitive_path(const char *path)
          * these. Only the compositor (synui) legitimately opens them, so
          * any other opener is worth a synguard verdict. */
         "/dev/input/",
+        /* System persistence & injection surfaces. synguard already had rules
+         * for several of these (ld.so.preload, cron, systemd units) that never
+         * fired because the kmod wasn't reporting the paths. */
+        "/etc/ld.so.preload", "/etc/cron", "/var/spool/cron/",
+        "/etc/systemd/system/", "/etc/profile.d/", "/etc/xdg/autostart/",
+        "/etc/rc.local",
         NULL
     };
     for (int i = 0; sensitive[i]; i++)
         if (strncmp(path, sensitive[i], strlen(sensitive[i])) == 0)
+            return true;
+    return false;
+}
+
+/*
+ * is_persistence_path — per-user auto-run/persistence files whose home prefix
+ * varies (/home/<user>/…), so they need a substring rather than prefix match.
+ * A trojan drops itself here to survive logout/reboot. These files are *read*
+ * constantly (e.g. .bashrc on every shell), so the caller only reports a
+ * write/create — a read is not interesting.
+ */
+static bool is_persistence_path(const char *path)
+{
+    static const char *const markers[] = {
+        "/.config/autostart/", "/.config/systemd/",
+        "/.bashrc", "/.bash_profile", "/.profile",
+        "/.zshrc", "/.zshenv", "/.xprofile",
+        NULL
+    };
+    for (int i = 0; markers[i]; i++)
+        if (strstr(path, markers[i]))
             return true;
     return false;
 }
@@ -232,19 +263,30 @@ static int openat_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
 
-    /* openat(dfd, filename, flags, mode): filename is the 2nd user arg. */
+    /* openat(dfd, filename, flags, mode): filename is 2nd arg, flags is 3rd. */
     struct pt_regs *u = syscall_uregs(regs);
     const char __user *filename = (const char __user *)u->si;
     if (!filename) return 0;
+    int oflags = (int)u->dx;
 
     char kbuf[128] = {0};
     if (strncpy_from_user(kbuf, filename, sizeof(kbuf) - 1) <= 0)
         return 0;
 
-    if (!is_sensitive_path(kbuf)) return 0;
+    bool sens    = is_sensitive_path(kbuf);
+    bool persist = sens ? false : is_persistence_path(kbuf);
+    if (!sens && !persist) return 0;
+
+    /* Persistence files are read on every shell/session start; only a
+     * write/create/truncate is worth reporting. Sensitive system paths
+     * (shadow, ssh keys, kernel) are reported on any access. */
+    if (persist &&
+        !(oflags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)))
+        return 0;
 
     struct synapse_syscall_event e = {0};
     fill_event(&e, __NR_openat, SYNAPSE_EVT_OPEN);
+    e.args[0] = (u64)(unsigned int)oflags;   /* open flags → wire arg0 */
     strncpy(e.filename, kbuf, sizeof(e.filename) - 1);
 
     ring_push(&e);
@@ -262,9 +304,18 @@ static int socket_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
     if (!synapse_events_enabled()) return 0;
 
+    struct pt_regs *u = syscall_uregs(regs);
+
+    /* Skip AF_UNIX/AF_LOCAL (1) and AF_NETLINK (16): local IPC that every
+     * desktop process spams (Plex, NetworkManager, wpa_supplicant …). Left
+     * unfiltered it floods the lossy ring and buries real network activity.
+     * We only care about IP-family sockets here. */
+    long dom = (long)u->di;
+    if (dom == AF_UNIX || dom == AF_NETLINK)
+        return 0;
+
     struct synapse_syscall_event e = {0};
     fill_event(&e, __NR_socket, SYNAPSE_EVT_SOCKET);
-    struct pt_regs *u = syscall_uregs(regs);
     e.args[0] = u->di;  /* domain */
     e.args[1] = u->si;  /* type   */
     e.args[2] = u->dx;  /* proto  */
@@ -277,6 +328,56 @@ static int socket_pre_handler(struct kprobe *p, struct pt_regs *regs)
 static struct kprobe kp_socket = {
     .symbol_name = "__x64_sys_socket",
     .pre_handler = socket_pre_handler,
+};
+
+/* ── connect kprobe ───────────────────────────────────────── */
+/*
+ * connect(fd, sockaddr, addrlen). We capture the *destination* for IPv4/IPv6
+ * connections into e->filename as "A.B.C.D:port" / "[v6]:port" — this is the
+ * signal synguard uses to spot worm scanning (fan-out to many hosts) and
+ * trojan C2 beaconing. AF_UNIX/netlink/etc are skipped (local, high-volume,
+ * uninteresting). Distinguished from socket() downstream by syscall_nr (42).
+ */
+static int connect_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+    if (!synapse_events_enabled()) return 0;
+
+    struct pt_regs *u = syscall_uregs(regs);
+    void __user *uaddr = (void __user *)u->si;
+    int addrlen = (int)u->dx;
+    struct sockaddr_storage ss;
+
+    if (!uaddr || addrlen < (int)sizeof(sa_family_t))
+        return 0;
+    if (addrlen > (int)sizeof(ss))
+        addrlen = (int)sizeof(ss);
+    if (copy_from_user(&ss, uaddr, addrlen))
+        return 0;
+
+    struct synapse_syscall_event e = {0};
+    fill_event(&e, __NR_connect, SYNAPSE_EVT_SOCKET);
+    e.args[0] = ss.ss_family;
+
+    if (ss.ss_family == AF_INET) {
+        struct sockaddr_in *in = (struct sockaddr_in *)&ss;
+        scnprintf(e.filename, sizeof(e.filename), "%pI4:%u",
+                  &in->sin_addr, ntohs(in->sin_port));
+    } else if (ss.ss_family == AF_INET6) {
+        struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)&ss;
+        scnprintf(e.filename, sizeof(e.filename), "[%pI6c]:%u",
+                  &in6->sin6_addr, ntohs(in6->sin6_port));
+    } else {
+        return 0;   /* not an IP connection — ignore */
+    }
+
+    ring_push(&e);
+    synapse_stat_event();
+    return 0;
+}
+
+static struct kprobe kp_connect = {
+    .symbol_name = "__x64_sys_connect",
+    .pre_handler = connect_pre_handler,
 };
 
 /* ── ptrace kprobe ────────────────────────────────────────── */
@@ -362,6 +463,7 @@ static struct kprobe *all_probes[] = {
     &kp_execveat,
     &kp_openat,
     &kp_socket,
+    &kp_connect,
     &kp_ptrace,
     &kp_insmod,
     &kp_finit_module,

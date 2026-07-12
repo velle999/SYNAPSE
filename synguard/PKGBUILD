@@ -1,6 +1,6 @@
 pkgname=synguard
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL2')
@@ -23,6 +23,7 @@ package() {
     install -Dm640 rules/00-base.rules "$pkgdir/etc/synguard/rules.d/00-base.rules"
     install -Dm640 rules/10-ai-assist.rules "$pkgdir/etc/synguard/rules.d/10-ai-assist.rules"
     install -Dm640 rules/20-input-devices.rules "$pkgdir/etc/synguard/rules.d/20-input-devices.rules"
+    install -Dm640 rules/30-network-persistence.rules "$pkgdir/etc/synguard/rules.d/30-network-persistence.rules"
     install -dm750 "$pkgdir/var/lib/synguard"
     install -dm750 "$pkgdir/var/log/synguard"
     install -Dm644 systemd/synguard.service \

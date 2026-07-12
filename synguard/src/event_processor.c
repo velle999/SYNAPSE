@@ -144,6 +144,89 @@ static void build_ai_context(const sg_event_t *e, char *out, size_t out_len)
     );
 }
 
+/* ── Worm / C2 egress detector (netwatch) ─────────────────────
+ *
+ * The kmod now reports connect() with the destination ("A.B.C.D:port" or
+ * "[v6]:port") in filename, syscall_nr 42. We track, per process over a short
+ * sliding window, how many connections it makes and to how many distinct
+ * hosts. A worm scanning/spreading fans out to many hosts fast; a flood
+ * hammers connects. Either trips a HIGH alert. Purely additive — the event
+ * still flows through the normal rule pipeline afterwards.
+ */
+#define NW_TABLE      256          /* direct-mapped by pid (heuristic) */
+#define NW_WINDOW_S    10          /* sliding window, seconds */
+#define NW_FANOUT      20          /* distinct dests in window → scan */
+#define NW_RATE        80          /* total connects in window → flood */
+#define NW_DESTS       64          /* distinct dests tracked per window */
+
+struct nw_entry {
+    uint32_t pid;
+    time_t   win_start;
+    int      conn_count;
+    int      distinct;
+    int      alerted;              /* one alert per window */
+    uint32_t dest_hash[NW_DESTS];
+};
+static struct nw_entry nw_table[NW_TABLE];
+static pthread_mutex_t nw_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static uint32_t nw_fnv1a(const char *s, size_t n)
+{
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < n && s[i]; i++) { h ^= (uint8_t)s[i]; h *= 16777619u; }
+    return h ? h : 1;   /* reserve 0 for "empty slot" */
+}
+
+/*
+ * Record a connect and decide whether it trips a fan-out/flood alert.
+ * Returns 1 (and fills reason) once per window when a threshold is crossed.
+ */
+static int netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
+{
+    if (e->filename[0] == '\0') return 0;
+
+    /* Destination host = the address portion, without the :port. IPv6 is
+     * "[....]:port", so cut at the last ':' but keep the bracketed body. */
+    const char *colon = strrchr(e->filename, ':');
+    size_t hostlen = colon ? (size_t)(colon - e->filename) : strlen(e->filename);
+    uint32_t dh = nw_fnv1a(e->filename, hostlen);
+
+    time_t now = time(NULL);
+    int tripped = 0;
+
+    pthread_mutex_lock(&nw_lock);
+    struct nw_entry *ent = &nw_table[e->pid % NW_TABLE];
+
+    /* New pid in this slot, or window expired → start a fresh window. */
+    if (ent->pid != e->pid || (now - ent->win_start) > NW_WINDOW_S) {
+        memset(ent, 0, sizeof(*ent));
+        ent->pid       = e->pid;
+        ent->win_start = now;
+    }
+
+    ent->conn_count++;
+
+    /* Count distinct destinations (bounded set). */
+    int seen = 0, i;
+    for (i = 0; i < ent->distinct && i < NW_DESTS; i++)
+        if (ent->dest_hash[i] == dh) { seen = 1; break; }
+    if (!seen && ent->distinct < NW_DESTS)
+        ent->dest_hash[ent->distinct++] = dh;
+
+    if (!ent->alerted &&
+        (ent->distinct >= NW_FANOUT || ent->conn_count >= NW_RATE)) {
+        ent->alerted = 1;
+        tripped = 1;
+        snprintf(reason, rlen,
+                 "netwatch: %s pid=%u made %d connections to %d distinct hosts "
+                 "in <%ds — possible worm scan / C2 beacon (last=%s)",
+                 e->comm, e->pid, ent->conn_count, ent->distinct,
+                 NW_WINDOW_S, e->filename);
+    }
+    pthread_mutex_unlock(&nw_lock);
+    return tripped;
+}
+
 /* ── Full decision pipeline ───────────────────────────────── */
 void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
 {
@@ -153,6 +236,26 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
     if (strcmp(e->comm, "synguard") == 0 ||
         strcmp(e->comm, "synapd")   == 0)
         return;
+
+    /* ── Step 0: Worm/C2 egress fan-out check (connect only) ── */
+    /* syscall_nr 42 == connect; the kmod put the dest IP:port in filename. */
+    if (e->evt_type == EVT_SOCKET && e->syscall_nr == 42 && e->filename[0]) {
+        char nwreason[200];
+        if (netwatch_connect(e, nwreason, sizeof(nwreason))) {
+            sg_alert_t nwalert = {
+                .timestamp = time(NULL),
+                .event     = *e,
+                .verdict   = VERDICT_ALERT,
+                .threat    = THREAT_HIGH,
+            };
+            strncpy(nwalert.reason, nwreason, sizeof(nwalert.reason) - 1);
+            snprintf(nwalert.action_taken, sizeof(nwalert.action_taken), "alert");
+            s->stats.alerts++;
+            action_alert(s, &nwalert);
+            if (s->config.audit_enabled)
+                audit_write(s, &nwalert);
+        }
+    }
 
     /* ── Step 1: Baseline anomaly check ────────────────────── */
     int anomalous = 0;

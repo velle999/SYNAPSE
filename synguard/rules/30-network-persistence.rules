@@ -1,0 +1,100 @@
+# /etc/synguard/rules.d/30-network-persistence.rules
+# SynapseOS synguard — worm/trojan: reverse-shell tools + persistence writes
+#
+# Worm scan / C2 fan-out is detected in code (netwatch, per-process connection
+# fan-out over a sliding window) — it needs no rule. These rules cover the
+# complementary static signals now that the kmod reports connect destinations,
+# system persistence paths, and write-gated user persistence files.
+
+# ── Reverse-shell / raw-socket tools ─────────────────────────
+# nc/ncat/netcat/socat opening sockets is rarely legitimate on a desktop and
+# is the classic reverse-shell primitive. EVT_SOCKET covers socket()+connect().
+rule alert-netcat {
+    event   socket
+    comm    nc
+    verdict alert
+    priority 46
+}
+
+rule alert-ncat {
+    event   socket
+    comm    ncat
+    verdict alert
+    priority 46
+}
+
+rule alert-netcat-full {
+    event   socket
+    comm    netcat
+    verdict alert
+    priority 46
+}
+
+rule alert-socat {
+    event   socket
+    comm    socat
+    verdict alert
+    priority 46
+}
+
+# ── User-level persistence (write-gated by the kmod) ─────────
+# The kmod only reports these on a write/create, so a match means something
+# is installing autostart/login persistence in a home directory.
+rule alert-user-autostart {
+    event   open
+    path    /home/*/.config/autostart/*
+    verdict alert
+    priority 26
+}
+
+rule alert-user-systemd {
+    event   open
+    path    /home/*/.config/systemd/*
+    verdict alert
+    priority 26
+}
+
+rule alert-user-bashrc {
+    event   open
+    path    /home/*/.bashrc
+    verdict alert
+    priority 26
+}
+
+rule alert-user-profile {
+    event   open
+    path    /home/*/.profile
+    verdict alert
+    priority 26
+}
+
+rule alert-user-zshrc {
+    event   open
+    path    /home/*/.zshrc
+    verdict alert
+    priority 26
+}
+
+# ── System persistence now reported by the kmod ──────────────
+# (These paths were referenced by rules before but the kmod never emitted
+#  them; it does now.)
+rule alert-profiled-write {
+    event   open
+    path    /etc/profile.d/*
+    verdict alert
+    priority 27
+}
+
+rule alert-xdg-autostart-write {
+    event   open
+    path    /etc/xdg/autostart/*
+    verdict alert
+    priority 27
+}
+
+rule alert-rc-local-write {
+    event   open
+    path    /etc/rc.local
+    verdict alert
+    priority 27
+}
