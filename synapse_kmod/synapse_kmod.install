@@ -1,26 +1,28 @@
+# Build/verify logic lives in /usr/bin/synapse-kmod-rebuild, which is also what
+# the pacman kernel-upgrade hook runs. Keeping one code path means the install
+# path gets the same vermagic verification the upgrade path does.
+
+_rebuild() {
+    if [ -x /usr/bin/synapse-kmod-rebuild ]; then
+        /usr/bin/synapse-kmod-rebuild || {
+            echo ""
+            echo ">>> synapse_kmod did not build for every installed kernel."
+            echo ">>> synapd/synguard will run DEGRADED (no AI scheduler bridge)."
+            echo ">>> Check: syn status"
+            echo ""
+        }
+    fi
+}
+
 post_install() {
     dkms add synapse_kmod/0.1.0 2>/dev/null || true
-
-    # Build for every installed kernel that has headers available
-    # Gracefully skip if no kernel modules exist (e.g. archiso chroot)
-    local built=0
-    for kver in /lib/modules/*/build; do
-        [ -d "$kver" ] || continue
-        kver="${kver%/build}"
-        kver="${kver##*/}"
-        echo ":: Building synapse_kmod for kernel $kver ..."
-        if dkms install synapse_kmod/0.1.0 -k "$kver" --no-initrd 2>&1; then
-            built=1
-        else
-            echo "   (failed for $kver — will be built at boot via synapse-kmod-build.service)"
-        fi
-    done
-    [ "$built" -eq 1 ] && depmod -A || true
+    _rebuild
 }
 
 post_upgrade() {
     dkms remove synapse_kmod/0.1.0 --all 2>/dev/null || true
-    post_install
+    dkms add synapse_kmod/0.1.0 2>/dev/null || true
+    _rebuild
 }
 
 pre_remove() {

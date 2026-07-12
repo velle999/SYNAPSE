@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL2')
@@ -10,13 +10,27 @@ install=synapse_kmod.install
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # The kernel module itself is built by DKMS at install time, not here.
+    # This is just the userspace status tool.
+    gcc $CFLAGS $LDFLAGS -Iinclude -o syn-kmod-status tools/syn-kmod-status.c
+}
+
 package() {
     cd "$srcdir/$pkgname-$pkgver"
 
-    # Install source tree for DKMS (builds against any kernel at install time)
+    # Install source tree for DKMS (builds against any kernel at install time).
+    # --exclude keeps stray .o/.ko from a local in-tree build out of the package;
+    # DKMS would reuse them and silently ship a module with the wrong vermagic.
     install -dm755 "$pkgdir/usr/src/$pkgname-$pkgver"
-    cp -r src include Makefile dkms.conf \
+    cp -r --no-preserve=mode,ownership src include Makefile dkms.conf \
         "$pkgdir/usr/src/$pkgname-$pkgver/"
+    find "$pkgdir/usr/src/$pkgname-$pkgver" \
+        \( -name '*.o' -o -name '*.ko*' -o -name '*.mod' -o -name '*.mod.c' \
+           -o -name '*.cmd' -o -name 'modules.order' -o -name 'Module.symvers' \) \
+        -delete
 
     # DKMS configuration
     install -Dm644 dkms.conf \
@@ -30,8 +44,9 @@ package() {
     install -Dm755 hooks/synapse-kmod-rebuild \
         "$pkgdir/usr/bin/synapse-kmod-rebuild"
 
-    install -Dm755 tools/syn-kmod-status \
-        "$pkgdir/usr/bin/syn-kmod-status" 2>/dev/null || true
+    # No `|| true` here: if the status tool didn't build, that is a packaging
+    # bug and the build should fail loudly rather than silently ship nothing.
+    install -Dm755 syn-kmod-status "$pkgdir/usr/bin/syn-kmod-status"
 
     # Auto-load module at boot
     install -Dm644 /dev/null \

@@ -6,30 +6,63 @@ set -uo pipefail
 MODULE="synapse_kmod"
 VERSION="0.1.0"
 
+# Vermagic of the module currently installed for kernel $1 (empty if none).
+installed_vermagic() {
+    local kver="$1" ko
+    ko=$(find "/lib/modules/$kver" -name "$MODULE.ko*" -print -quit 2>/dev/null)
+    [ -n "$ko" ] || return 0
+    modinfo -F vermagic "$ko" 2>/dev/null | awk '{print $1}'
+}
+
+# A module is only "built" if it will actually LOAD on that kernel.
+#
+# Do not use `dkms status` for this. DKMS reports "installed" as soon as a .ko
+# exists in the target kernel's module dir — it never checks what that .ko was
+# compiled against. A stale module with the previous kernel's vermagic therefore
+# reads as "installed", the rebuild gets skipped, and the module dies at boot
+# with ENOEXEC. Compare vermagic to the kernel release instead.
+is_good() {
+    [ "$(installed_vermagic "$1")" = "$1" ]
+}
+
 # Ensure DKMS knows about the module
 dkms status "$MODULE/$VERSION" &>/dev/null || \
     dkms add "$MODULE/$VERSION" 2>/dev/null || true
 
 built=0
 failed=0
+failed_kvers=()
 
 for kdir in /lib/modules/*/build; do
     [ -d "$kdir" ] || continue
     kver="${kdir%/build}"
     kver="${kver##*/}"
 
-    # Skip if already built for this exact kernel
-    if dkms status "$MODULE/$VERSION" -k "$kver" 2>/dev/null | grep -q "installed"; then
+    # Skip only if a genuinely loadable module is already in place.
+    is_good "$kver" && continue
+
+    echo ":: Building $MODULE for kernel $kver ..."
+
+    # Drop any cached build for this kernel first — otherwise DKMS reuses it.
+    dkms remove "$MODULE/$VERSION" -k "$kver" --no-initrd &>/dev/null || true
+
+    if ! dkms install "$MODULE/$VERSION" -k "$kver" --no-initrd --force 2>&1; then
+        echo "   ERROR: dkms build failed for $kver" >&2
+        failed=$((failed + 1))
+        failed_kvers+=("$kver")
         continue
     fi
 
-    echo ":: Building $MODULE for kernel $kver ..."
-    if dkms install "$MODULE/$VERSION" -k "$kver" --no-initrd 2>&1; then
-        built=$((built + 1))
-    else
-        echo "   warning: build failed for $kver"
+    # A zero exit from dkms is not proof of a loadable module. Verify.
+    if ! is_good "$kver"; then
+        echo "   ERROR: built $MODULE for $kver, but it has vermagic '$(installed_vermagic "$kver")'" >&2
+        echo "          expected '$kver' — this module would fail to load (ENOEXEC)." >&2
         failed=$((failed + 1))
+        failed_kvers+=("$kver")
+        continue
     fi
+
+    built=$((built + 1))
 done
 
 # Remove modules for kernels that no longer exist.
@@ -54,5 +87,19 @@ done
 depmod -A 2>/dev/null || true
 
 [ "$built" -gt 0 ] && echo ":: $MODULE rebuilt for $built kernel(s)"
-[ "$failed" -gt 0 ] && echo ":: $MODULE failed for $failed kernel(s)"
+
+# Exit non-zero so pacman reports the hook as failed. A silent degrade is what
+# let a dead module go unnoticed across a kernel upgrade.
+if [ "$failed" -gt 0 ]; then
+    {
+        echo ""
+        echo "!! $MODULE FAILED to build for: ${failed_kvers[*]}"
+        echo "!! The AI scheduler bridge and kprobe telemetry will be INACTIVE."
+        echo "!! synapd and synguard will still start, but DEGRADED. Check with:"
+        echo "!!     syn status"
+        echo "!!     dkms build $MODULE/$VERSION -k <kernel>"
+    } >&2
+    exit 1
+fi
+
 exit 0

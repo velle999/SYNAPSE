@@ -79,6 +79,21 @@ typedef enum {
 #define AI_CTX_FLAG_EPHEMERAL   (1 << 6)  /* short-lived process */
 #define AI_CTX_FLAG_TRUSTED     (1 << 7)  /* trusted system process */
 
+/* ── AI_CTX syscall numbers ──────────────────────────────── */
+/*
+ * Allocated by the SynapseOS kernel patch. On a stock kernel, processes
+ * calling these get ENOSYS.
+ *
+ * These live in the shared header, not in the module source, so that the
+ * kernel side and userspace callers (syn-kmod-status) cannot disagree about
+ * which syscall is which.
+ */
+#ifndef NR_AI_CTX_SET
+#define NR_AI_CTX_SET    451
+#define NR_AI_CTX_GET    452
+#define NR_AI_CTX_QUERY  453
+#endif
+
 /* ── AI_CTX syscall argument structures ──────────────────── */
 
 /* AI_CTX_SET: declare process intent */

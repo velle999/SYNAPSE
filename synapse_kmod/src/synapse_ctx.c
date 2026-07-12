@@ -45,17 +45,7 @@
 extern void synapse_stat_query(void);
 extern bool synapse_daemon_is_alive(void);
 
-/* ── AI_CTX syscall numbers ───────────────────────────────── */
-/*
- * Linux 7.0 allocates these. On earlier kernels we detect them
- * by trying to register and falling back gracefully.
- *
- * These numbers are defined in the SynapseOS kernel patch.
- * On a stock kernel, processes calling these get ENOSYS.
- */
-#define NR_AI_CTX_SET    451
-#define NR_AI_CTX_GET    452
-#define NR_AI_CTX_QUERY  453
+/* NR_AI_CTX_* now live in include/synapse_kmod.h, shared with userspace. */
 
 /* ── Per-PID context store ────────────────────────────────── */
 #define CTX_HASH_BITS  8
