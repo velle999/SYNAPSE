@@ -8,11 +8,16 @@ MODULE="synapse_kmod"
 VERSION="0.1.0"
 KVER="${1:-$(uname -r)}"
 
-SRC=$(ls -d /usr/src/${MODULE}-* 2>/dev/null | head -1) || true
-[ -z "$SRC" ] && SRC="/usr/src/${MODULE}"
+# Only ever build from the versioned tree that the synapse_kmod package installs.
+# There used to be a fallback to an unversioned /usr/src/synapse_kmod shipped in
+# the ISO airootfs — but that copy drifted and went stale, so the fallback would
+# silently build an OLD module (and symlink it in as the DKMS source). Missing
+# source is a packaging failure: say so, don't paper over it with stale code.
+SRC="/usr/src/${MODULE}-${VERSION}"
 
 if [ ! -d "$SRC" ]; then
-    echo "synapse-kmod-build: no source at $SRC" >&2
+    echo "synapse-kmod-build: no module source at $SRC" >&2
+    echo "synapse-kmod-build: the synapse_kmod package is not installed" >&2
     exit 1
 fi
 
@@ -38,12 +43,8 @@ done
 if command -v dkms &>/dev/null; then
     echo "synapse-kmod-build: attempting DKMS build for kernel $KVER"
 
-    # Ensure DKMS source link exists
-    DKMS_SRC="/usr/src/${MODULE}-${VERSION}"
-    if [ ! -d "$DKMS_SRC" ] && [ -d "$SRC" ]; then
-        ln -sf "$SRC" "$DKMS_SRC"
-    fi
-
+    # $SRC is already /usr/src/$MODULE-$VERSION — the path DKMS looks in — and its
+    # existence is checked above, so there is nothing to link.
     dkms add "$MODULE/$VERSION" 2>/dev/null || true
 
     if dkms install "$MODULE/$VERSION" -k "$KVER" --no-initrd 2>&1; then
