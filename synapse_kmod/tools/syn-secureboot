@@ -120,26 +120,46 @@ cmd_status() {
 # ── enroll (interactive, real hardware) ──────────────────────
 cmd_enroll() {
     cat <<'EOF'
-Guided Secure Boot enrollment (real hardware, physical presence required):
+Guided Secure Boot enrollment (real hardware, physical presence required).
 
-  1. pacman -S sbctl
-  2. Put the firmware in "Setup Mode" (clear existing SB keys in BIOS/UEFI).
-  3. sbctl create-keys
-  4. sbctl enroll-keys -m            # -m also keeps Microsoft keys (needed if
-                                     # you dual-boot Windows or use signed shim)
-  5. sbctl sign -s /boot/efi/EFI/SynapseOS/grubx64.efi
-     sbctl sign -s /boot/vmlinuz-linux
-     # (re-sign after each kernel/grub update; a pacman hook can automate this)
-  6. Enroll the DKMS module key so the kernel trusts your modules:
-     sbctl enroll-keys is for EFI; for MODULES, import the DKMS key —
-     mokutil --import /var/lib/dkms/mok.pub   (if using shim), OR ensure the
-     kernel's .platform keyring picks up the db key sbctl enrolled.
-  7. Enable Secure Boot in firmware, reboot.
-  8. Verify:  syn-secureboot status   → "SAFE to enforce"
-     then:    syn-secureboot apply    → enables module.sig_enforce=1
+  THE RULE: never enable Secure Boot first. Sign + verify everything while SB
+  is still OFF, confirm it's green, THEN flip SB on. That way the first SB boot
+  is guaranteed to succeed.
 
-  WARNING: a second OS on this box (e.g. batocera) must also be signed or it
-  will stop booting under Secure Boot. Verify it boots before relying on SB.
+  RECOVERY (you can always get back in): Secure Boot is only a firmware toggle,
+  never a permanent lockout. If a boot fails, enter firmware setup at power-on
+  (Del/F2 — always works regardless of SB), turn Secure Boot OFF, save, and you
+  boot normally again. Keep a SynapseOS/Arch live USB as a second net.
+
+  Do ALL of these with Secure Boot still OFF:
+
+    1. pacman -S sbctl
+    2. sbctl create-keys
+    3. sbctl enroll-keys -m
+         # -m ALSO enrolls Microsoft's UEFI CA. On this machine that is
+         # important: it signs the nvidia GPU option ROM. Without it the GPU
+         # may not initialise under SB (no display).
+         # If this errors "not in setup mode", clear the Secure Boot keys in
+         # BIOS (Setup Mode), then re-run.
+    4. sbctl sign -s /boot/efi/EFI/SynapseOS/grubx64.efi
+       sbctl sign -s /boot/vmlinuz-linux
+         # re-sign after each grub/kernel update (a pacman hook can automate it)
+    5. sbctl verify
+         # EVERYTHING must show a signed check. THIS is your green light.
+
+    6. (optional, for module enforcement too) trust the DKMS module key:
+         mokutil --import /var/lib/dkms/mok.pub   # then reboot, enroll at the
+         # blue MOK screen. Loads the key into the kernel .machine keyring so
+         # your signed modules are trusted. Skipping this is fine — SB still
+         # protects boot and syn-secureboot holds enforcement off (safe).
+
+    7. NOW reboot into BIOS, enable Secure Boot, save.
+    8. Back in SynapseOS:
+         syn-secureboot status   → should show Secure Boot enabled
+         syn-secureboot apply    → enables module.sig_enforce=1 when trusted
+
+  NOTE: any OTHER OS that shares this machine must also be Secure-Boot-signed or
+  it will stop booting once SB is on.
 EOF
 }
 

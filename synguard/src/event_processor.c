@@ -144,6 +144,96 @@ static void build_ai_context(const sg_event_t *e, char *out, size_t out_len)
     );
 }
 
+/* ── Active canary: detect probe blinding ─────────────────────
+ *
+ * The in-kernel self-integrity check can see a targeted disable_kprobe() but
+ * NOT the global `echo 0 > /sys/kernel/debug/kprobes/enabled` switch, which
+ * disarms every kprobe without setting per-probe flags (the flag it does set,
+ * kprobes_all_disarmed, is not exported to modules).
+ *
+ * We close that gap from userspace: synguard periodically open()s a sentinel
+ * path that IS on the kmod's sensitive list, then confirms the resulting event
+ * comes back through the syscall feed. If our own opens stop showing up while
+ * event capture is supposed to be on, the probes are disarmed — however it
+ * happened — and we raise a CRITICAL alert.
+ */
+#define CANARY_PATH        "/sys/kernel/synapse/version"  /* matches "/sys/kernel/" */
+#define CANARY_INTERVAL_S  20
+#define CANARY_GRACE_S      6      /* must return within this after firing */
+#define CANARY_MISS_ALERT   2      /* consecutive misses before alerting */
+
+static time_t canary_last_fire = 0;
+static time_t canary_fired_at  = 0;
+static int    canary_pending   = 0;
+static int    canary_misses    = 0;
+
+/* True if the kmod says event capture is currently enabled. If an admin
+ * deliberately turned it off (config events_enabled=0), a missing canary is
+ * expected and already logged loudly by the kmod — don't cry wolf. */
+static int kmod_events_enabled(void)
+{
+    int fd = open("/sys/kernel/synapse/config", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 1;   /* can't tell → assume on */
+    char buf[128] = {0};
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return 1;
+    return strstr(buf, "events_enabled=0") ? 0 : 1;
+}
+
+/* Recognise our own canary event coming back through the feed. */
+static int is_canary_event(const sg_event_t *e)
+{
+    return e->evt_type == EVT_OPEN &&
+           strcmp(e->comm, "synguard") == 0 &&
+           strstr(e->filename, "synapse/version") != NULL;
+}
+
+/* Called each reader iteration: fire a new canary on schedule and alert if a
+ * previously fired one never came back. */
+static void canary_tick(synguard_state_t *s)
+{
+    if (!s->kmod_present) return;
+
+    time_t now = time(NULL);
+
+    /* A pending canary that blew its grace window is a miss. */
+    if (canary_pending && (now - canary_fired_at) > CANARY_GRACE_S) {
+        canary_pending = 0;
+        canary_misses++;
+        sg_log(LOG_WARNING,
+               "canary: kmod did not report our sentinel open (miss %d)",
+               canary_misses);
+        if (canary_misses == CANARY_MISS_ALERT) {
+            sg_alert_t a = {
+                .timestamp = now,
+                .verdict   = VERDICT_ALERT,
+                .threat    = THREAT_CRITICAL,
+            };
+            strncpy(a.event.comm, "synapse_kmod", sizeof(a.event.comm) - 1);
+            a.event.evt_type = EVT_UNKNOWN;
+            snprintf(a.reason, sizeof(a.reason),
+                     "canary: syscall probes are not reporting — monitoring "
+                     "may be blinded (kprobes disabled / tampered)");
+            snprintf(a.action_taken, sizeof(a.action_taken), "alert");
+            s->stats.alerts++;
+            action_alert(s, &a);
+            if (s->config.audit_enabled)
+                audit_write(s, &a);
+        }
+    }
+
+    /* Fire a fresh canary on schedule (only while capture should be on). */
+    if (!canary_pending && (now - canary_last_fire) >= CANARY_INTERVAL_S) {
+        if (!kmod_events_enabled()) { canary_last_fire = now; return; }
+        int fd = open(CANARY_PATH, O_RDONLY | O_CLOEXEC);
+        if (fd >= 0) close(fd);
+        canary_last_fire = now;
+        canary_fired_at  = now;
+        canary_pending   = 1;
+    }
+}
+
 /* ── Worm / C2 egress detector (netwatch) ─────────────────────
  *
  * The kmod now reports connect() with the destination ("A.B.C.D:port" or
@@ -412,6 +502,9 @@ static void *reader_thread_fn(void *arg)
         close(fd);
 
         if (n <= 0) {
+            /* Quiet system: still run the canary so blinding is caught even
+             * when no other events are flowing. */
+            canary_tick(s);
             usleep(s->config.poll_interval_ms * 1000);
             continue;
         }
@@ -422,12 +515,21 @@ static void *reader_thread_fn(void *arg)
         while (line) {
             if (*line) {
                 sg_event_t evt;
-                if (kmod_parse_event(line, &evt) == 0)
+                if (kmod_parse_event(line, &evt) == 0) {
+                    /* Our own canary open coming back = probes are live.
+                     * Check before process_event, which skips synguard's
+                     * own events. */
+                    if (is_canary_event(&evt)) {
+                        canary_pending = 0;
+                        canary_misses  = 0;
+                    }
                     synguard_process_event(s, &evt);
+                }
             }
             line = strtok(NULL, "\n");
         }
 
+        canary_tick(s);
         usleep(s->config.poll_interval_ms * 1000);
     }
 
