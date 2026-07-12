@@ -571,7 +571,6 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
 struct syn_popup_watch {
     struct wlr_xdg_popup *popup;
     syn_server_t *server;
-    syn_view_t   *parent_view;
     struct wl_listener commit;
     struct wl_listener destroy;
 };
@@ -585,6 +584,54 @@ static void popup_watch_destroy(struct wl_listener *listener, void *data)
     free(w);
 }
 
+/* Layout-space origin of the surface a popup chain ultimately hangs off.
+ *
+ * wlr_xdg_popup_unconstrain_from_box() wants its box in the coordinate system
+ * of the popup's ROOT surface — the toplevel or layer surface at the top of the
+ * chain, not the popup's immediate parent. Walk the xdg_popup parent links up to
+ * that surface and report where it sits in the output layout.
+ *
+ * Both root kinds can be resolved from the surface: views stash their scene tree
+ * on xdg_surface->data, and layer.c stashes its syn_layer_surface_t on
+ * wlr_layer_surface_v1->data for exactly this purpose.
+ *
+ * NB: do NOT try to carry this on the popup's scene-tree node.data instead —
+ * input.c resolves a view by walking up the scene graph to the first node with
+ * data set, so anything but a syn_view_t* there silently corrupts input routing.
+ */
+static bool popup_root_origin(struct wlr_xdg_popup *popup, int *root_lx, int *root_ly)
+{
+    struct wlr_surface *surf = popup->parent;
+
+    for (;;) {
+        struct wlr_xdg_surface *xs = wlr_xdg_surface_try_from_wlr_surface(surf);
+        if (xs && xs->role == WLR_XDG_SURFACE_ROLE_POPUP &&
+            xs->popup && xs->popup->parent) {
+            surf = xs->popup->parent;   /* a submenu — keep climbing */
+            continue;
+        }
+        break;
+    }
+
+    struct wlr_scene_tree *root = NULL;
+
+    struct wlr_xdg_surface *xs = wlr_xdg_surface_try_from_wlr_surface(surf);
+    if (xs && xs->data) {
+        root = xs->data;                /* toplevel: view->scene_tree */
+    } else {
+        struct wlr_layer_surface_v1 *lsurf =
+            wlr_layer_surface_v1_try_from_wlr_surface(surf);
+        syn_layer_surface_t *ls = lsurf ? lsurf->data : NULL;
+        if (ls && ls->scene)
+            root = ls->scene->tree;     /* layer surface: waybar, wofi */
+    }
+
+    if (!root)
+        return false;
+
+    return wlr_scene_node_coords(&root->node, root_lx, root_ly);
+}
+
 /* wlroots 0.19 requires the compositor to answer a popup's initial commit
  * with a configure the same way toplevels do (see xdg_surface_commit) — a
  * client that waits for a real ack, like GTK4's, otherwise hangs unmapped
@@ -596,20 +643,28 @@ static void popup_watch_commit(struct wl_listener *listener, void *data)
     if (!w->popup->base->initial_commit)
         return;
 
-    /* layer.c's (working) popup path always unconstrains before the first
-     * configure; this toplevel-parented path never did, so a popup near a
-     * screen edge (e.g. Firefox's hamburger menu, which runs ~715px tall)
-     * could render extending past the output bounds instead of being
-     * flipped/slid into view. Matches layer_popup_commit's pattern. */
-    if (w->parent_view) {
-        struct wlr_output *output = w->parent_view->workspace && w->parent_view->workspace->output
-            ? w->parent_view->workspace->output->wlr_output : NULL;
+    /* Tell the popup how much room it has, or it renders at whatever size it
+     * asked for and runs straight off the screen.
+     *
+     * This used to key off w->parent_view, which is only ever set for a popup
+     * whose parent is a toplevel VIEW. A popup parented to another popup — i.e.
+     * every submenu — resolved parent_view to NULL and so was never unconstrained
+     * at all. waybar's "Applications" submenu (69 entries, ~1900px) is the
+     * obvious casualty: GTK only grows scroll arrows when it is told it doesn't
+     * fit, so it just overflowed the output. Same for any nested menu, in any
+     * client. Resolving the chain's root surface handles toplevel- and
+     * layer-shell-rooted popups alike, at any nesting depth.
+     */
+    int root_lx = 0, root_ly = 0;
+    if (popup_root_origin(w->popup, &root_lx, &root_ly)) {
+        struct wlr_output *output = wlr_output_layout_output_at(
+            w->server->output_layout, root_lx, root_ly);
         if (output) {
             struct wlr_box out_box;
             wlr_output_layout_get_box(w->server->output_layout, output, &out_box);
             struct wlr_box constraint = {
-                .x = out_box.x - w->parent_view->x,
-                .y = out_box.y - w->parent_view->y,
+                .x = out_box.x - root_lx,
+                .y = out_box.y - root_ly,
                 .width = out_box.width,
                 .height = out_box.height,
             };
@@ -647,7 +702,6 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
     struct syn_popup_watch *w = calloc(1, sizeof(*w));
     w->popup = popup;
     w->server = s;
-    w->parent_view = parent_tree->node.data;
     w->commit.notify = popup_watch_commit;
     wl_signal_add(&popup->base->surface->events.commit, &w->commit);
     /* The popup's own destroy signal, not the surface's: a client may destroy
