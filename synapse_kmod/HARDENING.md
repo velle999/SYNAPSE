@@ -45,11 +45,25 @@ Trade-off: hot-plugged hardware whose driver is not already resident will not
 work until reboot. Confirm everything you need loads at boot first
 (`lsmod` after a normal session), then enable.
 
-## Not enabled here: module signature enforcement
+## Module signature enforcement — automatic, "assume SB on, fall back"
+
+`syn-secureboot` (run each boot by `synapse-secureboot.service`) manages
+`module.sig_enforce=1` for you:
+
+- **Secure Boot on + all modules kernel-trusted** → it adds
+  `module.sig_enforce=1` to the kernel cmdline. The kernel then refuses any
+  module without a trusted signature.
+- **Otherwise** → it makes sure enforcement is off, so the machine still boots
+  and loads nvidia/synapse_kmod. Modules are still signed; you're just not
+  enforcing yet.
+
+Check posture any time: `syn-secureboot status`. Guided enrollment for real
+hardware: `syn-secureboot enroll`.
 
 `module.sig_enforce=1` / kernel `lockdown=integrity` are the real wall against
 loading an unsigned/untrusted module — but they require the module-signing key
-to be **trusted by the kernel**, which it is not on this machine:
+to be **trusted by the kernel**. On a machine with Secure Boot **off** (as
+shipped), it is not:
 
 - Secure Boot is **off**, so no shim/MOK keyring is loaded.
 - The DKMS key (`/var/lib/dkms/mok.pub`) signs `synapse_kmod` *and* the nvidia

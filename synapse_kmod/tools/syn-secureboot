@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+#
+# syn-secureboot — SynapseOS module-signature policy manager.
+#
+# Design: "assume Secure Boot is on, fall back safely if it is not."
+#
+#   apply   — enable kernel module signature enforcement (module.sig_enforce=1)
+#             IFF it is provably safe: Secure Boot is on AND every currently
+#             loaded out-of-tree module carries a signature the kernel trusts.
+#             Otherwise it makes sure enforcement is OFF so a fresh/non-SB
+#             install (or one where SB was later disabled) can still load its
+#             nvidia/synapse_kmod modules and boot. Idempotent; only touches
+#             the bootloader when the desired state differs from the current.
+#   status  — print the current signing/SB posture (read-only, safe anywhere).
+#   enroll  — guided sbctl setup for real hardware (interactive, physical).
+#
+# Enforcement is applied via the kernel command line so it takes effect from
+# early boot. A oneshot unit runs `apply` each boot; because it only enables
+# enforcement when it is safe, shipping it enabled implements the "assume SB,
+# fall back" behaviour with no brick risk on machines without Secure Boot.
+#
+# SynapseOS Project — GPLv2
+set -uo pipefail
+
+GRUB_DEFAULT="/etc/default/grub"
+MOK_KEY="/var/lib/dkms/mok.pub"
+LOG_TAG="syn-secureboot"
+CMDLINE_TOKEN="module.sig_enforce=1"
+
+log()  { echo "$LOG_TAG: $*"; command -v logger >/dev/null && logger -t "$LOG_TAG" "$*" || true; }
+
+# ── Secure Boot state ────────────────────────────────────────
+sb_enabled() {
+    local f v
+    f=$(ls /sys/firmware/efi/efivars/SecureBoot-* 2>/dev/null | head -1) || return 1
+    [ -n "$f" ] || return 1
+    v=$(od -An -t u1 "$f" 2>/dev/null | awk '{print $NF}')
+    [ "$v" = "1" ]
+}
+
+# ── Is enforcement safe right now? ───────────────────────────
+# TAINT_UNSIGNED_MODULE is bit 13 (8192): set when a module without a
+# kernel-trusted signature was loaded. If it is clear, every loaded module was
+# trusted, so turning on enforcement will not lock anything out.
+untrusted_module_loaded() {
+    local t; t=$(cat /proc/sys/kernel/tainted 2>/dev/null || echo 0)
+    (( (t & 8192) != 0 ))
+}
+
+sig_enforce_live() { cat /sys/module/module/parameters/sig_enforce 2>/dev/null || echo '?'; }
+
+cmdline_has_token() {
+    [ -f "$GRUB_DEFAULT" ] && grep -q -- "$CMDLINE_TOKEN" "$GRUB_DEFAULT"
+}
+
+regen_grub() {
+    local cfg
+    for cfg in /boot/grub/grub.cfg /boot/grub2/grub.cfg /efi/grub/grub.cfg; do
+        [ -f "$cfg" ] || continue
+        if command -v grub-mkconfig >/dev/null; then
+            grub-mkconfig -o "$cfg" >/dev/null 2>&1 && { log "regenerated $cfg"; return 0; }
+        fi
+    done
+    log "WARNING: could not regenerate grub.cfg — new cmdline takes effect only after a manual grub-mkconfig"
+    return 1
+}
+
+add_token() {
+    cmdline_has_token && return 0
+    # Append into GRUB_CMDLINE_LINUX_DEFAULT="...".
+    sed -i -E "s/^(GRUB_CMDLINE_LINUX_DEFAULT=\")([^\"]*)(\")/\1\2 ${CMDLINE_TOKEN}\3/" "$GRUB_DEFAULT"
+    # Collapse any double space we may have introduced.
+    sed -i -E "s/(GRUB_CMDLINE_LINUX_DEFAULT=\") +/\1/" "$GRUB_DEFAULT"
+    log "added $CMDLINE_TOKEN to $GRUB_DEFAULT"
+    regen_grub
+}
+
+remove_token() {
+    cmdline_has_token || return 0
+    sed -i -E "s/ *${CMDLINE_TOKEN}//g" "$GRUB_DEFAULT"
+    log "removed $CMDLINE_TOKEN from $GRUB_DEFAULT (enforcement not safe here)"
+    regen_grub
+}
+
+# ── apply ────────────────────────────────────────────────────
+cmd_apply() {
+    [ "$(id -u)" = 0 ] || { echo "syn-secureboot apply must run as root" >&2; exit 1; }
+
+    if sb_enabled && ! untrusted_module_loaded; then
+        log "Secure Boot ON and all loaded modules trusted → enabling signature enforcement"
+        add_token
+        # Belt for the rest of this boot (blocks future untrusted loads now).
+        echo 1 > /sys/module/module/parameters/sig_enforce 2>/dev/null || true
+    else
+        if sb_enabled; then
+            log "Secure Boot ON but an untrusted module is loaded (tainted) — NOT enforcing (would lock it out). Enroll the signing key, then re-run."
+        else
+            log "Secure Boot OFF → signature enforcement not applicable; falling back to unenforced (modules still signed). Enable SB + 'syn-secureboot enroll' to harden."
+        fi
+        remove_token
+    fi
+}
+
+# ── status ───────────────────────────────────────────────────
+cmd_status() {
+    echo "Secure Boot:        $(sb_enabled && echo enabled || echo DISABLED)"
+    echo "sig_enforce (live): $(sig_enforce_live)"
+    echo "cmdline token set:  $(cmdline_has_token && echo yes || echo no)"
+    echo "untrusted module:   $(untrusted_module_loaded && echo 'YES (a loaded module is not kernel-trusted)' || echo 'no (all trusted)')"
+    echo "signing key:        $([ -f "$MOK_KEY" ] && echo "$MOK_KEY" || echo '<none>')"
+    if sb_enabled && ! untrusted_module_loaded; then
+        echo "verdict:            SAFE to enforce (apply will enable it)"
+    elif sb_enabled; then
+        echo "verdict:            SB on but a module is untrusted — enroll the key first"
+    else
+        echo "verdict:            SB off — enforcement withheld (safe fallback)"
+    fi
+}
+
+# ── enroll (interactive, real hardware) ──────────────────────
+cmd_enroll() {
+    cat <<'EOF'
+Guided Secure Boot enrollment (real hardware, physical presence required):
+
+  1. pacman -S sbctl
+  2. Put the firmware in "Setup Mode" (clear existing SB keys in BIOS/UEFI).
+  3. sbctl create-keys
+  4. sbctl enroll-keys -m            # -m also keeps Microsoft keys (needed if
+                                     # you dual-boot Windows or use signed shim)
+  5. sbctl sign -s /boot/efi/EFI/SynapseOS/grubx64.efi
+     sbctl sign -s /boot/vmlinuz-linux
+     # (re-sign after each kernel/grub update; a pacman hook can automate this)
+  6. Enroll the DKMS module key so the kernel trusts your modules:
+     sbctl enroll-keys is for EFI; for MODULES, import the DKMS key —
+     mokutil --import /var/lib/dkms/mok.pub   (if using shim), OR ensure the
+     kernel's .platform keyring picks up the db key sbctl enrolled.
+  7. Enable Secure Boot in firmware, reboot.
+  8. Verify:  syn-secureboot status   → "SAFE to enforce"
+     then:    syn-secureboot apply    → enables module.sig_enforce=1
+
+  WARNING: a second OS on this box (e.g. batocera) must also be signed or it
+  will stop booting under Secure Boot. Verify it boots before relying on SB.
+EOF
+}
+
+case "${1:-status}" in
+    apply)  cmd_apply  ;;
+    status) cmd_status ;;
+    enroll) cmd_enroll ;;
+    *) echo "usage: syn-secureboot {status|apply|enroll}" >&2; exit 2 ;;
+esac

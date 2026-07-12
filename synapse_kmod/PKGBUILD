@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=9
+pkgrel=10
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL2')
@@ -66,6 +66,12 @@ package() {
     # Opt-in "seal module loading" unit — installed DISABLED (see HARDENING.md)
     install -Dm644 systemd/synapse-lock-modules.service \
         "$pkgdir/usr/lib/systemd/system/synapse-lock-modules.service"
+
+    # Module-signature policy tool + its boot unit ("assume SB on, fall back")
+    install -Dm755 tools/syn-secureboot \
+        "$pkgdir/usr/bin/syn-secureboot"
+    install -Dm644 systemd/synapse-secureboot.service \
+        "$pkgdir/usr/lib/systemd/system/synapse-secureboot.service"
 
     # Hardening documentation
     install -Dm644 HARDENING.md \

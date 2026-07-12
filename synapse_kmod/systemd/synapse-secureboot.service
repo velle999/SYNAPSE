@@ -1,0 +1,18 @@
+[Unit]
+Description=SynapseOS: apply module-signature policy (assume SB on, fall back safely)
+Documentation=file:/usr/share/doc/synapse_kmod/HARDENING.md
+# Run after modules have loaded so the trusted/untrusted taint reflects reality.
+After=multi-user.target
+# Don't run in the live ISO environment (nothing installed to sign for).
+ConditionPathExists=!/run/archiso/bootmnt
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Idempotent and safe: enables enforcement ONLY when Secure Boot is on and every
+# loaded module is kernel-trusted; otherwise it ensures enforcement is off so a
+# non-SB machine still boots. Only touches the bootloader when state changes.
+ExecStart=/usr/bin/syn-secureboot apply
+
+[Install]
+WantedBy=multi-user.target

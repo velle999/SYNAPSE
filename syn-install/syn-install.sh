@@ -625,6 +625,10 @@ echo "  User '$NEW_USER' created (uid=$USER_UID)"
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
+# Module-signature policy: safe to enable — only enforces when Secure Boot is
+# on and all modules are kernel-trusted, otherwise it's a no-op (assume SB on,
+# fall back if not).
+arch-chroot /mnt systemctl enable synapse-secureboot.service 2>/dev/null || true
 arch-chroot /mnt systemctl enable vboxservice 2>/dev/null || true
 
 # Audio (PipeWire). --global, not --enable: these are *user* units, and they
