@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=64
+pkgrel=65
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -37,6 +37,12 @@ package() {
     # falls back to the "Open With" chooser. See config/applications.menu.
     install -Dm644 config/applications.menu \
         "$pkgdir/etc/xdg/menus/applications.menu"
+
+    # Point KDE's terminal actions (Dolphin's "Open Terminal" / F4) at foot;
+    # KIO's fallback is a hard-coded konsole, which we don't ship. See
+    # config/kdeglobals.
+    install -Dm644 config/kdeglobals \
+        "$pkgdir/etc/xdg/kdeglobals"
 
     # Media idle-inhibit (synui-idle-inhibit binary is installed by meson).
     install -Dm755 systemd/synui-media-inhibit.sh \

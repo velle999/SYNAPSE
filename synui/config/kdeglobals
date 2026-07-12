@@ -1,0 +1,16 @@
+# System-wide KDE defaults for a SynapseOS session.
+#
+# KIO's KTerminalLauncherJob — what Dolphin's "Open Terminal" / F4 and every
+# other KDE "run this in a terminal" action goes through — reads these two
+# keys and, finding neither, falls back to a hard-coded `konsole`. SynapseOS
+# ships foot and no konsole, so the fallback resolves to nothing and the menu
+# entry silently does nothing at all. Same shape as the missing
+# applications.menu: a KDE default that quietly assumes Plasma is installed.
+#
+# Both keys are set because KIO consults them in order: TerminalService (a
+# .desktop id, what System Settings writes) first, TerminalApplication (a bare
+# executable, the legacy key) second. A per-user ~/.config/kdeglobals still
+# overrides this, so changing the terminal later works as normal.
+[General]
+TerminalApplication=foot
+TerminalService=foot.desktop
