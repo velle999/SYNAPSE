@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=61
+pkgrel=62
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -9,7 +9,9 @@ license=('GPL2')
 #   Discord screen capture silently fails. slurp is xdpw's output chooser.
 # rtkit: pipewire/wireplumber cannot get realtime scheduling without it and the
 #   audio stack xruns under load (chibi's TTS, and anything playing during a game).
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp')
+# grim/slurp/wl-clipboard: the Print-key screenshot tool (synui-screenshot).
+#   slurp is also xdpw's output chooser.
+depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
@@ -57,4 +59,8 @@ package() {
     # Game mode indicator for waybar (custom/gamemode polls this).
     install -Dm755 systemd/synui-game-status.sh \
         "$pkgdir/usr/bin/synui-game-status"
+
+    # Screenshots: Print / Shift+Print / Ctrl+Print (see seed_default_binds).
+    install -Dm755 systemd/synui-screenshot.sh \
+        "$pkgdir/usr/bin/synui-screenshot"
 }

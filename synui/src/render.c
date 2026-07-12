@@ -1589,8 +1589,9 @@ static const char *dockact_label(syn_dockact_t a)
     case SYN_DOCKACT_PIN:    return "Pin to Dock";
     case SYN_DOCKACT_UNPIN:  return "Unpin from Dock";
     case SYN_DOCKACT_OPEN:   return "Open";
-    case SYN_DOCKACT_NEWWIN: return "New Window";
-    case SYN_DOCKACT_QUIT:   return "Quit";
+    case SYN_DOCKACT_NEWWIN:   return "New Window";
+    case SYN_DOCKACT_CLOSEWIN: return "Close Window";
+    case SYN_DOCKACT_QUIT:     return "Quit All Windows";
     }
     return "?";
 }

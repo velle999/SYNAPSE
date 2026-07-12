@@ -823,8 +823,12 @@ void dockmenu_open(syn_server_t *s, syn_dock_entry_t *e, double lx, double ly)
     if (ic->exec[0])
         s->dockmenu.actions[n++] = e->running ? SYN_DOCKACT_NEWWIN
                                               : SYN_DOCKACT_OPEN;
-    if (e->running)
+    /* Close-one before quit-all: closing a single window is the common intent,
+     * and Quit sits furthest from the cursor so it is hard to hit by accident. */
+    if (e->running) {
+        s->dockmenu.actions[n++] = SYN_DOCKACT_CLOSEWIN;
         s->dockmenu.actions[n++] = SYN_DOCKACT_QUIT;
+    }
     s->dockmenu.action_count = n;
 
     int w = DOCKMENU_W, h = n * DOCKMENU_ITEM_H + 8;
@@ -896,6 +900,28 @@ void dockmenu_click(syn_server_t *s, double lx, double ly)
     case SYN_DOCKACT_NEWWIN: {
         const syn_icon_entry_t *ic = icon_lookup(app_id);
         if (ic->exec[0]) synui_spawn(ic->exec);
+        break;
+    }
+    case SYN_DOCKACT_CLOSEWIN: {
+        /* One window, not the app. Prefer the focused window when it belongs to
+         * this app_id — that is the one the user is looking at — and otherwise
+         * take the first mapped window we find. Re-resolved from app_id rather
+         * than a view pointer stashed at open time, because a window can close
+         * on its own while the menu is up. */
+        syn_view_t *target = NULL, *f = s->focused_view;
+        if (f && f->mapped) {
+            const char *aid = view_app_id(f);
+            if (aid && strcmp(aid, app_id) == 0) target = f;
+        }
+        for (int wi = 0; wi < WORKSPACE_MAX && !target; wi++) {
+            syn_view_t *v;
+            wl_list_for_each(v, &s->workspaces[wi].windows, link) {
+                if (!v->mapped) continue;
+                const char *aid = view_app_id(v);
+                if (aid && strcmp(aid, app_id) == 0) { target = v; break; }
+            }
+        }
+        if (target) view_close(target);
         break;
     }
     case SYN_DOCKACT_QUIT:

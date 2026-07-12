@@ -410,6 +410,20 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         else                   cmdbar_show(s);
     } else if (strcmp(action, "overlay") == 0) {
         overlay_toggle(s);
+    } else if (strcmp(action, "screenshot") == 0) {
+        /* Capture the monitor the user is actually on. grim can only be told a
+         * monitor by name, and nothing outside the compositor knows which one
+         * has focus — a bare `grim` grabs the whole layout's bounding box,
+         * which across SYNAPSE's three monitors is a 3640x3000 image with dead
+         * space in the gaps. Fall back to that only if there is no focus. */
+        syn_output_t *o = server_focused_output(s);
+        const char *name = (o && o->wlr_output) ? o->wlr_output->name : NULL;
+        char cmd[256];
+        if (name && *name)
+            snprintf(cmd, sizeof(cmd), "synui-screenshot output '%s'", name);
+        else
+            snprintf(cmd, sizeof(cmd), "synui-screenshot full");
+        spawn(cmd);
     } else if (strcmp(action, "close") == 0) {
         if (s->focused_view) view_close(s->focused_view);
     } else if (strcmp(action, "quit") == 0) {
@@ -647,6 +661,13 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
             if (sym == shifted_nums[i]) { sym = XKB_KEY_1 + i; break; }
         }
     }
+
+    /* Print sits at shift level 2 under *Alt*, not Shift (its xkb type is
+     * PC_ALT_LEVEL2), so alt+print arrives as Sys_Req and would never match a
+     * bind written as "alt+print". Nothing wants to bind Sys_Req itself. */
+    if (sym == XKB_KEY_Sys_Req)
+        sym = XKB_KEY_Print;
+
     xkb_keysym_t lower = xkb_keysym_to_lower(sym);
 
     for (int i = 0; i < s->config.bind_count; i++) {

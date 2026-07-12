@@ -221,6 +221,15 @@ static void seed_default_binds(syn_config_t *cfg)
          * below us claims it: logind's ctrl-alt-del handling is a VT/console
          * thing, so inside a Wayland session the key reaches the compositor. */
         { "ctrl+alt+delete", "taskmgr" },
+        /* Print grabs the monitor you are looking at (the `screenshot` action
+         * resolves it — grim cannot). Shift+Print drags out an area with
+         * slurp; Ctrl+Print takes the whole layout, every monitor at once.
+         * super+shift+s is the same area-select under the shortcut most people
+         * already have in their fingers from elsewhere. */
+        { "print",           "screenshot" },
+        { "shift+print",     "spawn synui-screenshot region" },
+        { "ctrl+print",      "spawn synui-screenshot full" },
+        { "super+shift+s",   "spawn synui-screenshot region" },
         { "super+g",         "game" },
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },

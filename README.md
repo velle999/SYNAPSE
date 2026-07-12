@@ -136,8 +136,14 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Ctrl`+`Alt`+`Delete` / `Super`+`T` | Task manager (processes, CPU/RAM/GPU) |
 | `Super`+`G` | Game mode |
 | `Super`+`L` | Lock screen |
+| `Print` | Screenshot the monitor you're on |
+| `Shift`+`Print` / `Super`+`Shift`+`S` | Screenshot an area (drag it out with slurp) |
+| `Ctrl`+`Print` | Screenshot every monitor at once |
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
+
+Screenshots land in `~/Pictures/Screenshots` *and* on the clipboard, so you can
+paste one straight into a chat without opening the file.
 
 ---
 

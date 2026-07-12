@@ -410,6 +410,7 @@ typedef enum {
     SYN_DOCKACT_UNPIN,     /* remove it from the pinned set */
     SYN_DOCKACT_OPEN,      /* launch (.desktop Exec) — not currently running */
     SYN_DOCKACT_NEWWIN,    /* launch another instance — already running */
+    SYN_DOCKACT_CLOSEWIN,  /* close one window of this app_id — the focused one */
     SYN_DOCKACT_QUIT,      /* close every mapped window of this app_id */
 } syn_dockact_t;
 #define SYN_DOCKMENU_MAX 6
