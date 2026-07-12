@@ -84,6 +84,27 @@ mount)
         }
     }
 
+    # Hand the loop device back to the kernel once its last mount goes away.
+    #
+    # Detaching a loop device is Loop.Delete, and nothing but this script ever
+    # calls it: Solid — and so the eject button beside the image in Dolphin's
+    # Places panel — can unmount a filesystem but has no concept of the loop
+    # device underneath it. So an eject used to unmount the image and leave the
+    # loop attached, which kept the entry sitting in the panel looking mounted,
+    # and only a second trip through this script's unmount action cleared it.
+    #
+    # Autoclear makes that impossible: the kernel drops the loop on the last
+    # close, so *whoever* releases the mount gets a full teardown. It has to be
+    # set after the mount, which holds the device open — set it on an idle loop
+    # and it detaches under us immediately. Best-effort: the image is mounted
+    # either way, and a stale loop is untidy, not fatal.
+    if [ "$ours" = 1 ]; then
+        busctl call org.freedesktop.UDisks2 \
+            "/org/freedesktop/UDisks2/block_devices/${loop##*/}" \
+            org.freedesktop.UDisks2.Loop SetAutoclear "ba{sv}" true 0 \
+            >/dev/null 2>&1 || true
+    fi
+
     exec dolphin "$mp"
     ;;
 unmount)
@@ -98,8 +119,20 @@ unmount)
             || die "Could not unmount $dev:\n\n$out"
     done
 
-    out=$(udisksctl loop-delete --block-device "$loop" 2>&1) \
-        || die "Could not detach $loop:\n\n$out"
+    # Autoclear, set when we mounted it, means the unmount above has most
+    # likely detached the loop device already. Deleting it a second time is not
+    # merely redundant: once the backing file is gone udisks2 no longer sees the
+    # device as one *we* set up, so the request escalates to loop-delete-others
+    # and the user gets an admin password prompt for a teardown that has in fact
+    # already happened.
+    #
+    # Note the node outlives the binding — /dev/loop0 still exists, unbound, so
+    # a [ -b ] test proves nothing. What settles it is whether any loop device
+    # is still backed by this image, which is exactly what loop_for_image asks.
+    if loop=$(loop_for_image); then
+        out=$(udisksctl loop-delete --block-device "$loop" 2>&1) \
+            || die "Could not detach $loop:\n\n$out"
+    fi
     ;;
 *)
     die "Unknown action: $action"
