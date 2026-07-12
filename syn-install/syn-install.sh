@@ -293,7 +293,7 @@ pacstrap /mnt \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
-    rtkit polkit-gnome \
+    rtkit polkit-gnome xorg-xhost \
     mkinitcpio dkms \
     2>&1 || die "pacstrap failed — check network connection"
 
