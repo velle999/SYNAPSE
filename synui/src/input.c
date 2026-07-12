@@ -22,7 +22,7 @@
  *   Super+Shift+N        Restore a minimized window on this workspace
  *   Super+1..9           Switch to workspace N
  *   Super+Shift+1..9     Move focused window to workspace N
- *   Super+Backspace      Spawn: syn ask (quick AI query)
+ *   Super+Backspace      Command bar, scoped to the focused window (ai_ask)
  *
  * Pointer (interactive floating window management):
  *   Super + Left-drag    Move the window under the cursor
@@ -484,7 +484,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                 break;
             }
     } else if (strcmp(action, "ai_ask") == 0) {
-        spawn("foot -e synsh -c 'syn ask'");
+        cmdbar_ask_window(s);
     } else if (strcmp(action, "displays") == 0) {
         dispcfg_toggle(s);
     } else if (strcmp(action, "wallpaper") == 0) {

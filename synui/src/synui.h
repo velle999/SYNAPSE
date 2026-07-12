@@ -128,6 +128,10 @@ typedef struct {
     int   input_len;
     char  response[512];
     int   waiting;
+    /* Non-empty when the bar was opened via ai_ask (Super+Backspace) to ask
+     * about a specific window: "<app_id> — <title>". Folded into the prompt so
+     * "what is this?" has a referent. Cleared by a plain cmdbar_show. */
+    char  ctx[192];
 } syn_cmdbar_t;
 
 /* ── Neural overlay ──────────────────────────────────────── */
@@ -1222,6 +1226,7 @@ void ai_thread_stop(syn_server_t *s);    /* join the thread, close the pipes */
 void ai_thread_send(syn_server_t *s, const syn_ai_request_t *req);
 int  ai_thread_poll(syn_server_t *s, syn_ai_response_t *resp);
 void cmdbar_show(syn_server_t *s);
+void cmdbar_ask_window(syn_server_t *s);
 void cmdbar_hide(syn_server_t *s);
 void cmdbar_key(syn_server_t *s, uint32_t keysym);
 void cmdbar_submit(syn_server_t *s);

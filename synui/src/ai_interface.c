@@ -352,8 +352,41 @@ void cmdbar_show(syn_server_t *s)
     s->cmdbar.input[0]  = '\0';
     s->cmdbar.response[0] = '\0';
     s->cmdbar.waiting   = 0;
+    s->cmdbar.ctx[0]    = '\0';
     synui_render_cmdbar(s);
     wlr_log(WLR_DEBUG, "cmdbar: shown");
+}
+
+/* Super+Backspace: the command bar, scoped to the focused window, so you can
+ * ask "what is this?" / "why is it using the network?" and have the model know
+ * what "this" refers to. With nothing focused it degrades to a plain cmdbar.
+ *
+ * This used to spawn `foot -e synsh -c 'syn ask'`. `syn` has no `ask`
+ * subcommand and never has: the terminal opened, printed "Unknown command",
+ * and exited within a frame, so the key looked completely dead. */
+void cmdbar_ask_window(syn_server_t *s)
+{
+    cmdbar_show(s);
+
+    syn_view_t *v = s->focused_view;
+    if (!v || !v->mapped) {
+        strncpy(s->cmdbar.response, "no focused window — ask anything",
+                sizeof(s->cmdbar.response) - 1);
+        synui_render_cmdbar(s);
+        return;
+    }
+
+    const char *app   = view_app_id(v);
+    const char *title = view_title(v);
+    snprintf(s->cmdbar.ctx, sizeof(s->cmdbar.ctx), "%s — %s",
+             app   && *app   ? app   : "(unknown)",
+             title && *title ? title : "(untitled)");
+
+    /* Echo the referent back, so the bar visibly says what it is scoped to. */
+    snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+             "about: %s", s->cmdbar.ctx);
+    synui_render_cmdbar(s);
+    wlr_log(WLR_DEBUG, "cmdbar: ask-window ctx='%s'", s->cmdbar.ctx);
 }
 
 void cmdbar_hide(syn_server_t *s)
@@ -461,11 +494,19 @@ void cmdbar_submit(syn_server_t *s)
     bar->waiting = 1;
     strncpy(bar->response, "⟳ thinking…", sizeof(bar->response) - 1);
 
-    /* Build prompt with compositor context */
+    /* Build prompt with compositor context. focused_window is only present when
+     * the bar was opened with Super+Backspace (cmdbar_ask_window), which is what
+     * gives "what is this?" a referent. */
+    char focus_line[256] = "";
+    if (bar->ctx[0])
+        snprintf(focus_line, sizeof(focus_line),
+                 "focused_window: %s\n", bar->ctx);
+
     char prompt[1024];
     snprintf(prompt, sizeof(prompt),
         "[COMPOSITOR_CMD]\n"
         "workspace: %s\n"
+        "%s"
         "request: %s\n"
         "\n"
         "Respond with one of:\n"
@@ -474,6 +515,7 @@ void cmdbar_submit(syn_server_t *s)
         "WORKSPACE: switch <N>\n"
         "Or plain text to display as answer.",
         server_active_workspace(s)->name,
+        focus_line,
         bar->input
     );
 
