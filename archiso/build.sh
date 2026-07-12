@@ -190,6 +190,16 @@ case "$WITH_GPU" in
     *) err "Invalid --gpu value: $WITH_GPU (expected cuda, rocm, or auto)" ;;
 esac
 
+# Stage each backend into its own directory. The install is a wipe-and-replace
+# (see the rm -rf below — layered installs leave mismatched sonames), so a
+# single shared staging dir meant an ISO build, which is CPU-only by default,
+# silently destroyed the CUDA build this machine's synapd runs on. Keeping them
+# apart means building the ISO can never take the local GPU runtime down.
+# llama-staging stays as a symlink to the last build: synapd's PKGBUILD,
+# build-all.sh and /etc/ld.so.conf.d all reference that path by name.
+LLAMA_STAGING="${PROJECT_ROOT}/llama-staging-${WITH_GPU}"
+LLAMA_STAGING_LINK="${PROJECT_ROOT}/llama-staging"
+
 # ── Clean ─────────────────────────────────────────────────────
 # Always wipe the mkarchiso work dir, even under --no-clean. It carries
 # per-stage stamp files AND the pacstrapped airootfs; a stale one from a
@@ -265,13 +275,24 @@ cmake .. "${CMAKE_ARGS[@]}"
 log "Building llama.cpp (${JOBS} jobs)..."
 make -j"${JOBS}"
 
-# Stage into llama-staging/ at project root (referenced by synapd PKGBUILD)
-LLAMA_STAGING="${PROJECT_ROOT}/llama-staging"
 log "Installing llama.cpp to staging area..."
 # Wipe first: layering installs from different llama.cpp builds leaves
 # mismatched libllama/libggml sonames that break linking against staging.
+# Scoped to this backend's dir — never touches the other backends' builds.
 rm -rf "${LLAMA_STAGING}"
 DESTDIR="${LLAMA_STAGING}" make install
+
+# Repoint llama-staging at what we just built. If that steals the symlink from
+# a GPU build, say so loudly: synapd resolves libllama through this path at
+# runtime, so the machine silently drops to CPU inference until it is restored.
+_prev="$(readlink "${LLAMA_STAGING_LINK}" 2>/dev/null || true)"
+if [[ -n "$_prev" && "$_prev" != "$(basename "${LLAMA_STAGING}")" && "$_prev" != "llama-staging-cpu" ]]; then
+    warn "llama-staging was pointing at ${_prev} — repointing it to the ${WITH_GPU} build."
+    warn "Anything linking against llama-staging (synapd) now runs on ${WITH_GPU}."
+    warn "Restore with: ln -sfn ${_prev} ${LLAMA_STAGING_LINK}"
+fi
+# -n: don't descend into the existing symlink and nest the link inside its target
+ln -sfn "$(basename "${LLAMA_STAGING}")" "${LLAMA_STAGING_LINK}"
 ok "llama.cpp built and staged to ${LLAMA_STAGING}"
 
 cd "${SCRIPT_DIR}"
@@ -379,9 +400,11 @@ build_package() {
 
     # Copy llama-staging for packages that link against it (synapd) — a
     # symlink back into the project tree would be unreachable for synbuild.
-    if [[ -d "${PROJECT_ROOT}/llama-staging" ]]; then
+    # Copy the resolved backend dir, not the llama-staging symlink itself:
+    # the link is relative to the project root and dangles once moved here.
+    if [[ -d "${LLAMA_STAGING}" ]]; then
         rm -rf "${tmpbuild}/llama-staging"
-        cp -a "${PROJECT_ROOT}/llama-staging" "${tmpbuild}/llama-staging"
+        cp -a "${LLAMA_STAGING}" "${tmpbuild}/llama-staging"
     fi
 
     # Drop stale artifacts copied along from the source tree: old packages
@@ -478,7 +501,6 @@ fi
 # ── Stage llama.cpp libraries into airootfs ──────────────────
 step "Staging llama.cpp libraries"
 
-LLAMA_STAGING="${PROJECT_ROOT}/llama-staging"
 if [[ -d "${LLAMA_STAGING}/usr/lib" ]]; then
     mkdir -p "${SCRIPT_DIR}/airootfs/usr/lib"
     # Clear llama libs staged by previous runs — mixed-build leftovers

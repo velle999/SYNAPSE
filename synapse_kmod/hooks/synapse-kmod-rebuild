@@ -32,8 +32,19 @@ for kdir in /lib/modules/*/build; do
     fi
 done
 
-# Remove modules for kernels that no longer exist
-for entry in $(dkms status "$MODULE/$VERSION" 2>/dev/null | awk -F'[ ,]+' '{print $4}'); do
+# Remove modules for kernels that no longer exist.
+# dkms prints "<module>/<version>, <kernel>, <arch>: <status>", so splitting on
+# both ',' and ':' puts the kernel in field 2. Splitting on spaces+commas (the
+# old way) landed on field 4 — the literal word "installed" — so this loop only
+# ever tried to remove a kernel named "installed" and no stale build was cleaned.
+for entry in $(dkms status "$MODULE/$VERSION" 2>/dev/null \
+                 | awk -F'[,:]' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2}'); do
+    # Guard against a dkms output format we don't recognise: a kernel release
+    # starts with a digit, a status word ("installed", "added") never does.
+    case "$entry" in
+        [0-9]*) ;;
+        *) continue ;;
+    esac
     if [ ! -d "/lib/modules/$entry" ]; then
         echo ":: Removing stale $MODULE build for $entry"
         dkms remove "$MODULE/$VERSION" -k "$entry" --no-initrd 2>/dev/null || true

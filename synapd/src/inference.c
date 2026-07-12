@@ -54,7 +54,18 @@ static int detect_gpu_layers(void) {
      * Currently probes via lspci. Future: /sys/class/drm,
      * libvulkan availability, CUDA device enumeration.
      */
-    FILE *f = popen("lspci 2>/dev/null | grep -iE 'VGA|3D|Display' | head -1", "r");
+    /*
+     * Match the PCI *class*, not the whole line. The old pattern was a
+     * case-insensitive 'VGA|3D|Display' over all of lspci, so any device whose
+     * model name happened to contain those letters won — on this machine a
+     * "SanDisk Ultra 3D" NVMe SSD matched '3D' and got picked as the GPU,
+     * ahead of the actual card, because of the head -1. The class name is the
+     * field between the slot and the first colon and is one of a fixed set, so
+     * anchor on that and drop -i (product names are not classes).
+     */
+    FILE *f = popen("lspci 2>/dev/null | grep -E "
+                    "'^[0-9a-f:.]+ (VGA compatible controller|3D controller|Display controller):'"
+                    " | head -1", "r");
     if (!f) return 0;
 
     char buf[256] = {0};
