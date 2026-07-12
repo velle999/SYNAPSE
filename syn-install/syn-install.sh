@@ -330,18 +330,20 @@ SigLevel = Optional TrustAll
 Server = file:///var/cache/synapseos
 REPOEOF
 
+# synapse-llama carries libllama/libggml and is pulled in automatically as a
+# dependency of synapd — do NOT copy those libraries in by hand.
+#
+# This used to `cp /run/archiso/airootfs/usr/lib/libllama* /mnt/usr/lib/`. Two
+# bugs in one line: the files landed owned by no package (pacman could never
+# upgrade them, and a stale set silently shadowed the real libraries in the
+# ld.so cache — synapd ran a months-old CPU-only libllama while claiming GPU
+# offload was on), and plain `cp` dereferenced the soname symlinks, writing
+# three identical 4 MB regular files per library instead of a symlink chain,
+# which is what made ldconfig warn "is not a symbolic link" on every pacman run.
 arch-chroot /mnt pacman -Sy --noconfirm \
     synapd synsh synnet synguard synui synapse_kmod \
     syn syn-model syn-firstboot \
     2>&1 || warn "Some SynapseOS packages failed to install"
-
-# Copy llama.cpp shared libraries from live ISO
-echo "  Copying AI runtime libraries..."
-for lib in /run/archiso/airootfs/usr/lib/libllama* \
-           /run/archiso/airootfs/usr/lib/libggml*; do
-    [ -f "$lib" ] && cp "$lib" /mnt/usr/lib/ && echo "    $(basename "$lib")"
-done
-arch-chroot /mnt ldconfig
 
 # Copy AI model if present on live ISO
 MODEL_SRC=""

@@ -25,6 +25,7 @@ plymouth
 archiso
 mkinitcpio-archiso
 syslinux
+synapse-llama
 synapd
 synsh
 synnet

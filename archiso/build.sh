@@ -23,6 +23,10 @@
 #                   (libcuda.so.1), and synapd dies with exit 127 on any
 #                   machine without that driver — including every VM.
 #   --no-gpu        (default; kept for compatibility)
+#   --llama-only    Build and stage llama.cpp, then stop (no packages, no ISO).
+#                   This is the recovery path for the local GPU runtime:
+#                   sudo ./build.sh --gpu=cuda --llama-only, then reinstall
+#                   synapd. Restoring GPU should not cost a full ISO build.
 #   --no-clean      Skip cleaning previous build artifacts
 #   --jobs N        Parallel build jobs (default: nproc)
 #   --sign          GPG-sign the ISO
@@ -73,6 +77,7 @@ WITH_MODEL=true
 WITH_GPU=cpu
 CLEAN=true
 SIGN=false
+LLAMA_ONLY=false
 
 # ── Colors ────────────────────────────────────────────────────
 C_BRAND='\033[38;5;51m'
@@ -95,6 +100,7 @@ for arg in "$@"; do
         --no-model)   WITH_MODEL=false ;;
         --no-gpu)     WITH_GPU=cpu ;;
         --gpu=*)      WITH_GPU="${arg#--gpu=}" ;;
+        --llama-only) LLAMA_ONLY=true ;;
         --no-clean)   CLEAN=false ;;
         --sign)       SIGN=true ;;
         --jobs=*)     JOBS="${arg#--jobs=}" ;;
@@ -282,6 +288,15 @@ log "Installing llama.cpp to staging area..."
 rm -rf "${LLAMA_STAGING}"
 DESTDIR="${LLAMA_STAGING}" make install
 
+# Before the split, llama-staging was a real directory. ln can't overwrite one,
+# so migrate it out of the way rather than die here — and never delete it, it may
+# be the only copy of a build something still links against.
+if [[ -d "${LLAMA_STAGING_LINK}" && ! -L "${LLAMA_STAGING_LINK}" ]]; then
+    _orphan="${LLAMA_STAGING_LINK}.pre-split-$(date +%Y%m%d%H%M%S)"
+    warn "llama-staging is a real directory (pre-split layout) — moving it to $(basename "${_orphan}")"
+    mv "${LLAMA_STAGING_LINK}" "${_orphan}"
+fi
+
 # Repoint llama-staging at what we just built. If that steals the symlink from
 # a GPU build, say so loudly: synapd resolves libllama through this path at
 # runtime, so the machine silently drops to CPU inference until it is restored.
@@ -295,6 +310,16 @@ fi
 ln -sfn "$(basename "${LLAMA_STAGING}")" "${LLAMA_STAGING_LINK}"
 ok "llama.cpp built and staged to ${LLAMA_STAGING}"
 
+if [[ "$LLAMA_ONLY" == "true" ]]; then
+    if [[ "$WITH_GPU" == "cuda" && ! -e "${LLAMA_STAGING}/usr/lib/libggml-cuda.so" ]]; then
+        err "CUDA was requested but libggml-cuda.so is not in the staging lib dir — this is a CPU build."
+    fi
+    ok "--llama-only: stopping before packages/ISO."
+    log "Next: rebuild + reinstall synapd so it links against this staging, then"
+    log "verify with: grep -c nvidia /proc/\$(pidof synapd)/maps"
+    exit 0
+fi
+
 cd "${SCRIPT_DIR}"
 
 # ── Build SynapseOS packages ──────────────────────────────────
@@ -302,6 +327,8 @@ step "Building SynapseOS packages"
 
 # All packages with a PKGBUILD in the project root
 PACKAGES=(
+    # Must precede synapd — synapd depends on it.
+    synapse-llama
     synapd
     synsh
     synguard
@@ -398,13 +425,21 @@ build_package() {
     tmpbuild="$(mktemp -d "/var/tmp/synapse-pkg-${pkg}.XXXXXX")"
     cp -a "${pkgdir}/." "${tmpbuild}/"
 
-    # Copy llama-staging for packages that link against it (synapd) — a
-    # symlink back into the project tree would be unreachable for synbuild.
-    # Copy the resolved backend dir, not the llama-staging symlink itself:
-    # the link is relative to the project root and dangles once moved here.
+    # Copy llama-staging for packages that need it — synapd links against it,
+    # synapse-llama packages it. A symlink back into the project tree would be
+    # unreachable for synbuild, so copy the resolved backend dir; the bare
+    # llama-staging symlink is relative to the project root and dangles here.
+    #
+    # Keep the backend-qualified NAME (llama-staging-cuda, not llama-staging):
+    # synapse-llama's PKGBUILD resolves its tree by backend so it can never
+    # package a CPU build as the CUDA one. synapd looks for the bare name, so
+    # provide that as a local symlink alongside.
     if [[ -d "${LLAMA_STAGING}" ]]; then
-        rm -rf "${tmpbuild}/llama-staging"
-        cp -a "${LLAMA_STAGING}" "${tmpbuild}/llama-staging"
+        local _sname
+        _sname="$(basename "${LLAMA_STAGING}")"
+        rm -rf "${tmpbuild}/llama-staging" "${tmpbuild}/${_sname}"
+        cp -a "${LLAMA_STAGING}" "${tmpbuild}/${_sname}"
+        ln -sfn "${_sname}" "${tmpbuild}/llama-staging"
     fi
 
     # Drop stale artifacts copied along from the source tree: old packages
@@ -429,7 +464,11 @@ build_package() {
     # No PKGDEST: makepkg silently ignores it as a trailing argument, and
     # local-repo isn't writable by synbuild — let the package land in the
     # build dir and copy it over as root below.
-    sudo -u synbuild -H makepkg -fd --noconfirm \
+    # SYNAPSE_LLAMA_BACKEND selects which variant synapse-llama's PKGBUILD
+    # builds (cpu -> synapse-llama, cuda -> synapse-llama-cuda). sudo scrubs the
+    # environment, so hand it over explicitly via env.
+    sudo -u synbuild -H env "SYNAPSE_LLAMA_BACKEND=${WITH_GPU}" \
+        makepkg -fd --noconfirm \
         2>&1 | sed 's/^/  /' \
         || err "${pkg} build failed — aborting (packages.x86_64 needs every package)"
 
@@ -498,34 +537,35 @@ quantization   = Q4_K_M  (4-bit, medium quality)
 EOF
 fi
 
-# ── Stage llama.cpp libraries into airootfs ──────────────────
-step "Staging llama.cpp libraries"
+# ── Sweep llama libs out of the airootfs overlay ─────────────
+# llama used to be shipped by cp'ing the .so files straight into
+# airootfs/usr/lib. That put files in /usr/lib owned by NO package: pacman
+# could not upgrade or remove them, ldconfig complained about them on every
+# transaction, and a stale set silently shadowed the real libraries in the
+# ld.so cache — which is how synapd ran a months-old CPU-only libllama while
+# reporting that GPU offload was on.
+#
+# The synapse-llama package now owns these files and synapd depends on it, so
+# they arrive through pacman like everything else. This step only cleans up the
+# orphans a previous build of this script left in the overlay; without it they
+# would keep shipping and keep shadowing the packaged copies.
+step "Sweeping unowned llama libs from airootfs"
 
-if [[ -d "${LLAMA_STAGING}/usr/lib" ]]; then
-    mkdir -p "${SCRIPT_DIR}/airootfs/usr/lib"
-    # Clear llama libs staged by previous runs — mixed-build leftovers
-    # (different sonames) would otherwise ship in the ISO.
-    rm -f "${SCRIPT_DIR}"/airootfs/usr/lib/libllama*.so* \
+_swept=0
+for _f in "${SCRIPT_DIR}"/airootfs/usr/lib/libllama*.so* \
           "${SCRIPT_DIR}"/airootfs/usr/lib/libggml*.so* \
-          "${SCRIPT_DIR}"/airootfs/usr/lib/libmtmd*.so*
-    # Copy shared libraries (follow symlinks to get actual files + create symlinks)
-    for lib in "${LLAMA_STAGING}"/usr/lib/lib*.so*; do
-        [[ -e "$lib" ]] || continue
-        cp -a "$lib" "${SCRIPT_DIR}/airootfs/usr/lib/"
-    done
-    ok "llama.cpp libraries staged into airootfs"
-
-    # Also stage llama-server and key binaries synapd needs
-    mkdir -p "${SCRIPT_DIR}/airootfs/usr/bin"
-    for bin in llama-server llama-cli; do
-        if [[ -f "${LLAMA_STAGING}/usr/bin/${bin}" ]]; then
-            cp -a "${LLAMA_STAGING}/usr/bin/${bin}" "${SCRIPT_DIR}/airootfs/usr/bin/"
-        fi
-    done
-    ok "llama.cpp binaries staged"
-else
-    warn "llama-staging/usr/lib not found — synapd will run without llama"
+          "${SCRIPT_DIR}"/airootfs/usr/lib/libmtmd*.so* \
+          "${SCRIPT_DIR}"/airootfs/usr/bin/llama-server \
+          "${SCRIPT_DIR}"/airootfs/usr/bin/llama-cli; do
+    [[ -e "$_f" ]] || continue
+    rm -f "$_f"
+    _swept=$((_swept + 1))
+done
+if (( _swept )); then
+    warn "removed ${_swept} unowned llama file(s) from the airootfs overlay"
+    warn "they are shipped by the synapse-llama package now"
 fi
+ok "airootfs carries no unowned llama libs"
 
 # ── Configure airootfs ────────────────────────────────────────
 step "Configuring airootfs"

@@ -1,0 +1,99 @@
+# synapse-llama — llama.cpp shared libraries, packaged.
+#
+# WHY THIS PACKAGE EXISTS
+#
+# llama's libs used to reach the system two ways, both bad:
+#   1. copied into /usr/lib as files owned by no package (the ISO did this by
+#      cp'ing into airootfs/usr/lib), and
+#   2. loaded at runtime through /etc/ld.so.conf.d/*.conf entries pointing at a
+#      *build directory in $HOME* (SYNAPSE/llama-staging).
+#
+# That combination silently killed GPU offload twice. A stale unowned copy in
+# /usr/lib shadowed the real build in the ld.so cache, so synapd loaded a
+# months-old CPU-only libllama while every log line claimed GPU was on; and an
+# ISO build (CPU by default) could wipe the staging dir out from under the
+# running daemon. Neither failure mode errors — inference just quietly runs on
+# the CPU.
+#
+# Owned files in /usr/lib + a normal soname lookup remove both failure modes.
+#
+# BACKEND SELECTION (build time):
+#   SYNAPSE_LLAMA_BACKEND=cuda makepkg  ->  synapse-llama-cuda
+#   (unset / anything else)             ->  synapse-llama     (portable CPU)
+#
+# The CUDA package declares provides+conflicts on synapse-llama, so pacman
+# REFUSES to replace a GPU build with a CPU one rather than doing it silently.
+# That is the whole point: the regression this package prevents was silent.
+#
+# The libraries themselves are built by archiso/build.sh (which owns the CUDA
+# recipe — the CCCL/cub patch, the arch flags) and staged into
+# llama-staging-<backend>/. This PKGBUILD only packages that tree.
+
+_backend="${SYNAPSE_LLAMA_BACKEND:-cpu}"
+
+pkgver=0.1.0
+pkgrel=1
+# The upstream llama.cpp commit build.sh pins. Keep in sync with LLAMA_REF.
+_llama_ref=b8272
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('MIT')
+options=('!strip' '!debug')
+
+if [ "$_backend" = "cuda" ]; then
+    pkgname=synapse-llama-cuda
+    pkgdesc="llama.cpp shared libraries for SynapseOS (CUDA build, ${_llama_ref})"
+    # libggml-cuda NEEDs libcudart/libcublas/libcublasLt (cuda) and
+    # libcuda.so.1 (the driver, from nvidia-utils). Without these synapd dies
+    # at exit 127 on load — which is exactly why this build must never ship on
+    # the ISO, where neither is guaranteed to exist.
+    depends=('glibc' 'gcc-libs' 'cuda' 'nvidia-utils')
+    provides=('synapse-llama')
+    conflicts=('synapse-llama')
+else
+    pkgname=synapse-llama
+    pkgdesc="llama.cpp shared libraries for SynapseOS (CPU build, ${_llama_ref})"
+    depends=('glibc' 'gcc-libs')
+fi
+
+package() {
+    # Always resolve the BACKEND-NAMED dir, never the bare `llama-staging`
+    # symlink: that symlink just points at whatever was built last, so trusting
+    # it is how a CPU tree could get packaged as the CUDA build (or vice versa).
+    # $startdir/ is where archiso/build.sh copies it; ../ is the dev checkout.
+    local staging=""
+    local c
+    for c in "${startdir}/llama-staging-${_backend}" \
+             "${startdir}/../llama-staging-${_backend}"; do
+        [ -d "${c}/usr/lib" ] && { staging="$c"; break; }
+    done
+
+    [ -n "$staging" ] || {
+        echo "synapse-llama: no staged ${_backend} build found" >&2
+        echo "  build it first: sudo archiso/build.sh --gpu=${_backend} --llama-only" >&2
+        return 1
+    }
+
+    # A CUDA package without the CUDA backend library is the exact silent
+    # failure this package exists to prevent. Fail the build instead.
+    if [ "$_backend" = "cuda" ] && [ ! -e "${staging}/usr/lib/libggml-cuda.so" ]; then
+        echo "synapse-llama: backend=cuda but libggml-cuda.so is absent — that staging tree is a CPU build" >&2
+        return 1
+    fi
+
+    install -dm755 "${pkgdir}/usr/lib" "${pkgdir}/usr/include" "${pkgdir}/usr/bin"
+
+    # -a preserves the soname symlink chain (libfoo.so -> .so.0 -> .so.0.9.7).
+    # Copying these as three identical regular files is what made ldconfig spam
+    # "is not a symbolic link" on every pacman run.
+    cp -a "${staging}"/usr/lib/lib*.so* "${pkgdir}/usr/lib/"
+    cp -a "${staging}"/usr/include/*.h  "${pkgdir}/usr/include/"
+
+    # synapd links libllama directly; the CLI tools are here because the ISO
+    # previously shipped them and syn-model/debugging expect them on PATH.
+    local b
+    for b in llama-cli llama-server llama-bench; do
+        [ -x "${staging}/usr/bin/${b}" ] && install -Dm755 \
+            "${staging}/usr/bin/${b}" "${pkgdir}/usr/bin/${b}"
+    done
+}

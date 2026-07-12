@@ -27,6 +27,11 @@
 
 /* llama.cpp C API */
 #include "llama.h"
+#include "ggml-backend.h"
+#include "gguf.h"
+
+/* Offload every layer. llama clamps this down to the model's real layer count. */
+#define GPU_LAYERS_ALL 999
 
 /* ── Internal state ───────────────────────────────────────── */
 struct synapd_inference {
@@ -46,43 +51,91 @@ struct synapd_inference {
 };
 
 /* ── GPU layer auto-detection ─────────────────────────────── */
-static int detect_gpu_layers(void) {
-    /*
-     * Probe available accelerators in priority order:
-     *   CUDA → ROCm → Vulkan → RKNN (NPU) → CPU only
-     *
-     * Currently probes via lspci. Future: /sys/class/drm,
-     * libvulkan availability, CUDA device enumeration.
-     */
-    /*
-     * Match the PCI *class*, not the whole line. The old pattern was a
-     * case-insensitive 'VGA|3D|Display' over all of lspci, so any device whose
-     * model name happened to contain those letters won — on this machine a
-     * "SanDisk Ultra 3D" NVMe SSD matched '3D' and got picked as the GPU,
-     * ahead of the actual card, because of the head -1. The class name is the
-     * field between the slot and the first colon and is one of a fixed set, so
-     * anchor on that and drop -i (product names are not classes).
-     */
-    FILE *f = popen("lspci 2>/dev/null | grep -E "
-                    "'^[0-9a-f:.]+ (VGA compatible controller|3D controller|Display controller):'"
-                    " | head -1", "r");
-    if (!f) return 0;
 
-    char buf[256] = {0};
-    fgets(buf, sizeof(buf), f);
-    pclose(f);
+/* Read the model's true layer count from its GGUF metadata ("<arch>.block_count").
+ * Returns 0 if it can't be determined. Metadata only — no tensor data is read. */
+static int gguf_block_count(const char *model_path) {
+    struct gguf_init_params p = { .no_alloc = true, .ctx = NULL };
+    struct gguf_context *gg = gguf_init_from_file(model_path, p);
+    if (!gg) return 0;
 
-    if (strlen(buf) > 0) {
-        syn_log(LOG_INFO, "inference: detected GPU: %.80s", buf);
-        /*
-         * Offload as many layers as we reasonably can.
-         * VRAM estimation: 7B Q4_K_M ≈ 4.5GB → safe default for 6GB+ cards.
-         * User can override with --gpu-layers.
-         */
-        return 28;  /* safe default for 7B model */
+    int n_layer = 0;
+    int64_t arch_id = gguf_find_key(gg, "general.architecture");
+    if (arch_id >= 0) {
+        char key[128];
+        snprintf(key, sizeof(key), "%s.block_count", gguf_get_val_str(gg, arch_id));
+        int64_t kid = gguf_find_key(gg, key);
+        if (kid >= 0) n_layer = (int)gguf_get_val_u32(gg, kid);
     }
-    syn_log(LOG_INFO, "inference: no GPU detected, using CPU only");
-    return 0;
+    gguf_free(gg);
+    return n_layer;
+}
+
+/*
+ * Ask ggml what it can actually USE — not what is plugged into the PCI bus.
+ *
+ * This used to shell out to lspci and return a hardcoded 28 whenever it saw a
+ * display controller. That is a lie in the one case that matters: when libllama
+ * is built WITHOUT a CUDA backend the card is still on the bus, so synapd logged
+ * "detected GPU ... gpu_layers=28" and then ran every layer on the CPU. It stayed
+ * that way for a day, because the log never contradicted itself.
+ *
+ * ggml_backend_dev_* only reports backends that were compiled in and are usable,
+ * so a CPU-only libllama now says so out loud instead of pretending.
+ */
+static int detect_gpu_layers(const char *model_path, off_t model_bytes) {
+    ggml_backend_dev_t gpu = NULL;
+
+    for (size_t i = 0, n = ggml_backend_dev_count(); i < n; i++) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+            gpu = dev;
+            break;
+        }
+    }
+
+    if (!gpu) {
+        syn_log(LOG_WARNING, "inference: libllama has no usable GPU backend — "
+                          "running on CPU. Install synapse-llama-cuda for GPU offload.");
+        return 0;
+    }
+
+    size_t vram_free = 0, vram_total = 0;
+    ggml_backend_dev_memory(gpu, &vram_free, &vram_total);
+    syn_log(LOG_INFO, "inference: GPU backend %s (%s), VRAM %zu/%zu MiB free",
+            ggml_backend_dev_name(gpu), ggml_backend_dev_description(gpu),
+            vram_free / (1024 * 1024), vram_total / (1024 * 1024));
+
+    int n_layer = gguf_block_count(model_path);
+    if (n_layer <= 0 || model_bytes <= 0) {
+        /* Can't size it — llama clamps an over-large count to the real one. */
+        syn_log(LOG_INFO, "inference: model geometry unknown, offloading all layers");
+        return GPU_LAYERS_ALL;
+    }
+
+    /* The weights are what the file size accounts for; the KV cache and compute
+     * buffers are not. At 4096 ctx a 7B needs roughly 0.7 GiB of them, so keep
+     * a 1 GiB reserve before deciding everything fits. */
+    const size_t reserve = 1024ull * 1024 * 1024;
+
+    if (vram_free > (size_t)model_bytes + reserve) {
+        syn_log(LOG_INFO, "inference: all %d layers fit in VRAM", n_layer);
+        return GPU_LAYERS_ALL;
+    }
+
+    /* Tight fit: offload what the free VRAM can actually hold. Layers are close
+     * enough to equal-sized to divide the weights by the block count. */
+    size_t usable    = vram_free > reserve ? vram_free - reserve : 0;
+    size_t per_layer = (size_t)model_bytes / (size_t)n_layer;
+    int    layers    = per_layer ? (int)(usable / per_layer) : 0;
+    if (layers > n_layer) layers = n_layer;
+    if (layers < 0)       layers = 0;
+
+    syn_log(LOG_WARNING, "inference: only %zu MiB VRAM free for a %zu MiB model — "
+                      "offloading %d of %d layers, the rest run on CPU",
+            vram_free / (1024 * 1024), (size_t)model_bytes / (1024 * 1024),
+            layers, n_layer);
+    return layers;
 }
 
 /* ── Init ─────────────────────────────────────────────────── */
@@ -102,7 +155,7 @@ int inference_init(synapd_state_t *s) {
     inf->context_size = s->config.context_window;
     inf->n_threads    = s->config.n_threads;
     inf->n_gpu_layers = s->config.n_gpu_layers < 0
-                        ? detect_gpu_layers()
+                        ? detect_gpu_layers(s->config.model_path, st.st_size)
                         : s->config.n_gpu_layers;
 
     syn_log(LOG_INFO, "inference: loading model %s (ctx=%u threads=%d gpu_layers=%d)",

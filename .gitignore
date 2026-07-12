@@ -6,7 +6,10 @@ archiso/airootfs/var/lib/synapd/models/synapse.gguf
 
 # ── Vendored / prebuilt llama.cpp (build it locally; see README) ─
 llama.cpp/
-llama-staging/
+# llama-staging* covers the per-backend trees (llama-staging-cpu,
+# llama-staging-cuda), the bare `llama-staging` symlink that points at the last
+# one built, and the symlink makepkg leaves in synapd/src/.
+llama-staging*
 archiso/build/
 
 # ── makepkg build droppings ─────────────────────────────────

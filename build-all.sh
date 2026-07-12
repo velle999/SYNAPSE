@@ -3,11 +3,55 @@
 set -e
 
 BASE="$(cd "$(dirname "$0")" && pwd)"
-LLAMA_INC="${LLAMA_INC:-$BASE/llama-staging/usr/include}"
-LLAMA_LIB="${LLAMA_LIB:-$BASE/llama-staging/usr/lib}"
+
+# Which llama backend the synapse-llama package is built from. The staged tree
+# (llama-staging-$SYNAPSE_LLAMA_BACKEND) is produced by:
+#     sudo archiso/build.sh --gpu=cuda --llama-only
+#
+# Default to whatever THIS host already runs, so a routine ./build-all.sh on a
+# GPU box rebuilds the GPU variant instead of quietly trying to replace it with
+# a CPU one. (It would not be quiet — synapse-llama-cuda conflicts with
+# synapse-llama, so pacman would refuse — but failing a full build over a
+# defaulted variable is a lousy way to find that out.)
+if [ -z "${SYNAPSE_LLAMA_BACKEND:-}" ]; then
+    if pacman -Qq synapse-llama-cuda >/dev/null 2>&1; then
+        SYNAPSE_LLAMA_BACKEND=cuda
+    else
+        SYNAPSE_LLAMA_BACKEND=cpu
+    fi
+fi
+export SYNAPSE_LLAMA_BACKEND
+echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
+
+# Optional component filter: `./build-all.sh synapd` rebuilds only synapd.
+# No arguments = build everything, which is the default and unchanged.
+# Rebuilding one component must go through build_component, not a hand-rolled
+# tar — the tarball regeneration below is what stops makepkg silently packaging
+# the last build's source.
+ONLY=("$@")
+KNOWN=(synapse-llama synapd synsh synnet synguard synui synapse_kmod
+       syn syn-model syn-install syn-firstboot nexus-chat tepris)
+for _c in "${ONLY[@]}"; do
+    case " ${KNOWN[*]} " in
+        *" $_c "*) ;;
+        *) echo "unknown component: $_c" >&2
+           echo "known: ${KNOWN[*]}" >&2
+           exit 1 ;;
+    esac
+done
+
+want() {
+    [ ${#ONLY[@]} -eq 0 ] && return 0
+    local c
+    for c in "${ONLY[@]}"; do
+        [ "$c" = "$1" ] && return 0
+    done
+    return 1
+}
 
 build_component() {
     local name=$1
+    want "$name" || return 0
     echo "=== Building $name ==="
     cd "$BASE/$name"
 
@@ -71,6 +115,7 @@ build_component() {
 
 build_script_pkg() {
     local name=$1
+    want "$name" || return 0
     echo "=== Building $name ==="
     cd "$BASE/$name"
     makepkg -sf --noconfirm
@@ -84,9 +129,19 @@ build_script_pkg() {
     fi
 }
 
-# Add llama lib to ld path
-echo "$LLAMA_LIB" | sudo tee /etc/ld.so.conf.d/llama.conf
-sudo ldconfig
+# Retire the old ld.so.conf entries that pointed the DYNAMIC LINKER at this
+# build tree. They made a root daemon (synapd) load its core libraries out of a
+# user's $HOME, so a `git clean` or an ISO rebuild could take synapd down — and
+# they let a stale unowned copy in /usr/lib shadow the real build in the ld.so
+# cache, which is how synapd silently ran CPU-only libllama for a day while
+# reporting GPU offload. synapse-llama installs into /usr/lib and owns the files.
+for _stale in /etc/ld.so.conf.d/llama.conf /etc/ld.so.conf.d/synapse-llama.conf; do
+    if [ -e "$_stale" ] && grep -q "llama-staging" "$_stale" 2>/dev/null; then
+        echo "removing stale $_stale (pointed the linker at the build tree)"
+        sudo rm -f "$_stale"
+        sudo ldconfig
+    fi
+done
 
 # Create synsh config
 sudo mkdir -p /etc/synsh
@@ -97,6 +152,11 @@ sudo touch /etc/synsh/synshrc
 # once and shipped a start menu whose entries launched the wrong app — so the
 # copies are checked, not trusted. `python3 waybar/sync-installer.py` re-splices.
 python3 "$BASE/waybar/check-installer-sync.py" || exit 1
+
+# llama.cpp libraries — must be built and installed BEFORE synapd, which now
+# depends on it. build_script_pkg (no source tarball): it packages the tree that
+# archiso/build.sh staged.
+build_script_pkg synapse-llama
 
 # Build C components
 build_component synapd

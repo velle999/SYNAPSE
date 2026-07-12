@@ -5,10 +5,18 @@ cc = meson.get_compiler('c')
 dep_threads = dependency('threads')
 dep_systemd = dependency('libsystemd', required: false)
 
-# llama.cpp — look in llama-staging (symlinked into srcdir by PKGBUILD),
-# then fall back to system paths.
+# llama.cpp — prefer the installed synapse-llama package (/usr/lib), and only
+# fall back to llama-staging for a dev tree that hasn't installed it yet.
+#
+# System first, deliberately: llama used to be found ONLY via llama-staging, a
+# build dir in $HOME wired in through /etc/ld.so.conf.d. That made a root daemon
+# depend on a user's build tree, and let a stale /usr/lib copy shadow the real
+# build — synapd ran months-old CPU-only libllama while claiming GPU was on.
+# synapse-llama now owns those files; this fallback is only a convenience.
+_system_llama = cc.find_library('llama', required: false)
+
 _staging = join_paths(meson.project_source_root(), '..', 'llama-staging', 'usr')
-_has_staging = run_command('test', '-d', join_paths(_staging, 'lib'), check: false).returncode() == 0
+_has_staging = not _system_llama.found() and run_command('test', '-d', join_paths(_staging, 'lib'), check: false).returncode() == 0
 
 _lib_dirs = []
 if _has_staging
@@ -23,6 +31,16 @@ if _has_staging
 endif
 
 dep_llama = cc.find_library('llama', dirs: _lib_dirs, required: false)
+
+# detect_gpu_layers() asks ggml which backends are actually compiled in, and
+# reads the model's layer count from its GGUF metadata, so synapd needs the ggml
+# symbols directly — libllama does not re-export them. They are split across two
+# libs: the backend *registry* (ggml_backend_dev_count/_get) lives in libggml,
+# while the device queries (ggml_backend_dev_memory) and gguf_* live in
+# libggml-base. Link both or the link fails with undefined references.
+dep_ggml      = cc.find_library('ggml',      dirs: _lib_dirs, required: false)
+dep_ggml_base = cc.find_library('ggml-base', dirs: _lib_dirs, required: false)
+
 llama_inc = include_directories('include')
 
 if dep_systemd.found()
@@ -34,7 +52,7 @@ endif
 
 deps = [dep_threads]
 if dep_llama.found()
-  deps += [dep_llama]
+  deps += [dep_llama, dep_ggml, dep_ggml_base]
 endif
 if dep_systemd.found()
   deps += [dep_systemd]

@@ -1,11 +1,16 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=6
+pkgrel=8
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL2')
-depends=('glibc' 'systemd-libs' 'gcc-libs' 'libgomp')
+# synapse-llama provides libllama/libggml in /usr/lib. It is a real dependency:
+# synapd previously resolved these through an /etc/ld.so.conf.d entry pointing
+# at a build dir in $HOME, so pacman had no idea the daemon needed them and
+# nothing stopped them being deleted or shadowed. synapse-llama-cuda `provides`
+# this, so a GPU box satisfies the dep without pulling the CPU build in.
+depends=('glibc' 'systemd-libs' 'gcc-libs' 'libgomp' 'synapse-llama')
 makedepends=('meson' 'ninja' 'gcc' 'pkg-config')
 backup=('etc/synapd/synapd.conf')
 source=("synapd-0.1.0.tar.gz")
