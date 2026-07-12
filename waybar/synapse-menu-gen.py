@@ -14,10 +14,10 @@
 # a pair whose ids don't line up.
 
 import configparser
-import glob
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
@@ -58,6 +58,66 @@ CATEGORIES = [
 ]
 OTHER_CATEGORY = "Other"
 
+# Wine imports every Windows Start Menu shortcut in the prefix into
+# applications/wine/Programs/…, and gives none of them a Categories= line, so
+# on category alone they'd all scatter into "Other" among the genuinely
+# uncategorised apps. Keep the prefix together under its own submenu instead.
+WINE_CATEGORY = "Wine"
+WINE_PREFIX = "wine-"
+
+
+def category_of(entry, entry_id):
+    """The submenu an app belongs in, from its .desktop Categories= list."""
+    cats = {c for c in (entry.get("Categories") or "").split(";") if c}
+    for key, display in CATEGORIES:
+        if key in cats:
+            return display
+    if entry_id.startswith(WINE_PREFIX):
+        return WINE_CATEGORY
+    return OTHER_CATEGORY
+
+
+# Escape sequences the desktop-entry spec defines inside a value, undone before
+# the string reaches the shell. Wine's Exec lines lean on them hard: it writes
+# the shortcut path as "C:\\\\users\\\\velle\\\\…", which is "C:\\users\\…"
+# after this pass and C:\users\… once the shell strips the quotes. Skip the
+# pass and the shell hands wine a path with doubled separators, wine can't
+# resolve it, and the menu entry dies silently.
+DESKTOP_ESCAPES = {"s": " ", "n": "\n", "t": "\t", "r": "\r", "\\": "\\"}
+
+
+def unescape(value):
+    out = []
+    i, n = 0, len(value)
+    while i < n:
+        c = value[i]
+        if c == "\\" and i + 1 < n and value[i + 1] in DESKTOP_ESCAPES:
+            out.append(DESKTOP_ESCAPES[value[i + 1]])
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def desktop_files(root):
+    """(entry_id, path) for every .desktop under an XDG application dir.
+
+    An application dir is a *tree*, not a flat list, and the id of a nested
+    entry is its path relative to the dir with "/" turned into "-" — that id,
+    not the bare basename, is what shadows a lower-precedence dir's entry.
+    This used to glob one level deep, which meant Wine's apps (all of which
+    live under applications/wine/Programs/…) were invisible to the menu.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for fn in sorted(filenames):
+            if not fn.endswith(".desktop"):
+                continue
+            path = os.path.join(dirpath, fn)
+            rel = os.path.relpath(path, root)
+            yield rel.replace(os.sep, "-"), path
+
 # A GTK3 menu renders at its natural height and *ignores* the size the
 # compositor grants it in xdg_popup.configure — it even asks for resize_y in
 # the positioner's constraint adjustment, then discards the answer. So a
@@ -70,14 +130,6 @@ OTHER_CATEGORY = "Other"
 # 768px laptop panel, and it keeps a category scannable besides.
 MAX_ITEMS_PER_SUBMENU = 25
 
-
-def category_of(entry):
-    """The submenu an app belongs in, from its .desktop Categories= list."""
-    cats = {c for c in (entry.get("Categories") or "").split(";") if c}
-    for key, display in CATEGORIES:
-        if key in cats:
-            return display
-    return OTHER_CATEGORY
 
 STATIC_ITEMS = [
     # The control panel is synui's, not a program we can exec: the compositor
@@ -183,8 +235,7 @@ def find_apps():
     seen_ids = set()
     apps = []
     for d in APP_DIRS:
-        for path in sorted(glob.glob(os.path.join(d, "*.desktop"))):
-            entry_id = os.path.basename(path)
+        for entry_id, path in desktop_files(d):
             if entry_id in seen_ids:
                 continue
             seen_ids.add(entry_id)
@@ -211,14 +262,25 @@ def find_apps():
             if not name or not exec_:
                 continue
 
+            # Collapse whitespace while the escapes are still two-character
+            # sequences, so a "\s" that stands for a real space inside a quoted
+            # argument survives the squeeze intact.
             cmd = FIELD_CODE_RE.sub("", exec_)
-            cmd = re.sub(r"\s+", " ", cmd).strip()
+            cmd = unescape(re.sub(r"\s+", " ", cmd).strip()).strip()
             if not cmd:
                 continue
             if e.getboolean("Terminal", fallback=False):
                 cmd = f"foot -e {cmd}"
 
-            apps.append((name, cmd, category_of(e)))
+            # An entry may name the working directory it expects, and Wine's do:
+            # its shortcuts point into the install dir the program reads its data
+            # out of. waybar runs a menu action through `sh -c`, so a cd is all
+            # this takes.
+            workdir = unescape(e.get("Path") or "").strip()
+            if workdir:
+                cmd = f"cd {shlex.quote(workdir)} && exec {cmd}"
+
+            apps.append((name, cmd, category_of(e, entry_id)))
 
     apps.sort(key=lambda a: a[0].lower())
     return apps
