@@ -198,6 +198,11 @@ static void *ai_thread_fn(void *arg)
             break;
         }
 
+        /* Shutting down: drop whatever is still queued rather than running it.
+         * Every queued request is an LLM round trip, and the compositor is
+         * joining this thread — the answers have nowhere to go. */
+        if (atomic_load(&s->ai_stopping)) break;
+
         if (synapd_fd < 0) {
             /* Try reconnect (same timeouts as the initial connection) */
             synapd_fd = ai_connect_synapd();
@@ -292,6 +297,10 @@ int ai_thread_start(syn_server_t *s)
  * Safe to call unconditionally. */
 void ai_thread_stop(syn_server_t *s)
 {
+    /* Before the shutdown(), so the thread cannot start another query in the
+     * window between the socket dying and the join. */
+    atomic_store(&s->ai_stopping, 1);
+
     int fd = atomic_load(&s->ai_synapd_fd);
     if (fd >= 0)
         shutdown(fd, SHUT_RDWR);

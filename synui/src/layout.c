@@ -416,6 +416,9 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
     if (!view->mapped) return;
 
     if (view->fullscreen) {
+        /* Leaving fullscreen re-places a floating window (layout_float_place),
+         * which would move it out of the zone it claims to be snapped to. */
+        view->snapped = SYN_SNAP_NONE;
         syn_output_t *o = fullscreen_target_output(s, view);
         /* Fullscreening onto another monitor hands the window to that monitor
          * (same desktop), so it untiles back where it is actually shown. */
@@ -523,6 +526,7 @@ void workspace_switch(syn_server_t *s, int index)
     /* Show the incoming one. */
     s->active_workspace = index;
     target->visible = 1;
+    wlr_log(WLR_INFO, "synui: workspace %d", index + 1);
     wl_list_for_each(v, &target->windows, link)
         if (v->mapped && !v->minimized) {
             wlr_scene_node_set_enabled(view_node(v), true);

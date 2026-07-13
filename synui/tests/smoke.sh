@@ -36,6 +36,7 @@ fail() { echo "FAIL: $*" >&2; [ -n "${LOG:-}" ] && tail -40 "$LOG" >&2; cleanup;
 
 cleanup() {
     [ -n "${SYNUI_PID:-}" ] && kill -9 "$SYNUI_PID" 2>/dev/null
+    [ -n "${FOOT_PID:-}" ] && kill -9 "$FOOT_PID" 2>/dev/null
     [ -n "${TMP:-}" ] && rm -rf "$TMP"
 }
 trap cleanup INT TERM
@@ -292,6 +293,31 @@ else
     echo "ok 10 # SKIP wtype not installed"
 fi
 
+# ── 11. Super+N on the *numpad* switches workspace ─────────
+# The keypad never sends a digit keysym: NumLock on gives KP_1..KP_9, and NumLock
+# off — or Shift, which inverts NumLock — gives the cursor names (KP_End for 1,
+# KP_Down for 2, …). A bind written "super+2" holds XKB_KEY_2, so none of those
+# matched and Super+numpad was silently dead while the number row worked.
+# Both spellings must land on the same workspace bind.
+if command -v wtype >/dev/null; then
+    for key_ws in "KP_2:2" "KP_End:1" "KP_Prior:9"; do
+        key=${key_ws%:*}
+        ws=${key_ws#*:}
+        wtype -M logo -k "$key" -m logo \
+            || fail "wtype could not send Super+$key"
+        i=0
+        while ! grep -q "synui: workspace $ws\$" "$LOG"; do
+            [ $i -ge 30 ] && fail "Super+$key (numpad) did not switch to workspace $ws"
+            kill -0 "$SYNUI_PID" 2>/dev/null || fail "synui died handling Super+$key"
+            sleep 0.1
+            i=$((i + 1))
+        done
+    done
+    echo "ok 11 - numpad Super+N switches workspace (KP_N and the NumLock-off names)"
+else
+    echo "ok 11 # SKIP wtype not installed"
+fi
+
 kill -TERM "$SYNUI_PID"
 i=0
 while kill -0 "$SYNUI_PID" 2>/dev/null; do
@@ -302,6 +328,55 @@ done
 wait "$SYNUI_PID"
 rc=$?
 [ "$rc" -eq 0 ] || fail "control-panel instance exited $rc (expected 0)"
+
+# ── 12. Shutdown with a client STILL CONNECTED ─────────────
+# Every other test lets its client exit first, so nothing here ever covered the
+# ordinary case: logging out while apps are still open. It hid a real one —
+# synui_destroy() freed the IME relay before wl_display_destroy_clients(), and
+# each client text-input's destroy listener then dereferenced it
+# (text_input_destroy → ime_deactivate → use-after-free). ASan caught it on
+# every logout with a window open. So: leave a client running, then SIGTERM.
+if command -v foot >/dev/null; then
+    unset WAYLAND_DISPLAY
+    LOG="$TMP/synui5.log"
+    "$SYNUI" >"$LOG" 2>&1 &
+    SYNUI_PID=$!
+
+    SOCK=
+    i=0
+    while [ $i -lt 100 ]; do
+        SOCK=$(sed -n 's/.*running on WAYLAND_DISPLAY=\(wayland-[0-9]*\).*/\1/p' "$LOG" | head -1)
+        [ -n "$SOCK" ] && break
+        kill -0 "$SYNUI_PID" 2>/dev/null || fail "live-client test: synui died during startup"
+        sleep 0.1
+        i=$((i + 1))
+    done
+    [ -n "$SOCK" ] || fail "live-client test: no Wayland socket within 10s"
+
+    # Give it time to connect and map; the point is only that it is still there.
+    WAYLAND_DISPLAY="$SOCK" foot -- sleep 300 >/dev/null 2>&1 &
+    FOOT_PID=$!
+    sleep 2
+
+    kill -TERM "$SYNUI_PID"
+    i=0
+    while kill -0 "$SYNUI_PID" 2>/dev/null; do
+        [ $i -ge 100 ] && fail "synui did not exit within 10s of SIGTERM (client still connected)"
+        sleep 0.1
+        i=$((i + 1))
+    done
+    wait "$SYNUI_PID"
+    rc=$?
+    kill -9 "$FOOT_PID" 2>/dev/null
+    [ "$rc" -eq 0 ] \
+        || fail "synui exited $rc shutting down with a client connected (expected 0)"
+    if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
+        fail "sanitizer error shutting down with a client connected"
+    fi
+    echo "ok 12 - clean shutdown with a client still connected"
+else
+    echo "ok 12 # SKIP foot not installed"
+fi
 
 SYNUI_PID=
 cleanup

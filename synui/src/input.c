@@ -608,6 +608,49 @@ static bool welcome_menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     return false;
 }
 
+/* The digit a keypad key stands for, or NoSymbol if it isn't one.
+ *
+ * The keypad never produces a digit keysym: with NumLock on it sends KP_1..KP_9,
+ * and with NumLock off — or, crucially, with *Shift held*, which inverts NumLock
+ * — it sends the cursor-key names instead (KP_End for 1, KP_Down for 2, …). A
+ * bind written as "super+1" carries XKB_KEY_1, so none of those ever matched and
+ * Super+numpad-N was dead while the number row worked. Both sets map back here.
+ *
+ * Note KP_Prior/KP_Page_Up and KP_Next/KP_Page_Down are the same keysym; only
+ * one of each pair can be listed. */
+static xkb_keysym_t numpad_digit(xkb_keysym_t sym)
+{
+    if (sym >= XKB_KEY_KP_0 && sym <= XKB_KEY_KP_9)
+        return XKB_KEY_0 + (sym - XKB_KEY_KP_0);
+
+    switch (sym) {
+    case XKB_KEY_KP_Insert: return XKB_KEY_0;
+    case XKB_KEY_KP_End:    return XKB_KEY_1;
+    case XKB_KEY_KP_Down:   return XKB_KEY_2;
+    case XKB_KEY_KP_Next:   return XKB_KEY_3;
+    case XKB_KEY_KP_Left:   return XKB_KEY_4;
+    case XKB_KEY_KP_Begin:  return XKB_KEY_5;
+    case XKB_KEY_KP_Right:  return XKB_KEY_6;
+    case XKB_KEY_KP_Home:   return XKB_KEY_7;
+    case XKB_KEY_KP_Up:     return XKB_KEY_8;
+    case XKB_KEY_KP_Prior:  return XKB_KEY_9;
+    default:                return XKB_KEY_NoSymbol;
+    }
+}
+
+/* Run the first bind whose (mods, sym) matches. */
+static bool bind_dispatch(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
+{
+    for (int i = 0; i < s->config.bind_count; i++) {
+        syn_bind_t *b = &s->config.binds[i];
+        if (b->mods == mods && b->sym == sym) {
+            synui_binding_execute(s, b->action, b->arg);
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
                                uint32_t modifiers)
 {
@@ -633,15 +676,16 @@ static bool handle_keybinding(syn_server_t *s, xkb_keysym_t sym,
     if (sym == XKB_KEY_Sys_Req)
         sym = XKB_KEY_Print;
 
-    xkb_keysym_t lower = xkb_keysym_to_lower(sym);
+    if (bind_dispatch(s, xkb_keysym_to_lower(sym), mods))
+        return true;
 
-    for (int i = 0; i < s->config.bind_count; i++) {
-        syn_bind_t *b = &s->config.binds[i];
-        if (b->mods == mods && b->sym == lower) {
-            synui_binding_execute(s, b->action, b->arg);
-            return true;
-        }
-    }
+    /* Nothing bound to the key itself — if it was a keypad key, try the digit it
+     * stands for, so the numpad drives Super+1..9 like the number row. Second,
+     * not first, so an explicit "super+kp_1" bind still wins over the fallback. */
+    xkb_keysym_t digit = numpad_digit(sym);
+    if (digit != XKB_KEY_NoSymbol && bind_dispatch(s, digit, mods))
+        return true;
+
     return false;
 }
 
@@ -916,6 +960,13 @@ static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
         }
     }
 
+    /* Same for a snapped window: a move drags it out of its zone and back to the
+     * size it had before it was snapped. A *resize* leaves the snap flag alone
+     * on purpose — pulling a snapped window's edge is how you rebalance a split,
+     * not how you un-snap it. */
+    if (view->snapped && mode == SYNUI_CURSOR_MOVE)
+        snap_release_view(s, view, 1);
+
     if (!view->floating) {
         view->floating = 1;
         layout_apply(s, view->workspace);   /* reflow remaining tiled windows */
@@ -956,6 +1007,10 @@ static void process_cursor_move(syn_server_t *s)
     v->y = (int)(s->cursor->y - s->grab_y);
     wlr_scene_node_set_position(view_node(v), v->x, v->y);
     view_update_decorations(v);
+
+    /* Arm (and preview) the snap zone the cursor is currently over. The window
+     * only actually moves there on release. */
+    snap_drag_motion(s, s->cursor->x, s->cursor->y);
 }
 
 static void process_cursor_resize(syn_server_t *s)
@@ -1165,9 +1220,12 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         return;
     }
 
-    /* A release always ends an in-progress grab and is swallowed. */
+    /* A release always ends an in-progress grab and is swallowed. Ending a MOVE
+     * is where a drag against a screen edge becomes a snap. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED &&
         s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
+        if (s->cursor_mode == SYNUI_CURSOR_MOVE)
+            snap_drag_end(s, s->grabbed_view);
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
         s->grabbed_view = NULL;
         return;

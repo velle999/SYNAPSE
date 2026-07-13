@@ -45,6 +45,20 @@ titlebar_height = 26
 # titlebar_text        = #73738c
 # titlebar_text_focus  = #e6e6f2
 
+# ── Window snapping ────────────────────────────────────────
+# Drag a window against a screen edge and it fills that region when you let go,
+# with a preview while you hold it there:
+#
+#   top edge          maximize
+#   left / right      that half
+#   the four corners  that quarter
+#
+# Dragging a snapped window off its edge restores the size it had before.
+# There is no bottom-edge zone on purpose — the dock lives on a screen edge and
+# would fight a window drag for the same pixels. Set to off to make a drag only
+# ever a move.
+# snap = on
+
 # ── GLES post-process effects ──────────────────────────────
 # CRT-style pass on real GPUs; automatically off on pixman (VMs).
 # Strengths 0..1, 0 disables the individual effect (defaults shown).

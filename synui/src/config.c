@@ -12,6 +12,10 @@
  *   bind = super+ctrl+3 movews 3
  * Modifiers: super/logo/mod4, shift, ctrl/control, alt/mod1. Keys are XKB
  * keysym names (case-insensitive: q, return, space, tab, backspace, f1…).
+ * A bind on a digit ("super+1") also answers to that digit on the *numpad* —
+ * the keypad never sends a digit keysym (KP_1 with NumLock on, KP_End with it
+ * off or with Shift held), so input.c maps them back. Bind "super+kp_1"
+ * explicitly to give the keypad key its own action.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
@@ -28,6 +32,11 @@
  * Empty/absent path, or a decode failure, falls back to the solid
  * background color. Super+Shift+W (or a SIGHUP) reloads synuirc and
  * repaints from the current wallpaper path/mode.
+ *
+ * Window snapping (snap.c):
+ *   snap = on|off               (default on)
+ * Drag a window to the top edge to maximize it, to a side for that half, into a
+ * corner for that quarter; dragging it off again restores its old size.
  *
  * Cat mode (cat.c):
  *   cat = on|off                (default off; Super+Shift+C toggles at runtime)
@@ -330,6 +339,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->ai_layout = 1;
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
+    cfg->snap = 1;
 
     /* GLES post-process: on by default, harmless on pixman (effects_init
      * refuses and the plain path is used). Strengths tuned for subtlety.
@@ -514,6 +524,8 @@ void synui_config_load(syn_config_t *cfg)
             cfg->ai_ctx_decor = strcmp(val, "on") == 0;
         else if (strcmp(key, "start_overlay") == 0)
             cfg->start_overlay = strcmp(val, "on") == 0;
+        else if (strcmp(key, "snap") == 0)
+            cfg->snap = strcmp(val, "on") == 0;
         else if (strcmp(key, "border_color_norm") == 0)
             parse_hex_color(val, cfg->border_color_norm);
         else if (strcmp(key, "border_color_focus") == 0)

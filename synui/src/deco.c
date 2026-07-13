@@ -41,7 +41,14 @@
 #include "synui.h"
 
 #define BTN_COUNT     3
-#define CORNER_GRAB  16   /* px from a corner that resizes both edges at once */
+#define CORNER_GRAB  24   /* px from a corner that resizes both edges at once */
+
+/* Width of the invisible resize-grab ring outside the window (see the grab_*
+ * rects in syn_view). The visible border is border_width px — 2 by default —
+ * which is not a click target a hand can hit, so the real grab band is
+ * border_width + GRAB_RING, and the corners get an L of that thickness
+ * extending CORNER_GRAB along both edges. */
+#define GRAB_RING     8
 
 /* ── Frame ───────────────────────────────────────────────── */
 struct wlr_scene_node *view_node(syn_view_t *view)
@@ -240,6 +247,7 @@ void view_update_decorations(syn_view_t *view)
         if (view->border_left)   wlr_scene_node_set_enabled(&view->border_left->node,   false);
         if (view->border_right)  wlr_scene_node_set_enabled(&view->border_right->node,  false);
         if (view->titlebar)      wlr_scene_node_set_enabled(&view->titlebar->node,      false);
+        view_grab_ring_update(view);
         return;
     }
 
@@ -287,7 +295,57 @@ void view_update_decorations(syn_view_t *view)
 
     #undef MAKE_BORDER
 
+    view_grab_ring_update(view);
     titlebar_render(view);
+}
+
+/* ── Invisible resize-grab ring ──────────────────────────── */
+/*
+ * Four transparent rects hugging the outside of the frame, overhanging at the
+ * corners so each corner is a GRAB_RING-thick L rather than a 2px dot. They are
+ * pure hit-testing: wlr_scene_node_at() accepts a WLR_SCENE_NODE_RECT on its
+ * bounds alone (only scene *buffers* get a point_accepts_input veto), so a rect
+ * with alpha 0 is a click target that paints nothing.
+ *
+ * They sit strictly outside the window, never over the client, so they can't eat
+ * a click meant for a scrollbar sitting flush against the window edge. They do
+ * overlay ~8px of whatever is behind the window — the same trade every CSD
+ * toolkit makes with its shadow region.
+ */
+void view_grab_ring_update(syn_view_t *view)
+{
+    if (!view->frame) return;
+
+    /* Nothing to resize: a fullscreen or maximized window is not draggable by
+     * its edges, and the ring would just be an 8px dead zone over its
+     * neighbours (or over the dock, at the screen edge). */
+    bool want = view->mapped && !view->fullscreen && !view->maximized &&
+                view->w > 0 && view->h > 0;
+
+    static const float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    int m = GRAB_RING, w = view->w, h = view->h;
+
+    #define MAKE_GRAB(field, gx, gy, gw, gh) do { \
+        if (!want) { \
+            if (view->field) \
+                wlr_scene_node_set_enabled(&view->field->node, false); \
+            break; \
+        } \
+        if (!view->field) \
+            view->field = wlr_scene_rect_create(view->frame, gw, gh, clear); \
+        else \
+            wlr_scene_rect_set_size(view->field, gw, gh); \
+        wlr_scene_node_set_enabled(&view->field->node, true); \
+        wlr_scene_node_set_position(&view->field->node, gx, gy); \
+        wlr_scene_node_lower_to_bottom(&view->field->node); \
+    } while (0)
+
+    MAKE_GRAB(grab_top,    -m, -m, w + 2 * m, m);
+    MAKE_GRAB(grab_bottom, -m,  h, w + 2 * m, m);
+    MAKE_GRAB(grab_left,   -m,  0, m, h);
+    MAKE_GRAB(grab_right,   w,  0, m, h);
+
+    #undef MAKE_GRAB
 }
 
 void view_deco_destroy(syn_view_t *view)
@@ -297,6 +355,10 @@ void view_deco_destroy(syn_view_t *view)
     if (view->border_left)   { wlr_scene_node_destroy(&view->border_left->node);   view->border_left   = NULL; }
     if (view->border_right)  { wlr_scene_node_destroy(&view->border_right->node);  view->border_right  = NULL; }
     if (view->titlebar)      { wlr_scene_node_destroy(&view->titlebar->node);      view->titlebar      = NULL; }
+    if (view->grab_top)      { wlr_scene_node_destroy(&view->grab_top->node);      view->grab_top      = NULL; }
+    if (view->grab_bottom)   { wlr_scene_node_destroy(&view->grab_bottom->node);   view->grab_bottom   = NULL; }
+    if (view->grab_left)     { wlr_scene_node_destroy(&view->grab_left->node);     view->grab_left     = NULL; }
+    if (view->grab_right)    { wlr_scene_node_destroy(&view->grab_right->node);    view->grab_right    = NULL; }
 
     if (view->server->deco_hover_view    == view) view->server->deco_hover_view    = NULL;
     if (view->server->tb_last_click_view == view) view->server->tb_last_click_view = NULL;
@@ -346,11 +408,16 @@ syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
     syn_view_t *v = tree->node.data;
     if (!v || !v->mapped || !v->frame) return NULL;
 
-    /* A border rect? */
+    /* A border rect, or the invisible grab ring just outside it? Both resize;
+     * border_edges() works off the cursor's position relative to the window, so
+     * it reads a point in the ring (negative, or past w/h) as that edge without
+     * caring which rect was actually hit. */
     if (node->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *rect = wl_container_of(node, rect, node);
         if (rect == v->border_top || rect == v->border_bottom ||
-            rect == v->border_left || rect == v->border_right) {
+            rect == v->border_left || rect == v->border_right ||
+            rect == v->grab_top    || rect == v->grab_bottom  ||
+            rect == v->grab_left   || rect == v->grab_right) {
             if (v->fullscreen) return NULL;
             if (region) *region = DECO_BORDER;
             if (edges)  *edges  = border_edges(v, lx, ly);
@@ -428,6 +495,10 @@ void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized)
     view_set_maximized(view, maximized);   /* client + taskbar state */
 
     if (maximized) {
+        /* Maximize and snap share saved_geo, so they can't both be live: a
+         * maximized window is no longer "the left half", and un-maximizing puts
+         * it back where it was when it was maximized. */
+        view->snapped        = SYN_SNAP_NONE;
         view->saved_geo      = (struct wlr_box){ view->x, view->y,
                                                  view->w, view->h };
         view->saved_floating = view->floating;

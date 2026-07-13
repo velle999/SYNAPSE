@@ -119,6 +119,21 @@ typedef enum {
     SYNUI_CURSOR_RESIZE,
 } syn_cursor_mode_t;
 
+/* Edge-snap (snap.c): the region a dragged window lands in when it is released
+ * against a screen edge. The value doubles as syn_view::snapped, i.e. "which
+ * half/quarter this window is currently snapped to", so a later drag knows to
+ * restore it to its pre-snap size. */
+typedef enum {
+    SYN_SNAP_NONE = 0,
+    SYN_SNAP_MAX,            /* top edge → fill the usable box */
+    SYN_SNAP_LEFT,           /* left/right edge → half */
+    SYN_SNAP_RIGHT,
+    SYN_SNAP_TOP_LEFT,       /* corners → quarter */
+    SYN_SNAP_TOP_RIGHT,
+    SYN_SNAP_BOTTOM_LEFT,
+    SYN_SNAP_BOTTOM_RIGHT,
+} syn_snap_zone_t;
+
 /* ── Forward declarations ────────────────────────────────── */
 typedef struct syn_server   syn_server_t;
 typedef struct syn_view     syn_view_t;
@@ -452,6 +467,10 @@ typedef struct {
     int   ai_ctx_decor;
     int   start_overlay;
 
+    /* Drag a window against a screen edge to snap it to that half/quarter
+     * (snap.c). Off means a drag is only ever a move. */
+    int   snap;
+
     /* Border colors (RGBA 0..1) by window role; defaults COLOR_BORDER_*. */
     float border_color_norm[4];
     float border_color_focus[4];
@@ -659,6 +678,20 @@ struct syn_view {
     struct wlr_scene_rect *border_left;
     struct wlr_scene_rect *border_right;
 
+    /* Invisible resize-grab ring: four fully transparent rects sitting *outside*
+     * the window, one per edge, overhanging the corners. The visible border is
+     * only border_width px thick, so before these existed a corner grab meant
+     * hitting a 2px sliver and edge drags were a game of pixel darts. Scene
+     * rects are hit-tested on their bounds alone — alpha is irrelevant and,
+     * unlike scene buffers, they have no point_accepts_input opt-out — so a
+     * transparent rect is exactly a click target with nothing drawn in it.
+     * They live in the frame (so they move/raise with the window) and are
+     * disabled when there is nothing to resize (fullscreen, maximized). */
+    struct wlr_scene_rect *grab_top;
+    struct wlr_scene_rect *grab_bottom;
+    struct wlr_scene_rect *grab_left;
+    struct wlr_scene_rect *grab_right;
+
     /* Titlebar: one cairo buffer holding the title text and the three buttons
      * (child of frame). Re-rendered only when something it draws changes — the
      * cached fields below are what it was last drawn with. */
@@ -668,10 +701,16 @@ struct syn_view {
     syn_deco_region_t tb_hover;       /* button highlighted under the pointer */
     char  tb_title[128];              /* title it was last drawn with */
 
-    /* Geometry to restore when un-maximizing, and whether the window was
-     * floating before it was maximized (maximizing leaves the tiling flow). */
+    /* Geometry to restore when un-maximizing or un-snapping, and whether the
+     * window was floating before (both maximize and snap leave the tiling
+     * flow). Maximize and snap are mutually exclusive states, so they share the
+     * one slot. */
     struct wlr_box saved_geo;
     int            saved_floating;
+
+    /* snap.c: which edge zone this window is currently snapped to, if any.
+     * Dragging a snapped window releases it back to saved_geo. */
+    syn_snap_zone_t snapped;
 
     /* anim.c: the window's current opacity (1 = solid) and the fade in flight.
      * alpha is applied to every buffer under the frame *and* multiplied into
@@ -992,6 +1031,19 @@ struct syn_server {
     struct wlr_box    grab_geobox;      /* RESIZE: view geometry at grab start */
     uint32_t          resize_edges;     /* RESIZE: WLR_EDGE_* being dragged */
 
+    /* snap.c: the drag-to-edge preview. `zone` is what the cursor is currently
+     * over (NONE for most of a drag) and `box` the geometry it would land in —
+     * computed on motion, applied on release. The preview is a translucent fill
+     * plus four bright edge rects, in a tree of its own inside window_tree so it
+     * paints above the windows but below the dock and menus. */
+    struct {
+        struct wlr_scene_tree *tree;
+        struct wlr_scene_rect *fill;
+        struct wlr_scene_rect *edge[4];   /* top, bottom, left, right */
+        syn_snap_zone_t        zone;
+        struct wlr_box         box;
+    } snap;
+
     /* deco.c: the titlebar button currently highlighted under the pointer, and
      * the last titlebar press — a second press on the same window inside the
      * double-click window maximizes it instead of starting a drag. */
@@ -1122,6 +1174,13 @@ struct syn_server {
     atomic_int      ai_synapd_fd;       /* live synapd socket, so stop can
                                           * shutdown() it and unblock a
                                           * mid-query recv() (see sec_fd) */
+    /* Set by ai_thread_stop() before it shuts the socket down. Shutting the
+     * socket down only kills the query *in flight*: the thread would then drain
+     * the requests still queued in the pipe, reconnect for each one and block on
+     * a fresh socket that nobody is going to shut down — so a logout right after
+     * a few workspace switches (each notifies the AI) waited on that many LLM
+     * round trips, 15s+ in practice. The thread checks this and bails instead. */
+    atomic_int      ai_stopping;
     int             ai_disabled;        /* --no-ai: AI thread never starts */
     int             ai_pipe_req[2];
     int             ai_pipe_resp[2];
@@ -1384,10 +1443,31 @@ syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
                     syn_deco_region_t *region, uint32_t *edges);
 /* Repaint button highlights as the pointer moves across titlebars. */
 void deco_hover_update(syn_server_t *s, double lx, double ly);
+/* (Re)place the invisible resize-grab ring outside the window. Called from
+ * view_update_decorations; the window's edges and corners are only realistically
+ * grabbable because of it. */
+void view_grab_ring_update(syn_view_t *view);
 /* Maximize/restore for real: fills the output's usable box and leaves the
  * tiling flow, restoring the previous geometry (and tiled-ness) on the way
  * back. */
 void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized);
+
+/* ── snap.c ──────────────────────────────────────────────── */
+/* Drag-to-edge window snapping ("snap to fit"). The move grab in input.c drives
+ * these: motion picks a zone and paints the preview, release applies it. */
+/* Which zone the cursor at (lx, ly) is in, and the box that zone fills. */
+syn_snap_zone_t snap_zone_at(syn_server_t *s, double lx, double ly,
+                             struct wlr_box *box);
+/* Called on every motion of a MOVE grab: updates (and shows/hides) the preview. */
+void snap_drag_motion(syn_server_t *s, double lx, double ly);
+/* Called when a MOVE grab is released: snaps `view` into the previewed zone, if
+ * any, and clears the preview. */
+void snap_drag_end(syn_server_t *s, syn_view_t *view);
+/* Hide the preview without applying it (grab cancelled, view destroyed). */
+void snap_preview_hide(syn_server_t *s);
+/* Put a snapped window back to its pre-snap geometry, keeping it under the
+ * cursor — a drag off an edge un-snaps, as it does everywhere else. */
+void snap_release_view(syn_server_t *s, syn_view_t *view, int keep_under_cursor);
 
 /* ── layout.c ────────────────────────────────────────────── */
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);

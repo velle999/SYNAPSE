@@ -465,6 +465,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
     if (server->grabbed_view == view) {
         server->grabbed_view = NULL;
         server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+        snap_preview_hide(server);   /* the window it was previewing is gone */
     }
     /* Drop the chrome (the frame itself goes with the scene tree). */
     view_deco_destroy(view);
@@ -487,6 +488,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data)
     if (view->server->grabbed_view == view) {
         view->server->grabbed_view = NULL;
         view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
+        snap_preview_hide(view->server);
     }
     wl_list_remove(&view->map.link);
     wl_list_remove(&view->unmap.link);
@@ -1350,8 +1352,8 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->request_activate.link);
     wl_list_remove(&s->request_set_shape.link);
     wl_list_remove(&s->set_icon.link);
-    ime_destroy(s);
     ipc_destroy(s);
+    /* NOT ime_destroy() — it must outlive the clients; see below. */
 
     /* Detach the compositor's singleton listeners before destroying the
      * objects they hang off — wlroots asserts empty listener lists on destroy
@@ -1401,6 +1403,17 @@ void synui_destroy(syn_server_t *s)
     game_finish(s);
 
     wl_display_destroy_clients(s->display);
+
+    /* Only now is the IME relay safe to free. Every text-input object belongs to
+     * a *client*, and its destroy listener (text_input_destroy → ime_deactivate)
+     * dereferences relay through ti->relay — so the relay has to outlive the
+     * clients that point at it. Freeing it earlier was a heap-use-after-free on
+     * every shutdown with a client still running, i.e. on every real logout;
+     * it went unseen because the ASan smoke test's client exits before SIGTERM.
+     * Destroying the clients first also lets each text_input unregister itself,
+     * so the relay's list is empty by the time it goes. */
+    ime_destroy(s);
+
     wlr_scene_node_destroy(&s->scene->tree.node);
     wlr_xcursor_manager_destroy(s->cursor_mgr);
     wlr_cursor_destroy(s->cursor);
