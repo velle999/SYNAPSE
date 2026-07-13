@@ -496,6 +496,8 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&view->commit.link);
     wl_list_remove(&view->request_maximize.link);
     wl_list_remove(&view->request_fullscreen.link);
+    wl_list_remove(&view->request_move.link);
+    wl_list_remove(&view->request_resize.link);
     wl_list_remove(&view->link);
     free(view);
 }
@@ -574,6 +576,51 @@ static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *
     /* Honour the state the client asked for (not a blind toggle), and give
      * the window real fullscreen geometry / hand it back to the layout. */
     view_apply_fullscreen(view->server, view, fs);
+}
+
+/*
+ * Client-initiated move/resize (xdg_toplevel.move / .resize).
+ *
+ * A client that draws its own decorations does its own hit-testing and then asks
+ * us to run the drag. synui says SERVER_SIDE over xdg-decoration and gives every
+ * toplevel a frame, so most clients never send these — but a client only has to
+ * *honour* xdg-decoration if it binds it, and Firefox does not bind it at all: it
+ * keeps its GTK frame and its invisible shadow margin, whose input region covers
+ * the pixels just outside our frame — i.e. exactly where the grab ring lives. The
+ * shadow wins the hit test (it is a client surface, above the ring in the frame),
+ * so Firefox's edges and corners reached the client and stopped dead here, with
+ * nothing listening. Ignoring the request meant Firefox could not be resized at
+ * all.
+ *
+ * Guard: only the window the pointer is actually over may start a grab, and only
+ * when no grab is already running. Without that, any background client could take
+ * the pointer whenever it liked.
+ */
+static bool grab_request_ok(syn_view_t *view)
+{
+    syn_server_t *s = view->server;
+    if (s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) return false;
+
+    struct wlr_surface *focus = s->seat->pointer_state.focused_surface;
+    return focus && wlr_surface_get_root_surface(focus) == view_surface(view);
+}
+
+static void xdg_toplevel_request_move(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, request_move);
+    if (grab_request_ok(view))
+        view_begin_interactive(view, SYNUI_CURSOR_MOVE, 0);
+}
+
+static void xdg_toplevel_request_resize(struct wl_listener *listener, void *data)
+{
+    syn_view_t *view = wl_container_of(listener, view, request_resize);
+    struct wlr_xdg_toplevel_resize_event *ev = data;
+    /* The client names the edges it grabbed — a corner arrives as two of them,
+     * which is precisely what our resize path already expects. */
+    if (grab_request_ok(view))
+        view_begin_interactive(view, SYNUI_CURSOR_RESIZE, ev->edges);
 }
 
 /*
@@ -768,6 +815,14 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     view->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
     wl_signal_add(&xdg_surface->toplevel->events.request_fullscreen,
                   &view->request_fullscreen);
+
+    view->request_move.notify = xdg_toplevel_request_move;
+    wl_signal_add(&xdg_surface->toplevel->events.request_move,
+                  &view->request_move);
+
+    view->request_resize.notify = xdg_toplevel_request_resize;
+    wl_signal_add(&xdg_surface->toplevel->events.request_resize,
+                  &view->request_resize);
 
     /* Assign server pointer so view callbacks can reach it */
     view->server = server;

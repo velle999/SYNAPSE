@@ -1000,6 +1000,16 @@ static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
     begin_interactive_edges(view, mode, 0);
 }
 
+/* Public entry point (synui.h): a CSD client asks us to run the grab itself.
+ * Firefox binds no xdg-decoration, draws its own frame, and hit-tests its own
+ * shadow margin for the resize edges — so its corners and titlebar arrive here
+ * as xdg_toplevel.move/.resize and nowhere else. */
+void view_begin_interactive(syn_view_t *view, syn_cursor_mode_t mode,
+                            uint32_t edges)
+{
+    begin_interactive_edges(view, mode, edges);
+}
+
 static void process_cursor_move(syn_server_t *s)
 {
     syn_view_t *v = s->grabbed_view;

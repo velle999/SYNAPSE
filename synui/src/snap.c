@@ -207,6 +207,17 @@ void snap_drag_end(syn_server_t *s, syn_view_t *view)
     if (zone == SYN_SNAP_NONE || !view || !view->mapped || view->fullscreen)
         return;
 
+    /* Re-home the window onto the monitor it was *dropped* on before applying the
+     * zone. Everything downstream reads view->output, not the box: maximize sizes
+     * itself to view->output's usable area, and the tiling reflows per output. Do
+     * this first or a drag onto another monitor's top edge maximizes back onto the
+     * monitor it came from — the preview lands on the right screen and the window
+     * doesn't. */
+    struct wlr_output *wo = wlr_output_layout_output_at(
+        s->output_layout, box.x + box.width / 2.0, box.y + box.height / 2.0);
+    if (wo && wo->data && wo->data != view->output)
+        view_set_output(s, view, wo->data);
+
     /* The top zone is a maximize, and maximize already knows how to save the
      * geometry, tell the client and reflow the workspace. */
     if (zone == SYN_SNAP_MAX) {
@@ -225,14 +236,6 @@ void snap_drag_end(syn_server_t *s, syn_view_t *view)
     }
     view->snapped  = zone;
     view->floating = 1;              /* a snapped window is out of the tiling flow */
-
-    /* The zone box is an output box; view_set_output keeps ->output honest so a
-     * later maximize/fullscreen targets the monitor the window actually landed
-     * on, not the one it was dragged from. */
-    struct wlr_output *wo = wlr_output_layout_output_at(
-        s->output_layout, box.x + box.width / 2.0, box.y + box.height / 2.0);
-    if (wo && wo->data && wo->data != view->output)
-        view_set_output(s, view, wo->data);
 
     wlr_scene_node_raise_to_top(view_node(view));
     view_resize(view, box.x, box.y, box.width, box.height);

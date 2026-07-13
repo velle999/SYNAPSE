@@ -728,6 +728,10 @@ struct syn_view {
     struct wl_listener commit;
     struct wl_listener request_maximize;
     struct wl_listener request_fullscreen;
+    /* xdg-only: a CSD client (Firefox) drags its own titlebar / resize edges and
+     * asks the compositor to run the grab. See view_begin_interactive(). */
+    struct wl_listener request_move;
+    struct wl_listener request_resize;
     /* xwayland-only */
     struct wl_listener associate;
     struct wl_listener dissociate;
@@ -1451,6 +1455,14 @@ void view_grab_ring_update(syn_view_t *view);
  * tiling flow, restoring the previous geometry (and tiled-ness) on the way
  * back. */
 void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized);
+
+/* ── input.c ─────────────────────────────────────────────── */
+/* Start a compositor-run pointer grab on a view: SYNUI_CURSOR_MOVE, or
+ * SYNUI_CURSOR_RESIZE from `edges` (a WLR_EDGE_* mask; 0 = derive from the
+ * cursor's quadrant). The same path the titlebar and the grab ring use, exposed
+ * so a CSD client's own xdg_toplevel.move/.resize request runs it too. */
+void view_begin_interactive(syn_view_t *view, syn_cursor_mode_t mode,
+                            uint32_t edges);
 
 /* ── snap.c ──────────────────────────────────────────────── */
 /* Drag-to-edge window snapping ("snap to fit"). The move grab in input.c drives
