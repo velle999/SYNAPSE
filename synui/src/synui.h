@@ -1462,8 +1462,15 @@ void view_deco_destroy(syn_view_t *view);
  * config reload). view_update_decorations alone would repaint the chrome and
  * leave the client sized and offset for the old one. */
 void deco_refresh_all(syn_server_t *s);
-/* Hide/show every titlebar at runtime — the `decorations_toggle` action. */
+/* Hide/show every titlebar at runtime — the `decorations_toggle` action.
+ * Persists the new state, so both it and the control panel's row survive a
+ * restart. */
 void deco_toggle_titlebars(syn_server_t *s);
+/* Persisted titlebar toggle (~/.config/synui/deco.state). Loaded once at
+ * startup, before any view is mapped, so no refresh is owed; written by
+ * deco_toggle_titlebars() itself. */
+void deco_state_load(syn_server_t *s);
+void deco_state_save(syn_server_t *s);
 /* What decoration (if any) sits under a layout-space point. Fills *edges with
  * the WLR_EDGE_* to resize from when the region is DECO_BORDER. */
 syn_view_t *deco_at(syn_server_t *s, double lx, double ly,

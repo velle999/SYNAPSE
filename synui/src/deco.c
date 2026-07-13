@@ -30,6 +30,7 @@
  */
 
 #define _GNU_SOURCE
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -327,8 +328,58 @@ void deco_toggle_titlebars(syn_server_t *s)
 {
     s->titlebars_hidden = !s->titlebars_hidden;
     deco_refresh_all(s);
+    deco_state_save(s);
     wlr_log(WLR_INFO, "synui: titlebars %s",
             s->titlebars_hidden ? "hidden" : "shown");
+}
+
+/* ── Persisted state (~/.config/synui/deco.state) ─────────── */
+/*
+ * The toggle stays *server* state rather than moving into syn_config_t, so a
+ * config reload still can't undo it (see synui.h) — it just now survives a
+ * logout as well. Its own state file, alongside wallpaper/dock/power/filters,
+ * keeps it out of synuirc, where `titlebar_height = 0` remains the permanent
+ * "I never want titlebars" answer.
+ */
+static bool deco_state_path(char *buf, size_t n)
+{
+    return syn_config_path(buf, n, "deco.state");
+}
+
+void deco_state_save(syn_server_t *s)
+{
+    char path[256];
+    if (!deco_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
+
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: deco: cannot write '%s': %s",
+                path, strerror(errno));
+        return;
+    }
+    fprintf(f, "titlebars_hidden=%d\n", s->titlebars_hidden ? 1 : 0);
+    fclose(f);
+}
+
+void deco_state_load(syn_server_t *s)
+{
+    char path[256];
+    if (!deco_state_path(path, sizeof(path))) return;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;   /* no persisted choice — titlebars start shown */
+
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        if (strcmp(line, "titlebars_hidden") == 0)
+            s->titlebars_hidden = atoi(eq + 1) != 0;
+    }
+    fclose(f);
 }
 
 /* ── Invisible resize-grab ring ──────────────────────────── */
