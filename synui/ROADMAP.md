@@ -552,3 +552,40 @@ starts silent.
 - [x] Each new listener is removed at teardown — wlroots asserts empty listener
       lists when it destroys the managers, and xdg-activation aborted the
       compositor on SIGTERM until it was.
+
+### Phase P — Hyprland-style polish: animations + control socket  *(done)*
+Cherry-picked from Hyprland rather than adopting it: synui keeps synapd, the
+security borders, the dock and game mode, and gains the parts worth having.
+- [x] **Animations** (`anim.c`) — windows fade in when they open, and switching
+      desktop cross-fades (the outgoing windows fade out and are only disabled
+      once actually invisible). Runs off the existing per-output frame tick, like
+      `dock_tick`/`cat_tick`. `animation_ms = 0` disables it; every fade then
+      jumps straight to its end state so nothing else has to care.
+      Fading a window means fading it *whole*: `wlr_scene_node_for_each_buffer`
+      covers the client surfaces and the titlebar, while the four border rects
+      carry alpha in their colour and are multiplied by `view->alpha` in
+      `view_update_decorations`.
+      **Not** doing geometry animation: animating a window's size means
+      re-configuring the client every frame — a resize storm — which is why
+      Hyprland animates a scaled *snapshot* instead. That needs render control
+      `wlr_scene` does not expose. Fades are the honest subset.
+- [x] **Control socket** (`ipc.c` + `synctl`) — the hyprctl of synui.
+      `$XDG_RUNTIME_DIR/synui-$WAYLAND_DISPLAY.sock`, 0600, exported to children
+      as `SYNUI_SOCKET`. JSON state (`clients`, `workspaces`, `outputs`,
+      `activewindow`, `activeworkspace`) plus `dispatch <action> [arg]`, which
+      runs **any keybind action by name** — so anything bindable is scriptable,
+      with no second registry to keep in sync (`synctl dispatch ws 3`,
+      `synctl dispatch spawn foot`). Listener and clients live on the
+      compositor's own `wl_event_loop`, so handlers run on the main thread
+      between frames: no locking, no racing the scene graph. Window titles are
+      JSON-escaped (arbitrary user data must not be able to forge fields).
+
+### Not done: rounded corners + blur
+Both need per-surface render control that `wlr_scene` does not expose — there is
+no corner radius, no blur and no per-node shader hook, and the CRT post-process
+pass in `effects.c` cannot help: it runs on the *composited* frame, where the
+pixels behind a window's corner have already been occluded, so there is nothing
+left to round *to*. The real path is **scenefx** (the `wlr_scene` fork SwayFX
+uses, which adds corner radius, blur and shadows). It is not packaged here and
+would mean migrating every `wlr_scene_*` call and pinning to a wlroots version.
+Left as an explicit decision rather than a silent gap.

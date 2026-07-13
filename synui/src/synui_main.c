@@ -209,6 +209,11 @@ static void output_frame(struct wl_listener *listener, void *data)
     if (cat_tick(output, now_s))
         wlr_output_schedule_frame(output->wlr_output);
 
+    /* Advance window fades (open, desktop cross-fade); keep frames coming
+     * while any is still running. */
+    if (anim_tick(output->server, now_s))
+        wlr_output_schedule_frame(output->wlr_output);
+
     /* Poll for AI responses (non-blocking) and route by request type. */
     syn_ai_response_t resp;
     if (ai_thread_poll(output->server, &resp) == 0) {
@@ -428,6 +433,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
     focus_view(view->server, view, view->xdg_surface->surface);
     layout_apply(view->server, view->workspace);
     foreign_toplevel_map(view);
+    anim_fade_in(view);          /* windows arrive, they don't just appear */
 
     /* A client that asked for fullscreen before it ever mapped only got the
      * state recorded (see xdg_toplevel_request_fullscreen) — layout_apply just
@@ -1203,6 +1209,10 @@ int synui_init(syn_server_t *s)
     setenv("WAYLAND_DISPLAY", socket, 1);
     wlr_log(WLR_INFO, "synui: running on WAYLAND_DISPLAY=%s", socket);
 
+    /* Control socket (synctl). After WAYLAND_DISPLAY is set: the socket is keyed
+     * on it, so a nested/headless synui can't collide with the session's. */
+    ipc_setup(s);
+
     /* Publish the socket name for synui-foot.service and synui-media-inhibit.
      *
      * This goes in XDG_RUNTIME_DIR (0700, owned by the session user), not in
@@ -1341,6 +1351,7 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->request_set_shape.link);
     wl_list_remove(&s->set_icon.link);
     ime_destroy(s);
+    ipc_destroy(s);
 
     /* Detach the compositor's singleton listeners before destroying the
      * objects they hang off — wlroots asserts empty listener lists on destroy

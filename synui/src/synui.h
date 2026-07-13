@@ -77,6 +77,7 @@
 #define COLOR_TITLE_TEXT_FOCUS{ 0.90f, 0.90f, 0.95f, 1.0f } /* #e6e6f2 */
 
 #define TITLEBAR_HEIGHT_DEF  26   /* synuirc titlebar_height; 0 disables */
+#define ANIMATION_MS_DEF     140   /* synuirc animation_ms; 0 disables */
 
 /* What the pointer is over, in a window's server-side decorations. Buttons are
  * square, titlebar-height, right-aligned: [ _ ] [ □ ] [ × ]. */
@@ -460,6 +461,10 @@ typedef struct {
     /* Server-side titlebar: drag to move, double-click to maximize, and the
      * three buttons. `titlebar_height` of 0 turns it off entirely (windows keep
      * their borders, and Super+drag still moves them). */
+    /* anim.c: fade duration in ms; 0 disables animations entirely (every fade
+     * then jumps straight to its end state). */
+    int   animation_ms;
+
     int   titlebar_height;
     float titlebar_color[4];
     float titlebar_color_focus[4];
@@ -667,6 +672,15 @@ struct syn_view {
      * floating before it was maximized (maximizing leaves the tiling flow). */
     struct wlr_box saved_geo;
     int            saved_floating;
+
+    /* anim.c: the window's current opacity (1 = solid) and the fade in flight.
+     * alpha is applied to every buffer under the frame *and* multiplied into
+     * the border rects' colour, so a fading window fades whole. */
+    float  alpha;
+    int    fade_active;
+    int    fade_hide_done;   /* disable the node once it reaches alpha 0 */
+    float  fade_from, fade_to;
+    double fade_start;       /* CLOCK_MONOTONIC secs */
 
     /* Listeners (shared: xdg + xwayland reuse map/unmap/destroy/request_*) */
     struct wl_listener map;
@@ -1179,6 +1193,12 @@ struct syn_server {
     struct wlr_xdg_toplevel_icon_manager_v1 *toplevel_icon_mgr;
     struct wl_listener                       set_icon;
 
+    /* ipc.c: the control socket (synctl). */
+    int                     ipc_fd;
+    struct wl_event_source *ipc_source;
+    int                     ipc_clients;
+    char                    ipc_path[256];
+
     /* text-input-v3 + input-method-v2 (ime.c). Without these every toolkit
      * disables its IME, which means no CJK, no compose key and no emoji picker
      * — nothing that isn't a direct keysym can be typed at all. */
@@ -1646,6 +1666,19 @@ typedef struct {
  * pointer with app_id/display_name/exec populated (falling back to the
  * app_id string itself when no .desktop file matches); icon_surface may be
  * NULL, in which case the caller should fall back to icon_draw_monogram(). */
+/* ── ipc.c ───────────────────────────────────────────────── */
+/* Control socket: JSON state queries + `dispatch <action>` for every keybind
+ * action. $XDG_RUNTIME_DIR/synui-$WAYLAND_DISPLAY.sock, 0600. */
+void ipc_setup(syn_server_t *s);
+void ipc_destroy(syn_server_t *s);
+
+/* ── anim.c ──────────────────────────────────────────────── */
+bool anim_tick(syn_server_t *s, double now);
+void anim_fade_in(syn_view_t *view);
+void anim_fade_out_and_hide(syn_view_t *view);
+void anim_reset(syn_view_t *view);
+void anim_apply_alpha(syn_view_t *view);
+
 /* ── ime.c ───────────────────────────────────────────────── */
 void ime_setup(syn_server_t *s);
 void ime_destroy(syn_server_t *s);

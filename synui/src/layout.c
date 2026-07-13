@@ -512,19 +512,22 @@ void workspace_switch(syn_server_t *s, int index)
     syn_workspace_t *cur    = &s->workspaces[s->active_workspace];
     syn_workspace_t *target = &s->workspaces[index];
 
-    /* Hide the outgoing desktop on every monitor. */
+    /* Cross-fade: the outgoing desktop's windows fade out and are only disabled
+     * once they're actually invisible (anim.c), the incoming ones fade in. */
     syn_view_t *v;
     wl_list_for_each(v, &cur->windows, link)
         if (v->mapped)
-            wlr_scene_node_set_enabled(view_node(v), false);
+            anim_fade_out_and_hide(v);
     cur->visible = 0;
 
     /* Show the incoming one. */
     s->active_workspace = index;
     target->visible = 1;
     wl_list_for_each(v, &target->windows, link)
-        if (v->mapped && !v->minimized)
+        if (v->mapped && !v->minimized) {
             wlr_scene_node_set_enabled(view_node(v), true);
+            anim_fade_in(v);
+        }
 
     layout_apply(s, target);
 

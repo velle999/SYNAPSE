@@ -25,6 +25,12 @@ master_factor   = 0.60
 # border_color_ai    = #05d9e8
 # border_color_warn  = #ff3524
 
+# ── Animations ─────────────────────────────────────────────
+# Window fade duration in ms: windows fade in when they open, and switching
+# desktop cross-fades instead of snapping. 0 disables animations entirely.
+# Capped at 1000.
+animation_ms = 140
+
 # ── Titlebar ───────────────────────────────────────────────
 # Server-side titlebar: drag it to move the window, double-click it to
 # maximize, and the three buttons are minimize / maximize / close.

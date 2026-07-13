@@ -119,7 +119,9 @@ synui_exe = executable('synui',
     'src/input.c',
     'src/constraints.c',
     'src/deco.c',
+    'src/anim.c',
     'src/ime.c',
+    'src/ipc.c',
     'src/foreign_toplevel.c',
     'src/layout.c',
     'src/layer.c',
@@ -163,6 +165,12 @@ synui_exe = executable('synui',
                   egl, glesv2, libsystemd],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
+  install : true)
+
+# synctl: the control-socket client (hyprctl equivalent). Talks to the socket
+# synui exports as SYNUI_SOCKET; no Wayland connection of its own.
+executable('synctl',
+  sources : ['src/synctl.c'],
   install : true)
 
 # synui-idle-inhibit: standalone helper that holds a real Wayland idle inhibitor

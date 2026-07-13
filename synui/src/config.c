@@ -322,6 +322,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->gap = GAP_DEFAULT;
     cfg->master_factor = 0.60f;
     cfg->titlebar_height = TITLEBAR_HEIGHT_DEF;
+    cfg->animation_ms    = ANIMATION_MS_DEF;
     { static const float c[4] = COLOR_TITLEBAR_NORM;    memcpy(cfg->titlebar_color,       c, sizeof(c)); }
     { static const float c[4] = COLOR_TITLEBAR_FOCUS;   memcpy(cfg->titlebar_color_focus, c, sizeof(c)); }
     { static const float c[4] = COLOR_TITLE_TEXT;       memcpy(cfg->titlebar_text,        c, sizeof(c)); }
@@ -482,6 +483,14 @@ void synui_config_load(syn_config_t *cfg)
         }
         else if (strcmp(key, "master_factor") == 0)
             cfg->master_factor = strtof(val, NULL);
+        else if (strcmp(key, "animation_ms") == 0) {
+            /* 0 = off. Cap it: a multi-second fade is a broken desktop, not a
+             * preference. */
+            int ms = atoi(val);
+            if (ms < 0)   ms = 0;
+            if (ms > 1000) ms = 1000;
+            cfg->animation_ms = ms;
+        }
         else if (strcmp(key, "titlebar_height") == 0) {
             /* 0 disables the titlebar entirely; clamp the rest to something a
              * button glyph can actually be drawn in. */
