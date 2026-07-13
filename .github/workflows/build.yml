@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege for GITHUB_TOKEN: both jobs only ever check the repo out and
+# compile it. Without this the token inherits the repository default, which can
+# be write-all — a compromised action or dependency could then push to main.
+# Any future job that needs more (releases, packages) must opt in explicitly.
+permissions:
+  contents: read
+
 # Pinned llama.cpp build tag. Local llama-staging is build 8274
 # (libllama.so.0.0.8274), but upstream never tagged b8273–b8275, so we
 # pin the nearest tag at or below it. Bump this to move synapd to a

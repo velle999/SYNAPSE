@@ -160,7 +160,8 @@ void action_quarantine(synguard_state_t *s, const sg_event_t *e)
             "kill:      kill -9 %u\n",
             tbuf, e->pid, e->comm, e->uid,
             e->evt_type, e->filename[0] ? e->filename : "-",
-            e->pid, e->pid, e->pid
+            /* cgroup:, resume: (twice), kill: — four pids, not three. */
+            e->pid, e->pid, e->pid, e->pid
         );
         fclose(f);
         sg_log(LOG_INFO, "quarantine: report at %s", note_path);
