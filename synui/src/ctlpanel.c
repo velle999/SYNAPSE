@@ -46,6 +46,7 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_GAME:       return "Game mode";
     case CTL_ROW_AI_BACKEND: return "AI backend";
     case CTL_ROW_DOCK:       return "Dock";
+    case CTL_ROW_TITLEBARS:  return "Titlebars";
     case CTL_ROW_SEP:        return "";
     case CTL_ROW_DISPLAYS:   return "Display settings";
     case CTL_ROW_FILTERS:    return "CRT filters \xe2\x80\xa6";
@@ -95,6 +96,10 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         break;
     case CTL_ROW_DOCK:
         snprintf(buf, n, "%s", s->config.dock_enabled ? "on" : "off");
+        break;
+    case CTL_ROW_TITLEBARS:
+        /* The row is the titlebars, not the hiding of them: "on" means shown. */
+        snprintf(buf, n, "%s", s->titlebars_hidden ? "off" : "on");
         break;
     default:
         buf[0] = '\0';   /* jump-offs have no state of their own */
@@ -316,6 +321,15 @@ static void ctlpanel_activate(syn_server_t *s)
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock %s", s->config.dock_enabled ? "on" : "off");
         ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_TITLEBARS:
+        /* Same call the Super+Shift+D bind makes — it re-runs the layout for
+         * every view, which a bare repaint here would not: the clients have to
+         * be resized for the titlebar that just came or went. */
+        deco_toggle_titlebars(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "titlebars %s", s->titlebars_hidden ? "off" : "on");
         return;
 
     case CTL_ROW_AI_BACKEND:

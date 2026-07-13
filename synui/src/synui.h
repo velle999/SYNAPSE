@@ -256,6 +256,7 @@ typedef enum {
     CTL_ROW_GAME,
     CTL_ROW_AI_BACKEND,
     CTL_ROW_DOCK,
+    CTL_ROW_TITLEBARS,
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
     CTL_ROW_FILTERS,
