@@ -79,6 +79,7 @@ int view_deco_titlebar(const syn_view_t *view)
 {
     if (view->fullscreen || view->override_redirect) return 0;
     if (!view->frame) return 0;
+    if (view->server->titlebars_hidden) return 0;  /* decorations_toggle */
     return view->server->config.titlebar_height;   /* 0 = disabled in synuirc */
 }
 
@@ -297,6 +298,37 @@ void view_update_decorations(syn_view_t *view)
 
     view_grab_ring_update(view);
     titlebar_render(view);
+}
+
+/* ── Runtime titlebar toggle ─────────────────────────────── */
+/*
+ * Re-apply each mapped view's geometry to the frame box it already has. The
+ * tiling is untouched on purpose: layout_tile lays out *frames*, and the
+ * titlebar lives inside the frame, so no frame moves when the titlebar comes
+ * and goes. What does change is view_content_box(), and only view_resize()
+ * pushes that to the client (configure + the client subtree's offset inside the
+ * frame). Floating windows are the ones that prove it: layout_apply skips them,
+ * so a bare view_update_decorations() loop would repaint their chrome and leave
+ * the client itself sized for the titlebar that is no longer there.
+ */
+void deco_refresh_all(syn_server_t *s)
+{
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link) {
+            /* Not sized yet: it gets the current metrics at its first layout. */
+            if (!v->mapped || v->w <= 0 || v->h <= 0) continue;
+            view_resize(v, v->x, v->y, v->w, v->h);
+        }
+    }
+}
+
+void deco_toggle_titlebars(syn_server_t *s)
+{
+    s->titlebars_hidden = !s->titlebars_hidden;
+    deco_refresh_all(s);
+    wlr_log(WLR_INFO, "synui: titlebars %s",
+            s->titlebars_hidden ? "hidden" : "shown");
 }
 
 /* ── Invisible resize-grab ring ──────────────────────────── */

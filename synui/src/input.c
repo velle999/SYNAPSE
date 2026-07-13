@@ -430,6 +430,12 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "maximize_toggle") == 0) {
         if (!s->focused_view) return;
         view_apply_maximized(s, s->focused_view, !s->focused_view->maximized);
+    } else if (strcmp(action, "decorations_toggle") == 0) {
+        /* Global, not per-window: the titlebar is chrome the compositor owes
+         * every client it told SERVER_SIDE, so it goes away for all of them at
+         * once or the desktop is half-decorated. Borders stay — they are the
+         * focus indicator, and they are what the grab ring hangs off. */
+        deco_toggle_titlebars(s);
     } else if (strcmp(action, "minimize_toggle") == 0) {
         /* Only ever minimizes: a minimized window has its scene node
          * disabled, so it can never hold focus for this to toggle back. */

@@ -131,6 +131,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "maximize_toggle",   "Maximize window" },
         { "minimize_toggle",   "Minimize window" },
         { "minimize_restore",  "Restore minimized window" },
+        { "decorations_toggle","Titlebars on/off" },
         { "displays",          "Display settings" },
         { "wallpaper",         "Wallpaper picker" },
         { "wallpaper_reload",  "Reload wallpaper / config" },

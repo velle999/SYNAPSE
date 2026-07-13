@@ -19,12 +19,14 @@
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
- * minimize_restore, ai_ask,
+ * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
  * filters, effects_toggle, power, lock, game, taskmgr, network.
  * A bind with the same combo as a default replaces it.
  * "filters" (Super+E) opens the CRT filter panel; "effects_toggle" is the older
  * blind on/off flip, kept for anyone who bound it.
+ * "decorations_toggle" (Super+Shift+D) hides every titlebar until you press it
+ * again; `titlebar_height = 0` below is the permanent version.
  *
  * Wallpaper (wallpaper.c):
  *   wallpaper = /path/to/image.png   (PNG or JPEG; ~ expands to $HOME)
@@ -230,6 +232,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+f",         "float_toggle" },
         { "super+shift+f",   "fullscreen_toggle" },
         { "super+m",         "maximize_toggle" },
+        { "super+shift+d",   "decorations_toggle" },
         { "super+n",         "minimize_toggle" },
         { "super+shift+n",   "minimize_restore" },
         { "super+backspace", "ai_ask" },

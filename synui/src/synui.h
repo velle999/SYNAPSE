@@ -1055,6 +1055,11 @@ struct syn_server {
     uint32_t          tb_last_click_ms;
     syn_view_t       *tb_last_click_view;
 
+    /* deco.c: `decorations_toggle` (Super+Shift+D) hides every titlebar at
+     * runtime. Server state, not config state, so a config reload can't undo
+     * it — synuirc's `titlebar_height = 0` is the permanent version of this. */
+    bool              titlebars_hidden;
+
     /* The cursor image the compositor is currently forcing over its own chrome
      * or for the length of a grab (a resize arrow, a grab hand). NULL means the
      * client under the pointer owns the cursor again. Always a string literal —
@@ -1450,6 +1455,14 @@ void view_content_box(const syn_view_t *view, struct wlr_box *out);
 /* Redraw borders + titlebar for the view's current geometry/focus/title. */
 void view_update_decorations(syn_view_t *view);
 void view_deco_destroy(syn_view_t *view);
+/* Re-apply every mapped view's geometry to its current frame box. The frame is
+ * unchanged; the *content* box inside it is not, so this is what has to run
+ * after anything that moves the border/titlebar metrics (the titlebar toggle, a
+ * config reload). view_update_decorations alone would repaint the chrome and
+ * leave the client sized and offset for the old one. */
+void deco_refresh_all(syn_server_t *s);
+/* Hide/show every titlebar at runtime — the `decorations_toggle` action. */
+void deco_toggle_titlebars(syn_server_t *s);
 /* What decoration (if any) sits under a layout-space point. Fills *edges with
  * the WLR_EDGE_* to resize from when the region is DECO_BORDER. */
 syn_view_t *deco_at(syn_server_t *s, double lx, double ly,

@@ -36,6 +36,8 @@ animation_ms = 140
 # maximize, and the three buttons are minimize / maximize / close.
 # Set to 0 to turn titlebars off entirely — windows keep their borders, and
 # Super+drag still moves them. Clamped to 14..64 when non-zero.
+# Super+Shift+D (the `decorations_toggle` action) flips them off and back on at
+# runtime without touching this; setting 0 here is the permanent version.
 titlebar_height = 26
 
 # Titlebar colors, #rrggbb (defaults shown). Deliberately muted: the border

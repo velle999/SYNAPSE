@@ -88,15 +88,13 @@ void synui_config_reload(syn_server_t *s)
     input_reload_config(s);
 
     /* Re-tile the visible desktop (layout_apply covers every output) with the
-     * new gap/border, and refresh every mapped view's border rects (floating
-     * windows aren't touched by the layout pass). Hidden desktops re-flow on
-     * switch. */
+     * new gap/border. Hidden desktops re-flow on switch. */
     layout_apply(s, server_active_workspace(s));
-    for (int w = 0; w < WORKSPACE_MAX; w++) {
-        syn_view_t *v;
-        wl_list_for_each(v, &s->workspaces[w].windows, link)
-            view_update_decorations(v);
-    }
+    /* Then re-apply every view's geometry: border_width/titlebar_height may
+     * have changed, which moves the content box inside an unchanged frame. The
+     * layout pass doesn't cover that for floating windows, and repainting the
+     * chrome alone would leave the client sized for the old metrics. */
+    deco_refresh_all(s);
 
     wlr_log(WLR_INFO, "synui: config reloaded (%d binds, gap %d, border %d)",
             s->config.bind_count, s->config.gap, s->config.border_width);
