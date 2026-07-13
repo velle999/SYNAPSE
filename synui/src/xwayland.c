@@ -241,6 +241,22 @@ static void fs_scale_count(struct wlr_scene_buffer *b, int sx, int sy, void *dat
     p->buf = b;
 }
 
+/* Place the client surface at an offset *inside* the view's frame.
+ *
+ * The surface tree is a child of the frame (view_frame_create), so its position
+ * is relative to the frame's origin — exactly as view_resize places it. Passing
+ * an absolute layout coordinate here displaces the surface by the frame's own
+ * position, which is invisible on a monitor at the layout origin and ruinous on
+ * any other: a fullscreen window on the portrait monitor (layout y=1080) had its
+ * top 1080px pushed off the bottom of the screen. */
+static void fs_place_surface(syn_view_t *v, int off_x, int off_y)
+{
+    int base_x = v->frame ? 0 : v->x;
+    int base_y = v->frame ? 0 : v->y;
+    wlr_scene_node_set_position(&v->scene_tree->node,
+                                base_x + off_x, base_y + off_y);
+}
+
 void view_fullscreen_rescale(syn_view_t *v)
 {
     if (!v || !v->is_xwayland || v->override_redirect || !v->mapped ||
@@ -260,16 +276,19 @@ void view_fullscreen_rescale(syn_view_t *v)
         double scale = fx < fy ? fx : fy;
         int dw = (int)(sw * scale + 0.5), dh = (int)(sh * scale + 0.5);
         wlr_scene_buffer_set_dest_size(p.buf, dw, dh);
-        wlr_scene_node_set_position(&v->scene_tree->node,
-                                    v->x + (v->w - dw) / 2,
-                                    v->y + (v->h - dh) / 2);
+        fs_place_surface(v, (v->w - dw) / 2, (v->h - dh) / 2);
     } else {
         /* Not fullscreen, or the client already fills the box: hand the buffer
-         * back to its natural size at the view origin. (The helper also resets
+         * back to its natural size at the content offset. (The helper also resets
          * dest_size on the next commit, but do it now so an un-fullscreened or
-         * grown window isn't left scaled/offset for a frame.) */
+         * grown window isn't left scaled/offset for a frame.) A window that is
+         * back in the layout has its border and titlebar again, so the content
+         * offset is not the frame origin — view_content_box is the same answer
+         * view_resize gives, and this runs after it. */
+        struct wlr_box c;
+        view_content_box(v, &c);
         wlr_scene_buffer_set_dest_size(p.buf, sw, sh);
-        wlr_scene_node_set_position(&v->scene_tree->node, v->x, v->y);
+        fs_place_surface(v, c.x - v->x, c.y - v->y);
     }
 }
 
