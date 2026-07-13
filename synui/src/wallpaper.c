@@ -321,13 +321,13 @@ void wallpaper_reload(syn_server_t *s)
 
 /* ── Persisted picker choice (~/.config/synui/wallpaper.state) ── */
 
-/* Resolve the state-file path into buf. Returns false if $HOME is unset. */
+/* Resolve the state-file path into buf. Returns false if the config dir can't
+ * be resolved. Note this file OVERRIDES the synuirc `wallpaper` key on load
+ * (config.c applies it last) — that is deliberate: it is what makes a Super+W
+ * pick survive a restart. Delete it to hand control back to synuirc. */
 static bool wallpaper_state_path(char *buf, size_t n)
 {
-    const char *home = getenv("HOME");
-    if (!home || !*home) return false;
-    snprintf(buf, n, "%s/.config/synui/wallpaper.state", home);
-    return true;
+    return syn_config_path(buf, n, "wallpaper.state");
 }
 
 /* Interpret one token the same way the synuirc `wallpaper` key does. */
@@ -372,6 +372,7 @@ void wallpaper_state_save(syn_server_t *s)
 {
     char path[256];
     if (!wallpaper_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
 
     FILE *f = fopen(path, "w");
     if (!f) {

@@ -724,10 +724,7 @@ void dock_drag_end(syn_server_t *s, double lx, double ly)
 /* Resolve ~/.config/synui/dock.state; false if $HOME is unset. */
 static bool dock_state_path(char *buf, size_t n)
 {
-    const char *home = getenv("HOME");
-    if (!home || !*home) return false;
-    snprintf(buf, n, "%s/.config/synui/dock.state", home);
-    return true;
+    return syn_config_path(buf, n, "dock.state");
 }
 
 void dock_state_load(syn_config_t *cfg)
@@ -769,6 +766,7 @@ void dock_state_save(syn_server_t *s)
 {
     char path[256];
     if (!dock_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
     FILE *f = fopen(path, "w");
     if (!f) {
         wlr_log(WLR_ERROR, "synui: dock: cannot write '%s': %s",

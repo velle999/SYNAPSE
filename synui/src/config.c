@@ -92,6 +92,9 @@
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "synui.h"
 
 static char *strip(char *s)
@@ -259,6 +262,56 @@ static void seed_default_binds(syn_config_t *cfg)
     }
 }
 
+/* ── Config-dir paths ────────────────────────────────────── */
+
+/* The single resolver for everything under synui's config dir: synuirc,
+ * outputs.conf, and the *.state files (wallpaper/dock/power/filters/welcome).
+ * Those state files each used to hardcode ~/.config/synui and ignore
+ * XDG_CONFIG_HOME, which synuirc and outputs.conf honour — so pointing
+ * XDG_CONFIG_HOME elsewhere read the settings from one directory and the
+ * persisted picker/dock/power choices from another. Route every one of them
+ * through here and they can't drift apart again. */
+bool syn_config_path(char *buf, size_t n, const char *name)
+{
+    const char *xdg  = getenv("XDG_CONFIG_HOME");
+    const char *home = getenv("HOME");
+    if (xdg && *xdg)
+        snprintf(buf, n, "%s/synui/%s", xdg, name);
+    else if (home && *home)
+        snprintf(buf, n, "%s/.config/synui/%s", home, name);
+    else
+        return false;
+    return true;
+}
+
+/* Create the config dir (and its parent) if absent, so a *_state_save() into
+ * a fresh XDG_CONFIG_HOME writes instead of failing to a log line nobody
+ * reads. Only writers need this; readers treat a missing file as "no
+ * persisted choice". mkdir(2) errors other than EEXIST are left for the
+ * caller's fopen() to report against the full path. */
+void syn_config_ensure_dir(void)
+{
+    char dir[256];
+    if (!syn_config_path(dir, sizeof(dir), "")) return;
+
+    /* syn_config_path() left a trailing '/' from the empty name. */
+    size_t len = strlen(dir);
+    while (len > 1 && dir[len - 1] == '/') dir[--len] = '\0';
+
+    /* mkdir -p: XDG_CONFIG_HOME can point at a path with any number of
+     * missing components, so creating just the last one (or just its parent)
+     * still fails with ENOENT. Walk it and create each in turn; intermediate
+     * failures are left to the final mkdir to report against the full path. */
+    for (char *p = dir + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = '\0';
+        mkdir(dir, 0755);
+        *p = '/';
+    }
+    if (mkdir(dir, 0755) != 0 && errno != EEXIST)
+        wlr_log(WLR_ERROR, "synui: mkdir %s failed: %s", dir, strerror(errno));
+}
+
 void synui_config_load(syn_config_t *cfg)
 {
     /* Defaults */
@@ -362,12 +415,7 @@ void synui_config_load(syn_config_t *cfg)
      * hermetic run), then user config, then system-wide. */
     const char *paths[3] = { getenv("SYNUI_CONFIG"), NULL, "/etc/synui/synuirc" };
     char user_path[256] = {0};
-    const char *xdg = getenv("XDG_CONFIG_HOME");
-    const char *home = getenv("HOME");
-    if (xdg)
-        snprintf(user_path, sizeof(user_path), "%s/synui/synuirc", xdg);
-    else if (home)
-        snprintf(user_path, sizeof(user_path), "%s/.config/synui/synuirc", home);
+    syn_config_path(user_path, sizeof(user_path), "synuirc");
     paths[1] = user_path;
 
     FILE *f = NULL;

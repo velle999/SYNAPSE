@@ -301,10 +301,7 @@ void synui_welcome_hide(syn_server_t *s)
 /* Resolve ~/.config/synui/welcome.state; false if $HOME is unset. */
 static bool welcome_state_path(char *buf, size_t n)
 {
-    const char *home = getenv("HOME");
-    if (!home || !*home) return false;
-    snprintf(buf, n, "%s/.config/synui/welcome.state", home);
-    return true;
+    return syn_config_path(buf, n, "welcome.state");
 }
 
 void welcome_state_load(syn_config_t *cfg)
@@ -327,6 +324,7 @@ void welcome_state_save(syn_config_t *cfg)
 {
     char path[256];
     if (!welcome_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
 
     FILE *f = fopen(path, "w");
     if (!f) {

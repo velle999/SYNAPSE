@@ -94,16 +94,14 @@ static void filters_repaint(syn_server_t *s)
 
 static bool filters_state_path(char *buf, size_t n)
 {
-    const char *home = getenv("HOME");
-    if (!home || !*home) return false;
-    snprintf(buf, n, "%s/.config/synui/filters.state", home);
-    return true;
+    return syn_config_path(buf, n, "filters.state");
 }
 
 void filters_state_save(syn_server_t *s)
 {
     char path[256];
     if (!filters_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
 
     FILE *f = fopen(path, "w");
     if (!f) {

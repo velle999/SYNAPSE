@@ -291,16 +291,14 @@ void power_finish(syn_server_t *s)
 
 static bool power_state_path(char *buf, size_t n)
 {
-    const char *home = getenv("HOME");
-    if (!home || !*home) return false;
-    snprintf(buf, n, "%s/.config/synui/power.state", home);
-    return true;
+    return syn_config_path(buf, n, "power.state");
 }
 
 void power_state_save(syn_server_t *s)
 {
     char path[256];
     if (!power_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
 
     FILE *f = fopen(path, "w");
     if (!f) {

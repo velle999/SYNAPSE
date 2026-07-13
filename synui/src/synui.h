@@ -1261,6 +1261,19 @@ void synmon_set_active(syn_server_t *s, int on);  /* poll fast while overlay ope
 /* ── config.c ────────────────────────────────────────────── */
 void synui_config_load(syn_config_t *cfg);
 
+/* Resolve <config dir>/<name> into buf, where the config dir is
+ * $XDG_CONFIG_HOME/synui (preferred) or ~/.config/synui. Every file synui
+ * reads or writes under its config dir MUST go through this — synuirc,
+ * outputs.conf and the *.state files used to resolve their paths separately,
+ * and the .state ones ignored XDG_CONFIG_HOME, so a non-default
+ * XDG_CONFIG_HOME split the config across two directories (settings from one,
+ * persisted picker/dock/power choices from the other). Returns false if
+ * neither variable is set, in which case buf is untouched. */
+bool syn_config_path(char *buf, size_t n, const char *name);
+
+/* Create the config dir if absent. Call before writing a *.state file. */
+void syn_config_ensure_dir(void);
+
 /* ── render.c ────────────────────────────────────────────── */
 void synui_ui_init(syn_server_t *s);
 void synui_render_welcome(syn_server_t *s);

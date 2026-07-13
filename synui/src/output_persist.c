@@ -56,12 +56,7 @@ static void outputs_path(char *buf, size_t len)
     const char *env = getenv("SYNUI_OUTPUTS");
     if (env && env[0]) { snprintf(buf, len, "%s", env); return; }
 
-    const char *xdg  = getenv("XDG_CONFIG_HOME");
-    const char *home = getenv("HOME");
-    if (xdg)
-        snprintf(buf, len, "%s/synui/outputs.conf", xdg);
-    else if (home)
-        snprintf(buf, len, "%s/.config/synui/outputs.conf", home);
+    syn_config_path(buf, len, "outputs.conf");
 }
 
 static persist_entry_t *table_find(const char *name)
