@@ -67,23 +67,27 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
     view->w = w;
     view->h = h;
 
-    int bw = view->server->config.border_width;
-    int iw = w - 2 * bw;
-    int ih = h - 2 * bw;
-    if (iw < 1) iw = 1;
-    if (ih < 1) ih = 1;
+    /* x/y/w/h is the *frame*; the client gets what's left inside the border and
+     * below the titlebar. */
+    struct wlr_box c;
+    view_content_box(view, &c);
 
     /* Commit the size to the client. X11 clients also need their absolute
      * layout position, which the xdg path derives from the scene node. */
     if (view->is_xwayland)
-        wlr_xwayland_surface_configure(view->xsurface, x, y, iw, ih);
+        wlr_xwayland_surface_configure(view->xsurface, c.x, c.y,
+                                       c.width, c.height);
     else
-        wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, iw, ih);
+        wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel,
+                                  c.width, c.height);
 
-    /* Move the scene tree node */
-    wlr_scene_node_set_position(&view->scene_tree->node, x, y);
+    /* Move the frame; the client surface sits at its content offset *inside*
+     * the frame, so the chrome travels with the window for free. */
+    wlr_scene_node_set_position(view_node(view), x, y);
+    if (view->frame)
+        wlr_scene_node_set_position(&view->scene_tree->node, c.x - x, c.y - y);
 
-    view_update_borders(view);
+    view_update_decorations(view);
 }
 #define place_view(v, x, y, w, h) view_resize((v), (x), (y), (w), (h))
 
@@ -169,7 +173,7 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
         place_view(v,
                    area.x, area.y,
                    area.width, area.height);
-        wlr_scene_node_set_enabled(&v->scene_tree->node, v == top);
+        wlr_scene_node_set_enabled(view_node(v), v == top);
     }
 }
 
@@ -345,7 +349,7 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
         if (v->mapped && !v->minimized)
-            wlr_scene_node_set_enabled(&v->scene_tree->node, true);
+            wlr_scene_node_set_enabled(view_node(v), true);
 
     /* AI-managed marking (and its cyan border) only persists under the AI
      * layout; clear it for the other layouts so the border reflects reality. */
@@ -419,17 +423,10 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
             view->output = o;
         struct wlr_box area;
         output_box_of(s, o, &area);
-        view->x = area.x;    view->y = area.y;
-        view->w = area.width; view->h = area.height;
-        if (view->is_xwayland)
-            wlr_xwayland_surface_configure(view->xsurface, area.x, area.y,
-                                           area.width, area.height);
-        else
-            wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel,
-                                      area.width, area.height);
-        wlr_scene_node_set_position(&view->scene_tree->node, area.x, area.y);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
-        view_update_borders(view);
+        /* view_resize re-seats the client at the frame origin: fullscreen has
+         * no border or titlebar, so content == frame. */
+        view_resize(view, area.x, area.y, area.width, area.height);
+        wlr_scene_node_raise_to_top(view_node(view));
         /* A sub-native X11 client (old game locked to 1080p) fills the box by
          * scaling its buffer; re-applied per-commit from xw_surface_commit. */
         view_fullscreen_rescale(view);
@@ -437,7 +434,7 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
         layout_apply(s, view->workspace);
         if (view->floating)
             layout_float_place(s, view);
-        view_update_borders(view);
+        view_update_decorations(view);
         /* Undo any fullscreen buffer scale now the view is back in the layout. */
         view_fullscreen_rescale(view);
     }
@@ -469,13 +466,13 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized)
      * (workspace_switch re-enables mapped, non-minimized nodes when it next
      * becomes visible). */
     int show = !view->minimized && workspace_visible(view->workspace);
-    wlr_scene_node_set_enabled(&view->scene_tree->node, show);
+    wlr_scene_node_set_enabled(view_node(view), show);
 
     if (view->minimized) {
         if (s->focused_view == view)
             workspace_focus_first(s, view->workspace);
     } else if (show) {
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+        wlr_scene_node_raise_to_top(view_node(view));
         focus_view(s, view, view_surface(view));
     }
 
@@ -519,7 +516,7 @@ void workspace_switch(syn_server_t *s, int index)
     syn_view_t *v;
     wl_list_for_each(v, &cur->windows, link)
         if (v->mapped)
-            wlr_scene_node_set_enabled(&v->scene_tree->node, false);
+            wlr_scene_node_set_enabled(view_node(v), false);
     cur->visible = 0;
 
     /* Show the incoming one. */
@@ -527,7 +524,7 @@ void workspace_switch(syn_server_t *s, int index)
     target->visible = 1;
     wl_list_for_each(v, &target->windows, link)
         if (v->mapped && !v->minimized)
-            wlr_scene_node_set_enabled(&v->scene_tree->node, true);
+            wlr_scene_node_set_enabled(view_node(v), true);
 
     layout_apply(s, target);
 
@@ -571,7 +568,7 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
     wl_list_insert(&view->workspace->windows, &view->link);
 
     /* Visible only if the target desktop is the one being shown. */
-    wlr_scene_node_set_enabled(&view->scene_tree->node,
+    wlr_scene_node_set_enabled(view_node(view),
                                 workspace_visible(view->workspace) &&
                                 !view->minimized);
 
@@ -605,19 +602,21 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
     get_view_geom(s, view, &area);
 
     int w = view->w, h = view->h;
-    int bw = s->config.border_width;
+    /* The frame has to hold the client plus its chrome. */
+    int bw = view_deco_border(view);
+    int th = view_deco_titlebar(view);
 
     /* Prefer the surface's natural size. */
     if (view->is_xwayland) {
         if (view->xsurface->width > 0 && view->xsurface->height > 0) {
             w = view->xsurface->width  + 2 * bw;
-            h = view->xsurface->height + 2 * bw;
+            h = view->xsurface->height + 2 * bw + th;
         }
     } else {
         struct wlr_box geo = view->xdg_surface->geometry;
         if (geo.width > 0 && geo.height > 0) {
             w = geo.width  + 2 * bw;
-            h = geo.height + 2 * bw;
+            h = geo.height + 2 * bw + th;
         }
     }
 

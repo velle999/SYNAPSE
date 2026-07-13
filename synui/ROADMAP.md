@@ -480,3 +480,42 @@ them. Reported as "Super+numbers is unresponsive".
       nothing is stranded off-screen.
 - [x] Smoke test check 8 inverted: a dual-head boot must show workspace 1 on
       **both** outputs, and no output may claim its own workspace.
+
+### Phase N — Server-side decorations: titlebar, buttons, mouse drag  *(done)*
+synui told every client SERVER_SIDE via xdg-decoration but only ever drew a 2px
+border, so windows had no titlebar, no buttons, and could only be moved with
+Super+drag. They now have all three.
+- [x] **Per-view frame tree.** Every managed toplevel gets a `syn_view::frame`
+      scene tree; the client's surface tree and all chrome are children of it, so
+      one node is enabled/hidden/raised/moved. This fixed two real bugs: the
+      borders were siblings in `window_tree`, so (a) a window hidden by a
+      workspace switch **left its border rects painted on screen** (verified: an
+      empty desktop rendered the same 10304 border pixels as the one with the
+      window), and (b) raising a window didn't raise its chrome. `view_node()`
+      returns the frame, or the bare surface tree for override-redirect X11.
+- [x] **Frame geometry.** `view->x/y/w/h` is now the *outer* frame;
+      `view_content_box()` is what the client gets (inset by the border and the
+      titlebar). Fullscreen drops both, so frame == content. This also closed a
+      pre-existing off-by-a-border gap: the client was positioned at the frame
+      origin but sized `w - 2*bw`, leaving a border-wide strip of wallpaper down
+      the right and bottom edges.
+- [x] **Titlebar** (`deco.c`): one cairo buffer with the title and three
+      square, right-aligned buttons — `[ _ ]` minimize, `[ □ ]` maximize,
+      `[ × ]` close — repainted only when the size, title, focus or hovered
+      button actually changes. Hovering lights the button; close lights alarm
+      red. `titlebar_height = 0` in synuirc turns it off (borders and Super+drag
+      remain), colors are `titlebar_color[_focus]` / `titlebar_text[_focus]`.
+- [x] **Mouse drag.** Press the titlebar to move (auto-floating a tiled window
+      as Super+drag already did); press any border to resize from *that* edge,
+      with the corners grabbing both axes. Double-click the titlebar to maximize.
+      Dragging a maximized window restores it and takes it with the cursor.
+- [x] **Maximize was a lie, and now isn't.** `maximize_toggle` set
+      `view->maximized` and told the client, but *nothing read the flag* —
+      layout.c doesn't know it exists, so the window never changed size.
+      `view_apply_maximized()` now leaves the tiling flow, covers the output's
+      usable box, and restores the previous geometry (and tiled-ness) on the way
+      back. Client-side `set_maximized` requests go through it too.
+- [x] Verified headless by driving the real click path (cursor warp +
+      `pointer_button`): all five hit regions resolve correctly; maximize fills
+      the output and restores to its tiled slot; a border drag resized exactly
+      -120px; a titlebar drag moved exactly +100,+80; minimize disabled the node.

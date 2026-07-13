@@ -321,6 +321,11 @@ void synui_config_load(syn_config_t *cfg)
     cfg->border_width = BORDER_WIDTH_DEFAULT;
     cfg->gap = GAP_DEFAULT;
     cfg->master_factor = 0.60f;
+    cfg->titlebar_height = TITLEBAR_HEIGHT_DEF;
+    { static const float c[4] = COLOR_TITLEBAR_NORM;    memcpy(cfg->titlebar_color,       c, sizeof(c)); }
+    { static const float c[4] = COLOR_TITLEBAR_FOCUS;   memcpy(cfg->titlebar_color_focus, c, sizeof(c)); }
+    { static const float c[4] = COLOR_TITLE_TEXT;       memcpy(cfg->titlebar_text,        c, sizeof(c)); }
+    { static const float c[4] = COLOR_TITLE_TEXT_FOCUS; memcpy(cfg->titlebar_text_focus,  c, sizeof(c)); }
     cfg->ai_layout = 1;
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
@@ -477,6 +482,23 @@ void synui_config_load(syn_config_t *cfg)
         }
         else if (strcmp(key, "master_factor") == 0)
             cfg->master_factor = strtof(val, NULL);
+        else if (strcmp(key, "titlebar_height") == 0) {
+            /* 0 disables the titlebar entirely; clamp the rest to something a
+             * button glyph can actually be drawn in. */
+            int th = atoi(val);
+            if (th < 0)  th = 0;
+            if (th > 64) th = 64;
+            if (th > 0 && th < 14) th = 14;
+            cfg->titlebar_height = th;
+        }
+        else if (strcmp(key, "titlebar_color") == 0)
+            parse_hex_color(val, cfg->titlebar_color);
+        else if (strcmp(key, "titlebar_color_focus") == 0)
+            parse_hex_color(val, cfg->titlebar_color_focus);
+        else if (strcmp(key, "titlebar_text") == 0)
+            parse_hex_color(val, cfg->titlebar_text);
+        else if (strcmp(key, "titlebar_text_focus") == 0)
+            parse_hex_color(val, cfg->titlebar_text_focus);
         else if (strcmp(key, "ai_layout") == 0)
             cfg->ai_layout = strcmp(val, "on") == 0;
         else if (strcmp(key, "ai_ctx_decor") == 0)

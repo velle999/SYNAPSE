@@ -92,7 +92,7 @@ void synui_config_reload(syn_server_t *s)
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link)
-            view_update_borders(v);
+            view_update_decorations(v);
     }
 
     wlr_log(WLR_INFO, "synui: config reloaded (%d binds, gap %d, border %d)",
@@ -457,11 +457,8 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
         server->grabbed_view = NULL;
         server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
     }
-    /* Remove borders from scene */
-    if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
-    if (view->border_bottom) { wlr_scene_node_destroy(&view->border_bottom->node); view->border_bottom = NULL; }
-    if (view->border_left)   { wlr_scene_node_destroy(&view->border_left->node);   view->border_left   = NULL; }
-    if (view->border_right)  { wlr_scene_node_destroy(&view->border_right->node);  view->border_right  = NULL; }
+    /* Drop the chrome (the frame itself goes with the scene tree). */
+    view_deco_destroy(view);
 
     /* Reflow the remaining tiled windows and hand focus to one of them
      * (the XWayland unmap path already re-tiled; this one never did). */
@@ -519,16 +516,21 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
 
     /* Update borders when surface geometry changes */
     if (view->mapped)
-        view_update_borders(view);
+        view_update_decorations(view);
 }
 
 static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data)
 {
     (void)data;
     syn_view_t *view = wl_container_of(listener, view, request_maximize);
-    /* Honour the requested state (not a blind toggle). Tiling still governs
-     * the geometry; set_maximized acks with the required configure. */
-    view->maximized = view->xdg_surface->toplevel->requested.maximized;
+    /* Honour the requested state (not a blind toggle). Once mapped this really
+     * does resize the window (view_apply_maximized); before the first commit we
+     * can only record it — the initial_commit path applies it. */
+    int want = view->xdg_surface->toplevel->requested.maximized;
+    if (view->mapped)
+        view_apply_maximized(view->server, view, want);
+    else
+        view->maximized = want;
     /* Clients may send set_maximized before their first commit, while
      * xdg_surface->initialized is still false. wlroots asserts on that in
      * wlr_xdg_surface_schedule_configure(), aborting the whole compositor.
@@ -720,7 +722,10 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
 
     syn_view_t *view = calloc(1, sizeof(*view));
     view->xdg_surface = xdg_surface;
-    view->scene_tree = wlr_scene_xdg_surface_create(server->window_tree, xdg_surface);
+    /* The client's surface tree hangs inside a per-view frame together with the
+     * borders and titlebar, so the whole window shows/hides/raises as one. */
+    struct wlr_scene_tree *frame = view_frame_create(view, server->window_tree);
+    view->scene_tree = wlr_scene_xdg_surface_create(frame, xdg_surface);
     view->scene_tree->node.data = view;
     xdg_surface->data = view->scene_tree;
 

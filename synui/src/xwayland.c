@@ -140,8 +140,10 @@ static void xw_map(struct wl_listener *listener, void *data)
         return;
     }
 
-    /* Managed toplevel: join the active workspace and tile/float it. */
-    view->scene_tree = wlr_scene_subsurface_tree_create(s->window_tree, xs->surface);
+    /* Managed toplevel: join the active workspace and tile/float it. The client
+     * surface lives inside a per-view frame alongside its borders + titlebar. */
+    struct wlr_scene_tree *frame = view_frame_create(view, s->window_tree);
+    view->scene_tree = wlr_scene_subsurface_tree_create(frame, xs->surface);
     view->scene_tree->node.data = view;   /* so view_at() finds it */
 
     view->workspace = server_active_workspace(s);
@@ -153,7 +155,7 @@ static void xw_map(struct wl_listener *listener, void *data)
     layout_apply(s, view->workspace);
     if (view->floating) {
         layout_float_place(s, view);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
+        wlr_scene_node_raise_to_top(view_node(view));
     }
     focus_view(s, view, xs->surface);
     foreign_toplevel_map(view);
@@ -195,11 +197,8 @@ static void xw_unmap(struct wl_listener *listener, void *data)
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
     }
 
-    /* Drop borders */
-    if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
-    if (view->border_bottom) { wlr_scene_node_destroy(&view->border_bottom->node); view->border_bottom = NULL; }
-    if (view->border_left)   { wlr_scene_node_destroy(&view->border_left->node);   view->border_left   = NULL; }
-    if (view->border_right)  { wlr_scene_node_destroy(&view->border_right->node);  view->border_right  = NULL; }
+    /* Drop the chrome (the frame itself goes with the scene tree). */
+    view_deco_destroy(view);
 
     if (!view->override_redirect) {
         wl_list_remove(&view->link);

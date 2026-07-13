@@ -25,6 +25,20 @@ master_factor   = 0.60
 # border_color_ai    = #05d9e8
 # border_color_warn  = #ff3524
 
+# ── Titlebar ───────────────────────────────────────────────
+# Server-side titlebar: drag it to move the window, double-click it to
+# maximize, and the three buttons are minimize / maximize / close.
+# Set to 0 to turn titlebars off entirely — windows keep their borders, and
+# Super+drag still moves them. Clamped to 14..64 when non-zero.
+titlebar_height = 26
+
+# Titlebar colors, #rrggbb (defaults shown). Deliberately muted: the border
+# already carries the focus/AI/alert signal.
+# titlebar_color       = #12121c
+# titlebar_color_focus = #1e1e31
+# titlebar_text        = #73738c
+# titlebar_text_focus  = #e6e6f2
+
 # ── GLES post-process effects ──────────────────────────────
 # CRT-style pass on real GPUs; automatically off on pixman (VMs).
 # Strengths 0..1, 0 disables the individual effect (defaults shown).

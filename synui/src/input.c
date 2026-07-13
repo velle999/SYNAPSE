@@ -95,17 +95,17 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
         effects_notify_focus(s);
 
     /* Raise to top of scene */
-    wlr_scene_node_raise_to_top(&view->scene_tree->node);
+    wlr_scene_node_raise_to_top(view_node(view));
 
     /* Toggle activated state (X11 clients need this to accept input) and
      * refresh border colours. */
     if (prev && prev != view) {
         view_set_activated(prev, 0);
-        view_update_borders(prev);
+        view_update_decorations(prev);
         foreign_toplevel_update_state(prev);
     }
     view_set_activated(view, 1);
-    view_update_borders(view);
+    view_update_decorations(view);
     foreign_toplevel_update_state(view);
 
     /* Notify seat */
@@ -153,68 +153,11 @@ syn_view_t *view_at(syn_server_t *s, double lx, double ly,
 }
 
 /* ── View borders ────────────────────────────────────────── */
+/* The chrome itself lives in deco.c; security state just re-tints the border. */
 void view_set_security(syn_view_t *view, win_security_t state)
 {
     view->security = state;
-    view_update_borders(view);
-}
-
-void view_update_borders(syn_view_t *view)
-{
-    if (!view->mapped) return;
-    /* No sane geometry yet (e.g. focused at map before the first layout) — the
-     * borders will be (re)created once the window is sized. */
-    if (view->w <= 0 || view->h <= 0) return;
-
-    /* Fullscreen covers the whole output; borders would poke out past it. */
-    if (view->fullscreen) {
-        if (view->border_top)    wlr_scene_node_set_enabled(&view->border_top->node,    false);
-        if (view->border_bottom) wlr_scene_node_set_enabled(&view->border_bottom->node, false);
-        if (view->border_left)   wlr_scene_node_set_enabled(&view->border_left->node,   false);
-        if (view->border_right)  wlr_scene_node_set_enabled(&view->border_right->node,  false);
-        return;
-    }
-
-    /* Pick border color (config-driven; defaults COLOR_BORDER_*) */
-    float color[4];
-    syn_config_t *cfg = &view->server->config;
-
-    if (view->security == WIN_SECURE_ALERT ||
-        view->security == WIN_SECURE_DENIED)
-        memcpy(color, cfg->border_color_warn, sizeof(color));
-    else if (view->ai_ctx.has_ctx)
-        memcpy(color, cfg->border_color_ai, sizeof(color));
-    else if (view == view->server->focused_view)
-        memcpy(color, cfg->border_color_focus, sizeof(color));
-    else
-        memcpy(color, cfg->border_color_norm, sizeof(color));
-
-    int x = view->x, y = view->y, w = view->w, h = view->h;
-    int bw = view->server->config.border_width;
-    int side_h = h - 2 * bw;      /* side borders sit between top/bottom */
-    if (side_h < 0) side_h = 0;   /* scene rects must be non-negative */
-
-    /* Create borders as scene rects if they don't exist yet. Existing rects
-     * are re-sized too: the view may have been resized (retile), and a config
-     * reload can change border_width. */
-    #define MAKE_BORDER(field, bx, by, bw2, bh) do { \
-        if (!view->field) \
-            view->field = wlr_scene_rect_create(view->scene_tree->node.parent, \
-                                                bw2, bh, color); \
-        else { \
-            wlr_scene_rect_set_color(view->field, color); \
-            wlr_scene_rect_set_size(view->field, bw2, bh); \
-        } \
-        wlr_scene_node_set_enabled(&view->field->node, true); \
-        wlr_scene_node_set_position(&view->field->node, bx, by); \
-    } while(0)
-
-    MAKE_BORDER(border_top,    x,        y,        w,  bw);
-    MAKE_BORDER(border_bottom, x,        y+h-bw,   w,  bw);
-    MAKE_BORDER(border_left,   x,        y+bw,     bw, side_h);
-    MAKE_BORDER(border_right,  x+w-bw,   y+bw,     bw, side_h);
-
-    #undef MAKE_BORDER
+    view_update_decorations(view);
 }
 
 /* ── Keyboard ────────────────────────────────────────────── */
@@ -458,7 +401,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         layout_apply(s, ws);
         if (v->floating) {
             layout_float_place(s, v);
-            wlr_scene_node_raise_to_top(&v->scene_tree->node);
+            wlr_scene_node_raise_to_top(view_node(v));
         }
     } else if (strcmp(action, "fullscreen_toggle") == 0) {
         /* Force fullscreen on the focused window regardless of whether it ever
@@ -475,8 +418,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                                   !s->focused_view->fullscreen);
     } else if (strcmp(action, "maximize_toggle") == 0) {
         if (!s->focused_view) return;
-        s->focused_view->maximized = !s->focused_view->maximized;
-        view_set_maximized(s->focused_view, s->focused_view->maximized);
+        view_apply_maximized(s, s->focused_view, !s->focused_view->maximized);
     } else if (strcmp(action, "minimize_toggle") == 0) {
         /* Only ever minimizes: a minimized window has its scene node
          * disabled, so it can never hold focus for this to toggle back. */
@@ -598,8 +540,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             else
                 wlr_xdg_toplevel_set_size(v->xdg_surface->toplevel,
                                           to.width, to.height);
-            wlr_scene_node_set_position(&v->scene_tree->node, to.x, to.y);
-            wlr_scene_node_raise_to_top(&v->scene_tree->node);
+            wlr_scene_node_set_position(view_node(v), to.x, to.y);
+            wlr_scene_node_raise_to_top(view_node(v));
         } else if (v->floating) {
             /* Keep the same on-screen position relative to the monitor. */
             int nx = v->x + (to.x - from.x);
@@ -609,7 +551,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             if (nx < to.x) nx = to.x;
             if (ny < to.y) ny = to.y;
             view_resize(v, nx, ny, v->w, v->h);
-            wlr_scene_node_raise_to_top(&v->scene_tree->node);
+            wlr_scene_node_raise_to_top(view_node(v));
         }
         /* workspace_move_view keeps focus (the target workspace is visible on
          * the new monitor); re-assert activation so the client repaints. */
@@ -934,16 +876,33 @@ static void server_vkb_mgr_destroy(struct wl_listener *listener, void *data)
  * drag doesn't fight the layout engine; the workspace reflows around them.
  * For a resize we grab from whichever corner the cursor is nearest.
  */
-static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
+/* edges: which WLR_EDGE_* a RESIZE drags. 0 = derive from the cursor's quadrant
+ * (Super+right-drag, which has no edge to speak of); a border press passes the
+ * edge it actually landed on. Ignored for MOVE. */
+static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
+                                    uint32_t edges)
 {
     syn_server_t *s = view->server;
     if (!view->mapped || view->fullscreen) return;
+
+    /* Dragging a maximized window restores it and takes it with you, the way
+     * every other desktop does — otherwise it would slide around full-size. */
+    if (view->maximized) {
+        view_apply_maximized(s, view, 0);
+        if (mode == SYNUI_CURSOR_MOVE) {
+            /* Re-centre the restored window under the cursor so the grab point
+             * stays on the titlebar it was grabbed by. */
+            int nx = (int)s->cursor->x - view->w / 2;
+            int ny = view->y;
+            view_resize(view, nx, ny, view->w, view->h);
+        }
+    }
 
     if (!view->floating) {
         view->floating = 1;
         layout_apply(s, view->workspace);   /* reflow remaining tiled windows */
     }
-    wlr_scene_node_raise_to_top(&view->scene_tree->node);
+    wlr_scene_node_raise_to_top(view_node(view));
     focus_view(s, view, view_surface(view));
 
     s->grabbed_view = view;
@@ -957,13 +916,19 @@ static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
         s->grab_x = s->cursor->x;
         s->grab_y = s->cursor->y;
         s->grab_geobox = (struct wlr_box){ view->x, view->y, view->w, view->h };
-        uint32_t edges = 0;
-        edges |= (s->cursor->x < view->x + view->w / 2)
-                     ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
-        edges |= (s->cursor->y < view->y + view->h / 2)
-                     ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
+        if (!edges) {
+            edges |= (s->cursor->x < view->x + view->w / 2)
+                         ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
+            edges |= (s->cursor->y < view->y + view->h / 2)
+                         ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
+        }
         s->resize_edges = edges;
     }
+}
+
+static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
+{
+    begin_interactive_edges(view, mode, 0);
 }
 
 static void process_cursor_move(syn_server_t *s)
@@ -971,8 +936,8 @@ static void process_cursor_move(syn_server_t *s)
     syn_view_t *v = s->grabbed_view;
     v->x = (int)(s->cursor->x - s->grab_x);
     v->y = (int)(s->cursor->y - s->grab_y);
-    wlr_scene_node_set_position(&v->scene_tree->node, v->x, v->y);
-    view_update_borders(v);
+    wlr_scene_node_set_position(view_node(v), v->x, v->y);
+    view_update_decorations(v);
 }
 
 static void process_cursor_resize(syn_server_t *s)
@@ -1139,6 +1104,9 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);
 
+    /* Light up the titlebar button under the pointer (repaints only on change). */
+    deco_hover_update(s, s->cursor->x, s->cursor->y);
+
     pointer_update_focus(s, time_msec);
 }
 
@@ -1219,6 +1187,49 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
              * on release, snaps the dock to the nearest screen edge. */
             if (dock_bar_at(s, s->cursor->x, s->cursor->y, NULL)) {
                 dock_drag_begin(s, s->cursor->x, s->cursor->y);
+                return;
+            }
+        }
+
+        /* Server-side decorations claim the click before the client sees it:
+         * the titlebar buttons, a titlebar drag (double-click = maximize), and
+         * a border drag to resize from that edge. */
+        if (button == BTN_LEFT) {
+            syn_deco_region_t region;
+            uint32_t edges;
+            syn_view_t *dv = deco_at(s, s->cursor->x, s->cursor->y,
+                                     &region, &edges);
+            if (dv && region != DECO_NONE) {
+                focus_view(s, dv, view_surface(dv));
+                wlr_scene_node_raise_to_top(view_node(dv));
+
+                switch (region) {
+                case DECO_BTN_MIN:
+                    view_apply_minimized(s, dv, 1);
+                    break;
+                case DECO_BTN_MAX:
+                    view_apply_maximized(s, dv, !dv->maximized);
+                    break;
+                case DECO_BTN_CLOSE:
+                    view_close(dv);
+                    break;
+                case DECO_BORDER:
+                    begin_interactive_edges(dv, SYNUI_CURSOR_RESIZE, edges);
+                    break;
+                case DECO_TITLEBAR: {
+                    bool dbl = (s->tb_last_click_view == dv) &&
+                               (time_msec - s->tb_last_click_ms < 400);
+                    s->tb_last_click_view = dbl ? NULL : dv;
+                    s->tb_last_click_ms   = time_msec;
+                    if (dbl)
+                        view_apply_maximized(s, dv, !dv->maximized);
+                    else
+                        begin_interactive(dv, SYNUI_CURSOR_MOVE);
+                    break;
+                }
+                default:
+                    break;
+                }
                 return;
             }
         }

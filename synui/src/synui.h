@@ -67,6 +67,27 @@
 #define COLOR_BORDER_FOCUS  { 1.00f, 0.16f, 0.43f, 1.0f }  /* #ff296d neon magenta */
 #define COLOR_BORDER_AI     { 0.02f, 0.85f, 0.91f, 1.0f }  /* #05d9e8 neon cyan    */
 #define COLOR_BORDER_WARN   { 1.00f, 0.21f, 0.14f, 1.0f }  /* #ff3524 alarm red    */
+
+/* Titlebar palette; overridable from synuirc as titlebar_color / _focus and
+ * titlebar_text / _focus. Deliberately muted — the border already carries the
+ * focus/AI/alert signal, so a titlebar in border-magenta would shout. */
+#define COLOR_TITLEBAR_NORM   { 0.07f, 0.07f, 0.11f, 1.0f } /* #12121c */
+#define COLOR_TITLEBAR_FOCUS  { 0.12f, 0.12f, 0.19f, 1.0f } /* #1e1e31 */
+#define COLOR_TITLE_TEXT      { 0.45f, 0.45f, 0.55f, 1.0f } /* #73738c */
+#define COLOR_TITLE_TEXT_FOCUS{ 0.90f, 0.90f, 0.95f, 1.0f } /* #e6e6f2 */
+
+#define TITLEBAR_HEIGHT_DEF  26   /* synuirc titlebar_height; 0 disables */
+
+/* What the pointer is over, in a window's server-side decorations. Buttons are
+ * square, titlebar-height, right-aligned: [ _ ] [ □ ] [ × ]. */
+typedef enum {
+    DECO_NONE = 0,
+    DECO_TITLEBAR,     /* drag area: press-drag moves, double-click maximizes */
+    DECO_BTN_MIN,
+    DECO_BTN_MAX,
+    DECO_BTN_CLOSE,
+    DECO_BORDER,       /* press-drag resizes from the nearest edge/corner */
+} syn_deco_region_t;
 #define COLOR_OVERLAY_BG    { 0.05f, 0.05f, 0.10f, 0.85f }
 #define COLOR_BRAND         { 0.00f, 0.85f, 0.75f, 1.0f }
 
@@ -436,6 +457,15 @@ typedef struct {
     float border_color_ai[4];
     float border_color_warn[4];
 
+    /* Server-side titlebar: drag to move, double-click to maximize, and the
+     * three buttons. `titlebar_height` of 0 turns it off entirely (windows keep
+     * their borders, and Super+drag still moves them). */
+    int   titlebar_height;
+    float titlebar_color[4];
+    float titlebar_color_focus[4];
+    float titlebar_text[4];
+    float titlebar_text_focus[4];
+
     /* GLES post-process effects (effects.c). `effects` gates the pass;
      * it silently stays off on non-GLES2 renderers (pixman VMs).
      * Strengths are 0..1; 0 disables the individual effect. */
@@ -605,11 +635,38 @@ struct syn_view {
     struct wl_listener ft_title;
     struct wl_listener ft_app_id;
 
-    /* Border scene rects */
+    /* Per-view decoration frame. The client surface (scene_tree) and every bit
+     * of chrome (borders, titlebar) are children of it, so enabling, hiding and
+     * raising a window moves its decorations with it. Before this existed the
+     * borders were siblings in window_tree, and a window hidden by a workspace
+     * switch left its border rects painted on screen.
+     *
+     * Frame-local coordinates: the frame node sits at (view->x, view->y), so
+     * the chrome is laid out from (0,0) and only the frame is repositioned when
+     * the window moves. NULL for override-redirect X11 surfaces, which are
+     * undecorated and live in the overlay layer — use view_node() to get the
+     * node to enable/raise/position for any view. */
+    struct wlr_scene_tree *frame;
+
+    /* Border scene rects (children of frame) */
     struct wlr_scene_rect *border_top;
     struct wlr_scene_rect *border_bottom;
     struct wlr_scene_rect *border_left;
     struct wlr_scene_rect *border_right;
+
+    /* Titlebar: one cairo buffer holding the title text and the three buttons
+     * (child of frame). Re-rendered only when something it draws changes — the
+     * cached fields below are what it was last drawn with. */
+    struct wlr_scene_buffer *titlebar;
+    int   tb_w, tb_h;                 /* size it was last rendered at */
+    int   tb_focused;                 /* focus state it was last drawn with */
+    syn_deco_region_t tb_hover;       /* button highlighted under the pointer */
+    char  tb_title[128];              /* title it was last drawn with */
+
+    /* Geometry to restore when un-maximizing, and whether the window was
+     * floating before it was maximized (maximizing leaves the tiling flow). */
+    struct wlr_box saved_geo;
+    int            saved_floating;
 
     /* Listeners (shared: xdg + xwayland reuse map/unmap/destroy/request_*) */
     struct wl_listener map;
@@ -886,6 +943,13 @@ struct syn_server {
     double            grab_x, grab_y;   /* MOVE: cursor→view offset; RESIZE: cursor anchor */
     struct wlr_box    grab_geobox;      /* RESIZE: view geometry at grab start */
     uint32_t          resize_edges;     /* RESIZE: WLR_EDGE_* being dragged */
+
+    /* deco.c: the titlebar button currently highlighted under the pointer, and
+     * the last titlebar press — a second press on the same window inside the
+     * double-click window maximizes it instead of starting a drag. */
+    syn_view_t       *deco_hover_view;
+    uint32_t          tb_last_click_ms;
+    syn_view_t       *tb_last_click_view;
 
     /* UI scene nodes (render.c) */
     struct {
@@ -1219,7 +1283,33 @@ syn_view_t *view_at(syn_server_t *s, double lx, double ly,
 struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
                                syn_view_t **view_out, double *sx, double *sy);
 void view_set_security(syn_view_t *view, win_security_t state);
-void view_update_borders(syn_view_t *view);
+
+/* ── deco.c — server-side decorations ────────────────────── */
+/* The node to enable / raise / position for a view: its frame if it has one,
+ * else the bare surface tree (override-redirect X11). */
+struct wlr_scene_node *view_node(syn_view_t *view);
+/* Create the per-view frame and reparent `child` (the client's surface tree)
+ * into it. Called from the xdg and XWayland map paths. */
+struct wlr_scene_tree *view_frame_create(syn_view_t *view,
+                                         struct wlr_scene_tree *parent);
+/* Border + titlebar widths for this view; 0 when fullscreen or disabled. */
+int  view_deco_border(const syn_view_t *view);
+int  view_deco_titlebar(const syn_view_t *view);
+/* The client area inside the frame, in layout coordinates. */
+void view_content_box(const syn_view_t *view, struct wlr_box *out);
+/* Redraw borders + titlebar for the view's current geometry/focus/title. */
+void view_update_decorations(syn_view_t *view);
+void view_deco_destroy(syn_view_t *view);
+/* What decoration (if any) sits under a layout-space point. Fills *edges with
+ * the WLR_EDGE_* to resize from when the region is DECO_BORDER. */
+syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
+                    syn_deco_region_t *region, uint32_t *edges);
+/* Repaint button highlights as the pointer moves across titlebars. */
+void deco_hover_update(syn_server_t *s, double lx, double ly);
+/* Maximize/restore for real: fills the output's usable box and leaves the
+ * tiling flow, restoring the previous geometry (and tiled-ness) on the way
+ * back. */
+void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized);
 
 /* ── layout.c ────────────────────────────────────────────── */
 void layout_apply(syn_server_t *s, syn_workspace_t *ws);
