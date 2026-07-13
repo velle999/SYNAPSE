@@ -400,13 +400,13 @@ bool matrix_output_frame(syn_output_t *o)
         return false;
     }
 
-    /* Rotated/flipped outputs would need the transform folded into the pass;
-     * punt (the background falls back to solid there). */
-    if (wo->transform != WL_OUTPUT_TRANSFORM_NORMAL) {
-        matrix_output_destroy(o);
-        return false;
-    }
-
+    /* Rotated outputs need no special handling: we render offscreen into a
+     * scene buffer sized to the *transformed* resolution (so a portrait
+     * monitor gets a portrait buffer, and the rain falls down the long axis),
+     * and the scene's output pass folds in wo->transform at composite time —
+     * exactly as it does for the static cairo wallpaper. This is unlike
+     * effects.c, which post-processes the output's own scanout buffer and
+     * therefore does have to bail on a non-normal transform. */
     int pw, ph;
     wlr_output_transformed_resolution(wo, &pw, &ph);
     if (pw <= 0 || ph <= 0) return false;
