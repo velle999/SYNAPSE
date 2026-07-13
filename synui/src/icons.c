@@ -296,6 +296,25 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
     return slot;
 }
 
+void icon_provide_name(const char *app_id, const char *icon_name)
+{
+    if (!app_id || !app_id[0] || !icon_name || !icon_name[0]) return;
+
+    /* Resolve through the normal path first: that either finds the app's
+     * existing entry or builds one from its .desktop file. */
+    const syn_icon_entry_t *found = icon_lookup(app_id);
+    if (!found) return;
+
+    /* A .desktop icon is the more authoritative source (it's what the app was
+     * installed as); only fill a gap the theme lookup couldn't. */
+    syn_icon_entry_t *e = (syn_icon_entry_t *)found;
+    if (e->icon_surface) return;
+
+    e->icon_surface = find_and_decode_icon(icon_name);
+    if (e->icon_surface)
+        snprintf(e->icon_hint, sizeof(e->icon_hint), "%s", icon_name);
+}
+
 void icon_draw_monogram(cairo_t *cr, const char *app_id,
                         double x, double y, double size)
 {

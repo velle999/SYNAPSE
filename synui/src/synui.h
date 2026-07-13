@@ -684,6 +684,40 @@ struct syn_view {
 };
 
 /* ── Layer-shell surface (panels, bars, wallpaper, launchers) ── */
+/* ── Input method relay (ime.c) ──────────────────────────── */
+/* The switchboard between the application's text field (text-input-v3) and the
+ * IME (input-method-v2); neither protocol can see the other. */
+typedef struct syn_text_input {
+    struct wlr_text_input_v3 *input;
+    struct syn_ime           *relay;
+    struct wl_list            link;    /* in syn_ime::text_inputs */
+    struct wl_listener enable, commit, disable, destroy;
+} syn_text_input_t;
+
+/* The IME's candidate window ("你好 / 泥號 / …"), parked at the caret. */
+typedef struct syn_ime_popup {
+    struct wlr_input_popup_surface_v2 *popup;
+    struct syn_ime                    *relay;
+    struct wlr_scene_tree             *tree;
+    struct wl_list                     link;   /* in syn_ime::popups */
+    struct wl_listener destroy, surface_commit;
+} syn_ime_popup_t;
+
+typedef struct syn_ime {
+    syn_server_t *server;
+    struct wl_list text_inputs;                    /* syn_text_input::link */
+    struct wl_list popups;                         /* syn_ime_popup::link  */
+
+    /* At most one IME per seat; a second is told it's unavailable. */
+    struct wlr_input_method_v2                *input_method;
+    struct wlr_input_method_keyboard_grab_v2  *keyboard_grab;
+
+    struct wl_listener new_text_input;
+    struct wl_listener new_input_method;
+    struct wl_listener im_commit, im_new_popup, im_grab_keyboard, im_destroy;
+    struct wl_listener grab_keyboard_destroy;
+} syn_ime_t;
+
 typedef struct syn_layer_surface {
     struct wl_list                     link;    /* in syn_output::layer_surfaces */
     syn_server_t                      *server;
@@ -1127,6 +1161,30 @@ struct syn_server {
                          * deadlock note in xwayland_apply_primary() */
     struct wl_listener new_decoration;
     struct wl_listener new_idle_inhibitor;
+
+    /* xdg-activation-v1: how a running app asks to be brought to the front
+     * ("open this link" landing in the Firefox you already have open). Without
+     * it the request is silently dropped and the window just never surfaces. */
+    struct wlr_xdg_activation_v1 *xdg_activation;
+    struct wl_listener            request_activate;
+
+    /* cursor-shape-v1: clients name a cursor ("text", "grab") instead of
+     * shipping a pixel buffer. Without it they fall back to drawing their own,
+     * which is why the cursor changed size/theme between apps. */
+    struct wlr_cursor_shape_manager_v1 *cursor_shape_mgr;
+    struct wl_listener                  request_set_shape;
+
+    /* xdg-toplevel-icon-v1: a window can name its own icon, which is the only
+     * way to get an icon for an app that ships no .desktop file. */
+    struct wlr_xdg_toplevel_icon_manager_v1 *toplevel_icon_mgr;
+    struct wl_listener                       set_icon;
+
+    /* text-input-v3 + input-method-v2 (ime.c). Without these every toolkit
+     * disables its IME, which means no CJK, no compose key and no emoji picker
+     * — nothing that isn't a direct keysym can be typed at all. */
+    struct wlr_text_input_manager_v3   *text_input_mgr;
+    struct wlr_input_method_manager_v2 *input_method_mgr;
+    syn_ime_t                          *ime;
     struct wl_listener output_mgr_apply;
     struct wl_listener output_mgr_test;
     struct wl_listener output_power_set_mode;
@@ -1588,7 +1646,23 @@ typedef struct {
  * pointer with app_id/display_name/exec populated (falling back to the
  * app_id string itself when no .desktop file matches); icon_surface may be
  * NULL, in which case the caller should fall back to icon_draw_monogram(). */
+/* ── ime.c ───────────────────────────────────────────────── */
+void ime_setup(syn_server_t *s);
+void ime_destroy(syn_server_t *s);
+/* Keyboard focus moved: re-point the IME at the newly focused text field. */
+void ime_set_focus(syn_server_t *s, struct wlr_surface *surface);
+/* True when the IME grabbed the keyboard and consumed the event — the key must
+ * then NOT reach the application (it's being composed, not typed). */
+bool ime_handle_key(syn_server_t *s, struct wlr_keyboard *kb,
+                    uint32_t time_msec, uint32_t keycode,
+                    enum wl_keyboard_key_state state);
+bool ime_handle_modifiers(syn_server_t *s, struct wlr_keyboard *kb);
+
 const syn_icon_entry_t *icon_lookup(const char *app_id);
+/* A window named its own icon (xdg-toplevel-icon). Attach it to that app's
+ * cache entry so the dock's existing icon_lookup() picks it up — this is the
+ * only icon source for an app that ships no .desktop file (Wine, Electron). */
+void icon_provide_name(const char *app_id, const char *icon_name);
 /* Draw a coloured monogram chip (first letter of app_id, uppercased) into a
  * size x size box at (x, y) — the fallback when icon_lookup() found no icon
  * file (SVG icon themes, or nothing on disk at all: both out of scope). */

@@ -83,6 +83,17 @@ pointer_constraints_h = custom_target('pointer-constraints-unstable-v1-protocol.
   input   : pointer_constraints_xml,
   command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
 
+# cursor-shape: same deal — wlroots' wlr_cursor_shape_v1.h includes the generated
+# header for the wp_cursor_shape_device_v1_shape enum.
+cursor_shape_xml = join_paths(
+  wayland_protos.get_variable('pkgdatadir'),
+  'staging/cursor-shape/cursor-shape-v1.xml')
+
+cursor_shape_h = custom_target('cursor-shape-v1-protocol.h',
+  output  : 'cursor-shape-v1-protocol.h',
+  input   : cursor_shape_xml,
+  command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
+
 # idle-inhibit: the synui-idle-inhibit helper is a Wayland *client* (unlike the
 # compositor, which gets its server-side idle-inhibit code from wlroots), so it
 # needs the client-side glue generated from the stock wayland-protocols XML.
@@ -108,6 +119,7 @@ synui_exe = executable('synui',
     'src/input.c',
     'src/constraints.c',
     'src/deco.c',
+    'src/ime.c',
     'src/foreign_toplevel.c',
     'src/layout.c',
     'src/layer.c',
@@ -143,6 +155,7 @@ synui_exe = executable('synui',
     output_power_h,
     output_power_c,
     pointer_constraints_h,
+    cursor_shape_h,
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,

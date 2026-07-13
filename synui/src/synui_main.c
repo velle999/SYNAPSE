@@ -49,6 +49,9 @@
 #include <wlr/types/wlr_data_control_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/types/wlr_xdg_toplevel_icon_v1.h>
 
 #include "synui.h"
 #include "effects.h"
@@ -801,6 +804,78 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     wlr_log(WLR_DEBUG, "synui: new toplevel");
 }
 
+/* ── xdg-activation ──────────────────────────────────────── */
+/*
+ * A client that already has a window asks to be brought to the front: clicking
+ * a link hands the URL to the running Firefox, which then requests activation
+ * so its window actually surfaces. synui never implemented this, so the request
+ * went nowhere and the window stayed buried on whatever desktop it was on.
+ *
+ * Honour it fully — raise, un-minimize, and switch to the window's desktop —
+ * because the activation token is only handed out to a client the user just
+ * interacted with; this is not a channel a background app can steal focus over.
+ */
+static void handle_request_activate(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, request_activate);
+    const struct wlr_xdg_activation_v1_request_activate_event *event = data;
+
+    struct wlr_xdg_surface *xdg =
+        wlr_xdg_surface_try_from_wlr_surface(event->surface);
+    if (!xdg || !xdg->data) return;
+
+    struct wlr_scene_tree *tree = xdg->data;
+    syn_view_t *view = tree->node.data;
+    if (!view || !view->mapped) return;
+
+    if (view->minimized)
+        view_apply_minimized(s, view, 0);
+    if (view->workspace && !workspace_visible(view->workspace))
+        workspace_switch(s, view->workspace->index);
+
+    wlr_scene_node_raise_to_top(view_node(view));
+    focus_view(s, view, view_surface(view));
+}
+
+/* ── cursor-shape-v1 ─────────────────────────────────────── */
+/* The client names the cursor it wants ("text", "grab", "ns-resize") and we
+ * load it from the same xcursor theme the compositor uses. Without this the
+ * client draws its own, so the cursor jumped theme and size between apps. */
+static void handle_request_set_shape(struct wl_listener *listener, void *data)
+{
+    syn_server_t *s = wl_container_of(listener, s, request_set_shape);
+    const struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
+
+    /* Tablet tools carry their own cursor; only the pointer is ours to set. */
+    if (event->device_type != WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_POINTER)
+        return;
+    /* Only the client the pointer is actually over may change the cursor. */
+    if (event->seat_client != s->seat->pointer_state.focused_client)
+        return;
+    /* An interactive move/resize owns the cursor until the button comes up. */
+    if (s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH)
+        return;
+
+    const char *name = wlr_cursor_shape_v1_name(event->shape);
+    if (name)
+        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, name);
+}
+
+/* ── xdg-toplevel-icon-v1 ────────────────────────────────── */
+/* A window naming its own icon is the only icon source for an app with no
+ * .desktop file. Feed it to the icon cache the dock already reads. */
+static void handle_set_icon(struct wl_listener *listener, void *data)
+{
+    (void)listener;
+    const struct wlr_xdg_toplevel_icon_manager_v1_set_icon_event *event = data;
+    if (!event->icon || !event->icon->name || !event->toplevel) return;
+
+    const char *app_id = event->toplevel->app_id;
+    if (!app_id || !app_id[0]) return;
+
+    icon_provide_name(app_id, event->icon->name);
+}
+
 /* ── xdg-decoration ──────────────────────────────────────── */
 /* synui draws its own borders, so we ask clients to skip client-side
  * titlebars. set_mode() schedules a configure, which asserts the surface is
@@ -1053,6 +1128,26 @@ int synui_init(syn_server_t *s)
     /* foreign-toplevel — window lists for taskbars/docks. */
     foreign_toplevel_setup(s);
 
+    /* xdg-activation: "raise the window I already have open" (link handoff). */
+    s->xdg_activation = wlr_xdg_activation_v1_create(s->display);
+    s->request_activate.notify = handle_request_activate;
+    wl_signal_add(&s->xdg_activation->events.request_activate,
+                  &s->request_activate);
+
+    /* cursor-shape: clients name a cursor instead of drawing their own. */
+    s->cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(s->display, 1);
+    s->request_set_shape.notify = handle_request_set_shape;
+    wl_signal_add(&s->cursor_shape_mgr->events.request_set_shape,
+                  &s->request_set_shape);
+
+    /* xdg-toplevel-icon: per-window icons for apps with no .desktop file. */
+    s->toplevel_icon_mgr = wlr_xdg_toplevel_icon_manager_v1_create(s->display, 1);
+    s->set_icon.notify = handle_set_icon;
+    wl_signal_add(&s->toplevel_icon_mgr->events.set_icon, &s->set_icon);
+
+    /* text-input-v3 + input-method-v2: IME (CJK, compose, emoji picker). */
+    ime_setup(s);
+
     /* Seat */
     s->seat = wlr_seat_create(s->display, "seat0");
 
@@ -1242,6 +1337,10 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->output_mgr_test.link);
     wl_list_remove(&s->output_power_set_mode.link);
     wl_list_remove(&s->new_session_lock.link);
+    wl_list_remove(&s->request_activate.link);
+    wl_list_remove(&s->request_set_shape.link);
+    wl_list_remove(&s->set_icon.link);
+    ime_destroy(s);
 
     /* Detach the compositor's singleton listeners before destroying the
      * objects they hang off — wlroots asserts empty listener lists on destroy

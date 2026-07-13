@@ -519,3 +519,36 @@ Super+drag. They now have all three.
       `pointer_button`): all five hit regions resolve correctly; maximize fills
       the output and restores to its tiled slot; a border drag resized exactly
       -120px; a titlebar drag moved exactly +100,+80; minimize disabled the node.
+
+### Phase O — Protocol compatibility gaps  *(done)*
+Four protocols synui never implemented, all of which clients actively looked for
+and fell back from. foot listed every one of them as a warning on startup; it now
+starts silent.
+- [x] **text-input-v3 + input-method-v2** (`ime.c`) — the big one. Without them
+      every toolkit disables its IME ("IME will be disabled" — foot), so **no
+      CJK, no compose key, no emoji picker**: nothing that isn't a direct
+      keysym→character mapping could be typed at all. `ime.c` is the relay
+      between the two protocols, which cannot see each other: it follows keyboard
+      focus (activate/deactivate), mirrors the app's surrounding text / content
+      type / caret rect to the IME, pushes the IME's preedit + commit strings
+      back into the app, routes raw keys to the IME while it holds the keyboard
+      grab (so "nihao" reaches fcitx5 to be composed instead of landing in the
+      field as five Latin letters), and parks the candidate popup at the caret
+      (flipping above it when there's no room below). One IME per seat; a second
+      is sent `unavailable` rather than fighting over keystrokes.
+- [x] **xdg-activation-v1** — how a running app asks to be raised (clicking a
+      link hands the URL to the Firefox you already have open, which then
+      requests activation). The request was silently dropped, so the window
+      never surfaced. Now honoured fully: un-minimize, switch to its desktop,
+      raise, focus.
+- [x] **cursor-shape-v1** — clients name a cursor ("text", "grab") instead of
+      shipping a pixel buffer. Without it they drew their own, which is why the
+      cursor changed theme and size between apps. Ignored while an interactive
+      move/resize owns the cursor.
+- [x] **xdg-toplevel-icon-v1** — a window naming its own icon is the only icon
+      source for an app that ships no .desktop file (Wine, Electron). Fed into
+      the icon cache the dock already reads, so it fills exactly the gap where
+      the dock used to fall back to a monogram.
+- [x] Each new listener is removed at teardown — wlroots asserts empty listener
+      lists when it destroys the managers, and xdg-activation aborted the
+      compositor on SIGTERM until it was.

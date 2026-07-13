@@ -84,6 +84,7 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
          * would keep flowing to a window that may no longer be visible. */
         s->focused_view = NULL;
         wlr_seat_keyboard_notify_clear_focus(s->seat);
+        ime_set_focus(s, NULL);      /* no text field is focused any more */
         return;
     }
 
@@ -116,6 +117,10 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
                                         &kb->modifiers);
     else
         wlr_seat_keyboard_notify_enter(s->seat, surface, NULL, 0, NULL);
+
+    /* The IME follows keyboard focus: the text field on this surface is now
+     * the one fcitx5/ibus composes into. */
+    ime_set_focus(s, surface);
 }
 
 /* Topmost surface (of any role) under the given layout coordinates. Also
@@ -163,7 +168,13 @@ void view_set_security(syn_view_t *view, win_security_t state)
 /* ── Keyboard ────────────────────────────────────────────── */
 static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
 {
+    (void)data;
     syn_keyboard_t *kb = wl_container_of(listener, kb, modifiers);
+
+    /* While the IME holds the keyboard, modifiers go to it, not the client. */
+    if (ime_handle_modifiers(kb->server, kb->wlr_keyboard))
+        return;
+
     wlr_seat_set_keyboard(kb->server->seat, kb->wlr_keyboard);
     wlr_seat_keyboard_notify_modifiers(kb->server->seat,
                                         &kb->wlr_keyboard->modifiers);
@@ -755,6 +766,13 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     }
 
     if (!handled) {
+        /* Compositor keybinds win; then the IME, if it grabbed the keyboard —
+         * typing "nihao" has to reach fcitx5 to be composed, not land in the
+         * text field as five Latin letters. Only then does the client see it. */
+        if (ime_handle_key(s, wlr_kb, event->time_msec,
+                           event->keycode, event->state))
+            return;
+
         wlr_seat_set_keyboard(s->seat, wlr_kb);
         wlr_seat_keyboard_notify_key(s->seat, event->time_msec,
                                       event->keycode, event->state);
