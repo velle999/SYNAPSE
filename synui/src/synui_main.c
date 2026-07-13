@@ -915,8 +915,10 @@ static void handle_request_set_shape(struct wl_listener *listener, void *data)
     /* Only the client the pointer is actually over may change the cursor. */
     if (event->seat_client != s->seat->pointer_state.focused_client)
         return;
-    /* An interactive move/resize owns the cursor until the button comes up. */
-    if (s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH)
+    /* An interactive move/resize owns the cursor until the button comes up, as
+     * does a hover over our own resize edges — a client must not paint over the
+     * arrow that says what the compositor's chrome will do. */
+    if (s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH || s->deco_cursor)
         return;
 
     const char *name = wlr_cursor_shape_v1_name(event->shape);

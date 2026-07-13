@@ -447,11 +447,62 @@ syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
     return NULL;
 }
 
+/* ── Resize cursors ──────────────────────────────────────── */
+/*
+ * The cursor for a set of resize edges. Driven by border_edges() — the very same
+ * bits the press reads — so the arrow can never promise a resize the click won't
+ * perform. Corners are the point: the ring overhangs into an L at each corner, so
+ * they must show the diagonal, and a side arrow there means the 24px corner zone
+ * is invisible to the user.
+ *
+ * Themes name these two ways. The CSS names ("se-resize") are what cursor-shape-v1
+ * clients ask for and what modern themes ship; the X11 legacy names are still all
+ * some older themes have. Ask for the first, fall back to the second, or a theme
+ * without the CSS names silently leaves the previous cursor on screen.
+ */
+static const char *edge_cursor_name(syn_server_t *s, uint32_t edges)
+{
+    const char *css, *x11;
+
+    switch (edges) {
+    case WLR_EDGE_TOP:                     css = "n-resize";  x11 = "top_side";           break;
+    case WLR_EDGE_BOTTOM:                  css = "s-resize";  x11 = "bottom_side";        break;
+    case WLR_EDGE_LEFT:                    css = "w-resize";  x11 = "left_side";          break;
+    case WLR_EDGE_RIGHT:                   css = "e-resize";  x11 = "right_side";         break;
+    case WLR_EDGE_TOP | WLR_EDGE_LEFT:     css = "nw-resize"; x11 = "top_left_corner";    break;
+    case WLR_EDGE_TOP | WLR_EDGE_RIGHT:    css = "ne-resize"; x11 = "top_right_corner";   break;
+    case WLR_EDGE_BOTTOM | WLR_EDGE_LEFT:  css = "sw-resize"; x11 = "bottom_left_corner"; break;
+    case WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT: css = "se-resize"; x11 = "bottom_right_corner"; break;
+    default:                               return NULL;
+    }
+
+    return wlr_xcursor_manager_get_xcursor(s->cursor_mgr, css, 1) ? css : x11;
+}
+
+/* The cursor a grab should hold for its whole duration: a resize keeps the arrow
+ * for the edges being dragged (the pointer runs ahead of a client that is slow to
+ * commit its new size, so tracking the cursor's position instead would flicker),
+ * and a move shows the closed hand. */
+const char *deco_grab_cursor(syn_server_t *s, syn_cursor_mode_t mode,
+                             uint32_t edges)
+{
+    if (mode == SYNUI_CURSOR_RESIZE) return edge_cursor_name(s, edges);
+    if (mode == SYNUI_CURSOR_MOVE)   return "grabbing";
+    return NULL;
+}
+
 /* ── Hover highlight ─────────────────────────────────────── */
-void deco_hover_update(syn_server_t *s, double lx, double ly)
+void deco_hover_update(syn_server_t *s, double lx, double ly, uint32_t time_msec)
 {
     syn_deco_region_t region = DECO_NONE;
-    syn_view_t *v = deco_at(s, lx, ly, &region, NULL);
+    uint32_t          edges  = 0;
+    syn_view_t *v = deco_at(s, lx, ly, &region, &edges);
+
+    /* Name the resize the border under the pointer would do — and let go of the
+     * cursor the moment the pointer is anywhere else, so the client under it gets
+     * its own cursor straight back. */
+    cursor_set_deco(s, region == DECO_BORDER ? edge_cursor_name(s, edges) : NULL,
+                    time_msec);
 
     /* Only the three buttons light up; the drag strip and borders don't. */
     if (region != DECO_BTN_MIN && region != DECO_BTN_MAX &&

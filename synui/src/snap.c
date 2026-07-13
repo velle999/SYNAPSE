@@ -204,19 +204,38 @@ void snap_drag_end(syn_server_t *s, syn_view_t *view)
     struct wlr_box  box  = s->snap.box;
     snap_preview_hide(s);
 
-    if (zone == SYN_SNAP_NONE || !view || !view->mapped || view->fullscreen)
+    if (!view || !view->mapped || view->fullscreen)
         return;
 
-    /* Re-home the window onto the monitor it was *dropped* on before applying the
-     * zone. Everything downstream reads view->output, not the box: maximize sizes
-     * itself to view->output's usable area, and the tiling reflows per output. Do
-     * this first or a drag onto another monitor's top edge maximizes back onto the
-     * monitor it came from — the preview lands on the right screen and the window
-     * doesn't. */
-    struct wlr_output *wo = wlr_output_layout_output_at(
-        s->output_layout, box.x + box.width / 2.0, box.y + box.height / 2.0);
+    /* Re-home the window onto the monitor it was *dropped* on, whether or not the
+     * drop landed in a snap zone. Everything downstream reads view->output, not
+     * the geometry: maximize sizes itself to view->output's usable area, and the
+     * tiling reflows per output. So a window merely dragged to another monitor
+     * kept pointing at the one it came from, and the next maximize — double-click
+     * the titlebar, Super+M — sent it back there to fill *that* screen instead.
+     *
+     * A snap is defined by its zone's box, a plain drop by where the window came
+     * to rest (falling back to the cursor if it was dragged mostly off-screen).
+     * For a snap this must still happen before the zone is applied, or the
+     * preview lands on the right screen and the window doesn't. */
+    double cx, cy;
+    if (zone != SYN_SNAP_NONE) {
+        cx = box.x + box.width  / 2.0;
+        cy = box.y + box.height / 2.0;
+    } else {
+        cx = view->x + view->w / 2.0;
+        cy = view->y + view->h / 2.0;
+    }
+    struct wlr_output *wo =
+        wlr_output_layout_output_at(s->output_layout, cx, cy);
+    if (!wo)
+        wo = wlr_output_layout_output_at(s->output_layout,
+                                         s->cursor->x, s->cursor->y);
     if (wo && wo->data && wo->data != view->output)
         view_set_output(s, view, wo->data);
+
+    if (zone == SYN_SNAP_NONE)
+        return;
 
     /* The top zone is a maximize, and maximize already knows how to save the
      * geometry, tell the client and reflow the workspace. */

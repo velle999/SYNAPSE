@@ -993,6 +993,13 @@ static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
         }
         s->resize_edges = edges;
     }
+
+    /* Hold one cursor for the whole grab. It has to be pinned rather than
+     * recomputed from the pointer's position: the pointer routinely runs past the
+     * edge it is dragging (a client clamps at its minimum size and the cursor
+     * keeps going), and it is over the client's own surface for the whole of a
+     * move — either would otherwise hand the cursor straight back mid-drag. */
+    cursor_set_deco(s, deco_grab_cursor(s, mode, s->resize_edges), now_msec());
 }
 
 static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
@@ -1105,6 +1112,50 @@ static void input_apply_libinput_config(syn_server_t *s,
         libinput_device_config_accel_set_speed(li, cfg->accel_speed);
 }
 
+/* ── Compositor-owned cursor image ───────────────────────── */
+/*
+ * Over its own chrome — and for the length of a move/resize grab — the
+ * compositor names the cursor, not the client: a corner of the grab ring has to
+ * show the diagonal arrow that says what the press will actually do.
+ *
+ * Giving it back needs the forced re-enter below. A client only calls
+ * wl_pointer.set_cursor when it receives an enter, so where the client keeps
+ * pointer focus while we hold the cursor — which is every grab, since the
+ * implicit pointer grab pins focus to the surface that took the button-down —
+ * simply dropping our image leaves the resize arrow on screen until the client
+ * next happens to change its own cursor for unrelated reasons. That was the
+ * cursor "not switching back" after leaving an edge. Clearing focus and
+ * re-entering makes the client re-set it now.
+ */
+void cursor_set_deco(syn_server_t *s, const char *name, uint32_t time_msec)
+{
+    if (name) {
+        if (s->deco_cursor == name) return;   /* literals: compare by pointer */
+        s->deco_cursor = name;
+        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, name);
+        return;
+    }
+
+    if (!s->deco_cursor) return;              /* the client already owns it */
+    s->deco_cursor = NULL;
+
+    double sx, sy;
+    struct wlr_surface *surface =
+        surface_at(s, s->cursor->x, s->cursor->y, NULL, &sx, &sy);
+
+    if (surface && surface == s->seat->pointer_state.focused_surface &&
+        s->seat->pointer_state.button_count == 0) {
+        wlr_seat_pointer_notify_clear_focus(s->seat);
+        wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
+        wlr_seat_pointer_notify_motion(s->seat, time_msec, sx, sy);
+        return;                               /* the client sets it from here */
+    }
+
+    /* No focused client to ask (or focus is about to change anyway, which sends
+     * an enter of its own): show the arrow rather than a stale resize cursor. */
+    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+}
+
 /* Give pointer focus to whatever lies under the cursor and (de)activate the
  * pointer constraint owned by that surface. Public: workspace_switch's
  * jump-focus warps the cursor and needs the focus re-derived immediately
@@ -1139,7 +1190,12 @@ void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
         wlr_seat_pointer_notify_enter(s->seat, surface, sx, sy);
         wlr_seat_pointer_notify_motion(s->seat, time_msec, sx, sy);
     } else {
-        wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+        /* Nothing under the cursor but our own chrome (borders and the grab ring
+         * are scene rects, not surfaces, so they land here on every motion). The
+         * arrow is right for the wallpaper — but not over a resize edge, where
+         * deco_hover_update has just claimed the cursor, and this would undo it. */
+        if (!s->deco_cursor)
+            wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
         wlr_seat_pointer_notify_clear_focus(s->seat);
     }
     constraints_focus_surface(s, surface);
@@ -1187,8 +1243,9 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);
 
-    /* Light up the titlebar button under the pointer (repaints only on change). */
-    deco_hover_update(s, s->cursor->x, s->cursor->y);
+    /* Light up the titlebar button under the pointer (repaints only on change),
+     * and show the resize arrow for the edge it would drag. */
+    deco_hover_update(s, s->cursor->x, s->cursor->y, time_msec);
 
     pointer_update_focus(s, time_msec);
 }
@@ -1217,6 +1274,18 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
                            lx - s->cursor->x, ly - s->cursor->y);
 }
 
+/* Does the seat still hold this button down — i.e. was its press forwarded to a
+ * client? Only then may a release be sent, or the client sees a release it has no
+ * matching press for. */
+static bool seat_button_is_down(struct wlr_seat *seat, uint32_t button)
+{
+    for (size_t i = 0; i < seat->pointer_state.button_count; i++)
+        if (seat->pointer_state.buttons[i].button == button &&
+            seat->pointer_state.buttons[i].n_pressed > 0)
+            return true;
+    return false;
+}
+
 /* Button handling shared between real pointers and tablet-tool emulation. */
 static void pointer_button(syn_server_t *s, uint32_t time_msec,
                            uint32_t button, enum wl_pointer_button_state state)
@@ -1230,14 +1299,34 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         return;
     }
 
-    /* A release always ends an in-progress grab and is swallowed. Ending a MOVE
-     * is where a drag against a screen edge becomes a snap. */
+    /* A release always ends an in-progress grab. Ending a MOVE is where a drag
+     * against a screen edge becomes a snap. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED &&
         s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
         if (s->cursor_mode == SYNUI_CURSOR_MOVE)
             snap_drag_end(s, s->grabbed_view);
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
         s->grabbed_view = NULL;
+
+        /* The release is swallowed — unless the client began this grab itself.
+         * A CSD app (Firefox dragging its own titlebar or edge) gets the press
+         * forwarded, *then* asks for the grab with xdg_toplevel.move/.resize, so
+         * the seat has that button down. Swallowing the release too left it down
+         * forever, and pointer_update_focus honours the implicit grab it implies:
+         * pointer focus froze on that client, so the cursor kept whatever image it
+         * last set — the resize arrow — and never updated again no matter where
+         * the pointer went. Deliver the release iff the seat still thinks the
+         * button is down; a compositor-initiated grab (Super+drag, a border press)
+         * never forwarded its press, so nothing is sent and the client sees no
+         * stray release. */
+        if (seat_button_is_down(s->seat, button))
+            wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
+
+        /* Now that the grab is over, give the cursor back to the client under the
+         * pointer — or re-derive it from the border it came to rest on — rather
+         * than leaving the drag's arrow frozen on screen. */
+        cursor_set_deco(s, NULL, time_msec);
+        deco_hover_update(s, s->cursor->x, s->cursor->y, time_msec);
         return;
     }
 

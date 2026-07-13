@@ -1055,6 +1055,12 @@ struct syn_server {
     uint32_t          tb_last_click_ms;
     syn_view_t       *tb_last_click_view;
 
+    /* The cursor image the compositor is currently forcing over its own chrome
+     * or for the length of a grab (a resize arrow, a grab hand). NULL means the
+     * client under the pointer owns the cursor again. Always a string literal —
+     * compared by pointer, never freed. See cursor_set_deco(). */
+    const char       *deco_cursor;
+
     /* UI scene nodes (render.c) */
     struct {
         struct wlr_scene_tree   *tree;
@@ -1417,6 +1423,9 @@ int  constraints_apply_motion(syn_server_t *s, double *dx, double *dy);
 void input_setup(syn_server_t *s);
 void input_reload_config(syn_server_t *s);   /* reapply keymap/repeat/libinput */
 void pointer_update_focus(syn_server_t *s, uint32_t time_msec);
+/* Take the cursor image for the compositor's own chrome (`name` = an xcursor
+ * name), or give it back to the client under the pointer (`name` = NULL). */
+void cursor_set_deco(syn_server_t *s, const char *name, uint32_t time_msec);
 void focus_view(syn_server_t *s, syn_view_t *view,
                 struct wlr_surface *surface);
 syn_view_t *view_at(syn_server_t *s, double lx, double ly,
@@ -1446,7 +1455,10 @@ void view_deco_destroy(syn_view_t *view);
 syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
                     syn_deco_region_t *region, uint32_t *edges);
 /* Repaint button highlights as the pointer moves across titlebars. */
-void deco_hover_update(syn_server_t *s, double lx, double ly);
+void deco_hover_update(syn_server_t *s, double lx, double ly, uint32_t time_msec);
+/* The cursor a MOVE/RESIZE grab holds for its whole duration. */
+const char *deco_grab_cursor(syn_server_t *s, syn_cursor_mode_t mode,
+                             uint32_t edges);
 /* (Re)place the invisible resize-grab ring outside the window. Called from
  * view_update_decorations; the window's edges and corners are only realistically
  * grabbable because of it. */
