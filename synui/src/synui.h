@@ -548,17 +548,22 @@ typedef struct {
 } syn_dock_entry_t;
 
 /* ── Workspace ───────────────────────────────────────────── */
+/* A workspace is a *virtual desktop*: it spans every monitor at once, the way
+ * KDE/GNOME virtual desktops do. Switching to it switches all outputs together
+ * (server::active_workspace); each window inside it remembers which monitor it
+ * sits on (syn_view::output), so a desktop keeps its own arrangement across the
+ * whole desk. Exactly one workspace is visible at a time.
+ *
+ * `layout` and `master_factor` are per-desktop, not per-monitor: every output
+ * showing this desktop tiles the same way. */
 struct syn_workspace {
     int              index;
     char             name[WORKSPACE_NAME_LEN];
     char             intent[256];
     syn_layout_t     layout;
-    int              visible;        /* shown on its output right now */
-    syn_output_t    *output;         /* output this workspace lives on; NULL =
-                                        unassigned (never shown / its output
-                                        was unplugged) */
+    int              visible;        /* == (index == server->active_workspace) */
     float            master_factor;  /* master column width, 0.10–0.90 */
-    struct wl_list   windows;   /* syn_view_t::link */
+    struct wl_list   windows;   /* syn_view_t::link — across all outputs */
 };
 
 /* ── View (window) ───────────────────────────────────────── */
@@ -566,6 +571,9 @@ struct syn_view {
     struct wl_list          link;       /* in workspace->windows */
     syn_server_t           *server;
     syn_workspace_t        *workspace;
+    /* The monitor this window lives on within its workspace. Never NULL for a
+     * mapped view while any output exists; output removal re-homes it. */
+    syn_output_t           *output;
 
     /* A view wraps either an xdg_toplevel (Wayland) or an xwayland_surface
      * (X11). Exactly one of these is set; is_xwayland selects which. */
@@ -640,8 +648,6 @@ struct syn_output {
     syn_server_t            *server;
     struct wlr_output       *wlr_output;
     struct wlr_scene_output *scene_output;
-
-    int                      active_workspace; /* workspace shown on this output */
 
     /* Logical cell in the dispcfg arrangement grid (not pixels — see
      * dispcfg_rechain). Seeded from connection order in server_new_output;
@@ -858,12 +864,17 @@ struct syn_server {
                                     devices, so a config reload can reapply
                                     libinput options */
 
-    /* Workspaces are global; each output shows one of them
-     * (syn_output_t::active_workspace). "The" active workspace — what
-     * keybinds, new windows and the overlay act on — is the one on the
-     * focused output: server_active_workspace(). */
+    /* Workspaces are virtual desktops spanning every monitor. Exactly one is
+     * shown at a time, on all outputs at once — active_workspace is the whole
+     * desk's current desktop, and server_active_workspace() returns it. */
     syn_workspace_t workspaces[WORKSPACE_MAX];
+    int             active_workspace;
     syn_view_t     *focused_view;
+
+    /* layout.c: the output an AI layout request was issued for, so the async
+     * response lands on the right monitor's windows (AI layout runs on the
+     * focused output; the others tile). */
+    syn_output_t   *ai_layout_output;
 
     syn_cmdbar_t    cmdbar;
     syn_overlay_t   overlay;
@@ -1218,13 +1229,17 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized);
  * no-op for xdg, override-redirect, multi-surface or already-filling clients. */
 void view_fullscreen_rescale(syn_view_t *view);
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
-void layout_tile(syn_server_t *s, syn_workspace_t *ws);
-void layout_monocle(syn_server_t *s, syn_workspace_t *ws);
+/* The tiling passes act on one (workspace, output) pair: the windows of ws that
+ * live on o. layout_apply() runs them for every output showing ws. */
+void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void view_resize(syn_view_t *view, int x, int y, int w, int h);
 void layout_float_place(syn_server_t *s, syn_view_t *view);
 void layout_move_in_stack(syn_server_t *s, syn_view_t *view, int dir);
 void layout_adjust_master(syn_server_t *s, syn_workspace_t *ws, float delta);
-void layout_request_ai(syn_server_t *s, syn_workspace_t *ws);
+/* Re-home a window onto another monitor, keeping it on its current desktop. */
+void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o);
+void layout_request_ai(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                const char *json_response);
 int  parse_ai_layout_line(const char *line, char *app_id, size_t app_len,

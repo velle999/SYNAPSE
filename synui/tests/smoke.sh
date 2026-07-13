@@ -15,7 +15,8 @@
 #   7. an ASan build reports no errors or leaks (when built with
 #      -Db_sanitize=address; harmless otherwise);
 #   8. a second instance with WLR_HEADLESS_OUTPUTS=2 gives each output its
-#      own workspace (per-output workspaces) and also shuts down cleanly;
+#      shows the *same* workspace (virtual desktops span every monitor) and
+#      also shuts down cleanly;
 #   9. spawned children inherit neither synui's blocked signal mask nor its
 #      SIG_IGN dispositions — both survive exec, and leaking them makes every
 #      app synui launches immune to SIGTERM;
@@ -160,7 +161,11 @@ if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
 fi
 echo "ok 7 - no sanitizer errors"
 
-# ── 8. Per-output workspaces (dual-head boot) ──────────────
+# ── 8. Desk-spanning workspaces (dual-head boot) ───────────
+# A workspace is a virtual desktop across the whole desk, not a per-monitor
+# slot: both outputs must come up showing the same one. The old model gave each
+# output its own workspace, which pinned ws1..N to monitors and made Super+1..N
+# unable to switch anything on a multi-head desk.
 unset WAYLAND_DISPLAY
 LOG="$TMP/synui2.log"
 WLR_HEADLESS_OUTPUTS=2 "$SYNUI" >"$LOG" 2>&1 &
@@ -172,10 +177,10 @@ while [ "$(grep -c 'new output' "$LOG")" -lt 2 ]; do
     sleep 0.1
     i=$((i + 1))
 done
-grep -q "new output .* workspace 1" "$LOG" \
-    || fail "dual-head: no output was assigned workspace 1"
-grep -q "new output .* workspace 2" "$LOG" \
-    || fail "dual-head: second output did not get its own workspace 2"
+[ "$(grep -c 'new output .* showing workspace 1' "$LOG")" -eq 2 ] \
+    || fail "dual-head: both outputs should come up showing workspace 1"
+grep -q "showing workspace 2" "$LOG" \
+    && fail "dual-head: an output claimed its own workspace (per-output model)"
 kill -TERM "$SYNUI_PID"
 i=0
 while kill -0 "$SYNUI_PID" 2>/dev/null; do
@@ -189,7 +194,7 @@ rc=$?
 if grep -qE "(ERROR|SUMMARY): (Address|Leak)Sanitizer" "$LOG"; then
     fail "sanitizer reported errors (dual-head instance)"
 fi
-echo "ok 8 - dual-head boot: one workspace per output"
+echo "ok 8 - dual-head boot: one desktop spanning both outputs"
 
 # ── 9. Children get a clean signal slate ───────────────────
 # A process's blocked signal mask survives exec, and so do its SIG_IGN

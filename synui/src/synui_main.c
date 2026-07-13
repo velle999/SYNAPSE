@@ -84,12 +84,11 @@ void synui_config_reload(syn_server_t *s)
     wallpaper_reload(s);
     input_reload_config(s);
 
-    /* Re-tile every output's visible workspace with the new gap/border, and
-     * refresh every mapped view's border rects (floating windows aren't
-     * touched by the layout pass). Hidden workspaces re-flow on switch. */
-    syn_output_t *o;
-    wl_list_for_each(o, &s->outputs, link)
-        layout_apply(s, &s->workspaces[o->active_workspace]);
+    /* Re-tile the visible desktop (layout_apply covers every output) with the
+     * new gap/border, and refresh every mapped view's border rects (floating
+     * windows aren't touched by the layout pass). Hidden desktops re-flow on
+     * switch. */
+    layout_apply(s, server_active_workspace(s));
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link)
@@ -126,8 +125,7 @@ syn_output_t *server_focused_output(syn_server_t *s)
 
 syn_workspace_t *server_active_workspace(syn_server_t *s)
 {
-    syn_output_t *o = server_focused_output(s);
-    int idx = o ? o->active_workspace : 0;
+    int idx = s->active_workspace;
     if (idx < 0 || idx >= WORKSPACE_MAX) idx = 0;
     return &s->workspaces[idx];
 }
@@ -157,7 +155,7 @@ syn_output_t *server_primary_output(syn_server_t *s)
 
 int workspace_visible(syn_workspace_t *ws)
 {
-    return ws && ws->output && ws->output->active_workspace == ws->index;
+    return ws && ws->visible;
 }
 
 void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
@@ -280,26 +278,35 @@ static void output_destroy(struct wl_listener *listener, void *data)
      * dereferences ->data — leave it NULL so that lookup skips this output. */
     output->wlr_output->data = NULL;
 
-    /* Orphan every workspace that lived on this output: hide its windows and
-     * mark it unassigned. The windows aren't lost — switching to the
-     * workspace (Super+N) re-homes it onto the focused output (i3/sway
-     * semantics). Skipped during shutdown, when the scene graph is gone. */
+    /* Workspaces span the whole desk, so unplugging a monitor orphans windows,
+     * not workspaces: every window that lived on this output — on any desktop —
+     * moves to a surviving one, so nothing is stranded off-screen. Skipped
+     * during shutdown, when the scene graph is gone. */
     if (!server->shutting_down) {
         wallpaper_output_destroy(output);
         matrix_output_destroy(output);
         dock_output_destroy(output);
+
+        syn_output_t *home = wl_list_empty(&server->outputs)
+                                 ? NULL
+                                 : wl_container_of(server->outputs.next, home, link);
+        int moved = 0;
         for (int i = 0; i < WORKSPACE_MAX; i++) {
-            syn_workspace_t *ws = &server->workspaces[i];
-            if (ws->output != output) continue;
-            ws->output  = NULL;
-            ws->visible = 0;
             syn_view_t *v;
-            wl_list_for_each(v, &ws->windows, link)
-                if (v->mapped)
-                    wlr_scene_node_set_enabled(&v->scene_tree->node, false);
-            wlr_log(WLR_INFO, "synui: workspace %d orphaned by output removal "
-                    "— switch to it to re-home its windows", i + 1);
+            wl_list_for_each(v, &server->workspaces[i].windows, link) {
+                if (v->output != output) continue;
+                v->output = home;      /* NULL only when the last monitor goes */
+                moved++;
+            }
         }
+        if (server->ai_layout_output == output)
+            server->ai_layout_output = NULL;
+        if (moved)
+            wlr_log(WLR_INFO, "synui: %d window(s) re-homed from %s onto %s",
+                    moved, output->wlr_output->name,
+                    home ? home->wlr_output->name : "(no output left)");
+        if (home)
+            layout_apply(server, server_active_workspace(server));
     }
     free(output);
 
@@ -371,41 +378,29 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     wl_list_insert(&server->outputs, &output->link);
 
-    /* Give the new output its own workspace. Prefer an orphaned workspace
-     * that still has windows (its output was unplugged — replugging brings
-     * them back), then the lowest-numbered unassigned one. */
-    int assigned = -1;
-    for (int i = 0; i < WORKSPACE_MAX && assigned < 0; i++) {
-        syn_workspace_t *ws = &server->workspaces[i];
-        if (!ws->output && !wl_list_empty(&ws->windows))
-            assigned = i;
+    /* A new monitor doesn't claim a workspace — every desktop already spans it.
+     * It simply comes up showing the current desktop's share, which is empty
+     * until windows are moved onto it (Super+O). If this is the *first* output,
+     * adopt any windows created before it existed (they have no home yet). */
+    if (wl_list_length(&server->outputs) == 1) {
+        for (int i = 0; i < WORKSPACE_MAX; i++) {
+            syn_view_t *v;
+            wl_list_for_each(v, &server->workspaces[i].windows, link)
+                if (!v->output) v->output = output;
+        }
     }
-    for (int i = 0; i < WORKSPACE_MAX && assigned < 0; i++) {
-        if (!server->workspaces[i].output)
-            assigned = i;
-    }
-    if (assigned < 0)   /* all 9 somehow assigned: fall back to ws 0 */
-        assigned = 0;
 
-    syn_workspace_t *ws = &server->workspaces[assigned];
-    output->active_workspace = assigned;
-    ws->output  = output;
-    ws->visible = 1;
-    syn_view_t *v;
-    wl_list_for_each(v, &ws->windows, link)
-        if (v->mapped)
-            wlr_scene_node_set_enabled(&v->scene_tree->node, true);
-
-    wlr_log(WLR_INFO, "synui: new output %s %dx%d — workspace %d",
+    wlr_log(WLR_INFO, "synui: new output %s %dx%d — showing workspace %d",
             wlr_output->name, wlr_output->width, wlr_output->height,
-            assigned + 1);
+            server->active_workspace + 1);
 
     /* Seed the usable area (full box; no layer surfaces yet), then lay the
-     * workspace out on it and re-home all UI. */
+     * visible desktop out across every output (this one included) and re-home
+     * all UI. */
     layer_arrange_output(output);
     wallpaper_output_created(output);
     dock_output_created(output);
-    layout_apply(server, ws);
+    layout_apply(server, server_active_workspace(server));
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
     if (server->overlay.visible)
@@ -729,8 +724,9 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     view->scene_tree->node.data = view;
     xdg_surface->data = view->scene_tree;
 
-    /* Assign to the focused output's workspace */
+    /* Land on the current desktop, on the monitor the user is looking at. */
     view->workspace = server_active_workspace(server);
+    view->output    = server_focused_output(server);
     wl_list_insert(&view->workspace->windows, &view->link);
 
     view->map.notify = xdg_surface_map;
@@ -1072,8 +1068,7 @@ int synui_init(syn_server_t *s)
     for (int i = 0; i < WORKSPACE_MAX; i++) {
         s->workspaces[i].index   = i;
         s->workspaces[i].layout  = LAYOUT_TILING;
-        s->workspaces[i].visible = 0;      /* new_output assigns and shows */
-        s->workspaces[i].output  = NULL;
+        s->workspaces[i].visible = (i == 0);   /* desktop 1 is shown at start */
         s->workspaces[i].master_factor = s->config.master_factor;
         strncpy(s->workspaces[i].name, ws_names[i], WORKSPACE_NAME_LEN - 1);
         wl_list_init(&s->workspaces[i].windows);

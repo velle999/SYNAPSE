@@ -321,8 +321,11 @@ ASan run reports zero leaks with only the two library-static suppressions.
 Not exercisable headless: keymap/libinput reapplication needs real input
 devices — verify on hardware by switching `xkb_layout` and sending SIGHUP.
 
-### Phase K — Per-output workspaces  *(done)*
+### Phase K — Per-output workspaces  *(done — superseded by Phase M)*
 Each monitor now shows its own workspace instead of mirroring the active one.
+**Superseded:** this model made a workspace a per-monitor slot, which pinned
+workspaces 1..N to the N connected monitors and left `Super+1..N` unable to
+switch anything. Phase M replaces it with desk-spanning virtual desktops.
 - [x] Model: `syn_output_t.active_workspace` (what this output shows) +
       `syn_workspace_t.output` (where this workspace lives; NULL =
       unassigned/orphaned). The global `s->active_workspace` field is gone —
@@ -439,3 +442,41 @@ Not drivable headless (needs key/pointer input or real hardware): the
 focus_next crash path, monocle multi-head behaviour, fullscreen requests,
 and output-management apply — the fixes are compile-verified and the
 surrounding paths run leak-free under the ASan smoke test.
+
+### Phase M — Workspaces are virtual desktops  *(done)*
+A workspace is a *virtual desktop spanning the whole desk* (KDE/GNOME/Windows
+semantics), not a slot owned by one monitor. Phase K's model bound each
+workspace to an output, so on a 3-monitor desk workspaces 1–3 were permanently
+claimed, one per screen: `Super+1..3` could never bring a desktop to the screen
+you were on (it warped the cursor to the monitor that already owned it, or, if
+you were already there, did nothing at all), and only `Super+4..9` still
+switched. The binds were firing the whole time — the model had nowhere to put
+them. Reported as "Super+numbers is unresponsive".
+- [x] Model: `syn_server_t.active_workspace` is back — one desktop is shown at
+      a time, on **every** output at once. `syn_view_t.output` records which
+      monitor a window sits on within its desktop. `syn_workspace_t.output` and
+      `syn_output_t.active_workspace` are gone, and with them the whole
+      orphan/re-home/steal machinery. `workspace_visible()` is now just
+      `ws->visible`.
+- [x] `workspace_switch()` switches the entire desk: hide the outgoing
+      desktop's windows on all monitors, show the incoming one's, re-tile.
+      Always does something, on any number of monitors. No cursor warping.
+- [x] Layout is per (workspace, output): `layout_apply()` runs the workspace's
+      layout once per output over just the windows that live on that output, so
+      each monitor tiles its own share. Monocle is per-output (a 3-monitor
+      desktop shows three windows, one per screen). `layout` and `master_factor`
+      stay per-desktop — every monitor showing it tiles the same way.
+      AI layout is focused-output-only (one in-flight request; the others tile),
+      with `server::ai_layout_output` routing the async reply to the right box.
+- [x] `Super+Shift+1..9` (`workspace_move_view`) sends a window to another
+      desktop keeping its monitor, so it's where you left it when you switch.
+      `Super+O` (`view_set_output`) moves it between monitors keeping its
+      desktop. The two axes are now independent.
+- [x] `workspace_focus_first()` prefers a window on the focused output —
+      switching desktops must not throw focus onto another screen.
+- [x] Hotplug: a new monitor claims no workspace (every desktop already spans
+      it); it comes up showing the current desktop's share. Unplugging one
+      re-homes its windows — on *every* desktop — onto a surviving monitor, so
+      nothing is stranded off-screen.
+- [x] Smoke test check 8 inverted: a dual-head boot must show workspace 1 on
+      **both** outputs, and no output may claim its own workspace.

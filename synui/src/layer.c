@@ -81,9 +81,9 @@ void layer_arrange_output(syn_output_t *output)
             output->wlr_output->name, usable.width, usable.height,
             usable.x, usable.y, full.width, full.height);
 
-    /* Re-tile this output's workspace so windows fit the new usable area. */
+    /* Re-tile the visible desktop so windows fit the new usable area. */
     if (!s->shutting_down)
-        layout_apply(s, &s->workspaces[output->active_workspace]);
+        layout_apply(s, server_active_workspace(s));
 
     /* A bar that (un)mapped or re-anchored must re-check the fullscreen rule. */
     layer_update_occlusion(s, output);
@@ -107,7 +107,8 @@ void layer_update_occlusion(syn_server_t *s, syn_output_t *o)
 
     int hide = 0;
     syn_view_t *v;
-    wl_list_for_each(v, &s->workspaces[o->active_workspace].windows, link) {
+    wl_list_for_each(v, &server_active_workspace(s)->windows, link) {
+        if (v->output != o) continue;   /* only this monitor's windows cover it */
         if (v->mapped && v->fullscreen && !v->minimized) { hide = 1; break; }
     }
 

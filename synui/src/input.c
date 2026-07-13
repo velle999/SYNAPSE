@@ -567,15 +567,14 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             workspace_move_view(s, s->focused_view, n - 1);
     } else if (strcmp(action, "move_output") == 0) {
         /* Throw the focused window to the next monitor (connection order,
-         * cyclic); arg "prev" goes the other way. Tiled/monocle/maximized
-         * windows are repositioned by the target output's layout via
-         * workspace_move_view; floating and fullscreen windows carry their own
-         * absolute geometry, so translate or re-cover them onto it explicitly. */
+         * cyclic); arg "prev" goes the other way. It stays on its current
+         * desktop — only the monitor changes. Tiled/monocle/maximized windows
+         * are repositioned by the target output's layout via view_set_output;
+         * floating and fullscreen windows carry their own absolute geometry, so
+         * translate or re-cover them onto it explicitly. */
         syn_view_t *v = s->focused_view;
         if (!v || !v->mapped) return;
-        syn_output_t *cur = (v->workspace && v->workspace->output)
-                                ? v->workspace->output
-                                : server_focused_output(s);
+        syn_output_t *cur = v->output ? v->output : server_focused_output(s);
         if (!cur) return;
         bool prev = arg && strcmp(arg, "prev") == 0;
         /* Step one element in the wl_list, wrapping past the head sentinel. */
@@ -588,7 +587,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         output_box_of(s, cur,  &from);
         output_box_of(s, next, &to);
 
-        workspace_move_view(s, v, next->active_workspace);
+        view_set_output(s, v, next);
 
         if (v->fullscreen) {
             v->x = to.x;      v->y = to.y;

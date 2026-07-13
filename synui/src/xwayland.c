@@ -145,6 +145,7 @@ static void xw_map(struct wl_listener *listener, void *data)
     view->scene_tree->node.data = view;   /* so view_at() finds it */
 
     view->workspace = server_active_workspace(s);
+    view->output    = server_focused_output(s);
     if (xs->modal || xs->parent)
         view->floating = 1;
     wl_list_insert(&view->workspace->windows, &view->link);

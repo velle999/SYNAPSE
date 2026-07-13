@@ -34,25 +34,26 @@
 #define MASTER_MAX     0.90f
 #define MIN_WIN        40      /* smallest interactive window size, px */
 
-/* ── Get output geometry for a workspace ─────────────────── */
-/* Lay out on the output the workspace is assigned to (falling back to the
- * focused output for an unassigned one), minus any layer-shell exclusive
- * zones so tiling doesn't cover panels/bars. */
-static void get_output_geom(syn_server_t *s, syn_workspace_t *ws,
-                            struct wlr_box *out)
+/* ── Get output geometry for a view ──────────────────────── */
+/* A window is laid out on the monitor it lives on (falling back to the focused
+ * output if it has none yet), minus any layer-shell exclusive zones so tiling
+ * doesn't cover panels/bars. */
+static void get_view_geom(syn_server_t *s, syn_view_t *view,
+                          struct wlr_box *out)
 {
-    syn_output_t *o = (ws && ws->output) ? ws->output
-                                         : server_focused_output(s);
+    syn_output_t *o = (view && view->output) ? view->output
+                                            : server_focused_output(s);
     output_usable_box_of(s, o, out);
 }
 
-/* ── Count mapped windows in workspace ───────────────────── */
-static int count_windows(syn_workspace_t *ws)
+/* ── Count mapped windows of ws on one output ────────────── */
+static int count_windows(syn_workspace_t *ws, syn_output_t *o)
 {
     int n = 0;
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link)
-        if (v->mapped && !v->floating && !v->fullscreen && !v->minimized)
+        if (v->mapped && !v->floating && !v->fullscreen && !v->minimized &&
+            v->output == o)
             n++;
     return n;
 }
@@ -87,10 +88,11 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
 #define place_view(v, x, y, w, h) view_resize((v), (x), (y), (w), (h))
 
 /* ── TILING layout (master-stack) ────────────────────────── */
-void layout_tile(syn_server_t *s, syn_workspace_t *ws)
+/* Tiles only the windows of ws that live on o, into o's usable box. */
+void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
 {
     struct wlr_box area;
-    get_output_geom(s, ws, &area);
+    output_usable_box_of(s, o, &area);
 
     /* Apply outer gap. Clamp the working area: a large configured gap on a
      * small output must not go negative — negative sizes would flow into
@@ -103,7 +105,7 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
     if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
 
-    int n = count_windows(ws);
+    int n = count_windows(ws, o);
     if (n == 0) return;
 
     float mf = ws->master_factor;
@@ -118,6 +120,7 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->floating || v->fullscreen || v->minimized) continue;
+        if (v->output != o) continue;
 
         if (i == 0) {
             /* Master */
@@ -135,27 +138,34 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws)
 }
 
 /* ── MONOCLE layout ──────────────────────────────────────── */
-void layout_monocle(syn_server_t *s, syn_workspace_t *ws)
+/* Each monitor showing ws gets its own top window — monocle is per-output, so
+ * a 3-monitor desktop still shows three windows, one filling each screen. */
+void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
 {
     struct wlr_box area;
-    get_output_geom(s, ws, &area);
+    output_usable_box_of(s, o, &area);
 
-    /* Show exactly one window: the focused view if it lives on this
-     * workspace, else the first mapped one. Keying off the *global* focused
-     * view would blank the whole workspace whenever focus sits on another
-     * output (or on nothing, right after a close). */
+    /* Show exactly one window *of this output*: the focused view if it lives
+     * here, else the first mapped one. Keying off the global focused view
+     * would blank the monitor whenever focus sits on another output (or on
+     * nothing, right after a close). */
     syn_view_t *top = NULL;
     syn_view_t *v;
     if (s->focused_view && s->focused_view->workspace == ws &&
+        s->focused_view->output == o &&
         s->focused_view->mapped && !s->focused_view->floating &&
         !s->focused_view->minimized)
         top = s->focused_view;
     else
         wl_list_for_each(v, &ws->windows, link)
-            if (v->mapped && !v->floating && !v->minimized) { top = v; break; }
+            if (v->mapped && !v->floating && !v->minimized && v->output == o) {
+                top = v;
+                break;
+            }
 
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->floating || v->minimized) continue;
+        if (v->output != o) continue;
         place_view(v,
                    area.x, area.y,
                    area.width, area.height);
@@ -176,10 +186,10 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws)
  * w and h are fractions of the output dimensions (0.0-1.0).
  * If the response is malformed we fall back to tiling.
  */
-void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
+void layout_request_ai(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
 {
     if (!atomic_load(&s->ai_connected)) {
-        layout_tile(s, ws);
+        layout_tile(s, ws, o);
         return;
     }
 
@@ -188,7 +198,7 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
     int pos = 0;
     syn_view_t *v;
     wl_list_for_each(v, &ws->windows, link) {
-        if (!v->mapped || v->floating) continue;
+        if (!v->mapped || v->floating || v->output != o) continue;
         const char *title = view_title(v) ? view_title(v) : "unknown";
         const char *app   = view_app_id(v) ? view_app_id(v) : "unknown";
         pos += snprintf(win_list + pos, sizeof(win_list) - pos,
@@ -197,12 +207,16 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
     }
 
     if (!win_list[0]) {
-        layout_tile(s, ws);
+        layout_tile(s, ws, o);
         return;
     }
 
     struct wlr_box area;
-    get_output_geom(s, ws, &area);
+    output_usable_box_of(s, o, &area);
+
+    /* Remember which monitor asked, so the async response places the right
+     * windows into the right box. */
+    s->ai_layout_output = o;
 
     char prompt[2048];
     snprintf(prompt, sizeof(prompt),
@@ -230,7 +244,7 @@ void layout_request_ai(syn_server_t *s, syn_workspace_t *ws)
 
     /* Apply tiling immediately as placeholder; the AI response arrives
      * asynchronously and the frame loop calls layout_apply_ai_response(). */
-    layout_tile(s, ws);
+    layout_tile(s, ws, o);
 }
 
 /* ── Parse one AI layout line ────────────────────────────── */
@@ -264,8 +278,12 @@ int parse_ai_layout_line(const char *line, char *app_id, size_t app_len,
 void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                const char *json_response)
 {
+    /* The monitor whose windows this suggestion is about (recorded when the
+     * request went out — the response is async and the focus may have moved). */
+    syn_output_t *o = s->ai_layout_output ? s->ai_layout_output
+                                          : server_focused_output(s);
     struct wlr_box area;
-    get_output_geom(s, ws, &area);
+    output_usable_box_of(s, o, &area);
 
     char copy[2048];
     strncpy(copy, json_response, sizeof(copy) - 1);
@@ -281,7 +299,7 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
                                  &fx, &fy, &fw, &fh)) {
             syn_view_t *v;
             wl_list_for_each(v, &ws->windows, link) {
-                if (!v->mapped || v->floating) continue;
+                if (!v->mapped || v->floating || v->output != o) continue;
                 const char *aid = view_app_id(v);
                 if (aid && strcmp(aid, app_id) == 0) {
                     int gap = s->config.gap;
@@ -311,6 +329,9 @@ void layout_apply_ai_response(syn_server_t *s, syn_workspace_t *ws,
 }
 
 /* ── Main dispatch ───────────────────────────────────────── */
+/* A workspace spans the whole desk, so laying it out means laying out each
+ * monitor's share of it: every output runs the workspace's layout over just
+ * the windows that live on that output. */
 void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 {
     if (!s || !ws) return;
@@ -332,11 +353,20 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
         wl_list_for_each(v, &ws->windows, link)
             v->ai_ctx.has_ctx = 0;
 
-    switch (ws->layout) {
-    case LAYOUT_TILING:   layout_tile(s, ws);        break;
-    case LAYOUT_MONOCLE:  layout_monocle(s, ws);     break;
-    case LAYOUT_AI:       layout_request_ai(s, ws);  break;
-    case LAYOUT_FLOATING: /* no-op: user positions windows */ break;
+    /* AI layout is a single-monitor feature: only the focused output gets a
+     * suggestion (one in-flight request at a time), the rest tile. */
+    syn_output_t *focused = server_focused_output(s);
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        switch (ws->layout) {
+        case LAYOUT_TILING:   layout_tile(s, ws, o);     break;
+        case LAYOUT_MONOCLE:  layout_monocle(s, ws, o);  break;
+        case LAYOUT_AI:
+            if (o == focused) layout_request_ai(s, ws, o);
+            else              layout_tile(s, ws, o);
+            break;
+        case LAYOUT_FLOATING: /* no-op: user positions windows */ break;
+        }
     }
 }
 
@@ -368,9 +398,7 @@ static syn_output_t *fullscreen_target_output(syn_server_t *s, syn_view_t *view)
     }
 
     if (wo && wo->data) return wo->data;
-    return (view->workspace && view->workspace->output)
-               ? view->workspace->output
-               : server_focused_output(s);
+    return view->output ? view->output : server_focused_output(s);
 }
 
 /* Enter/leave fullscreen with real geometry: cover the target output's
@@ -385,11 +413,10 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
 
     if (view->fullscreen) {
         syn_output_t *o = fullscreen_target_output(s, view);
-        /* Fullscreening onto another monitor hands the window to that
-         * monitor's workspace, so it stays put when the workspace it came
-         * from is switched away, and untiles back where it is shown. */
-        if (o && view->workspace && view->workspace->output != o)
-            workspace_move_view(s, view, o->active_workspace);
+        /* Fullscreening onto another monitor hands the window to that monitor
+         * (same desktop), so it untiles back where it is actually shown. */
+        if (o && view->output != o)
+            view->output = o;
         struct wlr_box area;
         output_box_of(s, o, &area);
         view->x = area.x;    view->y = area.y;
@@ -460,58 +487,52 @@ void view_apply_minimized(syn_server_t *s, syn_view_t *view, int minimized)
  * hidden window. */
 void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws)
 {
-    syn_view_t *v;
+    /* The desktop spans every monitor, so prefer a window on the one the user
+     * is actually looking at — otherwise switching desktops would throw focus
+     * onto whichever screen happens to hold the list's first window. */
+    syn_output_t *focused = server_focused_output(s);
+    syn_view_t *v, *fallback = NULL;
     wl_list_for_each(v, &ws->windows, link) {
-        if (v->mapped && !v->minimized) {
+        if (!v->mapped || v->minimized) continue;
+        if (v->output == focused) {
             focus_view(s, v, view_surface(v));
             return;
         }
+        if (!fallback) fallback = v;
     }
-    focus_view(s, NULL, NULL);
+    focus_view(s, fallback, fallback ? view_surface(fallback) : NULL);
 }
 
 /* ── Workspace switching ─────────────────────────────────── */
+/* Switch the whole desk to virtual desktop `index`: every monitor swaps to its
+ * share of that workspace at once. Nothing is bound to a particular output, so
+ * this always does something no matter how many monitors are plugged in. */
 void workspace_switch(syn_server_t *s, int index)
 {
     if (index < 0 || index >= WORKSPACE_MAX) return;
-    syn_output_t *o = server_focused_output(s);
-    if (!o) return;
-    if (o->active_workspace == index) return;
+    if (index == s->active_workspace) return;
 
+    syn_workspace_t *cur    = &s->workspaces[s->active_workspace];
     syn_workspace_t *target = &s->workspaces[index];
 
-    /* Already visible on another output? Jump focus there instead of
-     * stealing the workspace (i3/sway semantics): warp the cursor onto that
-     * output so focused-output resolution follows the user. */
-    if (workspace_visible(target) && target->output != o) {
-        struct wlr_box b;
-        output_box_of(s, target->output, &b);
-        wlr_cursor_warp(s->cursor, NULL,
-                        b.x + b.width / 2.0, b.y + b.height / 2.0);
-        /* Warping doesn't emit a motion event; re-derive pointer focus now. */
-        pointer_update_focus(s, 0);
-    } else {
-        /* Hide this output's current workspace */
-        syn_workspace_t *cur = &s->workspaces[o->active_workspace];
-        syn_view_t *v;
-        wl_list_for_each(v, &cur->windows, link)
-            if (v->mapped)
-                wlr_scene_node_set_enabled(&v->scene_tree->node, false);
-        cur->visible = 0;
+    /* Hide the outgoing desktop on every monitor. */
+    syn_view_t *v;
+    wl_list_for_each(v, &cur->windows, link)
+        if (v->mapped)
+            wlr_scene_node_set_enabled(&v->scene_tree->node, false);
+    cur->visible = 0;
 
-        /* Show the target here (re-homing it if it lived elsewhere) */
-        o->active_workspace = index;
-        target->output  = o;
-        target->visible = 1;
-        wl_list_for_each(v, &target->windows, link)
-            if (v->mapped)
-                wlr_scene_node_set_enabled(&v->scene_tree->node, true);
+    /* Show the incoming one. */
+    s->active_workspace = index;
+    target->visible = 1;
+    wl_list_for_each(v, &target->windows, link)
+        if (v->mapped && !v->minimized)
+            wlr_scene_node_set_enabled(&v->scene_tree->node, true);
 
-        layout_apply(s, target);
-    }
+    layout_apply(s, target);
 
     /* Focus the target workspace's first window (or clear focus if empty —
-     * the previous workspace's window is hidden now). */
+     * the previous workspace's windows are hidden now). */
     workspace_focus_first(s, target);
 
     /* Switching away from a fullscreen window must bring the bar back — and
@@ -536,6 +557,9 @@ void workspace_switch(syn_server_t *s, int index)
     }
 }
 
+/* Send a window to another virtual desktop (Super+Shift+1…9). It keeps the
+ * monitor it was on, so switching to that desktop finds it on the same screen
+ * you sent it from. */
 void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
 {
     if (ws_index < 0 || ws_index >= WORKSPACE_MAX) return;
@@ -546,17 +570,27 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
     wl_list_remove(&view->link);
     wl_list_insert(&view->workspace->windows, &view->link);
 
-    /* Visible only if the target workspace is shown on some output. */
+    /* Visible only if the target desktop is the one being shown. */
     wlr_scene_node_set_enabled(&view->scene_tree->node,
-                                workspace_visible(view->workspace));
+                                workspace_visible(view->workspace) &&
+                                !view->minimized);
 
     layout_apply(s, &s->workspaces[old_ws]);
     layout_apply(s, &s->workspaces[ws_index]);
 
-    /* If the moved window was focused and is now hidden, hand focus to the
-     * old workspace so keys don't keep going to an invisible window. */
+    /* If the moved window was focused and is now hidden, hand focus back to
+     * the desktop still on screen so keys don't keep going to an invisible
+     * window. */
     if (s->focused_view == view && !workspace_visible(view->workspace))
         workspace_focus_first(s, &s->workspaces[old_ws]);
+}
+
+/* Re-home a window onto another monitor, keeping its desktop (Super+O). */
+void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
+{
+    if (!view || !o || view->output == o) return;
+    view->output = o;
+    layout_apply(s, view->workspace);
 }
 
 /* ── Floating placement ──────────────────────────────────── */
@@ -568,7 +602,7 @@ void workspace_move_view(syn_server_t *s, syn_view_t *view, int ws_index)
 void layout_float_place(syn_server_t *s, syn_view_t *view)
 {
     struct wlr_box area;
-    get_output_geom(s, view->workspace, &area);
+    get_view_geom(s, view, &area);
 
     int w = view->w, h = view->h;
     int bw = s->config.border_width;
