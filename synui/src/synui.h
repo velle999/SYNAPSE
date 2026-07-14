@@ -399,6 +399,83 @@ typedef struct {
     struct wl_event_source *timer;  /* 1 Hz, armed only while visible */
 } syn_taskmgr_t;
 
+/* ── News aggregator (news.c) ────────────────────────────── */
+#define NEWS_SOURCES_MAX  12
+#define NEWS_ITEMS_MAX    360   /* across every feed, after the per-feed cap */
+#define NEWS_PER_FEED     30    /* newest N kept from any one feed */
+#define NEWS_ROWS         16    /* rows visible at once */
+#define NEWS_TITLE_LEN    200
+#define NEWS_URL_LEN      400
+#define NEWS_SEEN_MAX     4096  /* read-marks kept in news.seen */
+#define NEWS_QUERY_MAX    48
+
+typedef struct {
+    char name[16];    /* column tag: "HN", "ARCH", "LWN"… */
+    char url[256];    /* feed URL (RSS or Atom) */
+} syn_news_source_t;
+
+typedef struct {
+    char   title[NEWS_TITLE_LEN];
+    char   url[NEWS_URL_LEN];
+    char   comments[NEWS_URL_LEN];  /* discussion link, or "" */
+    int    src;                     /* index into news.sources[] */
+    int    rank;                    /* position within its own feed: HN's front
+                                     * page is ranked, not chronological, and
+                                     * sorting by time alone throws that away */
+    time_t ts;                      /* published; 0 = the feed didn't say */
+    int    seen;
+} syn_news_item_t;
+
+typedef enum {
+    NEWS_SORT_TIME = 0,   /* one river, newest first */
+    NEWS_SORT_SOURCE,     /* grouped by feed, each in its own feed order */
+} syn_news_sort_t;
+
+typedef struct {
+    int   visible;
+    int   selected;       /* index into view[] */
+    int   scroll;
+    int   filter;         /* -1 = every source, else a sources[] index */
+    syn_news_sort_t sort;
+    int   searching;      /* '/' typing mode */
+    char  query[NEWS_QUERY_MAX];
+    char  status[96];
+
+    syn_news_source_t sources[NEWS_SOURCES_MAX];
+    int   n_sources;
+
+    /* What the panel draws. Main thread only. */
+    syn_news_item_t items[NEWS_ITEMS_MAX];
+    int   n;
+    int   view[NEWS_ITEMS_MAX];   /* row -> items[] index, under filter+query */
+    int   n_view;
+
+    time_t updated;       /* last fetch that brought something back */
+    int    fetching;
+    int    failed;        /* feeds that errored in that fetch */
+
+    /* Read-marks: FNV-1a of the item URL, persisted to news.seen. */
+    uint64_t seen[NEWS_SEEN_MAX];
+    int      n_seen;
+
+    /* ── Shared with the fetch thread ─────────────────────
+     * The thread owns no wlroots state: it fetches, parses into fetched[]
+     * under lock, and pokes the pipe. The main thread does the rest. */
+    pthread_t        thread;
+    pthread_mutex_t  lock;
+    pthread_cond_t   cv;
+    int              running;
+    atomic_int       stop;        /* also aborts a transfer mid-flight */
+    atomic_int       want;        /* a refresh has been asked for */
+    int              pipe[2];
+    struct wl_event_source *src;
+    struct wl_event_source *timer;   /* auto-refresh, armed only while visible */
+
+    syn_news_item_t  fetched[NEWS_ITEMS_MAX];
+    int              n_fetched;
+    int              fetch_failed;
+} syn_news_t;
+
 /* ── Keybinding (table-driven; syntax in config.c) ───────── */
 #define SYN_BINDS_MAX        96
 #define SYN_BIND_ACTION_LEN  24
@@ -581,6 +658,13 @@ typedef struct {
     int   game_exclude_count;
     char  game_ai_stop_cmd[192];
     char  game_ai_start_cmd[192];
+
+    /* News aggregator (news.c). Empty means "use the built-in source list";
+     * the first `news_source =` line in synuirc replaces the lot, so a user
+     * who wants only their own feeds is not stuck with ours. */
+    syn_news_source_t news_sources[NEWS_SOURCES_MAX];
+    int   news_sources_n;
+    int   news_refresh_min;     /* re-fetch a feed at most this often */
 
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
@@ -1153,6 +1237,16 @@ struct syn_server {
 
     syn_taskmgr_t   taskmgr;
 
+    /* News aggregator panel (Super+N) — HN, Lobsters, Arch, LWN, Phoronix… */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } news_ui;
+
+    syn_news_t      news;
+
     /* GPU telemetry (gpu.c), refreshed by the task manager's poll. gpu_n is 0
      * when no supported GPU was found — every consumer must handle that. */
     syn_gpu_t       gpu[SYN_GPU_MAX];
@@ -1651,6 +1745,25 @@ int  taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 void taskmgr_sample(syn_server_t *s);
 const char *taskmgr_sort_label(syn_tm_sort_t sort);
 void synui_render_taskmgr(syn_server_t *s);
+
+/* ── News aggregator (news.c) ────────────────────────────── */
+void news_init(syn_server_t *s);
+void news_finish(syn_server_t *s);
+void news_show(syn_server_t *s);
+void news_hide(syn_server_t *s);
+void news_toggle(syn_server_t *s);
+/* Modal while visible; returns 1 if the key was consumed. */
+int  news_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* Age of an item as "3m"/"5h"/"2d", for the panel's right-hand column. */
+void news_age(time_t ts, char *buf, size_t n);
+/* Host of a URL ("lwn.net"), sans "www.". Empty for a URL we can't parse. */
+void news_host(const char *url, char *buf, size_t n);
+/* Longest prefix of `len` bytes that doesn't end inside a UTF-8 sequence.
+ * Anything cutting text for display must go through this: cairo_show_text()
+ * poisons its whole context on invalid UTF-8, and everything drawn afterwards
+ * silently disappears. */
+size_t news_utf8_trim(const char *b, size_t len);
+void synui_render_news(syn_server_t *s);
 
 /* ── Game mode (game.c) ──────────────────────────────────── */
 /* Startup: publish the (off) state for waybar's indicator, so a file left

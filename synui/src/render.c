@@ -139,6 +139,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Power Saving",     "Super+P",       "power"     },
     { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
+    { "News",             "Super+R",       "news"      },
     { "Network / Wi-Fi",  "Super+I",       "network"   },
     { "Game Mode",        "Super+G",       "game"      },
     { "Cat Mode",         "Super+Shift+C", "cat"       },
@@ -1624,6 +1625,286 @@ void synui_render_taskmgr(syn_server_t *s)
     set_scene_buffer(&s->taskmgr_ui.text_buf, s->taskmgr_ui.tree, buf);
 }
 
+/* ── News aggregator (news.c) ────────────────────────────── */
+
+#define NW_W          1040
+#define NW_ROW_H        30
+#define NW_TOP          76   /* first row's baseline area */
+#define NW_COL_TAG      36   /* source tag */
+#define NW_COL_TITLE   142
+#define NW_COL_HOST    900   /* right edge of the host column */
+#define NW_HOST_W      210   /* …and its width. A host can be as long as
+                              * "newsletter.pragmaticengineer.com", so the
+                              * title's room is what is left after this, not
+                              * some fixed slack — get that wrong and a long
+                              * headline prints straight over the host. */
+#define NW_COL_AGE    1022   /* right edge */
+#define NW_TITLE_W    (NW_COL_HOST - NW_HOST_W - 16 - NW_COL_TITLE)
+
+/* One colour per source, so a feed is recognisable in peripheral vision
+ * without reading the tag. Indexed by source, wrapping past the palette. */
+static void src_color(int i, double *r, double *g, double *b)
+{
+    static const double pal[8][3] = {
+        { 1.00, 0.50, 0.20 },   /* HN orange */
+        { 0.60, 0.75, 0.35 },   /* Lobsters */
+        { 0.35, 0.65, 0.95 },   /* Arch blue */
+        { 0.95, 0.35, 0.40 },   /* Arch security red */
+        { 0.85, 0.75, 0.35 },   /* kernel */
+        { 0.55, 0.80, 0.85 },   /* LWN */
+        { 0.70, 0.55, 0.90 },   /* Phoronix */
+        { 0.40, 0.85, 0.60 },   /* GamingOnLinux */
+    };
+    int k = ((i % 8) + 8) % 8;
+    *r = pal[k][0]; *g = pal[k][1]; *b = pal[k][2];
+}
+
+/* Cut text to fit a column, with an ellipsis. Monospace, so a width is a
+ * character count — but measure anyway: a headline can carry an em dash or a
+ * CJK glyph, and those are not one cell wide. */
+static void draw_clipped(cairo_t *cr, double x, double y, double max_w,
+                         const char *text)
+{
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, text, &ext);
+
+    if (ext.width <= max_w) {
+        cairo_move_to(cr, x, y);
+        cairo_show_text(cr, text);
+        return;
+    }
+
+    char buf[256];
+    size_t len = strlen(text);
+    if (len > sizeof(buf) - 4) len = sizeof(buf) - 4;
+
+    while (len > 0) {
+        /* Never cut inside a UTF-8 sequence: cairo refuses invalid UTF-8 by
+         * poisoning the whole context, so one badly-cut headline would blank
+         * every row under it. news_utf8_trim drops a partial character whole. */
+        len = news_utf8_trim(text, len);
+        if (len == 0) break;
+
+        memcpy(buf, text, len);
+        memcpy(buf + len, "\xe2\x80\xa6", 4);   /* … */
+        cairo_text_extents(cr, buf, &ext);
+        if (ext.width <= max_w) break;
+        len--;
+    }
+    if (len == 0) return;
+
+    cairo_move_to(cr, x, y);
+    cairo_show_text(cr, buf);
+}
+
+/* Right-aligned at x_right, ellipsized if it will not fit in max_w. */
+static void draw_right_clipped(cairo_t *cr, double x_right, double y,
+                               double max_w, const char *text)
+{
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, text, &ext);
+
+    if (ext.width <= max_w) {
+        cairo_move_to(cr, x_right - ext.width, y);
+        cairo_show_text(cr, text);
+        return;
+    }
+    /* Left-align the clipped form at the column's left edge: an ellipsized
+     * host that is still right-aligned looks like it is falling off the row. */
+    draw_clipped(cr, x_right - max_w, y, max_w, text);
+}
+
+void synui_render_news(syn_server_t *s)
+{
+    syn_news_t *n = &s->news;
+
+    if (!n->visible) {
+        wlr_scene_node_set_enabled(&s->news_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int pw = NW_W;
+    int ph = NW_TOP + NEWS_ROWS * NW_ROW_H + 76;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->news_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->news_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->news_ui.tree->node);
+
+    /* As opaque as the task manager, and for the same reason: this is a dense
+     * table of small type, and at 0.94 the (animated) wallpaper reads through
+     * the headlines. */
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->news_ui.bg)
+        s->news_ui.bg = wlr_scene_rect_create(s->news_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->news_ui.bg, pw, ph);
+    if (!s->news_ui.accent)
+        s->news_ui.accent = wlr_scene_rect_create(s->news_ui.tree, pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Title */
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "NEWS");
+
+    /* Right of the title: what this list currently *is* — which source, how
+     * fresh, and whether a fetch is in flight. */
+    char sub[160];
+    char age[16];
+    news_age(n->updated, age, sizeof(age));
+    snprintf(sub, sizeof(sub), "%s \xc2\xb7 %s \xc2\xb7 %d/%d \xc2\xb7 %s",
+             n->filter < 0 ? "all sources" : n->sources[n->filter].name,
+             n->sort == NEWS_SORT_TIME ? "by time" : "by source",
+             n->n_view, n->n,
+             n->fetching ? "refreshing\xe2\x80\xa6"
+                         : (n->updated ? age : "never fetched"));
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    draw_right(cr, pw - 18, 30, sub);
+
+    /* Search box, in place of the separator, while '/' is active. */
+    if (n->searching) {
+        cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+        cairo_rectangle(cr, 12, 40, pw - 24, 22);
+        cairo_fill(cr);
+        char q[80];
+        snprintf(q, sizeof(q), "/%s_", n->query);
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.90, 1.00, 0.98, 1.0);
+        cairo_move_to(cr, 18, 56);
+        cairo_show_text(cr, q);
+    } else {
+        cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+        cairo_set_line_width(cr, 1);
+        cairo_move_to(cr, 18, 50);
+        cairo_line_to(cr, pw - 18, 50);
+        cairo_stroke(cr);
+
+        if (n->query[0]) {
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 0.9);
+            char q[80];
+            snprintf(q, sizeof(q), "filter: /%s", n->query);
+            cairo_move_to(cr, 18, 66);
+            cairo_show_text(cr, q);
+        }
+    }
+
+    /* An empty river is either "still fetching" or "the network said no", and
+     * those need different reactions — so say which. */
+    if (n->n_view == 0) {
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.55, 0.58, 0.66, 1.0);
+        cairo_move_to(cr, 18, NW_TOP + 24);
+        cairo_show_text(cr,
+            n->fetching  ? "fetching feeds\xe2\x80\xa6"
+          : n->n         ? "nothing matches this filter"
+          : n->failed    ? "no feeds answered \xe2\x80\x94 check the network, then press r"
+                         : "no items yet \xe2\x80\x94 press r to fetch");
+    }
+
+    for (int r = 0; r < NEWS_ROWS; r++) {
+        int vi = n->scroll + r;
+        if (vi >= n->n_view) break;
+
+        syn_news_item_t *it = &n->items[n->view[vi]];
+        int sel = (vi == n->selected);
+        int ry  = NW_TOP + r * NW_ROW_H;   /* row top */
+        double ty = ry + 20;               /* text baseline */
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 12, ry, pw - 24, NW_ROW_H - 4);
+            cairo_fill(cr);
+            cairo_set_line_width(cr, 2);
+            cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+            cairo_rectangle(cr, 12.5, ry + 0.5, pw - 25, NW_ROW_H - 5);
+            cairo_stroke(cr);
+        }
+
+        /* Unread marker: a filled dot in the gutter. This is the whole point of
+         * the seen-set — without it a river of 240 headlines looks identical
+         * whether or not you have already read all of it. */
+        if (!it->seen) {
+            cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+            cairo_arc(cr, 24, ry + 14, 3.5, 0, 2 * 3.14159265);
+            cairo_fill(cr);
+        }
+
+        double sr, sg, sb;
+        src_color(it->src, &sr, &sg, &sb);
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, sr, sg, sb, it->seen ? 0.65 : 1.0);
+        cairo_move_to(cr, NW_COL_TAG, ty);
+        cairo_show_text(cr, n->sources[it->src].name);
+
+        /* Read stories stay in the list but recede — the eye should land on
+         * what is new without the list jumping around. */
+        cairo_set_font_size(cr, 14);
+        if (sel)           cairo_set_source_rgba(cr, 0.96, 1.00, 0.99, 1.0);
+        else if (it->seen) cairo_set_source_rgba(cr, 0.52, 0.55, 0.62, 1.0);
+        else               cairo_set_source_rgba(cr, 0.86, 0.90, 0.94, 1.0);
+        draw_clipped(cr, NW_COL_TITLE, ty, NW_TITLE_W, it->title);
+
+        char host[64];
+        news_host(it->url, host, sizeof(host));
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.40, 0.43, 0.52, 1.0);
+        draw_right_clipped(cr, NW_COL_HOST, ty, NW_HOST_W, host);
+
+        /* A discussion link exists for this item (HN/Lobsters): 'c' opens it. */
+        if (it->comments[0]) {
+            cairo_set_source_rgba(cr, 0.45, 0.50, 0.60, 1.0);
+            cairo_move_to(cr, NW_COL_HOST + 16, ty);
+            cairo_show_text(cr, "\xe2\x97\x8b");   /* ○ */
+        }
+
+        char age_s[16];
+        news_age(it->ts, age_s, sizeof(age_s));
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.45, 0.48, 0.56, 1.0);
+        draw_right(cr, NW_COL_AGE, ty, age_s);
+    }
+
+    /* Scroll position */
+    if (n->n_view > NEWS_ROWS) {
+        char pos[32];
+        snprintf(pos, sizeof(pos), "%d/%d", n->selected + 1, n->n_view);
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        draw_right(cr, pw - 18, ph - 44, pos);
+    }
+
+    if (n->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, 18, ph - 44);
+        cairo_show_text(cr, n->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 20);
+    cairo_show_text(cr, n->searching
+        ? "type to filter \xc2\xb7 Enter keep \xc2\xb7 Esc clear"
+        : "j/k move \xc2\xb7 Enter open \xc2\xb7 o background \xc2\xb7 c comments \xc2\xb7 "
+          "y copy \xc2\xb7 Tab source \xc2\xb7 / search \xc2\xb7 s sort \xc2\xb7 "
+          "m read \xc2\xb7 r refresh \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->news_ui.text_buf, s->news_ui.tree, buf);
+}
+
 /* ── Dock right-click context menu (dock.c) ──────────────── */
 
 static const char *dockact_label(syn_dockact_t a)
@@ -1706,6 +1987,7 @@ void synui_ui_init(syn_server_t *s)
     s->power_ui.dim_tree = wlr_scene_tree_create(&s->scene->tree);
     wlr_scene_node_set_enabled(&s->power_ui.dim_tree->node, true);
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->news_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
@@ -1717,6 +1999,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->news_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);

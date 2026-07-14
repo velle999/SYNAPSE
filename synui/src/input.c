@@ -457,6 +457,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         power_toggle(s);
     } else if (strcmp(action, "taskmgr") == 0) {
         taskmgr_toggle(s);
+    } else if (strcmp(action, "news") == 0) {
+        news_toggle(s);
     } else if (strcmp(action, "game") == 0) {
         game_toggle(s);
     } else if (strcmp(action, "cat") == 0) {
@@ -785,6 +787,13 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
          * Shift, since Shift+X is its SIGKILL. Super+… still falls through. */
         for (int i = 0; i < nsyms; i++)
             if (taskmgr_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* News: modal like the task manager, and it claims bare Shift too —
+         * its '/' search box types capitals. */
+        for (int i = 0; i < nsyms; i++)
+            if (news_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

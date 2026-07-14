@@ -14,6 +14,7 @@ libinput  = dependency('libinput')
 # screensaver.c: sd-bus, to own org.freedesktop.ScreenSaver
 libsystemd = dependency('libsystemd')
 libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
+libcurl   = dependency('libcurl')  # news.c fetches the feeds (on its own thread)
 
 # effects.c drives the GLES2 renderer directly for the post-process pass
 egl       = dependency('egl')
@@ -136,6 +137,7 @@ synui_exe = executable('synui',
     'src/ctlpanel.c',
     'src/gpu.c',
     'src/taskmgr.c',
+    'src/news.c',
     'src/screensaver.c',
     'src/session.c',
     'src/ai_interface.c',
@@ -162,7 +164,7 @@ synui_exe = executable('synui',
   ],
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
-                  libinput, libjpeg, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
+                  libinput, libjpeg, libcurl, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],

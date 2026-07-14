@@ -1331,6 +1331,10 @@ int synui_init(syn_server_t *s)
     /* Task manager: creates its poll timer (disarmed) and probes for a GPU. */
     taskmgr_init(s);
 
+    /* News: loads the cached river off disk and parks a fetch thread on its
+     * condvar. Nothing goes near the network until the panel is opened. */
+    news_init(s);
+
     /* org.freedesktop.ScreenSaver — lets apps inhibit idle the standard way.
      * Best-effort; no session bus just means the feature stays off. */
     screensaver_init(s);
@@ -1457,6 +1461,7 @@ void synui_destroy(syn_server_t *s)
 
     power_finish(s);
     taskmgr_finish(s);
+    news_finish(s);
     screensaver_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */
@@ -1530,6 +1535,8 @@ static void usage(const char *prog) {
         "  Super+D            Display settings (rotate/arrange monitors)\n"
         "  Super+W            Wallpaper picker\n"
         "  Super+P            Power-saving panel\n"
+        "  Super+R            News (Hacker News, Arch, LWN, Phoronix, …)\n"
+        "  Super+T            Task manager\n"
         "  Super+L            Lock the screen\n"
         "  Super+E            Toggle CRT post-process filters\n"
         "  Super+Escape       Toggle the welcome menu\n"

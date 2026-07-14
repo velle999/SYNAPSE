@@ -21,7 +21,7 @@
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
- * filters, effects_toggle, power, lock, game, taskmgr, network.
+ * filters, effects_toggle, power, lock, game, taskmgr, network, news.
  * A bind with the same combo as a default replaces it.
  * "filters" (Super+E) opens the CRT filter panel; "effects_toggle" is the older
  * blind on/off flip, kept for anyone who bound it.
@@ -74,6 +74,15 @@
  * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
  * entry to type a passphrase into, so there is nothing native to point at yet:
  *   network_cmd = foot -e nmtui
+ *
+ * News (news.c, Super+R) — RSS/Atom feeds. With no news_source lines the
+ * built-in list is used (Hacker News, Lobsters, Arch news, Arch security,
+ * kernel releases, LWN, Phoronix, GamingOnLinux). The *first* news_source line
+ * replaces that list rather than adding to it, so listing your own feeds gives
+ * you those and only those. TAG is the column the panel shows:
+ *   news_source = LWN|https://lwn.net/headlines/newrss
+ *   news_source = HN|https://news.ycombinator.com/rss
+ *   news_refresh = 15                  (minutes; only while the panel is open)
  *
  * Game mode (game.c) — a fullscreen XWayland client is taken to be a game, and
  * while one runs synapd is stopped (it holds ~4GB of VRAM and has no unload
@@ -242,6 +251,9 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+p",         "power" },
         { "super+t",         "taskmgr" },
         { "super+i",         "network" },
+        /* Not super+n: that is minimize, and has been since before there was
+         * anything to read. R for RSS — the panel is a feed reader. */
+        { "super+r",         "news" },
         /* The one shortcut everybody already has in their fingers. Nothing
          * below us claims it: logind's ctrl-alt-del handling is a VT/console
          * thing, so inside a Wayland session the key reaches the compositor. */
@@ -407,6 +419,12 @@ void synui_config_load(syn_config_t *cfg)
 
     snprintf(cfg->network_cmd, sizeof(cfg->network_cmd),
              "foot -e nmtui");
+
+    /* News (news.c). No sources here: an empty list means "use the built-in
+     * ones" (news.c owns that table), and the first `news_source =` line in
+     * synuirc replaces the lot. */
+    cfg->news_sources_n  = 0;
+    cfg->news_refresh_min = 15;
 
     cfg->game_mode         = 1;
     cfg->game_suspend_ai   = 1;
@@ -617,6 +635,28 @@ void synui_config_load(syn_config_t *cfg)
             snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
         else if (strcmp(key, "network_cmd") == 0)
             snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
+        else if (strcmp(key, "news_refresh") == 0) {
+            int m = atoi(val);
+            cfg->news_refresh_min = m < 1 ? 1 : m;   /* never hammer a feed */
+        } else if (strcmp(key, "news_source") == 0) {
+            /* news_source = TAG|https://example.org/feed.xml
+             * Repeatable. The first one replaces the built-in list rather than
+             * adding to it: a user listing their own feeds means "these", not
+             * "these as well as your eight". */
+            char *bar = strchr(val, '|');
+            if (!bar) {
+                wlr_log(WLR_ERROR, "synui: config: news_source needs TAG|URL: %s",
+                        val);
+            } else if (cfg->news_sources_n >= NEWS_SOURCES_MAX) {
+                wlr_log(WLR_ERROR, "synui: config: too many news_source lines "
+                                   "(max %d)", NEWS_SOURCES_MAX);
+            } else {
+                *bar = '\0';
+                syn_news_source_t *src = &cfg->news_sources[cfg->news_sources_n++];
+                snprintf(src->name, sizeof(src->name), "%s", strip(val));
+                snprintf(src->url,  sizeof(src->url),  "%s", strip(bar + 1));
+            }
+        }
         else if (strcmp(key, "cat") == 0)
             cfg->cat_start = strcmp(val, "on") == 0;
         else if (strcmp(key, "welcome_at_startup") == 0)
