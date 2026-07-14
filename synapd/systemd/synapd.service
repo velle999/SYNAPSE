@@ -33,12 +33,14 @@ ExecReload=/bin/kill -HUP $MAINPID
 # Always restart — synapd is a core OS service
 Restart=always
 RestartSec=2s
-TimeoutStartSec=120s   # model loading can take a moment
+# model loading can take a moment
+TimeoutStartSec=120s
 TimeoutStopSec=30s
 
 # Resource limits
 LimitNOFILE=65536
-LimitMEMLOCK=infinity   # needed for model mmap
+# needed for model mmap
+LimitMEMLOCK=infinity
 LimitNICE=-20
 
 # Logging
