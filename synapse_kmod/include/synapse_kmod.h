@@ -130,6 +130,13 @@ struct ai_ctx_query_args {
  *   <timestamp_ns> <pid> <uid> <syscall_nr> <comm> <filename|-> <flags:hex> <arg0>
  * The trailing "<flags> <arg0>" pair was appended in 0.1.1; readers must
  * treat it as optional. For SYNAPSE_EVT_SETUID, arg0 is the target uid.
+ *
+ * <comm> and <filename> are ESCAPED: any byte <= 0x20, 0x7f, or '\' is written
+ * as \xHH, so each is exactly one whitespace-delimited token. Without this a
+ * comm containing a space ("Socket Thread") shifts every later field and the
+ * reader picks up the comm's second word as the filename. Readers must
+ * unescape; bytes needing no escape are emitted verbatim, so ordinary comms
+ * and paths look exactly as they always did.
  */
 struct synapse_syscall_event {
     uint64_t  timestamp_ns;
@@ -143,6 +150,12 @@ struct synapse_syscall_event {
     uint8_t   flags;              /* SYNAPSE_EVT_* */
     uint8_t   pad[3];
 };
+
+/* Worst-case escaped sizes (every byte becomes \xHH) + NUL, and the longest
+ * log line they can produce once the numeric fields are added. */
+#define SYN_ESC_MAX_COMM      (16  * 4 + 1)
+#define SYN_ESC_MAX_FILENAME  (128 * 4 + 1)
+#define SYN_LOG_LINE_MAX      (SYN_ESC_MAX_COMM + SYN_ESC_MAX_FILENAME + 96)
 
 #define SYNAPSE_EVT_EXEC    0x01  /* execve/execveat */
 #define SYNAPSE_EVT_OPEN    0x02  /* open/openat sensitive file */

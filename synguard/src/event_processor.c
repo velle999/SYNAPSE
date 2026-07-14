@@ -63,25 +63,29 @@ static evt_type_t syscall_to_evt(uint32_t nr)
 
 int kmod_parse_event(const char *line, sg_event_t *out)
 {
-    char comm[32] = {0};
-    char filename[256] = {0};
+    /* comm and filename arrive ESCAPED (\xHH for whitespace/backslash), so each
+     * is one token no matter what it contains — see synguard.h. The buffers are
+     * sized for a fully-escaped field (4x) so a hostile comm can't be truncated
+     * mid-escape. */
+    char comm_esc[SG_ESC_MAX_COMM] = {0};
+    char fname_esc[SG_ESC_MAX_FILENAME] = {0};
     unsigned int wire_flags = 0;
     unsigned long long arg0 = 0;
     memset(out, 0, sizeof(*out));
 
     /* The kmod appends "flags arg0" after the filename (newer log format);
      * older kmods stop at the filename, so those fields are optional. */
-    int n = sscanf(line, "%llu %u %u %u %31s %255s %x %llu",
+    int n = sscanf(line, "%llu %u %u %u %79s %639s %x %llu",
                    (unsigned long long *)&out->timestamp_ns,
                    &out->pid, &out->uid, &out->syscall_nr,
-                   comm, filename, &wire_flags, &arg0);
+                   comm_esc, fname_esc, &wire_flags, &arg0);
 
     if (n < 5) return -1;
 
-    strncpy(out->comm, comm, sizeof(out->comm) - 1);
+    sg_str_unescape(out->comm, sizeof(out->comm), comm_esc);
 
-    if (n >= 6 && strcmp(filename, "-") != 0)
-        strncpy(out->filename, filename, sizeof(out->filename) - 1);
+    if (n >= 6 && strcmp(fname_esc, "-") != 0)
+        sg_str_unescape(out->filename, sizeof(out->filename), fname_esc);
 
     if (n >= 8) {
         out->evt_type = (uint8_t)wire_flags;
@@ -236,26 +240,50 @@ static void canary_tick(synguard_state_t *s)
 
 /* ── Worm / C2 egress detector (netwatch) ─────────────────────
  *
- * The kmod now reports connect() with the destination ("A.B.C.D:port" or
- * "[v6]:port") in filename, syscall_nr 42. We track, per process over a short
- * sliding window, how many connections it makes and to how many distinct
- * hosts. A worm scanning/spreading fans out to many hosts fast; a flood
- * hammers connects. Either trips a HIGH alert. Purely additive — the event
- * still flows through the normal rule pipeline afterwards.
+ * The kmod reports connect() with the destination ("A.B.C.D:port" or
+ * "[v6]:port") in filename, syscall_nr 42. Per process, over a short sliding
+ * window, we look for the shapes that actually separate a worm from a busy
+ * browser:
+ *
+ *   sweep   many distinct hosts inside ONE /24 — lateral movement and worm
+ *           spreading walk a subnet host by host; a browser never does.
+ *   scan    many distinct hosts on non-web ports — a scanner hunting 22/445/
+ *           3389 fans out wide; a browser only ever speaks 80/443/8080/8443.
+ *   flood   a large number of connects to one or two hosts — a retry storm, or
+ *           a beacon hammering its C2.
+ *
+ * Raw counts are NOT signatures, which is the trap the first version fell into:
+ * "20 distinct hosts OR 80 connects in 10s" is an ordinary news page (~80
+ * connections to ~30 CDN hosts), so it called Firefox a worm. Every rule here
+ * has to stay silent for that and still fire on a subnet sweep.
+ *
+ * Loopback is skipped outright — connecting to 127.0.0.1 is not egress, and the
+ * local AI daemons chat constantly.
+ *
+ * Purely additive: the event still flows through the normal rule pipeline.
  */
-#define NW_TABLE      256          /* direct-mapped by pid (heuristic) */
-#define NW_WINDOW_S    10          /* sliding window, seconds */
-#define NW_FANOUT      20          /* distinct dests in window → scan */
-#define NW_RATE        80          /* total connects in window → flood */
-#define NW_DESTS       64          /* distinct dests tracked per window */
+#define NW_TABLE       256         /* direct-mapped by pid (heuristic) */
+#define NW_WINDOW_S     10         /* sliding window, seconds */
+#define NW_DESTS        64         /* distinct hosts tracked per window */
+#define NW_SUBNETS      32         /* distinct /24s tracked per window */
+#define NW_SWEEP        20         /* distinct hosts in ONE /24 → sweep */
+#define NW_SCAN         20         /* distinct non-web hosts → port scan */
+#define NW_FLOOD       300         /* connects in the window ...          */
+#define NW_FLOOD_HOSTS   2         /* ... spread over at most this many hosts */
 
 struct nw_entry {
     uint32_t pid;
     time_t   win_start;
     int      conn_count;
-    int      distinct;
-    int      alerted;              /* one alert per window */
+    int      distinct;              /* distinct hosts this window */
+    int      nonweb;                /* of those, how many on non-web ports */
+    int      alerted;               /* one alert per window */
     uint32_t dest_hash[NW_DESTS];
+    uint32_t sub_key[NW_SUBNETS];   /* /24 network address */
+    uint16_t sub_hosts[NW_SUBNETS]; /* distinct hosts seen inside that /24 */
+    int      nsubs;
+    int      max_sub;               /* busiest /24's host count */
+    char     max_sub_name[20];      /* "192.168.1.0/24" */
 };
 static struct nw_entry nw_table[NW_TABLE];
 static pthread_mutex_t nw_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -267,22 +295,68 @@ static uint32_t nw_fnv1a(const char *s, size_t n)
     return h ? h : 1;   /* reserve 0 for "empty slot" */
 }
 
-/*
- * Record a connect and decide whether it trips a fan-out/flood alert.
- * Returns 1 (and fills reason) once per window when a threshold is crossed.
- */
-static int netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
+static int nw_is_web_port(unsigned port)
 {
-    if (e->filename[0] == '\0') return 0;
+    return port == 80 || port == 443 || port == 8080 || port == 8443;
+}
 
-    /* Destination host = the address portion, without the :port. IPv6 is
-     * "[....]:port", so cut at the last ':' but keep the bracketed body. */
-    const char *colon = strrchr(e->filename, ':');
-    size_t hostlen = colon ? (size_t)(colon - e->filename) : strlen(e->filename);
-    uint32_t dh = nw_fnv1a(e->filename, hostlen);
+/* "A.B.C.D:port" / "[v6]:port" → host, port. IPv6 keeps its brackets. */
+static int nw_split_dest(const char *dest, char *host, size_t hlen, unsigned *port)
+{
+    const char *colon = strrchr(dest, ':');
+    if (!colon || colon == dest) return -1;
 
+    size_t n = (size_t)(colon - dest);
+    if (n >= hlen) return -1;
+
+    memcpy(host, dest, n);
+    host[n] = '\0';
+    *port = (unsigned)strtoul(colon + 1, NULL, 10);
+    return 0;
+}
+
+/* The /24 a host sits in. IPv4 only: there is no cheap IPv6 equivalent worth
+ * the false positives, so v6 destinations simply never trip the sweep rule. */
+static int nw_subnet24(const char *host, uint32_t *key, char *name, size_t nlen)
+{
+    unsigned a, b, c, d;
+    char trailing;
+
+    /* The %c catches trailing junk: a clean dotted quad matches exactly 4. */
+    if (sscanf(host, "%u.%u.%u.%u%c", &a, &b, &c, &d, &trailing) != 4)
+        return -1;
+    if (a > 255 || b > 255 || c > 255 || d > 255)
+        return -1;
+
+    *key = (a << 24) | (b << 16) | (c << 8);
+    snprintf(name, nlen, "%u.%u.%u.0/24", a, b, c);
+    return 0;
+}
+
+/*
+ * Record a connect and decide whether it trips a sweep/scan/flood alert.
+ * Returns the threat level (THREAT_NONE when nothing tripped) and fills
+ * `reason`, once per window.
+ */
+sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
+{
+    char host[64];
+    unsigned port = 0;
+
+    if (e->filename[0] == '\0') return THREAT_NONE;
+    if (nw_split_dest(e->filename, host, sizeof(host), &port) != 0)
+        return THREAT_NONE;
+
+    uint32_t subkey = 0;
+    char subname[20] = {0};
+    int have_sub = (nw_subnet24(host, &subkey, subname, sizeof(subname)) == 0);
+
+    if (have_sub && (subkey >> 24) == 127)      /* loopback is not egress */
+        return THREAT_NONE;
+
+    uint32_t dh = nw_fnv1a(host, strlen(host));
     time_t now = time(NULL);
-    int tripped = 0;
+    sg_threat_t threat = THREAT_NONE;
 
     pthread_mutex_lock(&nw_lock);
     struct nw_entry *ent = &nw_table[e->pid % NW_TABLE];
@@ -296,25 +370,66 @@ static int netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
 
     ent->conn_count++;
 
-    /* Count distinct destinations (bounded set). */
-    int seen = 0, i;
-    for (i = 0; i < ent->distinct && i < NW_DESTS; i++)
+    /* First sighting of this host in the window? Then it also counts towards
+     * its /24 and, if the port isn't a web port, the scan tally. Repeat
+     * connections to a host already seen only move conn_count. */
+    int seen = 0;
+    for (int i = 0; i < ent->distinct && i < NW_DESTS; i++)
         if (ent->dest_hash[i] == dh) { seen = 1; break; }
-    if (!seen && ent->distinct < NW_DESTS)
+
+    if (!seen && ent->distinct < NW_DESTS) {
         ent->dest_hash[ent->distinct++] = dh;
 
-    if (!ent->alerted &&
-        (ent->distinct >= NW_FANOUT || ent->conn_count >= NW_RATE)) {
-        ent->alerted = 1;
-        tripped = 1;
-        snprintf(reason, rlen,
-                 "netwatch: %s pid=%u made %d connections to %d distinct hosts "
-                 "in <%ds — possible worm scan / C2 beacon (last=%s)",
-                 e->comm, e->pid, ent->conn_count, ent->distinct,
-                 NW_WINDOW_S, e->filename);
+        if (!nw_is_web_port(port))
+            ent->nonweb++;
+
+        if (have_sub) {
+            int b;
+            for (b = 0; b < ent->nsubs; b++)
+                if (ent->sub_key[b] == subkey) break;
+
+            if (b == ent->nsubs && ent->nsubs < NW_SUBNETS) {
+                ent->sub_key[b]   = subkey;
+                ent->sub_hosts[b] = 0;
+                ent->nsubs++;
+            }
+            if (b < ent->nsubs) {
+                ent->sub_hosts[b]++;
+                if (ent->sub_hosts[b] > ent->max_sub) {
+                    ent->max_sub = ent->sub_hosts[b];
+                    snprintf(ent->max_sub_name, sizeof(ent->max_sub_name),
+                             "%s", subname);
+                }
+            }
+        }
+    }
+
+    /* The secfeed truncates a reason to 111 chars, so lead with the counts and
+     * the destination — they are what a human acts on. */
+    if (!ent->alerted) {
+        if (ent->max_sub >= NW_SWEEP) {
+            threat = THREAT_HIGH;
+            snprintf(reason, rlen,
+                     "netwatch: subnet sweep — %d hosts in %s in <%ds (last=%s)",
+                     ent->max_sub, ent->max_sub_name, NW_WINDOW_S, e->filename);
+        } else if (ent->nonweb >= NW_SCAN) {
+            threat = THREAT_HIGH;
+            snprintf(reason, rlen,
+                     "netwatch: port scan — %d hosts on non-web ports in <%ds "
+                     "(last=%s)", ent->nonweb, NW_WINDOW_S, e->filename);
+        } else if (ent->conn_count >= NW_FLOOD &&
+                   ent->distinct <= NW_FLOOD_HOSTS) {
+            threat = THREAT_MEDIUM;
+            snprintf(reason, rlen,
+                     "netwatch: connect flood — %d conns to %d host(s) in <%ds "
+                     "(last=%s)", ent->conn_count, ent->distinct,
+                     NW_WINDOW_S, e->filename);
+        }
+        if (threat != THREAT_NONE)
+            ent->alerted = 1;
     }
     pthread_mutex_unlock(&nw_lock);
-    return tripped;
+    return threat;
 }
 
 /* ── Full decision pipeline ───────────────────────────────── */
@@ -331,12 +446,14 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
     /* syscall_nr 42 == connect; the kmod put the dest IP:port in filename. */
     if (e->evt_type == EVT_SOCKET && e->syscall_nr == 42 && e->filename[0]) {
         char nwreason[200];
-        if (netwatch_connect(e, nwreason, sizeof(nwreason))) {
+        sg_threat_t nwthreat = netwatch_connect(e, nwreason, sizeof(nwreason));
+
+        if (nwthreat != THREAT_NONE) {
             sg_alert_t nwalert = {
                 .timestamp = time(NULL),
                 .event     = *e,
                 .verdict   = VERDICT_ALERT,
-                .threat    = THREAT_HIGH,
+                .threat    = nwthreat,
             };
             strncpy(nwalert.reason, nwreason, sizeof(nwalert.reason) - 1);
             snprintf(nwalert.action_taken, sizeof(nwalert.action_taken), "alert");

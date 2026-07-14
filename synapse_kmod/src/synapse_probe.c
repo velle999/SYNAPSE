@@ -95,11 +95,49 @@ static void ring_push(const struct synapse_syscall_event *evt)
 }
 
 /*
+ * syn_escape — render src as a single whitespace-free token.
+ *
+ * The log below is whitespace-delimited, but a comm may legally contain spaces
+ * (Firefox's "Socket Thread", prctl(PR_SET_NAME, "evil worm")) and so may a
+ * path. Emitted raw, those shift every field after them: userspace read the
+ * second word of the comm as the filename, which silently fed synguard a
+ * constant string in place of the connect() destination. Escape anything that
+ * could break the framing as \xHH; synguard's kmod_parse_event() reverses it.
+ *
+ * Bytes with no whitespace or backslash pass through unchanged, so the common
+ * case is byte-identical to the old format and older readers keep working.
+ */
+static void syn_escape(char *dst, size_t dlen, const char *src, size_t slen)
+{
+    size_t o = 0;
+
+    for (size_t i = 0; i < slen && src[i]; i++) {
+        unsigned char c = (unsigned char)src[i];
+
+        if (c <= 0x20 || c == 0x7f || c == '\\') {
+            if (o + 4 >= dlen)
+                break;
+            o += scnprintf(dst + o, dlen - o, "\\x%02x", c);
+        } else {
+            if (o + 1 >= dlen)
+                break;
+            dst[o++] = (char)c;
+        }
+    }
+    dst[o] = '\0';
+}
+
+/*
  * synapse_probe_read_log — drain ring buffer into buf for sysfs read.
  * Returns bytes written.
  */
 ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
 {
+    /* Static, not stack: a fully-escaped filename is 4x. Every use is inside
+     * g_ring.lock, which serialises readers. */
+    static char comm_esc[SYN_ESC_MAX_COMM];
+    static char name_esc[SYN_ESC_MAX_FILENAME];
+    static char line[SYN_LOG_LINE_MAX];
     size_t pos = 0;
 
     spin_lock(&g_ring.lock);
@@ -109,24 +147,35 @@ ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
     /* Read up to 32 events per sysfs read to avoid huge pages */
     int max_read = min(head - tail, 32);
 
-    for (int i = 0; i < max_read && pos < buf_len - 128; i++) {
+    for (int i = 0; i < max_read; i++) {
         int idx = (tail + i) % g_ring.size;
         struct synapse_syscall_event *e = &g_ring.events[idx];
 
-        const char *fname = e->filename[0] ? e->filename : "-";
+        syn_escape(comm_esc, sizeof(comm_esc), e->comm, sizeof(e->comm));
+        syn_escape(name_esc, sizeof(name_esc), e->filename, sizeof(e->filename));
+
+        const char *fname = name_esc[0] ? name_esc : "-";
         /* Trailing "flags arg0" lets userspace type events without guessing
          * from syscall_nr and see arg0 (setuid: target uid). Readers that
          * stop at the filename keep working — the fields only append. */
-        pos += scnprintf(buf + pos, buf_len - pos,
+        int len = scnprintf(line, sizeof(line),
             "%llu %u %u %u %s %s %02x %llu\n",
             e->timestamp_ns,
             e->pid, e->uid,
             e->syscall_nr,
-            e->comm,
+            comm_esc,
             fname,
             e->flags,
             (unsigned long long)e->args[0]
         );
+
+        /* Never emit a half line: leave the event queued for the next read
+         * rather than handing userspace a truncated record to misparse. */
+        if (pos + (size_t)len >= buf_len)
+            break;
+
+        memcpy(buf + pos, line, (size_t)len);
+        pos += (size_t)len;
         atomic_inc(&g_ring.tail);
     }
     spin_unlock(&g_ring.lock);

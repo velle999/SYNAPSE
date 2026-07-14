@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -28,6 +29,56 @@
 
 #define BASELINE_MAX_ENTRIES  1024
 #define SENSITIVE_EVT_MASK    (EVT_EXEC | EVT_PTRACE | EVT_MODULE | EVT_SETUID)
+
+/* ── Wire-format escaping ─────────────────────────────────────
+ *
+ * Mirrors syn_escape() in the kmod (synapse_probe.c). See synguard.h.
+ */
+void sg_str_escape(char *dst, size_t dlen, const char *src)
+{
+    size_t o = 0;
+
+    if (!dlen) return;
+
+    for (size_t i = 0; src[i]; i++) {
+        unsigned char c = (unsigned char)src[i];
+
+        if (c <= 0x20 || c == 0x7f || c == '\\') {
+            if (o + 4 >= dlen) break;
+            o += (size_t)snprintf(dst + o, dlen - o, "\\x%02x", c);
+        } else {
+            if (o + 1 >= dlen) break;
+            dst[o++] = (char)c;
+        }
+    }
+    dst[o] = '\0';
+}
+
+void sg_str_unescape(char *dst, size_t dlen, const char *src)
+{
+    size_t o = 0;
+
+    if (!dlen) return;
+
+    for (size_t i = 0; src[i] && o + 1 < dlen; i++) {
+        /* \xHH → the byte. Anything else, including a lone backslash, is
+         * passed through — a malformed escape must not eat the next char. */
+        if (src[i] == '\\' && src[i + 1] == 'x' &&
+            isxdigit((unsigned char)src[i + 2]) &&
+            isxdigit((unsigned char)src[i + 3])) {
+            char hex[3] = { src[i + 2], src[i + 3], '\0' };
+            long b = strtol(hex, NULL, 16);
+
+            /* Never splice in a NUL: it would truncate the string and could
+             * hide the tail of a hostile comm from every rule downstream. */
+            dst[o++] = b ? (char)b : '_';
+            i += 3;
+        } else {
+            dst[o++] = src[i];
+        }
+    }
+    dst[o] = '\0';
+}
 
 int baseline_load(synguard_state_t *s)
 {
@@ -42,9 +93,16 @@ int baseline_load(synguard_state_t *s)
     char line[512];
     while (fgets(line, sizeof(line), f) && s->baseline_count < BASELINE_MAX_ENTRIES) {
         sg_baseline_entry_t *e = &s->baseline[s->baseline_count];
-        if (sscanf(line, "%15s %u %u %ld",
-                   e->comm, &e->typical_evt_mask,
+        char comm_esc[SG_ESC_MAX_COMM];
+
+        /* comm is escaped on disk: read it as one token, then decode. Reading
+         * it raw with "%15s" split "Socket Thread" in two, the following %u hit
+         * "Thread", sscanf returned 1 instead of 4 — and the entry was silently
+         * dropped. Any process with a space in its comm could never baseline. */
+        if (sscanf(line, "%79s %u %u %ld",
+                   comm_esc, &e->typical_evt_mask,
                    &e->seen_count, &e->first_seen) == 4) {
+            sg_str_unescape(e->comm, sizeof(e->comm), comm_esc);
             e->last_seen = e->first_seen;
             s->baseline_count++;
         }
@@ -62,8 +120,11 @@ void baseline_save(synguard_state_t *s)
     pthread_mutex_lock(&s->baseline_lock);
     for (int i = 0; i < s->baseline_count; i++) {
         sg_baseline_entry_t *e = &s->baseline[i];
+        char comm_esc[SG_ESC_MAX_COMM];
+
+        sg_str_escape(comm_esc, sizeof(comm_esc), e->comm);
         fprintf(f, "%s %u %u %ld\n",
-                e->comm, e->typical_evt_mask,
+                comm_esc, e->typical_evt_mask,
                 e->seen_count, e->first_seen);
     }
     pthread_mutex_unlock(&s->baseline_lock);

@@ -243,8 +243,27 @@ int  synguard_init(synguard_state_t *s);
 void synguard_destroy(synguard_state_t *s);
 int  synguard_run(synguard_state_t *s);
 
+/* Wire-format string escaping (core.c).
+ *
+ * The kmod's syscall_log and the baseline file are both whitespace-delimited
+ * text, but a comm may contain a space ("Socket Thread") and so may a path.
+ * The kmod escapes those bytes as \xHH so each field stays one token; these
+ * mirror that, and the baseline file uses the same encoding. Anything without
+ * whitespace or a backslash round-trips unchanged.
+ */
+#define SG_ESC_MAX_COMM      80    /* comm[16] fully escaped, + NUL   */
+#define SG_ESC_MAX_FILENAME  640   /* kmod filename[128] escaped, + NUL */
+void sg_str_escape(char *dst, size_t dlen, const char *src);
+void sg_str_unescape(char *dst, size_t dlen, const char *src);
+
 /* Event processing */
 void synguard_process_event(synguard_state_t *s, const sg_event_t *e);
+int  kmod_parse_event(const char *line, sg_event_t *out);
+
+/* Worm/C2 egress detector (event_processor.c). Exposed for tests: returns the
+ * threat level of the connect() in `e` (THREAT_NONE when nothing tripped) and
+ * fills `reason`. */
+sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen);
 
 /* Rule engine */
 int          rules_load(synguard_state_t *s, const char *dir);
@@ -275,6 +294,11 @@ typedef struct {
     int32_t  verdict;    /* sg_verdict_t */
     int32_t  threat;     /* sg_threat_t */
     char     comm[16];
+    /* Alert reasons are truncated to fit. This is a FIXED wire layout shared
+     * with synui and chibi's secfeed.py — do not widen it without bumping
+     * SG_SECFEED_VERSION and rebuilding both. Keep the most useful part of a
+     * reason (the counts, the offending destination) in the first 111 chars:
+     * the netwatch alert used to lose its "(last=<dest>)" tail here. */
     char     reason[112];
 } sg_secfeed_msg_t;      /* 152 bytes, fixed layout (< PIPE_BUF) */
 #pragma pack(pop)

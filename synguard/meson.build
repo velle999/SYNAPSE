@@ -40,6 +40,15 @@ secfeed_test = executable('secfeed_test',
     meson.current_build_dir())])
 test('secfeed', secfeed_test, timeout: 60)
 
+# The connect() wire format and the worm/C2 thresholds. netwatch_connect() and
+# kmod_parse_event() live in event_processor.c, which pulls in the pipeline, so
+# the test stubs the daemon entry points it never calls.
+netwatch_test = executable('netwatch_test',
+  files('tests/netwatch_test.c', 'src/event_processor.c', 'src/core.c'),
+  include_directories: inc,
+  dependencies: [dep_threads])
+test('netwatch', netwatch_test, timeout: 60)
+
 install_data('systemd/synguard.service', install_dir: '/etc/systemd/system')
 
 install_subdir('rules', install_dir: '/etc/synguard', strip_directory: false)
