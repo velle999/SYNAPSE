@@ -346,7 +346,57 @@ REPOEOF
 arch-chroot /mnt pacman -Sy --noconfirm \
     synapd synsh synnet synguard synui synapse_kmod \
     syn syn-model syn-firstboot \
-    2>&1 || warn "Some SynapseOS packages failed to install"
+    chibi nexus-chat tepris \
+    2>&1 || warn "Some SynapseOS packages failed to install — verifying below"
+
+# ── Hard verify the SynapseOS packages landed ─────────────
+#
+# The install above is a SINGLE transaction, so one unresolvable dependency
+# loses every package in it — and `|| warn` then let the installer carry on and
+# still print "SynapseOS installation complete!" at the end. grub has been hard
+# verified here for ages; the packages the distro exists for were not checked at
+# all. A box without synapd/synguard/synapse_kmod is not SynapseOS, so say so
+# instead of handing over a machine that quietly isn't one.
+#
+# Retry individually before giving up: that way one bad package fails alone
+# instead of taking the other nine with it, and the error names the culprit.
+SYN_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot"
+# Apps, not the OS. They ship in the live repo but were never installed to disk,
+# so an installed SynapseOS had no chibi at all — you only got her on the ISO.
+SYN_EXTRA="chibi nexus-chat tepris"
+
+syn_missing() {
+    local out="" p
+    for p in $1; do
+        arch-chroot /mnt pacman -Q "$p" &>/dev/null || out="$out $p"
+    done
+    printf '%s' "$out"
+}
+
+missing=$(syn_missing "$SYN_CORE $SYN_EXTRA")
+if [ -n "$missing" ]; then
+    warn "Not installed:$missing — retrying each on its own..."
+    for p in $missing; do
+        arch-chroot /mnt pacman -S --noconfirm "$p" 2>&1 \
+            || warn "  $p failed"
+    done
+fi
+
+# These are apps, not the OS — a missing one is worth saying out loud but must
+# not fail an otherwise good install.
+missing_extra=$(syn_missing "$SYN_EXTRA")
+[ -n "$missing_extra" ] && warn "App(s) not installed:$missing_extra"
+
+missing_core=$(syn_missing "$SYN_CORE")
+if [ -n "$missing_core" ]; then
+    die "SynapseOS packages could not be installed:$missing_core
+  This machine would boot without the daemons SynapseOS is built on.
+  Usually a network problem, or a dependency the live repo cannot resolve.
+  Check the pacman output above."
+fi
+
+success "SynapseOS packages verified: $(echo $SYN_CORE | wc -w) core, \
+$(( $(echo $SYN_EXTRA | wc -w) - $(echo $missing_extra | wc -w) ))/$(echo $SYN_EXTRA | wc -w) apps"
 
 # Copy AI model if present on live ISO
 MODEL_SRC=""
