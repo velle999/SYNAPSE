@@ -58,6 +58,11 @@ static const char *const browsers[] = {
 static const char *const file_managers[] = {
     "dolphin", "thunar", "nautilus", "pcmanfm", NULL
 };
+/* For the intents that need a tty when we haven't got one — see run_foreground().
+ * $TERMINAL wins if it names something real; foot is what SynapseOS ships. */
+static const char *const terminals[] = {
+    "foot", "alacritty", "kitty", "konsole", "xterm", NULL
+};
 
 /* Is `prog` on $PATH? execvp-style lookup without spawning anything. */
 static bool have(const char *prog)
@@ -179,6 +184,95 @@ static int launch_detached(const char *cmd, const char *arg)
     return 0;
 }
 
+/* ── Running things that need a terminal ──────────────────── */
+
+/*
+ * Have we got a tty to hand a full-screen program?
+ *
+ * synsh in a terminal: yes, and a TUI just takes over the screen. synsh spawned
+ * by synui's Super+Space bar: no — stdout is a pipe the compositor drains into
+ * the bar, and stdin is /dev/null. Handing cliamp that gets you a player that
+ * dies instantly with nowhere to draw, which looks exactly like "the cmdbar
+ * still can't play music".
+ */
+static bool have_tty(void)
+{
+    return isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+}
+
+/* $TERMINAL if it is real, else the first one installed. */
+static const char *find_terminal(void)
+{
+    const char *t = getenv("TERMINAL");
+    if (t && *t && have(t)) return t;
+    return first_present(terminals);
+}
+
+/*
+ * Run a foreground/interactive command — a TUI, or anything that will prompt.
+ *
+ * With a tty, that is just execute_command_line(): the command inherits our
+ * terminal, which is what someone typing into synsh wants, signal resets and
+ * job control included.
+ *
+ * Without one, the command still has to run *somewhere a person can see and
+ * type into*, so we open a terminal for it. `keep_open` is for the ones whose
+ * output is the point (pacman): the shell holds the window after the command
+ * exits so the result does not flash past. A TUI does not need that — it owns
+ * the window until you quit it.
+ *
+ * The command goes to `sh -c` as ONE argv element, never interpolated into a
+ * command string: these fragments contain their own quotes (see the orphans
+ * intent) and re-quoting them for a second round of shell parsing is how you
+ * get a subtly different command than the one you printed.
+ */
+static int run_foreground(synsh_state_t *s, const char *cmd, bool keep_open)
+{
+    if (have_tty())
+        return execute_command_line(s, cmd);
+
+    const char *term = find_terminal();
+    if (!term) {
+        fprintf(stderr, "  synsh: no terminal installed to run: %s\n"
+                        "         sudo pacman -S foot\n", cmd);
+        return 1;
+    }
+
+    char wrapped[SYNSH_MAX_LINE + 128];
+    if (keep_open)
+        snprintf(wrapped, sizeof(wrapped),
+                 "%s; printf '\\n[done — press enter]'; read _", cmd);
+    else
+        snprintf(wrapped, sizeof(wrapped), "%s", cmd);
+
+    /* Say where it went. Without this the bar reports nothing and a terminal
+     * appears on some other workspace, unexplained. */
+    printf("  opening %s\n", term);
+    fflush(stdout);
+
+    pid_t p = fork();
+    if (p < 0) { perror("synsh: fork"); return 1; }
+    if (p == 0) {
+        if (fork() != 0) _exit(0);          /* intermediate exits at once */
+        setsid();
+        /* The terminal must not inherit the caller's pipe: synui waits on EOF
+         * to decide the command finished, and a terminal holding the write end
+         * open would defer that until the window closed. */
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > 2) close(devnull);
+        }
+        execlp(term, term, "-e", "sh", "-c", wrapped, (char *)NULL);
+        _exit(127);
+    }
+    int st;
+    waitpid(p, &st, 0);                     /* reap the intermediate only */
+    return 0;
+}
+
 /* ── Intent: time / date ──────────────────────────────────── */
 
 static int intent_time(synsh_state_t *s, bool want_date)
@@ -276,16 +370,18 @@ static int intent_music(synsh_state_t *s)
      * and a machine with no ~/Music is its normal case, not an error.
      *
      * It is also a TUI, so it runs in the FOREGROUND — launch_detached() would
-     * hand a full-screen interface /dev/null and a lost tty. execute_pipeline()
-     * is what a typed command goes through, which is exactly the behaviour
-     * wanted here, signal resets included. */
+     * hand a full-screen interface /dev/null and a lost tty. run_foreground()
+     * is what a typed command goes through when we have a terminal, and opens
+     * one when we do not (synui's command bar). */
     if (strcmp(player, "cliamp") == 0) {
         if (cliamp_running(s)) {
+            /* Resume is a one-shot IPC call, not the TUI — it needs no terminal
+             * either way, and opening one for it would leave an empty window. */
             printf("  %sresuming%s cliamp\n", COLOR_DIM, COLOR_RESET);
             return execute_pipeline(s, "cliamp play");
         }
         printf("  %sstarting%s cliamp\n", COLOR_DIM, COLOR_RESET);
-        return execute_pipeline(s, "cliamp --auto-play --shuffle");
+        return run_foreground(s, "cliamp --auto-play --shuffle", false);
     }
 
     /* Look where music actually lives. XDG first, then the usual suspects. */
@@ -492,13 +588,27 @@ static bool looks_like_packages(const char *args)
 
 /* Show the command, then run it through synsh's own executor so it behaves like
  * anything else typed here. pacman does its own confirming, which is why these
- * do not add a second prompt on top. */
+ * do not add a second prompt on top.
+ *
+ * The sudo ones go through run_foreground(), because that confirming is the
+ * whole point: pacman asks "Proceed with installation? [Y/n]" and sudo asks for
+ * a password, and both need somewhere to read the answer from. With no tty
+ * (synui's command bar) that opens a terminal, rather than feeding pacman
+ * /dev/null and reporting whatever it does when its prompt hits EOF.
+ *
+ * The read-only queries — `pacman -Ss`, `pacman -Q` — deliberately do not.
+ * Nothing prompts, so a terminal would only flash their answer up in a window
+ * of its own instead of leaving it where it was asked for. Testing for sudo
+ * anywhere in the line, not just at the front: the orphans intent buries it
+ * mid-pipeline. */
 static int run_pkg(synsh_state_t *s, const char *cmd)
 {
     printf("  %s%s%s\n", COLOR_CMD, cmd, COLOR_RESET);
     /* The child writes straight to fd 1 while this printf sits in our stdio
      * buffer, so without the flush the command appears *after* its own output. */
     fflush(stdout);
+    if (strstr(cmd, "sudo "))
+        return run_foreground(s, cmd, true);
     return execute_command_line(s, cmd);
 }
 
@@ -591,7 +701,25 @@ static const struct {
 
 /* ── Dispatch ─────────────────────────────────────────────── */
 
-int synsh_intent(synsh_state_t *s, const char *line, int *exit_code)
+/*
+ * Claim a line: report that it is ours, and act on it unless we are only being
+ * asked whether it is.
+ *
+ * The check-only mode exists for synui's command bar, which must decide between
+ * this file and a synapd round trip *before* it commits to either — and must do
+ * it from another process, so the answer has to come from the same table that
+ * does the work. Anything that recognises lines twice drifts.
+ *
+ * Every claim goes through here so that matching and acting cannot disagree:
+ * the branch that says "mine" is the branch that runs it.
+ */
+#define CLAIM(call) do {                        \
+        if (!check_only) *exit_code = (call);   \
+        return 1;                               \
+    } while (0)
+
+int synsh_intent(synsh_state_t *s, const char *line, int *exit_code,
+                 bool check_only)
 {
     char p[SYNSH_MAX_LINE];
     normalize(p, sizeof(p), line);
@@ -616,18 +744,16 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code)
     static const char *const yt_p[]    = {
         "open youtube", "youtube", "open yt", "launch youtube", NULL };
 
-    if (line_is(p, time_p))  { *exit_code = intent_time(s, false); return 1; }
-    if (line_is(p, date_p))  { *exit_code = intent_time(s, true);  return 1; }
-    if (line_is(p, music_p)) { *exit_code = intent_music(s);       return 1; }
-    if (line_is(p, files_p)) { *exit_code = intent_files(s);       return 1; }
-    if (line_is(p, yt_p))    { *exit_code = intent_url(s, "https://www.youtube.com"); return 1; }
+    if (line_is(p, time_p))  CLAIM(intent_time(s, false));
+    if (line_is(p, date_p))  CLAIM(intent_time(s, true));
+    if (line_is(p, music_p)) CLAIM(intent_music(s));
+    if (line_is(p, files_p)) CLAIM(intent_files(s));
+    if (line_is(p, yt_p))    CLAIM(intent_url(s, "https://www.youtube.com"));
 
     /* Parameterised: "set alarm for 7:30am", "wake me at 7". */
     if (line_starts(p, "set alarm") || line_starts(p, "set an alarm") ||
-        line_starts(p, "wake me")) {
-        *exit_code = intent_alarm(s, p);
-        return 1;
-    }
+        line_starts(p, "wake me"))
+        CLAIM(intent_alarm(s, p));
 
     /* ── Packages ──
      * Arch syntax, which is most of the reason these are here at all: asked to
@@ -639,20 +765,14 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code)
      * -S --needed, not plain -S: re-installing something already at the right
      * version is a pointless download and, mid-upgrade, a partial-upgrade risk. */
     const char *a;
-    if ((a = rest_after(p, "install")) && looks_like_packages(a)) {
-        *exit_code = intent_pkg(s, "sudo pacman -S --needed", a);
-        return 1;
-    }
-    if ((a = rest_after(p, "uninstall")) || (a = rest_after(p, "remove package"))) {
+    if ((a = rest_after(p, "install")) && looks_like_packages(a))
+        CLAIM(intent_pkg(s, "sudo pacman -S --needed", a));
+    if ((a = rest_after(p, "uninstall")) || (a = rest_after(p, "remove package")))
         /* -Rns: the package, its now-orphaned deps, and its config. Plain -R
          * leaves both behind and that is never what "uninstall" means. */
-        *exit_code = intent_pkg(s, "sudo pacman -Rns", a);
-        return 1;
-    }
-    if ((a = rest_after(p, "search for")) || (a = rest_after(p, "search"))) {
-        *exit_code = intent_pkg(s, "pacman -Ss", a);
-        return 1;
-    }
+        CLAIM(intent_pkg(s, "sudo pacman -Rns", a));
+    if ((a = rest_after(p, "search for")) || (a = rest_after(p, "search")))
+        CLAIM(intent_pkg(s, "pacman -Ss", a));
     if ((a = rest_after(p, "is")) && line_starts(p, "is")) {
         /* "is firefox installed" */
         size_t la = strlen(a);
@@ -663,10 +783,8 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code)
             size_t n = la - ls;
             if (n < sizeof(pkg)) {
                 memcpy(pkg, a, n); pkg[n] = '\0';
-                if (looks_like_packages(pkg)) {
-                    *exit_code = intent_pkg(s, "pacman -Q", pkg);
-                    return 1;
-                }
+                if (looks_like_packages(pkg))
+                    CLAIM(intent_pkg(s, "pacman -Q", pkg));
             }
         }
     }
@@ -675,17 +793,16 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code)
         "update", "update system", "update the system", "upgrade",
         "upgrade system", "upgrade the system", "update everything",
         "check for updates", "system update", NULL };
-    if (line_is(p, update_p)) {
+    if (line_is(p, update_p))
         /* Always -Syu. A bare -Sy syncs the databases without upgrading, which
          * is a partial upgrade, which is how Arch breaks. */
-        *exit_code = intent_pkg(s, "sudo pacman -Syu", NULL);
-        return 1;
-    }
+        CLAIM(intent_pkg(s, "sudo pacman -Syu", NULL));
 
     /* Plain English for the everyday commands. Last, so a more specific intent
      * above always wins. */
     for (int i = 0; english_cmds[i].phrases; i++) {
         if (line_is(p, english_cmds[i].phrases)) {
+            if (check_only) return 1;
             const char *cmd = english_cmds[i].cmd;
             /* Say what it ran. The point of a natural-language shell is that
              * you learn the command, not that it stays hidden. */
@@ -705,14 +822,12 @@ int synsh_intent(synsh_state_t *s, const char *line, int *exit_code)
 
     static const char *const orphan_p[] = {
         "remove orphans", "clean orphans", "remove orphaned packages", NULL };
-    if (line_is(p, orphan_p)) {
+    if (line_is(p, orphan_p))
         /* pacman -Qtdq lists true orphans; the guard keeps -Rns from being run
          * with an empty argument list, which would make it prompt for stdin. */
-        *exit_code = run_pkg(s,
+        CLAIM(run_pkg(s,
             "pacman -Qtdq >/dev/null 2>&1 && sudo pacman -Rns $(pacman -Qtdq) "
-            "|| echo '  no orphaned packages'");
-        return 1;
-    }
+            "|| echo '  no orphaned packages'"));
 
     return 0;   /* not ours — let synapd have it */
 }

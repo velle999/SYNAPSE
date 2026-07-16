@@ -78,6 +78,13 @@ static void setup_signals(void) {
 }
 
 /* ── Usage ────────────────────────────────────────────────── */
+
+/* --intent-check's "not an intent" answer. Not 1: an intent that matched and
+ * then failed also exits nonzero, and a caller choosing between synsh and the
+ * model must be able to tell "not mine" from "mine, and it went wrong". 70 is
+ * outside both the shell's 1-2 and its 126-128 exec range. */
+#define SYNSH_NO_INTENT 70
+
 static void usage(const char *prog) {
     fprintf(stderr,
         "Usage: %s [OPTIONS] [script]\n"
@@ -87,6 +94,11 @@ static void usage(const char *prog) {
         "Options:\n"
         "  -c CMD         Execute CMD and exit\n"
         "  -i             Force interactive mode\n"
+        "  --intent       Let -c answer plain-English intents, as the prompt does\n"
+        "  --intent-check LINE\n"
+        "                 Exit 0 if LINE is an intent synsh answers itself,\n"
+        "                 %d if it is not. Runs nothing, prints nothing.\n"
+        "  --toolinfo     Print the tools resolved from $PATH (for AI prompts)\n"
         "  --no-ai        Disable AI translation (pure shell mode)\n"
         "  --no-confirm   Run AI-suggested commands without confirmation\n"
         "  --no-color     Disable colored output\n"
@@ -105,7 +117,7 @@ static void usage(const char *prog) {
         "  syn explain          Explain the last command run\n"
         "  syn history          Show AI query history\n"
         "  cd, exit, help, ...  Standard builtins\n",
-        prog
+        prog, SYNSH_NO_INTENT
     );
 }
 
@@ -144,7 +156,7 @@ static int run_interactive(synsh_state_t *s) {
          * model round-trip, and should still work with the daemon down. */
         {
             int ic = 0;
-            if (synsh_intent(s, line, &ic)) {
+            if (synsh_intent(s, line, &ic, false)) {
                 s->last_exit = ic;
                 free(line);
                 continue;
@@ -265,13 +277,18 @@ int main(int argc, char *argv[]) {
     int force_interactive = 0;
     int no_ai = 0;
     int no_color = 0;
+    int cmd_intents = 0;
+    char *intent_check = NULL;
     char *cmd_string = NULL;
     char *script_path = NULL;
 
     static struct option long_opts[] = {
-        {"no-ai",      no_argument,       0, 0},
-        {"no-confirm", no_argument,       0, 0},
-        {"no-color",   no_argument,       0, 0},
+        {"no-ai",       no_argument,       0, 0},
+        {"no-confirm",  no_argument,       0, 0},
+        {"no-color",    no_argument,       0, 0},
+        {"intent",      no_argument,       0, 0},
+        {"intent-check", required_argument, 0, 0},
+        {"toolinfo",    no_argument,       0, 0},
         {"verbose",    no_argument,       0, 'v'},
         {"version",    no_argument,       0, 'V'},
         {"help",       no_argument,       0, 'h'},
@@ -288,6 +305,17 @@ int main(int argc, char *argv[]) {
                 g_state.ai_confirm = 0;
             else if (strcmp(long_opts[longidx].name, "no-color") == 0)
                 no_color = 1;  /* applied after the rc load, so it wins */
+            else if (strcmp(long_opts[longidx].name, "intent") == 0)
+                cmd_intents = 1;
+            else if (strcmp(long_opts[longidx].name, "intent-check") == 0)
+                intent_check = optarg;
+            else if (strcmp(long_opts[longidx].name, "toolinfo") == 0) {
+                /* Before init: this resolves $PATH and nothing else, and the
+                 * caller (synui's command bar, building its prompt) is on an
+                 * event loop. Same contract as --intent-check. */
+                puts(synsh_intent_toolinfo());
+                return 0;
+            }
             break;
         case 'c': cmd_string = optarg; break;
         case 'i': force_interactive = 1; break;
@@ -310,6 +338,23 @@ int main(int argc, char *argv[]) {
     }
 
     if (no_ai) g_state.synapd_connected = 0;
+
+    /*
+     * --intent-check: answer and get out, before anything with a cost.
+     *
+     * Deliberately above synapd_connect(), the rc load and history: the caller
+     * is synui's command bar, which runs this synchronously on its event loop
+     * to choose between synsh and the model, and a compositor that blocks is a
+     * frozen desktop. Matching needs the normalise-and-compare table and $PATH,
+     * nothing else — so it must not pay for a socket to a daemon it will never
+     * speak to. (synapd_connect() to a dead daemon is the exact stall this
+     * would have introduced.)
+     */
+    if (intent_check) {
+        int ignored = 0;
+        return synsh_intent(&g_state, intent_check, &ignored, true)
+               ? 0 : SYNSH_NO_INTENT;
+    }
 
     /* Determine mode */
     g_state.interactive = force_interactive ||
@@ -378,8 +423,19 @@ int main(int argc, char *argv[]) {
     int exit_code = 0;
 
     if (cmd_string) {
-        /* -c mode: run single command string */
-        exit_code = execute_command_line(&g_state, cmd_string);
+        /* -c mode: run single command string.
+         *
+         * Intents only when asked for. -c is the interface scripts use, and
+         * there they mean shell: the tables claim bare words like `date`, `df`
+         * and `uptime`, so answering them here would quietly turn `synsh -c
+         * date` from the date(1) everyone expects into prose. Interactive input
+         * is a person talking and gets them unconditionally; -c is a program
+         * talking and has to say --intent to mean it. synui's command bar does. */
+        int ic = 0;
+        if (cmd_intents && synsh_intent(&g_state, cmd_string, &ic, false))
+            exit_code = ic;
+        else
+            exit_code = execute_command_line(&g_state, cmd_string);
     } else if (script_path) {
         /* Script mode */
         exit_code = run_script(&g_state, script_path);

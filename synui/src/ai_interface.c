@@ -35,8 +35,10 @@
 #include <fcntl.h>
 #include <time.h>
 #include <pthread.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <sys/syscall.h>
 #include <stdatomic.h>
 
@@ -634,9 +636,18 @@ static int cmdcap_readable(int fd, uint32_t mask, void *data)
     return 0;
 }
 
-/* fork+exec `cmd` with its output on a pipe we drain. Returns false only if the
- * command could not be started at all; the caller still owns bar->response. */
-static bool cmdcap_run(syn_server_t *s, const char *cmd)
+/*
+ * fork+exec `path` with argv[] and its output on a pipe we drain. Returns false
+ * only if the command could not be started at all; the caller still owns
+ * bar->response.
+ *
+ * argv, not a command string, because one caller passes the user's own words
+ * (see cmdbar_submit): building a shell line out of those means quoting them,
+ * and a line with an apostrophe in it — "what's running" — either breaks or,
+ * worse, doesn't.
+ */
+static bool cmdcap_spawn(syn_server_t *s, const char *path,
+                         const char *const argv[])
 {
     int pfd[2];
     /* O_CLOEXEC: this pipe must not leak into the *next* CMD: child, which
@@ -664,7 +675,7 @@ static bool cmdcap_run(syn_server_t *s, const char *cmd)
         int devnull = open("/dev/null", O_RDONLY);
         if (devnull >= 0) { dup2(devnull, STDIN_FILENO); close(devnull); }
         synui_child_reset_signals();
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
+        execvp(path, (char *const *)argv);
         _exit(127);
     }
 
@@ -683,6 +694,15 @@ static bool cmdcap_run(syn_server_t *s, const char *cmd)
                                   cmdcap_readable, c);
     if (!c->src) { cmdcap_free(c); return false; }
     return true;
+}
+
+/* A shell command line, captured the same way. This is the CMD: path: what the
+ * model returns is a *shell fragment* — pipes, redirects and quoting are the
+ * point of it — so it has to reach a shell to mean anything. */
+static bool cmdcap_run(syn_server_t *s, const char *cmd)
+{
+    const char *argv[] = { "sh", "-c", cmd, NULL };
+    return cmdcap_spawn(s, "/bin/sh", argv);
 }
 
 /*
@@ -775,21 +795,142 @@ void execute_ai_action(syn_server_t *s, const char *response)
     strncpy(s->cmdbar.response, response, sizeof(s->cmdbar.response) - 1);
 }
 
+/*
+ * Would synsh answer this itself?
+ *
+ * The bar and synsh take the same kind of input, and synsh already knows the
+ * answers to the common ones — that music here means cliamp, that packages mean
+ * pacman, that "disk space" is `df -h`. The bar knew none of it, so every line
+ * went to the model, and the model does not know what is installed: asked to
+ * play music it suggests whatever players existed on the internet, which is how
+ * Super+Space could not play music while the prompt could.
+ *
+ * The question goes to `synsh --intent-check` rather than to a table of our own
+ * because two tables become two behaviours. This is the one place both agree.
+ *
+ * Synchronous, on the wl_event_loop, which is normally the thing you must never
+ * do — but --intent-check exists to be called this way: it matches against
+ * $PATH and exits before touching synapd, in ~1ms. The alternative is spending
+ * a 35-123s model round trip to be told the time.
+ */
+static bool synsh_claims(const char *line)
+{
+    /*
+     * Block SIGCHLD BEFORE the fork, not after it.
+     *
+     * SIGCHLD is a real async handler here (signal(SIGCHLD, reap_children) in
+     * synui_main.c), and it waitpid(-1)s every child it can. This is the one
+     * child in the file whose exit STATUS is the answer, so it must not be
+     * reaped out from under us — and --intent-check exits in about a
+     * millisecond, so "after the fork" is not early enough: the child can be
+     * dead and reaped before the next line runs, leaving waitpid() with ECHILD
+     * and this function guessing.
+     *
+     * The child clears the mask in synui_child_reset_signals() — a blocked mask
+     * survives exec, and synsh must not inherit one.
+     */
+    sigset_t chld, prev;
+    sigemptyset(&chld);
+    sigaddset(&chld, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &chld, &prev);
+
+    pid_t pid = fork();
+    if (pid < 0) {                  /* can't ask: let the model have it */
+        sigprocmask(SIG_SETMASK, &prev, NULL);
+        return false;
+    }
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > 2) close(devnull);
+        }
+        synui_child_reset_signals();
+        execlp("synsh", "synsh", "--intent-check", line, (char *)NULL);
+        _exit(127);
+    }
+
+    int st = 0;
+    pid_t r;
+    while ((r = waitpid(pid, &st, 0)) < 0 && errno == EINTR)
+        ;
+
+    sigprocmask(SIG_SETMASK, &prev, NULL);
+
+    if (r != pid || !WIFEXITED(st)) return false;
+    /* 0 = mine. 70 = not an intent. 127 = synsh is not installed — both mean
+     * the model, which is exactly what happened before this existed. */
+    return WEXITSTATUS(st) == 0;
+}
+
+/*
+ * What is actually installed, for the prompt — synsh's answer, not ours.
+ *
+ * Without it the model recommends software from the internet at large: asked
+ * about disk usage it has offered gnome-disks, zenity and kde-disk-manager on a
+ * box that has none of them. synsh already resolves this list from $PATH to
+ * keep its own prompt honest, so the bar asks synsh rather than growing a
+ * second list that can disagree with the first.
+ *
+ * Resolved once and cached: $PATH does not change under a running compositor,
+ * and this is the same synchronous-fork bargain as synsh_claims() — worth it
+ * once, not per keystroke. "" if synsh is missing, which just restores the old
+ * prompt rather than failing the query.
+ */
+static const char *synsh_toolinfo(void)
+{
+    static char buf[512];
+    static bool done = false;
+    if (done) return buf;
+    done = true;
+
+    /* popen, not the fork/waitpid dance above: the output is the whole answer
+     * and the exit status is irrelevant, so reap_children() stealing the child
+     * from pclose() costs us nothing. */
+    FILE *f = popen("synsh --toolinfo 2>/dev/null", "r");
+    if (!f) return buf;
+    if (fgets(buf, sizeof(buf), f)) buf[strcspn(buf, "\n")] = '\0';
+    pclose(f);
+    if (buf[0]) wlr_log(WLR_INFO, "cmdbar: tools: %s", buf);
+    return buf;
+}
+
 void cmdbar_submit(syn_server_t *s)
 {
     syn_cmdbar_t *bar = &s->cmdbar;
     if (!bar->input_len) return;
 
-    bar->waiting = 1;
-    strncpy(bar->response, "⟳ thinking…", sizeof(bar->response) - 1);
-
     /* The last command's output is not an answer to this question. Drop it as
      * the question is asked, not when the next output lands: the reply may be
      * plain text or a GUI launch, neither of which writes a row. A capture
      * still draining from the previous command carries an older generation and
-     * so cannot repopulate these either (see cmdcap_run). */
+     * so cannot repopulate these either (see cmdcap_spawn). */
     bar->out_lines = 0;
     bar->out_more  = 0;
+
+    /*
+     * Intents first, and note this runs BEFORE bar->waiting is set: synsh
+     * answers now, not eventually, so the bar must not be left saying
+     * "thinking…" about a question already answered.
+     *
+     * --intent, because synsh's -c is the shell interface and means shell
+     * there; this is the caller that wants the prompt's behaviour instead.
+     * Output lands in the bar through the same capture as CMD:, so `df -h`
+     * prints its rows and cliamp reports the terminal it opened.
+     */
+    if (synsh_claims(bar->input)) {
+        wlr_log(WLR_INFO, "cmdbar: synsh intent: %s", bar->input);
+        const char *argv[] = { "synsh", "--intent", "-c", bar->input, NULL };
+        snprintf(bar->response, sizeof(bar->response), "▸ %s", bar->input);
+        if (!cmdcap_spawn(s, "synsh", argv))
+            snprintf(bar->response, sizeof(bar->response),
+                     "could not run synsh: %s", bar->input);
+        return;
+    }
+
+    bar->waiting = 1;
+    strncpy(bar->response, "⟳ thinking…", sizeof(bar->response) - 1);
 
     /* Build prompt with compositor context. focused_window is only present when
      * the bar was opened with Super+Backspace (cmdbar_ask_window), which is what
@@ -799,12 +940,22 @@ void cmdbar_submit(syn_server_t *s)
         snprintf(focus_line, sizeof(focus_line),
                  "focused_window: %s\n", bar->ctx);
 
+    /* The tool line is what stops CMD: naming programs this machine has never
+     * had; the Arch line is the same correction synsh's prompt carries, because
+     * a model asked to install something reaches for apt-get by default and the
+     * suggestion looks perfectly reasonable until you run it. */
+    const char *tools = synsh_toolinfo();
+
     char prompt[1024];
     snprintf(prompt, sizeof(prompt),
         "[COMPOSITOR_CMD]\n"
         "workspace: %s\n"
         "%s"
+        "%s%s%s"
         "request: %s\n"
+        "\n"
+        "This is Arch Linux. Use only programs listed above as installed;\n"
+        "if none fits, say so rather than naming one that is not there.\n"
         "\n"
         "Respond with one of:\n"
         "CMD: <shell command to run>\n"
@@ -813,6 +964,7 @@ void cmdbar_submit(syn_server_t *s)
         "Or plain text to display as answer.",
         server_active_workspace(s)->name,
         focus_line,
+        tools[0] ? "installed: " : "", tools, tools[0] ? "\n" : "",
         bar->input
     );
 
