@@ -10,6 +10,11 @@ Documentation=https://github.com/velle999/SYNAPSE
 After=local-fs.target network.target
 Before=display-manager.service synguard.service synnet.service
 Wants=local-fs.target
+# nvidia-persistenced keeps the driver initialized and the device nodes
+# present. Wants= (not Requires=) so we still start on non-NVIDIA hardware,
+# where this unit does not exist.
+Wants=nvidia-persistenced.service
+After=nvidia-persistenced.service
 
 [Service]
 Type=simple
@@ -17,6 +22,18 @@ User=root
 
 ExecStartPre=/bin/mkdir -p /run/synapd /var/lib/synapd /var/log/synapd
 ExecStartPre=/bin/chmod 0755 /run/synapd
+# Create /dev/nvidia0 + /dev/nvidiactl before we probe for CUDA.
+#
+# nvidia-utils ships modules-load.d/nvidia-utils.conf, which inserts nvidia_uvm
+# at boot and so creates /dev/nvidia-uvm early. That trips the TEST!=/dev/nvidia-uvm
+# guard in 60-nvidia.rules, and udev then never creates the real nodes. They
+# normally appear only when some process calls setuid nvidia-modprobe on demand
+# — which NoNewPrivileges=true forbids us from doing. synapd starts before any
+# other CUDA client, so without this it finds no nodes, cannot make them, and
+# silently falls back to CPU on every boot (~100x slower).
+#
+# Leading '-' so a machine with no NVIDIA GPU still starts. Needs CAP_MKNOD.
+ExecStartPre=-/usr/bin/nvidia-modprobe -c 0 -u
 ExecStart=/usr/bin/synapd \
     --foreground \
     --model /var/lib/synapd/models/synapse.gguf \
@@ -58,6 +75,10 @@ SyslogIdentifier=synapd
 #   MemoryDenyWriteExecute— CUDA generates code at runtime
 #   ProtectSystem=strict  — would make /run and /var read-only; `full` gives us
 #                           read-only /usr + /etc without that fallout
+#
+# NoNewPrivileges=true stays ON. It does neuter the setuid bit on
+# nvidia-modprobe, but we run as User=root and so need no escalation to run it —
+# only CAP_MKNOD, which is why that capability is in the bounding set below.
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
@@ -65,7 +86,8 @@ PrivateTmp=true
 ProtectHostname=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-CapabilityBoundingSet=CAP_SYS_MODULE CAP_IPC_LOCK CAP_CHOWN CAP_DAC_OVERRIDE CAP_SYS_NICE
+# CAP_MKNOD lets the nvidia-modprobe ExecStartPre create /dev/nvidia*.
+CapabilityBoundingSet=CAP_SYS_MODULE CAP_IPC_LOCK CAP_CHOWN CAP_DAC_OVERRIDE CAP_SYS_NICE CAP_MKNOD
 
 [Install]
 WantedBy=multi-user.target
