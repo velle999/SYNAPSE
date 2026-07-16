@@ -179,6 +179,16 @@ static cairo_surface_t *wallpaper_decode(const char *path)
 
 /* ── Scaling + paint ─────────────────────────────────────── */
 
+/* Indexed by syn_wallpaper_mode_t — keep in step with the enum in synui.h.
+ * Used by the config parser and by the Super+W picker's mode row. */
+const char *const syn_wallpaper_mode_names[SYN_WALLPAPER_MODE_COUNT] = {
+    [SYN_WALLPAPER_FILL]    = "fill",
+    [SYN_WALLPAPER_FIT]     = "fit",
+    [SYN_WALLPAPER_STRETCH] = "stretch",
+    [SYN_WALLPAPER_CENTER]  = "center",
+    [SYN_WALLPAPER_TILE]    = "tile",
+};
+
 static void wallpaper_paint_box(cairo_t *cr, cairo_surface_t *src,
                                  int dst_w, int dst_h,
                                  syn_wallpaper_mode_t mode)
@@ -186,6 +196,24 @@ static void wallpaper_paint_box(cairo_t *cr, cairo_surface_t *src,
     int sw = cairo_image_surface_get_width(src);
     int sh = cairo_image_surface_get_height(src);
     if (sw <= 0 || sh <= 0) return;
+
+    if (mode == SYN_WALLPAPER_TILE) {
+        /* Repeat at 1:1 from the top-left. This cannot go through the
+         * translate+scale path below: the repeat belongs to the pattern, not
+         * to the transform.
+         *
+         * NEAREST, not GOOD: a tile is meant to butt up seamlessly, and a
+         * filter that samples across the wrap boundary draws a visible seam
+         * along every tile edge. */
+        cairo_save(cr);
+        cairo_set_source_surface(cr, src, 0, 0);
+        cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+        cairo_rectangle(cr, 0, 0, dst_w, dst_h);
+        cairo_fill(cr);
+        cairo_restore(cr);
+        return;
+    }
 
     double sx = 1.0, sy = 1.0, ox = 0.0, oy = 0.0;
     switch (mode) {
@@ -365,6 +393,24 @@ void wallpaper_state_load(syn_config_t *cfg)
         while (*p == ' ' || *p == '\t') p++;
         if (*p) wallpaper_apply_token(cfg, p);
     }
+    /* Optional second line, "mode <name>", written by the Super+W picker.
+     * Older state files have only the token line and still load — an absent
+     * second line just leaves synuirc's wallpaper_mode standing. */
+    if (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "mode ", 5) == 0) {
+            p += 5;
+            while (*p == ' ' || *p == '\t') p++;
+            for (int m = 0; m < SYN_WALLPAPER_MODE_COUNT; m++) {
+                if (strcmp(p, syn_wallpaper_mode_names[m]) == 0) {
+                    cfg->wallpaper_mode = (syn_wallpaper_mode_t)m;
+                    break;
+                }
+            }
+        }
+    }
     fclose(f);
 }
 
@@ -388,5 +434,12 @@ void wallpaper_state_save(syn_server_t *s)
         fputs("none\n", f);
     else
         fprintf(f, "%s\n", s->config.wallpaper);
+    /* Second line: the picker's scaling choice. wallpaper_state_load() ignores
+     * this line if absent, so a state file written by an older synui still
+     * loads. */
+    if (s->config.wallpaper_mode >= 0 &&
+        s->config.wallpaper_mode < SYN_WALLPAPER_MODE_COUNT)
+        fprintf(f, "mode %s\n",
+                syn_wallpaper_mode_names[s->config.wallpaper_mode]);
     fclose(f);
 }

@@ -502,7 +502,13 @@ typedef enum {
     SYN_WALLPAPER_FIT,        /* contain, letterboxed */
     SYN_WALLPAPER_STRETCH,    /* non-uniform scale to exact size */
     SYN_WALLPAPER_CENTER,     /* 1:1, cropped/padded */
+    SYN_WALLPAPER_TILE,       /* 1:1, repeated from the top-left */
+    SYN_WALLPAPER_MODE_COUNT, /* keep last — the Super+W picker cycles on it */
 } syn_wallpaper_mode_t;
+
+/* Names for the picker and the config parser, indexed by syn_wallpaper_mode_t.
+ * Defined in wallpaper.c; keep in step with the enum above. */
+extern const char *const syn_wallpaper_mode_names[SYN_WALLPAPER_MODE_COUNT];
 
 /* Which wallpaper backend paints the background. IMAGE is the static
  * wallpaper.c path (config `wallpaper` = a file path, or empty = solid
@@ -640,7 +646,9 @@ typedef struct {
     int   power_blank;          /* DPMS the outputs off */
     int   power_lock;           /* run power_lock_cmd */
     int   power_suspend;        /* run power_suspend_cmd; default 0 (never) */
-    char  power_lock_cmd[192];
+    /* 512, not 192: the themed swaylock invocation is ~320 chars and snprintf
+     * would have truncated it mid-flag, silently. */
+    char  power_lock_cmd[512];
 
     /* Wi-Fi / network configuration UI. nmtui in a terminal by default: synui
      * has no text entry to type a passphrase into, so there is nothing native
@@ -967,6 +975,9 @@ struct syn_server {
     struct wl_event_source     *sigterm_src;
     struct wl_event_source     *sighup_src;
     struct wlr_backend         *backend;
+    /* The DRM session, kept so Ctrl+Alt+F1..F12 can change VT. NULL under a
+     * nested/headless backend, where there is no VT to change to. */
+    struct wlr_session         *session;
     struct wlr_renderer        *renderer;
     struct wlr_allocator       *allocator;
     struct syn_effects         *effects;   /* GLES post-process (effects.c); NULL = unavailable */

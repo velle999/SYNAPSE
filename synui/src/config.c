@@ -412,8 +412,27 @@ void synui_config_load(syn_config_t *cfg)
     cfg->power_suspend = 0;
     /* The pgrep guard keeps a second idle period from stacking another
      * swaylock on top of the one already covering the screen. */
+    /* `-c 000000` alone drew a featureless black rectangle with no indicator
+     * until a key was pressed, so a lock was indistinguishable from a dead or
+     * blanked screen — "it didn't go to a lock screen, it blacked out". Give it
+     * the SynapseOS neon and keep the ring on screen (--indicator-idle-visible)
+     * so it is obviously asking for a password, and so a wrong one is visibly
+     * wrong (--ring-wrong-color) rather than silent.
+     *
+     * swaylock 1.8.6 has no --clock. */
+    /* NB: there is no bare `--indicator` in swaylock 1.8.6. getopt_long treats
+     * it as an ambiguous prefix of --indicator-radius/-thickness/-idle-visible/
+     * -caps-lock/-x-position/-y-position, prints usage and EXITS — so passing
+     * it means no lock screen appears at all. --indicator-idle-visible alone is
+     * what keeps the ring on screen. */
     snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd),
-             "pgrep -x swaylock >/dev/null || swaylock -f -c 000000");
+             "pgrep -x swaylock >/dev/null || swaylock -f -c 000814"
+             " --indicator-idle-visible"
+             " --indicator-radius 110 --indicator-thickness 8"
+             " --ring-color 00ffff --ring-ver-color ff00c8"
+             " --ring-wrong-color ff3355 --key-hl-color ff00c8"
+             " --inside-color 080814 --text-color 00ffff"
+             " --line-color 080814 --separator-color 080814");
     snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
              "systemctl suspend");
 
@@ -613,10 +632,13 @@ void synui_config_load(syn_config_t *cfg)
             }
         }
         else if (strcmp(key, "wallpaper_mode") == 0) {
-            if      (strcmp(val, "fill")    == 0) cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
-            else if (strcmp(val, "fit")     == 0) cfg->wallpaper_mode = SYN_WALLPAPER_FIT;
-            else if (strcmp(val, "stretch") == 0) cfg->wallpaper_mode = SYN_WALLPAPER_STRETCH;
-            else if (strcmp(val, "center")  == 0) cfg->wallpaper_mode = SYN_WALLPAPER_CENTER;
+            /* Driven off syn_wallpaper_mode_names so a new mode only has to be
+             * added to the enum and that table — this parser and the Super+W
+             * picker both pick it up for free, instead of drifting apart. */
+            int found = -1;
+            for (int m = 0; m < SYN_WALLPAPER_MODE_COUNT; m++)
+                if (strcmp(val, syn_wallpaper_mode_names[m]) == 0) { found = m; break; }
+            if (found >= 0) cfg->wallpaper_mode = (syn_wallpaper_mode_t)found;
             else wlr_log(WLR_ERROR, "synui: wallpaper_mode: unknown '%s'", val);
         }
         else if (strcmp(key, "power_enabled") == 0)

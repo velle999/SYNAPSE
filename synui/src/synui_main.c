@@ -1078,7 +1078,11 @@ int synui_init(syn_server_t *s)
                                               handle_reload_signal, s);
 
     /* Create wlroots backend */
-    s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display), NULL);
+    /* Keep the session (2nd arg) instead of discarding it: it is what
+     * wlr_session_change_vt() needs, and without a VT switch there is no way
+     * off a session whose lock client will not let you back in. */
+    s->backend = wlr_backend_autocreate(wl_display_get_event_loop(s->display),
+                                        &s->session);
     if (!s->backend) {
         fprintf(stderr, "synui: wlr_backend_autocreate() failed (WLR_BACKENDS=%s WLR_RENDERER=%s)\n",
                 getenv("WLR_BACKENDS") ? getenv("WLR_BACKENDS") : "(auto)",

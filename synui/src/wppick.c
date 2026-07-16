@@ -287,6 +287,22 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             synui_render_wppick(s);
         }
         return 1;
+    case XKB_KEY_m:
+        /* Cycle fill → fit → stretch → center → tile. The mode was previously
+         * only reachable by hand-editing synuirc's wallpaper_mode, which is why
+         * nobody knew stretch and center already existed.
+         *
+         * Repaint every output rather than just the selected entry: the mode is
+         * global, so a live preview has to show on all of them. */
+        s->config.wallpaper_mode =
+            (s->config.wallpaper_mode + 1) % SYN_WALLPAPER_MODE_COUNT;
+        wallpaper_reload(s);
+        syn_output_t *wo;
+        wl_list_for_each(wo, &s->outputs, link)
+            wlr_output_schedule_frame(wo->wlr_output);
+        wallpaper_state_save(s);
+        synui_render_wppick(s);
+        return 1;
     case XKB_KEY_r:
         /* Rescan without closing — for when you have just saved an image into
          * ~/Pictures and want it in the list. */

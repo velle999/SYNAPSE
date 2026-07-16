@@ -51,6 +51,7 @@
 #include <linux/input-event-codes.h>
 #include <xkbcommon/xkbcommon-names.h>
 #include <wlr/backend/libinput.h>
+#include <wlr/backend/session.h>
 #include <wlr/util/edges.h>
 #include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
@@ -713,6 +714,33 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     uint32_t modifiers = wlr_keyboard_get_modifiers(wlr_kb);
 
     bool handled = false;
+
+    /* ── VT switch (Ctrl+Alt+F1..F12) ──────────────────────────────────
+     *
+     * Deliberately handled BEFORE the locked check below, and before every
+     * other binding. This is the escape hatch, and the case it exists for is
+     * precisely the one where the session is locked: swaylock is spawned with
+     * `-c 000000`, so a lock that will not take your password is an entirely
+     * black screen with no way off it. synui had no VT switch at all, so
+     * Ctrl+Alt+F2 did nothing and a hard reboot was the only exit. That is not
+     * hypothetical — three rejected passwords in a row trip pam_faillock
+     * (deny=3, unlock_time=600), after which the *correct* password is refused
+     * for ten minutes and the screen looks identical.
+     *
+     * Safe while locked: the TTY has its own login, and this session stays
+     * locked behind us. Every other compositor does this for the same reason.
+     */
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && s->session) {
+        for (int i = 0; i < nsyms; i++) {
+            if (syms[i] >= XKB_KEY_XF86Switch_VT_1 &&
+                syms[i] <= XKB_KEY_XF86Switch_VT_12) {
+                unsigned vt = syms[i] - XKB_KEY_XF86Switch_VT_1 + 1;
+                wlr_log(WLR_INFO, "synui: switching to VT %u", vt);
+                wlr_session_change_vt(s->session, vt);
+                return;
+            }
+        }
+    }
 
     /* While the session is locked, compositor bindings are disabled and keys
      * go straight to the lock surface (which holds keyboard focus). */

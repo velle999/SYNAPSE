@@ -824,6 +824,23 @@ void synui_render_wppick(syn_server_t *s)
     cairo_move_to(cr, 18, 30);
     cairo_show_text(cr, "WALLPAPER");
 
+    /* Scaling mode, right-aligned on the title row. fill/fit/stretch/center
+     * existed for ages but only as a synuirc key, so nobody knew they were
+     * there — show the current one and how to change it. */
+    {
+        syn_wallpaper_mode_t m = s->config.wallpaper_mode;
+        const char *mname = (m >= 0 && m < SYN_WALLPAPER_MODE_COUNT)
+                            ? syn_wallpaper_mode_names[m] : "?";
+        char label[64];
+        snprintf(label, sizeof(label), "[m] %s", mname);
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, label, &te);
+        cairo_set_source_rgba(cr, 0.75, 0.55, 0.95, 1.0);
+        cairo_move_to(cr, pw - 18 - te.width, 30);
+        cairo_show_text(cr, label);
+    }
+
     /* Separator */
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
     cairo_set_line_width(cr, 1);
