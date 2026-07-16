@@ -273,6 +273,14 @@ static void seed_default_binds(syn_config_t *cfg)
         { "shift+print",     "spawn synui-screenshot region" },
         { "ctrl+print",      "spawn synui-screenshot full" },
         { "super+shift+s",   "spawn synui-screenshot region" },
+        /* The USB volume knob (LCTECH LCKEY) reports plain KEY_VOLUMEUP /
+         * KEY_VOLUMEDOWN / KEY_MUTE, which the evdev keymap turns into these
+         * XF86Audio keysyms with no modifier held. synui had no audio binds at
+         * all, so the knob's events reached the bind table and matched nothing.
+         * Bare-key binds are fine here — `print` above is one. */
+        { "xf86audioraisevolume", "volume up" },
+        { "xf86audiolowervolume", "volume down" },
+        { "xf86audiomute",        "volume mute" },
         { "super+g",         "game" },
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },

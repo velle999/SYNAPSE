@@ -564,6 +564,20 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         dispcfg_toggle(s);
     } else if (strcmp(action, "wallpaper") == 0) {
         wppick_toggle(s);
+    } else if (strcmp(action, "volume") == 0) {
+        /* wpctl asks WirePlumber, which owns the sink, rather than poking ALSA
+         * behind PipeWire's back. @DEFAULT_AUDIO_SINK@ is resolved at run time,
+         * so the knob follows the sink the user actually switched to instead of
+         * a device id captured when synui started. -l caps the raise at 100%:
+         * without it a spun knob keeps climbing into software gain and clips. */
+        if (arg && strcmp(arg, "up") == 0)
+            spawn("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+");
+        else if (arg && strcmp(arg, "down") == 0)
+            spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-");
+        else if (arg && strcmp(arg, "mute") == 0)
+            spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+        else
+            wlr_log(WLR_ERROR, "synui: volume: bad arg '%s'", arg ? arg : "");
     } else if (strcmp(action, "power") == 0) {
         power_toggle(s);
     } else if (strcmp(action, "taskmgr") == 0) {
@@ -757,6 +771,15 @@ static xkb_keysym_t numpad_digit(xkb_keysym_t sym)
     }
 }
 
+/* The keys a volume knob sends. Called out because these have to dispatch
+ * ahead of the modal panels — see keyboard_handle_key. */
+static bool is_volume_key(xkb_keysym_t sym)
+{
+    return sym == XKB_KEY_XF86AudioRaiseVolume ||
+           sym == XKB_KEY_XF86AudioLowerVolume ||
+           sym == XKB_KEY_XF86AudioMute;
+}
+
 /* Run the first bind whose (mods, sym) matches. */
 static bool bind_dispatch(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
@@ -859,6 +882,24 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         wlr_seat_keyboard_notify_key(s->seat, event->time_msec,
                                       event->keycode, event->state);
         return;
+    }
+
+    /* ── Volume keys ──────────────────────────────────────────────────
+     *
+     * Dispatched ahead of the command bar and every modal panel, because all
+     * of those swallow unmodified keys wholesale (`default: return 1`) — and a
+     * knob that stops working because the power panel happens to be open is not
+     * a knob. Hoisting is safe: these keysyms exist only on media keys, so
+     * jumping the queue cannot shadow a Super+… bind or steal a typed
+     * character from the cmdbar's text entry.
+     *
+     * Below the `s->locked` check on purpose: while locked, synui disables its
+     * bindings by contract and keys belong to the lock surface.
+     */
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        for (int i = 0; i < nsyms; i++)
+            if (is_volume_key(syms[i]) && bind_dispatch(s, syms[i], 0))
+                return;
     }
 
     /* Command bar absorbs all input when open */
