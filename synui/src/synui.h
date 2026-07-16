@@ -751,6 +751,12 @@ struct syn_view {
     int minimized;
     int x, y, w, h;
 
+    /* When this view was last focused, from the server's focus_counter. Higher
+     * is more recent; 0 means never focused. This is what Alt+Tab orders by —
+     * the workspace list is in stacking order, which is not the order anyone
+     * means by "the last window I was in". */
+    uint64_t focus_seq;
+
     win_security_t   security;
     syn_ai_ctx_t     ai_ctx;
 
@@ -1098,6 +1104,22 @@ struct syn_server {
         int  selected;                    /* hovered item, -1 = none */
         int  x, y, w, h;                  /* menu rect, layout coords */
     } dockmenu;
+
+    /* Alt+Tab (input.c). focus_counter stamps syn_view::focus_seq on every real
+     * focus change, which is the most-recently-used order Alt+Tab walks.
+     *
+     * `active` means Alt is still held mid-cycle. While it is set, focus_view()
+     * deliberately does NOT stamp focus_seq: the running order has to stay
+     * still while you tab through it, or the list would reshuffle under you and
+     * a second Tab would bounce back to where you started. The stamp lands once
+     * on release. `depth` is how many steps back we have walked; there is no
+     * snapshot of views to dangle — the candidate list is rebuilt from live
+     * views on each press. */
+    struct {
+        bool     active;
+        int      depth;
+    } alttab;
+    uint64_t focus_counter;
 
     /* Scene-graph z-order (bottom→top): bg_rect, wallpaper_tree,
      * layer[BACKGROUND], layer[BOTTOM], window_tree, layer[TOP],

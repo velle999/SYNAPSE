@@ -124,9 +124,12 @@ welcome_at_startup = on
 # Mods: super/logo/mod4, shift, ctrl, alt. Keys are XKB keysym names
 # (q, return, space, tab, backspace, f1, ...).
 # Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
-#          layout_cycle, focus_next/prev, stack_next/prev,
+#          layout_cycle, focus_next/prev, alt_tab, alt_tab_prev,
+#          stack_next/prev,
 #          master_shrink/grow, float_toggle, maximize_toggle, ai_ask,
 #          ws <1-9>, movews <1-9>
+# alt_tab = focus the last-used window (most-recently-used order); hold alt and
+# press tab again to keep going back. Bound to alt+tab / alt+shift+tab.
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
 # menu = the SYNAPSE OS welcome menu (default super+escape).

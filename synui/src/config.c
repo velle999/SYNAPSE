@@ -17,7 +17,8 @@
  * off or with Shift held), so input.c maps them back. Bind "super+kp_1"
  * explicitly to give the keypad key its own action.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
- * layout_cycle, focus_next/prev, stack_next/prev, master_shrink/grow,
+ * layout_cycle, focus_next/prev, alt_tab, alt_tab_prev, stack_next/prev,
+ * master_shrink/grow,
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
@@ -231,6 +232,11 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+q",         "close" },
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },
+        /* Alt+Tab is most-recently-used order (alt_tab), not the stacking-order
+         * walk that super+j/k do — "the window I was just in" is the whole
+         * reason the key exists. */
+        { "alt+tab",         "alt_tab" },
+        { "alt+shift+tab",   "alt_tab_prev" },
         { "super+h",         "master_shrink" },
         { "super+shift+l",   "master_grow" },
         { "super+l",         "lock" },

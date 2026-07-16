@@ -12,6 +12,9 @@
  *   Super+Q              Close focused window
  *   Super+Shift+Q        Quit synui
  *   Super+Tab            Cycle layout (tile → floating → monocle → AI → tile)
+ *   Alt+Tab              Focus the last-used window; hold Alt + Tab to go back
+ *                        further (Alt+Shift+Tab forward). MRU order, not the
+ *                        stacking-order walk Super+J/K do.
  *   Super+J/K            Focus next/prev window
  *   Super+Shift+J/K      Move window down/up the stack
  *   Super+H/Shift+L      Shrink / grow the master column
@@ -92,6 +95,15 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
     syn_view_t *prev = s->focused_view;
     s->focused_view = view;
 
+    /* Stamp the most-recently-used order Alt+Tab walks — but NOT while a cycle
+     * is running. Each Tab focuses a view for real (you see it, it takes your
+     * keys), and stamping that would make the window you just tabbed to the
+     * most recent one, so the next Tab would tab straight back to it and the
+     * cycle could never reach a third window. The stamp for the whole cycle
+     * lands once, on release, in alttab_finish(). */
+    if (!s->alttab.active)
+        view->focus_seq = ++s->focus_counter;
+
     /* L3: brief chromatic-aberration pulse on an actual focus change. */
     if (prev != view)
         effects_notify_focus(s);
@@ -167,10 +179,24 @@ void view_set_security(syn_view_t *view, win_security_t state)
 }
 
 /* ── Keyboard ────────────────────────────────────────────── */
+static void alttab_finish(syn_server_t *s);   /* defined with the rest of Alt+Tab */
+
 static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
 {
     (void)data;
     syn_keyboard_t *kb = wl_container_of(listener, kb, modifiers);
+
+    /* Alt let go ends an Alt+Tab cycle and commits the window we landed on.
+     *
+     * This is the only place that can see it: a modifier release produces a
+     * modifiers event, not a key event, so keyboard_handle_key never hears
+     * about it. Checked before the IME early-return — a cycle left "active"
+     * because fcitx5 happened to be grabbing the keyboard would freeze the MRU
+     * order for every later focus change, which is a far stranger bug than any
+     * it could save. */
+    if (kb->server->alttab.active &&
+        !(wlr_keyboard_get_modifiers(kb->wlr_keyboard) & WLR_MODIFIER_ALT))
+        alttab_finish(kb->server);
 
     /* While the IME holds the keyboard, modifiers go to it, not the client. */
     if (ime_handle_modifiers(kb->server, kb->wlr_keyboard))
@@ -179,6 +205,86 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
     wlr_seat_set_keyboard(kb->server->seat, kb->wlr_keyboard);
     wlr_seat_keyboard_notify_modifiers(kb->server->seat,
                                         &kb->wlr_keyboard->modifiers);
+}
+
+/* ── Alt+Tab ─────────────────────────────────────────────────
+ *
+ * Most-recently-used order, which is the whole point: Alt+Tab means "the window
+ * I was just in", and holding Alt to press Tab again means "the one before
+ * that". The existing focus_next (Super+J/K) walks ws->windows, which is
+ * *stacking* order — fine for "next window along", useless for coming back.
+ *
+ * No snapshot of the candidate list is kept between presses. It is rebuilt from
+ * live views every time, so a window that closes mid-cycle simply stops being a
+ * candidate — there is no stale pointer to dangle, and no destroy hook to
+ * remember to add in the two places (xdg + xwayland) that destroy views.
+ */
+#define ALTTAB_MAX 64
+
+/* Mapped, non-minimized views of the active workspace, most-recent first.
+ *
+ * Minimized windows are skipped deliberately: you minimized them, so pulling
+ * one back with Alt+Tab and leaving it minimized-but-focused would be a window
+ * you cannot see eating your keystrokes. Super+Shift+N restores those. */
+static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
+{
+    syn_workspace_t *ws = server_active_workspace(s);
+    int n = 0;
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->mapped || v->minimized) continue;
+        if (n >= max) break;
+        out[n++] = v;
+    }
+
+    /* Insertion sort by focus_seq, newest first. n is a handful of windows, and
+     * this keeps the "never focused" ones (seq 0) at the back where they
+     * belong. */
+    for (int i = 1; i < n; i++) {
+        syn_view_t *cur = out[i];
+        int j = i - 1;
+        while (j >= 0 && out[j]->focus_seq < cur->focus_seq) {
+            out[j + 1] = out[j];
+            j--;
+        }
+        out[j + 1] = cur;
+    }
+    return n;
+}
+
+/* Alt released: the window we landed on becomes the most recent, so the next
+ * Alt+Tab comes back here. */
+static void alttab_finish(syn_server_t *s)
+{
+    if (!s->alttab.active) return;
+    s->alttab.active = false;
+    s->alttab.depth  = 0;
+    if (s->focused_view)
+        s->focused_view->focus_seq = ++s->focus_counter;
+}
+
+/* One Tab press while Alt is held. dir +1 walks back through the MRU order,
+ * -1 (Alt+Shift+Tab) walks forward again. */
+static void alttab_step(syn_server_t *s, int dir)
+{
+    syn_view_t *cands[ALTTAB_MAX];
+    int n = alttab_candidates(s, cands, ALTTAB_MAX);
+    if (n < 2) return;          /* nothing to switch to */
+
+    if (!s->alttab.active) {
+        s->alttab.active = true;
+        s->alttab.depth  = 0;
+    }
+
+    /* Wrap with a floored modulo — C's % keeps the sign, so a bare
+     * depth % n sends Alt+Shift+Tab off the front of the list to a negative
+     * index on the very first press. */
+    s->alttab.depth += dir;
+    int idx = ((s->alttab.depth % n) + n) % n;
+
+    syn_view_t *target = cands[idx];
+    if (target != s->focused_view)
+        focus_view(s, target, view_surface(target));
 }
 
 static void focus_next(syn_server_t *s, int dir)
@@ -401,6 +507,10 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         focus_next(s, 1);
     } else if (strcmp(action, "focus_prev") == 0) {
         focus_next(s, -1);
+    } else if (strcmp(action, "alt_tab") == 0) {
+        alttab_step(s, 1);
+    } else if (strcmp(action, "alt_tab_prev") == 0) {
+        alttab_step(s, -1);
     } else if (strcmp(action, "stack_next") == 0) {
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, 1);
     } else if (strcmp(action, "stack_prev") == 0) {
