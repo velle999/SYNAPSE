@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -10,7 +10,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('unknown')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=29b8f625ed2b5aceaf4b9d2ffbec4eb54fa30bf7
+_commit=21bb716cb39df9391af82e09f8d57958763fdc52
 
 # Runtime deps.
 #
@@ -137,6 +137,16 @@ package() {
         error "config.local.py leaked into the package — refusing to ship it"
         return 1
     fi
+
+    # NB: the backend is NOT patched here. chibi.sh already exports
+    # CHIBI_LLM_BACKEND=synapd (and CHIBI_SYNAPD_SOCKET), and env wins over
+    # config.py, so the launcher is the single place that decides. Upstream's
+    # config.py keeps its neutral ollama default for plain chibi-llm installs.
+    #
+    # Until 21bb716 that env var pointed at a backend the packaged
+    # llm_client.py did not implement, and stream_chat quietly spoke llama.cpp
+    # instead. The fix belongs upstream (and in tools/check-shared.sh), not in a
+    # second copy of the default here.
 
     # The app dir is read-only at runtime, so .pyc can't be written on import.
     # Precompile now, or every start pays full parse cost.
