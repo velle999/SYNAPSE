@@ -29,7 +29,8 @@
 
 set -u
 
-SYNUI=${1:?usage: smoke.sh /path/to/synui}
+SYNUI=${1:?usage: smoke.sh /path/to/synui [/path/to/x11_remap_test]}
+X11_REMAP=${2:-}
 TESTDIR=$(dirname "$0")
 
 fail() { echo "FAIL: $*" >&2; [ -n "${LOG:-}" ] && tail -40 "$LOG" >&2; cleanup; exit 1; }
@@ -376,6 +377,83 @@ if command -v foot >/dev/null; then
     echo "ok 12 - clean shutdown with a client still connected"
 else
     echo "ok 12 # SKIP foot not installed"
+fi
+
+# 13. An X11 toplevel that closes to the tray and comes back leaves nothing
+# behind. xw_map builds a fresh frame on every map, so an unmap that dropped
+# only the client's surface tree orphaned the frame, and the next map
+# overwrote view->frame and leaked it for good — one scene tree per
+# close/restore cycle, growing for as long as the app is used, with each
+# orphan still tagged node.data = a view that free() would later reclaim.
+# Steam does this cycle every time it closes to the tray.
+#
+# The leak is invisible to LSan: the orphans stay reachable from the scene
+# graph and are freed when it is torn down at exit. It has to be counted while
+# the compositor is up, which is what `synctl scene` is for.
+if [ -n "$X11_REMAP" ] && [ -x "$X11_REMAP" ] && command -v Xwayland >/dev/null 2>&1; then
+    LOG=$(mktemp)
+    "$SYNUI" >"$LOG" 2>&1 &
+    SYNUI_PID=$!
+
+    SOCK=
+    i=0
+    while [ $i -lt 100 ]; do
+        SOCK=$(sed -n 's/.*running on WAYLAND_DISPLAY=\(wayland-[0-9]*\).*/\1/p' "$LOG" | head -1)
+        [ -n "$SOCK" ] && break
+        kill -0 "$SYNUI_PID" 2>/dev/null || fail "remap test: synui died during startup"
+        sleep 0.1
+        i=$((i + 1))
+    done
+    [ -n "$SOCK" ] || fail "remap test: no Wayland socket within 10s"
+
+    # Xwayland is started lazily; wait for it to announce its DISPLAY.
+    XDISP=
+    i=0
+    while [ $i -lt 150 ]; do
+        # "synui: Xwayland X11 DISPLAY=:1 (lazy start)" — anchor on DISPLAY=,
+        # not on the distance from "Xwayland": the X11 in between is digits.
+        XDISP=$(sed -n 's/.*Xwayland.*DISPLAY=\(:[0-9]\{1,\}\).*/\1/p' "$LOG" \
+                | head -1)
+        [ -n "$XDISP" ] && break
+        sleep 0.2
+        i=$((i + 1))
+    done
+    if [ -z "$XDISP" ]; then
+        kill -TERM "$SYNUI_PID" 2>/dev/null; wait "$SYNUI_PID" 2>/dev/null
+        echo "ok 13 # SKIP Xwayland did not start"
+    else
+        WAYLAND_DISPLAY="$SOCK" DISPLAY="$XDISP" "$X11_REMAP" 6 >/dev/null 2>&1 \
+            || fail "remap test: X11 client failed"
+
+        # The cycle ends on an unmap, so a correct compositor has nothing left:
+        # frames=0, views=0. Pristine HEAD reads {"frames":6,"views":0} — one
+        # orphaned frame per cycle, every one of them tagged with a view that
+        # is gone. Assert on `leaked` (frames - views) rather than on frames
+        # alone, so the test still means something if the client is left mapped.
+        # synctl from the build dir, not $PATH: the installed one is whatever
+        # version is on the system and need not know `scene` at all.
+        SYNCTL=$(dirname "$SYNUI")/synctl
+        [ -x "$SYNCTL" ] || SYNCTL=synctl
+        # SYNUI_SOCKET wins over WAYLAND_DISPLAY in synctl, and running this
+        # suite from inside a synui session inherits one pointing at the *live*
+        # compositor — so setting WAYLAND_DISPLAY alone silently queries the
+        # developer's own desktop instead of the instance under test. Pin it.
+        SCENE=$(SYNUI_SOCKET="$XDG_RUNTIME_DIR/synui-$SOCK.sock" \
+                WAYLAND_DISPLAY="$SOCK" "$SYNCTL" scene 2>/dev/null)
+        LEAKED=$(printf '%s' "$SCENE" | sed -n 's/.*"leaked":\([-0-9]*\).*/\1/p')
+
+        kill -TERM "$SYNUI_PID" 2>/dev/null
+        wait "$SYNUI_PID" 2>/dev/null
+
+        [ -n "$LEAKED" ] \
+            || fail "remap test: synctl scene gave nothing (got: $SCENE)"
+        [ "$LEAKED" -eq 0 ] \
+            || fail "remap test: $LEAKED frame(s) left behind after 6 map/unmap cycles ($SCENE)"
+        echo "ok 13 - an X11 toplevel re-mapped 6 times leaks no frames"
+    fi
+    rm -f "$LOG"
+else
+    echo "ok 13 # SKIP x11_remap_test or Xwayland not available"
 fi
 
 SYNUI_PID=

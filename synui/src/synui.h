@@ -1607,6 +1607,10 @@ void view_content_box(const syn_view_t *view, struct wlr_box *out);
 /* Redraw borders + titlebar for the view's current geometry/focus/title. */
 void view_update_decorations(syn_view_t *view);
 void view_deco_destroy(syn_view_t *view);
+/* Destroy the frame and everything inside it (chrome + the client's surface
+ * tree), clearing view->frame and view->scene_tree. Destroying the surface tree
+ * alone leaves the frame leaked and view->frame dangling — use this instead. */
+void view_frame_destroy(syn_view_t *view);
 /* Re-apply every mapped view's geometry to its current frame box. The frame is
  * unchanged; the *content* box inside it is not, so this is what has to run
  * after anything that moves the border/titlebar metrics (the titlebar toggle, a

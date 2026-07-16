@@ -173,6 +173,29 @@ static void cmd_workspaces(syn_server_t *s, ipc_buf_t *b)
     bputs(b, "]\n");
 }
 
+/* Scene-graph accounting. Every mapped view owns exactly one frame under
+ * window_tree, so `frames` should equal `views` — anything more is a frame that
+ * outlived the view it was built for (the leak that grew one tree per
+ * close/restore cycle; see view_frame_destroy). Cheap enough to ask for in a
+ * loop, and tests/smoke.sh asserts the equality across re-map cycles. */
+static void cmd_scene(syn_server_t *s, ipc_buf_t *b)
+{
+    int frames = 0;
+    struct wlr_scene_node *nd;
+    wl_list_for_each(nd, &s->window_tree->children, link)
+        frames++;
+
+    int views = 0;
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link)
+            if (v->mapped && v->frame) views++;
+    }
+
+    bprintf(b, "{\"frames\":%d,\"views\":%d,\"leaked\":%d}\n",
+            frames, views, frames - views);
+}
+
 static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
 {
     bputs(b, "[");
@@ -227,6 +250,10 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     }
     if (strcmp(line, "outputs") == 0 || strcmp(line, "monitors") == 0) {
         cmd_outputs(s, out);
+        return;
+    }
+    if (strcmp(line, "scene") == 0) {
+        cmd_scene(s, out);
         return;
     }
     if (strcmp(line, "activeworkspace") == 0) {

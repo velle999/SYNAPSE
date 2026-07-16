@@ -198,16 +198,16 @@ static void xw_unmap(struct wl_listener *listener, void *data)
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
     }
 
-    /* Drop the chrome (the frame itself goes with the scene tree). */
-    view_deco_destroy(view);
+    /* Drop the whole frame tree — chrome, surface tree, and the frame itself.
+     * xw_map builds a fresh frame on every map, so an unmap that dropped only
+     * the surface tree left the frame behind, and the next map orphaned it for
+     * good: one leaked tree per close/restore cycle, which is what Steam does
+     * every time it closes to the tray. */
+    view_frame_destroy(view);
 
     if (!view->override_redirect) {
         wl_list_remove(&view->link);
         wl_list_init(&view->link);
-    }
-    if (view->scene_tree) {
-        wlr_scene_node_destroy(&view->scene_tree->node);
-        view->scene_tree = NULL;
     }
     if (!view->override_redirect && !s->shutting_down) {
         layout_apply(s, view->workspace);
@@ -335,6 +335,11 @@ static void xw_destroy(struct wl_listener *listener, void *data)
         s->grabbed_view = NULL;
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
     }
+    /* No-op if xw_unmap already ran, but a surface can be destroyed while
+     * unmapped (or never map at all), and the frame carries node.data = view:
+     * left behind, it is a dangling view pointer that surface_at() will walk
+     * up to and dereference. */
+    view_frame_destroy(view);
 
     wl_list_remove(&view->associate.link);
     wl_list_remove(&view->dissociate.link);

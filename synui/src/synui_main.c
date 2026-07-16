@@ -494,6 +494,13 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data)
         view->server->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
         snap_preview_hide(view->server);
     }
+    /* server_new_xdg_toplevel builds the frame once, for the view's whole life
+     * (so unmap keeps it for the next map) — which leaves this the only place
+     * it can go. Nothing destroyed it before, so every Wayland window leaked
+     * its frame, still tagged node.data = view, into a scene graph that
+     * outlives the free() below. */
+    view_frame_destroy(view);
+
     wl_list_remove(&view->map.link);
     wl_list_remove(&view->unmap.link);
     wl_list_remove(&view->destroy.link);

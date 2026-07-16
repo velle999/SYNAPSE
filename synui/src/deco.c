@@ -447,6 +447,39 @@ void view_deco_destroy(syn_view_t *view)
     if (view->server->tb_last_click_view == view) view->server->tb_last_click_view = NULL;
 }
 
+/* Tear down the whole frame tree: the chrome, the client's surface tree, and
+ * the frame itself.
+ *
+ * The frame is the *parent* of view->scene_tree (view_frame_create), so
+ * destroying the surface tree leaves the frame behind — it does not "go with"
+ * it. Nothing else destroys view->frame, so without this every teardown leaked
+ * the frame into window_tree, and view_frame_create on a re-map overwrote
+ * view->frame and orphaned the old one for good. Worse, the frame carries
+ * node.data = view (so surface_at() can walk up to it), so a frame outliving
+ * its freed view leaves the scene graph holding a dangling view pointer.
+ *
+ * Destroying the frame takes its children with it, so the chrome and the
+ * surface tree must not be destroyed again afterwards — view_deco_destroy runs
+ * first only to clear the pointers (and the server's hover/click refs) that the
+ * view keeps to them. */
+void view_frame_destroy(syn_view_t *view)
+{
+    view_deco_destroy(view);
+
+    if (view->frame) {
+        wlr_scene_node_destroy(&view->frame->node);
+        view->frame      = NULL;
+        view->scene_tree = NULL;   /* was a child of the frame */
+        return;
+    }
+    /* Override-redirect surfaces have no frame: their tree hangs straight off
+     * the overlay layer (xw_map), so it has to be destroyed on its own. */
+    if (view->scene_tree) {
+        wlr_scene_node_destroy(&view->scene_tree->node);
+        view->scene_tree = NULL;
+    }
+}
+
 /* ── Hit testing ─────────────────────────────────────────── */
 /* Which resize edges a press at (lx, ly) on the border should drag: the edge it
  * landed on, plus the perpendicular one if it's within CORNER_GRAB of a corner

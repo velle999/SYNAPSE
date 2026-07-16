@@ -201,10 +201,24 @@ install_data('data/logo.svg',         install_dir : synui_datadir)
 # (if grim is installed) and asserts a clean SIGTERM teardown. Run with
 # `meson test`; add -Db_sanitize=address to a build dir for a leak-checked
 # run (tests/lsan.supp covers library-internal static caches).
+# An X11 client that maps/unmaps one toplevel repeatedly — the close-to-tray
+# cycle Steam does, and the path every other test misses by mapping once and
+# exiting. smoke.sh test 13 uses it to assert no frame is left behind per cycle;
+# it skips when libX11 isn't available to build against.
+x11 = dependency('x11', required : false)
+smoke_args = [synui_exe]
+if x11.found()
+  x11_remap_test = executable('x11_remap_test',
+    'tests/x11_remap_test.c',
+    dependencies : [x11],
+    build_by_default : true)
+  smoke_args += [x11_remap_test]
+endif
+
 test('smoke',
   find_program('tests/smoke.sh'),
-  args : [synui_exe],
-  timeout : 120)
+  args : smoke_args,
+  timeout : 180)
 
 # The kitty (cat.c). Links only the drawing half — cat_draw.c is pure cairo, no
 # wlroots — and renders every pose to a contact sheet. As a test it can only
