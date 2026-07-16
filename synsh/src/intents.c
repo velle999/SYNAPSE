@@ -334,7 +334,13 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
     snprintf(path, sizeof(path), "%s/.chibi-alarms.json",
              s->home ? s->home : ".");
 
-    /* The file is small and rewritten wholesale by both sides; read what is
+    /* Keys must match chibi's Alarm dataclass EXACTLY: from_dict() is
+     * Alarm(**d), so one key it does not declare raises TypeError, _load()
+     * catches it as a load error, and every alarm in the file is lost. The
+     * fields are time/label/enabled/repeating/repeat_days — "repeating", not
+     * "repeat_daily". Verified by round-tripping this through from_dict().
+     *
+     * The file is small and rewritten wholesale by both sides; read what is
      * there, splice one entry in, write it back atomically. */
     char existing[8192] = {0};
     FILE *f = fopen(path, "r");
@@ -344,11 +350,19 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
         fclose(f);
     }
 
-    /* Find the last ']' — everything before it is the alarms array. */
-    char *close = strrchr(existing, ']');
+    /* Splice into the alarms array: everything up to its ']' is kept.
+     *
+     * has_entries decides whether our entry needs a leading comma, and it must
+     * be judged BETWEEN the brackets — scanning from the start of the file
+     * finds the outer object's own '{' and writes `"alarms": [,` into an empty
+     * file, which is invalid JSON that chibi's _load() swallows as a load error
+     * and answers by dropping every alarm. */
+    char *open_br = strchr(existing, '[');
+    char *close   = strrchr(existing, ']');
+    if (close && (!open_br || close < open_br)) close = NULL;   /* malformed */
     bool has_entries = false;
-    if (close) {
-        for (char *q = existing; q < close; q++)
+    if (open_br && close) {
+        for (char *q = open_br + 1; q < close; q++)
             if (*q == '{') { has_entries = true; break; }
     }
 
@@ -367,7 +381,7 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
                      "      \"time\": \"%s\",\n"
                      "      \"label\": \"\",\n"
                      "      \"enabled\": true,\n"
-                     "      \"repeat_daily\": false\n"
+                     "      \"repeating\": false\n"
                      "    }\n  ]\n}\n",
                 existing, has_entries ? "," : "", iso);
     } else {
@@ -375,7 +389,7 @@ static int intent_alarm(synsh_state_t *s, const char *lower)
                      "      \"time\": \"%s\",\n"
                      "      \"label\": \"\",\n"
                      "      \"enabled\": true,\n"
-                     "      \"repeat_daily\": false\n"
+                     "      \"repeating\": false\n"
                      "    }\n  ]\n}\n", iso);
     }
     fclose(out);
