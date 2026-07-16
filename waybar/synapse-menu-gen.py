@@ -143,6 +143,12 @@ STATIC_ITEMS = [
     ("status", "System Status", "foot --hold syn status"),
     ("network", "Network Setup", "foot -e nmtui"),
     ("monitor", "Process Monitor", "foot -e top"),
+    # A full -Syu, never a bare -Sy: syncing the databases and then installing
+    # anything less than everything is a partial upgrade, which on Arch means a
+    # 404 on some dependency at best and a half-upgraded system at worst.
+    # --hold so the window survives the command and you can read what happened;
+    # foot gives sudo a pty to prompt on, which waybar's own environment has not.
+    ("update", "Update System", "foot --hold sudo pacman -Syu"),
 ]
 POWER_ITEMS = [
     ("logout", "Log Out", "pkill -x synui"),
