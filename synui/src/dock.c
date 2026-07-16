@@ -20,12 +20,14 @@
  */
 
 #define _GNU_SOURCE
+#include <dirent.h>
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <cairo.h>
 #include <wlr/types/wlr_scene.h>
@@ -37,6 +39,128 @@
 
 #define DOCK_ICON_SIZE 48
 #define DOCK_ICON_PAD  8
+
+/* ── Tray-resident apps ──────────────────────────────────────
+ *
+ * An app that closed to tray has no mapped window, so dock_rebuild() marks it
+ * not-running and a click re-runs its .desktop Exec. For most single-instance
+ * apps that is right: the second invocation reaches the first, which raises its
+ * window.
+ *
+ * Steam is the documented exception, and it is why this section exists.
+ * Measured against a tray-resident Steam, a FRESH client per trial and a fixed
+ * 20s settle (see below — both matter):
+ *
+ *     /usr/bin/steam                    → 1/3   the old click. Flaky, and that
+ *                                               "sometimes" is the whole bug.
+ *     /usr/bin/steam steam://open/main  → 3/3   window back in ~2s
+ *     /usr/bin/steam steam://open/games → 0/4   never
+ *
+ * Bare `steam` forwards *no instruction* to the running client, so it has
+ * nothing to act on; that it works at all is incidental. Steam's tray icon
+ * exports no Activate either (see the waybar-tray notes), so no bar can restore
+ * it with a plain click — libayatana-appindicator behaviour, not ours.
+ *
+ * open/main, NOT the [Desktop Action Library] that "right-click → Library"
+ * suggests. That was the obvious candidate and it does not work: `open/games`
+ * *navigates* a window that already exists, while `open/main` is what *creates*
+ * one. Steam's own tray menu can offer Library because it shows the window
+ * internally first; the URL cannot.
+ *
+ * If you re-measure this, control for two things that made three earlier runs
+ * of mine say three different things:
+ *   - A failed trial leaves Steam already closed, so the next trial's "close"
+ *     is a no-op and its command really runs minutes after the close. That
+ *     measures the delay, not the command.
+ *   - Steam WEDGES after repeated close/restore cycles: it maps its X window
+ *     (IsViewable) but never paints, so there is no buffer, no wl_surface map,
+ *     and nothing any compositor can show. Once wedged nothing restores it and
+ *     every later trial reads as FAIL. Only a Steam restart clears it — which
+ *     is why the numbers above use a fresh client per trial.
+ * The wedge is Steam's own bug and is beyond anything the dock can do.
+ */
+
+/*
+ * Is a Steam client really live? Mirrors is_steam_running() from Valve's own
+ * steam.sh, which is the authority on this and does three things:
+ *
+ *   1. ~/.steam/steam.pid exists
+ *   2. /proc/<pid> exists
+ *   3. that process holds ~/.steam/steam.pipe open
+ *
+ * (3) is the one that matters and the one a naive check misses. Steam does not
+ * remove steam.pid on exit — verified: the file outlived a dead client here —
+ * so existence proves nothing and even kill(0) can be fooled by PID recycling.
+ * Getting this wrong is not harmless: sending a steam:// URL to a dead client
+ * silently starts a SECOND Steam whose window never paints. Only claim Steam is
+ * up when it is holding its own pipe.
+ */
+static bool steam_is_running(void)
+{
+    const char *home = getenv("HOME");
+    if (!home || !*home) return false;
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/.steam/steam.pid", home);
+    FILE *f = fopen(path, "r");
+    if (!f) return false;
+    long pid = 0;
+    int got = fscanf(f, "%ld", &pid);
+    fclose(f);
+    if (got != 1 || pid <= 1) return false;
+
+    char pipe_path[512];
+    snprintf(pipe_path, sizeof(pipe_path), "%s/.steam/steam.pipe", home);
+
+    /* Sized so "<fd_dir>/<d_name>" cannot truncate: a /proc/<pid>/fd path is
+     * ~30 bytes and d_name is at most NAME_MAX. Oversizing fd_dir instead makes
+     * the compiler (rightly) warn that the join might not fit. */
+    char fd_dir[64];
+    snprintf(fd_dir, sizeof(fd_dir), "/proc/%ld/fd", pid);
+    DIR *d = opendir(fd_dir);
+    if (!d) return false;              /* no such process (or not ours) */
+
+    bool holds_pipe = false;
+    struct dirent *de;
+    while (!holds_pipe && (de = readdir(d))) {
+        if (de->d_name[0] == '.') continue;
+        char link[64 + 256], target[512];
+        snprintf(link, sizeof(link), "%s/%s", fd_dir, de->d_name);
+        ssize_t n = readlink(link, target, sizeof(target) - 1);
+        if (n <= 0) continue;          /* raced a closing fd — just skip it */
+        target[n] = '\0';
+        if (strcmp(target, pipe_path) == 0) holds_pipe = true;
+    }
+    closedir(d);
+    return holds_pipe;
+}
+
+/*
+ * The command that restores `app_id` from the tray, or NULL if a plain Exec is
+ * the right thing — which it is for everything but Steam.
+ *
+ * Keyed on app_id "steam": that is what synui reports for Steam's main window
+ * (verified via synctl — its WM_CLASS is ("steamwebhelper", "steam") and
+ * view_app_id() returns the res_class), and it is also what steam.desktop and
+ * the dock pin are called, so all three agree and the pinned icon is the same
+ * entry as the running one.
+ *
+ * The steam binary comes from its own .desktop Exec rather than a hardcoded
+ * /usr/bin/steam, so a Flatpak/other-prefix install still gets its own
+ * launcher. Only the URL is ours, because Steam ships no .desktop action that
+ * means "just show the window".
+ */
+static const char *dock_tray_restore_exec(const char *app_id)
+{
+    if (strcmp(app_id, "steam") != 0) return NULL;
+    if (!steam_is_running()) return NULL;   /* not in the tray — a real launch */
+
+    static char cmd[320];
+    const syn_icon_entry_t *ic = icon_lookup("steam");
+    snprintf(cmd, sizeof(cmd), "%s steam://open/main",
+             ic->exec[0] ? ic->exec : "steam");
+    return cmd;
+}
 
 /* Auto-hide timing. The dock slides fully in/out over DOCK_SLIDE_SECS; once
  * the cursor leaves it stays put for DOCK_HIDE_DELAY before sliding away, so
@@ -602,8 +726,17 @@ void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
 
     syn_view_t *v = e->primary_view;
 
-    /* Pinned-but-not-running: launch its .desktop Exec. */
+    /* No window: either it is not running, or it is sitting in the tray with
+     * its window unmapped — the dock cannot tell those apart, because both look
+     * like "no mapped view". Ask the app. */
     if (!v || !v->mapped) {
+        const char *restore = dock_tray_restore_exec(e->app_id);
+        if (restore) {
+            wlr_log(WLR_INFO, "dock: %s is tray-resident, restoring via: %s",
+                    e->app_id, restore);
+            synui_spawn(restore);
+            return;
+        }
         const syn_icon_entry_t *ic = icon_lookup(e->app_id);
         if (ic->exec[0]) synui_spawn(ic->exec);
         return;
