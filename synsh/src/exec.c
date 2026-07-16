@@ -24,6 +24,7 @@
 
 #include "synsh.h"
 #include "exec.h"
+#include "intents.h"
 #include "ipc.h"
 #include "color.h"
 
@@ -604,10 +605,17 @@ int ai_translate(synsh_state_t *s,
      * Build translation prompt. We inject the current working directory
      * and the system name so the AI can make context-aware suggestions.
      */
+    /* Tell it what this machine actually is. Without the Installed: line it
+     * suggests whatever is commonest on the internet — apt-get, systemctl
+     * start on a unit that doesn't exist, rhythmbox on a box with no audio
+     * player — and every one of those looks plausible until you run it.
+     * synsh_intent_toolinfo() is resolved from $PATH, so it cannot drift from
+     * reality the way a hardcoded list would. */
     char prompt[SYNSH_MAX_LINE * 2];
     snprintf(prompt, sizeof(prompt),
         "[TRANSLATE TO SHELL]\n"
-        "OS: SynapseOS (Arch Linux base)\n"
+        "OS: SynapseOS — Arch Linux. NOT Debian/Ubuntu/Fedora.\n"
+        "Installed: %s\n"
         "CWD: %s\n"
         "User: %s\n"
         "Request: %s\n"
@@ -618,10 +626,18 @@ int ai_translate(synsh_state_t *s,
         "\n"
         "Rules:\n"
         "- CMD must be a valid bash command\n"
+        "- Arch syntax ONLY. Packages: pacman -S / -Rns / -Syu / -Ss / -Q.\n"
+        "  Never apt, apt-get, dnf, yum, zypper, snap or flatpak.\n"
+        "- Upgrading is `sudo pacman -Syu`, never a bare -Sy: syncing the\n"
+        "  databases without upgrading is a partial upgrade and breaks Arch.\n"
+        "- Services are systemctl; logs are journalctl. No service(8), no /etc/init.d.\n"
+        "- Only name a program listed in Installed above. If the request needs one\n"
+        "  that is not there, CMD must be the pacman -S that installs it.\n"
         "- If the request is ambiguous, pick the safest interpretation\n"
         "- Never include rm -rf without explicit confirmation request\n"
         "- Use sudo for privileged commands, NEVER su — the root account is locked\n"
         "- If no shell command makes sense, write CMD: # not possible\n",
+        synsh_intent_toolinfo(),
         s->cwd   ? s->cwd   : "/",
         s->user  ? s->user  : "user",
         natural_input

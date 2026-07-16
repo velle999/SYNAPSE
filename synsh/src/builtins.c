@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include "synsh.h"
+#include "intents.h"
 
 /* ── cd ───────────────────────────────────────────────────── */
 static int builtin_cd(synsh_state_t *s, int argc, char **argv) {
@@ -193,6 +194,9 @@ static int builtin_help(synsh_state_t *s, int argc, char **argv) {
         COL_BOLD, COL_RESET,
         COL_BOLD, COL_RESET
     );
+    /* What synsh answers itself, built from what is actually installed — so
+     * this list tells you "no music player" instead of promising one. */
+    synsh_intent_help(s);
     return 0;
 }
 

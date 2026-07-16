@@ -35,6 +35,7 @@
 #include "synsh.h"
 #include "ipc.h"
 #include "classify.h"
+#include "intents.h"
 #include "exec.h"
 #include "readline_synsh.h"
 #include "builtins.h"
@@ -131,6 +132,25 @@ static int run_interactive(synsh_state_t *s) {
         /* Add to history */
         synsh_history_add(s, line);
 
+        /* The requests synsh answers exactly (intents.c), before classify.
+         *
+         * It has to be before: `play` is a real program — sox ships it, and
+         * chibi pulls sox in — so classify sees a known command and routes
+         * "play music" to the shell, where sox fails on a file called "music".
+         * intents.c only claims whole lines that are nothing but the phrase, so
+         * `play music.wav` still reaches sox untouched.
+         *
+         * Also before the synapd check: being told the time should not cost a
+         * model round-trip, and should still work with the daemon down. */
+        {
+            int ic = 0;
+            if (synsh_intent(s, line, &ic)) {
+                s->last_exit = ic;
+                free(line);
+                continue;
+            }
+        }
+
         /* Classify and dispatch */
         input_class_t cls = classify_input(line);
 
@@ -149,6 +169,7 @@ static int run_interactive(synsh_state_t *s) {
              * Ask synapd to translate to a shell command,
              * optionally confirm, then execute.
              */
+
             /* The startup connect races synapd's boot — retry here so a
              * shell opened before the daemon was up heals on first use. */
             if (!s->synapd_connected && synapd_connect(s) == 0) {
