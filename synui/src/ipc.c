@@ -115,6 +115,13 @@ static const char *layout_name(syn_layout_t l)
     return "unknown";
 }
 
+static void count_buffer(struct wlr_scene_buffer *buffer, int sx, int sy,
+                         void *data)
+{
+    (void)buffer; (void)sx; (void)sy;
+    (*(int *)data)++;
+}
+
 static void json_view(ipc_buf_t *b, syn_view_t *v)
 {
     bputs(b, "{\"app_id\":");
@@ -133,6 +140,33 @@ static void json_view(ipc_buf_t *b, syn_view_t *v)
     bprintf(b, ",\"xwayland\":%s",   v->is_xwayland ? "true" : "false");
     bprintf(b, ",\"focused\":%s",    v == v->server->focused_view ? "true" : "false");
     bprintf(b, ",\"pid\":%d", (int)view_pid(v));
+
+    /* Why a window can be invisible while every field above says it is fine.
+     *
+     * Steam wedges intermittently: mapped, IsViewable, responsive — its menus
+     * work and games launch — and yet nothing renders. Everything above reports
+     * that window as healthy, which is exactly why three sessions of looking at
+     * it got nowhere. These three tell the invisibility apart, and a wedge is
+     * cleared by the restart that would let us instrument it, so it has to be
+     * readable from the *live* compositor:
+     *
+     *   alpha 0        — anim_fade_in() zeroes alpha and fades up off the frame
+     *                    tick; a fade that never ticks leaves a window mapped,
+     *                    buffered and perfectly transparent.
+     *   enabled false  — something disabled the node (fade-out, occlusion).
+     *   buffers 0      — the client genuinely never painted. Steam's own bug.
+     *
+     * Cheap: the buffer walk is a handful of nodes, and only on request.
+     */
+    int buffers = 0;
+    if (v->mapped && (v->frame || v->scene_tree))
+        wlr_scene_node_for_each_buffer(view_node(v), count_buffer, &buffers);
+    bprintf(b, ",\"alpha\":%.3f", (double)v->alpha);
+    bprintf(b, ",\"fade_active\":%s", v->fade_active ? "true" : "false");
+    bprintf(b, ",\"enabled\":%s",
+            (v->mapped && (v->frame || v->scene_tree) && view_node(v)->enabled)
+                ? "true" : "false");
+    bprintf(b, ",\"buffers\":%d", buffers);
     bputs(b, "}");
 }
 
