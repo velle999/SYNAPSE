@@ -32,6 +32,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -42,9 +44,13 @@
 
 /* ── Tool discovery ───────────────────────────────────────── */
 
-/* Candidate programs, best first. Resolved against $PATH once. */
+/* Candidate programs, best first. Resolved against $PATH once.
+ *
+ * cliamp leads: it is the player SynapseOS actually ships for, and it is a TUI
+ * with its own library (Plex/Navidrome/radio/...), so it neither needs nor
+ * accepts a directory. Everything after it is a fallback that plays a folder. */
 static const char *const music_players[] = {
-    "mpv", "vlc", "audacious", "cmus", "mpc", "rhythmbox", NULL
+    "cliamp", "mpv", "vlc", "audacious", "cmus", "mpc", "rhythmbox", NULL
 };
 static const char *const browsers[] = {
     "firefox", "chromium", "google-chrome-stable", "epiphany", NULL
@@ -224,18 +230,62 @@ static int intent_files(synsh_state_t *s)
 
 /* ── Intent: music ────────────────────────────────────────── */
 
+/* Is a cliamp instance live? It serves IPC on a unix socket, and `cliamp play`
+ * only means "resume" if something is there to hear it.
+ *
+ * This must connect(), not stat(). cliamp does not unlink the socket on the way
+ * out, so the node routinely outlives the process — an existence check reports
+ * a player that died days ago. A dead socket refuses the connection; that is
+ * the only answer worth trusting. `cliamp status` is no help either: it prints
+ * "cliamp is not running" and still exits 0. */
+static bool cliamp_running(synsh_state_t *s)
+{
+    const char *cfg = getenv("XDG_CONFIG_HOME");
+    char path[512];
+    if (cfg && *cfg)
+        snprintf(path, sizeof(path), "%s/cliamp/cliamp.sock", cfg);
+    else
+        snprintf(path, sizeof(path), "%s/.config/cliamp/cliamp.sock",
+                 s->home ? s->home : ".");
+
+    struct sockaddr_un addr = { .sun_family = AF_UNIX };
+    if (strlen(path) >= sizeof(addr.sun_path)) return false;
+    memcpy(addr.sun_path, path, strlen(path) + 1);
+
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return false;
+    bool live = connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;
+    close(fd);
+    return live;
+}
+
 static int intent_music(synsh_state_t *s)
 {
     const char *player = first_present(music_players);
     if (!player) {
-        /* Say so rather than let the model invent a player. SynapseOS ships no
-         * audio player at all — chibi pulls in the pipewire stack, but nothing
-         * that plays a file. */
+        /* Say so rather than let the model invent a player. */
         fprintf(stderr,
             "  synsh: no music player is installed.\n"
             "         sudo pacman -S mpv        # plays anything, no GUI needed\n"
             "         sudo pacman -S audacious  # if you want a library + playlists\n");
         return 1;
+    }
+
+    /* cliamp is not a play-this-folder program, so it skips every directory
+     * check below: its library is whatever provider it is configured against,
+     * and a machine with no ~/Music is its normal case, not an error.
+     *
+     * It is also a TUI, so it runs in the FOREGROUND — launch_detached() would
+     * hand a full-screen interface /dev/null and a lost tty. execute_pipeline()
+     * is what a typed command goes through, which is exactly the behaviour
+     * wanted here, signal resets included. */
+    if (strcmp(player, "cliamp") == 0) {
+        if (cliamp_running(s)) {
+            printf("  %sresuming%s cliamp\n", COLOR_DIM, COLOR_RESET);
+            return execute_pipeline(s, "cliamp play");
+        }
+        printf("  %sstarting%s cliamp\n", COLOR_DIM, COLOR_RESET);
+        return execute_pipeline(s, "cliamp --auto-play --shuffle");
     }
 
     /* Look where music actually lives. XDG first, then the usual suspects. */
