@@ -1017,14 +1017,40 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     }
 }
 
+/* Re-advertise what the seat can do.
+ *
+ * Must be called from every path that adds or drops a keyboard, not just from
+ * server_new_input: a *virtual* keyboard (wtype, an on-screen keyboard) arrives
+ * via virtual-keyboard-v1 and never passes through the backend's new_input, so
+ * computing capabilities only there left the seat advertising pointer-only. A
+ * client that sees no keyboard capability never calls wl_seat.get_keyboard, so
+ * it has no wl_keyboard to send anything to — on a session whose only keyboard
+ * is virtual, that means no client can receive a keystroke at all. The pointer
+ * bit is unconditional for the reason server_init gives: the compositor always
+ * drives a cursor, and a capability-less seat kills clients that call
+ * get_pointer.
+ */
+static void seat_update_capabilities(syn_server_t *s)
+{
+    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+    if (!wl_list_empty(&s->keyboards))
+        caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    if (s->touch_devices > 0)
+        caps |= WL_SEAT_CAPABILITY_TOUCH;
+    wlr_seat_set_capabilities(s->seat, caps);
+}
+
 static void keyboard_handle_destroy(struct wl_listener *listener, void *data)
 {
     syn_keyboard_t *kb = wl_container_of(listener, kb, destroy);
+    syn_server_t *s = kb->server;
     wl_list_remove(&kb->modifiers.link);
     wl_list_remove(&kb->key.link);
     wl_list_remove(&kb->destroy.link);
     wl_list_remove(&kb->link);
     free(kb);
+    /* After the unlink: the last keyboard leaving drops the capability. */
+    seat_update_capabilities(s);
 }
 
 /*
@@ -1103,6 +1129,7 @@ static void server_new_keyboard(syn_server_t *s, struct wlr_input_device *dev)
 
     wlr_seat_set_keyboard(s->seat, wlr_kb);
     wl_list_insert(&s->keyboards, &kb->link);
+    seat_update_capabilities(s);
 }
 
 /* A virtual keyboard (wtype, or anything else speaking virtual-keyboard-v1)
@@ -1946,12 +1973,7 @@ static void server_new_input(struct wl_listener *listener, void *data)
         break;
     }
 
-    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-    if (!wl_list_empty(&s->keyboards))
-        caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    if (s->touch_devices > 0)
-        caps |= WL_SEAT_CAPABILITY_TOUCH;
-    wlr_seat_set_capabilities(s->seat, caps);
+    seat_update_capabilities(s);
 }
 
 static void server_request_set_selection(struct wl_listener *listener, void *data)
