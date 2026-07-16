@@ -230,6 +230,24 @@ static void *ai_thread_fn(void *arg)
             atomic_store(&s->ai_connected, 0);
             strncpy(s->overlay.synapd_status, "○ synapd reconnecting…",
                     sizeof(s->overlay.synapd_status) - 1);
+
+            /* Still answer the compositor. A failed round trip used to
+             * `continue` silently, which left cmdbar.waiting set and the bar
+             * showing "⟳ thinking…" until the session ended — a dead synapd
+             * and a slow one looked identical, and neither ever resolved.
+             * Not sent while stopping: the compositor is joining this thread
+             * and nothing is left to read the pipe. */
+            if (!atomic_load(&s->ai_stopping)) {
+                syn_ai_response_t err = {
+                    .request_id = req.id,
+                    .type       = req.type,
+                    .ok         = 0,
+                };
+                strncpy(err.response, "synapd query failed — reconnecting",
+                        sizeof(err.response) - 1);
+                if (write_all(s->ai_pipe_resp[1], &err, sizeof(err)) < 0)
+                    wlr_log(WLR_ERROR, "ai_thread: failed to write error to compositor");
+            }
             continue;
         }
 
@@ -362,6 +380,8 @@ void cmdbar_show(syn_server_t *s)
     s->cmdbar.response[0] = '\0';
     s->cmdbar.waiting   = 0;
     s->cmdbar.ctx[0]    = '\0';
+    s->cmdbar.out_lines = 0;
+    s->cmdbar.out_more  = 0;
     synui_render_cmdbar(s);
     wlr_log(WLR_DEBUG, "cmdbar: shown");
 }
@@ -436,6 +456,246 @@ void cmdbar_key(syn_server_t *s, uint32_t keysym)
     synui_render_cmdbar(s);
 }
 
+/* ── CMD: output capture ─────────────────────────────────── */
+
+/*
+ * A CMD: child used to be fork+exec'd onto /dev/null, so "df -h" ran, printed
+ * to nothing, and the bar said "ran: df -h" — the command worked and the user
+ * saw no answer. So we keep the child's stdout+stderr on a pipe and drain it
+ * from the wl_event_loop, never from a blocking read: the compositor's event
+ * loop is the same one that drives every client's frames.
+ *
+ * Why EOF and not waitpid(): SIGCHLD carries reap_children() (synui_main.c),
+ * which waitpid(-1)s every child the moment it dies. A waitpid() here would be
+ * racing that handler for the status and would usually lose. EOF on the pipe is
+ * ours alone, and it says the thing we actually care about — no writer is left.
+ *
+ * Why a GUI launch does not fill the bar with junk: firefox holds its stdout
+ * open for its whole life and chatters on stderr, so its EOF arrives minutes
+ * later, long after CMDCAP_SHOW_SECS has passed and the answer stopped being
+ * an answer to anything. Short commands EOF in milliseconds and win the bar;
+ * long-lived ones silently drain and are dropped at exit.
+ *
+ * We must keep draining even once the buffer is full: a child whose pipe fills
+ * blocks forever in write(), which for a GUI app means a hung window.
+ */
+#define CMDCAP_BUF_MAX    (16 * 1024)
+#define CMDCAP_SHOW_SECS  10
+
+typedef struct {
+    syn_server_t           *s;
+    struct wl_list          link;       /* s->cmdcaps */
+    struct wl_event_source *src;
+    int                     fd;
+    unsigned                gen;        /* vs s->cmdcap_gen; see synui.h */
+    time_t                  started;
+    size_t                  len;
+    bool                    capped;     /* buf full: still drain, stop storing */
+    char                    buf[CMDCAP_BUF_MAX];
+} syn_cmdcap_t;
+
+/* Copy `n` bytes of arbitrary child output into `dst` as text cairo will
+ * accept. Two hazards, both of which have cost this project a panel before:
+ * cairo_show_text() puts its *entire context* into a permanent error state when
+ * handed invalid UTF-8 (so one bad byte in `ls` output would blank every row
+ * under it), and control bytes render as boxes or move the pen. Anything not a
+ * well-formed, non-overlong, non-surrogate scalar is dropped, whole sequences
+ * at a time — so `dst` can never end mid-character and never needs trimming. */
+static void cmdcap_sanitize(char *dst, size_t cap, const char *src, size_t n)
+{
+    size_t o = 0;
+    for (size_t i = 0; i < n && o + 1 < cap; ) {
+        unsigned char c = (unsigned char)src[i];
+
+        if (c == '\t') {                       /* tabs: pen-moving, not text */
+            if (o + 1 < cap) dst[o++] = ' ';
+            i++;
+            continue;
+        }
+        if (c < 0x20 || c == 0x7F) { i++; continue; }   /* controls, incl. ESC */
+        if (c < 0x80) { dst[o++] = (char)c; i++; continue; }
+
+        int need;
+        unsigned cp;
+        if      ((c & 0xE0) == 0xC0) { need = 1; cp = c & 0x1F; }
+        else if ((c & 0xF0) == 0xE0) { need = 2; cp = c & 0x0F; }
+        else if ((c & 0xF8) == 0xF0) { need = 3; cp = c & 0x07; }
+        else { i++; continue; }                /* stray continuation / 0xF8+ */
+
+        /* i+need indexes the last continuation byte; past the end means the
+         * sequence is cut short by the cap and there is nothing valid left. */
+        if (i + (size_t)need >= n) break;
+
+        bool ok = true;
+        for (int k = 1; k <= need; k++) {
+            unsigned char cc = (unsigned char)src[i + k];
+            if ((cc & 0xC0) != 0x80) { ok = false; break; }
+            cp = (cp << 6) | (cc & 0x3F);
+        }
+        if (!ok) { i++; continue; }
+        /* Overlong, surrogate, or out of range — all rejected by cairo. */
+        if ((need == 1 && cp < 0x80) ||
+            (need == 2 && cp < 0x800) ||
+            (need == 3 && cp < 0x10000) ||
+            (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) {
+            i++;
+            continue;
+        }
+        if (o + (size_t)need + 1 >= cap) break;   /* whole sequence or none */
+        for (int k = 0; k <= need; k++) dst[o++] = src[i + k];
+        i += (size_t)need + 1;
+    }
+    dst[o] = '\0';
+}
+
+/* Split the captured bytes into the bar's rows. Trailing blank lines go: every
+ * command ends with a newline and we are not showing an empty row for it. */
+static void cmdcap_to_bar(syn_cmdcap_t *c)
+{
+    syn_cmdbar_t *bar = &c->s->cmdbar;
+    bar->out_lines = 0;
+    bar->out_more  = 0;
+
+    size_t end = c->len;
+    while (end > 0 && (c->buf[end-1] == '\n' || c->buf[end-1] == '\r')) end--;
+
+    size_t start = 0;
+    for (size_t i = 0; i <= end; i++) {
+        if (i < end && c->buf[i] != '\n') continue;
+        if (bar->out_lines < CMDBAR_OUT_LINES) {
+            cmdcap_sanitize(bar->out[bar->out_lines], CMDBAR_OUT_COLS,
+                            c->buf + start, i - start);
+            bar->out_lines++;
+        } else {
+            bar->out_more++;
+        }
+        start = i + 1;
+    }
+    if (c->capped) bar->out_more++;   /* at least one, exact count unknown */
+}
+
+static void cmdcap_free(syn_cmdcap_t *c)
+{
+    wl_list_remove(&c->link);
+    if (c->src) wl_event_source_remove(c->src);
+    if (c->fd >= 0) close(c->fd);
+    free(c);
+}
+
+void cmdcap_stop_all(syn_server_t *s)
+{
+    syn_cmdcap_t *c, *tmp;
+    wl_list_for_each_safe(c, tmp, &s->cmdcaps, link)
+        cmdcap_free(c);
+}
+
+/* EOF (or error): the child is done writing. Take the bar only if this is still
+ * the newest command, the bar is still up, and the answer is still fresh. */
+static void cmdcap_finish(syn_cmdcap_t *c)
+{
+    syn_server_t *s = c->s;
+    bool fresh = (time(NULL) - c->started) <= CMDCAP_SHOW_SECS;
+
+    wlr_log(WLR_DEBUG,
+            "cmdbar: capture EOF: %zu bytes, gen %u/%u, visible %d, fresh %d",
+            c->len, c->gen, s->cmdcap_gen, s->cmdbar.visible, (int)fresh);
+
+    if (c->gen == s->cmdcap_gen && s->cmdbar.visible && fresh && c->len) {
+        cmdcap_to_bar(c);
+        synui_render_cmdbar(s);
+    }
+    cmdcap_free(c);
+}
+
+static int cmdcap_readable(int fd, uint32_t mask, void *data)
+{
+    (void)mask;
+    syn_cmdcap_t *c = data;
+    char scratch[4096];
+
+    for (;;) {
+        ssize_t n = read(fd, scratch, sizeof scratch);
+        if (n > 0) {
+            if (!c->capped) {
+                size_t room = sizeof(c->buf) - c->len;
+                size_t take = (size_t)n < room ? (size_t)n : room;
+                memcpy(c->buf + c->len, scratch, take);
+                c->len += take;
+                if (c->len == sizeof(c->buf)) c->capped = true;
+            }
+            continue;                       /* drain: never stall the child */
+        }
+        if (n < 0 && errno == EINTR)  continue;   /* SIGCHLD landed mid-read */
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return 0;                       /* still running; more to come */
+        break;                              /* 0 = EOF, or a real error */
+    }
+    cmdcap_finish(c);
+    return 0;
+}
+
+/* fork+exec `cmd` with its output on a pipe we drain. Returns false only if the
+ * command could not be started at all; the caller still owns bar->response. */
+static bool cmdcap_run(syn_server_t *s, const char *cmd)
+{
+    int pfd[2];
+    /* O_CLOEXEC: this pipe must not leak into the *next* CMD: child, which
+     * would hold the write end open and defer our EOF until that one exits. */
+    if (pipe2(pfd, O_CLOEXEC) < 0) {
+        wlr_log(WLR_ERROR, "cmdbar: pipe: %s", strerror(errno));
+        return false;
+    }
+
+    syn_cmdcap_t *c = calloc(1, sizeof *c);
+    if (!c) { close(pfd[0]); close(pfd[1]); return false; }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        wlr_log(WLR_ERROR, "cmdbar: fork: %s", strerror(errno));
+        close(pfd[0]); close(pfd[1]); free(c);
+        return false;
+    }
+    if (pid == 0) {
+        setsid();   /* detach like spawn() so it outlives the compositor */
+        /* Undo O_CLOEXEC on the write end by dup2'ing it onto the std fds;
+         * dup2's copy does not carry the flag, so it survives exec. */
+        dup2(pfd[1], STDOUT_FILENO);
+        dup2(pfd[1], STDERR_FILENO);
+        int devnull = open("/dev/null", O_RDONLY);
+        if (devnull >= 0) { dup2(devnull, STDIN_FILENO); close(devnull); }
+        synui_child_reset_signals();
+        execl("/bin/sh", "sh", "-c", cmd, NULL);
+        _exit(127);
+    }
+
+    close(pfd[1]);                       /* our EOF depends on only the child
+                                          * holding the write end */
+    fcntl(pfd[0], F_SETFL, O_NONBLOCK);  /* the handler must never block */
+
+    c->s       = s;
+    c->fd      = pfd[0];
+    c->gen     = ++s->cmdcap_gen;
+    c->started = time(NULL);
+    wl_list_insert(&s->cmdcaps, &c->link);
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    c->src = wl_event_loop_add_fd(loop, pfd[0], WL_EVENT_READABLE,
+                                  cmdcap_readable, c);
+    if (!c->src) { cmdcap_free(c); return false; }
+    return true;
+}
+
+/*
+ * EVERY path out of here must leave bar->response saying what happened.
+ *
+ * cmdbar_submit() pre-loads the buffer with "⟳ thinking…", and the frame
+ * handler clears bar->waiting and re-renders whatever is in it. So a branch
+ * that acts and returns without rewriting the text leaves the bar spinning on
+ * "thinking…" forever — the answer arrived, the command ran, and the user is
+ * still watching a spinner. That was true of all three structured branches,
+ * and since the prompt *asks* the model for CMD:, it was the common case, not
+ * an edge one.
+ */
 void execute_ai_action(syn_server_t *s, const char *response)
 {
     /* Parse structured actions from AI response */
@@ -447,16 +707,19 @@ void execute_ai_action(syn_server_t *s, const char *response)
         while (*cmd == ' ') cmd++;
         char cmdcopy[512];
         strncpy(cmdcopy, cmd, sizeof(cmdcopy) - 1);
+        cmdcopy[sizeof(cmdcopy) - 1] = '\0';
         /* Truncate at newline */
         char *nl = strchr(cmdcopy, '\n');
         if (nl) *nl = '\0';
         wlr_log(WLR_INFO, "cmdbar: executing CMD: %s", cmdcopy);
-        if (fork() == 0) {
-            setsid();   /* detach like spawn() so it outlives the compositor */
-            synui_child_reset_signals();
-            execl("/bin/sh", "sh", "-c", cmdcopy, NULL);
-            _exit(1);
-        }
+
+        /* Naming what ran is the honest report until the output lands — and
+         * stays the whole report for a GUI launch, which prints nothing. */
+        snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                 "▸ %s", cmdcopy);
+        if (!cmdcap_run(s, cmdcopy))
+            snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                     "could not run: %s", cmdcopy);
         return;
     }
 
@@ -470,14 +733,21 @@ void execute_ai_action(syn_server_t *s, const char *response)
             /* Find and focus matching window */
             syn_workspace_t *ws = server_active_workspace(s);
             syn_view_t *v;
+            bool found = false;
             wl_list_for_each(v, &ws->windows, link) {
                 if (!v->mapped) continue;
                 const char *aid = view_app_id(v);
                 if (aid && strstr(aid, app_id)) {
                     focus_view(s, v, view_surface(v));
+                    found = true;
                     break;
                 }
             }
+            snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                     found ? "▸ focused %s" : "no window matching '%s'", app_id);
+        } else {
+            snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                     "unknown action: %s", act);
         }
         return;
     }
@@ -486,8 +756,18 @@ void execute_ai_action(syn_server_t *s, const char *response)
     const char *ws_act = strstr(response, "WORKSPACE:");
     if (ws_act) {
         int n;
-        if (sscanf(ws_act + 10, " switch %d", &n) == 1)
+        if (sscanf(ws_act + 10, " switch %d", &n) == 1 &&
+            n >= 1 && n <= WORKSPACE_MAX) {
             workspace_switch(s, n - 1);
+            snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                     "▸ workspace %d", n);
+        } else {
+            /* workspace_switch() ignores an out-of-range index (layout.c), so
+             * the range check here is not about safety — it is so a nonsense N
+             * is reported instead of silently doing nothing. */
+            snprintf(s->cmdbar.response, sizeof(s->cmdbar.response),
+                     "bad workspace in: %.64s", ws_act);
+        }
         return;
     }
 
@@ -502,6 +782,14 @@ void cmdbar_submit(syn_server_t *s)
 
     bar->waiting = 1;
     strncpy(bar->response, "⟳ thinking…", sizeof(bar->response) - 1);
+
+    /* The last command's output is not an answer to this question. Drop it as
+     * the question is asked, not when the next output lands: the reply may be
+     * plain text or a GUI launch, neither of which writes a row. A capture
+     * still draining from the previous command carries an older generation and
+     * so cannot repopulate these either (see cmdcap_run). */
+    bar->out_lines = 0;
+    bar->out_more  = 0;
 
     /* Build prompt with compositor context. focused_window is only present when
      * the bar was opened with Super+Backspace (cmdbar_ask_window), which is what

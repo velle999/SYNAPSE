@@ -47,6 +47,12 @@
 #define WORKSPACE_MAX       9
 #define WORKSPACE_NAME_LEN  32
 #define CMDBAR_MAX_INPUT    256
+/* Captured stdout+stderr of a CMD: launch, as rendered in the bar. Eight rows
+ * keeps the bar inside a sane height at the bottom of the screen; anything
+ * past that is reported as a "+N more lines" tail rather than dropped in
+ * silence. Columns are a byte cap, not a glyph count. */
+#define CMDBAR_OUT_LINES    8
+#define CMDBAR_OUT_COLS     128
 /* Defaults for synuirc `border_width` / `gap`; the live values come from
  * s->config so a SIGHUP reload can change them at runtime. */
 #define BORDER_WIDTH_DEFAULT 2
@@ -169,6 +175,14 @@ typedef struct {
      * about a specific window: "<app_id> — <title>". Folded into the prompt so
      * "what is this?" has a referent. Cleared by a plain cmdbar_show. */
     char  ctx[192];
+
+    /* stdout+stderr of the last CMD:, split to lines and sanitised for cairo.
+     * Filled by the capture in ai_interface.c when the child hits EOF; empty
+     * for a launch that printed nothing (the GUI-app case), which is what
+     * keeps `response` alone on the bar there. */
+    char  out[CMDBAR_OUT_LINES][CMDBAR_OUT_COLS];
+    int   out_lines;
+    int   out_more;     /* lines produced beyond the ones we kept */
 } syn_cmdbar_t;
 
 /* ── Neural overlay ──────────────────────────────────────── */
@@ -1162,6 +1176,16 @@ struct syn_server {
      * compared by pointer, never freed. See cursor_set_deco(). */
     const char       *deco_cursor;
 
+    /* Bumped by every CMD: launch. A capture stamps this at fork time and only
+     * writes to the bar if it still matches at EOF, so a slow command cannot
+     * overwrite the output of a newer one that already finished. */
+    unsigned          cmdcap_gen;
+    /* Live CMD: output captures (ai_interface.c). A capture lives until its
+     * child closes stdout, so launching a GUI app from the bar leaves one here
+     * for that app's whole life — including across a logout, which is why
+     * synui_destroy() has to free them rather than let them leak. */
+    struct wl_list    cmdcaps;
+
     /* UI scene nodes (render.c) */
     struct {
         struct wlr_scene_tree   *tree;
@@ -1660,6 +1684,10 @@ void overlay_update(syn_server_t *s);
 void overlay_render(syn_server_t *s, struct wlr_renderer *renderer,
                     int width, int height);
 void execute_ai_action(syn_server_t *s, const char *response);
+/* Drop every in-flight CMD: output capture. Teardown only: a capture outlives
+ * its command only to catch late output, and at shutdown there is no bar left
+ * to write it to. */
+void cmdcap_stop_all(syn_server_t *s);
 
 /* ── secfeed.c ───────────────────────────────────────────── */
 void secfeed_start(syn_server_t *s);     /* subscribe to synguard verdicts */

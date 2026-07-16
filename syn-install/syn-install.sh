@@ -743,6 +743,17 @@ else
         esac
     done
 fi
+# ~/.local/bin on PATH for synui and everything it spawns. greetd runs this
+# through a login shell, so /etc/profile.d is already applied — but the ISO's
+# profile.d/synapseos.sh is not installed onto disk, so this is where an
+# installed system gets it. ~/.bashrc cannot serve: only interactive bash reads
+# it, and the programs that need this are not bash (synsh walks PATH itself and
+# says "no music player is installed" when it misses cliamp; synui's AI "CMD:"
+# children exec via /bin/sh). Guarded against duplicates.
+case ":${PATH}:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 export XDG_SESSION_TYPE=wayland
 # Portal backend routing (synui-portals.conf); unset ⇒ no screen sharing.
 export XDG_CURRENT_DESKTOP=synui

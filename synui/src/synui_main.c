@@ -220,7 +220,13 @@ static void output_frame(struct wl_listener *listener, void *data)
         case AI_MSG_QUERY_CMD:
             if (server->cmdbar.visible && server->cmdbar.waiting) {
                 server->cmdbar.waiting = 0;
-                execute_ai_action(server, resp.response);
+                /* resp.ok == 0 is the AI thread reporting a failed round trip;
+                 * its text is a diagnostic, not something to parse for CMD:. */
+                if (resp.ok)
+                    execute_ai_action(server, resp.response);
+                else
+                    snprintf(server->cmdbar.response,
+                             sizeof(server->cmdbar.response), "%s", resp.response);
                 synui_render_cmdbar(server);
             }
             break;
@@ -1252,6 +1258,7 @@ int synui_init(syn_server_t *s)
 
     wl_list_init(&s->outputs);
     wl_list_init(&s->keyboards);
+    wl_list_init(&s->cmdcaps);
 
     /* dock.c: needs s->workspaces[].windows and s->outputs already
      * wl_list_init'd (dock_rebuild walks both) — seeds pinned-only entries;
@@ -1398,6 +1405,7 @@ void synui_destroy(syn_server_t *s)
      * touches the server struct while we tear it down, and their pipes and
      * sockets are closed (they'd otherwise leak and trip LeakSanitizer). */
     ai_thread_stop(s);
+    cmdcap_stop_all(s);
     secfeed_stop(s);
     synmon_stop(s);
     effects_finish(s);

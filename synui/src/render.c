@@ -344,7 +344,22 @@ void synui_render_cmdbar(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    int bw = 620, bh = 56;
+    /* The bar grows downward-anchored to fit whatever the last CMD: printed
+     * (ai_interface.c fills cmdbar.out): `by` is derived from the final height,
+     * so extra rows push the top edge up and the bar stays put above the dock.
+     * A command that printed nothing leaves out_lines at 0 and the bar keeps
+     * its original single-line size. */
+    const int row_h = 17;                 /* matches the 13px monospace face */
+    int rows = s->cmdbar.out_lines + (s->cmdbar.out_more > 0 ? 1 : 0);
+
+    /* Wider only when there is tabular output to hold: 620px fits ~73 columns
+     * of the monospace face, which cuts `df -h` mid-table. Text past the edge
+     * is clipped by the cairo buffer itself, which is sized to the bar. */
+    int bw = rows ? 860 : 620;
+    /* Rows begin one row_h below the response baseline at y=50, after a 12px
+     * gap, so the first sits at y=79 and the last at 79+(rows-1)*row_h; +6
+     * clears its descenders. Keep in step with the draw loop below. */
+    int bh = 56 + (rows ? rows * row_h + 12 : 0);
     int bx = ob.x + (ob.width - bw) / 2, by = ob.y + ob.height - bh - 48;
 
     wlr_scene_node_set_position(&s->cmdbar_ui.tree->node, bx, by);
@@ -362,6 +377,8 @@ void synui_render_cmdbar(syn_server_t *s)
         s->cmdbar_ui.bg = wlr_scene_rect_create(s->cmdbar_ui.tree,
                                                   bw, bh, color);
     }
+    /* Created once, but bw/bh move with the output — resize every pass. */
+    wlr_scene_rect_set_size(s->cmdbar_ui.bg, bw, bh);
 
     /* Accent line */
     if (!s->cmdbar_ui.accent) {
@@ -369,6 +386,7 @@ void synui_render_cmdbar(syn_server_t *s)
         s->cmdbar_ui.accent = wlr_scene_rect_create(s->cmdbar_ui.tree,
                                                       bw, 2, accent);
     }
+    wlr_scene_rect_set_size(s->cmdbar_ui.accent, bw, 2);
 
     /* Cairo text */
     cairo_t *cr;
@@ -406,6 +424,29 @@ void synui_render_cmdbar(syn_server_t *s)
                               s->cmdbar.waiting ? 0.55 : 0.75, 0.9);
         cairo_move_to(cr, 34, 50);
         cairo_show_text(cr, s->cmdbar.response);
+    }
+
+    /* Captured stdout+stderr of the last CMD:, under the command that made it.
+     * Every row is already sanitised to valid UTF-8 (cmdcap_sanitize) — cairo
+     * puts its whole context into a permanent error state on a single bad byte,
+     * and one row of `ls` output could otherwise blank every row below it. */
+    if (rows) {
+        int y = 50 + 12 + row_h;
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.80, 0.84, 0.88, 0.95);
+        for (int i = 0; i < s->cmdbar.out_lines; i++) {
+            cairo_move_to(cr, 34, y);
+            cairo_show_text(cr, s->cmdbar.out[i]);
+            y += row_h;
+        }
+        if (s->cmdbar.out_more > 0) {
+            char more[64];
+            snprintf(more, sizeof more, "+%d more line%s",
+                     s->cmdbar.out_more, s->cmdbar.out_more == 1 ? "" : "s");
+            cairo_set_source_rgba(cr, 0.55, 0.58, 0.66, 0.9);
+            cairo_move_to(cr, 34, y);
+            cairo_show_text(cr, more);
+        }
     }
 
     cairo_destroy(cr);

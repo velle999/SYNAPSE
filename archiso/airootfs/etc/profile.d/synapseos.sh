@@ -1,4 +1,16 @@
 # SynapseOS environment
+
+# ~/.local/bin on PATH for every login shell, and so for the whole session
+# tree greetd exec's below it. It cannot live in ~/.bashrc: that file is read
+# only by interactive *bash*, and the programs that need this are not bash —
+# synsh looks cliamp up with an execvp-style PATH walk and reports "no music
+# player is installed" when it misses, and synui's AI "CMD:" children exec via
+# /bin/sh. Guarded so re-sourcing a login shell does not stack duplicates.
+case ":${PATH}:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+
 export XDG_SESSION_TYPE=wayland
 # Portal backend routing keys off this (synui-portals.conf). Unset, portal falls
 # back to GTK, which cannot ScreenCast on wlroots — no screen sharing at all.
