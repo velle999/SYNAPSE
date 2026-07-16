@@ -77,6 +77,8 @@ build_component() {
     [ -d "$name/data" ]    && dirs+=("$name/data/")
     [ -d "$name/config" ]  && dirs+=("$name/config/")
     [ -d "$name/systemd" ] && dirs+=("$name/systemd/")
+    [ -d "$name/sysusers" ] && dirs+=("$name/sysusers/")
+    [ -d "$name/tmpfiles" ] && dirs+=("$name/tmpfiles/")
     [ -d "$name/rules" ]   && dirs+=("$name/rules/")
     [ -d "$name/protocols" ] && dirs+=("$name/protocols/")
     [ -d "$name/tests" ]   && dirs+=("$name/tests/")

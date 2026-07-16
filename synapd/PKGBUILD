@@ -1,6 +1,6 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=10
+pkgrel=13
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -44,4 +44,16 @@ package() {
     install -dm750 "$pkgdir/var/log/synapd"
     install -Dm644 systemd/synapd.service \
         "$pkgdir/usr/lib/systemd/system/synapd.service"
+    install -Dm644 systemd/synapd.socket \
+        "$pkgdir/usr/lib/systemd/system/synapd.socket"
+    install -Dm644 systemd/synapd-setup.service \
+        "$pkgdir/usr/lib/systemd/system/synapd-setup.service"
+
+    # Creates the unprivileged `synapd` user and owns its state dirs, so the
+    # daemon that parses socket input is not root. The tmpfiles Z lines also
+    # re-own a model that an older, root-running synapd left behind.
+    install -Dm644 sysusers/synapd.conf \
+        "$pkgdir/usr/lib/sysusers.d/synapd.conf"
+    install -Dm644 tmpfiles/synapd.conf \
+        "$pkgdir/usr/lib/tmpfiles.d/synapd.conf"
 }

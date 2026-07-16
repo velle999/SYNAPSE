@@ -30,6 +30,10 @@
 #include <fcntl.h>
 #include <grp.h>
 
+#ifdef HAVE_LIBSYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
+
 #include "synapd.h"
 #include "socket_server.h"
 #include "inference.h"
@@ -38,6 +42,11 @@
 
 #define THREAD_POOL_SIZE   8
 #define EPOLL_MAX_EVENTS   64
+
+/* Set when systemd handed us the listening socket. The socket is then systemd's
+ * to manage: unlinking it on stop would leave synapd.socket pointing at nothing
+ * and the next activation with no path to listen on. */
+static int g_socket_activated = 0;
 #define RECV_BUF_SIZE      (64 * 1024)   /* 64 KiB per client recv buf */
 
 /* synapd_header_valid() — the input gate — lives in src/wire.c, which is pure
@@ -321,45 +330,75 @@ static void *server_thread_fn(void *arg) {
 
 /* ── Public API ───────────────────────────────────────────── */
 int socket_server_start(synapd_state_t *s) {
-    unlink(s->config.socket_path);
+    int fd = -1;
 
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#ifdef HAVE_LIBSYSTEMD
+    /* Socket activation. synapd.socket hands us an already-bound, already-
+     * listening socket that systemd created, owns and chmodded (SocketGroup=
+     * synapse, SocketMode=0660). Binding it and chown()ing it to that group
+     * were the ONLY reasons this code needed CAP_CHOWN, so letting systemd do
+     * it is what lets synapd run as an unprivileged user. Do not unlink() or
+     * bind() on this path — the socket is systemd's, not ours. */
+    int nfds = sd_listen_fds(0);
+    if (nfds > 1) {
+        syn_log(LOG_ERR, "socket_server: got %d activation fds, expected 1", nfds);
+        return -1;
+    }
+    if (nfds == 1) {
+        fd = SD_LISTEN_FDS_START;
+        if (sd_is_socket_unix(fd, SOCK_STREAM, 1, s->config.socket_path, 0) <= 0) {
+            syn_log(LOG_ERR, "socket_server: activation fd is not a listening "
+                              "unix socket at %s", s->config.socket_path);
+            return -1;
+        }
+        g_socket_activated = 1;
+        syn_log(LOG_INFO, "socket_server: socket-activated, no privilege needed");
+    }
+#endif
+
     if (fd < 0) {
-        syn_log(LOG_ERR, "socket_server: socket(): %s", strerror(errno));
-        return -1;
-    }
+        /* Not socket-activated (--socket on the command line, or a build with
+         * no libsystemd). Bind it ourselves, which does need privilege to hand
+         * the inode to the synapse group. */
+        unlink(s->config.socket_path);
 
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, s->config.socket_path, sizeof(addr.sun_path) - 1);
+        fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        if (fd < 0) {
+            syn_log(LOG_ERR, "socket_server: socket(): %s", strerror(errno));
+            return -1;
+        }
 
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        syn_log(LOG_ERR, "socket_server: bind(%s): %s",
-                 s->config.socket_path, strerror(errno));
-        close(fd);
-        return -1;
-    }
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, s->config.socket_path, sizeof(addr.sun_path) - 1);
 
-    /* Unix-socket connect() needs write permission on the inode. synapd
-     * runs as root but clients (synsh in the user's terminal) don't, so
-     * root:root 0660 locked every non-root client out with EACCES. Hand
-     * the socket to the synapse group — the installer and live ISO both
-     * put the login user in it. */
-    struct group *gr = getgrnam("synapse");
-    if (gr) {
-        if (chown(s->config.socket_path, 0, gr->gr_gid) < 0)
-            syn_log(LOG_WARNING, "socket_server: chown(%s, :synapse): %s",
+        if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+            syn_log(LOG_ERR, "socket_server: bind(%s): %s",
                      s->config.socket_path, strerror(errno));
-    } else {
-        syn_log(LOG_WARNING,
-                 "socket_server: no 'synapse' group — only root can connect");
-    }
-    chmod(s->config.socket_path, 0660);
+            close(fd);
+            return -1;
+        }
 
-    if (listen(fd, s->config.max_clients) < 0) {
-        syn_log(LOG_ERR, "socket_server: listen(): %s", strerror(errno));
-        close(fd);
-        return -1;
+        /* Unix-socket connect() needs write permission on the inode. Clients
+         * (synsh in the user's terminal) are not root, so root:root 0660 locked
+         * every one of them out with EACCES. Hand the socket to the synapse
+         * group — the installer and live ISO both put the login user in it. */
+        struct group *gr = getgrnam("synapse");
+        if (gr) {
+            if (chown(s->config.socket_path, -1, gr->gr_gid) < 0)
+                syn_log(LOG_WARNING, "socket_server: chown(%s, :synapse): %s",
+                         s->config.socket_path, strerror(errno));
+        } else {
+            syn_log(LOG_WARNING,
+                     "socket_server: no 'synapse' group — only root can connect");
+        }
+        chmod(s->config.socket_path, 0660);
+
+        if (listen(fd, s->config.max_clients) < 0) {
+            syn_log(LOG_ERR, "socket_server: listen(): %s", strerror(errno));
+            close(fd);
+            return -1;
+        }
     }
 
     s->socket_fd = fd;
@@ -398,6 +437,8 @@ void socket_server_stop(synapd_state_t *s) {
     if (g_epoll_fd >= 0) { close(g_epoll_fd); g_epoll_fd = -1; }
     if (s->socket_fd >= 0) { close(s->socket_fd); s->socket_fd = -1; }
 
-    unlink(s->config.socket_path);
+    /* Only clean up a socket we created ourselves — see g_socket_activated. */
+    if (!g_socket_activated)
+        unlink(s->config.socket_path);
     syn_log(LOG_INFO, "socket_server: stopped");
 }

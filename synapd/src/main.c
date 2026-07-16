@@ -236,11 +236,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Must run as root for kernel sysfs writes */
-    if (geteuid() != 0) {
-        fprintf(stderr, "synapd: must run as root (needs /sys/kernel/synapse access)\n");
-        return EXIT_FAILURE;
-    }
+    /* Root is NOT required. synapd used to insist on it for the one privileged
+     * thing it does — writing /sys/kernel/synapse/ai_hints — but that made the
+     * process that parses every byte arriving on the socket run as root, which
+     * is exactly the wrong process to give privilege to.
+     *
+     * synapd-setup.service now does the privileged work up front (modprobe,
+     * and handing ai_hints to the synapd user), and synapd.socket creates the
+     * listening socket, so the daemon itself needs nothing. Losing the kmod is
+     * already non-fatal — scheduler_init() falls back to userspace-only mode —
+     * so a missing hints fd degrades rather than fails. */
 
     openlog("synapd", LOG_PID | LOG_NDELAY, LOG_DAEMON);
     syn_log_init(g_state.debug ? LOG_DEBUG : g_state.config.log_level);

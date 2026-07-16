@@ -1,0 +1,65 @@
+# SynapseOS AI Daemon — privileged setup
+#
+# Everything synapd used to need root for, done once, up front, by a process
+# that exits immediately and never touches the network or a client.
+#
+# synapd itself then runs as User=synapd with an empty CapabilityBoundingSet.
+# That matters because synapd parses every byte that arrives on its socket, and
+# that socket is reachable from the LAN on hosts running a synapd bridge. The
+# parser is the last thing in the tree that should hold privilege.
+
+[Unit]
+Description=SynapseOS AI Daemon privileged setup (synapd)
+Documentation=https://github.com/velle999/SYNAPSE
+Before=synapd.service synapd.socket
+After=nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+
+# /dev/nvidia0 + /dev/nvidiactl must exist before synapd probes for CUDA, or it
+# silently falls back to CPU for the whole boot (~100x slower).
+#
+# They do not exist on their own. nvidia-utils ships modules-load.d/nvidia-utils.conf,
+# which inserts nvidia_uvm early and so creates /dev/nvidia-uvm; that trips the
+# TEST!=/dev/nvidia-uvm guard in its own 60-nvidia.rules, and udev then never
+# creates the real nodes. They normally appear only when the first CUDA client
+# initializes, because libcuda shells out to setuid nvidia-modprobe. synapd
+# starts before any other CUDA client and NoNewPrivileges=true voids that setuid,
+# so it lost the race on every boot.
+#
+# What actually creates them is **nvidia-persistenced** (After= above, Type=forking,
+# so ordering is real). VERIFIED: with it stopped and both nodes deleted, starting
+# it recreates them immediately.
+#
+# nvidia-modprobe below is NOT what creates them and cannot be. When the module is
+# already loaded it does `access("/sys/module/nvidia/initstate")` and exits 0 —
+# a complete no-op, whatever arguments you pass. It is kept only for the case
+# where the module is not loaded at all, where it does load it. Do not mistake
+# its exit status for success at making device nodes.
+ExecStart=-/usr/bin/nvidia-modprobe -c0 -u
+
+# scheduler.c would otherwise modprobe this itself, which is what CAP_SYS_MODULE
+# was for. Losing it is non-fatal: scheduler_init() falls back to userspace-only.
+ExecStart=-/usr/bin/modprobe synapse_kmod
+
+# Hand the two sysfs files synapd writes to the synapd user. Needing these as
+# root is the only reason main.c ever insisted on geteuid()==0:
+#   ai_hints — scheduler_update_hints(), created 0200 root:root by the kmod
+#   status   — scheduler_write_status(), created 0644 root:root
+# Both are opened O_WRONLY, so root ownership means EACCES for the daemon and
+# the scheduler drops to "lost connection to synapse_kmod" on every write.
+# Modes are preserved: status stays world-readable, ai_hints stays write-only.
+#
+# NOTE: the kmod recreates both on every load, so ownership resets if
+# synapse_kmod is reloaded without re-running this unit.
+#
+# Deliberately chowned to the synapd USER, not the synapse group: the group
+# holds real login users, and these steer kernel scheduling.
+ExecStart=-/bin/sh -c 'for f in ai_hints status; do [ -e "/sys/kernel/synapse/$f" ] && chown synapd "/sys/kernel/synapse/$f"; done; exit 0'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,8 +1,11 @@
-# /etc/systemd/system/synapd.service
 # SynapseOS AI Daemon — systemd service unit
 #
 # Core OS service. Starts before display manager and all
 # synapse-aware services. Kernel-native inference always on.
+#
+# This daemon holds NO privilege. Everything that needs it happens in
+# synapd-setup.service (modprobe, /dev/nvidia*, ai_hints ownership) and
+# synapd.socket (creating the socket as :synapse 0660) before we start.
 
 [Unit]
 Description=SynapseOS AI Daemon (synapd)
@@ -10,30 +13,16 @@ Documentation=https://github.com/velle999/SYNAPSE
 After=local-fs.target network.target
 Before=display-manager.service synguard.service synnet.service
 Wants=local-fs.target
-# nvidia-persistenced keeps the driver initialized and the device nodes
-# present. Wants= (not Requires=) so we still start on non-NVIDIA hardware,
-# where this unit does not exist.
-Wants=nvidia-persistenced.service
-After=nvidia-persistenced.service
+Requires=synapd-setup.service
+After=synapd-setup.service
+Requires=synapd.socket
+After=synapd.socket
 
 [Service]
 Type=simple
-User=root
+User=synapd
+Group=synapd
 
-ExecStartPre=/bin/mkdir -p /run/synapd /var/lib/synapd /var/log/synapd
-ExecStartPre=/bin/chmod 0755 /run/synapd
-# Create /dev/nvidia0 + /dev/nvidiactl before we probe for CUDA.
-#
-# nvidia-utils ships modules-load.d/nvidia-utils.conf, which inserts nvidia_uvm
-# at boot and so creates /dev/nvidia-uvm early. That trips the TEST!=/dev/nvidia-uvm
-# guard in 60-nvidia.rules, and udev then never creates the real nodes. They
-# normally appear only when some process calls setuid nvidia-modprobe on demand
-# — which NoNewPrivileges=true forbids us from doing. synapd starts before any
-# other CUDA client, so without this it finds no nodes, cannot make them, and
-# silently falls back to CPU on every boot (~100x slower).
-#
-# Leading '-' so a machine with no NVIDIA GPU still starts. Needs CAP_MKNOD.
-ExecStartPre=-/usr/bin/nvidia-modprobe -c 0 -u
 ExecStart=/usr/bin/synapd \
     --foreground \
     --model /var/lib/synapd/models/synapse.gguf \
@@ -56,9 +45,9 @@ TimeoutStopSec=30s
 
 # Resource limits
 LimitNOFILE=65536
-# needed for model mmap
+# needed for model mmap and CUDA pinned host memory. This is an rlimit, not a
+# capability — CAP_IPC_LOCK would only be needed to raise it past a lower cap.
 LimitMEMLOCK=infinity
-LimitNICE=-20
 
 # Logging
 StandardOutput=journal
@@ -66,28 +55,41 @@ StandardError=journal
 SyslogIdentifier=synapd
 
 # ── Hardening ────────────────────────────────────────────
-# synapd runs as root and parses everything that comes in over its socket, so
-# it is the most valuable thing in the tree to fence in.
+# synapd parses everything that comes in over its socket, and on a box running
+# the synapd bridge that socket is reachable from the LAN. So it gets no user
+# privilege and no capabilities at all: the empty CapabilityBoundingSet below
+# is the whole point of splitting the privileged work out into
+# synapd-setup.service and synapd.socket.
 #
 # Deliberately NOT set, because each of these would break it:
 #   PrivateDevices        — needs /dev/nvidia* for CUDA offload
-#   ProtectKernelModules  — it modprobes synapse_kmod (scheduler.c)
 #   MemoryDenyWriteExecute— CUDA generates code at runtime
 #   ProtectSystem=strict  — would make /run and /var read-only; `full` gives us
 #                           read-only /usr + /etc without that fallout
-#
-# NoNewPrivileges=true stays ON. It does neuter the setuid bit on
-# nvidia-modprobe, but we run as User=root and so need no escalation to run it —
-# only CAP_MKNOD, which is why that capability is in the bounding set below.
 NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
 ProtectHostname=true
+ProtectClock=true
 ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
 RestrictSUIDSGID=true
-# CAP_MKNOD lets the nvidia-modprobe ExecStartPre create /dev/nvidia*.
-CapabilityBoundingSet=CAP_SYS_MODULE CAP_IPC_LOCK CAP_CHOWN CAP_DAC_OVERRIDE CAP_SYS_NICE CAP_MKNOD
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# The daemon's own state. ReadWritePaths is what it may touch under a
+# ProtectSystem=full root; the model dir stays read-only.
+ReadWritePaths=/var/lib/synapd/context /var/log/synapd /run/synapd
+ReadOnlyPaths=/var/lib/synapd/models
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+# SynapseOS AI Daemon — listening socket
+#
+# systemd owns this socket, not synapd. That is the point: creating it and
+# handing the inode to the synapse group were the only reasons synapd ever
+# needed CAP_CHOWN, so doing it here is what lets synapd.service run as an
+# unprivileged user with an empty capability set.
+
+[Unit]
+Description=SynapseOS AI Daemon socket (synapd)
+Documentation=https://github.com/velle999/SYNAPSE
+
+[Socket]
+ListenStream=/run/synapd/synapd.sock
+
+# Unix-socket connect() needs write permission on the inode, so clients
+# (synsh in the user's terminal, synui) must be able to write it. The installer
+# and the live ISO both put the login user in the synapse group.
+SocketGroup=synapse
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target
