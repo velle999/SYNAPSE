@@ -79,3 +79,19 @@ menu separator {
     background: #ffd319;
     font-weight: bold;
 }
+
+/* Battery. The module is absent entirely on a machine with no battery, so these
+ * rules simply never match on a desktop. warning/critical come from the module's
+ * "states" — at 10% the point is to be noticed, not to be tasteful. */
+#battery {
+    color: #cdd6f4;
+}
+#battery.warning {
+    color: #f9e2af;
+}
+#battery.critical {
+    color: #f38ba8;
+}
+#battery.charging {
+    color: #a6e3a1;
+}

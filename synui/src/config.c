@@ -230,6 +230,10 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+escape",    "menu" },
         { "super+c",         "control" },
         { "super+b",         "bluetooth" },
+        /* Brightness keys. No modifier: they are dedicated keys on every
+         * laptop, and nothing else claims them. */
+        { "xf86monbrightnessup",   "brightness_up" },
+        { "xf86monbrightnessdown", "brightness_down" },
         { "super+q",         "close" },
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },

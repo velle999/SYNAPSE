@@ -1361,6 +1361,7 @@ int synui_init(syn_server_t *s)
     screensaver_init(s);
     bt_init(s);
     notif_init(s);
+    logind_init(s);
 
     /* Stamp game mode "off" for waybar's indicator. */
     game_init(s);
@@ -1486,6 +1487,7 @@ void synui_destroy(syn_server_t *s)
     power_finish(s);
     taskmgr_finish(s);
     news_finish(s);
+    logind_finish(s);
     notif_finish(s);
     bt_finish(s);
     screensaver_finish(s);

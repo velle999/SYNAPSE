@@ -11,6 +11,7 @@
     "modules-right": [
         "tray",
         "custom/gamemode",
+        "battery",
         "pulseaudio",
         "cpu",
         "memory",
@@ -62,6 +63,25 @@
     "clock": {
         "format": "{:%I:%M:%S %p  %Y-%m-%d}",
         "interval": 1
+    },
+    // Battery. waybar hides this module entirely on a machine with no
+    // /sys/class/power_supply/BAT*, so it costs a desktop nothing and is the
+    // reason no detection is needed here — a laptop installed from this ISO
+    // previously had no battery indicator at all, on a distro whose installer
+    // goes out of its way to handle the "no cable, needs Wi-Fi" laptop case.
+    //
+    // states drive the CSS classes (warning/critical in style.css); format-icons
+    // steps with the level. {capacity} is a percentage, {time} is what waybar
+    // computes from the current draw — useful, and wrong for the first minute
+    // after a plug/unplug, which is normal and not worth hiding.
+    "battery": {
+        "states": { "warning": 20, "critical": 10 },
+        "format": "BAT {capacity}%",
+        "format-charging": "CHG {capacity}%",
+        "format-plugged": "AC {capacity}%",
+        "format-full": "AC full",
+        "tooltip-format": "{timeTo} ({power}W)",
+        "interval": 30
     },
     "cpu": {
         "format": "CPU {usage}%",

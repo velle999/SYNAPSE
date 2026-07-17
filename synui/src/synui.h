@@ -2122,6 +2122,16 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
 
+/* ── logind (logind.c) ───────────────────────────────────── */
+/* systemd-logind: lock before a sleep synui did not initiate (the lid), and set
+ * the backlight — both over sd-bus, so neither needs root, a udev rule, or
+ * brightnessctl. Safe with no system bus and on machines with no backlight. */
+void logind_init(syn_server_t *s);
+void logind_finish(syn_server_t *s);
+/* Step the backlight by a percentage of its range (+/-). No-op where there is
+ * no panel. */
+void logind_brightness_step(syn_server_t *s, int pct);
+
 /* ── Notifications (notif.c) ─────────────────────────────── */
 /* notif_init takes org.freedesktop.Notifications on the session bus. Safe where
  * there is no bus or the name is already owned (a stray mako): it logs, leaves

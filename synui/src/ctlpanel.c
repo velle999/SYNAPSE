@@ -122,6 +122,8 @@ static const char *action_desc(const char *action, const char *arg)
         { "menu",              "Welcome menu" },
         { "control",           "Control panel" },
         { "bluetooth",         "Bluetooth" },
+        { "brightness_up",     "Brightness up" },
+        { "brightness_down",   "Brightness down" },
         { "start_menu",        "Start menu" },
         { "close",             "Close window" },
         { "quit",              "Quit synui" },
