@@ -1427,6 +1427,123 @@ void synui_render_ctlpanel(syn_server_t *s)
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
 }
 
+/* ── Clipboard history (clipboard.c) ─────────────────────── */
+
+#define CLIP_W       560
+#define CLIP_ROW_H    24
+#define CLIP_TOP      78
+#define CLIP_FOOTER   46
+#define CLIP_PAD      18
+
+void synui_render_clipboard(syn_server_t *s)
+{
+    syn_clipboard_t *c = &s->clipboard;
+
+    if (!c->visible) {
+        wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int rows = c->count < CLIP_ROWS ? c->count : CLIP_ROWS;
+    if (rows < 1) rows = 1;                 /* the empty line still needs a row */
+
+    int pw = CLIP_W;
+    int ph = CLIP_TOP + rows * CLIP_ROW_H + CLIP_FOOTER;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->clip_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->clip_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->clip_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->clip_ui.bg)
+        s->clip_ui.bg = wlr_scene_rect_create(s->clip_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->clip_ui.bg, pw, ph);   /* height tracks the list */
+    if (!s->clip_ui.accent)
+        s->clip_ui.accent = wlr_scene_rect_create(s->clip_ui.tree, pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, CLIP_PAD, 30);
+    cairo_show_text(cr, "CLIPBOARD");
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, CLIP_PAD, 44);
+    cairo_line_to(cr, pw - CLIP_PAD, 44);
+    cairo_stroke(cr);
+
+    int first = c->scroll;
+    if (first > c->count - CLIP_ROWS) first = c->count - CLIP_ROWS;
+    if (first < 0) first = 0;
+
+    if (c->count == 0) {
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, CLIP_PAD, CLIP_TOP);
+        cairo_show_text(cr, "Nothing copied yet");
+    }
+
+    for (int i = 0; i < CLIP_ROWS && first + i < c->count; i++) {
+        const syn_clip_item_t *it = &c->items[first + i];
+        int ry = CLIP_TOP + i * CLIP_ROW_H;
+        int sel = (first + i == c->selected);
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, CLIP_PAD - 8, ry - 15, pw - 2 * (CLIP_PAD - 8),
+                            CLIP_ROW_H - 3);
+            cairo_fill(cr);
+        }
+
+        /* Flatten to one line for display. The stored text keeps its newlines —
+         * this is only what the row shows, and a raw \n would draw as a box
+         * glyph and throw the row's baseline out. */
+        char line[160];
+        size_t n = 0;
+        for (const char *p = it->text; *p && n < sizeof(line) - 1; p++)
+            line[n++] = ((unsigned char)*p < 0x20) ? ' ' : *p;
+        line[n] = '\0';
+        /* Cut on a character boundary: a chop through a multi-byte sequence
+         * poisons cairo's context and blanks every row below this one. */
+        line[news_utf8_trim(line, strlen(line))] = '\0';
+
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        draw_clipped(cr, CLIP_PAD, ry, pw - 2 * CLIP_PAD - 40, line);
+    }
+
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    if (c->count > CLIP_ROWS) {
+        char more[64];
+        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d", first + 1,
+                 first + CLIP_ROWS < c->count ? first + CLIP_ROWS : c->count,
+                 c->count);
+        cairo_move_to(cr, CLIP_PAD, ph - 30);
+        cairo_show_text(cr, more);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, CLIP_PAD, ph - 14);
+    cairo_show_text(cr, "Enter copy \xc2\xb7 Del clear all \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->clip_ui.text_buf, s->clip_ui.tree, buf);
+}
+
 /* ── Notification toasts (notif.c) ───────────────────────── */
 
 #define NOTIF_W       360
@@ -1498,6 +1615,7 @@ void synui_render_notifs(syn_server_t *s)
 
     if (!n->count) {
         wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
         return;
     }
 
@@ -1505,6 +1623,7 @@ void synui_render_notifs(syn_server_t *s)
     notif_stack_box(s, &box);
     if (box.height <= 0) {
         wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
         return;
     }
 
@@ -1584,6 +1703,7 @@ void synui_render_bt(syn_server_t *s)
     if (!b->visible) {
         wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
         return;
     }
 
@@ -2529,6 +2649,7 @@ void synui_ui_init(syn_server_t *s)
     s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
+    s->clip_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -2544,6 +2665,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

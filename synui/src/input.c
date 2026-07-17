@@ -582,6 +582,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         nightlight_toggle(s);
     } else if (strcmp(action, "record") == 0) {
         synui_spawn("synui-record");
+    } else if (strcmp(action, "clipboard") == 0) {
+        clipboard_toggle(s);
     } else if (strcmp(action, "brightness_up") == 0) {
         logind_brightness_step(s, +5);
     } else if (strcmp(action, "brightness_down") == 0) {
@@ -930,6 +932,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Control panel: same modal contract again. */
         for (int i = 0; i < nsyms; i++)
             if (ctlpanel_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Clipboard history: same modal contract as the rest. */
+        for (int i = 0; i < nsyms; i++)
+            if (clipboard_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

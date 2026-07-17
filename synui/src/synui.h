@@ -400,6 +400,26 @@ typedef struct {
     uint32_t    next_id;   /* ids must never be 0: 0 means "no id" to callers */
 } syn_notifs_t;
 
+/* ── Clipboard history (clipboard.c) ─────────────────────── */
+/* The compositor already owns the seat, so it sees every selection with no
+ * protocol, no client and no wl-paste poller. Memory only, never a file: a
+ * clipboard that silently persists every password you copy is a liability. */
+#define CLIP_HISTORY_MAX  32
+#define CLIP_TEXT_MAX     (256 * 1024)   /* a client may offer 900MB of "text" */
+#define CLIP_ROWS         12             /* render.c draws this many; keep in step */
+
+typedef struct {
+    char *text;          /* owned; strdup'd out of the client's pipe */
+} syn_clip_item_t;
+
+typedef struct {
+    int             visible;
+    int             selected;
+    int             scroll;
+    int             count;
+    syn_clip_item_t items[CLIP_HISTORY_MAX];   /* [0] is most recent */
+} syn_clipboard_t;
+
 /* ── Bluetooth panel (bt.c) ──────────────────────────────── */
 /* Native BlueZ client: synui talks org.bluez over sd-bus itself rather than
  * shelling out to bluetoothctl and scraping it, or handing the job to a GTK
@@ -1485,6 +1505,17 @@ struct syn_server {
 
     syn_notifs_t    notifs;
 
+    /* Clipboard history (Super+V) — see syn_clipboard_t. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } clip_ui;
+
+    syn_clipboard_t  clipboard;
+    struct wl_listener clipboard_set_selection;
+
     /* Super-tap: Super pressed and released with nothing in between opens the
      * start menu, the way it does on every other desktop. Armed on the Super
      * press and disarmed by *any* intervening key or pointer button, so Super
@@ -2126,6 +2157,16 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
+
+/* ── Clipboard history (clipboard.c) ─────────────────────── */
+void clipboard_init(syn_server_t *s);
+void clipboard_finish(syn_server_t *s);
+void clipboard_show(syn_server_t *s);
+void clipboard_hide(syn_server_t *s);
+void clipboard_toggle(syn_server_t *s);
+void clipboard_clear(syn_server_t *s);
+int  clipboard_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+void synui_render_clipboard(syn_server_t *s);
 
 /* ── Night light (nightlight.c) ──────────────────────────── */
 /* Writes the gamma LUT on every output. No-op where the backend has no gamma

@@ -1368,6 +1368,7 @@ int synui_init(syn_server_t *s)
     notif_init(s);
     logind_init(s);
     nightlight_apply(s);   /* honour night_light = on from synuirc at startup */
+    clipboard_init(s);
 
     /* Stamp game mode "off" for waybar's indicator. */
     game_init(s);
@@ -1493,6 +1494,7 @@ void synui_destroy(syn_server_t *s)
     power_finish(s);
     taskmgr_finish(s);
     news_finish(s);
+    clipboard_finish(s);
     logind_finish(s);
     notif_finish(s);
     bt_finish(s);

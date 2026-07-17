@@ -234,6 +234,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+b",         "bluetooth" },
         { "super+shift+b",   "night_light" },   /* "blue light" */
         { "super+shift+r",   "record" },        /* start/stop screen recording */
+        { "super+v",         "clipboard" },     /* clipboard history */
         /* Brightness keys. No modifier: they are dedicated keys on every
          * laptop, and nothing else claims them. */
         { "xf86monbrightnessup",   "brightness_up" },
