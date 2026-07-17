@@ -392,6 +392,8 @@ create_source_tarball() {
     [ -d "${pkg}/data" ]    && items+=("${pkg}/data/")
     [ -d "${pkg}/config" ]  && items+=("${pkg}/config/")
     [ -d "${pkg}/systemd" ] && items+=("${pkg}/systemd/")
+    [ -d "${pkg}/sysusers" ] && items+=("${pkg}/sysusers/")
+    [ -d "${pkg}/tmpfiles" ] && items+=("${pkg}/tmpfiles/")
     [ -d "${pkg}/rules" ]   && items+=("${pkg}/rules/")
     [ -d "${pkg}/protocols" ] && items+=("${pkg}/protocols/")
     [ -d "${pkg}/tests" ]   && items+=("${pkg}/tests/")
