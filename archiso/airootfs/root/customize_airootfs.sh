@@ -15,6 +15,22 @@ echo 'root:synapse' | chpasswd
 groupadd -r synapse  2>/dev/null || true
 groupadd -r synguard 2>/dev/null || true
 
+# ── Generate the locale /etc/locale.conf actually names ───────
+#
+# airootfs ships /etc/locale.conf (LANG=en_US.UTF-8) and /etc/locale.gen with
+# en_US.UTF-8 uncommented, and nothing ever ran locale-gen — so the ISO booted
+# pointing LANG at a locale that did not exist. Only C.utf8 was in
+# /usr/lib/locale, which is why foot greets every live session with
+# "invalid locale, falling back to 'C.UTF-8'" and why anything that sorts,
+# formats a date, or measures a string got the C locale's answer instead of the
+# configured one.
+#
+# This is the chroot, so it is the one place that can generate it: locale-gen
+# writes /usr/lib/locale/locale-archive into the image at build time. A declar-
+# ative file cannot do it — which is exactly why it belongs here per this
+# script's own rule about what can't be a plain file.
+locale-gen
+
 # ── synsh is a valid login shell ──────────────────────────────
 grep -qxF '/usr/bin/synsh' /etc/shells || echo '/usr/bin/synsh' >> /etc/shells
 
