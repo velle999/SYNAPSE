@@ -1237,7 +1237,10 @@ int synui_init(syn_server_t *s)
     s->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
     wlr_xcursor_manager_load(s->cursor_mgr, 1);
 
-    /* XWayland — X11 app support (lazy: Xwayland starts on first X client). */
+    /* XWayland — X11 app support (lazy: Xwayland starts on first X client).
+     * xw_views must be live first: server_new_xwayland_surface() inserts into
+     * it, and a zeroed wl_list is not an empty one. */
+    wl_list_init(&s->xw_views);
     xwayland_setup(s);
 
     /* Initialize workspaces */

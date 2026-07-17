@@ -72,12 +72,21 @@
  *   - A failed trial leaves Steam already closed, so the next trial's "close"
  *     is a no-op and its command really runs minutes after the close. That
  *     measures the delay, not the command.
- *   - Steam WEDGES after repeated close/restore cycles: it maps its X window
- *     (IsViewable) but never paints, so there is no buffer, no wl_surface map,
- *     and nothing any compositor can show. Once wedged nothing restores it and
- *     every later trial reads as FAIL. Only a Steam restart clears it — which
+ *   - Steam WEDGES: it maps its X window (IsViewable) but never associates a
+ *     wl_surface, so there is no buffer, no map, and nothing any compositor can
+ *     show. Every trial after that reads as FAIL regardless of command — which
  *     is why the numbers above use a fresh client per trial.
- * The wedge is Steam's own bug and is beyond anything the dock can do.
+ *
+ * The wedge is NOT "after repeated close/restore cycles", and it is NOT beyond
+ * the dock — both were earlier readings here, and both were wrong. Caught live
+ * 2026-07-16: it formed ~12s into a fresh session with nothing cycled, when
+ * Steam destroyed its just-mapped main window during the login→main handoff and
+ * the replacement never associated. An X unmap/map recovers it in ~1s.
+ *
+ * So a tray-restore click now arms dock_arm_unwedge(): if no window has arrived
+ * a few seconds later, xwayland_unwedge() rebuilds the surface. open/main is
+ * still tried first and still the right thing for a genuinely tray-resident
+ * client; the fallback only fires when it demonstrably did nothing.
  */
 
 /*
@@ -715,6 +724,56 @@ bool dock_bar_at(syn_server_t *s, double lx, double ly, syn_output_t **out)
     return false;
 }
 
+/* How long a tray restore gets before we call it wedged. steam://open/main
+ * brings a healthy client back in ~2s (measured, 3/3), so this is generous —
+ * deliberately, because the fallback tears the window down and rebuilding it is
+ * far more disruptive than waiting. */
+#define DOCK_UNWEDGE_DELAY_MS 6000
+
+static bool dock_app_is_mapped(syn_server_t *s, const char *app_id)
+{
+    for (int wi = 0; wi < WORKSPACE_MAX; wi++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[wi].windows, link) {
+            if (!v->mapped) continue;
+            const char *a = view_app_id(v);
+            if (a && strcmp(a, app_id) == 0) return true;
+        }
+    }
+    return false;
+}
+
+/*
+ * The restore command went out; did a window actually come back?
+ *
+ * The dock cannot tell "sitting in the tray" from "wedged" at click time —
+ * both are simply "no mapped view", which is why the open/main fix reads as
+ * flaky: it is the right thing for the first and useless for the second. So
+ * ask the only question that distinguishes them, which is whether a window
+ * appeared, and only then reach for the disruptive remedy.
+ */
+static int dock_unwedge_cb(void *data)
+{
+    syn_server_t *s = data;
+    if (dock_app_is_mapped(s, "steam")) return 0;   /* restored normally */
+    /* Deliberately re-derived rather than captured at arm time: six seconds is
+     * long enough for the client to have exited and taken its view with it. */
+    xwayland_unwedge(s, "steam", "Steam");
+    return 0;
+}
+
+static void dock_arm_unwedge(syn_server_t *s)
+{
+    if (!s->dock_unwedge_timer) {
+        struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+        s->dock_unwedge_timer = wl_event_loop_add_timer(loop, dock_unwedge_cb, s);
+        if (!s->dock_unwedge_timer) return;
+    }
+    /* Re-arming an already-pending timer just pushes it out, which is what
+     * repeated clicking should do. */
+    wl_event_source_timer_update(s->dock_unwedge_timer, DOCK_UNWEDGE_DELAY_MS);
+}
+
 void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
 {
     /* Kick off the press-pop and wake every output's dock so the animation
@@ -735,6 +794,10 @@ void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
             wlr_log(WLR_INFO, "dock: %s is tray-resident, restoring via: %s",
                     e->app_id, restore);
             synui_spawn(restore);
+            /* ...and check up on it: the command is a no-op against a wedged
+             * client, and this click is the only signal that the user wants
+             * the window now. */
+            if (strcmp(e->app_id, "steam") == 0) dock_arm_unwedge(s);
             return;
         }
         const syn_icon_entry_t *ic = icon_lookup(e->app_id);

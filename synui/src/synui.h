@@ -730,6 +730,11 @@ struct syn_workspace {
 /* ── View (window) ───────────────────────────────────────── */
 struct syn_view {
     struct wl_list          link;       /* in workspace->windows */
+    /* In server->xw_views; X11 views only, and valid from new_surface rather
+     * than from map. `link` above is only ever on a workspace list, i.e. only
+     * while mapped, so it cannot reach a window that never mapped — which is
+     * precisely the Steam wedge. See xwayland_unwedge(). */
+    struct wl_list          xw_link;
     syn_server_t           *server;
     syn_workspace_t        *workspace;
     /* The monitor this window lives on within its workspace. Never NULL for a
@@ -1060,6 +1065,9 @@ struct syn_server {
      * every output's own syn_output::dock tree. */
     syn_dock_entry_t dock_entries[DOCK_MAX_ENTRIES];
     int              dock_entry_count;
+    /* Armed by a tray-restore click, disarmed if the window shows up in time;
+     * see dock_arm_unwedge(). */
+    struct wl_event_source *dock_unwedge_timer;
 
     /* cat.c: the wandering kitty (Super+Shift+C). One animal for the whole
      * layout, so its tree is top-level and its position is in LAYOUT coords —
@@ -1399,6 +1407,10 @@ struct syn_server {
     int xwayland_up;    /* the X server is actually running (ready has fired),
                          * not merely socket-listening — see the lazy-start
                          * deadlock note in xwayland_apply_primary() */
+    /* Every X11 view, mapped or not, in syn_view::xw_link. The workspace lists
+     * hold only mapped views, so this is the one place a never-mapped surface
+     * is still reachable. Read by xwayland_unwedge(). */
+    struct wl_list xw_views;
     struct wl_listener new_decoration;
     struct wl_listener new_idle_inhibitor;
 
@@ -1523,6 +1535,13 @@ void xwayland_setup(syn_server_t *s);   /* create server; no-op if unavailable *
  * deadlocks the compositor against Xwayland. Call whenever the primary changes
  * (display panel) or a monitor is hotplugged. */
 void xwayland_apply_primary(syn_server_t *s);
+
+/* Last-resort recovery for an X11 window that mapped in X but never associated
+ * a wl_surface, so no compositor can ever show it (the Steam wedge). Forces an
+ * X unmap/map on the one managed window matching class+title, which makes
+ * Xwayland tear down and rebuild the surface. Asynchronous and best-effort:
+ * safe to call when nothing is wedged, in which case it does nothing. */
+void xwayland_unwedge(syn_server_t *s, const char *app_id, const char *title);
 
 /* ── output_mgmt.c ───────────────────────────────────────── */
 void output_mgmt_setup(syn_server_t *s);        /* output-management + DPMS */

@@ -341,6 +341,7 @@ static void xw_destroy(struct wl_listener *listener, void *data)
      * up to and dereference. */
     view_frame_destroy(view);
 
+    wl_list_remove(&view->xw_link);
     wl_list_remove(&view->associate.link);
     wl_list_remove(&view->dissociate.link);
     wl_list_remove(&view->destroy.link);
@@ -424,6 +425,7 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
     view->override_redirect = xs->override_redirect;
     xs->data = view;
     wl_list_init(&view->link);
+    wl_list_insert(&s->xw_views, &view->xw_link);
 
     view->associate.notify = xw_associate;
     wl_signal_add(&xs->events.associate, &view->associate);
@@ -620,6 +622,135 @@ void xwayland_apply_primary(syn_server_t *s)
 fail:
     free(job->display);
     free(job->want);
+    free(job);
+}
+
+/* ── Unwedging a window that mapped in X but never associated ─
+ *
+ * Steam can reach a state where its main X window is IsViewable and fully
+ * sized, but no wl_surface is ever associated with it: wlroots therefore never
+ * emits map, there is no view in any workspace list, and _NET_CLIENT_LIST is
+ * empty. Nothing the compositor draws can bring it back, and steam://open/main
+ * cannot either — the client believes its window is already up, so it has
+ * nothing to do. Caught live 2026-07-16; measured on the wedge:
+ *
+ *     XResizeWindow ±1 and back (ConfigureNotify) → no
+ *     XClearArea exposures=True (full Expose)     → no
+ *     XUnmapWindow + XMapWindow                   → window back in ~1s
+ *
+ * Only teardown works, and it works because it makes Xwayland destroy the
+ * failed surface and build a fresh one. Confirmed in isolation — resize and
+ * expose were not run first.
+ *
+ * This is a workaround, not the fix: the association is being lost somewhere we
+ * have not yet found (it is NOT wlroots' xwm.c serial guard — a patched wlroots
+ * logging that drop stayed silent across a whole natural wedge). Treat this as
+ * a floor under the bug, not a reason to stop looking for it.
+ */
+
+struct unwedge_job {
+    char        *display;   /* owned */
+    xcb_window_t window;
+    char        *what;      /* owned; for logging only */
+};
+
+/* XSync equivalent: a round trip forces everything queued to actually land.
+ * The unmap must be complete before the map is sent, or Xwayland can coalesce
+ * the pair and the surface is never torn down — which is the whole point. */
+static void unwedge_sync(xcb_connection_t *xcb)
+{
+    free(xcb_get_input_focus_reply(xcb, xcb_get_input_focus(xcb), NULL));
+}
+
+static void *unwedge_worker(void *data)
+{
+    struct unwedge_job *job = data;
+
+    xcb_connection_t *xcb = xcb_connect(job->display, NULL);
+    if (xcb_connection_has_error(xcb)) goto out;
+
+    /* Act only on a window X still calls viewable. A Steam that is genuinely
+     * tray-resident has its main window UNMAPPED, and both states look
+     * identical from here (no view either way) — so without this check the
+     * timer would force open a window the user deliberately closed. */
+    xcb_get_window_attributes_reply_t *attr =
+        xcb_get_window_attributes_reply(xcb,
+            xcb_get_window_attributes(xcb, job->window), NULL);
+    if (!attr) goto out_disconnect;   /* window died under us; nothing to fix */
+    int viewable = attr->map_state == XCB_MAP_STATE_VIEWABLE;
+    free(attr);
+
+    if (!viewable) {
+        wlr_log(WLR_INFO,
+                "synui: %s (0x%x) is unmapped in X — really in the tray, "
+                "not wedged; leaving it alone", job->what, job->window);
+        goto out_disconnect;
+    }
+
+    wlr_log(WLR_INFO,
+            "synui: %s (0x%x) is viewable in X but has no wl_surface — "
+            "wedged; forcing an X unmap/map to rebuild it", job->what,
+            job->window);
+
+    xcb_unmap_window(xcb, job->window);
+    unwedge_sync(xcb);
+    sleep(2);                 /* mirrors the recipe proven on the live wedge */
+    xcb_map_window(xcb, job->window);
+    unwedge_sync(xcb);
+
+out_disconnect:
+    xcb_disconnect(xcb);
+out:
+    free(job->display);
+    free(job->what);
+    free(job);
+    return NULL;
+}
+
+void xwayland_unwedge(syn_server_t *s, const char *app_id, const char *title)
+{
+    if (!s->xwayland_up || !s->xwayland->display_name) return;
+
+    /* Find the one managed X11 window that we have never mapped and that
+     * matches both class and title. Class alone is far too broad: every Steam
+     * child window (and there are a dozen) reports class "steam" too, and all
+     * of them are legitimately unmapped. The title is what separates the main
+     * window from its own popups; the worker's IsViewable test is the second
+     * gate. */
+    xcb_window_t win = XCB_WINDOW_NONE;
+    syn_view_t *v;
+    wl_list_for_each(v, &s->xw_views, xw_link) {
+        if (!v->is_xwayland || v->mapped || v->override_redirect) continue;
+        if (!v->xsurface || !v->xsurface->window_id) continue;
+        const char *c = view_app_id(v), *t = view_title(v);
+        if (!c || !t || strcmp(c, app_id) || strcmp(t, title)) continue;
+        win = v->xsurface->window_id;
+        break;
+    }
+    if (win == XCB_WINDOW_NONE) return;   /* nothing wedged-looking */
+
+    struct unwedge_job *job = calloc(1, sizeof *job);
+    if (!job) return;
+    job->display = strdup(s->xwayland->display_name);
+    job->what    = strdup(title);
+    job->window  = win;
+    if (!job->display || !job->what) goto fail;
+
+    /* Snapshot above, thread below. The worker gets a window id and a string —
+     * never a view pointer, which could be freed while it sleeps. It must not
+     * run inline either: it does X round trips and a 2s sleep, and blocking the
+     * wl_event_loop on X is what deadlocks us (see xwayland_apply_primary). */
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, unwedge_worker, job) != 0) {
+        wlr_log(WLR_ERROR, "synui: can't spawn X11 unwedge worker");
+        goto fail;
+    }
+    pthread_detach(tid);
+    return;
+
+fail:
+    free(job->display);
+    free(job->what);
     free(job);
 }
 
