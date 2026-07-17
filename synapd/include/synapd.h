@@ -41,6 +41,16 @@ typedef enum {
     SYN_MSG_ERROR          = 0xFF,
 } syn_msg_type_t;
 
+/* Query flags — carried in syn_msg_header_t.flags, meaningful on SYN_MSG_QUERY.
+ * Fully backward-compatible: flags==0 is the legacy behaviour every existing
+ * client (synsh, synguard, kmod, chibi) already sends. Agentic clients that
+ * drive their own full prompt (e.g. vibe) set SYN_QF_RAW and a token budget. */
+#define SYN_QF_RAW          0x8000u  /* skip the built-in Synapse persona + rolling
+                                        OS system-context injection, and don't push
+                                        the turn into the context store — the client
+                                        owns the whole prompt */
+#define SYN_QF_TOKENS_MASK  0x7FFFu  /* max output tokens; 0 = daemon default (512) */
+
 /* Wire format: fixed header + variable payload */
 #pragma pack(push, 1)
 typedef struct {

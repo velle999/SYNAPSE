@@ -8,7 +8,8 @@ int  inference_run(synapd_state_t *s,
                    const char *system_ctx,
                    const char *prompt,
                    char *out_buf, size_t out_len,
-                   int max_tokens);
+                   int max_tokens,
+                   int raw);
 int  inference_classify_syscall(synapd_state_t *s,
                                  const char *syscall_ctx,
                                  char *out_buf, size_t out_len);

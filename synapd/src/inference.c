@@ -208,6 +208,9 @@ int inference_init(synapd_state_t *s) {
  * @out_buf   : caller-allocated output buffer
  * @out_len   : size of out_buf
  * @max_tokens: max tokens to generate (0 = use context default)
+ * @raw       : if non-zero, suppress the built-in Synapse persona so the caller
+ *              controls the whole prompt (agentic clients). system_ctx is still
+ *              honoured if supplied; NULL/empty means no system block at all.
  *
  * Returns number of tokens generated, or -1 on error.
  */
@@ -215,7 +218,8 @@ int inference_run(synapd_state_t *s,
                   const char *system_ctx,
                   const char *prompt,
                   char *out_buf, size_t out_len,
-                  int max_tokens)
+                  int max_tokens,
+                  int raw)
 {
     synapd_inference_t *inf = s->inference;
     if (!inf || !inf->model || !inf->ctx) return -1;
@@ -231,6 +235,12 @@ int inference_run(synapd_state_t *s,
         plen = asprintf(&full_prompt,
             "<|system|>\n%s\n<|user|>\n%s\n<|assistant|>\n",
             system_ctx, prompt);
+    } else if (raw) {
+        /* Raw agentic client with no system_ctx: bare user turn, no persona.
+         * The client has already baked any system prompt into `prompt`. */
+        plen = asprintf(&full_prompt,
+            "<|user|>\n%s\n<|assistant|>\n",
+            prompt);
     } else {
         plen = asprintf(&full_prompt,
             "<|system|>\nYou are Synapse, the AI core of SynapseOS. "
@@ -344,7 +354,7 @@ int inference_classify_syscall(synapd_state_t *s,
         "NORMAL, SUSPICIOUS:<brief reason>, or BLOCK:<brief reason>. "
         "Reply with only the classification tag, nothing else.";
 
-    return inference_run(s, sys, syscall_ctx, out_buf, out_len, 32);
+    return inference_run(s, sys, syscall_ctx, out_buf, out_len, 32, 0);
 }
 
 /* ── Scheduling hint generator ────────────────────────────── */
@@ -364,7 +374,7 @@ int inference_sched_hint(synapd_state_t *s,
         "integer from -20 (lower priority) to +19 (higher priority). "
         "No explanation.";
 
-    int r = inference_run(s, sys, proc_intent, buf, sizeof(buf), 8);
+    int r = inference_run(s, sys, proc_intent, buf, sizeof(buf), 8, 0);
     if (r < 0) return -1;
 
     *out_priority_delta = atoi(buf);

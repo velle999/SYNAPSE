@@ -145,24 +145,34 @@ static void handle_query(work_item_t *w) {
         return;
     }
 
-    /* Fetch rolling system context */
+    /* Query flags (legacy clients send 0 → persona + OS context + 512 tokens). */
+    int raw        = (w->hdr.flags & SYN_QF_RAW) != 0;
+    int max_tokens = w->hdr.flags & SYN_QF_TOKENS_MASK;  /* 0 => inference default */
+
+    /* The rolling system context is the OS-assistant role's memory. An agentic
+     * client (SYN_QF_RAW) drives its own prompt, so don't prepend OS state to it. */
     char sys_ctx[1024] = {0};
-    context_get_summary(w->state, sys_ctx, sizeof(sys_ctx));
+    if (!raw)
+        context_get_summary(w->state, sys_ctx, sizeof(sys_ctx));
 
     /* Run inference */
     char *out = malloc(SYN_MAX_PAYLOAD);
     if (!out) { send_error(w->client_fd, w->hdr.request_id, "oom"); return; }
 
-    int n = inference_run(w->state, sys_ctx, prompt, out, SYN_MAX_PAYLOAD - 1, 512);
+    int n = inference_run(w->state, raw ? NULL : sys_ctx, prompt,
+                          out, SYN_MAX_PAYLOAD - 1, max_tokens, raw);
     if (n < 0) {
         send_error(w->client_fd, w->hdr.request_id, "inference failed");
         free(out);
         return;
     }
 
-    /* Push Q+A into context store */
-    context_push(w->state, CTX_QUERY,    w->client_pid, prompt);
-    context_push(w->state, CTX_RESPONSE, 0,             out);
+    /* Push Q+A into the context store — but not an agentic client's coding
+     * turns, which would pollute the OS assistant's rolling memory. */
+    if (!raw) {
+        context_push(w->state, CTX_QUERY,    w->client_pid, prompt);
+        context_push(w->state, CTX_RESPONSE, 0,             out);
+    }
 
     send_response(w->client_fd, w->hdr.request_id,
                   SYN_MSG_QUERY, out, strlen(out) + 1);
