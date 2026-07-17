@@ -491,9 +491,14 @@ create_source_tarball() {
         return 1
     fi
 
+    # Exclude ONLY the versioned makepkg extraction dir, never the broad
+    # ${pkg}-* glob: that also matched real source files named ${pkg}-*
+    # (e.g. src/synui-lock-auth.c), silently dropping them from the tarball so
+    # the build failed with "File src/synui-lock-auth.c does not exist".
+    # build-all.sh's collector was already fixed this way; this copy drifted.
     tar czf "${tarball}" \
         --transform "s|^${pkg}/|${pkg}-${SYNAPSEOS_VERSION}/|" \
-        --exclude="${pkg}/src/${pkg}-*" \
+        --exclude="${pkg}/src/${pkg}-${SYNAPSEOS_VERSION}" \
         --exclude="${pkg}/pkg" \
         --exclude="${pkg}/*.pkg.tar*" \
         --exclude="${pkg}/*.tar.gz" \
