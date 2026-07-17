@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=100
+pkgrel=101
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -62,19 +62,26 @@ package() {
     install -Dm644 config/kdeglobals \
         "$pkgdir/etc/xdg/kdeglobals"
 
-    # The bar. waybar reads /etc/xdg/waybar/ when a user has no ~/.config/waybar,
-    # so packaging the config here gives every session a working bar with no
-    # per-user setup — including the live ISO's root session, which had none at
-    # all: waybar was not on the ISO and nothing would have configured it if it
-    # were. This is also the ONLY copy now. syn-install used to write its own
-    # from heredocs, which drifted from the repo's and shipped a menu that
-    # launched the wrong app; a packaged default cannot drift from itself.
+    # The bar's config, and the wrapper that points waybar at it.
+    #
+    # NOT /etc/xdg/waybar: those paths are owned by the *waybar package*, and
+    # shipping ours there is a hard file conflict that fails the whole pacstrap
+    # transaction — which is how it broke the ISO build. It only ever "worked"
+    # on a dev box because build-all.sh installs with --overwrite '*', silently
+    # taking ownership of waybar's own files.
+    #
+    # This is still the ONLY copy of the config: syn-install used to write its
+    # own from heredocs, which drifted from the repo's and once shipped a menu
+    # whose items launched the wrong app. A packaged default cannot drift from
+    # itself, and synui-waybar hands over to ~/.config/waybar when a user has one.
     install -Dm644 config/waybar/config.jsonc \
-        "$pkgdir/etc/xdg/waybar/config.jsonc"
+        "$pkgdir/usr/share/synui/waybar/config.jsonc"
     install -Dm644 config/waybar/style.css \
-        "$pkgdir/etc/xdg/waybar/style.css"
+        "$pkgdir/usr/share/synui/waybar/style.css"
     install -Dm644 config/waybar/network-menu.xml \
-        "$pkgdir/etc/xdg/waybar/network-menu.xml"
+        "$pkgdir/usr/share/synui/waybar/network-menu.xml"
+    install -Dm755 systemd/synui-waybar.sh \
+        "$pkgdir/usr/bin/synui-waybar"
 
     # Media idle-inhibit (synui-idle-inhibit binary is installed by meson).
     install -Dm755 systemd/synui-media-inhibit.sh \

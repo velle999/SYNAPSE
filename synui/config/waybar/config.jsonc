@@ -103,7 +103,7 @@
         "tooltip-format-disconnected": "Disconnected - click for network options",
         "tooltip-format-disabled": "Wi-Fi is switched off - click to turn it back on",
         "menu": "on-click",
-        "menu-file": "/etc/xdg/waybar/network-menu.xml",
+        "menu-file": "/usr/share/synui/waybar/network-menu.xml",
         // "nmcli radio wifi on" also clears an rfkill soft block, and needs no
         // root (polkit lets the active local session do network-control), so
         // the bar alone is enough to dig out of a switched-off radio.

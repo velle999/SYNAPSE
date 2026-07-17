@@ -879,7 +879,7 @@ autostart = swaybg -c '#0b0b14'
 # waybar is just the bar now. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
 # opens — so there is no generator to run before waybar starts.
-autostart = waybar
+autostart = synui-waybar
 autostart = foot synsh
 # Any GUI app that needs root goes through polkit, and pkexec refuses to
 # prompt on a terminal it doesn't have — without an authentication agent

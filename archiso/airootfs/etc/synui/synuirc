@@ -15,7 +15,7 @@ terminal = foot
 # indicator, looking far less finished than an installed system for no reason.
 # Its config comes from /etc/xdg/waybar (shipped by synui), so the root session
 # here needs nothing in its home.
-autostart = waybar
+autostart = synui-waybar
 
 # Window appearance
 border_width = 2
