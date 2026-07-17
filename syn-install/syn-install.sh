@@ -528,6 +528,58 @@ elif [ -n "$HAS_NVIDIA" ]; then
     # wlroots needs KMS on the nvidia driver
     GPU_KERNEL_PARAMS="nvidia_drm.modeset=1"
     success "NVIDIA driver installed ($NVIDIA_PKG, nouveau blacklisted)"
+
+    # ── Put inference on the GPU ──────────────────────────────
+    #
+    # The driver alone does nothing for synapd. synapd depends on synapse-llama,
+    # which the pacstrap above resolved to the CPU build the ISO ships — so
+    # until this ran, a SynapseOS install detected your card, installed the
+    # right driver, and then ran the entire reason the distro exists on the CPU.
+    # Silently. On a 4090. Forever. Nothing said a word, because a CPU build is
+    # not an error; it is just slow.
+    #
+    # synapse-llama-cuda declares provides+conflicts on synapse-llama, so this
+    # is a straight swap and pacman does the right thing. It comes from the
+    # [synapseos] repo copied to /var/cache/synapseos above; `cuda` and
+    # nvidia-utils come from Arch's repos over the network, which the install
+    # already required. It is a large download (cuda is ~4.7 GiB installed),
+    # hence the prompt — but default yes: someone installing on an NVIDIA box
+    # wants the GPU, and the failure mode of not asking loudly enough is a
+    # machine that quietly never uses it.
+    if arch-chroot /mnt pacman -Si synapse-llama-cuda &>/dev/null; then
+        echo ""
+        echo "  synapd can run inference on this GPU instead of the CPU."
+        echo "  This downloads the CUDA runtime (~4.7 GiB installed)."
+        prompt "Enable GPU inference? [Y/n]:"
+        read -r gpu_ans
+        case "${gpu_ans:-y}" in
+            [Nn]*)
+                warn "Keeping CPU inference. Switch later with:
+  sudo pacman -S synapse-llama-cuda" ;;
+            *)
+                echo "  Installing synapse-llama-cuda (this takes a while)..."
+                if arch-chroot /mnt pacman -S --noconfirm synapse-llama-cuda 2>&1; then
+                    # Verify rather than trust: this is the exact spot where a
+                    # silent CPU fallback would be indistinguishable from success.
+                    if arch-chroot /mnt sh -c '[ -e /usr/lib/libggml-cuda.so ]'; then
+                        success "GPU inference enabled (synapse-llama-cuda)"
+                    else
+                        warn "synapse-llama-cuda installed but libggml-cuda.so is missing —
+  synapd will run on the CPU. Report this."
+                    fi
+                else
+                    warn "Could not install synapse-llama-cuda — synapd will run on the
+  CPU. Retry later with: sudo pacman -S synapse-llama-cuda"
+                fi ;;
+        esac
+    else
+        # The ISO was built without a CUDA toolkit on the build host, so it
+        # carries no GPU package. Say so — the whole bug being fixed here is
+        # that this case used to be indistinguishable from success.
+        warn "This ISO ships no GPU build of llama, so synapd will run on the CPU
+  despite the NVIDIA card. (The ISO must be built on a host with the CUDA
+  toolkit for synapse-llama-cuda to exist.)"
+    fi
 else
     GPU_PKGS="mesa"
     [ -n "$HAS_AMD" ]   && GPU_PKGS="$GPU_PKGS vulkan-radeon"

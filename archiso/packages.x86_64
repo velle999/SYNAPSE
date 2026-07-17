@@ -25,6 +25,12 @@ plymouth
 archiso
 mkinitcpio-archiso
 syslinux
+# The CPU llama build, named explicitly. The repo also carries
+# synapse-llama-cuda, which provides+conflicts synapse-llama — naming the one we
+# want here means the ISO's dependency resolution can never fall through to the
+# CUDA provider, whose libs NEED libcuda.so.1 at load and would make synapd fail
+# to start on every machine without an NVIDIA driver. The GPU build is for
+# installed systems (syn-install picks it when it sees the hardware), never here.
 synapse-llama
 synapd
 synsh

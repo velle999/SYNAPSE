@@ -225,111 +225,178 @@ fi
 mkdir -p "${BUILD_DIR}" "${OUT_DIR}" "${LOCAL_REPO}" "${MODEL_DIR}"
 
 # ── Build llama.cpp ───────────────────────────────────────────
-step "Building llama.cpp"
+#
+# build_llama <backend> <repoint:yes|no>
+#
+# A function because the ISO now needs TWO backends out of one run: the CPU
+# build it actually ships, and a CUDA build that is packaged but never
+# installed on the ISO — so that an installed system with an NVIDIA card has a
+# synapse-llama-cuda to switch to. Before this, nothing ever built that package
+# during a release, nothing shipped it, and every installed SynapseOS ran the
+# headline feature on the CPU no matter what card was in the machine.
+#
+# Each backend gets its own build dir (build-cpu/, build-cuda/). That is not
+# tidiness: `build/` was shared and reused across runs, and CMake option()
+# values are STICKY, so a cached GGML_CUDA=ON from an earlier cuda build made a
+# later "cpu" build silently reconfigure with CUDA still on — an ISO whose
+# synapd links libcuda.so.1 and therefore fails to start on any machine without
+# an NVIDIA driver. A directory that is only ever configured for one backend
+# cannot have that bug at all. The cache check below stays as a safety net, and
+# alternating backends no longer throws away either build's objects.
+build_llama() {
+    local backend="$1" repoint="$2"
+    local staging="${PROJECT_ROOT}/llama-staging-${backend}"
+    local bdir="${BUILD_DIR}/llama-build-${backend}"
 
-if [[ ! -d "${LLAMA_DIR}" ]]; then
-    log "Cloning llama.cpp..."
-    git clone --depth=1 --branch "${LLAMA_REF}" \
-        https://github.com/ggerganov/llama.cpp "${LLAMA_DIR}"
-fi
+    step "Building llama.cpp (${backend})"
 
-cd "${LLAMA_DIR}"
-log "(llama.cpp pinned at ${LLAMA_REF})"
-
-# CUDA 13+ ships CCCL 3.4, which changed the cub/thrust APIs this pinned
-# llama.cpp (${LLAMA_REF}) uses in argsort.cu / top-k.cu (cuda::make_*_iterator,
-# DeviceTopK::MaxPairs) — the build fails with "namespace cuda has no member".
-# ggml only reaches for cub as a fast path and has portable fallback kernels, so
-# gate it off on CUDA 13+ (older toolkits keep cub). Idempotent, cuda-only.
-if [[ "$WITH_GPU" == "cuda" ]]; then
-    _cub_guard='ggml/src/ggml-cuda/common.cuh'
-    if grep -q 'CUDART_VERSION >= 11070$' "$_cub_guard" 2>/dev/null; then
-        log "Patching ggml to disable cub on CUDA 13+ (CCCL 3.4 API break)"
-        sed -i 's|\(CUDART_VERSION >= 11070\)$|\1 \&\& CUDART_VERSION < 13000|' "$_cub_guard"
+    if [[ ! -d "${LLAMA_DIR}" ]]; then
+        log "Cloning llama.cpp..."
+        git clone --depth=1 --branch "${LLAMA_REF}" \
+            https://github.com/ggerganov/llama.cpp "${LLAMA_DIR}"
     fi
-fi
 
-# Belt and braces to the explicit -D flags below: if the reused build/ dir was
-# configured for a DIFFERENT backend, wipe it. The -D flags alone would fix the
-# configuration, but stale artifacts (a leftover libggml-cuda.so) would still be
-# sitting there for `make install` to pick up.
-if [[ -f build/CMakeCache.txt ]]; then
-    _want_cuda=OFF; [[ "$WITH_GPU" == cuda ]] && _want_cuda=ON
-    _have_cuda=$(sed -n 's/^GGML_CUDA:BOOL=//p' build/CMakeCache.txt | head -1)
-    if [[ -n "$_have_cuda" && "$_have_cuda" != "$_want_cuda" ]]; then
-        log "llama.cpp build/ was configured GGML_CUDA=${_have_cuda}, want ${_want_cuda} — wiping it"
-        rm -rf build
-    fi
-fi
+    cd "${LLAMA_DIR}"
+    log "(llama.cpp pinned at ${LLAMA_REF})"
 
-mkdir -p build && cd build
-
-CMAKE_ARGS=(
-    "-DCMAKE_BUILD_TYPE=Release"
-    "-DCMAKE_INSTALL_PREFIX=/usr"
-    "-DLLAMA_BUILD_TESTS=OFF"
-    "-DLLAMA_BUILD_EXAMPLES=ON"
-    "-DLLAMA_SERVER=ON"
-)
-
-# EVERY backend toggle is stated explicitly on EVERY path, never left to
-# default. `build/` is reused across runs (--no-clean), so CMakeCache.txt
-# survives — and a cached `GGML_CUDA:BOOL=ON` from an earlier cuda build is
-# STICKY: an option() not passed with -D keeps its cached value. A `cpu` build
-# would then silently reconfigure with the CUDA backend still on, log
-# "CMake configure (GPU: cpu)" while printing "Including CUDA backend", and
-# produce an ISO whose synapd links libcuda.so.1 — so it fails to start on any
-# machine without an NVIDIA driver. Which is most of them.
-case "$WITH_GPU" in
-    cuda)
-        CMAKE_ARGS+=("-DGGML_CUDA=ON")
-        # Ensure CMake can find CUDA even under sudo (which strips env vars)
-        if [[ -d /opt/cuda ]]; then
-            CMAKE_ARGS+=("-DCUDAToolkit_ROOT=/opt/cuda" "-DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc")
+    # CUDA 13+ ships CCCL 3.4, which changed the cub/thrust APIs this pinned
+    # llama.cpp (${LLAMA_REF}) uses in argsort.cu / top-k.cu (cuda::make_*_iterator,
+    # DeviceTopK::MaxPairs) — the build fails with "namespace cuda has no member".
+    # ggml only reaches for cub as a fast path and has portable fallback kernels, so
+    # gate it off on CUDA 13+ (older toolkits keep cub). Idempotent, cuda-only —
+    # and harmless to a CPU build, which never compiles that file.
+    if [[ "$backend" == "cuda" ]]; then
+        local _cub_guard='ggml/src/ggml-cuda/common.cuh'
+        if grep -q 'CUDART_VERSION >= 11070$' "$_cub_guard" 2>/dev/null; then
+            log "Patching ggml to disable cub on CUDA 13+ (CCCL 3.4 API break)"
+            sed -i 's|\(CUDART_VERSION >= 11070\)$|\1 \&\& CUDART_VERSION < 13000|' "$_cub_guard"
         fi
-        ;;
-    rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
-    # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
-    # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
-    # CPU without those extensions — VMs without -cpu host included.
-    # The ISO must run on baseline x86-64.
-    cpu)   CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_NATIVE=OFF") ;;
-esac
+    fi
 
-log "CMake configure (GPU: ${WITH_GPU})..."
-cmake .. "${CMAKE_ARGS[@]}"
+    # Safety net. Per-backend dirs mean this should never fire; it stays because
+    # the failure it catches is silent and shipped once.
+    if [[ -f "${bdir}/CMakeCache.txt" ]]; then
+        local _want_cuda=OFF; [[ "$backend" == cuda ]] && _want_cuda=ON
+        local _have_cuda
+        _have_cuda=$(sed -n 's/^GGML_CUDA:BOOL=//p' "${bdir}/CMakeCache.txt" | head -1)
+        if [[ -n "$_have_cuda" && "$_have_cuda" != "$_want_cuda" ]]; then
+            log "${bdir} was configured GGML_CUDA=${_have_cuda}, want ${_want_cuda} — wiping it"
+            rm -rf "${bdir}"
+        fi
+    fi
 
-log "Building llama.cpp (${JOBS} jobs)..."
-make -j"${JOBS}"
+    mkdir -p "${bdir}"
+    cd "${bdir}"
 
-log "Installing llama.cpp to staging area..."
-# Wipe first: layering installs from different llama.cpp builds leaves
-# mismatched libllama/libggml sonames that break linking against staging.
-# Scoped to this backend's dir — never touches the other backends' builds.
-rm -rf "${LLAMA_STAGING}"
-DESTDIR="${LLAMA_STAGING}" make install
+    local CMAKE_ARGS=(
+        "-DCMAKE_BUILD_TYPE=Release"
+        "-DCMAKE_INSTALL_PREFIX=/usr"
+        "-DLLAMA_BUILD_TESTS=OFF"
+        "-DLLAMA_BUILD_EXAMPLES=ON"
+        "-DLLAMA_SERVER=ON"
+    )
 
-# Before the split, llama-staging was a real directory. ln can't overwrite one,
-# so migrate it out of the way rather than die here — and never delete it, it may
-# be the only copy of a build something still links against.
-if [[ -d "${LLAMA_STAGING_LINK}" && ! -L "${LLAMA_STAGING_LINK}" ]]; then
-    _orphan="${LLAMA_STAGING_LINK}.pre-split-$(date +%Y%m%d%H%M%S)"
-    warn "llama-staging is a real directory (pre-split layout) — moving it to $(basename "${_orphan}")"
-    mv "${LLAMA_STAGING_LINK}" "${_orphan}"
+    # EVERY backend toggle is stated explicitly on EVERY path, never left to
+    # default — see the note above build_llama about sticky option() values.
+    case "$backend" in
+        cuda)
+            CMAKE_ARGS+=("-DGGML_CUDA=ON")
+            # Ensure CMake can find CUDA even under sudo (which strips env vars)
+            if [[ -d /opt/cuda ]]; then
+                CMAKE_ARGS+=("-DCUDAToolkit_ROOT=/opt/cuda" "-DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc")
+            fi
+            ;;
+        rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
+        # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
+        # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
+        # CPU without those extensions — VMs without -cpu host included.
+        # The ISO must run on baseline x86-64.
+        cpu)   CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_NATIVE=OFF") ;;
+    esac
+
+    log "CMake configure (GPU: ${backend})..."
+    cmake "${LLAMA_DIR}" "${CMAKE_ARGS[@]}"
+
+    log "Building llama.cpp (${JOBS} jobs)..."
+    make -j"${JOBS}"
+
+    log "Installing llama.cpp to staging area..."
+    # Wipe first: layering installs from different llama.cpp builds leaves
+    # mismatched libllama/libggml sonames that break linking against staging.
+    # Scoped to this backend's dir — never touches the other backends' builds.
+    rm -rf "${staging}"
+    DESTDIR="${staging}" make install
+
+    # A cuda build that produced no cuda backend is a CPU build wearing the
+    # wrong name — and it would be packaged as synapse-llama-cuda and installed
+    # on exactly the machines that wanted the GPU. Fail loudly instead.
+    if [[ "$backend" == "cuda" && ! -e "${staging}/usr/lib/libggml-cuda.so" ]]; then
+        err "CUDA build produced no libggml-cuda.so — this is a CPU build. Refusing to package it as synapse-llama-cuda."
+    fi
+
+    if [[ "$repoint" == "yes" ]]; then
+        # Before the split, llama-staging was a real directory. ln can't overwrite one,
+        # so migrate it out of the way rather than die here — and never delete it, it may
+        # be the only copy of a build something still links against.
+        if [[ -d "${LLAMA_STAGING_LINK}" && ! -L "${LLAMA_STAGING_LINK}" ]]; then
+            local _orphan="${LLAMA_STAGING_LINK}.pre-split-$(date +%Y%m%d%H%M%S)"
+            warn "llama-staging is a real directory (pre-split layout) — moving it to $(basename "${_orphan}")"
+            mv "${LLAMA_STAGING_LINK}" "${_orphan}"
+        fi
+
+        # Repoint llama-staging at what we just built. If that steals the symlink from
+        # a GPU build, say so loudly: synapd resolves libllama through this path at
+        # runtime, so the machine silently drops to CPU inference until it is restored.
+        local _prev
+        _prev="$(readlink "${LLAMA_STAGING_LINK}" 2>/dev/null || true)"
+        if [[ -n "$_prev" && "$_prev" != "$(basename "${staging}")" && "$_prev" != "llama-staging-cpu" ]]; then
+            warn "llama-staging was pointing at ${_prev} — repointing it to the ${backend} build."
+            warn "Anything linking against llama-staging (synapd) now runs on ${backend}."
+            warn "Restore with: ln -sfn ${_prev} ${LLAMA_STAGING_LINK}"
+        fi
+        # -n: don't descend into the existing symlink and nest the link inside its target
+        ln -sfn "$(basename "${staging}")" "${LLAMA_STAGING_LINK}"
+    fi
+
+    ok "llama.cpp (${backend}) built and staged to ${staging}"
+    cd "${SCRIPT_DIR}"
+}
+
+# The ISO's own backend. Repoints llama-staging, because that is the build
+# synapd on this host links against.
+build_llama "${WITH_GPU}" yes
+
+# ── The CUDA package (built, never installed on the ISO) ──────
+#
+# The ISO must stay a CPU build: libggml-cuda.so NEEDs libcudart/libcublas and
+# libcuda.so.1 at load, so a CUDA synapd cannot start on a machine with no
+# NVIDIA driver — which is most of them. But an INSTALLED SynapseOS with an
+# NVIDIA card should run on the GPU, and syn-install can only offer that if a
+# synapse-llama-cuda package exists in the repo it copies to the target. Nothing
+# ever built one during a release, so every install ran CPU inference forever,
+# silently, on any hardware. This builds it so there is something to install.
+#
+# Skipped (loudly) with no CUDA toolkit: the ISO is still valid, it just cannot
+# offer the GPU to anyone. That has to be a warning, not silence — silence is
+# how this went unnoticed in the first place.
+BUILD_CUDA_PKG=false
+if [[ "$WITH_GPU" == "cuda" ]]; then
+    # The ISO backend IS cuda (never for a release — see above). The one build
+    # already covers the package.
+    BUILD_CUDA_PKG=false
+elif command -v nvcc &>/dev/null || [[ -x /opt/cuda/bin/nvcc ]]; then
+    BUILD_CUDA_PKG=true
+else
+    warn "No CUDA toolkit (nvcc) on this host — synapse-llama-cuda will NOT be built."
+    warn "The ISO stays valid, but an NVIDIA machine installed from it will run"
+    warn "inference on the CPU with no way to switch. Install 'cuda' to fix."
 fi
 
-# Repoint llama-staging at what we just built. If that steals the symlink from
-# a GPU build, say so loudly: synapd resolves libllama through this path at
-# runtime, so the machine silently drops to CPU inference until it is restored.
-_prev="$(readlink "${LLAMA_STAGING_LINK}" 2>/dev/null || true)"
-if [[ -n "$_prev" && "$_prev" != "$(basename "${LLAMA_STAGING}")" && "$_prev" != "llama-staging-cpu" ]]; then
-    warn "llama-staging was pointing at ${_prev} — repointing it to the ${WITH_GPU} build."
-    warn "Anything linking against llama-staging (synapd) now runs on ${WITH_GPU}."
-    warn "Restore with: ln -sfn ${_prev} ${LLAMA_STAGING_LINK}"
+if [[ "$BUILD_CUDA_PKG" == "true" && "$LLAMA_ONLY" != "true" ]]; then
+    # repoint=no: this build is for packaging only. Stealing the llama-staging
+    # symlink would silently change what this host's synapd links against.
+    build_llama cuda no
 fi
-# -n: don't descend into the existing symlink and nest the link inside its target
-ln -sfn "$(basename "${LLAMA_STAGING}")" "${LLAMA_STAGING_LINK}"
-ok "llama.cpp built and staged to ${LLAMA_STAGING}"
 
 if [[ "$LLAMA_ONLY" == "true" ]]; then
     if [[ "$WITH_GPU" == "cuda" && ! -e "${LLAMA_STAGING}/usr/lib/libggml-cuda.so" ]]; then
@@ -370,6 +437,12 @@ id -u synbuild &>/dev/null || useradd -r -s /bin/bash -m synbuild
 
 create_source_tarball() {
     local pkg="$1"
+    # An optional second argument overrides which llama backend this package is
+    # built against, so synapse-llama can be packaged twice from one run: once
+    # as the CPU build the ISO installs, once as synapse-llama-cuda for targets
+    # that have a GPU. Defaults to the ISO's own backend.
+    local llama_backend="${2:-${WITH_GPU}}"
+    local staging="${PROJECT_ROOT}/llama-staging-${llama_backend}"
     local pkgdir="${PROJECT_ROOT}/${pkg}"
     local tarball="${pkgdir}/${pkg}-${SYNAPSEOS_VERSION}.tar.gz"
 
@@ -444,7 +517,7 @@ build_package() {
         return 0
     fi
 
-    log "Building ${pkg}..."
+    log "Building ${pkg}${2:+ (llama: ${llama_backend})}..."
 
     # Create source tarball for packages that need it
     create_source_tarball "${pkg}"
@@ -466,11 +539,11 @@ build_package() {
     # synapse-llama's PKGBUILD resolves its tree by backend so it can never
     # package a CPU build as the CUDA one. synapd looks for the bare name, so
     # provide that as a local symlink alongside.
-    if [[ -d "${LLAMA_STAGING}" ]]; then
+    if [[ -d "${staging}" ]]; then
         local _sname
-        _sname="$(basename "${LLAMA_STAGING}")"
+        _sname="$(basename "${staging}")"
         rm -rf "${tmpbuild}/llama-staging" "${tmpbuild}/${_sname}"
-        cp -a "${LLAMA_STAGING}" "${tmpbuild}/${_sname}"
+        cp -a "${staging}" "${tmpbuild}/${_sname}"
         ln -sfn "${_sname}" "${tmpbuild}/llama-staging"
     fi
 
@@ -499,7 +572,7 @@ build_package() {
     # SYNAPSE_LLAMA_BACKEND selects which variant synapse-llama's PKGBUILD
     # builds (cpu -> synapse-llama, cuda -> synapse-llama-cuda). sudo scrubs the
     # environment, so hand it over explicitly via env.
-    sudo -u synbuild -H env "SYNAPSE_LLAMA_BACKEND=${WITH_GPU}" \
+    sudo -u synbuild -H env "SYNAPSE_LLAMA_BACKEND=${llama_backend}" \
         makepkg -fd --noconfirm \
         2>&1 | sed 's/^/  /' \
         || err "${pkg} build failed — aborting (packages.x86_64 needs every package)"
@@ -518,6 +591,20 @@ rm -f "${LOCAL_REPO}"/*.pkg.tar.zst
 for pkg in "${PACKAGES[@]}"; do
     build_package "$pkg"
 done
+
+# synapse-llama, a second time, against the CUDA staging tree — producing
+# synapse-llama-cuda. It goes into the repo but is NOT in packages.x86_64, so
+# the ISO itself never installs it: pacstrap resolves synapd's dependency on
+# `synapse-llama` to the exact-name package, and packages.x86_64 lists that
+# explicitly so the choice can never fall to the provider.
+#
+# syn-install copies this whole repo to /var/cache/synapseos on the target and
+# leaves it in pacman.conf, so the package stays installable for the life of the
+# machine — which is what lets the installer switch an NVIDIA box to the GPU
+# build, and what lets anyone switch later.
+if [[ "$BUILD_CUDA_PKG" == "true" ]]; then
+    build_package synapse-llama cuda
+fi
 
 # ── Rebuild local repo database ───────────────────────────────
 step "Updating local pacman repo"
