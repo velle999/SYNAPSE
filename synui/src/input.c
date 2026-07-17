@@ -576,6 +576,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         else                     synui_render_welcome(s);
     } else if (strcmp(action, "control") == 0) {
         ctlpanel_toggle(s);
+    } else if (strcmp(action, "bluetooth") == 0) {
+        bt_toggle(s);
     } else if (strcmp(action, "start_menu") == 0) {
         synui_start_menu_open(s);
     } else if (strcmp(action, "ws") == 0) {
@@ -920,6 +922,13 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Control panel: same modal contract again. */
         for (int i = 0; i < nsyms; i++)
             if (ctlpanel_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Bluetooth: same modal contract. Ahead of the start menu because a
+         * pairing prompt has BlueZ blocked on the answer. */
+        for (int i = 0; i < nsyms; i++)
+            if (bt_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

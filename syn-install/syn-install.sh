@@ -479,6 +479,7 @@ case "$DE_CHOICE" in
         # into the compositor). Without it that menu entry silently does nothing.
         arch-chroot /mnt pacman -S --noconfirm \
             greetd greetd-tuigreet waybar swaybg python wtype \
+            bluez bluez-utils \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
         success "SynapseUI selected (included)"
         ;;
@@ -676,6 +677,9 @@ echo "  User '$NEW_USER' created (uid=$USER_UID)"
 
 # ── Enable services ──────────────────────────────────────
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
+# Bluetooth: bluez ships the unit but enables nothing. Without this the radio
+# stays down and synui's panel (Super+B) correctly reports no adapter.
+arch-chroot /mnt systemctl enable bluetooth 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 # Module-signature policy: safe to enable — only enforces when Secure Boot is

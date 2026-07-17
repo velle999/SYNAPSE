@@ -1427,6 +1427,210 @@ void synui_render_ctlpanel(syn_server_t *s)
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
 }
 
+/* ── Bluetooth (bt.c) ────────────────────────────────────── */
+
+#define BT_W        520
+#define BT_ROW_H     26
+#define BT_TOP       98
+#define BT_FOOTER    52
+#define BT_PAD       18
+
+/* A device's state in one word, plus the colour to say it in. Connected is the
+ * only thing worth shouting about; the rest is context. */
+static const char *bt_dev_state(const syn_bt_dev_t *d, double rgb[3])
+{
+    if (d->connected) { rgb[0] = 0.00; rgb[1] = 0.85; rgb[2] = 0.75; return "connected"; }
+    if (d->paired)    { rgb[0] = 0.60; rgb[1] = 0.60; rgb[2] = 0.70; return "paired"; }
+    rgb[0] = 0.45; rgb[1] = 0.45; rgb[2] = 0.55;
+    return "";
+}
+
+void synui_render_bt(syn_server_t *s)
+{
+    syn_bt_t *b = &s->bt;
+
+    if (!b->visible) {
+        wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int rows = b->count < BT_ROWS ? b->count : BT_ROWS;
+    if (rows < 1) rows = 1;                  /* the empty-list line needs a row */
+
+    int pw = BT_W;
+    int ph = BT_TOP + rows * BT_ROW_H + BT_FOOTER;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->bt_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->bt_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->bt_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->bt_ui.bg)
+        s->bt_ui.bg = wlr_scene_rect_create(s->bt_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->bt_ui.bg, pw, ph);   /* height tracks the list */
+    if (!s->bt_ui.accent)
+        s->bt_ui.accent = wlr_scene_rect_create(s->bt_ui.tree, pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, BT_PAD, 30);
+    cairo_show_text(cr, "BLUETOOTH");
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, BT_PAD, 44);
+    cairo_line_to(cr, pw - BT_PAD, 44);
+    cairo_stroke(cr);
+
+    /* Adapter line: the two facts that explain an empty list. */
+    cairo_set_font_size(cr, 13);
+    if (!b->has_adapter) {
+        cairo_set_source_rgba(cr, 0.85, 0.45, 0.45, 1.0);
+        cairo_move_to(cr, BT_PAD, 70);
+        cairo_show_text(cr, "No Bluetooth adapter found");
+    } else {
+        cairo_set_source_rgba(cr, b->powered ? 0.0 : 0.45, b->powered ? 0.85 : 0.45,
+                              b->powered ? 0.75 : 0.55, 1.0);
+        cairo_move_to(cr, BT_PAD, 70);
+        cairo_show_text(cr, b->powered ? "Radio on" : "Radio off");
+
+        if (b->discovering) {
+            cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+            cairo_move_to(cr, BT_PAD + 110, 70);
+            cairo_show_text(cr, "\xc2\xb7 scanning\xe2\x80\xa6");
+        }
+    }
+
+    /* A pairing prompt takes over the body: BlueZ is blocked on the answer, so
+     * showing the device list underneath would invite acting on it. */
+    if (b->ask_kind != BT_ASK_NONE) {
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
+        cairo_move_to(cr, BT_PAD, BT_TOP + 6);
+        cairo_show_text(cr, b->ask_dev[0] ? b->ask_dev : "A device");
+
+        char l2[128];
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+        cairo_move_to(cr, BT_PAD, BT_TOP + 32);
+
+        if (b->ask_kind == BT_ASK_CONFIRM) {
+            snprintf(l2, sizeof(l2), "Passkey %06u \xc2\xb7 does it match the device?",
+                     b->ask_passkey);
+        } else if (b->ask_kind == BT_ASK_AUTHORIZE) {
+            snprintf(l2, sizeof(l2), "wants to connect%s",
+                     b->ask_detail[0] ? " (service)" : "");
+        } else if (b->ask_passkey) {
+            snprintf(l2, sizeof(l2), "Type %06u on the device, then Enter",
+                     b->ask_passkey);
+        } else {
+            snprintf(l2, sizeof(l2), "Enter PIN %s on the device", b->ask_detail);
+        }
+        draw_clipped(cr, BT_PAD, BT_TOP + 32, pw - 2 * BT_PAD, l2);
+
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, BT_PAD, ph - 14);
+        cairo_show_text(cr, b->ask_kind == BT_ASK_DISPLAY
+                        ? "Any key to dismiss"
+                        : "y accept \xc2\xb7 n reject");
+        cairo_destroy(cr);
+        set_scene_buffer(&s->bt_ui.text_buf, s->bt_ui.tree, buf);
+        return;
+    }
+
+    int first = b->scroll;
+    if (first > b->count - BT_ROWS) first = b->count - BT_ROWS;
+    if (first < 0) first = 0;
+
+    if (b->count == 0) {
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, BT_PAD, BT_TOP);
+        cairo_show_text(cr, b->powered ? "No devices \xc2\xb7 press s to scan"
+                                       : "Radio is off \xc2\xb7 press o");
+    }
+
+    for (int i = 0; i < BT_ROWS && first + i < b->count; i++) {
+        const syn_bt_dev_t *d = &b->devs[first + i];
+        int ry = BT_TOP + i * BT_ROW_H;
+        int sel = (first + i == b->selected);
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, BT_PAD - 8, ry - 16, pw - 2 * (BT_PAD - 8), BT_ROW_H - 3);
+            cairo_fill(cr);
+        }
+
+        /* Name, then the address for anything that did not give one — an
+         * unnamed row is otherwise unidentifiable among six other unnamed rows. */
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        draw_clipped(cr, BT_PAD, ry, 250, d->name[0] ? d->name : d->addr);
+
+        double rgb[3];
+        const char *st = bt_dev_state(d, rgb);
+        if (st[0]) {
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 1.0);
+            cairo_move_to(cr, 290, ry);
+            cairo_show_text(cr, st);
+        }
+        if (d->trusted) {
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            cairo_move_to(cr, 372, ry);
+            cairo_show_text(cr, "trusted");
+        }
+
+        char right[32] = {0};
+        if (d->battery >= 0)      snprintf(right, sizeof(right), "%d%%", d->battery);
+        else if (d->has_rssi)     snprintf(right, sizeof(right), "%d dBm", d->rssi);
+        if (right[0]) {
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            draw_right(cr, pw - BT_PAD, ry, right);
+        }
+    }
+
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    if (b->count > BT_ROWS) {
+        char more[64];
+        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d", first + 1,
+                 first + BT_ROWS < b->count ? first + BT_ROWS : b->count, b->count);
+        cairo_move_to(cr, BT_PAD, ph - 34);
+        cairo_show_text(cr, more);
+    }
+
+    if (b->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        draw_clipped(cr, BT_PAD, ph - 34, pw - 2 * BT_PAD, b->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, BT_PAD, ph - 14);
+    cairo_show_text(cr, "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 "
+                        "r forget \xc2\xb7 s scan \xc2\xb7 o radio \xc2\xb7 Esc");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->bt_ui.text_buf, s->bt_ui.tree, buf);
+}
+
 /* ── Start menu (menu.c) ─────────────────────────────────── */
 
 #define MENU_W        420
@@ -2190,6 +2394,7 @@ void synui_ui_init(syn_server_t *s)
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
+    s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -2203,6 +2408,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

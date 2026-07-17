@@ -47,6 +47,11 @@ firefox
 # silently does nothing, KIO's fallback being a konsole we don't ship).
 dolphin
 gamescope
+# Bluetooth. bluez is the daemon (org.bluez); bluez-utils is bluetoothctl, which
+# synui does not need — it talks BlueZ over sd-bus itself (synui/src/bt.c) — but
+# which is the only way to debug a radio from a shell when the panel says no.
+bluez
+bluez-utils
 virtualbox-guest-utils
 dkms
 xdg-desktop-portal

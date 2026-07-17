@@ -347,6 +347,70 @@ typedef struct {
     syn_menu_entry_t entries[MENU_ENTRIES_MAX];
 } syn_menu_t;
 
+/* ── Bluetooth panel (bt.c) ──────────────────────────────── */
+/* Native BlueZ client: synui talks org.bluez over sd-bus itself rather than
+ * shelling out to bluetoothctl and scraping it, or handing the job to a GTK
+ * applet. Same reasoning as the start menu — a panel the compositor draws is one
+ * it can hand the keyboard to.
+ *
+ * Everything here is async. A radio can take seconds to answer, and a sync
+ * sd_bus_call() would block the wl_event_loop — i.e. freeze the whole desktop —
+ * so every method goes out via sd_bus_call_async and the panel repaints when the
+ * reply or a PropertiesChanged lands. The bus fd sits in the Wayland event loop
+ * (the screensaver.c idiom), so this costs nothing while the panel is closed.
+ *
+ * Discovery is owned by the D-Bus *connection* that started it: BlueZ stops
+ * scanning when that client drops off the bus. synui's connection is long-lived,
+ * so a scan survives closing the panel — bt_hide() stops it deliberately rather
+ * than leaving the radio burning power in the background. */
+#define BT_DEVICES_MAX  64
+
+typedef struct {
+    char path[160];        /* /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX */
+    char name[64];         /* Alias, falling back to Name, then Address */
+    char addr[24];
+    char icon[24];         /* BlueZ's freedesktop icon name: audio-headset, … */
+    int  paired, trusted, connected, blocked;
+    int  battery;          /* org.bluez.Battery1 percentage, -1 if none */
+    int  rssi;             /* 0 when absent — a device off the air has none */
+    int  has_rssi;
+} syn_bt_dev_t;
+
+typedef struct {
+    int  visible;
+    int  selected;         /* index into devs[] */
+    int  touched;          /* the cursor has been moved: pin the selection
+                            * to its device rather than to the top row */
+    int  scroll;
+
+    int  has_adapter;
+    char adapter[160];     /* /org/bluez/hci0 */
+    int  powered;
+    int  discovering;
+    int  discoverable;
+
+    syn_bt_dev_t devs[BT_DEVICES_MAX];
+    int  count;
+
+    char status[96];       /* last action / error, shown in the footer */
+
+    /* A pairing agent request waiting on the user. BlueZ is blocked on our
+     * reply the whole time it is up, so it must be answered (y/n) or cancelled —
+     * the message is kept so the reply can be sent when they decide. */
+    int      ask_kind;     /* syn_bt_ask_t */
+    char     ask_dev[64];
+    char     ask_detail[64];
+    uint32_t ask_passkey;
+} syn_bt_t;
+
+typedef enum {
+    BT_ASK_NONE = 0,
+    BT_ASK_CONFIRM,        /* RequestConfirmation: passkey matches? y/n */
+    BT_ASK_AUTHORIZE,      /* RequestAuthorization / AuthorizeService: y/n */
+    BT_ASK_DISPLAY,        /* DisplayPasskey / DisplayPinCode: type it on the
+                            * device; informational, no reply expected */
+} syn_bt_ask_t;
+
 /* ── Power saving panel + idle state machine (power.c) ───── */
 /* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch;
  * the rest each map to one syn_config_t timeout, in the same order. */
@@ -1343,6 +1407,16 @@ struct syn_server {
 
     syn_menu_t      menu;
 
+    /* Bluetooth panel (Super+B) — native BlueZ client, see syn_bt_t. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } bt_ui;
+
+    syn_bt_t        bt;
+
     /* Super-tap: Super pressed and released with nothing in between opens the
      * start menu, the way it does on every other desktop. Armed on the Super
      * press and disarmed by *any* intervening key or pointer button, so Super
@@ -1984,6 +2058,21 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
+
+/* ── Bluetooth (bt.c) ────────────────────────────────────── */
+/* bt_init opens the system bus and exports the pairing agent; it is safe to call
+ * where there is no bus or no bluetoothd — Bluetooth just stays unavailable and
+ * the panel says so. */
+void bt_init(syn_server_t *s);
+void bt_finish(syn_server_t *s);
+void bt_show(syn_server_t *s);
+void bt_hide(syn_server_t *s);
+void bt_toggle(syn_server_t *s);
+int  bt_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* Rows the panel draws at once — render.c owns the geometry, bt.c owns the
+ * scroll clamp, so they have to agree (as in CTL_SHORTCUT_ROWS). */
+#define BT_ROWS  12
+void synui_render_bt(syn_server_t *s);
 
 /* ── Start menu (menu.c) ─────────────────────────────────── */
 void menu_show(syn_server_t *s);

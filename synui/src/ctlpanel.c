@@ -121,6 +121,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "overlay",           "Neural overlay" },
         { "menu",              "Welcome menu" },
         { "control",           "Control panel" },
+        { "bluetooth",         "Bluetooth" },
         { "start_menu",        "Start menu" },
         { "close",             "Close window" },
         { "quit",              "Quit synui" },

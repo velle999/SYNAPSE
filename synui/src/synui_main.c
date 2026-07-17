@@ -1359,6 +1359,7 @@ int synui_init(syn_server_t *s)
     /* org.freedesktop.ScreenSaver — lets apps inhibit idle the standard way.
      * Best-effort; no session bus just means the feature stays off. */
     screensaver_init(s);
+    bt_init(s);
 
     /* Stamp game mode "off" for waybar's indicator. */
     game_init(s);
@@ -1484,6 +1485,7 @@ void synui_destroy(syn_server_t *s)
     power_finish(s);
     taskmgr_finish(s);
     news_finish(s);
+    bt_finish(s);
     screensaver_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */

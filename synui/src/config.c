@@ -229,6 +229,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+d",         "displays" },
         { "super+escape",    "menu" },
         { "super+c",         "control" },
+        { "super+b",         "bluetooth" },
         { "super+q",         "close" },
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },
