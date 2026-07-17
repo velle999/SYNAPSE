@@ -81,7 +81,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | App | What it does |
 |---|---|
 | **`vibe`** | Local AI coding assistant — an agentic read/write/edit/bash/grep loop. Reuses the model already resident in `synapd` (no second model, no extra VRAM), and confirms before destructive tools. `vibe` in a terminal; `VIBE_BACKEND=ollama` to swap backends. |
-| **`chibi`** | Voice-interactive AI companion with a security-sentinel aspect over `synguard`'s verdict feed. See the [Chibi wiki page](../../wiki/Chibi). |
+| **`chibi`** | Voice-interactive AI companion with a security-sentinel aspect over `synguard`'s verdict feed. See the [Chibi wiki page](https://github.com/velle999/SYNAPSE/wiki/Chibi). |
 | **`nexus-chat`**, **`tepris`** | Bundled web apps (Firefox app-mode packages). |
 
 Supporting pieces: `syn-install`, `syn-firstboot`, `syn-model`, `waybar/`
