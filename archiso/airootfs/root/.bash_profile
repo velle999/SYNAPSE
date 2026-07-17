@@ -17,21 +17,26 @@ if [ "$(tty)" = "/dev/tty1" ]; then
             if systemctl is-active --quiet synui.service 2>/dev/null; then
                 echo "synui is running via synui.service"
             elif [ -x /usr/bin/synui ]; then
-                # Ensure runtime dir exists with correct permissions
-                export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-                mkdir -p "$XDG_RUNTIME_DIR"
-                chmod 700 "$XDG_RUNTIME_DIR"
-                export XDG_SESSION_TYPE=wayland
-                export LIBSEAT_BACKEND=seatd
-
-                # Renderer for this hardware — VMs and nouveau-driven
-                # cards fall back to software rendering so setup always
-                # completes; real drivers (nvidia/amdgpu/i915) get GLES2.
-                if [ -x /usr/local/bin/synui-gfx-env ]; then
-                    eval "$(/usr/local/bin/synui-gfx-env | sed 's/^/export /')"
-                fi
-
-                exec /usr/bin/synui
+                # Start the unit, the same way the kde/gnome branches above start
+                # sddm/gdm. This used to exec synui straight out of the login
+                # shell, which meant the live session's compositor was the one
+                # thing on the ISO systemd knew nothing about: no
+                # Restart=on-failure, no ExecStopPost to hand tty1 back to getty,
+                # and none of the unit's environment — its ExecStartPre creates
+                # /run/user/0 and runs synui-gfx-env, so the renderer selection
+                # for VMs and nouveau was duplicated here by hand instead.
+                #
+                # The unit is deliberately NOT enabled on the ISO. It
+                # Conflicts=getty@tty1.service, so anything that pulls it in at
+                # boot stops the getty this wizard needs — and the wizard is the
+                # only way to reach "Install to disk". Starting it here, after
+                # the choice has been made, is what keeps both.
+                #
+                # Conflicts= then stops getty@tty1 and takes this shell with it.
+                # That is fine and is exactly what starting sddm does: the start
+                # job is already queued with systemd and completes on its own.
+                systemctl start synui.service || \
+                    echo "synui failed — dropping to shell"
             else
                 echo "synui not found — dropping to shell"
             fi

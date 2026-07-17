@@ -1,7 +1,10 @@
 [Unit]
 Description=SynapseOS Wayland Compositor
 After=synapd.service seatd.service
-Wants=synapd.service synui-foot.service
+# NOT synui-foot.service: it runs `foot synsh`, which would put the fullscreen
+# terminal straight back — Wants= pulls it in whenever this unit starts,
+# regardless of whether it is enabled. The live session is a desktop now.
+Wants=synapd.service
 Requires=seatd.service
 Conflicts=getty@tty1.service
 # If synui fails 3 times in 30s, stop trying and let getty take over

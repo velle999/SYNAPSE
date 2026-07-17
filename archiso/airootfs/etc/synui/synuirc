@@ -4,11 +4,12 @@
 terminal = foot
 
 # Programs to launch on compositor start.
-# The live ISO execs synui from root's .bash_profile (no synui-foot.service),
-# so this is the only thing that opens a terminal there. Installed systems
-# run the service instead and shadow this file with a per-user synuirc that
-# has no autostart — keep both, or boots open zero or two terminals.
-autostart = foot
+#
+# Deliberately NO terminal. The live session used to open one and synui tiles a
+# lone window fullscreen, so it covered the wallpaper and the ISO looked like a
+# bare terminal rather than a desktop — which is exactly what "the live doesn't
+# boot right" turned out to be. The compositor was working the whole time.
+# Super+Return, or the start menu, opens a terminal when one is wanted.
 # The bar. The live ISO had none at all — waybar was not even in
 # packages.x86_64 — so the ISO booted with no clock, no tray and no network
 # indicator, looking far less finished than an installed system for no reason.
