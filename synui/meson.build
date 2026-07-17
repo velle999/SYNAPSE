@@ -199,6 +199,18 @@ install_data('data/wallpaper.png',    install_dir : synui_datadir)
 install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
 install_data('data/logo.svg',         install_dir : synui_datadir)
 
+# Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
+# that is one of the directories the picker (Super+W) already scans, so they show
+# up as rows with no code change and no per-machine copying — on the live ISO too,
+# whose root session has no ~/Pictures to scan. The picker labels a scanned image
+# by its basename, hence the synapse- prefix: /usr/share/backgrounds is shared
+# with every other package, and a bare "logo.png" there would be both a collision
+# waiting to happen and a meaningless row in the list.
+install_data('data/synapse-logo.png',
+             install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
+install_data('data/synapse-logo-electrified.png',
+             install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
+
 # Headless smoke test: boots the compositor on the headless backend, checks
 # the advertised globals, maps a client (if foot is installed), screenshots
 # (if grim is installed) and asserts a clean SIGTERM teardown. Run with
