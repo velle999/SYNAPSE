@@ -313,6 +313,31 @@ static void xw_associate(struct wl_listener *listener, void *data)
     wl_signal_add(&view->xsurface->surface->events.unmap, &view->unmap);
     view->commit.notify = xw_surface_commit;
     wl_signal_add(&view->xsurface->surface->events.commit, &view->commit);
+
+    /* wlroots maps an Xwayland surface from ONE place: its commit handler
+     * (xwm.c xwayland_surface_handle_commit). Association itself never maps,
+     * however much buffer the surface already carries. That is fine for a
+     * fresh surface — a commit is always still to come — but a surface can be
+     * associated with a buffer already committed on it:
+     *
+     *   X unmap  → xwm dissociates → wlr_surface_unmap(). This does NOT clear
+     *              the buffer; wlr_surface_has_buffer() reads current.buffer_
+     *              width/height, which stay set. Xwayland keeps the surface.
+     *   X map    → new WL_SURFACE_SERIAL for that same, still-buffered surface
+     *              → associate → no commit follows, because nothing about the
+     *              surface's content changed. It stays unmapped forever.
+     *
+     * That is the Steam tray wedge: viewable in X, associated, buffered, and
+     * invisible. Map it here — a buffered surface is by definition mappable,
+     * and it is what the commit that never comes would have done. */
+    struct wlr_surface *surf = view->xsurface->surface;
+    if (!surf->mapped && wlr_surface_has_buffer(surf)) {
+        wlr_log(WLR_INFO, "synui: ASSOCIATE-BUFFERED %s (0x%x): surface %p "
+                "already has a buffer and is unmapped; mapping it",
+                view_title(view) ? view_title(view) : "(no title)",
+                view->xsurface->window_id, (void *)surf);
+        wlr_surface_map(surf);
+    }
 }
 
 static void xw_dissociate(struct wl_listener *listener, void *data)
