@@ -463,6 +463,12 @@ typedef struct {
     char name[64];         /* Alias, falling back to Name, then Address */
     char addr[24];
     char icon[24];         /* BlueZ's freedesktop icon name: audio-headset, … */
+    /* AddressType == "random": an LE privacy address, rotated every ~15 minutes
+     * by the phone/watch/earbud broadcasting it. Nameless ones are the noise the
+     * panel hides by default — the address identifies nothing and is a different
+     * address by the time you look again. A "public" address is a real fixed one
+     * and its device is worth listing even unnamed. */
+    int  random_addr;
     int  paired, trusted, connected, blocked;
     int  battery;          /* org.bluez.Battery1 percentage, -1 if none */
     int  rssi;             /* 0 when absent — a device off the air has none */
@@ -475,6 +481,13 @@ typedef struct {
     int  touched;          /* the cursor has been moved: pin the selection
                             * to its device rather than to the top row */
     int  scroll;
+    /* 'a': list the anonymous advertisers too. Off by default — see
+     * dev_listable() in bt.c for what that leaves out and why. */
+    int  show_all;
+
+    /* Panel geometry in layout coords, written by synui_render_bt() on every
+     * render and read by the pointer hit-tests — as in syn_menu_t. */
+    int  x, y, w, h;
 
     int  has_adapter;
     char adapter[160];     /* /org/bluez/hci0 */
@@ -2235,9 +2248,30 @@ void bt_show(syn_server_t *s);
 void bt_hide(syn_server_t *s);
 void bt_toggle(syn_server_t *s);
 int  bt_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
-/* Rows the panel draws at once — render.c owns the geometry, bt.c owns the
- * scroll clamp, so they have to agree (as in CTL_SHORTCUT_ROWS). */
-#define BT_ROWS  12
+/* Pointer, from input.c while the panel is up — as with the start menu, except
+ * that a click only selects: connect/pair/trust/forget are several actions and
+ * one click cannot mean all of them. */
+void bt_motion(syn_server_t *s, double lx, double ly);
+void bt_click(syn_server_t *s, double lx, double ly);
+void bt_scroll(syn_server_t *s, double delta);
+int  bt_first_row(const syn_bt_t *b);
+/* How many rows the list shows: every device when show_all, else only the ones
+ * dev_listable() keeps (dev_cmp sorts those to the front, so it is devs[0..n)).
+ * render.c sizes and clamps against this; bt.c moves the selection within it. */
+int  bt_shown_count(const syn_bt_t *b);
+/* How a device is written in the list: its name, or — for the nameless, whose
+ * BlueZ Alias is just the address spelled with dashes — what kind of thing it
+ * is, plus the address. See bt.c. */
+void bt_dev_label(const syn_bt_dev_t *d, char *out, size_t n);
+
+/* Panel geometry: render.c draws with it, bt.c hit-tests against it. */
+#define BT_ROWS      12
+#define BT_W        520
+#define BT_ROW_H     26
+#define BT_ROW_ASC   16
+#define BT_TOP       98
+#define BT_FOOTER    52
+#define BT_PAD       18
 void synui_render_bt(syn_server_t *s);
 
 /* ── Start menu (menu.c) ─────────────────────────────────── */

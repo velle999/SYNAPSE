@@ -1683,12 +1683,8 @@ void synui_render_notifs(syn_server_t *s)
 }
 
 /* ── Bluetooth (bt.c) ────────────────────────────────────── */
-
-#define BT_W        520
-#define BT_ROW_H     26
-#define BT_TOP       98
-#define BT_FOOTER    52
-#define BT_PAD       18
+/* The geometry lives in synui.h: bt.c hit-tests the pointer against the same
+ * numbers this draws with. */
 
 /* A device's state in one word, plus the colour to say it in. Connected is the
  * only thing worth shouting about; the rest is context. */
@@ -1714,12 +1710,20 @@ void synui_render_bt(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    int rows = b->count < BT_ROWS ? b->count : BT_ROWS;
+    /* The list is only the shown devices, not every device the scan turned up:
+     * the anonymous advertisers are filtered out unless 'a' is on. Everything
+     * below sizes, clamps and iterates against this, never b->count. */
+    int shown = bt_shown_count(b);
+
+    int rows = shown < BT_ROWS ? shown : BT_ROWS;
     if (rows < 1) rows = 1;                  /* the empty-list line needs a row */
 
     int pw = BT_W;
     int ph = BT_TOP + rows * BT_ROW_H + BT_FOOTER;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    /* What the pointer hit-tests measure against. */
+    b->x = px; b->y = py; b->w = pw; b->h = ph;
 
     wlr_scene_node_set_position(&s->bt_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, true);
@@ -1807,35 +1811,46 @@ void synui_render_bt(syn_server_t *s)
         return;
     }
 
-    int first = b->scroll;
-    if (first > b->count - BT_ROWS) first = b->count - BT_ROWS;
-    if (first < 0) first = 0;
+    int first = bt_first_row(b);
 
-    if (b->count == 0) {
+    if (shown == 0) {
         cairo_set_font_size(cr, 13);
         cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
         cairo_move_to(cr, BT_PAD, BT_TOP);
-        cairo_show_text(cr, b->powered ? "No devices \xc2\xb7 press s to scan"
-                                       : "Radio is off \xc2\xb7 press o");
+        if (!b->powered) {
+            cairo_show_text(cr, "Radio is off \xc2\xb7 press o");
+        } else if (b->count > 0) {
+            /* Devices are there, just filtered: say so, or an empty panel next
+             * to a phone that is plainly in range reads as broken. */
+            char msg[64];
+            snprintf(msg, sizeof(msg), "%d hidden \xc2\xb7 press a to show", b->count);
+            cairo_show_text(cr, msg);
+        } else {
+            cairo_show_text(cr, "No devices \xc2\xb7 press s to scan");
+        }
     }
 
-    for (int i = 0; i < BT_ROWS && first + i < b->count; i++) {
+    for (int i = 0; i < BT_ROWS && first + i < shown; i++) {
         const syn_bt_dev_t *d = &b->devs[first + i];
         int ry = BT_TOP + i * BT_ROW_H;
         int sel = (first + i == b->selected);
 
         if (sel) {
             cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
-            cairo_rectangle(cr, BT_PAD - 8, ry - 16, pw - 2 * (BT_PAD - 8), BT_ROW_H - 3);
+            cairo_rectangle(cr, BT_PAD - 8, ry - BT_ROW_ASC, pw - 2 * (BT_PAD - 8),
+                            BT_ROW_H - 3);
             cairo_fill(cr);
         }
 
-        /* Name, then the address for anything that did not give one — an
-         * unnamed row is otherwise unidentifiable among six other unnamed rows. */
+        /* bt_dev_label, not d->name: BlueZ hands out an Alias for every device
+         * whether it has a name or not, and for the nameless that alias is the
+         * address with dashes — which is why this list read as MAC addresses. */
+        char label[128];
+        bt_dev_label(d, label, sizeof(label));
         cairo_set_font_size(cr, 14);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
-        draw_clipped(cr, BT_PAD, ry, 250, d->name[0] ? d->name : d->addr);
+        draw_clipped(cr, BT_PAD, ry, 250, label);
 
         double rgb[3];
         const char *st = bt_dev_state(d, rgb);
@@ -1864,10 +1879,10 @@ void synui_render_bt(syn_server_t *s)
 
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
-    if (b->count > BT_ROWS) {
+    if (shown > BT_ROWS) {
         char more[64];
         snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d", first + 1,
-                 first + BT_ROWS < b->count ? first + BT_ROWS : b->count, b->count);
+                 first + BT_ROWS < shown ? first + BT_ROWS : shown, shown);
         cairo_move_to(cr, BT_PAD, ph - 34);
         cairo_show_text(cr, more);
     }
@@ -1881,8 +1896,11 @@ void synui_render_bt(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, BT_PAD, ph - 14);
-    cairo_show_text(cr, "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 "
-                        "r forget \xc2\xb7 s scan \xc2\xb7 o radio \xc2\xb7 Esc");
+    cairo_show_text(cr, b->show_all
+        ? "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
+          "s scan \xc2\xb7 o radio \xc2\xb7 a fewer \xc2\xb7 Esc"
+        : "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
+          "s scan \xc2\xb7 o radio \xc2\xb7 a all \xc2\xb7 Esc");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->bt_ui.text_buf, s->bt_ui.tree, buf);

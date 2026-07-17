@@ -1432,6 +1432,8 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
      * the arrow keys drive one highlight rather than two. */
     if (s->menu.visible)
         menu_motion(s, s->cursor->x, s->cursor->y);
+    if (s->bt.visible)
+        bt_motion(s, s->cursor->x, s->cursor->y);
 
     /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);
@@ -1540,6 +1542,14 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         if (s->menu.visible) {
             if (button == BTN_LEFT) menu_click(s, s->cursor->x, s->cursor->y);
             else                    menu_hide(s);
+            return;
+        }
+
+        /* The Bluetooth panel likewise: a click picks the device the keys then
+         * act on, and a click off it puts the panel away. */
+        if (s->bt.visible) {
+            if (button == BTN_LEFT) bt_click(s, s->cursor->x, s->cursor->y);
+            else                    bt_hide(s);
             return;
         }
 
@@ -1706,6 +1716,11 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
     if (s->menu.visible &&
         event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         menu_scroll(s, event->delta);
+        return;
+    }
+    if (s->bt.visible &&
+        event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        bt_scroll(s, event->delta);
         return;
     }
 

@@ -26,6 +26,7 @@
  */
 
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,17 +93,124 @@ static syn_bt_dev_t *dev_add(syn_bt_t *b, const char *path)
     return d;
 }
 
-/* Connected first, then paired, then strongest signal. What you want to act on
- * is almost always something you already own, and a scan otherwise buries it
- * under every phone in the building. */
+/* ── Naming ──────────────────────────────────────────────── */
+
+/* Is this "name" just BlueZ spelling the address back at us?
+ *
+ * BlueZ's Alias property is never absent: with no alias set and no name learned
+ * it falls back to the address with ':' turned into '-' (dev_property_get_alias
+ * → g_strdelimit(dstaddr, ":", '-')), and Name is simply not published at all.
+ * So a device that never advertised a name arrives here with a perfectly valid
+ * Alias of "84-9E-56-B6-EE-FA" — which is why the panel looked like a list of
+ * MAC addresses. There is no property to test for this: the only way to know an
+ * alias is a stand-in is to notice it is the address. */
+static int bt_name_is_address(const char *name, const char *addr)
+{
+    if (!name[0] || !addr[0]) return 0;
+    size_t i = 0;
+    for (; name[i] && addr[i]; i++) {
+        char a = name[i], b = addr[i];
+        if (b == ':' ? a != '-' && a != ':' : toupper((unsigned char)a) !=
+                                              toupper((unsigned char)b))
+            return 0;
+    }
+    return !name[i] && !addr[i];
+}
+
+/* BlueZ's Icon is a freedesktop icon name derived from the device's class or
+ * appearance — the one thing a nameless device still tells us about itself.
+ * "Headset · 84:9E:56:B6:EE:FA" is not a name, but it is an answer to "which of
+ * these do I want?", which the address alone never was. */
+static const char *bt_icon_label(const char *icon)
+{
+    static const struct { const char *icon, *label; } MAP[] = {
+        { "audio-card",        "Audio"      },
+        { "audio-headset",     "Headset"    },
+        { "audio-headphones",  "Headphones" },
+        { "camera-photo",      "Camera"     },
+        { "camera-video",      "Camcorder"  },
+        { "computer",          "Computer"   },
+        { "input-gaming",      "Controller" },
+        { "input-keyboard",    "Keyboard"   },
+        { "input-mouse",       "Mouse"      },
+        { "input-tablet",      "Tablet"     },
+        { "modem",             "Modem"      },
+        { "multimedia-player", "Player"     },
+        { "network-wireless",  "Network"    },
+        { "phone",             "Phone"      },
+        { "printer",           "Printer"    },
+        { "scanner",           "Scanner"    },
+        { "video-display",     "Display"    },
+    };
+    for (unsigned i = 0; i < sizeof(MAP) / sizeof(MAP[0]); i++)
+        if (strcmp(icon, MAP[i].icon) == 0) return MAP[i].label;
+    return NULL;
+}
+
+/* How a device should be written in the list. */
+void bt_dev_label(const syn_bt_dev_t *d, char *out, size_t n)
+{
+    int named = d->name[0] && !bt_name_is_address(d->name, d->addr);
+    if (named) { snprintf(out, n, "%s", d->name); return; }
+
+    /* Nameless: say what it is, and keep the address — it is the only thing
+     * telling two nameless headsets apart. */
+    const char *what = d->icon[0] ? bt_icon_label(d->icon) : NULL;
+    if (what && d->addr[0]) snprintf(out, n, "%s \xc2\xb7 %s", what, d->addr);
+    else if (what)          snprintf(out, n, "%s", what);
+    else if (d->addr[0])    snprintf(out, n, "%s", d->addr);
+    else                    snprintf(out, n, "(unknown device)");
+}
+
+/* Is this device worth listing at all?
+ *
+ * A scan in a populated building is mostly phones, watches and earbuds shouting
+ * BLE advertisements under privacy addresses: no name, no class, no vendor, and
+ * an address that is a different address in fifteen minutes. Nothing can be
+ * learned about them and nothing can be done with them — measured here, every
+ * device a scan turned up was one of these, which is why the panel read as a
+ * list of MAC addresses. They are hidden by default and 'a' shows them.
+ *
+ * Hidden is not the same as unreachable, which is why the toggle exists: a real
+ * gadget that advertises no name is rare but does exist, and it must still be
+ * pairable. Anything with a fixed public address is listed even unnamed, for the
+ * same reason — a fixed address belongs to a real device that will still be
+ * there when you look again. */
+static int dev_listable(const syn_bt_dev_t *d)
+{
+    if (d->paired || d->connected) return 1;    /* yours: always */
+    if (d->icon[0]) return 1;                   /* said what it is */
+    if (d->name[0] && !bt_name_is_address(d->name, d->addr)) return 1;
+    return !d->random_addr;
+}
+
+/* Listable first, then connected, then paired, then strongest signal. What you
+ * want to act on is almost always something you already own, and a scan
+ * otherwise buries it under every phone in the building.
+ *
+ * The listable key is first so that the hidden ones gather at the end of the
+ * array: everything else can then take "the first n" as the visible list. */
 static int dev_cmp(const void *va, const void *vb)
 {
     const syn_bt_dev_t *a = va, *b = vb;
+    int al = dev_listable(a), bl = dev_listable(b);
+    if (al != bl) return bl - al;
     if (a->connected != b->connected) return b->connected - a->connected;
     if (a->paired    != b->paired)    return b->paired - a->paired;
     if (a->has_rssi && b->has_rssi && a->rssi != b->rssi) return b->rssi - a->rssi;
     if (a->has_rssi != b->has_rssi)   return b->has_rssi - a->has_rssi;
     return strcasecmp(a->name, b->name);
+}
+
+/* How many rows the list shows. dev_cmp sorts the listable ones to the front, so
+ * the visible list is always devs[0..n) and every index stays an index into
+ * devs[] — no second array to keep in step. */
+int bt_shown_count(const syn_bt_t *b)
+{
+    if (b->show_all) return b->count;
+    int n = 0;
+    while (n < b->count && dev_listable(&b->devs[n])) n++;
+    return n;
 }
 
 /* Re-sorting moves rows under the cursor, and a scan fires PropertiesChanged
@@ -128,7 +236,11 @@ static void bt_sort_keep_selection(syn_bt_t *b)
         for (int i = 0; i < b->count; i++)
             if (strcmp(b->devs[i].path, keep) == 0) { b->selected = i; break; }
     }
-    if (b->selected >= b->count) b->selected = b->count ? b->count - 1 : 0;
+    /* Clamp to the shown list, not the array: a device that has just been
+     * filtered out of view must not keep the highlight, or the keys would act on
+     * a row that is not on screen. */
+    int n = bt_shown_count(b);
+    if (b->selected >= n) b->selected = n ? n - 1 : 0;
     if (b->selected < 0) b->selected = 0;
 }
 
@@ -191,6 +303,8 @@ static int bt_read_prop(sd_bus_message *m, const char *iface, syn_server_t *s,
             if (!d->name[0]) bt_copy_text(d->name, sizeof(d->name), sv);
         } else if (strcmp(key, "Address") == 0 && sd_bus_message_read(m, "s", &sv) >= 0)
             snprintf(d->addr, sizeof(d->addr), "%s", sv);
+        else if (strcmp(key, "AddressType") == 0 && sd_bus_message_read(m, "s", &sv) >= 0)
+            d->random_addr = strcmp(sv, "random") == 0;
         else if (strcmp(key, "Icon") == 0 && sd_bus_message_read(m, "s", &sv) >= 0)
             bt_copy_text(d->icon, sizeof(d->icon), sv);
         else if (strcmp(key, "Paired") == 0 && sd_bus_message_read(m, "b", &v) >= 0)
@@ -608,7 +722,7 @@ static const sd_bus_vtable agent_vtable[] = {
 
 static syn_bt_dev_t *bt_sel(syn_bt_t *b)
 {
-    if (b->selected < 0 || b->selected >= b->count) return NULL;
+    if (b->selected < 0 || b->selected >= bt_shown_count(b)) return NULL;
     return &b->devs[b->selected];
 }
 
@@ -734,11 +848,100 @@ void bt_toggle(syn_server_t *s)
 static void bt_move(syn_bt_t *b, int dir)
 {
     int n = b->selected + dir;
-    if (n < 0 || n >= b->count) return;
+    if (n < 0 || n >= bt_shown_count(b)) return;
     b->touched = 1;
     b->selected = n;
     if (b->selected < b->scroll) b->scroll = b->selected;
     if (b->selected >= b->scroll + BT_ROWS) b->scroll = b->selected - BT_ROWS + 1;
+}
+
+/* ── Pointer ─────────────────────────────────────────────── */
+/* As in menu.c, and for the same reason: a panel the compositor draws is one it
+ * can also hand the pointer to. Hovering selects and the wheel scrolls; a click
+ * selects and no more. The actions here are several (connect, pair, trust,
+ * forget) and a single click cannot mean all of them, so it means the one thing
+ * it unambiguously can — this is what you point at — and the keys named in the
+ * footer still do the rest. */
+
+/* The device row drawn at the top of the panel — see menu_first_row. */
+int bt_first_row(const syn_bt_t *b)
+{
+    int max_scroll = bt_shown_count(b) - BT_ROWS;
+    if (max_scroll < 0) max_scroll = 0;
+    int first = b->scroll;
+    if (first > max_scroll) first = max_scroll;
+    if (first < 0) first = 0;
+    return first;
+}
+
+static int bt_in_panel(const syn_bt_t *b, double lx, double ly)
+{
+    return lx >= b->x && lx < b->x + b->w && ly >= b->y && ly < b->y + b->h;
+}
+
+/* devs[] index under (lx,ly), or -1 for the chrome or outside. */
+static int bt_row_at(const syn_bt_t *b, double lx, double ly)
+{
+    if (!bt_in_panel(b, lx, ly)) return -1;
+    /* A pairing prompt replaces the list entirely; there are no rows to hit. */
+    if (b->ask_kind != BT_ASK_NONE) return -1;
+
+    double top = b->y + BT_TOP - BT_ROW_ASC;
+    if (ly < top) return -1;
+    int i = (int)((ly - top) / BT_ROW_H);
+    if (i < 0 || i >= BT_ROWS) return -1;
+
+    int row = bt_first_row(b) + i;
+    return row < bt_shown_count(b) ? row : -1;
+}
+
+void bt_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_bt_t *b = &s->bt;
+    if (!b->visible) return;
+    int row = bt_row_at(b, lx, ly);
+    if (row < 0 || row == b->selected) return;
+    b->selected = row;
+    b->touched  = 1;      /* a refresh must now keep the selection on its device */
+    synui_render_bt(s);
+}
+
+void bt_click(syn_server_t *s, double lx, double ly)
+{
+    syn_bt_t *b = &s->bt;
+    if (!b->visible) return;
+
+    /* A prompt has BlueZ blocked waiting on y/n, so a click cannot dismiss the
+     * panel out from under it — the keys are the only way through. */
+    if (!bt_in_panel(b, lx, ly)) {
+        if (b->ask_kind == BT_ASK_NONE) bt_hide(s);
+        return;
+    }
+    bt_motion(s, lx, ly);
+}
+
+void bt_scroll(syn_server_t *s, double delta)
+{
+    syn_bt_t *b = &s->bt;
+    if (!b->visible || delta == 0) return;
+    if (b->ask_kind != BT_ASK_NONE) return;
+    int shown = bt_shown_count(b);
+    if (shown <= BT_ROWS) return;
+
+    b->scroll += delta > 0 ? 3 : -3;
+    int max_scroll = shown - BT_ROWS;
+    if (b->scroll > max_scroll) b->scroll = max_scroll;
+    if (b->scroll < 0) b->scroll = 0;
+
+    /* Keep the selection on a row that is still on screen: the footer's keys all
+     * act on it, and acting on something scrolled out of sight is how you
+     * disconnect the wrong headset. */
+    int first = bt_first_row(b), last = first + BT_ROWS - 1;
+    if (last >= shown) last = shown - 1;
+    if (b->selected < first) { b->selected = first; b->touched = 1; }
+    if (b->selected > last)  { b->selected = last;  b->touched = 1; }
+
+    synui_render_bt(s);
 }
 
 int bt_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
@@ -784,6 +987,15 @@ int bt_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     case XKB_KEY_o:                       /* radio power */
         if (b->has_adapter) bt_set_bool(s, b->adapter, BT_ADAPT, "Powered", !b->powered);
+        return 1;
+
+    case XKB_KEY_a:                       /* show the anonymous advertisers too */
+        b->show_all = !b->show_all;
+        b->scroll = 0;
+        /* The shown list just grew or shrank under the selection; re-sort clamps
+         * it back onto a row that is actually on screen (see dev_cmp/bt_move). */
+        bt_sort_keep_selection(b);
+        synui_render_bt(s);
         return 1;
 
     case XKB_KEY_s:                       /* scan */
