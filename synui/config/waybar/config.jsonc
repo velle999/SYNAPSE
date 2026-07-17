@@ -62,7 +62,7 @@
         "tooltip": true
     },
     "clock": {
-        "format": " {:%I:%M:%S %p  %Y-%m-%d}",
+        "format": "{:%I:%M:%S %p  %Y-%m-%d}",
         "interval": 1
     },
     // Battery. waybar hides this module entirely on a machine with no
@@ -103,8 +103,8 @@
         "format": "",
         "format-off": "",
         "format-on": "",
-        "format-connected": " {device_alias}",
-        "format-connected-battery": " {device_alias} {device_battery_percentage}%",
+        "format-connected": "",
+        "format-connected-battery": "",
         "tooltip-format": "{controller_alias}\nClick for Bluetooth options",
         "tooltip-format-connected": "{controller_alias}\n{num_connections} connected\n{device_enumerate}\nClick for Bluetooth options",
         "tooltip-format-enumerate-connected": "{device_alias}",

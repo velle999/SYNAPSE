@@ -40,6 +40,20 @@ menu separator {
 #clock {
     color: #ffd319;
 }
+/* Bluetooth: the one module coloured by what it is, not the house cyan — the
+ * brand blue reads as "bluetooth" at a glance. A step larger than the rest too,
+ * because a single glyph with no number beside it is easy to miss. */
+#bluetooth {
+    color: #2d9bff;
+    font-size: 17px;
+    padding: 0 6px;
+}
+#bluetooth.connected {
+    color: #4dabff;
+}
+#bluetooth.off, #bluetooth.disabled {
+    color: #3a4a52;
+}
 #cpu, #memory, #network, #pulseaudio, #custom-gamemode {
     color: #05d9e8;
     padding: 0 10px;
