@@ -397,6 +397,16 @@ static void menu_add_submenu(syn_menu_t *m, const char *label, const char *to)
              sizeof(m->entries[0].menu_to), "%s", to);
 }
 
+/* A submenu page's first row, going back to the root. It is the mouse's way
+ * out — the arrow keys have Left/Esc, but the pointer had nothing to click, so
+ * every page below the root gets one of these at the top. menu_to is "" so it
+ * rides the same menu_open_page(m, "") that Left does; the kind is its own so
+ * it can be drawn (and skipped over on landing) without being taken for a leaf. */
+static void menu_add_back(syn_menu_t *m, const char *page)
+{
+    menu_add(m, page, MENU_ROW_BACK, "Back", NULL, NULL);
+}
+
 /* The fixed rows. Were STATIC_ITEMS/POWER_ITEMS in the retired
  * synapse-menu-gen.py, with one difference that matters: the panels are bind
  * *actions* here. waybar had to reach synui by running `wtype -M logo -k c` —
@@ -418,6 +428,7 @@ static void menu_add_static(syn_menu_t *m)
 static void menu_add_tools(syn_menu_t *m)
 {
     const char *p = MENU_PAGE_TOOLS;
+    menu_add_back(m, p);
     menu_add(m, p, MENU_ROW_ITEM, "AI Shell (synsh)", NULL, "foot synsh");
     menu_add(m, p, MENU_ROW_ITEM, "System Status",   NULL, "foot --hold syn status");
     menu_add(m, p, MENU_ROW_ITEM, "Network Setup",   NULL, "foot -e nmtui");
@@ -496,9 +507,20 @@ static void menu_build(syn_server_t *s)
 
     menu_add_power(m);
     menu_add_tools(m);
-    for (int i = 0; i < sc->count; i++)
+    /* Each category's page opens with a Back row. The apps are still grouped by
+     * category, so a change of category is the start of a new page and the place
+     * that row goes; a page's rows need only be in order relative to each other,
+     * so emitting Back here — ahead of that category's first app — makes it the
+     * page's first row. */
+    const char *page = NULL;
+    for (int i = 0; i < sc->count; i++) {
+        if (!page || strcmp(page, sc->apps[i].cat) != 0) {
+            page = sc->apps[i].cat;
+            menu_add_back(m, page);
+        }
         menu_add(m, sc->apps[i].cat, MENU_ROW_ITEM, sc->apps[i].name,
                  NULL, sc->apps[i].cmd);
+    }
 
     wlr_log(WLR_DEBUG, "synui: menu: %d apps scanned, %d rows", sc->count, m->count);
     free(sc);
@@ -538,11 +560,15 @@ static void menu_refilter(syn_menu_t *m)
         m->view[m->view_count++] = i;
     }
 
-    /* Land on something selectable. With no filter the first row is a header,
-     * so an unconditional 0 would put the cursor on a rule that does nothing. */
+    /* Land on something worth acting on. With no filter the first row is a
+     * header, so an unconditional 0 would put the cursor on a rule that does
+     * nothing; and a submenu page opens on a Back row, so landing there would
+     * arm Enter to undo the very drill-in that got here. Skip both to the first
+     * real item. */
     m->selected = 0;
     while (m->selected < m->view_count &&
-           m->entries[m->view[m->selected]].kind == MENU_ROW_HEADER)
+           (m->entries[m->view[m->selected]].kind == MENU_ROW_HEADER ||
+            m->entries[m->view[m->selected]].kind == MENU_ROW_BACK))
         m->selected++;
     if (m->selected >= m->view_count) m->selected = 0;
     m->scroll = 0;
@@ -569,6 +595,10 @@ static void menu_open_page(syn_menu_t *m, const char *page)
 
 /* ── Panel ───────────────────────────────────────────────── */
 
+/* Defined in the Pointer section below; menu_hide()/menu_key() disarm any
+ * pending hover-open, and both come before it. */
+static void menu_cancel_hover_open(syn_menu_t *m);
+
 void menu_show(syn_server_t *s)
 {
     s->menu.filter[0] = '\0';
@@ -585,6 +615,7 @@ void menu_show(syn_server_t *s)
 void menu_hide(syn_server_t *s)
 {
     s->menu.visible = 0;
+    menu_cancel_hover_open(&s->menu);
     synui_render_menu(s);
 }
 
@@ -641,8 +672,8 @@ static void menu_activate(syn_server_t *s)
 
     syn_menu_entry_t *e = &m->entries[m->view[m->selected]];
 
-    if (e->kind == MENU_ROW_SUBMENU) {
-        menu_open_page(m, e->menu_to);
+    if (e->kind == MENU_ROW_SUBMENU || e->kind == MENU_ROW_BACK) {
+        menu_open_page(m, e->menu_to);   /* Back's menu_to is "" — the root */
         synui_render_menu(s);
         return;
     }
@@ -709,16 +740,65 @@ static void menu_select_into_view(syn_menu_t *m)
     if (row >= first && row <= last) m->selected = row;
 }
 
+/* Open a hovered submenu once the pointer has rested on it — the pointer's
+ * equivalent of pressing Right. Deliberately re-derives the row under the cursor
+ * instead of trusting the one armed: a slow drift onto the next row re-arms with
+ * that one, but a drift off the panel entirely leaves the timer pending, and
+ * opening a page the cursor has already left would be a surprise. */
+static int menu_hover_open_cb(void *data)
+{
+    syn_server_t *s = data;
+    syn_menu_t *m = &s->menu;
+    if (!m->visible || m->filter[0]) return 0;
+
+    int row = menu_row_at(m, s->cursor->x, s->cursor->y);
+    if (row < 0 || m->entries[m->view[row]].kind != MENU_ROW_SUBMENU) return 0;
+
+    m->selected = row;
+    menu_open_page(m, m->entries[m->view[row]].menu_to);
+    synui_render_menu(s);
+    return 0;
+}
+
+static void menu_arm_hover_open(syn_server_t *s)
+{
+    syn_menu_t *m = &s->menu;
+    if (!m->hover_timer) {
+        struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+        m->hover_timer = wl_event_loop_add_timer(loop, menu_hover_open_cb, s);
+        if (!m->hover_timer) return;
+    }
+    /* Re-arming pushes a pending open out, so passing over one submenu on the
+     * way to another never opens the one you were only crossing. */
+    wl_event_source_timer_update(m->hover_timer, MENU_HOVER_OPEN_MS);
+}
+
+static void menu_cancel_hover_open(syn_menu_t *m)
+{
+    if (m->hover_timer) wl_event_source_timer_update(m->hover_timer, 0);
+}
+
 void menu_motion(syn_server_t *s, double lx, double ly)
 {
     syn_menu_t *m = &s->menu;
     if (!m->visible) return;
 
     /* Off a row, the highlight stays where it is rather than clearing: the
-     * pointer crossing a header on its way somewhere should not disarm Enter. */
+     * pointer crossing a header on its way somewhere should not disarm Enter.
+     * A pending hover-open stays armed too — the cursor is still headed
+     * somewhere, and the callback re-checks the row before it acts. */
     int row = menu_row_at(m, lx, ly);
     if (row < 0 || row == m->selected) return;
     m->selected = row;
+
+    /* Resting on a submenu opens it after MENU_HOVER_OPEN_MS; moving onto any
+     * other row cancels that, so an item or the Back row does not carry a stale
+     * open. Searching disables it — the view is not a page to drill into. */
+    if (!m->filter[0] && m->entries[m->view[row]].kind == MENU_ROW_SUBMENU)
+        menu_arm_hover_open(s);
+    else
+        menu_cancel_hover_open(m);
+
     synui_render_menu(s);
 }
 
@@ -761,6 +841,10 @@ int menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     syn_menu_t *m = &s->menu;
     if (!m->visible) return 0;
+
+    /* A keystroke means the keyboard is driving now; drop any hover-open the
+     * pointer left armed so it cannot open a page out from under the keys. */
+    menu_cancel_hover_open(m);
 
     /* Super+… still reaches the global bind table, so every other panel's
      * shortcut works with the menu open, as it does from ctlpanel. */

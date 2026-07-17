@@ -2030,20 +2030,29 @@ void synui_render_menu(syn_server_t *s)
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
 
-        /* A submenu says so with the usual arrow, and the label is clipped short
-         * of it so a long category can never run underneath it. */
+        /* A submenu says so with the usual arrow on the right, and the label is
+         * clipped short of it so a long category can never run underneath it. A
+         * Back row points the other way, a left chevron ahead of its label, so
+         * the mouse's way out reads as such at a glance. */
         int text_w = pw - MENU_PAD - 16;
         if (e->kind == MENU_ROW_SUBMENU) {
             text_w -= 20;
             cairo_move_to(cr, pw - MENU_PAD - 8, ry);
             cairo_show_text(cr, "\xe2\x80\xba");
         }
-        cairo_move_to(cr, MENU_PAD + 8, ry);
+        int text_x = MENU_PAD + 8;
+        if (e->kind == MENU_ROW_BACK) {
+            cairo_move_to(cr, MENU_PAD + 4, ry);
+            cairo_show_text(cr, "\xe2\x80\xb9");   /* ‹ */
+            text_x = MENU_PAD + 20;
+            text_w -= 12;
+        }
         /* draw_clipped, not cairo_show_text: a long app name would otherwise
          * run past the panel edge. It truncates on a character boundary — a cut
          * through a multi-byte sequence would poison the context and blank
          * every row below this one. */
-        draw_clipped(cr, MENU_PAD + 8, ry, text_w, e->label);
+        cairo_move_to(cr, text_x, ry);
+        draw_clipped(cr, text_x, ry, text_w, e->label);
     }
 
     /* Say so when the list runs off the window rather than silently truncating:

@@ -270,6 +270,7 @@ typedef enum {
     CTL_ROW_GAME,
     CTL_ROW_AI_BACKEND,
     CTL_ROW_DOCK,
+    CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_TITLEBARS,
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
@@ -325,6 +326,7 @@ typedef enum {
     MENU_ROW_HEADER = 0,   /* section rule — never selectable */
     MENU_ROW_ITEM,
     MENU_ROW_SUBMENU,      /* opens the page named by ->menu_to, launches nothing */
+    MENU_ROW_BACK,         /* a submenu page's first row; returns to the root */
 } syn_menu_kind_t;
 
 typedef struct {
@@ -358,6 +360,9 @@ typedef struct {
      * a return to the root and needs no stack. */
     char page[MENU_CAT_MAX];
     int  root_selected, root_scroll;  /* where to land back on when we do */
+    /* Hovering a submenu row arms this to open its page after a short delay, so
+     * the pointer can cross the category rows without flipping through pages. */
+    struct wl_event_source *hover_timer;
     /* Panel geometry in layout coords, written by synui_render_menu() on every
      * render and read by the pointer hit-tests. The renderer owns it because the
      * height depends on the row count it just drew; nothing reads it while the
@@ -857,6 +862,11 @@ typedef struct {
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
      * it takes zero layout space, shown it floats above window content. */
     int   dock_enabled;         /* default 1 */
+    /* Auto-hide: slide the dock off its edge when the pointer leaves and
+     * reveal it from a trigger strip (default 1). Off, it stays on screen —
+     * pinned like the drag branch, still floating above content, not reserving
+     * layout space. Persisted to dock.state. */
+    int   dock_autohide;        /* default 1 */
     /* Night light: warm the screen by writing the outputs' gamma LUTs directly
      * (nightlight.c). 6500K is daylight — the identity ramp — so the *temp* is
      * only meaningful while night_light is on. */
@@ -2340,6 +2350,10 @@ int  menu_first_row(const syn_menu_t *m);
 #define MENU_TOP       92
 #define MENU_FOOTER    46
 #define MENU_PAD       18
+/* How long the pointer must rest on a submenu row before its page opens. Long
+ * enough that sliding across the category rows to reach a row below them does
+ * not flip through every page; short enough to feel like a hover, not a wait. */
+#define MENU_HOVER_OPEN_MS 350
 void synui_render_menu(syn_server_t *s);
 
 /* Run a bind action by name (input.c owns the dispatch table). The control
@@ -2456,6 +2470,7 @@ void dock_pointer_motion(syn_server_t *s);
 /* Re-render every output's dock without changing the entry model — used
  * after output geometry changes (output_layout_changed). */
 void dock_relayout(syn_server_t *s);
+void dock_wake(syn_server_t *s);                  /* re-tick every output's dock */
 /* Hit-test layout coordinates against every output's dock icon row; returns
  * the entry under (lx, ly) or NULL. Used by input.c's pointer_button to
  * route clicks before falling back to normal view hit-testing. */

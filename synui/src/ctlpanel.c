@@ -46,6 +46,7 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_GAME:       return "Game mode";
     case CTL_ROW_AI_BACKEND: return "AI backend";
     case CTL_ROW_DOCK:       return "Dock";
+    case CTL_ROW_DOCK_AUTOHIDE: return "Dock auto-hide";
     case CTL_ROW_TITLEBARS:  return "Titlebars";
     case CTL_ROW_SEP:        return "";
     case CTL_ROW_DISPLAYS:   return "Display settings";
@@ -96,6 +97,11 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         break;
     case CTL_ROW_DOCK:
         snprintf(buf, n, "%s", s->config.dock_enabled ? "on" : "off");
+        break;
+    case CTL_ROW_DOCK_AUTOHIDE:
+        /* "n/a" when the dock is off entirely: hide-behaviour is moot. */
+        if (!s->config.dock_enabled) snprintf(buf, n, "n/a");
+        else snprintf(buf, n, "%s", s->config.dock_autohide ? "on" : "off");
         break;
     case CTL_ROW_TITLEBARS:
         /* The row is the titlebars, not the hiding of them: "on" means shown. */
@@ -326,6 +332,23 @@ static void ctlpanel_activate(syn_server_t *s)
         dock_relayout(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock %s", s->config.dock_enabled ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_DOCK_AUTOHIDE:
+        /* No-op while the dock is off — the row reads "n/a" then, and toggling
+         * a hidden dock's hide-behaviour would only confuse. */
+        if (!s->config.dock_enabled) {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "dock is off");
+            ctlpanel_repaint(s);
+            return;
+        }
+        s->config.dock_autohide = !s->config.dock_autohide;
+        dock_state_save(s);   /* persist to dock.state, like edge/pins */
+        dock_wake(s);         /* pin or release the bar on the next frame */
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "dock auto-hide %s", s->config.dock_autohide ? "on" : "off");
         ctlpanel_repaint(s);
         return;
 

@@ -56,6 +56,7 @@
  *
  * Dock (dock.c):
  *   dock_enabled = on|off       (default on)
+ *   dock_autohide = on|off      (default on; off = always on screen)
  *   night_light  = on|off       (default off)   Super+Shift+B toggles
  *   night_light_temp = 4000     (Kelvin, 1000-6500; 6500 is daylight)
  *   dock_height = 64            (px)
@@ -436,6 +437,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->numlock            = 1;
 
     cfg->dock_enabled      = 1;
+    cfg->dock_autohide     = 1;
     cfg->dock_height       = 64;
     cfg->dock_hover_margin = 4;
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
@@ -736,6 +738,8 @@ void synui_config_load(syn_config_t *cfg)
             cfg->numlock = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
+        else if (strcmp(key, "dock_autohide") == 0)
+            cfg->dock_autohide = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_edge") == 0) {
             if      (strcmp(val, "bottom") == 0) cfg->dock_edge = SYN_DOCK_EDGE_BOTTOM;
             else if (strcmp(val, "top")    == 0) cfg->dock_edge = SYN_DOCK_EDGE_TOP;

@@ -896,6 +896,57 @@ static const char *synsh_toolinfo(void)
     return buf;
 }
 
+/* True if the first word of `line` is an executable — the same test synsh uses
+ * to tell a command from a question (classify.c's cmd_in_path), so a program
+ * name typed into the bar launches exactly as it would in the shell. A word
+ * with a '/' is a path and is checked directly; otherwise $PATH is walked. */
+static bool cmdbar_is_launch(const char *line)
+{
+    while (*line == ' ' || *line == '\t') line++;
+    /* '?' is the AI prefix idiom; never treat a question as a launch. */
+    if (!*line || *line == '?') return false;
+
+    char first[128];
+    size_t i = 0;
+    while (line[i] && line[i] != ' ' && line[i] != '\t' && i < sizeof(first) - 1)
+        first[i] = line[i], i++;
+    first[i] = '\0';
+
+    if (strchr(first, '/'))                       /* ./x or /usr/bin/x */
+        return access(first, X_OK) == 0;
+
+    const char *path = getenv("PATH");
+    if (!path) return false;
+    char copy[4096];
+    snprintf(copy, sizeof(copy), "%s", path);
+    for (char *dir = strtok(copy, ":"); dir; dir = strtok(NULL, ":")) {
+        char full[600];
+        if (snprintf(full, sizeof(full), "%s/%s", dir, first) >= (int)sizeof(full))
+            continue;
+        if (access(full, X_OK) == 0) return true;
+    }
+    return false;
+}
+
+/* Fire-and-forget launch of a typed command in a foot terminal. --hold keeps
+ * the window after the command exits, so a one-shot's output ("ls -la") is not
+ * lost the instant it prints; an interactive program (htop, vim) holds it open
+ * itself until quit. sh -c carries the line verbatim — flags, pipes and quoting
+ * mean what a shell would make of them, without this code re-quoting the user's
+ * own words. Returns false only if the process could not be started at all. */
+static bool cmdbar_launch_term(const char *line)
+{
+    pid_t pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) {
+        setsid();                                 /* outlive the compositor */
+        synui_child_reset_signals();
+        execlp("foot", "foot", "--hold", "sh", "-c", line, (char *)NULL);
+        _exit(127);
+    }
+    return true;
+}
+
 void cmdbar_submit(syn_server_t *s)
 {
     syn_cmdbar_t *bar = &s->cmdbar;
@@ -926,6 +977,27 @@ void cmdbar_submit(syn_server_t *s)
         if (!cmdcap_spawn(s, "synsh", argv))
             snprintf(bar->response, sizeof(bar->response),
                      "could not run synsh: %s", bar->input);
+        return;
+    }
+
+    /*
+     * A bare program name is a launch, not a question: routing "htop" through
+     * the model would pay the ~38s round trip only to be told to run the thing
+     * already named. If the first word is a program on PATH, open the line in a
+     * terminal — the same call synsh makes when it classifies a line as a
+     * command, so the bar and the shell agree on what typing a program does.
+     *
+     * Below the intent check on purpose: "play <song>" is an intent first, not
+     * an invocation of whatever `play` happens to be on PATH.
+     */
+    if (cmdbar_is_launch(bar->input)) {
+        wlr_log(WLR_INFO, "cmdbar: launch: %s", bar->input);
+        if (cmdbar_launch_term(bar->input)) {
+            cmdbar_hide(s);              /* hand the keyboard to the terminal */
+        } else {
+            snprintf(bar->response, sizeof(bar->response),
+                     "could not launch: %s", bar->input);
+        }
         return;
     }
 

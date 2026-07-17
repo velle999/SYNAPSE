@@ -482,6 +482,16 @@ void dock_relayout(syn_server_t *s)
         dock_render_output(o);
 }
 
+/* Schedule a frame on every output so dock_tick re-evaluates at once. Used
+ * after a setting changes (auto-hide toggled) so the bar pins or releases
+ * immediately rather than waiting on the next incidental repaint. */
+void dock_wake(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
+}
+
 /* ── Public API ──────────────────────────────────────────── */
 
 void dock_init(syn_server_t *s)
@@ -544,6 +554,26 @@ bool dock_tick(syn_output_t *o, double now)
             dock_apply_position(o);
         }
         return false;
+    }
+
+    /* Always-visible mode: pin the bar on screen and skip the hover state
+     * machine entirely — the same fixed pose the drag branch holds, but
+     * permanent. It still floats above content rather than reserving layout
+     * space, so nothing else has to be re-laid-out when this toggles. */
+    if (!s->config.dock_autohide) {
+        if (!o->dock.shown || o->dock.slide_progress != 1.0) {
+            o->dock.shown = 1;
+            o->dock.slide_progress = 1.0;
+            o->dock.unhover_since = 0.0;
+            o->dock.last_tick = 0.0;
+            dock_apply_position(o);
+        }
+        /* Icons still press-pop on click; keep rendering while one animates. */
+        bool clicking = false;
+        for (int i = 0; i < s->dock_entry_count; i++)
+            if (dock_entry_animating(&s->dock_entries[i], now)) { clicking = true; break; }
+        if (clicking) dock_render_output(o);
+        return clicking;
     }
 
     int bx, by, bw, bh;
@@ -783,12 +813,36 @@ void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
     wl_list_for_each(o, &s->outputs, link)
         if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
 
-    syn_view_t *v = e->primary_view;
+    /* The dock groups every window of an app under one icon, so a click has to
+     * act on the whole group. Keying it off a single stashed view (primary_view)
+     * is exactly what stranded a second window: minimize the one the icon
+     * pointed at and it would re-point at the other instance, leaving the
+     * minimized one with no icon that could bring it back. Gather the app's live
+     * windows first — into a local array, so restoring or minimizing them cannot
+     * reorder a workspace list we are still walking — and decide from the set. */
+    syn_view_t *inst[64];
+    int ninst = 0, any_minimized = 0, app_has_focus = 0;
+    syn_view_t *focus_target = NULL, *ws_ref = NULL, *v;
+    for (int wi = 0; wi < WORKSPACE_MAX; wi++)
+        wl_list_for_each(v, &s->workspaces[wi].windows, link) {
+            const char *a;
+            if (!v->mapped) continue;
+            a = view_app_id(v);
+            if (!a || strcmp(a, e->app_id) != 0) continue;
+            ws_ref = v;
+            if (v->minimized) {
+                any_minimized = 1;
+            } else {
+                if (!focus_target) focus_target = v;
+                if (v == s->focused_view) app_has_focus = 1;
+            }
+            if (ninst < (int)(sizeof inst / sizeof inst[0])) inst[ninst++] = v;
+        }
 
     /* No window: either it is not running, or it is sitting in the tray with
      * its window unmapped — the dock cannot tell those apart, because both look
      * like "no mapped view". Ask the app. */
-    if (!v || !v->mapped) {
+    if (ninst == 0) {
         const char *restore = dock_tray_restore_exec(e->app_id);
         if (restore) {
             wlr_log(WLR_INFO, "dock: %s is tray-resident, restoring via: %s",
@@ -805,23 +859,30 @@ void dock_entry_click(syn_server_t *s, syn_dock_entry_t *e)
         return;
     }
 
-    if (v->minimized) {
-        /* view_apply_minimized() itself raises+focuses on restore once the
-         * workspace is visible — mirrors ft_handle_minimize. */
-        if (v->workspace && !workspace_visible(v->workspace))
-            workspace_switch(s, v->workspace->index);
-        view_apply_minimized(s, v, 0);
+    /* Restore and focus both need the app's workspace on screen. */
+    if (ws_ref->workspace && !workspace_visible(ws_ref->workspace))
+        workspace_switch(s, ws_ref->workspace->index);
+
+    /* Any hidden instance → raise the group. Restoring *every* minimized window,
+     * not just one, is what keeps a duplicate from being stranded; the last one
+     * restored takes focus, as view_apply_minimized() raises+focuses on restore
+     * (mirrors ft_handle_minimize). */
+    if (any_minimized) {
+        for (int i = 0; i < ninst; i++)
+            if (inst[i]->minimized) view_apply_minimized(s, inst[i], 0);
         return;
     }
 
-    if (s->focused_view == v) {
-        view_apply_minimized(s, v, 1);
+    /* Every instance is already shown. If one holds focus the app is fully
+     * forward, so the click tucks the whole group away — the counterpart to
+     * raising it, and every window is back one more click on the icon.
+     * Otherwise the app is behind something: bring it to the front. */
+    if (app_has_focus) {
+        for (int i = 0; i < ninst; i++)
+            view_apply_minimized(s, inst[i], 1);
         return;
     }
-
-    if (v->workspace && !workspace_visible(v->workspace))
-        workspace_switch(s, v->workspace->index);
-    focus_view(s, v, view_surface(v));
+    focus_view(s, focus_target, view_surface(focus_target));
 }
 
 /* ── Drag to reposition ──────────────────────────────────── */
@@ -947,6 +1008,10 @@ void dock_state_load(syn_config_t *cfg)
             else if (strcmp(v, "top")    == 0) cfg->dock_edge = SYN_DOCK_EDGE_TOP;
             else if (strcmp(v, "left")   == 0) cfg->dock_edge = SYN_DOCK_EDGE_LEFT;
             else if (strcmp(v, "right")  == 0) cfg->dock_edge = SYN_DOCK_EDGE_RIGHT;
+        } else if (strncmp(p, "autohide=", 9) == 0) {
+            /* Only overrides synuirc when the line is present, so an older
+             * dock.state written before this key leaves the config value alone. */
+            cfg->dock_autohide = strcmp(p + 9, "on") == 0;
         } else if (strncmp(p, "pin=", 4) == 0) {
             const char *v = p + 4;
             if (*v && cfg->dock_pin_count < DOCK_PIN_MAX) {
@@ -971,6 +1036,7 @@ void dock_state_save(syn_server_t *s)
     }
     static const char *edge_name[] = { "bottom", "top", "left", "right" };
     fprintf(f, "edge=%s\n", edge_name[s->config.dock_edge]);
+    fprintf(f, "autohide=%s\n", s->config.dock_autohide ? "on" : "off");
     for (int i = 0; i < s->config.dock_pin_count; i++)
         fprintf(f, "pin=%s\n", s->config.dock_pin[i]);
     fclose(f);
