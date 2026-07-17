@@ -437,12 +437,6 @@ id -u synbuild &>/dev/null || useradd -r -s /bin/bash -m synbuild
 
 create_source_tarball() {
     local pkg="$1"
-    # An optional second argument overrides which llama backend this package is
-    # built against, so synapse-llama can be packaged twice from one run: once
-    # as the CPU build the ISO installs, once as synapse-llama-cuda for targets
-    # that have a GPU. Defaults to the ISO's own backend.
-    local llama_backend="${2:-${WITH_GPU}}"
-    local staging="${PROJECT_ROOT}/llama-staging-${llama_backend}"
     local pkgdir="${PROJECT_ROOT}/${pkg}"
     local tarball="${pkgdir}/${pkg}-${SYNAPSEOS_VERSION}.tar.gz"
 
@@ -510,6 +504,12 @@ create_source_tarball() {
 
 build_package() {
     local pkg="$1"
+    # An optional second argument overrides which llama backend this package is
+    # built against, so synapse-llama can be packaged twice from one run: once
+    # as the CPU build the ISO installs, once as synapse-llama-cuda for targets
+    # that have a GPU. Defaults to the ISO's own backend.
+    local llama_backend="${2:-${WITH_GPU}}"
+    local staging="${PROJECT_ROOT}/llama-staging-${llama_backend}"
     local pkgdir="${PROJECT_ROOT}/${pkg}"
 
     if [[ ! -f "${pkgdir}/PKGBUILD" ]]; then
