@@ -236,11 +236,12 @@ int inference_run(synapd_state_t *s,
             "<|system|>\n%s\n<|user|>\n%s\n<|assistant|>\n",
             system_ctx, prompt);
     } else if (raw) {
-        /* Raw agentic client with no system_ctx: bare user turn, no persona.
-         * The client has already baked any system prompt into `prompt`. */
-        plen = asprintf(&full_prompt,
-            "<|user|>\n%s\n<|assistant|>\n",
-            prompt);
+        /* Raw agentic client with no system_ctx: send the prompt VERBATIM so the
+         * client owns the ENTIRE chat template — turn markers, tool results, and
+         * the trailing <|assistant|> generation cue. Wrapping it in one more
+         * <|user|> turn made the model leak template tokens and hallucinate extra
+         * turns, because it saw a half-applied template it tried to complete. */
+        plen = asprintf(&full_prompt, "%s", prompt);
     } else {
         plen = asprintf(&full_prompt,
             "<|system|>\nYou are Synapse, the AI core of SynapseOS. "
