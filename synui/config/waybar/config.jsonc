@@ -62,7 +62,7 @@
         "tooltip": true
     },
     "clock": {
-        "format": "{:%I:%M:%S %p  %Y-%m-%d}",
+        "format": " {:%I:%M:%S %p  %Y-%m-%d}",
         "interval": 1
     },
     // Battery. waybar hides this module entirely on a machine with no
@@ -77,19 +77,20 @@
     // after a plug/unplug, which is normal and not worth hiding.
     "battery": {
         "states": { "warning": 20, "critical": 10 },
-        "format": "BAT {capacity}%",
-        "format-charging": "CHG {capacity}%",
-        "format-plugged": "AC {capacity}%",
-        "format-full": "AC full",
+        "format": "{icon} {capacity}%",
+        "format-charging": " {capacity}%",
+        "format-plugged": " {capacity}%",
+        "format-full": " full",
+        "format-icons": ["","","","",""],
         "tooltip-format": "{timeTo} ({power}W)",
         "interval": 30
     },
     "cpu": {
-        "format": "CPU {usage}%",
+        "format": " {usage}%",
         "interval": 2
     },
     "memory": {
-        "format": "MEM {percentage}%",
+        "format": " {percentage}%",
         "interval": 5
     },
     // Bluetooth. Text label to match NET/VOL/MEM/CPU — the bar's iconography is
@@ -99,11 +100,11 @@
     // bluetoothctl one-shots need no root — bluez's polkit lets the active local
     // session drive the adapter.
     "bluetooth": {
-        "format": "BT {status}",
-        "format-off": "BT off",
-        "format-on": "BT on",
-        "format-connected": "BT {device_alias}",
-        "format-connected-battery": "BT {device_alias} {device_battery_percentage}%",
+        "format": "",
+        "format-off": "",
+        "format-on": "",
+        "format-connected": " {device_alias}",
+        "format-connected-battery": " {device_alias} {device_battery_percentage}%",
         "tooltip-format": "{controller_alias}\nClick for Bluetooth options",
         "tooltip-format-connected": "{controller_alias}\n{num_connections} connected\n{device_enumerate}\nClick for Bluetooth options",
         "tooltip-format-enumerate-connected": "{device_alias}",
@@ -119,12 +120,12 @@
         "interval": 5
     },
     "network": {
-        "format-wifi": "NET {essid} {signalStrength}%",
-        "format-ethernet": "NET {ipaddr}",
-        "format-disconnected": "NET offline",
+        "format-wifi": " {signalStrength}%",
+        "format-ethernet": "󰈀",
+        "format-disconnected": "",
         // rfkill'd wlan reads as plain "offline" otherwise, which is what sent
         // us hunting for a driver bug when the radio was only switched off.
-        "format-disabled": "NET wifi off",
+        "format-disabled": "",
         "tooltip-format-wifi": "{essid} ({signalStrength}%) - {ipaddr}\nClick for network options",
         "tooltip-format-ethernet": "{ifname} - {ipaddr}\nClick for network options",
         "tooltip-format-disconnected": "Disconnected - click for network options",
@@ -145,14 +146,10 @@
         "interval": 5
     },
     "pulseaudio": {
-        "format": "VOL {volume}%",
-        "format-muted": "VOL muted",
+        "format": "{icon} {volume}%",
+        "format-muted": " muted",
         "format-icons": {
-            "default": [
-                "",
-                "",
-                ""
-            ]
+            "default": ["","",""]
         },
         "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
         "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +5%",

@@ -1,5 +1,8 @@
 * {
-    font-family: monospace;
+    /* DejaVu carries the numbers and clock; the Nerd symbols font carries the
+     * module glyphs via per-glyph fallback (nothing else on the box has those
+     * Private-Use codepoints, so this is the only font that can draw them). */
+    font-family: "DejaVu Sans Mono", "Symbols Nerd Font Mono", monospace;
     font-size: 12px;
     min-height: 0;
     border: none;
