@@ -19,6 +19,7 @@
 
 #define _GNU_SOURCE
 #include <pthread.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,8 +118,8 @@ static void xw_map(struct wl_listener *listener, void *data)
 
     view->override_redirect = xs->override_redirect;
     view->mapped = 1;
-    wlr_log(WLR_INFO, "synui: X11 window mapped: '%s' (%s)",
-            xs->title ? xs->title : "?",
+    wlr_log(WLR_INFO, "synui: X11 window mapped: '%s' (0x%x, %s)",
+            xs->title ? xs->title : "?", xs->window_id,
             view->override_redirect ? "override-redirect" : "managed");
 
     if (view->override_redirect) {
@@ -718,16 +719,37 @@ void xwayland_unwedge(syn_server_t *s, const char *app_id, const char *title)
      * window from its own popups; the worker's IsViewable test is the second
      * gate. */
     xcb_window_t win = XCB_WINDOW_NONE;
-    syn_view_t *v;
+    syn_view_t *v, *found = NULL;
     wl_list_for_each(v, &s->xw_views, xw_link) {
         if (!v->is_xwayland || v->mapped || v->override_redirect) continue;
         if (!v->xsurface || !v->xsurface->window_id) continue;
         const char *c = view_app_id(v), *t = view_title(v);
         if (!c || !t || strcmp(c, app_id) || strcmp(t, title)) continue;
         win = v->xsurface->window_id;
+        found = v;
         break;
     }
     if (win == XCB_WINDOW_NONE) return;   /* nothing wedged-looking */
+
+    /* Which half of the bug are we in? !mapped has two causes that look
+     * identical from everywhere else in the compositor, and nothing has ever
+     * distinguished them: the surface was never associated, or it associated
+     * fine and no buffer ever arrived. Every hypothesis so far has assumed the
+     * former on the strength of an empty _NET_CLIENT_LIST. Measure it. */
+    {
+        struct wlr_xwayland_surface *xs = found->xsurface;
+        struct wlr_surface *surf = xs->surface;
+        if (!surf) {
+            wlr_log(WLR_INFO, "synui: WEDGE-STATE %s (0x%x): NOT associated "
+                    "(xsurface->surface == NULL, serial %" PRIu64 ")",
+                    title, win, xs->serial);
+        } else {
+            wlr_log(WLR_INFO, "synui: WEDGE-STATE %s (0x%x): ASSOCIATED "
+                    "(surface %p, mapped %d, has_buffer %d, serial %" PRIu64 ")",
+                    title, win, (void *)surf, surf->mapped,
+                    wlr_surface_has_buffer(surf), xs->serial);
+        }
+    }
 
     struct unwedge_job *job = calloc(1, sizeof *job);
     if (!job) return;
