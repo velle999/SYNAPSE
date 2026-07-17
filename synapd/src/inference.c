@@ -283,12 +283,36 @@ int inference_run(synapd_state_t *s,
     /* Evaluate prompt */
     llama_memory_clear(llama_get_memory(inf->ctx), true);
 
-    struct llama_batch batch = llama_batch_get_one(tokens, n_prompt_tokens);
-    if (llama_decode(inf->ctx, batch) != 0) {
-        syn_log(LOG_ERR, "inference: llama_decode (prompt) failed");
+    /* A prompt longer than the context can never fit — reject cleanly rather
+     * than feed a doomed batch. (The caller, e.g. vibe, prunes to fit.) */
+    if (n_prompt_tokens >= (int)inf->context_size) {
+        syn_log(LOG_WARNING,
+                "inference: prompt %d tokens >= context window %u — rejecting",
+                n_prompt_tokens, inf->context_size);
         free(tokens);
         pthread_mutex_unlock(&inf->lock);
         return -1;
+    }
+
+    /* Feed the prompt in n_batch-sized chunks. llama_decode aborts the whole
+     * daemon with GGML_ASSERT(n_tokens_all <= n_batch) if a single batch
+     * exceeds n_batch (default 512 here, while n_ctx is much larger). Short
+     * OS-assistant queries never hit this; agentic clients that send tool
+     * schemas + file contents + history routinely do. Positions continue
+     * across chunks from the KV state (no clear between chunks). */
+    int n_batch = (int)llama_n_batch(inf->ctx);
+    if (n_batch < 1) n_batch = 512;
+    for (int off = 0; off < n_prompt_tokens; off += n_batch) {
+        int chunk = n_prompt_tokens - off;
+        if (chunk > n_batch) chunk = n_batch;
+        struct llama_batch batch = llama_batch_get_one(tokens + off, chunk);
+        if (llama_decode(inf->ctx, batch) != 0) {
+            syn_log(LOG_ERR, "inference: llama_decode (prompt chunk @%d, %d tok) failed",
+                    off, chunk);
+            free(tokens);
+            pthread_mutex_unlock(&inf->lock);
+            return -1;
+        }
     }
     free(tokens);
 
