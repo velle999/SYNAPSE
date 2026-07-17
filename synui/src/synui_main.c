@@ -1360,6 +1360,7 @@ int synui_init(syn_server_t *s)
      * Best-effort; no session bus just means the feature stays off. */
     screensaver_init(s);
     bt_init(s);
+    notif_init(s);
 
     /* Stamp game mode "off" for waybar's indicator. */
     game_init(s);
@@ -1485,6 +1486,7 @@ void synui_destroy(syn_server_t *s)
     power_finish(s);
     taskmgr_finish(s);
     news_finish(s);
+    notif_finish(s);
     bt_finish(s);
     screensaver_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it

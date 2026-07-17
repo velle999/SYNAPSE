@@ -347,6 +347,59 @@ typedef struct {
     syn_menu_entry_t entries[MENU_ENTRIES_MAX];
 } syn_menu_t;
 
+/* ── Notifications (notif.c) ─────────────────────────────── */
+/* synui owns org.freedesktop.Notifications and draws the toasts itself.
+ *
+ * Nothing owned that name, so every notify() on the system failed silently:
+ * Firefox, chibi, synguard's alerts, and synui-screenshot's own "saved" toast
+ * (whose script has carried a "SYNAPSE ships no notification daemon" comment
+ * and a guard around the call). A desktop where nothing can tell you anything
+ * is the state this replaces.
+ *
+ * Native for the same reason as the start menu and Bluetooth: the compositor
+ * already owns the screen, so it can place a toast in the usable area (below
+ * waybar's exclusive zone), above every window, without a layer-shell client
+ * and without a second process to keep alive.
+ */
+#define NOTIF_MAX       6     /* on screen at once; older ones drop off */
+#define NOTIF_APP_MAX  48
+#define NOTIF_SUM_MAX  96
+#define NOTIF_BODY_MAX 256
+
+/* org.freedesktop.Notifications urgency hint. Critical is the one that matters:
+ * the spec says it must not auto-expire, so it stays until dismissed. */
+typedef enum {
+    NOTIF_URGENCY_LOW = 0,
+    NOTIF_URGENCY_NORMAL = 1,
+    NOTIF_URGENCY_CRITICAL = 2,
+} syn_notif_urgency_t;
+
+/* NotificationClosed reasons, from the spec. Sent so a client can tell an
+ * expiry from a dismissal — some redraw or re-post on one but not the other. */
+typedef enum {
+    NOTIF_CLOSED_EXPIRED   = 1,
+    NOTIF_CLOSED_DISMISSED = 2,
+    NOTIF_CLOSED_BY_CALL   = 3,
+    NOTIF_CLOSED_UNDEFINED = 4,
+} syn_notif_reason_t;
+
+typedef struct {
+    uint32_t id;
+    char     app[NOTIF_APP_MAX];
+    char     summary[NOTIF_SUM_MAX];
+    char     body[NOTIF_BODY_MAX];
+    int      urgency;
+    /* CLOCK_MONOTONIC ms at which this expires; 0 = never (critical, or an
+     * explicit expire_timeout of 0). */
+    int64_t  expires_ms;
+} syn_notif_t;
+
+typedef struct {
+    syn_notif_t items[NOTIF_MAX];
+    int         count;
+    uint32_t    next_id;   /* ids must never be 0: 0 means "no id" to callers */
+} syn_notifs_t;
+
 /* ── Bluetooth panel (bt.c) ──────────────────────────────── */
 /* Native BlueZ client: synui talks org.bluez over sd-bus itself rather than
  * shelling out to bluetoothctl and scraping it, or handing the job to a GTK
@@ -1417,6 +1470,16 @@ struct syn_server {
 
     syn_bt_t        bt;
 
+    /* Notification toasts — org.freedesktop.Notifications, see syn_notifs_t.
+     * No bg rect: the stack is one cairo buffer that draws its own cards, since
+     * each toast is a different height and a single rect could not back them. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_buffer *text_buf;
+    } notif_ui;
+
+    syn_notifs_t    notifs;
+
     /* Super-tap: Super pressed and released with nothing in between opens the
      * start menu, the way it does on every other desktop. Armed on the Super
      * press and disarmed by *any* intervening key or pointer button, so Super
@@ -2058,6 +2121,23 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
+
+/* ── Notifications (notif.c) ─────────────────────────────── */
+/* notif_init takes org.freedesktop.Notifications on the session bus. Safe where
+ * there is no bus or the name is already owned (a stray mako): it logs, leaves
+ * the name to whoever has it, and synui simply draws no toasts. */
+void notif_init(syn_server_t *s);
+void notif_finish(syn_server_t *s);
+void synui_render_notifs(syn_server_t *s);
+/* Dismiss the toast under (lx, ly) in layout coords. Returns 1 if one was hit,
+ * so the click is not also delivered to whatever is behind it. */
+int  notif_click(syn_server_t *s, double lx, double ly);
+/* Which toast is under a layout-space point, or -1; stack gets the whole
+ * stack's box. render.c owns toast geometry, so it answers this — one
+ * definition of where a toast is, rather than two that disagree and eat
+ * clicks. */
+int  synui_notif_hit(syn_server_t *s, double lx, double ly,
+                     struct wlr_box *stack);
 
 /* ── Bluetooth (bt.c) ────────────────────────────────────── */
 /* bt_init opens the system bus and exports the pairing agent; it is safe to call

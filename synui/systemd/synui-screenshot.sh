@@ -53,8 +53,11 @@ grim "$@" "$file"
 # works and it is meant to outlive us.
 wl-copy --type image/png <"$file"
 
-# SYNAPSE ships no notification daemon, so notify-send is a nicety, not a
-# dependency — never let its absence fail the screenshot that already landed.
+# synui serves org.freedesktop.Notifications itself now (src/notif.c), so this
+# actually shows something — for most of this script's life it did not, because
+# nothing on SYNAPSE owned that name and the call failed silently. Still guarded:
+# libnotify is a dependency, but a screenshot that already landed must never fail
+# over its own toast.
 if command -v notify-send >/dev/null 2>&1; then
     notify-send -a synui -i "$file" "Screenshot saved" "$file" || true
 fi

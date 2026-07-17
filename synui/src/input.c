@@ -1503,6 +1503,14 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
     }
 
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        /* Click a toast to dismiss it. First, because toasts are drawn above
+         * everything and sit over the top-right corner of whatever is there —
+         * letting the click through to the window underneath would mean acting
+         * on something you cannot see. Only swallows the click when one is
+         * actually hit, so the corner is otherwise untouched. */
+        if (button == BTN_LEFT && notif_click(s, s->cursor->x, s->cursor->y))
+            return;
+
         /* The dock context menu is modal for the pointer while open: a left
          * click runs the item under the cursor, any other click dismisses. */
         if (s->dockmenu.visible) {

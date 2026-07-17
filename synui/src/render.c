@@ -1427,6 +1427,138 @@ void synui_render_ctlpanel(syn_server_t *s)
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
 }
 
+/* ── Notification toasts (notif.c) ───────────────────────── */
+
+#define NOTIF_W       360
+#define NOTIF_GAP       8
+#define NOTIF_MARGIN   12
+#define NOTIF_PAD      12
+
+/* A toast is two lines, or three when it has a body. Fixed heights rather than
+ * measured ones: the text is clipped to one line each anyway, so there is
+ * nothing to measure, and a stack whose cards jump height as text arrives reads
+ * as jitter. */
+static int notif_height(const syn_notif_t *t) { return t->body[0] ? 82 : 58; }
+
+/* Top-right of the *usable* box — the full output box would put the first toast
+ * underneath waybar, which owns an exclusive zone at the top. Toasts follow the
+ * focused output, so they appear on the screen you are looking at. */
+static void notif_stack_box(syn_server_t *s, struct wlr_box *out)
+{
+    struct wlr_box ub;
+    server_usable_box(s, &ub);
+
+    int h = 0;
+    for (int i = 0; i < s->notifs.count; i++) {
+        h += notif_height(&s->notifs.items[i]);
+        if (i) h += NOTIF_GAP;
+    }
+
+    out->width  = NOTIF_W;
+    out->height = h;
+    out->x = ub.x + ub.width - NOTIF_W - NOTIF_MARGIN;
+    out->y = ub.y + NOTIF_MARGIN;
+}
+
+/* Which toast is under a layout-space point, or -1. Lives here because render.c
+ * owns the geometry — notif.c asking for it keeps one definition of where a
+ * toast is, instead of two that can disagree by a pixel and eat clicks. */
+int synui_notif_hit(syn_server_t *s, double lx, double ly, struct wlr_box *stack)
+{
+    if (!s->notifs.count) return -1;
+
+    notif_stack_box(s, stack);
+    if (lx < stack->x || lx >= stack->x + stack->width) return -1;
+    if (ly < stack->y || ly >= stack->y + stack->height) return -1;
+
+    int y = stack->y;
+    for (int i = 0; i < s->notifs.count; i++) {
+        int h = notif_height(&s->notifs.items[i]);
+        if (ly >= y && ly < y + h) return i;
+        y += h + NOTIF_GAP;
+    }
+    return -1;   /* landed in a gap between cards */
+}
+
+/* Urgency reads as colour: critical is the only one allowed to shout. */
+static void notif_accent(int urgency, double rgb[3])
+{
+    if (urgency >= NOTIF_URGENCY_CRITICAL) {
+        rgb[0] = 0.95; rgb[1] = 0.30; rgb[2] = 0.35;
+    } else if (urgency <= NOTIF_URGENCY_LOW) {
+        rgb[0] = 0.45; rgb[1] = 0.45; rgb[2] = 0.55;
+    } else {
+        rgb[0] = 0.00; rgb[1] = 0.85; rgb[2] = 0.75;
+    }
+}
+
+void synui_render_notifs(syn_server_t *s)
+{
+    syn_notifs_t *n = &s->notifs;
+
+    if (!n->count) {
+        wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box box;
+    notif_stack_box(s, &box);
+    if (box.height <= 0) {
+        wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
+        return;
+    }
+
+    wlr_scene_node_set_position(&s->notif_ui.tree->node, box.x, box.y);
+    wlr_scene_node_set_enabled(&s->notif_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->notif_ui.tree->node);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(box.width, box.height, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    int y = 0;
+    for (int i = 0; i < n->count; i++) {
+        const syn_notif_t *t = &n->items[i];
+        int h = notif_height(t);
+
+        /* The card. Each toast paints its own background: they are separate
+         * rounded slabs with gaps between them, which one backing rect for the
+         * whole stack could not express. */
+        cairo_set_source_rgba(cr, 0.06, 0.06, 0.12, 0.96);
+        cairo_rectangle(cr, 0, y, box.width, h);
+        cairo_fill(cr);
+
+        double rgb[3];
+        notif_accent(t->urgency, rgb);
+        cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 1.0);
+        cairo_rectangle(cr, 0, y, 3, h);      /* urgency stripe down the left */
+        cairo_fill(cr);
+
+        /* App name, dim: it is context, not the message. */
+        if (t->app[0]) {
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 0.9);
+            draw_clipped(cr, NOTIF_PAD, y + 20, box.width - 2 * NOTIF_PAD, t->app);
+        }
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
+        draw_clipped(cr, NOTIF_PAD, y + 40, box.width - 2 * NOTIF_PAD, t->summary);
+
+        if (t->body[0]) {
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+            draw_clipped(cr, NOTIF_PAD, y + 62, box.width - 2 * NOTIF_PAD, t->body);
+        }
+
+        y += h + NOTIF_GAP;
+    }
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->notif_ui.text_buf, s->notif_ui.tree, buf);
+}
+
 /* ── Bluetooth (bt.c) ────────────────────────────────────── */
 
 #define BT_W        520
@@ -1451,6 +1583,7 @@ void synui_render_bt(syn_server_t *s)
 
     if (!b->visible) {
         wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
         return;
     }
 
@@ -2395,6 +2528,7 @@ void synui_ui_init(syn_server_t *s)
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
+    s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -2409,6 +2543,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

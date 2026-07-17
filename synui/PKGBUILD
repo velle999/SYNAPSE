@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=96
+pkgrel=97
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -15,6 +15,10 @@ license=('GPL2')
 #   does the privileged loop-setup+mount (polkit allow_active, so no root);
 #   zenity is how the service menu reports a failure — a menu item that fails
 #   silently looks like a broken menu item.
+# libnotify: synui *serves* org.freedesktop.Notifications (src/notif.c), so it
+#   needs no client library for that — but notify-send is what synui-screenshot
+#   uses to say "saved", and it lives here. Nothing else on the ISO pulled it in,
+#   so that toast had no chance of appearing even once a daemon existed.
 # bluez: bt.c is a native BlueZ client (Super+B) — it talks org.bluez over sd-bus
 #   rather than driving bluetoothctl, but the daemon still has to be there, and
 #   bluez enables no unit of its own: without `systemctl enable bluetooth` the
@@ -22,7 +26,7 @@ license=('GPL2')
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez')
+depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
