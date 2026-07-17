@@ -366,48 +366,6 @@ void synui_spawn(const char *cmd)
     spawn(cmd);
 }
 
-/* ── Start menu (Super-tap) ──────────────────────────────── */
-
-/* Where in the bar the start button is. waybar's "◢ SYNAPSE" module is the sole
- * entry in modules-left, so it sits hard against the bar's left edge and a click
- * a couple of dozen pixels in lands on it. This is the one brittle assumption
- * here: reorder modules-left and the tap opens whatever moved into that corner.
- * waybar exposes no geometry (and no IPC to open a menu), so there is nothing
- * better to key off than position. */
-#define START_MENU_HIT_X  24
-
-/* The bar that owns the start menu. Matched on the layer-shell namespace rather
- * than "the first top-layer surface", so an unrelated panel can't be clicked. */
-static syn_layer_surface_t *bar_on(syn_output_t *o)
-{
-    syn_layer_surface_t *ls;
-    wl_list_for_each(ls, &o->layer_surfaces, link) {
-        struct wlr_layer_surface_v1 *lsurf = ls->layer_surface;
-        if (!lsurf || !lsurf->surface || !lsurf->surface->mapped) continue;
-        if (lsurf->namespace && strcmp(lsurf->namespace, "waybar") == 0)
-            return ls;
-    }
-    return NULL;
-}
-
-static syn_layer_surface_t *find_bar(syn_server_t *s)
-{
-    /* The bar on the output you are looking at, if it has one; otherwise any
-     * bar at all, so the tap still works from a monitor that carries none. */
-    syn_output_t *f = server_focused_output(s);
-    if (f) {
-        syn_layer_surface_t *ls = bar_on(f);
-        if (ls) return ls;
-    }
-
-    syn_output_t *o;
-    wl_list_for_each(o, &s->outputs, link) {
-        syn_layer_surface_t *ls = bar_on(o);
-        if (ls) return ls;
-    }
-    return NULL;
-}
-
 static uint32_t now_msec(void)
 {
     struct timespec ts;
@@ -415,47 +373,24 @@ static uint32_t now_msec(void)
     return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
-/* Open waybar's start menu.
+/* ── Start menu (Super-tap) ──────────────────────────────── */
+
+/* Open the start menu.
  *
- * waybar's menu is a GTK popup that opens on a click on the module's widget:
- * there is no IPC, no signal and no protocol to open it from outside. So synui
- * does what a user does — it clicks the button, by sending the bar surface a
- * pointer enter/press/release through the seat. The physical cursor is left
- * where it is; only the seat's pointer focus moves, and the next real pointer
- * motion puts that back.
+ * This used to click waybar's: the menu was a GTK popup with no IPC to open it,
+ * so synui sent the bar surface a synthetic pointer enter/press/release and let
+ * GTK pop the menu. It worked, and it was a dead end — that menu could never be
+ * arrow-navigated, because waybar sets keyboard_interactivity NONE once at
+ * startup and never revises it, so it is handed no keyboard focus at all. Three
+ * synui-side focus fixes each delivered a textbook key sequence that GTK
+ * ignored; the wall is inside waybar/GDK, not here.
  *
- * Nothing here is load-bearing: if the bar isn't running, or waybar changes its
- * layout, the click misses and nothing happens. That is the intended failure —
- * a tap that does nothing, not a compositor that breaks. */
+ * So the menu is synui's own now (menu.c) — a panel the compositor draws is one
+ * it can hand the keyboard to. waybar keeps the bar, the tray and its modules;
+ * it just no longer owns the menu. */
 void synui_start_menu_open(syn_server_t *s)
 {
-    syn_layer_surface_t *bar = find_bar(s);
-    if (!bar) {
-        wlr_log(WLR_DEBUG, "synui: start menu: no waybar surface to click");
-        return;
-    }
-
-    struct wlr_surface *surf = bar->layer_surface->surface;
-    double sx = START_MENU_HIT_X;
-    double sy = surf->current.height / 2.0;
-
-    /* Clicking outside the surface would be silently ignored by the client, so
-     * a bar too narrow for the hit point is worth a word rather than a mystery. */
-    if (sx >= surf->current.width || surf->current.height <= 0) {
-        wlr_log(WLR_DEBUG, "synui: start menu: bar is %dx%d, hit point outside it",
-                surf->current.width, surf->current.height);
-        return;
-    }
-
-    uint32_t t = now_msec();
-    wlr_seat_pointer_notify_enter(s->seat, surf, sx, sy);
-    wlr_seat_pointer_notify_motion(s->seat, t, sx, sy);
-    wlr_seat_pointer_notify_button(s->seat, t, BTN_LEFT,
-                                   WL_POINTER_BUTTON_STATE_PRESSED);
-    wlr_seat_pointer_notify_frame(s->seat);
-    wlr_seat_pointer_notify_button(s->seat, now_msec(), BTN_LEFT,
-                                   WL_POINTER_BUTTON_STATE_RELEASED);
-    wlr_seat_pointer_notify_frame(s->seat);
+    menu_toggle(s);
 }
 
 /* Execute a bind action (see config.c for the names and defaults). */
@@ -985,6 +920,13 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Control panel: same modal contract again. */
         for (int i = 0; i < nsyms; i++)
             if (ctlpanel_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Start menu: modal like the news panel, and it claims bare Shift for
+         * the same reason — its type-to-search box has to accept capitals. */
+        for (int i = 0; i < nsyms; i++)
+            if (menu_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

@@ -669,6 +669,54 @@ Server = file:///run/archiso/airootfs/local-repo
 LIVEPACMANEOF
 ok "airootfs/etc/pacman.conf written (live-ISO paths)"
 
+# ── OS identity (os-release / issue / motd) ───────────────────
+#
+# These three files carry the version the booted system reports: os-release is
+# what every tool reads (fastfetch, systemd, syn-install), issue is the getty
+# banner, motd greets the shell. They used to be static files with 0.1.0 typed
+# into them and nothing ever rewrote them, so EVERY ISO from v0.1.1 to v0.1.6
+# booted announcing "0.1.0" — the write was fine, the distro was just lying
+# about itself, which reads exactly like a failed dd and cost a debugging round.
+#
+# The single source of truth is iso_version in profiledef.sh (see the version
+# model: iso_version is the DISTRO version and is the one to bump; the packages
+# stay 0.1.0-N because PKGBUILDs source that tarball name literally, so
+# SYNAPSEOS_VERSION here must NOT be used for this).
+#
+# Substituted in place rather than templated from a placeholder because
+# mkarchiso copies airootfs/ verbatim with no hook to intercept, and because
+# this step already generates airootfs content the same way (mirrorlist,
+# pacman.conf above). The version pattern is matched loosely so this is
+# idempotent — re-running rewrites whatever version is already there.
+ISO_VERSION=$(sed -n 's/^iso_version="\([^"]*\)".*/\1/p' "${SCRIPT_DIR}/profiledef.sh")
+[[ -n "$ISO_VERSION" ]] || err "Could not read iso_version from profiledef.sh"
+
+_v='[0-9][0-9A-Za-z.+~-]*'
+
+sed -i \
+    -e "s|^PRETTY_NAME=\"SynapseOS ${_v}\"|PRETTY_NAME=\"SynapseOS ${ISO_VERSION}\"|" \
+    -e "s|^VERSION=\"${_v}\"|VERSION=\"${ISO_VERSION}\"|" \
+    -e "s|^VERSION_ID=\"${_v}\"|VERSION_ID=\"${ISO_VERSION}\"|" \
+    -e "s|^BUILD_ID=${_v}|BUILD_ID=${ISO_VERSION}|" \
+    "${SCRIPT_DIR}/airootfs/etc/os-release"
+
+sed -i -e "s|Version ${_v} |Version ${ISO_VERSION} |" \
+    "${SCRIPT_DIR}/airootfs/etc/issue"
+
+sed -i -e "s|SynapseOS ${_v} |SynapseOS ${ISO_VERSION} |" \
+    "${SCRIPT_DIR}/airootfs/etc/motd"
+
+# Prove it landed rather than trusting sed's exit status, which is 0 whether or
+# not the pattern matched — a silent no-match is precisely how the old version
+# would persist into a release again.
+for _f in etc/os-release etc/issue etc/motd; do
+    grep -q -- "$ISO_VERSION" "${SCRIPT_DIR}/airootfs/${_f}" \
+        || err "airootfs/${_f} does not carry version ${ISO_VERSION} after substitution"
+done
+grep -q "^VERSION_ID=\"${ISO_VERSION}\"$" "${SCRIPT_DIR}/airootfs/etc/os-release" \
+    || err "airootfs/etc/os-release VERSION_ID is not ${ISO_VERSION}"
+ok "OS identity stamped ${ISO_VERSION} (os-release, issue, motd)"
+
 # ── Run mkarchiso ─────────────────────────────────────────────
 step "Building ISO (mkarchiso)"
 

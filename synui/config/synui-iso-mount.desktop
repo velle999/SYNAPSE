@@ -14,7 +14,7 @@ Type=Application
 Name=Disc Image
 Icon=media-optical
 MimeType=application/x-iso9660-image;application/x-cd-image;application/x-raw-disk-image;
-Actions=synuiIsoMount;synuiIsoUnmount;
+Actions=synuiIsoMount;synuiIsoUnmount;synuiIsoWrite;
 X-KDE-Priority=TopLevel
 
 [Desktop Action synuiIsoMount]
@@ -26,3 +26,10 @@ Exec=synui-iso-mount mount %f
 Name=Unmount Image
 Icon=media-eject
 Exec=synui-iso-mount unmount %f
+
+# Opens a terminal that proposes the dd command and waits for confirmation —
+# it does not write on click. See systemd/synui-iso-write.sh.
+[Desktop Action synuiIsoWrite]
+Name=Write to USB Stick…
+Icon=drive-removable-media-usb
+Exec=synui-iso-write %f

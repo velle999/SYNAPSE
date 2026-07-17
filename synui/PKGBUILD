@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=94
+pkgrel=95
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -77,10 +77,13 @@ package() {
     install -Dm755 systemd/synui-screenshot.sh \
         "$pkgdir/usr/bin/synui-screenshot"
 
-    # Right-click an .iso in Dolphin -> Mount/Unmount Image. The service menu
-    # must be executable or KIO 6 skips it. See config/synui-iso-mount.desktop.
+    # Right-click an .iso in Dolphin -> Mount/Unmount Image, Write to USB Stick.
+    # The service menu must be executable or KIO 6 skips it. See
+    # config/synui-iso-mount.desktop.
     install -Dm755 systemd/synui-iso-mount.sh \
         "$pkgdir/usr/bin/synui-iso-mount"
+    install -Dm755 systemd/synui-iso-write.sh \
+        "$pkgdir/usr/bin/synui-iso-write"
     install -Dm755 config/synui-iso-mount.desktop \
         "$pkgdir/usr/share/kio/servicemenus/synui-iso-mount.desktop"
 }

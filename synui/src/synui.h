@@ -299,6 +299,54 @@ typedef struct {
     char status[96];
 } syn_ctlpanel_t;
 
+/* ── Start menu (menu.c) ─────────────────────────────────── */
+/* Super-tap's menu, drawn by the compositor rather than clicked out of waybar.
+ *
+ * It used to be waybar's: synui synthesised a pointer click on the bar and GTK
+ * popped a menu. That menu could never be arrow-navigated — waybar asks for
+ * keyboard_interactivity NONE once at startup and never revises it, so the
+ * client is handed no keyboard focus, and three separate synui-side focus fixes
+ * all delivered keys that GTK then ignored. The wall was inside waybar/GDK, not
+ * here, so the menu moved in-process: a panel synui draws is one synui can also
+ * give the keyboard to, and it is arrow-navigable by construction.
+ *
+ * The entries are scanned from the installed .desktop files at open, NOT read
+ * from a generated file. The waybar menu's XML/menu-actions pair had to be
+ * regenerated in lockstep and drifted apart at least once, mapping entries to
+ * the wrong commands; there is nothing to keep in step if the list is built
+ * from the source of truth each time. Scanning ~170 files takes ~ms.
+ */
+#define MENU_ENTRIES_MAX  512
+#define MENU_LABEL_MAX     72
+#define MENU_CMD_MAX      512
+
+typedef enum {
+    MENU_ROW_HEADER = 0,   /* section rule — never selectable */
+    MENU_ROW_ITEM,
+} syn_menu_kind_t;
+
+typedef struct {
+    int  kind;                     /* syn_menu_kind_t */
+    char label[MENU_LABEL_MAX];
+    /* Exactly one of these is set on an item. A bind action goes through
+     * synui_binding_execute() — the same path a keypress takes — so the menu
+     * cannot become a second, disagreeing definition of what "Control Panel"
+     * means. Anything synui does not own is a command for spawn(). */
+    char action[24];
+    char cmd[MENU_CMD_MAX];
+} syn_menu_entry_t;
+
+typedef struct {
+    int  visible;
+    int  count;                       /* entries[] in use */
+    int  view[MENU_ENTRIES_MAX];      /* indices of entries[] passing the filter */
+    int  view_count;
+    int  selected;                    /* index into view[], not entries[] */
+    int  scroll;                      /* first view[] row drawn */
+    char filter[48];                  /* type-to-search; empty = show all */
+    syn_menu_entry_t entries[MENU_ENTRIES_MAX];
+} syn_menu_t;
+
 /* ── Power saving panel + idle state machine (power.c) ───── */
 /* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch;
  * the rest each map to one syn_config_t timeout, in the same order. */
@@ -1285,6 +1333,16 @@ struct syn_server {
 
     syn_ctlpanel_t  ctlpanel;
 
+    /* Start menu (Super-tap) — synui's own, see syn_menu_t. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } menu_ui;
+
+    syn_menu_t      menu;
+
     /* Super-tap: Super pressed and released with nothing in between opens the
      * start menu, the way it does on every other desktop. Armed on the Super
      * press and disarmed by *any* intervening key or pointer button, so Super
@@ -1926,6 +1984,18 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
+
+/* ── Start menu (menu.c) ─────────────────────────────────── */
+void menu_show(syn_server_t *s);
+void menu_hide(syn_server_t *s);
+void menu_toggle(syn_server_t *s);
+/* Modal key handling while the menu is open, as in ctlpanel_key. Returns 1 if
+ * the key was consumed. */
+int  menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* How many rows the menu draws at once — render.c owns the geometry, menu.c
+ * owns the scroll clamp, so the two have to agree (as in CTL_SHORTCUT_ROWS). */
+#define MENU_ROWS  18
+void synui_render_menu(syn_server_t *s);
 
 /* Run a bind action by name (input.c owns the dispatch table). The control
  * panel's rows are actions, so they go through exactly the path a keybind

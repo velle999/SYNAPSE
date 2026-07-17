@@ -31,28 +31,24 @@
         "spacing": 8,
         "show-passive-items": true
     },
+    // The start menu is synui's now (synui/src/menu.c), not waybar's.
+    //
+    // It used to be a GTK menu here, opened either by clicking this module or by
+    // synui synthesising a click on it for the Super tap. It worked, and it
+    // could never be arrow-navigated: waybar sets keyboard_interactivity NONE
+    // once at startup and never revises it, so the menu is handed no keyboard
+    // focus and is deaf by construction. That is a waybar/GDK wall, not
+    // something synui can patch from outside — three attempts to, all reverted.
+    //
+    // So this button now just asks synui to open its own menu, the same way the
+    // control panel entry used to: wtype speaks virtual-keyboard-v1, which synui
+    // wires to the path a physical keyboard takes, and a Super tap (press and
+    // release with nothing in between) is what opens the menu. There is no other
+    // IPC into the compositor. Keep in step with syn_server::super_armed.
     "custom/synapse": {
         "format": "◢ SYNAPSE",
         "tooltip": false,
-        "menu": "on-click",
-        "menu-file": "/home/velle/.config/waybar/synapse-menu.xml",
-        // menu-actions is *generated*: synapse-menu-gen.py rewrites this key
-        // and synapse-menu.xml together from the installed .desktop files,
-        // before waybar starts. Only the fixed entries are seeded here. Do not
-        // hand-write app_N entries — the generator owns those ids, and a stale
-        // hand-written set is worse than none: waybar maps a clicked item's id
-        // to a command positionally, so a stale list launches the wrong app.
-        "menu-actions": {
-            "control": "wtype -M logo -k c -m logo",
-            "terminal": "foot",
-            "aishell": "foot synsh",
-            "status": "foot --hold syn status",
-            "network": "foot -e nmtui",
-            "monitor": "foot -e top",
-            "logout": "pkill -x synui",
-            "reboot": "sudo systemctl reboot",
-            "poweroff": "sudo systemctl poweroff"
-        }
+        "on-click": "wtype -k Super_L"
     },
     // Game mode (synui). synui writes its state to $XDG_RUNTIME_DIR/synui/game
     // on every enter/leave; synui-game-status turns that into waybar JSON. The

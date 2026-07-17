@@ -1072,6 +1072,48 @@ static void draw_right(cairo_t *cr, double x_right, double y, const char *text)
     cairo_show_text(cr, text);
 }
 
+/* Cut text to fit a column, with an ellipsis. Monospace, so a width is a
+ * character count — but measure anyway: a headline can carry an em dash or a
+ * CJK glyph, and those are not one cell wide.
+ *
+ * Lives up here with draw_right rather than down in the news section it was
+ * written for: the start menu clips app names with it too, and both callers
+ * have to sit below the definition. */
+static void draw_clipped(cairo_t *cr, double x, double y, double max_w,
+                         const char *text)
+{
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, text, &ext);
+
+    if (ext.width <= max_w) {
+        cairo_move_to(cr, x, y);
+        cairo_show_text(cr, text);
+        return;
+    }
+
+    char buf[256];
+    size_t len = strlen(text);
+    if (len > sizeof(buf) - 4) len = sizeof(buf) - 4;
+
+    while (len > 0) {
+        /* Never cut inside a UTF-8 sequence: cairo refuses invalid UTF-8 by
+         * poisoning the whole context, so one badly-cut headline would blank
+         * every row under it. news_utf8_trim drops a partial character whole. */
+        len = news_utf8_trim(text, len);
+        if (len == 0) break;
+
+        memcpy(buf, text, len);
+        memcpy(buf + len, "\xe2\x80\xa6", 4);   /* … */
+        cairo_text_extents(cr, buf, &ext);
+        if (ext.width <= max_w) break;
+        len--;
+    }
+    if (len == 0) return;
+
+    cairo_move_to(cr, x, y);
+    cairo_show_text(cr, buf);
+}
+
 /* The slider itself: a trough with a filled portion. Drawn rather than spelled
  * out because these values are judged by eye, and a bar you can see moving is
  * the whole difference between tuning a look and typing numbers at it. */
@@ -1383,6 +1425,143 @@ void synui_render_ctlpanel(syn_server_t *s)
 
     cairo_destroy(cr);
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
+}
+
+/* ── Start menu (menu.c) ─────────────────────────────────── */
+
+#define MENU_W        420
+#define MENU_ROW_H     24
+#define MENU_TOP       92    /* baseline of the first row */
+#define MENU_FOOTER    46
+#define MENU_PAD       18
+
+void synui_render_menu(syn_server_t *s)
+{
+    syn_menu_t *m = &s->menu;
+
+    if (!m->visible) {
+        wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int rows = m->view_count < MENU_ROWS ? m->view_count : MENU_ROWS;
+    if (rows < 1) rows = 1;                 /* "no matches" still needs a line */
+
+    int pw = MENU_W;
+    int ph = MENU_TOP + rows * MENU_ROW_H + MENU_FOOTER;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->menu_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->menu_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->menu_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    /* The panel's height tracks the filtered row count, so unlike the fixed
+     * panels these rects have to be resized on every render, not just created. */
+    if (!s->menu_ui.bg)
+        s->menu_ui.bg = wlr_scene_rect_create(s->menu_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->menu_ui.bg, pw, ph);
+    if (!s->menu_ui.accent)
+        s->menu_ui.accent = wlr_scene_rect_create(s->menu_ui.tree, pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, MENU_PAD, 30);
+    cairo_show_text(cr, "SYNAPSE");
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, MENU_PAD, 44);
+    cairo_line_to(cr, pw - MENU_PAD, 44);
+    cairo_stroke(cr);
+
+    /* Search line. Always drawn, with a prompt when empty, so that typing is
+     * discoverable rather than a thing you have to already know about. */
+    cairo_set_font_size(cr, 13);
+    if (m->filter[0]) {
+        cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
+        cairo_move_to(cr, MENU_PAD, 68);
+        cairo_show_text(cr, m->filter);
+        cairo_show_text(cr, "\xe2\x96\x8f");          /* caret */
+    } else {
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, MENU_PAD, 68);
+        cairo_show_text(cr, "Type to search\xe2\x80\xa6");
+    }
+
+    int first = m->scroll;
+    if (first > m->view_count - MENU_ROWS) first = m->view_count - MENU_ROWS;
+    if (first < 0) first = 0;
+
+    if (m->view_count == 0) {
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, MENU_PAD, MENU_TOP);
+        cairo_show_text(cr, "No matches");
+    }
+
+    for (int i = 0; i < MENU_ROWS && first + i < m->view_count; i++) {
+        const syn_menu_entry_t *e = &m->entries[m->view[first + i]];
+        int ry = MENU_TOP + i * MENU_ROW_H;
+
+        if (e->kind == MENU_ROW_HEADER) {
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            cairo_move_to(cr, MENU_PAD, ry);
+            cairo_show_text(cr, e->label);
+            continue;
+        }
+
+        int sel = (first + i == m->selected);
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, MENU_PAD - 8, ry - 15, pw - 2 * (MENU_PAD - 8),
+                            MENU_ROW_H - 3);
+            cairo_fill(cr);
+        }
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, MENU_PAD + 8, ry);
+        /* draw_clipped, not cairo_show_text: a long app name would otherwise
+         * run past the panel edge. It truncates on a character boundary — a cut
+         * through a multi-byte sequence would poison the context and blank
+         * every row below this one. */
+        draw_clipped(cr, MENU_PAD + 8, ry, pw - MENU_PAD - 16, e->label);
+    }
+
+    /* Say so when the list runs off the window rather than silently truncating:
+     * an entry you cannot see is an entry you do not have. */
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    if (m->view_count > MENU_ROWS) {
+        char more[64];
+        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d",
+                 first + 1,
+                 first + MENU_ROWS < m->view_count ? first + MENU_ROWS : m->view_count,
+                 m->view_count);
+        cairo_move_to(cr, MENU_PAD, ph - 30);
+        cairo_show_text(cr, more);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, MENU_PAD, ph - 14);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter launch \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->menu_ui.text_buf, s->menu_ui.tree, buf);
 }
 
 /* ── Task manager (taskmgr.c) ────────────────────────────── */
@@ -1717,44 +1896,6 @@ static void src_color(int i, double *r, double *g, double *b)
     *r = pal[k][0]; *g = pal[k][1]; *b = pal[k][2];
 }
 
-/* Cut text to fit a column, with an ellipsis. Monospace, so a width is a
- * character count — but measure anyway: a headline can carry an em dash or a
- * CJK glyph, and those are not one cell wide. */
-static void draw_clipped(cairo_t *cr, double x, double y, double max_w,
-                         const char *text)
-{
-    cairo_text_extents_t ext;
-    cairo_text_extents(cr, text, &ext);
-
-    if (ext.width <= max_w) {
-        cairo_move_to(cr, x, y);
-        cairo_show_text(cr, text);
-        return;
-    }
-
-    char buf[256];
-    size_t len = strlen(text);
-    if (len > sizeof(buf) - 4) len = sizeof(buf) - 4;
-
-    while (len > 0) {
-        /* Never cut inside a UTF-8 sequence: cairo refuses invalid UTF-8 by
-         * poisoning the whole context, so one badly-cut headline would blank
-         * every row under it. news_utf8_trim drops a partial character whole. */
-        len = news_utf8_trim(text, len);
-        if (len == 0) break;
-
-        memcpy(buf, text, len);
-        memcpy(buf + len, "\xe2\x80\xa6", 4);   /* … */
-        cairo_text_extents(cr, buf, &ext);
-        if (ext.width <= max_w) break;
-        len--;
-    }
-    if (len == 0) return;
-
-    cairo_move_to(cr, x, y);
-    cairo_show_text(cr, buf);
-}
-
 /* Right-aligned at x_right, ellipsized if it will not fit in max_w. */
 static void draw_right_clipped(cairo_t *cr, double x_right, double y,
                                double max_w, const char *text)
@@ -2048,6 +2189,7 @@ void synui_ui_init(syn_server_t *s)
     s->news_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
@@ -2060,6 +2202,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->news_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

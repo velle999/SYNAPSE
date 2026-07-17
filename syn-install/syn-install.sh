@@ -907,10 +907,15 @@ FOOTEOF
 # Passive first, and waybar hides Passive items by default.
 mkdir -p "/mnt/home/$NEW_USER/.config/waybar"
 # NB: no comments in this seed. It is JSONC and waybar would accept them, but
-# menu-actions below is rewritten in place by synapse-menu-gen.py, which reads
+# network-menu's actions are still rewritten in place by a generator that reads
 # the file back with json — and json.dump would drop any comment it did not
 # choke on first. The repo copy (SYNAPSE/waybar/config.jsonc) is the annotated
 # one; this stays plain.
+#
+# The start menu is NOT here: it is synui's own panel now (synui/src/menu.c),
+# because a GTK menu on this bar can never be arrow-navigated — waybar asks for
+# keyboard_interactivity NONE and never revises it. The button just taps Super,
+# which is what opens synui's menu. wtype is pacstrapped above for exactly this.
 cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
 {
     "layer": "top",
@@ -927,19 +932,7 @@ cat > "/mnt/home/$NEW_USER/.config/waybar/config.jsonc" << WAYBAREOF
     "custom/synapse": {
         "format": "◢ SYNAPSE",
         "tooltip": false,
-        "menu": "on-click",
-        "menu-file": "/home/$NEW_USER/.config/waybar/synapse-menu.xml",
-        "menu-actions": {
-            "control": "wtype -M logo -k c -m logo",
-            "terminal": "foot",
-            "aishell": "foot synsh",
-            "status": "foot --hold syn status",
-            "network": "foot -e nmtui",
-            "monitor": "foot -e top",
-            "logout": "pkill -x synui",
-            "reboot": "sudo systemctl reboot",
-            "poweroff": "sudo systemctl poweroff"
-        }
+        "on-click": "wtype -k Super_L"
     },
     "custom/gamemode": {
         "exec": "/usr/bin/synui-game-status",
