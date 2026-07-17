@@ -1962,17 +1962,17 @@ void synui_render_menu(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
-    /* Title doubles as the breadcrumb, so a submenu says which one it is and
-     * that there is a level above it to go back to. The page name comes from a
-     * .desktop's Categories, but only ever as one of CATEGORIES' own display
-     * strings — never third-party text — so it is safe to draw. */
-    cairo_set_font_size(cr, 15);
-    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
-    cairo_move_to(cr, MENU_PAD, 30);
-    cairo_show_text(cr, "SYNAPSE");
+    /* The top line is the breadcrumb. The "SYNAPSE" brand text that used to sit
+     * here was removed (it read as chrome, not information); at the root the
+     * line is now blank, and a submenu shows its page name with a back-arrow so
+     * you still know where you are and that Esc goes up a level. The page name
+     * comes from a .desktop's Categories, but only ever as one of CATEGORIES'
+     * own display strings — never third-party text — so it is safe to draw. */
     if (m->page[0]) {
+        cairo_set_font_size(cr, 15);
         cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-        cairo_show_text(cr, "  \xe2\x80\xba  ");
+        cairo_move_to(cr, MENU_PAD, 30);
+        cairo_show_text(cr, "\xe2\x80\xb9  ");        /* ‹ back indicator */
         cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
         cairo_show_text(cr, m->page);
     }

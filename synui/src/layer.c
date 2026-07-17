@@ -125,6 +125,11 @@ void layer_update_occlusion_all(syn_server_t *s)
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link)
         layer_update_occlusion(s, o);
+
+    /* A fullscreen change also decides whether the always-visible dock sits over
+     * or under the fullscreen window (dock_apply_position reads the same rule),
+     * so restack the docks whenever occlusion is recomputed. */
+    dock_relayout(s);
 }
 
 /* ── Layer surface events ────────────────────────────────── */

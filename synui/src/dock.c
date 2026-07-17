@@ -331,6 +331,20 @@ static bool dock_geometry(syn_output_t *o, int *bx, int *by,
     return true;
 }
 
+/* True while this output shows a mapped, non-minimized fullscreen window on the
+ * active workspace. Mirrors layer_update_occlusion's rule (layer.c) — the dock
+ * must yield to a fullscreen game/video the same way the top-layer bar does. */
+static bool dock_output_fullscreen(syn_output_t *o)
+{
+    syn_server_t *s = o->server;
+    syn_view_t *v;
+    wl_list_for_each(v, &server_active_workspace(s)->windows, link) {
+        if (v->output != o) continue;
+        if (v->mapped && v->fullscreen && !v->minimized) return true;
+    }
+    return false;
+}
+
 /* Place the tree at its slide offset and enable it only while any part is
  * on-screen. slide_progress 1 = flush against the edge, 0 = pushed fully off
  * it (along the edge normal). While this output's dock is being dragged, the
@@ -371,8 +385,18 @@ static void dock_apply_position(syn_output_t *o)
 
     bool visible = p > 0.001;
     wlr_scene_node_set_enabled(&o->dock.tree->node, visible);
-    if (visible)
-        wlr_scene_node_raise_to_top(&o->dock.tree->node);
+    if (visible) {
+        /* The dock's tree is a UI sibling of window_tree, so raising it to top
+         * floats it over everything — including a fullscreen window, which only
+         * raises within window_tree. An always-visible dock must not sit on top
+         * of a fullscreen game/video: when this output shows one, tuck the dock
+         * just below window_tree so the fullscreen view covers it. Otherwise
+         * keep it above ordinary windows. */
+        if (dock_output_fullscreen(o))
+            wlr_scene_node_place_below(&o->dock.tree->node, &s->window_tree->node);
+        else
+            wlr_scene_node_raise_to_top(&o->dock.tree->node);
+    }
 }
 
 /* ── Rendering ───────────────────────────────────────────── */
