@@ -11,7 +11,16 @@
 [Unit]
 Description=SynapseOS AI Daemon privileged setup (synapd)
 Documentation=https://github.com/velle999/SYNAPSE
-Before=synapd.service synapd.socket
+# Order before the DAEMON only, never the socket. A socket unit is part of
+# sockets.target and starts early (right after tmpfiles makes /run/synapd);
+# ordering this normal service — which runs after basic.target — before the
+# socket closes a cycle: synapd.socket → synapd-setup → basic.target →
+# sockets.target → synapd.socket. systemd broke it by deleting a job at random,
+# and when it picked synapd.socket the daemon never socket-activated at boot
+# (had to be kicked by hand, e.g. game-mode off). The socket needs nothing from
+# this unit — only the daemon does (Requires=synapd-setup.service). Do NOT add
+# synapd.socket back here.
+Before=synapd.service
 After=nvidia-persistenced.service
 Wants=nvidia-persistenced.service
 
