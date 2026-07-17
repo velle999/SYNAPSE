@@ -47,6 +47,15 @@ firefox
 # silently does nothing, KIO's fallback being a konsole we don't ship).
 dolphin
 gamescope
+# The bar. Neither of these was on the ISO, so the live session had no bar at
+# all — no clock, no tray, no network indicator — while an installed system had
+# one; that was an oversight, not a decision. synui pulls waybar in as a
+# dependency now, but list it explicitly: what the ISO ships should be readable
+# here rather than inferred from someone else's depends. wtype is how the bar's
+# SYNAPSE button asks synui to open the start menu (there is no other IPC in).
+waybar
+wtype
+
 # Bluetooth. bluez is the daemon (org.bluez); bluez-utils is bluetoothctl, which
 # synui does not need — it talks BlueZ over sd-bus itself (synui/src/bt.c) — but
 # which is the only way to debug a radio from a shell when the panel says no.

@@ -9,6 +9,12 @@ terminal = foot
 # run the service instead and shadow this file with a per-user synuirc that
 # has no autostart — keep both, or boots open zero or two terminals.
 autostart = foot
+# The bar. The live ISO had none at all — waybar was not even in
+# packages.x86_64 — so the ISO booted with no clock, no tray and no network
+# indicator, looking far less finished than an installed system for no reason.
+# Its config comes from /etc/xdg/waybar (shipped by synui), so the root session
+# here needs nothing in its home.
+autostart = waybar
 
 # Window appearance
 border_width = 2

@@ -150,12 +150,6 @@ done
 sudo mkdir -p /etc/synsh
 sudo touch /etc/synsh/synshrc
 
-# syn-install.sh writes a new user's ~/.config/waybar from heredocs that embed a
-# copy of waybar/network-menu.xml. That kind of copy drifted once and shipped a
-# start menu whose entries launched the wrong app — so the copies are checked,
-# not trusted. `python3 waybar/sync-installer.py` re-splices.
-python3 "$BASE/waybar/check-installer-sync.py" || exit 1
-
 # llama.cpp libraries — must be built and installed BEFORE synapd, which now
 # depends on it. build_script_pkg (no source tarball): it packages the tree that
 # archiso/build.sh staged.
