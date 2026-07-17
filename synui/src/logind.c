@@ -127,7 +127,7 @@ static int on_prepare_for_sleep(sd_bus_message *m, void *data, sd_bus_error *e)
         if (s->config.power_lock > 0 && !s->power.locked) {
             wlr_log(WLR_INFO, "synui: logind: sleep imminent — locking");
             s->power.locked = 1;
-            synui_spawn(s->config.power_lock_cmd);
+            synui_lock(s);
         }
         /* Release the delay so the machine can actually sleep. The lock command
          * has been spawned; logind gives us InhibitDelayMaxSec (5s) and we do

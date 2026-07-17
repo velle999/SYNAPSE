@@ -182,7 +182,7 @@ static int ss_method_lock(sd_bus_message *m, void *userdata, sd_bus_error *err)
     (void)err;
     syn_server_t *s = userdata;
     wlr_log(WLR_INFO, "synui: screensaver: Lock() requested over D-Bus");
-    synui_spawn(s->config.power_lock_cmd);
+    synui_lock(s);
     return sd_bus_reply_method_return(m, "");
 }
 

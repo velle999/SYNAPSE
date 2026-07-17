@@ -524,9 +524,18 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "cat") == 0) {
         cat_toggle(s);
     } else if (strcmp(action, "lock") == 0) {
-        /* Same swaylock the idle timer and the power panel's Lock row run;
-         * power_lock_cmd already guards against stacking a second instance. */
-        spawn(s->config.power_lock_cmd);
+        /* The native lock (lock.c). Idempotent, so the idle timer, the power
+         * panel's Lock row, the menu's Lock Screen and logind's before-sleep
+         * can all reach it the same way. */
+        synui_lock(s);
+    } else if (strcmp(action, "unlock") == 0) {
+        /* Escape hatch: force the native lock off without a password. Reachable
+         * only over synui's own control socket, which is the session user's —
+         * an attacker at the locked machine cannot get to it without first
+         * logging into a TTY (which needs the password anyway). It is the
+         * `synctl dispatch unlock` counterpart of `pkill swaylock`, there so a
+         * lock bug can never make a hard reboot the only way out. */
+        synui_unlock(s);
     } else if (strcmp(action, "ai_backend") == 0) {
         /* Toggle synapd between GPU and CPU inference. The helper owns the
          * work (rewrite the systemd drop-in, record /run/synapd/backend,
@@ -822,9 +831,20 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         }
     }
 
-    /* While the session is locked, compositor bindings are disabled and keys
-     * go straight to the lock surface (which holds keyboard focus). */
+    /* While the session is locked, compositor bindings are disabled and no key
+     * may reach a window. The native lock (lock.c) draws its own screen and
+     * takes the key here; an ext-session-lock client (swaylock) instead holds
+     * keyboard focus and is sent the key through the seat. Either way we return
+     * — this is below the VT-switch escape above, which must survive both. */
     if (s->locked) {
+        if (s->nlock.active) {
+            if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+                xkb_keysym_t sym = nsyms > 0 ? syms[0] : XKB_KEY_NoSymbol;
+                uint32_t cp = nsyms == 1 ? xkb_keysym_to_utf32(sym) : 0;
+                lock_handle_key(s, sym, cp);
+            }
+            return;                 /* swallow presses and releases alike */
+        }
         wlr_seat_set_keyboard(s->seat, wlr_kb);
         wlr_seat_keyboard_notify_key(s->seat, event->time_msec,
                                       event->keycode, event->state);
@@ -1399,6 +1419,12 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
 {
     notify_activity(s);
 
+    /* Moving the mouse wakes the lock screen. The rest of the function still
+     * runs so the cursor tracks, but focus never reaches a window while locked
+     * (guarded below), so nothing underneath sees the motion. */
+    if (s->nlock.active)
+        lock_notify_activity(s);
+
     if (s->relative_pointer_mgr)
         wlr_relative_pointer_manager_v1_send_relative_motion(
             s->relative_pointer_mgr, s->seat,
@@ -1486,6 +1512,13 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                            uint32_t button, enum wl_pointer_button_state state)
 {
     notify_activity(s);
+
+    /* Locked: a click wakes the native lock and goes no further — no window,
+     * dock or panel underneath may be reached. */
+    if (s->nlock.active) {
+        lock_notify_activity(s);
+        return;
+    }
 
     /* A dock drag keeps cursor_mode == PASSTHROUGH, so catch its release
      * before the generic grab-release below. */

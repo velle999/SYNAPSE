@@ -1,0 +1,9 @@
+#
+# PAM configuration for synui's native lock screen (synui-lock-auth).
+#
+# Includes 'login' — the same stack swaylock uses here — so unlocking the
+# screen enforces exactly what logging in does, faillock included. A lock that
+# is weaker than the login behind it is not a lock.
+#
+auth    include login
+account include login

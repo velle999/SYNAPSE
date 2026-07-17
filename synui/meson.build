@@ -152,6 +152,7 @@ synui_exe = executable('synui',
     'src/news.c',
     'src/screensaver.c',
     'src/session.c',
+    'src/lock.c',
     'src/ai_interface.c',
     'src/secfeed.c',
     'src/synapd_mon.c',
@@ -186,6 +187,16 @@ synui_exe = executable('synui',
 # synui exports as SYNUI_SOCKET; no Wayland connection of its own.
 executable('synctl',
   sources : ['src/synctl.c'],
+  install : true)
+
+# synui-lock-auth: the native lock's PAM helper. The compositor forks it and
+# reads a verdict off a pipe, so pam_unix's fail delay never stalls the event
+# loop (see src/lock.c). Not setuid — pam_unix reaches shadow through its own
+# unix_chkpwd. Installed on $PATH because lock.c execlp's it by name.
+libpam = cc.find_library('pam')
+executable('synui-lock-auth',
+  sources : ['src/synui-lock-auth.c'],
+  dependencies : [libpam],
   install : true)
 
 # synui-idle-inhibit: standalone helper that holds a real Wayland idle inhibitor

@@ -1255,6 +1255,34 @@ struct syn_server {
     int                                  locked;     /* session is locked */
     int                                  idle_inhibitors;  /* active inhibitor count */
 
+    /* Native lock screen (lock.c). Instead of spawning swaylock as an
+     * ext-session-lock client, synui draws the lock itself — a stylized clock
+     * that brightens on input and fades when idle — and authenticates through
+     * the synui-lock-auth helper (PAM in a child, so the event loop never
+     * blocks on the fail delay). Reuses `locked` above, so every input gate
+     * that already exists for the session lock holds for this one too; its
+     * own scene tree is layered over everything, as session.c's backstop is. */
+    struct {
+        int      active;
+        char     pw[256];
+        int      pw_len;
+        int      failed;          /* last attempt was rejected */
+        int      busy;            /* auth helper in flight — ignore keys */
+        double   bright;          /* 0..1 fade level of the clock/indicator */
+        uint32_t last_input_ms;
+        struct wlr_scene_tree   *tree;      /* backstop + the per-output panes */
+        struct wl_event_source  *t_clock;   /* 1 Hz, so the minute updates */
+        struct wl_event_source  *t_fade;    /* eases `bright` toward its target */
+        pid_t                    auth_pid;
+        int                      auth_fd;   /* result-pipe read end, -1 when idle */
+        struct wl_event_source  *auth_src;
+        struct {
+            struct wlr_output       *output;
+            struct wlr_scene_buffer *buf;
+        } pane[8];              /* one clock panel centred on each output */
+        int      npane;
+    } nlock;
+
     /* Idle inhibits held over D-Bus (org.freedesktop.ScreenSaver — screensaver.c).
      * Counted separately from idle_inhibitors, which belongs to the wlr
      * idle-inhibit protocol: mixing them would make the Wayland counter lie
@@ -1843,6 +1871,15 @@ void dispcfg_outputs_changed(syn_server_t *s);
 /* ── session.c ───────────────────────────────────────────── */
 void session_lock_setup(syn_server_t *s);        /* ext-session-lock */
 void session_lock_arrange(syn_server_t *s);      /* re-place lock surfaces */
+
+/* Native lock screen (lock.c). synui_lock is idempotent — a no-op if the
+ * session is already locked (by this or by an ext-session-lock client), so the
+ * idle timer, the power panel, logind's before-sleep and Super+L can all just
+ * call it. lock_handle_key returns 1 when it consumed the key. */
+void synui_lock(syn_server_t *s);
+void synui_unlock(syn_server_t *s);
+int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint);
+void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
 
 /* ── foreign_toplevel.c ──────────────────────────────────── */
 void foreign_toplevel_setup(syn_server_t *s);        /* create the manager */

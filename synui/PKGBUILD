@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=110
+pkgrel=111
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -67,6 +67,11 @@ package() {
     # config/kdeglobals.
     install -Dm644 config/kdeglobals \
         "$pkgdir/etc/xdg/kdeglobals"
+
+    # PAM service for the native lock's auth helper (synui-lock-auth). Without
+    # it pam_start("synui-lock") fails and the screen can never be unlocked.
+    install -Dm644 config/pam/synui-lock \
+        "$pkgdir/etc/pam.d/synui-lock"
 
     # The bar's config, and the wrapper that points waybar at it.
     #

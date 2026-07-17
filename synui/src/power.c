@@ -174,7 +174,7 @@ static int power_lock_cb(void *data)
     if (s->power.locked) return 0;
     s->power.locked = 1;
     wlr_log(WLR_INFO, "synui: power: locking session");
-    synui_spawn(s->config.power_lock_cmd);
+    synui_lock(s);
     return 0;
 }
 
@@ -188,7 +188,7 @@ static int power_suspend_cb(void *data)
      * lock. Guarded on power_lock so "lock: never" stays honoured. */
     if (s->config.power_lock > 0 && !s->power.locked) {
         s->power.locked = 1;
-        synui_spawn(s->config.power_lock_cmd);
+        synui_lock(s);
     }
 
     wlr_log(WLR_INFO, "synui: power: suspending");
