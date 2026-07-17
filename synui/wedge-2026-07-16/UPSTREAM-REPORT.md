@@ -104,6 +104,19 @@ with no round trip between the requests produced 0 wedges in 150 cycles. Real GP
 session + Steam's ARGB Chromium window is what shows it; a non-reproducing rig
 proves nothing either way.
 
+## Not a duplicate of the earlier "not mapped" reports
+
+Both prior issues are the *opposite* half of the problem — `associate` never
+being **called**. Here it is called, correctly, and the surface still never maps:
+
+- **#3575** (closed, 2023) — "xwayland/xwm: does not trigger surface associate":
+  associate never runs at all, fixed by reordering client-message handling.
+- **#3196** (closed, 2023) — "xwayland: surface not becoming mapped": a plain
+  `XCreateSimpleWindow`/`XMapWindow` app, from the WL_SURFACE_ID era.
+
+Also distinct from **#4078** ("games freeze, unfreeze when unfocused"), which
+bisects to a scene/syncobj commit and is a timeline issue, not an association one.
+
 ## Suggested fix
 
 Have `associate` do what the commit that never arrives would have done — map a
