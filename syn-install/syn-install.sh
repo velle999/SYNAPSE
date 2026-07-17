@@ -608,16 +608,110 @@ cat > /mnt/etc/hosts << 'EOF'
 EOF
 echo "  Hostname: synapse"
 
-# locale
-echo "en_US.UTF-8 UTF-8" >> /mnt/etc/locale.gen
-arch-chroot /mnt locale-gen 2>/dev/null
-echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
-echo "  Locale: en_US.UTF-8"
+# ── Language, keyboard, timezone ──────────────────────────
+#
+# This used to hardcode en_US.UTF-8 and UTC with no keymap at all, so every
+# SynapseOS install anywhere on earth came up in American English, on a US
+# keyboard, with the clock wrong — and a CJK or Indic user got a system that
+# rendered their own language as boxes, because the only fonts on the ISO are
+# dejavu and terminus. "Installs in English" is a decision; "cannot display
+# your language" is a bug.
+#
+# LOCALE_ROWS is deliberately short. A picker listing all 500 of glibc's locales
+# is not more international, it is unusable — these cover the large majority,
+# and Other takes any locale glibc has.
+#
+# Each row: label|locale|keymap|font-package(s). The font column is the
+# "language pack" part: noto-fonts covers Latin/Greek/Cyrillic and ships as a
+# base, CJK needs noto-fonts-cjk (~130MB, which is why it is not simply always
+# installed), and noto-fonts-extra carries the Indic/Arabic/Hebrew coverage.
+LOCALE_ROWS="
+English (US)|en_US.UTF-8|us|
+English (UK)|en_GB.UTF-8|uk|
+Deutsch|de_DE.UTF-8|de|
+Français|fr_FR.UTF-8|fr|
+Español|es_ES.UTF-8|es|
+Português (Brasil)|pt_BR.UTF-8|br|
+Italiano|it_IT.UTF-8|it|
+Nederlands|nl_NL.UTF-8|nl|
+Polski|pl_PL.UTF-8|pl|
+Русский|ru_RU.UTF-8|ru|
+日本語|ja_JP.UTF-8|jp106|noto-fonts-cjk
+中文 (简体)|zh_CN.UTF-8|us|noto-fonts-cjk
+한국어|ko_KR.UTF-8|kr|noto-fonts-cjk
+हिन्दी|hi_IN.UTF-8|us|noto-fonts-extra
+العربية|ar_EG.UTF-8|us|noto-fonts-extra
+"
 
-# timezone
-arch-chroot /mnt ln -sf /usr/share/zoneinfo/UTC /etc/localtime 2>/dev/null || true
+header
+step "Step 6 — Language & Region"
+
+i=0
+echo "$LOCALE_ROWS" | while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    i=$((i + 1))
+    printf '  %2d) %s\n' "$i" "${row%%|*}"
+done
+echo "   0) Other — enter a locale by hand"
+echo ""
+prompt "Language [1-15, default=1]:"
+read -r lang_choice
+lang_choice="${lang_choice:-1}"
+
+LOCALE="en_US.UTF-8"; KEYMAP="us"; LANG_FONTS=""
+if [ "$lang_choice" = "0" ]; then
+    prompt "Locale (e.g. sv_SE.UTF-8):"; read -r LOCALE
+    prompt "Console keymap (e.g. sv):"; read -r KEYMAP
+    LOCALE="${LOCALE:-en_US.UTF-8}"; KEYMAP="${KEYMAP:-us}"
+    # No idea what script that is, so cover as much as possible rather than
+    # hand someone a system that cannot draw their own alphabet.
+    LANG_FONTS="noto-fonts-extra"
+else
+    row=$(echo "$LOCALE_ROWS" | sed -n "$((lang_choice + 1))p")
+    if [ -n "$row" ]; then
+        LOCALE=$(echo "$row" | cut -d'|' -f2)
+        KEYMAP=$(echo "$row" | cut -d'|' -f3)
+        LANG_FONTS=$(echo "$row" | cut -d'|' -f4)
+    fi
+fi
+
+# locale.gen needs every locale that will be used. en_US stays generated
+# alongside: a great deal of software falls back to it, and a system with only
+# one locale generated fails in odd ways when anything asks for C.UTF-8's
+# neighbours.
+echo "$LOCALE $(echo "$LOCALE" | cut -d'.' -f2)" >> /mnt/etc/locale.gen
+[ "$LOCALE" = "en_US.UTF-8" ] || echo "en_US.UTF-8 UTF-8" >> /mnt/etc/locale.gen
+arch-chroot /mnt locale-gen 2>&1 | sed 's/^/    /'
+echo "LANG=$LOCALE" > /mnt/etc/locale.conf
+echo "KEYMAP=$KEYMAP" > /mnt/etc/vconsole.conf
+success "Locale: $LOCALE   Keymap: $KEYMAP"
+
+# synui reads its own layout from synuirc — the console keymap does not reach
+# Wayland, so without this the desktop stays on a US layout no matter what was
+# picked here. Written later with the rest of synuirc; recorded now.
+SYNUI_XKB="$KEYMAP"
+
+# The language pack. Fonts are the whole point: without them the locale is set
+# correctly and every glyph is a box, which looks far more broken than English
+# would have.
+FONT_PKGS="noto-fonts"
+[ -n "$LANG_FONTS" ] && FONT_PKGS="$FONT_PKGS $LANG_FONTS"
+echo "  Installing fonts ($FONT_PKGS)..."
+arch-chroot /mnt pacman -S --noconfirm --needed $FONT_PKGS 2>&1 | tail -2 \
+    || warn "Font install failed — $LOCALE may render as boxes"
+
+# ── Timezone ──────────────────────────────────────────────
+echo ""
+prompt "Timezone (e.g. Europe/Berlin, blank for UTC):"
+read -r TZ_CHOICE
+TZ_CHOICE="${TZ_CHOICE:-UTC}"
+if [ ! -f "/mnt/usr/share/zoneinfo/$TZ_CHOICE" ]; then
+    warn "Unknown timezone '$TZ_CHOICE' — using UTC"
+    TZ_CHOICE="UTC"
+fi
+arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$TZ_CHOICE" /etc/localtime 2>/dev/null || true
 arch-chroot /mnt hwclock --systohc 2>/dev/null || true
-echo "  Timezone: UTC"
+success "Timezone: $TZ_CHOICE"
 
 # os-release — copy the live system's canonical file so the installed
 # system's identity always matches the ISO (no drift). Fall back to the
@@ -924,6 +1018,14 @@ workspace_3_intent = writing code and running tests
 workspace_4_intent = terminal and system administration
 workspace_5_intent = media and entertainment
 SYNUIRC
+
+# The console keymap does not reach Wayland: synui reads its layout from its own
+# config. Without this the installer asks which keyboard you have, sets it for
+# the console, and then the desktop comes up on a US layout regardless — which
+# is the same "asked and ignored" failure as setting the locale and shipping no
+# fonts. Appended rather than put in the heredoc above, which is quoted so that
+# nothing else in it expands.
+echo "xkb_layout = $SYNUI_XKB" >> "/mnt/home/$NEW_USER/.config/synui/synuirc"
 
 # foot terminal — "night drive" palette (matches synuirc border colors)
 mkdir -p "/mnt/home/$NEW_USER/.config/foot"

@@ -19,6 +19,15 @@ arch-install-scripts
 terminus-font
 ttf-dejavu
 fontconfig
+# Latin/Greek/Cyrillic coverage for the LIVE session itself — the installer's
+# own language picker lists Русский, 日本語, العربية, and dejavu draws none of
+# them, so the menu offering them rendered as boxes. noto-fonts is ~10MB and
+# covers everything except CJK/Indic, which the installer pulls per-language
+# (noto-fonts-cjk alone is ~130MB, too much to put on every ISO).
+#
+# This also makes the compositor honest elsewhere: a filename or an RSS headline
+# in a script dejavu lacks drew as boxes on the live ISO, whatever the locale.
+noto-fonts
 wlroots0.19
 librsvg
 plymouth
