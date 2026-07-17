@@ -1,0 +1,72 @@
+
+xwininfo: Window id: 0x1e00046 "Steam"
+
+  Root window id: 0x399 (the root window) (has no name)
+  Parent window id: 0x399 (the root window) (has no name)
+     2 children:
+     0x1400014 (has no name): ()  2540x1366+0+0  +1090+1144
+        1 child:
+        0x1400015 (has no name): ()  2540x1366+0+0  +1090+1144
+     0x1400017 (has no name): ()  2538x1249+0+0  +1090+1144
+        1 child:
+        0x1400019 (has no name): ()  2538x1249+0+0  +1090+1144
+           1 child:
+           0x1c00132 (has no name): ()  2538x1249+0+0  +1090+1144
+
+  Absolute upper-left X:  1090
+  Absolute upper-left Y:  1144
+  Relative upper-left X:  1090
+  Relative upper-left Y:  1144
+  Width: 2540
+  Height: 1366
+  Depth: 32
+  Visual: 0x25c
+  Visual Class: TrueColor
+  Border width: 0
+  Class: InputOutput
+  Colormap: 0x1e00045 (not installed)
+  Bit Gravity State: ForgetGravity
+  Window Gravity State: NorthWestGravity
+  Backing Store State: NotUseful
+  Save Under State: no
+  Map State: IsViewable
+  Override Redirect State: no
+  Corners:  +1090+1144  -10+1144  -10-490  +1090-490
+  -geometry 2540x1366-10+1144
+
+  Bit gravity: ForgetGravity
+  Window gravity: NorthWestGravity
+  Backing-store hint: NotUseful
+  Backing-planes to be preserved: 0xffffffff
+  Backing pixel: 0
+  Save-unders: No
+
+  Someone wants these events:
+      KeyPress
+      KeyRelease
+      EnterWindow
+      LeaveWindow
+      KeymapState
+      Exposure
+      StructureNotify
+      FocusChange
+      PropertyChange
+  Do not propagate these events:
+  Override redirection?: No
+
+  Window manager hints:
+      Client accepts input or input focus: Yes
+      Window type:
+          Normal
+      Window state:
+          Focused
+      Process id: 64816 on host synapse
+
+  Normal window size hints:
+      User supplied location: 1090, 1144
+      Program supplied minimum size: 1010 by 600
+  No zoom window size hints defined
+
+  No window shape defined
+  No border shape defined
+

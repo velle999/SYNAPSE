@@ -1,0 +1,113 @@
+
+xwininfo: Window id: 0x399 (the root window) (has no name)
+
+  Root window id: 0x399 (the root window) (has no name)
+  Parent window id: 0x0 (none)
+     27 children:
+     0x1e00075 (has no name): ("steamwebhelper" "steam")  203x233+1212+1178  +1212+1178
+        1 child:
+        0x1400023 (has no name): ()  203x233+0+0  +1212+1178
+           1 child:
+           0x1400025 (has no name): ()  203x233+0+0  +1212+1178
+              1 child:
+              0x1c000f2 (has no name): ()  203x233+0+0  +1212+1178
+     0x1e000c5 (has no name): ("steamwebhelper" "steam")  118x264+1461+1184  +1461+1184
+        1 child:
+        0x1400043 (has no name): ()  118x264+0+0  +1461+1184
+           1 child:
+           0x1400045 (has no name): ()  118x264+0+0  +1461+1184
+              1 child:
+              0x1c0012a (has no name): ()  118x264+0+0  +1461+1184
+     0x1e000bb (has no name): ("steamwebhelper" "steam")  132x165+1329+1184  +1329+1184
+        1 child:
+        0x140003f (has no name): ()  132x165+0+0  +1329+1184
+           1 child:
+           0x1400041 (has no name): ()  132x165+0+0  +1329+1184
+              1 child:
+              0x1c00122 (has no name): ()  132x165+0+0  +1329+1184
+     0x1e000b1 (has no name): ("steamwebhelper" "steam")  102x100+1235+1184  +1235+1184
+        1 child:
+        0x140003b (has no name): ()  102x100+0+0  +1235+1184
+           1 child:
+           0x140003d (has no name): ()  102x100+0+0  +1235+1184
+              1 child:
+              0x1c0011a (has no name): ()  102x100+0+0  +1235+1184
+     0x1e000a7 (has no name): ("steamwebhelper" "steam")  138x198+1158+1184  +1158+1184
+        1 child:
+        0x1400037 (has no name): ()  138x198+0+0  +1158+1184
+           1 child:
+           0x1400039 (has no name): ()  138x198+0+0  +1158+1184
+              1 child:
+              0x1c00112 (has no name): ()  138x198+0+0  +1158+1184
+     0x1e0009d (has no name): ("steamwebhelper" "steam")  171x199+3396+1148  +3396+1148
+        1 child:
+        0x1400033 (has no name): ()  171x199+0+0  +3396+1148
+           1 child:
+           0x1400035 (has no name): ()  171x199+0+0  +3396+1148
+              1 child:
+              0x1c0010a (has no name): ()  171x199+0+0  +3396+1148
+     0x1e00089 (has no name): ("steamwebhelper" "steam")  212x267+1319+1152  +1319+1152
+        1 child:
+        0x140002b (has no name): ()  212x267+0+0  +1319+1152
+           1 child:
+           0x140002d (has no name): ()  212x267+0+0  +1319+1152
+              1 child:
+              0x1c00102 (has no name): ()  212x267+0+0  +1319+1152
+     0x1e0007f (has no name): ("steamwebhelper" "steam")  276x166+1267+1152  +1267+1152
+        1 child:
+        0x1400027 (has no name): ()  276x166+0+0  +1267+1152
+           1 child:
+           0x1400029 (has no name): ()  276x166+0+0  +1267+1152
+              1 child:
+              0x1c000fa (has no name): ()  276x166+0+0  +1267+1152
+     0x1e0006b (has no name): ("steamwebhelper" "steam")  194x399+1171+1152  +1171+1152
+        1 child:
+        0x140001f (has no name): ()  194x399+0+0  +1171+1152
+           1 child:
+           0x1400021 (has no name): ()  194x399+0+0  +1171+1152
+              1 child:
+              0x1c000ea (has no name): ()  194x399+0+0  +1171+1152
+     0x1e00093 (has no name): ("steamwebhelper" "steam")  300x215+3088+1148  +3088+1148
+        1 child:
+        0x140002f (has no name): ()  300x215+0+0  +3088+1148
+           1 child:
+           0x1400031 (has no name): ()  300x215+0+0  +3088+1148
+              1 child:
+              0x1c000ca (has no name): ()  300x215+0+0  +3088+1148
+     0x1e00061 (has no name): ("steamwebhelper" "steam")  238x235+1100+1152  +1100+1152
+        1 child:
+        0x140001b (has no name): ()  238x235+0+0  +1100+1152
+           1 child:
+           0x140001d (has no name): ()  238x235+0+0  +1100+1152
+              1 child:
+              0x1c000e2 (has no name): ()  238x235+0+0  +1100+1152
+     0x800037 "VRStream": ("steam" "steam")  32x32+2344+1784  +2344+1784
+     0xc0000f (has no name): ("Steam" "Steam")  64x24+0+0  +0+0
+     0xc0000d "Untitled": ("Steam" "Steam")  64x24+0+0  +0+0
+     0x1400009 (has no name): ()  1x1+0+0  +0+0
+     0x1e0002d (has no name): ()  1x1+-10+-10  +-10+-10
+     0x1600003 "steamwebhelper": ("steamwebhelper" "Steamwebhelper")  200x200+0+0  +0+0
+        1 child:
+        0x1600004 (has no name): ()  1x1+-1+-1  +-1+-1
+     0x1600001 "steamwebhelper": ("steamwebhelper" "Steamwebhelper")  10x10+10+10  +10+10
+     0x1400001 "Chromium clipboard": ()  10x10+-100+-100  +-100+-100
+     0xc00005 (has no name): ("Steam" "Steam")  64x24+0+0  +0+0
+     0xe00001 "steam": ("steam" "Steam")  10x10+10+10  +10+10
+        1 child:
+        0xe00002 (has no name): ()  1x1+-1+-1  +9+9
+     0x80002d (has no name): ()  1x1+-10+-10  +-10+-10
+     0x200004 "wlroots wm": ()  10x10+0+0  +0+0
+     0x200003 (has no name): ()  8192x8192+0+0  +0+0
+     0x200002 (has no name): ()  10x10+0+0  +0+0
+     0x200001 (has no name): ()  10x10+0+0  +0+0
+     0x1e00046 "Steam": ("steamwebhelper" "steam")  2540x1366+1090+1144  +1090+1144
+        2 children:
+        0x1400014 (has no name): ()  2540x1366+0+0  +1090+1144
+           1 child:
+           0x1400015 (has no name): ()  2540x1366+0+0  +1090+1144
+        0x1400017 (has no name): ()  2538x1249+0+0  +1090+1144
+           1 child:
+           0x1400019 (has no name): ()  2538x1249+0+0  +1090+1144
+              1 child:
+              0x1c00132 (has no name): ()  2538x1249+0+0  +1090+1144
+

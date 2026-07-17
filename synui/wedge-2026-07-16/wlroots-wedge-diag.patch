@@ -1,0 +1,30 @@
+diff --git a/xwayland/xwm.c b/xwayland/xwm.c
+index 3caf335e3..c1eb0c0a3 100644
+--- a/xwayland/xwm.c
++++ b/xwayland/xwm.c
+@@ -1448,8 +1448,23 @@ static void xwm_handle_surface_serial_message(struct wlr_xwm *xwm,
+ 		return;
+ 	}
+ 	if (xsurface->serial != 0) {
+-		wlr_log(WLR_DEBUG, "Received multiple client messages WL_SURFACE_SERIAL "
+-			"for the same X11 window %u", ev->window);
++		/* WEDGE-DIAG: this is THE event under investigation, escalated from
++		 * DEBUG to ERROR so it shows in a session running synui without -d.
++		 *
++		 * associate() clears surface_id but NOT serial, so serial stays
++		 * non-zero for a window's entire associated lifetime. A re-map sends a
++		 * new WL_SURFACE_SERIAL on the X11 fd; if it is read before the old
++		 * surface's destroy on the Wayland fd, dissociate has not yet zeroed
++		 * serial and this drop fires. The xsurface is then never put on
++		 * unpaired_surfaces, the new wl_surface associates with nothing, and
++		 * the window can never map again — IsViewable in X, absent from the
++		 * compositor, empty _NET_CLIENT_LIST. Only an X unmap/map recovers it.
++		 *
++		 * Diagnostic build only — do not ship. */
++		wlr_log(WLR_ERROR, "WEDGE-DIAG: DROPPING WL_SURFACE_SERIAL for X11 window "
++			"%u (stale serial=%llu still set) -- this window can now never "
++			"associate or map again",
++			ev->window, (unsigned long long)xsurface->serial);
+ 		return;
+ 	}
+ 
