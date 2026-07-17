@@ -58,6 +58,15 @@ static const char *const APP_DIRS_SYSTEM[] = {
  * a display string like the categories', so nothing has to special-case it. */
 #define MENU_PAGE_TOOLS  "System Tools"
 
+/* synui keeps its own settings in compositor panels (Super+D displays, Super+E
+ * filters, Super+P power …), not in .desktop files, so none of them ever show
+ * up under the scanned "Settings" category — which on a stock install holds only
+ * cups' "Manage Printing". This page lists them, so "Settings" is the whole of
+ * the system's settings rather than the one printer entry it was. Its display
+ * name has to equal the "Settings" CATEGORIES row (below) so a Settings-category
+ * .desktop folds onto the same page instead of making a second one. */
+#define MENU_PAGE_SETTINGS  "Settings"
+
 /* XDG main categories → the submenu they file under, in test order. An app
  * usually lists several ("Game;Emulator;"), so precedence matters: the
  * catch-alls (Settings/System/Utility) must come last or they swallow half the
@@ -443,6 +452,28 @@ static void menu_add_tools(syn_menu_t *m)
     menu_add(m, p, MENU_ROW_ITEM, "Update System",   NULL, "foot --hold sudo pacman -Syu");
 }
 
+/* The Settings page: the control panel and every settings panel it fronts,
+ * listed as bind *actions* so a row takes the same path its Super+key shortcut
+ * does — no second definition of "open the display settings" to drift from the
+ * first. It emits the root row and the Back itself, so a stock box with no
+ * Settings-category .desktop still gets the page; cups' "Manage Printing" is
+ * folded onto it by menu_build, which is why there is no Printers row here. */
+static void menu_add_settings(syn_menu_t *m)
+{
+    const char *p = MENU_PAGE_SETTINGS;
+    menu_add_submenu(m, p, p);
+    menu_add_back(m, p);
+    menu_add(m, p, MENU_ROW_ITEM, "Control Panel",   "control",     NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Display",         "displays",    NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Wallpaper",       "wallpaper",   NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "CRT Filters",     "filters",     NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Night Light",     "night_light", NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Power Saving",    "power",       NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Network / Wi-Fi", "network",     NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Bluetooth",       "bluetooth",   NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Lock Screen",     "lock",        NULL);
+}
+
 static void menu_add_power(syn_menu_t *m)
 {
     menu_add(m, "", MENU_ROW_HEADER, "POWER", NULL, NULL);
@@ -492,6 +523,9 @@ static void menu_build(syn_server_t *s)
     qsort(sc->apps, sc->count, sizeof(sc->apps[0]), app_cmp);
 
     menu_add_static(m);
+    /* Sits under SYSTEM, right after System Tools: the root row is emitted here,
+     * among the root rows, while its page rows (below) go on the Settings page. */
+    menu_add_settings(m);
 
     /* The apps are sorted by category, so a change of category is a new group.
      * The root's row for it goes in as the group opens; the apps themselves go
@@ -499,6 +533,9 @@ static void menu_build(syn_server_t *s)
     menu_add(m, "", MENU_ROW_HEADER, "APPLICATIONS", NULL, NULL);
     const char *cur = NULL;
     for (int i = 0; i < sc->count; i++) {
+        /* Settings already has its fixed root row (menu_add_settings); a second
+         * one from a Settings-category .desktop would double it. */
+        if (strcmp(sc->apps[i].cat, MENU_PAGE_SETTINGS) == 0) continue;
         if (!cur || strcmp(cur, sc->apps[i].cat) != 0) {
             cur = sc->apps[i].cat;
             menu_add_submenu(m, cur, cur);
@@ -516,7 +553,10 @@ static void menu_build(syn_server_t *s)
     for (int i = 0; i < sc->count; i++) {
         if (!page || strcmp(page, sc->apps[i].cat) != 0) {
             page = sc->apps[i].cat;
-            menu_add_back(m, page);
+            /* The fixed Settings page already opened with its own Back; a second
+             * one here would draw twice. Its apps still append onto the page. */
+            if (strcmp(page, MENU_PAGE_SETTINGS) != 0)
+                menu_add_back(m, page);
         }
         menu_add(m, sc->apps[i].cat, MENU_ROW_ITEM, sc->apps[i].name,
                  NULL, sc->apps[i].cmd);
@@ -698,6 +738,11 @@ static void menu_activate(syn_server_t *s)
  * panel, so they cannot drift from what is on screen the way a second copy of
  * the layout constants would. */
 
+int menu_top_y(const syn_menu_t *m)
+{
+    return m->page[0] ? MENU_TOP : MENU_TOP - MENU_ROOT_SHIFT;
+}
+
 static int menu_in_panel(const syn_menu_t *m, double lx, double ly)
 {
     return lx >= m->x && lx < m->x + m->w && ly >= m->y && ly < m->y + m->h;
@@ -710,7 +755,7 @@ static int menu_row_at(const syn_menu_t *m, double lx, double ly)
 
     /* A row's text sits on its baseline and its highlight is drawn around it,
      * so the band starts MENU_ROW_ASC above the first baseline. */
-    double top = m->y + MENU_TOP - MENU_ROW_ASC;
+    double top = m->y + menu_top_y(m) - MENU_ROW_ASC;
     if (ly < top) return -1;                       /* the title and search line */
 
     int i = (int)((ly - top) / MENU_ROW_H);

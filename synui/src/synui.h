@@ -2338,6 +2338,13 @@ void menu_scroll(syn_server_t *s, double delta);
 /* The view[] row drawn at the top of the panel — see menu.c. */
 int  menu_first_row(const syn_menu_t *m);
 
+/* The y of the first row's baseline. The root has no breadcrumb (the "SYNAPSE"
+ * brand line that once sat there is gone), so its rows — and the search and
+ * separator lines above them — ride up by MENU_ROOT_SHIFT to close the gap it
+ * left; a submenu keeps the full head for its page name. render.c draws with
+ * this and menu.c hit-tests with it, so it lives here where both can see it. */
+int  menu_top_y(const syn_menu_t *m);
+
 /* Panel geometry. render.c draws it and menu.c hit-tests and scroll-clamps
  * against it, so the two have to agree — hence here rather than in either (as
  * with CTL_SHORTCUT_ROWS). Rows step MENU_ROW_H from a first baseline at
@@ -2350,6 +2357,9 @@ int  menu_first_row(const syn_menu_t *m);
 #define MENU_TOP       92
 #define MENU_FOOTER    46
 #define MENU_PAD       18
+/* The blank breadcrumb line the root no longer needs. Reclaimed at the root
+ * (see menu_top_y); kept on submenu pages, which draw their name in it. */
+#define MENU_ROOT_SHIFT 24
 /* How long the pointer must rest on a submenu row before its page opens. Long
  * enough that sliding across the category rows to reach a row below them does
  * not flip through every page; short enough to feel like a hover, not a wait. */

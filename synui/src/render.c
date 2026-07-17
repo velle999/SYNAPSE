@@ -1932,8 +1932,13 @@ void synui_render_menu(syn_server_t *s)
     int rows = m->view_count < MENU_ROWS ? m->view_count : MENU_ROWS;
     if (rows < 1) rows = 1;                 /* "no matches" still needs a line */
 
+    /* The root sheds the blank breadcrumb line; a submenu keeps it for its page
+     * name. Everything above the rows (separator, search) and the rows' own
+     * baseline shift up by the same amount so the panel closes around them. */
+    int mtop = menu_top_y(m);
+
     int pw = MENU_W;
-    int ph = MENU_TOP + rows * MENU_ROW_H + MENU_FOOTER;
+    int ph = mtop + rows * MENU_ROW_H + MENU_FOOTER;
     int px = ob.x, py = ob.y;
     /* A short output could leave the footer off the bottom; ride up if so. */
     if (py + ph > ob.y + ob.height) py = ob.y + ob.height - ph;
@@ -1977,10 +1982,12 @@ void synui_render_menu(syn_server_t *s)
         cairo_show_text(cr, m->page);
     }
 
+    /* The separator sits one line above the search, the search one line above
+     * the first row — both pinned to mtop so they follow it up at the root. */
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
     cairo_set_line_width(cr, 1);
-    cairo_move_to(cr, MENU_PAD, 44);
-    cairo_line_to(cr, pw - MENU_PAD, 44);
+    cairo_move_to(cr, MENU_PAD, mtop - 48);
+    cairo_line_to(cr, pw - MENU_PAD, mtop - 48);
     cairo_stroke(cr);
 
     /* Search line. Always drawn, with a prompt when empty, so that typing is
@@ -1988,12 +1995,12 @@ void synui_render_menu(syn_server_t *s)
     cairo_set_font_size(cr, 13);
     if (m->filter[0]) {
         cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
-        cairo_move_to(cr, MENU_PAD, 68);
+        cairo_move_to(cr, MENU_PAD, mtop - 24);
         cairo_show_text(cr, m->filter);
         cairo_show_text(cr, "\xe2\x96\x8f");          /* caret */
     } else {
         cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-        cairo_move_to(cr, MENU_PAD, 68);
+        cairo_move_to(cr, MENU_PAD, mtop - 24);
         cairo_show_text(cr, "Type to search\xe2\x80\xa6");
     }
 
@@ -2002,13 +2009,13 @@ void synui_render_menu(syn_server_t *s)
     if (m->view_count == 0) {
         cairo_set_font_size(cr, 13);
         cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-        cairo_move_to(cr, MENU_PAD, MENU_TOP);
+        cairo_move_to(cr, MENU_PAD, mtop);
         cairo_show_text(cr, "No matches");
     }
 
     for (int i = 0; i < MENU_ROWS && first + i < m->view_count; i++) {
         const syn_menu_entry_t *e = &m->entries[m->view[first + i]];
-        int ry = MENU_TOP + i * MENU_ROW_H;
+        int ry = mtop + i * MENU_ROW_H;
 
         if (e->kind == MENU_ROW_HEADER) {
             cairo_set_font_size(cr, 11);
