@@ -804,6 +804,11 @@ typedef struct {
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
      * it takes zero layout space, shown it floats above window content. */
     int   dock_enabled;         /* default 1 */
+    /* Night light: warm the screen by writing the outputs' gamma LUTs directly
+     * (nightlight.c). 6500K is daylight — the identity ramp — so the *temp* is
+     * only meaningful while night_light is on. */
+    int   night_light;          /* default 0 */
+    int   night_light_temp;     /* Kelvin, default 4000 */
     int   dock_height;          /* px thickness, default 64 */
     int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
@@ -2121,6 +2126,16 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
+
+/* ── Night light (nightlight.c) ──────────────────────────── */
+/* Writes the gamma LUT on every output. No-op where the backend has no gamma
+ * (headless/pixman). wlr_gamma_control_manager_v1 stays exported, so wlsunset
+ * still works for anyone who prefers it — last writer wins. */
+void nightlight_apply(syn_server_t *s);
+void nightlight_toggle(syn_server_t *s);
+/* A new output comes up at identity and has to be told, or a second monitor
+ * plugged in with night light on stays blue while the first is warm. */
+void nightlight_output_added(syn_server_t *s, syn_output_t *o);
 
 /* ── logind (logind.c) ───────────────────────────────────── */
 /* systemd-logind: lock before a sleep synui did not initiate (the lid), and set

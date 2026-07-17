@@ -390,6 +390,11 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     wl_list_insert(&server->outputs, &output->link);
 
+    /* A new output comes up at identity gamma. With night light on, leaving it
+     * that way means the second monitor stays blue while the first is warm —
+     * which reads as a broken monitor, not a setting. */
+    nightlight_output_added(server, output);
+
     /* A new monitor doesn't claim a workspace — every desktop already spans it.
      * It simply comes up showing the current desktop's share, which is empty
      * until windows are moved onto it (Super+O). If this is the *first* output,
@@ -1362,6 +1367,7 @@ int synui_init(syn_server_t *s)
     bt_init(s);
     notif_init(s);
     logind_init(s);
+    nightlight_apply(s);   /* honour night_light = on from synuirc at startup */
 
     /* Stamp game mode "off" for waybar's indicator. */
     game_init(s);

@@ -122,6 +122,8 @@ static const char *action_desc(const char *action, const char *arg)
         { "menu",              "Welcome menu" },
         { "control",           "Control panel" },
         { "bluetooth",         "Bluetooth" },
+        { "night_light",       "Night light" },
+        { "record",            "Record screen" },
         { "brightness_up",     "Brightness up" },
         { "brightness_down",   "Brightness down" },
         { "start_menu",        "Start menu" },

@@ -62,6 +62,10 @@ gamescope
 waybar
 wtype
 
+# Screen recording (Super+Shift+R). synui pulls it in as a dependency; listed
+# here so what the ISO ships is readable rather than inferred.
+wf-recorder
+
 # Printing. SynapseOS shipped Dolphin and Firefox and no way to print from
 # either. cups brings its own web admin UI on localhost:631, so there is no
 # printer-setup GUI to write or ship — the start menu just opens it.

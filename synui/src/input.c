@@ -578,6 +578,10 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         ctlpanel_toggle(s);
     } else if (strcmp(action, "bluetooth") == 0) {
         bt_toggle(s);
+    } else if (strcmp(action, "night_light") == 0) {
+        nightlight_toggle(s);
+    } else if (strcmp(action, "record") == 0) {
+        synui_spawn("synui-record");
     } else if (strcmp(action, "brightness_up") == 0) {
         logind_brightness_step(s, +5);
     } else if (strcmp(action, "brightness_down") == 0) {

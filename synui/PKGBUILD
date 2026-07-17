@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=102
+pkgrel=103
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -18,6 +18,9 @@ license=('GPL2')
 # waybar/wtype: the bar, and the virtual keyboard its SYNAPSE button uses to ask
 #   synui for the start menu. synui ships the bar's config to /etc/xdg/waybar, so
 #   depending on it keeps the config and the thing that reads it together.
+# wf-recorder: Super+Shift+R (synui-record). Recording means encoding, and
+#   ffmpeg is not something the compositor should grow — wf-recorder captures
+#   through wlr-screencopy, which synui already exports for grim.
 # libnotify: synui *serves* org.freedesktop.Notifications (src/notif.c), so it
 #   needs no client library for that — but notify-send is what synui-screenshot
 #   uses to say "saved", and it lives here. Nothing else on the ISO pulled it in,
@@ -29,7 +32,7 @@ license=('GPL2')
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'waybar' 'wtype')
+depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'waybar' 'wtype' 'wf-recorder')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
@@ -108,6 +111,10 @@ package() {
     # Screenshots: Print / Shift+Print / Ctrl+Print (see seed_default_binds).
     install -Dm755 systemd/synui-screenshot.sh \
         "$pkgdir/usr/bin/synui-screenshot"
+
+    # Screen recording: Super+Shift+R starts, and pressing it again stops.
+    install -Dm755 systemd/synui-record.sh \
+        "$pkgdir/usr/bin/synui-record"
 
     # Right-click an .iso in Dolphin -> Mount/Unmount Image, Write to USB Stick.
     # The service menu must be executable or KIO 6 skips it. See

@@ -26,6 +26,12 @@ xcb_icccm = dependency('xcb-icccm')
 xcb_ewmh  = dependency('xcb-ewmh')
 xcb_randr = dependency('xcb-randr')   # xwayland.c marks the primary output
 
+# nightlight.c's blackbody approximation uses log()/pow(). libm arrives
+# transitively via cairo today; naming it means that staying true is not load
+# bearing.
+cc = meson.get_compiler('c')
+libm = cc.find_library('m', required : false)
+
 wl_scanner = find_program('wayland-scanner')
 
 xdg_shell_xml = join_paths(
@@ -139,6 +145,7 @@ synui_exe = executable('synui',
     'src/bt.c',
     'src/notif.c',
     'src/logind.c',
+    'src/nightlight.c',
     'src/gpu.c',
     'src/taskmgr.c',
     'src/news.c',
@@ -169,7 +176,7 @@ synui_exe = executable('synui',
   include_directories : include_directories('src'),
   dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
                   libinput, libjpeg, libcurl, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
-                  egl, glesv2, libsystemd],
+                  egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
   install : true)

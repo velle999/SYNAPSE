@@ -56,6 +56,8 @@
  *
  * Dock (dock.c):
  *   dock_enabled = on|off       (default on)
+ *   night_light  = on|off       (default off)   Super+Shift+B toggles
+ *   night_light_temp = 4000     (Kelvin, 1000-6500; 6500 is daylight)
  *   dock_height = 64            (px)
  *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
@@ -230,6 +232,8 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+escape",    "menu" },
         { "super+c",         "control" },
         { "super+b",         "bluetooth" },
+        { "super+shift+b",   "night_light" },   /* "blue light" */
+        { "super+shift+r",   "record" },        /* start/stop screen recording */
         /* Brightness keys. No modifier: they are dedicated keys on every
          * laptop, and nothing else claims them. */
         { "xf86monbrightnessup",   "brightness_up" },
@@ -291,8 +295,20 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
     };
-    for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
+    for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++) {
+        /* Shout about a duplicate rather than shipping one. handle_keybinding
+         * takes the FIRST match, so a second bind on a combo is not a conflict
+         * anyone sees — it is the older feature silently going dead. Adding
+         * night_light on super+shift+n did exactly that to minimize_restore and
+         * only turned up because the table happened to get grepped. */
+        for (size_t j = 0; j < i; j++) {
+            if (strcmp(defaults[i].combo, defaults[j].combo) == 0)
+                wlr_log(WLR_ERROR, "synui: config: DUPLICATE default bind %s "
+                        "(%s shadows %s) — the second one is dead",
+                        defaults[i].combo, defaults[j].action, defaults[i].action);
+        }
         config_bind(cfg, defaults[i].combo, defaults[i].action);
+    }
 
     for (int i = 1; i <= WORKSPACE_MAX; i++) {
         char combo[32], act[16];
@@ -359,6 +375,8 @@ void synui_config_load(syn_config_t *cfg)
 {
     /* Defaults */
     strncpy(cfg->terminal, "foot", sizeof(cfg->terminal) - 1);
+    cfg->night_light = 0;
+    cfg->night_light_temp = 4000;
     cfg->autostart_count = 1;
     strncpy(cfg->autostart[0], "foot", sizeof(cfg->autostart[0]) - 1);
     cfg->border_width = BORDER_WIDTH_DEFAULT;
@@ -607,6 +625,17 @@ void synui_config_load(syn_config_t *cfg)
             strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
         else if (strcmp(key, "xkb_model") == 0)
             strncpy(cfg->xkb_model, val, sizeof(cfg->xkb_model) - 1);
+        else if (strcmp(key, "night_light") == 0)
+            cfg->night_light = strcmp(val, "on") == 0;
+        else if (strcmp(key, "night_light_temp") == 0) {
+            int k = atoi(val);
+            /* Below ~1000K the ramp is essentially red-only and the screen is
+             * unusable; above 6500K it is colder than daylight, which is not
+             * what a night light is for. Clamp rather than obey. */
+            if (k < 1000) k = 1000;
+            if (k > 6500) k = 6500;
+            cfg->night_light_temp = k;
+        }
         else if (strcmp(key, "xkb_layout") == 0)
             strncpy(cfg->xkb_layout, val, sizeof(cfg->xkb_layout) - 1);
         else if (strcmp(key, "xkb_variant") == 0)
