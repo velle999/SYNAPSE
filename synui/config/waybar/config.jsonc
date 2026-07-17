@@ -15,6 +15,7 @@
         "pulseaudio",
         "cpu",
         "memory",
+        "bluetooth",
         "network"
     ],
     // System tray (StatusNotifierItem). Nothing else on SYNAPSE runs an SNI
@@ -89,6 +90,32 @@
     },
     "memory": {
         "format": "MEM {percentage}%",
+        "interval": 5
+    },
+    // Bluetooth. Text label to match NET/VOL/MEM/CPU — the bar's iconography is
+    // words, not a nerd-font glyph. The click menu funnels to synui's own Super+B
+    // panel (synctl dispatch bluetooth) for scan/pair/connect; the radio on/off
+    // and the console are here so a dead adapter can be woken from the bar alone.
+    // bluetoothctl one-shots need no root — bluez's polkit lets the active local
+    // session drive the adapter.
+    "bluetooth": {
+        "format": "BT {status}",
+        "format-off": "BT off",
+        "format-on": "BT on",
+        "format-connected": "BT {device_alias}",
+        "format-connected-battery": "BT {device_alias} {device_battery_percentage}%",
+        "tooltip-format": "{controller_alias}\nClick for Bluetooth options",
+        "tooltip-format-connected": "{controller_alias}\n{num_connections} connected\n{device_enumerate}\nClick for Bluetooth options",
+        "tooltip-format-enumerate-connected": "{device_alias}",
+        "tooltip-format-enumerate-connected-battery": "{device_alias} {device_battery_percentage}%",
+        "menu": "on-click",
+        "menu-file": "/usr/share/synui/waybar/bluetooth-menu.xml",
+        "menu-actions": {
+            "bt_panel": "synctl dispatch bluetooth",
+            "bt_on": "bluetoothctl power on",
+            "bt_off": "bluetoothctl power off",
+            "bt_console": "foot -e bluetoothctl"
+        },
         "interval": 5
     },
     "network": {

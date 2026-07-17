@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="bt_panel">
+        <property name="label">Devices &amp; Pairing…</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="btsep1"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="bt_on">
+        <property name="label">Turn Bluetooth On</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="bt_off">
+        <property name="label">Turn Bluetooth Off</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="btsep2"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="bt_console">
+        <property name="label">Bluetooth Console</property>
+      </object>
+    </child>
+  </object>
+</interface>

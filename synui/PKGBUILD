@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=105
+pkgrel=106
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -83,6 +83,8 @@ package() {
         "$pkgdir/usr/share/synui/waybar/style.css"
     install -Dm644 config/waybar/network-menu.xml \
         "$pkgdir/usr/share/synui/waybar/network-menu.xml"
+    install -Dm644 config/waybar/bluetooth-menu.xml \
+        "$pkgdir/usr/share/synui/waybar/bluetooth-menu.xml"
     install -Dm755 systemd/synui-waybar.sh \
         "$pkgdir/usr/bin/synui-waybar"
 
