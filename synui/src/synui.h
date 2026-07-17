@@ -319,15 +319,24 @@ typedef struct {
 #define MENU_ENTRIES_MAX  512
 #define MENU_LABEL_MAX     72
 #define MENU_CMD_MAX      512
+#define MENU_CAT_MAX       24
 
 typedef enum {
     MENU_ROW_HEADER = 0,   /* section rule — never selectable */
     MENU_ROW_ITEM,
+    MENU_ROW_SUBMENU,      /* opens the page named by ->menu_to, launches nothing */
 } syn_menu_kind_t;
 
 typedef struct {
     int  kind;                     /* syn_menu_kind_t */
     char label[MENU_LABEL_MAX];
+    /* Which page this row lives on: "" is the root, otherwise a submenu name.
+     * Every row of every page is in this one flat array, which is what lets a
+     * search run across the whole menu rather than only the page you happen to
+     * be looking at — the reason drilling in does not cost you reachability. */
+    char menu[MENU_CAT_MAX];
+    /* On a MENU_ROW_SUBMENU, the page it opens (matched against ->menu). */
+    char menu_to[MENU_CAT_MAX];
     /* Exactly one of these is set on an item. A bind action goes through
      * synui_binding_execute() — the same path a keypress takes — so the menu
      * cannot become a second, disagreeing definition of what "Control Panel"
@@ -344,6 +353,17 @@ typedef struct {
     int  selected;                    /* index into view[], not entries[] */
     int  scroll;                      /* first view[] row drawn */
     char filter[48];                  /* type-to-search; empty = show all */
+    /* The page on show: "" is the root. One level deep by construction — the
+     * root's submenu rows are the only ones there are, so backing out is always
+     * a return to the root and needs no stack. */
+    char page[MENU_CAT_MAX];
+    int  root_selected, root_scroll;  /* where to land back on when we do */
+    /* Panel geometry in layout coords, written by synui_render_menu() on every
+     * render and read by the pointer hit-tests. The renderer owns it because the
+     * height depends on the row count it just drew; nothing reads it while the
+     * menu is hidden, and showing the menu renders it before any pointer event
+     * can arrive. */
+    int  x, y, w, h;
     syn_menu_entry_t entries[MENU_ENTRIES_MAX];
 } syn_menu_t;
 
@@ -2227,9 +2247,28 @@ void menu_toggle(syn_server_t *s);
 /* Modal key handling while the menu is open, as in ctlpanel_key. Returns 1 if
  * the key was consumed. */
 int  menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
-/* How many rows the menu draws at once — render.c owns the geometry, menu.c
- * owns the scroll clamp, so the two have to agree (as in CTL_SHORTCUT_ROWS). */
-#define MENU_ROWS  18
+/* Pointer, from input.c while the menu is up. The menu is modal for the pointer
+ * exactly as the dock's context menu is: hover selects, left click activates,
+ * anything else dismisses. */
+void menu_motion(syn_server_t *s, double lx, double ly);
+void menu_click(syn_server_t *s, double lx, double ly);
+/* Wheel. delta is in the same sense wlroots reports it: positive is down. */
+void menu_scroll(syn_server_t *s, double delta);
+/* The view[] row drawn at the top of the panel — see menu.c. */
+int  menu_first_row(const syn_menu_t *m);
+
+/* Panel geometry. render.c draws it and menu.c hit-tests and scroll-clamps
+ * against it, so the two have to agree — hence here rather than in either (as
+ * with CTL_SHORTCUT_ROWS). Rows step MENU_ROW_H from a first baseline at
+ * MENU_TOP, and MENU_ROW_ASC is how far the row's band rises above its
+ * baseline: text sits on the baseline, the highlight is drawn around it. */
+#define MENU_ROWS      22
+#define MENU_W        420
+#define MENU_ROW_H     24
+#define MENU_ROW_ASC   15
+#define MENU_TOP       92
+#define MENU_FOOTER    46
+#define MENU_PAD       18
 void synui_render_menu(syn_server_t *s);
 
 /* Run a bind action by name (input.c owns the dispatch table). The control

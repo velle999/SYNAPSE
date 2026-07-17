@@ -174,15 +174,19 @@ void synui_render_welcome(syn_server_t *s)
     get_output_box(s, &ob);
 
     /* Height follows the menu rather than being a constant someone has to
-     * remember to bump: the rows start at MENU_TOP and step MENU_ROW_H, and the
-     * footer + version sit below them. With a hard-coded height, adding a menu
-     * entry silently pushed the footer off the bottom of the panel. */
-    /* FOOTER_H covers three hint lines (at y+16/+34/+52) *and* the version
-     * line, which is drawn from the bottom at ph-16 — too small a value and the
-     * two collide rather than the footer simply being cut off. */
-    const int MENU_TOP = 128, MENU_ROW_H = 28, FOOTER_H = 92;
+     * remember to bump: the rows start at WELCOME_TOP and step WELCOME_ROW_H,
+     * and the footer + version sit below them. With a hard-coded height, adding
+     * a menu entry silently pushed the footer off the bottom of the panel.
+     *
+     * Prefixed, unlike everything else local to this function: the start menu's
+     * geometry is MENU_* in synui.h now, and these are a different panel's
+     * numbers that happened to be spelled the same. */
+    /* WELCOME_FOOTER_H covers three hint lines (at y+16/+34/+52) *and* the
+     * version line, which is drawn from the bottom at ph-16 — too small a value
+     * and the two collide rather than the footer simply being cut off. */
+    const int WELCOME_TOP = 128, WELCOME_ROW_H = 28, WELCOME_FOOTER_H = 92;
     int pw = 500;
-    int ph = MENU_TOP + synui_welcome_menu_len * MENU_ROW_H + FOOTER_H;
+    int ph = WELCOME_TOP + synui_welcome_menu_len * WELCOME_ROW_H + WELCOME_FOOTER_H;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
@@ -236,7 +240,7 @@ void synui_render_welcome(syn_server_t *s)
 
     /* Selectable menu (input.c: Up/Down + Enter) */
     cairo_set_font_size(cr, 15);
-    int y = MENU_TOP;
+    int y = WELCOME_TOP;
     for (int i = 0; i < synui_welcome_menu_len; i++) {
         int sel = (i == s->welcome_ui.selected);
 
@@ -265,7 +269,7 @@ void synui_render_welcome(syn_server_t *s)
         cairo_move_to(cr, 290, y);
         cairo_show_text(cr, hint);
 
-        y += MENU_ROW_H;
+        y += WELCOME_ROW_H;
     }
 
     /* Footer hints */
@@ -1885,12 +1889,8 @@ void synui_render_bt(syn_server_t *s)
 }
 
 /* ── Start menu (menu.c) ─────────────────────────────────── */
-
-#define MENU_W        420
-#define MENU_ROW_H     24
-#define MENU_TOP       92    /* baseline of the first row */
-#define MENU_FOOTER    46
-#define MENU_PAD       18
+/* The geometry lives in synui.h: menu.c hit-tests the pointer and clamps the
+ * scroll against the same numbers this draws with. */
 
 void synui_render_menu(syn_server_t *s)
 {
@@ -1901,15 +1901,28 @@ void synui_render_menu(syn_server_t *s)
         return;
     }
 
+    /* The *usable* box, not the output: it is the output minus the layer-shell
+     * exclusive zones, so its top-left corner is the pixel under the left end of
+     * waybar — which is where the SYNAPSE button is. Anchoring there is what
+     * makes the menu drop out of the button that opens it instead of appearing
+     * in the middle of the screen with no relationship to anything. Reading the
+     * bar's height off the exclusive zone rather than hard-coding 28 means a
+     * bar that moves or resizes takes the menu with it. */
     struct wlr_box ob;
-    get_output_box(s, &ob);
+    server_usable_box(s, &ob);
 
     int rows = m->view_count < MENU_ROWS ? m->view_count : MENU_ROWS;
     if (rows < 1) rows = 1;                 /* "no matches" still needs a line */
 
     int pw = MENU_W;
     int ph = MENU_TOP + rows * MENU_ROW_H + MENU_FOOTER;
-    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+    int px = ob.x, py = ob.y;
+    /* A short output could leave the footer off the bottom; ride up if so. */
+    if (py + ph > ob.y + ob.height) py = ob.y + ob.height - ph;
+    if (py < ob.y) py = ob.y;
+
+    /* What the pointer hit-tests measure against. */
+    m->x = px; m->y = py; m->w = pw; m->h = ph;
 
     wlr_scene_node_set_position(&s->menu_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->menu_ui.tree->node, true);
@@ -1931,10 +1944,20 @@ void synui_render_menu(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    /* Title doubles as the breadcrumb, so a submenu says which one it is and
+     * that there is a level above it to go back to. The page name comes from a
+     * .desktop's Categories, but only ever as one of CATEGORIES' own display
+     * strings — never third-party text — so it is safe to draw. */
     cairo_set_font_size(cr, 15);
     cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
     cairo_move_to(cr, MENU_PAD, 30);
     cairo_show_text(cr, "SYNAPSE");
+    if (m->page[0]) {
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_show_text(cr, "  \xe2\x80\xba  ");
+        cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+        cairo_show_text(cr, m->page);
+    }
 
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
     cairo_set_line_width(cr, 1);
@@ -1956,9 +1979,7 @@ void synui_render_menu(syn_server_t *s)
         cairo_show_text(cr, "Type to search\xe2\x80\xa6");
     }
 
-    int first = m->scroll;
-    if (first > m->view_count - MENU_ROWS) first = m->view_count - MENU_ROWS;
-    if (first < 0) first = 0;
+    int first = menu_first_row(m);
 
     if (m->view_count == 0) {
         cairo_set_font_size(cr, 13);
@@ -1982,20 +2003,29 @@ void synui_render_menu(syn_server_t *s)
         int sel = (first + i == m->selected);
         if (sel) {
             cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
-            cairo_rectangle(cr, MENU_PAD - 8, ry - 15, pw - 2 * (MENU_PAD - 8),
-                            MENU_ROW_H - 3);
+            cairo_rectangle(cr, MENU_PAD - 8, ry - MENU_ROW_ASC,
+                            pw - 2 * (MENU_PAD - 8), MENU_ROW_H - 3);
             cairo_fill(cr);
         }
 
         cairo_set_font_size(cr, 14);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
+
+        /* A submenu says so with the usual arrow, and the label is clipped short
+         * of it so a long category can never run underneath it. */
+        int text_w = pw - MENU_PAD - 16;
+        if (e->kind == MENU_ROW_SUBMENU) {
+            text_w -= 20;
+            cairo_move_to(cr, pw - MENU_PAD - 8, ry);
+            cairo_show_text(cr, "\xe2\x80\xba");
+        }
         cairo_move_to(cr, MENU_PAD + 8, ry);
         /* draw_clipped, not cairo_show_text: a long app name would otherwise
          * run past the panel edge. It truncates on a character boundary — a cut
          * through a multi-byte sequence would poison the context and blank
          * every row below this one. */
-        draw_clipped(cr, MENU_PAD + 8, ry, pw - MENU_PAD - 16, e->label);
+        draw_clipped(cr, MENU_PAD + 8, ry, text_w, e->label);
     }
 
     /* Say so when the list runs off the window rather than silently truncating:
@@ -2015,7 +2045,11 @@ void synui_render_menu(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, MENU_PAD, ph - 14);
-    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter launch \xc2\xb7 Esc close");
+    /* The hint tracks where you are: at the root there is nothing to go back
+     * to, and in a submenu the way out is the thing worth saying. */
+    cairo_show_text(cr, m->page[0]
+        ? "Enter launch \xc2\xb7 \xe2\x86\x90 back \xc2\xb7 Esc close"
+        : "\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 \xe2\x86\x92 open \xc2\xb7 Enter launch \xc2\xb7 Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->menu_ui.text_buf, s->menu_ui.tree, buf);

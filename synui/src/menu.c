@@ -54,7 +54,9 @@ static const char *const APP_DIRS_SYSTEM[] = {
  * symlink loop in a user-writable dir would otherwise hang the compositor. */
 #define MENU_SCAN_DEPTH_MAX  8
 
-#define MENU_CAT_MAX  24
+/* The submenu the fixed rows that did not fit the root file under. Its name is
+ * a display string like the categories', so nothing has to special-case it. */
+#define MENU_PAGE_TOOLS  "System Tools"
 
 /* XDG main categories → the submenu they file under, in test order. An app
  * usually lists several ("Game;Emulator;"), so precedence matters: the
@@ -370,64 +372,96 @@ static int app_cmp(const void *a, const void *b)
 
 /* ── Build ───────────────────────────────────────────────── */
 
-static void menu_add(syn_menu_t *m, int kind, const char *label,
+/* Append a row to page. Rows of a page need not be contiguous in entries[] —
+ * only in order relative to each other, since a page's view is entries[] in
+ * array order with the other pages filtered out. */
+static void menu_add(syn_menu_t *m, const char *page, int kind, const char *label,
                      const char *action, const char *cmd)
 {
     if (m->count >= MENU_ENTRIES_MAX) return;
     syn_menu_entry_t *e = &m->entries[m->count++];
     e->kind = kind;
     snprintf(e->label, sizeof(e->label), "%s", label);
+    snprintf(e->menu, sizeof(e->menu), "%s", page);
+    e->menu_to[0] = '\0';
     snprintf(e->action, sizeof(e->action), "%s", action ? action : "");
     snprintf(e->cmd, sizeof(e->cmd), "%s", cmd ? cmd : "");
+}
+
+/* A root row that opens page `to`. */
+static void menu_add_submenu(syn_menu_t *m, const char *label, const char *to)
+{
+    if (m->count >= MENU_ENTRIES_MAX) return;
+    menu_add(m, "", MENU_ROW_SUBMENU, label, NULL, NULL);
+    snprintf(m->entries[m->count - 1].menu_to,
+             sizeof(m->entries[0].menu_to), "%s", to);
 }
 
 /* The fixed rows. Were STATIC_ITEMS/POWER_ITEMS in the retired
  * synapse-menu-gen.py, with one difference that matters: the panels are bind
  * *actions* here. waybar had to reach synui by running `wtype -M logo -k c` —
  * pressing the keybind from outside, because there is no other IPC into the
- * compositor. In-process there is no need to pretend to be a keyboard. */
+ * compositor. In-process there is no need to pretend to be a keyboard.
+ *
+ * The split across two pages is by how often a row is wanted, not by what it
+ * is: the three at the root are the ones worth a keystroke, and the rest are a
+ * drill-in. Search reaches all of them either way. */
 static void menu_add_static(syn_menu_t *m)
 {
-    menu_add(m, MENU_ROW_HEADER, "SYSTEM", NULL, NULL);
-    menu_add(m, MENU_ROW_ITEM, "Control Panel",   "control", NULL);
-    menu_add(m, MENU_ROW_ITEM, "Task Manager",    "taskmgr", NULL);
-    menu_add(m, MENU_ROW_ITEM, "Terminal",        NULL, "foot");
-    menu_add(m, MENU_ROW_ITEM, "AI Shell (synsh)", NULL, "foot synsh");
-    menu_add(m, MENU_ROW_ITEM, "System Status",   NULL, "foot --hold syn status");
-    menu_add(m, MENU_ROW_ITEM, "Network Setup",   NULL, "foot -e nmtui");
+    menu_add(m, "", MENU_ROW_HEADER, "SYSTEM", NULL, NULL);
+    menu_add(m, "", MENU_ROW_ITEM, "Control Panel",   "control", NULL);
+    menu_add(m, "", MENU_ROW_ITEM, "Task Manager",    "taskmgr", NULL);
+    menu_add(m, "", MENU_ROW_ITEM, "Terminal",        NULL, "foot");
+    menu_add_submenu(m, MENU_PAGE_TOOLS, MENU_PAGE_TOOLS);
+}
+
+static void menu_add_tools(syn_menu_t *m)
+{
+    const char *p = MENU_PAGE_TOOLS;
+    menu_add(m, p, MENU_ROW_ITEM, "AI Shell (synsh)", NULL, "foot synsh");
+    menu_add(m, p, MENU_ROW_ITEM, "System Status",   NULL, "foot --hold syn status");
+    menu_add(m, p, MENU_ROW_ITEM, "Network Setup",   NULL, "foot -e nmtui");
     /* cups ships a complete printer admin UI on localhost:631, so there is no
      * GUI to write or package — this is the whole printer story. cups.socket is
      * socket-activated, so opening the page is also what starts the daemon. */
-    menu_add(m, MENU_ROW_ITEM, "Printers",         NULL, "xdg-open http://localhost:631/");
+    menu_add(m, p, MENU_ROW_ITEM, "Printers",         NULL, "xdg-open http://localhost:631/");
     /* A full -Syu, never a bare -Sy: syncing the databases and then installing
      * anything less than everything is a partial upgrade, which on Arch means a
      * 404 on some dependency at best and a half-upgraded system at worst.
      * --hold so the window survives the command; foot gives sudo a pty. */
-    menu_add(m, MENU_ROW_ITEM, "Update System",   NULL, "foot --hold sudo pacman -Syu");
+    menu_add(m, p, MENU_ROW_ITEM, "Update System",   NULL, "foot --hold sudo pacman -Syu");
 }
 
 static void menu_add_power(syn_menu_t *m)
 {
-    menu_add(m, MENU_ROW_HEADER, "POWER", NULL, NULL);
-    menu_add(m, MENU_ROW_ITEM, "Lock Screen", "lock", NULL);
-    menu_add(m, MENU_ROW_ITEM, "Log Out",     "quit", NULL);
-    menu_add(m, MENU_ROW_ITEM, "Reboot",      NULL, "sudo systemctl reboot");
-    menu_add(m, MENU_ROW_ITEM, "Shut Down",   NULL, "sudo systemctl poweroff");
+    menu_add(m, "", MENU_ROW_HEADER, "POWER", NULL, NULL);
+    menu_add(m, "", MENU_ROW_ITEM, "Lock Screen", "lock", NULL);
+    menu_add(m, "", MENU_ROW_ITEM, "Log Out",     "quit", NULL);
+    menu_add(m, "", MENU_ROW_ITEM, "Reboot",      NULL, "sudo systemctl reboot");
+    menu_add(m, "", MENU_ROW_ITEM, "Shut Down",   NULL, "sudo systemctl poweroff");
 }
 
+/* Root gets one row per category, each opening a page of that category's apps.
+ * Flat, every app was a root row under one of ~10 headers: 126 apps against 22
+ * drawn rows, so five screens of scrolling to reach the bottom of a list whose
+ * shape you cannot see. The categories were already there as headers — this
+ * makes them the thing you choose, so the root is one screen and no app is more
+ * than one keystroke deeper than it was. */
 static void menu_build(syn_server_t *s)
 {
     syn_menu_t *m = &s->menu;
     m->count = 0;
 
-    menu_add_static(m);
-
     /* The scan is ~1500 dirents and ~170 opens; measured well under 10ms, which
      * is why it happens at open rather than being cached. A cache would be a
      * second source of truth that can disagree with what is installed — the
-     * exact failure the generated waybar menu shipped. */
+     * exact failure the generated waybar menu shipped. It runs before any row
+     * is emitted now: the root's category rows are not knowable until the apps
+     * have been grouped, and the root has to be built in the order it is drawn. */
     menu_scan_t *sc = calloc(1, sizeof(*sc));
     if (!sc) {                     /* out of memory: still give them the fixed rows */
+        menu_add_static(m);
+        menu_add_tools(m);
         menu_add_power(m);
         return;
     }
@@ -446,22 +480,28 @@ static void menu_build(syn_server_t *s)
 
     qsort(sc->apps, sc->count, sizeof(sc->apps[0]), app_cmp);
 
+    menu_add_static(m);
+
+    /* The apps are sorted by category, so a change of category is a new group.
+     * The root's row for it goes in as the group opens; the apps themselves go
+     * on that group's own page. */
+    menu_add(m, "", MENU_ROW_HEADER, "APPLICATIONS", NULL, NULL);
     const char *cur = NULL;
     for (int i = 0; i < sc->count; i++) {
         if (!cur || strcmp(cur, sc->apps[i].cat) != 0) {
             cur = sc->apps[i].cat;
-            char up[MENU_CAT_MAX];
-            snprintf(up, sizeof(up), "%s", cur);
-            for (char *c = up; *c; c++) *c = (char)toupper((unsigned char)*c);
-            menu_add(m, MENU_ROW_HEADER, up, NULL, NULL);
+            menu_add_submenu(m, cur, cur);
         }
-        menu_add(m, MENU_ROW_ITEM, sc->apps[i].name, NULL, sc->apps[i].cmd);
     }
+
+    menu_add_power(m);
+    menu_add_tools(m);
+    for (int i = 0; i < sc->count; i++)
+        menu_add(m, sc->apps[i].cat, MENU_ROW_ITEM, sc->apps[i].name,
+                 NULL, sc->apps[i].cmd);
 
     wlr_log(WLR_DEBUG, "synui: menu: %d apps scanned, %d rows", sc->count, m->count);
     free(sc);
-
-    menu_add_power(m);
 }
 
 /* ── Filter ──────────────────────────────────────────────── */
@@ -475,17 +515,26 @@ static int label_matches(const char *label, const char *needle)
     return 0;
 }
 
-/* Rebuild view[] from filter[]. With no filter the view is every row, headers
- * included; with one it is matching items only — a section heading floating
- * above no rows is noise, and the filtered list is short enough not to need
- * signposting. */
+/* Rebuild view[] from filter[] and the open page.
+ *
+ * Unfiltered, the view is the current page's rows, headers included. Filtered,
+ * it is every matching item on every page — searching only the page you are
+ * looking at would make the submenus a place things can hide, which is the one
+ * thing they must not be. The submenu rows themselves drop out: they launch
+ * nothing, and "Games" matching "gam" ahead of the games is not an answer to
+ * what was typed. Headers drop out too — a section heading floating above no
+ * rows is noise, and the filtered list is short enough not to need signposting. */
 static void menu_refilter(syn_menu_t *m)
 {
     m->view_count = 0;
     for (int i = 0; i < m->count; i++) {
-        if (m->entries[i].kind == MENU_ROW_HEADER && m->filter[0]) continue;
-        if (m->entries[i].kind == MENU_ROW_ITEM &&
-            !label_matches(m->entries[i].label, m->filter)) continue;
+        const syn_menu_entry_t *e = &m->entries[i];
+        if (m->filter[0]) {
+            if (e->kind != MENU_ROW_ITEM) continue;
+            if (!label_matches(e->label, m->filter)) continue;
+        } else {
+            if (strcmp(e->menu, m->page) != 0) continue;
+        }
         m->view[m->view_count++] = i;
     }
 
@@ -499,11 +548,33 @@ static void menu_refilter(syn_menu_t *m)
     m->scroll = 0;
 }
 
+/* Open a submenu page, or (page = "") go back to the root. Backing out restores
+ * where the root was left, so drilling in to look at something and coming back
+ * does not also lose your place in the list you came from. */
+static void menu_open_page(syn_menu_t *m, const char *page)
+{
+    int to_root = !page[0];
+    if (!m->page[0] && !to_root) {
+        m->root_selected = m->selected;
+        m->root_scroll   = m->scroll;
+    }
+    snprintf(m->page, sizeof(m->page), "%s", page);
+    m->filter[0] = '\0';
+    menu_refilter(m);
+    if (to_root && m->root_selected < m->view_count) {
+        m->selected = m->root_selected;
+        m->scroll   = m->root_scroll;
+    }
+}
+
 /* ── Panel ───────────────────────────────────────────────── */
 
 void menu_show(syn_server_t *s)
 {
     s->menu.filter[0] = '\0';
+    s->menu.page[0] = '\0';           /* always opens at the root */
+    s->menu.root_selected = 0;
+    s->menu.root_scroll   = 0;
     menu_build(s);
     menu_refilter(&s->menu);
     s->menu.visible = 1;
@@ -521,6 +592,20 @@ void menu_toggle(syn_server_t *s)
 {
     if (s->menu.visible) menu_hide(s);
     else                 menu_show(s);
+}
+
+/* The view[] row drawn at the top of the panel. render.c draws from here and the
+ * pointer hit-test measures from here, so it is one function rather than the
+ * same clamp written out in both — a hit-test that disagreed with the drawing by
+ * a row would launch the neighbour of whatever was clicked. */
+int menu_first_row(const syn_menu_t *m)
+{
+    int max_scroll = m->view_count - MENU_ROWS;
+    if (max_scroll < 0) max_scroll = 0;
+    int first = m->scroll;
+    if (first > max_scroll) first = max_scroll;
+    if (first < 0) first = 0;
+    return first;
 }
 
 /* Keep the selection inside the drawn window. */
@@ -555,6 +640,12 @@ static void menu_activate(syn_server_t *s)
     if (m->selected < 0 || m->selected >= m->view_count) return;
 
     syn_menu_entry_t *e = &m->entries[m->view[m->selected]];
+
+    if (e->kind == MENU_ROW_SUBMENU) {
+        menu_open_page(m, e->menu_to);
+        synui_render_menu(s);
+        return;
+    }
     if (e->kind != MENU_ROW_ITEM) return;
 
     /* Hide before acting. A bind action may open another panel, and rendering
@@ -565,6 +656,106 @@ static void menu_activate(syn_server_t *s)
     if (e->action[0]) synui_binding_execute(s, e->action, NULL);
     else if (e->cmd[0]) synui_spawn(e->cmd);
 }
+
+/* ── Pointer ─────────────────────────────────────────────── */
+/* The menu was keyboard-only, which was never the intent: it went native to be
+ * *able* to take the keyboard, not to stop taking the mouse. Nothing here is a
+ * second way to work the menu — hover moves the same selection the arrows move,
+ * and a click runs the same menu_activate() Enter does.
+ *
+ * The geometry these measure against is whatever the last render wrote to the
+ * panel, so they cannot drift from what is on screen the way a second copy of
+ * the layout constants would. */
+
+static int menu_in_panel(const syn_menu_t *m, double lx, double ly)
+{
+    return lx >= m->x && lx < m->x + m->w && ly >= m->y && ly < m->y + m->h;
+}
+
+/* view[] index under (lx,ly), or -1 for the chrome, a header, or outside. */
+static int menu_row_at(const syn_menu_t *m, double lx, double ly)
+{
+    if (!menu_in_panel(m, lx, ly)) return -1;
+
+    /* A row's text sits on its baseline and its highlight is drawn around it,
+     * so the band starts MENU_ROW_ASC above the first baseline. */
+    double top = m->y + MENU_TOP - MENU_ROW_ASC;
+    if (ly < top) return -1;                       /* the title and search line */
+
+    int i = (int)((ly - top) / MENU_ROW_H);
+    if (i < 0 || i >= MENU_ROWS) return -1;        /* the footer */
+
+    int row = menu_first_row(m) + i;
+    if (row >= m->view_count) return -1;
+    if (m->entries[m->view[row]].kind == MENU_ROW_HEADER) return -1;
+    return row;
+}
+
+/* Pull the selection back inside the drawn window after a wheel scroll. The
+ * highlight is what Enter acts on, so a selection left on a row that has
+ * scrolled away would arm Enter with something you cannot see. */
+static void menu_select_into_view(syn_menu_t *m)
+{
+    int first = menu_first_row(m);
+    int last  = first + MENU_ROWS - 1;
+    if (last >= m->view_count) last = m->view_count - 1;
+    if (m->selected >= first && m->selected <= last) return;
+
+    int dir = m->selected < first ? +1 : -1;
+    int row = m->selected < first ? first : last;
+    while (row >= first && row <= last &&
+           m->entries[m->view[row]].kind == MENU_ROW_HEADER)
+        row += dir;
+    if (row >= first && row <= last) m->selected = row;
+}
+
+void menu_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_menu_t *m = &s->menu;
+    if (!m->visible) return;
+
+    /* Off a row, the highlight stays where it is rather than clearing: the
+     * pointer crossing a header on its way somewhere should not disarm Enter. */
+    int row = menu_row_at(m, lx, ly);
+    if (row < 0 || row == m->selected) return;
+    m->selected = row;
+    synui_render_menu(s);
+}
+
+void menu_click(syn_server_t *s, double lx, double ly)
+{
+    syn_menu_t *m = &s->menu;
+    if (!m->visible) return;
+
+    if (!menu_in_panel(m, lx, ly)) { menu_hide(s); return; }
+
+    int row = menu_row_at(m, lx, ly);
+    if (row < 0) return;             /* the panel's own chrome: swallowed */
+    m->selected = row;
+    menu_activate(s);
+}
+
+void menu_scroll(syn_server_t *s, double delta)
+{
+    syn_menu_t *m = &s->menu;
+    if (!m->visible || delta == 0) return;
+    if (m->view_count <= MENU_ROWS) return;      /* nothing to scroll to */
+
+    /* Three rows a notch — the conventional step, and enough that a long
+     * category is a few flicks rather than a grind. The delta's magnitude is
+     * deliberately ignored: it is in the source's own units (a wheel notch, a
+     * touchpad's pixels), and only its sign means the same thing in both. */
+    m->scroll += delta > 0 ? 3 : -3;
+
+    int max_scroll = m->view_count - MENU_ROWS;
+    if (m->scroll > max_scroll) m->scroll = max_scroll;
+    if (m->scroll < 0) m->scroll = 0;
+
+    menu_select_into_view(m);
+    synui_render_menu(s);
+}
+
+/* ── Keys ────────────────────────────────────────────────── */
 
 int menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
@@ -578,10 +769,26 @@ int menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     switch (sym) {
     case XKB_KEY_Escape:
-        /* Esc backs out one step: it clears a filter first and only closes an
-         * unfiltered menu, so a typo costs a keystroke rather than the menu. */
+        /* Esc backs out one step at a time — filter, then submenu, then the
+         * menu itself — so a typo or a wrong turn costs a keystroke rather than
+         * everything you had done to get here. */
         if (m->filter[0]) { m->filter[0] = '\0'; menu_refilter(m); synui_render_menu(s); }
+        else if (m->page[0]) { menu_open_page(m, ""); synui_render_menu(s); }
         else              menu_hide(s);
+        return 1;
+
+    /* Right/Left drill in and back out, as in any menu with submenus. Right on
+     * a leaf does nothing rather than launching it — Enter is the only key that
+     * runs anything, so walking the list with the arrows can never start a
+     * program by accident. Left at the root does nothing for the same reason:
+     * a stray press should not throw away everything you had open. */
+    case XKB_KEY_Right:
+        if (m->selected >= 0 && m->selected < m->view_count &&
+            m->entries[m->view[m->selected]].kind == MENU_ROW_SUBMENU)
+            menu_activate(s);
+        return 1;
+    case XKB_KEY_Left:
+        if (m->page[0] && !m->filter[0]) { menu_open_page(m, ""); synui_render_menu(s); }
         return 1;
 
     case XKB_KEY_Up:

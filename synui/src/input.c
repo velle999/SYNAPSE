@@ -1428,6 +1428,11 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     if (s->dockmenu.visible)
         dockmenu_motion(s, s->cursor->x, s->cursor->y);
 
+    /* Same for the start menu: hovering a row selects it, so the pointer and
+     * the arrow keys drive one highlight rather than two. */
+    if (s->menu.visible)
+        menu_motion(s, s->cursor->x, s->cursor->y);
+
     /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);
 
@@ -1526,6 +1531,17 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
          * actually hit, so the corner is otherwise untouched. */
         if (button == BTN_LEFT && notif_click(s, s->cursor->x, s->cursor->y))
             return;
+
+        /* The start menu is modal for the pointer while open, as the dock's
+         * context menu is: a left click runs the row under the cursor (and a
+         * click off the panel dismisses it, which is how every menu closes),
+         * any other button just dismisses. Above the dock in this order because
+         * it is drawn above it and can cover its icons. */
+        if (s->menu.visible) {
+            if (button == BTN_LEFT) menu_click(s, s->cursor->x, s->cursor->y);
+            else                    menu_hide(s);
+            return;
+        }
 
         /* The dock context menu is modal for the pointer while open: a left
          * click runs the item under the cursor, any other click dismisses. */
@@ -1682,6 +1698,17 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
     syn_server_t *s = wl_container_of(listener, s, cursor_axis);
     struct wlr_pointer_axis_event *event = data;
     notify_activity(s);
+
+    /* The start menu takes the wheel while it is up — it is modal for the
+     * pointer, and a scroll landing on the window behind it would act on
+     * something the menu is covering. Vertical only: nothing here scrolls
+     * sideways, so a horizontal flick is not the menu's to swallow. */
+    if (s->menu.visible &&
+        event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        menu_scroll(s, event->delta);
+        return;
+    }
+
     wlr_seat_pointer_notify_axis(s->seat, event->time_msec,
         event->orientation, event->delta, event->delta_discrete, event->source,
         event->relative_direction);
