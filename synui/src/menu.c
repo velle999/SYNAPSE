@@ -395,6 +395,10 @@ static void menu_add_static(syn_menu_t *m)
     menu_add(m, MENU_ROW_ITEM, "AI Shell (synsh)", NULL, "foot synsh");
     menu_add(m, MENU_ROW_ITEM, "System Status",   NULL, "foot --hold syn status");
     menu_add(m, MENU_ROW_ITEM, "Network Setup",   NULL, "foot -e nmtui");
+    /* cups ships a complete printer admin UI on localhost:631, so there is no
+     * GUI to write or package — this is the whole printer story. cups.socket is
+     * socket-activated, so opening the page is also what starts the daemon. */
+    menu_add(m, MENU_ROW_ITEM, "Printers",         NULL, "xdg-open http://localhost:631/");
     /* A full -Syu, never a bare -Sy: syncing the databases and then installing
      * anything less than everything is a partial upgrade, which on Arch means a
      * 404 on some dependency at best and a half-upgraded system at worst.

@@ -62,6 +62,21 @@ gamescope
 waybar
 wtype
 
+# Printing. SynapseOS shipped Dolphin and Firefox and no way to print from
+# either. cups brings its own web admin UI on localhost:631, so there is no
+# printer-setup GUI to write or ship — the start menu just opens it.
+#
+# cups pulls avahi itself, which is most of what makes this work: a printer made
+# since ~2015 speaks IPP Everywhere / AirPrint, so cups discovers it over mDNS
+# and prints with no driver at all. nss-mdns is the glibc half of that — without
+# it nothing resolves the printer's own .local name. ghostscript is what renders
+# PDF for printers that don't do it themselves; cups-pdf adds a "Print to PDF"
+# printer, which is the one every machine should have.
+cups
+cups-pdf
+ghostscript
+nss-mdns
+
 # Bluetooth. bluez is the daemon (org.bluez); bluez-utils is bluetoothctl, which
 # synui does not need — it talks BlueZ over sd-bus itself (synui/src/bt.c) — but
 # which is the only way to debug a radio from a shell when the panel says no.

@@ -480,6 +480,7 @@ case "$DE_CHOICE" in
         arch-chroot /mnt pacman -S --noconfirm \
             greetd greetd-tuigreet waybar swaybg python wtype \
             bluez bluez-utils \
+            cups cups-pdf ghostscript nss-mdns \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
         success "SynapseUI selected (included)"
         ;;
@@ -732,6 +733,16 @@ arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 # Bluetooth: bluez ships the unit but enables nothing. Without this the radio
 # stays down and synui's panel (Super+B) correctly reports no adapter.
 arch-chroot /mnt systemctl enable bluetooth 2>/dev/null || true
+# Printing. cups.socket, not cups.service: socket activation means no daemon
+# runs until something actually prints. avahi is what finds driverless
+# (IPP Everywhere / AirPrint) printers, which is most printers made since ~2015.
+arch-chroot /mnt systemctl enable cups.socket avahi-daemon 2>/dev/null || true
+# The glibc half of mDNS. Without it cups discovers the printer and then cannot
+# resolve its .local name, so discovery works and printing fails.
+if [ -f /mnt/etc/nsswitch.conf ] && ! grep -q mdns_minimal /mnt/etc/nsswitch.conf; then
+    sed -i '/^hosts:/s/ myhostname/ myhostname mdns_minimal [NOTFOUND=return]/' \
+        /mnt/etc/nsswitch.conf
+fi
 arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
 arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 # Module-signature policy: safe to enable — only enforces when Secure Boot is
