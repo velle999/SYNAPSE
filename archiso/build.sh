@@ -430,6 +430,7 @@ PACKAGES=(
     nexus-chat
     tepris
     chibi
+    vibe
 )
 
 # Create build user for makepkg (can't run as root)
@@ -470,6 +471,11 @@ create_source_tarball() {
     [ -d "${pkg}/hooks" ]     && items+=("${pkg}/hooks/")
     [ -d "${pkg}/tools" ]     && items+=("${pkg}/tools/")
     [ -f "${pkg}/synapse_kmod.install" ] && items+=("${pkg}/synapse_kmod.install")
+    # vibe extras: a pure-Python app (entry point + package + launcher), not the
+    # src/include/meson layout the C packages use.
+    [ -f "${pkg}/main.py" ]    && items+=("${pkg}/main.py")
+    [ -d "${pkg}/vibe" ]       && items+=("${pkg}/vibe/")
+    [ -d "${pkg}/packaging" ]  && items+=("${pkg}/packaging/")
     # Top-level docs: PKGBUILDs install them (synapse_kmod ships HARDENING.md to
     # /usr/share/doc), so omitting them fails package() with "cannot stat".
     # Globbed rather than named, because this collector is a SECOND COPY of the

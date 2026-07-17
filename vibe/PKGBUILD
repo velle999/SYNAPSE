@@ -1,0 +1,56 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+pkgname=vibe
+pkgver=0.1.0
+pkgrel=2
+pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
+arch=('any')
+url="https://github.com/velle999/vibe"
+# Upstream ships no LICENSE file, so there is nothing to install and nothing to
+# truthfully claim. Add one upstream and set this properly.
+license=('unknown')
+
+# Pure-Python runtime deps come from the Arch repos — no venv, no vendoring.
+# llama-cpp-python is NOT pulled: the synapd backend (the default here) reuses
+# the model already resident on the GPU, so Vibe needs no model runtime of its
+# own. The two direct deps are what the app actually imports.
+depends=(
+    'python'
+    'python-rich'            # streaming TUI output
+    'python-prompt_toolkit'  # REPL input
+    'synapd'                 # default backend — the resident model on SynapseOS
+)
+optdepends=(
+    'ollama: alternative backend (run with VIBE_BACKEND=ollama)'
+    'python-llama-cpp: direct-GGUF backend (run with VIBE_BACKEND=llama_cpp)'
+)
+
+# Built from the local working tree (the synapd backend is not upstream yet) via
+# packaging/build.sh, which tars main.py + the vibe/ package + the launcher.
+source=("vibe-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    cd "$srcdir/vibe-0.1.0"
+
+    install -d "$pkgdir/usr/lib/vibe/app"
+    # The app: entry point + the vibe package. requirements.txt/setup.sh/.venv
+    # and the upstream dev launcher are dev-only and deliberately not shipped.
+    cp -a main.py vibe "$pkgdir/usr/lib/vibe/app/"
+
+    # Never bake a build-host __pycache__ or a project-local .vibe/ (runtime
+    # session memory) into the package.
+    rm -rf "$pkgdir/usr/lib/vibe/app/vibe/__pycache__" \
+           "$pkgdir/usr/lib/vibe/app/.vibe"
+
+    # Pure Python, but the app dir is read-only at runtime so .pyc can't be
+    # written on import — precompile now to save the cold-start parse cost.
+    # -s/-p rewrite the embedded source path from the build $pkgdir to the real
+    # installed /usr/... path, so tracebacks are right and no $pkgdir leaks into
+    # the shipped files. (A python minor bump just recompiles in memory; no break.)
+    python -m compileall -q -s "$pkgdir" -p / "$pkgdir/usr/lib/vibe/app" || true
+
+    # Launcher → /usr/bin/vibe. Defaults VIBE_BACKEND=synapd and puts the app on
+    # PYTHONPATH. Installed to /usr/bin (NOT ~/.local/bin) so the synui session
+    # PATH actually sees it.
+    install -Dm755 packaging/vibe-launcher.sh "$pkgdir/usr/bin/vibe"
+}

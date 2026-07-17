@@ -42,6 +42,9 @@ nexus-chat/*.min.js
 # built packages
 *.pkg.tar.zst
 *.pkg.tar.xz
+# python bytecode (vibe is vendored in-tree; its .pyc are build/runtime cruft)
+__pycache__/
+*.pyc
 
 # ── meson / ninja build dirs ────────────────────────────────
 build/

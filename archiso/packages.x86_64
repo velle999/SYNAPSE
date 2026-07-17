@@ -54,6 +54,7 @@ synapse_kmod
 nexus-chat
 tepris
 chibi
+vibe
 foot
 firefox
 # File manager. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
