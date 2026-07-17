@@ -2,7 +2,7 @@
 """Fail if syn-install.sh's embedded waybar files have drifted from the repo's.
 
 syn-install.sh writes the new user's ~/.config/waybar by heredoc, so it carries
-its own copy of synapse-menu-gen.py and network-menu.xml. A comment asking the
+its own copy of network-menu.xml. A comment asking the
 next person to "keep this in sync" is not a mechanism — the copies drifted, and
 the drift is what shipped a menu whose items launched the wrong application (the
 generator could not parse a config.jsonc that had grown comments, failed
@@ -19,7 +19,6 @@ INSTALLER = BASE / "syn-install" / "syn-install.sh"
 
 # heredoc marker -> repo file that must match it byte for byte
 EMBEDDED = {
-    "GENEOF": BASE / "waybar" / "synapse-menu-gen.py",
     "NETMENUEOF": BASE / "waybar" / "network-menu.xml",
 }
 

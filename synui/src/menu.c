@@ -18,8 +18,10 @@
  * The entry list is scanned from the installed .desktop files every time the
  * menu opens rather than read from a generated file — see syn_menu_t. The rules
  * for reading them (field codes, escapes, Terminal=, Path=, Wine) are the ones
- * waybar/synapse-menu-gen.py already worked out the hard way; this is a port of
- * that behaviour, not a fresh guess at it.
+ * waybar/synapse-menu-gen.py worked out the hard way over many bugs; this is a
+ * port of that behaviour, not a fresh guess at it. That generator has since been
+ * deleted — this file replaced it, and its history is the place to look for why
+ * any given rule here exists.
  *
  * SynapseOS Project — GPLv2
  * https://github.com/velle999/SYNAPSE
@@ -57,7 +59,7 @@ static const char *const APP_DIRS_SYSTEM[] = {
 /* XDG main categories → the submenu they file under, in test order. An app
  * usually lists several ("Game;Emulator;"), so precedence matters: the
  * catch-alls (Settings/System/Utility) must come last or they swallow half the
- * menu. Mirrors CATEGORIES in synapse-menu-gen.py. */
+ * menu. Was CATEGORIES in the retired synapse-menu-gen.py. */
 static const struct { const char *key, *display; } CATEGORIES[] = {
     { "Game",        "Games" },
     { "Development", "Development" },
@@ -379,11 +381,11 @@ static void menu_add(syn_menu_t *m, int kind, const char *label,
     snprintf(e->cmd, sizeof(e->cmd), "%s", cmd ? cmd : "");
 }
 
-/* The fixed rows. Mirrors STATIC_ITEMS/POWER_ITEMS in synapse-menu-gen.py, with
- * one difference that matters: the panels are bind *actions* here. waybar had to
- * reach synui by running `wtype -M logo -k c` — pressing the keybind from
- * outside, because there is no other IPC into the compositor. In-process there
- * is no need to pretend to be a keyboard. */
+/* The fixed rows. Were STATIC_ITEMS/POWER_ITEMS in the retired
+ * synapse-menu-gen.py, with one difference that matters: the panels are bind
+ * *actions* here. waybar had to reach synui by running `wtype -M logo -k c` —
+ * pressing the keybind from outside, because there is no other IPC into the
+ * compositor. In-process there is no need to pretend to be a keyboard. */
 static void menu_add_static(syn_menu_t *m)
 {
     menu_add(m, MENU_ROW_HEADER, "SYSTEM", NULL, NULL);
