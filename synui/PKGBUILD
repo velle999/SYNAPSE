@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=111
+pkgrel=112
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -72,6 +72,13 @@ package() {
     # it pam_start("synui-lock") fails and the screen can never be unlocked.
     install -Dm644 config/pam/synui-lock \
         "$pkgdir/etc/pam.d/synui-lock"
+
+    # Laptop lid policy: close = suspend (synui locks first via its before-sleep
+    # inhibitor), ignored when docked to an external display. logind's own
+    # defaults, made explicit as SynapseOS policy. A drop-in, so it layers over
+    # the stock logind.conf without replacing a file pacman would then own.
+    install -Dm644 config/logind.conf.d/synapse-lid.conf \
+        "$pkgdir/etc/systemd/logind.conf.d/synapse-lid.conf"
 
     # The bar's config, and the wrapper that points waybar at it.
     #
