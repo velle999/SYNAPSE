@@ -17,11 +17,14 @@
 #
 # Options:
 #   --no-model      Skip model download (build ISO without embedded model)
-#   --gpu=TYPE      Build llama.cpp with GPU backend: cuda, rocm, or auto.
-#                   Default is CPU-only: a GPU build links the shipped
-#                   libggml against the BUILD HOST's driver stack
-#                   (libcuda.so.1), and synapd dies with exit 127 on any
-#                   machine without that driver — including every VM.
+#   --gpu=TYPE      Build llama.cpp with GPU backend: cuda, rocm, vulkan, or
+#                   auto. Default is CPU-only: a CUDA/ROCm build links the
+#                   shipped libggml against the BUILD HOST's driver stack
+#                   (libcuda.so.1 / rocblas), and synapd dies with exit 127 on
+#                   any machine without that driver — including every VM.
+#                   'vulkan' (AMD/Intel) is the exception: it links only the
+#                   Vulkan loader, loads with no GPU, and one build runs on any
+#                   AMD/Intel card — so it is safe to offer broadly.
 #   --no-gpu        (default; kept for compatibility)
 #   --llama-only    Build and stage llama.cpp, then stop (no packages, no ISO).
 #                   This is the recovery path for the local GPU runtime:
@@ -178,9 +181,13 @@ if [[ "$WITH_GPU" == "auto" ]]; then
     if lspci 2>/dev/null | grep -qi "nvidia"; then
         WITH_GPU="cuda"
         log "Detected NVIDIA GPU — building llama.cpp with CUDA"
-    elif lspci 2>/dev/null | grep -qi "amd\|radeon"; then
-        WITH_GPU="rocm"
-        log "Detected AMD GPU — building llama.cpp with ROCm"
+    elif lspci 2>/dev/null | grep -qiE "amd|radeon|advanced micro devices"; then
+        # Vulkan, not ROCm: one build covers every AMD card (GCN/RDNA/APU) with
+        # no per-arch compile and only the mesa RADV ICD at runtime. ROCm stays
+        # an explicit opt-in (--gpu=rocm) for a known-supported card wanting
+        # peak throughput.
+        WITH_GPU="vulkan"
+        log "Detected AMD GPU — building llama.cpp with Vulkan (portable; --gpu=rocm for peak perf)"
     else
         WITH_GPU="cpu"
         log "No discrete GPU detected — building llama.cpp CPU-only"
@@ -193,7 +200,11 @@ case "$WITH_GPU" in
         warn "GPU build ($WITH_GPU): the ISO will only run AI features on"
         warn "machines with the matching driver installed — synapd will fail"
         warn "to start anywhere else (VMs included). CPU is the safe default." ;;
-    *) err "Invalid --gpu value: $WITH_GPU (expected cuda, rocm, or auto)" ;;
+    vulkan)
+        warn "GPU build (vulkan): synapd loads everywhere (the loader tolerates"
+        warn "no GPU), but only offloads where a Vulkan ICD + GPU exist — else it"
+        warn "runs on the CPU. The ISO still ships CPU by default." ;;
+    *) err "Invalid --gpu value: $WITH_GPU (expected cuda, rocm, vulkan, or auto)" ;;
 esac
 
 # Stage each backend into its own directory. The install is a wipe-and-replace
@@ -300,19 +311,33 @@ build_llama() {
     # default — see the note above build_llama about sticky option() values.
     case "$backend" in
         cuda)
-            CMAKE_ARGS+=("-DGGML_CUDA=ON")
+            CMAKE_ARGS+=("-DGGML_CUDA=ON" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=OFF")
             # Ensure CMake can find CUDA even under sudo (which strips env vars)
             if [[ -d /opt/cuda ]]; then
                 CMAKE_ARGS+=("-DCUDAToolkit_ROOT=/opt/cuda" "-DCMAKE_CUDA_COMPILER=/opt/cuda/bin/nvcc")
             fi
             ;;
-        rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
+        rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DGGML_VULKAN=OFF" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
+        # Vulkan: portable AMD/Intel GPU backend. Needs glslc (shaderc) +
+        # Vulkan headers at build time to compile the compute shaders into
+        # libggml-vulkan.so; both are checked before this runs. No GGML_NATIVE
+        # override — the Vulkan build still carries the CPU fallback path, and
+        # like CUDA it targets machines that specifically asked for this build.
+        vulkan) CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=ON") ;;
         # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
         # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
         # CPU without those extensions — VMs without -cpu host included.
         # The ISO must run on baseline x86-64.
-        cpu)   CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_NATIVE=OFF") ;;
+        cpu)   CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=OFF" "-DGGML_NATIVE=OFF") ;;
     esac
+
+    # The Vulkan backend compiles GLSL compute shaders at build time; without
+    # glslc (shaderc) and the Vulkan headers CMake silently configures GGML_VULKAN
+    # back OFF and produces a CPU build wearing the vulkan name. Catch it here.
+    if [[ "$backend" == "vulkan" ]]; then
+        command -v glslc &>/dev/null \
+            || err "Vulkan build needs 'glslc' — install 'shaderc'. (also: vulkan-headers)"
+    fi
 
     log "CMake configure (GPU: ${backend})..."
     cmake "${LLAMA_DIR}" "${CMAKE_ARGS[@]}"
@@ -330,6 +355,9 @@ build_llama() {
     # A cuda build that produced no cuda backend is a CPU build wearing the
     # wrong name — and it would be packaged as synapse-llama-cuda and installed
     # on exactly the machines that wanted the GPU. Fail loudly instead.
+    if [[ "$backend" == "vulkan" && ! -e "${staging}/usr/lib/libggml-vulkan.so" ]]; then
+        err "Vulkan build produced no libggml-vulkan.so — this is a CPU build. Refusing to package it as synapse-llama-vulkan."
+    fi
     if [[ "$backend" == "cuda" && ! -e "${staging}/usr/lib/libggml-cuda.so" ]]; then
         err "CUDA build produced no libggml-cuda.so — this is a CPU build. Refusing to package it as synapse-llama-cuda."
     fi
@@ -398,9 +426,35 @@ if [[ "$BUILD_CUDA_PKG" == "true" && "$LLAMA_ONLY" != "true" ]]; then
     build_llama cuda no
 fi
 
+# ── The Vulkan package (built, never installed on the ISO) ────
+#
+# The AMD/Intel analogue of the CUDA package above. The ISO ships CPU; this
+# builds synapse-llama-vulkan into the repo so syn-install can switch an
+# AMD/Intel machine onto its GPU. Unlike CUDA the build host only needs the
+# Vulkan shader toolchain (glslc + vulkan-headers), which is small and present
+# on the CI runner — so this is expected to build on every release. Skipped
+# (loudly) if that toolchain is absent, never silently.
+BUILD_VULKAN_PKG=false
+if [[ "$WITH_GPU" == "vulkan" ]]; then
+    BUILD_VULKAN_PKG=false   # ISO backend already vulkan; the one build covers it
+elif command -v glslc &>/dev/null; then
+    BUILD_VULKAN_PKG=true
+else
+    warn "No Vulkan shader compiler (glslc) on this host — synapse-llama-vulkan will NOT be built."
+    warn "The ISO stays valid, but an AMD/Intel machine installed from it will run"
+    warn "inference on the CPU with no way to switch. Install 'shaderc' to fix."
+fi
+
+if [[ "$BUILD_VULKAN_PKG" == "true" && "$LLAMA_ONLY" != "true" ]]; then
+    build_llama vulkan no
+fi
+
 if [[ "$LLAMA_ONLY" == "true" ]]; then
     if [[ "$WITH_GPU" == "cuda" && ! -e "${LLAMA_STAGING}/usr/lib/libggml-cuda.so" ]]; then
         err "CUDA was requested but libggml-cuda.so is not in the staging lib dir — this is a CPU build."
+    fi
+    if [[ "$WITH_GPU" == "vulkan" && ! -e "${LLAMA_STAGING}/usr/lib/libggml-vulkan.so" ]]; then
+        err "Vulkan was requested but libggml-vulkan.so is not in the staging lib dir — this is a CPU build."
     fi
     ok "--llama-only: stopping before packages/ISO."
     log "Next: rebuild + reinstall synapd so it links against this staging, then"
@@ -624,6 +678,14 @@ done
 # build, and what lets anyone switch later.
 if [[ "$BUILD_CUDA_PKG" == "true" ]]; then
     build_package synapse-llama cuda
+fi
+
+# synapse-llama a third time, against the Vulkan staging tree — producing
+# synapse-llama-vulkan for AMD/Intel targets. Same repo, same not-in-ISO rule
+# as the CUDA package: pacstrap resolves synapd's dep to the exact-name CPU
+# package, and syn-install swaps in this one when it detects an AMD/Intel GPU.
+if [[ "$BUILD_VULKAN_PKG" == "true" ]]; then
+    build_package synapse-llama vulkan
 fi
 
 # ── Rebuild local repo database ───────────────────────────────

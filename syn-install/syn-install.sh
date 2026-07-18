@@ -594,6 +594,39 @@ else
     arch-chroot /mnt pacman -S --noconfirm --needed $GPU_PKGS 2>&1 \
         || warn "Video driver install failed — synui may fall back to software rendering"
     success "Video drivers installed"
+
+    # ── Put inference on the GPU (AMD/Intel, via Vulkan) ──────────
+    #
+    # The NVIDIA branch above swaps synapse-llama -> synapse-llama-cuda so an
+    # NVIDIA box doesn't run the whole reason the distro exists on the CPU.
+    # This is the same swap for AMD/Intel, using the portable Vulkan build:
+    # the ICD (vulkan-radeon/vulkan-intel) was just installed, and
+    # synapse-llama-vulkan carries the Vulkan llama backend so synapd offloads.
+    #
+    # No prompt (unlike CUDA's ~4.7 GiB download): the Vulkan runtime is the
+    # loader + the mesa ICD already installed here, so this is a small swap.
+    # Still verify rather than trust — a silent CPU fallback is exactly the
+    # failure this whole path exists to prevent.
+    if [ -n "$HAS_AMD" ] || [ -n "$HAS_INTEL" ]; then
+        if arch-chroot /mnt pacman -Si synapse-llama-vulkan &>/dev/null; then
+            echo "  Enabling GPU inference (synapse-llama-vulkan)..."
+            if arch-chroot /mnt pacman -S --noconfirm synapse-llama-vulkan 2>&1; then
+                if arch-chroot /mnt sh -c '[ -e /usr/lib/libggml-vulkan.so ]'; then
+                    success "GPU inference enabled (synapse-llama-vulkan)"
+                else
+                    warn "synapse-llama-vulkan installed but libggml-vulkan.so is missing —
+  synapd will run on the CPU. Report this."
+                fi
+            else
+                warn "Could not install synapse-llama-vulkan — synapd will run on the
+  CPU. Retry later with: sudo pacman -S synapse-llama-vulkan"
+            fi
+        else
+            warn "This ISO ships no Vulkan build of llama, so synapd will run on the CPU
+  despite the AMD/Intel GPU. (Build the ISO on a host with 'shaderc' +
+  vulkan-headers for synapse-llama-vulkan to exist.)"
+        fi
+    fi
 fi
 
 # ── Configure system ──────────────────────────────────────

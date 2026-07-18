@@ -18,12 +18,20 @@
 # Owned files in /usr/lib + a normal soname lookup remove both failure modes.
 #
 # BACKEND SELECTION (build time):
-#   SYNAPSE_LLAMA_BACKEND=cuda makepkg  ->  synapse-llama-cuda
-#   (unset / anything else)             ->  synapse-llama     (portable CPU)
+#   SYNAPSE_LLAMA_BACKEND=cuda   makepkg  ->  synapse-llama-cuda    (NVIDIA)
+#   SYNAPSE_LLAMA_BACKEND=vulkan makepkg  ->  synapse-llama-vulkan  (AMD/Intel)
+#   (unset / anything else)               ->  synapse-llama         (portable CPU)
 #
-# The CUDA package declares provides+conflicts on synapse-llama, so pacman
+# Every GPU package declares provides+conflicts on synapse-llama, so pacman
 # REFUSES to replace a GPU build with a CPU one rather than doing it silently.
 # That is the whole point: the regression this package prevents was silent.
+#
+# Vulkan vs CUDA: CUDA is NVIDIA-only and its libggml-cuda.so hard-links
+# libcuda.so.1, so it cannot even load without the driver. The Vulkan build
+# links only libvulkan.so.1 (the loader), which loads fine everywhere — it just
+# enumerates zero devices with no GPU — and one build runs on any AMD (GCN /
+# RDNA) or Intel GPU. That is why the ISO can offer it broadly without a
+# per-architecture compile.
 #
 # The libraries themselves are built by archiso/build.sh (which owns the CUDA
 # recipe — the CCCL/cub patch, the arch flags) and staged into
@@ -40,7 +48,8 @@ url="https://github.com/velle999/SYNAPSE"
 license=('MIT')
 options=('!strip' '!debug')
 
-if [ "$_backend" = "cuda" ]; then
+case "$_backend" in
+cuda)
     pkgname=synapse-llama-cuda
     pkgdesc="llama.cpp shared libraries for SynapseOS (CUDA build, ${_llama_ref})"
     # libggml-cuda NEEDs libcudart/libcublas/libcublasLt (cuda) and
@@ -50,11 +59,26 @@ if [ "$_backend" = "cuda" ]; then
     depends=('glibc' 'gcc-libs' 'cuda' 'nvidia-utils')
     provides=('synapse-llama')
     conflicts=('synapse-llama')
-else
+    ;;
+vulkan)
+    pkgname=synapse-llama-vulkan
+    pkgdesc="llama.cpp shared libraries for SynapseOS (Vulkan build, ${_llama_ref})"
+    # libggml-vulkan NEEDs only libvulkan.so.1 (the loader) at load time. The
+    # actual GPU ICD (vulkan-radeon for AMD, vulkan-intel for Intel) is the
+    # driver, installed per-hardware by syn-install — NOT a hard dependency
+    # here, so this package stays installable (and loadable) on any box. The
+    # loader itself loads with no GPU present, so unlike CUDA this can never
+    # exit-127 synapd; it just falls back to the CPU with no device.
+    depends=('glibc' 'gcc-libs' 'vulkan-icd-loader')
+    provides=('synapse-llama')
+    conflicts=('synapse-llama')
+    ;;
+*)
     pkgname=synapse-llama
     pkgdesc="llama.cpp shared libraries for SynapseOS (CPU build, ${_llama_ref})"
     depends=('glibc' 'gcc-libs')
-fi
+    ;;
+esac
 
 package() {
     # Always resolve the BACKEND-NAMED dir, never the bare `llama-staging`
@@ -74,10 +98,16 @@ package() {
         return 1
     }
 
-    # A CUDA package without the CUDA backend library is the exact silent
-    # failure this package exists to prevent. Fail the build instead.
-    if [ "$_backend" = "cuda" ] && [ ! -e "${staging}/usr/lib/libggml-cuda.so" ]; then
-        echo "synapse-llama: backend=cuda but libggml-cuda.so is absent — that staging tree is a CPU build" >&2
+    # A GPU package without its backend library is the exact silent failure
+    # this package exists to prevent (a CPU tree wearing a GPU name, installed
+    # on exactly the machines that wanted the GPU). Fail the build instead.
+    local _need_lib=""
+    case "$_backend" in
+        cuda)   _need_lib=libggml-cuda.so ;;
+        vulkan) _need_lib=libggml-vulkan.so ;;
+    esac
+    if [ -n "$_need_lib" ] && [ ! -e "${staging}/usr/lib/${_need_lib}" ]; then
+        echo "synapse-llama: backend=${_backend} but ${_need_lib} is absent — that staging tree is a CPU build" >&2
         return 1
     fi
 

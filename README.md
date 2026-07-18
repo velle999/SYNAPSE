@@ -224,6 +224,24 @@ synsh
 Any GGUF that llama.cpp can load will work; Mistral 7B Instruct is what the
 prompts are tuned against.
 
+### GPU inference
+
+`synapd` runs on the CPU by default and offloads to the GPU when a matching
+`synapse-llama-*` build is installed. The installer picks the right one for your
+hardware; you can also switch at any time from the desktop's **AI backend** row
+(or `synui-ai-backend gpu`).
+
+| Package | Hardware | Backend | Runtime cost |
+|---|---|---|---|
+| `synapse-llama` | any | CPU | — (the default) |
+| `synapse-llama-cuda` | NVIDIA | CUDA | large (`cuda` ~4.7 GiB) |
+| `synapse-llama-vulkan` | AMD / Intel | Vulkan | tiny (loader + mesa ICD) |
+
+The **Vulkan** build is deliberately portable — one package runs on any AMD
+(GCN/RDNA/APU) or Intel GPU with no per-card compile, which is why the ISO can
+offer it broadly. ROCm/HIP is an opt-in high-performance path for a known AMD
+card: build it with `sudo archiso/build.sh --gpu=rocm`.
+
 ---
 
 ## Building
@@ -239,9 +257,17 @@ local pacman repo, fetches the model, and invokes `mkarchiso`.
 ```bash
 sudo archiso/build.sh              # full build, GPU auto-detected
 sudo archiso/build.sh --no-gpu     # CPU-only llama.cpp — use for QEMU-targeted ISOs
+sudo archiso/build.sh --gpu=vulkan # AMD/Intel GPU backend (portable; needs shaderc)
+sudo archiso/build.sh --gpu=cuda   # NVIDIA GPU backend (needs the cuda toolkit)
 sudo archiso/build.sh --no-model   # slim ISO, model downloaded on first boot
 sudo archiso/build.sh --no-clean   # reuse the previous llama.cpp build
 ```
+
+Regardless of the ISO's own backend, a release build **also** packages a GPU
+build into the repo when the host has the toolchain — `synapse-llama-cuda` if
+`nvcc` is present, `synapse-llama-vulkan` if `glslc` (from `shaderc`) is — so an
+installed machine can switch onto its GPU. Add `shaderc` + `vulkan-headers` to
+the build host to ship the AMD/Intel package.
 
 Output lands in `archiso/out/SynapseOS-<version>-x86_64.iso`.
 
