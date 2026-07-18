@@ -9,6 +9,7 @@
 #
 #   gpu  → --gpu-layers -1  (auto-detect; offloads to the GPU when present)
 #   cpu  → --gpu-layers 0   (force CPU-only)
+#   off  → synapd stopped   (frees the model's RAM/VRAM; no inference at all)
 #
 # Needs root (writes /etc/systemd, restarts synapd) — synui.service runs as
 # root, so the menu action has the privilege it needs.
@@ -22,7 +23,7 @@ STATE=/run/synapd/backend
 MODEL=/var/lib/synapd/models/synapse.gguf
 SOCK=/run/synapd/synapd.sock
 
-usage() { echo "usage: synui-ai-backend {gpu|cpu|toggle|status}" >&2; exit 2; }
+usage() { echo "usage: synui-ai-backend {gpu|cpu|off|toggle|status}" >&2; exit 2; }
 
 current() { [ -r "$STATE" ] && cat "$STATE" || echo auto; }
 
@@ -48,9 +49,32 @@ EOF
     echo "synapd backend → $mode (gpu-layers=$layers)"
 }
 
+# Kill the AI backend outright: stop synapd so the model's RAM/VRAM is freed and
+# no inference happens at all. Deliberately NOT game mode — this must not light
+# the waybar game-mode glyph or inhibit idle; it is only the daemon going down.
+# The drop-in is left in place, so the next gpu/cpu apply restarts synapd on the
+# device it last used. Record "off" so synui labels the row and the toggle cycle
+# knows where it is.
+off_backend() {
+    mkdir -p "$(dirname "$STATE")"
+    echo off > "$STATE"
+    systemctl stop synapd
+    echo "synapd backend → off (stopped)"
+}
+
 case "${1:-status}" in
     status)  current ;;
     gpu|cpu) apply "$1" ;;
-    toggle)  [ "$(current)" = cpu ] && apply gpu || apply cpu ;;
+    off)     off_backend ;;
+    # Cycle GPU → CPU → off → GPU. From auto/unknown, start at CPU (unchanged
+    # first step); the off state is reached one more toggle along than before.
+    toggle)
+        case "$(current)" in
+            gpu) apply cpu ;;
+            cpu) off_backend ;;
+            off) apply gpu ;;
+            *)   apply cpu ;;
+        esac
+        ;;
     *)       usage ;;
 esac

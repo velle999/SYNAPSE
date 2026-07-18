@@ -145,7 +145,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Game Mode",        "Super+G",       "game"      },
     { "Cat Mode",         "Super+Shift+C", "cat"       },
     { "Lock Screen",      "Super+L",       "lock"      },
-    { "AI Backend",       "GPU/CPU",       "ai_backend"},
+    { "AI Backend",       "GPU/CPU/off",   "ai_backend"},
     { "Show At Startup",  "[x]",           "welcome_startup" },
     { "Quit synui",       "Super+Shift+Q", "quit"      },
 };
@@ -166,6 +166,7 @@ static const char *synui_ai_backend_label(void)
     while (n > 0 && (b[n - 1] == '\n' || b[n - 1] == ' ')) b[--n] = 0;
     if (strcmp(b, "gpu") == 0) return "GPU";
     if (strcmp(b, "cpu") == 0) return "CPU";
+    if (strcmp(b, "off") == 0) return "off";
     return "auto";
 }
 

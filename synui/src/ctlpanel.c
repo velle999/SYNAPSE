@@ -80,6 +80,7 @@ static const char *ai_backend_label(void)
     while (n > 0 && (b[n - 1] == '\n' || b[n - 1] == ' ')) b[--n] = 0;
     if (strcmp(b, "gpu") == 0) return "GPU";
     if (strcmp(b, "cpu") == 0) return "CPU";
+    if (strcmp(b, "off") == 0) return "off";
     return "auto";
 }
 
@@ -168,7 +169,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "network",           "Network / Wi-Fi" },
         { "game",              "Game mode" },
         { "lock",              "Lock screen" },
-        { "ai_backend",        "AI backend (GPU/CPU)" },
+        { "ai_backend",        "AI backend (GPU/CPU/off)" },
         { "move_output",       "Move window to next output" },
     };
 
