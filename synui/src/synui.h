@@ -241,14 +241,28 @@ typedef struct {
 } syn_dispcfg_t;
 
 /* ── CRT filter panel (filters.c) ────────────────────────── */
+/* Monochrome phosphor tint (effects.c): the shader desaturates to luminance and
+ * multiplies it by one phosphor colour, for the amber-P3 and green-P1 terminal
+ * looks. OFF leaves colour untouched. Order is what FILTER_ROW_PHOSPHOR cycles. */
+typedef enum {
+    SYN_PHOSPHOR_OFF = 0,
+    SYN_PHOSPHOR_GREEN,   /* P1 — the IBM 5150 green */
+    SYN_PHOSPHOR_AMBER,   /* P3 — warm amber terminal */
+    SYN_PHOSPHOR_WHITE,   /* P4 — paper-white monochrome */
+    SYN_PHOSPHOR_COUNT,
+} syn_phosphor_t;
+
 /* Panel rows, in display order. FILTER_ROW_ENABLED toggles the master switch;
- * the rest each map to one syn_config_t effect_* strength, in the same order. */
+ * the slider rows each map to one syn_config_t effect_* strength. PHOSPHOR is a
+ * discrete tint selector (a word, not a bar), MONO its blend strength. */
 typedef enum {
     FILTER_ROW_ENABLED = 0,
     FILTER_ROW_SCANLINE,
     FILTER_ROW_CURVATURE,
     FILTER_ROW_ABERRATION,
     FILTER_ROW_GLITCH,
+    FILTER_ROW_PHOSPHOR,
+    FILTER_ROW_MONO,
     FILTER_ROW_COUNT,
 } syn_filter_row_t;
 
@@ -829,6 +843,8 @@ typedef struct {
     float effect_curvature;
     float effect_aberration;
     float effect_glitch;     /* strength of the alert/close glitch; 0 = off */
+    int   effect_phosphor;   /* syn_phosphor_t tint; SYN_PHOSPHOR_OFF = colour */
+    float effect_mono;       /* 0..1 blend toward the phosphor tint */
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];

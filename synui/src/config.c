@@ -408,6 +408,8 @@ void synui_config_load(syn_config_t *cfg)
     cfg->effect_curvature  = 0.25f;
     cfg->effect_aberration = 0.40f;
     cfg->effect_glitch     = 0.60f;
+    cfg->effect_phosphor   = SYN_PHOSPHOR_OFF;   /* colour, until a tint is picked */
+    cfg->effect_mono       = 0.90f;              /* strong monochrome when it is */
 
     {
         static const float norm[4]  = COLOR_BORDER_NORM;
@@ -628,6 +630,15 @@ void synui_config_load(syn_config_t *cfg)
             cfg->effect_aberration = clamp01(strtof(val, NULL));
         else if (strcmp(key, "effect_glitch") == 0)
             cfg->effect_glitch = clamp01(strtof(val, NULL));
+        else if (strcmp(key, "effect_phosphor") == 0) {
+            if      (strcmp(val, "off")   == 0) cfg->effect_phosphor = SYN_PHOSPHOR_OFF;
+            else if (strcmp(val, "green") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_GREEN;
+            else if (strcmp(val, "amber") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_AMBER;
+            else if (strcmp(val, "white") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_WHITE;
+            else wlr_log(WLR_ERROR, "synui: effect_phosphor: unknown '%s'", val);
+        }
+        else if (strcmp(key, "effect_mono") == 0)
+            cfg->effect_mono = clamp01(strtof(val, NULL));
         else if (strcmp(key, "xkb_rules") == 0)
             strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
         else if (strcmp(key, "xkb_model") == 0)

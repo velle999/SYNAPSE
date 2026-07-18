@@ -40,8 +40,8 @@ static float clamp01f(float v)
     return v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
 }
 
-/* The strength a row edits. FILTER_ROW_ENABLED has no float — it toggles the
- * master switch — so it maps to NULL and callers must check. */
+/* The strength a row edits. Rows with no float — the master switch and the
+ * discrete phosphor selector — map to NULL, and callers must check. */
 static float *row_field(syn_server_t *s, int row)
 {
     switch (row) {
@@ -49,7 +49,19 @@ static float *row_field(syn_server_t *s, int row)
     case FILTER_ROW_CURVATURE: return &s->config.effect_curvature;
     case FILTER_ROW_ABERRATION:return &s->config.effect_aberration;
     case FILTER_ROW_GLITCH:    return &s->config.effect_glitch;
+    case FILTER_ROW_MONO:      return &s->config.effect_mono;
     default:                   return NULL;
+    }
+}
+
+/* The phosphor tint's name, for the selector row and the save status. */
+static const char *phosphor_name(int ph)
+{
+    switch (ph) {
+    case SYN_PHOSPHOR_GREEN: return "green";
+    case SYN_PHOSPHOR_AMBER: return "amber";
+    case SYN_PHOSPHOR_WHITE: return "white";
+    default:                 return "off";
     }
 }
 
@@ -61,6 +73,8 @@ const char *filters_row_label(int row)
     case FILTER_ROW_CURVATURE: return "Screen curvature";
     case FILTER_ROW_ABERRATION:return "Chromatic aberration";
     case FILTER_ROW_GLITCH:    return "Glitch strength";
+    case FILTER_ROW_PHOSPHOR:  return "Phosphor";
+    case FILTER_ROW_MONO:      return "Monochrome";
     default:                   return "?";
     }
 }
@@ -71,6 +85,10 @@ float filters_row_value(syn_server_t *s, int row, char *buf, size_t n)
 {
     if (row == FILTER_ROW_ENABLED) {
         snprintf(buf, n, "%s", s->config.effects ? "on" : "off");
+        return -1.0f;
+    }
+    if (row == FILTER_ROW_PHOSPHOR) {   /* a word, not a bar */
+        snprintf(buf, n, "%s", phosphor_name(s->config.effect_phosphor));
         return -1.0f;
     }
     float v = *row_field(s, row);
@@ -116,6 +134,8 @@ void filters_state_save(syn_server_t *s)
     fprintf(f, "curvature=%.3f\n",  s->config.effect_curvature);
     fprintf(f, "aberration=%.3f\n", s->config.effect_aberration);
     fprintf(f, "glitch=%.3f\n",     s->config.effect_glitch);
+    fprintf(f, "phosphor=%s\n",     phosphor_name(s->config.effect_phosphor));
+    fprintf(f, "mono=%.3f\n",       s->config.effect_mono);
     fclose(f);
 
     s->filters.dirty = 0;
@@ -148,6 +168,13 @@ void filters_state_load(syn_server_t *s)
         else if (strcmp(key, "curvature") == 0)  cfg->effect_curvature  = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "aberration") == 0) cfg->effect_aberration = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "glitch") == 0)     cfg->effect_glitch     = clamp01f(strtof(val, NULL));
+        else if (strcmp(key, "mono") == 0)       cfg->effect_mono       = clamp01f(strtof(val, NULL));
+        else if (strcmp(key, "phosphor") == 0) {
+            if      (strcmp(val, "green") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_GREEN;
+            else if (strcmp(val, "amber") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_AMBER;
+            else if (strcmp(val, "white") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_WHITE;
+            else                                cfg->effect_phosphor = SYN_PHOSPHOR_OFF;
+        }
     }
     fclose(f);
 }
@@ -176,6 +203,28 @@ void filters_toggle(syn_server_t *s)
 
 static void filters_adjust(syn_server_t *s, int dir)
 {
+    if (s->filters.selected == FILTER_ROW_PHOSPHOR) {
+        /* Cycle Off → green → amber → white → Off, both directions. */
+        int cur = s->config.effect_phosphor;
+        cur = (cur + dir + SYN_PHOSPHOR_COUNT) % SYN_PHOSPHOR_COUNT;
+        s->config.effect_phosphor = cur;
+        s->filters.dirty = 1;
+        snprintf(s->filters.status, sizeof(s->filters.status),
+                 "Phosphor: %s", phosphor_name(cur));
+        /* An off master switch, or a zeroed monochrome amount, means the tint
+         * moves a word and nothing on screen — say which. */
+        if (!s->config.effects && cur != SYN_PHOSPHOR_OFF)
+            snprintf(s->filters.status, sizeof(s->filters.status),
+                     "Phosphor: %s \xc2\xb7 filters are off (Space on the top row)",
+                     phosphor_name(cur));
+        else if (s->config.effect_mono <= 0.0f && cur != SYN_PHOSPHOR_OFF)
+            snprintf(s->filters.status, sizeof(s->filters.status),
+                     "Phosphor: %s \xc2\xb7 Monochrome is at 0%%",
+                     phosphor_name(cur));
+        filters_repaint(s);
+        return;
+    }
+
     float *field = row_field(s, s->filters.selected);
     if (!field) {                       /* the master switch row */
         s->config.effects = !s->config.effects;

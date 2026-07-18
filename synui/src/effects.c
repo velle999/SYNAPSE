@@ -49,7 +49,7 @@ struct syn_effects {
     /* [0] sampler2D, [1] samplerExternalOES (dmabuf-backed scene buffers) */
     GLuint prog[2];
     GLint  u_tex[2], u_scan[2], u_curv[2], u_aberr[2], u_size[2];
-    GLint  u_time[2], u_glitch[2];
+    GLint  u_time[2], u_glitch[2], u_mono[2], u_tint[2];
 
     /* Animation clocks (CLOCK_MONOTONIC seconds). While any of these is
      * live the frame pass keeps damaging + scheduling, so the animation
@@ -93,6 +93,8 @@ static const char *frag_fmt =
     "uniform float u_aberr;\n"
     "uniform float u_time;\n"
     "uniform float u_glitch;\n"
+    "uniform float u_mono;\n"
+    "uniform vec3 u_tint;\n"
     "uniform vec2 u_size;\n"
     "vec2 curve(vec2 uv) {\n"
     "    uv = uv * 2.0 - 1.0;\n"
@@ -131,7 +133,16 @@ static const char *frag_fmt =
     "    vec2 vg = uv * (1.0 - uv);\n"
     "    float vig = 1.0 - u_curv * 0.35 *\n"
     "                (1.0 - clamp(vg.x * vg.y * 18.0, 0.0, 1.0));\n"
-    "    gl_FragColor = vec4(vec3(r, g.g, b) * scan * vig, g.a);\n"
+    "    vec3 col = vec3(r, g.g, b) * scan * vig;\n"
+    "    /* Monochrome phosphor: collapse to luminance and paint it in one tint.\n"
+    "     * pow() lifts the midtones so the tint glows like a phosphor screen\n"
+    "     * instead of reading as a flat colourize; u_mono blends it in. */\n"
+    "    if (u_mono > 0.0) {\n"
+    "        float lum = dot(col, vec3(0.299, 0.587, 0.114));\n"
+    "        vec3 ph = u_tint * pow(lum, 0.85);\n"
+    "        col = mix(col, ph, u_mono);\n"
+    "    }\n"
+    "    gl_FragColor = vec4(col, g.a);\n"
     "}\n";
 
 /* ── EGL context juggling ─────────────────────────────────── */
@@ -248,6 +259,8 @@ bool effects_init(syn_server_t *s)
         fx->u_size[i]   = glGetUniformLocation(fx->prog[i], "u_size");
         fx->u_time[i]   = glGetUniformLocation(fx->prog[i], "u_time");
         fx->u_glitch[i] = glGetUniformLocation(fx->prog[i], "u_glitch");
+        fx->u_mono[i]   = glGetUniformLocation(fx->prog[i], "u_mono");
+        fx->u_tint[i]   = glGetUniformLocation(fx->prog[i], "u_tint");
     }
 
     const char *force = getenv("SYNUI_EFFECTS_FORCE_GLITCH");
@@ -316,8 +329,18 @@ static bool any_view_alerted(syn_server_t *s)
  * keeps frames coming. */
 struct fx_params {
     float scan, curv, aberr, glitch;
+    float mono, tint[3];
     double time;
     bool animating;
+};
+
+/* The phosphor tints (RGB), indexed by syn_phosphor_t. A white pixel comes out
+ * exactly this colour; darker pixels ramp toward black through it. */
+static const float phosphor_tint[SYN_PHOSPHOR_COUNT][3] = {
+    [SYN_PHOSPHOR_OFF]   = { 1.00f, 1.00f, 1.00f },   /* unused (mono 0) */
+    [SYN_PHOSPHOR_GREEN] = { 0.25f, 1.00f, 0.30f },   /* P1 CRT green */
+    [SYN_PHOSPHOR_AMBER] = { 1.00f, 0.70f, 0.12f },   /* P3 amber */
+    [SYN_PHOSPHOR_WHITE] = { 1.00f, 0.97f, 0.92f },   /* P4 warm white */
 };
 
 static bool fx_compute(syn_server_t *s, struct fx_params *p)
@@ -332,6 +355,20 @@ static bool fx_compute(syn_server_t *s, struct fx_params *p)
     p->time  = now;
     p->glitch = 0.0f;
     p->animating = false;
+
+    /* Monochrome phosphor tint. OFF (or amount 0) leaves colour untouched. */
+    int ph = s->config.effect_phosphor;
+    if (ph < 0 || ph >= SYN_PHOSPHOR_COUNT) ph = SYN_PHOSPHOR_OFF;
+    if (ph == SYN_PHOSPHOR_OFF) {
+        p->mono = 0.0f;
+    } else {
+        p->mono = s->config.effect_mono;
+        if (p->mono < 0.0f) p->mono = 0.0f;
+        if (p->mono > 1.0f) p->mono = 1.0f;
+    }
+    p->tint[0] = phosphor_tint[ph][0];
+    p->tint[1] = phosphor_tint[ph][1];
+    p->tint[2] = phosphor_tint[ph][2];
 
     /* L3: aberration ramps up on focus change and decays back. */
     if (fx->pulse_until > now) {
@@ -353,7 +390,7 @@ static bool fx_compute(syn_server_t *s, struct fx_params *p)
     }
 
     return p->scan > 0.0f || p->curv > 0.0f || p->aberr > 0.0f ||
-           p->glitch > 0.0f;
+           p->glitch > 0.0f || p->mono > 0.0f;
 }
 
 /* ── Frame pass ───────────────────────────────────────────── */
@@ -448,6 +485,8 @@ bool effects_output_commit(syn_output_t *output)
     glUniform1f(fx->u_curv[p],   prm.curv);
     glUniform1f(fx->u_aberr[p],  prm.aberr);
     glUniform1f(fx->u_glitch[p], prm.glitch);
+    glUniform1f(fx->u_mono[p],   prm.mono);
+    glUniform3f(fx->u_tint[p],   prm.tint[0], prm.tint[1], prm.tint[2]);
     /* Wrapped so float precision stays fine on long uptimes. */
     glUniform1f(fx->u_time[p], (GLfloat)fmod(prm.time, 3600.0));
     glUniform2f(fx->u_size[p], (GLfloat)w, (GLfloat)h);
