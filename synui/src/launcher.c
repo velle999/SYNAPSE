@@ -17,7 +17,8 @@
  * never sees them.
  *
  * launcher_style picks text ("◢ SYNAPSE") or the ◢ caret beside the dendrite
- * logo.svg. synuirc sets the default; launcher_toggle_style() flips it at run
+ * emblem (logo-bold.svg — the small-size variant). synuirc sets the default;
+ * launcher_toggle_style() flips it at run
  * time (control panel + start-menu Settings) and persists to launcher.state,
  * which synui_config_load lays back over synuirc so the choice outlives both a
  * config reload and a logout — the same pattern the dock/wallpaper use.
@@ -159,7 +160,11 @@ static void launcher_render_output(syn_output_t *o)
         cairo_text_extents(cr, LAUNCHER_CARET, &ce);
         double emblem_x = LAUNCHER_PAD_X + ce.x_advance + LAUNCHER_CARET_GAP;
 
-        RsvgHandle *lh = rsvg_handle_new_from_file(SYNUI_DATADIR "/logo.svg", NULL);
+        /* logo-bold.svg, not logo.svg: at 20px the thin mark's 8/4.4 strokes and
+         * faint triangle all but vanish into the bar. The bold variant thickens
+         * the branches and nodes and drops the triangle so it still reads here;
+         * the welcome header (render.c) keeps the finer logo.svg at 64px. */
+        RsvgHandle *lh = rsvg_handle_new_from_file(SYNUI_DATADIR "/logo-bold.svg", NULL);
         if (lh) {
             RsvgRectangle vp = { .x = emblem_x,
                                  .y = (h - LAUNCHER_LOGO_SZ) / 2.0,

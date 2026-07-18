@@ -219,6 +219,7 @@ synui_datadir = get_option('prefix') / get_option('datadir') / 'synui'
 install_data('data/wallpaper.png',    install_dir : synui_datadir)
 install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
 install_data('data/logo.svg',         install_dir : synui_datadir)
+install_data('data/logo-bold.svg',    install_dir : synui_datadir)
 
 # Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
 # that is one of the directories the picker (Super+W) already scans, so they show
