@@ -943,21 +943,58 @@ exec synui
 SESSION_EOF
         chmod 755 /mnt/usr/local/bin/synui-session
 
-        # greetd: tuigreet login prompt on tty1, session = synui.
-        # synui.service / synui-foot.service stay disabled on installs —
-        # the session goes through PAM so logind owns XDG_RUNTIME_DIR
-        # (they remain the no-login path for the live ISO only).
+        # Greeter wrapper — greetd runs this as the `greeter` user to draw the
+        # LOGIN screen, which is synui itself in --greeter mode: the same panel
+        # as the lock screen. Same renderer detection as the session wrapper;
+        # seatd so the compositor can take DRM/input on the seat. greetd exports
+        # GREETD_SOCK into this process, which synui --greeter speaks to start
+        # the session once the password checks out.
+        cat > /mnt/usr/local/bin/synui-greeter << 'GREETER_EOF'
+#!/bin/sh
+if [ -f /sys/class/dmi/id/sys_vendor ] && \
+   grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+    export WLR_RENDERER=pixman
+    export WLR_BACKENDS=drm,libinput
+    export WLR_NO_HARDWARE_CURSORS=1
+else
+    for drv in /sys/class/drm/card*/device/driver; do
+        case "$(readlink "$drv" 2>/dev/null)" in
+            *nouveau) export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+        esac
+    done
+fi
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=synui
+export LIBSEAT_BACKEND=seatd
+export XCURSOR_THEME=Adwaita
+export XCURSOR_SIZE=24
+exec synui --greeter
+GREETER_EOF
+        chmod 755 /mnt/usr/local/bin/synui-greeter
+
+        # tuigreet is a TTY app; the synui greeter is a full wlroots compositor,
+        # so the `greeter` user needs the seat's devices: video (GPU), input
+        # (libinput), and seat (so seatd hands them over). Without these the
+        # greeter can't take DRM and greetd loops on a black screen.
+        arch-chroot /mnt usermod -aG video,input,seat greeter 2>/dev/null || true
+
+        # greetd: the synui greeter on tty1 — the login screen IS the lock
+        # screen. synui --greeter (via the wrapper) collects the password and
+        # asks greetd to start /usr/local/bin/synui-session on success.
+        # synui.service / synui-foot.service stay disabled on installs — the
+        # session goes through PAM so logind owns XDG_RUNTIME_DIR (they remain
+        # the no-login path for the live ISO only).
         mkdir -p /mnt/etc/greetd
         cat > /mnt/etc/greetd/config.toml << 'GREETD_EOF'
 [terminal]
 vt = 1
 
 [default_session]
-command = "tuigreet --time --remember --theme 'border=magenta;text=cyan;prompt=green;time=magenta;action=cyan;button=yellow;container=black;input=magenta' --cmd /usr/local/bin/synui-session"
+command = "/usr/local/bin/synui-greeter"
 user = "greeter"
 GREETD_EOF
         arch-chroot /mnt systemctl enable greetd.service 2>/dev/null || true
-        echo "  Desktop: SynapseUI (greetd login as $NEW_USER)"
+        echo "  Desktop: SynapseUI (synui greeter — login mirrors the lock screen)"
         ;;
 esac
 

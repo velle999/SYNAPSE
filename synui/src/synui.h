@@ -1744,6 +1744,24 @@ struct syn_server {
      * round trips, 15s+ in practice. The thread checks this and bails instead. */
     atomic_int      ai_stopping;
     int             ai_disabled;        /* --no-ai: AI thread never starts */
+
+    /* --greeter: run as the greetd login greeter. Draws the same panel as the
+     * lock screen (lock.c), but Enter hands the password to greetd to start the
+     * session instead of unlocking one. See greeter.c. */
+    int             greeter;
+    struct {
+        char     user[64];              /* the account to log in (default: UID 1000) */
+        int      busy;                  /* a greetd exchange is in flight */
+        int      failed;                /* last attempt was rejected */
+        int      sock;                  /* GREETD_SOCK fd, -1 when idle */
+        int      state;                 /* syn_greetd_state_t */
+        struct wl_event_source *src;    /* sock readable on the event loop */
+        char     rbuf[1024];            /* partial length-prefixed reply */
+        size_t   rlen;
+        char     pw[512];               /* password held only across the exchange */
+        int      pw_len;
+    } greetd;
+
     int             ai_pipe_req[2];
     int             ai_pipe_resp[2];
     pthread_t       ai_thread;
@@ -1975,6 +1993,23 @@ void synui_lock(syn_server_t *s);
 void synui_unlock(syn_server_t *s);
 int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint);
 void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
+void lock_render(syn_server_t *s);               /* repaint panes (greeter reuses) */
+
+/* ── greeter.c: the greetd login greeter (synui --greeter) ── */
+/* State of the greetd IPC exchange (greetd.state). */
+typedef enum {
+    GREETD_IDLE = 0,
+    GREETD_WAIT_CREATE,   /* sent create_session, awaiting auth_message/success */
+    GREETD_WAIT_AUTH,     /* sent the password, awaiting success/error */
+    GREETD_WAIT_START,    /* sent start_session, greetd will kill us on success */
+} syn_greetd_state_t;
+
+/* Set up the login panel (same panes as the lock screen) and pick the account
+ * to log in. Called once at startup when --greeter is given. */
+void greeter_start(syn_server_t *s);
+/* Enter pressed: run the greetd create/auth/start handshake for the typed
+ * password. Non-blocking — driven off the wl_event_loop like lock auth. */
+void greeter_submit(syn_server_t *s);
 
 /* ── foreign_toplevel.c ──────────────────────────────────── */
 void foreign_toplevel_setup(syn_server_t *s);        /* create the manager */

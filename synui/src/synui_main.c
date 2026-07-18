@@ -1281,8 +1281,10 @@ int synui_init(syn_server_t *s)
 
     /* dock.c: needs s->workspaces[].windows and s->outputs already
      * wl_list_init'd (dock_rebuild walks both) — seeds pinned-only entries;
-     * no output exists yet for dock_relayout to actually paint into. */
-    dock_init(s);
+     * no output exists yet for dock_relayout to actually paint into.
+     * The greeter has no dock — it is a bare login panel. */
+    if (!s->greeter)
+        dock_init(s);
 
     /* Input */
     input_setup(s);
@@ -1404,6 +1406,16 @@ int synui_run(syn_server_t *s)
     /* Set initial cursor image so it's visible immediately */
     wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
 
+
+    /* The greeter takes over here: draw the login panel (same as the lock
+     * screen) and skip everything a desktop session would start — cat mode,
+     * autostarted apps (waybar, etc.). greetd will kill us when the password
+     * it is handed starts the real session. */
+    if (s->greeter) {
+        greeter_start(s);
+        wl_display_run(s->display);
+        return 0;
+    }
 
     /* Cat mode, if synuirc asked for it. After backend start, so the outputs it
      * needs to pick a starting spot and a destination already exist. */
@@ -1567,6 +1579,8 @@ static void usage(const char *prog) {
         "SynapseOS Wayland Compositor\n"
         "\n"
         "Options:\n"
+        "  --greeter      Run as the greetd login greeter (mirrors the lock\n"
+        "                 screen; hands the password to greetd via GREETD_SOCK)\n"
         "  --no-ai        Disable AI features (layout hints, command bar AI)\n"
         "  --overlay      Start with neural overlay visible\n"
         "  -d, --debug    Enable verbose wlroots logging\n"
@@ -1619,10 +1633,12 @@ int main(int argc, char *argv[])
     int debug = 0;
     int no_ai = 0;
     int start_overlay = 0;
+    int greeter = 0;
 
     static struct option long_opts[] = {
         {"no-ai",   no_argument, 0, 'N'},
         {"overlay", no_argument, 0, 'O'},
+        {"greeter", no_argument, 0, 'G'},
         {"debug",   no_argument, 0, 'd'},
         {"version", no_argument, 0, 'v'},
         {"help",    no_argument, 0, 'h'},
@@ -1630,10 +1646,11 @@ int main(int argc, char *argv[])
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "NOdvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "NOGdvh", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'N': no_ai = 1; break;
         case 'O': start_overlay = 1; break;
+        case 'G': greeter = 1; no_ai = 1; break;  /* greeter: no session AI */
         case 'd': debug = 1; break;
         case 'v':
             printf("synui %s (SynapseOS Wayland Compositor)\n", SYNUI_VERSION);
@@ -1677,6 +1694,12 @@ int main(int argc, char *argv[])
     if (no_ai) {
         server.ai_disabled = 1;
         atomic_store(&server.ai_connected, 0);
+    }
+    if (greeter) {
+        server.greeter = 1;
+        /* The greeter is a login screen, not a desktop: no welcome menu, no
+         * dock, no autostarted apps — gated below on server.greeter. */
+        server.config.welcome_at_startup = 0;
     }
     if (start_overlay || server.config.start_overlay) {
         server.overlay.visible = 1;

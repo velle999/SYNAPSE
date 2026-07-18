@@ -147,8 +147,9 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
 }
 
 /* Render every pane. Panels are created lazily here so synui_lock() need only
- * record the outputs. */
-static void lock_render(syn_server_t *s)
+ * record the outputs. Non-static so the greeter (greeter.c) can repaint the
+ * shared panel after a rejected login. */
+void lock_render(syn_server_t *s)
 {
     if (!s->nlock.active || !s->nlock.tree) return;
 
@@ -359,7 +360,12 @@ int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
     switch (sym) {
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
-        lock_auth_start(s);
+        /* In the greeter there is no session to unlock — hand the password to
+         * greetd to start one instead. Same panel, different verb. */
+        if (s->greeter)
+            greeter_submit(s);
+        else
+            lock_auth_start(s);
         return 1;
     case XKB_KEY_BackSpace:
         if (s->nlock.pw_len > 0) {
