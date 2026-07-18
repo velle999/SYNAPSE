@@ -798,6 +798,15 @@ arch-chroot /mnt bash -c "
     echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl stop synapd, /usr/bin/systemctl start synapd' \
         > /etc/sudoers.d/synapd-gamemode
     chmod 440 /etc/sudoers.d/synapd-gamemode
+
+    # The 'AI backend' row (welcome menu / control panel) toggles synapd
+    # between GPU/CPU/off via synui-ai-backend, which rewrites synapd's
+    # systemd drop-in and restarts it. Under a greetd session synui runs as
+    # the user, who cannot do that and has no polkit agent to prompt — so the
+    # helper re-execs under sudo -n. Scope it to exactly this command.
+    echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/synui-ai-backend gpu, /usr/bin/synui-ai-backend cpu, /usr/bin/synui-ai-backend off, /usr/bin/synui-ai-backend toggle' \
+        > /etc/sudoers.d/synapd-backend
+    chmod 440 /etc/sudoers.d/synapd-backend
 "
 
 # useradd runs outside the masked bash -c block: if it fails, nothing

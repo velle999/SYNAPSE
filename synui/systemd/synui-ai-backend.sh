@@ -62,6 +62,18 @@ off_backend() {
     echo "synapd backend → off (stopped)"
 }
 
+# The welcome menu / control panel row fires this as the SESSION USER: synui
+# normally runs as root (synui.service), but under a greetd session it runs as
+# the logged-in user, who cannot write the systemd drop-in, restart synapd, or
+# write /run/synapd/backend. There is no polkit agent here to prompt, so the
+# mutating verbs re-exec under `sudo -n` — a NOPASSWD rule in /etc/sudoers.d
+# (shipped by syn-install) scopes it to exactly this command. Skipped when
+# already root, and 'status' is left alone: it only reads a world-readable file.
+case "${1:-status}" in
+    gpu|cpu|off|toggle)
+        [ "$(id -u)" -eq 0 ] || exec sudo -n /usr/bin/synui-ai-backend "$@" ;;
+esac
+
 case "${1:-status}" in
     status)  current ;;
     gpu|cpu) apply "$1" ;;
