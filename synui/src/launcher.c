@@ -46,7 +46,7 @@
 #define LAUNCHER_H       28
 #define LAUNCHER_PAD_X   12      /* matches #custom-synapse padding: 0 12px */
 #define LAUNCHER_FONT    13.0
-#define LAUNCHER_LOGO_SZ 20      /* emblem square in logo mode */
+#define LAUNCHER_LOGO_SZ 23      /* emblem square in logo mode (of the 28px bar) */
 #define LAUNCHER_CARET_GAP 6     /* px between the ◢ caret and the emblem, logo mode */
 
 /* Waybar's #custom-synapse teal (#05d9e8). Kept in step by eye — the bar's CSS
