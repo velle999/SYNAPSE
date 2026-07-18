@@ -290,6 +290,9 @@ echo "  Running pacstrap (this may take several minutes)..."
 # dolphin is the file manager; it drags in Qt6 + KF6, so it is much the largest
 # thing here. synui ships the /etc/xdg files that make KDE work outside Plasma
 # (applications.menu, kdeglobals) — see its PKGBUILD.
+# wine (+ wine-mono for .NET installers) makes .exe/.msi runnable out of the
+# box: wine.desktop drives double-click and synui's "Run with Wine" right-click
+# service menu drives the context menu. Matches the dev machine's local setup.
 pacstrap /mnt \
     base linux linux-firmware linux-headers foot \
     grub efibootmgr \
@@ -298,6 +301,7 @@ pacstrap /mnt \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
     rtkit polkit-gnome xorg-xhost \
     mkinitcpio dkms dolphin \
+    wine wine-mono \
     2>&1 || die "pacstrap failed — check network connection"
 
 # Hard verify grub landed in the chroot

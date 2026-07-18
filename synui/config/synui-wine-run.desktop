@@ -1,0 +1,28 @@
+# Dolphin (KIO 6) right-click service menu for Windows executables.
+#
+# wine.desktop (from the wine package) already claims these mimetypes and is
+# NoDisplay, so it drives double-click and "Open With". This adds the explicit
+# top-level "Run with Wine" entry so an .exe is obviously runnable on a fresh
+# install, plus a terminal variant for seeing wine's output when a game misbehaves.
+#
+# Same KIO 6 rules as synui-iso-mount.desktop: new-style Type=Application with
+# Actions=, read from $XDG_DATA_DIRS/kio/servicemenus/, and the file MUST be
+# executable or KIO silently skips it. The menu shows even without wine
+# installed; the action just fails — but SynapseOS installs wine (see syn-install).
+[Desktop Entry]
+Type=Application
+Name=Wine
+Icon=wine
+MimeType=application/x-ms-dos-executable;application/x-msi;application/x-ms-shortcut;application/x-bat;
+Actions=synuiWineRun;synuiWineTerm;
+X-KDE-Priority=TopLevel
+
+[Desktop Action synuiWineRun]
+Name=Run with Wine
+Icon=wine
+Exec=synui-wine-run run %f
+
+[Desktop Action synuiWineTerm]
+Name=Run with Wine (show output)…
+Icon=utilities-terminal
+Exec=synui-wine-run term %f

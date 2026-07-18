@@ -96,6 +96,12 @@ nss-mdns
 # which is the only way to debug a radio from a shell when the panel says no.
 bluez
 bluez-utils
+
+# Wine so the live environment can run Windows .exe/.msi, and so the packages
+# are cached on the ISO for the installer's pacstrap (syn-install adds them to
+# the target). wine-mono covers .NET-based installers.
+wine
+wine-mono
 virtualbox-guest-utils
 dkms
 xdg-desktop-portal
