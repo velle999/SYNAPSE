@@ -50,6 +50,7 @@ static float *row_field(syn_server_t *s, int row)
     case FILTER_ROW_ABERRATION:return &s->config.effect_aberration;
     case FILTER_ROW_GLITCH:    return &s->config.effect_glitch;
     case FILTER_ROW_MONO:      return &s->config.effect_mono;
+    case FILTER_ROW_BLOOM:     return &s->config.effect_bloom;
     default:                   return NULL;
     }
 }
@@ -75,6 +76,7 @@ const char *filters_row_label(int row)
     case FILTER_ROW_GLITCH:    return "Glitch strength";
     case FILTER_ROW_PHOSPHOR:  return "Phosphor";
     case FILTER_ROW_MONO:      return "Monochrome";
+    case FILTER_ROW_BLOOM:     return "Phosphor bloom";
     default:                   return "?";
     }
 }
@@ -136,6 +138,7 @@ void filters_state_save(syn_server_t *s)
     fprintf(f, "glitch=%.3f\n",     s->config.effect_glitch);
     fprintf(f, "phosphor=%s\n",     phosphor_name(s->config.effect_phosphor));
     fprintf(f, "mono=%.3f\n",       s->config.effect_mono);
+    fprintf(f, "bloom=%.3f\n",      s->config.effect_bloom);
     fclose(f);
 
     s->filters.dirty = 0;
@@ -169,6 +172,7 @@ void filters_state_load(syn_server_t *s)
         else if (strcmp(key, "aberration") == 0) cfg->effect_aberration = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "glitch") == 0)     cfg->effect_glitch     = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "mono") == 0)       cfg->effect_mono       = clamp01f(strtof(val, NULL));
+        else if (strcmp(key, "bloom") == 0)      cfg->effect_bloom      = clamp01f(strtof(val, NULL));
         else if (strcmp(key, "phosphor") == 0) {
             if      (strcmp(val, "green") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_GREEN;
             else if (strcmp(val, "amber") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_AMBER;
@@ -251,6 +255,11 @@ static void filters_adjust(syn_server_t *s, int dir)
         snprintf(s->filters.status, sizeof(s->filters.status),
                  "%s: %s \xc2\xb7 filters are off (Space on the top row)",
                  filters_row_label(s->filters.selected), v);
+    /* Bloom is the phosphor glow: with no monochrome amount there is no
+     * phosphor to bleed, so the slider moves a number and nothing else. */
+    else if (s->filters.selected == FILTER_ROW_BLOOM && s->config.effect_mono <= 0.0f)
+        snprintf(s->filters.status, sizeof(s->filters.status),
+                 "%s: %s \xc2\xb7 Monochrome is at 0%%", filters_row_label(s->filters.selected), v);
 
     filters_repaint(s);
 }

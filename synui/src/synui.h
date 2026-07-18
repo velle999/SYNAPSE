@@ -263,6 +263,7 @@ typedef enum {
     FILTER_ROW_GLITCH,
     FILTER_ROW_PHOSPHOR,
     FILTER_ROW_MONO,
+    FILTER_ROW_BLOOM,
     FILTER_ROW_COUNT,
 } syn_filter_row_t;
 
@@ -845,6 +846,7 @@ typedef struct {
     float effect_glitch;     /* strength of the alert/close glitch; 0 = off */
     int   effect_phosphor;   /* syn_phosphor_t tint; SYN_PHOSPHOR_OFF = colour */
     float effect_mono;       /* 0..1 blend toward the phosphor tint */
+    float effect_bloom;      /* 0..1 phosphor glow bleed; only bites with mono */
 
     /* Keyboard: XKB keymap (empty = XKB_DEFAULT_* env / system default). */
     char  xkb_rules[64];

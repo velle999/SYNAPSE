@@ -49,7 +49,7 @@ struct syn_effects {
     /* [0] sampler2D, [1] samplerExternalOES (dmabuf-backed scene buffers) */
     GLuint prog[2];
     GLint  u_tex[2], u_scan[2], u_curv[2], u_aberr[2], u_size[2];
-    GLint  u_time[2], u_glitch[2], u_mono[2], u_tint[2];
+    GLint  u_time[2], u_glitch[2], u_mono[2], u_tint[2], u_swap[2], u_bloom[2];
 
     /* Animation clocks (CLOCK_MONOTONIC seconds). While any of these is
      * live the frame pass keeps damaging + scheduling, so the animation
@@ -96,6 +96,11 @@ static const char *frag_fmt =
     "uniform float u_mono;\n"
     "uniform vec3 u_tint;\n"
     "uniform vec2 u_size;\n"
+    /* 1.0 when the output is rotated 90/270 (portrait): the scanline and
+     * glitch axes are keyed to the buffer, so they must swap to stay aligned
+     * with what the viewer calls horizontal. */
+    "uniform float u_swap;\n"
+    "uniform float u_bloom;\n"
     "vec2 curve(vec2 uv) {\n"
     "    uv = uv * 2.0 - 1.0;\n"
     "    vec2 off = uv.yx * uv.yx * u_curv * 0.12;\n"
@@ -109,13 +114,18 @@ static const char *frag_fmt =
     "        return;\n"
     "    }\n"
     "    if (u_glitch > 0.0) {\n"
-    "        /* 8px horizontal bands; a per-band hash reseeded ~24x/sec\n"
-    "         * decides which bands displace and by how much. */\n"
-    "        float band = floor(uv.y * u_size.y / 8.0);\n"
+    "        /* 8px bands across the display's vertical, displaced along its\n"
+    "         * horizontal; a per-band hash reseeded ~24x/sec decides which\n"
+    "         * bands displace and by how much. On a portrait output both\n"
+    "         * axes swap (u_swap) so the tearing still reads as horizontal. */\n"
+    "        float along = mix(uv.y, uv.x, u_swap);\n"
+    "        float dim   = mix(u_size.y, u_size.x, u_swap);\n"
+    "        float band = floor(along * dim / 8.0);\n"
     "        float seed = band * 127.1 + floor(u_time * 24.0) * 311.7;\n"
     "        float h = fract(sin(seed) * 43758.5453);\n"
     "        float disp = (h - 0.5) * 0.10 * u_glitch * step(0.75, h);\n"
-    "        uv.x = clamp(uv.x + disp, 0.0, 1.0);\n"
+    "        if (u_swap > 0.5) uv.y = clamp(uv.y + disp, 0.0, 1.0);\n"
+    "        else              uv.x = clamp(uv.x + disp, 0.0, 1.0);\n"
     "    }\n"
     "    vec2 d = (uv - 0.5) * u_aberr * 0.0035;\n"
     "    float r = texture2D(u_tex, uv - d).r;\n"
@@ -127,7 +137,8 @@ static const char *frag_fmt =
     "     * what the eye resolves on a HiDPI panel - it just reads as dim),\n"
     "     * and the gain divisor holds mean brightness so the effect adds\n"
     "     * contrast rather than simply darkening the screen. */\n"
-    "    float beam = 0.5 + 0.5 * cos(gl_FragCoord.y * 6.2831853 / SCAN_PITCH);\n"
+    "    float scanpos = mix(gl_FragCoord.y, gl_FragCoord.x, u_swap);\n"
+    "    float beam = 0.5 + 0.5 * cos(scanpos * 6.2831853 / SCAN_PITCH);\n"
     "    float k    = u_scan * SCAN_DEPTH;\n"
     "    float scan = (1.0 - k * (1.0 - beam)) / (1.0 - 0.5 * k);\n"
     "    vec2 vg = uv * (1.0 - uv);\n"
@@ -141,6 +152,26 @@ static const char *frag_fmt =
     "        float lum = dot(col, vec3(0.299, 0.587, 0.114));\n"
     "        vec3 ph = u_tint * pow(lum, 0.85);\n"
     "        col = mix(col, ph, u_mono);\n"
+    "    }\n"
+    "    /* Phosphor bloom: a lit dot on a real tube spills a soft halo into its\n"
+    "     * neighbours, so highlights glow instead of ending at a hard edge.\n"
+    "     * Cheap single-pass take — sample two rings around the fragment, keep\n"
+    "     * only what is bright (BLOOM_THRESH), and add it back in the phosphor\n"
+    "     * tint. Gated on u_mono: no phosphor, nothing to bleed. */\n"
+    "    if (u_mono > 0.0 && u_bloom > 0.0) {\n"
+    "        vec2 px = 1.0 / u_size;\n"
+    "        float glow = 0.0;\n"
+    "        for (int i = 0; i < 8; i++) {\n"
+    "            float a = float(i) * 0.7853982;\n"
+    "            vec2 dir = vec2(cos(a), sin(a));\n"
+    "            float l1 = dot(texture2D(u_tex, uv + dir * px * 3.0).rgb,\n"
+    "                           vec3(0.299, 0.587, 0.114));\n"
+    "            float l2 = dot(texture2D(u_tex, uv + dir * px * 6.0).rgb,\n"
+    "                           vec3(0.299, 0.587, 0.114));\n"
+    "            glow += max(l1 - 0.55, 0.0) + 0.5 * max(l2 - 0.55, 0.0);\n"
+    "        }\n"
+    "        glow *= 0.08333;\n"   /* /12 : the ring weights sum to 8*(1+0.5) */
+    "        col += u_tint * glow * u_bloom * 2.2 * u_mono;\n"
     "    }\n"
     "    gl_FragColor = vec4(col, g.a);\n"
     "}\n";
@@ -192,7 +223,7 @@ static GLuint compile(GLenum type, const char *src)
 
 static GLuint build_program(const char *prelude, const char *sampler)
 {
-    char frag[4096];
+    char frag[8192];
     snprintf(frag, sizeof(frag), frag_fmt, prelude, sampler);
 
     GLuint vs = compile(GL_VERTEX_SHADER, vert_src);
@@ -261,6 +292,8 @@ bool effects_init(syn_server_t *s)
         fx->u_glitch[i] = glGetUniformLocation(fx->prog[i], "u_glitch");
         fx->u_mono[i]   = glGetUniformLocation(fx->prog[i], "u_mono");
         fx->u_tint[i]   = glGetUniformLocation(fx->prog[i], "u_tint");
+        fx->u_swap[i]   = glGetUniformLocation(fx->prog[i], "u_swap");
+        fx->u_bloom[i]  = glGetUniformLocation(fx->prog[i], "u_bloom");
     }
 
     const char *force = getenv("SYNUI_EFFECTS_FORCE_GLITCH");
@@ -329,7 +362,7 @@ static bool any_view_alerted(syn_server_t *s)
  * keeps frames coming. */
 struct fx_params {
     float scan, curv, aberr, glitch;
-    float mono, tint[3];
+    float mono, tint[3], bloom;
     double time;
     bool animating;
 };
@@ -370,6 +403,12 @@ static bool fx_compute(syn_server_t *s, struct fx_params *p)
     p->tint[1] = phosphor_tint[ph][1];
     p->tint[2] = phosphor_tint[ph][2];
 
+    /* Bloom is the phosphor glow; the shader gates it on mono, so it goes
+     * quiet on its own when there is no tint. */
+    p->bloom = s->config.effect_bloom;
+    if (p->bloom < 0.0f) p->bloom = 0.0f;
+    if (p->bloom > 1.0f) p->bloom = 1.0f;
+
     /* L3: aberration ramps up on focus change and decays back. */
     if (fx->pulse_until > now) {
         float k = (float)((fx->pulse_until - now) / FX_PULSE_SECS);
@@ -403,9 +442,18 @@ bool effects_output_commit(syn_output_t *output)
 
     struct fx_params prm;
     if (!fx_compute(s, &prm)) return false;
-    /* Rotated/flipped outputs would need the transform folded into the
-     * shader; punt to the plain path there. */
-    if (wo->transform != WL_OUTPUT_TRANSFORM_NORMAL) return false;
+
+    /* The scene is rendered into fx_swapchain with the output transform
+     * already baked in, and this pass samples buffer→buffer 1:1, so the image
+     * comes out correct on rotated outputs without any UV remap. Only the
+     * procedural effects keyed to buffer axes (scanlines, glitch) need to know
+     * the panel is turned: on a 90/270 rotation their axis swaps so they still
+     * read as horizontal to the viewer. Flips leave the axis unchanged. */
+    enum wl_output_transform t = wo->transform;
+    float swap = (t == WL_OUTPUT_TRANSFORM_90 ||
+                  t == WL_OUTPUT_TRANSFORM_270 ||
+                  t == WL_OUTPUT_TRANSFORM_FLIPPED_90 ||
+                  t == WL_OUTPUT_TRANSFORM_FLIPPED_270) ? 1.0f : 0.0f;
 
     if (!wlr_output_configure_primary_swapchain(wo, NULL, &wo->swapchain))
         return false;
@@ -487,6 +535,8 @@ bool effects_output_commit(syn_output_t *output)
     glUniform1f(fx->u_glitch[p], prm.glitch);
     glUniform1f(fx->u_mono[p],   prm.mono);
     glUniform3f(fx->u_tint[p],   prm.tint[0], prm.tint[1], prm.tint[2]);
+    glUniform1f(fx->u_swap[p],   swap);
+    glUniform1f(fx->u_bloom[p],  prm.bloom);
     /* Wrapped so float precision stays fine on long uptimes. */
     glUniform1f(fx->u_time[p], (GLfloat)fmod(prm.time, 3600.0));
     glUniform2f(fx->u_size[p], (GLfloat)w, (GLfloat)h);

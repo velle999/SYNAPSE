@@ -410,6 +410,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->effect_glitch     = 0.60f;
     cfg->effect_phosphor   = SYN_PHOSPHOR_OFF;   /* colour, until a tint is picked */
     cfg->effect_mono       = 0.90f;              /* strong monochrome when it is */
+    cfg->effect_bloom      = 0.55f;              /* phosphor glow, the way a real tube blooms */
 
     {
         static const float norm[4]  = COLOR_BORDER_NORM;
@@ -639,6 +640,8 @@ void synui_config_load(syn_config_t *cfg)
         }
         else if (strcmp(key, "effect_mono") == 0)
             cfg->effect_mono = clamp01(strtof(val, NULL));
+        else if (strcmp(key, "effect_bloom") == 0)
+            cfg->effect_bloom = clamp01(strtof(val, NULL));
         else if (strcmp(key, "xkb_rules") == 0)
             strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
         else if (strcmp(key, "xkb_model") == 0)
