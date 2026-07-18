@@ -84,6 +84,42 @@ disk_busy() {
     lsblk -nro MOUNTPOINT "$1" 2>/dev/null | grep -q .
 }
 
+# Partition device node for <disk> <num>, handling the 'p' infix on nvme/mmc
+# (nvme0n1p2, mmcblk0p2) vs plain (sda2): the kernel inserts a 'p' when the
+# disk name ends in a digit.
+part_name() {
+    local disk="$1" num="$2"
+    if [[ "$disk" =~ [0-9]$ ]]; then echo "${disk}p${num}"; else echo "${disk}${num}"; fi
+}
+
+# The EFI System Partition type GUID — matched directly (not via a parted flag)
+# so ESP detection is reliable regardless of which tool wrote the table.
+ESP_TYPE_GUID="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+
+# Echo the disk's existing ESP (/dev/...), or nothing. The dual-boot path must
+# REUSE this partition — it holds Windows'/other OSes' boot files and must never
+# be reformatted.
+find_esp() {
+    local disk="$1" name ptype
+    while read -r name ptype; do
+        [ -n "$name" ] || continue
+        [ "${ptype,,}" = "$ESP_TYPE_GUID" ] && { echo "/dev/$name"; return 0; }
+    done < <(lsblk -rno NAME,PARTTYPE "$disk" 2>/dev/null)
+    return 1
+}
+
+# Largest unallocated region on the disk as "START END SIZE" in whole MiB
+# (empty if none). Read from parted's "Free Space" rows, which are stable across
+# the parted versions shipped on the ISO. Used to place the alongside root.
+largest_free_region() {
+    parted -s "$1" unit MiB print free 2>/dev/null | awk '
+        /Free Space/ {
+            s=$1; e=$2; z=$3; gsub(/MiB/,"",s); gsub(/MiB/,"",e); gsub(/MiB/,"",z);
+            if (z+0 > best+0) { best=z; bs=s; be=e }
+        }
+        END { if (best+0 > 0) printf "%d %d %d\n", bs+0, be+0, best+0 }'
+}
+
 # ── Must be root ──────────────────────────────────────────
 [ "$(id -u)" = "0" ] || die "syn-install must be run as root"
 
@@ -199,15 +235,10 @@ echo ""
 echo "  $(bold 'Target:') $DISK"
 lsblk "$DISK"
 echo ""
-warn "This will ERASE all data on $DISK"
-prompt "Type 'yes' to confirm:"
-read -r confirm
-[ "$confirm" = "yes" ] || die "Aborted"
-
-# Clean up any previous failed install attempt
-umount -R /mnt 2>/dev/null || true
 
 # ── Detect boot mode ──────────────────────────────────────
+# Determined before the install-mode choice: installing ALONGSIDE another OS is
+# offered only under UEFI, which is how every modern Windows machine boots.
 if [ -d /sys/firmware/efi/efivars ]; then
     BOOT_MODE="uefi"
     success "Boot mode: UEFI"
@@ -216,24 +247,109 @@ else
     success "Boot mode: BIOS/Legacy"
 fi
 
+# ── Install mode: erase whole disk vs install alongside ───
+#
+# ERASE wipes the disk (mklabel) — the clean-install path. ALONGSIDE installs
+# into existing FREE SPACE without touching any current partition, reusing the
+# machine's ESP: the dual-boot flow for a disk that already holds Windows (or
+# another OS). Alongside is offered ONLY when it can actually work — UEFI, an
+# existing ESP, and enough contiguous free space — so the option never appears
+# when it would fail. It never resizes a partition: the user frees space first
+# (Windows: Disk Management -> Shrink Volume), which is the safe, in-Windows way.
+NUM_PARTS=$(lsblk -rno NAME "$DISK" | tail -n +2 | grep -c .)
+FREE_REGION="$(largest_free_region "$DISK")"
+FREE_MIB="${FREE_REGION##* }"; [[ "$FREE_MIB" =~ ^[0-9]+$ ]] || FREE_MIB=0
+ESP_DEV="$(find_esp "$DISK" || true)"
+MIN_ROOT_MIB=$((MIN_DISK_BYTES / 1024 / 1024))
+
+INSTALL_MODE="erase"
+if [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] \
+   && [ -n "$ESP_DEV" ] && [ "$FREE_MIB" -ge "$MIN_ROOT_MIB" ]; then
+    echo ""
+    echo "  This disk already holds $NUM_PARTS partition(s), an EFI System"
+    echo "  Partition ($ESP_DEV), and $((FREE_MIB / 1024)) GiB of free space."
+    echo ""
+    echo "    1) Install $(bold 'ALONGSIDE') — use the free space, keep everything else"
+    echo "    2) $(bold 'ERASE') the whole disk — delete every partition and all data"
+    echo ""
+    prompt "Install mode [1/2]:"
+    read -r _mode
+    case "${_mode:-1}" in
+        1) INSTALL_MODE="alongside" ;;
+        *) INSTALL_MODE="erase" ;;
+    esac
+elif [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] && [ -n "$ESP_DEV" ]; then
+    # Another OS is here, but not enough room to sit beside it.
+    warn "This disk holds another OS but only $((FREE_MIB / 1024)) GiB is free —
+  under the $((MIN_ROOT_MIB / 1024)) GiB SynapseOS needs. To dual-boot, shrink the
+  existing OS first (Windows: Disk Management -> Shrink Volume), then re-run.
+  Continuing now would ERASE the whole disk."
+fi
+
+# Clean up any previous failed install attempt
+umount -R /mnt 2>/dev/null || true
+
 # ── Partition ─────────────────────────────────────────────
 header
-step "Step 2 — Partitioning $DISK"
+step "Step 2 — Partitioning $DISK ($INSTALL_MODE)"
 
-if [ "$BOOT_MODE" = "uefi" ]; then
+if [ "$INSTALL_MODE" = "alongside" ]; then
+    # Non-destructive: create ONE new root partition in the largest free region
+    # and reuse the existing ESP. No mklabel, and nothing we did not just create
+    # is ever formatted. Confirm the exact plan first.
+    read -r FREE_START FREE_END _FREE_SIZE <<<"$FREE_REGION"
+    R_START=$((FREE_START + 1))          # 1 MiB inset off the preceding partition
+    R_END=$FREE_END
+    echo ""
+    echo "  Plan — $(bold 'nothing else is touched'):"
+    echo "    • KEEP   all $NUM_PARTS existing partition(s), including Windows"
+    echo "    • REUSE  $ESP_DEV as the EFI partition (mounted, $(bold 'not') formatted)"
+    echo "    • CREATE a new ext4 root of ~$(( (R_END - R_START) / 1024 )) GiB in the free space"
+    echo ""
+    lsblk -o NAME,SIZE,FSTYPE,PARTTYPENAME,MOUNTPOINTS "$DISK" 2>/dev/null | sed 's/^/    /' \
+        || lsblk "$DISK" | sed 's/^/    /'
+    echo ""
+    warn "This adds one partition in the free space. Back up anything irreplaceable first."
+    prompt "Type 'yes' to install alongside:"
+    read -r confirm
+    [ "$confirm" = "yes" ] || die "Aborted"
+
+    # Snapshot the partition list so we can identify the one parted creates — its
+    # number is whatever GPT slot is free, not necessarily the highest.
+    _before=$(lsblk -rno NAME "$DISK" | sort)
+    echo "  Creating root partition in free space (${R_START}MiB–${R_END}MiB)..."
+    parted -s "$DISK" mkpart SYNAPSE_ROOT ext4 "${R_START}MiB" "${R_END}MiB" \
+        || die "Failed to create the root partition"
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 2
+    _after=$(lsblk -rno NAME "$DISK" | sort)
+    _new=$(comm -13 <(echo "$_before") <(echo "$_after") | grep . | head -1)
+    [ -n "$_new" ] || die "Could not identify the new partition after creating it"
+    PART_ROOT="/dev/$_new"
+    PART_EFI="$ESP_DEV"
+
+    echo "  Formatting new root ($PART_ROOT)..."
+    mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
+
+    echo "  Mounting..."
+    mount "$PART_ROOT" /mnt || die "Failed to mount root"
+    mkdir -p /mnt/boot/efi
+    # REUSE, never mkfs: this ESP carries Windows' bootloader.
+    mount "$PART_EFI" /mnt/boot/efi || die "Failed to mount the existing ESP"
+
+elif [ "$BOOT_MODE" = "uefi" ]; then
+    warn "This will ERASE all data on $DISK"
+    prompt "Type 'yes' to confirm:"
+    read -r confirm
+    [ "$confirm" = "yes" ] || die "Aborted"
+
     echo "  Creating GPT partition table..."
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart ESP fat32 1MiB 513MiB
     parted -s "$DISK" set 1 esp on
     parted -s "$DISK" mkpart root ext4 513MiB 100%
-
-    if [[ "$DISK" == *"nvme"* ]]; then
-        PART_EFI="${DISK}p1"
-        PART_ROOT="${DISK}p2"
-    else
-        PART_EFI="${DISK}1"
-        PART_ROOT="${DISK}2"
-    fi
+    PART_EFI="$(part_name "$DISK" 1)"
+    PART_ROOT="$(part_name "$DISK" 2)"
 
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
@@ -248,16 +364,17 @@ if [ "$BOOT_MODE" = "uefi" ]; then
     mkdir -p /mnt/boot/efi
     mount "$PART_EFI" /mnt/boot/efi || die "Failed to mount EFI"
 else
+    # BIOS/MBR whole-disk. Alongside is UEFI-only, so BIOS is always an erase.
+    warn "This will ERASE all data on $DISK"
+    prompt "Type 'yes' to confirm:"
+    read -r confirm
+    [ "$confirm" = "yes" ] || die "Aborted"
+
     echo "  Creating MBR partition table..."
     parted -s "$DISK" mklabel msdos
     parted -s "$DISK" mkpart primary ext4 1MiB 100%
     parted -s "$DISK" set 1 boot on
-
-    if [[ "$DISK" == *"nvme"* ]]; then
-        PART_ROOT="${DISK}p1"
-    else
-        PART_ROOT="${DISK}1"
-    fi
+    PART_ROOT="$(part_name "$DISK" 1)"
 
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
@@ -295,7 +412,7 @@ echo "  Running pacstrap (this may take several minutes)..."
 # service menu drives the context menu. Matches the dev machine's local setup.
 pacstrap /mnt \
     base linux linux-firmware linux-headers foot \
-    grub efibootmgr \
+    grub efibootmgr os-prober ntfs-3g \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
@@ -749,6 +866,16 @@ if [ ! -f "/mnt/usr/share/zoneinfo/$TZ_CHOICE" ]; then
 fi
 arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$TZ_CHOICE" /etc/localtime 2>/dev/null || true
 arch-chroot /mnt hwclock --systohc 2>/dev/null || true
+
+# Dual-boot clock: Windows keeps the RTC in LOCAL time, Linux in UTC by default,
+# so a naive dual-boot shows the wrong time in one OS after switching. Match the
+# less-invasive side — put Linux on a local-time RTC too (writes LOCAL to
+# /etc/adjtime). Only in alongside mode, where another OS is present.
+if [ "$INSTALL_MODE" = "alongside" ]; then
+    arch-chroot /mnt hwclock --systohc --localtime 2>/dev/null \
+        && echo "  Dual-boot: set the hardware clock to local time (matches Windows)" \
+        || echo "  (note: if the clock is wrong after booting Windows, set Windows to UTC"
+fi
 success "Timezone: $TZ_CHOICE"
 
 # os-release — copy the live system's canonical file so the installed
@@ -1217,7 +1344,11 @@ GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="SynapseOS"
 GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
 GRUB_CMDLINE_LINUX=""
-GRUB_DISABLE_OS_PROBER=true
+# os-prober ON so grub-mkconfig detects Windows / other OSes and adds their
+# boot menu entries. Recent GRUB disables it by default for security; a
+# single-OS install just finds nothing, so enabling it globally is safe and is
+# what makes the alongside (dual-boot) install actually offer the other OS.
+GRUB_DISABLE_OS_PROBER=false
 EOF
 
 mkdir -p /mnt/boot/grub
