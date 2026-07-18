@@ -320,10 +320,15 @@ build_llama() {
         rocm)  CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=ON" "-DGGML_VULKAN=OFF" "-DAMDGPU_TARGETS=gfx1030;gfx1100") ;;
         # Vulkan: portable AMD/Intel GPU backend. Needs glslc (shaderc) +
         # Vulkan headers at build time to compile the compute shaders into
-        # libggml-vulkan.so; both are checked before this runs. No GGML_NATIVE
-        # override — the Vulkan build still carries the CPU fallback path, and
-        # like CUDA it targets machines that specifically asked for this build.
-        vulkan) CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=ON") ;;
+        # libggml-vulkan.so; both are checked before this runs. GGML_NATIVE=OFF
+        # is REQUIRED here (unlike CUDA): the Vulkan build's whole point is that
+        # it loads with no GPU and FALLS BACK TO THE CPU — a reachable path, so
+        # baking the build host's AVX-512/AVX2 into it would SIGILL that fallback
+        # on baseline x86-64 (and in a VM without -cpu host). CUDA gets away
+        # without it only because its lib can't load at all without the GPU, so
+        # its CPU path is never reached. GGML_NATIVE only touches the CPU
+        # backend — it costs GPU users nothing.
+        vulkan) CMAKE_ARGS+=("-DGGML_CUDA=OFF" "-DGGML_HIPBLAS=OFF" "-DGGML_VULKAN=ON" "-DGGML_NATIVE=OFF") ;;
         # GGML_NATIVE=OFF: NATIVE bakes the BUILD HOST's instruction set
         # (AVX2/AVX-512) into libggml, and synapd dies with SIGILL on any
         # CPU without those extensions — VMs without -cpu host included.
