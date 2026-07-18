@@ -63,6 +63,9 @@
  *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
  *
+ * Launcher (launcher.c) — the "◢ SYNAPSE" start-menu button, top-left:
+ *   launcher_style = text|logo  (default text; logo = the dendrite emblem)
+ *
  * Power saving (power.c) — idle seconds per stage, 0 = never. Each is
  * measured from the last input event, so they are independent, not
  * cumulative. Super+P edits them live and writes power.state, which then
@@ -442,6 +445,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->dock_hover_margin = 4;
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
     cfg->dock_pin_count    = 0;
+    cfg->launcher_style    = SYN_LAUNCHER_TEXT;
 
     cfg->power_enabled = 1;
     cfg->power_dim     = 240;
@@ -746,6 +750,11 @@ void synui_config_load(syn_config_t *cfg)
             else if (strcmp(val, "left")   == 0) cfg->dock_edge = SYN_DOCK_EDGE_LEFT;
             else if (strcmp(val, "right")  == 0) cfg->dock_edge = SYN_DOCK_EDGE_RIGHT;
             else wlr_log(WLR_ERROR, "synui: dock_edge: unknown '%s'", val);
+        }
+        else if (strcmp(key, "launcher_style") == 0) {
+            if      (strcmp(val, "text") == 0) cfg->launcher_style = SYN_LAUNCHER_TEXT;
+            else if (strcmp(val, "logo") == 0) cfg->launcher_style = SYN_LAUNCHER_LOGO;
+            else wlr_log(WLR_ERROR, "synui: launcher_style: unknown '%s'", val);
         }
         else if (strcmp(key, "dock_height") == 0) {
             cfg->dock_height = atoi(val);

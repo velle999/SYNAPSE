@@ -768,6 +768,14 @@ typedef enum {
     SYN_DOCK_EDGE_RIGHT,
 } syn_dock_edge_t;
 
+/* The start-menu launcher (launcher.c) synui draws in the top-left of every
+ * output — the "◢ SYNAPSE" button that used to be a waybar module. Text is the
+ * old look; logo swaps it for the dendrite emblem (SYNUI_DATADIR/logo.svg). */
+typedef enum {
+    SYN_LAUNCHER_TEXT = 0,   /* "◢ SYNAPSE" */
+    SYN_LAUNCHER_LOGO,       /* logo.svg emblem */
+} syn_launcher_style_t;
+
 /* Dock right-click context-menu actions (dock.c / render.c). */
 typedef enum {
     SYN_DOCKACT_PIN = 0,   /* add app_id to the pinned set */
@@ -877,6 +885,8 @@ typedef struct {
     int   dock_height;          /* px thickness, default 64 */
     int   dock_hover_margin;    /* px trigger strip at the dock's edge, default 4 */
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
+    /* launcher.c: the synui-drawn start-menu button. Default TEXT. */
+    syn_launcher_style_t launcher_style;
 #define DOCK_PIN_MAX 16
 #define GAME_EXCLUDE_MAX 16
     /* Runtime-mutable pinned set: seeded from synuirc `dock_pin`, then
@@ -1201,6 +1211,17 @@ struct syn_output {
         double   last_tick;        /* CLOCK_MONOTONIC secs of the last anim
                                      * step; 0 while settled (no slide). */
     } dock;
+
+    /* launcher.c: this output's "◢ SYNAPSE" start-menu button, drawn top-left
+     * over the waybar bar. A UI-sibling scene tree like the dock's, so it floats
+     * above the top-layer bar; hidden when a fullscreen window covers the
+     * output, exactly as the bar and dock are. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_buffer *buf;
+        int  x, y, w, h;   /* layout-space hit box; valid while visible */
+        int  visible;
+    } launcher;
 
     struct wl_listener frame;
     struct wl_listener request_state;
@@ -2469,6 +2490,14 @@ void icon_draw_monogram(cairo_t *cr, const char *app_id,
 void dock_init(syn_server_t *s);                  /* load config; entries start empty */
 void dock_output_created(syn_output_t *o);        /* create this output's dock tree */
 void dock_output_destroy(syn_output_t *o);        /* destroy this output's dock tree */
+
+/* ── Start-menu launcher (launcher.c) ────────────────────── */
+void launcher_output_created(syn_output_t *o);    /* create this output's button */
+void launcher_output_destroy(syn_output_t *o);    /* destroy it */
+void launcher_render_all(syn_server_t *s);         /* rebuild buffers (style change) */
+void launcher_relayout(syn_server_t *s);           /* reposition + fullscreen hide */
+/* True if (lx,ly) is over a visible launcher button; used by the click router. */
+bool launcher_at(syn_server_t *s, double lx, double ly);
 /* Re-merge pinned (config) + running (all workspaces') apps into
  * s->dock_entries, then re-render every output. Called on view map/unmap. */
 void dock_rebuild(syn_server_t *s);

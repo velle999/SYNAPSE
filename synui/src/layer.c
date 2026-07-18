@@ -130,6 +130,8 @@ void layer_update_occlusion_all(syn_server_t *s)
      * or under the fullscreen window (dock_apply_position reads the same rule),
      * so restack the docks whenever occlusion is recomputed. */
     dock_relayout(s);
+    /* The launcher button hides on fullscreen exactly as the bar does above. */
+    launcher_relayout(s);
 }
 
 /* ── Layer surface events ────────────────────────────────── */

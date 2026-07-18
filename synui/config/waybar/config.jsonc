@@ -2,9 +2,10 @@
     "layer": "top",
     "position": "top",
     "height": 28,
-    "modules-left": [
-        "custom/synapse"
-    ],
+    // The "◢ SYNAPSE" launcher is drawn by the compositor now (synui/src/
+    // launcher.c), top-left over this bar, so it is no longer a waybar module —
+    // see the custom/synapse note below. Left empty; synui fills the corner.
+    "modules-left": [],
     "modules-center": [
         "clock"
     ],
@@ -33,25 +34,19 @@
         "spacing": 8,
         "show-passive-items": true
     },
-    // The start menu is synui's now (synui/src/menu.c), not waybar's.
+    // The "◢ SYNAPSE" launcher and the start menu are both synui's now.
     //
-    // It used to be a GTK menu here, opened either by clicking this module or by
-    // synui synthesising a click on it for the Super tap. It worked, and it
-    // could never be arrow-navigated: waybar sets keyboard_interactivity NONE
-    // once at startup and never revises it, so the menu is handed no keyboard
-    // focus and is deaf by construction. That is a waybar/GDK wall, not
-    // something synui can patch from outside — three attempts to, all reverted.
+    // The button used to be a custom/synapse module here whose on-click
+    // synthesised a Super tap (wtype -k Super_L) so synui would open its own
+    // menu — the menu could never live in waybar, which sets
+    // keyboard_interactivity NONE once at startup and never revises it, so a GTK
+    // menu there is handed no keyboard focus and is deaf by construction (three
+    // attempts to patch that from outside, all reverted). With the menu already
+    // synui's (synui/src/menu.c), the button moved in too: synui draws it
+    // directly, top-left over this bar, and a click calls menu_toggle() straight
+    // — no synthetic keypress, no module (synui/src/launcher.c). launcher_style
+    // in synuirc picks "◢ SYNAPSE" text or the dendrite logo.
     //
-    // So this button now just asks synui to open its own menu, the same way the
-    // control panel entry used to: wtype speaks virtual-keyboard-v1, which synui
-    // wires to the path a physical keyboard takes, and a Super tap (press and
-    // release with nothing in between) is what opens the menu. There is no other
-    // IPC into the compositor. Keep in step with syn_server::super_armed.
-    "custom/synapse": {
-        "format": "◢ SYNAPSE",
-        "tooltip": false,
-        "on-click": "wtype -k Super_L"
-    },
     // Game mode (synui). synui writes its state to $XDG_RUNTIME_DIR/synui/game
     // on every enter/leave; synui-game-status turns that into waybar JSON. The
     // module only ever reports — Super+G is what toggles it.

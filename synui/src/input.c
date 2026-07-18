@@ -1603,6 +1603,15 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
             return;
         }
 
+        /* The launcher button (top-left, over the bar): a left click opens the
+         * start menu. When the menu is already up we returned above at
+         * s->menu.visible, where a click off the panel closes it — so this path
+         * only ever opens. Ahead of the dock and window forwarding, like it. */
+        if (button == BTN_LEFT && launcher_at(s, s->cursor->x, s->cursor->y)) {
+            menu_toggle(s);
+            return;
+        }
+
         /* Right-click a dock icon → its context menu. */
         if (button == BTN_RIGHT) {
             syn_dock_entry_t *e =

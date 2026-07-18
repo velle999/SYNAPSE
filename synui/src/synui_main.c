@@ -86,6 +86,8 @@ void synui_config_reload(syn_server_t *s)
 
     wallpaper_reload(s);
     input_reload_config(s);
+    /* launcher_style may have changed text↔logo — rebuild the button pixels. */
+    launcher_render_all(s);
 
     /* Re-tile the visible desktop (layout_apply covers every output) with the
      * new gap/border. Hidden desktops re-flow on switch. */
@@ -298,6 +300,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
         wallpaper_output_destroy(output);
         matrix_output_destroy(output);
         dock_output_destroy(output);
+        launcher_output_destroy(output);
 
         syn_output_t *home = wl_list_empty(&server->outputs)
                                  ? NULL
@@ -417,6 +420,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
     layer_arrange_output(output);
     wallpaper_output_created(output);
     dock_output_created(output);
+    launcher_output_created(output);
     layout_apply(server, server_active_workspace(server));
     if (server->welcome_ui.shown)
         synui_render_welcome(server);

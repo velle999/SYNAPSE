@@ -101,6 +101,7 @@ void output_layout_changed(syn_server_t *s)
         layer_arrange_output(o);
     wallpaper_relayout(s);
     dock_relayout(s);
+    launcher_relayout(s);
     session_lock_arrange(s);
     if (s->welcome_ui.shown)
         synui_render_welcome(s);
