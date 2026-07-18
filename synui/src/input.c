@@ -587,6 +587,13 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         ctlpanel_toggle(s);
     } else if (strcmp(action, "bluetooth") == 0) {
         bt_toggle(s);
+    } else if (strcmp(action, "printers") == 0) {
+        /* cups ships a complete admin UI on localhost:631; there is no GUI to
+         * write. Opening the page is also what starts cupsd — cups.socket has a
+         * loopback TCP listener (a drop-in the installer ships), so the URL
+         * socket-activates the daemon rather than refusing the connection. The
+         * control panel's Printers row and the start menu both land here. */
+        synui_spawn("xdg-open http://localhost:631/");
     } else if (strcmp(action, "night_light") == 0) {
         nightlight_toggle(s);
     } else if (strcmp(action, "record") == 0) {

@@ -831,6 +831,17 @@ arch-chroot /mnt systemctl enable bluetooth 2>/dev/null || true
 # runs until something actually prints. avahi is what finds driverless
 # (IPP Everywhere / AirPrint) printers, which is most printers made since ~2015.
 arch-chroot /mnt systemctl enable cups.socket avahi-daemon 2>/dev/null || true
+# cups.socket binds only the unix socket, so the web admin UI at localhost:631 —
+# the whole printer story, opened from the start menu and control panel — can
+# never connect. Append a loopback TCP listener (ListenStream is a list, so the
+# unix socket stays); socket activation is preserved, cupsd still idles until
+# the port or a print job is touched.
+mkdir -p /mnt/etc/systemd/system/cups.socket.d
+cat > /mnt/etc/systemd/system/cups.socket.d/tcp.conf << 'CUPSTCP_EOF'
+[Socket]
+ListenStream=127.0.0.1:631
+ListenStream=[::1]:631
+CUPSTCP_EOF
 # The glibc half of mDNS. Without it cups discovers the printer and then cannot
 # resolve its .local name, so discovery works and printing fails.
 if [ -f /mnt/etc/nsswitch.conf ] && ! grep -q mdns_minimal /mnt/etc/nsswitch.conf; then

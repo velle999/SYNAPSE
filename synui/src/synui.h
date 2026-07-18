@@ -279,6 +279,8 @@ typedef enum {
     CTL_ROW_POWER,
     CTL_ROW_TASKMGR,
     CTL_ROW_NETWORK,
+    CTL_ROW_BLUETOOTH,
+    CTL_ROW_PRINTERS,
     CTL_ROW_LOCK,
     CTL_ROW_COUNT,
 } syn_ctl_row_t;

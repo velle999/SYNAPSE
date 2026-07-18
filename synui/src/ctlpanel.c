@@ -55,6 +55,8 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_POWER:      return "Power saving \xe2\x80\xa6";
     case CTL_ROW_TASKMGR:    return "Task manager \xe2\x80\xa6";
     case CTL_ROW_NETWORK:    return "Network / Wi-Fi \xe2\x80\xa6";
+    case CTL_ROW_BLUETOOTH:  return "Bluetooth \xe2\x80\xa6";
+    case CTL_ROW_PRINTERS:   return "Printers \xe2\x80\xa6";
     case CTL_ROW_LOCK:       return "Lock screen";
     default:                 return "?";
     }
@@ -128,6 +130,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "menu",              "Welcome menu" },
         { "control",           "Control panel" },
         { "bluetooth",         "Bluetooth" },
+        { "printers",          "Printers" },
         { "night_light",       "Night light" },
         { "record",            "Record screen" },
         { "clipboard",         "Clipboard history" },
@@ -377,6 +380,8 @@ static void ctlpanel_activate(syn_server_t *s)
     case CTL_ROW_POWER:     ctlpanel_hide(s); synui_binding_execute(s, "power",     NULL); return;
     case CTL_ROW_TASKMGR:   ctlpanel_hide(s); synui_binding_execute(s, "taskmgr",   NULL); return;
     case CTL_ROW_NETWORK:   ctlpanel_hide(s); synui_binding_execute(s, "network",   NULL); return;
+    case CTL_ROW_BLUETOOTH: ctlpanel_hide(s); synui_binding_execute(s, "bluetooth", NULL); return;
+    case CTL_ROW_PRINTERS:  ctlpanel_hide(s); synui_binding_execute(s, "printers",  NULL); return;
     case CTL_ROW_LOCK:      ctlpanel_hide(s); synui_binding_execute(s, "lock",      NULL); return;
 
     default:
