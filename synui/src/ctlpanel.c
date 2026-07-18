@@ -48,6 +48,7 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_DOCK:       return "Dock";
     case CTL_ROW_DOCK_AUTOHIDE: return "Dock auto-hide";
     case CTL_ROW_TITLEBARS:  return "Titlebars";
+    case CTL_ROW_LAUNCHER:   return "Start button";
     case CTL_ROW_SEP:        return "";
     case CTL_ROW_DISPLAYS:   return "Display settings";
     case CTL_ROW_FILTERS:    return "CRT filters \xe2\x80\xa6";
@@ -109,6 +110,10 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         /* The row is the titlebars, not the hiding of them: "on" means shown. */
         snprintf(buf, n, "%s", s->titlebars_hidden ? "off" : "on");
         break;
+    case CTL_ROW_LAUNCHER:
+        snprintf(buf, n, "%s",
+                 s->config.launcher_style == SYN_LAUNCHER_LOGO ? "logo" : "text");
+        break;
     default:
         buf[0] = '\0';   /* jump-offs have no state of their own */
         break;
@@ -137,6 +142,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "brightness_up",     "Brightness up" },
         { "brightness_down",   "Brightness down" },
         { "start_menu",        "Start menu" },
+        { "launcher_style",    "Start button: text/logo" },
         { "close",             "Close window" },
         { "quit",              "Quit synui" },
         { "layout_cycle",      "Cycle layout" },
@@ -362,6 +368,17 @@ static void ctlpanel_activate(syn_server_t *s)
         deco_toggle_titlebars(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "titlebars %s", s->titlebars_hidden ? "off" : "on");
+        return;
+
+    case CTL_ROW_LAUNCHER:
+        /* Same call the start-menu Settings row and any bind make: it flips the
+         * style, redraws the button on every output, and persists to
+         * launcher.state. Repaint after so this row's value reads the new style. */
+        launcher_toggle_style(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "start button: %s",
+                 s->config.launcher_style == SYN_LAUNCHER_LOGO ? "logo" : "text");
+        ctlpanel_repaint(s);
         return;
 
     case CTL_ROW_AI_BACKEND:

@@ -441,10 +441,11 @@ static void menu_add_tools(syn_menu_t *m)
     menu_add(m, p, MENU_ROW_ITEM, "AI Shell (synsh)", NULL, "foot synsh");
     menu_add(m, p, MENU_ROW_ITEM, "System Status",   NULL, "foot --hold syn status");
     menu_add(m, p, MENU_ROW_ITEM, "Network Setup",   NULL, "foot -e nmtui");
-    /* cups ships a complete printer admin UI on localhost:631, so there is no
-     * GUI to write or package — this is the whole printer story. cups.socket is
-     * socket-activated, so opening the page is also what starts the daemon. */
-    menu_add(m, p, MENU_ROW_ITEM, "Printers",         NULL, "xdg-open http://localhost:631/");
+    /* No Printers row here: it lived in two places at once. cups' own "Manage
+     * Printing" .desktop is Settings-category, so menu_build folds it onto the
+     * Settings page — that is the single home for it now. (cups ships a complete
+     * admin UI on localhost:631; cups.socket is socket-activated, so opening the
+     * page is also what starts the daemon.) */
     /* A full -Syu, never a bare -Sy: syncing the databases and then installing
      * anything less than everything is a partial upgrade, which on Arch means a
      * 404 on some dependency at best and a half-upgraded system at worst.
@@ -458,8 +459,9 @@ static void menu_add_tools(syn_menu_t *m)
  * first. It emits the root row and the Back itself, so a stock box with no
  * Settings-category .desktop still gets the page; cups' "Manage Printing" is
  * folded onto it by menu_build, which is why there is no Printers row here. */
-static void menu_add_settings(syn_menu_t *m)
+static void menu_add_settings(syn_server_t *s)
 {
+    syn_menu_t *m = &s->menu;
     const char *p = MENU_PAGE_SETTINGS;
     menu_add_submenu(m, p, p);
     menu_add_back(m, p);
@@ -471,6 +473,13 @@ static void menu_add_settings(syn_menu_t *m)
     menu_add(m, p, MENU_ROW_ITEM, "Power Saving",    "power",       NULL);
     menu_add(m, p, MENU_ROW_ITEM, "Network / Wi-Fi", "network",     NULL);
     menu_add(m, p, MENU_ROW_ITEM, "Bluetooth",       "bluetooth",   NULL);
+    /* The start-button style, its current value in the label. Activating flips
+     * it (launcher_style bind); the menu is rebuilt on every open, so the label
+     * shows the new value the next time this page is drawn. */
+    char launcher_lbl[MENU_LABEL_MAX];
+    snprintf(launcher_lbl, sizeof(launcher_lbl), "Start Button: %s",
+             s->config.launcher_style == SYN_LAUNCHER_LOGO ? "Logo" : "Text");
+    menu_add(m, p, MENU_ROW_ITEM, launcher_lbl, "launcher_style", NULL);
     menu_add(m, p, MENU_ROW_ITEM, "Lock Screen",     "lock",        NULL);
 }
 
@@ -525,7 +534,7 @@ static void menu_build(syn_server_t *s)
     menu_add_static(m);
     /* Sits under SYSTEM, right after System Tools: the root row is emitted here,
      * among the root rows, while its page rows (below) go on the Settings page. */
-    menu_add_settings(m);
+    menu_add_settings(s);
 
     /* The apps are sorted by category, so a change of category is a new group.
      * The root's row for it goes in as the group opens; the apps themselves go

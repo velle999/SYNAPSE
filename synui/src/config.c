@@ -64,7 +64,9 @@
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
  *
  * Launcher (launcher.c) — the "◢ SYNAPSE" start-menu button, top-left:
- *   launcher_style = text|logo  (default text; logo = the dendrite emblem)
+ *   launcher_style = text|logo  (default; logo = ◢ caret + the dendrite emblem)
+ *     — the default only: the control panel and start-menu Settings toggle this
+ *       at run time, persisting to launcher.state (laid back over synuirc here).
  *
  * Power saving (power.c) — idle seconds per stage, 0 = never. Each is
  * measured from the last input event, so they are independent, not
@@ -533,6 +535,7 @@ void synui_config_load(syn_config_t *cfg)
         dock_state_load(cfg);
         power_state_load(cfg);
         welcome_state_load(cfg);
+        launcher_state_load(cfg);
         return;
     }
 
@@ -835,4 +838,5 @@ void synui_config_load(syn_config_t *cfg)
     dock_state_load(cfg);
     power_state_load(cfg);
     welcome_state_load(cfg);
+    launcher_state_load(cfg);
 }

@@ -287,6 +287,7 @@ typedef enum {
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_TITLEBARS,
+    CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
     CTL_ROW_FILTERS,
@@ -2514,6 +2515,8 @@ void launcher_output_created(syn_output_t *o);    /* create this output's button
 void launcher_output_destroy(syn_output_t *o);    /* destroy it */
 void launcher_render_all(syn_server_t *s);         /* rebuild buffers (style change) */
 void launcher_relayout(syn_server_t *s);           /* reposition + fullscreen hide */
+void launcher_toggle_style(syn_server_t *s);       /* flip text↔logo, redraw, persist */
+void launcher_state_load(syn_config_t *cfg);       /* lay launcher.state over synuirc */
 /* True if (lx,ly) is over a visible launcher button; used by the click router. */
 bool launcher_at(syn_server_t *s, double lx, double ly);
 /* Re-merge pinned (config) + running (all workspaces') apps into

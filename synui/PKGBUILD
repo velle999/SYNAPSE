@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=118
+pkgrel=119
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')

@@ -499,6 +499,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         dispcfg_toggle(s);
     } else if (strcmp(action, "wallpaper") == 0) {
         wppick_toggle(s);
+    } else if (strcmp(action, "launcher_style") == 0) {
+        launcher_toggle_style(s);
     } else if (strcmp(action, "volume") == 0) {
         /* wpctl asks WirePlumber, which owns the sink, rather than poking ALSA
          * behind PipeWire's back. @DEFAULT_AUDIO_SINK@ is resolved at run time,
