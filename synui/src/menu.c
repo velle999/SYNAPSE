@@ -441,16 +441,22 @@ static void menu_add_tools(syn_menu_t *m)
     menu_add(m, p, MENU_ROW_ITEM, "AI Shell (synsh)", NULL, "foot synsh");
     menu_add(m, p, MENU_ROW_ITEM, "System Status",   NULL, "foot --hold syn status");
     menu_add(m, p, MENU_ROW_ITEM, "Network Setup",   NULL, "foot -e nmtui");
+    /* Shelly is a GUI (Terminal=false in its .desktop), so it spawns bare, no
+     * foot wrapper. Its own com.shellyorg.shelly.desktop also lands it on a
+     * category page via the scan; this is the fixed System-Tools home for it. */
+    menu_add(m, p, MENU_ROW_ITEM, "Software Manager", NULL, "shelly-ui");
     /* No Printers row here: it lived in two places at once. cups' own "Manage
      * Printing" .desktop is Settings-category, so menu_build folds it onto the
      * Settings page — that is the single home for it now. (cups ships a complete
      * admin UI on localhost:631; cups.socket is socket-activated, so opening the
      * page is also what starts the daemon.) */
-    /* A full -Syu, never a bare -Sy: syncing the databases and then installing
-     * anything less than everything is a partial upgrade, which on Arch means a
-     * 404 on some dependency at best and a half-upgraded system at worst.
-     * --hold so the window survives the command; foot gives sudo a pty. */
-    menu_add(m, p, MENU_ROW_ITEM, "Update System",   NULL, "foot --hold sudo pacman -Syu");
+    /* shelly's own full-system upgrade — the same engine the Software Manager
+     * GUI drives, so the CLI and GUI stay in agreement — not raw pacman. shelly
+     * wraps ALPM to do a complete upgrade (never a partial-upgrade -Sy, which on
+     * Arch means a 404 on a dependency at best, a half-upgraded system at worst).
+     * --hold so the window survives; sudo via foot's pty, and already-root shelly
+     * skips its polkit escalation. */
+    menu_add(m, p, MENU_ROW_ITEM, "Update System",   NULL, "foot --hold sudo shelly upgrade");
 }
 
 /* The Settings page: the control panel and every settings panel it fronts,
