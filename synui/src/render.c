@@ -1391,12 +1391,21 @@ void synui_render_calendar(syn_server_t *s)
         return;
     }
 
+    /* The *usable* box, not the output: its top edge sits just under waybar
+     * (the bar's height comes off the layer-shell exclusive zone, so a bar that
+     * moves or resizes takes the calendar with it). The bar clock lives in
+     * modules-center, so we centre the popup horizontally and hang it from the
+     * bar — it drops out of the clock instead of floating in mid-screen. */
     struct wlr_box ob;
-    get_output_box(s, &ob);
+    server_usable_box(s, &ob);
 
     const int pw = 336, ph = 322;
     const int cell_w = 44, grid_x = 14, grid_y = 66, cell_h = 34;
-    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+    const int gap = 4;   /* breathing room between the bar and the popup */
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + gap;
+    /* A short output could push the footer off the bottom; ride up if so. */
+    if (py + ph > ob.y + ob.height) py = ob.y + ob.height - ph;
+    if (py < ob.y) py = ob.y;
 
     wlr_scene_node_set_position(&s->cal_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, true);

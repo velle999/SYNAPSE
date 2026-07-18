@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=126
+pkgrel=127
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL2')
@@ -125,6 +125,12 @@ package() {
     # Game mode indicator for waybar (custom/gamemode polls this).
     install -Dm755 systemd/synui-game-status.sh \
         "$pkgdir/usr/bin/synui-game-status"
+
+    # Bar clock for waybar (custom/clock polls this). Reads the format the
+    # Date & Time settings panel writes to ~/.config/synui/clock.state, so the
+    # panel's 12/24-hour and seconds toggles actually reach the bar.
+    install -Dm755 systemd/synui-clock.sh \
+        "$pkgdir/usr/bin/synui-clock"
 
     # Screenshots: Print / Shift+Print / Ctrl+Print (see seed_default_binds).
     install -Dm755 systemd/synui-screenshot.sh \

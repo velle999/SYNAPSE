@@ -7,7 +7,7 @@
     // see the custom/synapse note below. Left empty; synui fills the corner.
     "modules-left": [],
     "modules-center": [
-        "clock"
+        "custom/clock"
     ],
     "modules-right": [
         "tray",
@@ -56,9 +56,16 @@
         "interval": 2,
         "tooltip": true
     },
-    "clock": {
-        "format": "{:%I:%M:%S %p  %Y-%m-%d}",
+    // The bar clock is custom/clock, not waybar's built-in clock: the built-in
+    // module takes a fixed format string, so the Date & Time settings panel's
+    // 12/24-hour and seconds toggles could never reach it. synui-clock reads
+    // the format the panel saves to ~/.config/synui/clock.state on every 1s
+    // tick, so flipping a toggle there changes the bar within a second.
+    "custom/clock": {
+        "exec": "synui-clock",
+        "return-type": "json",
         "interval": 1,
+        "tooltip": true,
         // Click the bar clock to pop synui's compositor-drawn calendar. The
         // clock/time SETTINGS panel lives at Settings > Date & Time in the
         // start menu; this is just the month grid (also Super+Shift+T).

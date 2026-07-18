@@ -37,7 +37,7 @@ menu separator {
     background: #2a2a40;
     min-height: 1px;
 }
-#clock {
+#custom-clock {
     color: #ffd319;
 }
 /* Bluetooth: the one module coloured by what it is, not the house cyan — the
