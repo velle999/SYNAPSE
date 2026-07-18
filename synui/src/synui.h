@@ -1751,6 +1751,7 @@ struct syn_server {
     int             greeter;
     struct {
         char     user[64];              /* the account to log in (default: UID 1000) */
+        int      editing_user;          /* Tab focus is on the username field, not the password */
         int      busy;                  /* a greetd exchange is in flight */
         int      failed;                /* last attempt was rejected */
         int      sock;                  /* GREETD_SOCK fd, -1 when idle */

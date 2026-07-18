@@ -67,6 +67,77 @@ static uint32_t lock_now_ms(void)
 
 /* ── Drawing ─────────────────────────────────────────────── */
 
+/* Draw one "label: " prefix, set its colour by focus, and hand back the pen
+ * advance so the caller can place the value right after it. */
+static double lock_field_label(cairo_t *cr, double x, double y,
+                               const char *lab, int focused, double a)
+{
+    if (focused) cairo_set_source_rgba(cr, 0.45, 0.90, 0.85, a);   /* accent cyan */
+    else         cairo_set_source_rgba(cr, 0.38, 0.50, 0.55, a);   /* dim */
+    cairo_move_to(cr, x, y);
+    cairo_show_text(cr, lab);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, lab, &te);
+    return te.x_advance;
+}
+
+/* The greeter's two-field login: an editable "user:" row over the "pass:" dots,
+ * with Tab moving focus between them (greetd.editing_user). Only ever drawn in
+ * --greeter mode; the in-session lock keeps its single anonymous password row. */
+static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, double a)
+{
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 22);
+
+    const double lx = cx - 170;     /* left edge of the field block */
+    const double y_user = 258, y_pass = 296;
+    int editing_user = s->greetd.editing_user;
+    cairo_text_extents_t te;
+
+    /* ── user row ── */
+    double adv = lock_field_label(cr, lx, y_user, "user: ", editing_user, a);
+    if (editing_user) cairo_set_source_rgba(cr, 0.90, 0.98, 1.0, a);
+    else              cairo_set_source_rgba(cr, 0.60, 0.68, 0.75, a);
+    cairo_move_to(cr, lx + adv, y_user);
+    cairo_show_text(cr, s->greetd.user);
+    if (editing_user) {              /* a caret marks the focused, editable field */
+        cairo_text_extents(cr, s->greetd.user, &te);
+        cairo_move_to(cr, lx + adv + te.x_advance + 1, y_user);
+        cairo_show_text(cr, "_");
+    }
+
+    /* ── pass row ── */
+    adv = lock_field_label(cr, lx, y_pass, "pass: ", !editing_user, a);
+    int dots = s->nlock.pw_len;
+    if (dots > 24) dots = 24;
+    if (dots > 0) {
+        double r = 4, gap = 15, dx = lx + adv + 6;
+        cairo_set_source_rgba(cr, 0.75, 0.85, 0.92, a);
+        for (int i = 0; i < dots; i++) {
+            cairo_arc(cr, dx + i * gap, y_pass - 7, r, 0, 2 * 3.14159265);
+            cairo_fill(cr);
+        }
+    } else if (!editing_user) {       /* focused and empty: show the caret here */
+        cairo_set_source_rgba(cr, 0.75, 0.85, 0.92, a);
+        cairo_move_to(cr, lx + adv, y_pass);
+        cairo_show_text(cr, "_");
+    }
+
+    /* ── status line ── */
+    const char *msg = NULL;
+    double mr = 0, mg = 0, mb = 0;
+    if (s->nlock.failed)     { msg = "Wrong password"; mr = 1.0;  mg = 0.36; mb = 0.42; }
+    else if (s->nlock.busy)  { msg = "Checking\xe2\x80\xa6"; mr = 0.45; mg = 0.9; mb = 0.85; }
+    if (msg) {
+        cairo_set_font_size(cr, 16);
+        cairo_text_extents(cr, msg, &te);
+        cairo_set_source_rgba(cr, mr, mg, mb, a);
+        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 332);
+        cairo_show_text(cr, msg);
+    }
+}
+
 /* One panel: the clock, the date, and the password dots — everything scaled by
  * `bright`, so at bright 0 the buffer is empty (transparent over the black
  * backstop) and the screen is dark. */
@@ -114,6 +185,13 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     cairo_set_source_rgba(cr, 0.62, 0.72, 0.80, a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 205);
     cairo_show_text(cr, date);
+
+    /* The greeter draws a two-field (user + pass) block here instead of the
+     * lock's single anonymous password row. */
+    if (s->greeter) {
+        lock_draw_greeter_fields(s, cr, cx, a);
+        return;
+    }
 
     /* Password row: dots while typing, or the error after a rejection. The row
      * is only worth drawing once there is something to say. */
@@ -350,12 +428,51 @@ static void lock_pw_append(syn_server_t *s, uint32_t cp)
     s->nlock.pw[s->nlock.pw_len] = 0;
 }
 
+/* Append one Unicode code point to the greeter's username buffer as UTF-8. The
+ * buffer is NUL-terminated (greetd wants a plain string), so its length is just
+ * strlen — no separate counter to keep in sync. */
+static void greeter_user_append(syn_server_t *s, uint32_t cp)
+{
+    char u[4];
+    int n;
+    if      (cp < 0x80)    { u[0] = cp; n = 1; }
+    else if (cp < 0x800)   { u[0] = 0xC0 | (cp >> 6); u[1] = 0x80 | (cp & 0x3F); n = 2; }
+    else if (cp < 0x10000) { u[0] = 0xE0 | (cp >> 12); u[1] = 0x80 | ((cp >> 6) & 0x3F);
+                             u[2] = 0x80 | (cp & 0x3F); n = 3; }
+    else                   { u[0] = 0xF0 | (cp >> 18); u[1] = 0x80 | ((cp >> 12) & 0x3F);
+                             u[2] = 0x80 | ((cp >> 6) & 0x3F); u[3] = 0x80 | (cp & 0x3F); n = 4; }
+
+    size_t len = strlen(s->greetd.user);
+    if (len + n >= sizeof(s->greetd.user)) return;               /* full: drop it */
+    memcpy(s->greetd.user + len, u, n);
+    s->greetd.user[len + n] = 0;
+}
+
+/* Drop the last UTF-8 code point from the greeter's username buffer. */
+static void greeter_user_backspace(syn_server_t *s)
+{
+    size_t len = strlen(s->greetd.user);
+    if (len == 0) return;
+    do { len--; } while (len > 0 && (s->greetd.user[len] & 0xC0) == 0x80);
+    s->greetd.user[len] = 0;
+}
+
 int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
 {
     if (!s->nlock.active) return 0;
 
     lock_notify_activity(s);        /* any key brightens the screen */
     if (s->nlock.busy) return 1;    /* a check is in flight: swallow, do nothing */
+
+    /* Tab moves focus between the greeter's username and password fields. The
+     * in-session lock has only the password, so it never toggles. */
+    if (s->greeter && (sym == XKB_KEY_Tab || sym == XKB_KEY_ISO_Left_Tab)) {
+        s->greetd.editing_user = !s->greetd.editing_user;
+        s->nlock.failed = 0;
+        lock_render(s);
+        return 1;
+    }
+    int editing_user = s->greeter && s->greetd.editing_user;
 
     switch (sym) {
     case XKB_KEY_Return:
@@ -368,7 +485,9 @@ int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
             lock_auth_start(s);
         return 1;
     case XKB_KEY_BackSpace:
-        if (s->nlock.pw_len > 0) {
+        if (editing_user) {
+            greeter_user_backspace(s);
+        } else if (s->nlock.pw_len > 0) {
             /* Step back over a whole UTF-8 code point, not one byte. */
             do { s->nlock.pw_len--; }
             while (s->nlock.pw_len > 0 &&
@@ -379,16 +498,24 @@ int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
         lock_render(s);
         return 1;
     case XKB_KEY_Escape:
-        s->nlock.pw_len = 0;
-        s->nlock.pw[0] = 0;
+        /* Clear whichever field has focus. */
+        if (editing_user) {
+            s->greetd.user[0] = 0;
+        } else {
+            s->nlock.pw_len = 0;
+            s->nlock.pw[0] = 0;
+        }
         s->nlock.failed = 0;
         lock_render(s);
         return 1;
     default:
-        /* A printable character types into the password; everything else is
-         * swallowed, because while locked no key may reach anything else. */
+        /* A printable character types into the focused field; everything else
+         * is swallowed, because while locked no key may reach anything else. */
         if (codepoint >= 0x20 && codepoint != 0x7f) {
-            lock_pw_append(s, codepoint);
+            if (editing_user)
+                greeter_user_append(s, codepoint);
+            else
+                lock_pw_append(s, codepoint);
             s->nlock.failed = 0;
             lock_render(s);
         }

@@ -135,6 +135,7 @@ static void greeter_reject(syn_server_t *s)
     s->nlock.busy   = 0;
     s->nlock.failed = 1;
     s->nlock.bright = 1.0;
+    s->greetd.editing_user = 0;  /* land back on the password — the common retry */
     lock_render(s);            /* show "Wrong password" at once, not on the next tick */
 }
 
@@ -267,6 +268,7 @@ void greeter_start(syn_server_t *s)
 {
     s->greetd.sock  = -1;
     s->greetd.state = GREETD_IDLE;
+    s->greetd.editing_user = 0;   /* start on the password: the username is pre-filled */
     greeter_pick_user(s->greetd.user, sizeof(s->greetd.user));
     wlr_log(WLR_INFO, "synui greeter: login for '%s', session '%s'",
             s->greetd.user, greeter_session_cmd());
@@ -286,6 +288,11 @@ void greeter_start(syn_server_t *s)
 void greeter_submit(syn_server_t *s)
 {
     if (s->greetd.busy) return;                    /* an exchange is in flight */
+    if (s->greetd.user[0] == 0) {                  /* no account to log in — focus it */
+        s->greetd.editing_user = 1;
+        lock_render(s);
+        return;
+    }
     if (s->nlock.pw_len == 0) return;              /* nothing typed */
 
     const char *sockpath = getenv("GREETD_SOCK");
