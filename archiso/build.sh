@@ -891,6 +891,24 @@ grep -q "^VERSION_ID=\"${ISO_VERSION}\"$" "${SCRIPT_DIR}/airootfs/etc/os-release
     || err "airootfs/etc/os-release VERSION_ID is not ${ISO_VERSION}"
 ok "OS identity stamped ${ISO_VERSION} (os-release, issue, motd)"
 
+# ── Pin the ISO's synapse-llama backend in packages.x86_64 ────
+#
+# packages.x86_64 names the llama package to install on the ISO. For a CPU ISO
+# the exact package `synapse-llama` exists, so pacstrap installs it and never
+# reaches a provider. But a --gpu=X ISO builds NO plain `synapse-llama` — only
+# `synapse-llama-cuda`/`-vulkan`, both of which `provides` it — so the bare name
+# falls through to pacstrap's provider default, which is ALPHABETICAL: cuda wins
+# and a `--gpu=vulkan` ISO silently ships CUDA (needs libcuda.so.1, won't boot
+# without an NVIDIA driver). Pin the exact backend name so the ISO installs the
+# one this build actually made. Idempotent; a cpu build restores the bare name.
+_llama_pkg=synapse-llama
+[[ "$WITH_GPU" != cpu ]] && _llama_pkg="synapse-llama-${WITH_GPU}"
+sed -i -E "s#^synapse-llama(-(cuda|vulkan|rocm))?\$#${_llama_pkg}#" \
+    "${SCRIPT_DIR}/packages.x86_64"
+grep -qx "${_llama_pkg}" "${SCRIPT_DIR}/packages.x86_64" \
+    || err "packages.x86_64 does not pin ${_llama_pkg} after substitution"
+ok "ISO llama backend pinned: ${_llama_pkg}"
+
 # ── Run mkarchiso ─────────────────────────────────────────────
 step "Building ISO (mkarchiso)"
 
