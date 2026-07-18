@@ -351,6 +351,7 @@ arch-chroot /mnt pacman -Sy --noconfirm \
     synapd synsh synnet synguard synui synapse_kmod \
     syn syn-model syn-firstboot \
     chibi nexus-chat tepris vibe \
+    samsung-m2020 shelly-bin \
     2>&1 || warn "Some SynapseOS packages failed to install — verifying below"
 
 # ── Hard verify the SynapseOS packages landed ─────────────
@@ -367,7 +368,7 @@ arch-chroot /mnt pacman -Sy --noconfirm \
 SYN_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot"
 # Apps, not the OS. They ship in the live repo but were never installed to disk,
 # so an installed SynapseOS had no chibi at all — you only got her on the ISO.
-SYN_EXTRA="chibi nexus-chat tepris vibe"
+SYN_EXTRA="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
 
 syn_missing() {
     local out="" p

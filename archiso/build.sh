@@ -431,6 +431,15 @@ PACKAGES=(
     tepris
     chibi
     vibe
+    # Printer driver for the Xpress M2020W — an SPL printer too old for the
+    # driverless IPP path cups otherwise relies on. Script/data package:
+    # ships the vendor ULD rastertospl filter, its dlopen'd libscmssc.so, and
+    # the rastertospl PPD. See samsung-m2020/PKGBUILD for the two traps.
+    samsung-m2020
+    # Shelly — GTK4/libalpm package manager (dir 'shelly' builds pkg
+    # 'shelly-bin'). Prebuilt-binary PKGBUILD: makepkg downloads the pinned
+    # release tarball at build time, so this needs network like pacstrap does.
+    shelly
 )
 
 # Create build user for makepkg (can't run as root)

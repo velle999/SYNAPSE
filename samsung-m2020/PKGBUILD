@@ -1,0 +1,62 @@
+# Samsung Xpress M2020 / M2020W driver for SynapseOS.
+#
+# WHY THIS EXISTS: build.sh's printing philosophy is "any printer made since
+# ~2015 speaks IPP Everywhere / AirPrint, so cups discovers it over mDNS and
+# prints with no driver at all." The M2020W predates that — it is an SPL
+# (Samsung Printer Language) device, invisible to driverless IPP. It needs
+# Samsung's Unified Linux Driver (ULD) filter, rastertospl.
+#
+# THE TRAP that cost an afternoon: the community "m2020.ppd" you find first
+# calls the filter `rastertoqpdl` (from splix). That is the WRONG driver —
+# splix isn't even packaged, so every job dies with "filter not available".
+# The M2020 is SPL, not QPDL. The correct path is the ULD's `rastertospl`.
+#
+# THE SECOND TRAP: rastertospl dlopen()s libscmssc.so (Samsung's Smart CMS
+# engine) at runtime. Without it on the loader path, rastertospl exits 1
+# SILENTLY — no stderr — and ghostscript reports only a "Broken pipe".
+#
+# THE THIRD TRAP (why libscmssc.so lands in /usr/lib, not the vendor's
+# /opt/smfp-common/printer/lib): Arch ships NO alpm ldconfig hook — ldconfig
+# never runs on package install. So an /opt path + /etc/ld.so.conf.d entry
+# would install fine yet leave the ld.so cache stale on a fresh system, and
+# the dlopen would fail all over again. rastertospl dlopen()s libscmssc.so by
+# bare soname, which the loader resolves against /usr/lib as a hardcoded
+# default path — no cache entry, no ldconfig, no post-install action needed.
+# It is package-owned and uniquely named, so it shadows nothing.
+#
+# Files come pre-built from Samsung's ULD tarball (uld_V1.00.39_01.17), the
+# same source the AUR samsung-unified-driver package uses. arch=x86_64 only —
+# these are the vendor's proprietary x86_64 ELF binaries, not compiled here.
+pkgname=samsung-m2020
+pkgver=1.00.39.1
+pkgrel=2
+pkgdesc="Samsung Xpress M2020/M2020W SPL printer driver (ULD rastertospl + PPD)"
+arch=('x86_64')
+url="https://www.bchemnet.com/suldr/"
+license=('custom:Samsung')
+# Prebuilt vendor ELF binaries: don't let makepkg strip them (they have no
+# debug symbols — gdb-add-index just warns) or emit an empty -debug package.
+options=('!strip' '!debug')
+depends=('cups' 'ghostscript' 'libcups')
+source=(
+    'rastertospl'
+    'pstosecps'
+    'libscmssc.so'
+    'Samsung_M2020_Series.ppd'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+    # CUPS filters — invoked by the PPD's cupsFilter line.
+    install -Dm755 "$srcdir/rastertospl" "$pkgdir/usr/lib/cups/filter/rastertospl"
+    install -Dm755 "$srcdir/pstosecps"   "$pkgdir/usr/lib/cups/filter/pstosecps"
+
+    # The dlopen()'d Smart CMS engine. Goes in /usr/lib (default loader path)
+    # so it resolves with no ldconfig run — see THE THIRD TRAP above.
+    install -Dm755 "$srcdir/libscmssc.so" "$pkgdir/usr/lib/libscmssc.so"
+
+    # The PPD that references rastertospl (NOT the splix rastertoqpdl one).
+    # Dropped into the model dir so `lpadmin -m` / the CUPS web UI can pick it.
+    install -Dm644 "$srcdir/Samsung_M2020_Series.ppd" \
+        "$pkgdir/usr/share/cups/model/Samsung_M2020_Series.ppd"
+}

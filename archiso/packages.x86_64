@@ -90,6 +90,17 @@ cups
 cups-pdf
 ghostscript
 nss-mdns
+# The driverless-IPP story above covers any printer since ~2015. The Xpress
+# M2020W predates it: an SPL device cups cannot drive without Samsung's ULD
+# rastertospl filter. samsung-m2020 (built from samsung-m2020/PKGBUILD) ships
+# it so the live ISO — not just installed disks — can print to one.
+samsung-m2020
+
+# Shelly — a GTK4 + libalpm package manager (CLI `shelly`, GUI `shelly-ui`), a
+# friendlier front-end to pacman/AUR/Flatpak. Built from shelly/PKGBUILD as
+# the pkgname `shelly-bin` (it provides `shelly`); listed by exact name so
+# pacstrap never has to resolve the provider.
+shelly-bin
 
 # Bluetooth. bluez is the daemon (org.bluez); bluez-utils is bluetoothctl, which
 # synui does not need — it talks BlueZ over sd-bus itself (synui/src/bt.c) — but
