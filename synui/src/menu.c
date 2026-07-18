@@ -466,6 +466,7 @@ static void menu_add_settings(syn_server_t *s)
     menu_add_submenu(m, p, p);
     menu_add_back(m, p);
     menu_add(m, p, MENU_ROW_ITEM, "Control Panel",   "control",     NULL);
+    menu_add(m, p, MENU_ROW_ITEM, "Date & Time",     "clock",       NULL);
     menu_add(m, p, MENU_ROW_ITEM, "Display",         "displays",    NULL);
     menu_add(m, p, MENU_ROW_ITEM, "Wallpaper",       "wallpaper",   NULL);
     menu_add(m, p, MENU_ROW_ITEM, "CRT Filters",     "filters",     NULL);

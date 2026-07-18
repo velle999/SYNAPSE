@@ -1351,6 +1351,10 @@ int synui_init(syn_server_t *s)
     /* Initialize UI scene nodes (welcome screen, cmdbar, overlay) */
     synui_ui_init(s);
 
+    /* Clock & Time: loads clock.state and arms the panel's 1 Hz repaint timer.
+     * After synui_ui_init so the scene trees it will draw into already exist. */
+    clock_init(s);
+
     /* Drag-and-drop icon layer: created last so it stacks above everything,
      * including the compositor UI. input.c moves it with the cursor. */
     s->drag_icon_tree = wlr_scene_tree_create(&s->scene->tree);
@@ -1502,6 +1506,7 @@ void synui_destroy(syn_server_t *s)
     logind_finish(s);
     notif_finish(s);
     bt_finish(s);
+    clock_finish(s);
     screensaver_finish(s);
     /* Before anything else tears down: if game mode stopped synapd, start it
      * again. A synui that exits mid-game must not leave the box with no AI. */

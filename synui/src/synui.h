@@ -274,6 +274,30 @@ typedef struct {
     char status[96];
 } syn_filters_t;
 
+/* ── Clock & Time / Calendar (clock.c) ───────────────────── */
+#define CLOCK_ZONES_MAX    6
+#define CLOCK_SETTING_ROWS 3   /* format, seconds, NTP — see clock_row_label() */
+
+typedef struct {
+    int  fmt24;        /* 0 = 12-hour, 1 = 24-hour (persisted to clock.state) */
+    int  seconds;      /* show seconds in the bar clock */
+    char zones[CLOCK_ZONES_MAX][64];  /* world-clock IANA zone names */
+    int  nzones;
+    char tz[128];      /* system zone, read from /etc/localtime */
+    int  ntp;          /* timedatectl NTP sync on */
+    char status[96];   /* last action / error, shown on the panel */
+    int  visible;
+    int  selected;     /* 0..CLOCK_SETTING_ROWS-1 */
+    struct wl_event_source *timer;    /* 1 Hz repaint while the panel is open */
+} syn_clock_t;
+
+typedef struct {
+    int visible;
+    int year;
+    int mon;   /* 0-11 */
+    int sel;   /* selected day, 1-based */
+} syn_cal_t;
+
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
 /* The settings column, in display order. The *shortcuts* column deliberately
  * has no table here: it is generated from the live bind table (syn_config_t::
@@ -1577,6 +1601,25 @@ struct syn_server {
 
     syn_filters_t   filters;
 
+    /* Clock & Time settings panel ("Date & Time" on the Settings menu) and the
+     * calendar popup (Super+Shift+T, or a click on the bar clock). Two trees
+     * because the calendar can open over the settings panel and vice-versa. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } clock_ui;
+    syn_clock_t     clock;
+
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } cal_ui;
+    syn_cal_t       cal;
+
     /* Control panel (Super+C, and the top entry of the waybar start menu) —
      * the live keybind list plus the toggles and panel jump-offs. */
     struct {
@@ -2243,6 +2286,29 @@ void power_show(syn_server_t *s);
 void power_hide(syn_server_t *s);
 void power_toggle(syn_server_t *s);
 int  power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+
+/* ── Clock & Time settings + calendar (clock.c) ──────────── */
+void clock_init(syn_server_t *s);
+void clock_finish(syn_server_t *s);
+void clock_state_load(syn_server_t *s);
+void clock_state_save(syn_server_t *s);
+void clock_show(syn_server_t *s);
+void clock_hide(syn_server_t *s);
+void clock_toggle(syn_server_t *s);
+int  clock_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+const char *clock_row_label(int row);
+void clock_row_value(syn_server_t *s, int row, char *out, size_t n);
+void clock_local_string(syn_server_t *s, char *out, size_t n);
+void clock_zone_string(syn_server_t *s, int i, char *out, size_t n);
+void synui_render_clock(syn_server_t *s);
+/* Calendar popup — shares clock.c's date helpers. */
+void calendar_show(syn_server_t *s);
+void calendar_hide(syn_server_t *s);
+void calendar_toggle(syn_server_t *s);
+int  calendar_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+int  calendar_days_in_month(int year, int mon);
+int  calendar_first_weekday(int year, int mon);
+void synui_render_calendar(syn_server_t *s);
 
 /* ── CRT filter panel (filters.c) ────────────────────────── */
 void filters_show(syn_server_t *s);

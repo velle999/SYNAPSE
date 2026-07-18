@@ -272,6 +272,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+e",         "filters" },
         { "super+p",         "power" },
         { "super+t",         "taskmgr" },
+        { "super+shift+t",   "calendar" },
         { "super+i",         "network" },
         /* Not super+n: that is minimize, and has been since before there was
          * anything to read. R for RSS — the panel is a feed reader. */

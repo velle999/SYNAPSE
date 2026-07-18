@@ -596,6 +596,12 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * socket-activates the daemon rather than refusing the connection. The
          * control panel's Printers row and the start menu both land here. */
         synui_spawn("xdg-open http://localhost:631/");
+    } else if (strcmp(action, "clock") == 0) {
+        /* "Date & Time" — the compositor's clock/time settings panel. */
+        clock_toggle(s);
+    } else if (strcmp(action, "calendar") == 0) {
+        /* Super+Shift+T, and the bar clock's on-click (via synctl dispatch). */
+        calendar_toggle(s);
     } else if (strcmp(action, "night_light") == 0) {
         nightlight_toggle(s);
     } else if (strcmp(action, "record") == 0) {
@@ -955,6 +961,18 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* CRT filter panel: same modal contract as the power panel. */
         for (int i = 0; i < nsyms; i++)
             if (filters_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Clock & Time settings panel: same modal contract. */
+        for (int i = 0; i < nsyms; i++)
+            if (clock_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Calendar popup: same modal contract. */
+        for (int i = 0; i < nsyms; i++)
+            if (calendar_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

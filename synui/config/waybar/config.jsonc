@@ -58,7 +58,11 @@
     },
     "clock": {
         "format": "{:%I:%M:%S %p  %Y-%m-%d}",
-        "interval": 1
+        "interval": 1,
+        // Click the bar clock to pop synui's compositor-drawn calendar. The
+        // clock/time SETTINGS panel lives at Settings > Date & Time in the
+        // start menu; this is just the month grid (also Super+Shift+T).
+        "on-click": "synctl dispatch calendar"
     },
     // Battery. waybar hides this module entirely on a machine with no
     // /sys/class/power_supply/BAT*, so it costs a desktop nothing and is the

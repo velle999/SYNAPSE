@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <cairo.h>
 #include <librsvg/rsvg.h>
@@ -1261,6 +1262,227 @@ void synui_render_filters(syn_server_t *s)
 
     cairo_destroy(cr);
     set_scene_buffer(&s->filters_ui.text_buf, s->filters_ui.tree, buf);
+}
+
+/* ── Clock & Time settings panel (clock.c) ───────────────── */
+
+void synui_render_clock(syn_server_t *s)
+{
+    syn_clock_t *c = &s->clock;
+
+    if (!c->visible) {
+        wlr_scene_node_set_enabled(&s->clock_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 34, top = 116, pad = 26;
+    int pw = 560;
+    int ph = top + CLOCK_SETTING_ROWS * row_h + 40 + c->nzones * 24 + 72;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->clock_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->clock_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->clock_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->clock_ui.bg)
+        s->clock_ui.bg = wlr_scene_rect_create(s->clock_ui.tree, pw, ph, bg_color);
+    if (!s->clock_ui.accent)
+        s->clock_ui.accent = wlr_scene_rect_create(s->clock_ui.tree, pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, pad, 30);
+    cairo_show_text(cr, "DATE & TIME");
+
+    char local[128];
+    clock_local_string(s, local, sizeof(local));
+    cairo_set_font_size(cr, 20);
+    cairo_set_source_rgba(cr, 0.92, 0.96, 1.0, 1.0);
+    cairo_move_to(cr, pad, 66);
+    cairo_show_text(cr, local);
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.55, 0.6, 0.72, 1.0);
+    cairo_move_to(cr, pad, 90);
+    char tzline[168];
+    snprintf(tzline, sizeof(tzline), "system zone \xc2\xb7 %s", c->tz);
+    cairo_show_text(cr, tzline);
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, pad, 100);
+    cairo_line_to(cr, pw - pad, 100);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < CLOCK_SETTING_ROWS; i++) {
+        int sel = (i == c->selected);
+        int ry = top + i * row_h;
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        cairo_show_text(cr, clock_row_label(i));
+
+        char value[32];
+        clock_row_value(s, i, value, sizeof(value));
+        cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 1.0);
+        cairo_move_to(cr, 340, ry + 4);
+        cairo_show_text(cr, value);
+    }
+
+    int wy = top + CLOCK_SETTING_ROWS * row_h + 16;
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.55, 0.6, 0.72, 1.0);
+    cairo_move_to(cr, pad, wy);
+    cairo_show_text(cr, "WORLD CLOCK");
+    wy += 22;
+    for (int i = 0; i < c->nzones; i++) {
+        char zs[64];
+        clock_zone_string(s, i, zs, sizeof(zs));
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.82, 0.86, 0.94, 1.0);
+        cairo_move_to(cr, pad + 8, wy);
+        cairo_show_text(cr, c->zones[i]);
+        cairo_set_source_rgba(cr, 0.6, 0.85, 0.82, 1.0);
+        cairo_move_to(cr, 340, wy);
+        cairo_show_text(cr, zs);
+        wy += 24;
+    }
+
+    if (c->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, pad, ph - 40);
+        cairo_show_text(cr, c->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, pad, ph - 18);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Space toggle \xc2\xb7 c calendar \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->clock_ui.text_buf, s->clock_ui.tree, buf);
+}
+
+/* ── Calendar popup (clock.c) ────────────────────────────── */
+
+void synui_render_calendar(syn_server_t *s)
+{
+    syn_cal_t *cal = &s->cal;
+
+    if (!cal->visible) {
+        wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int pw = 336, ph = 322;
+    const int cell_w = 44, grid_x = 14, grid_y = 66, cell_h = 34;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->cal_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->cal_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->cal_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->cal_ui.bg)
+        s->cal_ui.bg = wlr_scene_rect_create(s->cal_ui.tree, pw, ph, bg_color);
+    if (!s->cal_ui.accent)
+        s->cal_ui.accent = wlr_scene_rect_create(s->cal_ui.tree, pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    static const char *mon_name[] = {
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December" };
+
+    char hdr[64];
+    snprintf(hdr, sizeof(hdr), "%s %d", mon_name[cal->mon], cal->year);
+    cairo_set_font_size(cr, 17);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, hdr, &ext);
+    cairo_move_to(cr, (pw - ext.width) / 2, 36);
+    cairo_show_text(cr, hdr);
+
+    static const char *wd[] = { "Su","Mo","Tu","We","Th","Fr","Sa" };
+    cairo_set_font_size(cr, 12);
+    for (int i = 0; i < 7; i++) {
+        cairo_set_source_rgba(cr, i == 0 || i == 6 ? 0.72 : 0.55,
+                              0.6, 0.72, 1.0);
+        cairo_move_to(cr, grid_x + i * cell_w + 13, grid_y);
+        cairo_show_text(cr, wd[i]);
+    }
+
+    time_t now = time(NULL);
+    struct tm tmn;
+    localtime_r(&now, &tmn);
+    int t_year = tmn.tm_year + 1900, t_mon = tmn.tm_mon, t_day = tmn.tm_mday;
+
+    int first = calendar_first_weekday(cal->year, cal->mon);
+    int dim   = calendar_days_in_month(cal->year, cal->mon);
+
+    int rowi = 0;
+    for (int day = 1; day <= dim; day++) {
+        int col = (first + day - 1) % 7;
+        if (day > 1 && col == 0) rowi++;
+        int cx = grid_x + col * cell_w;
+        int cy = grid_y + 12 + rowi * cell_h;
+
+        bool is_today = (cal->year == t_year && cal->mon == t_mon && day == t_day);
+        bool is_sel   = (day == cal->sel);
+
+        if (is_sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, cx + 2, cy - 2, cell_w - 4, cell_h - 6);
+            cairo_fill(cr);
+        }
+        if (is_today) {
+            cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+            cairo_set_line_width(cr, 1.5);
+            cairo_rectangle(cr, cx + 2, cy - 2, cell_w - 4, cell_h - 6);
+            cairo_stroke(cr);
+        }
+
+        char ds[8];
+        snprintf(ds, sizeof(ds), "%d", day);
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, is_sel ? 0.95 : 0.82, is_sel ? 1.0 : 0.86,
+                              is_sel ? 0.99 : 0.94, 1.0);
+        cairo_move_to(cr, cx + (day < 10 ? 16 : 12), cy + 18);
+        cairo_show_text(cr, ds);
+    }
+
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 14, ph - 12);
+    cairo_show_text(cr,
+        "\xe2\x86\x90\xe2\x86\x92 day \xc2\xb7 PgUp/PgDn month \xc2\xb7 t today \xc2\xb7 Esc");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->cal_ui.text_buf, s->cal_ui.tree, buf);
 }
 
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
@@ -2713,6 +2935,8 @@ void synui_ui_init(syn_server_t *s)
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->news_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->clock_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
+    s->cal_ui.tree     = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
@@ -2729,6 +2953,8 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->news_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->clock_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
