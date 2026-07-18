@@ -171,6 +171,43 @@ cat /sys/kernel/synapse/status
 
 ---
 
+## Commands
+
+### Command-line tools
+
+Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
+
+| Command | What it does |
+|---|---|
+| `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard …`, `syn shell`, `syn ui`, `syn install` |
+| `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
+| `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
+| `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
+| `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
+| `synui-ai-backend` | Switch `synapd`'s inference device — `gpu` / `cpu` / `off` / `toggle` / `status` (drives the "AI backend" row; see below) |
+| `synapd` / `synguard` / `synnet` / `synui` | The daemons and compositor themselves — normally started by systemd, not by hand |
+
+### Privileged desktop actions
+
+`synui` runs as the **session user** (under a greetd session it is not root), and
+the target has **no polkit agent** to prompt for a password. So the handful of
+menu/desktop actions that genuinely need root are granted passwordless through
+tightly-scoped `/etc/sudoers.d` rules (written by `syn-install`). These are the
+*only* commands `%wheel` may run without a password — each helper self-escalates
+with `sudo -n`:
+
+| Command | Rule file | Triggered by |
+|---|---|---|
+| `sudo -n systemctl reboot` · `poweroff` | `power-menu` | Start-menu Reboot / Shut Down |
+| `sudo -n systemctl stop synapd` · `start synapd` | `synapd-gamemode` | Game mode (`Super`+`G`) frees the GPU |
+| `sudo -n synui-ai-backend gpu\|cpu\|off\|toggle` | `synapd-backend` | "AI backend" row (control panel / `Super`+`Escape`) |
+
+Anything else still prompts for a password (`%wheel ALL=(ALL:ALL) ALL`). When
+`synui` instead runs as root via `synui.service`, the `sudo -n` re-exec is a
+no-op — the helpers already have the privilege they need.
+
+---
+
 ## The model
 
 ISOs built with `--no-model` are ~4 GB smaller and fetch the model on first boot
