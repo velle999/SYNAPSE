@@ -41,7 +41,7 @@ def main():
     app = st["app"]
 
     if on:
-        text = "GAME"
+        text = ""   # Nerd Font gamepad (fa-gamepad); CSS colours it yellow
         tooltip = f"Game mode ON — {app}" if app else "Game mode ON"
         tooltip += "\nsynapd suspended (GPU freed), idle timers held off"
     else:
@@ -49,7 +49,7 @@ def main():
         # something is on gives you no way to tell "off" from "broken" — which
         # is the exact confusion that sent us looking at game mode to begin
         # with. Dim it instead, and let the CSS carry the difference.
-        text = "GAME"
+        text = ""   # same glyph; CSS dims it grey so "off" still reads
         tooltip = "Game mode off"
 
     if mode == "forced-on":
