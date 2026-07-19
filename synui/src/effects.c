@@ -471,7 +471,22 @@ bool effects_output_commit(syn_output_t *output)
         if (!output->fx_swapchain) return false;
     }
 
-    /* Render the scene into the offscreen swapchain. */
+    /* Render the scene into the offscreen swapchain.
+     *
+     * The CRT shader below samples the WHOLE fx_swapchain buffer (barrel warp
+     * moves every pixel), so partial damage is never enough — any region the
+     * scene left unpainted shows whatever stale frame that rotating buffer last
+     * held. That bites hardest on the FIRST frame of a transient effect (the
+     * focus-change aberration pulse): the offscreen path is entered cold, the
+     * buffer still holds an old composited frame — most often the wallpaper from
+     * before a game went fullscreen — and with little incidental damage
+     * build_state leaves most of it untouched, so the shader presents a full
+     * frame of stale wallpaper: a one-frame flash on every click/window switch.
+     * Force whole damage up front so build_state always fully repaints the
+     * buffer the shader is about to consume. (The tail add_whole only primed
+     * frames 2..N.) */
+    wlr_damage_ring_add_whole(&output->scene_output->damage_ring);
+
     struct wlr_output_state st;
     wlr_output_state_init(&st);
     struct wlr_scene_output_state_options opts = {
