@@ -182,6 +182,11 @@ jobs:
           modprobe udmabuf 2>&1 || echo "modprobe udmabuf failed"
           echo "--- after ---"
           ls -l /dev/dri /dev/udmabuf 2>&1 || true
+          echo "--- CPU (llvmpipe JITs for the host CPU; a codegen crash lives here) ---"
+          grep -m1 '^model name' /proc/cpuinfo || true
+          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' \
+            | grep -E '^(avx|avx2|avx512[a-z]*|sse4_[12]|f16c|fma)$' | tr '\n' ' ' || true
+          echo
           if [ -e /dev/udmabuf ] || ls /dev/dri/renderD* >/dev/null 2>&1; then
             echo "ok: a DMA-BUF allocator is available"
           else

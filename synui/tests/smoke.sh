@@ -93,6 +93,19 @@ export WLR_RENDERER_FORCE_SOFTWARE=1 WLR_RENDERER_ALLOW_SOFTWARE=1
 # irrelevant to how synui runs on a real GPU — this is a property of the
 # software rasterizer the test harness stands on, not of the compositor.
 export LP_NUM_THREADS=0
+
+# Cap llvmpipe's JIT at 128-bit vectors. With the worker pool gone the next
+# crash was still inside JIT-compiled mesa code ("<unknown module>" over
+# libgallium) on a cursor-texture upload, in both release and ASan builds, and
+# only ever on the CI runner — never on a developer box. llvmpipe compiles for
+# whatever the host CPU advertises, so the wide-vector paths are the part of it
+# that varies between machines and the part not exercised locally.
+#
+# This is empirical, not a diagnosis: it narrows codegen to the conservative
+# path. If the crash outlives it, the honest answer is that the smoke test is
+# exercising mesa's JIT rather than synui, and the ASan/llvmpipe combination
+# should move to a machine with a real driver instead of being tuned further.
+export LP_NATIVE_VECTOR_WIDTH=128
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
 
 # ASan vs llvmpipe's JIT. llvmpipe compiles its rasterizer/blit paths at runtime
