@@ -833,22 +833,49 @@ def _auto_save_code_blocks(text: str) -> list[tuple[str, str]]:
     return results
 
 
+# Wrapper keys a model may use instead of "arguments"
+_ARG_KEYS = ("arguments", "parameters", "args", "input")
+
+
+def _extract_tool_args(data: dict) -> dict:
+    """Pull the argument mapping out of one parsed <tool_call> block.
+
+    Models emit the args either wrapped ({"name":.., "arguments":{..}}) or
+    flattened onto the top level ({"name":.., "path":.., "content":..}).
+    synapd's model does the latter, so accept both.
+    """
+    for key in _ARG_KEYS:
+        if key in data:
+            val = data[key]
+            if isinstance(val, str):
+                # Some models double-encode the wrapper as a JSON string
+                try:
+                    val = json.loads(val)
+                except json.JSONDecodeError:
+                    return {}
+            return val if isinstance(val, dict) else {}
+    # Flattened form: everything that isn't call metadata is an argument
+    return {k: v for k, v in data.items() if k not in ("name", "type", "id")}
+
+
 def _parse_text_tool_calls(text: str) -> list[dict]:
     """Extract Qwen3-style <tool_call>...</tool_call> blocks from assistant text."""
     calls = []
     for i, m in enumerate(_TOOL_CALL_RE.finditer(text)):
         try:
             data = json.loads(m.group(1))
-            calls.append({
-                "id": f"call_{i}",
-                "type": "function",
-                "function": {
-                    "name": data.get("name", ""),
-                    "arguments": json.dumps(data.get("arguments", {})),
-                },
-            })
         except json.JSONDecodeError:
-            pass
+            continue
+        if not isinstance(data, dict):
+            continue
+        calls.append({
+            "id": f"call_{i}",
+            "type": "function",
+            "function": {
+                "name": data.get("name", ""),
+                "arguments": json.dumps(_extract_tool_args(data)),
+            },
+        })
     return calls
 
 
