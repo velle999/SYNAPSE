@@ -298,6 +298,28 @@ typedef struct {
     int sel;   /* selected day, 1-based */
 } syn_cal_t;
 
+/* ── Theme manager (theme.c) ─────────────────────────────── */
+/* A theme is a preset bundle: window-chrome colours (borders + titlebar),
+ * a default translucency, and an app colour-scheme (light/dark) that synui
+ * writes out to kdeglobals / GTK / Firefox so Dolphin, GTK apps and Firefox
+ * follow the desktop. Picked from the Super+Shift+A panel or `theme = ` in
+ * synuirc; persisted to theme.state. SYNAPSE is the neon default. */
+typedef enum {
+    SYN_THEME_SYNAPSE = 0,   /* the neon "night drive" default */
+    SYN_THEME_DARK,          /* flat modern dark (a plain dark mode) */
+    SYN_THEME_WINXP,         /* Windows XP "Luna" blue */
+    SYN_THEME_WIN95,         /* Windows 95 grey 3D */
+    SYN_THEME_COUNT,
+} syn_theme_t;
+
+extern const char *const syn_theme_names[SYN_THEME_COUNT];
+
+typedef struct {
+    int  visible;
+    int  selected;     /* syn_theme_t */
+    char status[96];
+} syn_thememgr_t;
+
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
 /* The settings column, in display order. The *shortcuts* column deliberately
  * has no table here: it is generated from the live bind table (syn_config_t::
@@ -312,7 +334,9 @@ typedef enum {
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_TITLEBARS,
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
+    CTL_ROW_TRANSPARENCY,  /* window translucency master switch */
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
+    CTL_ROW_THEME,         /* jump-off: the Super+Shift+A theme manager */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
     CTL_ROW_FILTERS,
     CTL_ROW_WALLPAPER,
@@ -861,6 +885,21 @@ typedef struct {
     float titlebar_text[4];
     float titlebar_text_focus[4];
 
+    /* theme.c: which preset is active. Its colours seed the border/titlebar
+     * fields above (theme_apply overwrites them), so an explicit border_color_*
+     * in synuirc set AFTER `theme =` still wins — the parse order is the config's
+     * to decide. Persisted as a name to theme.state. */
+    syn_theme_t theme;
+
+    /* Window translucency (theme.c / anim.c). `transparency` is the master
+     * switch — off, everything is opaque and the opacities are ignored. When on,
+     * the focused window sits at active_opacity and the rest at inactive_opacity.
+     * Applied compositor-side to every buffer under a window, so it covers native
+     * and XWayland clients (Firefox, Dolphin) uniformly, without their help. */
+    int   transparency;          /* default 0 (opaque) */
+    float active_opacity;        /* focused window, 0.5..1.0; default 1.0 */
+    float inactive_opacity;      /* unfocused windows; default 0.92 */
+
     /* GLES post-process effects (effects.c). `effects` gates the pass;
      * it silently stays off on non-GLES2 renderers (pixman VMs).
      * Strengths are 0..1; 0 disables the individual effect. */
@@ -1126,6 +1165,13 @@ struct syn_view {
     int    fade_hide_done;   /* disable the node once it reaches alpha 0 */
     float  fade_from, fade_to;
     double fade_start;       /* CLOCK_MONOTONIC secs */
+
+    /* theme.c / anim.c: the window's *settled* translucency, driven by focus
+     * (config.active_opacity vs inactive_opacity) when config.transparency is on.
+     * This is a separate lever from `alpha` (the fade in flight): the two are
+     * multiplied at apply time, so a window can be fading in AND translucent at
+     * once, and neither clobbers the other. 1.0 = opaque; the default. */
+    float  base_opacity;
 
     /* Listeners (shared: xdg + xwayland reuse map/unmap/destroy/request_*) */
     struct wl_listener map;
@@ -1630,6 +1676,16 @@ struct syn_server {
     } ctlpanel_ui;
 
     syn_ctlpanel_t  ctlpanel;
+
+    /* Theme manager (Super+Shift+A) — its own scene subtree, like ctlpanel. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } thememgr_ui;
+
+    syn_thememgr_t  thememgr;
 
     /* Start menu (Super-tap) — synui's own, see syn_menu_t. */
     struct {
@@ -2382,6 +2438,25 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
 #define CTL_SHORTCUT_ROWS  16
 void synui_render_ctlpanel(syn_server_t *s);
 
+/* ── Theme manager (theme.c) ─────────────────────────────── */
+/* Apply a preset: overwrite the border/titlebar colours + default opacities in
+ * cfg, re-decorate every mapped window, repaint, and (for the app colour-scheme)
+ * write kdeglobals / GTK / Firefox so Dolphin & co. follow. Persists theme.state
+ * unless `save` is 0 (startup load passes 0 — it is applying what it just read). */
+void theme_apply(syn_server_t *s, syn_theme_t theme, int save);
+/* Copy a preset's colours + opacity levels into a config only (no server) —
+ * what config.c calls for a synuirc `theme =` line at parse time. */
+void theme_load_colors(syn_config_t *cfg, syn_theme_t theme);
+void theme_state_load(syn_server_t *s);   /* lay theme.state over the config default */
+const char *theme_name(syn_theme_t t);    /* display label, e.g. "Windows XP" */
+void theme_preview_color(syn_theme_t t, float out[4]);   /* swatch RGBA for the panel */
+
+void theme_show(syn_server_t *s);
+void theme_hide(syn_server_t *s);
+void theme_toggle(syn_server_t *s);
+int  theme_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+void synui_render_thememgr(syn_server_t *s);
+
 /* ── Clipboard history (clipboard.c) ─────────────────────── */
 void clipboard_init(syn_server_t *s);
 void clipboard_finish(syn_server_t *s);
@@ -2583,6 +2658,12 @@ void anim_fade_in(syn_view_t *view);
 void anim_fade_out_and_hide(syn_view_t *view);
 void anim_reset(syn_view_t *view);
 void anim_apply_alpha(syn_view_t *view);
+/* The window's settled translucency (config.active/inactive_opacity gated by
+ * config.transparency), by whether it is the focused view. 1.0 when off. */
+float anim_view_opacity(syn_view_t *view);
+/* Re-push opacity to every mapped window — after a transparency toggle or a
+ * theme change moved the active/inactive levels. */
+void anim_apply_alpha_all(syn_server_t *s);
 
 /* ── ime.c ───────────────────────────────────────────────── */
 void ime_setup(syn_server_t *s);

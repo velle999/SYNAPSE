@@ -62,6 +62,7 @@ struct wlr_scene_tree *view_frame_create(syn_view_t *view,
 {
     view->frame = wlr_scene_tree_create(parent);
     view->alpha = 1.0f;      /* calloc'd to 0 = fully transparent otherwise */
+    view->base_opacity = 1.0f;   /* opaque until the transparency setting bites */
     /* surface_at() walks up from the node it hit until it finds one carrying a
      * view — the titlebar buffer is a direct child of the frame, so the frame
      * has to carry it too. */
@@ -268,8 +269,11 @@ void view_update_decorations(syn_view_t *view)
         memcpy(color, cfg->border_color_norm, sizeof(color));
 
     /* A fading window has to fade *whole*: scene rects carry their alpha in the
-     * colour (unlike buffers, which have set_opacity), so fold it in here. */
-    color[3] *= (view->alpha > 0.0f ? view->alpha : 0.0f);
+     * colour (unlike buffers, which have set_opacity), so fold it in here. The
+     * same effective alpha the buffers get — fade × focus-driven translucency —
+     * or a translucent window would show solid borders around a see-through body. */
+    float eff = view->alpha * anim_view_opacity(view);
+    color[3] *= (eff > 0.0f ? eff : 0.0f);
 
     /* Frame-local: the frame node already sits at (view->x, view->y). */
     int w = view->w, h = view->h;

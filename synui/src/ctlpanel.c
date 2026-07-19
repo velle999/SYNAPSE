@@ -49,7 +49,9 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_DOCK_AUTOHIDE: return "Dock auto-hide";
     case CTL_ROW_TITLEBARS:  return "Titlebars";
     case CTL_ROW_LAUNCHER:   return "Start button";
+    case CTL_ROW_TRANSPARENCY: return "Transparency";
     case CTL_ROW_SEP:        return "";
+    case CTL_ROW_THEME:      return "Theme \xe2\x80\xa6";
     case CTL_ROW_DISPLAYS:   return "Display settings";
     case CTL_ROW_FILTERS:    return "CRT filters \xe2\x80\xa6";
     case CTL_ROW_WALLPAPER:  return "Wallpaper \xe2\x80\xa6";
@@ -114,6 +116,14 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
     case CTL_ROW_LAUNCHER:
         snprintf(buf, n, "%s",
                  s->config.launcher_style == SYN_LAUNCHER_LOGO ? "logo" : "text");
+        break;
+    case CTL_ROW_TRANSPARENCY:
+        snprintf(buf, n, "%s", s->config.transparency ? "on" : "off");
+        break;
+    case CTL_ROW_THEME:
+        /* A jump-off, but showing the active theme here saves opening the panel
+         * just to read which one is on. */
+        snprintf(buf, n, "%s", theme_name(s->config.theme));
         break;
     default:
         buf[0] = '\0';   /* jump-offs have no state of their own */
@@ -380,6 +390,21 @@ static void ctlpanel_activate(syn_server_t *s)
                  "start button: %s",
                  s->config.launcher_style == SYN_LAUNCHER_LOGO ? "logo" : "text");
         ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_TRANSPARENCY:
+        s->config.transparency = !s->config.transparency;
+        /* Re-push opacity to every window: the focused one and all the rest move
+         * at once (focus_view only touches two windows on a focus change). */
+        anim_apply_alpha_all(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "transparency %s", s->config.transparency ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_THEME:
+        ctlpanel_hide(s);
+        synui_binding_execute(s, "theme", NULL);
         return;
 
     case CTL_ROW_AI_BACKEND:

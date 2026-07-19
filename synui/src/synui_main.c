@@ -1392,6 +1392,11 @@ int synui_init(syn_server_t *s)
      * is owed here. */
     deco_state_load(s);
 
+    /* The theme last picked in the manager (theme.state), applied over whatever
+     * synuirc left. No windows are mapped yet, so this is mostly about firing
+     * synui-apply-theme once so Dolphin/GTK/Firefox match on login. */
+    theme_state_load(s);
+
     return 0;
 }
 

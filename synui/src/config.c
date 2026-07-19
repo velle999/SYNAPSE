@@ -299,6 +299,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "xf86audiolowervolume", "volume down" },
         { "xf86audiomute",        "volume mute" },
         { "super+g",         "game" },
+        { "super+shift+a",   "theme" },   /* "appearance" — the theme manager */
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
@@ -400,6 +401,15 @@ void synui_config_load(syn_config_t *cfg)
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
     cfg->snap = 1;
+
+    /* Theme + transparency. SYNAPSE's colours ARE the border/titlebar defaults
+     * set just above, so leaving theme = SYNAPSE changes nothing; a `theme =`
+     * line (parsed below) or theme.state (applied at startup) reskins from here.
+     * Transparency is opt-in: off, the opacity levels are dormant. */
+    cfg->theme            = SYN_THEME_SYNAPSE;
+    cfg->transparency     = 0;
+    cfg->active_opacity   = 1.00f;
+    cfg->inactive_opacity = 0.92f;
 
     /* GLES post-process: on by default, harmless on pixman (effects_init
      * refuses and the plain path is used). Strengths tuned for subtlety.
@@ -617,6 +627,22 @@ void synui_config_load(syn_config_t *cfg)
             cfg->start_overlay = strcmp(val, "on") == 0;
         else if (strcmp(key, "snap") == 0)
             cfg->snap = strcmp(val, "on") == 0;
+        else if (strcmp(key, "theme") == 0) {
+            /* Seeds the chrome colours from the preset; an explicit
+             * border_color_* / titlebar_* line placed AFTER this still wins,
+             * because it parses later and overwrites the field. */
+            for (int t = 0; t < SYN_THEME_COUNT; t++)
+                if (strcmp(val, syn_theme_names[t]) == 0) {
+                    theme_load_colors(cfg, (syn_theme_t)t);
+                    break;
+                }
+        }
+        else if (strcmp(key, "transparency") == 0)
+            cfg->transparency = strcmp(val, "on") == 0;
+        else if (strcmp(key, "active_opacity") == 0)
+            cfg->active_opacity = (float)atof(val);
+        else if (strcmp(key, "inactive_opacity") == 0)
+            cfg->inactive_opacity = (float)atof(val);
         else if (strcmp(key, "border_color_norm") == 0)
             parse_hex_color(val, cfg->border_color_norm);
         else if (strcmp(key, "border_color_focus") == 0)

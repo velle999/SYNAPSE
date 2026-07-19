@@ -58,21 +58,55 @@ static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
 }
 
 /*
+ * The window's *settled* translucency, driven by focus. This is the theme's
+ * transparency lever, orthogonal to the fade in flight (view->alpha): the two
+ * are multiplied at apply time so a translucent window still fades cleanly.
+ * 1.0 (opaque) whenever transparency is off, so the whole feature costs nothing
+ * until someone turns it on.
+ */
+float anim_view_opacity(syn_view_t *view)
+{
+    syn_server_t *s = view->server;
+    if (!s || !s->config.transparency) return 1.0f;
+    float o = (view == s->focused_view) ? s->config.active_opacity
+                                        : s->config.inactive_opacity;
+    if (o < 0.1f) o = 0.1f;   /* never let a window vanish entirely */
+    if (o > 1.0f) o = 1.0f;
+    return o;
+}
+
+/*
  * A window is a frame tree: the client's surface(s) plus the titlebar buffer
  * plus four border rects. for_each_buffer covers the surfaces and the titlebar;
  * the borders are scene *rects*, which carry their alpha in the colour, so
- * view_update_decorations() multiplies them by view->alpha itself.
+ * view_update_decorations() multiplies them by the effective alpha itself.
+ *
+ * Effective alpha = the fade value × the focus-driven base translucency, so one
+ * pass handles both a window that is fading in AND one made see-through.
  */
 void anim_apply_alpha(syn_view_t *view)
 {
     if (!view->mapped) return;
 
-    float a = view->alpha;
+    float a = view->alpha * anim_view_opacity(view);
     if (a < 0.0f) a = 0.0f;
     if (a > 1.0f) a = 1.0f;
 
     wlr_scene_node_for_each_buffer(view_node(view), set_buffer_opacity, &a);
     view_update_decorations(view);   /* re-tints the border rects at `a` */
+}
+
+/* Re-push opacity to every mapped window. Called after the transparency master
+ * switch flips or a theme moves the active/inactive levels — nothing else would
+ * repaint the windows that are not the focused one. */
+void anim_apply_alpha_all(syn_server_t *s)
+{
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link)
+            if (v->mapped)
+                anim_apply_alpha(v);
+    }
 }
 
 /* ── Starting a fade ─────────────────────────────────────── */

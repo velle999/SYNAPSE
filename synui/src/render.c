@@ -1663,6 +1663,132 @@ void synui_render_ctlpanel(syn_server_t *s)
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
 }
 
+/* ── Theme manager (theme.c) ─────────────────────────────── */
+
+#define THM_W        460
+#define THM_ROW_H     52
+#define THM_TOP       96
+#define THM_FOOTER    56
+#define THM_PAD       22
+#define THM_SWATCH    30
+
+/* One-line "what this theme is" under each name, so the pick is not just a word. */
+static const char *thememgr_blurb(syn_theme_t t)
+{
+    switch (t) {
+    case SYN_THEME_SYNAPSE: return "The neon night-drive default \xc2\xb7 apps dark";
+    case SYN_THEME_DARK:    return "Flat modern dark \xc2\xb7 apps + Dolphin + Firefox dark";
+    case SYN_THEME_WINXP:   return "Luna blue \xc2\xb7 apps light";
+    case SYN_THEME_WIN95:   return "Grey 3D, navy titles \xc2\xb7 apps light";
+    default:                return "";
+    }
+}
+
+void synui_render_thememgr(syn_server_t *s)
+{
+    syn_thememgr_t *tm = &s->thememgr;
+
+    if (!tm->visible) {
+        wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int pw = THM_W;
+    int ph = THM_TOP + SYN_THEME_COUNT * THM_ROW_H + THM_FOOTER;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->thememgr_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->thememgr_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4]   = { 0.00f, 0.85f, 0.75f, 1.0f };
+    if (!s->thememgr_ui.bg)
+        s->thememgr_ui.bg = wlr_scene_rect_create(s->thememgr_ui.tree,
+                                                  pw, ph, bg_color);
+    if (!s->thememgr_ui.accent)
+        s->thememgr_ui.accent = wlr_scene_rect_create(s->thememgr_ui.tree,
+                                                      pw, 2, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+    cairo_move_to(cr, THM_PAD, 34);
+    cairo_show_text(cr, "THEME MANAGER");
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, THM_PAD, 50);
+    cairo_line_to(cr, pw - THM_PAD, 50);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < SYN_THEME_COUNT; i++) {
+        int ry = THM_TOP + i * THM_ROW_H;
+        int sel    = (i == tm->selected);
+        int active = (i == s->config.theme);
+
+        if (sel) {
+            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            cairo_rectangle(cr, THM_PAD - 10, ry - 26, pw - 2 * (THM_PAD - 10),
+                            THM_ROW_H - 6);
+            cairo_fill(cr);
+        }
+
+        /* Swatch: the theme's focused-title colour, framed. */
+        float sw[4];
+        theme_preview_color((syn_theme_t)i, sw);
+        cairo_set_source_rgba(cr, sw[0], sw[1], sw[2], 1.0);
+        cairo_rectangle(cr, THM_PAD, ry - 24, THM_SWATCH, THM_SWATCH);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 0.8);
+        cairo_set_line_width(cr, 1);
+        cairo_rectangle(cr, THM_PAD, ry - 24, THM_SWATCH, THM_SWATCH);
+        cairo_stroke(cr);
+
+        double tx = THM_PAD + THM_SWATCH + 16;
+
+        cairo_set_font_size(cr, 15);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.80, sel ? 1.0 : 0.80,
+                              sel ? 0.99 : 0.88, 1.0);
+        cairo_move_to(cr, tx, ry - 6);
+        cairo_show_text(cr, theme_name((syn_theme_t)i));
+
+        /* "active" marker: the theme currently in force (not just highlighted). */
+        if (active) {
+            cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 1.0);
+            draw_right(cr, pw - THM_PAD, ry - 6, "\xe2\x97\x8f active");
+        }
+
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        cairo_move_to(cr, tx, ry + 12);
+        cairo_show_text(cr, thememgr_blurb((syn_theme_t)i));
+    }
+
+    if (tm->status[0]) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.0, 0.85, 0.75, 0.9);
+        cairo_move_to(cr, THM_PAD, ph - 34);
+        cairo_show_text(cr, tm->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, THM_PAD, ph - 16);
+    cairo_show_text(cr,
+        "Up/Down select \xc2\xb7 Enter apply \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->thememgr_ui.text_buf, s->thememgr_ui.tree, buf);
+}
+
 /* ── Clipboard history (clipboard.c) ─────────────────────── */
 
 #define CLIP_W       560
@@ -2948,6 +3074,7 @@ void synui_ui_init(syn_server_t *s)
     s->clock_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->cal_ui.tree     = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->thememgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
@@ -2966,6 +3093,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->clock_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);

@@ -122,6 +122,16 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
     view_update_decorations(view);
     foreign_toplevel_update_state(view);
 
+    /* Transparency follows focus: the window that just lost focus drops to
+     * inactive_opacity and the new one rises to active_opacity. Decorations were
+     * refreshed just above (border rects), but the client surface + titlebar
+     * buffer opacity only move when anim_apply_alpha re-pushes them. Cheap no-op
+     * while transparency is off (anim_view_opacity returns 1.0). */
+    if (s->config.transparency) {
+        if (prev && prev != view) anim_apply_alpha(prev);
+        anim_apply_alpha(view);
+    }
+
     /* Notify seat */
     struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
     if (kb)
@@ -587,6 +597,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         else                     synui_render_welcome(s);
     } else if (strcmp(action, "control") == 0) {
         ctlpanel_toggle(s);
+    } else if (strcmp(action, "theme") == 0) {
+        theme_toggle(s);
     } else if (strcmp(action, "bluetooth") == 0) {
         bt_toggle(s);
     } else if (strcmp(action, "printers") == 0) {
@@ -979,6 +991,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Control panel: same modal contract again. */
         for (int i = 0; i < nsyms; i++)
             if (ctlpanel_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Theme manager: same modal contract again. */
+        for (int i = 0; i < nsyms; i++)
+            if (theme_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
