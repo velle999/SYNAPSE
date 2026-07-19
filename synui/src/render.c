@@ -750,7 +750,7 @@ void synui_render_dispcfg(syn_server_t *s)
         int cy = map_top + (o->grid_y - min_gy) * (cell_h + cell_gap);
 
         if (sel)
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
         else
             cairo_set_source_rgba(cr, 0.14, 0.14, 0.20, 1.0);
         cairo_rectangle(cr, cx, cy, cell_w, cell_h);
@@ -947,7 +947,7 @@ void synui_render_wppick(syn_server_t *s)
         int ry = top + r * row_h;
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 12, ry, pw - 24, row_h - 8);
             cairo_fill(cr);
             cairo_set_line_width(cr, 2);
@@ -1069,7 +1069,7 @@ void synui_render_power(syn_server_t *s)
         int ry = top + i * row_h;
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 12, ry - 16, pw - 24, row_h - 4);
             cairo_fill(cr);
         }
@@ -1265,7 +1265,7 @@ void synui_render_filters(syn_server_t *s)
         int ry = top + i * row_h;
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
             cairo_fill(cr);
         }
@@ -1381,7 +1381,7 @@ void synui_render_clock(syn_server_t *s)
         int sel = (i == c->selected);
         int ry = top + i * row_h;
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
             cairo_fill(cr);
         }
@@ -1520,7 +1520,7 @@ void synui_render_calendar(syn_server_t *s)
         bool is_sel   = (day == cal->sel);
 
         if (is_sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, cx + 2, cy - 2, cell_w - 4, cell_h - 6);
             cairo_fill(cr);
         }
@@ -1678,7 +1678,7 @@ void synui_render_ctlpanel(syn_server_t *s)
 
         int sel = (i == cp->selected);
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, CTL_COL_RIGHT - 12, ry - 16,
                             (CTL_SETTING_V + 52) - (CTL_COL_RIGHT - 12), CTL_ROW_H - 4);
             cairo_fill(cr);
@@ -1796,7 +1796,7 @@ void synui_render_thememgr(syn_server_t *s)
         int active = (i == s->config.theme);
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, THM_PAD - 10, ry - 26, pw - 2 * (THM_PAD - 10),
                             THM_ROW_H - 6);
             cairo_fill(cr);
@@ -1959,7 +1959,7 @@ void synui_render_clipboard(syn_server_t *s)
         int sel = (first + i == c->selected);
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, CLIP_PAD - 8, ry - 15, pw - 2 * (CLIP_PAD - 8),
                             CLIP_ROW_H - 3);
             cairo_fill(cr);
@@ -2294,7 +2294,7 @@ void synui_render_bt(syn_server_t *s)
         int sel = (first + i == b->selected);
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, BT_PAD - 8, ry - BT_ROW_ASC, pw - 2 * (BT_PAD - 8),
                             BT_ROW_H - 3);
             cairo_fill(cr);
@@ -2488,7 +2488,7 @@ void synui_render_menu(syn_server_t *s)
 
         int sel = (first + i == m->selected);
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, MENU_PAD - 8, ry - MENU_ROW_ASC,
                             pw - 2 * (MENU_PAD - 8), MENU_ROW_H - 3);
             cairo_fill(cr);
@@ -2770,7 +2770,7 @@ void synui_render_taskmgr(syn_server_t *s)
         int ry = table_top + 14 + row * TM_ROW_H;
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 12, ry - 14, pw - 24, TM_ROW_H - 2);
             cairo_fill(cr);
         }
@@ -2965,7 +2965,7 @@ void synui_render_news(syn_server_t *s)
 
     /* Search box, in place of the separator, while '/' is active. */
     if (n->searching) {
-        cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+        set_accent(cr, 0.35);
         cairo_rectangle(cr, 12, 40, pw - 24, 22);
         cairo_fill(cr);
         char q[80];
@@ -3014,7 +3014,7 @@ void synui_render_news(syn_server_t *s)
         double ty = ry + 20;               /* text baseline */
 
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 12, ry, pw - 24, NW_ROW_H - 4);
             cairo_fill(cr);
             cairo_set_line_width(cr, 2);
@@ -3148,7 +3148,7 @@ void synui_render_dockmenu(syn_server_t *s)
         int iy = 4 + i * item_h;
         int sel = (i == s->dockmenu.selected);
         if (sel) {
-            cairo_set_source_rgba(cr, 0.00, 0.35, 0.32, 1.0);
+            set_accent(cr, 0.35);
             cairo_rectangle(cr, 3, iy, pw - 6, item_h);
             cairo_fill(cr);
         }

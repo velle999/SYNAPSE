@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=132
+pkgrel=133
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -166,6 +166,11 @@ package() {
     # toolkits aren't installed. See src/theme.c.
     install -Dm755 systemd/synui-apply-theme.sh \
         "$pkgdir/usr/bin/synui-apply-theme"
+
+    # The transparency slider fires this to set foot's own background alpha, so a
+    # translucent terminal keeps opaque text ("text on glass"). No-op without foot.
+    install -Dm755 systemd/synui-glass.sh \
+        "$pkgdir/usr/bin/synui-glass"
 
     # SteamOS-style game launcher: gamemoderun + MangoHud overlay + opt-in
     # gamescope. mangohud/gamemode are optdepends — the wrapper drops whichever

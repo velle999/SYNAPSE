@@ -190,6 +190,18 @@ static float inactive_from_active(float active)
     return v;
 }
 
+/* Terminals (foot) draw their own glass, so they are excluded from the
+ * compositor's uniform fade (anim.c) — instead their real background alpha is
+ * driven here so a translucent terminal keeps opaque text. Off = solid (1.0);
+ * on = the slider value. Fire-and-forget, a no-op when foot isn't installed. */
+static void glass_push(syn_server_t *s)
+{
+    float a = s->config.transparency ? s->config.active_opacity : 1.0f;
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "synui-glass %.2f", a);
+    synui_spawn(cmd);
+}
+
 void transparency_set_opacity(syn_server_t *s, float active)
 {
     if (active < 0.50f) active = 0.50f;
@@ -197,6 +209,7 @@ void transparency_set_opacity(syn_server_t *s, float active)
     s->config.active_opacity   = active;
     s->config.inactive_opacity = inactive_from_active(active);
     anim_apply_alpha_all(s);
+    glass_push(s);
     theme_repaint(s);
     theme_state_save(s);
 }
@@ -212,6 +225,7 @@ void transparency_set_enabled(syn_server_t *s, int on)
         s->config.inactive_opacity = inactive_from_active(0.90f);
     }
     anim_apply_alpha_all(s);
+    glass_push(s);
     theme_repaint(s);
     theme_state_save(s);
 }
@@ -313,6 +327,9 @@ void theme_state_load(syn_server_t *s)
     }
     if (have_tr) s->config.transparency = tr;
     if (have_tr || have_op) anim_apply_alpha_all(s);
+    /* Re-sync the terminal's own glass to the restored state: if the last
+     * session left transparency off, foot.ini must go back to solid. */
+    glass_push(s);
 }
 
 /* ── The panel ───────────────────────────────────────────── */

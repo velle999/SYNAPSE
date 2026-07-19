@@ -28,6 +28,7 @@
 
 #define _GNU_SOURCE
 #include <stdbool.h>
+#include <string.h>
 #include <time.h>
 
 #include <wlr/types/wlr_scene.h>
@@ -59,6 +60,21 @@ static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
 }
 
 /*
+ * "App-native glass" windows draw their own translucent background with opaque
+ * text (foot's [colors-dark] alpha), so a compositor-wide uniform fade on top of
+ * that would drag the *text* down with the background — the exact "everything
+ * fades together" the glass look is meant to avoid. Such windows are left fully
+ * opaque at the compositor; synui-glass drives their real alpha instead, keeping
+ * the glyphs crisp at any transparency. Keyed on app_id (foot / footclient).
+ */
+static bool view_is_glass_native(syn_view_t *view)
+{
+    const char *id = view_app_id(view);
+    if (!id) return false;
+    return strcmp(id, "foot") == 0 || strcmp(id, "footclient") == 0;
+}
+
+/*
  * The window's *settled* translucency, driven by focus. This is the theme's
  * transparency lever, orthogonal to the fade in flight (view->alpha): the two
  * are multiplied at apply time so a translucent window still fades cleanly.
@@ -69,6 +85,7 @@ float anim_view_opacity(syn_view_t *view)
 {
     syn_server_t *s = view->server;
     if (!s || !s->config.transparency) return 1.0f;
+    if (view_is_glass_native(view)) return 1.0f;   /* app draws its own glass */
     float o = (view == s->focused_view) ? s->config.active_opacity
                                         : s->config.inactive_opacity;
     if (o < 0.1f) o = 0.1f;   /* never let a window vanish entirely */
