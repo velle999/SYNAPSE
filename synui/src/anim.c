@@ -31,7 +31,7 @@
 #include <string.h>
 #include <time.h>
 
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 
 #include "synui.h"
 

@@ -3,6 +3,11 @@ project('synui', 'c',
   default_options : ['warning_level=1', 'c_std=gnu17'])
 
 wlroots   = dependency('wlroots-0.19')
+# scenefx-0.4: the wlr_scene fork adding corner radius / backdrop blur / shadows.
+# synui includes <scenefx/types/wlr_scene.h> (a superset of wlroots' wlr_scene.h)
+# everywhere, and creates fx_renderer_create() instead of wlr_renderer_autocreate.
+# Pinned to 0.4.x = wlroots 0.19; 0.5+ is wlroots 0.20. See SYNAPSE/scenefx/.
+scenefx   = dependency('scenefx-0.4')
 wayland   = dependency('wayland-server')
 wayland_protos = dependency('wayland-protocols')
 xkbcommon = dependency('xkbcommon')
@@ -180,7 +185,7 @@ synui_exe = executable('synui',
     cursor_shape_h,
   ],
   include_directories : include_directories('src'),
-  dependencies : [wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
+  dependencies : [wlroots, scenefx, wayland, xkbcommon, pixman, threads, cairo, rsvg,
                   libinput, libjpeg, libcurl, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',

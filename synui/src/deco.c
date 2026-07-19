@@ -37,7 +37,7 @@
 #include <string.h>
 #include <math.h>
 
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 #include <wlr/util/edges.h>
 
 #include "synui.h"

@@ -44,12 +44,13 @@
 #include <GLES2/gl2.h>
 
 #include <wlr/render/egl.h>
-#include <wlr/render/gles2.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+#include "fx_compat.h"
 #include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
 #include "synui.h"
@@ -61,6 +62,8 @@ struct syn_matrix {
     GLint      u_time, u_res, u_atlas;
     GLuint     atlas_tex;
     double     start;    /* CLOCK_MONOTONIC secs at init; t = now - start */
+    int        gl_ready; /* fx_renderer hides its EGL context; capture dpy/ctx +
+                          * build program/atlas lazily on the first frame. */
 };
 
 static double now_secs(void)
@@ -321,29 +324,11 @@ static GLuint load_atlas(void)
 
 /* ── Public API ──────────────────────────────────────────── */
 
-void matrix_init(syn_server_t *s)
+/* Compile the rain shader and upload the glyph atlas. MUST run with the
+ * fx_renderer's EGL context current (the caller captures it first). Returns
+ * false if the program or atlas failed. */
+static bool matrix_gl_setup(struct syn_matrix *m)
 {
-    s->matrix = NULL;
-
-    if (!wlr_renderer_is_gles2(s->renderer)) {
-        wlr_log(WLR_INFO, "matrix: renderer is not GLES2 — animated wallpaper disabled");
-        return;
-    }
-
-    struct wlr_egl *egl = wlr_gles2_renderer_get_egl(s->renderer);
-    struct syn_matrix *m = calloc(1, sizeof(*m));
-    if (!m) return;
-    m->dpy = wlr_egl_get_display(egl);
-    m->ctx = wlr_egl_get_context(egl);
-    m->start = now_secs();
-
-    struct egl_saved saved;
-    if (!mx_make_current(m, &saved)) {
-        wlr_log(WLR_ERROR, "matrix: eglMakeCurrent failed");
-        free(m);
-        return;
-    }
-
     m->prog = build_program();
     if (m->prog) {
         m->u_time  = glGetUniformLocation(m->prog, "t");
@@ -351,18 +336,29 @@ void matrix_init(syn_server_t *s)
         m->u_atlas = glGetUniformLocation(m->prog, "atlas");
         m->atlas_tex = load_atlas();
     }
-
-    mx_restore(&saved);
-
     if (!m->prog || !m->atlas_tex) {
-        /* Programs/textures die with the renderer's EGL context on teardown;
-         * here we just drop the half-built state and stay disabled. */
-        free(m);
-        return;
+        wlr_log(WLR_ERROR, "matrix: shader/atlas setup failed");
+        return false;
     }
+    wlr_log(WLR_INFO, "matrix: animated wallpaper ready");
+    return true;
+}
+
+void matrix_init(syn_server_t *s)
+{
+    s->matrix = NULL;
+
+    /* scenefx's fx_renderer isn't a wlr_gles2_renderer and hides its EGL
+     * context, so — like effects.c — we can't touch GL at init. Allocate now,
+     * defer the shader + atlas to the first frame where a scenefx op makes the
+     * context current for us to capture (see gl_ready in the render path). */
+    struct syn_matrix *m = calloc(1, sizeof(*m));
+    if (!m) return;
+    m->start = now_secs();
+    m->gl_ready = 0;
 
     s->matrix = m;
-    wlr_log(WLR_INFO, "matrix: animated wallpaper ready");
+    wlr_log(WLR_INFO, "matrix: animated wallpaper armed (GL setup deferred)");
 }
 
 void matrix_finish(syn_server_t *s)
@@ -434,15 +430,42 @@ bool matrix_output_frame(syn_output_t *o)
     struct wlr_buffer *dst = wlr_swapchain_acquire(o->matrix_swapchain);
     if (!dst) return false;
 
-    struct egl_saved saved;
-    if (!mx_make_current(m, &saved)) {
+    GLuint fbo = fx_renderer_get_buffer_fbo(s->renderer, dst);
+    if (!fbo) {
         wlr_buffer_unlock(dst);
         return false;
     }
 
-    GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(s->renderer, dst);
-    if (!fbo) {
-        mx_restore(&saved);
+    /* scenefx exposes no getter for the fx_renderer's EGL context and its
+     * helpers restore the context after themselves, so capture it inside a
+     * throwaway render pass (the context is current between begin and submit)
+     * and build the shader + atlas there. dst is overwritten by our own raw-GL
+     * pass just below, so the empty pass is harmless. */
+    if (!m->gl_ready) {
+        struct wlr_buffer_pass_options bpo = {0};
+        struct fx_buffer_pass_options fxo = { .base = &bpo };
+        struct fx_gles_render_pass *cap =
+            fx_renderer_begin_buffer_pass(s->renderer, dst, wo, &fxo);
+        if (!cap) {
+            wlr_buffer_unlock(dst);
+            return false;
+        }
+        m->dpy = eglGetCurrentDisplay();
+        m->ctx = eglGetCurrentContext();
+        bool ok = m->dpy != EGL_NO_DISPLAY && m->ctx != EGL_NO_CONTEXT &&
+                  matrix_gl_setup(m);
+        wlr_render_pass_submit((struct wlr_render_pass *)cap);
+        if (!ok) {
+            wlr_log(WLR_ERROR, "matrix: could not capture fx EGL context / "
+                    "build shader — animated wallpaper off");
+            wlr_buffer_unlock(dst);
+            return false;
+        }
+        m->gl_ready = 1;
+    }
+
+    struct egl_saved saved;
+    if (!mx_make_current(m, &saved)) {
         wlr_buffer_unlock(dst);
         return false;
     }

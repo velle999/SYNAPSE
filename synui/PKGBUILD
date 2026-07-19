@@ -35,7 +35,7 @@ license=('GPL-2.0-or-later')
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-depends=('wlroots0.19' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'waybar' 'wtype' 'wf-recorder')
+depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'waybar' 'wtype' 'wf-recorder')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
 optdepends=('wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: FPS/temp overlay for synui-game-run'

@@ -34,7 +34,8 @@
 #include <GLES2/gl2ext.h>
 
 #include <wlr/render/egl.h>
-#include <wlr/render/gles2.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+#include "fx_compat.h"
 #include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_damage_ring.h>
@@ -59,6 +60,12 @@ struct syn_effects {
     double close_until;   /* L2 (interim): brief glitch after a close  */
 
     int force_glitch;     /* SYNUI_EFFECTS_FORCE_GLITCH=1 (tests only) */
+
+    /* scenefx's fx_renderer does not expose its EGL context (unlike wlroots'
+     * gles2 renderer, whose wlr_egl we used to grab at init). So dpy/ctx and the
+     * shader programs are captured LAZILY on the first frame, while a scenefx GL
+     * op has the context current — see effects_output_commit. 0 until then. */
+    int gl_ready;
 };
 
 #define FX_PULSE_SECS  0.25
@@ -254,30 +261,17 @@ static GLuint build_program(const char *prelude, const char *sampler)
     return prog;
 }
 
-bool effects_init(syn_server_t *s)
+/* Compile the CRT programs and resolve their uniform locations. MUST run with
+ * the fx_renderer's EGL context already current (the caller captures it first).
+ * Returns false if the base program failed to build. */
+static bool effects_gl_setup(struct syn_effects *fx)
 {
-    s->effects = NULL;
-
-    if (!wlr_renderer_is_gles2(s->renderer)) {
-        wlr_log(WLR_INFO, "effects: renderer is not GLES2 — post-process disabled");
-        return false;
-    }
-
-    struct wlr_egl *egl = wlr_gles2_renderer_get_egl(s->renderer);
-    struct syn_effects *fx = calloc(1, sizeof(*fx));
-    if (!fx) return false;
-    fx->dpy = wlr_egl_get_display(egl);
-    fx->ctx = wlr_egl_get_context(egl);
-
-    struct egl_saved saved;
-    if (!fx_make_current(fx, &saved)) {
-        wlr_log(WLR_ERROR, "effects: eglMakeCurrent failed");
-        free(fx);
-        return false;
-    }
-
     fx->prog[0] = build_program("", "sampler2D");
-    if (wlr_gles2_renderer_check_ext(s->renderer, "GL_OES_EGL_image_external"))
+    /* scenefx doesn't export a check_ext (its header declares one the .so does
+     * not ship), but our GL context is current here, so ask GL itself whether
+     * external-OES samplers (needed for dmabuf-backed scene buffers) exist. */
+    const char *exts = (const char *)glGetString(GL_EXTENSIONS);
+    if (exts && strstr(exts, "GL_OES_EGL_image_external"))
         fx->prog[1] = build_program(
             "#extension GL_OES_EGL_image_external : require\n",
             "samplerExternalOES");
@@ -297,19 +291,33 @@ bool effects_init(syn_server_t *s)
         fx->u_bloom[i]  = glGetUniformLocation(fx->prog[i], "u_bloom");
     }
 
-    const char *force = getenv("SYNUI_EFFECTS_FORCE_GLITCH");
-    fx->force_glitch = force && strcmp(force, "1") == 0;
-
-    fx_restore(&saved);
-
     if (!fx->prog[0]) {
-        free(fx);
+        wlr_log(WLR_ERROR, "effects: base CRT program failed to compile");
         return false;
     }
-
-    s->effects = fx;
     wlr_log(WLR_INFO, "effects: GLES2 post-process ready (external-oes: %s)",
             fx->prog[1] ? "yes" : "no");
+    return true;
+}
+
+bool effects_init(syn_server_t *s)
+{
+    s->effects = NULL;
+
+    /* No renderer-type gate and no shader compile here anymore: scenefx's
+     * fx_renderer isn't a wlr_gles2_renderer (wlr_renderer_is_gles2 is false)
+     * and hides its EGL context, so we cannot grab a context at init. Allocate
+     * the state now and defer all GL work to the first frame, where a scenefx
+     * op makes the context current for us to capture (see gl_ready). */
+    struct syn_effects *fx = calloc(1, sizeof(*fx));
+    if (!fx) return false;
+
+    const char *force = getenv("SYNUI_EFFECTS_FORCE_GLITCH");
+    fx->force_glitch = force && strcmp(force, "1") == 0;
+    fx->gl_ready = 0;
+
+    s->effects = fx;
+    wlr_log(WLR_INFO, "effects: post-process armed (GL setup deferred to first frame)");
     return true;
 }
 
@@ -508,23 +516,46 @@ bool effects_output_commit(syn_output_t *output)
     struct wlr_buffer *scene_buf = wlr_buffer_lock(st.buffer);
     wlr_output_state_finish(&st);
 
-    struct wlr_texture *tex = wlr_texture_from_buffer(s->renderer, scene_buf);
+    struct wlr_texture *tex = fx_texture_from_buffer(s->renderer, scene_buf);
     if (!tex) goto fail_scene;
 
     struct wlr_buffer *dst = wlr_swapchain_acquire(wo->swapchain);
     if (!dst) goto fail_tex;
 
+    GLuint fbo = fx_renderer_get_buffer_fbo(s->renderer, dst);
+    if (!fbo) goto fail_dst;
+
+    /* scenefx exposes no getter for the fx_renderer's EGL context, and its
+     * helpers (get_buffer_fbo) save/restore the context around themselves, so
+     * nothing is left current to capture. A render pass, however, holds the
+     * context current between begin and submit — so open a throwaway pass on
+     * dst once, grab dpy/ctx and compile the CRT programs inside it, then
+     * submit. dst gets overwritten by our own raw-GL pass immediately below, so
+     * the empty pass is harmless. */
+    if (!fx->gl_ready) {
+        struct wlr_buffer_pass_options bpo = {0};
+        struct fx_buffer_pass_options fxo = { .base = &bpo };
+        struct fx_gles_render_pass *cap =
+            fx_renderer_begin_buffer_pass(s->renderer, dst, wo, &fxo);
+        if (!cap) goto fail_dst;
+        fx->dpy = eglGetCurrentDisplay();
+        fx->ctx = eglGetCurrentContext();
+        bool ok = fx->dpy != EGL_NO_DISPLAY && fx->ctx != EGL_NO_CONTEXT &&
+                  effects_gl_setup(fx);
+        wlr_render_pass_submit((struct wlr_render_pass *)cap);
+        if (!ok) {
+            wlr_log(WLR_ERROR, "effects: could not capture fx EGL context / "
+                    "compile programs — post-process off");
+            goto fail_dst;
+        }
+        fx->gl_ready = 1;
+    }
+
     struct egl_saved saved;
     if (!fx_make_current(fx, &saved)) goto fail_dst;
 
-    GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(s->renderer, dst);
-    if (!fbo) {
-        fx_restore(&saved);
-        goto fail_dst;
-    }
-
-    struct wlr_gles2_texture_attribs ta;
-    wlr_gles2_texture_get_attribs(tex, &ta);
+    struct fx_texture_attribs ta;
+    fx_texture_get_attribs(tex, &ta);
     int p = (ta.target == GL_TEXTURE_EXTERNAL_OES) ? 1 : 0;
     if (!fx->prog[p]) {
         fx_restore(&saved);

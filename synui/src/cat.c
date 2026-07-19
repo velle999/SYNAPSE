@@ -31,7 +31,7 @@
 #include <time.h>
 #include <cairo.h>
 
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 
 #include "synui.h"
 

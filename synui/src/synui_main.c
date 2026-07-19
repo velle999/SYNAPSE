@@ -54,6 +54,8 @@
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_xdg_toplevel_icon_v1.h>
 
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+
 #include "synui.h"
 #include "effects.h"
 
@@ -1114,9 +1116,14 @@ int synui_init(syn_server_t *s)
         return -1;
     }
 
-    s->renderer = wlr_renderer_autocreate(s->backend);
+    /* scenefx's fx_renderer, not wlr_renderer_autocreate: it is a GLES2 renderer
+     * that also knows how to paint corner radius / backdrop blur / shadows during
+     * the scene pass — the whole reason we can do real glass. Everything else on
+     * the wlr_renderer interface (allocator autocreate, wl_display init, the CRT
+     * post-pass) treats it as an ordinary renderer. */
+    s->renderer = fx_renderer_create(s->backend);
     if (!s->renderer) {
-        fprintf(stderr, "synui: wlr_renderer_autocreate() failed (WLR_RENDERER=%s)\n",
+        fprintf(stderr, "synui: fx_renderer_create() failed (WLR_RENDERER=%s)\n",
                 getenv("WLR_RENDERER") ? getenv("WLR_RENDERER") : "(auto)");
         return -1;
     }
