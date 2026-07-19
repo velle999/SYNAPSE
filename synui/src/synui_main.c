@@ -304,6 +304,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
         matrix_output_destroy(output);
         dock_output_destroy(output);
         launcher_output_destroy(output);
+        lock_output_destroy(output);   /* drop the pane before its wlr_output frees */
 
         syn_output_t *home = wl_list_empty(&server->outputs)
                                  ? NULL
@@ -1067,6 +1068,13 @@ int synui_init(syn_server_t *s)
     setenv("SYNUI_RUNNING", "1", 1);
     setenv("XDG_SESSION_TYPE", "wayland", 1);
     setenv("XDG_CURRENT_DESKTOP", "SynapseOS", 1);
+    /* Force GTK/Firefox onto their Wayland backends rather than XWayland. Firefox
+     * only honours the glass prefs (transparency, blur-behind) on its Wayland
+     * surface — under XWayland the window is opaque no matter the CSS/prefs. Its
+     * auto-detection is unreliable across restarts (some come up XWayland), so pin
+     * it here for every child of the session. See [[project_synui_firefox_glass]]. */
+    setenv("MOZ_ENABLE_WAYLAND", "1", 1);
+    setenv("MOZ_DBUS_REMOTE", "1", 1);
     /* WAYLAND_DISPLAY will be set after socket creation below */
 
     /* Declare AI intent to the kernel */
@@ -1157,6 +1165,12 @@ int synui_init(syn_server_t *s)
     /* Scene graph */
     s->scene = wlr_scene_create();
     s->scene_layout = wlr_scene_attach_output_layout(s->scene, s->output_layout);
+
+    /* scenefx global blur parameters (Stage 5). One-time; per-buffer backdrop
+     * blur is toggled in anim.c. Cheap when no buffer opts into blur. */
+    wlr_scene_set_blur_data(s->scene, s->config.blur_passes, s->config.blur_radius,
+                            s->config.blur_noise, s->config.blur_brightness,
+                            s->config.blur_contrast, s->config.blur_saturation);
 
     /* Background: dark rect so the compositor isn't pure black */
     float bg_color[4] = { 0.07f, 0.07f, 0.12f, 1.0f };

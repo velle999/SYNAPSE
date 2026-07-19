@@ -411,6 +411,18 @@ void synui_config_load(syn_config_t *cfg)
     cfg->transparency     = 0;
     cfg->active_opacity   = 1.00f;
     cfg->inactive_opacity = 0.92f;
+
+    /* scenefx glass defaults (Stage 5). Rounded corners are on out of the box —
+     * they cost nothing on opaque windows and are the single most visible piece
+     * of the "glass" look. Blur is on but only paints behind translucent windows. */
+    cfg->corner_radius    = 12;
+    cfg->blur             = 1;
+    cfg->blur_passes      = 3;
+    cfg->blur_radius      = 5;
+    cfg->blur_noise       = 0.02f;
+    cfg->blur_brightness  = 0.90f;
+    cfg->blur_contrast    = 1.00f;
+    cfg->blur_saturation  = 1.15f;
     /* SYNAPSE's neon cyan — the panel accent render.c starts on; theme_apply()
      * (via theme.state at startup, or a synuirc `theme =`) reskins it. */
     cfg->panel_accent[0] = 0.00f; cfg->panel_accent[1] = 0.85f;
@@ -648,6 +660,31 @@ void synui_config_load(syn_config_t *cfg)
             cfg->active_opacity = (float)atof(val);
         else if (strcmp(key, "inactive_opacity") == 0)
             cfg->inactive_opacity = (float)atof(val);
+        else if (strcmp(key, "corner_radius") == 0) {
+            cfg->corner_radius = atoi(val);
+            if (cfg->corner_radius < 0)  cfg->corner_radius = 0;
+            if (cfg->corner_radius > 48) cfg->corner_radius = 48;
+        }
+        else if (strcmp(key, "blur") == 0)
+            cfg->blur = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
+        else if (strcmp(key, "blur_passes") == 0) {
+            cfg->blur_passes = atoi(val);
+            if (cfg->blur_passes < 1) cfg->blur_passes = 1;
+            if (cfg->blur_passes > 5) cfg->blur_passes = 5;
+        }
+        else if (strcmp(key, "blur_radius") == 0) {
+            cfg->blur_radius = atoi(val);
+            if (cfg->blur_radius < 1)  cfg->blur_radius = 1;
+            if (cfg->blur_radius > 20) cfg->blur_radius = 20;
+        }
+        else if (strcmp(key, "blur_noise") == 0)
+            cfg->blur_noise = (float)atof(val);
+        else if (strcmp(key, "blur_brightness") == 0)
+            cfg->blur_brightness = (float)atof(val);
+        else if (strcmp(key, "blur_contrast") == 0)
+            cfg->blur_contrast = (float)atof(val);
+        else if (strcmp(key, "blur_saturation") == 0)
+            cfg->blur_saturation = (float)atof(val);
         else if (strcmp(key, "border_color_norm") == 0)
             parse_hex_color(val, cfg->border_color_norm);
         else if (strcmp(key, "border_color_focus") == 0)

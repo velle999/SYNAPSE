@@ -185,7 +185,11 @@ synui_exe = executable('synui',
     cursor_shape_h,
   ],
   include_directories : include_directories('src'),
-  dependencies : [wlroots, scenefx, wayland, xkbcommon, pixman, threads, cairo, rsvg,
+  # scenefx BEFORE wlroots: both export the wlr_scene_* symbols, and DT_NEEDED
+  # order decides resolution. scenefx must win so the surface/xdg/layer/subsurface
+  # /drag/output-layout helpers build scenefx-native (type-3) buffer nodes that can
+  # carry blur/corners/shadow. wlroots-first gives a mixed tree and dead clicks.
+  dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
                   libinput, libjpeg, libcurl, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',

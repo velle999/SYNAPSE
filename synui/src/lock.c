@@ -43,7 +43,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
 #include "synui.h"
@@ -252,6 +252,34 @@ void lock_render(syn_server_t *s)
         int px = box.x + (box.width  - LOCK_PANEL_W) / 2;
         int py = box.y + (box.height - LOCK_PANEL_H) / 2;
         wlr_scene_node_set_position(&s->nlock.pane[i].buf->node, px, py);
+    }
+}
+
+/* A monitor unplugged — or destroyed and recreated across a suspend/DPMS
+ * cycle — while the session is locked leaves its pane holding a freed
+ * wlr_output. lock_render() and the 1 Hz clock tick then feed that dangling
+ * pointer to wlr_output_layout_get_box(), whose wlr_addon_find() dereferences
+ * it and segfaults. Called from output_destroy() (synui_main.c) before the
+ * wlr_output is freed, this drops the pane so nothing outlives the output.
+ * The output layout has not removed the output yet, so we match by pointer. */
+void lock_output_destroy(syn_output_t *o)
+{
+    if (!o) return;
+    syn_server_t *s = o->server;
+    struct wlr_output *dead = o->wlr_output;
+
+    for (int i = 0; i < s->nlock.npane; i++) {
+        if (s->nlock.pane[i].output != dead) continue;
+
+        /* Tear down this pane's scene buffer, then null the output pointer so
+         * lock_render()'s `if (!o) continue;` skips the slot from now on. The
+         * slot is left in place (npane unchanged); the render loop tolerates
+         * holes, and synui_unlock() resets the array wholesale anyway. */
+        if (s->nlock.pane[i].buf) {
+            wlr_scene_node_destroy(&s->nlock.pane[i].buf->node);
+            s->nlock.pane[i].buf = NULL;
+        }
+        s->nlock.pane[i].output = NULL;
     }
 }
 

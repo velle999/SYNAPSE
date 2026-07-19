@@ -31,7 +31,7 @@
 #include <string.h>
 #include <time.h>
 
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 
 #include "synui.h"
 
@@ -50,13 +50,33 @@ static double now_secs(void)
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
-/* ── Applying alpha to a whole window ────────────────────── */
-static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
+/* ── Applying alpha + scenefx glass to a whole window ─────── */
+struct view_effect_params {
+    float alpha;
+    int   corner_radius;   /* 0 = square (maximized/fullscreen) */
+    bool  blur;            /* backdrop blur behind this window */
+};
+
+/* One walk over every buffer under the frame sets opacity AND the scenefx
+ * effects together, so the glass tracks the same events the fade already does
+ * (map, focus, transparency toggle, config reload) — no separate re-apply path
+ * to forget. corner_radius/backdrop_blur persist on the scene_buffer node across
+ * the client's buffer swaps, so a repaint can't quietly drop them (the bug that
+ * made the plain-opacity 'transparency setting' snap back to solid). */
+static void set_buffer_effects(struct wlr_scene_buffer *buffer,
                                int sx, int sy, void *data)
 {
     (void)sx; (void)sy;
-    const float *alpha = data;
-    wlr_scene_buffer_set_opacity(buffer, *alpha);
+    const struct view_effect_params *p = data;
+    wlr_scene_buffer_set_opacity(buffer, p->alpha);
+    wlr_scene_buffer_set_corner_radius(buffer, p->corner_radius,
+                                       CORNER_LOCATION_ALL);
+    wlr_scene_buffer_set_backdrop_blur(buffer, p->blur);
+    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, p->blur);
+    /* Skip blur under fully-transparent (alpha 0) regions — the rounded-corner
+     * cutouts — so corners stay crisp; the semi-transparent glass body still
+     * gets blurred. */
+    wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, true);
 }
 
 /*
@@ -115,7 +135,22 @@ void anim_apply_alpha(syn_view_t *view)
     if (a < 0.0f) a = 0.0f;
     if (a > 1.0f) a = 1.0f;
 
-    wlr_scene_node_for_each_buffer(view_node(view), set_buffer_opacity, &a);
+    syn_server_t *s = view->server;
+    /* A window is glass-eligible when it will actually be translucent: an app that
+     * draws its own alpha (foot, transparent Firefox), or any window while the
+     * transparency master switch is on. Blur behind an opaque window is invisible
+     * and just burns GPU, so it is gated on that. Rounded corners apply to every
+     * window (they read as glass even opaque) but are squared off when maximized/
+     * fullscreen so nothing pokes past the tile/output. */
+    bool boxy       = view->fullscreen || view->maximized;
+    bool translucent = view_is_glass_native(view) || (s && s->config.transparency);
+    struct view_effect_params p = {
+        .alpha         = a,
+        .corner_radius = (boxy || !s) ? 0 : s->config.corner_radius,
+        .blur          = s && s->config.blur && !view->fullscreen && translucent,
+    };
+
+    wlr_scene_node_for_each_buffer(view_node(view), set_buffer_effects, &p);
     view_update_decorations(view);   /* re-tints the border rects at `a` */
 }
 

@@ -22,7 +22,7 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_cursor.h>
@@ -907,6 +907,22 @@ typedef struct {
     int   transparency;          /* default 0 (opaque) */
     float active_opacity;        /* focused window, 0.5..1.0; default 1.0 */
     float inactive_opacity;      /* unfocused windows; default 0.92 */
+
+    /* scenefx glass (Stage 5 of the scenefx migration). Applied to every buffer
+     * under a window via the same anim.c walk that drives opacity. `corner_radius`
+     * rounds each window's corners (0 = square, forced to 0 while maximized/
+     * fullscreen so nothing pokes past the output). `blur` turns on backdrop blur
+     * behind translucent windows — foot's app-native glass and transparent
+     * Firefox get frosted; behind an opaque window it renders nothing, so it is
+     * safe on every client. blur_* feed wlr_scene_set_blur_data once at init. */
+    int   corner_radius;         /* px; default 12, 0 disables */
+    int   blur;                  /* master backdrop-blur switch; default 1 */
+    int   blur_passes;           /* default 3 */
+    int   blur_radius;           /* default 5 */
+    float blur_noise;            /* default 0.02 */
+    float blur_brightness;       /* default 0.90 */
+    float blur_contrast;         /* default 1.00 */
+    float blur_saturation;       /* default 1.15 */
 
     /* GLES post-process effects (effects.c). `effects` gates the pass;
      * it silently stays off on non-GLES2 renderers (pixman VMs).
@@ -2059,6 +2075,7 @@ void synui_unlock(syn_server_t *s);
 int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint);
 void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
 void lock_render(syn_server_t *s);               /* repaint panes (greeter reuses) */
+void lock_output_destroy(syn_output_t *o);       /* drop a dying output's lock pane (output_destroy) */
 
 /* ── greeter.c: the greetd login greeter (synui --greeter) ── */
 /* State of the greetd IPC exchange (greetd.state). */

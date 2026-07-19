@@ -50,7 +50,7 @@
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
 #include "synui.h"
