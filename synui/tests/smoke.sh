@@ -94,6 +94,18 @@ export WLR_RENDERER_FORCE_SOFTWARE=1 WLR_RENDERER_ALLOW_SOFTWARE=1
 # software rasterizer the test harness stands on, not of the compositor.
 export LP_NUM_THREADS=0
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
+
+# ASan vs llvmpipe's JIT. llvmpipe compiles its rasterizer/blit paths at runtime
+# into anonymous executable mappings — which is why the faulting frame in the
+# crash this fixes was "<unknown module>" with libgallium beneath it, on an
+# ordinary cursor-texture upload. ASan reserves a large shadow region and, with
+# protect_shadow_gap on, the guarded gap collides with where the JIT wants to
+# map; the JIT'd code then faults on memory ASan is protecting.
+#
+# protect_shadow_gap=0 is the standard remedy for running ASan against a JIT.
+# Harmless on a non-ASan build: the variable is simply unread. Keep halt_on_error
+# so a genuine ASan report still fails the run rather than scrolling past.
+export ASAN_OPTIONS="protect_shadow_gap=0:halt_on_error=1:abort_on_error=1:print_summary=1"
 unset DISPLAY WAYLAND_DISPLAY
 
 # ── 1. Boot ────────────────────────────────────────────────

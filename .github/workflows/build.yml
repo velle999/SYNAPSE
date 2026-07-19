@@ -190,21 +190,19 @@ jobs:
             exit 1
           fi
 
-      # ASan BEFORE the release smoke, deliberately. Both run the same suite, but
-      # a release build answers a crash with "Segmentation fault (core dumped)"
-      # and a core file the runner throws away — which is what a first-frame SEGV
-      # here looked like, leaving nothing to debug remotely. The ASan build prints
-      # a symbolized backtrace instead. Running it first means the *informative*
-      # failure is the one that stops the job.
+      - name: synui headless smoke test
+        run: |
+          meson test -C synui/_ci smoke --print-errorlogs
+
+      # If this one ever dies with a bare "Segmentation fault (core dumped)"
+      # again, run the ASan step FIRST: the release build's core is discarded by
+      # the runner, while ASan prints a symbolized backtrace. That swap is what
+      # identified both crashes here as mesa's, with no synui frame involved.
       - name: synui headless smoke test (ASan + LeakSanitizer)
         run: |
           meson setup synui/_asan synui -Dbuildtype=debug -Db_sanitize=address
           meson compile -C synui/_asan
           meson test -C synui/_asan smoke --print-errorlogs
-
-      - name: synui headless smoke test
-        run: |
-          meson test -C synui/_ci smoke --print-errorlogs
 
       - name: Build kernel module
         run: |
