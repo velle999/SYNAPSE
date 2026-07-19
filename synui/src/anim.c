@@ -65,13 +65,18 @@ static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
  * that would drag the *text* down with the background — the exact "everything
  * fades together" the glass look is meant to avoid. Such windows are left fully
  * opaque at the compositor; synui-glass drives their real alpha instead, keeping
- * the glyphs crisp at any transparency. Keyed on app_id (foot / footclient).
+ * the glyphs crisp at any transparency. Keyed on app_id:
+ *   - foot/footclient: [colors-dark] alpha (synui-glass).
+ *   - firefox: glass chrome via userChrome.css (widget.wayland.opaque-region
+ *     disabled). Its page content is opaque anyway, so a uniform fade would only
+ *     wash out the text it can't make transparent — leave it to draw its own.
  */
 static bool view_is_glass_native(syn_view_t *view)
 {
     const char *id = view_app_id(view);
     if (!id) return false;
-    return strcmp(id, "foot") == 0 || strcmp(id, "footclient") == 0;
+    return strcmp(id, "foot") == 0 || strcmp(id, "footclient") == 0 ||
+           strcmp(id, "firefox") == 0 || strcmp(id, "org.mozilla.firefox") == 0;
 }
 
 /*
