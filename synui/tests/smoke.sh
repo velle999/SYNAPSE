@@ -80,6 +80,19 @@ export SYNUI_CONFIG="$TMP/synuirc"
 # only-when-no-GPU so CI and a developer's GPU box exercise the same path.
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
 export WLR_RENDERER_FORCE_SOFTWARE=1 WLR_RENDERER_ALLOW_SOFTWARE=1
+
+# llvmpipe single-threaded. Its rasterizer otherwise spawns a worker pool at EGL
+# context creation, and in a container those threads SEGV'd on startup — the
+# whole crash stack was libgallium frames under a pthread_create from
+# driCreateContextAttribs, with no synui code in it. That took down the
+# compositor just after it came up, which surfaced only as "wayland-info listed
+# no globals" and, in the release build, a bare "Segmentation fault (core
+# dumped)" whose core the runner discarded.
+#
+# 0 = rasterize on the calling thread, no worker pool. Slower, and completely
+# irrelevant to how synui runs on a real GPU — this is a property of the
+# software rasterizer the test harness stands on, not of the compositor.
+export LP_NUM_THREADS=0
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
 unset DISPLAY WAYLAND_DISPLAY
 
