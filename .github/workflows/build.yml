@@ -111,6 +111,22 @@ jobs:
           cmake --build /tmp/llama/build -j"$(nproc)"
           DESTDIR="$PWD/llama-staging" cmake --install /tmp/llama/build
 
+      # scenefx is synui's glass dependency (corner radius / backdrop blur /
+      # shadow) and is our own package, not in the Arch repos — so CI must build
+      # and install it before synui, exactly as a real machine does from
+      # SYNAPSE/scenefx/. Without this, `meson setup synui` fails at
+      # dependency('scenefx-0.4'). makepkg refuses to run as root, so build under
+      # a throwaway user and then pacman -U the result. --nodeps: the build/make
+      # deps (wlroots0.19, meson, ninja, wayland-protocols, pkgconf) are already
+      # installed by the toolchain step above.
+      - name: Build & install scenefx (synui glass dependency)
+        run: |
+          set -e
+          useradd -m builder
+          chown -R builder:builder scenefx
+          su builder -c 'cd scenefx && makepkg -f --noconfirm --nodeps --skipinteg'
+          pacman -U --noconfirm scenefx/scenefx-0.4.1-*-x86_64.pkg.tar.zst
+
       - name: Build userspace components
         run: |
           set -e
