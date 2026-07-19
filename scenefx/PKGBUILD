@@ -1,0 +1,34 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# scenefx — the wlr_scene fork (from the SwayFX project) that adds what plain
+# wlr_scene cannot express: per-node corner radius, backdrop blur, and shadows.
+# SynapseOS packages it so synui can migrate its scene graph onto it and finally
+# render real "glass" (blur-behind) windows. Pinned to the 0.4.x line because
+# that is the release series built against wlroots 0.19 — our wlroots. 0.5+ is
+# wlroots 0.20 and will NOT link against what synui/SynapseOS currently ship.
+pkgname=scenefx
+pkgver=0.4.1
+pkgrel=1
+pkgdesc='wlr_scene fork with corner radius, blur and shadows (wlroots 0.19)'
+arch=('x86_64')
+url='https://github.com/wlrfx/scenefx'
+license=('MIT')
+depends=('wlroots0.19' 'wayland' 'libdrm' 'libxkbcommon' 'pixman')
+makedepends=('meson' 'ninja' 'wayland-protocols' 'pkgconf')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/wlrfx/scenefx/archive/refs/tags/$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    # examples pull in extra deps and ship demo binaries we don't want; werror
+    # off so a newer-toolchain warning can't fail a dependency build.
+    meson setup build --prefix=/usr --buildtype=release \
+        -Dexamples=false -Dwerror=false
+    ninja -C build
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    DESTDIR="$pkgdir" ninja -C build install
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
