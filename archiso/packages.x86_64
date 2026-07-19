@@ -29,6 +29,10 @@ fontconfig
 # in a script dejavu lacks drew as boxes on the live ISO, whatever the locale.
 noto-fonts
 wlroots0.19
+# wlr_scene fork giving synui blur + rounded corners. Built by build.sh into
+# local-repo; listed explicitly (like wlroots0.19) rather than left to synui's
+# dependency resolution, since it exists in no upstream repo.
+scenefx
 librsvg
 plymouth
 archiso
