@@ -79,23 +79,12 @@ jobs:
   # ── Real compile of every component on a current Arch toolchain ─
   build:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-      # --privileged exposes the host's /dev/udmabuf, which the smoke test needs
-      # as a DMA-BUF allocator: synui renders through scenefx's fx_renderer,
-      # which is GLES2/EGL and accepts ONLY DMA-BUF buffers, and a GPU-less
-      # runner has no /dev/dri render node. Without it wlr_allocator_autocreate()
-      # fails and the compositor cannot start. It cannot fall back to pixman —
-      # scenefx's scene commit requires an fx renderer.
-      #
-      # Do NOT also bind-mount the host's /lib/modules here. On Arch /lib is a
-      # symlink to /usr/lib, so that shadows the container's /usr/lib/modules and
-      # linux-headers silently fails to extract ("Failed to create dir
-      # /usr/lib/modules/<ver>"), breaking the kernel-module build further down.
-      # It was only ever there for a modprobe that is not needed: the udmabuf
-      # module is already loaded on the host, and --privileged is what surfaces
-      # the device node.
-      options: --privileged
+    # Plain container: no --privileged, no device or module mounts. Those were
+    # added to hand the smoke test a udmabuf DMA-BUF allocator so it could run on
+    # llvmpipe, which turned out to be a dead end — mesa's software rasterizer
+    # crashes inside its own JIT there (see tests/smoke.sh). The suite now skips
+    # without a real DRM render node, so the runner needs nothing special.
+    container: archlinux:latest
     steps:
       - name: Install toolchain and dependencies
         run: |
@@ -171,35 +160,11 @@ jobs:
           meson test -C synapd/_ci wire --print-errorlogs
           meson test -C synguard/_ci secfeed --print-errorlogs
 
-      # A DMA-BUF source for the headless smoke test. fx_renderer is GLES2-only
-      # and GLES2 advertises only WLR_BUFFER_CAP_DMABUF, so wlroots' allocator
-      # autocreate needs either a DRM render node (no GPU here) or udmabuf.
-      # Neither is present by default on a runner, which is why the compositor
-      # died at "wlr_allocator_autocreate() failed" even once the renderer
-      # itself came up fine on llvmpipe.
-      #
-      # Diagnostics first: if this ever breaks again, the log should say which
-      # of the two paths was available rather than leaving a bare allocator
-      # error to be reverse-engineered.
-      - name: DMA-BUF allocator for the smoke test (udmabuf)
-        run: |
-          # No modprobe: udmabuf is already loaded on the host and --privileged
-          # surfaces the node. Loading it from here would need the host's
-          # /lib/modules mounted, which breaks linux-headers (see container opts).
-          ls -l /dev/dri /dev/udmabuf 2>&1 || true
-          echo "--- CPU (llvmpipe JITs for the host CPU; a codegen crash lives here) ---"
-          grep -m1 '^model name' /proc/cpuinfo || true
-          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' \
-            | grep -E '^(avx|avx2|avx512[a-z]*|sse4_[12]|f16c|fma)$' | tr '\n' ' ' || true
-          echo
-          if [ -e /dev/udmabuf ] || ls /dev/dri/renderD* >/dev/null 2>&1; then
-            echo "ok: a DMA-BUF allocator is available"
-          else
-            echo "::error::no DMA-BUF source (/dev/udmabuf or /dev/dri/renderD*)."
-            echo "::error::synui cannot start headless without one — fx_renderer is GLES2/DMA-BUF only."
-            exit 1
-          fi
-
+      # Both smoke steps SKIP on a GPU-less runner (no /dev/dri/renderD*) and run
+      # in full anywhere a real driver exists — a developer box, or a self-hosted
+      # runner with a GPU, where they are worth wiring up. meson reports the skip
+      # rather than a pass, so a green build here is not claiming they ran.
+      # tests/smoke.sh carries the reasoning.
       - name: synui headless smoke test
         run: |
           meson test -C synui/_ci smoke --print-errorlogs

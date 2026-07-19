@@ -44,18 +44,6 @@ trap cleanup INT TERM
 
 command -v wayland-info >/dev/null || fail "wayland-info not installed (wayland-utils)"
 
-# A DMA-BUF source has to exist or synui cannot start, and the failure it
-# produces ("synui died during startup") says nothing about why. fx_renderer is
-# GLES2-only and GLES2 accepts only DMA-BUF buffers, so wlroots' allocator needs
-# a DRM render node or udmabuf; a GPU-less container has neither by default.
-# Say so here rather than leaving the next person to decode an allocator error.
-if [ ! -e /dev/udmabuf ] && ! ls /dev/dri/renderD* >/dev/null 2>&1; then
-    echo "FAIL: no DMA-BUF source — need /dev/udmabuf or /dev/dri/renderD*." >&2
-    echo "      synui renders through scenefx's fx_renderer (GLES2/DMA-BUF only)" >&2
-    echo "      and cannot fall back to pixman. Try: modprobe udmabuf" >&2
-    exit 1
-fi
-
 # Private, *short* runtime dir: unix socket paths are capped at 108 bytes,
 # so mktemp under /tmp rather than any nested build path. An empty
 # SYNUI_CONFIG makes the run hermetic — without it a developer's synuirc or
@@ -68,57 +56,50 @@ LOG="$TMP/synui.log"
 
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
-# Renderer: software GLES2 (llvmpipe), NOT pixman. Since the scenefx migration
-# synui builds its renderer with fx_renderer_create(), which is GLES2-only and
-# ignores WLR_RENDERER entirely — so the old WLR_RENDERER=pixman here silently
-# stopped meaning anything, and on a machine with no /dev/dri (every CI runner)
-# fx_renderer_create() then failed outright at "no DRM FD available" and the
-# suite died at test 1. These two are the supported no-GPU path:
-#   FORCE_SOFTWARE — skip the DRM render-node hunt, pass drm_fd = -1
-#   ALLOW_SOFTWARE — let EGL actually select the llvmpipe device once it does
-# Both are needed; either alone still fails. Set unconditionally rather than
-# only-when-no-GPU so CI and a developer's GPU box exercise the same path.
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
-export WLR_RENDERER_FORCE_SOFTWARE=1 WLR_RENDERER_ALLOW_SOFTWARE=1
 
-# llvmpipe single-threaded. Its rasterizer otherwise spawns a worker pool at EGL
-# context creation, and in a container those threads SEGV'd on startup — the
-# whole crash stack was libgallium frames under a pthread_create from
-# driCreateContextAttribs, with no synui code in it. That took down the
-# compositor just after it came up, which surfaced only as "wayland-info listed
-# no globals" and, in the release build, a bare "Segmentation fault (core
-# dumped)" whose core the runner discarded.
 #
-# 0 = rasterize on the calling thread, no worker pool. Slower, and completely
-# irrelevant to how synui runs on a real GPU — this is a property of the
-# software rasterizer the test harness stands on, not of the compositor.
-export LP_NUM_THREADS=0
+# This suite needs a real DRM render node, and SKIPS without one.
+#
+# Since the scenefx migration synui builds its renderer with
+# fx_renderer_create(): GLES2-only, ignores WLR_RENDERER (so the old
+# WLR_RENDERER=pixman here had silently stopped meaning anything), and it
+# accepts only DMA-BUF buffers. There is no pixman fallback to drop to —
+# scenefx's scene commit requires an fx renderer.
+#
+# That leaves mesa's llvmpipe as the only GPU-less option, and llvmpipe could
+# not carry it. On a GPU-less runner it crashed twice, in both release and ASan
+# builds, with NO synui frame in either stack: first its rasterizer worker pool
+# died at EGL context creation, then — with the pool disabled — JIT-compiled
+# code ("<unknown module>" over libgallium) faulted on an ordinary cursor
+# texture upload. Neither reproduces on a machine with a real driver. Capping
+# the JIT's vector width and disabling the worker pool did not fix it, and at
+# that point the suite is exercising mesa's software rasterizer rather than the
+# compositor.
+#
+# So: run the full 13 tests wherever there is a driver (every developer box, and
+# any self-hosted runner with a GPU), and skip loudly where there is not. Exit
+# 77 is meson's SKIP code, so `meson test` reports a skip rather than a pass —
+# CI does not get to look green on the strength of a test that never ran.
+#
+if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+    echo "SKIP: no DRM render node (/dev/dri/renderD*)."
+    echo "      synui renders through scenefx's fx_renderer, which is GLES2 and"
+    echo "      DMA-BUF only, with no pixman fallback. The software rasterizer"
+    echo "      (llvmpipe) segfaults inside its own JIT on a GPU-less runner, so"
+    echo "      this suite runs only where a real driver exists."
+    exit 77
+fi
 
-# Cap llvmpipe's JIT at 128-bit vectors. With the worker pool gone the next
-# crash was still inside JIT-compiled mesa code ("<unknown module>" over
-# libgallium) on a cursor-texture upload, in both release and ASan builds, and
-# only ever on the CI runner — never on a developer box. llvmpipe compiles for
-# whatever the host CPU advertises, so the wide-vector paths are the part of it
-# that varies between machines and the part not exercised locally.
-#
-# This is empirical, not a diagnosis: it narrows codegen to the conservative
-# path. If the crash outlives it, the honest answer is that the smoke test is
-# exercising mesa's JIT rather than synui, and the ASan/llvmpipe combination
-# should move to a machine with a real driver instead of being tuned further.
-export LP_NATIVE_VECTOR_WIDTH=128
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
 
-# ASan vs llvmpipe's JIT. llvmpipe compiles its rasterizer/blit paths at runtime
-# into anonymous executable mappings — which is why the faulting frame in the
-# crash this fixes was "<unknown module>" with libgallium beneath it, on an
-# ordinary cursor-texture upload. ASan reserves a large shadow region and, with
-# protect_shadow_gap on, the guarded gap collides with where the JIT wants to
-# map; the JIT'd code then faults on memory ASan is protecting.
-#
-# protect_shadow_gap=0 is the standard remedy for running ASan against a JIT.
-# Harmless on a non-ASan build: the variable is simply unread. Keep halt_on_error
-# so a genuine ASan report still fails the run rather than scrolling past.
+# protect_shadow_gap=0: ASan's guarded shadow gap collides with the executable
+# mappings a graphics driver JITs its shader/blit paths into, and the JIT'd code
+# then faults on memory ASan is protecting. Kept now that the suite runs against
+# real drivers, which JIT too. halt_on_error stays so a genuine ASan report
+# still fails the run rather than scrolling past.
 export ASAN_OPTIONS="protect_shadow_gap=0:halt_on_error=1:abort_on_error=1:print_summary=1"
+
 unset DISPLAY WAYLAND_DISPLAY
 
 # ── 1. Boot ────────────────────────────────────────────────
