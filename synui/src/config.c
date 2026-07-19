@@ -272,7 +272,12 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "filters" },
         { "super+p",         "power" },
-        { "super+t",         "taskmgr" },
+        /* Themes, not the task manager. The task manager had two binds and needs
+         * one — ctrl+alt+delete below is the one everybody already reaches for,
+         * so super+t goes to the theme manager, which had only the far less
+         * guessable super+shift+a. That freed super+shift+a entirely; it is
+         * deliberately left unbound rather than reassigned. */
+        { "super+t",         "theme" },
         { "super+shift+t",   "calendar" },
         { "super+i",         "network" },
         /* Not super+n: that is minimize, and has been since before there was
@@ -300,7 +305,9 @@ static void seed_default_binds(syn_config_t *cfg)
         { "xf86audiolowervolume", "volume down" },
         { "xf86audiomute",        "volume mute" },
         { "super+g",         "game" },
-        { "super+shift+a",   "theme" },   /* "appearance" — the theme manager */
+        /* super+shift+a is intentionally FREE — the theme manager moved to
+         * super+t. Left open for the next feature rather than filled to keep the
+         * table tidy; `bind = super+shift+a <action>` in synuirc claims it. */
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
@@ -423,6 +430,13 @@ void synui_config_load(syn_config_t *cfg)
     cfg->blur_brightness  = 0.90f;
     cfg->blur_contrast    = 1.00f;
     cfg->blur_saturation  = 1.15f;
+    /* Drop shadow: on, a soft dark halo dropped a touch downward. */
+    cfg->shadow           = 1;
+    cfg->shadow_blur_sigma = 18.0f;
+    cfg->shadow_offset_x  = 0;
+    cfg->shadow_offset_y  = 6;
+    cfg->shadow_color[0]  = 0.00f; cfg->shadow_color[1] = 0.00f;
+    cfg->shadow_color[2]  = 0.00f; cfg->shadow_color[3] = 0.45f;
     /* SYNAPSE's neon cyan — the panel accent render.c starts on; theme_apply()
      * (via theme.state at startup, or a synuirc `theme =`) reskins it. */
     cfg->panel_accent[0] = 0.00f; cfg->panel_accent[1] = 0.85f;
@@ -685,6 +699,29 @@ void synui_config_load(syn_config_t *cfg)
             cfg->blur_contrast = (float)atof(val);
         else if (strcmp(key, "blur_saturation") == 0)
             cfg->blur_saturation = (float)atof(val);
+        else if (strcmp(key, "shadow") == 0)
+            cfg->shadow = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
+        else if (strcmp(key, "shadow_blur_sigma") == 0) {
+            cfg->shadow_blur_sigma = (float)atof(val);
+            if (cfg->shadow_blur_sigma < 0.0f)  cfg->shadow_blur_sigma = 0.0f;
+            if (cfg->shadow_blur_sigma > 80.0f) cfg->shadow_blur_sigma = 80.0f;
+        }
+        else if (strcmp(key, "shadow_offset_x") == 0)
+            cfg->shadow_offset_x = atoi(val);
+        else if (strcmp(key, "shadow_offset_y") == 0)
+            cfg->shadow_offset_y = atoi(val);
+        else if (strcmp(key, "shadow_color") == 0) {
+            /* RGB only; parse_hex_color forces alpha to 1, so keep the alpha the
+             * separate shadow_opacity key (or the default) already set. */
+            float rgb[4];
+            if (parse_hex_color(val, rgb)) {
+                cfg->shadow_color[0] = rgb[0];
+                cfg->shadow_color[1] = rgb[1];
+                cfg->shadow_color[2] = rgb[2];
+            }
+        }
+        else if (strcmp(key, "shadow_opacity") == 0)
+            cfg->shadow_color[3] = clamp01(strtof(val, NULL));
         else if (strcmp(key, "border_color_norm") == 0)
             parse_hex_color(val, cfg->border_color_norm);
         else if (strcmp(key, "border_color_focus") == 0)

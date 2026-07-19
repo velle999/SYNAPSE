@@ -72,7 +72,15 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
     wlr_scene_buffer_set_corner_radius(buffer, p->corner_radius,
                                        CORNER_LOCATION_ALL);
     wlr_scene_buffer_set_backdrop_blur(buffer, p->blur);
-    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, p->blur);
+    /* NOT optimized blur. scenefx's "optimized" path samples a pre-blurred
+     * backdrop cached in fx_effect_framebuffers->optimized_blur_buffer, and that
+     * buffer is only ever filled by a WLR_SCENE_NODE_OPTIMIZED_BLUR node
+     * (wlr_scene_optimized_blur_create) — which synui does not create. Asking for
+     * it anyway left the buffer NULL, so every blurred window took the
+     * "Warning: Failed to use optimized blur" branch and fell back to live blur:
+     * an error log per window per frame for a setting that never did anything.
+     * Live blur is the honest description of what we actually render. */
+    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, false);
     /* Skip blur under fully-transparent (alpha 0) regions — the rounded-corner
      * cutouts — so corners stay crisp; the semi-transparent glass body still
      * gets blurred. */

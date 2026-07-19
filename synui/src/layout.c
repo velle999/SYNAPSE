@@ -443,6 +443,13 @@ void view_apply_fullscreen(syn_server_t *s, syn_view_t *view, int fs)
         view_fullscreen_rescale(view);
     }
 
+    /* Re-push the glass: corner_radius is squared off while fullscreen and blur
+     * is gated on !fullscreen, and both persist on the scene_buffer node until
+     * something recomputes them — same staleness that left maximized windows
+     * rounded (see view_apply_maximized). Only for a mapped view; the unmapped
+     * early-return above never reaches here. */
+    anim_apply_alpha(view);
+
     /* A fullscreen view has to cover the bar, and it may have just been handed
      * to another output — refresh every output, not just the target. */
     layer_update_occlusion_all(s);

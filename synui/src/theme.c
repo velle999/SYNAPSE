@@ -1,5 +1,5 @@
 /*
- * theme.c — the theme manager (Super+Shift+A) and the presets behind it.
+ * theme.c — the theme manager (Super+T) and the presets behind it.
  *
  * synui grew every colour as a synuirc key (border_color_*, titlebar_color_*).
  * That is the right primitive, but nobody hand-writes eight hex triples to get a
@@ -74,6 +74,14 @@ typedef struct {
     float panel_accent[4];
     const char *scheme;              /* "dark" | "light" */
     int   accent_r, accent_g, accent_b;
+    /* glyph_*: the colour the BAR's module glyphs (cpu/mem/net/audio/gamemode)
+     * are drawn in. Normally the same as accent_* — the bar tracks the desktop
+     * accent on a theme switch, which is the point. SYNAPSE is the exception:
+     * its accent is the neon magenta selection colour, but the launcher caret
+     * beside those glyphs is hard-coded teal (LAUNCHER_R/G/B in launcher.c), so
+     * taking the accent here split the bar into two clashing colours. Teal here
+     * keeps the neon bar reading as one piece; every other theme still recolours. */
+    int   glyph_r, glyph_g, glyph_b;
 } syn_theme_preset_t;
 
 static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
@@ -92,6 +100,8 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .active_opacity = 1.0f, .inactive_opacity = 0.92f,
         .panel_accent  = { 0.00f, 0.85f, 0.75f, 1.0f },  /* house neon cyan */
         .scheme = "dark", .accent_r = 255, .accent_g = 41, .accent_b = 109,
+        /* #05d9e8 — the launcher caret's teal, not the magenta accent. */
+        .glyph_r = 0x05, .glyph_g = 0xd9, .glyph_b = 0xe8,
     },
     /* DARK — the "just a tasteful dark mode": flat greys, one restrained blue
      * accent, no neon. This is the theme whose whole point is the app-side dark:
@@ -108,6 +118,7 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .active_opacity = 1.0f, .inactive_opacity = 0.94f,
         .panel_accent  = { 0.24f, 0.49f, 1.00f, 1.0f },  /* restrained blue */
         .scheme = "dark", .accent_r = 61, .accent_g = 125, .accent_b = 255,
+        .glyph_r = 61, .glyph_g = 125, .glyph_b = 255,   /* follows the accent */
     },
     /* WINDOWS XP (Luna, "Blue") — a light theme with that blue title chrome.
      * Scene rects can't gradient, so the titlebar is Luna's mid blue flat; white
@@ -124,6 +135,7 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .active_opacity = 1.0f, .inactive_opacity = 1.0f,   /* XP was never glassy */
         .panel_accent  = { 0.16f, 0.55f, 1.00f, 1.0f },  /* Luna blue, brightened */
         .scheme = "light", .accent_r = 10, .accent_g = 95, .accent_b = 214,
+        .glyph_r = 10, .glyph_g = 95, .glyph_b = 214,    /* follows the accent */
     },
     /* WINDOWS 95 — navy active title, grey inactive, silver frame, on a light
      * (grey) palette. The bevels are gone (flat rects), the colours are the tell. */
@@ -139,6 +151,7 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .active_opacity = 1.0f, .inactive_opacity = 1.0f,
         .panel_accent  = { 0.45f, 0.60f, 0.95f, 1.0f },  /* navy, legible on dark */
         .scheme = "light", .accent_r = 0, .accent_g = 0, .accent_b = 128,
+        .glyph_r = 0, .glyph_g = 0, .glyph_b = 128,      /* follows the accent */
     },
 };
 
@@ -279,9 +292,10 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
     /* Hand the app-side reskin to the helper (safe/merge-y, and a no-op where the
      * tools aren't installed). Firefox transparency is already covered by the
      * compositor's opacity — this only carries the light/dark scheme. */
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "synui-apply-theme %s %d %d %d",
-             p->scheme, p->accent_r, p->accent_g, p->accent_b);
+    char cmd[160];
+    snprintf(cmd, sizeof(cmd), "synui-apply-theme %s %d %d %d %d %d %d",
+             p->scheme, p->accent_r, p->accent_g, p->accent_b,
+             p->glyph_r, p->glyph_g, p->glyph_b);
     synui_spawn(cmd);
 
     if (save) theme_state_save(s);
@@ -367,7 +381,7 @@ int theme_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->thememgr.visible) return 0;
 
-    /* Let modified combos through to the global binds, so Super+Shift+A closes
+    /* Let modified combos through to the global binds, so Super+T closes
      * the panel it opened (same idiom as ctlpanel_key). */
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
                 WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))

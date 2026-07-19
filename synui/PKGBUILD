@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=139
+pkgrel=140
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -161,7 +161,7 @@ package() {
     install -Dm755 config/synui-wine-run.desktop \
         "$pkgdir/usr/share/kio/servicemenus/synui-wine-run.desktop"
 
-    # Theme manager (Super+Shift+A) fires this to push its light/dark scheme out
+    # Theme manager (Super+T) fires this to push its light/dark scheme out
     # to GTK / Dolphin (kdeglobals) / Firefox — best-effort, a no-op where the
     # toolkits aren't installed. See src/theme.c.
     install -Dm755 systemd/synui-apply-theme.sh \

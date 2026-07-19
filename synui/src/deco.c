@@ -252,6 +252,7 @@ void view_update_decorations(syn_view_t *view)
         if (view->border_right)  wlr_scene_node_set_enabled(&view->border_right->node,  false);
         if (view->titlebar)      wlr_scene_node_set_enabled(&view->titlebar->node,      false);
         view_grab_ring_update(view);
+        view_shadow_update(view);   /* disables it — fullscreen has no shadow */
         return;
     }
 
@@ -303,6 +304,7 @@ void view_update_decorations(syn_view_t *view)
     #undef MAKE_BORDER
 
     view_grab_ring_update(view);
+    view_shadow_update(view);
     titlebar_render(view);
 }
 
@@ -436,6 +438,81 @@ void view_grab_ring_update(syn_view_t *view)
     #undef MAKE_GRAB
 }
 
+/* ── Drop shadow ─────────────────────────────────────────────
+ *
+ * One wlr_scene_shadow node per frame, lowered to the bottom so it renders
+ * behind the client and chrome. scenefx's box-shadow shader (box_shadow.frag)
+ * insets the *solid* shadow rect by blur_sigma on every side and clips the blur
+ * to the node's box, so to make the shadow's solid rect coincide with the window
+ * the node is grown 2·sigma and origined at -sigma; shadow_offset_{x,y} then bias
+ * the drop direction. The window's own rounded rect is subtracted via the node's
+ * clipped_region, leaving a soft outer ring — without that the solid centre would
+ * bleed through a translucent glass body and darken it.
+ */
+void view_shadow_update(syn_view_t *view)
+{
+    if (!view->frame) return;   /* override-redirect: no frame, no shadow */
+
+    syn_config_t *cfg = &view->server->config;
+
+    /* Off, unmapped, or edge-to-edge: a maximized/fullscreen window's shadow is
+     * clipped to nothing and would only burn fill, so disable rather than draw. */
+    bool want = cfg->shadow && view->mapped &&
+                !view->fullscreen && !view->maximized &&
+                view->w > 0 && view->h > 0;
+    if (!want) {
+        if (view->shadow)
+            wlr_scene_node_set_enabled(&view->shadow->node, false);
+        return;
+    }
+
+    int   sigma  = (int)lroundf(cfg->shadow_blur_sigma);
+    if (sigma < 1) sigma = 1;
+    int   radius = cfg->corner_radius;   /* match the glass corners */
+    int   w = view->w, h = view->h;
+
+    int bx  = -sigma + cfg->shadow_offset_x;
+    int by  = -sigma + cfg->shadow_offset_y;
+    int bw2 = w + 2 * sigma;
+    int bh2 = h + 2 * sigma;
+
+    /* Fold fade × focus-translucency into the shadow alpha, exactly like the
+     * border rects, so a fading or hidden window's shadow fades away with it. */
+    float eff = view->alpha * anim_view_opacity(view);
+    if (eff < 0.0f) eff = 0.0f;
+    float color[4] = {
+        cfg->shadow_color[0], cfg->shadow_color[1],
+        cfg->shadow_color[2], cfg->shadow_color[3] * eff,
+    };
+
+    if (!view->shadow) {
+        view->shadow = wlr_scene_shadow_create(view->frame, bw2, bh2,
+                                               radius, (float)sigma, color);
+    } else {
+        wlr_scene_shadow_set_size(view->shadow, bw2, bh2);
+        wlr_scene_shadow_set_corner_radius(view->shadow, radius);
+        wlr_scene_shadow_set_blur_sigma(view->shadow, (float)sigma);
+        wlr_scene_shadow_set_color(view->shadow, color);
+    }
+    if (!view->shadow) return;   /* alloc failed — nothing more to do */
+
+    wlr_scene_node_set_position(&view->shadow->node, bx, by);
+
+    /* Cut the window's rounded rect out of the shadow. clipped_region.area is
+     * node-relative: the frame box (0,0,w,h) sits at (-bx,-by) from the shadow
+     * origin. Rounding the cutout to the window's corner_radius keeps the ring
+     * from poking through the rounded corners. */
+    struct clipped_region clip = {
+        .area          = { .x = -bx, .y = -by, .width = w, .height = h },
+        .corner_radius = radius,
+        .corners       = CORNER_LOCATION_ALL,
+    };
+    wlr_scene_shadow_set_clipped_region(view->shadow, clip);
+
+    wlr_scene_node_set_enabled(&view->shadow->node, true);
+    wlr_scene_node_lower_to_bottom(&view->shadow->node);
+}
+
 void view_deco_destroy(syn_view_t *view)
 {
     if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
@@ -447,6 +524,7 @@ void view_deco_destroy(syn_view_t *view)
     if (view->grab_bottom)   { wlr_scene_node_destroy(&view->grab_bottom->node);   view->grab_bottom   = NULL; }
     if (view->grab_left)     { wlr_scene_node_destroy(&view->grab_left->node);     view->grab_left     = NULL; }
     if (view->grab_right)    { wlr_scene_node_destroy(&view->grab_right->node);    view->grab_right    = NULL; }
+    if (view->shadow)        { wlr_scene_node_destroy(&view->shadow->node);        view->shadow        = NULL; }
 
     if (view->server->deco_hover_view    == view) view->server->deco_hover_view    = NULL;
     if (view->server->tb_last_click_view == view) view->server->tb_last_click_view = NULL;
@@ -689,5 +767,13 @@ void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized)
             view_resize(view, view->saved_geo.x, view->saved_geo.y,
                         view->saved_geo.width, view->saved_geo.height);
     }
-    view_update_decorations(view);
+    /* anim_apply_alpha, not view_update_decorations: the scenefx glass
+     * (corner_radius, backdrop blur) is keyed on `boxy` = maximized||fullscreen,
+     * and it PERSISTS on the scene_buffer node across the client's buffer swaps
+     * — which is what makes it survive a repaint, but also means nothing clears
+     * it on its own. Only re-tinting the borders here left a maximized window
+     * wearing the rounded corners it had while floating, until some unrelated
+     * event (a focus change, which does call this) recomputed them and they
+     * visibly snapped square. It calls view_update_decorations itself. */
+    anim_apply_alpha(view);
 }

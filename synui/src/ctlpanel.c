@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <wlr/types/wlr_damage_ring.h>
 #include <scenefx/types/wlr_scene.h>
@@ -37,6 +38,18 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "synui.h"
+
+/* How long to keep repainting the panel after an AI-backend switch, waiting for
+ * the helper to restart synapd and write /run/synapd/backend. Generous: it is a
+ * service restart, and the poll stops early the moment the value changes. */
+#define CTL_BACKEND_POLL_SECS  8.0
+
+static double ctl_now_secs(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
 
 /* ── Settings column ─────────────────────────────────────── */
 
@@ -298,12 +311,60 @@ static void ctlpanel_repaint(syn_server_t *s)
     }
 }
 
+/*
+ * Called once per frame from output_frame. Returns 1 while it wants more frames.
+ *
+ * Only the AI-backend row needs this: every other value on the panel is state
+ * synui itself owns and changes synchronously, so the keypress that changed it
+ * also repaints. That one is read back from a file the synui-ai-backend helper
+ * writes after restarting synapd, which lands whenever it lands — so the panel
+ * has to look again rather than be told. Stops as soon as the label changes
+ * (the common case, well under a second) or the deadline passes, so an idle
+ * panel costs nothing.
+ */
+int ctlpanel_tick(syn_server_t *s)
+{
+    if (s->ctlpanel.backend_poll_until == 0.0)
+        return 0;
+
+    /* Closing the panel abandons the poll: there is nothing left to repaint. */
+    if (!s->ctlpanel.visible) {
+        s->ctlpanel.backend_poll_until = 0.0;
+        return 0;
+    }
+
+    char now_val[16];
+    ctlpanel_row_value(s, CTL_ROW_AI_BACKEND, now_val, sizeof(now_val));
+
+    if (strcmp(now_val, s->ctlpanel.backend_before) != 0) {
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "AI backend: %s", now_val);
+        s->ctlpanel.backend_poll_until = 0.0;   /* landed — stop polling */
+        synui_render_ctlpanel(s);
+        return 0;
+    }
+
+    if (ctl_now_secs() >= s->ctlpanel.backend_poll_until) {
+        /* Timed out. Say so rather than leaving "switching …" on screen for
+         * good — a helper that failed (no polkit, synapd wedged) is exactly the
+         * case where a stuck spinner reads as "it worked". */
+        s->ctlpanel.backend_poll_until = 0.0;
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "AI backend: still %s \xc2\xb7 switch did not land", now_val);
+        synui_render_ctlpanel(s);
+        return 0;
+    }
+
+    return 1;   /* keep the frames coming */
+}
+
 void ctlpanel_show(syn_server_t *s)
 {
     s->ctlpanel.visible   = 1;
     s->ctlpanel.selected  = CTL_ROW_EFFECTS;
     s->ctlpanel.scroll    = 0;
     s->ctlpanel.status[0] = '\0';
+    s->ctlpanel.backend_poll_until = 0.0;
     wlr_log(WLR_INFO, "synui: control panel shown");
     synui_render_ctlpanel(s);
 }
@@ -415,9 +476,15 @@ static void ctlpanel_activate(syn_server_t *s)
         return;
 
     case CTL_ROW_AI_BACKEND:
-        /* The helper owns the work (systemd drop-in, restart synapd); it is
-         * not instant, so the row still reads the old device until it lands. */
+        /* The helper owns the work (systemd drop-in, restart synapd) and it is
+         * not instant, so the row still reads the old device when this returns.
+         * Poll the panel for a few seconds so the new value appears on its own
+         * — see backend_poll_until. Without this the row only refreshed when
+         * some other keypress happened to repaint the panel. */
+        ctlpanel_row_value(s, CTL_ROW_AI_BACKEND, s->ctlpanel.backend_before,
+                           sizeof(s->ctlpanel.backend_before));
         synui_binding_execute(s, "ai_backend", NULL);
+        s->ctlpanel.backend_poll_until = ctl_now_secs() + CTL_BACKEND_POLL_SECS;
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "switching AI backend \xe2\x80\xa6");
         return;

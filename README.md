@@ -132,25 +132,43 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Backspace` | Ask the AI |
 | `Super`+`A` | Neural activity overlay |
 | `Super`+`D` | Display settings |
-| `Super`+`W` | Wallpaper picker |
-| `Super`+`E` | Toggle visual effects |
+| `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker / reload the wallpaper |
+| `Super`+`E` | Visual effects panel (per-filter strength sliders) |
+| `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95) |
+| `Super`+`Shift`+`T` | Calendar |
 | `Super`+`Escape` | Menu |
 | `Super`+`Tab` | Cycle layout |
+| `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Most-recently-used window switch |
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
+| `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
+| `Super`+`Shift`+`N` | Restore a minimized window |
 | `Super`+`Shift`+`F` | Fullscreen (forces it — for games that only do "borderless") |
+| `Super`+`Shift`+`D` | Show/hide titlebars |
 | `Super`+`O` / `Super`+`Shift`+`O` | Move window to next / previous monitor |
 | `Super`+`P` | Power saving panel |
-| `Ctrl`+`Alt`+`Delete` / `Super`+`T` | Task manager (processes, CPU/RAM/GPU) |
+| `Ctrl`+`Alt`+`Delete` | Task manager (processes, CPU/RAM/GPU) |
 | `Super`+`G` | Game mode |
 | `Super`+`L` | Lock screen |
+| `Super`+`B` | Bluetooth |
+| `Super`+`Shift`+`B` | Night light (blue-light filter) |
+| `Super`+`I` | Network / Wi-Fi |
+| `Super`+`V` | Clipboard history |
+| `Super`+`R` | News (Hacker News, Arch, LWN, Phoronix, …) |
+| `Super`+`Shift`+`R` | Start/stop screen recording |
+| `Super`+`Shift`+`C` | Cat mode |
 | `Print` | Screenshot the monitor you're on |
 | `Shift`+`Print` / `Super`+`Shift`+`S` | Screenshot an area (drag it out with slurp) |
 | `Ctrl`+`Print` | Screenshot every monitor at once |
+| Volume keys | Raise / lower / mute (also the USB volume knob) |
+| Brightness keys | Screen brightness up / down |
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
+
+`Super`+`Shift`+`A` is deliberately unbound — the theme manager moved to
+`Super`+`T`, so it is free for a `bind =` line of your own.
 
 Screenshots land in `~/Pictures/Screenshots` *and* on the clipboard, so you can
 paste one straight into a chat without opening the file.

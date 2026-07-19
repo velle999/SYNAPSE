@@ -88,7 +88,13 @@ jobs:
             readline systemd-libs \
             wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
             linux-headers \
-            wayland-utils foot grim ttf-dejavu
+            wayland-utils foot grim ttf-dejavu \
+            mesa libglvnd
+        # mesa/libglvnd are what make the smoke test possible at all: synui now
+        # renders through scenefx's fx_renderer, which is GLES2-only, and a
+        # runner has no /dev/dri — so the suite boots on mesa's llvmpipe
+        # software device (see tests/smoke.sh). They arrive as wlroots deps
+        # today; naming them here keeps that accident from becoming a red build.
 
       - uses: actions/checkout@v4
 

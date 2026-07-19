@@ -303,7 +303,7 @@ typedef struct {
 /* A theme is a preset bundle: window-chrome colours (borders + titlebar),
  * a default translucency, and an app colour-scheme (light/dark) that synui
  * writes out to kdeglobals / GTK / Firefox so Dolphin, GTK apps and Firefox
- * follow the desktop. Picked from the Super+Shift+A panel or `theme = ` in
+ * follow the desktop. Picked from the Super+T panel or `theme = ` in
  * synuirc; persisted to theme.state. SYNAPSE is the neon default. */
 typedef enum {
     SYN_THEME_SYNAPSE = 0,   /* the neon "night drive" default */
@@ -337,7 +337,7 @@ typedef enum {
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch */
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
-    CTL_ROW_THEME,         /* jump-off: the Super+Shift+A theme manager */
+    CTL_ROW_THEME,         /* jump-off: the Super+T theme manager */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
     CTL_ROW_FILTERS,
     CTL_ROW_WALLPAPER,
@@ -365,6 +365,19 @@ typedef struct {
     int  selected;     /* syn_ctl_row_t, always a selectable row */
     int  scroll;       /* first shortcuts row drawn */
     char status[96];
+    /* The AI-backend row's value is not compositor state: it is read back out of
+     * /run/synapd/backend, which the synui-ai-backend helper only writes once it
+     * has rewritten the drop-in and restarted synapd — a second or two later,
+     * with nothing to notify us. The panel otherwise repaints only on input, so
+     * the row sat on the old device until some keypress happened to redraw it
+     * ("it doesn't update until you move off the row"). Non-zero = keep
+     * repainting the panel until this CLOCK_MONOTONIC deadline. */
+    double backend_poll_until;
+    /* The row's value at the moment the switch was fired — what the poll is
+     * waiting to see change. Kept here rather than in a static: two opens of the
+     * panel are two separate waits, and a static would carry the first one's
+     * answer into the second and call it an instant success. */
+    char   backend_before[16];
 } syn_ctlpanel_t;
 
 /* ── Start menu (menu.c) ─────────────────────────────────── */
@@ -924,6 +937,19 @@ typedef struct {
     float blur_contrast;         /* default 1.00 */
     float blur_saturation;       /* default 1.15 */
 
+    /* Drop shadow (scenefx wlr_scene_shadow, one node per window frame, drawn
+     * behind everything and clipped out from under the window itself so it is a
+     * soft outer ring — see view_shadow_update). `shadow` gates it; disabled
+     * while maximized/fullscreen (an edge-to-edge window's shadow is clipped to
+     * nothing). shadow_blur_sigma is the softness/spread in px; the box is grown
+     * 2·sigma so the falloff isn't cut off. shadow_offset_{x,y} bias the drop
+     * direction (default straight down a touch). shadow_color is RGBA. */
+    int   shadow;                /* master switch; default 1 */
+    float shadow_blur_sigma;     /* px; default 18 */
+    int   shadow_offset_x;       /* px; default 0 */
+    int   shadow_offset_y;       /* px; default 6 */
+    float shadow_color[4];       /* default black @ 0.45 */
+
     /* GLES post-process effects (effects.c). `effects` gates the pass;
      * it silently stays off on non-GLES2 renderers (pixman VMs).
      * Strengths are 0..1; 0 disables the individual effect. */
@@ -1146,6 +1172,12 @@ struct syn_view {
     struct wlr_scene_rect *border_bottom;
     struct wlr_scene_rect *border_left;
     struct wlr_scene_rect *border_right;
+
+    /* Drop shadow (scenefx): one node lowered to the bottom of the frame so it
+     * sits behind the client + chrome, sized 2·blur_sigma larger than the frame
+     * and clipped to exclude the window rect (see view_shadow_update). NULL for
+     * override-redirect surfaces (no frame) and while shadows are off. */
+    struct wlr_scene_shadow *shadow;
 
     /* Invisible resize-grab ring: four fully transparent rects sitting *outside*
      * the window, one per edge, overhanging the corners. The visible border is
@@ -1701,7 +1733,7 @@ struct syn_server {
 
     syn_ctlpanel_t  ctlpanel;
 
-    /* Theme manager (Super+Shift+A) — its own scene subtree, like ctlpanel. */
+    /* Theme manager (Super+T) — its own scene subtree, like ctlpanel. */
     struct {
         struct wlr_scene_tree   *tree;
         struct wlr_scene_rect   *bg;
@@ -1759,7 +1791,7 @@ struct syn_server {
      * Without that disarm the modifier and the tap are indistinguishable. */
     int             super_armed;
 
-    /* Task manager panel (Super+T) — process table + resource overview. */
+    /* Task manager panel (Ctrl+Alt+Del) — process table + resource overview. */
     struct {
         struct wlr_scene_tree   *tree;
         struct wlr_scene_rect   *bg;
@@ -2171,6 +2203,11 @@ const char *deco_grab_cursor(syn_server_t *s, syn_cursor_mode_t mode,
  * view_update_decorations; the window's edges and corners are only realistically
  * grabbable because of it. */
 void view_grab_ring_update(syn_view_t *view);
+/* (Re)build the window's scenefx drop shadow at the frame's current geometry,
+ * folding the fade/focus alpha in like the borders. Called from
+ * view_update_decorations; a no-op (disables the node) when shadows are off or
+ * the window is maximized/fullscreen. */
+void view_shadow_update(syn_view_t *view);
 /* Maximize/restore for real: fills the output's usable box and leaves the
  * tiling flow, restoring the previous geometry (and tiled-ness) on the way
  * back. */
@@ -2448,6 +2485,8 @@ void synui_render_power(syn_server_t *s);
 void ctlpanel_show(syn_server_t *s);
 void ctlpanel_hide(syn_server_t *s);
 void ctlpanel_toggle(syn_server_t *s);
+/* Per-frame poll for the AI-backend row; 1 while it wants another frame. */
+int  ctlpanel_tick(syn_server_t *s);
 /* Modal key handling while the panel is open, as in filters_key. */
 int  ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* Settings-column row text. value[] is filled with the row's current state

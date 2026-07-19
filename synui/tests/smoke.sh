@@ -56,7 +56,18 @@ LOG="$TMP/synui.log"
 
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
-export WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1
+# Renderer: software GLES2 (llvmpipe), NOT pixman. Since the scenefx migration
+# synui builds its renderer with fx_renderer_create(), which is GLES2-only and
+# ignores WLR_RENDERER entirely — so the old WLR_RENDERER=pixman here silently
+# stopped meaning anything, and on a machine with no /dev/dri (every CI runner)
+# fx_renderer_create() then failed outright at "no DRM FD available" and the
+# suite died at test 1. These two are the supported no-GPU path:
+#   FORCE_SOFTWARE — skip the DRM render-node hunt, pass drm_fd = -1
+#   ALLOW_SOFTWARE — let EGL actually select the llvmpipe device once it does
+# Both are needed; either alone still fails. Set unconditionally rather than
+# only-when-no-GPU so CI and a developer's GPU box exercise the same path.
+export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
+export WLR_RENDERER_FORCE_SOFTWARE=1 WLR_RENDERER_ALLOW_SOFTWARE=1
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
 unset DISPLAY WAYLAND_DISPLAY
 

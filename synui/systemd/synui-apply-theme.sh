@@ -14,10 +14,18 @@
 # which Firefox-on-Wayland follows from the GTK theme + the gsettings color-scheme.
 #
 # Usage: synui-apply-theme <dark|light> <accent_r> <accent_g> <accent_b>
+#                          [glyph_r] [glyph_g] [glyph_b]
+#
+# The glyph triple is the colour for the bar's module glyphs (cpu/mem/net/audio/
+# gamemode). It defaults to the accent — which is what every theme but one wants
+# — and is passed separately only because SYNAPSE's accent is its neon magenta
+# selection colour while the launcher caret next to those glyphs is teal. An
+# older synui that passes four args still gets the accent, as before.
 set -u
 
 scheme=${1:-dark}
 ar=${2:-61} ag=${3:-125} ab=${4:-255}
+gr=${5:-$ar} gg=${6:-$ag} gb=${7:-$ab}
 
 case "$scheme" in
     dark|light) ;;
@@ -121,6 +129,7 @@ gen="$HOME/.config/synui/waybar-style.css"
 mkdir -p "$(dirname "$gen")" 2>/dev/null
 accent="rgb($ar,$ag,$ab)"
 accent_dim="rgba($ar,$ag,$ab,0.15)"
+glyph="rgb($gr,$gg,$gb)"
 if [ "$scheme" = dark ]; then
     bar_bg="rgba(11,11,20,0.85)"; menu_bg="rgba(11,11,20,0.97)"; fg="#c8e3ee"
     # The base yellow (#ffd319) reads fine on the dark bar; keep it.
@@ -136,9 +145,11 @@ cat > "$gen" <<CSS
  * Imports the packaged base, then recolours the themed selectors. */
 @import url("file:///usr/share/synui/waybar/style.css");
 window#waybar { background: $bar_bg; color: $fg; border-bottom: 2px solid $accent; }
-#custom-synapse { color: $accent; }
+/* The badge is the bar's copy of the launcher caret (launcher.c names this very
+ * selector), so it takes the glyph colour, not the accent — same reason. */
+#custom-synapse { color: $glyph; }
 #custom-synapse:hover { background: $accent_dim; }
-#cpu, #memory, #network, #pulseaudio, #custom-gamemode { color: $accent; }
+#cpu, #memory, #network, #pulseaudio, #custom-gamemode { color: $glyph; }
 /* Yellow text is unreadable on a light bar; the light scheme darkens it. The
  * gamemode.active pill keeps its yellow *background* (its text is already dark). */
 #custom-clock, #network.disabled { color: $clock_fg; }

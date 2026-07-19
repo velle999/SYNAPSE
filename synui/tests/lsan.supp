@@ -4,3 +4,30 @@
 # never released by design, and not reachable from synui's own teardown.
 leak:libfontconfig
 leak:libcairo
+
+# Mesa's software GLES2 driver. The smoke test renders on llvmpipe (no GPU on a
+# CI runner — see smoke.sh), and mesa's driver init allocates per-screen caches
+# under driCreateNewScreen3 that it never frees; every one of these stacks is
+# rooted in EGL/gallium driver setup, not in anything synui allocates.
+#
+# Deliberately NOT suppressing libscenefx here even though it appears in these
+# stacks: it is only the *caller* (wlr_egl_create_with_drm_fd), and suppressing
+# it would blind this suite to real leaks in our own scenefx fork, which is
+# exactly what the ASan run exists to catch.
+leak:libEGL_mesa
+leak:libgallium
+
+# KNOWN REAL LEAK, upstream scenefx 0.4.1 — not ours, and bounded.
+# fx_effect_framebuffers.c:addon_handle_destroy() frees the fx_effect_framebuffers
+# struct but never wlr_buffer_drop()s the three buffers it owns
+# (blur_saved_pixels_buffer, effects_buffer, effects_buffer_swapped), which
+# fx_framebuffer_get_or_create_custom() allocated via wlr_allocator_create_buffer.
+# That is exactly the 3 allocations / 624 bytes seen here.
+#
+# It leaks once per output AT SHUTDOWN and does not grow with uptime, so it is
+# suppressed rather than patched: the file is from the upstream tarball, not one
+# of the TUs our fork ports, so fixing it means carrying a patch in
+# scenefx/PKGBUILD and rebuilding the package. Worth doing — see the note in the
+# session summary — but not something to bury in a smoke-test change.
+leak:fx_effect_framebuffers
+leak:fx_framebuffer_get_or_create_custom

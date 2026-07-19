@@ -2,30 +2,28 @@
  * input.c — Keyboard, pointer, touch and tablet handling
  *
  * Keybindings are table-driven (config.c seeds the defaults; `bind =` lines
- * in synuirc add or override). Default table:
+ * in synuirc add or override).
  *
- *   Super+Enter          Launch terminal (foot)
- *   Super+Space          Open AI command bar
- *   Super+A              Toggle neural overlay
- *   Super+D              Toggle display settings (rotate/arrange monitors)
- *   Super+Escape         Toggle the welcome menu
- *   Super+Q              Close focused window
- *   Super+Shift+Q        Quit synui
- *   Super+Tab            Cycle layout (tile → floating → monocle → AI → tile)
- *   Alt+Tab              Focus the last-used window; hold Alt + Tab to go back
- *                        further (Alt+Shift+Tab forward). MRU order, not the
- *                        stacking-order walk Super+J/K do.
- *   Super+J/K            Focus next/prev window
- *   Super+Shift+J/K      Move window down/up the stack
- *   Super+H/Shift+L      Shrink / grow the master column
- *   Super+L              Lock the screen (power_lock_cmd / swaylock)
- *   Super+F              Toggle floating (centred placement)
- *   Super+M              Toggle maximize
- *   Super+N              Minimize focused window
- *   Super+Shift+N        Restore a minimized window on this workspace
- *   Super+1..9           Switch to workspace N
- *   Super+Shift+1..9     Move focused window to workspace N
- *   Super+Backspace      Command bar, scoped to the focused window (ai_ask)
+ * The default table is NOT reproduced here. It used to be, and it drifted —
+ * it still listed Super+T as the task manager long after that moved, and never
+ * gained Super+B/I/V/G at all, so the file that handles keys documented a
+ * keymap the compositor did not have. There are exactly two hand-written
+ * copies now, and both are somewhere a reader would look for the real thing:
+ *
+ *   - seed_default_binds() in config.c — the authoritative table.
+ *   - `synui --help` — the same list for users, marked to be kept in step.
+ *
+ * The control panel's shortcuts column (Super+C) is generated from the live
+ * bind table at runtime, so it is always right, and it is the fastest way to
+ * see what a running synui is actually bound to.
+ *
+ * A couple of behaviours worth knowing that the table cannot express:
+ *   Alt+Tab              MRU order — the last-used window, not the
+ *                        stacking-order walk Super+J/K do. Hold Alt and keep
+ *                        tapping Tab to go further back (Alt+Shift+Tab
+ *                        forward); the switch commits on Alt release.
+ *   Super (tapped alone) Start menu — a tap, not a combo, so it is handled in
+ *                        keyboard_handle_modifiers rather than the bind table.
  *
  * Pointer (interactive floating window management):
  *   Super + Left-drag    Move the window under the cursor

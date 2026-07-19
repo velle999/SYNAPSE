@@ -1,5 +1,5 @@
 /*
- * taskmgr.c — process + resource monitor (Super+T)
+ * taskmgr.c — process + resource monitor (Ctrl+Alt+Del)
  *
  * A compositor-drawn modal panel: a system overview (CPU, RAM, swap, and
  * every GPU gpu.c found) above a process table sorted by CPU, memory or

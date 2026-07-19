@@ -217,6 +217,11 @@ static void output_frame(struct wl_listener *listener, void *data)
     if (anim_tick(output->server, now_s))
         wlr_output_schedule_frame(output->wlr_output);
 
+    /* Control panel: waiting on the AI-backend helper to land (see
+     * ctlpanel_tick). Idle unless a switch is actually in flight. */
+    if (ctlpanel_tick(output->server))
+        wlr_output_schedule_frame(output->wlr_output);
+
     /* Poll for AI responses (non-blocking) and route by request type. */
     syn_ai_response_t resp;
     if (ai_thread_poll(output->server, &resp) == 0) {
@@ -261,6 +266,29 @@ static void output_frame(struct wl_listener *listener, void *data)
         wlr_damage_ring_add_whole(&scene_output->damage_ring);
         wlr_output_schedule_frame(output->wlr_output);
     }
+
+    /*
+     * Backdrop blur forces a whole-output repaint, for the same reason the CRT
+     * pass does (effects.c) — and it has to be done HERE because the CRT pass is
+     * skipped entirely when no filter is enabled, so its add_whole never ran and
+     * the flash came straight back the moment glass shipped without CRT.
+     *
+     * scenefx compensates for blur edge artifacts by saving the pixels around
+     * each blurred region and painting them back afterwards, and it reads them
+     * out of the buffer it is *currently rendering into*
+     * (fx_renderer_read_to_buffer(..., render_pass->buffer) in fx_pass.c). Under
+     * partial damage that buffer is one of 2–3 rotating swapchain buffers whose
+     * undamaged area still holds a frame from several vsyncs ago — so the
+     * "restore" step paints genuinely stale content back over the window. That
+     * is the wallpaper flash on a click in Dolphin, and the glimpse of the window
+     * behind a game: not a transient, but old pixels being copied forward.
+     *
+     * Repainting whole means the buffer never carries a stale region for that
+     * step to find. It costs a full repaint per frame, but only while blur is on
+     * — which is already the expensive path — and only on outputs with damage.
+     */
+    if (output->server->config.blur)
+        wlr_damage_ring_add_whole(&scene_output->damage_ring);
 
     /* GLES post-process pass when available; plain scene commit otherwise
      * (and whenever any step of the effects pass fails). */
@@ -1614,25 +1642,60 @@ static void usage(const char *prog) {
         "  -v, --version  Print version\n"
         "  -h, --help     This help\n"
         "\n"
+        /* Keep this list in step with seed_default_binds() in config.c — it is
+         * the only copy that is hand-written (the control panel's shortcuts
+         * column is generated from the live bind table, so it cannot drift).
+         * Super tap alone opens the start menu; it is not a bind-table entry. */
         "Default keybindings (override with 'bind =' lines in synuirc):\n"
+        "  Super (tapped)     Start menu\n"
         "  Super+Enter        Open terminal\n"
         "  Super+Space        Open AI command bar\n"
+        "  Super+Backspace    Ask the AI about the focused window\n"
+        "  Super+C            Control panel (every shortcut + the settings)\n"
         "  Super+A            Toggle neural overlay\n"
         "  Super+D            Display settings (rotate/arrange monitors)\n"
+        "  Super+Shift+D      Show/hide titlebars\n"
         "  Super+W            Wallpaper picker\n"
+        "  Super+Shift+W      Reload the wallpaper\n"
+        "  Super+T            Theme manager (SYNAPSE/Dark/XP/95)\n"
+        "  Super+Shift+T      Calendar\n"
         "  Super+P            Power-saving panel\n"
         "  Super+R            News (Hacker News, Arch, LWN, Phoronix, …)\n"
-        "  Super+T            Task manager\n"
+        "  Super+Shift+R      Start/stop screen recording\n"
+        "  Super+B            Bluetooth\n"
+        "  Super+Shift+B      Night light (blue-light filter)\n"
+        "  Super+I            Network / Wi-Fi\n"
+        "  Super+V            Clipboard history\n"
+        "  Super+G            Game mode\n"
+        "  Super+Shift+C      Cat mode\n"
+        "  Ctrl+Alt+Delete    Task manager\n"
         "  Super+L            Lock the screen\n"
-        "  Super+E            Toggle CRT post-process filters\n"
+        "  Super+E            Visual effects panel (per-filter sliders)\n"
         "  Super+Escape       Toggle the welcome menu\n"
         "  Super+1..9         Switch workspace\n"
         "  Super+Shift+1..9   Move window to workspace\n"
         "  Super+Tab          Next layout mode\n"
+        "  Alt+Tab            Most-recently-used window switch\n"
+        "  Super+J/K          Focus next/previous window\n"
+        "  Super+Shift+J/K    Move window down/up the stack\n"
+        "  Super+H            Shrink the master column\n"
+        "  Super+Shift+L      Grow the master column\n"
+        "  Super+F            Toggle floating\n"
+        "  Super+M            Toggle maximize\n"
+        "  Super+Shift+F      Force fullscreen (games that only do borderless)\n"
+        "  Super+N            Minimize\n"
+        "  Super+Shift+N      Restore a minimized window\n"
         "  Super+O            Move window to next monitor\n"
         "  Super+Shift+O      Move window to previous monitor\n"
         "  Super+Q            Close focused window\n"
         "  Super+Shift+Q      Quit compositor\n"
+        "  Print              Screenshot this monitor\n"
+        "  Shift+Print        Screenshot an area (slurp)\n"
+        "  Ctrl+Print         Screenshot every monitor\n"
+        "  Super+Shift+S      Screenshot an area\n"
+        "  Volume/brightness  Handled (incl. the USB volume knob)\n"
+        "\n"
+        "Super+Shift+A is intentionally free — the theme manager moved to Super+T.\n"
         "\n"
         "Config: ~/.config/synui/synuirc (or /etc/synui/synuirc; $SYNUI_CONFIG\n"
         "overrides both) — keybinds, xkb_layout/variant/options,\n"
@@ -1706,7 +1769,16 @@ int main(int argc, char *argv[])
 
     /* Detect VM and force software rendering before any wlroots init */
     if (detect_vm()) {
-        fprintf(stderr, "synui: VM/hypervisor detected — forcing pixman renderer\n");
+        /* Software rendering, but NOT via WLR_RENDERER=pixman: since the scenefx
+         * migration the renderer is built by fx_renderer_create(), which is
+         * GLES2-only and never consults WLR_RENDERER — so that setting quietly
+         * became a no-op here, and a VM with no DRM render node died at
+         * "no DRM FD available" instead of falling back. These are the knobs
+         * fx_renderer/EGL actually reads. WLR_RENDERER is still set for the
+         * benefit of anything else in the process that honours it. */
+        fprintf(stderr, "synui: VM/hypervisor detected — using software GLES2 (llvmpipe)\n");
+        setenv("WLR_RENDERER_FORCE_SOFTWARE", "1", 1);
+        setenv("WLR_RENDERER_ALLOW_SOFTWARE", "1", 1);
         setenv("WLR_RENDERER", "pixman", 1);
         /* Only set WLR_BACKENDS if caller hasn't already chosen one */
         if (!getenv("WLR_BACKENDS"))
