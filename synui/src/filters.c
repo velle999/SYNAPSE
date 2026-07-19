@@ -27,7 +27,7 @@
 #include <string.h>
 
 #include <wlr/types/wlr_damage_ring.h>
-#include <scenefx/types/wlr_scene.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
 #include "synui.h"

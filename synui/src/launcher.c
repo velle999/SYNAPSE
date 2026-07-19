@@ -36,7 +36,7 @@
 
 #include <cairo.h>
 #include <librsvg/rsvg.h>
-#include <scenefx/types/wlr_scene.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/util/log.h>
 
