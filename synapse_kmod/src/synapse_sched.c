@@ -21,7 +21,8 @@
  *   AI_SCHED_IDLE        → SCHED_IDLE
  *   AI_SCHED_INFERENCE   → SCHED_NORMAL, nice -15 (synapd inference threads)
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 

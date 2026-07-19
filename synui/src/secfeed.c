@@ -12,7 +12,8 @@
  * the main thread in secfeed_dispatch(). A record (160 bytes) is smaller than
  * PIPE_BUF, so each pipe write is atomic and reads can't tear.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

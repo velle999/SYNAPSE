@@ -22,7 +22,8 @@
  * view_apply_maximized() rather than reimplementing it, so the client and the
  * taskbar see a real maximize.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

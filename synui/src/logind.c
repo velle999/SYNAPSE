@@ -25,7 +25,8 @@
  * /sys/class/backlight directly needs root or a udev rule granting the video
  * group, and brightnessctl is another package doing exactly this call.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

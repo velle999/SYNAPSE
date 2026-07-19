@@ -15,7 +15,8 @@
  * AI assistant, not adversarial kernel hardening). SynapseOS
  * also ships a lightweight LSM stub for the true TOCTOU cases.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

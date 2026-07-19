@@ -7,7 +7,7 @@ arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-sp
 url="https://github.com/velle999/chibi-llm"
 # chibi-llm ships no LICENSE file, so there is nothing to install and nothing
 # to truthfully claim here. Add one upstream and set this properly.
-license=('unknown')
+license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
 _commit=22095b78569ef6dbb113968b52ca9ffc4f7725e3

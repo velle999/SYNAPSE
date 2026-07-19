@@ -7,7 +7,7 @@ arch=('any')
 url="https://github.com/velle999/vibe"
 # Upstream ships no LICENSE file, so there is nothing to install and nothing to
 # truthfully claim. Add one upstream and set this properly.
-license=('unknown')
+license=('GPL-2.0-or-later')
 
 # Pure-Python runtime deps come from the Arch repos — no venv, no vendoring.
 # llama-cpp-python is NOT pulled: the synapd backend (the default here) reuses

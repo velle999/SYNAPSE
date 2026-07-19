@@ -26,7 +26,8 @@
  * GL objects and no cross-context sharing is needed — only ordering, which a
  * glFinish() before commit guarantees.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

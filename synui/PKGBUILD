@@ -3,7 +3,7 @@ pkgver=0.1.0
 pkgrel=132
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
-license=('GPL2')
+license=('GPL-2.0-or-later')
 # xdg-desktop-portal{,-wlr,-gtk}: screen sharing. Without the wlr backend, portal
 #   falls back to GTK, which cannot do ScreenCast on wlroots — so Firefox/OBS/
 #   Discord screen capture silently fails. slurp is xdpw's output chooser.

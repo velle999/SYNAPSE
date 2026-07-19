@@ -25,7 +25,8 @@
  * view->x/y/w/h is always the *frame*; view_content_box() is what the client
  * actually gets. Fullscreen drops both border and titlebar, so frame == content.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

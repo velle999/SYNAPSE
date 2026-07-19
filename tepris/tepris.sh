@@ -7,7 +7,8 @@
 # icon lookup off app_id (synui/src/icons.c). Without it every Firefox-backed
 # app collides on the app_id "firefox".
 #
-# SynapseOS Project — GPLv2 (packaging); the app itself is MIT.
+# SynapseOS Project — packaging under GPL-2.0-or-later; the app itself is MIT.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 set -euo pipefail
 

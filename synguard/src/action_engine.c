@@ -17,7 +17,8 @@
  * In AUDIT and LEARNING modes, DENY becomes a logged warning.
  * Only ENFORCE and LOCKDOWN modes actually kill processes.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

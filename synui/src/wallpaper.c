@@ -8,7 +8,8 @@
  * falls back to the compositor's existing solid bg_color — this feature is
  * strictly additive and never fatal.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

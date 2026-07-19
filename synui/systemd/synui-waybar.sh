@@ -18,7 +18,8 @@
 # the way XDG leads you to expect. There is deliberately no merging: waybar does
 # not merge either, and a half-ours-half-yours bar would be unexplainable.
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 # https://github.com/velle999/SYNAPSE
 set -u
 

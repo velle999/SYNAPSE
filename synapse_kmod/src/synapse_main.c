@@ -14,7 +14,8 @@
  *   - Linux kernel 6.8+ (kprobe multi, sysfs attrs)
  *   - Linux 7.0 strongly preferred (AI_CTX syscall hooks)
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 

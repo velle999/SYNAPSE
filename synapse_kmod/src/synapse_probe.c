@@ -20,7 +20,8 @@
  * Implementation uses kretprobes + kprobes depending on
  * whether we need pre or post-syscall inspection.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 

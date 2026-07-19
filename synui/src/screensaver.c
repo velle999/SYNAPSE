@@ -25,7 +25,8 @@
  * without it (the ISO's root session may have no session bus at all), it just
  * logs and carries on with the Wayland idle-inhibit protocol alone.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

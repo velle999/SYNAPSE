@@ -9,7 +9,8 @@
 #   3. Generate synguard baseline (first 60s of system activity)
 #   4. Show welcome notification via synui
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 set -euo pipefail
 

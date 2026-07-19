@@ -47,7 +47,8 @@
  * Rules are evaluated in priority order (lowest number first).
  * First match wins. If no rule matches: default verdict is LOG.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

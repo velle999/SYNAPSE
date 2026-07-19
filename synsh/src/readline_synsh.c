@@ -5,7 +5,8 @@
  * fgets-based implementation that still supports history
  * navigation and basic line editing via termios.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

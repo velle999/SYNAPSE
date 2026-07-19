@@ -15,7 +15,8 @@
  * currently connected are preserved on save (merged from the file already
  * on disk) so unplugging a monitor doesn't lose its settings.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

@@ -4,7 +4,7 @@ pkgrel=17
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
-license=('GPL2')
+license=('GPL-2.0-or-later')
 # synapse-llama provides libllama/libggml in /usr/lib. It is a real dependency:
 # synapd previously resolved these through an /etc/ld.so.conf.d entry pointing
 # at a build dir in $HOME, so pacman had no idea the daemon needed them and

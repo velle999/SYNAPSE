@@ -10,7 +10,8 @@
  * inside the canvas, and that the poses differ from one another. Run it as:
  *     ninja -C build && ./build/cat_render_test /tmp/cat.png
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include <assert.h>

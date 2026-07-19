@@ -18,7 +18,8 @@
  * verdict and counting who receives it, and every recv() is timeout-bounded so a
  * regressed build fails instead of hanging the suite.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include <stdio.h>

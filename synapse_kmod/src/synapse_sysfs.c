@@ -10,7 +10,8 @@
  *   config       (rw) — runtime config (events_enabled, sched_enabled)
  *   version      (r)  — module version string
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 

@@ -39,7 +39,8 @@
  * are relayed via pointer-gestures-v1; libinput device options (tap,
  * natural scroll, accel, left-handed) come from synuirc.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

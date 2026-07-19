@@ -6,7 +6,8 @@
  * ordinary printf("%s...") call sites silently stop emitting escapes — no
  * per-site `if (color)` guards, and nothing leaks into a pipe or a log file.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include <stdlib.h>
 #include <string.h>

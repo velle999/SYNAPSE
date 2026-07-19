@@ -19,7 +19,8 @@
  * well under a millisecond and does not need the poller thread that
  * synapd_mon.c uses for its socket round-trips.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

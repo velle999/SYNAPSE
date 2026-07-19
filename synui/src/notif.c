@@ -18,7 +18,8 @@
  * and expiry is one timer armed to the *next* deadline rather than a timer per
  * toast or a poll.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

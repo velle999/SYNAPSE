@@ -12,7 +12,8 @@
  * inside inference.c via mutex — this is intentional until we
  * support multi-context parallel inference.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

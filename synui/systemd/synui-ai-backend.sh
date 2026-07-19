@@ -14,7 +14,8 @@
 # Needs root (writes /etc/systemd, restarts synapd) — synui.service runs as
 # root, so the menu action has the privilege it needs.
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 set -euo pipefail
 
 DROPIN_DIR=/etc/systemd/system/synapd.service.d

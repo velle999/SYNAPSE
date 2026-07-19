@@ -6,7 +6,8 @@
  * free of wlroots and syn_server_t, and tests/cat_render_test.c links just this
  * file to render the poses to a PNG a human can look at.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

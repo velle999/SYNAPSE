@@ -16,7 +16,8 @@
  * Space toggle, s save, Esc close), because a second panel that worked a second
  * way would be its own small bug.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

@@ -24,7 +24,8 @@
  * Idle inhibitors (zwp_idle_inhibit_manager_v1 — synui-media-inhibit creates
  * one whenever audio is playing) disarm every stage while any are held.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

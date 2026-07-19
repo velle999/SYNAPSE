@@ -19,7 +19,8 @@
  * Anything not recognised falls through to the model, which is the whole point
  * of having one.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

@@ -14,7 +14,8 @@
 # — before that this tool could not have told you anything, which is most of why
 # a recorder that starts silently and stops silently is a bad idea.
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 # https://github.com/velle999/SYNAPSE
 set -u
 

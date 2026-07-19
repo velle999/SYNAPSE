@@ -2,7 +2,8 @@
  * effects.h — GLES2 post-process pass (CRT curvature, scanlines,
  * chromatic aberration) for synui.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 #ifndef SYNUI_EFFECTS_H

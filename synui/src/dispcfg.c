@@ -23,7 +23,8 @@
  * post-apply reflow runs (output_layout_changed — the same path the
  * wlr-randr protocol handler uses).
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

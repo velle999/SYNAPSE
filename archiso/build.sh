@@ -44,7 +44,8 @@
 # Output:
 #   out/SynapseOS-0.1.0-YYYYMMDD-x86_64.iso
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 # =============================================================================
 set -euo pipefail
 IFS=$'\n\t'

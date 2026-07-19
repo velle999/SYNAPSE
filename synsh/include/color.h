@@ -7,7 +7,8 @@
  * have to guard their own output. Because they are not literals they
  * cannot be concatenated at compile time — pass them as %s arguments.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #pragma once
 

@@ -5,7 +5,8 @@
 # groups, passwords, /etc/shells registration. Configs, units, and MOTD
 # are declarative files under archiso/airootfs/.
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 set -euo pipefail
 
 # ── Passwords (live media only — changeable in firstboot) ─────

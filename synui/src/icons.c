@@ -17,7 +17,8 @@
  * doesn't equal their .desktop file's basename — the same fuzzy problem real
  * desktop shells only partially solve.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

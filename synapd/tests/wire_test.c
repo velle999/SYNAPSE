@@ -9,7 +9,8 @@
  * allowed here — the handlers treat a NULL payload as "no data" — so this
  * documents that it is intentional, not an oversight.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include <stdio.h>

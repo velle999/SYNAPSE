@@ -8,7 +8,8 @@
  * wlr_scene_layer_surface_v1_configure(), which also sends the configure and
  * shrinks the remaining usable area we feed back into the tiling layout.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

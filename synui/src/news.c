@@ -29,7 +29,8 @@
  * are validated (http/https, no control characters, no whitespace) and handed
  * to xdg-open through fork + execlp as a single argv element.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

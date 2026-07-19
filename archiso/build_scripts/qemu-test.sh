@@ -16,7 +16,8 @@
 #   QEMU_AUDIO=1     Enable audio passthrough
 #   QEMU_NET=user    Network mode (default: user)
 #
-# SynapseOS Project — GPLv2
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 set -euo pipefail
 

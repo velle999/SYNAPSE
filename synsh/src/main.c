@@ -15,7 +15,8 @@
  *   synsh script.syn   — run script file
  *   synsh --no-ai      — disable AI translation (pure shell mode)
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

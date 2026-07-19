@@ -6,7 +6,8 @@
  * exposes per-output power (DPMS on/off). wlr_gamma_control_manager_v1 lets
  * night-light tools (wlsunset, gammastep) set per-output gamma ramps.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

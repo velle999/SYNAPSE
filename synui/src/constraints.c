@@ -8,7 +8,8 @@
  * through constraints_apply_motion() and always broadcasts the raw delta to
  * relative-pointer clients, so a locked pointer still delivers look input.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

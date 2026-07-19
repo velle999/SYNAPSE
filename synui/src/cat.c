@@ -20,7 +20,8 @@
  *     any output's tree, which is what lets it walk from one monitor to the next
  *     without anything special happening at the seam.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

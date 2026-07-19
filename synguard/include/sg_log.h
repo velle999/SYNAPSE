@@ -1,6 +1,7 @@
 /*
  * sg_log.h — synguard logging
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #pragma once
 #include <syslog.h>

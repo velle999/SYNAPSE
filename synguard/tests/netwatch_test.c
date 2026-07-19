@@ -15,7 +15,8 @@
  *     an ordinary web page. The detector has to stay quiet for a browser and
  *     still catch a subnet sweep.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

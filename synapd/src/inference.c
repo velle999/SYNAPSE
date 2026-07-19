@@ -10,7 +10,8 @@
  *   - GPU offload via Vulkan / CUDA / ROCm (auto-detected)
  *   - NPU offload via RKNN (Rockchip, ARM SBCs)
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

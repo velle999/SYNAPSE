@@ -112,7 +112,8 @@
  *       sudo -n never prompts; the grant is /etc/sudoers.d/synapd-gamemode,
  *       exactly these two commands (see syn-install.sh).
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

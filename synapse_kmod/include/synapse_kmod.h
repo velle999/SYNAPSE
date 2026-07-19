@@ -22,7 +22,8 @@
  *     AI_CTX_GET    — process reads AI-assigned scheduling class
  *     AI_CTX_QUERY  — process asks AI directly (routed through kmod)
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 #pragma once

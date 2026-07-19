@@ -10,7 +10,8 @@
  *   - wlr_scene_rect nodes for background / accent lines
  *   - wlr_scene_buffer node with cairo-rendered text
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

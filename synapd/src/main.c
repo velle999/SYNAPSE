@@ -13,7 +13,8 @@
  *   context.c       → system context store (rolling window)
  *   scheduler.c     → AI hint feedback to kernel synapse sysfs
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

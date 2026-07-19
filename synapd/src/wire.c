@@ -8,7 +8,8 @@
  * hammer it with malformed frames directly, and so the rule for what synapd
  * will act on lives in exactly one place.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

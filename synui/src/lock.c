@@ -24,7 +24,8 @@
  * everywhere else in this tree (see ai_interface.c and
  * reference-inherited-signal-dispositions).
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

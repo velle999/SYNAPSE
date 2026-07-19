@@ -26,7 +26,8 @@
  * and cannot win a TOCTOU race against the kernel. The goal is to make the
  * common case safe and the dangerous case impossible.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

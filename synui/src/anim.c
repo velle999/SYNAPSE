@@ -21,7 +21,8 @@
  * anim_tick() advances every running fade and returns true while any is still
  * going, so the frame loop keeps pumping until the animation settles.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

@@ -14,7 +14,8 @@
  * client array is under a mutex. Writes use MSG_NOSIGNAL | MSG_DONTWAIT so a
  * slow or dead subscriber can never block or kill synguard.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

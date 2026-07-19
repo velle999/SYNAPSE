@@ -17,7 +17,8 @@
  * JSON. Messages are small and greetd's output is well-formed, so we hand-roll
  * the encode and match responses by substring rather than link a JSON library.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

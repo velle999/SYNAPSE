@@ -23,7 +23,8 @@
  * which synui_config_load lays back over synuirc so the choice outlives both a
  * config reload and a logout — the same pattern the dock/wallpaper use.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

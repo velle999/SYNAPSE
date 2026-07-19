@@ -17,7 +17,8 @@
  * makes the renderer's context current with raw EGL and restores whatever
  * was current before. All GL work happens between those two points.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

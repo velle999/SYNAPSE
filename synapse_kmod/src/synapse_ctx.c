@@ -22,7 +22,8 @@
  * the response to /sys/kernel/synapse/ai_hints as a special
  * QUERY_RESP record.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 

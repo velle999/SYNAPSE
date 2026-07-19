@@ -2,7 +2,8 @@
 /*
  * synapd.h — Core types and constants for the SynapseOS AI Daemon
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 #pragma once

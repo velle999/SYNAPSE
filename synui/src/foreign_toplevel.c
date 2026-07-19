@@ -7,7 +7,8 @@
  * map to the same paths the client's own requests use. Title/app-id changes
  * are pushed live.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

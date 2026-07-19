@@ -21,7 +21,8 @@
  * Keys follow filters.c/power.c (Up/Down select, Enter/Space activate, Esc
  * close), because a third panel that worked a third way would be its own bug.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

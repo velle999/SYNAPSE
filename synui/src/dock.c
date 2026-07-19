@@ -16,7 +16,8 @@
  * click context menu (dockmenu_*), and both the edge and the pinned set
  * persist to ~/.config/synui/dock.state.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE

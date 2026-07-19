@@ -16,7 +16,8 @@
  * faillock, deliberately: a lock that is easier to brute-force than the login
  * behind it is not a lock.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

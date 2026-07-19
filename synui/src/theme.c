@@ -21,7 +21,8 @@
  * The presets are data, not code (theme_presets[]). Adding one is a row plus a
  * name — the panel, the config parse and the persistence all read the table.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

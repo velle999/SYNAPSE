@@ -19,7 +19,8 @@
  * through polkit (polkit-gnome is the session agent); a denial or failure is
  * reported on the panel's status line rather than swallowed.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

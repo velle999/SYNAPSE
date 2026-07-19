@@ -23,7 +23,8 @@
  * deleted — this file replaced it, and its history is the place to look for why
  * any given rule here exists.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

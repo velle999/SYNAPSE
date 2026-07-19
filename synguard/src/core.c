@@ -8,7 +8,8 @@
  * A process is anomalous if it generates an event type it
  * has never generated before AND the event type is sensitive.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

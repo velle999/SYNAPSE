@@ -18,7 +18,8 @@
  * otherwise the table would show a column of zeroes for a second, which reads
  * as "nothing is running" exactly when the user opened it to find out what is.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
  */
 

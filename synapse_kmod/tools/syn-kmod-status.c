@@ -14,7 +14,8 @@
  *   syn-kmod-status --hint pid=N nice=D class=interactive
  *   syn-kmod-status --ctx-set "I am compiling a large project"
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  * https://github.com/velle999/SYNAPSE
  */
 

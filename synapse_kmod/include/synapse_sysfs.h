@@ -1,6 +1,7 @@
 /*
  * synapse_sysfs.h
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-only
  */
 #pragma once
 #include <linux/kobject.h>

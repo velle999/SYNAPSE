@@ -29,7 +29,8 @@
  * (game_finish) — leaving the box with a stopped synapd because the compositor
  * died mid-game would be a lousy way to lose the AI.
  *
- * SynapseOS Project — GPLv2
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define _GNU_SOURCE
