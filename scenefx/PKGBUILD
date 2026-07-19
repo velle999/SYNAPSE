@@ -6,17 +6,70 @@
 # render real "glass" (blur-behind) windows. Pinned to the 0.4.x line because
 # that is the release series built against wlroots 0.19 — our wlroots. 0.5+ is
 # wlroots 0.20 and will NOT link against what synui/SynapseOS currently ship.
+#
+# pkgrel 2 — "complete the fork". Upstream scenefx 0.4.1 only forks wlroots'
+# core scene TU (types/scene/wlr_scene.c); it leaves the surface / subsurface /
+# xdg / layer-shell / drag-icon / output-layout scene helpers to wlroots. On a
+# distro with a normally-built wlroots those helpers are non-interposable
+# (wlroots builds its whole scene graph in one TU, so surface_create ->
+# wlr_scene_buffer_create is an intra-TU direct call — 0 PLT stubs). The result:
+# client & shell surfaces stay wlroots-native (enum type 2) and can NEVER carry
+# scenefx effects, and mixing them with synui's scenefx nodes (type 3) breaks
+# hit-testing. Fix: port those six wlroots 0.19.3 scene TUs into scenefx,
+# recompiled against scenefx's own <scenefx/types/wlr_scene.h> so every node —
+# client and chrome — is a scenefx-native buffer node. The ported files are
+# wlroots 0.19.3 verbatim (MIT, same licence as scenefx) with only the scene
+# header swapped wlr -> scenefx. See SYNAPSE memory: project_synui_scenefx_*.
 pkgname=scenefx
 pkgver=0.4.1
-pkgrel=1
+pkgrel=2
 pkgdesc='wlr_scene fork with corner radius, blur and shadows (wlroots 0.19)'
 arch=('x86_64')
 url='https://github.com/wlrfx/scenefx'
 license=('MIT')
 depends=('wlroots0.19' 'wayland' 'libdrm' 'libxkbcommon' 'pixman')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkgconf')
-source=("$pkgname-$pkgver.tar.gz::https://github.com/wlrfx/scenefx/archive/refs/tags/$pkgver.tar.gz")
-sha256sums=('SKIP')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/wlrfx/scenefx/archive/refs/tags/$pkgver.tar.gz"
+        'surface.c'
+        'subsurface_tree.c'
+        'xdg_shell.c'
+        'layer_shell_v1.c'
+        'drag_icon.c'
+        'output_layout.c'
+        'wlr-layer-shell-unstable-v1.xml')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # 1. Drop the ported wlroots scene helper TUs into scenefx's scene dir.
+    cp "$srcdir"/surface.c "$srcdir"/subsurface_tree.c "$srcdir"/xdg_shell.c \
+       "$srcdir"/layer_shell_v1.c "$srcdir"/drag_icon.c "$srcdir"/output_layout.c \
+       types/scene/
+
+    # 2. Register them in the scene build list.
+    cat >> types/meson.build <<'MESON'
+
+# SynapseOS "complete the fork": the surface/subsurface/xdg/layer/drag/output-layout
+# scene helpers wlroots keeps in separate TUs, ported so client & shell surfaces
+# become scenefx-native (type-3) buffer nodes that can carry blur/corners/shadow.
+scenefx_files += files(
+	'scene/surface.c',
+	'scene/subsurface_tree.c',
+	'scene/xdg_shell.c',
+	'scene/layer_shell_v1.c',
+	'scene/drag_icon.c',
+	'scene/output_layout.c',
+)
+MESON
+
+    # 3. Vendor + register the wlr-layer-shell protocol. wlroots does not export
+    #    its generated wlr-layer-shell-unstable-v1-protocol.h, so layer_shell_v1.c
+    #    (like synui) needs it generated locally.
+    cp "$srcdir/wlr-layer-shell-unstable-v1.xml" protocol/
+    sed -i "s#\('xdg-shell': wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',\)#\1\n\t'wlr-layer-shell-unstable-v1': meson.current_source_dir() / 'wlr-layer-shell-unstable-v1.xml',#" \
+        protocol/meson.build
+}
 
 build() {
     cd "$srcdir/$pkgname-$pkgver"
