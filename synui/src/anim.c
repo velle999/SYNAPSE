@@ -118,9 +118,49 @@ float anim_view_opacity(syn_view_t *view)
 {
     syn_server_t *s = view->server;
     if (!s || !s->config.transparency) return 1.0f;
-    if (view_is_glass_native(view)) return 1.0f;   /* app draws its own glass */
-    float o = (view == s->focused_view) ? s->config.active_opacity
-                                        : s->config.inactive_opacity;
+
+    /*
+     * An override-redirect X11 window is chrome — a menu, tooltip or dropdown —
+     * belonging to the window that opened it, so it answers with THAT window's
+     * translucency instead of computing its own. An OR surface is never the
+     * focused view, so left to itself every X11 menu would come out at
+     * inactive_opacity and visibly mismatch the window it hangs off. Every
+     * xwayland surface carries its view on xs->data (xw_create), so the parent
+     * resolves directly.
+     *
+     * Resolved once, not recursively: a menu whose parent is itself a menu
+     * (submenus do this) would otherwise be a cycle if X ever handed back a
+     * parent loop. One hop lands on the real toplevel in every case that matters.
+     */
+    syn_view_t *target = view;
+    if (view->override_redirect && view->is_xwayland && view->xsurface &&
+        view->xsurface->parent) {
+        syn_view_t *pv = view->xsurface->parent->data;
+        if (pv && pv != view && pv->mapped)
+            target = pv;
+    }
+
+    if (view_is_glass_native(target)) return 1.0f;  /* app draws its own glass */
+    /*
+     * A fullscreen window covers its whole output, so there is nothing behind it
+     * that transparency could usefully reveal — only the wallpaper, a stacked
+     * menu, or whatever the layout left underneath. Worse, the artifact is
+     * INTERMITTENT and so reads as a compositor glitch rather than a setting: a
+     * fullscreen client is normally handed to direct scanout, where its buffer
+     * goes to the display untouched and per-node opacity is simply not applied.
+     * Only when something forces composition for a frame — a click mapping an
+     * override-redirect menu, a focus change — does the 0.5 actually render, for
+     * exactly that frame. That is the "I can see through the game for a split
+     * second on click" report (velle, 2026-07-19, Akane).
+     *
+     * Squared corners and disabled blur are already gated on fullscreen in
+     * anim_apply_alpha; opacity was the one effect that never got the guard.
+     * Maximized is deliberately NOT included — a maximized window still has a
+     * desktop behind it and translucency there is the wanted feature.
+     */
+    if (target->fullscreen) return 1.0f;
+    float o = (target == s->focused_view) ? s->config.active_opacity
+                                          : s->config.inactive_opacity;
     if (o < 0.1f) o = 0.1f;   /* never let a window vanish entirely */
     if (o > 1.0f) o = 1.0f;
     return o;

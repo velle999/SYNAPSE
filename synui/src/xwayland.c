@@ -132,6 +132,29 @@ static void xw_map(struct wl_listener *listener, void *data)
         wlr_scene_node_set_position(&view->scene_tree->node, xs->x, xs->y);
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
 
+        /*
+         * An OR surface never calls view_frame_create — it has no frame — and
+         * that is where a managed view gets alpha/base_opacity = 1.0. The view is
+         * calloc'd, so both are 0.0 here. That was harmless for as long as
+         * nothing applied effects to OR windows (their buffers simply kept
+         * wlr_scene's opaque default), but anim_apply_alpha multiplies by
+         * view->alpha — applying effects without initialising these first
+         * multiplies every X11 menu to fully transparent, i.e. invisible Steam
+         * menus. Initialise BEFORE the apply below, never after.
+         */
+        view->alpha = 1.0f;
+        view->base_opacity = 1.0f;
+
+        /*
+         * Give the menu the same glass as the window it belongs to. OR windows
+         * are the one view kind no effects path reached: they return early from
+         * xw_map (before focus_view) and are never inserted into a workspace
+         * list, so anim_apply_alpha_all does not see them either — they rendered
+         * opaque and square while every other window was glass.
+         * anim_view_opacity() resolves the parent for the opacity itself.
+         */
+        anim_apply_alpha(view);
+
         /* Some OR windows (rofi/dmenu) grab the keyboard themselves. */
         if (wlr_xwayland_surface_override_redirect_wants_focus(xs)) {
             struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);

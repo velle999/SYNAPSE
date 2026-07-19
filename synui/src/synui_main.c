@@ -833,6 +833,31 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data)
     popup->base->data =
         wlr_scene_xdg_surface_create(parent_tree, popup->base);
 
+    /*
+     * A popup's scene_buffers are born HERE — after the owning view's effects
+     * were last applied — and a fresh wlr_scene_buffer defaults to opacity 1.0,
+     * corner_radius 0, backdrop_blur off. anim_apply_alpha() is a one-shot walk
+     * over the buffers that exist at the instant it runs, and every one of its
+     * callers is a discrete event (map, focus, maximize, theme, config reload).
+     * None of them fire when a client opens a menu. So the menu rendered opaque
+     * and square inside an otherwise-glass window until some *unrelated* focus
+     * change finally swept it up — the "UI flashes on click" in Dolphin.
+     *
+     * Re-walking the view now covers the new subtree, and since the popup tree
+     * hangs under the view's frame it covers submenus at any nesting depth too.
+     * Popups are rare events, so the extra walk costs nothing in steady state.
+     *
+     * Finding the view: climb until a node carries one, the same way surface_at()
+     * does — a popup parented to another popup has no data on its immediate
+     * parent. Only xdg surfaces reach here (layer-shell popups are parentless and
+     * handled in layer.c), so the data, when found, is always a syn_view_t.
+     */
+    struct wlr_scene_tree *owner = parent_tree;
+    while (owner && !owner->node.data)
+        owner = owner->node.parent;
+    if (owner && owner->node.data)
+        anim_apply_alpha(owner->node.data);
+
     struct syn_popup_watch *w = calloc(1, sizeof(*w));
     w->popup = popup;
     w->server = s;
