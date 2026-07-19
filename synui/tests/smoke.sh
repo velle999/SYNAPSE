@@ -44,6 +44,18 @@ trap cleanup INT TERM
 
 command -v wayland-info >/dev/null || fail "wayland-info not installed (wayland-utils)"
 
+# A DMA-BUF source has to exist or synui cannot start, and the failure it
+# produces ("synui died during startup") says nothing about why. fx_renderer is
+# GLES2-only and GLES2 accepts only DMA-BUF buffers, so wlroots' allocator needs
+# a DRM render node or udmabuf; a GPU-less container has neither by default.
+# Say so here rather than leaving the next person to decode an allocator error.
+if [ ! -e /dev/udmabuf ] && ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+    echo "FAIL: no DMA-BUF source — need /dev/udmabuf or /dev/dri/renderD*." >&2
+    echo "      synui renders through scenefx's fx_renderer (GLES2/DMA-BUF only)" >&2
+    echo "      and cannot fall back to pixman. Try: modprobe udmabuf" >&2
+    exit 1
+fi
+
 # Private, *short* runtime dir: unix socket paths are capped at 108 bytes,
 # so mktemp under /tmp rather than any nested build path. An empty
 # SYNUI_CONFIG makes the run hermetic — without it a developer's synuirc or

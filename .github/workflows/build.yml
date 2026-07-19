@@ -79,7 +79,16 @@ jobs:
   # ── Real compile of every component on a current Arch toolchain ─
   build:
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container:
+      image: archlinux:latest
+      # --privileged + the host's modules so the smoke test can get a DMA-BUF
+      # allocator (see the "DMA-BUF allocator" step). synui renders through
+      # scenefx's fx_renderer, which is GLES2/EGL and accepts ONLY DMA-BUF
+      # buffers, and a GPU-less runner has neither /dev/dri nor a loaded
+      # udmabuf — so without this wlr_allocator_autocreate() fails and the
+      # compositor cannot start at all. It cannot fall back to pixman: scenefx's
+      # scene commit requires an fx renderer.
+      options: --privileged -v /lib/modules:/lib/modules:ro
     steps:
       - name: Install toolchain and dependencies
         run: |
@@ -149,6 +158,32 @@ jobs:
         run: |
           meson test -C synapd/_ci wire --print-errorlogs
           meson test -C synguard/_ci secfeed --print-errorlogs
+
+      # A DMA-BUF source for the headless smoke test. fx_renderer is GLES2-only
+      # and GLES2 advertises only WLR_BUFFER_CAP_DMABUF, so wlroots' allocator
+      # autocreate needs either a DRM render node (no GPU here) or udmabuf.
+      # Neither is present by default on a runner, which is why the compositor
+      # died at "wlr_allocator_autocreate() failed" even once the renderer
+      # itself came up fine on llvmpipe.
+      #
+      # Diagnostics first: if this ever breaks again, the log should say which
+      # of the two paths was available rather than leaving a bare allocator
+      # error to be reverse-engineered.
+      - name: DMA-BUF allocator for the smoke test (udmabuf)
+        run: |
+          pacman -S --noconfirm --needed kmod >/dev/null
+          echo "--- before ---"
+          ls -l /dev/dri /dev/udmabuf 2>&1 || true
+          modprobe udmabuf 2>&1 || echo "modprobe udmabuf failed"
+          echo "--- after ---"
+          ls -l /dev/dri /dev/udmabuf 2>&1 || true
+          if [ -e /dev/udmabuf ] || ls /dev/dri/renderD* >/dev/null 2>&1; then
+            echo "ok: a DMA-BUF allocator is available"
+          else
+            echo "::error::no DMA-BUF source (/dev/udmabuf or /dev/dri/renderD*)."
+            echo "::error::synui cannot start headless without one — fx_renderer is GLES2/DMA-BUF only."
+            exit 1
+          fi
 
       - name: synui headless smoke test
         run: |
