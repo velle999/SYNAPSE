@@ -98,7 +98,12 @@ jobs:
             wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
             linux-headers \
             wayland-utils foot grim ttf-dejavu \
-            mesa libglvnd
+            mesa libglvnd \
+            xorg-xwayland
+        # xorg-xwayland: without it smoke test 13 (an X11 toplevel re-mapped 6
+        # times leaks no frames) SKIPS rather than runs — the frame-leak guard
+        # was silently not being enforced in CI at all.
+        #
         # mesa/libglvnd are what make the smoke test possible at all: synui now
         # renders through scenefx's fx_renderer, which is GLES2-only, and a
         # runner has no /dev/dri — so the suite boots on mesa's llvmpipe

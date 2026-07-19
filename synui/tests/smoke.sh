@@ -102,8 +102,25 @@ echo "ok 1 - compositor up on $SOCK"
 export WAYLAND_DISPLAY="$SOCK"
 
 # ── 2. Protocol globals ────────────────────────────────────
-GLOBALS=$(wayland-info 2>/dev/null | sed -n "s/.*interface: '\([^']*\)'.*/\1/p") \
-    || fail "wayland-info could not connect"
+# Run wayland-info on its own so its exit status and stderr are the real thing.
+# This used to be one pipeline ending in sed, with `|| fail "could not connect"`
+# hung off the end — but $(...) reports the status of the LAST command, so sed's
+# success hid every wayland-info failure and the run reported all ~29 globals
+# "not advertised" instead of "it never connected". Two very different bugs that
+# looked identical, and the message pointed at the wrong one.
+WI_OUT="$TMP/wayland-info.out"
+WI_ERR="$TMP/wayland-info.err"
+if ! wayland-info >"$WI_OUT" 2>"$WI_ERR"; then
+    echo "FAIL: wayland-info could not talk to the compositor (exit $?)" >&2
+    echo "--- wayland-info stderr ---" >&2; cat "$WI_ERR" >&2
+    fail "wayland-info failed"
+fi
+GLOBALS=$(sed -n "s/.*interface: '\([^']*\)'.*/\1/p" "$WI_OUT")
+if [ -z "$GLOBALS" ]; then
+    echo "--- wayland-info stdout ---" >&2; cat "$WI_OUT" >&2
+    echo "--- wayland-info stderr ---" >&2; cat "$WI_ERR" >&2
+    fail "wayland-info connected but listed no globals at all"
+fi
 missing=
 for g in \
     wl_compositor wl_subcompositor wl_seat wl_shm wl_output \
