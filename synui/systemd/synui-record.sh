@@ -62,8 +62,33 @@ file="$dir/synui-$(date +%Y%m%d-%H%M%S).mp4"
 
 # -a records audio too; deliberately NOT default. A recorder that silently picks
 # up the microphone is a privacy problem, and someone who wants audio can say so.
+#
+# --output names the monitor to record. wf-recorder captures exactly one output,
+# and told none on a multi-monitor layout it does not pick one — it *prompts on
+# stdin* for a menu number. This script runs detached with no terminal, so that
+# read hits EOF and wf-recorder exits before it records a frame. That is the
+# whole bug behind "wf-recorder exited immediately" below: it never failed to
+# capture, it failed to be asked which screen. Single-monitor machines never saw
+# it, because with one output there is nothing to prompt about.
+#
+# So the compositor passes the focused monitor in, exactly as it does for
+# synui-screenshot (the `record` action in src/input.c) — only synui knows which
+# screen you are looking at.
 audio=""
-[ "${1:-}" = "--audio" ] && audio="-a"
+out=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --audio)  audio="-a" ;;
+    --output) shift; out="${1:-}" ;;
+    esac
+    shift
+done
+
+# Run by hand from a terminal there is no compositor argument, so ask synui
+# directly rather than falling through to the prompt that cannot be answered.
+[ -n "$out" ] || out=$(synctl outputs 2>/dev/null \
+    | tr '}' '\n' | grep '"focused":true' \
+    | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | head -1)
 
 note "Recording" "Super+Shift+R again to stop"
 
@@ -76,12 +101,28 @@ note "Recording" "Super+Shift+R again to stop"
 #
 # If a child ever ignores a signal it visibly handles, this is why: inherited
 # dispositions survive exec, and it has bitten this project repeatedly.
-setsid wf-recorder $audio -f "$file" >/dev/null 2>&1 &
+#
+# stdin comes from /dev/null so a recorder that still wants to ask something can
+# only fail fast. Backgrounded, it has no usable stdin anyway: reading the tty
+# from a background job raises SIGTTIN and stops the process, so the alternative
+# to a quick death is a wedged recording, not a working prompt.
+set --
+[ -n "$audio" ] && set -- "$audio"
+[ -n "$out" ]   && set -- "$@" -o "$out"
+
+log=$(mktemp 2>/dev/null) || log=/dev/null
+setsid wf-recorder "$@" -f "$file" </dev/null >"$log" 2>&1 &
 
 # Give it long enough to fail loudly (no screencopy, disk full, bad codec)
 # rather than leaving a "Recording" toast up over a recorder that already died.
 sleep 1
 if ! pgrep -x wf-recorder >/dev/null 2>&1; then
-    note "Recording failed" "wf-recorder exited immediately"
+    # Say *why*. "exited immediately" on its own sent someone reading source to
+    # find a one-line prompt-on-stdin problem; wf-recorder does explain itself,
+    # this just used to throw it away down /dev/null.
+    why=$(grep -v '^ *$' "$log" 2>/dev/null | tail -1)
+    note "Recording failed" "${why:-wf-recorder exited immediately}"
+    [ "$log" = /dev/null ] || rm -f "$log"
     exit 1
 fi
+[ "$log" = /dev/null ] || rm -f "$log"

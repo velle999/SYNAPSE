@@ -616,7 +616,19 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "night_light") == 0) {
         nightlight_toggle(s);
     } else if (strcmp(action, "record") == 0) {
-        synui_spawn("synui-record");
+        /* Record the monitor the user is actually on — same reason screenshot
+         * does this above. wf-recorder captures one output and, given no name
+         * on a multi-monitor layout, prompts on stdin for a menu number; the
+         * keybind's child has no terminal, so that read hits EOF and it dies
+         * before recording anything. Only the compositor knows the focus. */
+        syn_output_t *o = server_focused_output(s);
+        const char *name = (o && o->wlr_output) ? o->wlr_output->name : NULL;
+        char cmd[256];
+        if (name && *name)
+            snprintf(cmd, sizeof(cmd), "synui-record --output '%s'", name);
+        else
+            snprintf(cmd, sizeof(cmd), "synui-record");
+        synui_spawn(cmd);
     } else if (strcmp(action, "clipboard") == 0) {
         clipboard_toggle(s);
     } else if (strcmp(action, "brightness_up") == 0) {
