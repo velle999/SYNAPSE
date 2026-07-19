@@ -604,6 +604,13 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
     /* Update borders when surface geometry changes */
     if (view->mapped)
         view_update_decorations(view);
+
+    /* The client just painted, and scenefx's own commit handler (which ran
+     * before this one — wlr_scene_xdg_surface_create is called before we add
+     * this listener) has reset the surface buffer's opacity to 1.0. Put the
+     * window's translucency back, or transparency only ever survives on the
+     * chrome synui draws itself. */
+    anim_reapply_opacity(view);
 }
 
 static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data)

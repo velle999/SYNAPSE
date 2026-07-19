@@ -1168,10 +1168,12 @@ struct syn_view {
     struct wlr_scene_tree *frame;
 
     /* Border scene rects (children of frame) */
-    struct wlr_scene_rect *border_top;
-    struct wlr_scene_rect *border_bottom;
-    struct wlr_scene_rect *border_left;
-    struct wlr_scene_rect *border_right;
+    /* ONE rect spanning the whole frame with its middle clipped out, not four
+     * edge rects: a scene rect's corner radius rounds the rect itself, and four
+     * strips border_width thick cannot describe a corner of radius 12 — they
+     * rendered a square frame around visibly rounded glass. The ring carries the
+     * outer radius; the clipped region carries the inner one. */
+    struct wlr_scene_rect *border;
 
     /* Drop shadow (scenefx): one node lowered to the bottom of the frame so it
      * sits behind the client + chrome, sized 2·blur_sigma larger than the frame
@@ -2739,6 +2741,9 @@ float anim_view_opacity(syn_view_t *view);
 /* Re-push opacity to every mapped window — after a transparency toggle or a
  * theme change moved the active/inactive levels. */
 void anim_apply_alpha_all(syn_server_t *s);
+/* Cheap per-commit re-push of buffer opacity — scenefx resets it on every
+ * surface commit. Call from the surface commit handlers, never per frame tick. */
+void anim_reapply_opacity(syn_view_t *view);
 
 /* ── ime.c ───────────────────────────────────────────────── */
 void ime_setup(syn_server_t *s);

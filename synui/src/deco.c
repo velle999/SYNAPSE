@@ -246,11 +246,8 @@ void view_update_decorations(syn_view_t *view)
 
     /* Fullscreen covers the whole output: no border, no titlebar. */
     if (bw == 0) {
-        if (view->border_top)    wlr_scene_node_set_enabled(&view->border_top->node,    false);
-        if (view->border_bottom) wlr_scene_node_set_enabled(&view->border_bottom->node, false);
-        if (view->border_left)   wlr_scene_node_set_enabled(&view->border_left->node,   false);
-        if (view->border_right)  wlr_scene_node_set_enabled(&view->border_right->node,  false);
-        if (view->titlebar)      wlr_scene_node_set_enabled(&view->titlebar->node,      false);
+        if (view->border)   wlr_scene_node_set_enabled(&view->border->node,   false);
+        if (view->titlebar) wlr_scene_node_set_enabled(&view->titlebar->node, false);
         view_grab_ring_update(view);
         view_shadow_update(view);   /* disables it — fullscreen has no shadow */
         return;
@@ -279,29 +276,51 @@ void view_update_decorations(syn_view_t *view)
 
     /* Frame-local: the frame node already sits at (view->x, view->y). */
     int w = view->w, h = view->h;
-    int side_h = h - 2 * bw;      /* side borders sit between top/bottom */
-    if (side_h < 0) side_h = 0;   /* scene rects must be non-negative */
 
-    /* Create borders as scene rects if they don't exist yet. Existing rects
-     * are re-sized too: the view may have been resized (retile), and a config
-     * reload can change border_width. */
-    #define MAKE_BORDER(field, bx, by, bw2, bh) do { \
-        if (!view->field) \
-            view->field = wlr_scene_rect_create(view->frame, bw2, bh, color); \
-        else { \
-            wlr_scene_rect_set_color(view->field, color); \
-            wlr_scene_rect_set_size(view->field, bw2, bh); \
-        } \
-        wlr_scene_node_set_enabled(&view->field->node, true); \
-        wlr_scene_node_set_position(&view->field->node, bx, by); \
-    } while(0)
+    /*
+     * The border is one rect covering the frame with the content area clipped
+     * out, leaving a ring exactly border_width thick. Concentric radii: the
+     * outer edge is inset from the content by bw on every side, so an inner
+     * radius of corner_radius makes the outer one corner_radius + bw and the
+     * ring keeps a constant thickness around the curve. corner_radius 0 gives
+     * a square ring — the old four-strip look, unchanged.
+     */
+    int radius = view->server->config.corner_radius;
+    int iw = w - 2 * bw, ih = h - 2 * bw;   /* the clipped-out content box */
+    if (iw < 0) iw = 0;                     /* a window thinner than its own */
+    if (ih < 0) ih = 0;                     /* border: degenerate, not negative */
+    if (radius > iw / 2) radius = iw / 2;   /* scenefx clamps, but keep the two */
+    if (radius > ih / 2) radius = ih / 2;   /* radii consistent with each other */
+    if (radius < 0) radius = 0;
 
-    MAKE_BORDER(border_top,    0,        0,        w,  bw);
-    MAKE_BORDER(border_bottom, 0,        h-bw,     w,  bw);
-    MAKE_BORDER(border_left,   0,        bw,       bw, side_h);
-    MAKE_BORDER(border_right,  w-bw,     bw,       bw, side_h);
-
-    #undef MAKE_BORDER
+    if (!view->border)
+        view->border = wlr_scene_rect_create(view->frame, w, h, color);
+    else {
+        wlr_scene_rect_set_color(view->border, color);
+        wlr_scene_rect_set_size(view->border, w, h);
+    }
+    if (view->border) {
+        wlr_scene_rect_set_corner_radius(view->border, radius + bw,
+                                         CORNER_LOCATION_ALL);
+        struct clipped_region ring = {
+            .area          = { .x = bw, .y = bw, .width = iw, .height = ih },
+            .corner_radius = radius,
+            .corners       = CORNER_LOCATION_ALL,
+        };
+        wlr_scene_rect_set_clipped_region(view->border, ring);
+        wlr_scene_node_set_enabled(&view->border->node, true);
+        wlr_scene_node_set_position(&view->border->node, 0, 0);
+        /*
+         * Below the client, not above it. The clip is a *render*-time cutout —
+         * wlr_scene_node_at() still reports a hit anywhere in the rect's box, so
+         * a full-frame border left on top of the client would swallow every
+         * click on the window and answer it as DECO_BORDER (resize). Lowering
+         * costs nothing visually: the ring lies outside the content anyway.
+         * view_shadow_update() lowers the shadow afterwards, which is what keeps
+         * the shadow underneath this.
+         */
+        wlr_scene_node_lower_to_bottom(&view->border->node);
+    }
 
     view_grab_ring_update(view);
     view_shadow_update(view);
@@ -515,10 +534,7 @@ void view_shadow_update(syn_view_t *view)
 
 void view_deco_destroy(syn_view_t *view)
 {
-    if (view->border_top)    { wlr_scene_node_destroy(&view->border_top->node);    view->border_top    = NULL; }
-    if (view->border_bottom) { wlr_scene_node_destroy(&view->border_bottom->node); view->border_bottom = NULL; }
-    if (view->border_left)   { wlr_scene_node_destroy(&view->border_left->node);   view->border_left   = NULL; }
-    if (view->border_right)  { wlr_scene_node_destroy(&view->border_right->node);  view->border_right  = NULL; }
+    if (view->border)        { wlr_scene_node_destroy(&view->border->node);        view->border        = NULL; }
     if (view->titlebar)      { wlr_scene_node_destroy(&view->titlebar->node);      view->titlebar      = NULL; }
     if (view->grab_top)      { wlr_scene_node_destroy(&view->grab_top->node);      view->grab_top      = NULL; }
     if (view->grab_bottom)   { wlr_scene_node_destroy(&view->grab_bottom->node);   view->grab_bottom   = NULL; }
@@ -613,8 +629,7 @@ syn_view_t *deco_at(syn_server_t *s, double lx, double ly,
      * caring which rect was actually hit. */
     if (node->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *rect = wl_container_of(node, rect, node);
-        if (rect == v->border_top || rect == v->border_bottom ||
-            rect == v->border_left || rect == v->border_right ||
+        if (rect == v->border ||
             rect == v->grab_top    || rect == v->grab_bottom  ||
             rect == v->grab_left   || rect == v->grab_right) {
             if (v->fullscreen) return NULL;

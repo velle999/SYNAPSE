@@ -109,6 +109,24 @@ void view_set_minimized(syn_view_t *v, int minimized)
     foreign_toplevel_update_state(v);
 }
 
+/*
+ * Move our commit listener to the END of the surface's commit signal.
+ *
+ * Unlike xdg-shell — where wlr_scene_xdg_surface_create() runs before we add any
+ * listener, so scenefx is naturally first — an Xwayland view registers
+ * view->commit in xw_associate() but does not get its scene tree until xw_map().
+ * That makes synui's handler the OLDER listener, and wl_signal_emit walks the
+ * list head-to-tail, so anything we push during commit would be overwritten by
+ * scenefx's handler a moment later in the very same emit. Re-adding moves us to
+ * the tail (wl_signal_add appends), which is the ordering the opacity re-push in
+ * xw_surface_commit needs. Call immediately after creating the scene tree.
+ */
+static void xw_commit_listener_to_tail(syn_view_t *view)
+{
+    wl_list_remove(&view->commit.link);
+    wl_signal_add(&view->xsurface->surface->events.commit, &view->commit);
+}
+
 /* ── Managed-window mapping ──────────────────────────────── */
 static void xw_map(struct wl_listener *listener, void *data)
 {
@@ -127,6 +145,7 @@ static void xw_map(struct wl_listener *listener, void *data)
         /* Unmanaged surface (menu/tooltip): overlay layer, absolute position. */
         view->scene_tree = wlr_scene_subsurface_tree_create(
             s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY], xs->surface);
+        xw_commit_listener_to_tail(view);
         view->x = xs->x; view->y = xs->y;
         view->w = xs->width; view->h = xs->height;
         wlr_scene_node_set_position(&view->scene_tree->node, xs->x, xs->y);
@@ -169,6 +188,7 @@ static void xw_map(struct wl_listener *listener, void *data)
      * surface lives inside a per-view frame alongside its borders + titlebar. */
     struct wlr_scene_tree *frame = view_frame_create(view, s->window_tree);
     view->scene_tree = wlr_scene_subsurface_tree_create(frame, xs->surface);
+    xw_commit_listener_to_tail(view);
     view->scene_tree->node.data = view;   /* so view_at() finds it */
 
     view->workspace = server_active_workspace(s);
@@ -325,6 +345,11 @@ static void xw_surface_commit(struct wl_listener *listener, void *data)
      * un-fullscreen reset is driven once from view_apply_fullscreen. */
     if (view->fullscreen)
         view_fullscreen_rescale(view);
+
+    /* scenefx reset this surface's buffer opacity to 1.0 while handling the
+     * same commit; put the window's translucency back. Correct only because
+     * xw_commit_listener_to_tail() moved us after scenefx's handler. */
+    anim_reapply_opacity(view);
 }
 
 static void xw_associate(struct wl_listener *listener, void *data)

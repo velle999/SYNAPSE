@@ -55,6 +55,14 @@ struct view_effect_params {
     float alpha;
     int   corner_radius;   /* 0 = square (maximized/fullscreen) */
     bool  blur;            /* backdrop blur behind this window */
+    /* Which corners each buffer rounds. A decorated window is two stacked
+     * buffers — titlebar above content — so rounding all four on both curves the
+     * two edges that meet in the middle, pinching the window's waist. The
+     * titlebar takes the top corners, the content the bottom ones, and the seam
+     * between them stays straight. Undecorated (titlebar hidden or height 0):
+     * the content is the whole window and rounds all four. */
+    struct wlr_scene_buffer *titlebar;
+    enum corner_location     content_corners;
 };
 
 /* One walk over every buffer under the frame sets opacity AND the scenefx
@@ -70,7 +78,9 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
     const struct view_effect_params *p = data;
     wlr_scene_buffer_set_opacity(buffer, p->alpha);
     wlr_scene_buffer_set_corner_radius(buffer, p->corner_radius,
-                                       CORNER_LOCATION_ALL);
+                                       buffer == p->titlebar
+                                           ? CORNER_LOCATION_TOP
+                                           : p->content_corners);
     wlr_scene_buffer_set_backdrop_blur(buffer, p->blur);
     /* NOT optimized blur. scenefx's "optimized" path samples a pre-blurred
      * backdrop cached in fx_effect_framebuffers->optimized_blur_buffer, and that
@@ -192,14 +202,61 @@ void anim_apply_alpha(syn_view_t *view)
      * fullscreen so nothing pokes past the tile/output. */
     bool boxy       = view->fullscreen || view->maximized;
     bool translucent = view_is_glass_native(view) || (s && s->config.transparency);
+    bool decorated = view->titlebar && view->titlebar->node.enabled;
     struct view_effect_params p = {
-        .alpha         = a,
-        .corner_radius = (boxy || !s) ? 0 : s->config.corner_radius,
-        .blur          = s && s->config.blur && !view->fullscreen && translucent,
+        .alpha           = a,
+        .corner_radius   = (boxy || !s) ? 0 : s->config.corner_radius,
+        .blur            = s && s->config.blur && !view->fullscreen && translucent,
+        .titlebar        = view->titlebar,
+        .content_corners = decorated ? CORNER_LOCATION_BOTTOM
+                                     : CORNER_LOCATION_ALL,
     };
 
     wlr_scene_node_for_each_buffer(view_node(view), set_buffer_effects, &p);
     view_update_decorations(view);   /* re-tints the border rects at `a` */
+}
+
+static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
+                               int sx, int sy, void *data)
+{
+    (void)sx; (void)sy;
+    wlr_scene_buffer_set_opacity(buffer, *(const float *)data);
+}
+
+/*
+ * Re-push ONLY the opacity, after the client has painted.
+ *
+ * scenefx re-derives a surface buffer's opacity from wl_alpha_modifier_v1 on
+ * EVERY commit (types/scene/surface.c: `float opacity = 1.0;` unless the client
+ * set a modifier, then set_opacity(buffer, opacity)). So a window's translucency
+ * survived exactly until the client next painted, and anim_apply_alpha's careful
+ * one-shot walk was overwritten a frame later. That single fact produced all
+ * three symptoms we chased:
+ *   - "transparency only works on the window bar": the titlebar is a synui-drawn
+ *     buffer that never commits a surface, so it kept its alpha while the client
+ *     content next to it snapped straight back to solid.
+ *   - "Dolphin pulses on click": a click is a focus change (anim_apply_alpha sets
+ *     0.55) immediately followed by the client repainting (reset to 1.0), so the
+ *     window renders translucent for about one frame and reverts — too fast to
+ *     read as anything but a flicker.
+ *   - corner_radius/backdrop_blur never regressed, which is what made this look
+ *     like an opacity-specific bug rather than a lost window: they are
+ *     scenefx-only fields that commit handler does not touch.
+ *
+ * Opacity only, and deliberately NOT anim_apply_alpha: this runs on every frame
+ * a client paints, so it must not rebuild decorations or re-render the titlebar.
+ * wlr_scene_buffer_set_opacity early-returns when the value is unchanged, so the
+ * steady-state cost is a float compare per buffer.
+ */
+void anim_reapply_opacity(syn_view_t *view)
+{
+    if (!view->mapped) return;
+
+    float a = view->alpha * anim_view_opacity(view);
+    if (a < 0.0f) a = 0.0f;
+    if (a > 1.0f) a = 1.0f;
+
+    wlr_scene_node_for_each_buffer(view_node(view), set_buffer_opacity, &a);
 }
 
 /* Re-push opacity to every mapped window. Called after the transparency master
