@@ -198,6 +198,19 @@ static void output_frame(struct wl_listener *listener, void *data)
     syn_output_t *output = wl_container_of(listener, output, frame);
     struct wlr_scene_output *scene_output = output->scene_output;
 
+    /* No scene output yet — nothing can be composited, and most of this
+     * function dereferences it. Unreachable given the subscription ordering in
+     * new_output; here because the alternative to an early return is a NULL
+     * deref in the render path. Logged once so it cannot hide if it ever fires. */
+    if (!scene_output) {
+        static int warned;
+        if (!warned) {
+            warned = 1;
+            wlr_log(WLR_ERROR, "synui: frame before scene_output — skipping");
+        }
+        return;
+    }
+
     /* Apply any pending synguard security verdicts to window borders. */
     secfeed_dispatch(output->server);
 
@@ -402,9 +415,6 @@ static void server_new_output(struct wl_listener *listener, void *data)
     output->grid_x = wl_list_length(&server->outputs);
     output->grid_y = 0;
 
-    output->frame.notify = output_frame;
-    wl_signal_add(&wlr_output->events.frame, &output->frame);
-
     output->request_state.notify = output_request_state;
     wl_signal_add(&wlr_output->events.request_state, &output->request_state);
 
@@ -422,6 +432,18 @@ static void server_new_output(struct wl_listener *listener, void *data)
     output->scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout, l_output,
                                        output->scene_output);
+
+    /* Subscribe to `frame` only now that output->scene_output exists.
+     *
+     * This used to be registered ~16 lines earlier, above the output-layout
+     * calls — and those commit output state, which a backend may answer with a
+     * frame event synchronously, running output_frame with scene_output still
+     * NULL. Most of output_frame dereferences it. No crash has been pinned on
+     * this window (the one we chased turned out to be later, with scene_output
+     * already valid), so this is hygiene rather than a fix: ordering the
+     * subscription after the field it needs costs nothing and closes it. */
+    output->frame.notify = output_frame;
+    wl_signal_add(&wlr_output->events.frame, &output->frame);
 
     wl_list_insert(&server->outputs, &output->link);
 
