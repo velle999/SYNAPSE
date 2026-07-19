@@ -118,7 +118,13 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
                  s->config.launcher_style == SYN_LAUNCHER_LOGO ? "logo" : "text");
         break;
     case CTL_ROW_TRANSPARENCY:
-        snprintf(buf, n, "%s", s->config.transparency ? "on" : "off");
+        /* Show the slider position too, so the row reads "on · 90%" — Left/Right
+         * adjust it. Off hides the number: the levels are dormant then. */
+        if (s->config.transparency)
+            snprintf(buf, n, "on \xc2\xb7 %d%%",
+                     (int)(s->config.active_opacity * 100 + 0.5f));
+        else
+            snprintf(buf, n, "off");
         break;
     case CTL_ROW_THEME:
         /* A jump-off, but showing the active theme here saves opening the panel
@@ -393,13 +399,13 @@ static void ctlpanel_activate(syn_server_t *s)
         return;
 
     case CTL_ROW_TRANSPARENCY:
-        s->config.transparency = !s->config.transparency;
-        /* Re-push opacity to every window: the focused one and all the rest move
-         * at once (focus_view only touches two windows on a focus change). */
-        anim_apply_alpha_all(s);
+        /* Enter flips the master switch; Left/Right (below) drive the level. The
+         * helper re-pushes alpha to every window and persists, and turns a still-
+         * opaque desktop visibly translucent so "on" is not a no-op. */
+        transparency_set_enabled(s, !s->config.transparency);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "transparency %s", s->config.transparency ? "on" : "off");
-        ctlpanel_repaint(s);
+                 s->config.transparency ? "transparency on \xc2\xb7 %d%%" : "transparency off",
+                 (int)(s->config.active_opacity * 100 + 0.5f));
         return;
 
     case CTL_ROW_THEME:
@@ -447,6 +453,17 @@ static void ctlpanel_scroll(syn_server_t *s, int dir)
     s->ctlpanel.scroll = next;
 }
 
+/* Left/Right on the Transparency row are a slider: nudge the focused-window
+ * opacity in 5% steps, turning transparency on first if it is off (you would not
+ * be adjusting it otherwise). Everywhere else Left/Right scroll the shortcuts. */
+static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
+{
+    if (!s->config.transparency) transparency_set_enabled(s, 1);
+    transparency_set_opacity(s, s->config.active_opacity + dir * 0.05f);
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             "transparency %d%%", (int)(s->config.active_opacity * 100 + 0.5f));
+}
+
 int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->ctlpanel.visible) return 0;
@@ -480,15 +497,27 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
          * here would draw this panel back over the top of it. */
         if (s->ctlpanel.visible) synui_render_ctlpanel(s);
         return 1;
-    case XKB_KEY_Prior:     /* Page Up */
     case XKB_KEY_Left:
     case XKB_KEY_h:
+        if (s->ctlpanel.selected == CTL_ROW_TRANSPARENCY)
+            ctlpanel_adjust_opacity(s, -1);
+        else
+            ctlpanel_scroll(s, -CTL_SHORTCUT_ROWS / 2);
+        synui_render_ctlpanel(s);
+        return 1;
+    case XKB_KEY_Right:
+    case XKB_KEY_l:
+        if (s->ctlpanel.selected == CTL_ROW_TRANSPARENCY)
+            ctlpanel_adjust_opacity(s, +1);
+        else
+            ctlpanel_scroll(s, +CTL_SHORTCUT_ROWS / 2);
+        synui_render_ctlpanel(s);
+        return 1;
+    case XKB_KEY_Prior:     /* Page Up — always the shortcuts scroll */
         ctlpanel_scroll(s, -CTL_SHORTCUT_ROWS / 2);
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_Next:      /* Page Down */
-    case XKB_KEY_Right:
-    case XKB_KEY_l:
         ctlpanel_scroll(s, +CTL_SHORTCUT_ROWS / 2);
         synui_render_ctlpanel(s);
         return 1;

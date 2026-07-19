@@ -33,4 +33,10 @@ for user_cfg in "$CONF_HOME/waybar/config.jsonc" "$CONF_HOME/waybar/config"; do
     fi
 done
 
-exec waybar -c "$SYNUI_BAR/config.jsonc" -s "$SYNUI_BAR/style.css" "$@"
+# The theme manager (synui-apply-theme) generates a themed stylesheet here that
+# @imports the packaged base and recolours it to the active theme. Use it when it
+# exists so the bar matches the desktop; otherwise fall back to the packaged CSS.
+STYLE="$SYNUI_BAR/style.css"
+[ -f "$CONF_HOME/synui/waybar-style.css" ] && STYLE="$CONF_HOME/synui/waybar-style.css"
+
+exec waybar -c "$SYNUI_BAR/config.jsonc" -s "$STYLE" "$@"

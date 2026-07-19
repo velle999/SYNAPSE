@@ -410,6 +410,10 @@ void synui_config_load(syn_config_t *cfg)
     cfg->transparency     = 0;
     cfg->active_opacity   = 1.00f;
     cfg->inactive_opacity = 0.92f;
+    /* SYNAPSE's neon cyan — the panel accent render.c starts on; theme_apply()
+     * (via theme.state at startup, or a synuirc `theme =`) reskins it. */
+    cfg->panel_accent[0] = 0.00f; cfg->panel_accent[1] = 0.85f;
+    cfg->panel_accent[2] = 0.75f; cfg->panel_accent[3] = 1.00f;
 
     /* GLES post-process: on by default, harmless on pixman (effects_init
      * refuses and the plain path is used). Strengths tuned for subtlety.

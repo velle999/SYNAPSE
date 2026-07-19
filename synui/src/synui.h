@@ -891,6 +891,13 @@ typedef struct {
      * to decide. Persisted as a name to theme.state. */
     syn_theme_t theme;
 
+    /* Panel accent (RGBA 0..1): the one colour every compositor-drawn panel
+     * (menu, control panel, overlays) uses for headers, selections and rules.
+     * Seeded from the active theme (theme_load_colors), so a theme switch
+     * reskins synui's own UI, not just window chrome. render.c caches it via
+     * render_set_panel_accent() so draw helpers need no server handle. */
+    float panel_accent[4];
+
     /* Window translucency (theme.c / anim.c). `transparency` is the master
      * switch — off, everything is opaque and the opacities are ignored. When on,
      * the focused window sits at active_opacity and the rest at inactive_opacity.
@@ -2450,6 +2457,17 @@ void theme_load_colors(syn_config_t *cfg, syn_theme_t theme);
 void theme_state_load(syn_server_t *s);   /* lay theme.state over the config default */
 const char *theme_name(syn_theme_t t);    /* display label, e.g. "Windows XP" */
 void theme_preview_color(syn_theme_t t, float out[4]);   /* swatch RGBA for the panel */
+/* Cache the panel accent render.c draws every synui panel with. Called from
+ * theme_load_colors so a theme switch (or a synuirc `theme =`) reskins the UI. */
+void render_set_panel_accent(const float rgb[4]);
+
+/* Shared translucency controls behind the control-panel + theme-manager sliders.
+ * set_opacity clamps the focused level to 0.50..1.00 and derives the unfocused
+ * level just below it; set_enabled flips the master switch and, when turning on
+ * a still-opaque desktop, drops to a visibly translucent default. Both re-push
+ * alpha to every window and persist to theme.state. */
+void transparency_set_opacity(syn_server_t *s, float active);
+void transparency_set_enabled(syn_server_t *s, int on);
 
 void theme_show(syn_server_t *s);
 void theme_hide(syn_server_t *s);
