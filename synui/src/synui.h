@@ -310,8 +310,29 @@ typedef enum {
     SYN_THEME_DARK,          /* flat modern dark (a plain dark mode) */
     SYN_THEME_WINXP,         /* Windows XP "Luna" blue */
     SYN_THEME_WIN95,         /* Windows 95 grey 3D */
+    /* The rices: the palettes people actually theme their desktops with. Each
+     * is the upstream palette's real hex, not an approximation by eye. */
+    SYN_THEME_CATPPUCCIN,    /* Catppuccin Mocha (mauve) */
+    SYN_THEME_GRUVBOX,       /* Gruvbox dark (hard) */
+    SYN_THEME_TOKYONIGHT,    /* Tokyo Night (storm) */
+    SYN_THEME_NORD,          /* Nord (frost) */
+    SYN_THEME_DRACULA,       /* Dracula (purple/pink) */
+    SYN_THEME_BUBBLEGUM,     /* Bubblegum pink (light, pastel) */
     SYN_THEME_COUNT,
 } syn_theme_t;
+
+/* How window chrome is *drawn*, as opposed to what colour it is. Colours alone
+ * could never make the retro themes read as the real thing: XP's caption is a
+ * vertical gradient with rounded top corners and a red pill close button, and
+ * 95's is a flat navy bar inside a raised 3D bevel with square bevelled buttons.
+ * The titlebar is a cairo surface (deco.c), so it can draw all three properly —
+ * the borders around it stay flat scene rects, which is why the retro presets
+ * make their frame colour the frame *face* colour rather than the caption's. */
+typedef enum {
+    SYN_CHROME_FLAT = 0,     /* one solid caption colour — the modern look */
+    SYN_CHROME_LUNA,         /* Windows XP: gradient, rounded top, pill buttons */
+    SYN_CHROME_BEVEL,        /* Windows 95: 3D bevels, square bevelled buttons */
+} syn_chrome_t;
 
 extern const char *const syn_theme_names[SYN_THEME_COUNT];
 
@@ -905,6 +926,17 @@ typedef struct {
      * to decide. Persisted as a name to theme.state. */
     syn_theme_t theme;
 
+    /* Chrome style + the extra colours only the non-flat styles use. `chrome`
+     * picks the titlebar painter in deco.c; the gradient ends are the BOTTOM of
+     * each caption gradient (the *_color fields above are the top), and
+     * chrome_face is the 3D face colour bevels and retro buttons are cut from.
+     * A flat theme leaves the gradient ends equal to its caption colours, so the
+     * same painter code is correct with no branching on the theme itself. */
+    syn_chrome_t chrome;
+    float titlebar_grad[4];         /* inactive caption, gradient end */
+    float titlebar_grad_focus[4];   /* active caption, gradient end   */
+    float chrome_face[4];           /* frame/button face (95 silver, XP beige) */
+
     /* Panel accent (RGBA 0..1): the one colour every compositor-drawn panel
      * (menu, control panel, overlays) uses for headers, selections and rules.
      * Seeded from the active theme (theme_load_colors), so a theme switch
@@ -1068,6 +1100,23 @@ typedef struct {
     syn_bind_t binds[SYN_BINDS_MAX];
     int        bind_count;
 } syn_config_t;
+
+/* Retro chrome is SQUARE. scenefx's rounded corners are the house look and stay
+ * the user's setting (`corner_radius`), but a Windows 95 window with 12px
+ * rounded corners is instantly wrong, and no amount of correct navy fixes it —
+ * so the chrome style overrides the radius here rather than overwriting the
+ * config, and switching back to a modern theme restores the user's value with
+ * no state to remember. XP is square by this rule too: its rounded top corners
+ * are drawn by the titlebar itself (deco.c), which can round the TOP only, the
+ * way Luna did. 95 also drops the shadow — it sat flat on the desktop. */
+static inline int chrome_corner_radius(const syn_config_t *cfg)
+{
+    return cfg->chrome == SYN_CHROME_FLAT ? cfg->corner_radius : 0;
+}
+static inline int chrome_shadow(const syn_config_t *cfg)
+{
+    return cfg->chrome == SYN_CHROME_BEVEL ? 0 : cfg->shadow;
+}
 
 /* ── Dock entry (dock.c) ──────────────────────────────────── */
 /* One pinned and/or running app, shared across every output's mirrored
@@ -2172,6 +2221,9 @@ int  view_deco_titlebar(const syn_view_t *view);
 void view_content_box(const syn_view_t *view, struct wlr_box *out);
 /* Redraw borders + titlebar for the view's current geometry/focus/title. */
 void view_update_decorations(syn_view_t *view);
+/* Force the next view_update_decorations to repaint the titlebar surface even
+ * if its size/focus/title are unchanged — see the definition (theme switches). */
+void view_invalidate_titlebar(syn_view_t *view);
 void view_deco_destroy(syn_view_t *view);
 /* Destroy the frame and everything inside it (chrome + the client's surface
  * tree), clearing view->frame and view->scene_tree. Destroying the surface tree
@@ -2515,7 +2567,8 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save);
 void theme_load_colors(syn_config_t *cfg, syn_theme_t theme);
 void theme_state_load(syn_server_t *s);   /* lay theme.state over the config default */
 const char *theme_name(syn_theme_t t);    /* display label, e.g. "Windows XP" */
-void theme_preview_color(syn_theme_t t, float out[4]);   /* swatch RGBA for the panel */
+/* Two-tone swatch for the picker: the caption colour and the focus accent. */
+void theme_preview_colors(syn_theme_t t, float caption[4], float accent[4]);
 /* Cache the panel accent render.c draws every synui panel with. Called from
  * theme_load_colors so a theme switch (or a synuirc `theme =`) reskins the UI. */
 void render_set_panel_accent(const float rgb[4]);

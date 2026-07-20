@@ -205,7 +205,7 @@ void anim_apply_alpha(syn_view_t *view)
     bool decorated = view->titlebar && view->titlebar->node.enabled;
     struct view_effect_params p = {
         .alpha           = a,
-        .corner_radius   = (boxy || !s) ? 0 : s->config.corner_radius,
+        .corner_radius   = (boxy || !s) ? 0 : chrome_corner_radius(&s->config),
         .blur            = s && s->config.blur && !view->fullscreen && translucent,
         .titlebar        = view->titlebar,
         .content_corners = decorated ? CORNER_LOCATION_BOTTOM

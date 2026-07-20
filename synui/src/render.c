@@ -1734,11 +1734,17 @@ void synui_render_ctlpanel(syn_server_t *s)
 static const char *thememgr_blurb(syn_theme_t t)
 {
     switch (t) {
-    case SYN_THEME_SYNAPSE: return "The neon night-drive default \xc2\xb7 apps dark";
-    case SYN_THEME_DARK:    return "Flat modern dark \xc2\xb7 apps + Dolphin + Firefox dark";
-    case SYN_THEME_WINXP:   return "Luna blue \xc2\xb7 apps light";
-    case SYN_THEME_WIN95:   return "Grey 3D, navy titles \xc2\xb7 apps light";
-    default:                return "";
+    case SYN_THEME_SYNAPSE:    return "The neon night-drive default \xc2\xb7 apps dark";
+    case SYN_THEME_DARK:       return "Flat modern dark \xc2\xb7 apps + Dolphin + Firefox dark";
+    case SYN_THEME_WINXP:      return "Luna blue, gradient captions \xc2\xb7 apps beige";
+    case SYN_THEME_WIN95:      return "Silver 3D bevels, navy titles \xc2\xb7 apps grey";
+    case SYN_THEME_CATPPUCCIN: return "Mocha \xc2\xb7 mauve on soft black \xc2\xb7 glassy";
+    case SYN_THEME_GRUVBOX:    return "Retro warm \xc2\xb7 orange on brown \xc2\xb7 glassy";
+    case SYN_THEME_TOKYONIGHT: return "Storm \xc2\xb7 blue + purple on navy \xc2\xb7 glassy";
+    case SYN_THEME_NORD:       return "Arctic \xc2\xb7 frost blue on slate \xc2\xb7 glassy";
+    case SYN_THEME_DRACULA:    return "Purple + pink on charcoal \xc2\xb7 glassy";
+    case SYN_THEME_BUBBLEGUM:  return "Pastel pink, hot-pink titles \xc2\xb7 apps light";
+    default:                   return "";
     }
 }
 
@@ -1754,8 +1760,23 @@ void synui_render_thememgr(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
+    /* The list scrolls. With ten themes the full list is ~700px, which fits a
+     * 1080p screen but not a 1024x768 one (the ISO's default, and any VM), and a
+     * panel taller than its output silently loses its footer — the slider and the
+     * keybind help. So: show as many rows as fit with a margin, and window them
+     * around the selection. Stateless on purpose — deriving `first` from the
+     * selection each render means there is no scroll position to keep in sync. */
+    int rows = SYN_THEME_COUNT;
+    int avail = ob.height - 80 - THM_TOP - THM_FOOTER;
+    if (avail < THM_ROW_H * 3) avail = THM_ROW_H * 3;   /* never below 3 rows */
+    if (rows > avail / THM_ROW_H) rows = avail / THM_ROW_H;
+
+    int first = tm->selected - rows / 2;
+    if (first > SYN_THEME_COUNT - rows) first = SYN_THEME_COUNT - rows;
+    if (first < 0) first = 0;
+
     int pw = THM_W;
-    int ph = THM_TOP + SYN_THEME_COUNT * THM_ROW_H + THM_FOOTER;
+    int ph = THM_TOP + rows * THM_ROW_H + THM_FOOTER;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->thememgr_ui.tree->node, px, py);
@@ -1790,8 +1811,8 @@ void synui_render_thememgr(syn_server_t *s)
     cairo_line_to(cr, pw - THM_PAD, 50);
     cairo_stroke(cr);
 
-    for (int i = 0; i < SYN_THEME_COUNT; i++) {
-        int ry = THM_TOP + i * THM_ROW_H;
+    for (int i = first; i < first + rows; i++) {
+        int ry = THM_TOP + (i - first) * THM_ROW_H;
         int sel    = (i == tm->selected);
         int active = (i == s->config.theme);
 
@@ -1802,11 +1823,18 @@ void synui_render_thememgr(syn_server_t *s)
             cairo_fill(cr);
         }
 
-        /* Swatch: the theme's focused-title colour, framed. */
-        float sw[4];
-        theme_preview_color((syn_theme_t)i, sw);
-        cairo_set_source_rgba(cr, sw[0], sw[1], sw[2], 1.0);
-        cairo_rectangle(cr, THM_PAD, ry - 24, THM_SWATCH, THM_SWATCH);
+        /* Swatch: caption colour on the left, focus accent on the right, framed.
+         * Two halves because one colour cannot separate these themes — every
+         * rice's caption is the same near-black, and their accent is the whole
+         * point of picking one. */
+        float cap[4], acc[4];
+        theme_preview_colors((syn_theme_t)i, cap, acc);
+        cairo_set_source_rgba(cr, cap[0], cap[1], cap[2], 1.0);
+        cairo_rectangle(cr, THM_PAD, ry - 24, THM_SWATCH / 2.0, THM_SWATCH);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, acc[0], acc[1], acc[2], 1.0);
+        cairo_rectangle(cr, THM_PAD + THM_SWATCH / 2.0, ry - 24,
+                        THM_SWATCH / 2.0, THM_SWATCH);
         cairo_fill(cr);
         cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 0.8);
         cairo_set_line_width(cr, 1);
@@ -1831,6 +1859,18 @@ void synui_render_thememgr(syn_server_t *s)
         cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
         cairo_move_to(cr, tx, ry + 12);
         cairo_show_text(cr, thememgr_blurb((syn_theme_t)i));
+    }
+
+    /* "there is more above/below" — without these a windowed list reads as the
+     * whole list, and the themes off-screen may as well not exist. */
+    if (rows < SYN_THEME_COUNT) {
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 0.9);
+        if (first > 0)
+            draw_right(cr, pw - THM_PAD, THM_TOP - 32, "\xe2\x96\xb2");
+        if (first + rows < SYN_THEME_COUNT)
+            draw_right(cr, pw - THM_PAD, THM_TOP + rows * THM_ROW_H - 8,
+                       "\xe2\x96\xbc");
     }
 
     /* Transparency slider: a track filled in proportion to the focused-window

@@ -41,21 +41,33 @@
 
 /* Short tokens: what synuirc `theme =` and theme.state store. */
 const char *const syn_theme_names[SYN_THEME_COUNT] = {
-    [SYN_THEME_SYNAPSE] = "synapse",
-    [SYN_THEME_DARK]    = "dark",
-    [SYN_THEME_WINXP]   = "winxp",
-    [SYN_THEME_WIN95]   = "win95",
+    [SYN_THEME_SYNAPSE]    = "synapse",
+    [SYN_THEME_DARK]       = "dark",
+    [SYN_THEME_WINXP]      = "winxp",
+    [SYN_THEME_WIN95]      = "win95",
+    [SYN_THEME_CATPPUCCIN] = "catppuccin",
+    [SYN_THEME_GRUVBOX]    = "gruvbox",
+    [SYN_THEME_TOKYONIGHT] = "tokyonight",
+    [SYN_THEME_NORD]       = "nord",
+    [SYN_THEME_DRACULA]    = "dracula",
+    [SYN_THEME_BUBBLEGUM]  = "bubblegum",
 };
 
 /* What the panel shows a human. */
 const char *theme_name(syn_theme_t t)
 {
     switch (t) {
-    case SYN_THEME_SYNAPSE: return "SYNAPSE (neon)";
-    case SYN_THEME_DARK:    return "Dark";
-    case SYN_THEME_WINXP:   return "Windows XP";
-    case SYN_THEME_WIN95:   return "Windows 95";
-    default:                return "?";
+    case SYN_THEME_SYNAPSE:    return "SYNAPSE (neon)";
+    case SYN_THEME_DARK:       return "Dark";
+    case SYN_THEME_WINXP:      return "Windows XP";
+    case SYN_THEME_WIN95:      return "Windows 95";
+    case SYN_THEME_CATPPUCCIN: return "Catppuccin Mocha";
+    case SYN_THEME_GRUVBOX:    return "Gruvbox Dark";
+    case SYN_THEME_TOKYONIGHT: return "Tokyo Night";
+    case SYN_THEME_NORD:       return "Nord";
+    case SYN_THEME_DRACULA:    return "Dracula";
+    case SYN_THEME_BUBBLEGUM:  return "Bubblegum";
+    default:                   return "?";
     }
 }
 
@@ -66,6 +78,12 @@ const char *theme_name(syn_theme_t t)
 typedef struct {
     float border_norm[4], border_focus[4], border_ai[4], border_warn[4];
     float tb_norm[4], tb_focus[4], tb_text[4], tb_text_focus[4];
+    /* Caption gradient ends + the 3D face colour. A flat theme leaves the two
+     * gradient ends NULL-equivalent (all zero alpha) and theme_load_colors then
+     * copies the caption colours into them, so deco.c never has to ask which
+     * kind of theme it is drawing — see syn_chrome_t. */
+    float tb_grad_norm[4], tb_grad_focus[4], face[4];
+    syn_chrome_t chrome;
     float active_opacity, inactive_opacity;
     /* panel_accent: the colour synui's OWN panels (menu, control panel, every
      * overlay) draw with — headers, selections, rules. Tuned to read on the
@@ -82,6 +100,13 @@ typedef struct {
      * taking the accent here split the bar into two clashing colours. Teal here
      * keeps the neon bar reading as one piece; every other theme still recolours. */
     int   glyph_r, glyph_g, glyph_b;
+    /* base and text: the app window face and its foreground, handed to
+     * synui-apply-theme so Dolphin/GTK get THIS theme's palette rather than a
+     * generic Breeze light/dark. That is what makes a rice a rice — Gruvbox
+     * windows have to be Gruvbox brown, not "some dark grey" — and it is also
+     * how XP gets its #ECE9D8 beige and 95 its #C0C0C0 silver. */
+    int   base_r, base_g, base_b;
+    int   text_r, text_g, text_b;
 } syn_theme_preset_t;
 
 static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
@@ -102,6 +127,8 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .scheme = "dark", .accent_r = 255, .accent_g = 41, .accent_b = 109,
         /* #05d9e8 — the launcher caret's teal, not the magenta accent. */
         .glyph_r = 0x05, .glyph_g = 0xd9, .glyph_b = 0xe8,
+        .base_r = 30, .base_g = 30, .base_b = 36,        /* the historical pair */
+        .text_r = 235, .text_g = 235, .text_b = 242,
     },
     /* DARK — the "just a tasteful dark mode": flat greys, one restrained blue
      * accent, no neon. This is the theme whose whole point is the app-side dark:
@@ -119,48 +146,198 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .panel_accent  = { 0.24f, 0.49f, 1.00f, 1.0f },  /* restrained blue */
         .scheme = "dark", .accent_r = 61, .accent_g = 125, .accent_b = 255,
         .glyph_r = 61, .glyph_g = 125, .glyph_b = 255,   /* follows the accent */
+        .base_r = 30, .base_g = 30, .base_b = 36,
+        .text_r = 235, .text_g = 235, .text_b = 242,
     },
-    /* WINDOWS XP (Luna, "Blue") — a light theme with that blue title chrome.
-     * Scene rects can't gradient, so the titlebar is Luna's mid blue flat; white
-     * caption text sells it more than the gradient does. Apps go light. */
+    /* WINDOWS XP (Luna, "Blue"). Every colour here is a real Luna registry
+     * value rather than one picked by eye: ActiveTitle #0054E3 with
+     * GradientActiveTitle #3D95FF, InactiveTitle #7A96DF / #9DB9EB, the
+     * unmistakable #ECE9D8 beige face, and Explorer's #316AC5 selection.
+     * SYN_CHROME_LUNA is what actually sells it — the caption is a real vertical
+     * gradient with rounded top corners and the red pill close button (deco.c);
+     * a flat mid-blue bar never read as XP no matter how right the hex was.
+     * The frame is the beige face, as in Luna: only the caption is blue. */
     [SYN_THEME_WINXP] = {
-        .border_norm  = { 0.50f, 0.62f, 0.84f, 1.0f },  /* #7f9ed6 inactive frame */
-        .border_focus = { 0.04f, 0.37f, 0.84f, 1.0f },  /* #0a5fd6 Luna blue      */
-        .border_ai    = { 0.16f, 0.50f, 1.00f, 1.0f },  /* #2a7fff */
-        .border_warn  = { 0.84f, 0.31f, 0.16f, 1.0f },  /* #d64f2a */
-        .tb_norm       = { 0.50f, 0.62f, 0.84f, 1.0f },  /* inactive title */
-        .tb_focus      = { 0.04f, 0.37f, 0.84f, 1.0f },  /* active title   */
-        .tb_text       = { 0.88f, 0.92f, 1.00f, 1.0f },
+        .border_norm  = { 0.925f, 0.914f, 0.847f, 1.0f },  /* #ECE9D8 face */
+        .border_focus = { 0.925f, 0.914f, 0.847f, 1.0f },
+        .border_ai    = { 0.192f, 0.416f, 0.773f, 1.0f },  /* #316AC5 selection */
+        .border_warn  = { 0.788f, 0.239f, 0.157f, 1.0f },  /* #C93D28 */
+        .tb_norm       = { 0.478f, 0.588f, 0.875f, 1.0f },  /* #7A96DF */
+        .tb_focus      = { 0.000f, 0.329f, 0.890f, 1.0f },  /* #0054E3 */
+        .tb_grad_norm  = { 0.616f, 0.725f, 0.922f, 1.0f },  /* #9DB9EB */
+        .tb_grad_focus = { 0.239f, 0.584f, 1.000f, 1.0f },  /* #3D95FF */
+        .face          = { 0.925f, 0.914f, 0.847f, 1.0f },  /* #ECE9D8 */
+        .chrome = SYN_CHROME_LUNA,
+        .tb_text       = { 0.847f, 0.894f, 0.973f, 1.0f },  /* #D8E4F8 */
         .tb_text_focus = { 1.00f, 1.00f, 1.00f, 1.0f },
         .active_opacity = 1.0f, .inactive_opacity = 1.0f,   /* XP was never glassy */
-        .panel_accent  = { 0.16f, 0.55f, 1.00f, 1.0f },  /* Luna blue, brightened */
-        .scheme = "light", .accent_r = 10, .accent_g = 95, .accent_b = 214,
-        .glyph_r = 10, .glyph_g = 95, .glyph_b = 214,    /* follows the accent */
+        .panel_accent  = { 0.36f, 0.62f, 1.00f, 1.0f },  /* Luna blue, brightened */
+        .scheme = "light", .accent_r = 49, .accent_g = 106, .accent_b = 197,
+        .glyph_r = 49, .glyph_g = 106, .glyph_b = 197,   /* follows the accent */
+        .base_r = 236, .base_g = 233, .base_b = 216,     /* #ECE9D8 */
+        .text_r = 0, .text_g = 0, .text_b = 0,
     },
-    /* WINDOWS 95 — navy active title, grey inactive, silver frame, on a light
-     * (grey) palette. The bevels are gone (flat rects), the colours are the tell. */
+    /* WINDOWS 95 — the real VGA system colours (the 95 control-panel defaults):
+     * ActiveTitle #000080 navy, InactiveTitle #808080, #C0C0C0 silver face. Two
+     * accuracy fixes over the first pass: the frame is SILVER in both states (95
+     * never coloured the border with the caption — the navy is the caption bar
+     * only), and the inactive caption text is #C0C0C0, not the #D4D0C8 that
+     * arrived with Win98/2000. 95 had no gradient at all (GradientActiveTitle is
+     * a 98 feature) so both ends match; what makes it read as 95 is
+     * SYN_CHROME_BEVEL — the raised 3D frame and square bevelled buttons. */
     [SYN_THEME_WIN95] = {
-        .border_norm  = { 0.50f, 0.50f, 0.50f, 1.0f },  /* #808080 */
-        .border_focus = { 0.00f, 0.00f, 0.50f, 1.0f },  /* #000080 navy */
-        .border_ai    = { 0.00f, 0.00f, 0.50f, 1.0f },
-        .border_warn  = { 0.50f, 0.00f, 0.00f, 1.0f },  /* #800000 */
-        .tb_norm       = { 0.50f, 0.50f, 0.50f, 1.0f },  /* grey inactive title */
-        .tb_focus      = { 0.00f, 0.00f, 0.50f, 1.0f },  /* navy active title   */
-        .tb_text       = { 0.83f, 0.82f, 0.78f, 1.0f },  /* #d4d0c8 */
+        .border_norm  = { 0.753f, 0.753f, 0.753f, 1.0f },  /* #C0C0C0 face */
+        .border_focus = { 0.753f, 0.753f, 0.753f, 1.0f },
+        .border_ai    = { 0.753f, 0.753f, 0.753f, 1.0f },
+        .border_warn  = { 0.502f, 0.000f, 0.000f, 1.0f },  /* #800000 */
+        .tb_norm       = { 0.502f, 0.502f, 0.502f, 1.0f },  /* #808080 */
+        .tb_focus      = { 0.000f, 0.000f, 0.502f, 1.0f },  /* #000080 navy */
+        .tb_grad_norm  = { 0.502f, 0.502f, 0.502f, 1.0f },  /* no gradient in 95 */
+        .tb_grad_focus = { 0.000f, 0.000f, 0.502f, 1.0f },
+        .face          = { 0.753f, 0.753f, 0.753f, 1.0f },  /* #C0C0C0 */
+        .chrome = SYN_CHROME_BEVEL,
+        .tb_text       = { 0.753f, 0.753f, 0.753f, 1.0f },  /* #C0C0C0 */
         .tb_text_focus = { 1.00f, 1.00f, 1.00f, 1.0f },
         .active_opacity = 1.0f, .inactive_opacity = 1.0f,
         .panel_accent  = { 0.45f, 0.60f, 0.95f, 1.0f },  /* navy, legible on dark */
         .scheme = "light", .accent_r = 0, .accent_g = 0, .accent_b = 128,
         .glyph_r = 0, .glyph_g = 0, .glyph_b = 128,      /* follows the accent */
+        .base_r = 192, .base_g = 192, .base_b = 192,     /* #C0C0C0 */
+        .text_r = 0, .text_g = 0, .text_b = 0,
+    },
+    /* ── The rices ───────────────────────────────────────────
+     * Upstream palette hex, unmodified, so a synui desktop sits beside a
+     * matching terminal/editor colourscheme without clashing. All six lean
+     * faintly glassy by default (0.95/0.89) — translucency is half the aesthetic
+     * — but that is still only a default: the master switch stays the user's. */
+    /* CATPPUCCIN MOCHA — base #1E1E2E, mantle #181825, surface0 #313244,
+     * text #CDD6F4, mauve #CBA6F7, sky #89DCEB, red #F38BA8. */
+    [SYN_THEME_CATPPUCCIN] = {
+        .border_norm  = { 0.192f, 0.196f, 0.267f, 1.0f },  /* #313244 surface0 */
+        .border_focus = { 0.796f, 0.651f, 0.969f, 1.0f },  /* #CBA6F7 mauve */
+        .border_ai    = { 0.537f, 0.863f, 0.922f, 1.0f },  /* #89DCEB sky */
+        .border_warn  = { 0.953f, 0.545f, 0.659f, 1.0f },  /* #F38BA8 red */
+        .tb_norm       = { 0.094f, 0.094f, 0.145f, 1.0f },  /* #181825 mantle */
+        .tb_focus      = { 0.118f, 0.118f, 0.180f, 1.0f },  /* #1E1E2E base */
+        .tb_text       = { 0.424f, 0.439f, 0.525f, 1.0f },  /* #6C7086 overlay0 */
+        .tb_text_focus = { 0.804f, 0.839f, 0.957f, 1.0f },  /* #CDD6F4 text */
+        .active_opacity = 0.95f, .inactive_opacity = 0.89f,
+        .panel_accent  = { 0.796f, 0.651f, 0.969f, 1.0f },  /* mauve */
+        .scheme = "dark", .accent_r = 203, .accent_g = 166, .accent_b = 247,
+        .glyph_r = 203, .glyph_g = 166, .glyph_b = 247,
+        .base_r = 30, .base_g = 30, .base_b = 46,           /* #1E1E2E */
+        .text_r = 205, .text_g = 214, .text_b = 244,        /* #CDD6F4 */
+    },
+    /* GRUVBOX DARK (hard) — bg0_h #1D2021, bg0 #282828, bg1 #3C3836,
+     * fg1 #EBDBB2, orange #FE8019, aqua #8EC07C, red #FB4934. */
+    [SYN_THEME_GRUVBOX] = {
+        .border_norm  = { 0.235f, 0.220f, 0.212f, 1.0f },  /* #3C3836 bg1 */
+        .border_focus = { 0.996f, 0.502f, 0.098f, 1.0f },  /* #FE8019 orange */
+        .border_ai    = { 0.557f, 0.753f, 0.486f, 1.0f },  /* #8EC07C aqua */
+        .border_warn  = { 0.984f, 0.286f, 0.204f, 1.0f },  /* #FB4934 red */
+        .tb_norm       = { 0.114f, 0.125f, 0.129f, 1.0f },  /* #1D2021 bg0_h */
+        .tb_focus      = { 0.157f, 0.157f, 0.157f, 1.0f },  /* #282828 bg0 */
+        .tb_text       = { 0.659f, 0.600f, 0.518f, 1.0f },  /* #A89984 gray */
+        .tb_text_focus = { 0.922f, 0.859f, 0.698f, 1.0f },  /* #EBDBB2 fg1 */
+        .active_opacity = 0.95f, .inactive_opacity = 0.89f,
+        .panel_accent  = { 0.996f, 0.502f, 0.098f, 1.0f },  /* orange */
+        .scheme = "dark", .accent_r = 254, .accent_g = 128, .accent_b = 25,
+        .glyph_r = 254, .glyph_g = 128, .glyph_b = 25,
+        .base_r = 40, .base_g = 40, .base_b = 40,           /* #282828 */
+        .text_r = 235, .text_g = 219, .text_b = 178,        /* #EBDBB2 */
+    },
+    /* TOKYO NIGHT (storm) — bg #24283B, bg_dark #1F2335, fg #C0CAF5,
+     * blue #7AA2F7, purple #BB9AF7, cyan #7DCFFF, red #F7768E. */
+    [SYN_THEME_TOKYONIGHT] = {
+        .border_norm  = { 0.239f, 0.263f, 0.373f, 1.0f },  /* #3D435F */
+        .border_focus = { 0.478f, 0.635f, 0.969f, 1.0f },  /* #7AA2F7 blue */
+        .border_ai    = { 0.490f, 0.812f, 1.000f, 1.0f },  /* #7DCFFF cyan */
+        .border_warn  = { 0.969f, 0.463f, 0.557f, 1.0f },  /* #F7768E red */
+        .tb_norm       = { 0.122f, 0.137f, 0.208f, 1.0f },  /* #1F2335 bg_dark */
+        .tb_focus      = { 0.141f, 0.157f, 0.231f, 1.0f },  /* #24283B bg */
+        .tb_text       = { 0.337f, 0.369f, 0.494f, 1.0f },  /* #565F89 comment */
+        .tb_text_focus = { 0.753f, 0.792f, 0.961f, 1.0f },  /* #C0CAF5 fg */
+        .active_opacity = 0.95f, .inactive_opacity = 0.89f,
+        .panel_accent  = { 0.733f, 0.604f, 0.969f, 1.0f },  /* #BB9AF7 purple */
+        .scheme = "dark", .accent_r = 122, .accent_g = 162, .accent_b = 247,
+        .glyph_r = 122, .glyph_g = 162, .glyph_b = 247,
+        .base_r = 36, .base_g = 40, .base_b = 59,           /* #24283B */
+        .text_r = 192, .text_g = 202, .text_b = 245,        /* #C0CAF5 */
+    },
+    /* NORD — nord0 #2E3440 … nord3 #4C566A, nord4 #D8DEE9, frost #88C0D0 /
+     * #81A1C1, aurora red #BF616A. */
+    [SYN_THEME_NORD] = {
+        .border_norm  = { 0.231f, 0.259f, 0.322f, 1.0f },  /* #3B4252 nord1 */
+        .border_focus = { 0.533f, 0.753f, 0.816f, 1.0f },  /* #88C0D0 nord8 */
+        .border_ai    = { 0.506f, 0.631f, 0.757f, 1.0f },  /* #81A1C1 nord9 */
+        .border_warn  = { 0.749f, 0.380f, 0.416f, 1.0f },  /* #BF616A nord11 */
+        .tb_norm       = { 0.180f, 0.204f, 0.251f, 1.0f },  /* #2E3440 nord0 */
+        .tb_focus      = { 0.231f, 0.259f, 0.322f, 1.0f },  /* #3B4252 nord1 */
+        .tb_text       = { 0.298f, 0.337f, 0.416f, 1.0f },  /* #4C566A nord3 */
+        .tb_text_focus = { 0.847f, 0.871f, 0.914f, 1.0f },  /* #D8DEE9 nord4 */
+        .active_opacity = 0.95f, .inactive_opacity = 0.89f,
+        .panel_accent  = { 0.533f, 0.753f, 0.816f, 1.0f },  /* frost */
+        .scheme = "dark", .accent_r = 136, .accent_g = 192, .accent_b = 208,
+        .glyph_r = 136, .glyph_g = 192, .glyph_b = 208,
+        .base_r = 46, .base_g = 52, .base_b = 64,           /* #2E3440 */
+        .text_r = 216, .text_g = 222, .text_b = 233,        /* #D8DEE9 */
+    },
+    /* DRACULA — bg #282A36, current-line #44475A, fg #F8F8F2, purple #BD93F9,
+     * pink #FF79C6, cyan #8BE9FD, red #FF5555. */
+    [SYN_THEME_DRACULA] = {
+        .border_norm  = { 0.267f, 0.278f, 0.353f, 1.0f },  /* #44475A */
+        .border_focus = { 0.741f, 0.576f, 0.976f, 1.0f },  /* #BD93F9 purple */
+        .border_ai    = { 0.545f, 0.914f, 0.992f, 1.0f },  /* #8BE9FD cyan */
+        .border_warn  = { 1.000f, 0.333f, 0.333f, 1.0f },  /* #FF5555 red */
+        .tb_norm       = { 0.129f, 0.137f, 0.180f, 1.0f },  /* #21232E */
+        .tb_focus      = { 0.157f, 0.165f, 0.212f, 1.0f },  /* #282A36 bg */
+        .tb_text       = { 0.384f, 0.447f, 0.643f, 1.0f },  /* #6272A4 comment */
+        .tb_text_focus = { 0.973f, 0.973f, 0.949f, 1.0f },  /* #F8F8F2 fg */
+        .active_opacity = 0.95f, .inactive_opacity = 0.89f,
+        .panel_accent  = { 1.000f, 0.475f, 0.776f, 1.0f },  /* #FF79C6 pink */
+        .scheme = "dark", .accent_r = 255, .accent_g = 121, .accent_b = 198,
+        .glyph_r = 189, .glyph_g = 147, .glyph_b = 249,     /* purple beside pink */
+        .base_r = 40, .base_g = 42, .base_b = 54,           /* #282A36 */
+        .text_r = 248, .text_g = 248, .text_b = 242,        /* #F8F8F2 */
+    },
+    /* BUBBLEGUM — the one LIGHT rice: pastel pink shell, hot-pink caption, mint
+     * for the AI accent so it is not pink-on-pink. Apps go light on a #FFE9F2
+     * face, which is what stops Dolphin breaking the spell with plain white. The
+     * bar glyphs go a deeper #D6337A: this is the only rice whose bar is light,
+     * and the caption pink would wash out on it. */
+    [SYN_THEME_BUBBLEGUM] = {
+        .border_norm  = { 0.976f, 0.847f, 0.902f, 1.0f },  /* #F9D8E6 */
+        .border_focus = { 1.000f, 0.416f, 0.667f, 1.0f },  /* #FF6AAA hot pink */
+        .border_ai    = { 0.427f, 0.878f, 0.812f, 1.0f },  /* #6DE0CF mint */
+        .border_warn  = { 1.000f, 0.400f, 0.400f, 1.0f },  /* #FF6666 coral */
+        .tb_norm       = { 0.988f, 0.788f, 0.875f, 1.0f },  /* #FCC9DF */
+        .tb_focus      = { 1.000f, 0.416f, 0.667f, 1.0f },  /* #FF6AAA */
+        .tb_text       = { 0.639f, 0.325f, 0.451f, 1.0f },  /* #A35373 */
+        .tb_text_focus = { 1.000f, 1.000f, 1.000f, 1.0f },
+        .active_opacity = 0.96f, .inactive_opacity = 0.90f,
+        .panel_accent  = { 1.000f, 0.518f, 0.741f, 1.0f },  /* #FF84BD on dark chrome */
+        .scheme = "light", .accent_r = 255, .accent_g = 106, .accent_b = 170,
+        .glyph_r = 214, .glyph_g = 51, .glyph_b = 122,      /* #D6337A */
+        .base_r = 255, .base_g = 233, .base_b = 242,        /* #FFE9F2 */
+        .text_r = 61, .text_g = 26, .text_b = 42,           /* #3D1A2A */
     },
 };
 
-/* The colour the theme picker draws as a swatch — the focused-title colour, the
- * one that most says which theme this is (Luna blue, 95 navy, neon magenta). */
-void theme_preview_color(syn_theme_t t, float out[4])
+/* The theme picker's swatch. It takes TWO colours, because one cannot tell the
+ * themes apart: the caption alone makes every rice an identical dark grey square
+ * (they all sit on a near-black bg), and the accent alone would have said nothing
+ * about 95 vs XP once both frames became their real face colour. Caption on the
+ * left, focus accent on the right — navy+silver reads as 95, blue+beige as XP,
+ * near-black+mauve as Catppuccin. */
+void theme_preview_colors(syn_theme_t t, float caption[4], float accent[4])
 {
-    if (t < 0 || t >= SYN_THEME_COUNT) { out[0] = out[1] = out[2] = out[3] = 0; return; }
-    memcpy(out, theme_presets[t].tb_focus, sizeof(float) * 4);
+    if (t < 0 || t >= SYN_THEME_COUNT) {
+        memset(caption, 0, sizeof(float) * 4);
+        memset(accent,  0, sizeof(float) * 4);
+        return;
+    }
+    memcpy(caption, theme_presets[t].tb_focus,     sizeof(float) * 4);
+    memcpy(accent,  theme_presets[t].border_focus, sizeof(float) * 4);
 }
 
 /* ── Applying a theme ────────────────────────────────────── */
@@ -265,6 +442,22 @@ void theme_load_colors(syn_config_t *cfg, syn_theme_t theme)
     cfg->inactive_opacity = p->inactive_opacity;
     memcpy(cfg->panel_accent, p->panel_accent, sizeof(cfg->panel_accent));
 
+    /* Chrome style + its extra colours. A flat preset leaves the gradient ends
+     * and the face zeroed (they are not in its initialiser), so fill them from
+     * the caption colours: deco.c can then always draw "top → bottom" and always
+     * have a face to cut buttons from, with no theme-specific branching. The
+     * alpha is the tell for "unset" — no real colour here is fully transparent. */
+    cfg->chrome = p->chrome;
+    memcpy(cfg->titlebar_grad,       p->tb_grad_norm[3]  > 0.0f ? p->tb_grad_norm
+                                                                : p->tb_norm,
+           sizeof(cfg->titlebar_grad));
+    memcpy(cfg->titlebar_grad_focus, p->tb_grad_focus[3] > 0.0f ? p->tb_grad_focus
+                                                                : p->tb_focus,
+           sizeof(cfg->titlebar_grad_focus));
+    memcpy(cfg->chrome_face,         p->face[3]          > 0.0f ? p->face
+                                                                : p->border_norm,
+           sizeof(cfg->chrome_face));
+
     /* Push the accent into render.c's cache now, so every panel drawn after this
      * (including the first one, before any theme_apply) uses the theme's colour.
      * Safe with no server — it only writes a static. */
@@ -284,18 +477,26 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[w].windows, link)
-            if (v->mapped)
+            if (v->mapped) {
+                /* The titlebar surface is cached on size/focus/title, none of
+                 * which a theme switch touches — drop it first or the window
+                 * keeps its old caption until something else forces a repaint. */
+                view_invalidate_titlebar(v);
                 anim_apply_alpha(v);   /* calls view_update_decorations itself */
+            }
     }
     theme_repaint(s);
 
     /* Hand the app-side reskin to the helper (safe/merge-y, and a no-op where the
      * tools aren't installed). Firefox transparency is already covered by the
      * compositor's opacity — this only carries the light/dark scheme. */
-    char cmd[160];
-    snprintf(cmd, sizeof(cmd), "synui-apply-theme %s %d %d %d %d %d %d",
+    char cmd[224];
+    snprintf(cmd, sizeof(cmd),
+             "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d",
              p->scheme, p->accent_r, p->accent_g, p->accent_b,
-             p->glyph_r, p->glyph_g, p->glyph_b);
+             p->glyph_r, p->glyph_g, p->glyph_b,
+             p->base_r, p->base_g, p->base_b,
+             p->text_r, p->text_g, p->text_b);
     synui_spawn(cmd);
 
     if (save) theme_state_save(s);

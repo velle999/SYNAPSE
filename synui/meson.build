@@ -277,7 +277,10 @@ test('smoke',
 cat_render_test = executable('cat_render_test',
   ['tests/cat_render_test.c', 'src/cat_draw.c'],
   include_directories : include_directories('src'),
-  dependencies : [cairo, wlroots, wayland, pixman],
+  # scenefx too: synui.h includes <scenefx/types/wlr_scene.h> since the glass
+  # migration, so this target stopped compiling without the header path even
+  # though it draws nothing scenefx-y itself.
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])

@@ -15,17 +15,26 @@
 #
 # Usage: synui-apply-theme <dark|light> <accent_r> <accent_g> <accent_b>
 #                          [glyph_r] [glyph_g] [glyph_b]
+#                          [base_r] [base_g] [base_b] [text_r] [text_g] [text_b]
 #
 # The glyph triple is the colour for the bar's module glyphs (cpu/mem/net/audio/
 # gamemode). It defaults to the accent — which is what every theme but one wants
 # — and is passed separately only because SYNAPSE's accent is its neon magenta
-# selection colour while the launcher caret next to those glyphs is teal. An
-# older synui that passes four args still gets the accent, as before.
+# selection colour while the launcher caret next to those glyphs is teal.
+#
+# The base/text pair is the app WINDOW colour and its foreground. Without it
+# every dark theme handed Dolphin the same generic dark grey, which is exactly
+# what a rice must not do — Gruvbox windows have to be Gruvbox brown, Catppuccin
+# windows Catppuccin, XP's #ECE9D8 beige and 95's #C0C0C0 silver. It defaults to
+# the old hardcoded pair for the scheme, so an older synui passing four or seven
+# args behaves exactly as before.
 set -u
 
 scheme=${1:-dark}
 ar=${2:-61} ag=${3:-125} ab=${4:-255}
 gr=${5:-$ar} gg=${6:-$ag} gb=${7:-$ab}
+br=${8:-} bg_=${9:-} bb=${10:-}
+tr=${11:-} tg=${12:-} tb=${13:-}
 
 case "$scheme" in
     dark|light) ;;
@@ -88,10 +97,41 @@ for c in kwriteconfig6 kwriteconfig5; do
 done
 if [ -n "$kw" ]; then
     name=SynapseLight; wb="239,240,241"; wf="35,38,41"
-    vb="252,252,252";  vf="35,38,41";    bb="239,240,241"; bf="35,38,41"
+    vb="252,252,252";  vf="35,38,41";    btn="239,240,241"; bf="35,38,41"
     if [ "$scheme" = dark ]; then
         name=SynapseDark; wb="30,30,36"; wf="235,235,242"
-        vb="24,24,28";    vf="235,235,242"; bb="45,45,54"; bf="235,235,242"
+        vb="24,24,28";    vf="235,235,242"; btn="45,45,54"; bf="235,235,242"
+    fi
+
+    # A theme that named its own window colour replaces the generic pair above.
+    # The view (list/text area) and button faces are derived from it rather than
+    # given separately: every palette wants the same relationship — a light theme
+    # puts near-white under text and keeps buttons on the face (that IS the look
+    # for XP and 95), a dark one sinks the view below the window and lifts the
+    # buttons above it.
+    shade() {   # shade <r> <g> <b> <percent>  → "r,g,b" clamped
+        local i o=""
+        for i in "$1" "$2" "$3"; do
+            i=$(( i * $4 / 100 ))
+            [ "$i" -gt 255 ] && i=255
+            o="${o:+$o,}$i"
+        done
+        printf '%s' "$o"
+    }
+    if [ -n "$br" ] && [ -n "$bg_" ] && [ -n "$bb" ]; then
+        name=SynapseTheme
+        wb="$br,$bg_,$bb"
+        if [ "$scheme" = dark ]; then
+            vb=$(shade "$br" "$bg_" "$bb" 82)    # views sink
+            btn=$(shade "$br" "$bg_" "$bb" 125)  # buttons lift
+        else
+            # Toward white, not a percentage: 125% of #ECE9D8 is just clipped.
+            vb=$(( br + (255 - br) * 3 / 4 )),$(( bg_ + (255 - bg_) * 3 / 4 )),$(( bb + (255 - bb) * 3 / 4 ))
+            btn="$br,$bg_,$bb"
+        fi
+    fi
+    if [ -n "$tr" ] && [ -n "$tg" ] && [ -n "$tb" ]; then
+        wf="$tr,$tg,$tb"; vf="$wf"; bf="$wf"
     fi
     set_col() { "$kw" --file kdeglobals --group "$1" --key "$2" "$3" 2>/dev/null; }
     set_col General ColorScheme "$name"
@@ -100,7 +140,7 @@ if [ -n "$kw" ]; then
     set_col "Colors:Window"    ForegroundNormal "$wf"
     set_col "Colors:View"      BackgroundNormal "$vb"
     set_col "Colors:View"      ForegroundNormal "$vf"
-    set_col "Colors:Button"    BackgroundNormal "$bb"
+    set_col "Colors:Button"    BackgroundNormal "$btn"
     set_col "Colors:Button"    ForegroundNormal "$bf"
     set_col "Colors:Selection" BackgroundNormal "$ar,$ag,$ab"
     set_col "Colors:Selection" ForegroundNormal "255,255,255"
@@ -130,12 +170,21 @@ mkdir -p "$(dirname "$gen")" 2>/dev/null
 accent="rgb($ar,$ag,$ab)"
 accent_dim="rgba($ar,$ag,$ab,0.15)"
 glyph="rgb($gr,$gg,$gb)"
+
+# A theme's own window colour drives the bar too, so the bar belongs to the rice
+# instead of being the one dark strip on a Gruvbox desktop. Falls back to the
+# historical pair when synui passed no palette.
+bar_rgb=; [ -n "$br" ] && bar_rgb="$br,$bg_,$bb"
 if [ "$scheme" = dark ]; then
-    bar_bg="rgba(11,11,20,0.85)"; menu_bg="rgba(11,11,20,0.97)"; fg="#c8e3ee"
+    bar_bg="rgba(${bar_rgb:-11,11,20},0.85)"
+    menu_bg="rgba(${bar_rgb:-11,11,20},0.97)"
+    fg="#c8e3ee"; [ -n "$tr" ] && fg=$(printf '#%02x%02x%02x' "$tr" "$tg" "$tb")
     # The base yellow (#ffd319) reads fine on the dark bar; keep it.
     clock_fg="#ffd319"
 else
-    bar_bg="rgba(236,239,244,0.95)"; menu_bg="rgba(246,247,249,0.99)"; fg="#1a1a1c"
+    bar_bg="rgba(${bar_rgb:-236,239,244},0.95)"
+    menu_bg="rgba(${bar_rgb:-246,247,249},0.99)"
+    fg="#1a1a1c"; [ -n "$tr" ] && fg=$(printf '#%02x%02x%02x' "$tr" "$tg" "$tb")
     # #ffd319 yellow is illegible on a light bar — swap the clock and the other
     # yellow *text* modules for a dark gold that still reads as "amber".
     clock_fg="#8a6d00"

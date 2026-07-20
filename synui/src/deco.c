@@ -109,6 +109,88 @@ static int btn_x(int tb_w, int th, int i)
     return tb_w - (BTN_COUNT - i) * th;
 }
 
+/* ── Retro chrome helpers ─────────────────────────────────
+ * The retro themes are not just a different set of colours: XP's caption is a
+ * vertical gradient with rounded top corners and pill buttons, and 95's is a
+ * flat bar inside a raised 3D bevel with square bevelled buttons. Colours alone
+ * never read as either. All of this is confined to the titlebar surface, which
+ * is cairo (the borders around it are flat scene rects and stay flat). */
+
+/* Mix two colours; t=0 is a, t=1 is b. */
+static void mix(const float a[4], const float b[4], double t, double out[3])
+{
+    for (int i = 0; i < 3; i++) out[i] = a[i] + (b[i] - a[i]) * t;
+}
+
+static void rounded_top(cairo_t *cr, double w, double h, double r)
+{
+    cairo_new_path(cr);
+    cairo_arc(cr, r,     r,     r, M_PI,        1.5 * M_PI);
+    cairo_arc(cr, w - r, r,     r, 1.5 * M_PI,  2.0 * M_PI);
+    cairo_line_to(cr, w, h);
+    cairo_line_to(cr, 0, h);
+    cairo_close_path(cr);
+}
+
+/* Luna's caption is not a two-stop ramp: it is bright near the top, dips to the
+ * saturated base through the middle and lifts again at the bottom edge. Four
+ * stops off the theme's two registry colours (ActiveTitle + GradientActiveTitle)
+ * get within a hair of the real thing. */
+static void luna_caption(cairo_t *cr, double w, double h,
+                         const float base[4], const float grad[4])
+{
+    cairo_pattern_t *p = cairo_pattern_create_linear(0, 0, 0, h);
+    double c[3];
+    mix(base, grad, 0.45, c);
+    cairo_pattern_add_color_stop_rgba(p, 0.00, c[0], c[1], c[2], base[3]);
+    cairo_pattern_add_color_stop_rgba(p, 0.14, grad[0], grad[1], grad[2], base[3]);
+    cairo_pattern_add_color_stop_rgba(p, 0.55, base[0], base[1], base[2], base[3]);
+    mix(base, grad, 0.28, c);
+    cairo_pattern_add_color_stop_rgba(p, 1.00, c[0], c[1], c[2], base[3]);
+
+    rounded_top(cr, w, h, 6);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+
+    /* The pale inner highlight that runs just inside the rounded top edge. */
+    cairo_set_source_rgba(cr, 1, 1, 1, 0.35);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 7,     1.5);
+    cairo_line_to(cr, w - 7, 1.5);
+    cairo_stroke(cr);
+}
+
+/* A Win95 bevel, drawn with the real system colours: the outer ring is
+ * ButtonHilight #FFFFFF against ButtonDkShadow #000000, the inner ring
+ * ButtonLight #DFDFDF against ButtonShadow #808080. `raised` lights the top and
+ * left (a button, a frame); sunken swaps the pairs (a pressed button, a well). */
+static void bevel(cairo_t *cr, double x, double y, double w, double h, int raised)
+{
+    static const double ring[2][2] = {   /* { light, dark } per ring */
+        { 1.000, 0.000 },                /* outer: #FFFFFF / #000000 */
+        { 0.875, 0.502 },                /* inner: #DFDFDF / #808080 */
+    };
+    cairo_set_line_width(cr, 1);
+    for (int i = 0; i < 2; i++) {
+        double o  = (double)i;
+        double tl = raised ? ring[i][0] : ring[i][1];
+        double br = raised ? ring[i][1] : ring[i][0];
+
+        cairo_set_source_rgba(cr, tl, tl, tl, 1);
+        cairo_move_to(cr, x + o + 0.5, y + h - o);
+        cairo_line_to(cr, x + o + 0.5, y + o + 0.5);
+        cairo_line_to(cr, x + w - o,   y + o + 0.5);
+        cairo_stroke(cr);
+
+        cairo_set_source_rgba(cr, br, br, br, 1);
+        cairo_move_to(cr, x + w - o - 0.5, y + o);
+        cairo_line_to(cr, x + w - o - 0.5, y + h - o - 0.5);
+        cairo_line_to(cr, x + o,           y + h - o - 0.5);
+        cairo_stroke(cr);
+    }
+}
+
 static void draw_btn_glyph(cairo_t *cr, syn_deco_region_t which,
                            double cx, double cy, double s, const float col[4])
 {
@@ -136,6 +218,17 @@ static void draw_btn_glyph(cairo_t *cr, syn_deco_region_t which,
     default:
         break;
     }
+}
+
+/* Drop the "nothing changed, keep the surface" cache below, so the next
+ * view_update_decorations really repaints. Needed whenever something the
+ * titlebar draws with — rather than something it draws — has changed: a theme
+ * switch moves the caption colours AND the chrome style, and neither is in the
+ * cache key. Without this a theme change left every open window wearing its old
+ * caption until it was resized, refocused or retitled. */
+void view_invalidate_titlebar(syn_view_t *view)
+{
+    if (view) view->tb_title[0] = '\0';
 }
 
 static void titlebar_render(syn_view_t *view)
@@ -174,15 +267,47 @@ static void titlebar_render(syn_view_t *view)
     cairo_begin(cr);
 
     const float *bg   = focused ? cfg->titlebar_color_focus : cfg->titlebar_color;
+    const float *grad = focused ? cfg->titlebar_grad_focus  : cfg->titlebar_grad;
     const float *fg   = focused ? cfg->titlebar_text_focus  : cfg->titlebar_text;
+    const float *face = cfg->chrome_face;
 
-    cairo_set_source_rgba(cr, bg[0], bg[1], bg[2], bg[3]);
-    cairo_paint(cr);
+    /* text_x/text_right bound the caption. Both retro styles inset it: 95 by the
+     * frame bevel, XP by its rounded corner. */
+    double text_x     = 8;
+    int    text_right = btn_x(w, th, 0) - 6;
 
-    /* Hovered button gets a lit cell behind its glyph — close goes alarm red,
-     * so the destructive one never gets clicked by accident. */
-    if (view->tb_hover == DECO_BTN_MIN || view->tb_hover == DECO_BTN_MAX ||
-        view->tb_hover == DECO_BTN_CLOSE) {
+    switch (cfg->chrome) {
+    case SYN_CHROME_LUNA:
+        luna_caption(cr, w, th, bg, grad);
+        text_x = 10;
+        break;
+    case SYN_CHROME_BEVEL:
+        /* The raised silver frame, then the flat caption bar inset inside it —
+         * in 95 the caption never touches the window edge. */
+        cairo_set_source_rgba(cr, face[0], face[1], face[2], face[3]);
+        cairo_paint(cr);
+        bevel(cr, 0, 0, w, th + 2, 1);   /* +2: the bevel continues past the
+                                          * caption into the client area */
+        cairo_set_source_rgba(cr, bg[0], bg[1], bg[2], bg[3]);
+        cairo_rectangle(cr, 3, 3, w - 6, th - 6);
+        cairo_fill(cr);
+        text_x     = 7;
+        text_right = btn_x(w, th, 0) - 4;
+        break;
+    case SYN_CHROME_FLAT:
+    default:
+        cairo_set_source_rgba(cr, bg[0], bg[1], bg[2], bg[3]);
+        cairo_paint(cr);
+        break;
+    }
+
+    /* Hover feedback. Flat chrome lights the whole cell behind the glyph (close
+     * goes alarm red, so the destructive one is never hit by accident); the retro
+     * styles instead brighten their own button shape below, because a full-cell
+     * wash would paint straight over an XP pill or a 95 bevel. */
+    if (cfg->chrome == SYN_CHROME_FLAT &&
+        (view->tb_hover == DECO_BTN_MIN || view->tb_hover == DECO_BTN_MAX ||
+         view->tb_hover == DECO_BTN_CLOSE)) {
         int i = (view->tb_hover == DECO_BTN_MIN) ? 0
               : (view->tb_hover == DECO_BTN_MAX) ? 1 : 2;
         const float *hl = (view->tb_hover == DECO_BTN_CLOSE)
@@ -193,34 +318,93 @@ static void titlebar_render(syn_view_t *view)
         cairo_fill(cr);
     }
 
-    /* Title, vertically centred, clipped to where the buttons start. */
-    int text_right = btn_x(w, th, 0) - 6;
-    if (text_right > 8 && title[0]) {
+    /* Title, vertically centred, clipped to where the buttons start. Both retro
+     * captions were bold — that weight is a surprising amount of the likeness. */
+    if (text_right > text_x && title[0]) {
         cairo_save(cr);
-        cairo_rectangle(cr, 8, 0, text_right - 8, th);
+        cairo_rectangle(cr, text_x, 0, text_right - text_x, th);
         cairo_clip(cr);
 
+        if (cfg->chrome != SYN_CHROME_FLAT)
+            cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
+                                   CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, th * 0.46);
         cairo_font_extents_t fe;
         cairo_font_extents(cr, &fe);
+        double ty = (th + fe.ascent - fe.descent) / 2.0;
+
+        /* XP's caption text carries a soft drop shadow; without it white-on-blue
+         * looks pasted on rather than part of the bar. */
+        if (cfg->chrome == SYN_CHROME_LUNA) {
+            cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+            cairo_move_to(cr, text_x + 1, ty + 1);
+            cairo_show_text(cr, title);
+        }
         cairo_set_source_rgba(cr, fg[0], fg[1], fg[2], fg[3]);
-        cairo_move_to(cr, 8, (th + fe.ascent - fe.descent) / 2.0);
+        cairo_move_to(cr, text_x, ty);
         cairo_show_text(cr, title);
         cairo_restore(cr);
     }
 
-    /* The three glyphs. A hovered close gets white so it reads on the red. */
+    /* The three buttons. Flat chrome draws bare glyphs (the cell behind them is
+     * the hover wash above); the retro styles draw a real button under each. */
     double cy = th / 2.0;
     double gs = th * 0.18;
     static const syn_deco_region_t order[BTN_COUNT] = {
         DECO_BTN_MIN, DECO_BTN_MAX, DECO_BTN_CLOSE
     };
     static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static const float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
     for (int i = 0; i < BTN_COUNT; i++) {
+        double bx      = btn_x(w, th, i);
+        int    hovered = (view->tb_hover == order[i]);
         const float *gc = fg;
-        if (order[i] == DECO_BTN_CLOSE && view->tb_hover == DECO_BTN_CLOSE)
+
+        if (cfg->chrome == SYN_CHROME_LUNA) {
+            /* XP's pills: close is the red one, always visible; the other two are
+             * a lighter wash of the caption. All three sit inset from the edges,
+             * squarer than a circle — a rounded rect with a big radius. */
+            double bs = th * 0.72, by = (th - bs) / 2.0;
+            double px = bx + (th - bs) / 2.0;
+            double r  = bs * 0.28;
+            static const float xp_close[4]  = { 0.906f, 0.220f, 0.153f, 1.0f };
+            static const float xp_close_h[4] = { 0.965f, 0.400f, 0.310f, 1.0f };
+            double col[3];
+            if (order[i] == DECO_BTN_CLOSE) {
+                const float *c = hovered ? xp_close_h : xp_close;
+                col[0] = c[0]; col[1] = c[1]; col[2] = c[2];
+            } else {
+                mix(bg, white, hovered ? 0.45 : 0.28, col);
+            }
+            cairo_new_path(cr);
+            cairo_arc(cr, px + r,      by + r,      r, M_PI, 1.5 * M_PI);
+            cairo_arc(cr, px + bs - r, by + r,      r, 1.5 * M_PI, 2.0 * M_PI);
+            cairo_arc(cr, px + bs - r, by + bs - r, r, 0.0, 0.5 * M_PI);
+            cairo_arc(cr, px + r,      by + bs - r, r, 0.5 * M_PI, M_PI);
+            cairo_close_path(cr);
+            cairo_set_source_rgba(cr, col[0], col[1], col[2], 1.0);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgba(cr, 1, 1, 1, 0.55);   /* the pill's rim */
+            cairo_set_line_width(cr, 1);
+            cairo_stroke(cr);
             gc = white;
-        draw_btn_glyph(cr, order[i], btn_x(w, th, i) + th / 2.0, cy, gs, gc);
+        } else if (cfg->chrome == SYN_CHROME_BEVEL) {
+            /* 95's buttons: square silver, raised — pressed-looking (sunken) while
+             * hovered, which is as close as we get to the real press state. The
+             * glyphs go black, as they were. */
+            double bs = th - 8, by = 4;
+            double px = bx + (th - bs) / 2.0;
+            cairo_set_source_rgba(cr, face[0], face[1], face[2], face[3]);
+            cairo_rectangle(cr, px, by, bs, bs);
+            cairo_fill(cr);
+            bevel(cr, px, by, bs, bs, !hovered);
+            gc = black;
+        } else if (order[i] == DECO_BTN_CLOSE && hovered) {
+            gc = white;   /* reads on the alarm-red wash */
+        }
+
+        draw_btn_glyph(cr, order[i], bx + th / 2.0, cy, gs, gc);
     }
 
     cairo_destroy(cr);
@@ -285,7 +469,7 @@ void view_update_decorations(syn_view_t *view)
      * ring keeps a constant thickness around the curve. corner_radius 0 gives
      * a square ring — the old four-strip look, unchanged.
      */
-    int radius = view->server->config.corner_radius;
+    int radius = chrome_corner_radius(&view->server->config);
     int iw = w - 2 * bw, ih = h - 2 * bw;   /* the clipped-out content box */
     if (iw < 0) iw = 0;                     /* a window thinner than its own */
     if (ih < 0) ih = 0;                     /* border: degenerate, not negative */
@@ -476,7 +660,7 @@ void view_shadow_update(syn_view_t *view)
 
     /* Off, unmapped, or edge-to-edge: a maximized/fullscreen window's shadow is
      * clipped to nothing and would only burn fill, so disable rather than draw. */
-    bool want = cfg->shadow && view->mapped &&
+    bool want = chrome_shadow(cfg) && view->mapped &&
                 !view->fullscreen && !view->maximized &&
                 view->w > 0 && view->h > 0;
     if (!want) {
@@ -487,7 +671,7 @@ void view_shadow_update(syn_view_t *view)
 
     int   sigma  = (int)lroundf(cfg->shadow_blur_sigma);
     if (sigma < 1) sigma = 1;
-    int   radius = cfg->corner_radius;   /* match the glass corners */
+    int   radius = chrome_corner_radius(cfg);   /* match the glass corners */
     int   w = view->w, h = view->h;
 
     int bx  = -sigma + cfg->shadow_offset_x;

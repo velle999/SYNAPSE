@@ -17,6 +17,25 @@ border_width    = 2
 gap             = 8
 master_factor   = 0.60
 
+# Theme: one named bundle of chrome colours, app colour scheme and default
+# translucency. Also pickable live with Super+T, which persists to theme.state —
+# and theme.state WINS over this line on the next start, by design (same as the
+# dock and wallpaper). Anything below overrides the theme's colours, because it
+# parses after this line.
+#   synapse     the neon night-drive default   dark   (stock)
+#   dark        flat modern dark               dark
+#   winxp       Luna blue, gradient captions   light
+#   win95       silver 3D bevels, navy titles  light
+#   catppuccin  Mocha, mauve on soft black     dark   glassy
+#   gruvbox     retro warm, orange on brown    dark   glassy
+#   tokyonight  Storm, blue+purple on navy     dark   glassy
+#   nord        arctic frost blue on slate     dark   glassy
+#   dracula     purple + pink on charcoal      dark   glassy
+#   bubblegum   pastel pink, hot-pink titles   light  glassy
+# "glassy" is only the translucency level the theme picks IF transparency is on;
+# the master switch stays yours (`transparency` below, or T in the Super+T panel).
+# theme = synapse
+
 # Border colors, #rrggbb (defaults shown — the "night drive" palette).
 # norm = unfocused, focus = focused, ai = window with AI_CTX intent,
 # warn = synguard ALERT/DENY verdict.

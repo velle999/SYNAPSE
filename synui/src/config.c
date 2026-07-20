@@ -415,6 +415,14 @@ void synui_config_load(syn_config_t *cfg)
      * line (parsed below) or theme.state (applied at startup) reskins from here.
      * Transparency is opt-in: off, the opacity levels are dormant. */
     cfg->theme            = SYN_THEME_SYNAPSE;
+    /* Flat chrome, with the gradient ends and the 3D face seeded from the
+     * caption colours: deco.c always reads these, so they must be valid even for
+     * a config that never sees a theme (a `theme =` line or theme.state then
+     * overwrites the lot via theme_load_colors). */
+    cfg->chrome           = SYN_CHROME_FLAT;
+    memcpy(cfg->titlebar_grad,       cfg->titlebar_color,       sizeof(cfg->titlebar_grad));
+    memcpy(cfg->titlebar_grad_focus, cfg->titlebar_color_focus, sizeof(cfg->titlebar_grad_focus));
+    memcpy(cfg->chrome_face,         cfg->border_color_norm,    sizeof(cfg->chrome_face));
     cfg->transparency     = 0;
     cfg->active_opacity   = 1.00f;
     cfg->inactive_opacity = 0.92f;
