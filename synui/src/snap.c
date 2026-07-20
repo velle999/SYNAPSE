@@ -51,10 +51,21 @@
 #define SNAP_CORNER_MAX 300
 
 /* Preview: a translucent wash with brighter edges, in the focus-border colour
- * family (neon magenta #ff296d) so it reads as "this is where it lands". */
-static const float PREVIEW_FILL[4] = { 1.00f, 0.16f, 0.43f, 0.22f };
-static const float PREVIEW_EDGE[4] = { 1.00f, 0.16f, 0.43f, 0.85f };
+ * so it reads as "this is where it lands". That colour is the *theme's*
+ * (cfg->border_color_focus, set per-preset in theme.c) — it used to be a
+ * constant neon magenta #ff296d, which left the snap preview as the one piece
+ * of chrome still wearing the SYNAPSE accent on a Gruvbox or bubblegum desktop.
+ * Only the alphas are fixed: the wash has to stay a wash whatever the hue. */
+#define PREVIEW_FILL_A  0.22f
+#define PREVIEW_EDGE_A  0.85f
 #define PREVIEW_EDGE_PX 3
+
+static void preview_colors(syn_server_t *s, float fill[4], float edge[4])
+{
+    const float *f = s->config.border_color_focus;
+    fill[0] = f[0]; fill[1] = f[1]; fill[2] = f[2]; fill[3] = PREVIEW_FILL_A;
+    edge[0] = f[0]; edge[1] = f[1]; edge[2] = f[2]; edge[3] = PREVIEW_EDGE_A;
+}
 
 static int clampi(int v, int lo, int hi)
 {
@@ -127,7 +138,8 @@ syn_snap_zone_t snap_zone_at(syn_server_t *s, double lx, double ly,
 }
 
 /* ── Preview ─────────────────────────────────────────────── */
-static void preview_create(syn_server_t *s)
+static void preview_create(syn_server_t *s, const float fill[4],
+                           const float edge[4])
 {
     if (s->snap.tree) return;
 
@@ -136,17 +148,27 @@ static void preview_create(syn_server_t *s)
     s->snap.tree = wlr_scene_tree_create(s->window_tree);
     if (!s->snap.tree) return;
 
-    s->snap.fill = wlr_scene_rect_create(s->snap.tree, 1, 1, PREVIEW_FILL);
+    s->snap.fill = wlr_scene_rect_create(s->snap.tree, 1, 1, fill);
     for (int i = 0; i < 4; i++)
-        s->snap.edge[i] = wlr_scene_rect_create(s->snap.tree, 1, 1, PREVIEW_EDGE);
+        s->snap.edge[i] = wlr_scene_rect_create(s->snap.tree, 1, 1, edge);
 
     wlr_scene_node_set_enabled(&s->snap.tree->node, false);
 }
 
 static void preview_show(syn_server_t *s, const struct wlr_box *b)
 {
-    preview_create(s);
+    /* These rects are created once and then outlive any number of theme
+     * switches, so the colour is re-pushed on every show rather than only at
+     * create time — the same reason render.c re-pushes its panel accents each
+     * pass. Caching it here is exactly how the titlebar came to keep its old
+     * caption across a theme change. */
+    float fill[4], edge_col[4];
+    preview_colors(s, fill, edge_col);
+
+    preview_create(s, fill, edge_col);
     if (!s->snap.tree || !s->snap.fill) return;
+
+    wlr_scene_rect_set_color(s->snap.fill, fill);
 
     int e = PREVIEW_EDGE_PX;
     int w = b->width, h = b->height;
@@ -162,6 +184,7 @@ static void preview_show(syn_server_t *s, const struct wlr_box *b)
     };
     for (int i = 0; i < 4; i++) {
         if (!s->snap.edge[i]) continue;
+        wlr_scene_rect_set_color(s->snap.edge[i], edge_col);
         wlr_scene_rect_set_size(s->snap.edge[i], edges[i].w, edges[i].h);
         wlr_scene_node_set_position(&s->snap.edge[i]->node,
                                     edges[i].x, edges[i].y);
