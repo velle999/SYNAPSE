@@ -953,6 +953,15 @@ typedef struct {
     float active_opacity;        /* focused window, 0.5..1.0; default 1.0 */
     float inactive_opacity;      /* unfocused windows; default 0.92 */
 
+    /* Terminals draw their own background alpha (glyphs stay opaque), so foot is
+     * excluded from the compositor fade above and driven through synui-glass
+     * instead — see glass_push() in theme.c. It needs its OWN level rather than
+     * the slider's: the same alpha over foot's near-black background reads far
+     * more solid than over a light GTK window, so tracking the slider 1:1 made a
+     * comfortable desktop opacity into an almost-opaque terminal.
+     * -1 = untracked, fall back to active_opacity (the old coupled behaviour). */
+    float foot_alpha;            /* 0.0..1.0, or -1 to follow active_opacity */
+
     /* scenefx glass (Stage 5 of the scenefx migration). Applied to every buffer
      * under a window via the same anim.c walk that drives opacity. `corner_radius`
      * rounds each window's corners (0 = square, forced to 0 while maximized/

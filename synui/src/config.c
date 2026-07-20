@@ -426,6 +426,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->transparency     = 0;
     cfg->active_opacity   = 1.00f;
     cfg->inactive_opacity = 0.92f;
+    /* Unset: foot follows the slider exactly as before until someone sets a
+     * foot_alpha, so this key changes nothing for a config that omits it. */
+    cfg->foot_alpha       = -1.0f;
 
     /* scenefx glass defaults (Stage 5). Rounded corners are on out of the box —
      * they cost nothing on opaque windows and are the single most visible piece
@@ -682,6 +685,11 @@ void synui_config_load(syn_config_t *cfg)
             cfg->active_opacity = (float)atof(val);
         else if (strcmp(key, "inactive_opacity") == 0)
             cfg->inactive_opacity = (float)atof(val);
+        else if (strcmp(key, "foot_alpha") == 0) {
+            cfg->foot_alpha = (float)atof(val);
+            if (cfg->foot_alpha < 0.0f) cfg->foot_alpha = 0.0f;
+            if (cfg->foot_alpha > 1.0f) cfg->foot_alpha = 1.0f;
+        }
         else if (strcmp(key, "corner_radius") == 0) {
             cfg->corner_radius = atoi(val);
             if (cfg->corner_radius < 0)  cfg->corner_radius = 0;

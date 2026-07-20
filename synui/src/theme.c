@@ -368,6 +368,11 @@ static void theme_state_save(syn_server_t *s)
      * the theme name they sit beside in the appearance panels. */
     fprintf(f, "transparency=%s\n", s->config.transparency ? "on" : "off");
     fprintf(f, "active_opacity=%.2f\n", s->config.active_opacity);
+    /* Only written once set, so an untouched foot_alpha stays absent from the
+     * file and keeps following the slider rather than being frozen at a value
+     * the user never chose. */
+    if (s->config.foot_alpha >= 0.0f)
+        fprintf(f, "foot_alpha=%.2f\n", s->config.foot_alpha);
     fclose(f);
 }
 
@@ -386,7 +391,13 @@ static float inactive_from_active(float active)
  * on = the slider value. Fire-and-forget, a no-op when foot isn't installed. */
 static void glass_push(syn_server_t *s)
 {
-    float a = s->config.transparency ? s->config.active_opacity : 1.0f;
+    /* foot gets its own level when one is set. The slider is a poor proxy for it:
+     * alpha over foot's near-black background reads much more solid than the same
+     * alpha over a light toolkit window, so a comfortable 0.86 desktop left the
+     * terminal barely see-through. Unset (-1) keeps the old 1:1 coupling. */
+    float a = s->config.foot_alpha >= 0.0f ? s->config.foot_alpha
+                                           : s->config.active_opacity;
+    if (!s->config.transparency) a = 1.0f;
     char cmd[64];
     snprintf(cmd, sizeof(cmd), "synui-glass %.2f", a);
     synui_spawn(cmd);
@@ -508,8 +519,8 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
  * once at startup (save=0 — it is re-applying what it just read, not a new pick). */
 void theme_state_load(syn_server_t *s)
 {
-    int   have_tr = 0, tr = 0, have_op = 0;
-    float op = 0.0f;
+    int   have_tr = 0, tr = 0, have_op = 0, have_fa = 0;
+    float op = 0.0f, fa = 0.0f;
 
     char path[256];
     if (syn_config_path(path, sizeof(path), "theme.state")) {
@@ -526,6 +537,8 @@ void theme_state_load(syn_server_t *s)
                     tr = strcmp(line + 13, "on") == 0; have_tr = 1;
                 } else if (strncmp(line, "active_opacity=", 15) == 0) {
                     op = (float)atof(line + 15); have_op = 1;
+                } else if (strncmp(line, "foot_alpha=", 11) == 0) {
+                    fa = (float)atof(line + 11); have_fa = 1;
                 }
             }
             fclose(f);
@@ -541,6 +554,7 @@ void theme_state_load(syn_server_t *s)
         s->config.inactive_opacity = inactive_from_active(op);
     }
     if (have_tr) s->config.transparency = tr;
+    if (have_fa && fa >= 0.0f && fa <= 1.00f) s->config.foot_alpha = fa;
     if (have_tr || have_op) anim_apply_alpha_all(s);
     /* Re-sync the terminal's own glass to the restored state: if the last
      * session left transparency off, foot.ini must go back to solid. */
