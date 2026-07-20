@@ -15,6 +15,15 @@ export XDG_SESSION_TYPE=wayland
 # Portal backend routing keys off this (synui-portals.conf). Unset, portal falls
 # back to GTK, which cannot ScreenCast on wlroots — no screen sharing at all.
 export XDG_CURRENT_DESKTOP=synui
+
+# MangoHud's Vulkan implicit layer keys off MANGOHUD=1. It belongs here and not
+# in a launcher wrapper: a wrapper only ever covers the one launch path it wraps,
+# while the env var reaches Steam, Lutris, RetroArch and bare binaries alike. The
+# hud starts hidden (no_display in MangoHud.conf) — Shift_R+F12 toggles it live
+# inside the running game, which is the only place that toggle can work: nothing
+# can inject an overlay into a process that is already up. Vulkan only; OpenGL
+# titles still need the `mangohud` preload that synui-game-run applies.
+export MANGOHUD=1
 # WAYLAND_DISPLAY is set by synui at runtime — do not hard-code it here
 
 # Only set SynapseOS desktop ID when synui is the active compositor;

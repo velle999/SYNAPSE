@@ -48,6 +48,11 @@ ensure_config() {
     cat > "$f" <<'EOF'
 # SynapseOS default MangoHud overlay (synui-game-run). Edit freely — it is only
 # written when absent. See `man mangohud` for every option.
+#
+# This file SHADOWS /etc/MangoHud.conf completely, so it repeats the system
+# default's no_display: the session sets MANGOHUD=1 for every launcher, and the
+# overlay is meant to stay hidden until Shift_R+F12 asks for it.
+no_display
 legacy_layout=false
 fps
 frametime=1

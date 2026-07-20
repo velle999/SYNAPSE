@@ -1108,6 +1108,12 @@ export LIBSEAT_BACKEND=seatd
 # 24px cursor; without XCURSOR_SIZE libXcursor auto-picks a much larger size.
 export XCURSOR_THEME=Adwaita
 export XCURSOR_SIZE=24
+# MangoHud's Vulkan implicit layer keys off MANGOHUD=1. A launcher wrapper only
+# ever covers the path it wraps; the env var reaches Steam, Lutris, RetroArch and
+# bare binaries alike. Hud starts hidden (no_display) — Shift_R+F12 toggles it
+# live in-game, the only place it can work: an overlay cannot be injected into a
+# process already up. Vulkan only; OpenGL needs synui-game-run's preload.
+export MANGOHUD=1
 exec synui
 SESSION_EOF
         chmod 755 /mnt/usr/local/bin/synui-session
@@ -1191,6 +1197,8 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         export LIBSEAT_BACKEND=seatd
         export XCURSOR_THEME=Adwaita
         export XCURSOR_SIZE=24
+        # Vulkan overlay layer; see the synui-session heredoc above.
+        export MANGOHUD=1
         exec synui
     fi
 fi

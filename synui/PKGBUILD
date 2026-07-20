@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=144
+pkgrel=145
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -38,9 +38,13 @@ license=('GPL-2.0-or-later')
 depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'waybar' 'wtype' 'wf-recorder')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
 optdepends=('wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
-            'mangohud: FPS/temp overlay for synui-game-run'
+            'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
+            'lib32-mangohud: same overlay for 32-bit Vulkan titles'
             'gamemode: CPU/GPU governor for synui-game-run (gamemoderun)'
             'gamescope: nesting micro-compositor for synui-game-run --gamescope')
+# /etc/MangoHud.conf is meant to be tuned in place — keep a user's edits across
+# upgrades instead of overwriting them.
+backup=('etc/MangoHud.conf')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
 
@@ -83,6 +87,15 @@ package() {
     # the stock logind.conf without replacing a file pacman would then own.
     install -Dm644 config/logind.conf.d/synapse-lid.conf \
         "$pkgdir/etc/systemd/logind.conf.d/synapse-lid.conf"
+
+    # System-wide MangoHud defaults. The session sets MANGOHUD=1, so the Vulkan
+    # layer loads in every game regardless of launcher; this file is what keeps
+    # the overlay hidden until Shift_R+F12 rather than up from launch. Without
+    # it a fresh install gets MangoHud's own defaults, which draw immediately.
+    # Unowned by any package (mangohud ships no /etc config), and in backup= so
+    # pacman preserves a user's edits.
+    install -Dm644 config/MangoHud.conf \
+        "$pkgdir/etc/MangoHud.conf"
 
     # The bar's config, and the wrapper that points waybar at it.
     #
