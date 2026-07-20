@@ -83,6 +83,22 @@ output_power_c = custom_target('wlr-output-power-management-unstable-v1-protocol
   input   : output_power_xml,
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# kde-blur (org_kde_kwin_blur): vendored because plasma-wayland-protocols is not
+# a dependency worth taking for one 40-line XML — and unlike the wlr protocols,
+# no wlroots header needs it, so only src/kde_blur.c sees the generated code.
+kde_blur_xml = join_paths(meson.project_source_root(),
+  'protocols/kde-blur.xml')
+
+kde_blur_h = custom_target('kde-blur-protocol.h',
+  output  : 'kde-blur-protocol.h',
+  input   : kde_blur_xml,
+  command : [wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
+
+kde_blur_c = custom_target('kde-blur-protocol.c',
+  output  : 'kde-blur-protocol.c',
+  input   : kde_blur_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 # pointer-constraints: wlroots' wlr_pointer_constraints_v1.h includes the
 # generated protocol header (for the lifetime enum). Ships with
 # wayland-protocols, so generate straight from pkgdatadir.
@@ -175,12 +191,15 @@ synui_exe = executable('synui',
     'src/launcher.c',
     'src/cat.c',
     'src/cat_draw.c',
+    'src/kde_blur.c',
     xdg_shell_h,
     xdg_shell_c,
     layer_shell_h,
     layer_shell_c,
     output_power_h,
     output_power_c,
+    kde_blur_h,
+    kde_blur_c,
     pointer_constraints_h,
     cursor_shape_h,
   ],

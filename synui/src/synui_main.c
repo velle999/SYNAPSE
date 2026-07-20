@@ -58,6 +58,7 @@
 
 #include "synui.h"
 #include "effects.h"
+#include "kde_blur.h"
 
 /* ── Signal handling ─────────────────────────────────────── */
 static int handle_terminate_signal(int sig, void *data)
@@ -1337,6 +1338,12 @@ int synui_init(syn_server_t *s)
     s->toplevel_icon_mgr = wlr_xdg_toplevel_icon_manager_v1_create(s->display, 1);
     s->set_icon.notify = handle_set_icon;
     wl_signal_add(&s->toplevel_icon_mgr->events.set_icon, &s->set_icon);
+
+    /* org_kde_kwin_blur: mostly a signal rather than a feature. Qt/Breeze
+     * clients check for this global and only paint a translucent background
+     * when it exists, so advertising it is what gives the KDE apps their glass
+     * look; syn_kde_blur_wants() then tells anim.c to actually frost them. */
+    syn_kde_blur_init(s);
 
     /* text-input-v3 + input-method-v2: IME (CJK, compose, emoji picker). */
     ime_setup(s);

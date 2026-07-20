@@ -34,6 +34,7 @@
 #include <scenefx/types/wlr_scene.h>
 
 #include "synui.h"
+#include "kde_blur.h"
 
 /* Ease-out cubic: fast at the start, settling at the end. Movement that decays
  * reads as physical; a linear fade reads as a slideshow. */
@@ -55,6 +56,14 @@ struct view_effect_params {
     float alpha;
     int   corner_radius;   /* 0 = square (maximized/fullscreen) */
     bool  blur;            /* backdrop blur behind this window */
+    /* Blur is allowed for a buffer that ASKS for it via org_kde_kwin_blur, even
+     * when the heuristic above said no. `blur` is a guess that a window will be
+     * translucent (app_id allow-list, or the global transparency switch); a KDE
+     * client sending a blur request is not a guess, it is the client stating it
+     * paints a translucent background. So the guess is bypassed — but the
+     * master switch and the fullscreen guard are not, since those are the
+     * user's call and the compositor's, not the client's. */
+    bool  kde_blur_ok;
     /* Which corners each buffer rounds. A decorated window is two stacked
      * buffers — titlebar above content — so rounding all four on both curves the
      * two edges that meet in the middle, pinching the window's waist. The
@@ -81,7 +90,16 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
                                        buffer == p->titlebar
                                            ? CORNER_LOCATION_TOP
                                            : p->content_corners);
-    wlr_scene_buffer_set_backdrop_blur(buffer, p->blur);
+    bool blur = p->blur;
+    if (!blur && p->kde_blur_ok) {
+        /* Per BUFFER, not per view: a window is a frame tree, and only the
+         * client's own surfaces can carry a blur request — the titlebar and the
+         * border rects are synui's, and blurring behind an opaque titlebar
+         * would just cost a pass. try_from_buffer returns NULL for those. */
+        struct wlr_scene_surface *ss = wlr_scene_surface_try_from_buffer(buffer);
+        blur = ss && syn_kde_blur_wants(ss->surface);
+    }
+    wlr_scene_buffer_set_backdrop_blur(buffer, blur);
     /* NOT optimized blur. scenefx's "optimized" path samples a pre-blurred
      * backdrop cached in fx_effect_framebuffers->optimized_blur_buffer, and that
      * buffer is only ever filled by a WLR_SCENE_NODE_OPTIMIZED_BLUR node
@@ -207,6 +225,7 @@ void anim_apply_alpha(syn_view_t *view)
         .alpha           = a,
         .corner_radius   = (boxy || !s) ? 0 : chrome_corner_radius(&s->config),
         .blur            = s && s->config.blur && !view->fullscreen && translucent,
+        .kde_blur_ok     = s && s->config.blur && !view->fullscreen,
         .titlebar        = view->titlebar,
         .content_corners = decorated ? CORNER_LOCATION_BOTTOM
                                      : CORNER_LOCATION_ALL,

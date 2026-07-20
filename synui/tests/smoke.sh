@@ -155,7 +155,8 @@ for g in \
     zwlr_foreign_toplevel_manager_v1 ext_foreign_toplevel_list_v1 \
     zwlr_gamma_control_manager_v1 \
     zwp_pointer_constraints_v1 zwp_relative_pointer_manager_v1 \
-    zwp_pointer_gestures_v1
+    zwp_pointer_gestures_v1 \
+    org_kde_kwin_blur_manager
 do
     echo "$GLOBALS" | grep -qx "$g" || missing="$missing $g"
 done
