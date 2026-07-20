@@ -27,7 +27,7 @@ Use them freely and proactively.
 - Be concise — lead with action, not explanation.
 - NEVER narrate what you are about to do before doing it. Do not say "I'll write the file now" or "Let me create..." — just call the tool immediately. Text before the first tool call is wasted tokens.
 - If a task requires writing code, call write_file first. Explain afterward if needed.
-- If write_file tool call is not available or not working, output the file content as a fenced code block with a filename comment on the first line: ```python\n# file: name.py\n<code>\n``` — the system will save it automatically.
+- If write_file tool call is not available or not working, output the file content as a fenced code block with a filename comment on the first line: ```python\n# file: name.py\n# ...your complete code here...\n``` — the system will save it automatically. Write the real code in place of that comment; never emit a placeholder or a tag literally.
 
 ## Complex tasks (games, full apps, multi-file projects)
 When asked to create something complex (a game, a full application, etc.):
@@ -521,6 +521,9 @@ class VibeModel:
                 except (json.JSONDecodeError, TypeError):
                     args = {}
                     yield f"\n[Warning: malformed tool arguments for {name}, using defaults]\n"
+                if isinstance(args, dict):
+                    # Also covers the native tool_calls path (ollama, llama_cpp)
+                    args = _clean_tool_args(args)
 
                 yield f"\x00TOOL_START\x00{name}\x00{json.dumps(args)}\x00"
 
@@ -836,6 +839,22 @@ def _auto_save_code_blocks(text: str) -> list[tuple[str, str]]:
 # Wrapper keys a model may use instead of "arguments"
 _ARG_KEYS = ("arguments", "parameters", "args", "input")
 
+# Args that carry literal file content, so a stray wrapper tag becomes a syntax
+# error in the written file. Only these are unwrapped — a bash command or an
+# old_string must survive byte-for-byte.
+_CONTENT_ARGS = ("content", "new_string")
+
+# A <code>…</code> wrapper around the WHOLE value. Balanced-only: an unmatched
+# tag is left alone, so a file whose content legitimately opens with markup is
+# never truncated.
+_CODE_TAG_RE = re.compile(r"\A\s*<code>\s*\n(.*)\n\s*</code>\s*\Z", re.DOTALL)
+
+
+def _unwrap_code_tag(value: str) -> str:
+    """Strip a <code>…</code> wrapper the model copied from the prompt."""
+    m = _CODE_TAG_RE.match(value)
+    return m.group(1) if m else value
+
 
 def _extract_tool_args(data: dict) -> dict:
     """Pull the argument mapping out of one parsed <tool_call> block.
@@ -858,6 +877,14 @@ def _extract_tool_args(data: dict) -> dict:
     return {k: v for k, v in data.items() if k not in ("name", "type", "id")}
 
 
+def _clean_tool_args(args: dict) -> dict:
+    """Unwrap prompt-placeholder tags from content-bearing args."""
+    for key in _CONTENT_ARGS:
+        if isinstance(args.get(key), str):
+            args[key] = _unwrap_code_tag(args[key])
+    return args
+
+
 def _parse_text_tool_calls(text: str) -> list[dict]:
     """Extract Qwen3-style <tool_call>...</tool_call> blocks from assistant text."""
     calls = []
@@ -873,7 +900,7 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
             "type": "function",
             "function": {
                 "name": data.get("name", ""),
-                "arguments": json.dumps(_extract_tool_args(data)),
+                "arguments": json.dumps(_clean_tool_args(_extract_tool_args(data))),
             },
         })
     return calls
