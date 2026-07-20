@@ -914,9 +914,16 @@ void synui_render_wppick(syn_server_t *s)
     cairo_move_to(cr, 18, 30);
     cairo_show_text(cr, "WALLPAPER");
 
-    /* Scaling mode, right-aligned on the title row. fill/fit/stretch/center
-     * existed for ages but only as a synuirc key, so nobody knew they were
-     * there — show the current one and how to change it. */
+    /* The title row packs its extras from the right edge inward: the scaling
+     * mode first, then the scroll counter beside it. Both used to be placed
+     * independently — the counter at a hard-coded x — so they overdrew each
+     * other into an unreadable mash. Anything else added here must keep
+     * walking right_edge leftward rather than picking its own offset. */
+    double right_edge = pw - 18;
+
+    /* Scaling mode. fill/fit/stretch/center existed for ages but only as a
+     * synuirc key, so nobody knew they were there — show the current one and
+     * how to change it. */
     {
         syn_wallpaper_mode_t m = s->config.wallpaper_mode;
         const char *mname = (m >= 0 && m < SYN_WALLPAPER_MODE_COUNT)
@@ -927,8 +934,10 @@ void synui_render_wppick(syn_server_t *s)
         cairo_text_extents_t te;
         cairo_text_extents(cr, label, &te);
         cairo_set_source_rgba(cr, 0.75, 0.55, 0.95, 1.0);
-        cairo_move_to(cr, pw - 18 - te.width, 30);
+        right_edge -= te.width;
+        cairo_move_to(cr, right_edge, 30);
         cairo_show_text(cr, label);
+        right_edge -= 12;   /* gutter before whatever packs in next */
     }
 
     /* Separator */
@@ -984,8 +993,10 @@ void synui_render_wppick(syn_server_t *s)
         char pos[32];
         snprintf(pos, sizeof(pos), "%d/%d", s->wppick.selected + 1, total);
         cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, pos, &te);
         cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
-        cairo_move_to(cr, pw - 62, 30);
+        cairo_move_to(cr, right_edge - te.width, 30);
         cairo_show_text(cr, pos);
     }
 
