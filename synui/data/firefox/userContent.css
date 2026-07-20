@@ -1,0 +1,41 @@
+/* SYNUI-MANAGED — installed by synui-firefox-glass; edits are overwritten.
+ * Turn it off with:  synui-firefox-glass off
+ * Delete the SYNUI-MANAGED line above to claim this file as your own.
+ */
+
+/* The tile plate's tint is generated per theme by synui-apply-theme (same sheet
+ * userChrome imports); the use below falls back to the original navy if it is
+ * missing. @import must lead the file. */
+@import url("synapse-theme.css");
+
+/* SynapseOS — glass for Firefox's OWN blank pages only.
+ *
+ * about:blank / about:home / the (disabled) new-tab page get a transparent base
+ * so an empty tab shows the wallpaper. Real websites are untouched: they set
+ * their own background and it stays opaque — by design, not a bug here. */
+
+@-moz-document url("about:blank"),
+               url("about:newtab"),
+               url("about:home") {
+    :root, body {
+        background: transparent !important;
+    }
+}
+
+/* about:newtab / about:home now stay ENABLED (top-sites grid + pinned tiles),
+ * so clear activity-stream's own opaque surfaces to let the wallpaper through.
+ * These are the containers FF paints the newtab background on; we leave the
+ * tiles/labels alone so they stay legible. */
+@-moz-document url("about:newtab"), url("about:home") {
+    body,
+    .outer-wrapper,
+    .base-content-fallback,
+    main {
+        background: transparent !important;
+    }
+    /* Give the tile grid a faint navy plate so labels read over a busy
+     * wallpaper without hiding it (matches the chrome glass tint). */
+    .top-sites-list .top-site-outer .tile {
+        background-color: var(--sy-tile, rgba(11, 11, 20, 0.45)) !important;
+    }
+}

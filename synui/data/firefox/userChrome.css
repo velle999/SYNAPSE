@@ -1,0 +1,61 @@
+/* SYNUI-MANAGED — installed by synui-firefox-glass; edits are overwritten.
+ * To turn the glass off (and revert the prefs it needs):  synui-firefox-glass off
+ * To keep your own version instead: delete the SYNUI-MANAGED line above and this
+ * file becomes yours — the installer never overwrites a file it does not own.
+ *
+ * SynapseOS — glass Firefox chrome ("text on glass").
+ *
+ * This only affects Firefox's OWN chrome (toolbars, tabs, urlbar) and blank
+ * pages. Real websites set their own background — almost always opaque — so the
+ * page area stays solid; that is a browser fact, not something CSS here can fix.
+ *
+ * Requires (all in user.js): widget.wayland.opaque-region.enabled=false AND
+ * browser.tabs.allow_transparent_browser=true — WITHOUT the second one Firefox
+ * fills its surface opaque and none of this shows. Wayland backend only
+ * (MOZ_ENABLE_WAYLAND=1); under XWayland the window is opaque.
+ *
+ * Revert: delete this file (or the whole chrome/ dir) and restart Firefox.
+ */
+
+/* The glass tint (--sy-glass / --sy-glass-hi) is GENERATED per theme by
+ * synui-apply-theme, which rewrites synapse-theme.css on every theme switch so
+ * the browser chrome belongs to the current rice instead of staying the navy it
+ * was born with. @import must lead the file — CSS ignores it after any rule.
+ *
+ * Every use below carries the old navy as a var() fallback, so a profile that
+ * has never seen a theme switch (or one where the generated file was deleted)
+ * looks exactly as it did before rather than losing its glass. Firefox reads
+ * userChrome at STARTUP only: a theme switch lands on the next full restart. */
+@import url("synapse-theme.css");
+
+/* The window itself and the whole top toolbox: let the compositor show through.
+ * :not([customizing]) keeps the Customize view usable (it needs a solid bg). */
+#main-window,
+:root:not([customizing]) #navigator-toolbox {
+    background-color: transparent !important;
+    background-image: none !important;
+}
+
+/* Tab strip + nav bar + bookmarks get a faint tint rather than full clear, so
+ * buttons and tab labels stay legible against a busy wallpaper. */
+#TabsToolbar,
+#nav-bar,
+#PersonalToolbar {
+    background: var(--sy-glass, rgba(11, 11, 20, 0.28)) !important;
+}
+
+/* The urlbar/search field: a touch more opaque than the bar so the text you
+ * type never washes out against whatever is behind the window. */
+#urlbar,
+#urlbar-background,
+#searchbar {
+    background-color: var(--sy-glass-hi, rgba(11, 11, 20, 0.48)) !important;
+}
+
+/* The thin frame Firefox paints around the page content — clear it so the glass
+ * meets the page edge cleanly instead of leaving an opaque gutter. */
+#tabbrowser-tabbox,
+#tabbrowser-tabpanels,
+.browserStack {
+    background-color: transparent !important;
+}

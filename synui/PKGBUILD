@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=149
+pkgrel=151
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -184,6 +184,21 @@ package() {
     # translucent terminal keeps opaque text ("text on glass"). No-op without foot.
     install -Dm755 systemd/synui-glass.sh \
         "$pkgdir/usr/bin/synui-glass"
+
+    # Firefox glass. Unlike every other window, Firefox cannot be made
+    # translucent from the compositor side — it declares an opaque region and
+    # fills its own surface, so it takes three prefs plus a userChrome.css
+    # INSIDE the profile. synui-apply-theme delegates the whole business here.
+    # On by default; `synui-firefox-glass off` reverts the prefs and removes the
+    # files (deleting them alone would not: a written user_pref persists in
+    # prefs.js). The stylesheets are templates, not config — the installer only
+    # overwrites a copy still carrying its SYNUI-MANAGED marker.
+    install -Dm755 systemd/synui-firefox-glass.sh \
+        "$pkgdir/usr/bin/synui-firefox-glass"
+    install -Dm644 data/firefox/userChrome.css \
+        "$pkgdir/usr/share/synui/firefox/userChrome.css"
+    install -Dm644 data/firefox/userContent.css \
+        "$pkgdir/usr/share/synui/firefox/userContent.css"
 
     # SteamOS-style game launcher: gamemoderun + MangoHud overlay + opt-in
     # gamescope. mangohud/gamemode are optdepends — the wrapper drops whichever
