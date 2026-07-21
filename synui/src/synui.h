@@ -2168,6 +2168,7 @@ int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint);
 void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
 void lock_render(syn_server_t *s);               /* repaint panes (greeter reuses) */
 void lock_output_destroy(syn_output_t *o);       /* drop a dying output's lock pane (output_destroy) */
+void lock_output_create(syn_output_t *o);        /* pane for an output arriving mid-lock (server_new_output) */
 
 /* ── greeter.c: the greetd login greeter (synui --greeter) ── */
 /* State of the greetd IPC exchange (greetd.state). */

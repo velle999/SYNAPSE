@@ -453,6 +453,12 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * which reads as a broken monitor, not a setting. */
     nightlight_output_added(server, output);
 
+    /* If the native lock (or the greeter, which reuses it) is up, this output
+     * needs a clock/password pane — without one, a connector recreated by a
+     * suspend/resume cycle wakes to the lock's black backstop: still locked,
+     * still takes the password, but paints nothing. */
+    lock_output_create(output);
+
     /* A new monitor doesn't claim a workspace — every desktop already spans it.
      * It simply comes up showing the current desktop's share, which is empty
      * until windows are moved onto it (Super+O). If this is the *first* output,

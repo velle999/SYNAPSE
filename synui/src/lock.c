@@ -283,6 +283,33 @@ void lock_output_destroy(syn_output_t *o)
     }
 }
 
+/* Inverse of the above: an output that appears while the native lock is active
+ * (suspend/resume on the NVIDIA box destroys and recreates the connector) must
+ * get a pane back, or the wake shows only the backstop — a locked screen that
+ * still takes the password but stays black. Slots nulled by
+ * lock_output_destroy are reused before the array grows. Called from
+ * server_new_output() after the output joins the layout, so lock_render()'s
+ * get_box sees real geometry. */
+void lock_output_create(syn_output_t *o)
+{
+    syn_server_t *s = o->server;
+    if (!s->nlock.active) return;
+
+    int slot = -1;
+    for (int i = 0; i < s->nlock.npane; i++) {
+        if (s->nlock.pane[i].output == o->wlr_output) return;   /* already paned */
+        if (slot < 0 && !s->nlock.pane[i].output) slot = i;
+    }
+    if (slot < 0) {
+        if (s->nlock.npane >= (int)(sizeof(s->nlock.pane) / sizeof(s->nlock.pane[0])))
+            return;                     /* out of slots: the backstop keeps it black */
+        slot = s->nlock.npane++;
+    }
+    s->nlock.pane[slot].output = o->wlr_output;
+    s->nlock.pane[slot].buf    = NULL;
+    lock_render(s);
+}
+
 /* ── Fade / clock timers ─────────────────────────────────── */
 
 static int lock_fade_cb(void *data)
