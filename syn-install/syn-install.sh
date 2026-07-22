@@ -286,6 +286,115 @@ elif [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] && [ -n "$ESP_DEV" ]; t
   Continuing now would ERASE the whole disk."
 fi
 
+# ── Full-disk encryption ──────────────────────────────────
+#
+# LUKS2 on the root partition only. The ESP cannot be encrypted (firmware has
+# to read it), and /boot is deliberately left as its own PLAIN ext4 partition
+# rather than living inside the encrypted root.
+#
+# That last choice is the important one. Putting /boot inside LUKS means GRUB
+# itself must unlock it, and GRUB can only open LUKS2 volumes that use PBKDF2
+# — not the argon2id that cryptsetup defaults to and that makes LUKS2 worth
+# having. The workarounds are to weaken the KDF or to fight GRUB's cryptodisk
+# support, and on this distro GRUB is already the fragile part of the boot
+# path (see the shim_lock notes). A separate plain /boot costs one partition
+# and keeps the initramfs the only thing that has to unlock anything: GRUB
+# reads the kernel in the clear, the initramfs prompts, root opens. Nothing on
+# the unencrypted /boot is a secret; it is the same kernel everyone else ships.
+#
+# Only offered on the erase paths. Encrypting into free space beside an
+# existing OS works in principle but needs its own dual-boot testing pass, and
+# silently shipping an untested variant of the destructive path is worse than
+# not offering it.
+ENCRYPT="no"
+CRYPT_NAME="cryptroot"
+if [ "$INSTALL_MODE" = "erase" ]; then
+    echo ""
+    echo "  $(bold 'Encrypt this installation?')"
+    echo ""
+    echo "  Encrypts the root filesystem with LUKS2. You will be asked for the"
+    echo "  passphrase at every boot, before the system starts."
+    echo ""
+    echo "  $(bold 'There is no recovery.') If you forget the passphrase the data is"
+    echo "  gone — no password reset, no support call, nothing."
+    echo ""
+    prompt "Encrypt the disk? [y/N]:"
+    read -r _enc
+    case "${_enc,,}" in
+        y|yes) ENCRYPT="yes" ;;
+        *)     ENCRYPT="no" ;;
+    esac
+fi
+
+if [ "$ENCRYPT" = "yes" ]; then
+    command -v cryptsetup >/dev/null \
+        || die "cryptsetup is not available on this installer image"
+
+    # Read the passphrase twice, never echoed, and keep asking rather than
+    # aborting a half-hour install over a typo. Empty is refused outright: an
+    # empty LUKS passphrase is accepted by cryptsetup and would encrypt the
+    # disk to nothing.
+    while :; do
+        prompt "Encryption passphrase:"
+        read -rs LUKS_PASS; echo ""
+        prompt "Repeat passphrase:"
+        read -rs LUKS_PASS2; echo ""
+        if [ -z "$LUKS_PASS" ]; then
+            warn "Empty passphrase — that would leave the disk unprotected."
+            continue
+        fi
+        if [ "$LUKS_PASS" != "$LUKS_PASS2" ]; then
+            warn "Passphrases did not match — try again."
+            continue
+        fi
+        if [ "${#LUKS_PASS}" -lt 8 ]; then
+            warn "Passphrase is under 8 characters. A short one is worth little
+  against an attacker who has the disk in hand."
+            prompt "Use it anyway? [y/N]:"
+            read -r _short
+            case "${_short,,}" in y|yes) ;; *) continue ;; esac
+        fi
+        break
+    done
+    unset LUKS_PASS2
+    success "Encryption enabled — root will be LUKS2"
+fi
+
+#
+# Turn $PART_ROOT into the device the root filesystem actually goes on, and
+# leave it in $ROOT_FS_DEV. Without encryption that is just the partition; with
+# it, the partition is LUKS2-formatted, opened, and ROOT_FS_DEV becomes the
+# mapper node. Every partitioning path calls this so the mkfs/mount below never
+# has to know which case it is in.
+#
+# The passphrase goes in on stdin, never as an argv (which is world-readable in
+# /proc) and never through a temp file.
+#
+luks_format_root() {
+    ROOT_FS_DEV="$PART_ROOT"
+    [ "$ENCRYPT" = "yes" ] || return 0
+
+    echo "  Encrypting $PART_ROOT (LUKS2)..."
+    printf '%s' "$LUKS_PASS" | cryptsetup luksFormat \
+        --type luks2 --batch-mode --key-file - "$PART_ROOT" \
+        || die "cryptsetup luksFormat failed on $PART_ROOT"
+
+    printf '%s' "$LUKS_PASS" | cryptsetup open \
+        --key-file - "$PART_ROOT" "$CRYPT_NAME" \
+        || die "cryptsetup open failed — the passphrase did not take"
+
+    ROOT_FS_DEV="/dev/mapper/$CRYPT_NAME"
+    [ -b "$ROOT_FS_DEV" ] || die "$ROOT_FS_DEV missing after cryptsetup open"
+
+    # Needed by GRUB's cryptdevice= below. Read from the partition, not the
+    # mapper node: it is the LUKS container's UUID that identifies the volume
+    # to unlock, and it is stable across re-opens.
+    LUKS_UUID="$(blkid -s UUID -o value "$PART_ROOT")"
+    [ -n "$LUKS_UUID" ] || die "could not read the LUKS UUID of $PART_ROOT"
+
+    success "Root encrypted (LUKS2, UUID $LUKS_UUID)"
+}
+
 # Clean up any previous failed install attempt
 umount -R /mnt 2>/dev/null || true
 
@@ -347,20 +456,36 @@ elif [ "$BOOT_MODE" = "uefi" ]; then
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart ESP fat32 1MiB 513MiB
     parted -s "$DISK" set 1 esp on
-    parted -s "$DISK" mkpart root ext4 513MiB 100%
-    PART_EFI="$(part_name "$DISK" 1)"
-    PART_ROOT="$(part_name "$DISK" 2)"
+    if [ "$ENCRYPT" = "yes" ]; then
+        # Encrypted: ESP, a plain /boot for the kernel + initramfs, then LUKS.
+        parted -s "$DISK" mkpart boot ext4 513MiB 1537MiB
+        parted -s "$DISK" mkpart root ext4 1537MiB 100%
+        PART_EFI="$(part_name "$DISK" 1)"
+        PART_BOOT="$(part_name "$DISK" 2)"
+        PART_ROOT="$(part_name "$DISK" 3)"
+    else
+        parted -s "$DISK" mkpart root ext4 513MiB 100%
+        PART_EFI="$(part_name "$DISK" 1)"
+        PART_ROOT="$(part_name "$DISK" 2)"
+    fi
 
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
 
     echo "  Formatting EFI partition..."
     mkfs.fat -F32 "$PART_EFI" || die "Failed to format EFI partition"
+    luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
     echo "  Formatting root partition..."
-    mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
+    mkfs.ext4 -F "$ROOT_FS_DEV" || die "Failed to format root partition"
 
     echo "  Mounting..."
-    mount "$PART_ROOT" /mnt || die "Failed to mount root"
+    mount "$ROOT_FS_DEV" /mnt || die "Failed to mount root"
+    if [ "$ENCRYPT" = "yes" ]; then
+        echo "  Formatting /boot partition..."
+        mkfs.ext4 -F "$PART_BOOT" || die "Failed to format boot partition"
+        mkdir -p /mnt/boot
+        mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
+    fi
     mkdir -p /mnt/boot/efi
     mount "$PART_EFI" /mnt/boot/efi || die "Failed to mount EFI"
 else
@@ -372,17 +497,33 @@ else
 
     echo "  Creating MBR partition table..."
     parted -s "$DISK" mklabel msdos
-    parted -s "$DISK" mkpart primary ext4 1MiB 100%
-    parted -s "$DISK" set 1 boot on
-    PART_ROOT="$(part_name "$DISK" 1)"
+    if [ "$ENCRYPT" = "yes" ]; then
+        # Same split as UEFI, minus the ESP: GRUB's core reads a plain /boot.
+        parted -s "$DISK" mkpart primary ext4 1MiB 1025MiB
+        parted -s "$DISK" set 1 boot on
+        parted -s "$DISK" mkpart primary ext4 1025MiB 100%
+        PART_BOOT="$(part_name "$DISK" 1)"
+        PART_ROOT="$(part_name "$DISK" 2)"
+    else
+        parted -s "$DISK" mkpart primary ext4 1MiB 100%
+        parted -s "$DISK" set 1 boot on
+        PART_ROOT="$(part_name "$DISK" 1)"
+    fi
 
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
 
+    luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
     echo "  Formatting root partition..."
-    mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
+    mkfs.ext4 -F "$ROOT_FS_DEV" || die "Failed to format root partition"
     echo "  Mounting..."
-    mount "$PART_ROOT" /mnt || die "Failed to mount root"
+    mount "$ROOT_FS_DEV" /mnt || die "Failed to mount root"
+    if [ "$ENCRYPT" = "yes" ]; then
+        echo "  Formatting /boot partition..."
+        mkfs.ext4 -F "$PART_BOOT" || die "Failed to format boot partition"
+        mkdir -p /mnt/boot
+        mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
+    fi
 fi
 
 success "Disk partitioned and mounted at /mnt"
@@ -419,6 +560,7 @@ pacstrap /mnt \
     rtkit polkit-gnome xorg-xhost \
     mkinitcpio dkms dolphin \
     wine wine-mono \
+    cryptsetup \
     2>&1 || die "pacstrap failed — check network connection"
 
 # Hard verify grub landed in the chroot
@@ -1334,6 +1476,45 @@ d /var/lib/synapd 0755 root root -
 d /var/lib/synapd/models 0755 root root -
 EOF
 
+# The encryption hook is what prompts for the passphrase at boot and opens the
+# root volume. WHICH hook depends on how the initramfs is built, and getting it
+# wrong boots to a rescue shell with no stated reason:
+#
+#   udev-based    (HOOKS=... udev ...)     -> `encrypt`,    cryptdevice=UUID=x:name
+#   systemd-based (HOOKS=... systemd ...)  -> `sd-encrypt`, rd.luks.name=x=name
+#
+# They are not interchangeable: `encrypt` is a busybox hook that needs udev,
+# and it does not read rd.luks.*; `sd-encrypt` ignores cryptdevice=. Arch has
+# shipped both defaults over time, so detect rather than assume — the whole
+# point of this block is that the failure is silent and happens at first boot.
+#
+# Position: after `block` (the device must exist) and before `filesystems`
+# (which mounts what it produced). Inserting immediately before `filesystems`
+# satisfies both, since `block` already precedes it in every stock HOOKS line.
+CRYPT_HOOK=""
+if [ "$ENCRYPT" = "yes" ]; then
+    if grep -qE '^HOOKS=.*[( ]systemd[ )]' /mnt/etc/mkinitcpio.conf; then
+        CRYPT_HOOK="sd-encrypt"
+    else
+        CRYPT_HOOK="encrypt"
+    fi
+    echo "  Adding the $CRYPT_HOOK hook to mkinitcpio..."
+
+    grep -qE "^HOOKS=.*[( ]$CRYPT_HOOK[ )]" /mnt/etc/mkinitcpio.conf \
+        || sed -i "/^HOOKS=/s/\bfilesystems\b/$CRYPT_HOOK filesystems/" \
+                 /mnt/etc/mkinitcpio.conf
+    grep -qE "^HOOKS=.*[( ]$CRYPT_HOOK[ )]" /mnt/etc/mkinitcpio.conf \
+        || die "could not add the $CRYPT_HOOK hook — the installed system would not boot"
+
+    # sd-encrypt resolves the volume from the kernel cmdline, but a
+    # crypttab.initramfs makes the mapping explicit and survives someone later
+    # regenerating the initramfs by hand.
+    if [ "$CRYPT_HOOK" = "sd-encrypt" ]; then
+        printf '%s UUID=%s none luks,discard\n' \
+            "$CRYPT_NAME" "$LUKS_UUID" > /mnt/etc/crypttab.initramfs
+    fi
+fi
+
 echo "  Generating initramfs..."
 arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 \
     || die "mkinitcpio failed — the installed system would not boot"
@@ -1346,12 +1527,25 @@ success "System configured"
 header
 step "Installing Bootloader"
 
+# With an encrypted root the kernel needs to be told which volume to unlock and
+# what the opened device will be called; the encrypt hook reads both from here.
+# This goes in GRUB_CMDLINE_LINUX rather than _DEFAULT so it is also present on
+# the recovery entry — a rescue boot that cannot open the root is useless.
+GRUB_CRYPT_CMDLINE=""
+if [ "$ENCRYPT" = "yes" ]; then
+    if [ "$CRYPT_HOOK" = "sd-encrypt" ]; then
+        GRUB_CRYPT_CMDLINE="rd.luks.name=$LUKS_UUID=$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME"
+    else
+        GRUB_CRYPT_CMDLINE="cryptdevice=UUID=$LUKS_UUID:$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME"
+    fi
+fi
+
 cat > /mnt/etc/default/grub << EOF
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="SynapseOS"
 GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
-GRUB_CMDLINE_LINUX=""
+GRUB_CMDLINE_LINUX="$GRUB_CRYPT_CMDLINE"
 # os-prober ON so grub-mkconfig detects Windows / other OSes and adds their
 # boot menu entries. Recent GRUB disables it by default for security; a
 # single-OS install just finds nothing, so enabling it globally is safe and is
@@ -1383,6 +1577,39 @@ arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 \
 
 [ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
 
+# Hard-verify the encrypted boot path. Every one of these is a way to end up
+# with an install that partitions, formats and reports success, then drops to a
+# rescue shell on first boot — which is the worst possible time to find out.
+if [ "$ENCRYPT" = "yes" ]; then
+    echo "  Verifying the encrypted boot path..."
+
+    cryptsetup isLuks "$PART_ROOT" \
+        || die "$PART_ROOT is not a LUKS volume after install"
+
+    grep -q "$LUKS_UUID" /mnt/boot/grub/grub.cfg \
+        || die "grub.cfg never mentions $LUKS_UUID — it would not unlock at boot"
+
+    grep -qE "^HOOKS=.*[( ]$CRYPT_HOOK[ )]" /mnt/etc/mkinitcpio.conf \
+        || die "the $CRYPT_HOOK hook is missing from mkinitcpio.conf"
+
+    # The hook being named in the config is not the same as it being IN the
+    # image — a hook whose package is absent is skipped with a warning that
+    # scrolls past, and mkinitcpio still exits 0.
+    lsinitcpio /mnt/boot/initramfs-linux.img 2>/dev/null \
+        | grep -qE "(hooks/$CRYPT_HOOK|cryptsetup)" \
+        || die "$CRYPT_HOOK is not in the initramfs — the system would not unlock"
+
+    # /boot must be its own partition, or the kernel GRUB needs to read is
+    # sitting inside the volume it has not unlocked yet.
+    mountpoint -q /mnt/boot \
+        || die "/boot is not a separate mount — an encrypted root needs a plain /boot"
+
+    grep -qE '^[^#]*\s/boot\s' /mnt/etc/fstab \
+        || die "/boot is missing from fstab — it would not be mounted after boot"
+
+    success "Encrypted boot path verified"
+fi
+
 success "Bootloader installed"
 
 # ── Done ──────────────────────────────────────────────────
@@ -1397,6 +1624,9 @@ case "$DE_CHOICE" in
 esac
 echo "  $(bold 'Disk:')     $DISK"
 echo "  $(bold 'Boot:')     $BOOT_MODE"
+if [ "$ENCRYPT" = "yes" ]; then
+    echo "  $(bold 'Encrypted:') yes — LUKS2 on $PART_ROOT"
+fi
 echo "  $(bold 'Desktop:')  $DE_NAME"
 echo "  $(bold 'User:')     $NEW_USER"
 echo "  $(bold 'Hostname:') synapse"
@@ -1410,6 +1640,21 @@ echo "  Admin: use $(bold "sudo") with your user password."
 echo "  The root account is locked (no root login / su)."
 echo "  Note: 3 wrong password attempts lock the account for 10 minutes."
 echo ""
+
+if [ "$ENCRYPT" = "yes" ]; then
+    warn "You will be asked for the encryption passphrase at every boot,
+  BEFORE the login screen. There is no way to recover it."
+    echo ""
+    echo "  Manage it later with $(bold 'syn-crypt'):"
+    echo "    syn-crypt status                    is this disk encrypted, and how"
+    echo "    sudo syn-crypt change-key           replace the passphrase"
+    echo "    sudo syn-crypt add-key              add a second one"
+    echo "    sudo syn-crypt backup-header FILE   save the LUKS header"
+    echo ""
+    echo "  $(bold 'Back up the header to another machine.') A damaged LUKS header"
+    echo "  means the data is unrecoverable even with the right passphrase."
+    echo ""
+fi
 
 prompt "Remove installation media and press ENTER to reboot..."
 read -r

@@ -1,13 +1,18 @@
 pkgname=syn-install
 pkgver=0.1.0
-pkgrel=15
+pkgrel=16
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
-depends=('bash' 'parted' 'e2fsprogs' 'dosfstools' 'arch-install-scripts' 'grub')
-source=("syn-install.sh")
-sha256sums=('SKIP')
+# cryptsetup: the optional LUKS2 install path, and syn-crypt afterwards.
+depends=('bash' 'parted' 'e2fsprogs' 'dosfstools' 'arch-install-scripts' 'grub'
+         'cryptsetup' 'util-linux')
+source=("syn-install.sh"
+        "syn-crypt.sh")
+sha256sums=('SKIP'
+            'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-install.sh" "$pkgdir/usr/bin/syn-install"
+    install -Dm755 "$srcdir/syn-crypt.sh"   "$pkgdir/usr/bin/syn-crypt"
 }
