@@ -28,6 +28,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <systemd/sd-daemon.h>   /* sd_notify: readiness, from the main PID */
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <syslog.h>
@@ -265,9 +266,23 @@ int main(int argc, char *argv[])
         sg_log(LOG_WARNING, "synguard: kmod reader failed — running without kernel events");
     }
 
-    /* Notify systemd */
-    if (getenv("NOTIFY_SOCKET"))
-        system("systemd-notify READY=1");
+    /*
+     * Tell systemd we are up.
+     *
+     * This used to be system("systemd-notify READY=1"), which is wrong twice
+     * over. It runs a shell out of a root daemon holding the whole capability
+     * set, purely to send one datagram. And the datagram then comes from a
+     * grandchild (sh -> systemd-notify), while the unit says
+     * NotifyAccess=main — so the readiness only ever landed by the grace of
+     * whatever sandboxing was NOT in effect. Tightening the unit
+     * (CapabilityBoundingSet, seccomp-installing directives) broke the helper
+     * and the service sat in "activating" until TimeoutStartSec killed it,
+     * with the daemon itself running fine the whole time.
+     *
+     * sd_notify() sends it from this process, which is the main PID, so it
+     * satisfies NotifyAccess=main by construction and has no helper to break.
+     */
+    sd_notify(0, "READY=1");
 
     int ret = run_event_loop(&g_state);
 

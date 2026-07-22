@@ -5,6 +5,9 @@ project('synguard', 'c',
 )
 
 dep_threads = dependency('threads')
+# libsystemd: sd_notify() for Type=notify readiness. Replaces a
+# system("systemd-notify") shell-out that could not satisfy NotifyAccess=main.
+dep_systemd = dependency('libsystemd')
 
 add_project_arguments('-D_GNU_SOURCE', '-DSYNGUARD_VERSION="@0@"'.format(meson.project_version()), language: 'c')
 
@@ -23,7 +26,7 @@ inc = include_directories('include')
 
 executable('synguard', sources,
   include_directories: inc,
-  dependencies: [dep_threads],
+  dependencies: [dep_threads, dep_systemd],
   install: true,
   install_dir: get_option('bindir'),
 )
@@ -35,7 +38,7 @@ executable('synguard', sources,
 secfeed_test = executable('secfeed_test',
   files('tests/secfeed_test.c', 'src/secfeed.c'),
   include_directories: inc,
-  dependencies: [dep_threads],
+  dependencies: [dep_threads, dep_systemd],
   c_args: ['-DSYNGUARD_SECFEED_SOCKET="@0@/synguard-secfeed-test.sock"'.format(
     meson.current_build_dir())])
 test('secfeed', secfeed_test, timeout: 60)
@@ -46,7 +49,7 @@ test('secfeed', secfeed_test, timeout: 60)
 netwatch_test = executable('netwatch_test',
   files('tests/netwatch_test.c', 'src/event_processor.c', 'src/core.c'),
   include_directories: inc,
-  dependencies: [dep_threads])
+  dependencies: [dep_threads, dep_systemd])
 test('netwatch', netwatch_test, timeout: 60)
 
 install_data('systemd/synguard.service', install_dir: '/etc/systemd/system')

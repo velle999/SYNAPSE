@@ -47,5 +47,46 @@ ProtectHome=read-only
 ProtectHostname=true
 RestrictSUIDSGID=true
 
+# Capabilities. synguard ran as root with the FULL bounding set — every
+# capability the kernel has, including CAP_SYS_MODULE, CAP_SYS_BOOT and
+# CAP_SYS_RAWIO. A monitor that watches for compromise should not itself be
+# the most useful thing on the box to compromise. What it actually needs:
+#
+#   CAP_KILL             SIGSTOP/SIGKILL on processes it does not own
+#                        (isolation.c: terminate and freeze)
+#   CAP_SYS_PTRACE       readlink /proc/<pid>/exe for another user's process,
+#                        which is how a flagged pid gets classified at all
+#   CAP_DAC_READ_SEARCH  read /proc and /sys/kernel/synapse regardless of mode
+#   CAP_DAC_OVERRIDE     write /sys/fs/cgroup/... for the quarantine freeze
+#
+# Notably NOT CAP_SYS_ADMIN: cgroup v2 mkdir, cgroup.procs and cgroup.freeze
+# are all plain file writes that DAC_OVERRIDE covers.
+CapabilityBoundingSet=CAP_KILL CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE
+AmbientCapabilities=
+
+# Cheap and non-negotiable: nothing here changes personality, needs realtime,
+# creates namespaces, or speaks anything but AF_UNIX (the secfeed socket).
+LockPersonality=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX
+ProtectClock=true
+ProtectKernelLogs=true
+UMask=0077
+
+# ── Deliberately NOT set ─────────────────────────────────
+# ProtectControlGroups=true and ProtectKernelTunables=true both remount /sys
+# (or /sys/fs/cgroup) read-only. synguard WRITES there — cgroup.procs and
+# cgroup.freeze are how quarantine actually holds a process — so either one
+# would leave the daemon running, logging, and silently unable to contain
+# anything. That is a worse outcome than not hardening: the failure is
+# invisible until the day it matters.
+#
+# ProtectKernelModules=true is likewise off: it is meaningless without
+# CAP_SYS_MODULE, which the bounding set above already removes.
+#
+# MemoryDenyWriteExecute is off because the AI classifier path links against
+# the same inference stack synapd uses, and W^X breaks JIT'd kernels there.
+
 [Install]
 WantedBy=multi-user.target
