@@ -71,6 +71,15 @@ titlebar_height = 26
 # an entry written on a wider desk can't reopen a window off-screen.
 # remember_geometry = on
 
+# ── Desktop icons ──────────────────────────────────────────
+# Draw the contents of ~/Desktop on the wallpaper. Off by default; the desktop
+# right-click menu ("Show Desktop Icons") flips it at runtime without editing
+# this. Single click selects, double click opens — .desktop files run their
+# Exec=, anything else goes through xdg-open. There is no file watch, so a file
+# added elsewhere shows up the next time the setting is toggled or a monitor
+# changes.
+# desktop_icons = on
+
 # Titlebar colors, #rrggbb (defaults shown). Deliberately muted: the border
 # already carries the focus/AI/alert signal.
 # titlebar_color       = #12121c

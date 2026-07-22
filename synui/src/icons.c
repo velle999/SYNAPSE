@@ -297,6 +297,53 @@ const syn_icon_entry_t *icon_lookup(const char *app_id)
     return slot;
 }
 
+/*
+ * Same resolution as icon_lookup(), but for a .desktop file we already have
+ * the path of rather than an app_id to search for — what the desktop icons in
+ * deskmenu.c hold. Cached under the path so repeated reloads don't re-decode
+ * the PNG, and so the returned icon_surface stays valid for the caller.
+ *
+ * Returns NULL only if the file could not be parsed into a runnable entry;
+ * the caller then treats it as a plain file.
+ */
+const syn_icon_entry_t *icon_lookup_desktop_path(const char *path)
+{
+    for (int i = 0; i < icon_cache_count; i++)
+        if (strcmp(icon_cache[i].app_id, path) == 0)
+            return &icon_cache[i];
+
+    syn_icon_entry_t e = {0};
+    /* Key the cache by path; app_id has no meaning for a loose .desktop. */
+    snprintf(e.app_id, sizeof(e.app_id), "%s", path);
+    parse_desktop_file(path, &e);
+    if (!e.exec[0]) return NULL;   /* nothing to run — not an app entry */
+
+    if (!e.display_name[0]) {
+        /* Fall back to the basename without .desktop. */
+        const char *base = strrchr(path, '/');
+        base = base ? base + 1 : path;
+        snprintf(e.display_name, sizeof(e.display_name), "%s", base);
+        size_t n = strlen(e.display_name);
+        if (n > 8 && strcmp(e.display_name + n - 8, ".desktop") == 0)
+            e.display_name[n - 8] = '\0';
+    }
+
+    if (e.icon_hint[0])
+        e.icon_surface = find_and_decode_icon(e.icon_hint);
+
+    static syn_icon_entry_t overflow_scratch;
+    syn_icon_entry_t *slot;
+    if (icon_cache_count < ICON_CACHE_MAX) {
+        slot = &icon_cache[icon_cache_count++];
+    } else {
+        wlr_log(WLR_ERROR, "synui: icons: cache full (%d), not caching '%s'",
+                ICON_CACHE_MAX, path);
+        slot = &overflow_scratch;
+    }
+    *slot = e;
+    return slot;
+}
+
 void icon_provide_name(const char *app_id, const char *icon_name)
 {
     if (!app_id || !app_id[0] || !icon_name || !icon_name[0]) return;

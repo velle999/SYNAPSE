@@ -3214,6 +3214,206 @@ void synui_render_dockmenu(syn_server_t *s)
     set_scene_buffer(&s->dockmenu_ui.text_buf, s->dockmenu_ui.tree, buf);
 }
 
+void synui_render_deskmenu(syn_server_t *s)
+{
+    if (!s->deskmenu.visible) {
+        wlr_scene_node_set_enabled(&s->deskmenu_ui.tree->node, false);
+        return;
+    }
+
+    int pw = s->deskmenu.w, ph = s->deskmenu.h;
+
+    wlr_scene_node_set_position(&s->deskmenu_ui.tree->node,
+                                s->deskmenu.x, s->deskmenu.y);
+    wlr_scene_node_set_enabled(&s->deskmenu_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->deskmenu_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
+    if (!s->deskmenu_ui.bg)
+        s->deskmenu_ui.bg = wlr_scene_rect_create(s->deskmenu_ui.tree,
+                                                  pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->deskmenu_ui.bg, pw, ph);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    set_accent(cr, 0.35);
+    cairo_set_line_width(cr, 1);
+    cairo_rectangle(cr, 0.5, 0.5, pw - 1, ph - 1);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < s->deskmenu.action_count; i++) {
+        int iy = deskmenu_row_top(s, i);
+        int rh = deskmenu_row_height(s, i);
+
+        if (s->deskmenu.actions[i] == SYN_DESKACT_SEP) {
+            set_accent(cr, 0.22);
+            cairo_set_line_width(cr, 1);
+            cairo_move_to(cr, 10, iy + rh / 2.0 + 0.5);
+            cairo_line_to(cr, pw - 10, iy + rh / 2.0 + 0.5);
+            cairo_stroke(cr);
+            continue;
+        }
+
+        int sel = (i == s->deskmenu.selected);
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 3, iy, pw - 6, rh);
+            cairo_fill(cr);
+        }
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.82, sel ? 1.0 : 0.82,
+                              sel ? 0.99 : 0.90, 1.0);
+        cairo_move_to(cr, 14, iy + 20);
+        cairo_show_text(cr, deskact_label(s->deskmenu.actions[i]));
+
+        /* A checkmark shows desktop icons are already on, so the row reads as
+         * a toggle rather than an action that might do it twice. */
+        if (s->deskmenu.actions[i] == SYN_DESKACT_ICONS &&
+            s->config.desktop_icons) {
+            cairo_move_to(cr, pw - 24, iy + 20);
+            cairo_show_text(cr, "✓");
+        }
+    }
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->deskmenu_ui.text_buf, s->deskmenu_ui.tree, buf);
+}
+
+/* Well-formed UTF-8? Desktop labels come from filenames, which are arbitrary
+ * bytes on Linux — the one string reaching cairo that no parser vetted. */
+static int deskicon_utf8_ok(const char *s)
+{
+    const unsigned char *p = (const unsigned char *)s;
+    while (*p) {
+        int n;
+        if      (*p < 0x80)           n = 0;
+        else if ((*p & 0xE0) == 0xC0) n = 1;
+        else if ((*p & 0xF0) == 0xE0) n = 2;
+        else if ((*p & 0xF8) == 0xF0) n = 3;
+        else return 0;
+        p++;
+        for (int i = 0; i < n; i++, p++)
+            if ((*p & 0xC0) != 0x80) return 0;
+    }
+    return 1;
+}
+
+/*
+ * Desktop icons: one buffer covering the primary output's usable area, with
+ * every cell drawn into it. One buffer rather than one per icon because they
+ * never move independently — a re-layout redraws the lot anyway.
+ */
+void synui_render_deskicons(syn_server_t *s)
+{
+    if (!s->config.desktop_icons || s->deskicon_count <= 0) {
+        wlr_scene_node_set_enabled(&s->deskicons_ui.tree->node, false);
+        return;
+    }
+
+    syn_output_t *o = server_primary_output(s);
+    if (!o) o = server_focused_output(s);
+    if (!o) {
+        wlr_scene_node_set_enabled(&s->deskicons_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+    if (area.width <= 0 || area.height <= 0) return;
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(area.width, area.height, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    for (int i = 0; i < s->deskicon_count; i++) {
+        syn_deskicon_t *ic = &s->deskicons[i];
+        /* Cell coords are absolute; the buffer starts at the usable origin. */
+        double cx = ic->x - area.x, cy = ic->y - area.y;
+        int sel = (i == s->deskicon_selected);
+
+        if (sel) {
+            set_accent(cr, 0.30);
+            cairo_rectangle(cr, cx + 2, cy + 2,
+                            SYN_DESKICON_W - 4, SYN_DESKICON_H - 4);
+            cairo_fill(cr);
+        }
+
+        double ix = cx + (SYN_DESKICON_W - 48) / 2.0, iy = cy + 8;
+        if (ic->icon_surface) {
+            int iw = cairo_image_surface_get_width(ic->icon_surface);
+            int ih = cairo_image_surface_get_height(ic->icon_surface);
+            if (iw > 0 && ih > 0) {
+                cairo_save(cr);
+                cairo_translate(cr, ix, iy);
+                cairo_scale(cr, 48.0 / iw, 48.0 / ih);
+                cairo_set_source_surface(cr, ic->icon_surface, 0, 0);
+                cairo_paint(cr);
+                cairo_restore(cr);
+            }
+        } else {
+            /* No themed icon: a folder gets a tab, a file a dog-ear. Enough
+             * to tell them apart at a glance without shipping artwork. */
+            set_accent(cr, 0.75);
+            cairo_set_line_width(cr, 2);
+            if (ic->is_dir) {
+                cairo_rectangle(cr, ix + 4, iy + 14, 40, 26);
+                cairo_stroke(cr);
+                cairo_move_to(cr, ix + 4, iy + 14);
+                cairo_line_to(cr, ix + 16, iy + 14);
+                cairo_line_to(cr, ix + 20, iy + 8);
+                cairo_line_to(cr, ix + 30, iy + 8);
+                cairo_stroke(cr);
+            } else {
+                cairo_rectangle(cr, ix + 8, iy + 6, 32, 38);
+                cairo_stroke(cr);
+                cairo_move_to(cr, ix + 30, iy + 6);
+                cairo_line_to(cr, ix + 30, iy + 16);
+                cairo_line_to(cr, ix + 40, iy + 16);
+                cairo_stroke(cr);
+            }
+        }
+
+        /* Label, centred and shortened to the cell. Guard the UTF-8 twice
+         * over: a filename is arbitrary bytes, and cairo_show_text puts the
+         * whole context into a permanent error state on invalid UTF-8 — which
+         * would silently blank every icon drawn after it (see news.c). */
+        char label[128];
+        snprintf(label, sizeof(label), "%s", ic->label);
+        if (!deskicon_utf8_ok(label))
+            snprintf(label, sizeof(label), "?");
+
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t ext;
+        cairo_text_extents(cr, label, &ext);
+        while (ext.width > SYN_DESKICON_W - 8 && strlen(label) > 1) {
+            /* Cut one whole character, never mid-sequence. */
+            size_t n = strlen(label);
+            size_t cut = news_utf8_trim(label, n - 1);
+            if (cut >= n) cut = n - 1;
+            label[cut] = '\0';
+            cairo_text_extents(cr, label, &ext);
+        }
+
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.75);   /* shadow for legibility */
+        cairo_move_to(cr, cx + (SYN_DESKICON_W - ext.width) / 2.0 + 1,
+                      cy + 74 + 1);
+        cairo_show_text(cr, label);
+        cairo_set_source_rgba(cr, 0.94, 0.94, 0.98, 1.0);
+        cairo_move_to(cr, cx + (SYN_DESKICON_W - ext.width) / 2.0, cy + 74);
+        cairo_show_text(cr, label);
+    }
+
+    cairo_destroy(cr);
+    wlr_scene_node_set_position(&s->deskicons_ui.tree->node, area.x, area.y);
+    wlr_scene_node_set_enabled(&s->deskicons_ui.tree->node, true);
+    set_scene_buffer(&s->deskicons_ui.buf, s->deskicons_ui.tree, buf);
+}
+
 /* ── Initialize all UI scene trees ───────────────────────── */
 
 void synui_ui_init(syn_server_t *s)
@@ -3240,9 +3440,16 @@ void synui_ui_init(syn_server_t *s)
     s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->clip_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->deskmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
 
     /* All hidden until explicitly shown */
+    wlr_scene_node_set_enabled(&s->deskmenu_ui.tree->node, false);
+    /* No icon is selected until one is clicked. Zero would mean the first
+     * icon came up highlighted on a desktop nobody had touched yet. */
+    s->deskicon_selected       = -1;
+    s->deskicon_last_click_idx = -1;
+
     wlr_scene_node_set_enabled(&s->welcome_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->overlay_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);

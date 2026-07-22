@@ -482,6 +482,11 @@ static void server_new_output(struct wl_listener *listener, void *data)
     wallpaper_output_created(output);
     dock_output_created(output);
     launcher_output_created(output);
+    /* The icon grid needs an output to be sized against — at startup there is
+     * none yet when deskicons_reload() first runs, so this is where the very
+     * first layout actually happens. */
+    deskicons_layout(server);
+    synui_render_deskicons(server);
     layout_apply(server, server_active_workspace(server));
     if (server->welcome_ui.shown)
         synui_render_welcome(server);
@@ -1280,6 +1285,11 @@ int synui_init(syn_server_t *s)
      * therefore sit above all of these. */
     s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND] =
         wlr_scene_tree_create(&s->scene->tree);
+    /* Desktop icons are part of the desktop, not a panel: they belong above
+     * the wallpaper and background layer but UNDER every window, so they are
+     * created here rather than with the UI trees in synui_ui_init(). */
+    s->deskicons_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    wlr_scene_node_set_enabled(&s->deskicons_ui.tree->node, false);
     s->layer_tree[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM] =
         wlr_scene_tree_create(&s->scene->tree);
     s->window_tree = wlr_scene_tree_create(&s->scene->tree);
@@ -1476,6 +1486,10 @@ int synui_init(syn_server_t *s)
     /* Clock & Time: loads clock.state and arms the panel's 1 Hz repaint timer.
      * After synui_ui_init so the scene trees it will draw into already exist. */
     clock_init(s);
+
+    /* Desktop icons: a no-op unless synuirc turned them on. After the outputs
+     * exist, since the grid is laid out against the primary one's usable box. */
+    deskicons_reload(s);
 
     /* Drag-and-drop icon layer: created last so it stacks above everything,
      * including the compositor UI. input.c moves it with the cursor. */

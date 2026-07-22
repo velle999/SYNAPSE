@@ -946,6 +946,11 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
             for (int i = 0; i < nsyms; i++)
                 if (syms[i] == XKB_KEY_Escape) { dockmenu_close(s); return; }
         }
+        /* …and the desktop one. */
+        if (s->deskmenu.visible) {
+            for (int i = 0; i < nsyms; i++)
+                if (syms[i] == XKB_KEY_Escape) { deskmenu_close(s); return; }
+        }
 
         /* Display settings panel: modal for unmodified keys; modified
          * combos (Super+…) fall through to the bind table below. */
@@ -1559,6 +1564,8 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     /* Context menu hover highlight follows the cursor. */
     if (s->dockmenu.visible)
         dockmenu_motion(s, s->cursor->x, s->cursor->y);
+    if (s->deskmenu.visible)
+        deskmenu_motion(s, s->cursor->x, s->cursor->y);
 
     /* Same for the start menu: hovering a row selects it, so the pointer and
      * the arrow keys drive one highlight rather than two. */
@@ -1705,6 +1712,15 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
             return;
         }
 
+        /* Same contract for the desktop context menu. */
+        if (s->deskmenu.visible) {
+            if (button == BTN_LEFT)
+                deskmenu_click(s, s->cursor->x, s->cursor->y);
+            else
+                deskmenu_close(s);
+            return;
+        }
+
         /* The launcher button (top-left, over the bar): a left click opens the
          * start menu. When the menu is already up we returned above at
          * s->menu.visible, where a click off the panel closes it — so this path
@@ -1786,6 +1802,36 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         struct wlr_surface *surface = NULL;
         syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y,
                                     &surface, &sx, &sy);
+
+        /* Nothing under the cursor means the wallpaper — the desktop itself.
+         * The dock, panels and layer surfaces all returned above, so reaching
+         * here with no view and no surface is the only "clicked the desktop"
+         * signal there is. */
+        if (!view && !surface) {
+            int icon = deskicon_at(s, s->cursor->x, s->cursor->y);
+
+            if (button == BTN_RIGHT) {
+                deskicon_select(s, icon);   /* -1 clears */
+                deskmenu_open(s, s->cursor->x, s->cursor->y);
+                return;
+            }
+            if (button == BTN_LEFT) {
+                deskicon_select(s, icon);
+                if (icon >= 0) {
+                    /* Single click selects, double click opens — the same
+                     * 400ms window the titlebar uses. */
+                    bool dbl = (s->deskicon_last_click_idx == icon) &&
+                               (time_msec - s->deskicon_last_click_ms < 400);
+                    s->deskicon_last_click_idx = dbl ? -1 : icon;
+                    s->deskicon_last_click_ms  = time_msec;
+                    if (dbl) deskicon_activate(s, icon);
+                    return;
+                }
+                /* Clicking empty desktop drops focus decoration on the icons
+                 * but is otherwise forwarded as normal. */
+                s->deskicon_last_click_idx = -1;
+            }
+        }
 
         /* Is this click on one of the view's xdg_popups (a menu/tooltip)
          * rather than the toplevel itself? The popup's scene node lives in

@@ -886,6 +886,38 @@ typedef enum {
 } syn_dockact_t;
 #define SYN_DOCKMENU_MAX 6
 
+/* deskmenu.c: the desktop (wallpaper) right-click menu. SEP draws a rule and
+ * is not selectable; everything else is a row. */
+typedef enum {
+    SYN_DESKACT_TERMINAL = 0,
+    SYN_DESKACT_FILES,
+    SYN_DESKACT_APPS,        /* the start menu */
+    SYN_DESKACT_SEP,
+    SYN_DESKACT_WALLPAPER,
+    SYN_DESKACT_THEME,
+    SYN_DESKACT_DISPLAY,
+    SYN_DESKACT_ICONS,       /* toggle desktop icons at runtime */
+    SYN_DESKACT_TASKMGR,
+} syn_deskact_t;
+#define SYN_DESKMENU_MAX 12
+
+/* One ~/Desktop entry. `exec` and `icon_surface` are only meaningful for a
+ * .desktop file; anything else opens through xdg-open on its path. The
+ * surface is owned by icons.c's cache, not by us — never free it here. */
+#define SYN_DESKICON_MAX  128
+#define SYN_DESKICON_W    96     /* cell size, including the label */
+#define SYN_DESKICON_H    92
+#define SYN_DESKICON_PAD  16     /* inset from the usable area's edge */
+typedef struct {
+    char  path[512];
+    char  label[128];
+    char  exec[256];
+    int   is_dir;
+    int   is_desktop;
+    int   x, y;                    /* cell origin, layout coords */
+    cairo_surface_t *icon_surface; /* borrowed from icons.c; may be NULL */
+} syn_deskicon_t;
+
 typedef struct {
     char  terminal[64];
     char  autostart[SYN_AUTOSTART_MAX][128];
@@ -919,6 +951,10 @@ typedef struct {
     /* synuirc remember_geometry (default on): record each app's window
      * geometry when it closes and reopen it there. See geom_persist.c. */
     bool  remember_geometry;
+
+    /* synuirc desktop_icons (default OFF): draw ~/Desktop on the wallpaper.
+     * The desktop right-click menu can flip this at runtime. */
+    bool  desktop_icons;
     float titlebar_color[4];
     float titlebar_color_focus[4];
     float titlebar_text[4];
@@ -1605,6 +1641,33 @@ struct syn_server {
         int  selected;                    /* hovered item, -1 = none */
         int  x, y, w, h;                  /* menu rect, layout coords */
     } dockmenu;
+
+    /* deskmenu.c / render.c: right-click menu on the wallpaper, and the
+     * optional ~/Desktop icons. Same shape as dockmenu above. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_buffer *text_buf;
+    } deskmenu_ui;
+    struct {
+        int  visible;
+        syn_deskact_t actions[SYN_DESKMENU_MAX];
+        int  action_count;
+        int  selected;                    /* hovered item, -1 = none */
+        int  x, y, w, h;                  /* menu rect, layout coords */
+    } deskmenu;
+
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_buffer *buf;
+    } deskicons_ui;
+    syn_deskicon_t deskicons[SYN_DESKICON_MAX];
+    int            deskicon_count;
+    int            deskicon_selected;     /* -1 = none */
+    /* Double-click tracking for launching an icon, same 400ms window as the
+     * titlebar's (input.c) so the desktop does not feel different. */
+    uint32_t       deskicon_last_click_ms;
+    int            deskicon_last_click_idx;
 
     /* Alt+Tab (input.c). focus_counter stamps syn_view::focus_seq on every real
      * focus change, which is the most-recently-used order Alt+Tab walks.
@@ -2912,6 +2975,30 @@ void dockmenu_motion(syn_server_t *s, double lx, double ly);
 void dockmenu_click(syn_server_t *s, double lx, double ly);
 void dockmenu_close(syn_server_t *s);
 void synui_render_dockmenu(syn_server_t *s);
+
+/* deskmenu.c — the desktop right-click menu and the optional ~/Desktop icons.
+ * Same pointer-driven, modal-while-open contract as the dock menu above. */
+void deskmenu_open(syn_server_t *s, double lx, double ly);
+void deskmenu_motion(syn_server_t *s, double lx, double ly);
+void deskmenu_click(syn_server_t *s, double lx, double ly);
+void deskmenu_close(syn_server_t *s);
+const char *deskact_label(syn_deskact_t a);
+/* Row geometry, shared with render.c so both walk the rows the same way. */
+int  deskmenu_row_top(syn_server_t *s, int i);
+int  deskmenu_row_height(syn_server_t *s, int i);
+
+void deskicons_reload(syn_server_t *s);   /* rescan ~/Desktop */
+void deskicons_layout(syn_server_t *s);   /* re-grid onto the primary output */
+int  deskicon_at(syn_server_t *s, double lx, double ly);
+void deskicon_activate(syn_server_t *s, int i);
+void deskicon_select(syn_server_t *s, int i);
+
+void synui_render_deskmenu(syn_server_t *s);
+void synui_render_deskicons(syn_server_t *s);
+
+/* icons.c: resolve a .desktop file we have the path of (rather than an
+ * app_id). NULL if it has no runnable Exec=. */
+const syn_icon_entry_t *icon_lookup_desktop_path(const char *path);
 
 /* Launch a shell command (fork/exec); exposed for dock launches. */
 void synui_spawn(const char *cmd);
