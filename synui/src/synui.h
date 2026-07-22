@@ -1421,6 +1421,21 @@ struct syn_output {
      * to the X server. Persisted in outputs.conf as primary=1. */
     int                      primary;
 
+    /* dispcfg.c: 10-bit (deep colour) scanout — the HDR row in the display
+     * panel. `deep_color` is what the user asked for and what outputs.conf
+     * stores; `deep_color_ok` is whether the backend actually accepted it, so
+     * the panel can say "unsupported" instead of silently doing nothing.
+     * `hdr_capable` is what the monitor claims over EDID.
+     *
+     * This is deliberately NOT full HDR. Real HDR needs the compositor to
+     * composite in a PQ/scRGB space and tone-map SDR clients into it; scenefx
+     * renders 8-bit sRGB through GLES2 and cannot. What is here is the part
+     * the stack can honestly deliver: a 10-bit framebuffer, which removes
+     * gradient banding and is a prerequisite for HDR later. */
+    int                      deep_color;
+    int                      deep_color_ok;
+    int                      hdr_capable;
+
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */
 
@@ -2225,6 +2240,10 @@ void dispcfg_toggle(syn_server_t *s);
  * (navigation/rotate/reorder); modified combos fall through to the bind
  * table. Returns 1 if the key was consumed. */
 int  dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* 10-bit scanout. _set returns whether the backend accepted it; _probe fills
+ * hdr_capable. See the syn_output_t fields for why this is not full HDR. */
+int  dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable);
+void dispcfg_probe_hdr(syn_server_t *s, syn_output_t *o);
 /* Output hotplug while the panel is open: reseed the arrangement order
  * (dropping dangling pointers) and re-render. No-op when hidden. */
 void dispcfg_outputs_changed(syn_server_t *s);

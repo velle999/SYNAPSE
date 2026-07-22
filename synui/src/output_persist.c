@@ -45,6 +45,7 @@ typedef struct {
     int   grid_x, grid_y;
     int   x, y;
     int   primary;
+    int   deep_color;   /* 10-bit scanout; see dispcfg_set_deep_color */
 } persist_entry_t;
 
 static persist_entry_t table[OUTPUT_PERSIST_MAX];
@@ -111,6 +112,7 @@ static void table_load(void)
             else if (!strcmp(tok, "x"))         e->x         = atoi(val);
             else if (!strcmp(tok, "y"))         e->y         = atoi(val);
             else if (!strcmp(tok, "primary"))   e->primary   = atoi(val);
+            else if (!strcmp(tok, "deep_color")) e->deep_color = atoi(val);
         }
         table_count++;
     }
@@ -169,6 +171,13 @@ struct wlr_output_layout_output *output_persist_apply(syn_server_t *s,
     output->grid_y  = e->grid_y;
     output->primary = e->primary;
 
+    /* Re-apply 10-bit as its own modeset: it is a render-format change the
+     * state above deliberately does not carry, and it is allowed to fail (a
+     * different cable, a higher mode) without taking the rest of the saved
+     * config down with it. */
+    if (e->deep_color)
+        dispcfg_set_deep_color(s, output, 1);
+
     return wlr_output_layout_add(s->output_layout, wo, e->x, e->y);
 }
 
@@ -214,7 +223,8 @@ void output_persist_save(syn_server_t *s)
         e->grid_y    = o->grid_y;
         e->x         = box.x;
         e->y         = box.y;
-        e->primary   = o->primary;
+        e->primary    = o->primary;
+        e->deep_color = o->deep_color;
     }
 
     /* At most one primary. If a connected output claims it, it wins and every
@@ -257,10 +267,10 @@ void output_persist_save(syn_server_t *s)
         fprintf(f,
                 "output %s enabled=%d width=%d height=%d refresh=%d "
                 "transform=%d scale=%.6f grid_x=%d grid_y=%d x=%d y=%d "
-                "primary=%d\n",
+                "primary=%d deep_color=%d\n",
                 e->name, e->enabled, e->width, e->height, e->refresh,
                 e->transform, (double)e->scale, e->grid_x, e->grid_y,
-                e->x, e->y, e->primary);
+                e->x, e->y, e->primary, e->deep_color);
     }
     fclose(f);
 }

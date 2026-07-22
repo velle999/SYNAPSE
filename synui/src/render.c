@@ -699,8 +699,9 @@ void synui_render_dispcfg(syn_server_t *s)
 
     int rows = d->count > 0 ? d->count : 1;
     int list_top = d->count > 0 ? map_top + map_h + 24 : 70;
-    /* 760 min: the rows run out to the PRIMARY tag at x=630. */
-    int pw = d->count > 0 && map_w + 36 > 760 ? map_w + 36 : 760;
+    /* 890 min: the rows run out to the colour-depth column at x=760, which
+     * sits past the PRIMARY tag at x=630. */
+    int pw = d->count > 0 && map_w + 36 > 890 ? map_w + 36 : 890;
     int ph = list_top + rows * 28 + 126;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
@@ -836,6 +837,18 @@ void synui_render_dispcfg(syn_server_t *s)
             cairo_show_text(cr, explicit_choice ? "PRIMARY" : "primary (auto)");
         }
 
+        /* Colour depth. Three distinct states, because "off" and "this
+         * monitor/mode can't do it" are different answers to the same key. */
+        syn_output_t *o = d->order[i];
+        const char *depth;
+        if (o->deep_color)        { set_accent(cr, 0.95); depth = "10-bit"; }
+        else if (o->hdr_capable)  { cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+                                    depth = "8-bit"; }
+        else                      { cairo_set_source_rgba(cr, 0.40, 0.40, 0.48, 1.0);
+                                    depth = "8-bit (only)"; }
+        cairo_move_to(cr, 760, y);
+        cairo_show_text(cr, depth);
+
         y += 28;
     }
 
@@ -853,7 +866,8 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
                         "p set primary (X11/game default)");
     cairo_move_to(cr, 18, ph - 20);
-    cairo_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 Esc close");
+    cairo_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 "
+                        "d 10-bit colour (HDR-ready) \xc2\xb7 Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->dispcfg_ui.text_buf, s->dispcfg_ui.tree, buf);

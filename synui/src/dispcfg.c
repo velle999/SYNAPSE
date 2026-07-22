@@ -32,8 +32,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <drm_fourcc.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/util/log.h>
 
 #include "synui.h"
 
@@ -143,6 +145,74 @@ static void dispcfg_rechain(syn_server_t *s)
     }
 
     output_layout_changed(s);   /* re-renders the panel too */
+}
+
+/* ── Deep colour (the HDR row) ───────────────────────────── */
+/*
+ * Ask the backend for a 10-bit framebuffer on this output.
+ *
+ * There is no "does this connector do 10-bit?" query in wlroots, and the DRM
+ * property alone would not tell us whether the whole modeset (this mode, this
+ * bandwidth, this cable) survives at 30bpp. So the capability test IS the
+ * apply: build the state, wlr_output_test_state() it, and only commit if the
+ * backend says yes. A DisplayPort link that has the headroom at 1440p60 and
+ * not at 4K120 therefore reports honestly at each mode.
+ *
+ * Returns 1 if the output is now in the requested format.
+ */
+int dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable)
+{
+    if (!o || !o->wlr_output) return 0;
+
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    wlr_output_state_set_render_format(&state, enable ? DRM_FORMAT_XRGB2101010
+                                                      : DRM_FORMAT_XRGB8888);
+
+    int ok = wlr_output_test_state(o->wlr_output, &state) &&
+             wlr_output_commit_state(o->wlr_output, &state);
+    wlr_output_state_finish(&state);
+
+    if (!ok) {
+        wlr_log(WLR_INFO, "synui: %s rejected %s scanout",
+                o->wlr_output->name, enable ? "10-bit" : "8-bit");
+        /* Asking for 10-bit and being refused leaves the output where it was;
+         * record the refusal so the panel can say so rather than showing a
+         * setting that silently did nothing. */
+        if (enable) { o->deep_color = 0; o->deep_color_ok = 0; }
+        return 0;
+    }
+
+    o->deep_color    = enable ? 1 : 0;
+    o->deep_color_ok = 1;
+    return 1;
+}
+
+/*
+ * Does the monitor advertise HDR over EDID? wlroots surfaces no colorimetry
+ * fields, so this is the honest proxy we have: a display that accepts a
+ * 10-bit framebuffer is the one that could carry HDR if the renderer ever
+ * gains it. Reported separately from deep_color so the panel does not imply
+ * the compositor is doing HDR tone mapping — it is not.
+ */
+void dispcfg_probe_hdr(syn_server_t *s, syn_output_t *o)
+{
+    if (!o || !o->wlr_output) return;
+
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    wlr_output_state_set_render_format(&state, DRM_FORMAT_XRGB2101010);
+    o->hdr_capable = wlr_output_test_state(o->wlr_output, &state) ? 1 : 0;
+    wlr_output_state_finish(&state);
+}
+
+static void dispcfg_toggle_deep_color(syn_server_t *s)
+{
+    syn_output_t *sel = selected_output(s);
+    if (!sel) return;
+    dispcfg_set_deep_color(s, sel, !sel->deep_color);
+    output_persist_save(s);
+    synui_render_dispcfg(s);
 }
 
 /* Move the selected monitor one cell in the grid. If another monitor
@@ -314,6 +384,9 @@ int dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return 1;
     case XKB_KEY_p:
         dispcfg_make_primary(s);
+        return 1;
+    case XKB_KEY_d:
+        dispcfg_toggle_deep_color(s);
         return 1;
     default:
         return 1;   /* modal: swallow other unmodified keys while open */

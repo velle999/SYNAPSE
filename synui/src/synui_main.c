@@ -448,6 +448,11 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     wl_list_insert(&server->outputs, &output->link);
 
+    /* Ask once whether this connector can carry a 10-bit framebuffer, so the
+     * display panel can show the HDR row truthfully before anything is
+     * toggled. output_persist_apply() may already have re-enabled it below. */
+    dispcfg_probe_hdr(server, output);
+
     /* A new output comes up at identity gamma. With night light on, leaving it
      * that way means the second monitor stays blue while the first is warm —
      * which reads as a broken monitor, not a setting. */
