@@ -616,6 +616,33 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
     struct wlr_box area;
     get_view_geom(s, view, &area);
 
+    /* If this app has a remembered geometry, it wins over the centred
+     * default — but only after being clamped back onto a monitor that exists
+     * now, so an entry saved on a wider desk can't open the window off-screen
+     * where it could never be reached. */
+    struct wlr_box saved;
+    int saved_max = 0;
+    if (geom_persist_lookup(view, &saved, &saved_max)) {
+        int sw = saved.width, sh = saved.height;
+        if (sw > area.width)  sw = area.width;
+        if (sh > area.height) sh = area.height;
+        if (sw < MIN_WIN) sw = MIN_WIN;
+        if (sh < MIN_WIN) sh = MIN_WIN;
+
+        int sx = saved.x, sy = saved.y;
+        if (sx + sw > area.x + area.width)  sx = area.x + area.width  - sw;
+        if (sy + sh > area.y + area.height) sy = area.y + area.height - sh;
+        if (sx < area.x) sx = area.x;
+        if (sy < area.y) sy = area.y;
+
+        view_resize(view, sx, sy, sw, sh);
+        /* Re-maximizing needs the restore box already in place, which the
+         * view_resize above just established. */
+        if (saved_max && !view->maximized)
+            view_apply_maximized(s, view, 1);
+        return;
+    }
+
     int w = view->w, h = view->h;
     /* The frame has to hold the client plus its chrome. */
     int bw = view_deco_border(view);

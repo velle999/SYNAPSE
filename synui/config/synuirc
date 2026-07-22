@@ -59,6 +59,18 @@ animation_ms = 140
 # runtime without touching this; setting 0 here is the permanent version.
 titlebar_height = 26
 
+# ── Remembered window geometry ─────────────────────────────
+# When a window closes, record its size, position and maximized state against
+# its app_id, and reopen that app's next window there instead of centring it.
+# Written to ~/.config/synui/windows.conf — delete a line to forget one app,
+# delete the file to forget all of them.
+#
+# Only *free* windows are recorded: a tiled window's geometry belongs to the
+# layout engine and a fullscreen one's to the monitor, so neither is saved.
+# A remembered box is always clamped back onto a monitor that exists now, so
+# an entry written on a wider desk can't reopen a window off-screen.
+# remember_geometry = on
+
 # Titlebar colors, #rrggbb (defaults shown). Deliberately muted: the border
 # already carries the focus/AI/alert signal.
 # titlebar_color       = #12121c

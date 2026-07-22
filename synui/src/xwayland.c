@@ -230,6 +230,9 @@ static void xw_unmap(struct wl_listener *listener, void *data)
     effects_notify_close(s);
 
     int was_focused = (s->focused_view == view);
+    /* Before mapped clears — the geometry is only meaningful while the window
+     * is still the thing the user just sized. */
+    geom_persist_save(view);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     /* A game exiting is an unmap, not an un-fullscreen — without this, game

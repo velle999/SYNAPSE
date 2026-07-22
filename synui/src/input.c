@@ -1205,12 +1205,19 @@ static void server_vkb_mgr_destroy(struct wl_listener *listener, void *data)
 /* edges: which WLR_EDGE_* a RESIZE drags. 0 = derive from the cursor's quadrant
  * (Super+right-drag, which has no edge to speak of); a border press passes the
  * edge it actually landed on. Ignored for MOVE. */
-static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
-                                    uint32_t edges)
-{
-    syn_server_t *s = view->server;
-    if (!view->mapped || view->fullscreen) return;
+/* How far the pointer must travel before an armed titlebar press counts as a
+ * drag. Below this a press and release is just a click. */
+#define GRAB_DRAG_SLOP 5.0
 
+/*
+ * Release a view from whatever is pinning its geometry — maximized, snapped or
+ * tiled — so a grab can carry it freely. Split out of begin_interactive_edges
+ * because an armed titlebar grab runs it later, on the first real motion,
+ * rather than at press time.
+ */
+static void grab_release_constraints(syn_server_t *s, syn_view_t *view,
+                                     syn_cursor_mode_t mode)
+{
     /* Dragging a maximized window restores it and takes it with you, the way
      * every other desktop does — otherwise it would slide around full-size. */
     if (view->maximized) {
@@ -1235,6 +1242,25 @@ static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
         view->floating = 1;
         layout_apply(s, view->workspace);   /* reflow remaining tiled windows */
     }
+}
+
+/* armed: hold off on grab_release_constraints until the pointer has moved
+ * GRAB_DRAG_SLOP. Only a titlebar press does this; a Super+drag or a CSD
+ * client's xdg_toplevel.move already means "the drag has begun". */
+static void begin_interactive_armed(syn_view_t *view, syn_cursor_mode_t mode,
+                                    uint32_t edges, bool armed)
+{
+    syn_server_t *s = view->server;
+    if (!view->mapped || view->fullscreen) return;
+
+    s->grab_armed = armed;
+    if (armed) {
+        s->grab_press_x = s->cursor->x;
+        s->grab_press_y = s->cursor->y;
+    } else {
+        grab_release_constraints(s, view, mode);
+    }
+
     wlr_scene_node_raise_to_top(view_node(view));
     focus_view(s, view, view_surface(view));
 
@@ -1266,6 +1292,12 @@ static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
     cursor_set_deco(s, deco_grab_cursor(s, mode, s->resize_edges), now_msec());
 }
 
+static void begin_interactive_edges(syn_view_t *view, syn_cursor_mode_t mode,
+                                    uint32_t edges)
+{
+    begin_interactive_armed(view, mode, edges, false);
+}
+
 static void begin_interactive(syn_view_t *view, syn_cursor_mode_t mode)
 {
     begin_interactive_edges(view, mode, 0);
@@ -1284,6 +1316,24 @@ void view_begin_interactive(syn_view_t *view, syn_cursor_mode_t mode,
 static void process_cursor_move(syn_server_t *s)
 {
     syn_view_t *v = s->grabbed_view;
+
+    /* An armed titlebar press is not yet a drag. Hold the window in its
+     * maximized/snapped/tiled geometry until the pointer has actually
+     * travelled, so a plain click to focus no longer restores it. */
+    if (s->grab_armed) {
+        double px = s->cursor->x - s->grab_press_x;
+        double py = s->cursor->y - s->grab_press_y;
+        if (px * px + py * py < GRAB_DRAG_SLOP * GRAB_DRAG_SLOP)
+            return;
+
+        s->grab_armed = false;
+        grab_release_constraints(s, v, SYNUI_CURSOR_MOVE);
+        /* Re-anchor: grab_release_constraints may have resized and moved the
+         * window out from under the offsets taken at press time. */
+        s->grab_x = s->cursor->x - v->x;
+        s->grab_y = s->cursor->y - v->y;
+    }
+
     v->x = (int)(s->cursor->x - s->grab_x);
     v->y = (int)(s->cursor->y - s->grab_y);
     wlr_scene_node_set_position(view_node(v), v->x, v->y);
@@ -1587,8 +1637,11 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
      * against a screen edge becomes a snap. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED &&
         s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
-        if (s->cursor_mode == SYNUI_CURSOR_MOVE)
+        /* An armed grab that never crossed the slop was a click, not a drag:
+         * nothing moved, so there is no drop to resolve and no snap to apply. */
+        if (s->cursor_mode == SYNUI_CURSOR_MOVE && !s->grab_armed)
             snap_drag_end(s, s->grabbed_view);
+        s->grab_armed   = false;
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
         s->grabbed_view = NULL;
 
@@ -1719,7 +1772,7 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                     if (dbl)
                         view_apply_maximized(s, dv, !dv->maximized);
                     else
-                        begin_interactive(dv, SYNUI_CURSOR_MOVE);
+                        begin_interactive_armed(dv, SYNUI_CURSOR_MOVE, 0, true);
                     break;
                 }
                 default:

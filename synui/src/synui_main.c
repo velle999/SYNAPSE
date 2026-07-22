@@ -527,6 +527,9 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
     int was_focused = (server->focused_view == view);
     /* L2 (interim): a closing window fires a brief screen glitch. */
     effects_notify_close(server);
+    /* Before mapped clears — the geometry is only meaningful while the window
+     * is still the thing the user just sized. */
+    geom_persist_save(view);
     view->mapped = 0;
     foreign_toplevel_unmap(view);
     /* A fullscreen client that exits never un-fullscreens itself: bring back

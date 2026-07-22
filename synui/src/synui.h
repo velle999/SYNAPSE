@@ -915,6 +915,10 @@ typedef struct {
     int   animation_ms;
 
     int   titlebar_height;
+
+    /* synuirc remember_geometry (default on): record each app's window
+     * geometry when it closes and reopen it there. See geom_persist.c. */
+    bool  remember_geometry;
     float titlebar_color[4];
     float titlebar_color_focus[4];
     float titlebar_text[4];
@@ -1684,6 +1688,14 @@ struct syn_server {
     uint32_t          tb_last_click_ms;
     syn_view_t       *tb_last_click_view;
 
+    /* input.c: a titlebar press *arms* a move grab rather than committing to
+     * it. Un-maximizing (and un-snapping, and un-tiling) is deferred until the
+     * pointer has actually travelled — otherwise merely clicking a maximized
+     * window's titlebar to focus it dropped it straight back to a floating
+     * window. grab_press_* is where the button went down. */
+    bool              grab_armed;
+    double            grab_press_x, grab_press_y;
+
     /* deco.c: `decorations_toggle` (Super+Shift+D) hides every titlebar at
      * runtime. Server state, not config state, so a config reload can't undo
      * it — synuirc's `titlebar_height = 0` is the permanent version of this. */
@@ -2316,6 +2328,12 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void view_resize(syn_view_t *view, int x, int y, int w, int h);
 void layout_float_place(syn_server_t *s, syn_view_t *view);
+
+/* geom_persist.c: per-app window geometry, remembered across restarts.
+ * _save is called when a window unmaps; _lookup feeds layout_float_place,
+ * which does the clamping onto a currently-connected output. */
+void geom_persist_save(syn_view_t *view);
+bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized);
 void layout_move_in_stack(syn_server_t *s, syn_view_t *view, int dir);
 void layout_adjust_master(syn_server_t *s, syn_workspace_t *ws, float delta);
 /* Re-home a window onto another monitor, keeping it on its current desktop. */
