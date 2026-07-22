@@ -48,6 +48,37 @@ backup=('etc/MangoHud.conf')
 source=("synui-0.1.0.tar.gz")
 sha256sums=('SKIP')
 
+# Refuse to build a tarball that is older than the working tree.
+#
+# The tarball, not src/, is what gets compiled — mktarball.sh exists precisely
+# because of that, but nothing forced anyone to run it. Editing a source file
+# and running makepkg produces a package that builds cleanly, installs cleanly,
+# and contains the PREVIOUS binary. Nothing in the output says so, which is why
+# the check belongs here rather than in a comment.
+#
+# The extraction dir ($pkgname-$pkgver, under src/ alongside the real sources)
+# is always newer than the tarball because makepkg just created it; excluded by
+# path, or this would fire on every build.
+prepare() {
+    local tarball="$startdir/$pkgname-$pkgver.tar.gz"
+    [ -f "$tarball" ] || return 0
+
+    local stale
+    stale=$(find "$startdir/src" "$startdir/include" "$startdir/meson.build" \
+                 "$startdir/config" "$startdir/data" "$startdir/protocols" \
+                 "$startdir/systemd" "$startdir/tests" \
+                 -type f -newer "$tarball" \
+                 -not -path "*/$pkgname-$pkgver/*" \
+                 -print -quit 2>/dev/null)
+
+    if [ -n "$stale" ]; then
+        error "$pkgname-$pkgver.tar.gz is older than ${stale#"$startdir"/}"
+        error "makepkg would silently package the PREVIOUS build. Run:"
+        error "    ./mktarball.sh"
+        return 1
+    fi
+}
+
 build() {
     cd "$srcdir/synui-0.1.0"
     meson setup build --prefix=/usr --buildtype=release

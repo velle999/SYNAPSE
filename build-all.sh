@@ -66,7 +66,29 @@ build_component() {
            "$BASE/$name"/*.pkg.tar.zst \
            "$BASE/$name/$name-0.1.0.tar.gz"
 
-    # Create tarball
+    # Create tarball.
+    #
+    # A component that ships its own mktarball.sh wins: that script knows which
+    # top-level dirs the component actually compiles and refuses to write a
+    # tarball containing its own extraction dir. The generic tar below is a
+    # best-effort fallback for everything else, and having both meant two
+    # implementations of the same rule, free to drift.
+    if [ -x "$BASE/$name/mktarball.sh" ]; then
+        ( cd "$BASE/$name" && ./mktarball.sh )
+        cd "$BASE/$name"
+        makepkg -sf --noconfirm
+        local pkg_mk
+        pkg_mk=$(ls -1t "$name"-*.pkg.tar.zst 2>/dev/null \
+                 | grep -v "^$name-debug-" | head -1)
+        if [ -n "$pkg_mk" ]; then
+            sudo pacman -U --noconfirm --overwrite '*' "$pkg_mk"
+            echo "=== $name installed ==="
+        else
+            echo "=== $name: no package built ==="
+        fi
+        return 0
+    fi
+
     cd "$BASE"
 
     # Collect directories that exist

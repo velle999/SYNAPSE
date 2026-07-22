@@ -19,7 +19,14 @@ pkg/
 # extracted source tree (makepkg unpacks the tarball into src/)
 src/*-0.1.0/
 */src/*-0.1.0/
-# generated source tarballs
+# Generated source tarballs. These are build artifacts, not sources — the
+# working tree is the source. A fresh clone regenerates them with either
+# ./build-all.sh (which does it per component) or, for synui and synguard,
+# <pkg>/mktarball.sh. Do NOT commit them.
+#
+# Both PKGBUILDs refuse to build a tarball older than the tree, so a stale one
+# can no longer be packaged silently — which it once was, shipping a synguard
+# binary without the fix that had just been built into it.
 *-0.1.0.tar.gz
 # makepkg srcdir for the script-only packages (canonical source is the
 # top-level <pkg>/<name>.sh; everything makepkg drops into src/ is generated)

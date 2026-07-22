@@ -52,7 +52,15 @@ netwatch_test = executable('netwatch_test',
   dependencies: [dep_threads, dep_systemd])
 test('netwatch', netwatch_test, timeout: 60)
 
-install_data('systemd/synguard.service', install_dir: '/etc/systemd/system')
+# The unit is installed by the PKGBUILD, to /usr/lib/systemd/system — NOT here
+# and NOT to /etc.
+#
+# This used to install to /etc/systemd/system as well, so the package owned two
+# copies of the same unit. /etc wins (systemctl resolves FragmentPath there),
+# which means every hardening change shipped in /usr/lib was inert until the
+# /etc copy happened to be overwritten too. A packaged unit belongs in
+# /usr/lib; /etc/systemd/system is the ADMIN's space, and a package writing
+# there both shadows itself and clobbers local overrides on upgrade.
 
 install_subdir('rules', install_dir: '/etc/synguard', strip_directory: false)
 
