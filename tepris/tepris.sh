@@ -38,10 +38,29 @@ user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 0);
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+user_pref("dom.allow_scripts_to_close_windows", true);
+user_pref("browser.sessionstore.resume_from_crash", false);
 EOF
 
-# --kiosk: fullscreen, no browser chrome. The game binds Space/arrows/Shift,
-# so a URL bar in the way would eat keystrokes as much as it would look wrong.
+# We deliberately do NOT use --kiosk. Kiosk mode is permanently fullscreen with
+# no way out, which left the game with no working windowed state and no way to
+# quit. Instead we run an ordinary window and hide the browser chrome with
+# userChrome.css, so the game's own buttons control fullscreen and quitting,
+# and synui gives it a normal titlebar.
+mkdir -p "$PROFILE/chrome"
+cat >"$PROFILE/chrome/userChrome.css" <<'EOF'
+/* Single-app profile: hide tab strip and nav bar so the game gets the whole
+   window, without kiosk mode's inability to leave fullscreen. */
+#TabsToolbar,
+#nav-bar,
+#navigator-toolbox > toolbar:not(#toolbar-menubar) {
+  visibility: collapse !important;
+}
+EOF
+
+# The #app fragment tells the page it is running as a dedicated window, which
+# is what enables its quit button (see CAN_CLOSE_WINDOW in tepris.js).
 exec env MOZ_APP_REMOTINGNAME="$APP" \
-    firefox --no-remote --kiosk --profile "$PROFILE" \
-    "file://$APP_ROOT/index.html"
+    firefox --no-remote --new-window --profile "$PROFILE" \
+    "file://$APP_ROOT/index.html#app"

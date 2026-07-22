@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=tepris
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="TEPRIS — arcade Tetris remix with CRT/VHS effects, gamepad support, and screen shake"
 arch=('any')
 url="https://github.com/velle999/tepris"
@@ -10,7 +10,7 @@ depends=('firefox')
 makedepends=('git' 'python-pillow')
 
 # Pinned upstream commit — bump alongside pkgver/pkgrel when rolling the app.
-_commit=b97e7fe2c778d92b54c9d2451dd733a4695d4375
+_commit=339ece1b26b31e5eb8540bb2a409729d8d55c112
 
 source=("git+$url.git#commit=$_commit"
         "tepris.sh"
