@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=155
+pkgrel=156
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -45,7 +45,8 @@ license=('GPL-2.0-or-later')
 #   since those URLs come off the network. Without it, Enter does nothing.
 depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
-optdepends=('wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
+optdepends=('cava: audio visualiser widget (synui-widgets visualizer on)'
+            'wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'
             'gamemode: CPU/GPU governor for synui-game-run (gamemoderun)'
@@ -173,6 +174,16 @@ package() {
         install -Dm644 "$_mod" \
             "$pkgdir/usr/share/synui/quickshell/modules/${_mod##*/}"
     done
+    for _wid in quickshell/widgets/*.qml; do
+        install -Dm644 "$_wid" \
+            "$pkgdir/usr/share/synui/quickshell/widgets/${_wid##*/}"
+    done
+
+    # The single writer of widgets.state. synui's Super+Shift+A bind and the
+    # control panel's Desktop widgets row both run this, so there is one
+    # implementation of the toggle however it is reached.
+    install -Dm755 systemd/synui-widgets.sh \
+        "$pkgdir/usr/bin/synui-widgets"
     install -Dm755 systemd/synui-bar.sh \
         "$pkgdir/usr/bin/synui-bar"
 

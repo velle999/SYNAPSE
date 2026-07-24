@@ -1,4 +1,5 @@
 import Quickshell
+import "widgets"
 
 /*
  * SYNAPSE shell — a quickshell replacement for waybar.
@@ -21,5 +22,26 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: Osd {}
+    }
+
+    // Desktop widgets. All OFF until widgets.state says otherwise, and each
+    // one shows on the primary output only — see WidgetState. They are
+    // instantiated per screen anyway so that unplugging a monitor cannot strand
+    // one on a screen that no longer exists.
+    Variants {
+        model: Quickshell.screens
+        delegate: Visualizer {}
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: SysMonitor {}
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: BigClock {}
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: QuickLaunch {}
     }
 }

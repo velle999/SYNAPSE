@@ -357,6 +357,7 @@ typedef enum {
     CTL_ROW_TITLEBARS,
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch */
+    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher */
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
     CTL_ROW_THEME,         /* jump-off: the Super+T theme manager */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
@@ -399,6 +400,11 @@ typedef struct {
      * panel are two separate waits, and a static would carry the first one's
      * answer into the second and call it an instant success. */
     char   backend_before[16];
+    /* Which row the poll above is watching. It was written for the AI backend
+     * and hardcoded to that row; the desktop-widgets row has exactly the same
+     * shape (fire a helper, the value lands a moment later), so the row is a
+     * field rather than a second copy of the machinery. */
+    int    poll_row;
 } syn_ctlpanel_t;
 
 /* ── Start menu (menu.c) ─────────────────────────────────── */

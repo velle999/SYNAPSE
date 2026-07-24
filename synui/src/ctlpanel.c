@@ -64,6 +64,7 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_TITLEBARS:  return "Titlebars";
     case CTL_ROW_LAUNCHER:   return "Start button";
     case CTL_ROW_TRANSPARENCY: return "Transparency";
+    case CTL_ROW_WIDGETS:    return "Desktop widgets";
     case CTL_ROW_SEP:        return "";
     case CTL_ROW_THEME:      return "Theme \xe2\x80\xa6";
     case CTL_ROW_DISPLAYS:   return "Display settings";
@@ -98,6 +99,40 @@ static const char *ai_backend_label(void)
     if (strcmp(b, "cpu") == 0) return "CPU";
     if (strcmp(b, "off") == 0) return "off";
     return "auto";
+}
+
+/* Read the desktop-widget toggles the same way the bar does — straight out of
+ * widgets.state. synui does not own that state (synui-widgets writes it and
+ * quickshell watches it), so there is nothing in syn_server_t to read; the file
+ * IS the state, and a missing file means nothing has been switched on yet.
+ *
+ * "partial" is a real answer, not a fudge: the four widgets toggle
+ * independently from the CLI, so "on"/"off" alone would misreport a desktop
+ * with only the clock up. */
+static const char *widgets_label(void)
+{
+    char path[256];
+    if (!syn_config_path(path, sizeof(path), "widgets.state")) return "off";
+
+    FILE *f = fopen(path, "r");
+    if (!f) return "off";
+
+    int on = 0, total = 0;
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '#') continue;
+        const char *eq = strchr(line, '=');
+        if (!eq) continue;
+        total++;
+        /* Skip the spaces the writer puts either side of the '='. */
+        const char *v = eq + 1;
+        while (*v == ' ' || *v == '\t') v++;
+        if (strncmp(v, "on", 2) == 0) on++;
+    }
+    fclose(f);
+
+    if (total == 0 || on == 0) return "off";
+    return on == total ? "on" : "partial";
 }
 
 void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
@@ -139,6 +174,9 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
                      (int)(s->config.active_opacity * 100 + 0.5f));
         else
             snprintf(buf, n, "off");
+        break;
+    case CTL_ROW_WIDGETS:
+        snprintf(buf, n, "%s", widgets_label());
         break;
     case CTL_ROW_THEME:
         /* A jump-off, but showing the active theme here saves opening the panel
@@ -333,12 +371,15 @@ int ctlpanel_tick(syn_server_t *s)
         return 0;
     }
 
+    const char *poll_name =
+        s->ctlpanel.poll_row == CTL_ROW_WIDGETS ? "desktop widgets" : "AI backend";
+
     char now_val[16];
-    ctlpanel_row_value(s, CTL_ROW_AI_BACKEND, now_val, sizeof(now_val));
+    ctlpanel_row_value(s, s->ctlpanel.poll_row, now_val, sizeof(now_val));
 
     if (strcmp(now_val, s->ctlpanel.backend_before) != 0) {
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "AI backend: %s", now_val);
+                 "%s: %s", poll_name, now_val);
         s->ctlpanel.backend_poll_until = 0.0;   /* landed — stop polling */
         synui_render_ctlpanel(s);
         return 0;
@@ -350,7 +391,7 @@ int ctlpanel_tick(syn_server_t *s)
          * case where a stuck spinner reads as "it worked". */
         s->ctlpanel.backend_poll_until = 0.0;
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "AI backend: still %s \xc2\xb7 switch did not land", now_val);
+                 "%s: still %s \xc2\xb7 switch did not land", poll_name, now_val);
         synui_render_ctlpanel(s);
         return 0;
     }
@@ -365,6 +406,7 @@ void ctlpanel_show(syn_server_t *s)
     s->ctlpanel.scroll    = 0;
     s->ctlpanel.status[0] = '\0';
     s->ctlpanel.backend_poll_until = 0.0;
+    s->ctlpanel.poll_row  = CTL_ROW_AI_BACKEND;
     wlr_log(WLR_INFO, "synui: control panel shown");
     synui_render_ctlpanel(s);
 }
@@ -484,9 +526,26 @@ static void ctlpanel_activate(syn_server_t *s)
         ctlpanel_row_value(s, CTL_ROW_AI_BACKEND, s->ctlpanel.backend_before,
                            sizeof(s->ctlpanel.backend_before));
         synui_binding_execute(s, "ai_backend", NULL);
+        s->ctlpanel.poll_row = CTL_ROW_AI_BACKEND;
         s->ctlpanel.backend_poll_until = ctl_now_secs() + CTL_BACKEND_POLL_SECS;
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "switching AI backend \xe2\x80\xa6");
+        return;
+
+    case CTL_ROW_WIDGETS:
+        /* synui does not own this state and deliberately does not learn to:
+         * synui-widgets is the single writer of widgets.state and the bar
+         * watches it, so the compositor, the Super+Shift+A bind and this row all
+         * go through the same command. Spawning is async, so the row reads the
+         * OLD value on return — poll it exactly like the AI backend above rather
+         * than leaving a stale "off" under the cursor. */
+        ctlpanel_row_value(s, CTL_ROW_WIDGETS, s->ctlpanel.backend_before,
+                           sizeof(s->ctlpanel.backend_before));
+        synui_spawn("synui-widgets toggle");
+        s->ctlpanel.poll_row = CTL_ROW_WIDGETS;
+        s->ctlpanel.backend_poll_until = ctl_now_secs() + CTL_BACKEND_POLL_SECS;
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "desktop widgets \xe2\x80\xa6");
         return;
 
     /* Jump-offs: the panel that owns the setting is the one that should edit

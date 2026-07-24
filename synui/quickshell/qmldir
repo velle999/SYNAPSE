@@ -5,5 +5,6 @@
 singleton Theme 1.0 Theme.qml
 singleton Icons 1.0 Icons.qml
 singleton OsdState 1.0 OsdState.qml
+singleton WidgetState 1.0 WidgetState.qml
 Bar 1.0 Bar.qml
 Osd 1.0 Osd.qml

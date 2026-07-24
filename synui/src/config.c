@@ -275,8 +275,8 @@ static void seed_default_binds(syn_config_t *cfg)
         /* Themes, not the task manager. The task manager had two binds and needs
          * one — ctrl+alt+delete below is the one everybody already reaches for,
          * so super+t goes to the theme manager, which had only the far less
-         * guessable super+shift+a. That freed super+shift+a entirely; it is
-         * deliberately left unbound rather than reassigned. */
+         * guessable super+shift+a. That freed super+shift+a, which stayed
+         * unbound until the desktop widgets claimed it below. */
         { "super+t",         "theme" },
         { "super+shift+t",   "calendar" },
         { "super+i",         "network" },
@@ -305,9 +305,17 @@ static void seed_default_binds(syn_config_t *cfg)
         { "xf86audiolowervolume", "volume down" },
         { "xf86audiomute",        "volume mute" },
         { "super+g",         "game" },
-        /* super+shift+a is intentionally FREE — the theme manager moved to
-         * super+t. Left open for the next feature rather than filled to keep the
-         * table tidy; `bind = super+shift+a <action>` in synuirc claims it. */
+        /* super+shift+a was left FREE when the theme manager moved to super+t,
+         * explicitly for the next feature. This is it: the desktop widgets
+         * (visualiser, system monitor, clock, quick-launch).
+         *
+         * A spawn rather than a native action, because synui does not own the
+         * state — synui-widgets is the single writer of widgets.state and the
+         * bar watches that file, so the keybind, the control panel row and the
+         * command line all go through one implementation. Group-toggles: if any
+         * widget is on it turns them all off, so the key is always a reliable
+         * "clear the desktop". */
+        { "super+shift+a",   "spawn synui-widgets toggle" },
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },
