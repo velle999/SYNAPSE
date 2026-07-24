@@ -229,6 +229,18 @@ extern const int                 synui_welcome_menu_len;
 #define WPPICK_FOUND_MAX 64   /* images the browse scan will list */
 #define WPPICK_ROWS      10   /* rows visible at once; the rest scroll */
 
+/* ── Cursor theme picker (cursor.c) ──────────────────────── */
+#define CURPICK_MAX  64   /* installed cursor themes the scan will list */
+#define CURPICK_ROWS 10   /* rows visible at once; the rest scroll */
+
+/* One installed cursor theme. The name is a directory name, which means it
+ * comes from whatever archive it was unpacked from — treat it as untrusted
+ * text on both the render path (cairo) and any command line. */
+struct syn_cursor_theme {
+    char name[64];    /* directory name, e.g. "Adwaita" */
+    char path[256];   /* where it was found, shown as the row's subtitle */
+};
+
 /* ── Display settings panel (dispcfg.c) ──────────────────── */
 #define DISPCFG_MAX_OUTPUTS 8
 
@@ -1076,6 +1088,15 @@ typedef struct {
     char                  wallpaper[256];
     syn_wallpaper_mode_t  wallpaper_mode;
     syn_wallpaper_src_t   wallpaper_src;   /* IMAGE (default) or MATRIX */
+
+    /* Cursor theme (cursor.c). Empty name = whatever XCURSOR_THEME says, which
+     * is what synui did unconditionally before this existed. The size is pinned
+     * rather than left to libXcursor: with it unset, a client computes a size
+     * from the X screen, and the Xwayland virtual screen spanning several
+     * monitors is thousands of pixels wide — which is how Steam ended up with a
+     * pointer several times the size of synui's own. */
+    char                  cursor_theme[64];
+    int                   cursor_size;
 
     /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
      * Off by default — Super+Shift+C toggles it at runtime. */
@@ -1995,6 +2016,26 @@ struct syn_server {
         int  found_count;
     } wppick;
 
+    /* Cursor theme picker (cursor.c) — Super+C. Same modal shape as wppick. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } curpick_ui;
+    struct {
+        int visible;
+        int selected;
+        int scroll;
+
+        struct syn_cursor_theme themes[CURPICK_MAX];
+        int count;
+
+        /* What was active when the panel opened, so Esc can undo the live
+         * preview — arrowing onto an unreadable cursor is otherwise a trap. */
+        char restore_theme[64];
+    } curpick;
+
     /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
      * (non-GLES2 renderer) or never initialized. */
     struct syn_matrix *matrix;
@@ -2871,6 +2912,33 @@ void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
 int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 void synui_render_wppick(syn_server_t *s);
+
+/* ── cursor.c (cursor theme + picker) ────────────────────── */
+
+/* Persisted choice, shared with the synui-cursor(1) helper. Applied AFTER
+ * synuirc (config.c calls it last), so it overrides the cursor_theme line the
+ * same way wallpaper.state overrides `wallpaper`. */
+void cursor_state_load(syn_config_t *cfg);
+void cursor_state_save(syn_server_t *s);
+
+/* Swap the live wlr_xcursor_manager to config.cursor_theme/cursor_size. Safe to
+ * call at any time; keeps the previous manager if the new one cannot be built. */
+void cursor_apply(syn_server_t *s);
+/* Re-read cursor.state and apply it — what `synctl dispatch cursor_reload`
+ * runs, so the helper can change the pointer without a re-login. */
+void cursor_reload(syn_server_t *s);
+
+/* Rescan the icon directories into s->curpick.themes[]. */
+void cursor_scan(syn_server_t *s);
+
+void curpick_show(syn_server_t *s);
+void curpick_hide(syn_server_t *s);
+void curpick_toggle(syn_server_t *s);
+int  curpick_total(syn_server_t *s);
+/* Label + subtitle for one row; cursor.c owns the text, render.c draws it. */
+void curpick_row(syn_server_t *s, int row, const char **label, const char **desc);
+int  curpick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+void synui_render_curpick(syn_server_t *s);
 
 /* ── icons.c ─────────────────────────────────────────────── */
 /* Resolved .desktop info for one app_id, cached after first lookup. Matching

@@ -1378,8 +1378,25 @@ int synui_init(syn_server_t *s)
     /* Cursor */
     s->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(s->cursor, s->output_layout);
-    s->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+    /* Theme and size come from synuirc / cursor.state (cursor.c). An untouched
+     * system still gets NULL + 24 — exactly what this was hardcoded to before
+     * the cursor picker existed — because that is what config.c defaults to. */
+    s->cursor_mgr = wlr_xcursor_manager_create(
+        s->config.cursor_theme[0] ? s->config.cursor_theme : NULL,
+        s->config.cursor_size > 0 ? s->config.cursor_size : 24);
     wlr_xcursor_manager_load(s->cursor_mgr, 1);
+
+    /* Children inherit these, so an app launched from the menu agrees with the
+     * compositor rather than falling back to whatever the session wrapper
+     * exported at login. */
+    if (s->config.cursor_theme[0])
+        setenv("XCURSOR_THEME", s->config.cursor_theme, 1);
+    {
+        char cbuf[16];
+        snprintf(cbuf, sizeof(cbuf), "%d",
+                 s->config.cursor_size > 0 ? s->config.cursor_size : 24);
+        setenv("XCURSOR_SIZE", cbuf, 1);
+    }
 
     /* XWayland — X11 app support (lazy: Xwayland starts on first X client).
      * xw_views must be live first: server_new_xwayland_surface() inserts into

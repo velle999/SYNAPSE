@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=160
+pkgrel=161
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -43,9 +43,11 @@ license=('GPL-2.0-or-later')
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder')
+depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder' 'unzip')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
-optdepends=('cava: audio visualiser widget (synui-widgets visualizer on)'
+optdepends=('xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
+            'imagemagick: same — most cursor makefiles render their PNGs with it'
+            'cava: audio visualiser widget (synui-widgets visualizer on)'
             'wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'
@@ -261,6 +263,12 @@ package() {
     # Screen recording: Super+Shift+R starts, and pressing it again stops.
     install -Dm755 systemd/synui-record.sh \
         "$pkgdir/usr/bin/synui-record"
+
+    # synui-cursor: install/switch X cursor themes. The Super+Shift+P picker
+    # shells out to this on Enter, so it is not optional — without it the panel
+    # changes synui's own pointer and nothing else on the desktop follows.
+    install -Dm755 systemd/synui-cursor.sh \
+        "$pkgdir/usr/bin/synui-cursor"
 
     # Right-click an .iso in Dolphin -> Mount/Unmount Image, Write to USB Stick.
     # The service menu must be executable or KIO 6 skips it. See

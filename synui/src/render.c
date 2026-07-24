@@ -1191,6 +1191,157 @@ static void draw_clipped(cairo_t *cr, double x, double y, double max_w,
     cairo_show_text(cr, buf);
 }
 
+/* ── Cursor theme picker (cursor.c) ──────────────────────── */
+
+void synui_render_curpick(syn_server_t *s)
+{
+    if (!s->curpick.visible) {
+        wlr_scene_node_set_enabled(&s->curpick_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 48, top = 58, pad = 22;
+    int total = curpick_total(s);
+    int shown = total < CURPICK_ROWS ? total : CURPICK_ROWS;
+    if (shown < 1) shown = 1;
+
+    int pw = 520;
+    int ph = top + shown * row_h + 56;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->curpick_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->curpick_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->curpick_ui.tree->node);
+
+    /* Same near-opaque background as the wallpaper picker, and for the same
+     * reason: every row carries a small-type path underneath it. */
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->curpick_ui.bg)
+        s->curpick_ui.bg = wlr_scene_rect_create(s->curpick_ui.tree,
+                                                 pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->curpick_ui.bg, pw, ph);
+    if (!s->curpick_ui.accent)
+        s->curpick_ui.accent = wlr_scene_rect_create(s->curpick_ui.tree,
+                                                     pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->curpick_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Title */
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "CURSOR THEME");
+
+    double right_edge = pw - 18;
+
+    /* Current size, and how to change it — the +/- keys are not guessable. */
+    {
+        char label[64];
+        snprintf(label, sizeof(label), "[-/+] %dpx",
+                 s->config.cursor_size > 0 ? s->config.cursor_size : 24);
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, label, &te);
+        cairo_set_source_rgba(cr, 0.75, 0.55, 0.95, 1.0);
+        right_edge -= te.width;
+        cairo_move_to(cr, right_edge, 30);
+        cairo_show_text(cr, label);
+        right_edge -= 12;
+    }
+
+    /* Separator */
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 42);
+    cairo_line_to(cr, pw - 18, 42);
+    cairo_stroke(cr);
+
+    if (total == 0) {
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+        cairo_move_to(cr, pad, top + 24);
+        cairo_show_text(cr, "No cursor themes installed.");
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.50, 0.50, 0.60, 1.0);
+        cairo_move_to(cr, pad, top + 46);
+        cairo_show_text(cr, "synui-cursor install <archive>   then press r");
+    }
+
+    for (int r = 0; r < shown && total > 0; r++) {
+        int i = s->curpick.scroll + r;
+        if (i >= total) break;
+
+        int sel = (i == s->curpick.selected);
+        int ry = top + r * row_h;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry, pw - 24, row_h - 8);
+            cairo_fill(cr);
+            cairo_set_line_width(cr, 2);
+            set_accent(cr, 1.0);
+            cairo_rectangle(cr, 12.5, ry + 0.5, pw - 25, row_h - 9);
+            cairo_stroke(cr);
+        }
+
+        const char *label, *desc;
+        curpick_row(s, i, &label, &desc);
+
+        /* BOTH strings are third-party text: a theme's name is the directory
+         * name from whatever archive it was unpacked from, and the path
+         * contains it. cairo_show_text poisons its context on invalid UTF-8 and
+         * every later draw silently no-ops, so one badly-named theme would
+         * blank the whole panel from that row down. draw_clipped runs the text
+         * through news_utf8_trim, which is why neither of these calls
+         * cairo_show_text directly. */
+        cairo_set_font_size(cr, 15);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        draw_clipped(cr, pad + 8, ry + 22, pw - 2 * pad - 8, label);
+
+        cairo_save(cr);
+        cairo_rectangle(cr, pad, ry + 26, pw - 2 * pad - 8, 16);
+        cairo_clip(cr);
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
+                              sel ? 0.85 : 0.60, 1.0);
+        draw_clipped(cr, pad + 8, ry + 38, pw - 2 * pad - 8, desc);
+        cairo_restore(cr);
+    }
+
+    if (total > shown) {
+        char pos[32];
+        snprintf(pos, sizeof(pos), "%d/%d", s->curpick.selected + 1, total);
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, pos, &te);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        cairo_move_to(cr, right_edge - te.width, 30);
+        cairo_show_text(cr, pos);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 20);
+    cairo_show_text(cr,
+        "Up/Down preview \xc2\xb7 -/+ size \xc2\xb7 r rescan \xc2\xb7 Enter apply \xc2\xb7 Esc cancel");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->curpick_ui.text_buf, s->curpick_ui.tree, buf);
+}
+
+
 /* The slider itself: a trough with a filled portion. Drawn rather than spelled
  * out because these values are judged by eye, and a bar you can see moving is
  * the whole difference between tuning a look and typing numbers at it. */
@@ -3437,6 +3588,7 @@ void synui_ui_init(syn_server_t *s)
     s->overlay_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->dispcfg_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->wppick_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
+    s->curpick_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->power_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     /* The dim overlay covers the scene, so it needs a tree of its own that
      * can be raised above every window without dragging the panel with it. */

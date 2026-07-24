@@ -22,6 +22,7 @@
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
+ * cursor, cursor_reload,
  * filters, effects_toggle, power, lock, game, taskmgr, network, news.
  * A bind with the same combo as a default replaces it.
  * "filters" (Super+E) opens the CRT filter panel; "effects_toggle" is the older
@@ -35,6 +36,16 @@
  * Empty/absent path, or a decode failure, falls back to the solid
  * background color. Super+Shift+W (or a SIGHUP) reloads synuirc and
  * repaints from the current wallpaper path/mode.
+ *
+ * Cursor theme (cursor.c) — Super+Shift+P opens the picker ("pointer"; super+c
+ * and super+shift+c were both already taken). An empty theme inherits
+ * XCURSOR_THEME, which is what synui did before the picker existed:
+ *   cursor_theme = Adwaita      (a directory under any icons dir with cursors/)
+ *   cursor_size  = 24           (8-256; pinned so Xwayland clients match)
+ * The picker writes cursor.state, which overrides these lines the same way
+ * wallpaper.state overrides `wallpaper` — delete it to hand control back.
+ * Install themes with synui-cursor(1); it also handles the source-tree archives
+ * that opendesktop.org ships, which are not usable as-is.
  *
  * Window snapping (snap.c):
  *   snap = on|off               (default on)
@@ -272,6 +283,10 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "filters" },
         { "super+p",         "power" },
+        /* Cursor theme picker. "pointer" rather than "cursor" because super+c is
+         * the control panel and super+shift+c is cat mode — C was gone twice
+         * over before this feature existed. */
+        { "super+shift+p",   "cursor" },
         /* Themes, not the task manager. The task manager had two binds and needs
          * one — ctrl+alt+delete below is the one everybody already reaches for,
          * so super+t goes to the theme manager, which had only the far less
@@ -502,6 +517,12 @@ void synui_config_load(syn_config_t *cfg)
     cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
     cfg->wallpaper_src  = SYN_WP_SRC_IMAGE;
 
+    /* Empty theme = inherit XCURSOR_THEME, which is exactly what synui did
+     * before cursor.c existed, so an untouched system behaves identically.
+     * 24 matches the size the compositor was previously hardcoded to. */
+    cfg->cursor_theme[0] = '\0';
+    cfg->cursor_size     = 24;
+
     cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
 
     cfg->welcome_at_startup = 1;
@@ -595,6 +616,7 @@ void synui_config_load(syn_config_t *cfg)
     if (!f) {
         /* No config file: still honour persisted picker/dock choices. */
         wallpaper_state_load(cfg);
+        cursor_state_load(cfg);
         dock_state_load(cfg);
         power_state_load(cfg);
         welcome_state_load(cfg);
@@ -798,6 +820,17 @@ void synui_config_load(syn_config_t *cfg)
             if (k > 6500) k = 6500;
             cfg->night_light_temp = k;
         }
+        else if (strcmp(key, "cursor_theme") == 0)
+            strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);
+        else if (strcmp(key, "cursor_size") == 0) {
+            int px = atoi(val);
+            /* Clamped, not obeyed: 0 makes wlroots fall back in ways that are
+             * hard to explain afterwards, and a mistyped 2400 leaves a pointer
+             * covering a third of the screen with no visible way to undo it. */
+            if (px < 8)   px = 8;
+            if (px > 256) px = 256;
+            cfg->cursor_size = px;
+        }
         else if (strcmp(key, "xkb_layout") == 0)
             strncpy(cfg->xkb_layout, val, sizeof(cfg->xkb_layout) - 1);
         else if (strcmp(key, "xkb_variant") == 0)
@@ -973,6 +1006,7 @@ void synui_config_load(syn_config_t *cfg)
      * intent, so it overrides the synuirc `wallpaper` line. Delete the state
      * file to hand control back to synuirc. Same for the dock's edge/pins. */
     wallpaper_state_load(cfg);
+    cursor_state_load(cfg);
     dock_state_load(cfg);
     power_state_load(cfg);
     welcome_state_load(cfg);

@@ -1254,6 +1254,10 @@ export LIBSEAT_BACKEND=seatd
 # 24px cursor; without XCURSOR_SIZE libXcursor auto-picks a much larger size.
 export XCURSOR_THEME=Adwaita
 export XCURSOR_SIZE=24
+# ...unless a theme was chosen with Super+Shift+P or synui-cursor(1), which
+# writes exactly these two exports to cursor.env. Sourced after the defaults so
+# the user's choice wins; absent on a fresh install, hence the -r test.
+[ -r "$HOME/.config/synui/cursor.env" ] && . "$HOME/.config/synui/cursor.env"
 # MangoHud's Vulkan implicit layer keys off MANGOHUD=1. A launcher wrapper only
 # ever covers the path it wraps; the env var reaches Steam, Lutris, RetroArch and
 # bare binaries alike. Hud starts hidden (no_display) — Shift_R+F12 toggles it
@@ -1343,6 +1347,9 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         export LIBSEAT_BACKEND=seatd
         export XCURSOR_THEME=Adwaita
         export XCURSOR_SIZE=24
+        # ...unless synui-cursor(1) / Super+Shift+P wrote a choice. See the
+        # synui-session heredoc above; this path must stay in step with it.
+        [ -r "$HOME/.config/synui/cursor.env" ] && . "$HOME/.config/synui/cursor.env"
         # Vulkan overlay layer; see the synui-session heredoc above.
         export MANGOHUD=1
         exec synui

@@ -508,6 +508,12 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         dispcfg_toggle(s);
     } else if (strcmp(action, "wallpaper") == 0) {
         wppick_toggle(s);
+    } else if (strcmp(action, "cursor") == 0) {
+        curpick_toggle(s);
+    } else if (strcmp(action, "cursor_reload") == 0) {
+        /* What synui-cursor(1) dispatches after writing cursor.state, so a
+         * theme installed from a terminal takes effect without a re-login. */
+        cursor_reload(s);
     } else if (strcmp(action, "launcher_style") == 0) {
         launcher_toggle_style(s);
     } else if (strcmp(action, "volume") == 0) {
@@ -963,6 +969,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Wallpaper selector: same modal contract as the display panel. */
         for (int i = 0; i < nsyms; i++)
             if (wppick_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Cursor theme picker: same modal contract as the wallpaper one. */
+        for (int i = 0; i < nsyms; i++)
+            if (curpick_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
