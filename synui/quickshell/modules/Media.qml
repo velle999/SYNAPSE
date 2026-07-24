@@ -29,7 +29,7 @@ BarModule {
 
     readonly property bool playing: player ? player.isPlaying : false
 
-    visible: player !== null
+    moduleVisible: player !== null
 
     icon: playing ? Icons.mediaPlay : Icons.mediaPause
     iconColor: playing ? Theme.cyan : Theme.fgDim

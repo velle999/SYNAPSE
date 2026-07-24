@@ -424,10 +424,24 @@ static void dock_render_output(syn_output_t *o)
     cairo_begin(cr);
 
     rounded_rect(cr, 0, 0, bar_w, bar_h, 16);
+    /* The fill stays the panel dark that every compositor-drawn panel uses
+     * (render.c draws its backgrounds with the same values); it is the OUTLINE
+     * that carries the theme. */
     cairo_set_source_rgba(cr, 0.06, 0.06, 0.12, 0.80);
     cairo_fill_preserve(cr);
-    cairo_set_source_rgba(cr, 0.00, 0.85, 0.75, 0.35);
-    cairo_set_line_width(cr, 1);
+    /* Themed outline. This used to be a literal 0.00/0.85/0.75 — which is the
+     * DEFAULT panel accent, frozen here before the accent became theme data. So
+     * the dock kept SYNAPSE's house cyan on a Gruvbox or win95 desktop and was
+     * the one piece of chrome that never joined in. panel_accent is the single
+     * colour every other panel already uses for its rules and headers.
+     *
+     * Slightly heavier than the old 1px at 0.35 alpha: an outline that is meant
+     * to tie the dock to the rest of the desktop has to actually be visible
+     * against a wallpaper. */
+    cairo_set_source_rgba(cr, s->config.panel_accent[0],
+                          s->config.panel_accent[1],
+                          s->config.panel_accent[2], 0.55);
+    cairo_set_line_width(cr, 1.5);
     cairo_stroke(cr);
 
     double now = dock_now();

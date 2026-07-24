@@ -411,6 +411,14 @@ void transparency_set_opacity(syn_server_t *s, float active)
     s->config.inactive_opacity = inactive_from_active(active);
     anim_apply_alpha_all(s);
     glass_push(s);
+    /* The dock draws its outline from panel_accent into a CACHED cairo buffer,
+     * rebuilt only when its contents or geometry change — none of which a theme
+     * switch touches. theme_repaint() below only damages and schedules a frame,
+     * so without this the dock keeps the previous theme's outline until an app
+     * happens to open or close. Exactly the titlebar cache problem above, one
+     * buffer over. */
+    dock_relayout(s);
+
     theme_repaint(s);
     theme_state_save(s);
 }

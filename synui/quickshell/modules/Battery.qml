@@ -24,7 +24,7 @@ BarModule {
         : false
     readonly property bool full: dev ? dev.state === UPowerDeviceState.FullyCharged : false
 
-    visible: present
+    moduleVisible: present
 
     // Steps with the level, matching the waybar format-icons ramp.
     icon: charging ? Icons.batCharging

@@ -16,6 +16,8 @@ import ".."
 BarModule {
     id: root
 
+    acceptsRight: true
+
     readonly property var adapter: Bluetooth.defaultAdapter
     readonly property bool on: adapter ? adapter.enabled : false
     readonly property var connectedDevices: {

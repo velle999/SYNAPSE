@@ -19,6 +19,8 @@ import ".."
 BarModule {
     id: root
 
+    acceptsRight: true
+
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var audio: sink ? sink.audio : null
     readonly property bool muted: audio ? audio.muted : false

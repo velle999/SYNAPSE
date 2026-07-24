@@ -16,7 +16,7 @@ BarModule {
 
     property bool on: false
 
-    visible: on              // invisible when off, like waybar's empty text
+    moduleVisible: on              // invisible when off, like waybar's empty text
     icon: Icons.game
     iconColor: Theme.yellow
     text: "GAME"

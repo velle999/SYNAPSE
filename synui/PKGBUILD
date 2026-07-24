@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=156
+pkgrel=158
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -168,8 +168,14 @@ package() {
     done
     install -Dm644 quickshell/qmldir \
         "$pkgdir/usr/share/synui/quickshell/qmldir"
-    install -Dm644 quickshell/components/BarModule.qml \
-        "$pkgdir/usr/share/synui/quickshell/components/BarModule.qml"
+    # Globbed for the same reason the top-level types are: naming one file here
+    # silently dropped BarMenu.qml, and the bar then failed to start outright
+    # ("BarMenu is not a type") — from a package that built and installed
+    # cleanly. Caught only by running the INSTALLED tree.
+    for _cmp in quickshell/components/*.qml; do
+        install -Dm644 "$_cmp" \
+            "$pkgdir/usr/share/synui/quickshell/components/${_cmp##*/}"
+    done
     for _mod in quickshell/modules/*.qml; do
         install -Dm644 "$_mod" \
             "$pkgdir/usr/share/synui/quickshell/modules/${_mod##*/}"

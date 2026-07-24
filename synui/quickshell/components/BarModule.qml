@@ -19,6 +19,22 @@ Rectangle {
     id: root
 
     // ── What a module fills in ───────────────────────────
+    // TWO independent reasons to be hidden, kept apart on purpose. barVisible
+    // is the per-monitor switch from the bar's right-click menu; moduleVisible
+    // is the module's own condition (no battery on a desktop, no MPRIS player).
+    // A single `visible` would have one clobber the other — turning the media
+    // module on for a monitor would force an empty pill on screen with nothing
+    // playing.
+    property bool barVisible: true
+    property bool moduleVisible: true
+    visible: barVisible && moduleVisible
+
+    // Whether right-click means something to THIS module. Modules that decline
+    // it let the button fall through to the bar underneath, which opens the
+    // per-monitor menu — otherwise right-clicking the CPU readout would be
+    // swallowed and look like the menu was broken.
+    property bool acceptsRight: false
+
     property string text: ""
     property string icon: ""                 // optional leading glyph
     property color  iconColor: Theme.cyan
@@ -84,7 +100,8 @@ Rectangle {
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                         | (root.acceptsRight ? Qt.RightButton : Qt.NoButton)
 
         onClicked: (m) => {
             if (m.button === Qt.LeftButton)        root.clicked(m)

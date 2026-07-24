@@ -18,6 +18,8 @@ import ".."
 BarModule {
     id: root
 
+    acceptsRight: true
+
     property string kind: "none"      // wifi | ethernet | disabled | none
     property string ssid: ""
     property int    signal_: 0
