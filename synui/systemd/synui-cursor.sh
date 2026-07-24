@@ -1,5 +1,6 @@
 #!/bin/sh
-# synui-cursor — install and switch X cursor themes (the Super+C picker's helper).
+# synui-cursor — install and switch X cursor themes (the Super+Shift+P picker's
+# helper).
 #
 # Cursor themes from opendesktop.org / gnome-look.org come in two shapes that
 # look identical from the outside, and telling them apart is most of this tool:
@@ -182,6 +183,36 @@ cur_adopt() {
 }
 
 # ── install ──────────────────────────────────────────────────
+
+# Strip the archive extension off a filename. Two passes for the .tar.* pairs:
+# ${n%.*} takes yamikai-v1.tar.gz down to yamikai-v1.tar, and ${n%.tar} finishes
+# the job. Anything unrecognised is left alone rather than guessed at.
+cur_archive_basename() {
+    n=$(basename "$1")
+    case "$n" in
+        *.tar.gz|*.tar.xz|*.tar.bz2|*.tar.zst|*.tar.lz|*.tar.lzma)
+            n=${n%.*}; n=${n%.tar} ;;
+        *.tgz|*.txz|*.tbz2|*.tzst|*.zip|*.tar)
+            n=${n%.*} ;;
+    esac
+    printf '%s\n' "$n"
+}
+
+# A theme is named after its own directory — except when the archive ships a
+# bare cursors/ at the top level with nothing wrapping it (yamikai does). Then
+# the theme root IS the extraction directory, whose name came from mktemp, and
+# the theme would install as "synui-cursor-SHDBRt". Only in that one case does
+# the archive's filename supply the name. The result still goes through
+# cur_adopt's validation like any other name: it is no more trusted for having
+# come from the filename, and an unusable one is refused there, once.
+cur_theme_name() {
+    if [ -n "$archive_name" ] && [ "$1" = "$extract_root" ]; then
+        printf '%s\n' "$archive_name"
+    else
+        basename "$1"
+    fi
+}
+
 cur_install() {
     [ $# -ge 1 ] || die "usage: synui-cursor install <archive|directory>"
     src=$1
@@ -190,12 +221,19 @@ cur_install() {
     tmp=$(mktemp -d -t synui-cursor-XXXXXX) || die "cannot create a temp dir"
     trap 'rm -rf "$tmp"' EXIT INT TERM
 
+    # Empty for a directory source: that one is adopted under its own name, which
+    # is what the user typed, so there is nothing to fall back to.
+    extract_root=""
+    archive_name=""
+
     if [ -d "$src" ]; then
         # A directory is adopted in place (copied), not extracted.
         root=$src
     else
         cur_extract "$src" "$tmp" || die "could not extract '$src'"
         root=$tmp
+        extract_root=$tmp
+        archive_name=$(cur_archive_basename "$src")
 
         # Archives essentially always wrap everything in a single top-level
         # directory (FrierenBLZ/, retrosmart-x11-cursors-3.1a/). Descend through
@@ -234,15 +272,17 @@ cur_install() {
         printf '%s\n' "$themes" | while IFS= read -r c; do
             t=$(dirname "$c")
             cur_is_theme "$t" || continue
-            name=$(basename "$t")
+            name=$(cur_theme_name "$t")
             if cur_adopt "$root" "$t" "$name"; then
                 printf "installed '%s' -> %s/%s\n" "$name" "$ICONS_USER" "$name"
             fi
         done
         # The subshell above cannot set `found`, so re-test on disk: a theme is
-        # installed only if it is actually there now.
+        # installed only if it is actually there now. Must derive the name the
+        # same way the loop above did, or the fallback name is looked for under
+        # the temp directory's name and a good install reads as a failure.
         printf '%s\n' "$themes" | while IFS= read -r c; do
-            [ -d "$ICONS_USER/$(basename "$(dirname "$c")")" ] && exit 42
+            [ -d "$ICONS_USER/$(cur_theme_name "$(dirname "$c")")" ] && exit 42
         done
         [ $? -eq 42 ] && found=1
     fi
@@ -454,7 +494,7 @@ usage: synui-cursor <command>
   build <dir>              compile a source tree (runs ITS makefile — asks first)
   set <theme> [size]       make a theme active (compositor, GTK, Qt/KDE, X11)
 
-The picker panel (Super+C) is the graphical front end to the same state.
+The picker panel (Super+Shift+P) is the graphical front end to the same state.
 EOF
     exit 2
 }
