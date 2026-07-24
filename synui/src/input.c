@@ -386,20 +386,48 @@ static uint32_t now_msec(void)
 
 /* Open the start menu.
  *
- * This used to click waybar's: the menu was a GTK popup with no IPC to open it,
- * so synui sent the bar surface a synthetic pointer enter/press/release and let
- * GTK pop the menu. It worked, and it was a dead end — that menu could never be
- * arrow-navigated, because waybar sets keyboard_interactivity NONE once at
- * startup and never revises it, so it is handed no keyboard focus at all. Three
- * synui-side focus fixes each delivered a textbook key sequence that GTK
- * ignored; the wall is inside waybar/GDK, not here.
+ * Three homes in three years, and the reason keeps being keyboard focus:
  *
- * So the menu is synui's own now (menu.c) — a panel the compositor draws is one
- * it can hand the keyboard to. waybar keeps the bar, the tray and its modules;
- * it just no longer owns the menu. */
+ *   waybar   a GTK popup with no IPC to open it, so synui sent the bar surface a
+ *            synthetic pointer press and let GTK pop it. It could never be
+ *            arrow-navigated: waybar sets keyboard_interactivity NONE once at
+ *            startup and never revises it, so its menu is handed no keyboard
+ *            focus at all. Three synui-side focus fixes each delivered a
+ *            textbook key sequence that GTK ignored — the wall was in waybar.
+ *   menu.c   compositor-drawn, because a panel synui draws is one it can hand
+ *            the keyboard to. That worked, and cost a hand-rolled .desktop
+ *            scanner plus a second panel to theme and maintain.
+ *   the bar  quickshell takes EXCLUSIVE keyboard focus properly
+ *            (PanelWindow { focusable: true }), so the original objection is
+ *            simply gone and the menu lives with the bar it belongs to.
+ *
+ * synui still OWNS the keystroke — handle_keybinding runs before the focused
+ * surface sees anything, so Super tap keeps working regardless of what has
+ * focus. It just no longer draws the result. The direction of the call is the
+ * whole trick: synctl is request/response with no event stream, so the
+ * compositor cannot push to a client, but quickshell's IPC goes client-ward and
+ * needs no new protocol here.
+ *
+ * The focused output is passed along because synui is the only process that
+ * knows it — there is no Wayland protocol that tells a layer-shell client which
+ * monitor has focus, and the bar would otherwise have to guess or probe back. */
 void synui_start_menu_open(syn_server_t *s)
 {
-    menu_toggle(s);
+    syn_output_t *o = server_focused_output(s);
+    const char *name = (o && o->wlr_output && o->wlr_output->name)
+                       ? o->wlr_output->name : "";
+
+    /* execvp, not spawn(): spawn() goes through `/bin/sh -c` and this
+     * interpolates an output name. Those come from the kernel rather than from
+     * a user, but a shell in the path is a shell to get wrong later, and there
+     * is nothing here that needs one. */
+    if (fork() == 0) {
+        setsid();
+        synui_child_reset_signals();
+        execlp("synui-bar", "synui-bar", "ipc", "call", "menu", "toggle",
+               name, (char *)NULL);
+        _exit(1);
+    }
 }
 
 /* Execute a bind action (see config.c for the names and defaults). */
@@ -1041,12 +1069,10 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
                 absorbed = true;
         if (absorbed) return;
 
-        /* Start menu: modal like the news panel, and it claims bare Shift for
-         * the same reason — its type-to-search box has to accept capitals. */
-        for (int i = 0; i < nsyms; i++)
-            if (menu_key(s, syms[i], modifiers))
-                absorbed = true;
-        if (absorbed) return;
+        /* No start-menu branch here any more. The menu is a layer-shell client
+         * with EXCLUSIVE keyboard focus (quickshell/StartMenu.qml), so its keys
+         * arrive by the ordinary focus path — synui does not have to intercept
+         * them, and must not: swallowing them here is what would make it deaf. */
 
         /* Welcome menu: intercepts only its navigation keys. */
         for (int i = 0; i < nsyms; i++)
@@ -1579,10 +1605,6 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     if (s->deskmenu.visible)
         deskmenu_motion(s, s->cursor->x, s->cursor->y);
 
-    /* Same for the start menu: hovering a row selects it, so the pointer and
-     * the arrow keys drive one highlight rather than two. */
-    if (s->menu.visible)
-        menu_motion(s, s->cursor->x, s->cursor->y);
     if (s->bt.visible)
         bt_motion(s, s->cursor->x, s->cursor->y);
 
@@ -1695,17 +1717,6 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         if (button == BTN_LEFT && notif_click(s, s->cursor->x, s->cursor->y))
             return;
 
-        /* The start menu is modal for the pointer while open, as the dock's
-         * context menu is: a left click runs the row under the cursor (and a
-         * click off the panel dismisses it, which is how every menu closes),
-         * any other button just dismisses. Above the dock in this order because
-         * it is drawn above it and can cover its icons. */
-        if (s->menu.visible) {
-            if (button == BTN_LEFT) menu_click(s, s->cursor->x, s->cursor->y);
-            else                    menu_hide(s);
-            return;
-        }
-
         /* The Bluetooth panel likewise: a click picks the device the keys then
          * act on, and a click off it puts the panel away. */
         if (s->bt.visible) {
@@ -1733,14 +1744,10 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
             return;
         }
 
-        /* The launcher button (top-left, over the bar): a left click opens the
-         * start menu. When the menu is already up we returned above at
-         * s->menu.visible, where a click off the panel closes it — so this path
-         * only ever opens. Ahead of the dock and window forwarding, like it. */
-        if (button == BTN_LEFT && launcher_at(s, s->cursor->x, s->cursor->y)) {
-            menu_toggle(s);
-            return;
-        }
+        /* No launcher hit-test here any more. The start button is a bar module
+         * (quickshell/modules/Launcher.qml), so its clicks are the bar's like
+         * every other module's. Hit-testing it in the compositor is what made
+         * the bar's top-left corner invisible-but-clickable to the bar itself. */
 
         /* Right-click a dock icon → its context menu. */
         if (button == BTN_RIGHT) {
@@ -1918,15 +1925,6 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
     struct wlr_pointer_axis_event *event = data;
     notify_activity(s);
 
-    /* The start menu takes the wheel while it is up — it is modal for the
-     * pointer, and a scroll landing on the window behind it would act on
-     * something the menu is covering. Vertical only: nothing here scrolls
-     * sideways, so a horizontal flick is not the menu's to swallow. */
-    if (s->menu.visible &&
-        event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        menu_scroll(s, event->delta);
-        return;
-    }
     if (s->bt.visible &&
         event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         bt_scroll(s, event->delta);

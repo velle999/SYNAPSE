@@ -102,7 +102,6 @@ void output_layout_changed(syn_server_t *s)
         layer_arrange_output(o);
     wallpaper_relayout(s);
     dock_relayout(s);
-    launcher_relayout(s);
     /* The icon grid is sized against the primary output's usable box, so it
      * has to be rebuilt whenever that changes — including the very first time
      * an output appears, which is after the startup deskicons_reload(). */

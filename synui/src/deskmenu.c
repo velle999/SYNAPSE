@@ -164,7 +164,10 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
         synui_spawn("dolphin");
         break;
     case SYN_DESKACT_APPS:
-        menu_toggle(s);
+        /* The start menu is the bar's now, so this goes out the same door the
+         * Super tap does rather than reaching into a panel synui no longer
+         * draws. */
+        synui_start_menu_open(s);
         break;
     case SYN_DESKACT_WALLPAPER:
         wppick_toggle(s);

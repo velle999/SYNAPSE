@@ -17,51 +17,21 @@ import ".."
 Item {
     id: root
 
-    // The bar's top-left corner is NOT ours. synui draws the "◢ SYNAPSE"
-    // launcher there itself (src/launcher.c) and hit-tests it in the
-    // compositor, so anything placed under it is invisible AND unclickable.
-    //
-    // Its width is computed at runtime from the text extents, not fixed, and it
-    // changes when the style flips between text and logo — so the same formula
-    // is mirrored here off the same state file rather than guessing a margin
-    // that goes wrong the moment the style is toggled.
-    //   text: PAD(12) + advance("◢ SYNAPSE") + PAD(12)
-    //   logo: PAD(12) + advance("◢") + GAP(6) + EMBLEM(23) + PAD(12)
-    property bool logoStyle: true
-
-    property FileView launcherState: FileView {
-        path: Quickshell.env("HOME") + "/.config/synui/launcher.state"
-        watchChanges: true
-        onFileChanged: reload()
-        onLoaded: root.logoStyle = this.text().indexOf("style=logo") >= 0
-        onLoadFailed: root.logoStyle = true
-    }
-
-    TextMetrics {
-        id: caretMetrics
-        font.family: "monospace"
-        font.pixelSize: 13          // LAUNCHER_FONT
-        text: "◢"
-    }
-    TextMetrics {
-        id: wordmarkMetrics
-        font.family: "monospace"
-        font.pixelSize: 13
-        text: "◢ SYNAPSE"
-    }
-
-    readonly property int launcherWidth:
-        root.logoStyle ? (12 + Math.round(caretMetrics.advanceWidth) + 6 + 23 + 12)
-                       : (12 + Math.round(wordmarkMetrics.advanceWidth) + 12)
+    // This used to reserve the launcher's width at its left edge, because the
+    // compositor drew the "◢ SYNAPSE" button over the bar's top-left corner and
+    // hit-tested it there — anything placed under it was invisible AND
+    // unclickable, so this mirrored launcher.c's own width formula off the same
+    // state file. The button is a bar module now (modules/Launcher.qml) and sits
+    // in the same Row as this, so the corner is ordinary bar again and the whole
+    // mirror is gone.
 
     property var workspaces: []
 
-    implicitWidth: launcherWidth + row.implicitWidth
+    implicitWidth: row.implicitWidth
     implicitHeight: Theme.barHeight
 
     Row {
         id: row
-        x: root.launcherWidth
         height: parent.height
         spacing: 3
 

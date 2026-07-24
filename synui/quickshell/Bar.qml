@@ -7,13 +7,14 @@ import "components"
 /*
  * The SYNAPSE bar.
  *
- * Layout: virtual desktops left, clock centre, status right.
+ * Layout: start button and virtual desktops left, clock centre, status right.
  *
- * The left side is shared, not free. synui draws the "◢ SYNAPSE" launcher over
- * the bar's top-left corner itself (src/launcher.c) and a click there calls
- * menu_toggle() in the compositor, so anything drawn under it is both invisible
- * and unclickable. Workspaces starts past it by mirroring launcher.c's own
- * width formula.
+ * The left side used to be shared, not free: the compositor drew the "◢ SYNAPSE"
+ * launcher over the bar's top-left corner itself and hit-tested it there, so
+ * anything under it was invisible AND unclickable, and Workspaces had to mirror
+ * launcher.c's width formula to keep out of the way. The button is a module here
+ * now (modules/Launcher.qml), which is what lets it slide with the bar instead
+ * of hanging over the desktop after an auto-hide.
  *
  * WHAT IS SHOWN IS PER MONITOR (BarConfig, right-click the bar). A 1080-wide
  * portrait panel cannot hold what a 2560-wide landscape one can: the centred
@@ -139,12 +140,22 @@ PanelWindow {
                     color: Theme.magenta
                 }
 
-                // ── Left: virtual desktops ───────────────────────
-                // Workspaces reserves the launcher's width itself rather than being
-                // offset from here — see the note in Workspaces.qml.
-                Workspaces {
+                // ── Left: start button, then virtual desktops ────
+                Row {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                    visible: BarConfig.get(bar.outName, "workspaces")
+                    spacing: 0
+
+                    Launcher {
+                        anchors.verticalCenter: parent.verticalCenter
+                        // Which monitor's menu a click opens. The bar knows; the
+                        // button must not guess.
+                        output: bar.outName
+                    }
+
+                    Workspaces {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: BarConfig.get(bar.outName, "workspaces")
+                    }
                 }
 
                 // ── Centre: clock ────────────────────────────────

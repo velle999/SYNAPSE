@@ -419,77 +419,6 @@ typedef struct {
     int    poll_row;
 } syn_ctlpanel_t;
 
-/* ── Start menu (menu.c) ─────────────────────────────────── */
-/* Super-tap's menu, drawn by the compositor rather than clicked out of waybar.
- *
- * It used to be waybar's: synui synthesised a pointer click on the bar and GTK
- * popped a menu. That menu could never be arrow-navigated — waybar asks for
- * keyboard_interactivity NONE once at startup and never revises it, so the
- * client is handed no keyboard focus, and three separate synui-side focus fixes
- * all delivered keys that GTK then ignored. The wall was inside waybar/GDK, not
- * here, so the menu moved in-process: a panel synui draws is one synui can also
- * give the keyboard to, and it is arrow-navigable by construction.
- *
- * The entries are scanned from the installed .desktop files at open, NOT read
- * from a generated file. The waybar menu's XML/menu-actions pair had to be
- * regenerated in lockstep and drifted apart at least once, mapping entries to
- * the wrong commands; there is nothing to keep in step if the list is built
- * from the source of truth each time. Scanning ~170 files takes ~ms.
- */
-#define MENU_ENTRIES_MAX  512
-#define MENU_LABEL_MAX     72
-#define MENU_CMD_MAX      512
-#define MENU_CAT_MAX       24
-
-typedef enum {
-    MENU_ROW_HEADER = 0,   /* section rule — never selectable */
-    MENU_ROW_ITEM,
-    MENU_ROW_SUBMENU,      /* opens the page named by ->menu_to, launches nothing */
-    MENU_ROW_BACK,         /* a submenu page's first row; returns to the root */
-} syn_menu_kind_t;
-
-typedef struct {
-    int  kind;                     /* syn_menu_kind_t */
-    char label[MENU_LABEL_MAX];
-    /* Which page this row lives on: "" is the root, otherwise a submenu name.
-     * Every row of every page is in this one flat array, which is what lets a
-     * search run across the whole menu rather than only the page you happen to
-     * be looking at — the reason drilling in does not cost you reachability. */
-    char menu[MENU_CAT_MAX];
-    /* On a MENU_ROW_SUBMENU, the page it opens (matched against ->menu). */
-    char menu_to[MENU_CAT_MAX];
-    /* Exactly one of these is set on an item. A bind action goes through
-     * synui_binding_execute() — the same path a keypress takes — so the menu
-     * cannot become a second, disagreeing definition of what "Control Panel"
-     * means. Anything synui does not own is a command for spawn(). */
-    char action[24];
-    char cmd[MENU_CMD_MAX];
-} syn_menu_entry_t;
-
-typedef struct {
-    int  visible;
-    int  count;                       /* entries[] in use */
-    int  view[MENU_ENTRIES_MAX];      /* indices of entries[] passing the filter */
-    int  view_count;
-    int  selected;                    /* index into view[], not entries[] */
-    int  scroll;                      /* first view[] row drawn */
-    char filter[48];                  /* type-to-search; empty = show all */
-    /* The page on show: "" is the root. One level deep by construction — the
-     * root's submenu rows are the only ones there are, so backing out is always
-     * a return to the root and needs no stack. */
-    char page[MENU_CAT_MAX];
-    int  root_selected, root_scroll;  /* where to land back on when we do */
-    /* Hovering a submenu row arms this to open its page after a short delay, so
-     * the pointer can cross the category rows without flipping through pages. */
-    struct wl_event_source *hover_timer;
-    /* Panel geometry in layout coords, written by synui_render_menu() on every
-     * render and read by the pointer hit-tests. The renderer owns it because the
-     * height depends on the row count it just drew; nothing reads it while the
-     * menu is hidden, and showing the menu renders it before any pointer event
-     * can arrive. */
-    int  x, y, w, h;
-    syn_menu_entry_t entries[MENU_ENTRIES_MAX];
-} syn_menu_t;
 
 /* ── Notifications (notif.c) ─────────────────────────────── */
 /* synui owns org.freedesktop.Notifications and draws the toasts itself.
@@ -610,7 +539,7 @@ typedef struct {
     int  show_all;
 
     /* Panel geometry in layout coords, written by synui_render_bt() on every
-     * render and read by the pointer hit-tests — as in syn_menu_t. */
+     * render and read by the pointer hit-tests. */
     int  x, y, w, h;
 
     int  has_adapter;
@@ -1920,16 +1849,6 @@ struct syn_server {
 
     syn_thememgr_t  thememgr;
 
-    /* Start menu (Super-tap) — synui's own, see syn_menu_t. */
-    struct {
-        struct wlr_scene_tree   *tree;
-        struct wlr_scene_rect   *bg;
-        struct wlr_scene_rect   *accent;
-        struct wlr_scene_buffer *text_buf;
-    } menu_ui;
-
-    syn_menu_t      menu;
-
     /* Bluetooth panel (Super+B) — native BlueZ client, see syn_bt_t. */
     struct {
         struct wlr_scene_tree   *tree;
@@ -2827,50 +2746,6 @@ void bt_dev_label(const syn_bt_dev_t *d, char *out, size_t n);
 #define BT_PAD       18
 void synui_render_bt(syn_server_t *s);
 
-/* ── Start menu (menu.c) ─────────────────────────────────── */
-void menu_show(syn_server_t *s);
-void menu_hide(syn_server_t *s);
-void menu_toggle(syn_server_t *s);
-/* Modal key handling while the menu is open, as in ctlpanel_key. Returns 1 if
- * the key was consumed. */
-int  menu_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
-/* Pointer, from input.c while the menu is up. The menu is modal for the pointer
- * exactly as the dock's context menu is: hover selects, left click activates,
- * anything else dismisses. */
-void menu_motion(syn_server_t *s, double lx, double ly);
-void menu_click(syn_server_t *s, double lx, double ly);
-/* Wheel. delta is in the same sense wlroots reports it: positive is down. */
-void menu_scroll(syn_server_t *s, double delta);
-/* The view[] row drawn at the top of the panel — see menu.c. */
-int  menu_first_row(const syn_menu_t *m);
-
-/* The y of the first row's baseline. The root has no breadcrumb (the "SYNAPSE"
- * brand line that once sat there is gone), so its rows — and the search and
- * separator lines above them — ride up by MENU_ROOT_SHIFT to close the gap it
- * left; a submenu keeps the full head for its page name. render.c draws with
- * this and menu.c hit-tests with it, so it lives here where both can see it. */
-int  menu_top_y(const syn_menu_t *m);
-
-/* Panel geometry. render.c draws it and menu.c hit-tests and scroll-clamps
- * against it, so the two have to agree — hence here rather than in either (as
- * with CTL_SHORTCUT_ROWS). Rows step MENU_ROW_H from a first baseline at
- * MENU_TOP, and MENU_ROW_ASC is how far the row's band rises above its
- * baseline: text sits on the baseline, the highlight is drawn around it. */
-#define MENU_ROWS      22
-#define MENU_W        420
-#define MENU_ROW_H     24
-#define MENU_ROW_ASC   15
-#define MENU_TOP       92
-#define MENU_FOOTER    46
-#define MENU_PAD       18
-/* The blank breadcrumb line the root no longer needs. Reclaimed at the root
- * (see menu_top_y); kept on submenu pages, which draw their name in it. */
-#define MENU_ROOT_SHIFT 24
-/* How long the pointer must rest on a submenu row before its page opens. Long
- * enough that sliding across the category rows to reach a row below them does
- * not flip through every page; short enough to feel like a hover, not a wait. */
-#define MENU_HOVER_OPEN_MS 350
-void synui_render_menu(syn_server_t *s);
 
 /* Run a bind action by name (input.c owns the dispatch table). The control
  * panel's rows are actions, so they go through exactly the path a keybind
@@ -3010,15 +2885,12 @@ void dock_init(syn_server_t *s);                  /* load config; entries start 
 void dock_output_created(syn_output_t *o);        /* create this output's dock tree */
 void dock_output_destroy(syn_output_t *o);        /* destroy this output's dock tree */
 
-/* ── Start-menu launcher (launcher.c) ────────────────────── */
-void launcher_output_created(syn_output_t *o);    /* create this output's button */
-void launcher_output_destroy(syn_output_t *o);    /* destroy it */
-void launcher_render_all(syn_server_t *s);         /* rebuild buffers (style change) */
-void launcher_relayout(syn_server_t *s);           /* reposition + fullscreen hide */
-void launcher_toggle_style(syn_server_t *s);       /* flip text↔logo, redraw, persist */
+/* ── Start-button setting (launcher.c) ───────────────────── */
+/* The button is drawn by the bar (quickshell/modules/Launcher.qml); only the
+ * setting is the compositor's. The toggle's write to launcher.state is what the
+ * bar watches, so it is the update signal and not merely persistence. */
+void launcher_toggle_style(syn_server_t *s);       /* flip text↔logo, persist */
 void launcher_state_load(syn_config_t *cfg);       /* lay launcher.state over synuirc */
-/* True if (lx,ly) is over a visible launcher button; used by the click router. */
-bool launcher_at(syn_server_t *s, double lx, double ly);
 /* Re-merge pinned (config) + running (all workspaces') apps into
  * s->dock_entries, then re-render every output. Called on view map/unmap. */
 void dock_rebuild(syn_server_t *s);

@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import "widgets"
 
 /*
@@ -22,6 +23,33 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: Osd {}
+    }
+
+    // The start menu, same one-per-screen-show-one arrangement as the OSD.
+    Variants {
+        model: Quickshell.screens
+        delegate: StartMenu {}
+    }
+
+    // How the COMPOSITOR opens the menu.
+    //
+    // Super tap, super+escape and `synctl dispatch start_menu` all still run in
+    // synui — it owns the keyboard, and input.c dispatches keybinds before
+    // forwarding to the focused surface, so that keeps working with the menu
+    // outside the compositor. What synui cannot do is *tell* us: its own IPC
+    // (synctl) is request/response with no event stream, so there is nothing for
+    // a client to subscribe to. quickshell's IPC goes the other way, which is
+    // exactly the direction needed here, and needs no new synui protocol.
+    //
+    // The output is passed IN because synui is the only process that knows which
+    // one has focus (no Wayland protocol tells a layer-shell client), and it is
+    // answering a keypress it just handled — so it already knows.
+    IpcHandler {
+        target: "menu"
+
+        function toggle(output: string): void { MenuState.toggle(output) }
+        function open(output: string): void   { MenuState.show(output) }
+        function close(): void                { MenuState.close() }
     }
 
     // Desktop widgets. All OFF until widgets.state says otherwise, and each

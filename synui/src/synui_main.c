@@ -90,8 +90,6 @@ void synui_config_reload(syn_server_t *s)
 
     wallpaper_reload(s);
     input_reload_config(s);
-    /* launcher_style may have changed text↔logo — rebuild the button pixels. */
-    launcher_render_all(s);
 
     /* Re-tile the visible desktop (layout_apply covers every output) with the
      * new gap/border. Hidden desktops re-flow on switch. */
@@ -345,7 +343,6 @@ static void output_destroy(struct wl_listener *listener, void *data)
         wallpaper_output_destroy(output);
         matrix_output_destroy(output);
         dock_output_destroy(output);
-        launcher_output_destroy(output);
         lock_output_destroy(output);   /* drop the pane before its wlr_output frees */
 
         syn_output_t *home = wl_list_empty(&server->outputs)
@@ -486,7 +483,6 @@ static void server_new_output(struct wl_listener *listener, void *data)
     layer_arrange_output(output);
     wallpaper_output_created(output);
     dock_output_created(output);
-    launcher_output_created(output);
     /* The icon grid needs an output to be sized against — at startup there is
      * none yet when deskicons_reload() first runs, so this is where the very
      * first layout actually happens. */

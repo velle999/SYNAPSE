@@ -39,6 +39,26 @@ command -v quickshell >/dev/null 2>&1 || {
     exit 1
 }
 
+# `synui-bar ipc …` talks to the RUNNING bar instead of starting one.
+#
+# This exists so that exactly one place knows how the bar was launched. An IPC
+# call has to name the same config the instance was started with, and that is
+# the user-tree-or-packaged-path decision made below — duplicating it in the
+# compositor would mean a box with a user tree silently failing to open its
+# start menu, with nothing on screen saying why.
+#
+# The compositor calls this for the Super tap: synui owns the keyboard and
+# dispatches keybinds before forwarding, but its own IPC (synctl) is
+# request/response with no event stream, so it cannot tell the bar anything.
+# quickshell's IPC runs the other way. See quickshell/shell.qml's IpcHandler.
+if [ "${1-}" = "ipc" ]; then
+    shift
+    if [ -f "$CONF_HOME/quickshell/synapse/shell.qml" ]; then
+        exec quickshell -c synapse ipc "$@"
+    fi
+    exec quickshell -p "$SYNUI_BAR/shell.qml" ipc "$@"
+fi
+
 # A user tree wins. `-c synapse` is how quickshell finds a config by name, and
 # it searches the user's config dir — so this is the handover, not a duplicate
 # of the packaged path below.

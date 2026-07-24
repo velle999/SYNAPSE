@@ -358,6 +358,34 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
         wl_list_for_each(v, &ws->windows, link)
             v->ai_ctx.has_ctx = 0;
 
+    /* Re-fit maximized windows to the CURRENT usable box.
+     *
+     * view_apply_maximized sizes the window once and marks it floating (it has
+     * to — otherwise the tiling pass below would drag it back into a slot), so
+     * from then on every loop here skips it. But the usable box is not fixed:
+     * it moves whenever a panel maps, unmaps or changes its exclusive zone, and
+     * the bar's auto-hide changes it on every reveal (28 → 0 → 28). Without
+     * this the window keeps whatever box it was maximized into, so a hidden bar
+     * leaves a strip of bare desktop above a "maximized" window. Verified: with
+     * the bar's zone dropped to 0, a maximized window stayed at 1280x692 while
+     * a freshly tiled one correctly took the full 704.
+     *
+     * Runs for every layout, FLOATING included — maximize is not a tiling
+     * feature. The compare is what makes it cheap: layout_apply is called from
+     * a lot of paths and view_resize sends the client a configure, so it must
+     * not fire when the box has not actually moved. */
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->mapped || !v->maximized || v->fullscreen || v->minimized)
+            continue;
+        struct wlr_box area;
+        output_usable_box_of(s, v->output ? v->output : server_focused_output(s),
+                             &area);
+        if (v->x == area.x && v->y == area.y &&
+            v->w == area.width && v->h == area.height)
+            continue;
+        view_resize(v, area.x, area.y, area.width, area.height);
+    }
+
     /* AI layout is a single-monitor feature: only the focused output gets a
      * suggestion (one in-flight request at a time), the rest tile. */
     syn_output_t *focused = server_focused_output(s);

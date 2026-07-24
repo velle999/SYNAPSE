@@ -2580,192 +2580,6 @@ void synui_render_bt(syn_server_t *s)
     set_scene_buffer(&s->bt_ui.text_buf, s->bt_ui.tree, buf);
 }
 
-/* ── Start menu (menu.c) ─────────────────────────────────── */
-/* The geometry lives in synui.h: menu.c hit-tests the pointer and clamps the
- * scroll against the same numbers this draws with. */
-
-void synui_render_menu(syn_server_t *s)
-{
-    syn_menu_t *m = &s->menu;
-
-    if (!m->visible) {
-        wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
-        return;
-    }
-
-    /* The *usable* box, not the output: it is the output minus the layer-shell
-     * exclusive zones, so its top-left corner is the pixel under the left end of
-     * waybar — which is where the SYNAPSE button is. Anchoring there is what
-     * makes the menu drop out of the button that opens it instead of appearing
-     * in the middle of the screen with no relationship to anything. Reading the
-     * bar's height off the exclusive zone rather than hard-coding 28 means a
-     * bar that moves or resizes takes the menu with it. */
-    struct wlr_box ob;
-    server_usable_box(s, &ob);
-
-    int rows = m->view_count < MENU_ROWS ? m->view_count : MENU_ROWS;
-    if (rows < 1) rows = 1;                 /* "no matches" still needs a line */
-
-    /* The root sheds the blank breadcrumb line; a submenu keeps it for its page
-     * name. Everything above the rows (separator, search) and the rows' own
-     * baseline shift up by the same amount so the panel closes around them. */
-    int mtop = menu_top_y(m);
-
-    int pw = MENU_W;
-    int ph = mtop + rows * MENU_ROW_H + MENU_FOOTER;
-    int px = ob.x, py = ob.y;
-    /* A short output could leave the footer off the bottom; ride up if so. */
-    if (py + ph > ob.y + ob.height) py = ob.y + ob.height - ph;
-    if (py < ob.y) py = ob.y;
-
-    /* What the pointer hit-tests measure against. */
-    m->x = px; m->y = py; m->w = pw; m->h = ph;
-
-    wlr_scene_node_set_position(&s->menu_ui.tree->node, px, py);
-    wlr_scene_node_set_enabled(&s->menu_ui.tree->node, true);
-    wlr_scene_node_raise_to_top(&s->menu_ui.tree->node);
-
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
-    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
-                        g_panel_accent[2], 1.0f };
-    /* The panel's height tracks the filtered row count, so unlike the fixed
-     * panels these rects have to be resized on every render, not just created. */
-    if (!s->menu_ui.bg)
-        s->menu_ui.bg = wlr_scene_rect_create(s->menu_ui.tree, pw, ph, bg_color);
-    else
-        wlr_scene_rect_set_size(s->menu_ui.bg, pw, ph);
-    if (!s->menu_ui.accent)
-        s->menu_ui.accent = wlr_scene_rect_create(s->menu_ui.tree, pw, 2, accent);
-        else
-            wlr_scene_rect_set_color(s->menu_ui.accent, accent);
-
-    cairo_t *cr;
-    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
-    if (!buf) return;
-    cairo_begin(cr);
-
-    /* The top line is the breadcrumb. The "SYNAPSE" brand text that used to sit
-     * here was removed (it read as chrome, not information); at the root the
-     * line is now blank, and a submenu shows its page name with a back-arrow so
-     * you still know where you are and that Esc goes up a level. The page name
-     * comes from a .desktop's Categories, but only ever as one of CATEGORIES'
-     * own display strings — never third-party text — so it is safe to draw. */
-    if (m->page[0]) {
-        cairo_set_font_size(cr, 15);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-        cairo_move_to(cr, MENU_PAD, 30);
-        cairo_show_text(cr, "\xe2\x80\xb9  ");        /* ‹ back indicator */
-        cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
-        cairo_show_text(cr, m->page);
-    }
-
-    /* The separator sits one line above the search, the search one line above
-     * the first row — both pinned to mtop so they follow it up at the root. */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
-    cairo_set_line_width(cr, 1);
-    cairo_move_to(cr, MENU_PAD, mtop - 48);
-    cairo_line_to(cr, pw - MENU_PAD, mtop - 48);
-    cairo_stroke(cr);
-
-    /* Search line. Always drawn, with a prompt when empty, so that typing is
-     * discoverable rather than a thing you have to already know about. */
-    cairo_set_font_size(cr, 13);
-    if (m->filter[0]) {
-        cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
-        cairo_move_to(cr, MENU_PAD, mtop - 24);
-        cairo_show_text(cr, m->filter);
-        cairo_show_text(cr, "\xe2\x96\x8f");          /* caret */
-    } else {
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-        cairo_move_to(cr, MENU_PAD, mtop - 24);
-        cairo_show_text(cr, "Type to search\xe2\x80\xa6");
-    }
-
-    int first = menu_first_row(m);
-
-    if (m->view_count == 0) {
-        cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-        cairo_move_to(cr, MENU_PAD, mtop);
-        cairo_show_text(cr, "No matches");
-    }
-
-    for (int i = 0; i < MENU_ROWS && first + i < m->view_count; i++) {
-        const syn_menu_entry_t *e = &m->entries[m->view[first + i]];
-        int ry = mtop + i * MENU_ROW_H;
-
-        if (e->kind == MENU_ROW_HEADER) {
-            cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-            cairo_move_to(cr, MENU_PAD, ry);
-            cairo_show_text(cr, e->label);
-            continue;
-        }
-
-        int sel = (first + i == m->selected);
-        if (sel) {
-            set_accent(cr, 0.35);
-            cairo_rectangle(cr, MENU_PAD - 8, ry - MENU_ROW_ASC,
-                            pw - 2 * (MENU_PAD - 8), MENU_ROW_H - 3);
-            cairo_fill(cr);
-        }
-
-        cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
-
-        /* A submenu says so with the usual arrow on the right, and the label is
-         * clipped short of it so a long category can never run underneath it. A
-         * Back row points the other way, a left chevron ahead of its label, so
-         * the mouse's way out reads as such at a glance. */
-        int text_w = pw - MENU_PAD - 16;
-        if (e->kind == MENU_ROW_SUBMENU) {
-            text_w -= 20;
-            cairo_move_to(cr, pw - MENU_PAD - 8, ry);
-            cairo_show_text(cr, "\xe2\x80\xba");
-        }
-        int text_x = MENU_PAD + 8;
-        if (e->kind == MENU_ROW_BACK) {
-            cairo_move_to(cr, MENU_PAD + 4, ry);
-            cairo_show_text(cr, "\xe2\x80\xb9");   /* ‹ */
-            text_x = MENU_PAD + 20;
-            text_w -= 12;
-        }
-        /* draw_clipped, not cairo_show_text: a long app name would otherwise
-         * run past the panel edge. It truncates on a character boundary — a cut
-         * through a multi-byte sequence would poison the context and blank
-         * every row below this one. */
-        cairo_move_to(cr, text_x, ry);
-        draw_clipped(cr, text_x, ry, text_w, e->label);
-    }
-
-    /* Say so when the list runs off the window rather than silently truncating:
-     * an entry you cannot see is an entry you do not have. */
-    cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
-    if (m->view_count > MENU_ROWS) {
-        char more[64];
-        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d",
-                 first + 1,
-                 first + MENU_ROWS < m->view_count ? first + MENU_ROWS : m->view_count,
-                 m->view_count);
-        cairo_move_to(cr, MENU_PAD, ph - 30);
-        cairo_show_text(cr, more);
-    }
-
-    cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
-    cairo_move_to(cr, MENU_PAD, ph - 14);
-    /* The hint tracks where you are: at the root there is nothing to go back
-     * to, and in a submenu the way out is the thing worth saying. */
-    cairo_show_text(cr, m->page[0]
-        ? "Enter launch \xc2\xb7 \xe2\x86\x90 back \xc2\xb7 Esc close"
-        : "\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 \xe2\x86\x92 open \xc2\xb7 Enter launch \xc2\xb7 Esc close");
-
-    cairo_destroy(cr);
-    set_scene_buffer(&s->menu_ui.text_buf, s->menu_ui.tree, buf);
-}
-
 /* ── Task manager (taskmgr.c) ────────────────────────────── */
 
 /* Panel geometry. The column x's are tuned for the 13px monospace face the
@@ -3601,7 +3415,6 @@ void synui_ui_init(syn_server_t *s)
     s->cal_ui.tree     = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->thememgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
-    s->menu_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->clip_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
@@ -3627,7 +3440,6 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, false);
-    wlr_scene_node_set_enabled(&s->menu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
