@@ -104,6 +104,16 @@ QtObject {
     readonly property int  pillHeight:    20
     readonly property int  pillRadius:    10
 
+    // Auto-hide: the strip left taking pointer input while the bar is hidden,
+    // and how long it waits before dropping once nothing wants it up. The strip
+    // has to be thicker than a hairline on a monitor whose top edge is not the
+    // layout's top edge — there the pointer arrives from the screen above at
+    // whatever step the motion event carries instead of being clamped to y=0,
+    // so a 1-2px target gets jumped clean over. The delay is what stops a
+    // pointer merely crossing the edge from flapping the bar down and back up.
+    readonly property int  barEdgeStrip:  5
+    readonly property int  barHideDelay:  260
+
     readonly property string fontFamily:  "DejaVu Sans Mono"
     readonly property string iconFamily:  "Symbols Nerd Font Mono"
     readonly property int    fontSize:    12

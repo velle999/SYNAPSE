@@ -31,10 +31,29 @@ PanelWindow {
 
     readonly property bool autohide: BarConfig.get(bar.outName, "autohide")
 
-    // Revealed when it is not hiding at all, while the pointer is anywhere over
+    // Wanted up when it is not hiding at all, while the pointer is anywhere over
     // it, or while its menu is open — closing the bar out from under its own
     // menu would be a fine way to make the menu unusable.
-    readonly property bool revealed: !bar.autohide || edgeHover.hovered || menu.visible
+    readonly property bool wantsReveal: !bar.autohide || edgeHover.hovered || menu.visible
+
+    // …but `revealed` is a latch, not that binding. Going up is immediate; going
+    // down waits, so a pointer that only crosses the top edge on its way to a
+    // window's titlebar does not drag the bar down and back up behind it.
+    property bool revealed: true
+
+    onWantsRevealChanged: {
+        if (bar.wantsReveal) { hideDelay.stop(); bar.revealed = true }
+        else                   hideDelay.restart()
+    }
+    Component.onCompleted: bar.revealed = bar.wantsReveal
+
+    Timer {
+        id: hideDelay
+        interval: Theme.barHideDelay
+        // Re-read rather than assigning false: the pointer may have come back
+        // during the wait, and this fires either way.
+        onTriggered: bar.revealed = bar.wantsReveal
+    }
 
     anchors { top: true; left: true; right: true }
     implicitHeight: Theme.barHeight
@@ -52,92 +71,108 @@ PanelWindow {
 
     color: "transparent"
 
-    // While hidden, only a sliver at the screen edge takes pointer input. The
-    // window is still full height, so without this a hidden bar would keep
+    // While hidden, only a strip at the screen edge takes pointer input. The
+    // window keeps its full height, so without this a hidden bar would keep
     // swallowing every click along the top of the screen — invisibly, which is
-    // the worst version of that bug. The sliver is what the pointer runs into
-    // to bring the bar back.
+    // the worst version of that bug. The strip is what the pointer runs into to
+    // bring the bar back.
+    //
+    // The region FOLLOWS THE SLIDE rather than snapping with `revealed`. Snapped,
+    // the two disagree for the length of the animation in both directions: a bar
+    // still visibly on screen stops taking clicks on the way out (they land in
+    // the window behind it), and the pointer, now outside the region, cannot
+    // catch it on the way back either — so it looks like the bar ignored you.
     mask: Region {
         x: 0
         y: 0
         width: bar.width
-        height: bar.revealed ? Theme.barHeight : 3
+        height: Math.max(Theme.barEdgeStrip, Theme.barHeight + content.y)
     }
 
-    // Hover lives on its own item, NOT on the sliding content: once the content
-    // is translated off the top, the pointer is no longer over it and it could
-    // never be hovered back into view. A HoverHandler rather than a MouseArea
-    // because handlers do not consume events — the modules' own MouseAreas keep
-    // working, and hovering one still counts as hovering the bar.
+    // The hover item is the content's PARENT, not its sibling.
+    //
+    // It cannot be the content itself: once that is translated off the top the
+    // pointer is no longer over it and it could never be hovered back into view.
+    // But as a sibling underneath, it is starved — Qt delivers hover front to
+    // back and stops at the first item that takes it, so every module MouseArea
+    // (hoverEnabled, for its own wash) shadowed this handler. Hovering the
+    // background revealed the bar; sliding onto the tray, a workspace pill or
+    // any module reported "not hovered" and hid it out from under the pointer,
+    // which then re-armed the edge strip and revealed it again. That flapping is
+    // the auto-hide glitch. Nesting fixes it: an ancestor gets hover alongside
+    // its children, so the handler stays hovered anywhere over the bar and the
+    // modules keep their own hover (verified against Qt 6.11 hover delivery).
+    // Stacking the handler on TOP is not the fix — it starves the modules
+    // instead, `blocking: false` or not.
     Item {
         anchors.fill: parent
         HoverHandler { id: edgeHover }
-    }
 
-    Item {
-        id: content
-        width: bar.width
-        height: Theme.barHeight
-        y: bar.revealed ? 0 : -Theme.barHeight
-        Behavior on y {
-            NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.bg
-
-            // Right-click anywhere the modules do not claim opens the per-monitor
-            // menu. It sits UNDER the modules, so a module that uses right-click
-            // for its own thing (volume → mixer, network → nmtui) still wins;
-            // modules with no use for it decline the button so it falls through
-            // to here rather than being swallowed. See BarModule.acceptsRight.
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.RightButton
-                onClicked: (m) => menu.openAt(m.x)
+        Item {
+            id: content
+            width: bar.width
+            height: Theme.barHeight
+            y: bar.revealed ? 0 : -Theme.barHeight
+            Behavior on y {
+                NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic }
             }
 
-            // The accent underline the waybar CSS drew with border-bottom.
             Rectangle {
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                height: Theme.accentHeight
-                color: Theme.magenta
-            }
+                anchors.fill: parent
+                color: Theme.bg
 
-            // ── Left: virtual desktops ───────────────────────
-            // Workspaces reserves the launcher's width itself rather than being
-            // offset from here — see the note in Workspaces.qml.
-            Workspaces {
-                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                visible: BarConfig.get(bar.outName, "workspaces")
-            }
-
-            // ── Centre: clock ────────────────────────────────
-            Clock {
-                anchors.centerIn: parent
-                visible: BarConfig.get(bar.outName, "clock")
-            }
-
-            // ── Right: status modules ────────────────────────
-            Row {
-                anchors {
-                    right: parent.right
-                    rightMargin: 6
-                    verticalCenter: parent.verticalCenter
+                // Right-click anywhere the modules do not claim opens the per-monitor
+                // menu. It sits UNDER the modules, so a module that uses right-click
+                // for its own thing (volume → mixer, network → nmtui) still wins;
+                // modules with no use for it decline the button so it falls through
+                // to here rather than being swallowed. See BarModule.acceptsRight.
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    onClicked: (m) => menu.openAt(m.x)
                 }
-                spacing: Theme.moduleGap
 
-                Tray      { anchors.verticalCenter: parent.verticalCenter
-                            visible: BarConfig.get(bar.outName, "tray") }
-                Media     { barVisible: BarConfig.get(bar.outName, "media") }
-                GameMode  {}
-                Battery   {}
-                Volume    { barVisible: BarConfig.get(bar.outName, "volume") }
-                Cpu       { barVisible: BarConfig.get(bar.outName, "sysinfo") }
-                Memory    { barVisible: BarConfig.get(bar.outName, "sysinfo") }
-                Bluetooth { barVisible: BarConfig.get(bar.outName, "netbt") }
-                Network   { barVisible: BarConfig.get(bar.outName, "netbt") }
+                // The accent underline the waybar CSS drew with border-bottom.
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    height: Theme.accentHeight
+                    color: Theme.magenta
+                }
+
+                // ── Left: virtual desktops ───────────────────────
+                // Workspaces reserves the launcher's width itself rather than being
+                // offset from here — see the note in Workspaces.qml.
+                Workspaces {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    visible: BarConfig.get(bar.outName, "workspaces")
+                }
+
+                // ── Centre: clock ────────────────────────────────
+                Clock {
+                    anchors.centerIn: parent
+                    visible: BarConfig.get(bar.outName, "clock")
+                }
+
+                // ── Right: status modules ────────────────────────
+                Row {
+                    anchors {
+                        right: parent.right
+                        rightMargin: 6
+                        verticalCenter: parent.verticalCenter
+                    }
+                    spacing: Theme.moduleGap
+
+                    Tray      { anchors.verticalCenter: parent.verticalCenter
+                                visible: BarConfig.get(bar.outName, "tray") }
+                    Media     { barVisible: BarConfig.get(bar.outName, "media") }
+                    GameMode  {}
+                    Battery   {}
+                    Volume    { barVisible: BarConfig.get(bar.outName, "volume") }
+                    Cpu       { barVisible: BarConfig.get(bar.outName, "sysinfo") }
+                    Memory    { barVisible: BarConfig.get(bar.outName, "sysinfo") }
+                    Bluetooth { barVisible: BarConfig.get(bar.outName, "netbt") }
+                    Network   { barVisible: BarConfig.get(bar.outName, "netbt") }
+                }
             }
         }
     }
