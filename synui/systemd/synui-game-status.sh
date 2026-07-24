@@ -2,7 +2,9 @@
 """synui-game-status — waybar's game mode indicator (custom/gamemode).
 
 Reads the state synui publishes to $XDG_RUNTIME_DIR/synui-game on every
-enter/leave (see synui/src/game.c) and prints one line of waybar JSON.
+enter/leave (see synui/src/game.c) and prints one line of JSON for the bar
+(quickshell's GameMode.qml parses it; the schema is waybar's custom-module one,
+kept as-is so the two bars stay interchangeable).
 
 Python, not shell, for one reason: `app` is the game's WM_CLASS — client-
 controlled — and it ends up inside a JSON string. json.dumps escapes it;

@@ -69,11 +69,15 @@ dolphin
 gamescope
 # The bar. Neither of these was on the ISO, so the live session had no bar at
 # all — no clock, no tray, no network indicator — while an installed system had
-# one; that was an oversight, not a decision. synui pulls waybar in as a
+# one; that was an oversight, not a decision. synui pulls quickshell in as a
 # dependency now, but list it explicitly: what the ISO ships should be readable
 # here rather than inferred from someone else's depends. wtype is how the bar's
 # SYNAPSE button asks synui to open the start menu (there is no other IPC in).
-waybar
+#
+# quickshell replaced waybar as the bar on 2026-07-24 (synui/systemd/synui-bar.sh
+# records why). waybar is deliberately absent: nothing starts it, and the ISO is
+# already ~7GB.
+quickshell
 wtype
 
 # Screen recording (Super+Shift+R). synui pulls it in as a dependency; listed

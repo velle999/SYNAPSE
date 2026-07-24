@@ -8,8 +8,9 @@ Renders the time using the format the Date & Time settings panel writes to
     seconds=0|1         show seconds
     zones=A|B|C         world-clock IANA zones (tooltip only)
 
-waybar polls this once a second (interval 1), so flipping 12/24-hour or
-seconds in the panel changes the bar within a second with no waybar reload.
+The bar polls this once a second (quickshell's Clock.qml, a 1s Timer), so
+flipping 12/24-hour or seconds in the panel changes the bar within a second with
+no bar reload.
 This is the reader half of that pipeline; without it the bar shows a fixed
 format and the panel's toggles do nothing — which is the bug this fixes.
 

@@ -1,0 +1,7 @@
+# Declaring a singleton makes this directory an explicit QML module, which
+# turns OFF implicit sibling resolution — every type in here has to be listed
+# or `Bar is not a type`. That is the whole reason this file has more than one
+# line.
+singleton Theme 1.0 Theme.qml
+singleton Icons 1.0 Icons.qml
+Bar 1.0 Bar.qml

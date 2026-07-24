@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=153
+pkgrel=154
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -15,9 +15,15 @@ license=('GPL-2.0-or-later')
 #   does the privileged loop-setup+mount (polkit allow_active, so no root);
 #   zenity is how the service menu reports a failure — a menu item that fails
 #   silently looks like a broken menu item.
-# waybar/wtype: the bar, and the virtual keyboard its SYNAPSE button uses to ask
-#   synui for the start menu. synui ships the bar's config to /etc/xdg/waybar, so
-#   depending on it keeps the config and the thing that reads it together.
+# quickshell/wtype: the bar (quickshell/ + synui-bar), and the virtual keyboard
+#   the bar's SYNAPSE button uses to ask synui for the start menu. synui ships
+#   the bar's whole QML tree to /usr/share/synui/quickshell, so depending on the
+#   runtime keeps the config and the thing that reads it together.
+#   waybar was the bar until 2026-07-24 and is deliberately NOT a dependency any
+#   more — see systemd/synui-bar.sh for what moved and why. The waybar config is
+#   still packaged (config/waybar/, and synui-apply-theme still generates its
+#   stylesheet), so a user who installs waybar themselves keeps a working bar;
+#   nothing in SynapseOS starts it.
 # wf-recorder: Super+Shift+R (synui-record). Recording means encoding, and
 #   ffmpeg is not something the compositor should grow — wf-recorder captures
 #   through wlr-screencopy, which synui already exports for grim.
@@ -29,13 +35,15 @@ license=('GPL-2.0-or-later')
 #   rather than driving bluetoothctl, but the daemon still has to be there, and
 #   bluez enables no unit of its own: without `systemctl enable bluetooth` the
 #   radio stays down and the panel correctly reports no adapter.
-# ttf-nerd-fonts-symbols-mono: the waybar bar renders its modules as glyphs
-#   (bluetooth, wifi, volume, cpu…). DejaVu Sans Mono has none of those
-#   Private-Use codepoints, so without this font every icon is a tofu box.
+# ttf-nerd-fonts-symbols-mono: the bar renders its modules as glyphs (bluetooth,
+#   wifi, volume, cpu…) — quickshell/Icons.qml names the codepoints. DejaVu Sans
+#   Mono has none of those Private-Use codepoints, so without this font every
+#   icon is a tofu box, and the icon-only modules (bluetooth) collapse to
+#   zero width and vanish rather than showing anything at all.
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'waybar' 'wtype' 'wf-recorder')
+depends=('wlroots0.19' 'scenefx' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'foot' 'cairo' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'curl' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'curl')
 optdepends=('wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
@@ -63,10 +71,20 @@ prepare() {
     local tarball="$startdir/$pkgname-$pkgver.tar.gz"
     [ -f "$tarball" ] || return 0
 
+    # Only hand find paths that exist. It exits non-zero for a missing one, and
+    # under makepkg's errexit that aborts prepare() with no message at all —
+    # which is what `include/` (dropped from the tree long ago, still named here)
+    # did: this guard could never run, so bare makepkg refused to build synui
+    # while looking like the stale-tarball check firing. `include` stays listed
+    # so the check covers it again if it ever comes back.
+    local -a watched=()
+    local p
+    for p in src include meson.build config data protocols quickshell systemd tests; do
+        [ -e "$startdir/$p" ] && watched+=("$startdir/$p")
+    done
+
     local stale
-    stale=$(find "$startdir/src" "$startdir/include" "$startdir/meson.build" \
-                 "$startdir/config" "$startdir/data" "$startdir/protocols" \
-                 "$startdir/systemd" "$startdir/tests" \
+    stale=$(find "${watched[@]}" \
                  -type f -newer "$tarball" \
                  -not -path "*/$pkgname-$pkgver/*" \
                  -print -quit 2>/dev/null)
@@ -128,7 +146,42 @@ package() {
     install -Dm644 config/MangoHud.conf \
         "$pkgdir/etc/MangoHud.conf"
 
-    # The bar's config, and the wrapper that points waybar at it.
+    # ── The bar: quickshell ──────────────────────────────────────────────────
+    #
+    # The whole QML tree, preserving its directory shape. qmldir MUST ship with
+    # it: it declares Theme and Icons as singletons, which turns off implicit
+    # sibling resolution, so without that one file every type in the tree fails
+    # to resolve and the bar does not start at all.
+    #
+    # NOT ~/.config/quickshell: a packaged default belongs to the package, and
+    # quickshell's `-c <name>` only searches the user's config dir — hence
+    # synui-bar pointing at this path with -p, and handing over to
+    # ~/.config/quickshell/synapse by name when the user has their own.
+    for _qml in shell.qml Bar.qml Theme.qml Icons.qml qmldir; do
+        install -Dm644 "quickshell/$_qml" \
+            "$pkgdir/usr/share/synui/quickshell/$_qml"
+    done
+    install -Dm644 quickshell/components/BarModule.qml \
+        "$pkgdir/usr/share/synui/quickshell/components/BarModule.qml"
+    for _mod in quickshell/modules/*.qml; do
+        install -Dm644 "$_mod" \
+            "$pkgdir/usr/share/synui/quickshell/modules/${_mod##*/}"
+    done
+    install -Dm755 systemd/synui-bar.sh \
+        "$pkgdir/usr/bin/synui-bar"
+
+    # synuirc files already in the wild — including the one syn-install wrote for
+    # every existing install — say `autostart = synui-waybar`. Without this the
+    # bar simply would not come up after an upgrade, with nothing on screen to
+    # say why. The symlink is the compatibility shim, not a second bar.
+    ln -s synui-bar "$pkgdir/usr/bin/synui-waybar"
+
+    # ── The old bar's config, kept but not started ───────────────────────────
+    #
+    # waybar is no longer a dependency and nothing in SynapseOS launches it, but
+    # its config still ships: synui-apply-theme still generates the themed
+    # stylesheet, so a user who installs waybar by hand keeps a working, themed
+    # bar. Deleting the config would take that away for no gain.
     #
     # NOT /etc/xdg/waybar: those paths are owned by the *waybar package*, and
     # shipping ours there is a hard file conflict that fails the whole pacstrap
@@ -139,7 +192,8 @@ package() {
     # This is still the ONLY copy of the config: syn-install used to write its
     # own from heredocs, which drifted from the repo's and once shipped a menu
     # whose items launched the wrong app. A packaged default cannot drift from
-    # itself, and synui-waybar hands over to ~/.config/waybar when a user has one.
+    # itself. It is also where quickshell's Icons.qml took its glyph codepoints
+    # from, so the two bars are glyph-for-glyph identical.
     install -Dm644 config/waybar/config.jsonc \
         "$pkgdir/usr/share/synui/waybar/config.jsonc"
     install -Dm644 config/waybar/style.css \
@@ -148,8 +202,6 @@ package() {
         "$pkgdir/usr/share/synui/waybar/network-menu.xml"
     install -Dm644 config/waybar/bluetooth-menu.xml \
         "$pkgdir/usr/share/synui/waybar/bluetooth-menu.xml"
-    install -Dm755 systemd/synui-waybar.sh \
-        "$pkgdir/usr/bin/synui-waybar"
 
     # Media idle-inhibit (synui-idle-inhibit binary is installed by meson).
     install -Dm755 systemd/synui-media-inhibit.sh \

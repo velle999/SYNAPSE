@@ -10,12 +10,13 @@ terminal = foot
 # bare terminal rather than a desktop — which is exactly what "the live doesn't
 # boot right" turned out to be. The compositor was working the whole time.
 # Super+Return, or the start menu, opens a terminal when one is wanted.
-# The bar. The live ISO had none at all — waybar was not even in
+# The bar. The live ISO had none at all — the bar was not even in
 # packages.x86_64 — so the ISO booted with no clock, no tray and no network
 # indicator, looking far less finished than an installed system for no reason.
-# Its config comes from /etc/xdg/waybar (shipped by synui), so the root session
-# here needs nothing in its home.
-autostart = synui-waybar
+# The bar is quickshell as of 2026-07-24; its QML tree comes from
+# /usr/share/synui/quickshell (shipped by synui), so the root session here needs
+# nothing in its home.
+autostart = synui-bar
 
 # Window appearance
 border_width = 2

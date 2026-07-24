@@ -738,11 +738,15 @@ case "$DE_CHOICE" in
     4) echo "  No GUI will be installed." ;;
     *)
         echo "  Installing greetd (login screen) + desktop extras..."
-        # wtype is not optional decoration: it is how waybar's start menu asks
+        # wtype is not optional decoration: it is how the bar's start menu asks
         # synui to open the control panel (virtual-keyboard-v1 is the only IPC
         # into the compositor). Without it that menu entry silently does nothing.
+        #
+        # quickshell is the bar as of 2026-07-24, replacing waybar — synui
+        # depends on it, but name it here too so what an install pulls in is
+        # readable rather than inferred from someone else's depends.
         arch-chroot /mnt pacman -S --noconfirm \
-            greetd greetd-tuigreet waybar swaybg python wtype \
+            greetd greetd-tuigreet quickshell swaybg python wtype \
             bluez bluez-utils \
             cups cups-pdf ghostscript nss-mdns \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
@@ -1353,10 +1357,12 @@ terminal = foot
 # greetd launches synui after login; the synsh terminal is autostarted
 # here (synui-foot.service is only used on the live ISO).
 autostart = swaybg -c '#0b0b14'
-# waybar is just the bar now. The start menu it used to carry is synui's own
+# The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
-# opens — so there is no generator to run before waybar starts.
-autostart = synui-waybar
+# opens — so there is no generator to run before the bar starts. synui-bar
+# starts quickshell against the QML tree synui packages to
+# /usr/share/synui/quickshell.
+autostart = synui-bar
 autostart = foot synsh
 # Any GUI app that needs root goes through polkit, and pkexec refuses to
 # prompt on a terminal it doesn't have — without an authentication agent
@@ -1434,26 +1440,33 @@ selection-background=05d9e8
 urls=05d9e8
 FOOTEOF
 
-# waybar HUD — clock + system telemetry in the same palette.
-# The SYNAPSE badge doubles as the start menu (waybar's built-in GTK
-# dropdown; synui renders layer-shell xdg popups, so it just works).
-# Heredoc is unquoted so $NEW_USER lands in menu-file — keep the rest
-# of the config free of $ and backticks.
+# The bar — clock + system telemetry in the same palette. quickshell as of
+# 2026-07-24; the SYNAPSE badge is drawn by the compositor itself (launcher.c)
+# over the bar's top-left corner, so the bar deliberately leaves that corner
+# empty rather than competing for it.
 #
-# The tray module is load-bearing, not decoration: waybar is the only thing on
+# The tray module is load-bearing, not decoration: the bar is the only thing on
 # SYNAPSE that owns org.kde.StatusNotifierWatcher. Drop it and an app that
 # closes to tray (Steam, by default) unmaps its window and hands its icon to a
 # bus name nobody holds — the window is then unreachable, since we have no
-# taskbar either. show-passive-items is on because Steam registers its item
-# Passive first, and waybar hides Passive items by default.
-# No waybar config is written here any more. synui packages the bar's config to
-# /etc/xdg/waybar/, which waybar reads for any user who has no ~/.config/waybar —
-# so a new account gets a working bar with nothing copied into it, and there is
-# one copy of the config instead of three. These heredocs were the reason
-# sync-installer.py/check-installer-sync.py had to exist: the embedded copies
-# drifted from the repo's and shipped a start menu whose items launched the wrong
-# application. A user who wants to customise the bar copies /etc/xdg/waybar into
-# their ~/.config and owns it from then on, which is how XDG is meant to work.
+# taskbar either. Passive items are shown because Steam registers its item
+# Passive first and only later marks it Active.
+#
+# NOTE: SNI clients do not re-register when the watcher changes owner, so a bar
+# restart drops the icon of any client that does not watch NameOwnerChanged
+# (norduserd does; shelly-notifications does not). It costs nothing at install
+# time — the bar starts before any tray app — but it is why swapping bars on a
+# running session loses icons until each app restarts.
+#
+# No bar config is written here any more. synui packages the whole QML tree to
+# /usr/share/synui/quickshell and synui-bar points at it, so a new account gets
+# a working bar with nothing copied into it, and there is one copy of the config
+# instead of three. Heredocs here were the reason sync-installer.py/
+# check-installer-sync.py had to exist: the embedded copies drifted from the
+# repo's and shipped a start menu whose items launched the wrong application. A
+# user who wants to customise the bar copies the tree into
+# ~/.config/quickshell/synapse and owns it from then on — synui-bar hands over to
+# that path by name, which is how XDG is meant to work.
 
 # fastfetch config — reuse the branded one from the live ISO so `syn info`
 # / fastfetch shows the SynapseOS logo on the installed system too.
