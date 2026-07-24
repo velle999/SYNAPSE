@@ -145,5 +145,7 @@ PanelWindow {
     BarMenu {
         id: menu
         output: bar.outName
+        // A PopupWindow cannot find its own window — see BarMenu.barWindow.
+        barWindow: bar
     }
 }

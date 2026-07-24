@@ -24,6 +24,21 @@ PopupWindow {
     property string output: ""
     property int    anchorX: 0
 
+    // The window this menu hangs off, passed in by the bar.
+    //
+    // It CANNOT be discovered from here. A PopupWindow is not an Item, so it has
+    // no `parent` — inside a PanelWindow `menu.parent` is *undefined*, not a
+    // window — and the `QsWindow` attached property only resolves on an Item
+    // (which is why BarModule and Tray can say `root.QsWindow.window` and this
+    // cannot). The defensive `parent ? parent.QsWindow.window : null` this used
+    // to read therefore took the null branch every single time, leaving the
+    // popup with no anchor window, and a PopupWindow with no anchor window never
+    // maps: right-clicking the bar did nothing at all, silently.
+    //
+    // `required` so a caller that forgets fails loudly at load instead of
+    // quietly reintroducing a dead menu.
+    required property var barWindow
+
     implicitWidth: 232
     implicitHeight: col.implicitHeight + 16
     color: "transparent"
@@ -36,7 +51,7 @@ PopupWindow {
     }
 
     anchor {
-        window: menu.parent ? menu.parent.QsWindow.window : null
+        window: menu.barWindow
         rect.x: Math.max(4, menu.anchorX - menu.implicitWidth / 2)
         rect.y: Theme.barHeight + 2
     }
