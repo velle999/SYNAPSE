@@ -97,6 +97,13 @@ QtObject {
     readonly property int  moduleGap:     2
     readonly property int  radius:        4
 
+    // Module pills are inset from the bar's height so the hover wash reads as a
+    // button rather than a full-height stripe. 20 of 28 leaves 4px above and
+    // below; the radius is half the height, which is what makes it a pill and
+    // not a rounded box.
+    readonly property int  pillHeight:    20
+    readonly property int  pillRadius:    10
+
     readonly property string fontFamily:  "DejaVu Sans Mono"
     readonly property string iconFamily:  "Symbols Nerd Font Mono"
     readonly property int    fontSize:    12

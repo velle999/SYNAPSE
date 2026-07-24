@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=154
+pkgrel=155
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -157,10 +157,16 @@ package() {
     # quickshell's `-c <name>` only searches the user's config dir — hence
     # synui-bar pointing at this path with -p, and handing over to
     # ~/.config/quickshell/synapse by name when the user has their own.
-    for _qml in shell.qml Bar.qml Theme.qml Icons.qml qmldir; do
-        install -Dm644 "quickshell/$_qml" \
-            "$pkgdir/usr/share/synui/quickshell/$_qml"
+    # Globbed, not listed: a named list silently drops a new top-level type
+    # (Osd.qml, OsdState.qml) and the bar then fails to load with an error
+    # naming a file the user cannot see. qmldir is named separately because it
+    # is the one non-.qml file here and the most load-bearing.
+    for _qml in quickshell/*.qml; do
+        install -Dm644 "$_qml" \
+            "$pkgdir/usr/share/synui/quickshell/${_qml##*/}"
     done
+    install -Dm644 quickshell/qmldir \
+        "$pkgdir/usr/share/synui/quickshell/qmldir"
     install -Dm644 quickshell/components/BarModule.qml \
         "$pkgdir/usr/share/synui/quickshell/components/BarModule.qml"
     for _mod in quickshell/modules/*.qml; do

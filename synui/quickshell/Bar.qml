@@ -7,11 +7,13 @@ import "components"
 /*
  * The SYNAPSE bar.
  *
- * Layout matches the waybar it replaces: centre clock, everything else right.
- * The LEFT side stays empty on purpose — synui draws the "◢ SYNAPSE" launcher
- * over the bar's top-left corner itself (src/launcher.c), and a click there
- * calls menu_toggle() directly. Putting anything there would sit underneath
- * the compositor's own button.
+ * Layout: virtual desktops left, clock centre, status right.
+ *
+ * The left side is shared, not free. synui draws the "◢ SYNAPSE" launcher over
+ * the bar's top-left corner itself (src/launcher.c) and a click there calls
+ * menu_toggle() in the compositor, so anything drawn under it is both invisible
+ * and unclickable. Workspaces starts past it by mirroring launcher.c's own
+ * width formula.
  */
 PanelWindow {
     id: bar
@@ -46,6 +48,13 @@ PanelWindow {
             color: Theme.magenta
         }
 
+        // ── Left: virtual desktops ───────────────────────
+        // Workspaces reserves the launcher's width itself rather than being
+        // offset from here — see the note in Workspaces.qml.
+        Workspaces {
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+        }
+
         // ── Centre: clock ────────────────────────────────
         Clock {
             anchors.centerIn: parent
@@ -61,6 +70,7 @@ PanelWindow {
             spacing: Theme.moduleGap
 
             Tray     { anchors.verticalCenter: parent.verticalCenter }
+            Media    {}
             GameMode {}
             Battery  {}
             Volume   {}

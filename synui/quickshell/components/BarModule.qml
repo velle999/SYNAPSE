@@ -32,12 +32,27 @@ Rectangle {
     signal scrolled(int delta)               // +1 up, -1 down
 
     implicitWidth: row.implicitWidth + Theme.modulePadH * 2
+
+    // A pill inset from the bar's full height, rather than a full-height block:
+    // the hover wash reads as a button instead of a stripe cut out of the bar.
     implicitHeight: Theme.barHeight
-    radius: Theme.radius
+    height: Theme.pillHeight
+    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+    radius: Theme.pillRadius
 
     color: root.active ? Theme.activeBg
                        : (mouse.containsMouse ? Theme.hoverBg : "transparent")
     Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+    // A press that only changes colour is easy to miss on a 20px target; the
+    // dip is small enough not to read as movement in peripheral vision.
+    scale: mouse.pressed ? 0.94 : 1.0
+    Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutQuad } }
+
+    // Active modules get a hairline in the accent so "on" survives a theme
+    // whose activeBg wash is subtle against its own bar colour.
+    border.width: root.active ? 1 : 0
+    border.color: Theme.magenta
 
     Row {
         id: row

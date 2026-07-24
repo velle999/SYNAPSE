@@ -47,6 +47,17 @@ QtObject {
     readonly property string batFull:     "\uF240"
     readonly property string batCharging: "\uF0E7"
 
+    // -- Brightness (OSD only; there is no bar module for it) --
+    readonly property string brightnessLow:  "\uF186"
+    readonly property string brightnessHigh: "\uF185"
+
+    // -- Media (MPRIS) --
+    readonly property string mediaPlay:  "\uF04B"
+    readonly property string mediaPause: "\uF04C"
+    readonly property string mediaNext:  "\uF051"
+    readonly property string mediaPrev:  "\uF048"
+    readonly property string mediaNote:  "\uF001"
+
     // U+F0200 sits outside the BMP, so QML needs the surrogate pair.
     readonly property string ethernet: "\uDB80\uDE00"
 }
