@@ -20,6 +20,10 @@ libinput  = dependency('libinput')
 libsystemd = dependency('libsystemd')
 libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
 libcurl   = dependency('libcurl')  # news.c fetches the feeds (on its own thread)
+# dispcfg.c parses the connector EDID for HDR/colorimetry, which wlroots reads
+# with this same library but does not re-export. Already installed as a wlroots
+# dependency, so this adds no new package to the ISO.
+libdisplay_info = dependency('libdisplay-info')
 
 # effects.c drives the GLES2 renderer directly for the post-process pass
 egl       = dependency('egl')
@@ -160,6 +164,7 @@ synui_exe = executable('synui',
     'src/geom_persist.c',
     'src/output_persist.c',
     'src/dispcfg.c',
+    'src/edid.c',
     'src/power.c',
     'src/game.c',
     'src/filters.c',
@@ -211,7 +216,8 @@ synui_exe = executable('synui',
   # /drag/output-layout helpers build scenefx-native (type-3) buffer nodes that can
   # carry blur/corners/shadow. wlroots-first gives a mixed tree and dead clicks.
   dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
-                  libinput, libjpeg, libcurl, xcb, xcb_icccm, xcb_ewmh, xcb_randr,
+                  libinput, libjpeg, libcurl, libdisplay_info,
+                  xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DSYNUI_DATADIR="' + get_option('prefix') / get_option('datadir') / 'synui' + '"'],
@@ -317,3 +323,14 @@ deskicon_drag_test = executable('deskicon_drag_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('deskicon_drag', deskicon_drag_test)
+
+# EDID HDR detection. edid.c deliberately depends on nothing but
+# libdisplay-info, so this links it directly — no stubs, no wlroots, and the
+# fixtures are the two real monitors on the dev desk (one HDR10, one SDR) so
+# the test pins the distinction the old 10-bit-framebuffer probe could not make.
+edid_hdr_test = executable('edid_hdr_test',
+  ['tests/edid_hdr_test.c', 'src/edid.c'],
+  include_directories : include_directories('src'),
+  dependencies : [libdisplay_info],
+  build_by_default : false)
+test('edid_hdr', edid_hdr_test)

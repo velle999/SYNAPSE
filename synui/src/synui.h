@@ -1416,20 +1416,35 @@ struct syn_output {
      * to the X server. Persisted in outputs.conf as primary=1. */
     int                      primary;
 
-    /* dispcfg.c: 10-bit (deep colour) scanout — the HDR row in the display
-     * panel. `deep_color` is what the user asked for and what outputs.conf
-     * stores; `deep_color_ok` is whether the backend actually accepted it, so
-     * the panel can say "unsupported" instead of silently doing nothing.
-     * `hdr_capable` is what the monitor claims over EDID.
+    /* dispcfg.c: 10-bit (deep colour) scanout — the colour-depth column in
+     * the display panel. `deep_color` is what the user asked for and what
+     * outputs.conf stores; `deep_color_ok` is whether the backend actually
+     * accepted it, so the panel can say "unsupported" instead of silently
+     * doing nothing. `deep_color_capable` is whether the backend accepts a
+     * 10-bit framebuffer at all, probed once at output creation.
      *
-     * This is deliberately NOT full HDR. Real HDR needs the compositor to
-     * composite in a PQ/scRGB space and tone-map SDR clients into it; scenefx
-     * renders 8-bit sRGB through GLES2 and cannot. What is here is the part
-     * the stack can honestly deliver: a 10-bit framebuffer, which removes
-     * gradient banding and is a prerequisite for HDR later. */
+     * This is deliberately NOT HDR, and used to be labelled as if it were.
+     * Real HDR needs the compositor to composite in a PQ/scRGB space and
+     * tone-map SDR clients into it; scenefx renders 8-bit sRGB through GLES2
+     * and cannot. What is here is the part the stack can honestly deliver: a
+     * 10-bit framebuffer, which removes gradient banding and is a
+     * prerequisite for HDR later. */
     int                      deep_color;
     int                      deep_color_ok;
-    int                      hdr_capable;
+    int                      deep_color_capable;
+
+    /* dispcfg_probe_edid(): what the *monitor* says about HDR, read from its
+     * EDID (CTA-861 HDR static metadata + colorimetry blocks) rather than
+     * inferred from a framebuffer format. Purely informational — synui does
+     * not drive the connector into PQ/BT.2020 — but the display panel has to
+     * be able to tell a genuine HDR10 monitor from a merely 10-bit-capable
+     * one, which the framebuffer test cannot do.
+     *
+     * Zeroed on non-DRM backends and on monitors with no CTA extension. */
+    int                      hdr_pq;         /* SMPTE ST 2084 (HDR10) */
+    int                      hdr_hlg;        /* Rec. BT.2100 HLG */
+    int                      wide_gamut;     /* BT.2020 RGB/YCC colorimetry */
+    float                    hdr_max_nits;   /* desired content peak, 0 unset */
 
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */
@@ -2261,9 +2276,13 @@ void dispcfg_toggle(syn_server_t *s);
  * table. Returns 1 if the key was consumed. */
 int  dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* 10-bit scanout. _set returns whether the backend accepted it; _probe fills
- * hdr_capable. See the syn_output_t fields for why this is not full HDR. */
+ * deep_color_capable. See the syn_output_t fields for why this is not HDR. */
 int  dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable);
-void dispcfg_probe_hdr(syn_server_t *s, syn_output_t *o);
+void dispcfg_probe_deep_color(syn_server_t *s, syn_output_t *o);
+/* Read this connector's EDID and fill the hdr_* / wide_gamut fields — what the
+ * monitor advertises, which is a different question from what the framebuffer
+ * can carry. Safe to call on any backend; a no-op when there is no EDID. */
+void dispcfg_probe_edid(syn_server_t *s, syn_output_t *o);
 /* Output hotplug while the panel is open: reseed the arrangement order
  * (dropping dangling pointers) and re-render. No-op when hidden. */
 void dispcfg_outputs_changed(syn_server_t *s);

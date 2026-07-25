@@ -37,6 +37,7 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/util/log.h>
 
+#include "edid.h"
 #include "synui.h"
 
 static syn_output_t *selected_output(syn_server_t *s)
@@ -237,21 +238,56 @@ int dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable)
 }
 
 /*
- * Does the monitor advertise HDR over EDID? wlroots surfaces no colorimetry
- * fields, so this is the honest proxy we have: a display that accepts a
- * 10-bit framebuffer is the one that could carry HDR if the renderer ever
- * gains it. Reported separately from deep_color so the panel does not imply
- * the compositor is doing HDR tone mapping — it is not.
+ * Can this output carry a 10-bit framebuffer at all? Same test as the apply
+ * above, without committing, so the panel can grey out the row on a monitor
+ * or link that would refuse it.
+ *
+ * This says nothing about HDR. Every 10-bit-capable GPU plane passes it —
+ * on this desk all three monitors do, including two plain SDR panels — so it
+ * must not be used to answer "is this an HDR display?". That is
+ * dispcfg_probe_edid()'s job.
  */
-void dispcfg_probe_hdr(syn_server_t *s, syn_output_t *o)
+void dispcfg_probe_deep_color(syn_server_t *s, syn_output_t *o)
 {
     if (!o || !o->wlr_output) return;
 
     struct wlr_output_state state;
     wlr_output_state_init(&state);
     wlr_output_state_set_render_format(&state, DRM_FORMAT_XRGB2101010);
-    o->hdr_capable = wlr_output_test_state(o->wlr_output, &state) ? 1 : 0;
+    o->deep_color_capable = wlr_output_test_state(o->wlr_output, &state) ? 1 : 0;
     wlr_output_state_finish(&state);
+}
+
+/*
+ * What does the monitor itself claim? edid.c reads the connector's EDID and
+ * pulls the CTA-861 HDR static metadata (which EOTFs the panel implements —
+ * PQ means HDR10) and colorimetry (BT.2020) out of it.
+ *
+ * Kept strictly separate from deep_color: a display that takes a 10-bit
+ * framebuffer is not thereby an HDR display, and conflating the two is why
+ * the panel used to show the same answer for an HDR10 monitor and the SDR one
+ * next to it. Reporting this does not mean synui outputs HDR — it composites
+ * SDR sRGB and does not touch HDR_OUTPUT_METADATA — but the panel should not
+ * be the last thing on the desk that doesn't know what is plugged in.
+ */
+void dispcfg_probe_edid(syn_server_t *s, syn_output_t *o)
+{
+    if (!o || !o->wlr_output) return;
+
+    syn_edid_hdr_t hdr;
+    edid_hdr_probe_connector(o->wlr_output->name, &hdr);
+
+    o->hdr_pq       = hdr.pq;
+    o->hdr_hlg      = hdr.hlg;
+    o->wide_gamut   = hdr.bt2020;
+    o->hdr_max_nits = hdr.max_nits;
+
+    if (o->hdr_pq || o->hdr_hlg)
+        wlr_log(WLR_INFO, "synui: %s advertises HDR (%s%s%s, %.0f cd/m2 peak) "
+                          "- compositing SDR, output stays 8-bit sRGB",
+                o->wlr_output->name,
+                o->hdr_pq ? "PQ" : "", (o->hdr_pq && o->hdr_hlg) ? "+" : "",
+                o->hdr_hlg ? "HLG" : "", (double)o->hdr_max_nits);
 }
 
 static void dispcfg_toggle_deep_color(syn_server_t *s)

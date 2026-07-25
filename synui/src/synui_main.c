@@ -445,10 +445,13 @@ static void server_new_output(struct wl_listener *listener, void *data)
 
     wl_list_insert(&server->outputs, &output->link);
 
-    /* Ask once whether this connector can carry a 10-bit framebuffer, so the
-     * display panel can show the HDR row truthfully before anything is
-     * toggled. output_persist_apply() may already have re-enabled it below. */
-    dispcfg_probe_hdr(server, output);
+    /* Ask once whether this connector can carry a 10-bit framebuffer, and once
+     * what the monitor's EDID claims about HDR, so the display panel can show
+     * both columns truthfully before anything is toggled. These are separate
+     * questions: every 10-bit plane passes the first, only an HDR panel passes
+     * the second. output_persist_apply() may already have re-enabled it. */
+    dispcfg_probe_deep_color(server, output);
+    dispcfg_probe_edid(server, output);
 
     /* A new output comes up at identity gamma. With night light on, leaving it
      * that way means the second monitor stays blue while the first is warm —

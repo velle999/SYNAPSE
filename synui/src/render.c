@@ -699,10 +699,11 @@ void synui_render_dispcfg(syn_server_t *s)
 
     int rows = d->count > 0 ? d->count : 1;
     int list_top = d->count > 0 ? map_top + map_h + 24 : 70;
-    /* 890 min: the rows run out to the colour-depth column at x=760, which
-     * sits past the PRIMARY tag at x=630. */
-    int pw = d->count > 0 && map_w + 36 > 890 ? map_w + 36 : 890;
-    int ph = list_top + rows * 28 + 126;
+    /* 990 min: the rows run out to the HDR column at x=872, which sits past
+     * the colour-depth column at x=760 and the PRIMARY tag at x=630. */
+    int pw = d->count > 0 && map_w + 36 > 990 ? map_w + 36 : 990;
+    /* +20 over the old 126: the HDR detail line for the selected monitor. */
+    int ph = list_top + rows * 28 + 146;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->dispcfg_ui.tree->node, px, py);
@@ -841,13 +842,24 @@ void synui_render_dispcfg(syn_server_t *s)
          * monitor/mode can't do it" are different answers to the same key. */
         syn_output_t *o = d->order[i];
         const char *depth;
-        if (o->deep_color)        { set_accent(cr, 0.95); depth = "10-bit"; }
-        else if (o->hdr_capable)  { cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
-                                    depth = "8-bit"; }
-        else                      { cairo_set_source_rgba(cr, 0.40, 0.40, 0.48, 1.0);
-                                    depth = "8-bit (only)"; }
+        if (o->deep_color)             { set_accent(cr, 0.95); depth = "10-bit"; }
+        else if (o->deep_color_capable){ cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+                                         depth = "8-bit"; }
+        else                           { cairo_set_source_rgba(cr, 0.40, 0.40, 0.48, 1.0);
+                                         depth = "8-bit (only)"; }
         cairo_move_to(cr, 760, y);
         cairo_show_text(cr, depth);
+
+        /* What the monitor advertises over EDID — a separate fact from the
+         * column to its left, and the one the panel used to get wrong by
+         * deriving it from the framebuffer format. Deliberately dim: synui
+         * composites SDR, so an HDR10 monitor here is a capability sitting
+         * unused, not a mode that is switched on. */
+        if (o->hdr_pq || o->hdr_hlg) {
+            cairo_set_source_rgba(cr, 0.62, 0.58, 0.78, 1.0);
+            cairo_move_to(cr, 872, y);
+            cairo_show_text(cr, o->hdr_pq ? "HDR10" : "HLG");
+        }
 
         y += 28;
     }
@@ -859,15 +871,48 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_show_text(cr, d->status);
     }
 
-    /* Controls legend */
+    /* What the selected monitor's EDID says, spelled out — the HDR column is
+     * one word and this is where the rest of it goes. It also has to say what
+     * synui does with it, which is nothing: a panel that prints "HDR10" and
+     * stops reads as a mode you switched on. */
     cairo_set_font_size(cr, 12);
+    syn_output_t *selo = (d->selected >= 0 && d->selected < d->count)
+                       ? d->order[d->selected] : NULL;
+    if (selo && (selo->hdr_pq || selo->hdr_hlg)) {
+        char line[192];
+        char nits[32] = "";
+        if (selo->hdr_max_nits > 0.0f)
+            snprintf(nits, sizeof(nits), " \xc2\xb7 %.0f cd/m\xc2\xb2 peak",
+                     (double)selo->hdr_max_nits);
+        snprintf(line, sizeof(line),
+                 "%s reports %s%s%s%s \xe2\x80\x94 synui composites SDR sRGB; "
+                 "HDR output is not driven",
+                 selo->wlr_output->name,
+                 selo->hdr_pq ? "HDR10 (PQ)" : "HLG",
+                 (selo->hdr_pq && selo->hdr_hlg) ? " + HLG" : "",
+                 selo->wide_gamut ? " \xc2\xb7 BT.2020" : "", nits);
+        cairo_set_source_rgba(cr, 0.62, 0.58, 0.78, 0.95);
+        cairo_move_to(cr, 18, ph - 62);
+        cairo_show_text(cr, line);
+    } else if (selo) {
+        char line[192];
+        snprintf(line, sizeof(line),
+                 "%s advertises no HDR transfer function in its EDID "
+                 "(SDR panel)", selo->wlr_output->name);
+        cairo_set_source_rgba(cr, 0.40, 0.40, 0.48, 0.9);
+        cairo_move_to(cr, 18, ph - 62);
+        cairo_show_text(cr, line);
+    }
+
+    /* Controls legend */
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 40);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
                         "p set primary (X11/game default)");
     cairo_move_to(cr, 18, ph - 20);
     cairo_show_text(cr, "Shift+arrows move in grid (swaps) \xc2\xb7 "
-                        "d 10-bit colour (HDR-ready) \xc2\xb7 Esc close");
+                        "d 10-bit colour (deep colour, not HDR) \xc2\xb7 "
+                        "Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->dispcfg_ui.text_buf, s->dispcfg_ui.tree, buf);
