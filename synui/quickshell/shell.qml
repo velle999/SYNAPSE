@@ -1,3 +1,5 @@
+//@ pragma UseQApplication
+
 import Quickshell
 import Quickshell.Io
 import "widgets"
@@ -6,6 +8,14 @@ import "widgets"
  * SYNAPSE shell — a quickshell replacement for waybar.
  *
  * Run with:  quickshell -c synapse
+ *
+ * UseQApplication is LOAD-BEARING, not a preference: DBusMenu popups
+ * (QsMenuAnchor, which is the tray's whole interaction) refuse to open without
+ * it — "Cannot call QsMenuAnchor.open() as quickshell was not started in
+ * QApplication mode". The error goes to stderr, which is tty1 on a real
+ * session, so the tray simply looks dead. That is not a cosmetic loss: NordVPN
+ * sets ItemIsMenu, and Steam exports no Activate at all (see
+ * modules/Tray.qml), so for both of them the menu is the ONLY way to interact.
  *
  * Variants gives one Bar per connected screen. Quickshell.screens is live, so
  * plugging or unplugging a monitor creates or destroys its bar without a
