@@ -43,55 +43,95 @@ PanelWindow {
     visible: MenuState.open
              && (MenuState.output === root.outName || MenuState.output === "")
 
-    anchors { top: true; left: true }
-
-    implicitWidth: 340
-
-    // Sized to its rows, capped to what the monitor can show.
-    //
-    // A fixed height was wrong in both directions: the root page overflowed it
-    // (Log Out and Shut Down were clipped off the bottom edge, reachable only by
-    // scrolling into them blind), while a search matching two things left most
-    // of the panel empty. contentHeight is driven by the model rather than by
-    // the list's own height, so reading it here does not close a binding loop.
-    implicitHeight: Math.max(120,
-                    Math.min(root.screen.height - Theme.barHeight - 16,
-                             searchBox.height + list.contentHeight + 4))
+    // ALL FOUR EDGES — the window is the whole screen, the menu is a rectangle
+    // drawn in its top-left corner. The surface used to be exactly the size of
+    // the panel, which meant a click anywhere else was delivered to whatever was
+    // under the pointer and the menu just sat there open. There is no Wayland
+    // protocol that tells a layer-shell client "the pointer went down somewhere
+    // else" (that is what xdg_popup's grab is for, and a PanelWindow is not a
+    // popup), so the only way to hear that click is to be the surface that
+    // receives it. Hence a full-screen transparent catcher.
+    anchors { top: true; left: true; right: true; bottom: true }
 
     // NEVER reserve space. This is a transient panel; an exclusive zone would
     // shove every window on the monitor down by 470px each time it opened —
     // the same trap the OSD hit (see Osd.qml).
     //
-    // Ignore, not a zone of 0: `margins.top` below is measured from wherever
-    // layer-shell decides this surface's anchor edge is, and a zone of 0 still
-    // RESPECTS everyone else's. So with a bar that reserves its 28px (auto-hide
-    // off), the menu started 28px below the bar and then added its own 28px
-    // margin on top of that — it hung off the bar with a strip of desktop
-    // showing through the join. Ignore anchors it to the true screen edge, so
-    // the margin means what it says on every configuration.
+    // Ignore, not a zone of 0: this surface is placed from wherever layer-shell
+    // decides its anchor edge is, and a zone of 0 still RESPECTS everyone
+    // else's. So with a bar that reserves its 28px (auto-hide off), the menu
+    // started 28px below the bar and then added its own 28px offset on top of
+    // that — it hung off the bar with a strip of desktop showing through the
+    // join. Ignore anchors it to the true screen edge, so `panel.y` below means
+    // what it says on every configuration.
+    //
+    // It also matters more now the surface is full-screen: a zone of 0 would
+    // have made it screen-height MINUS the bar, and the panel would have been
+    // pushed a second bar's worth down inside it.
     exclusionMode: ExclusionMode.Ignore
 
     // The whole point of the port. Without it the menu is deaf, which is exactly
     // the waybar failure it replaces.
     focusable: true
 
-    // Hangs below the bar. Deliberately NOT tied to the bar's auto-hide slide:
-    // the menu is summoned by a keystroke at least as often as by a click, and a
-    // menu that sits at a different height depending on where the pointer
-    // happens to be reads as a bug.
-    margins.top: Theme.barHeight
-
     color: "transparent"
 
     onVisibleChanged: if (visible) keys.forceActiveFocus()
 
+    // Everywhere that is not the menu. Press to dismiss — press rather than
+    // click, so the menu is gone by the time the button comes back up and a
+    // press-drag-release never leaves it hanging around; and every button, since
+    // a right-click on the desktop is just as much "not the menu" as a left one.
+    //
+    // The click is CONSUMED, not passed through to the window underneath. That
+    // is not a limitation to apologise for — Wayland gives a client no way to
+    // forward a press it has already been handed — and it is the behaviour every
+    // other start menu has: the first click dismisses, the second one acts.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+        onPressed: MenuState.close()
+    }
+
     Rectangle {
         id: panel
-        anchors.fill: parent
+
+        // Hangs below the bar. Deliberately NOT tied to the bar's auto-hide
+        // slide: the menu is summoned by a keystroke at least as often as by a
+        // click, and a menu that sits at a different height depending on where
+        // the pointer happens to be reads as a bug.
+        x: 0
+        y: Theme.barHeight
+
+        width: 340
+
+        // Sized to its rows, capped to what the monitor can show.
+        //
+        // A fixed height was wrong in both directions: the root page overflowed
+        // it (Log Out and Shut Down were clipped off the bottom edge, reachable
+        // only by scrolling into them blind), while a search matching two things
+        // left most of the panel empty. contentHeight is driven by the model
+        // rather than by the list's own height, so reading it here does not
+        // close a binding loop.
+        height: Math.max(120,
+                Math.min(root.screen.height - Theme.barHeight - 16,
+                         searchBox.height + list.contentHeight + 4))
+
         color: Theme.popupBg
         border.color: Theme.magenta
         border.width: 1
         radius: Theme.radius
+
+        // Swallows presses that land on the panel but not on a row. A Rectangle
+        // accepts no buttons, and neither does the search box (an Item and a
+        // Text), so without this the press falls THROUGH to the dismiss catcher
+        // behind — clicking the search field, the 1px border, or the empty strip
+        // under a short list would close the menu. Declared first so it sits
+        // behind the list and the rows still get their clicks.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+        }
 
         // ── The row model ────────────────────────────────
         // Built in JS rather than as nested Repeaters because search flattens
