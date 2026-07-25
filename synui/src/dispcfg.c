@@ -80,68 +80,99 @@ static void dispcfg_seed(syn_server_t *s)
         d->selected = 0;
 }
 
+/* Collect the distinct values of one grid axis, ascending. Returns the count. */
+static int dispcfg_tracks(syn_dispcfg_t *d, bool axis_x, int *out)
+{
+    int n = 0;
+    for (int i = 0; i < d->count; i++) {
+        int v = axis_x ? d->order[i]->grid_x : d->order[i]->grid_y;
+        int j;
+        for (j = 0; j < n; j++)
+            if (out[j] == v) break;
+        if (j == n) out[n++] = v;
+    }
+    for (int i = 1; i < n; i++) {
+        int key = out[i], j = i - 1;
+        while (j >= 0 && out[j] > key) { out[j + 1] = out[j]; j--; }
+        out[j + 1] = key;
+    }
+    return n;
+}
+
 /* Re-flow every output's pixel position from its logical grid cell (using
  * transform-aware effective sizes), then run the shared post-apply reflow.
  *
- * This is a simple row/column pack, like CSS grid with auto tracks: each
- * distinct grid_y becomes a row whose height is the tallest output in it,
- * stacked top to bottom in grid_y order; within a row, outputs are placed
- * left to right in grid_x order, each offset by the cumulative width of
- * its row-mates to the left. That's what makes an L-shaped desk work —
- * e.g. main monitor at (0,0), a portrait monitor at (1,0) beside it, and a
- * third at (1,-1) stacked above the portrait one: the portrait monitor's
- * narrower width doesn't get stretched to match the main monitor's row, so
- * the third monitor sits flush above it instead of drifting into a gap. */
+ * This is a CSS-grid-style pack with auto tracks: each distinct grid_y is a
+ * row as tall as the tallest output in it, each distinct grid_x is a column
+ * as wide as the widest output in it, and an output lands at the top-left of
+ * its cell. Tracks are sized across the *whole* grid, not per row, so a
+ * column means the same x on every row — that is what makes an L-shaped desk
+ * work: main monitor at (2,0), a portrait one at (1,0) to its left, and a
+ * third at (2,-1) stacked above the main one lands above the MAIN monitor,
+ * not above the narrow portrait one. Packing each row independently from
+ * x=0 (what this used to do) put that third monitor at x=0, so the cursor
+ * crossed into it off the portrait monitor's top edge instead of off the
+ * main monitor's, and windows landed a screen to the left of where the desk
+ * said they should.
+ *
+ * Sizing per column rather than stretching to the widest row also keeps the
+ * portrait monitor's narrow width its own — nothing is padded out to match
+ * a wider neighbour on another row. */
 static void dispcfg_rechain(syn_server_t *s)
 {
     syn_dispcfg_t *d = &s->dispcfg;
     if (d->count == 0) return;
 
-    /* Distinct grid_y values, ascending — these become rows top to bottom. */
-    int rows[DISPCFG_MAX_OUTPUTS];
-    int nrows = 0;
-    for (int i = 0; i < d->count; i++) {
-        int gy = d->order[i]->grid_y;
-        int j;
-        for (j = 0; j < nrows; j++)
-            if (rows[j] == gy) break;
-        if (j == nrows) rows[nrows++] = gy;
-    }
-    for (int i = 1; i < nrows; i++) {
-        int key = rows[i], j = i - 1;
-        while (j >= 0 && rows[j] > key) { rows[j + 1] = rows[j]; j--; }
-        rows[j + 1] = key;
-    }
+    int rows[DISPCFG_MAX_OUTPUTS], cols[DISPCFG_MAX_OUTPUTS];
+    int nrows = dispcfg_tracks(d, false, rows);
+    int ncols = dispcfg_tracks(d, true,  cols);
 
+    /* Track origins: each row starts below the previous row's tallest
+     * output, each column right of the previous column's widest. */
+    int row_y[DISPCFG_MAX_OUTPUTS], col_x[DISPCFG_MAX_OUTPUTS];
     int y = 0;
     for (int r = 0; r < nrows; r++) {
         int row_h = 0;
-        for (int i = 0; i < d->count; i++)
-            if (d->order[i]->grid_y == rows[r]) {
-                int w, h;
-                wlr_output_effective_resolution(d->order[i]->wlr_output, &w, &h);
-                if (h > row_h) row_h = h;
-            }
-
-        /* Place this row's outputs left to right by grid_x. */
-        int done[DISPCFG_MAX_OUTPUTS] = {0};
-        int x = 0;
-        for (;;) {
-            int best = -1;
-            for (int i = 0; i < d->count; i++) {
-                if (done[i] || d->order[i]->grid_y != rows[r]) continue;
-                if (best < 0 || d->order[i]->grid_x < d->order[best]->grid_x)
-                    best = i;
-            }
-            if (best < 0) break;
-            done[best] = 1;
-
+        for (int i = 0; i < d->count; i++) {
+            if (d->order[i]->grid_y != rows[r]) continue;
             int w, h;
-            wlr_output_effective_resolution(d->order[best]->wlr_output, &w, &h);
-            wlr_output_layout_add(s->output_layout, d->order[best]->wlr_output, x, y);
-            x += w;
+            wlr_output_effective_resolution(d->order[i]->wlr_output, &w, &h);
+            if (h > row_h) row_h = h;
         }
+        row_y[r] = y;
         y += row_h;
+    }
+    int x = 0;
+    for (int c = 0; c < ncols; c++) {
+        int col_w = 0;
+        for (int i = 0; i < d->count; i++) {
+            if (d->order[i]->grid_x != cols[c]) continue;
+            int w, h;
+            wlr_output_effective_resolution(d->order[i]->wlr_output, &w, &h);
+            if (w > col_w) col_w = w;
+        }
+        col_x[c] = x;
+        x += col_w;
+    }
+
+    /* Place each output at its cell origin. dispcfg_move() swaps rather than
+     * stacks, so one output per cell is the normal case — but a saved layout
+     * could still name the same cell twice, and two outputs at identical
+     * coordinates would leave one of them unreachable by the cursor. Shift
+     * any extras right within the cell so they stay distinct. */
+    int used[DISPCFG_MAX_OUTPUTS][DISPCFG_MAX_OUTPUTS] = {{0}};
+    for (int i = 0; i < d->count; i++) {
+        int r = 0, c = 0;
+        for (int j = 0; j < nrows; j++)
+            if (rows[j] == d->order[i]->grid_y) { r = j; break; }
+        for (int j = 0; j < ncols; j++)
+            if (cols[j] == d->order[i]->grid_x) { c = j; break; }
+
+        int w, h;
+        wlr_output_effective_resolution(d->order[i]->wlr_output, &w, &h);
+        wlr_output_layout_add(s->output_layout, d->order[i]->wlr_output,
+                              col_x[c] + used[r][c], row_y[r]);
+        used[r][c] += w;
     }
 
     output_layout_changed(s);   /* re-renders the panel too */

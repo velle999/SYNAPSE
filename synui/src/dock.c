@@ -174,9 +174,18 @@ static const char *dock_tray_restore_exec(const char *app_id)
 
 /* Auto-hide timing. The dock slides fully in/out over DOCK_SLIDE_SECS; once
  * the cursor leaves it stays put for DOCK_HIDE_DELAY before sliding away, so
- * brushing past the edge doesn't make it flicker. */
+ * brushing past the edge doesn't make it flicker.
+ *
+ * DOCK_REVEAL_DELAY is the same courtesy on the way in: the cursor has to
+ * REST in the trigger strip this long before the dock slides out. On a
+ * stacked layout the strip along one monitor's dock edge is also the pixel
+ * row you cross to reach the neighbouring monitor's bar — without the dwell,
+ * aiming at the start button on the screen below pops the dock out on the
+ * screen above and the click lands on a dock icon. Short enough that a
+ * deliberate flick to the edge still feels immediate. */
 #define DOCK_SLIDE_SECS 0.16
 #define DOCK_HIDE_DELAY 0.45
+#define DOCK_REVEAL_DELAY 0.18
 
 /* Pointer travel (px) before a press on the bar becomes a real drag. */
 #define DOCK_DRAG_THRESHOLD 6.0
@@ -712,7 +721,20 @@ bool dock_tick(syn_output_t *o, double now)
     if (!on_screen && s->seat && s->seat->pointer_state.button_count > 0)
         in_trigger = false;
 
-    bool engaged = in_trigger || in_bar;
+    /* The trigger strip only counts once the cursor has rested in it for
+     * DOCK_REVEAL_DELAY — a cursor merely passing through on its way to the
+     * next monitor never stays that long. A dock that is already out stays
+     * out with no dwell, so re-entering the strip mid-hide is instant. */
+    if (in_trigger) {
+        if (o->dock.hover_since == 0.0)
+            o->dock.hover_since = now;
+    } else {
+        o->dock.hover_since = 0.0;
+    }
+    bool dwelt = in_trigger && (o->dock.shown ||
+                                now - o->dock.hover_since >= DOCK_REVEAL_DELAY);
+
+    bool engaged = dwelt || in_bar;
 
     if (engaged) {
         o->dock.unhover_since = 0.0;
@@ -753,7 +775,11 @@ bool dock_tick(syn_output_t *o, double now)
 
     bool animating = o->dock.slide_progress != goal;
     bool waiting_to_hide = !engaged && o->dock.shown;
-    return animating || waiting_to_hide || clicking;
+    /* Mid-dwell nothing is moving, but the cursor may have stopped dead in the
+     * strip — dock_pointer_motion() won't wake us again, so keep frames coming
+     * until the dwell elapses or the cursor leaves. */
+    bool waiting_to_show = in_trigger && !engaged;
+    return animating || waiting_to_hide || waiting_to_show || clicking;
 }
 
 /* Pointer moved: wake the outputs whose dock might need to react (cursor near
