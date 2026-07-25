@@ -614,19 +614,52 @@ bool effects_output_commit(syn_output_t *output)
     struct wlr_output_state st2;
     wlr_output_state_init(&st2);
     wlr_output_state_set_buffer(&st2, dst);
-    /* Night light, applied at scanout on top of the post-processed buffer —
-     * the same place the pre-0.20 gamma ramp was applied, so a colour filter
-     * and night light still compose in the order they always did. NULL (off)
-     * leaves the field uncommitted. */
-    struct wlr_color_transform *nl = nightlight_color_transform(s);
-    if (nl) wlr_output_state_set_color_transform(&st2, nl);
     pixman_region32_t full;
     pixman_region32_init_rect(&full, 0, 0, w, h);
     wlr_output_state_set_damage(&st2, &full);
     pixman_region32_fini(&full);
 
+    /* Night light, applied at scanout on top of the post-processed buffer —
+     * the same place the pre-0.20 gamma ramp was applied, so a colour filter
+     * and night light still compose in the order they always did.
+     *
+     * NULL — night light off — is committed too, and that is the whole point:
+     * a state that leaves WLR_OUTPUT_STATE_COLOR_TRANSFORM unset leaves the
+     * CRTC LUT exactly as the last warm frame programmed it. Skipping the call
+     * on NULL gave a toggle that turned on and never off for as long as the
+     * post-process pass was running. Committing NULL is committing identity.
+     *
+     * Tested on a copy first, as in scene_commit_nightlight(): a backend that
+     * refuses the transform fails the WHOLE commit, which here would mean a
+     * dropped frame every frame rather than a missing tint. */
+    int temp = nightlight_effective_temp(s);
+    struct wlr_color_transform *nl = nightlight_color_transform(s);
+    bool warm_ok = true;
+    struct wlr_output_state warm = {0};
+    if (wlr_output_state_copy(&warm, &st2)) {
+        wlr_output_state_set_color_transform(&warm, nl);
+        warm_ok = wlr_output_test_state(wo, &warm);
+        if (warm_ok)
+            wlr_output_state_copy(&st2, &warm);
+        wlr_output_state_finish(&warm);
+    } else {
+        warm_ok = false;
+    }
+
     bool ok = wlr_output_commit_state(wo, &st2);
     wlr_output_state_finish(&st2);
+
+    if (ok) {
+        if (!warm_ok)
+            wlr_log(WLR_ERROR, "synui: nightlight: %s will not take the %dK "
+                    "transform — frame committed without it", wo->name, temp);
+        /* Stamped for the same reason the scene path stamps it, and with the
+         * same "asked once" rule for a refusal. Leaving it unstamped is not
+         * merely untidy: output_frame() damages the whole output whenever this
+         * disagrees with the effective temperature, so an effects session that
+         * never stamped repainted everything, every frame, forever. */
+        output->nightlight_temp = temp;
+    }
 
     wlr_buffer_unlock(dst);
     wlr_texture_destroy(tex);

@@ -69,9 +69,14 @@ static void temp_to_rgb(int kelvin, double out[3])
     out[2] = b < 0 ? 0 : (b > 255 ? 1.0 : b / 255.0);
 }
 
-/* The ramp, as a colour transform. NULL means identity — night light off — and
- * every commit path treats NULL as "supply no transform", so the feature costs
- * nothing at all while it is off.
+/* The ramp, as a colour transform. NULL means identity — night light off.
+ *
+ * NULL is a value to be COMMITTED, not a reason to skip the call: an output
+ * state that leaves the colour transform unset leaves the CRTC LUT holding
+ * whatever the last frame put there. Both commit paths must hand NULL to
+ * wlr_output_state_set_color_transform() the same as any other transform, or
+ * night light turns on and cannot be turned off. effects.c skipped the call on
+ * NULL and that is exactly what it did.
  *
  * 1024 entries: the transform is resampled by whatever consumes it (CRTC LUT or
  * shader), so this is a source resolution rather than a hardware size, and 1024
