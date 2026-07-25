@@ -484,12 +484,12 @@ void view_update_decorations(syn_view_t *view)
         wlr_scene_rect_set_size(view->border, w, h);
     }
     if (view->border) {
-        wlr_scene_rect_set_corner_radius(view->border, radius + bw,
-                                         CORNER_LOCATION_ALL);
+        /* scenefx 0.5 fused "how round" and "which corners" into one
+         * fx_corner_radii, so the radius is no longer a separate argument. */
+        wlr_scene_rect_set_corner_radius(view->border, radius + bw);
         struct clipped_region ring = {
-            .area          = { .x = bw, .y = bw, .width = iw, .height = ih },
-            .corner_radius = radius,
-            .corners       = CORNER_LOCATION_ALL,
+            .area    = { .x = bw, .y = bw, .width = iw, .height = ih },
+            .corners = corner_radii_all(radius),
         };
         wlr_scene_rect_set_clipped_region(view->border, ring);
         wlr_scene_node_set_enabled(&view->border->node, true);
@@ -706,9 +706,8 @@ void view_shadow_update(syn_view_t *view)
      * origin. Rounding the cutout to the window's corner_radius keeps the ring
      * from poking through the rounded corners. */
     struct clipped_region clip = {
-        .area          = { .x = -bx, .y = -by, .width = w, .height = h },
-        .corner_radius = radius,
-        .corners       = CORNER_LOCATION_ALL,
+        .area    = { .x = -bx, .y = -by, .width = w, .height = h },
+        .corners = corner_radii_all(radius),
     };
     wlr_scene_shadow_set_clipped_region(view->shadow, clip);
 

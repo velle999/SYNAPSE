@@ -442,10 +442,11 @@ bool matrix_output_frame(syn_output_t *o)
      * and build the shader + atlas there. dst is overwritten by our own raw-GL
      * pass just below, so the empty pass is harmless. */
     if (!m->gl_ready) {
+        /* scenefx 0.5 unexported fx_renderer_begin_buffer_pass; the plain
+         * wlroots entry point reaches the same fx_renderer hook. */
         struct wlr_buffer_pass_options bpo = {0};
-        struct fx_buffer_pass_options fxo = { .base = &bpo };
-        struct fx_gles_render_pass *cap =
-            fx_renderer_begin_buffer_pass(s->renderer, dst, wo, &fxo);
+        struct wlr_render_pass *cap =
+            wlr_renderer_begin_buffer_pass(s->renderer, dst, &bpo);
         if (!cap) {
             wlr_buffer_unlock(dst);
             return false;
@@ -454,7 +455,7 @@ bool matrix_output_frame(syn_output_t *o)
         m->ctx = eglGetCurrentContext();
         bool ok = m->dpy != EGL_NO_DISPLAY && m->ctx != EGL_NO_CONTEXT &&
                   matrix_gl_setup(m);
-        wlr_render_pass_submit((struct wlr_render_pass *)cap);
+        wlr_render_pass_submit(cap);
         if (!ok) {
             wlr_log(WLR_ERROR, "matrix: could not capture fx EGL context / "
                     "build shader — animated wallpaper off");

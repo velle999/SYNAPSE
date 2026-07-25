@@ -459,10 +459,10 @@ void ime_setup(syn_server_t *s)
     s->input_method_mgr = wlr_input_method_manager_v2_create(s->display);
 
     relay->new_text_input.notify = ime_new_text_input;
-    wl_signal_add(&s->text_input_mgr->events.text_input,
+    wl_signal_add(&s->text_input_mgr->events.new_text_input,
                   &relay->new_text_input);
     relay->new_input_method.notify = ime_new_input_method;
-    wl_signal_add(&s->input_method_mgr->events.input_method,
+    wl_signal_add(&s->input_method_mgr->events.new_input_method,
                   &relay->new_input_method);
 
     s->ime = relay;

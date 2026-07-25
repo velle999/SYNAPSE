@@ -497,6 +497,12 @@ bool effects_output_commit(syn_output_t *output)
 
     struct wlr_output_state st;
     wlr_output_state_init(&st);
+    /* Night light is NOT passed in here, deliberately. The scene is free to
+     * satisfy a colour transform by programming the CRTC LUT, which it would
+     * record on the state we are about to throw away (only st.buffer survives
+     * below) — the warmth would silently vanish whenever the post-process pass
+     * is on. It goes on the final state instead, after our shader, which is
+     * also where the old hardware gamma ramp sat. */
     struct wlr_scene_output_state_options opts = {
         .swapchain = output->fx_swapchain,
     };
@@ -533,16 +539,19 @@ bool effects_output_commit(syn_output_t *output)
      * submit. dst gets overwritten by our own raw-GL pass immediately below, so
      * the empty pass is harmless. */
     if (!fx->gl_ready) {
+        /* scenefx 0.5 unexported fx_renderer_begin_buffer_pass (its
+         * replacement takes an internal fx_framebuffer). The plain wlroots
+         * entry point reaches the same fx_renderer hook and makes the same
+         * context current, which is all this pass is for. */
         struct wlr_buffer_pass_options bpo = {0};
-        struct fx_buffer_pass_options fxo = { .base = &bpo };
-        struct fx_gles_render_pass *cap =
-            fx_renderer_begin_buffer_pass(s->renderer, dst, wo, &fxo);
+        struct wlr_render_pass *cap =
+            wlr_renderer_begin_buffer_pass(s->renderer, dst, &bpo);
         if (!cap) goto fail_dst;
         fx->dpy = eglGetCurrentDisplay();
         fx->ctx = eglGetCurrentContext();
         bool ok = fx->dpy != EGL_NO_DISPLAY && fx->ctx != EGL_NO_CONTEXT &&
                   effects_gl_setup(fx);
-        wlr_render_pass_submit((struct wlr_render_pass *)cap);
+        wlr_render_pass_submit(cap);
         if (!ok) {
             wlr_log(WLR_ERROR, "effects: could not capture fx EGL context / "
                     "compile programs — post-process off");
@@ -605,6 +614,12 @@ bool effects_output_commit(syn_output_t *output)
     struct wlr_output_state st2;
     wlr_output_state_init(&st2);
     wlr_output_state_set_buffer(&st2, dst);
+    /* Night light, applied at scanout on top of the post-processed buffer —
+     * the same place the pre-0.20 gamma ramp was applied, so a colour filter
+     * and night light still compose in the order they always did. NULL (off)
+     * leaves the field uncommitted. */
+    struct wlr_color_transform *nl = nightlight_color_transform(s);
+    if (nl) wlr_output_state_set_color_transform(&st2, nl);
     pixman_region32_t full;
     pixman_region32_init_rect(&full, 0, 0, w, h);
     wlr_output_state_set_damage(&st2, &full);

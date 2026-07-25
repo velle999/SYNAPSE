@@ -51,6 +51,151 @@ static double now_secs(void)
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
+/* ── Backdrop blur: the companion node (scenefx 0.5) ─────── */
+/*
+ * scenefx 0.4 carried backdrop blur as a flag on the buffer itself —
+ * wlr_scene_buffer_set_backdrop_blur(buffer, true) — and the renderer blurred
+ * whatever lay behind that buffer. 0.5 removed the flag and made blur a node
+ * type of its own (wlr_scene_blur), which the compositor has to create, size,
+ * position and z-order.
+ *
+ * So a blurred buffer now needs a companion node kept in lockstep with it:
+ * same parent, same position, same size, same corner radii, placed directly
+ * below it, with the buffer set as the transparency mask source — that last
+ * part is what the old ..._ignore_transparent flag did, blurring only where the
+ * buffer actually paints so the rounded-corner cutouts stay crisp.
+ *
+ * The companion hangs off the buffer's addon set, so it is destroyed with the
+ * buffer and nothing else has to remember it exists. It also listens for its
+ * own node's destroy, because tearing down a frame tree destroys children in
+ * list order — the blur node can go first, and the addon must not then free it
+ * a second time.
+ *
+ * Creating and destroying these from inside wlr_scene_node_for_each_buffer is
+ * safe by construction: the companion is inserted *below* the buffer being
+ * visited, and wl_list_for_each has already taken its next pointer off that
+ * buffer, so a node added or removed before it cannot disturb the walk. Blur
+ * nodes are neither BUFFER nor TREE, so the walk skips them entirely and never
+ * revisits one.
+ */
+struct buffer_blur {
+    struct wlr_scene_blur *blur;
+    struct wlr_addon       addon;
+    struct wl_listener     blur_destroy;
+};
+
+static void blur_addon_destroy(struct wlr_addon *addon);
+
+static const struct wlr_addon_interface blur_addon_impl = {
+    .name    = "synui_backdrop_blur",
+    .destroy = blur_addon_destroy,
+};
+
+static void blur_addon_destroy(struct wlr_addon *addon)
+{
+    struct buffer_blur *bb = wl_container_of(addon, bb, addon);
+    wl_list_remove(&bb->blur_destroy.link);
+    wlr_addon_finish(&bb->addon);
+    if (bb->blur)
+        wlr_scene_node_destroy(&bb->blur->node);
+    free(bb);
+}
+
+/* The scene destroyed the blur node under us (its parent tree went away).
+ * Forget it, so the addon teardown does not touch freed memory. */
+static void blur_node_destroyed(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    struct buffer_blur *bb = wl_container_of(listener, bb, blur_destroy);
+    wl_list_remove(&bb->blur_destroy.link);
+    wl_list_init(&bb->blur_destroy.link);
+    bb->blur = NULL;
+}
+
+static struct buffer_blur *blur_find(struct wlr_scene_buffer *buffer)
+{
+    struct wlr_addon *a = wlr_addon_find(&buffer->node.addons, buffer,
+                                         &blur_addon_impl);
+    if (!a) return NULL;
+    struct buffer_blur *bb = wl_container_of(a, bb, addon);
+    return bb;
+}
+
+/* The buffer's painted size. dst_width/height is the scaled destination when
+ * the scene has been told one; otherwise the buffer's own dimensions. Zero
+ * means there is nothing on screen yet, and so nothing to blur behind. */
+static void blur_buffer_size(struct wlr_scene_buffer *buffer, int *w, int *h)
+{
+    if (buffer->dst_width > 0 && buffer->dst_height > 0) {
+        *w = buffer->dst_width;
+        *h = buffer->dst_height;
+    } else if (buffer->buffer) {
+        *w = buffer->buffer->width;
+        *h = buffer->buffer->height;
+    } else {
+        *w = *h = 0;
+    }
+}
+
+/* Match the companion to its buffer. Cheap enough to call on every client
+ * paint: each setter early-returns when the value is unchanged. */
+static void blur_sync(struct buffer_blur *bb, struct wlr_scene_buffer *buffer,
+                      struct fx_corner_radii corners)
+{
+    if (!bb->blur) return;
+
+    int w, h;
+    blur_buffer_size(buffer, &w, &h);
+    if (w <= 0 || h <= 0) {
+        wlr_scene_node_set_enabled(&bb->blur->node, false);
+        return;
+    }
+
+    wlr_scene_blur_set_size(bb->blur, w, h);
+    wlr_scene_blur_set_corner_radii(bb->blur, corners);
+    wlr_scene_node_set_position(&bb->blur->node, buffer->node.x, buffer->node.y);
+    wlr_scene_node_place_below(&bb->blur->node, &buffer->node);
+    wlr_scene_node_set_enabled(&bb->blur->node, true);
+}
+
+/* Turn blur on or off for one buffer, creating or destroying the companion. */
+static void blur_set(struct wlr_scene_buffer *buffer, bool want,
+                     struct fx_corner_radii corners)
+{
+    struct buffer_blur *bb = blur_find(buffer);
+
+    if (!want) {
+        if (bb) blur_addon_destroy(&bb->addon);
+        return;
+    }
+
+    if (!bb) {
+        int w, h;
+        blur_buffer_size(buffer, &w, &h);
+        if (w <= 0 || h <= 0) return;   /* nothing painted yet; try next frame */
+
+        struct wlr_scene_tree *parent = buffer->node.parent;
+        if (!parent) return;
+
+        bb = calloc(1, sizeof(*bb));
+        if (!bb) return;
+        bb->blur = wlr_scene_blur_create(parent, w, h);
+        if (!bb->blur) { free(bb); return; }
+
+        /* Blur only where the buffer paints — the 0.4 "ignore transparent"
+         * behaviour, without which the blur would fill the square corners the
+         * client left transparent. */
+        wlr_scene_blur_set_transparency_mask_source(bb->blur, buffer);
+
+        bb->blur_destroy.notify = blur_node_destroyed;
+        wl_signal_add(&bb->blur->node.events.destroy, &bb->blur_destroy);
+        wlr_addon_init(&bb->addon, &buffer->node.addons, buffer,
+                       &blur_addon_impl);
+    }
+
+    blur_sync(bb, buffer, corners);
+}
+
 /* ── Applying alpha + scenefx glass to a whole window ─────── */
 struct view_effect_params {
     float alpha;
@@ -69,9 +214,14 @@ struct view_effect_params {
      * two edges that meet in the middle, pinching the window's waist. The
      * titlebar takes the top corners, the content the bottom ones, and the seam
      * between them stays straight. Undecorated (titlebar hidden or height 0):
-     * the content is the whole window and rounds all four. */
+     * the content is the whole window and rounds all four.
+     *
+     * scenefx 0.5 fused "how round" with "which corners" into one
+     * fx_corner_radii, so these are the finished radii rather than a location
+     * to be combined with corner_radius at apply time. */
     struct wlr_scene_buffer *titlebar;
-    enum corner_location     content_corners;
+    struct fx_corner_radii   titlebar_corners;
+    struct fx_corner_radii   content_corners;
 };
 
 /* One walk over every buffer under the frame sets opacity AND the scenefx
@@ -86,10 +236,9 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
     (void)sx; (void)sy;
     const struct view_effect_params *p = data;
     wlr_scene_buffer_set_opacity(buffer, p->alpha);
-    wlr_scene_buffer_set_corner_radius(buffer, p->corner_radius,
-                                       buffer == p->titlebar
-                                           ? CORNER_LOCATION_TOP
-                                           : p->content_corners);
+    struct fx_corner_radii corners = buffer == p->titlebar ? p->titlebar_corners
+                                                           : p->content_corners;
+    wlr_scene_buffer_set_corner_radii(buffer, corners);
     bool blur = p->blur;
     if (!blur && p->kde_blur_ok) {
         /* Per BUFFER, not per view: a window is a frame tree, and only the
@@ -99,20 +248,16 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
         struct wlr_scene_surface *ss = wlr_scene_surface_try_from_buffer(buffer);
         blur = ss && syn_kde_blur_wants(ss->surface);
     }
-    wlr_scene_buffer_set_backdrop_blur(buffer, blur);
-    /* NOT optimized blur. scenefx's "optimized" path samples a pre-blurred
-     * backdrop cached in fx_effect_framebuffers->optimized_blur_buffer, and that
-     * buffer is only ever filled by a WLR_SCENE_NODE_OPTIMIZED_BLUR node
-     * (wlr_scene_optimized_blur_create) — which synui does not create. Asking for
-     * it anyway left the buffer NULL, so every blurred window took the
-     * "Warning: Failed to use optimized blur" branch and fell back to live blur:
-     * an error log per window per frame for a setting that never did anything.
-     * Live blur is the honest description of what we actually render. */
-    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, false);
-    /* Skip blur under fully-transparent (alpha 0) regions — the rounded-corner
-     * cutouts — so corners stay crisp; the semi-transparent glass body still
-     * gets blurred. */
-    wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, true);
+    /* Live blur, via a companion node (see blur_set). Still NOT the optimized
+     * path: scenefx's "optimized" blur samples a pre-blurred backdrop cached in
+     * fx_effect_framebuffers->optimized_blur_buffer, and that buffer is only
+     * ever filled by a WLR_SCENE_NODE_OPTIMIZED_BLUR node, which synui does not
+     * create. Under 0.4 asking for it anyway left the buffer NULL, so every
+     * blurred window took the "Failed to use optimized blur" branch and fell
+     * back to live blur — an error log per window per frame for a setting that
+     * never did anything. 0.5 makes that an explicit node type we simply do not
+     * create; live blur is the honest description of what we render. */
+    blur_set(buffer, blur, corners);
 }
 
 /*
@@ -221,14 +366,16 @@ void anim_apply_alpha(syn_view_t *view)
     bool boxy       = view->fullscreen || view->maximized;
     bool translucent = view_is_glass_native(view) || (s && s->config.transparency);
     bool decorated = view->titlebar && view->titlebar->node.enabled;
+    int  radius    = (boxy || !s) ? 0 : chrome_corner_radius(&s->config);
     struct view_effect_params p = {
-        .alpha           = a,
-        .corner_radius   = (boxy || !s) ? 0 : chrome_corner_radius(&s->config),
-        .blur            = s && s->config.blur && !view->fullscreen && translucent,
-        .kde_blur_ok     = s && s->config.blur && !view->fullscreen,
-        .titlebar        = view->titlebar,
-        .content_corners = decorated ? CORNER_LOCATION_BOTTOM
-                                     : CORNER_LOCATION_ALL,
+        .alpha            = a,
+        .corner_radius    = radius,
+        .blur             = s && s->config.blur && !view->fullscreen && translucent,
+        .kde_blur_ok      = s && s->config.blur && !view->fullscreen,
+        .titlebar         = view->titlebar,
+        .titlebar_corners = corner_radii_top(radius),
+        .content_corners  = decorated ? corner_radii_bottom(radius)
+                                      : corner_radii_all(radius),
     };
 
     wlr_scene_node_for_each_buffer(view_node(view), set_buffer_effects, &p);

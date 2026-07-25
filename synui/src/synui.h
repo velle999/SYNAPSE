@@ -2752,6 +2752,10 @@ void synui_render_clipboard(syn_server_t *s);
  * still works for anyone who prefers it — last writer wins. */
 void nightlight_apply(syn_server_t *s);
 void nightlight_toggle(syn_server_t *s);
+/* The warmth, as the colour transform every scene commit must carry (wlroots
+ * 0.20 replaced the gamma-LUT commit with this). NULL when night light is off.
+ * Borrowed — do not unref. */
+struct wlr_color_transform *nightlight_color_transform(syn_server_t *s);
 /* A new output comes up at identity and has to be told, or a second monitor
  * plugged in with night light on stays blue while the first is warm. */
 void nightlight_output_added(syn_server_t *s, syn_output_t *o);

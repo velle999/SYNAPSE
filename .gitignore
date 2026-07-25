@@ -34,6 +34,15 @@ syn/src/
 syn-model/src/
 syn-firstboot/src/
 syn-install/src/
+# makepkg srcdir + downloaded upstream tarball for the scenefx packages. The
+# canonical source is upstream's tagged release (pinned in each PKGBUILD) plus
+# the six ported wlroots scene TUs sitting next to it; everything under src/ is
+# a throwaway extraction. Committing it would let a stale upstream tree be
+# rebuilt silently — the same trap synui/mktarball.sh guards against.
+scenefx/src/
+scenefx/scenefx-*.tar.gz
+scenefx0.5/src/
+scenefx0.5/scenefx-*.tar.gz
 # makepkg srcdir for the web-app packages — canonical source is each app's own
 # git repo, pinned by commit in its PKGBUILD; src/ is a throwaway clone
 nexus-chat/src/

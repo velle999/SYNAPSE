@@ -183,9 +183,12 @@ void cursor_apply(syn_server_t *s)
             wlr_xcursor_manager_get_xcursor(s->cursor_mgr, "default", 1);
         if (xc && xc->image_count > 0) {
             struct wlr_xcursor_image *img = xc->images[0];
-            wlr_xwayland_set_cursor(s->xwayland, img->buffer, img->width * 4,
-                                    img->width, img->height,
-                                    img->hotspot_x, img->hotspot_y);
+            /* 0.20 takes a wlr_buffer instead of raw pixels+stride; the
+             * xcursor image owns one and hands it over without a copy. */
+            struct wlr_buffer *cb = wlr_xcursor_image_get_buffer(img);
+            if (cb)
+                wlr_xwayland_set_cursor(s->xwayland, cb,
+                                        img->hotspot_x, img->hotspot_y);
         }
     }
 

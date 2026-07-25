@@ -42,6 +42,7 @@
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
+#include <wlr/types/wlr_color_management_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
@@ -303,9 +304,17 @@ static void output_frame(struct wl_listener *listener, void *data)
         wlr_damage_ring_add_whole(&scene_output->damage_ring);
 
     /* GLES post-process pass when available; plain scene commit otherwise
-     * (and whenever any step of the effects pass fails). */
+     * (and whenever any step of the effects pass fails).
+     *
+     * Night light rides along as a colour transform rather than a gamma commit
+     * of its own (wlroots 0.20 removed that): the scene combines it with any
+     * gamma-control client's LUT and decides itself whether the CRTC or the
+     * render pass applies it. NULL while night light is off. */
+    struct wlr_scene_output_state_options opts = {
+        .color_transform = nightlight_color_transform(output->server),
+    };
     if (!effects_output_commit(output))
-        wlr_scene_output_commit(scene_output, NULL);
+        wlr_scene_output_commit(scene_output, &opts);
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -1259,6 +1268,56 @@ int synui_init(syn_server_t *s)
     wlr_data_device_manager_create(s->display);
     wlr_viewporter_create(s->display);
     wlr_presentation_create(s->display, s->backend, 1);
+
+    /*
+     * Colour management (wp_color_management_v1).
+     *
+     * What synui advertises here is the truth about what it composites: sRGB
+     * primaries, the sRGB transfer function, perceptual intent. It is NOT an
+     * HDR claim — scenefx renders 8-bit sRGB through GLES and the connector is
+     * never put into PQ/BT.2020 (see dispcfg.c and the display panel).
+     *
+     * Exporting it anyway is worth doing precisely because it is honest. Until
+     * now synui offered no colour management at all, so a client with HDR or
+     * wide-gamut content had nothing to ask and had to guess what the
+     * compositor would do with it — and the usual guess is "assume sRGB and
+     * hope", which is how HDR video ends up washed out and grey. With the
+     * global present, mpv/Firefox/games can read the preferred description off
+     * the surface and tone-map into sRGB themselves, correctly, in the one
+     * place that still knows the original colour volume. Clients that need
+     * nothing are unaffected: they never bind it.
+     *
+     * When the renderer eventually gains a linear-light HDR path, this is also
+     * the global that grows BT.2020 + ST2084_PQ — the protocol wiring is then
+     * already in place and only the capability list changes.
+     */
+    static const enum wp_color_manager_v1_render_intent cm_intents[] = {
+        WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL,  /* required by the protocol */
+    };
+    static const enum wp_color_manager_v1_primaries cm_primaries[] = {
+        WP_COLOR_MANAGER_V1_PRIMARIES_SRGB,
+    };
+    struct wlr_color_manager_v1_options cm_opts = {
+        /* Parametric only: an ICC profile would have to be applied by the
+         * renderer, which cannot yet. Claiming icc_v2_v4 would make clients
+         * hand over profiles synui would silently ignore. */
+        .features = { .parametric = true },
+        .render_intents     = cm_intents,
+        .render_intents_len = sizeof(cm_intents) / sizeof(cm_intents[0]),
+        /* Empty, and that is the sRGB answer: the protocol treats sRGB as
+         * always supported and this list as the *additional* transfer
+         * functions on top of it — wlroots asserts if sRGB appears in it. So
+         * an SDR-only compositor advertises none, and adding
+         * ST2084_PQ here is precisely the one-line change that goes with a
+         * renderer that can actually composite in PQ. */
+        .transfer_functions = NULL,
+        .transfer_functions_len = 0,
+        .primaries          = cm_primaries,
+        .primaries_len      = sizeof(cm_primaries) / sizeof(cm_primaries[0]),
+    };
+    if (!wlr_color_manager_v1_create(s->display, 2, &cm_opts))
+        wlr_log(WLR_ERROR, "synui: colour management global failed — clients "
+                           "will fall back to assuming sRGB");
 
     /* Output layout */
     s->output_layout = wlr_output_layout_create(s->display);

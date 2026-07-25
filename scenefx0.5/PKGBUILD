@@ -1,0 +1,103 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# scenefx0.5 — the wlroots-0.20 line of scenefx, packaged SEPARATELY from
+# `scenefx` (0.4.x / wlroots 0.19) instead of upgrading it in place.
+#
+# Why a second package rather than a version bump: the two libraries are
+# soname-versioned (libscenefx-0.4.so vs libscenefx-0.5.so), and upgrading
+# `scenefx` would DELETE libscenefx-0.4.so out from under the installed synui.
+# synui is the login session — a compositor that cannot resolve its scene
+# library does not start, and the failure lands at the greeter with no desktop
+# to fix it from. Keeping both installed means the synui package and its scene
+# library can be switched over in one transaction, and rolled back the same way.
+# This is the same convention Arch uses for wlroots0.19 / wlroots0.20.
+#
+# Like the 0.4 package, this "completes the fork": upstream scenefx only forks
+# wlroots' core scene TU (types/scene/wlr_scene.c) and leaves the surface /
+# subsurface / xdg / layer-shell / drag-icon / output-layout scene helpers to
+# wlroots. Those helpers are non-interposable — wlroots builds its scene graph
+# in one TU, so surface_create -> wlr_scene_buffer_create is an intra-TU direct
+# call with no PLT stub to hook. Left alone, client and shell surfaces stay
+# wlroots-native (enum type 2), can never carry scenefx effects, and mixing
+# them with synui's scenefx nodes (type 3) breaks hit-testing.
+#
+# The six ported TUs here are wlroots 0.20.2 verbatim (MIT, same licence as
+# scenefx) with only the scene header swapped wlr -> scenefx. They are NOT the
+# 0.4 package's copies: those are wlroots 0.19.3, and surface.c in particular
+# moved ~240 lines between the two (0.20 threads per-surface colour image
+# descriptions through it). Re-extract from the matching wlroots release when
+# bumping — never carry them across a wlroots version.
+#
+# See SYNAPSE memory: project_synui_hdr_roadmap, project_synui_scenefx_*.
+pkgname=scenefx0.5
+_pkgname=scenefx
+pkgver=0.5
+pkgrel=1
+pkgdesc='wlr_scene fork with corner radius, blur and shadows (wlroots 0.20)'
+arch=('x86_64')
+url='https://github.com/wlrfx/scenefx'
+license=('MIT')
+depends=('wlroots0.20' 'wayland' 'libdrm' 'libxkbcommon' 'pixman')
+makedepends=('meson' 'ninja' 'wayland-protocols' 'pkgconf')
+source=("$_pkgname-$pkgver.tar.gz::https://github.com/wlrfx/scenefx/archive/refs/tags/$pkgver.tar.gz"
+        'surface.c'
+        'subsurface_tree.c'
+        'xdg_shell.c'
+        'layer_shell_v1.c'
+        'drag_icon.c'
+        'output_layout.c'
+        'wlr-layer-shell-unstable-v1.xml')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+    cd "$srcdir/$_pkgname-$pkgver"
+
+    # 1. Drop the ported wlroots scene helper TUs into scenefx's scene dir.
+    cp "$srcdir"/surface.c "$srcdir"/subsurface_tree.c "$srcdir"/xdg_shell.c \
+       "$srcdir"/layer_shell_v1.c "$srcdir"/drag_icon.c "$srcdir"/output_layout.c \
+       types/scene/
+
+    # 2. Register them in the scene build list. 0.5 renamed nothing here — the
+    #    list is still `scenefx_files += files(...)` in types/meson.build — but
+    #    it gained scene/linked_node.c and output/output.c, so append rather
+    #    than rewrite.
+    cat >> types/meson.build <<'MESON'
+
+# SynapseOS "complete the fork": the surface/subsurface/xdg/layer/drag/output-layout
+# scene helpers wlroots keeps in separate TUs, ported so client & shell surfaces
+# become scenefx-native (type-3) buffer nodes that can carry blur/corners/shadow.
+scenefx_files += files(
+	'scene/surface.c',
+	'scene/subsurface_tree.c',
+	'scene/xdg_shell.c',
+	'scene/layer_shell_v1.c',
+	'scene/drag_icon.c',
+	'scene/output_layout.c',
+)
+MESON
+
+    # 3. Vendor + register the wlr-layer-shell protocol. wlroots 0.20 still does
+    #    not install its generated wlr-layer-shell-unstable-v1-protocol.h (its
+    #    own wlr_layer_shell_v1.h includes it by quoted name), so
+    #    layer_shell_v1.c — like synui — needs it generated locally.
+    cp "$srcdir/wlr-layer-shell-unstable-v1.xml" protocol/
+    sed -i "s#\('xdg-shell': wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',\)#\1\n\t'wlr-layer-shell-unstable-v1': meson.current_source_dir() / 'wlr-layer-shell-unstable-v1.xml',#" \
+        protocol/meson.build
+}
+
+build() {
+    cd "$srcdir/$_pkgname-$pkgver"
+    # examples pull in extra deps and ship demo binaries we don't want; werror
+    # off so a newer-toolchain warning can't fail a dependency build.
+    # --wrap-mode=nofallback: 0.5 ships subprojects/ and would silently build a
+    # bundled wayland-protocols instead of failing if the system one regressed.
+    meson setup build --prefix=/usr --buildtype=release \
+        --wrap-mode=nofallback -Dexamples=false -Dwerror=false
+    ninja -C build
+}
+
+package() {
+    cd "$srcdir/$_pkgname-$pkgver"
+    DESTDIR="$pkgdir" ninja -C build install
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
