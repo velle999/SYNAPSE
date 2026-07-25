@@ -484,8 +484,10 @@ PACKAGES=(
     # Must precede synui — synui depends on it, and scenefx is in no pacman
     # repo (it's a local fork of wlr_scene), so pacstrap can only satisfy
     # synui's dependency from our local-repo. Omitting it fails the ISO at
-    # pacstrap with "unable to satisfy dependency 'scenefx'".
-    scenefx
+    # pacstrap with "unable to satisfy dependency 'scenefx0.5'".
+    # scenefx0.5, not scenefx: the two are separate packages tracking wlroots
+    # (0.4.x = 0.19, 0.5.x = 0.20), and synui moved to the 0.20 pair.
+    scenefx0.5
     synui
     synapse_kmod
     syn

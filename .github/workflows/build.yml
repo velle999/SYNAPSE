@@ -91,7 +91,7 @@ jobs:
           pacman -Syu --noconfirm --needed \
             base-devel git cmake meson ninja pkgconf \
             readline systemd-libs \
-            wlroots0.19 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
+            wlroots0.20 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
             linux-headers \
             wayland-utils foot grim ttf-dejavu \
             mesa libglvnd \
@@ -130,18 +130,24 @@ jobs:
       # scenefx is synui's glass dependency (corner radius / backdrop blur /
       # shadow) and is our own package, not in the Arch repos — so CI must build
       # and install it before synui, exactly as a real machine does from
-      # SYNAPSE/scenefx/. Without this, `meson setup synui` fails at
-      # dependency('scenefx-0.4'). makepkg refuses to run as root, so build under
+      # SYNAPSE/scenefx0.5/. Without this, `meson setup synui` fails at
+      # dependency('scenefx-0.5'). makepkg refuses to run as root, so build under
       # a throwaway user and then pacman -U the result. --nodeps: the build/make
-      # deps (wlroots0.19, meson, ninja, wayland-protocols, pkgconf) are already
+      # deps (wlroots0.20, meson, ninja, wayland-protocols, pkgconf) are already
       # installed by the toolchain step above.
+      #
+      # scenefx0.5/, not scenefx/: the two are separate packages, versioned in
+      # lockstep with wlroots (0.4.x = wlroots 0.19, 0.5.x = wlroots 0.20). synui
+      # moved to 0.20 + 0.5, so building the 0.4 package here would install a
+      # library synui no longer asks for — against a wlroots that is no longer
+      # installed.
       - name: Build & install scenefx (synui glass dependency)
         run: |
           set -e
           useradd -m builder
-          chown -R builder:builder scenefx
-          su builder -c 'cd scenefx && makepkg -f --noconfirm --nodeps --skipinteg'
-          pacman -U --noconfirm scenefx/scenefx-0.4.1-*-x86_64.pkg.tar.zst
+          chown -R builder:builder scenefx0.5
+          su builder -c 'cd scenefx0.5 && makepkg -f --noconfirm --nodeps --skipinteg'
+          pacman -U --noconfirm scenefx0.5/scenefx0.5-0.5-*-x86_64.pkg.tar.zst
 
       - name: Build userspace components
         run: |
