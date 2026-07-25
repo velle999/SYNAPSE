@@ -1453,6 +1453,16 @@ struct syn_output {
      * post-process pass is active (NULL until first effects frame). */
     struct wlr_swapchain    *fx_swapchain;
 
+    /* nightlight.c: the colour temperature this output's committed colour
+     * transform was built for; 0 is identity, which is also where a freshly
+     * created output starts, so the zero value is already true. The transform
+     * is a CRTC LUT the kernel keeps until it is replaced, so it is committed
+     * on CHANGE rather than every frame: re-uploading a 1024-entry blob at the
+     * refresh rate is real work for a value that almost never moves, while
+     * *never* committing again would leave the screen warm after night light
+     * was switched off. */
+    int                      nightlight_temp;
+
     /* wallpaper.c: this output's painted background, parented under
      * server->wallpaper_tree; NULL if no wallpaper is configured/decoded. */
     struct wlr_scene_buffer *wallpaper_buf;
@@ -2752,10 +2762,14 @@ void synui_render_clipboard(syn_server_t *s);
  * still works for anyone who prefers it — last writer wins. */
 void nightlight_apply(syn_server_t *s);
 void nightlight_toggle(syn_server_t *s);
-/* The warmth, as the colour transform every scene commit must carry (wlroots
- * 0.20 replaced the gamma-LUT commit with this). NULL when night light is off.
+/* The warmth, as the colour transform the OUTPUT STATE must carry (wlroots 0.20
+ * replaced the gamma-LUT commit with this). NULL when night light is off.
  * Borrowed — do not unref. */
 struct wlr_color_transform *nightlight_color_transform(syn_server_t *s);
+/* The temperature that transform stands for: the configured Kelvin while night
+ * light is on, 0 (identity) while it is off. What syn_output.nightlight_temp is
+ * compared against to decide a commit is needed. */
+int nightlight_effective_temp(syn_server_t *s);
 /* A new output comes up at identity and has to be told, or a second monitor
  * plugged in with night light on stays blue while the first is warm. */
 void nightlight_output_added(syn_server_t *s, syn_output_t *o);

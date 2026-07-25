@@ -13,14 +13,20 @@
  * with two writers, and there is only ever one in practice.
  *
  * wlroots 0.20 dropped wlr_output_state_set_gamma_lut() in favour of
- * struct wlr_color_transform, which the scene combines with whatever a
- * gamma-control client has set and then either programs into the CRTC LUT or
- * folds into the render pass — the caller no longer chooses. So the warmth is
- * no longer committed per output at toggle time; it is one process-wide
- * transform handed to every scene commit, and a change takes effect by
- * scheduling a frame. One transform for every output is right here: the ramp
- * depends only on the temperature, and the LUT dimension is ours to pick now
- * that it is not the connector's hardware gamma size.
+ * struct wlr_color_transform. One process-wide transform serves every output:
+ * the ramp depends only on the temperature, and the LUT dimension is ours to
+ * pick now that it is not the connector's hardware gamma size.
+ *
+ * WHERE THE TRANSFORM GOES MATTERS, and the obvious answer is the wrong one.
+ * wlr_scene_output_state_options.color_transform is what a stock-wlroots
+ * compositor hands the scene — but the scene only forwards it to the renderer
+ * as wlr_buffer_pass_options.color_transform, and scenefx's fx_renderer
+ * declares features.output_color_transform = false and ignores the field.
+ * Given to the scene, night light is dropped in silence: no warmth, no error,
+ * nothing in the log. It has to go on the OUTPUT STATE
+ * (wlr_output_state_set_color_transform), where the DRM backend programs it
+ * into the CRTC gamma LUT after blending — the same hardware the pre-0.20
+ * gamma call drove. See output_frame() in synui_main.c and effects.c.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -114,14 +120,18 @@ static void nightlight_rebuild(int temp)
                 temp);
 }
 
+int nightlight_effective_temp(syn_server_t *s)
+{
+    return s->config.night_light ? s->config.night_light_temp : 0;
+}
+
 /*
  * What the commit paths ask for. Borrowed, not owned — the caller must not
  * unref it; it lives until the temperature changes.
  */
 struct wlr_color_transform *nightlight_color_transform(syn_server_t *s)
 {
-    int temp = s->config.night_light ? s->config.night_light_temp : 0;
-    nightlight_rebuild(temp);
+    nightlight_rebuild(nightlight_effective_temp(s));
     return g_nightlight_tf;
 }
 
@@ -130,8 +140,11 @@ void nightlight_apply(syn_server_t *s)
     int temp = s->config.night_light ? s->config.night_light_temp : 0;
     nightlight_rebuild(temp);
 
-    /* Nothing is committed here any more: the transform is picked up by the
-     * next scene commit, so every output just needs a frame to be scheduled. */
+    /* Nothing is committed here: output_frame() sees that this output's
+     * committed temperature no longer matches and puts the new transform on
+     * the state it is about to commit anyway. All that is needed is a frame —
+     * and it must be scheduled even on a still screen, which is exactly the
+     * case output_frame's damage guard has to let through. */
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link)
         wlr_output_schedule_frame(o->wlr_output);

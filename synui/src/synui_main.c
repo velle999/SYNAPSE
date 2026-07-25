@@ -193,6 +193,71 @@ void server_usable_box(syn_server_t *s, struct wlr_box *box)
 }
 
 /* ── Output events ───────────────────────────────────────── */
+/*
+ * The scene's commit, with night light on the FINAL output state.
+ *
+ * This is wlr_scene_output_commit() opened up, because the one thing it will
+ * not do is the thing night light needs. Handing the transform to the scene as
+ * wlr_scene_output_state_options.color_transform — the call every wlroots
+ * example makes — routes it to wlr_buffer_pass_options.color_transform, and
+ * scenefx's fx_renderer sets features.output_color_transform = false and never
+ * reads the field. The warmth is dropped with no log line, no failed commit and
+ * an empty CRTC GAMMA_LUT: the toggle simply does nothing. Set on the output
+ * state, the DRM backend programs the CRTC LUT after blending, which is where
+ * the pre-0.20 wlr_output_state_set_gamma_lut() call put it all along.
+ *
+ * Tested before it is kept, on a copy, the way scenefx tests a gamma-control
+ * client's LUT: a backend that cannot take the transform fails the WHOLE commit
+ * otherwise, trading a colour tint for a dead output.
+ */
+static void scene_commit_nightlight(syn_output_t *output)
+{
+    struct wlr_scene_output *scene_output = output->scene_output;
+    struct wlr_output *wo = output->wlr_output;
+    int temp = nightlight_effective_temp(output->server);
+
+    /* wlr_scene_output_commit()'s own guard — with the addition that a night
+     * light change is worth a commit even when nothing on screen moved. */
+    if (temp == output->nightlight_temp &&
+        !wlr_scene_output_needs_frame(scene_output))
+        return;
+
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    if (!wlr_scene_output_build_state(scene_output, &state, NULL)) {
+        wlr_output_state_finish(&state);
+        return;
+    }
+
+    /* NULL is night light off, and committing it is how the screen gets its
+     * colour back — an identity transform every backend can honour. */
+    struct wlr_color_transform *nl = nightlight_color_transform(output->server);
+    bool warm_ok = true;
+    struct wlr_output_state warm = {0};
+    if (wlr_output_state_copy(&warm, &state)) {
+        wlr_output_state_set_color_transform(&warm, nl);
+        warm_ok = wlr_output_test_state(wo, &warm);
+        if (warm_ok)
+            wlr_output_state_copy(&state, &warm);
+        wlr_output_state_finish(&warm);
+    } else {
+        warm_ok = false;
+    }
+
+    if (wlr_output_commit_state(wo, &state)) {
+        if (!warm_ok)
+            wlr_log(WLR_ERROR, "synui: nightlight: %s will not take the %dK "
+                    "transform — frame committed without it", wo->name, temp);
+        /* Stamped even when the transform was refused: a backend that says no
+         * once says no to the same transform every frame, and retrying it per
+         * frame would mean testing, and logging, at the refresh rate. The next
+         * temperature change asks again. */
+        output->nightlight_temp = temp;
+    }
+
+    wlr_output_state_finish(&state);
+}
+
 static void output_frame(struct wl_listener *listener, void *data)
 {
     syn_output_t *output = wl_container_of(listener, output, frame);
@@ -303,18 +368,18 @@ static void output_frame(struct wl_listener *listener, void *data)
     if (output->server->config.blur)
         wlr_damage_ring_add_whole(&scene_output->damage_ring);
 
+    /* A night light change has no damage of its own — the pixels are identical,
+     * only the LUT they are scanned out through moves — so on a still screen
+     * the commit below would be skipped and the toggle would do nothing until
+     * something else happened to repaint. Damage the output for it. */
+    if (output->nightlight_temp != nightlight_effective_temp(output->server))
+        wlr_damage_ring_add_whole(&scene_output->damage_ring);
+
     /* GLES post-process pass when available; plain scene commit otherwise
-     * (and whenever any step of the effects pass fails).
-     *
-     * Night light rides along as a colour transform rather than a gamma commit
-     * of its own (wlroots 0.20 removed that): the scene combines it with any
-     * gamma-control client's LUT and decides itself whether the CRTC or the
-     * render pass applies it. NULL while night light is off. */
-    struct wlr_scene_output_state_options opts = {
-        .color_transform = nightlight_color_transform(output->server),
-    };
+     * (and whenever any step of the effects pass fails). Both paths carry night
+     * light on the output state they commit — see scene_commit_nightlight. */
     if (!effects_output_commit(output))
-        wlr_scene_output_commit(scene_output, &opts);
+        scene_commit_nightlight(output);
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
