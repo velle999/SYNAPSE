@@ -58,9 +58,25 @@ const char *deskact_label(syn_deskact_t a)
     case SYN_DESKACT_THEME:     return "Appearance…";
     case SYN_DESKACT_DISPLAY:   return "Display Settings…";
     case SYN_DESKACT_ICONS:     return "Show Desktop Icons";
+    case SYN_DESKACT_ARRANGE_NAME: return "Arrange by Name";
+    case SYN_DESKACT_ARRANGE_TYPE: return "Arrange by Type";
+    case SYN_DESKACT_ARRANGE_SIZE: return "Arrange by Size";
+    case SYN_DESKACT_ARRANGE_DATE: return "Arrange by Date";
     case SYN_DESKACT_TASKMGR:   return "Task Manager";
     }
     return "";
+}
+
+/* The arrange mode a row selects, or -1 if the row is not an arrange row. */
+static int deskact_arrange(syn_deskact_t a)
+{
+    switch (a) {
+    case SYN_DESKACT_ARRANGE_NAME: return SYN_ARRANGE_NAME;
+    case SYN_DESKACT_ARRANGE_TYPE: return SYN_ARRANGE_TYPE;
+    case SYN_DESKACT_ARRANGE_SIZE: return SYN_ARRANGE_SIZE;
+    case SYN_DESKACT_ARRANGE_DATE: return SYN_ARRANGE_DATE;
+    default: return -1;
+    }
 }
 
 /* Separators are not selectable and are drawn as a rule, not a row. */
@@ -84,6 +100,15 @@ void deskmenu_open(syn_server_t *s, double lx, double ly)
     s->deskmenu.actions[n++] = SYN_DESKACT_THEME;
     s->deskmenu.actions[n++] = SYN_DESKACT_DISPLAY;
     s->deskmenu.actions[n++] = SYN_DESKACT_ICONS;
+    /* The arrange rows only exist while there is a desktop to arrange —
+     * otherwise they are four rows that visibly do nothing. */
+    if (s->config.desktop_icons) {
+        s->deskmenu.actions[n++] = SYN_DESKACT_SEP;
+        s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_NAME;
+        s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_TYPE;
+        s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_SIZE;
+        s->deskmenu.actions[n++] = SYN_DESKACT_ARRANGE_DATE;
+    }
     s->deskmenu.actions[n++] = SYN_DESKACT_SEP;
     s->deskmenu.actions[n++] = SYN_DESKACT_TASKMGR;
     s->deskmenu.action_count = n;
@@ -142,6 +167,17 @@ int deskmenu_row_top(syn_server_t *s, int i)
 
 int deskmenu_row_height(syn_server_t *s, int i) { return deskmenu_row_h(s, i); }
 
+bool deskmenu_row_checked(syn_server_t *s, int i)
+{
+    if (i < 0 || i >= s->deskmenu.action_count) return false;
+
+    syn_deskact_t a = s->deskmenu.actions[i];
+    if (a == SYN_DESKACT_ICONS) return s->config.desktop_icons;
+
+    int mode = deskact_arrange(a);
+    return mode >= 0 && (syn_arrange_t)mode == s->config.desktop_icon_arrange;
+}
+
 void deskmenu_motion(syn_server_t *s, double lx, double ly)
 {
     if (!s->deskmenu.visible) return;
@@ -194,6 +230,18 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
         s->config.desktop_icons = !s->config.desktop_icons;
         deskicons_reload(s);
         break;
+    case SYN_DESKACT_ARRANGE_NAME:
+        deskicons_arrange(s, SYN_ARRANGE_NAME);
+        break;
+    case SYN_DESKACT_ARRANGE_TYPE:
+        deskicons_arrange(s, SYN_ARRANGE_TYPE);
+        break;
+    case SYN_DESKACT_ARRANGE_SIZE:
+        deskicons_arrange(s, SYN_ARRANGE_SIZE);
+        break;
+    case SYN_DESKACT_ARRANGE_DATE:
+        deskicons_arrange(s, SYN_ARRANGE_DATE);
+        break;
     case SYN_DESKACT_TASKMGR:
         taskmgr_toggle(s);
         break;
@@ -204,10 +252,72 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
 
 /* ── Desktop icons ───────────────────────────────────────── */
 
-static int name_cmp(const void *a, const void *b)
+/*
+ * Name order, and the tie-break every other mode falls back to. Two icons can
+ * share a label — a .desktop is named by its Name= key, not its filename — so
+ * the path decides after that, or qsort would be free to swap them on every
+ * reload and the desktop would shuffle by itself.
+ */
+static int cmp_name(const syn_deskicon_t *x, const syn_deskicon_t *y)
+{
+    int r = strcasecmp(x->label, y->label);
+    return r ? r : strcmp(x->path, y->path);
+}
+
+/* Extension of the file on disk, "" for none. Deliberately the filename's, not
+ * the label's: a .desktop's Name= has no extension to group by. */
+static const char *icon_ext(const syn_deskicon_t *ic)
+{
+    const char *base = strrchr(ic->path, '/');
+    base = base ? base + 1 : ic->path;
+    const char *dot = strrchr(base, '.');
+    /* A leading dot is a hidden file, not an extension — those never reach the
+     * scan, but the rule is the same one every file manager uses. */
+    return (dot && dot != base) ? dot + 1 : "";
+}
+
+/*
+ * Compare under the current mode. qsort() has no user-data argument, and
+ * glibc's qsort_r takes its comparator arguments in the opposite order from
+ * the BSD one, so the mode rides in a file-static instead: synui sorts the
+ * desktop from one thread, in one call, right below.
+ */
+static syn_arrange_t sort_mode = SYN_ARRANGE_NAME;
+
+static int icon_cmp(const void *a, const void *b)
 {
     const syn_deskicon_t *x = a, *y = b;
-    return strcasecmp(x->label, y->label);
+
+    switch (sort_mode) {
+    case SYN_ARRANGE_TYPE:
+        /* Folders first — they are the one "type" that is not an extension. */
+        if (x->is_dir != y->is_dir) return y->is_dir - x->is_dir;
+        if (!x->is_dir) {
+            int r = strcasecmp(icon_ext(x), icon_ext(y));
+            if (r) return r;
+        }
+        break;
+
+    case SYN_ARRANGE_SIZE:
+        /* Folders again first: st_size for a directory is the size of the
+         * directory entry itself, which would sort them among the tiny files
+         * as if that number meant something. Largest first, as everywhere
+         * else that sorts by size. */
+        if (x->is_dir != y->is_dir) return y->is_dir - x->is_dir;
+        if (!x->is_dir && x->size != y->size) return x->size > y->size ? -1 : 1;
+        break;
+
+    case SYN_ARRANGE_DATE:
+        /* Newest first: on a desktop the thing you just saved is the thing you
+         * are looking for. */
+        if (x->mtime != y->mtime) return x->mtime > y->mtime ? -1 : 1;
+        break;
+
+    case SYN_ARRANGE_NAME:
+        break;
+    }
+
+    return cmp_name(x, y);
 }
 
 /* The output the icon field lives on. Icons are a single-output affair (they
@@ -268,8 +378,26 @@ static bool deskicons_state_path(char *buf, size_t n)
     return syn_config_path(buf, n, "deskicons.state");
 }
 
+/* The names the arrange mode is written and read as, in enum order. Also what
+ * synuirc's desktop_icon_arrange accepts, so there is one spelling of each. */
+static const char *const arrange_names[] = { "name", "type", "size", "date" };
+
+const char *syn_arrange_name(syn_arrange_t a)
+{
+    return (a >= 0 && a < (int)(sizeof(arrange_names) / sizeof(*arrange_names)))
+           ? arrange_names[a] : "name";
+}
+
+bool syn_arrange_parse(const char *s, syn_arrange_t *out)
+{
+    for (unsigned i = 0; i < sizeof(arrange_names) / sizeof(*arrange_names); i++)
+        if (strcmp(s, arrange_names[i]) == 0) { *out = (syn_arrange_t)i; return true; }
+    return false;
+}
+
 /*
- * Write one `pos=x,y,name` line per dragged icon. Keyed on the basename rather
+ * Write the arrange mode, then one `pos=x,y,name` line per dragged icon. Keyed
+ * on the basename rather
  * than the full path — every entry lives in ~/Desktop by definition, so the
  * placement survives a $HOME that moves. The name goes last because a filename
  * may itself contain commas.
@@ -286,6 +414,8 @@ static void deskicons_state_save(syn_server_t *s)
                 path, strerror(errno));
         return;
     }
+
+    fprintf(f, "arrange=%s\n", syn_arrange_name(s->config.desktop_icon_arrange));
 
     for (int i = 0; i < s->deskicon_count; i++) {
         syn_deskicon_t *ic = &s->deskicons[i];
@@ -322,6 +452,19 @@ static void deskicons_state_load(syn_server_t *s)
         line[strcspn(line, "\r\n")] = '\0';
         char *p = line;
         while (*p == ' ' || *p == '\t') p++;
+
+        /* The mode the user last chose from the menu wins over synuirc's
+         * default, the same way wallpaper.state overrides the configured
+         * wallpaper: the setting you changed from the desktop is the one you
+         * expect to still be in effect. An unknown name is left alone rather
+         * than silently reset — a newer synui may have written it. */
+        if (strncmp(p, "arrange=", 8) == 0) {
+            syn_arrange_t mode;
+            if (syn_arrange_parse(p + 8, &mode))
+                s->config.desktop_icon_arrange = mode;
+            continue;
+        }
+
         if (strncmp(p, "pos=", 4) != 0) continue;
         p += 4;
 
@@ -385,6 +528,8 @@ void deskicons_reload(syn_server_t *s)
         struct stat st;
         if (stat(ic->path, &st) != 0) continue;
         ic->is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
+        ic->size   = st.st_size;
+        ic->mtime  = st.st_mtime;
 
         size_t len = strlen(de->d_name);
         const syn_icon_entry_t *ent = NULL;
@@ -407,16 +552,38 @@ void deskicons_reload(syn_server_t *s)
     }
     closedir(d);
 
+    /* Before the sort: the state file carries the arrange mode as well as the
+     * dragged cells, and the mode is what the sort is about to use. Matching an
+     * icon by name does not care what order the array is in. */
+    deskicons_state_load(s);
+
     /* Stable, human order: readdir returns them in whatever order the
      * filesystem feels like, which would reshuffle the desktop every reload. */
-    qsort(s->deskicons, s->deskicon_count, sizeof(s->deskicons[0]), name_cmp);
-
-    /* After the sort, before the layout: the saved cells are what make the
-     * layout leave dragged icons where the user put them. */
-    deskicons_state_load(s);
+    sort_mode = s->config.desktop_icon_arrange;
+    qsort(s->deskicons, s->deskicon_count, sizeof(s->deskicons[0]), icon_cmp);
 
     deskicons_layout(s);
     synui_render_deskicons(s);
+}
+
+/*
+ * Switch the sort order and re-flow the desktop.
+ *
+ * Dragged icons lose their cells: an arrange that only reordered the icons the
+ * user had never touched would leave the desktop in neither order. That is what
+ * every other shell's "arrange by" does too, and the drop that pinned an icon
+ * is easy to repeat — so the placements are cleared, and the empty state is
+ * written before the rescan so the reload cannot load them straight back in.
+ */
+void deskicons_arrange(syn_server_t *s, syn_arrange_t mode)
+{
+    s->config.desktop_icon_arrange = mode;
+
+    for (int i = 0; i < s->deskicon_count; i++)
+        s->deskicons[i].placed = 0;
+
+    deskicons_state_save(s);   /* drops every pos= line, keeps the new mode */
+    deskicons_reload(s);
 }
 
 /*

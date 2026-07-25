@@ -844,9 +844,28 @@ typedef enum {
     SYN_DESKACT_THEME,
     SYN_DESKACT_DISPLAY,
     SYN_DESKACT_ICONS,       /* toggle desktop icons at runtime */
+    /* Icon sort order. Only offered while the icons are on, since choosing one
+     * with nothing drawn would be a setting with no visible effect. */
+    SYN_DESKACT_ARRANGE_NAME,
+    SYN_DESKACT_ARRANGE_TYPE,
+    SYN_DESKACT_ARRANGE_SIZE,
+    SYN_DESKACT_ARRANGE_DATE,
     SYN_DESKACT_TASKMGR,
 } syn_deskact_t;
-#define SYN_DESKMENU_MAX 12
+#define SYN_DESKMENU_MAX 16
+
+/* The order the auto-grid flows ~/Desktop in. Every mode falls back to name
+ * order for ties, so the desktop never reshuffles between two equal files. */
+typedef enum {
+    SYN_ARRANGE_NAME = 0,    /* case-insensitive, the default */
+    SYN_ARRANGE_TYPE,        /* folders first, then by extension */
+    SYN_ARRANGE_SIZE,        /* folders first, then largest first */
+    SYN_ARRANGE_DATE,        /* most recently modified first */
+} syn_arrange_t;
+
+/* One spelling of each mode, shared by deskicons.state and synuirc. */
+const char *syn_arrange_name(syn_arrange_t a);
+bool syn_arrange_parse(const char *s, syn_arrange_t *out);
 
 /* One ~/Desktop entry. `exec` and `icon_surface` are only meaningful for a
  * .desktop file; anything else opens through xdg-open on its path. The
@@ -861,6 +880,10 @@ typedef struct {
     char  exec[256];
     int   is_dir;
     int   is_desktop;
+    /* Straight off the stat() the scan already does, so an arrange-by-size or
+     * -date sort never has to walk ~/Desktop a second time. */
+    off_t  size;
+    time_t mtime;
     int   x, y;                    /* cell origin, layout coords */
     /* The user dragged this one: its cell came from deskicons.state (or from a
      * drop this session) and the auto-grid must leave it alone. */
@@ -905,6 +928,11 @@ typedef struct {
     /* synuirc desktop_icons (default OFF): draw ~/Desktop on the wallpaper.
      * The desktop right-click menu can flip this at runtime. */
     bool  desktop_icons;
+
+    /* synuirc desktop_icon_arrange (default name): the order the auto-grid
+     * flows icons in. Like desktop_icons the menu flips it live, but unlike it
+     * the choice is persisted — to deskicons.state, which overrides this. */
+    syn_arrange_t desktop_icon_arrange;
     float titlebar_color[4];
     float titlebar_color_focus[4];
     float titlebar_text[4];
@@ -2969,9 +2997,16 @@ const char *deskact_label(syn_deskact_t a);
 /* Row geometry, shared with render.c so both walk the rows the same way. */
 int  deskmenu_row_top(syn_server_t *s, int i);
 int  deskmenu_row_height(syn_server_t *s, int i);
+/* Does row i show a checkmark? The rows that are settings rather than actions
+ * (icons on/off, the arrange mode) draw one when they are the state we are
+ * already in; render.c asks rather than re-deriving the rule. */
+bool deskmenu_row_checked(syn_server_t *s, int i);
 
 void deskicons_reload(syn_server_t *s);   /* rescan ~/Desktop */
 void deskicons_layout(syn_server_t *s);   /* re-grid onto the primary output */
+/* Re-sort the desktop into `mode`. Re-flows everything, dragged icons
+ * included: a sort that left half the desktop where it was would not be one. */
+void deskicons_arrange(syn_server_t *s, syn_arrange_t mode);
 int  deskicon_at(syn_server_t *s, double lx, double ly);
 void deskicon_activate(syn_server_t *s, int i);
 void deskicon_select(syn_server_t *s, int i);

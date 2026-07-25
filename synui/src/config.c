@@ -425,6 +425,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->titlebar_height = TITLEBAR_HEIGHT_DEF;
     cfg->remember_geometry = true;
     cfg->desktop_icons     = false;   /* opt-in; the menu can flip it live */
+    cfg->desktop_icon_arrange = SYN_ARRANGE_NAME;
     cfg->animation_ms    = ANIMATION_MS_DEF;
     { static const float c[4] = COLOR_TITLEBAR_NORM;    memcpy(cfg->titlebar_color,       c, sizeof(c)); }
     { static const float c[4] = COLOR_TITLEBAR_FOCUS;   memcpy(cfg->titlebar_color_focus, c, sizeof(c)); }
@@ -691,6 +692,16 @@ void synui_config_load(syn_config_t *cfg)
         else if (strcmp(key, "desktop_icons") == 0)
             cfg->desktop_icons = strcmp(val, "on") == 0 ||
                                  strcmp(val, "1") == 0;
+        else if (strcmp(key, "desktop_icon_arrange") == 0) {
+            /* An unreadable value keeps the default rather than picking a mode
+             * the user did not ask for; deskicons.state may override this. */
+            syn_arrange_t mode;
+            if (syn_arrange_parse(val, &mode))
+                cfg->desktop_icon_arrange = mode;
+            else
+                wlr_log(WLR_ERROR, "synui: config: desktop_icon_arrange '%s' is "
+                        "not name|type|size|date", val);
+        }
         else if (strcmp(key, "titlebar_color") == 0)
             parse_hex_color(val, cfg->titlebar_color);
         else if (strcmp(key, "titlebar_color_focus") == 0)

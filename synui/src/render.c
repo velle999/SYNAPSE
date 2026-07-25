@@ -3249,10 +3249,10 @@ void synui_render_deskmenu(syn_server_t *s)
         cairo_move_to(cr, 14, iy + 20);
         cairo_show_text(cr, deskact_label(s->deskmenu.actions[i]));
 
-        /* A checkmark shows desktop icons are already on, so the row reads as
-         * a toggle rather than an action that might do it twice. */
-        if (s->deskmenu.actions[i] == SYN_DESKACT_ICONS &&
-            s->config.desktop_icons) {
+        /* A checkmark shows the state a settings row is already in — icons on,
+         * or the arrange mode in force — so the row reads as a setting rather
+         * than an action that might do it twice. */
+        if (deskmenu_row_checked(s, i)) {
             cairo_move_to(cr, pw - 24, iy + 20);
             cairo_show_text(cr, "✓");
         }

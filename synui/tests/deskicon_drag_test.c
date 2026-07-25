@@ -22,7 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include "synui.h"
 
@@ -48,6 +50,19 @@ void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
 {
     (void)s; (void)o;
     box->x = 0; box->y = 0; box->width = 1920; box->height = 1080;
+}
+
+/* deskmenu_open() asks the layout which output the cursor is over, to clamp the
+ * menu inside it. Standing up a real wlr_output_layout here would mean a
+ * wl_display and a backend for one lookup, so the wlroots symbol is overridden
+ * instead — a strong definition in the test object wins over the shared
+ * library's. NULL means "no output there", which is the path that skips the
+ * clamp and leaves the menu where it was asked for. */
+struct wlr_output *wlr_output_layout_output_at(struct wlr_output_layout *l,
+                                               double lx, double ly)
+{
+    (void)l; (void)lx; (void)ly;
+    return NULL;
 }
 
 /* Renders are counted, not drawn: a drag that never repaints looks identical to
@@ -156,6 +171,62 @@ static void write_file(const char *path, const char *body)
     fclose(f);
 }
 
+/* A file of exactly `bytes`, so an arrange-by-size assertion is about the sort
+ * and not about how large "x\n" happens to be. */
+static void write_sized(const char *path, size_t bytes)
+{
+    FILE *f = fopen(path, "w");
+    assert(f);
+    for (size_t i = 0; i < bytes; i++) fputc('x', f);
+    fclose(f);
+}
+
+/* mtime `secs` in the past. Arrange-by-date has to be driven off stamps the
+ * test chose: five files written in a loop can easily share a second. */
+static void set_age(const char *path, time_t secs)
+{
+    time_t now = time(NULL);
+    struct utimbuf t = { .actime = now - secs, .modtime = now - secs };
+    assert(utime(path, &t) == 0);
+}
+
+/* The labels of the first `n` icons in flow order (column-major down column 0,
+ * which is where the first ten land on this grid). */
+static void assert_order(syn_server_t *s, const char *const *want, int n)
+{
+    for (int row = 0; row < n; row++) {
+        int i = find_icon(s, want[row]);
+        assert(i >= 0);
+        if (s->deskicons[i].x != CELL_X(0) || s->deskicons[i].y != CELL_Y(row)) {
+            fprintf(stderr, "FAIL: expected %s in row %d; it is at (%d,%d)\n",
+                    want[row], row, s->deskicons[i].x, s->deskicons[i].y);
+            for (int k = 0; k < s->deskicon_count; k++)
+                fprintf(stderr, "      %-14s (%d,%d)\n", s->deskicons[k].label,
+                        s->deskicons[k].x, s->deskicons[k].y);
+            abort();
+        }
+    }
+}
+
+/* Index of the menu row whose label is `label`, or -1. */
+static int menu_row(syn_server_t *s, const char *label)
+{
+    for (int i = 0; i < s->deskmenu.action_count; i++)
+        if (strcmp(deskact_label(s->deskmenu.actions[i]), label) == 0) return i;
+    return -1;
+}
+
+/* Click the menu row named `label`, the way a pointer would: through
+ * deskmenu_click, at a point inside that row. */
+static void click_row(syn_server_t *s, const char *label)
+{
+    int i = menu_row(s, label);
+    assert(i >= 0);
+    deskmenu_click(s, s->deskmenu.x + 20,
+                   s->deskmenu.y + deskmenu_row_top(s, i) +
+                       deskmenu_row_height(s, i) / 2.0);
+}
+
 static char *slurp(const char *path)
 {
     FILE *f = fopen(path, "r");
@@ -253,7 +324,7 @@ int main(void)
     assert(body);
     {
         char want[128];
-        snprintf(want, sizeof(want), "pos=%d,%d,charlie.txt\n",
+        snprintf(want, sizeof(want), "arrange=name\npos=%d,%d,charlie.txt\n",
                  CELL_X(2), CELL_Y(5));
         if (strcmp(body, want) != 0) {
             fprintf(stderr, "FAIL: deskicons.state is\n%s\nexpected\n%s", body, want);
@@ -348,7 +419,132 @@ int main(void)
     assert_no_overlap(s);
     printf("ok 10 — the placements survive the desktop_icons toggle\n");
 
+    /* ── Arrange by … ───────────────────────────────────── */
+
+    /* Four more entries whose size, extension and mtime all disagree with
+     * their name order, so no two arrange modes can pass by accident. The five
+     * .txt files stay 2 bytes each: equal keys are what proves the name
+     * tie-break. */
+    char folder[700];
+    snprintf(folder, sizeof(folder), "%s/folder", desk);
+    assert(mkdir(folder, 0755) == 0);
+
+    static const char *extras[] = { "zulu.bin", "mike.dat", "kilo.log" };
+    static const size_t extra_size[] = { 3000, 500, 10 };
+    for (unsigned i = 0; i < sizeof(extras) / sizeof(extras[0]); i++) {
+        snprintf(path, sizeof(path), "%s/%s", desk, extras[i]);
+        write_sized(path, extra_size[i]);
+    }
+
+    /* Ages, oldest to newest: zulu.bin, the .txt files, kilo.log, mike.dat. */
+    snprintf(path, sizeof(path), "%s/zulu.bin", desk); set_age(path, 9000);
+    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        snprintf(path, sizeof(path), "%s/%s", desk, names[i]);
+        set_age(path, 3600);
+    }
+    snprintf(path, sizeof(path), "%s/kilo.log", desk); set_age(path, 600);
+    snprintf(path, sizeof(path), "%s/mike.dat", desk); set_age(path, 5);
+    set_age(folder, 60);
+
+    /* ── 11. By size: folders first, then largest first ── */
+    deskicons_reload(s);
+    assert(s->deskicon_count == 9);
+    deskicons_arrange(s, SYN_ARRANGE_SIZE);
+    assert(s->config.desktop_icon_arrange == SYN_ARRANGE_SIZE);
+    {
+        static const char *const want[] = { "folder", "zulu.bin", "mike.dat",
+                                            "kilo.log", "alpha.txt", "bravo.txt",
+                                            "charlie.txt", "delta.txt",
+                                            "echo.txt" };
+        assert_order(s, want, 9);
+    }
+    assert_no_overlap(s);
+    printf("ok 11 — arrange by size: folder first, then largest, name breaks ties\n");
+
+    /* ── 12. Arranging un-pins every dragged icon ───────── */
+    for (int i = 0; i < s->deskicon_count; i++)
+        assert(s->deskicons[i].placed == 0);
+    {
+        /* And the state file kept the mode while dropping the placements —
+         * otherwise the next reload would drag them straight back out of the
+         * order just chosen. */
+        char *st = slurp(statefile);
+        assert(st);
+        if (strcmp(st, "arrange=size\n") != 0) {
+            fprintf(stderr, "FAIL: deskicons.state is\n%s\nexpected arrange=size\n", st);
+            abort();
+        }
+    }
+    printf("ok 12 — an arrange clears the pinned cells and records the mode\n");
+
+    /* ── 13. By date: newest first ──────────────────────── */
+    deskicons_arrange(s, SYN_ARRANGE_DATE);
+    {
+        static const char *const want[] = { "mike.dat", "folder", "kilo.log" };
+        assert_order(s, want, 3);
+    }
+    /* The five equally-aged .txt files land between kilo.log and zulu.bin, in
+     * name order, and the oldest file is last. */
+    assert_cell(s, "alpha.txt", 0, 3);
+    assert_cell(s, "echo.txt",  0, 7);
+    assert_cell(s, "zulu.bin",  0, 8);
+    assert_no_overlap(s);
+    printf("ok 13 — arrange by date: newest first, equal stamps in name order\n");
+
+    /* ── 14. By type: folders, then extension ───────────── */
+    deskicons_arrange(s, SYN_ARRANGE_TYPE);
+    {
+        static const char *const want[] = { "folder", "zulu.bin", "mike.dat",
+                                            "kilo.log", "alpha.txt" };
+        assert_order(s, want, 5);
+    }
+    assert_no_overlap(s);
+    printf("ok 14 — arrange by type: folder first, then .bin/.dat/.log/.txt\n");
+
+    /* ── 15. The mode outlives the session ──────────────── */
+    s->config.desktop_icon_arrange = SYN_ARRANGE_NAME;   /* as if freshly parsed */
+    deskicons_reload(s);
+    assert(s->config.desktop_icon_arrange == SYN_ARRANGE_TYPE);
+    assert_cell(s, "folder", 0, 0);
+    printf("ok 15 — deskicons.state restores the arrange mode over the config\n");
+
+    /* ── 16. The menu offers it, and shows which one is on ── */
+    deskmenu_open(s, 100, 100);
+    assert(menu_row(s, "Arrange by Name") >= 0);
+    assert(menu_row(s, "Arrange by Size") >= 0);
+    assert(s->deskmenu.action_count <= SYN_DESKMENU_MAX);
+    assert(deskmenu_row_checked(s, menu_row(s, "Arrange by Type")));
+    assert(!deskmenu_row_checked(s, menu_row(s, "Arrange by Name")));
+
+    /* And clicking one is the whole path: row → mode → re-flow. */
+    click_row(s, "Arrange by Name");
+    assert(s->deskmenu.visible == 0);
+    assert(s->config.desktop_icon_arrange == SYN_ARRANGE_NAME);
+    {
+        static const char *const want[] = { "alpha.txt", "bravo.txt",
+                                            "charlie.txt", "delta.txt",
+                                            "echo.txt", "folder", "kilo.log",
+                                            "mike.dat", "zulu.bin" };
+        assert_order(s, want, 9);
+    }
+    printf("ok 16 — the menu row is checked, and clicking it re-flows the desktop\n");
+
+    /* ── 17. With icons off the arrange rows are not offered ── */
+    s->config.desktop_icons = false;
+    deskicons_reload(s);
+    deskmenu_open(s, 100, 100);
+    assert(menu_row(s, "Arrange by Name") < 0);
+    assert(menu_row(s, "Task Manager") >= 0);
+    deskmenu_close(s);
+    s->config.desktop_icons = true;
+    printf("ok 17 — no desktop, no arrange rows\n");
+
     /* Leave the scratch tree behind only on success. */
+    for (unsigned i = 0; i < sizeof(extras) / sizeof(extras[0]); i++) {
+        snprintf(path, sizeof(path), "%s/%s", desk, extras[i]);
+        unlink(path);
+    }
+    rmdir(folder);
     for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
         snprintf(path, sizeof(path), "%s/%s", desk, names[i]);
         unlink(path);

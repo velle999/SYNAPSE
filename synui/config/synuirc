@@ -86,6 +86,15 @@ titlebar_height = 26
 # Delete deskicons.state to put everything back on the auto-grid.
 # desktop_icons = on
 
+# The order icons flow in: name, type (folders first, then by extension), size
+# (folders first, then largest first) or date (most recently modified first).
+# Ties always fall back to name, so equal files never trade places by
+# themselves. The right-click menu's "Arrange by …" rows change this live and
+# record it in deskicons.state, which then overrides the value here — so edit
+# this for the default and use the menu after that. Picking an order re-flows
+# the whole desktop, dragged icons included.
+# desktop_icon_arrange = name
+
 # Titlebar colors, #rrggbb (defaults shown). Deliberately muted: the border
 # already carries the focus/AI/alert signal.
 # titlebar_color       = #12121c
