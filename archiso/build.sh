@@ -526,6 +526,27 @@ create_source_tarball() {
     log "Creating source tarball for ${pkg}..."
     cd "${PROJECT_ROOT}"
 
+    # A component that ships its own mktarball.sh WINS — same rule build-all.sh
+    # follows. That script knows which top-level dirs the component actually
+    # compiles, and it hard-fails on a missing one instead of quietly shipping a
+    # tarball without it.
+    #
+    # This is the drift the comment below warned about, arriving for real:
+    # synui's QML tree (quickshell/) moved into the package when the bar was
+    # ported from waybar, mktarball.sh listed it, and this collector never
+    # learned about it. The tarball built fine, synui COMPILED fine, and
+    # package() then died on `install -Dm644 quickshell/*.qml` — so every ISO
+    # release after the quickshell port aborted at synui. Delegating is what
+    # stops the generic list below from needing to know each component's layout
+    # at all; it stays as a fallback for the ones that ship no script.
+    if [[ -x "${pkgdir}/mktarball.sh" ]]; then
+        ( cd "${pkgdir}" && ./mktarball.sh ) \
+            || err "${pkg}: mktarball.sh failed — refusing to build from a stale tarball"
+        ok "Source tarball: ${tarball} (via ${pkg}/mktarball.sh)"
+        cd "${SCRIPT_DIR}"
+        return 0
+    fi
+
     # Collect directories/files that exist in the package
     local items=()
     [ -d "${pkg}/src" ]     && items+=("${pkg}/src/")
