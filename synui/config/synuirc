@@ -74,7 +74,8 @@ titlebar_height = 26
 # ── Desktop icons ──────────────────────────────────────────
 # Draw the contents of ~/Desktop on the wallpaper. Off by default; the desktop
 # right-click menu ("Show Desktop Icons") flips it at runtime without editing
-# this. Single click selects, double click opens — .desktop files run their
+# this, and records the flip in deskicons.state — which then overrides the value
+# here, so the tick survives a logout. Single click selects, double click opens — .desktop files run their
 # Exec=, anything else goes through xdg-open. There is no file watch, so a file
 # added elsewhere shows up the next time the setting is toggled or a monitor
 # changes.
@@ -83,7 +84,8 @@ titlebar_height = 26
 # with whatever was already sitting there, and its cell is written to
 # ~/.config/synui/deskicons.state so it comes back to the same place next login.
 # Icons you have never dragged still flow into the free cells in name order.
-# Delete deskicons.state to put everything back on the auto-grid.
+# Delete deskicons.state to put everything back on the auto-grid, and to hand
+# the on/off choice back to this file.
 # desktop_icons = on
 
 # The order icons flow in: name, type (folders first, then by extension), size

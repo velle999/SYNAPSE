@@ -324,7 +324,8 @@ int main(void)
     assert(body);
     {
         char want[128];
-        snprintf(want, sizeof(want), "arrange=name\npos=%d,%d,charlie.txt\n",
+        snprintf(want, sizeof(want),
+                 "icons=on\narrange=name\npos=%d,%d,charlie.txt\n",
                  CELL_X(2), CELL_Y(5));
         if (strcmp(body, want) != 0) {
             fprintf(stderr, "FAIL: deskicons.state is\n%s\nexpected\n%s", body, want);
@@ -470,7 +471,7 @@ int main(void)
          * order just chosen. */
         char *st = slurp(statefile);
         assert(st);
-        if (strcmp(st, "arrange=size\n") != 0) {
+        if (strcmp(st, "icons=on\narrange=size\n") != 0) {
             fprintf(stderr, "FAIL: deskicons.state is\n%s\nexpected arrange=size\n", st);
             abort();
         }
@@ -538,6 +539,55 @@ int main(void)
     deskmenu_close(s);
     s->config.desktop_icons = true;
     printf("ok 17 — no desktop, no arrange rows\n");
+
+    /* ── 18. The tick itself outlives the session ────────── */
+    deskicons_reload(s);
+    assert(s->deskicon_count == 9);
+    /* One pinned icon, so the round trip has something to lose. */
+    drag(s, "zulu.bin", 3 * SYN_DESKICON_W, 0);
+    assert(s->deskicons[find_icon(s, "zulu.bin")].placed == 1);
+
+    deskmenu_open(s, 100, 100);
+    click_row(s, "Show Desktop Icons");
+    assert(s->config.desktop_icons == false);
+    assert(s->deskicon_count == 0);
+    {
+        /* Off is written, and the pin is still there — the save has to land
+         * before the rescan that empties the model, or the placement goes out
+         * with the toggle. */
+        char *st = slurp(statefile);
+        assert(st);
+        assert(strncmp(st, "icons=off\n", 10) == 0);
+        assert(strstr(st, ",zulu.bin\n") != NULL);
+    }
+    /* A freshly parsed config — synuirc's default is off, and the state file is
+     * what a login has to read to agree with the menu. */
+    {
+        static syn_config_t cfg;
+        cfg.desktop_icons = true;             /* as if synuirc said `on` */
+        deskicons_state_load(&cfg);
+        assert(cfg.desktop_icons == false);   /* the menu's off wins */
+    }
+    printf("ok 18 — turning icons off is persisted, and keeps the pinned cells\n");
+
+    /* ── 19. And back on, without losing the cell ────────── */
+    deskmenu_open(s, 100, 100);
+    click_row(s, "Show Desktop Icons");
+    assert(s->config.desktop_icons == true);
+    assert(s->deskicon_count == 9);
+    assert(s->deskicons[find_icon(s, "zulu.bin")].placed == 1);
+    {
+        char *st = slurp(statefile);
+        assert(st);
+        assert(strncmp(st, "icons=on\n", 9) == 0);
+        assert(strstr(st, ",zulu.bin\n") != NULL);
+
+        static syn_config_t cfg;
+        cfg.desktop_icons = false;            /* synuirc's default */
+        deskicons_state_load(&cfg);
+        assert(cfg.desktop_icons == true);
+    }
+    printf("ok 19 — turning them back on is persisted too, cell intact\n");
 
     /* Leave the scratch tree behind only on success. */
     for (unsigned i = 0; i < sizeof(extras) / sizeof(extras[0]); i++) {

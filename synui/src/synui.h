@@ -926,12 +926,12 @@ typedef struct {
     bool  remember_geometry;
 
     /* synuirc desktop_icons (default OFF): draw ~/Desktop on the wallpaper.
-     * The desktop right-click menu can flip this at runtime. */
+     * The desktop right-click menu can flip this at runtime, and the flip is
+     * persisted to deskicons.state, which overrides this. */
     bool  desktop_icons;
 
     /* synuirc desktop_icon_arrange (default name): the order the auto-grid
-     * flows icons in. Like desktop_icons the menu flips it live, but unlike it
-     * the choice is persisted — to deskicons.state, which overrides this. */
+     * flows icons in. Menu-flippable and persisted the same way. */
     syn_arrange_t desktop_icon_arrange;
     float titlebar_color[4];
     float titlebar_color_focus[4];
@@ -3004,6 +3004,10 @@ bool deskmenu_row_checked(syn_server_t *s, int i);
 
 void deskicons_reload(syn_server_t *s);   /* rescan ~/Desktop */
 void deskicons_layout(syn_server_t *s);   /* re-grid onto the primary output */
+/* Lay deskicons.state's `icons=` over synuirc's desktop_icons, so the menu's
+ * toggle outlives a config reload and a logout. The dragged cells and the
+ * arrange mode are read separately, inside deskicons_reload. */
+void deskicons_state_load(syn_config_t *cfg);
 /* Re-sort the desktop into `mode`. Re-flows everything, dragged icons
  * included: a sort that left half the desktop where it was would not be one. */
 void deskicons_arrange(syn_server_t *s, syn_arrange_t mode);

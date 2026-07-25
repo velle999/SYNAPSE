@@ -19,6 +19,13 @@
  * back to the same spot next login. Everything not dragged still flows into the
  * free cells in name order.
  *
+ * That state file also carries the two settings the menu can flip — whether
+ * icons are shown at all, and the arrange mode — because a runtime toggle that
+ * only lived in s->config would be undone by the next synui_config_reload, let
+ * alone a logout. deskicons_state_load() lays them back over synuirc on every
+ * config load, the same precedence launcher.state and wallpaper.state use.
+ * Delete deskicons.state to hand the desktop back to synuirc.
+ *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
@@ -46,6 +53,10 @@
  * Same order as the titlebar's grab slop: small enough that a deliberate drag
  * starts at once, large enough that a shaky double-click still opens. */
 #define DESKICON_DRAG_SLOP 6.0
+
+/* Defined with the rest of the persistence, below; the menu's icons-on/off row
+ * has to write the state file too, and that row is handled up here. */
+static void deskicons_state_save(syn_server_t *s);
 
 const char *deskact_label(syn_deskact_t a)
 {
@@ -228,7 +239,18 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
         break;
     case SYN_DESKACT_ICONS:
         s->config.desktop_icons = !s->config.desktop_icons;
-        deskicons_reload(s);
+        /* Save on whichever side of the rescan the model is populated, or the
+         * dragged cells go out with the toggle: turning icons OFF zeroes
+         * deskicon_count, and turning them ON runs before the rescan has read
+         * the cells back in — a save on the wrong side writes a file with no
+         * pos= lines at all. */
+        if (s->config.desktop_icons) {
+            deskicons_reload(s);
+            deskicons_state_save(s);
+        } else {
+            deskicons_state_save(s);
+            deskicons_reload(s);
+        }
         break;
     case SYN_DESKACT_ARRANGE_NAME:
         deskicons_arrange(s, SYN_ARRANGE_NAME);
@@ -396,11 +418,10 @@ bool syn_arrange_parse(const char *s, syn_arrange_t *out)
 }
 
 /*
- * Write the arrange mode, then one `pos=x,y,name` line per dragged icon. Keyed
- * on the basename rather
- * than the full path — every entry lives in ~/Desktop by definition, so the
- * placement survives a $HOME that moves. The name goes last because a filename
- * may itself contain commas.
+ * Write the toggle and the arrange mode, then one `pos=x,y,name` line per
+ * dragged icon. Keyed on the basename rather than the full path — every entry
+ * lives in ~/Desktop by definition, so the placement survives a $HOME that
+ * moves. The name goes last because a filename may itself contain commas.
  */
 static void deskicons_state_save(syn_server_t *s)
 {
@@ -415,6 +436,7 @@ static void deskicons_state_save(syn_server_t *s)
         return;
     }
 
+    fprintf(f, "icons=%s\n", s->config.desktop_icons ? "on" : "off");
     fprintf(f, "arrange=%s\n", syn_arrange_name(s->config.desktop_icon_arrange));
 
     for (int i = 0; i < s->deskicon_count; i++) {
@@ -435,12 +457,42 @@ static void deskicons_state_save(syn_server_t *s)
 }
 
 /*
+ * The `icons=` toggle, read at config-load time.
+ *
+ * This cannot live in deskicons_state_apply below: that runs from
+ * deskicons_reload, which returns early while desktop_icons is off, so the very
+ * setting that would turn the desktop back on would never be read. Same
+ * precedence as launcher.state — the last thing you chose from the menu wins
+ * over synuirc, and an absent file leaves synuirc's `desktop_icons` standing.
+ */
+void deskicons_state_load(syn_config_t *cfg)
+{
+    char path[256];
+    if (!deskicons_state_path(path, sizeof(path))) return;
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+
+    char line[768];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "icons=", 6) != 0) continue;
+
+        const char *v = p + 6;
+        if      (strcmp(v, "on")  == 0) cfg->desktop_icons = true;
+        else if (strcmp(v, "off") == 0) cfg->desktop_icons = false;
+    }
+    fclose(f);
+}
+
+/*
  * Apply saved cells to the icons we just scanned. Lines for files that are no
  * longer on the desktop simply match nothing (and the next save drops them);
  * the coordinates are re-snapped and clamped by deskicons_layout, because the
  * monitor layout may have changed since they were written.
  */
-static void deskicons_state_load(syn_server_t *s)
+static void deskicons_state_apply(syn_server_t *s)
 {
     char path[256];
     if (!deskicons_state_path(path, sizeof(path))) return;
@@ -555,7 +607,7 @@ void deskicons_reload(syn_server_t *s)
     /* Before the sort: the state file carries the arrange mode as well as the
      * dragged cells, and the mode is what the sort is about to use. Matching an
      * icon by name does not care what order the array is in. */
-    deskicons_state_load(s);
+    deskicons_state_apply(s);
 
     /* Stable, human order: readdir returns them in whatever order the
      * filesystem feels like, which would reshuffle the desktop every reload. */

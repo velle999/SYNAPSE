@@ -424,7 +424,8 @@ void synui_config_load(syn_config_t *cfg)
     cfg->master_factor = 0.60f;
     cfg->titlebar_height = TITLEBAR_HEIGHT_DEF;
     cfg->remember_geometry = true;
-    cfg->desktop_icons     = false;   /* opt-in; the menu can flip it live */
+    cfg->desktop_icons     = false;   /* opt-in; the menu flips it live, and
+                                         deskicons.state remembers the flip */
     cfg->desktop_icon_arrange = SYN_ARRANGE_NAME;
     cfg->animation_ms    = ANIMATION_MS_DEF;
     { static const float c[4] = COLOR_TITLEBAR_NORM;    memcpy(cfg->titlebar_color,       c, sizeof(c)); }
@@ -622,6 +623,7 @@ void synui_config_load(syn_config_t *cfg)
         power_state_load(cfg);
         welcome_state_load(cfg);
         launcher_state_load(cfg);
+        deskicons_state_load(cfg);
         return;
     }
 
@@ -1022,4 +1024,5 @@ void synui_config_load(syn_config_t *cfg)
     power_state_load(cfg);
     welcome_state_load(cfg);
     launcher_state_load(cfg);
+    deskicons_state_load(cfg);
 }
