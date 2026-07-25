@@ -34,8 +34,12 @@ static void layer_keyboard_enter(syn_server_t *s, struct wlr_surface *surface)
  * closes), or clear it if there is none. */
 static void restore_toplevel_focus(syn_server_t *s)
 {
+    /* view_surface(), not ->xdg_surface->surface: an X11 view has a NULL
+     * xdg_surface (the union is selected by is_xwayland), so the raw deref
+     * crashed whenever a keyboard-grabbing layer surface — the start menu —
+     * unmapped while an XWayland window held the focus. */
     if (s->focused_view && s->focused_view->mapped)
-        focus_view(s, s->focused_view, s->focused_view->xdg_surface->surface);
+        focus_view(s, s->focused_view, view_surface(s->focused_view));
     else
         wlr_seat_keyboard_notify_clear_focus(s->seat);
 }

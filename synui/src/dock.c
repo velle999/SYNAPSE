@@ -346,6 +346,35 @@ static bool dock_output_fullscreen(syn_output_t *o)
     return false;
 }
 
+/* Show only the sub-rectangle of the dock buffer that lands on `o`, or the
+ * whole thing when w/h match the buffer.
+ *
+ * The dock hides by sliding its node past its own output's edge. That is
+ * invisible on a single monitor, but the tree hangs off the scene ROOT in
+ * layout coordinates, so on a stacked/side-by-side layout "off my bottom edge"
+ * is "on top of my neighbour" — the top monitor's dock slid down and painted
+ * itself across the screen below for the whole animation. Nothing clipped it,
+ * because a wlr_scene_tree has no clip; the crop has to go on the buffer.
+ *
+ * The crop goes on the buffer CHILD, not on the tree: dock_entry_at() reads
+ * icon hit-boxes relative to o->dock.tree->node, so the tree has to stay
+ * pinned to the dock canvas's origin even when only part of it is painted. */
+static void dock_set_crop(syn_output_t *o, int sx, int sy, int w, int h,
+                          int buf_w, int buf_h)
+{
+    if (!o->dock.icons_buf) return;
+    if (w == buf_w && h == buf_h) {
+        wlr_scene_node_set_position(&o->dock.icons_buf->node, 0, 0);
+        wlr_scene_buffer_set_source_box(o->dock.icons_buf, NULL);
+        wlr_scene_buffer_set_dest_size(o->dock.icons_buf, buf_w, buf_h);
+        return;
+    }
+    wlr_scene_node_set_position(&o->dock.icons_buf->node, sx, sy);
+    struct wlr_fbox src = { .x = sx, .y = sy, .width = w, .height = h };
+    wlr_scene_buffer_set_source_box(o->dock.icons_buf, &src);
+    wlr_scene_buffer_set_dest_size(o->dock.icons_buf, w, h);
+}
+
 /* Place the tree at its slide offset and enable it only while any part is
  * on-screen. slide_progress 1 = flush against the edge, 0 = pushed fully off
  * it (along the edge normal). While this output's dock is being dragged, the
@@ -356,8 +385,13 @@ static void dock_apply_position(syn_output_t *o)
     syn_server_t *s = o->server;
     if (!o->dock.tree) return;
 
-    /* Dragging: float freely under the cursor, always visible. */
+    /* Dragging: float freely under the cursor, always visible. Deliberately
+     * uncropped — a drag is how the dock is moved between edges and outputs,
+     * so it has to be able to cross them. */
     if (s->dock_drag.active && s->dock_drag.moved && s->dock_drag.output == o) {
+        int dw, dh, dbx, dby;
+        if (dock_geometry(o, &dbx, &dby, &dw, &dh))
+            dock_set_crop(o, 0, 0, dw, dh, dw, dh);
         wlr_scene_node_set_position(&o->dock.tree->node,
                                     (int)s->dock_drag.float_x,
                                     (int)s->dock_drag.float_y);
@@ -382,9 +416,19 @@ static void dock_apply_position(syn_output_t *o)
     case SYN_DOCK_EDGE_BOTTOM:
     default:                   y = by + (int)lround(off * bh); break;
     }
-    wlr_scene_node_set_position(&o->dock.tree->node, x, y);
 
-    bool visible = p > 0.001;
+    /* Clip the slid rect to this output and paint only that part. */
+    struct wlr_box ob;
+    output_box_of(s, o, &ob);
+    int cx0 = x > ob.x ? x : ob.x;
+    int cy0 = y > ob.y ? y : ob.y;
+    int cx1 = (x + bw) < (ob.x + ob.width)  ? (x + bw) : (ob.x + ob.width);
+    int cy1 = (y + bh) < (ob.y + ob.height) ? (y + bh) : (ob.y + ob.height);
+    int cw = cx1 - cx0, ch = cy1 - cy0;
+
+    bool visible = p > 0.001 && cw > 0 && ch > 0;
+    if (visible) dock_set_crop(o, cx0 - x, cy0 - y, cw, ch, bw, bh);
+    wlr_scene_node_set_position(&o->dock.tree->node, x, y);
     wlr_scene_node_set_enabled(&o->dock.tree->node, visible);
     if (visible) {
         /* The dock's tree is a UI sibling of window_tree, so raising it to top
