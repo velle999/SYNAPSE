@@ -888,6 +888,14 @@ typedef struct {
     /* The user dragged this one: its cell came from deskicons.state (or from a
      * drop this session) and the auto-grid must leave it alone. */
     int   placed;
+    /* Where the user actually put it, in layout coords — the drop, or the
+     * deskicons.state line. Kept apart from x/y because x/y is *this* layout's
+     * answer: the cell the pin snaps to depends on the usable box, which shrinks
+     * when the bar reserves its strip and changes again on every display config.
+     * Re-snapping x/y would fold each of those into the placement for good;
+     * re-snapping the pin lets the icon come back the moment the box does, and
+     * it is the pin that gets persisted. Only meaningful while `placed`. */
+    int   pin_x, pin_y;
     cairo_surface_t *icon_surface; /* borrowed from icons.c; may be NULL */
 } syn_deskicon_t;
 

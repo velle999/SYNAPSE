@@ -589,6 +589,65 @@ int main(void)
     }
     printf("ok 19 — turning them back on is persisted too, cell intact\n");
 
+    /* ── 20. A smaller usable box does not eat the placement ── */
+    /*
+     * Everything that re-grids the desktop re-snaps the pinned icons against the
+     * box in force at the time, and that box is not a constant: the bar reserves
+     * its strip only once quickshell has started, a monitor can be unplugged, and
+     * a mode change resizes the one that is left. A pin clamped onto a smaller
+     * grid has to be exactly that — clamped for as long as the grid is small —
+     * and not a new placement, or one session on a 800x480 output would be the
+     * last one the user's arrangement survived.
+     */
+    {
+        int i = find_icon(s, "zulu.bin");
+        drag(s, "zulu.bin", CELL_X(5) - s->deskicons[i].x,
+                            CELL_Y(8) - s->deskicons[i].y);
+        assert_cell(s, "zulu.bin", 5, 8);
+        assert_no_overlap(s);
+    }
+
+    struct wlr_box big = test_area;
+
+    /* A grid of 8x4 cells: the pinned column still exists, the row does not. */
+    test_area = (struct wlr_box){ .x = 0, .y = 40, .width = 800, .height = 480 };
+    deskicons_layout(s);
+    assert_cell(s, "zulu.bin", 5, 3);   /* clamped onto the last row it has */
+    assert_no_overlap(s);
+
+    test_area = big;
+    deskicons_layout(s);
+    assert_cell(s, "zulu.bin", 5, 8);   /* and back where the user left it */
+    assert_no_overlap(s);
+    printf("ok 20 — a pin clamped onto a smaller grid returns when it grows\n");
+
+    /* ── 21. And the clamp is never what gets written ────── */
+    /*
+     * The save is driven by whatever the user does next, which may well be a
+     * drag while the small monitor is the only one there. Writing the clamped
+     * cell would make the loss permanent the moment it reached the file.
+     */
+    test_area = (struct wlr_box){ .x = 0, .y = 40, .width = 800, .height = 480 };
+    deskicons_layout(s);
+    drag(s, "alpha.txt", 0, 2 * SYN_DESKICON_H);
+    {
+        char *st = slurp(statefile);
+        assert(st);
+        /* 5 columns and 8 rows into the *big* grid — the coords the drop made. */
+        char want[64];
+        snprintf(want, sizeof(want), "pos=%d,%d,zulu.bin\n",
+                 big.x + SYN_DESKICON_PAD + 5 * SYN_DESKICON_W,
+                 big.y + SYN_DESKICON_PAD + 8 * SYN_DESKICON_H);
+        if (!strstr(st, want)) {
+            fprintf(stderr, "FAIL: state has no '%s':\n%s", want, st);
+            abort();
+        }
+    }
+    test_area = big;
+    deskicons_reload(s);
+    assert_cell(s, "zulu.bin", 5, 8);   /* the file still puts it back */
+    printf("ok 21 — the state file keeps the pin, not the clamped cell\n");
+
     /* Leave the scratch tree behind only on success. */
     for (unsigned i = 0; i < sizeof(extras) / sizeof(extras[0]); i++) {
         snprintf(path, sizeof(path), "%s/%s", desk, extras[i]);

@@ -19,6 +19,15 @@
  * back to the same spot next login. Everything not dragged still flows into the
  * free cells in name order.
  *
+ * The cell the user chose is kept in `pin_x/pin_y` and never overwritten by a
+ * layout; x/y is only where this layout put it. The two differ whenever the
+ * usable box is not the one the pin was made against — and it usually is not,
+ * because the bar reserves its strip after synui has started, so the first
+ * layout of a session runs against the whole output. Every re-grid re-snaps the
+ * pin, and it is the pin that is persisted; snapping x/y instead folded each
+ * transient box into the placement, and one layout on a smaller grid clamped an
+ * icon's row away for good.
+ *
  * That state file also carries the two settings the menu can flip — whether
  * icons are shown at all, and the arrange mode — because a runtime toggle that
  * only lived in s->config would be undone by the next synui_config_reload, let
@@ -451,7 +460,10 @@ static void deskicons_state_save(syn_server_t *s)
          * file we cannot re-read. */
         if (strchr(base, '\n') || strchr(base, '\r')) continue;
 
-        fprintf(f, "pos=%d,%d,%s\n", ic->x, ic->y, base);
+        /* The pin, not x/y: x/y is where this layout put the icon against the
+         * usable box in force right now, and writing that back would bake a bar
+         * strip or a since-departed monitor into the placement. */
+        fprintf(f, "pos=%d,%d,%s\n", ic->pin_x, ic->pin_y, base);
     }
     fclose(f);
 }
@@ -534,6 +546,8 @@ static void deskicons_state_apply(syn_server_t *s)
             const char *base = strrchr(s->deskicons[i].path, '/');
             base = base ? base + 1 : s->deskicons[i].path;
             if (strcmp(base, name) != 0) continue;
+            s->deskicons[i].pin_x  = x;
+            s->deskicons[i].pin_y  = y;
             s->deskicons[i].x      = x;
             s->deskicons[i].y      = y;
             s->deskicons[i].placed = 1;
@@ -664,17 +678,20 @@ void deskicons_layout(syn_server_t *s)
      * an icon's own x/y is where it sits. */
     char settled[SYN_DESKICON_MAX] = {0};
 
-    /* Pass 1: dragged icons. The saved coords are re-snapped and clamped onto
+    /* Pass 1: dragged icons. The pinned coords are re-snapped and clamped onto
      * this grid — the output may have been resized, or the position may have
-     * been written against a monitor that is no longer here. Two icons landing
-     * on the same cell is settled in array (name) order; the loser flows with
-     * the rest rather than hiding underneath. */
+     * been written against a monitor that is no longer here. Always from the
+     * pin: snapping x/y would compound, so a bar strip appearing after login,
+     * or a grid that briefly lost a row to a smaller monitor, would move the
+     * icon permanently instead of just for as long as the box is that shape.
+     * Two icons landing on the same cell is settled in array (name) order; the
+     * loser flows with the rest rather than hiding underneath. */
     for (int i = 0; i < s->deskicon_count; i++) {
         syn_deskicon_t *ic = &s->deskicons[i];
         if (!ic->placed) continue;
 
         int col, row, cx, cy;
-        deskicon_cell_at(&area, cols, rows, ic->x, ic->y, &col, &row);
+        deskicon_cell_at(&area, cols, rows, ic->pin_x, ic->pin_y, &col, &row);
         deskicon_cell_origin(&area, col, row, &cx, &cy);
         if (deskicon_cell_taken(s, settled, cx, cy)) continue;
 
@@ -850,14 +867,25 @@ void deskicon_drag_end(syn_server_t *s, double lx, double ly)
         for (int k = 0; k < s->deskicon_count; k++) {
             if (k == i) continue;
             if (s->deskicons[k].x != cx || s->deskicons[k].y != cy) continue;
+            s->deskicons[k].pin_x  = orig_x;
+            s->deskicons[k].pin_y  = orig_y;
             s->deskicons[k].x      = orig_x;
             s->deskicons[k].y      = orig_y;
             s->deskicons[k].placed = 1;
             break;
         }
 
-        s->deskicons[i].x = cx;
-        s->deskicons[i].y = cy;
+        /* The snapped cell is the pin: it is where the user aimed, expressed on
+         * the grid that was on screen when they aimed at it. */
+        s->deskicons[i].pin_x = cx;
+        s->deskicons[i].pin_y = cy;
+        s->deskicons[i].x     = cx;
+        s->deskicons[i].y     = cy;
+    } else {
+        /* No output to snap against (the monitor went away mid-drag): the drop
+         * point itself is the pin, and the next layout will grid it. */
+        s->deskicons[i].pin_x = s->deskicons[i].x;
+        s->deskicons[i].pin_y = s->deskicons[i].y;
     }
 
     s->deskicons[i].placed = 1;

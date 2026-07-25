@@ -81,6 +81,7 @@ void layer_arrange_output(syn_output_t *output)
         }
     }
 
+    bool usable_changed = !wlr_box_equal(&output->usable_area, &usable);
     output->usable_area = usable;
     wlr_log(WLR_DEBUG, "synui: %s usable area %dx%d+%d+%d (full %dx%d)",
             output->wlr_output->name, usable.width, usable.height,
@@ -89,6 +90,19 @@ void layer_arrange_output(syn_output_t *output)
     /* Re-tile the visible desktop so windows fit the new usable area. */
     if (!s->shutting_down)
         layout_apply(s, server_active_workspace(s));
+
+    /* The desktop icon grid is sized against that same box, and the bar reserves
+     * its strip *after* synui has started — quickshell is a client, so the very
+     * first layout, at the end of init, ran against the whole output. Without
+     * this the top row stays under the bar until something else re-grids the
+     * desktop (a drag, a monitor change), and until then the icons are a bar's
+     * height above where the placement they were saved from puts them. Only on a
+     * real change: this runs on every layer commit, and a repaint rebuilds a
+     * screen-sized cairo surface. */
+    if (usable_changed && !s->shutting_down) {
+        deskicons_layout(s);
+        synui_render_deskicons(s);
+    }
 
     /* A bar that (un)mapped or re-anchored must re-check the fullscreen rule. */
     layer_update_occlusion(s, output);
