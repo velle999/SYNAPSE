@@ -1599,6 +1599,11 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
         dock_drag_motion(s, s->cursor->x, s->cursor->y);
         return;
     }
+    /* Same for a desktop icon being dragged to a new cell. */
+    if (s->deskicon_drag.active) {
+        deskicon_drag_motion(s, s->cursor->x, s->cursor->y);
+        return;
+    }
     /* Context menu hover highlight follows the cursor. */
     if (s->dockmenu.visible)
         dockmenu_motion(s, s->cursor->x, s->cursor->y);
@@ -1671,6 +1676,13 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
      * before the generic grab-release below. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->dock_drag.active) {
         dock_drag_end(s, s->cursor->x, s->cursor->y);
+        return;
+    }
+
+    /* A desktop-icon drag is the same story: PASSTHROUGH throughout, so its
+     * release has to be caught here or the drop would never be committed. */
+    if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->deskicon_drag.active) {
+        deskicon_drag_end(s, s->cursor->x, s->cursor->y);
         return;
     }
 
@@ -1843,7 +1855,13 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                                (time_msec - s->deskicon_last_click_ms < 400);
                     s->deskicon_last_click_idx = dbl ? -1 : icon;
                     s->deskicon_last_click_ms  = time_msec;
-                    if (dbl) deskicon_activate(s, icon);
+                    if (dbl) {
+                        deskicon_activate(s, icon);
+                    } else {
+                        /* Arm a move. It only becomes a drag once the cursor
+                         * travels, so a plain single click still just selects. */
+                        deskicon_drag_begin(s, icon, s->cursor->x, s->cursor->y);
+                    }
                     return;
                 }
                 /* Clicking empty desktop drops focus decoration on the icons

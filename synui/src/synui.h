@@ -862,6 +862,9 @@ typedef struct {
     int   is_dir;
     int   is_desktop;
     int   x, y;                    /* cell origin, layout coords */
+    /* The user dragged this one: its cell came from deskicons.state (or from a
+     * drop this session) and the auto-grid must leave it alone. */
+    int   placed;
     cairo_surface_t *icon_surface; /* borrowed from icons.c; may be NULL */
 } syn_deskicon_t;
 
@@ -1639,6 +1642,16 @@ struct syn_server {
      * titlebar's (input.c) so the desktop does not feel different. */
     uint32_t       deskicon_last_click_ms;
     int            deskicon_last_click_idx;
+    /* deskmenu.c: drag an icon to a new cell. Same armed-then-moved shape as
+     * dock_drag above — a press arms it, crossing the slop makes it a real
+     * drag, and the drop snaps to a grid cell and writes deskicons.state. */
+    struct {
+        int    active;
+        int    moved;              /* passed the slop → really dragging */
+        int    idx;                /* icon being dragged, -1 when idle */
+        double start_x, start_y;   /* press point, layout coords */
+        int    orig_x, orig_y;     /* the icon's cell origin at press */
+    } deskicon_drag;
 
     /* Alt+Tab (input.c). focus_counter stamps syn_view::focus_seq on every real
      * focus change, which is the most-recently-used order Alt+Tab walks.
@@ -2957,6 +2970,13 @@ void deskicons_layout(syn_server_t *s);   /* re-grid onto the primary output */
 int  deskicon_at(syn_server_t *s, double lx, double ly);
 void deskicon_activate(syn_server_t *s, int i);
 void deskicon_select(syn_server_t *s, int i);
+
+/* Drag an icon to a new cell. begin() arms on a press; motion() floats the
+ * icon under the cursor once the slop is crossed; end() snaps it to the
+ * nearest cell and persists every dragged icon to deskicons.state. */
+void deskicon_drag_begin(syn_server_t *s, int idx, double lx, double ly);
+void deskicon_drag_motion(syn_server_t *s, double lx, double ly);
+void deskicon_drag_end(syn_server_t *s, double lx, double ly);
 
 void synui_render_deskmenu(syn_server_t *s);
 void synui_render_deskicons(syn_server_t *s);

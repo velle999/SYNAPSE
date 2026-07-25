@@ -78,6 +78,12 @@ titlebar_height = 26
 # Exec=, anything else goes through xdg-open. There is no file watch, so a file
 # added elsewhere shows up the next time the setting is toggled or a monitor
 # changes.
+#
+# Drag an icon to move it: it snaps to the nearest grid cell on release, swaps
+# with whatever was already sitting there, and its cell is written to
+# ~/.config/synui/deskicons.state so it comes back to the same place next login.
+# Icons you have never dragged still flow into the free cells in name order.
+# Delete deskicons.state to put everything back on the auto-grid.
 # desktop_icons = on
 
 # Titlebar colors, #rrggbb (defaults shown). Deliberately muted: the border

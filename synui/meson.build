@@ -305,3 +305,15 @@ cat_render_test = executable('cat_render_test',
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])
+
+# Desktop-icon grid, drag-to-move and deskicons.state. Links deskmenu.c against
+# stubs for the compositor half (outputs, render, config paths) because there is
+# no way to synthesize a pointer drag on the headless backend — see the test's
+# header. It writes only into its own mkdtemp scratch $HOME.
+deskicon_drag_test = executable('deskicon_drag_test',
+  ['tests/deskicon_drag_test.c', 'src/deskmenu.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('deskicon_drag', deskicon_drag_test)
