@@ -37,6 +37,7 @@ typedef struct {
     char app_id[128];
     int  x, y, w, h;
     int  maximized;
+    int  floating;    /* was out of the tiling flow when it closed */
 } geom_entry_t;
 
 static geom_entry_t table[GEOM_PERSIST_MAX];
@@ -100,6 +101,7 @@ static void table_load(void)
         memset(e, 0, sizeof(*e));
         snprintf(e->app_id, sizeof(e->app_id), "%s", tok);
 
+        bool saw_floating = false;
         while ((tok = strtok(NULL, " \t\r\n"))) {
             char *eq = strchr(tok, '=');
             if (!eq) continue;
@@ -110,7 +112,20 @@ static void table_load(void)
             else if (!strcmp(tok, "w"))         e->w         = atoi(val);
             else if (!strcmp(tok, "h"))         e->h         = atoi(val);
             else if (!strcmp(tok, "maximized")) e->maximized = atoi(val);
+            else if (!strcmp(tok, "floating")) {
+                e->floating = atoi(val);
+                saw_floating = true;
+            }
         }
+
+        /* Migration for files written before floating= existed. An entry is only
+         * ever written for a window that was *free* (see geom_persist_save), so a
+         * non-maximized one must have been either floating or on a floating
+         * desktop — either way, "reopen it free" is the claim the box was saved
+         * to make. A maximized entry keeps floating = 0, so a tiled window that
+         * closed maximized still un-maximizes back into the tiler. */
+        if (!saw_floating)
+            e->floating = !e->maximized;
 
         /* Drop entries below the placement floor rather than clamping them up:
          * a file written before the save-side guards existed still holds
@@ -156,8 +171,8 @@ static void table_write(void)
                "# recording entirely.\n");
     for (int i = 0; i < table_count; i++) {
         geom_entry_t *e = &table[i];
-        fprintf(f, "window %s x=%d y=%d w=%d h=%d maximized=%d\n",
-                e->app_id, e->x, e->y, e->w, e->h, e->maximized);
+        fprintf(f, "window %s x=%d y=%d w=%d h=%d maximized=%d floating=%d\n",
+                e->app_id, e->x, e->y, e->w, e->h, e->maximized, e->floating);
     }
     fclose(f);
 }
@@ -203,13 +218,19 @@ void geom_persist_save(syn_view_t *view)
     key_of(app, key, sizeof(key));
 
     int x = view->x, y = view->y, w = view->w, h = view->h;
+    int floating = view->floating;
     if (view->maximized) {
         /* view->x/y/w/h is the output box while maximized; the box the user
-         * actually sized is the saved restore geometry. */
+         * actually sized is the saved restore geometry. Same for the flag:
+         * view_apply_maximized forces floating = 1 (a maximized window has to
+         * leave the tiling flow) and parks the real answer in saved_floating,
+         * so reading the live flag here would record every maximized tiled
+         * window as one the user had floated. */
         x = view->saved_geo.x;
         y = view->saved_geo.y;
         w = view->saved_geo.width;
         h = view->saved_geo.height;
+        floating = view->saved_floating;
     }
     /* Below the placement floor there is nothing worth remembering: layout.c
      * would only clamp it back up to MIN_WIN, and a splash screen that closed
@@ -232,6 +253,7 @@ void geom_persist_save(syn_view_t *view)
 
     e->x = x; e->y = y; e->w = w; e->h = h;
     e->maximized = view->maximized ? 1 : 0;
+    e->floating  = floating ? 1 : 0;
 
     table_write();
 }
@@ -245,7 +267,8 @@ void geom_persist_save(syn_view_t *view)
  * result lands on a monitor that currently exists — an entry written on a
  * three-monitor desk must not open the window off the edge of a laptop.
  */
-bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized)
+bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized,
+                         int *floating)
 {
     if (!view || !view->server->config.remember_geometry) return false;
     if (view->fullscreen) return false;
@@ -262,5 +285,6 @@ bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized)
 
     *box = (struct wlr_box){ e->x, e->y, e->w, e->h };
     *maximized = e->maximized;
+    *floating  = e->floating;
     return true;
 }

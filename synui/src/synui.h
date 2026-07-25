@@ -2473,7 +2473,8 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view);
  * _save is called when a window unmaps; _lookup feeds layout_restore_geometry,
  * which does the clamping onto a currently-connected output. */
 void geom_persist_save(syn_view_t *view);
-bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized);
+bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized,
+                         int *floating);
 void layout_move_in_stack(syn_server_t *s, syn_view_t *view, int dir);
 void layout_adjust_master(syn_server_t *s, syn_workspace_t *ws, float delta);
 /* Re-home a window onto another monitor, keeping it on its current desktop. */

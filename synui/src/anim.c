@@ -137,10 +137,20 @@ static void blur_buffer_size(struct wlr_scene_buffer *buffer, int *w, int *h)
     }
 }
 
-/* Match the companion to its buffer. Cheap enough to call on every client
- * paint: each setter early-returns when the value is unchanged. */
-static void blur_sync(struct buffer_blur *bb, struct wlr_scene_buffer *buffer,
-                      struct fx_corner_radii corners)
+/* Match the companion's *geometry* to its buffer. Cheap enough to call on every
+ * client paint: each setter early-returns when the value is unchanged.
+ *
+ * This has to run on every paint, not only when the window's effects are
+ * recomputed. The blur node is sized from the buffer, and the buffer changes
+ * size a frame *after* the resize the client was configured for — so anything
+ * that resizes a window (a drag on its edge, maximize, a layout reflow) leaves
+ * the companion at the old size until something else re-syncs it. That is the
+ * "the shadow keeps the window's old size while I drag, and snaps right when I
+ * click" report: the leftover is a blur node still covering the box the window
+ * used to fill, and the click was a focus change, which does re-sync.
+ */
+static void blur_sync_geometry(struct buffer_blur *bb,
+                               struct wlr_scene_buffer *buffer)
 {
     if (!bb->blur) return;
 
@@ -152,10 +162,19 @@ static void blur_sync(struct buffer_blur *bb, struct wlr_scene_buffer *buffer,
     }
 
     wlr_scene_blur_set_size(bb->blur, w, h);
-    wlr_scene_blur_set_corner_radii(bb->blur, corners);
     wlr_scene_node_set_position(&bb->blur->node, buffer->node.x, buffer->node.y);
     wlr_scene_node_place_below(&bb->blur->node, &buffer->node);
     wlr_scene_node_set_enabled(&bb->blur->node, true);
+}
+
+/* Geometry plus the corner radii, which only the effects walk knows. */
+static void blur_sync(struct buffer_blur *bb, struct wlr_scene_buffer *buffer,
+                      struct fx_corner_radii corners)
+{
+    if (!bb->blur) return;
+
+    blur_sync_geometry(bb, buffer);
+    wlr_scene_blur_set_corner_radii(bb->blur, corners);
 }
 
 /* Turn blur on or off for one buffer, creating or destroying the companion. */
@@ -387,6 +406,14 @@ static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
 {
     (void)sx; (void)sy;
     wlr_scene_buffer_set_opacity(buffer, *(const float *)data);
+
+    /* Under scenefx 0.4 backdrop blur was a flag on this buffer and needed no
+     * upkeep. Under 0.5 it is a separate node that only covers what it is told
+     * to, so the buffer having just painted at a new size is exactly the event
+     * that has to move it — see blur_sync_geometry. Existing companions only:
+     * whether a window *gets* blur is the effects walk's call, not this one's. */
+    struct buffer_blur *bb = blur_find(buffer);
+    if (bb) blur_sync_geometry(bb, buffer);
 }
 
 /*
@@ -409,10 +436,16 @@ static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
  *     like an opacity-specific bug rather than a lost window: they are
  *     scenefx-only fields that commit handler does not touch.
  *
- * Opacity only, and deliberately NOT anim_apply_alpha: this runs on every frame
- * a client paints, so it must not rebuild decorations or re-render the titlebar.
- * wlr_scene_buffer_set_opacity early-returns when the value is unchanged, so the
- * steady-state cost is a float compare per buffer.
+ * That last point stopped being true at scenefx 0.5, which turned backdrop blur
+ * from a field on the buffer into a node beside it. A node has a size, and the
+ * size it needs is the one the client just painted — so this walk now also
+ * re-seats each buffer's blur companion (set_buffer_opacity), which is what
+ * keeps the blur from lagging a resize.
+ *
+ * Still deliberately NOT anim_apply_alpha: this runs on every frame a client
+ * paints, so it must not rebuild decorations or re-render the titlebar. Every
+ * setter it does call early-returns when the value is unchanged, so the
+ * steady-state cost is a compare per buffer.
  */
 void anim_reapply_opacity(syn_view_t *view)
 {

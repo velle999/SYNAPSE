@@ -647,7 +647,14 @@ void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
  *  - The box only applies to a window the user positions themselves: a
  *    floating view, or any view on a floating desktop. A tiled window's
  *    geometry belongs to the layout engine, and handing it a saved box would
- *    only be overwritten by the next layout_apply anyway.
+ *    only be overwritten by the next layout_apply anyway. But "is this view
+ *    floating" is a question about the window that is opening *now*, and a
+ *    freshly-mapped one is never floating yet — so on a tiling desktop that
+ *    test alone rejected every restore, and the remembered box was only ever
+ *    visible to someone running a floating desktop. Whether the window was free
+ *    is a property of the *entry*, which is why floating is persisted with it:
+ *    a window the user floated and sized reopens floating, and the tiler is
+ *    told to reflow around it.
  *  - The maximized state applies whatever the layout is — maximize is not a
  *    tiling feature (same reasoning as the re-fit pass in layout_apply). A
  *    tiled window restored maximized keeps saved_floating = 0, so
@@ -660,13 +667,26 @@ void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
 bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
 {
     struct wlr_box saved;
-    int saved_max = 0;
-    if (!geom_persist_lookup(view, &saved, &saved_max))
+    int saved_max = 0, saved_float = 0;
+    if (!geom_persist_lookup(view, &saved, &saved_max, &saved_float))
         return false;
 
-    bool free_window = view->floating ||
-                       (view->workspace &&
-                        view->workspace->layout == LAYOUT_FLOATING);
+    bool on_floating_desk = view->workspace &&
+                            view->workspace->layout == LAYOUT_FLOATING;
+
+    /* The window was free when it closed, so give it back its freedom before
+     * asking whether it may keep its box — otherwise the tiler owns it and the
+     * saved geometry is dropped. Not needed on a floating desktop (nothing
+     * tiles there), and not for a maximized entry: view_apply_maximized below
+     * floats it for the duration anyway, and saved_floating has to stay 0 so
+     * un-maximizing hands it back to the tiler. */
+    bool refloated = false;
+    if (saved_float && !saved_max && !view->floating && !on_floating_desk) {
+        view->floating = 1;
+        refloated = true;
+    }
+
+    bool free_window = view->floating || on_floating_desk;
 
     if (free_window) {
         /* x/y are absolute layout coordinates, so they name a monitor as much
@@ -702,6 +722,13 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
 
         view_resize(view, sx, sy, sw, sh);
     }
+
+    /* The caller tiled this view before handing it here (both map paths run
+     * layout_apply first), so the desktop is still laid out as though it were
+     * one of the tiles. Reflow now it has left the flow, or the windows it was
+     * sharing a slot with stay squeezed around a gap. */
+    if (refloated)
+        layout_apply(s, view->workspace);
 
     /* Re-maximizing needs the restore box already in place, which the
      * view_resize above just established. */
