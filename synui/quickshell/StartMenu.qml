@@ -61,7 +61,15 @@ PanelWindow {
     // NEVER reserve space. This is a transient panel; an exclusive zone would
     // shove every window on the monitor down by 470px each time it opened —
     // the same trap the OSD hit (see Osd.qml).
-    exclusiveZone: 0
+    //
+    // Ignore, not a zone of 0: `margins.top` below is measured from wherever
+    // layer-shell decides this surface's anchor edge is, and a zone of 0 still
+    // RESPECTS everyone else's. So with a bar that reserves its 28px (auto-hide
+    // off), the menu started 28px below the bar and then added its own 28px
+    // margin on top of that — it hung off the bar with a strip of desktop
+    // showing through the join. Ignore anchors it to the true screen edge, so
+    // the margin means what it says on every configuration.
+    exclusionMode: ExclusionMode.Ignore
 
     // The whole point of the port. Without it the menu is deaf, which is exactly
     // the waybar failure it replaces.

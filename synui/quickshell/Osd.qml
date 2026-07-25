@@ -36,7 +36,12 @@ PanelWindow {
     // MUST NOT reserve space. An OSD with an exclusive zone would shove every
     // window down the screen for a second and a half, every time the volume
     // changed.
-    exclusiveZone: 0
+    //
+    // Ignore rather than a zone of 0, for the same reason as the start menu: a
+    // zone of 0 asks for nothing but still respects the bar's, so `margins.top`
+    // stacked on top of the reserved 28px and the popup sat a bar's height too
+    // low whenever auto-hide was off.
+    exclusionMode: ExclusionMode.Ignore
 
     // Nor take keyboard focus: the OSD appears while the user is typing or
     // gaming, and EXCLUSIVE focus here would eat their keys.

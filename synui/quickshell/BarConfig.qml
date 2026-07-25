@@ -73,24 +73,53 @@ QtObject {
 
     function toggle(output, key) { root.set(output, key, !root.get(output, key)) }
 
+    function parse(text) {
+        try {
+            const j = JSON.parse(text)
+            if (j && typeof j === "object") root.perOutput = j
+        } catch (e) {
+            // Keep what is in memory. Blanking every monitor's layout because
+            // one write raced a read would be far worse than ignoring a bad
+            // parse.
+        }
+    }
+
     property FileView configFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/bar.json"
         watchChanges: true
         // The bar is both reader and writer here, so a torn read is a real
         // possibility rather than a theoretical one.
         atomicWrites: true
+
+        /*
+         * THE FIRST READ MUST BE SYNCHRONOUS, and this is not a preference.
+         *
+         * `autohide` decides the bar's exclusive zone, and quickshell only ever
+         * sends set_exclusive_zone ONCE per surface unless the value changes
+         * AFTER that surface's first configure. An async read landed inside
+         * exactly that window — traced: get_layer_surface,
+         * set_exclusive_zone(28), then this file loading and flipping the
+         * property to 0, and only THEN the first configure. Wayland never saw
+         * the 0. So an auto-hiding bar reserved its 28px forever: it slid out of
+         * sight and left the strip of bare desktop above every maximized window
+         * that auto-hide exists to avoid, with the QML property reading 0 the
+         * whole time.
+         *
+         * Loading before any window exists also means the per-monitor module
+         * switches are right on the first frame instead of popping in.
+         */
+        blockLoading: true
+
         onFileChanged: reload()
-        onLoaded: {
-            try {
-                const j = JSON.parse(this.text())
-                if (j && typeof j === "object") root.perOutput = j
-            } catch (e) {
-                // Keep what is in memory. Blanking every monitor's layout
-                // because one write raced a read would be far worse than
-                // ignoring a bad parse.
-            }
-        }
+        onLoaded: root.parse(this.text())
         // Absent file is the normal case: nobody has changed anything yet.
         onLoadFailed: root.perOutput = ({})
     }
+
+    // Forces the blocking read above to happen NOW — while this singleton is
+    // being constructed, which is before the first `get()` call that referenced
+    // it can return, and therefore before any PanelWindow exists. Without a
+    // reader the FileView would sit idle until something asked for its text,
+    // and `blockLoading` would have nothing to block on.
+    Component.onCompleted: root.parse(configFile.text())
 }

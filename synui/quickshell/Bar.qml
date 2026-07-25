@@ -62,6 +62,15 @@ PanelWindow {
     // Reserve the strip so maximized windows stop below it — but an auto-hiding
     // bar must reserve NOTHING, or it hides and leaves its own empty gap behind,
     // which is the whole thing it was asked not to do.
+    //
+    // This value has to be RIGHT AT CREATION: quickshell sends
+    // set_exclusive_zone once when it makes the layer surface, and a change
+    // arriving before that surface's first configure is dropped on the floor —
+    // silently, with the QML property reading the new value. That is why
+    // BarConfig reads bar.json synchronously (blockLoading); an async read
+    // landed inside exactly that window and left every auto-hiding bar
+    // reserving 28px forever. Do not make `autohide` depend on anything that
+    // resolves later than construction.
     exclusiveZone: bar.autohide ? 0 : Theme.barHeight
 
     // Not focusable: the bar is pointer-driven, and taking keyboard focus here
