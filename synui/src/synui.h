@@ -1634,6 +1634,11 @@ struct syn_server {
     struct {
         struct wlr_scene_tree   *tree;
         struct wlr_scene_buffer *buf;
+        /* The icon under a live drag is lifted out of the desktop buffer into
+         * one of its own, so following the cursor is a node move rather than a
+         * full-desktop repaint. See synui_render_deskicons. */
+        struct wlr_scene_tree   *drag_tree;
+        struct wlr_scene_buffer *drag_buf;
     } deskicons_ui;
     syn_deskicon_t deskicons[SYN_DESKICON_MAX];
     int            deskicon_count;
@@ -2980,6 +2985,9 @@ void deskicon_drag_end(syn_server_t *s, double lx, double ly);
 
 void synui_render_deskmenu(syn_server_t *s);
 void synui_render_deskicons(syn_server_t *s);
+/* Move the drag layer to the dragged icon's current position. No repaint —
+ * this is the per-motion-event path of a drag. */
+void synui_move_deskicon_drag(syn_server_t *s);
 
 /* icons.c: resolve a .desktop file we have the path of (rather than an
  * app_id). NULL if it has no runnable Exec=. */

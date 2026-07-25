@@ -552,9 +552,11 @@ void deskicon_drag_motion(syn_server_t *s, double lx, double ly)
 
     double dx = lx - s->deskicon_drag.start_x;
     double dy = ly - s->deskicon_drag.start_y;
+    bool lifted = false;
     if (!s->deskicon_drag.moved) {
         if (hypot(dx, dy) < DESKICON_DRAG_SLOP) return;
         s->deskicon_drag.moved = 1;
+        lifted = true;
     }
 
     /* Free-floating while the button is down — the drop is what snaps. Clamped
@@ -576,9 +578,19 @@ void deskicon_drag_motion(syn_server_t *s, double lx, double ly)
         if (y > max_y)  y = max_y;
     }
 
+    /* A high-polling-rate mouse sends motion far faster than a pixel of travel,
+     * so most events land on the cell's current position and have nothing to
+     * do at all. */
+    if (!lifted && s->deskicons[i].x == x && s->deskicons[i].y == y) return;
+
     s->deskicons[i].x = x;
     s->deskicons[i].y = y;
-    synui_render_deskicons(s);
+
+    /* Crossing the slop is the one motion that repaints: it lifts the icon out
+     * of the desktop buffer and into the drag layer. Every motion after that is
+     * a node move. */
+    if (lifted) synui_render_deskicons(s);
+    else        synui_move_deskicon_drag(s);
 }
 
 void deskicon_drag_end(syn_server_t *s, double lx, double ly)

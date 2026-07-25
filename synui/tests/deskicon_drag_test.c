@@ -51,9 +51,13 @@ void output_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
 }
 
 /* Renders are counted, not drawn: a drag that never repaints looks identical to
- * a working one in the model alone. */
-static int render_calls;
+ * a working one in the model alone. The two paths are counted apart because
+ * which one a motion takes is the whole difference between a drag that keeps up
+ * with the cursor and one that does not — a repaint rebuilds a screen-sized
+ * cairo surface, a move is a scene-node reposition. */
+static int render_calls, move_calls;
 void synui_render_deskicons(syn_server_t *s) { (void)s; render_calls++; }
+void synui_move_deskicon_drag(syn_server_t *s) { (void)s; move_calls++; }
 void synui_render_deskmenu(syn_server_t *s)  { (void)s; }
 
 /* Nothing on the scratch desktop is a .desktop file, so the real lookup is
@@ -223,9 +227,14 @@ int main(void)
     printf("ok 2 — a sub-slop press moves nothing and writes no state\n");
 
     /* ── 3. A real drag lands on a cell and reflows the rest ── */
-    render_calls = 0;
+    render_calls = move_calls = 0;
     drag(s, "charlie.txt", 2 * SYN_DESKICON_W + 9, 3 * SYN_DESKICON_H - 11);
-    assert(render_calls > 0);              /* it repainted while dragging */
+    /* Four motion steps, and the icon travelled on every one. Exactly two of
+     * them may repaint the desktop: the step that crosses the slop and lifts
+     * the icon into its own layer, and the drop. The rest must take the cheap
+     * path, or a drag is back to allocating a full-screen surface per event. */
+    assert(render_calls == 2);
+    assert(move_calls == 3);
     assert_cell(s, "charlie.txt", 2, 5);   /* row 2 + 3, snapped off the +9/-11 */
     assert(s->deskicons[find_icon(s, "charlie.txt")].placed == 1);
 

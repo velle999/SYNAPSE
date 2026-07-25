@@ -3360,11 +3360,48 @@ static void deskicon_draw_cell(cairo_t *cr, const syn_deskicon_t *ic,
     cairo_show_text(cr, label);
 }
 
+/* The output the icons live on, or NULL. */
+static syn_output_t *deskicons_output(syn_server_t *s)
+{
+    syn_output_t *o = server_primary_output(s);
+    return o ? o : server_focused_output(s);
+}
+
+/*
+ * Move the drag layer to the dragged icon's position. This is the whole cost
+ * of a motion event mid-drag: no allocation, no repaint, and the damage is two
+ * icon-sized rects rather than the entire desktop.
+ */
+void synui_move_deskicon_drag(syn_server_t *s)
+{
+    if (!s->deskicons_ui.drag_tree) return;
+
+    int i = s->deskicon_drag.idx;
+    if (i < 0 || i >= s->deskicon_count) return;
+
+    syn_output_t *o = deskicons_output(s);
+    if (!o) return;
+
+    /* The layer is a child of the icon tree, which sits at the usable area's
+     * origin, so it wants area-relative coordinates. */
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+    wlr_scene_node_set_position(&s->deskicons_ui.drag_tree->node,
+                                s->deskicons[i].x - area.x,
+                                s->deskicons[i].y - area.y);
+}
+
 /*
  * Desktop icons: one buffer covering the primary output's usable area, with
  * every cell drawn into it. One buffer rather than one per icon because they
  * only ever move one at a time, under a drag, and a re-layout redraws the lot
  * anyway.
+ *
+ * The exception is that one dragged icon. Redrawing this buffer per motion
+ * event meant allocating and repainting a screen-sized surface hundreds of
+ * times a second, which is what made a drag lag behind the cursor — so the
+ * dragged icon is drawn once into a cell-sized layer of its own, and the drag
+ * then just moves that node (synui_move_deskicon_drag).
  */
 void synui_render_deskicons(syn_server_t *s)
 {
@@ -3373,8 +3410,7 @@ void synui_render_deskicons(syn_server_t *s)
         return;
     }
 
-    syn_output_t *o = server_primary_output(s);
-    if (!o) o = server_focused_output(s);
+    syn_output_t *o = deskicons_output(s);
     if (!o) {
         wlr_scene_node_set_enabled(&s->deskicons_ui.tree->node, false);
         return;
@@ -3389,23 +3425,55 @@ void synui_render_deskicons(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
-    /* An icon mid-drag is drawn last so it rides over the cells it passes
-     * across instead of sliding under the ones later in the array. */
+    /* An icon mid-drag is left out of this buffer entirely — it belongs to the
+     * drag layer below, which rides over the cells it passes across instead of
+     * sliding under the ones later in the array. */
     int dragging = s->deskicon_drag.active && s->deskicon_drag.moved
                  ? s->deskicon_drag.idx : -1;
+    if (dragging >= s->deskicon_count) dragging = -1;
 
     for (int i = 0; i < s->deskicon_count; i++) {
         if (i == dragging) continue;
         deskicon_draw_cell(cr, &s->deskicons[i], &area,
                            i == s->deskicon_selected);
     }
-    if (dragging >= 0 && dragging < s->deskicon_count)
-        deskicon_draw_cell(cr, &s->deskicons[dragging], &area, 1);
 
     cairo_destroy(cr);
     wlr_scene_node_set_position(&s->deskicons_ui.tree->node, area.x, area.y);
     wlr_scene_node_set_enabled(&s->deskicons_ui.tree->node, true);
     set_scene_buffer(&s->deskicons_ui.buf, s->deskicons_ui.tree, buf);
+
+    if (dragging < 0) {
+        if (s->deskicons_ui.drag_tree)
+            wlr_scene_node_set_enabled(&s->deskicons_ui.drag_tree->node, false);
+        return;
+    }
+
+    if (!s->deskicons_ui.drag_tree)
+        s->deskicons_ui.drag_tree = wlr_scene_tree_create(s->deskicons_ui.tree);
+
+    cairo_t *dcr;
+    struct wlr_buffer *dbuf =
+        create_cairo_buf(SYN_DESKICON_W, SYN_DESKICON_H, &dcr);
+    if (dbuf) {
+        cairo_begin(dcr);
+        /* draw_cell places the icon at (ic->x - area->x, ic->y - area->y), so
+         * an area pinned to the icon itself puts it at 0,0 in its own buffer. */
+        struct wlr_box cell = { .x      = s->deskicons[dragging].x,
+                                .y      = s->deskicons[dragging].y,
+                                .width  = SYN_DESKICON_W,
+                                .height = SYN_DESKICON_H };
+        deskicon_draw_cell(dcr, &s->deskicons[dragging], &cell, 1);
+        cairo_destroy(dcr);
+        set_scene_buffer(&s->deskicons_ui.drag_buf,
+                         s->deskicons_ui.drag_tree, dbuf);
+    }
+
+    /* Above the desktop buffer, which set_scene_buffer may have just created
+     * as a sibling after this tree. */
+    wlr_scene_node_raise_to_top(&s->deskicons_ui.drag_tree->node);
+    wlr_scene_node_set_enabled(&s->deskicons_ui.drag_tree->node, true);
+    synui_move_deskicon_drag(s);
 }
 
 /* ── Initialize all UI scene trees ───────────────────────── */
