@@ -589,6 +589,10 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
     view->mapped = 1;
     focus_view(view->server, view, view->xdg_surface->surface);
     layout_apply(view->server, view->workspace);
+    /* Reopen where this app was last closed (geom_persist.c). After
+     * layout_apply, which would otherwise tile straight over the restored box,
+     * and after mapped = 1, which view_apply_maximized requires. */
+    layout_restore_geometry(view->server, view);
     foreign_toplevel_map(view);
     anim_fade_in(view);          /* windows arrive, they don't just appear */
 

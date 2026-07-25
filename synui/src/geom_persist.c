@@ -112,9 +112,12 @@ static void table_load(void)
             else if (!strcmp(tok, "maximized")) e->maximized = atoi(val);
         }
 
-        /* A zero-size entry would place a window we could never see. The
-         * real minimum is layout.c's MIN_WIN; this only rejects nonsense. */
-        if (e->w > 0 && e->h > 0)
+        /* Drop entries below the placement floor rather than clamping them up:
+         * a file written before the save-side guards existed still holds
+         * tooltip- and splash-sized boxes, and silently dropping one means the
+         * app gets its normal default placement back instead of a 2x1 window
+         * inflated to 40x40. */
+        if (e->w >= MIN_WIN && e->h >= MIN_WIN)
             table_count++;
     }
     fclose(f);
@@ -168,9 +171,29 @@ void geom_persist_save(syn_view_t *view)
 {
     if (!view || !view->server->config.remember_geometry) return;
     if (view->fullscreen || view->minimized) return;
+
+    /* Only a real toplevel on a desktop is "a window this app opened".
+     *
+     * X11 override-redirect surfaces — menus, tooltips, drag icons — reach
+     * this function too: xw_unmap is hooked for every surface, and an OR view
+     * never joins a workspace, so the tiled-geometry test below used to fall
+     * through on the NULL workspace and record them. They carry the app's
+     * WM_CLASS, so a Steam tooltip closing wrote `steam w=2 h=1` over the real
+     * entry and Steam then reopened 2x1. */
+    if (view->override_redirect || !view->workspace) return;
+
+    /* Same clobber, one level up: a dialog shares its parent's app_id, so
+     * saving it would hand the app's next *main* window the size of its last
+     * file picker. Only parentless toplevels get a say. */
+    if (view->is_xwayland) {
+        if (view->xsurface->parent || view->xsurface->modal) return;
+    } else if (view->xdg_surface->toplevel->parent) {
+        return;
+    }
+
     /* Tiled geometry is the layout engine's, not the user's. */
     if (!view->floating && !view->maximized &&
-        view->workspace && view->workspace->layout != LAYOUT_FLOATING)
+        view->workspace->layout != LAYOUT_FLOATING)
         return;
 
     const char *app = view_app_id(view);
@@ -188,7 +211,10 @@ void geom_persist_save(syn_view_t *view)
         w = view->saved_geo.width;
         h = view->saved_geo.height;
     }
-    if (w <= 0 || h <= 0) return;
+    /* Below the placement floor there is nothing worth remembering: layout.c
+     * would only clamp it back up to MIN_WIN, and a splash screen that closed
+     * at 134x47 would have overwritten the real window's entry to say so. */
+    if (w < MIN_WIN || h < MIN_WIN) return;
 
     table_load();
     geom_entry_t *e = table_find(key);

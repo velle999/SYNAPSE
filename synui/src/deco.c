@@ -961,7 +961,15 @@ void view_apply_maximized(syn_server_t *s, syn_view_t *view, int maximized)
     } else {
         view->floating = view->saved_floating;
         layout_apply(s, view->workspace);   /* re-tiles it if it was tiled */
-        if (view->floating && view->saved_geo.width > 0)
+        /* Restore the box for any window the layout won't place itself. The
+         * floating *flag* is not the whole test: on a floating desktop an
+         * ordinary window has the flag clear, yet layout_apply is a no-op
+         * there, so nothing would ever size it back — un-maximizing left it
+         * stuck at the full output box. Only a genuinely tiled window is
+         * someone else's to place. */
+        if ((view->floating ||
+             (view->workspace && view->workspace->layout == LAYOUT_FLOATING)) &&
+            view->saved_geo.width > 0)
             view_resize(view, view->saved_geo.x, view->saved_geo.y,
                         view->saved_geo.width, view->saved_geo.height);
     }

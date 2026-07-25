@@ -33,7 +33,8 @@
 #define MASTER_FACTOR  0.60f   /* default master column width fraction */
 #define MASTER_MIN     0.10f
 #define MASTER_MAX     0.90f
-#define MIN_WIN        40      /* smallest interactive window size, px */
+/* MIN_WIN lives in synui.h — geom_persist.c needs the same floor so it never
+ * records a box this code would only have to clamp back up again. */
 
 /* ── Get output geometry for a view ──────────────────────── */
 /* A window is laid out on the monitor it lives on (falling back to the focused
@@ -633,24 +634,60 @@ void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
     layout_apply(s, view->workspace);
 }
 
-/* ── Floating placement ──────────────────────────────────── */
+/* ── Remembered geometry ─────────────────────────────────── */
 /*
- * Give a newly-floating window a sane geometry: prefer the client's own
- * preferred size, clamp it to the output, and centre it. Called when a
- * window is toggled floating (Super+F) or auto-floated for a drag.
+ * Put a window back where its app last left it (the table lives in
+ * geom_persist.c). Called from the xdg and XWayland map handlers, so an app
+ * reopens the size it was closed at, and from layout_float_place, where a
+ * remembered box beats the centred default.
+ *
+ * A remembered *box* and a remembered *maximized state* are two different
+ * claims, so they restore under different conditions:
+ *
+ *  - The box only applies to a window the user positions themselves: a
+ *    floating view, or any view on a floating desktop. A tiled window's
+ *    geometry belongs to the layout engine, and handing it a saved box would
+ *    only be overwritten by the next layout_apply anyway.
+ *  - The maximized state applies whatever the layout is — maximize is not a
+ *    tiling feature (same reasoning as the re-fit pass in layout_apply). A
+ *    tiled window restored maximized keeps saved_floating = 0, so
+ *    un-maximizing hands it back to the tiler rather than stranding it
+ *    floating on a tiling desktop.
+ *
+ * Returns false when the app has nothing saved, in which case the caller's
+ * own placement stands.
  */
-void layout_float_place(syn_server_t *s, syn_view_t *view)
+bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
 {
-    struct wlr_box area;
-    get_view_geom(s, view, &area);
-
-    /* If this app has a remembered geometry, it wins over the centred
-     * default — but only after being clamped back onto a monitor that exists
-     * now, so an entry saved on a wider desk can't open the window off-screen
-     * where it could never be reached. */
     struct wlr_box saved;
     int saved_max = 0;
-    if (geom_persist_lookup(view, &saved, &saved_max)) {
+    if (!geom_persist_lookup(view, &saved, &saved_max))
+        return false;
+
+    bool free_window = view->floating ||
+                       (view->workspace &&
+                        view->workspace->layout == LAYOUT_FLOATING);
+
+    if (free_window) {
+        /* x/y are absolute layout coordinates, so they name a monitor as much
+         * as a position. Re-home the view onto the monitor the saved box's
+         * centre lands on before clamping — otherwise every window reopens on
+         * whichever monitor happened to be focused, squashed into its box. If
+         * that monitor is gone the lookup fails and the clamp below handles
+         * it. */
+        struct wlr_output *wo = wlr_output_layout_output_at(
+            s->output_layout,
+            saved.x + saved.width  / 2.0,
+            saved.y + saved.height / 2.0);
+        if (wo && wo->data)
+            view->output = wo->data;
+
+        /* Clamp back onto a monitor that exists *now*, so an entry saved on a
+         * wider desk can't open the window off-screen where it could never be
+         * reached. */
+        struct wlr_box area;
+        get_view_geom(s, view, &area);
+
         int sw = saved.width, sh = saved.height;
         if (sw > area.width)  sw = area.width;
         if (sh > area.height) sh = area.height;
@@ -664,12 +701,29 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
         if (sy < area.y) sy = area.y;
 
         view_resize(view, sx, sy, sw, sh);
-        /* Re-maximizing needs the restore box already in place, which the
-         * view_resize above just established. */
-        if (saved_max && !view->maximized)
-            view_apply_maximized(s, view, 1);
-        return;
     }
+
+    /* Re-maximizing needs the restore box already in place, which the
+     * view_resize above just established. */
+    if (saved_max && !view->maximized)
+        view_apply_maximized(s, view, 1);
+    return true;
+}
+
+/* ── Floating placement ──────────────────────────────────── */
+/*
+ * Give a newly-floating window a sane geometry: prefer the client's own
+ * preferred size, clamp it to the output, and centre it. Called when a
+ * window is toggled floating (Super+F) or auto-floated for a drag.
+ */
+void layout_float_place(syn_server_t *s, syn_view_t *view)
+{
+    struct wlr_box area;
+    get_view_geom(s, view, &area);
+
+    /* Where this app was last left wins over the centred default. */
+    if (layout_restore_geometry(s, view))
+        return;
 
     int w = view->w, h = view->h;
     /* The frame has to hold the client plus its chrome. */

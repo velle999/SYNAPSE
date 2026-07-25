@@ -2460,8 +2460,17 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void view_resize(syn_view_t *view, int x, int y, int w, int h);
 void layout_float_place(syn_server_t *s, syn_view_t *view);
 
+/* Smallest interactive window size, px. Shared with geom_persist.c so the size
+ * that gets recorded and the size that gets placed obey one floor. */
+#define MIN_WIN 40
+
+/* Put a window back where its app last left it. Called from both map paths
+ * (and from layout_float_place, where the remembered box beats the centred
+ * default). Returns false if the app has nothing saved. */
+bool layout_restore_geometry(syn_server_t *s, syn_view_t *view);
+
 /* geom_persist.c: per-app window geometry, remembered across restarts.
- * _save is called when a window unmaps; _lookup feeds layout_float_place,
+ * _save is called when a window unmaps; _lookup feeds layout_restore_geometry,
  * which does the clamping onto a currently-connected output. */
 void geom_persist_save(syn_view_t *view);
 bool geom_persist_lookup(syn_view_t *view, struct wlr_box *box, int *maximized);
