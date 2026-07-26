@@ -52,10 +52,55 @@ const struct wppick_option wppick_options[] = {
 const int wppick_option_count =
     (int)(sizeof(wppick_options) / sizeof(wppick_options[0]));
 
+/* Defined down with the Workshop scan, but the apply/preview paths above it
+ * need to tell a Workshop row from an image row. */
+static int wppick_we_index(syn_server_t *s, int row);
+
 /* Which option currently matches the live config, so the panel opens with the
  * active wallpaper highlighted. */
+/* The id synui-wpengine currently has applied, or "" when it is not running.
+ * synui does not mirror that state — the script owns it — so the picker reads
+ * it back rather than trusting a copy that a `synui-wpengine off` from a
+ * terminal would have made stale. */
+static void wppick_active_we(char *out, size_t n)
+{
+    out[0] = '\0';
+
+    const char *home = getenv("HOME");
+    if (!home || !*home) return;
+
+    char path[256];
+    if (snprintf(path, sizeof(path), "%s/.config/synui/wpengine.state", home)
+            >= (int)sizeof(path))
+        return;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+
+    /* Every line is "<output> <id>"; the picker applies to all outputs at
+     * once, so the first line's id identifies the choice. */
+    char line[256];
+    if (fgets(line, sizeof(line), f)) {
+        char id[24];
+        if (sscanf(line, "%*s %23s", id) == 1)
+            snprintf(out, n, "%s", id);
+    }
+    fclose(f);
+}
+
 static int current_index(syn_server_t *s)
 {
+    /* An engine wallpaper wins over anything wallpaper.c holds: its surface is
+     * what is actually on screen. Checked against the state file rather than
+     * wallpaper_src so a choice made before this synui started still lands. */
+    char active[24];
+    wppick_active_we(active, sizeof(active));
+    if (active[0]) {
+        for (int i = 0; i < s->wppick.we_count; i++)
+            if (strcmp(s->wppick.we[i].id, active) == 0)
+                return wppick_option_count + s->wppick.found_count + i;
+    }
+
     if (s->config.wallpaper_src == SYN_WP_SRC_MATRIX)
         return 1;   /* "matrix" */
     if (s->config.wallpaper[0] == '\0')
@@ -86,6 +131,25 @@ static void wppick_scroll_to_selection(syn_server_t *s)
 static void wppick_apply(syn_server_t *s, int idx)
 {
     if (idx < 0 || idx >= wppick_total(s)) return;
+
+    /* A Workshop wallpaper is not painted here at all: hand the id to
+     * synui-wpengine, which starts linux-wallpaperengine as a layer-shell
+     * client above wallpaper_tree. It persists the choice itself, so there is
+     * nothing for wallpaper_state_save to record. */
+    int we = wppick_we_index(s, idx);
+    if (we >= 0) {
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "synui-wpengine set %s all", s->wppick.we[we].id);
+        synui_spawn(cmd);
+        s->config.wallpaper_src = SYN_WP_SRC_WPENGINE;
+        return;
+    }
+
+    /* Leaving a Workshop wallpaper: the engine holds an opaque surface over
+     * the whole output, so repainting wallpaper.c under it would change
+     * nothing visible until it is gone. */
+    if (s->config.wallpaper_src == SYN_WP_SRC_WPENGINE)
+        synui_spawn("synui-wpengine off");
 
     /* A row past the built-ins is an image the scan found: point the config
      * straight at its path. wallpaper_state_save already persists an arbitrary
@@ -124,6 +188,21 @@ repaint:
         wlr_output_schedule_frame(o->wlr_output);
 
     wallpaper_state_save(s);
+}
+
+/* Highlight moved. Images and built-ins are cheap enough to apply live, which
+ * is the whole point of the panel; a Workshop wallpaper spawns a GPU process
+ * and would thrash if it fired on every arrow key, so it is only remembered
+ * here and committed on Enter. */
+static void wppick_preview(syn_server_t *s, int idx)
+{
+    if (wppick_we_index(s, idx) >= 0) {
+        s->wppick.pending_we = idx;
+        return;
+    }
+
+    s->wppick.pending_we = -1;
+    wppick_apply(s, idx);
 }
 
 /* ── Browse: find images on disk ─────────────────────────── */
@@ -207,10 +286,150 @@ void wppick_scan(syn_server_t *s)
     wlr_log(WLR_INFO, "synui: wppick: %d image(s) found", s->wppick.found_count);
 }
 
-/* Built-ins first, then whatever the scan turned up. */
+/* ── Browse: Steam Workshop (Wallpaper Engine) ───────────── */
+
+/* Read one JSON string token, the opening quote already consumed. Titles carry
+ * escapes and plenty of non-ASCII; \" and \\ pass through as the literal
+ * character and other escapes are dropped rather than emitting a stray
+ * backslash. Everything else (UTF-8 included) is byte-copied. Always drains
+ * the whole token even when it does not fit, so the caller stays in sync. */
+static void wp_json_token(FILE *f, char *out, size_t n)
+{
+    size_t i = 0;
+    int c;
+    while ((c = fgetc(f)) != EOF && c != '"') {
+        if (c == '\\') {
+            c = fgetc(f);
+            if (c == EOF) break;
+            if (c != '"' && c != '\\') continue;
+        }
+        if (out && i + 1 < n) out[i++] = (char)c;
+    }
+    if (out && n) out[i] = '\0';
+}
+
+/* Pull the TOP-LEVEL "title" and "type" out of a project.json.
+ *
+ * No JSON library here, but a flat strstr for "type" is not good enough: a
+ * project.json carries a general.properties object whose every entry has its
+ * own "type" ("color", "bool", …) and often "text", and those come BEFORE the
+ * top-level keys in the files Wallpaper Engine writes. Matching the first hit
+ * labelled scene wallpapers "color" and left titles as bare ids. So track
+ * brace/bracket depth and only accept keys sitting directly in the root
+ * object. Streamed rather than slurped because the properties block can be
+ * far larger than the two strings we actually want. */
+static void wp_project_meta(const char *path, char *title, size_t tn,
+                            char *type, size_t yn)
+{
+    title[0] = '\0';
+    type[0]  = '\0';
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+
+    int depth = 0;
+    char pending[32] = "";   /* the depth-1 key whose value comes next */
+    int c;
+
+    while ((c = fgetc(f)) != EOF) {
+        if (c == '{' || c == '[') { depth++; pending[0] = '\0'; continue; }
+        if (c == '}' || c == ']') { depth--; pending[0] = '\0'; continue; }
+        if (c != '"') continue;
+
+        /* A string. Whether it is a key or a value is decided by the next
+         * non-space character: ':' means key. */
+        char tok[256];
+        wp_json_token(f, tok, sizeof(tok));
+
+        int nxt;
+        while ((nxt = fgetc(f)) != EOF && (nxt == ' ' || nxt == '\t' ||
+                                           nxt == '\n' || nxt == '\r'))
+            ;
+
+        if (nxt == ':') {
+            /* Only root-object keys are the ones we mean. */
+            if (depth == 1) snprintf(pending, sizeof(pending), "%s", tok);
+            else pending[0] = '\0';
+            continue;
+        }
+        if (nxt != EOF) ungetc(nxt, f);
+
+        if (depth != 1 || !pending[0]) continue;
+
+        if (strcmp(pending, "title") == 0)
+            snprintf(title, tn, "%s", tok);
+        else if (strcmp(pending, "type") == 0)
+            snprintf(type, yn, "%s", tok);
+        pending[0] = '\0';
+
+        if (title[0] && type[0]) break;   /* both found — stop reading */
+    }
+    fclose(f);
+}
+
+/* Wallpaper Engine is Steam AppID 431960; its subscriptions land in the usual
+ * workshop content tree, one numbered directory per wallpaper. */
+static void wppick_scan_workshop(syn_server_t *s)
+{
+    s->wppick.we_count = 0;
+
+    const char *home = getenv("HOME");
+    if (!home || !*home) return;
+
+    char root[256];
+    if (snprintf(root, sizeof(root),
+                 "%s/.local/share/Steam/steamapps/workshop/content/431960",
+                 home) >= (int)sizeof(root))
+        return;
+
+    DIR *d = opendir(root);
+    if (!d) return;   /* Wallpaper Engine not installed — no rows, no error */
+
+    struct dirent *e;
+    while ((e = readdir(d)) && s->wppick.we_count < WPPICK_WE_MAX) {
+        if (e->d_name[0] == '.') continue;
+
+        char proj[512];
+        if (snprintf(proj, sizeof(proj), "%s/%s/project.json", root, e->d_name)
+                >= (int)sizeof(proj))
+            continue;
+
+        char title[96], type[12];
+        wp_project_meta(proj, title, sizeof(title), type, sizeof(type));
+
+        /* A stale or partial subscription (no project.json, or no title in
+         * it) still gets a row — the id is enough to hand to the engine. */
+        if (!title[0]) snprintf(title, sizeof(title), "%s", e->d_name);
+        if (!type[0])  snprintf(type,  sizeof(type),  "?");
+
+        /* project.json spells the type both "Web" and "web" depending on who
+         * published it; fold it so the subtitle column does not look ragged. */
+        for (char *c = type; *c; c++)
+            if (*c >= 'A' && *c <= 'Z') *c += 'a' - 'A';
+
+        int i = s->wppick.we_count++;
+        snprintf(s->wppick.we[i].id,    sizeof(s->wppick.we[i].id),    "%s", e->d_name);
+        snprintf(s->wppick.we[i].title, sizeof(s->wppick.we[i].title), "%s", title);
+        snprintf(s->wppick.we[i].type,  sizeof(s->wppick.we[i].type),  "%s", type);
+    }
+    closedir(d);
+
+    wlr_log(WLR_INFO, "synui: wppick: %d Workshop wallpaper(s) found",
+            s->wppick.we_count);
+}
+
+/* Built-ins first, then the images the scan turned up, then Workshop. */
 int wppick_total(syn_server_t *s)
 {
-    return wppick_option_count + s->wppick.found_count;
+    return wppick_option_count + s->wppick.found_count + s->wppick.we_count;
+}
+
+/* Row index → Workshop entry, or -1 when the row is a built-in or an image. */
+static int wppick_we_index(syn_server_t *s, int row)
+{
+    int base = wppick_option_count + s->wppick.found_count;
+    if (row < base || row >= base + s->wppick.we_count) return -1;
+    return row - base;
 }
 
 /* One row's text. render.c draws; the labels live here so the built-in and
@@ -220,6 +439,16 @@ void wppick_row(syn_server_t *s, int row, const char **label, const char **desc)
     if (row < wppick_option_count) {
         *label = wppick_options[row].label;
         *desc  = wppick_options[row].desc;
+        return;
+    }
+
+    int we = wppick_we_index(s, row);
+    if (we >= 0) {
+        /* The Workshop title is the only human-readable handle these have —
+         * the id is a bare number. Type goes in the subtitle so the animated
+         * ones are obvious before you commit to starting the engine. */
+        *label = s->wppick.we[we].title;
+        *desc  = s->wppick.we[we].type;
         return;
     }
 
@@ -235,9 +464,11 @@ void wppick_row(syn_server_t *s, int row, const char **label, const char **desc)
 void wppick_show(syn_server_t *s)
 {
     wppick_scan(s);
+    wppick_scan_workshop(s);
     s->wppick.visible = 1;
     s->wppick.selected = current_index(s);
     s->wppick.scroll = 0;
+    s->wppick.pending_we = -1;
     wppick_scroll_to_selection(s);
     synui_render_wppick(s);
 }
@@ -264,17 +495,28 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return 0;
 
     switch (sym) {
-    case XKB_KEY_Escape:
-    case XKB_KEY_q:
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
+        /* Commit a deferred Workshop row. Everything else already applied on
+         * the way past it, so Enter is just "close" for those. */
+        if (s->wppick.pending_we >= 0) {
+            wppick_apply(s, s->wppick.pending_we);
+            s->wppick.pending_we = -1;
+        }
+        wppick_hide(s);
+        return 1;
+    case XKB_KEY_Escape:
+    case XKB_KEY_q:
+        /* Esc abandons a deferred row rather than committing it — arrowing
+         * through 131 Workshop entries must not leave one applied. */
+        s->wppick.pending_we = -1;
         wppick_hide(s);
         return 1;
     case XKB_KEY_Up:
     case XKB_KEY_k:
         if (s->wppick.selected > 0) {
             s->wppick.selected--;
-            wppick_apply(s, s->wppick.selected);   /* live preview */
+            wppick_preview(s, s->wppick.selected);
             wppick_scroll_to_selection(s);
             synui_render_wppick(s);
         }
@@ -283,7 +525,7 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_j:
         if (s->wppick.selected < wppick_total(s) - 1) {
             s->wppick.selected++;
-            wppick_apply(s, s->wppick.selected);   /* live preview */
+            wppick_preview(s, s->wppick.selected);
             wppick_scroll_to_selection(s);
             synui_render_wppick(s);
         }

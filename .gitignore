@@ -109,3 +109,13 @@ archiso/out/*.b2sum
 *.swp
 *~
 .DS_Store
+
+# ── linux-wallpaperengine ───────────────────────────────────
+# The dev clone is ~7 GB once cmake has fetched CEF, and makepkg's src/ and
+# pkg/ under the package dir are another ~2.7 GB. All of it is reproducible:
+# the PKGBUILD pins the upstream commit. Only PKGBUILD + synui-wpengine are
+# sources.
+/linux-wallpaperengine/
+/linux-wallpaperengine-pkg/src/
+/linux-wallpaperengine-pkg/pkg/
+/linux-wallpaperengine-pkg/*.pkg.tar.zst

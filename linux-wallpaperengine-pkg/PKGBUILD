@@ -1,0 +1,115 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+pkgname=linux-wallpaperengine
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers, with the synui-wpengine control script"
+arch=('x86_64')
+url="https://github.com/Almamu/linux-wallpaperengine"
+license=('GPL-3.0-or-later')
+# The renderer links these directly; mpv/ffmpeg drive video wallpapers, fftw
+# and libpulse the audio-reactive ones, glfw/glew the GL context.
+depends=('glew' 'sdl2-compat' 'ffmpeg' 'glfw' 'mpv' 'fftw' 'libpulse' 'libxrandr'
+         'libx11' 'nss' 'nspr' 'alsa-lib' 'dbus' 'gtk3')
+makedepends=('git' 'cmake' 'glm' 'python')
+optdepends=('steam: to subscribe to Workshop wallpapers'
+            'synui: the compositor synui-wpengine drives')
+# The engine reads Wallpaper Engine's own assets/ tree at runtime; it is not
+# redistributable, so it stays where Steam put it (see synui-wpengine).
+
+# Pinned upstream commit — bump alongside pkgver/pkgrel when rolling the app.
+_commit=b016d7d1fdcf4e5fd2f9c9fa420a8aaa07fee02d
+
+source=("git+$url.git#commit=$_commit"
+        "synui-wpengine")
+sha256sums=('SKIP'
+            'SKIP')
+
+# CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
+# in build/cef/, NOT in SRCDEST), so a clean build needs the network and about
+# 6 GB of scratch. makepkg's default strip takes libcef.so down to ~219 MB.
+#
+# Everything the renderer loads at runtime has to sit next to the executable —
+# CEF resolves icudtl.dat, the .pak files and locales/ relative to the binary —
+# so the whole payload goes in /usr/lib/$pkgname and /usr/bin gets a wrapper.
+# It is NOT /opt: this distro has no alpm ldconfig hook, so packaged libraries
+# belong under /usr/lib.
+_libdir=/usr/lib/$pkgname
+
+prepare() {
+    cd "$srcdir/$pkgname"
+    git submodule update --init --recursive --depth 1
+}
+
+build() {
+    cd "$srcdir/$pkgname"
+
+    # CEF's bundled cmake compiles libcef_dll_wrapper with -Werror AND its own
+    # "-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2". makepkg.conf hardening adds
+    # -D_FORTIFY_SOURCE=3 on top, and the redefinition is a warning, which
+    # -Werror turns into a hard build failure. Drop ours and let CEF pick.
+    CFLAGS="${CFLAGS//-Wp,-D_FORTIFY_SOURCE=[0-9]/}"
+    CXXFLAGS="${CXXFLAGS//-Wp,-D_FORTIFY_SOURCE=[0-9]/}"
+    CPPFLAGS="${CPPFLAGS//-D_FORTIFY_SOURCE=[0-9]/}"
+    CFLAGS="${CFLAGS//-D_FORTIFY_SOURCE=[0-9]/}"
+    CXXFLAGS="${CXXFLAGS//-D_FORTIFY_SOURCE=[0-9]/}"
+    export CFLAGS CXXFLAGS CPPFLAGS
+
+    # Passed explicitly, not just exported: a build/ left over from a previous
+    # makepkg run carries the old flags in CMakeCache.txt, and cmake prefers
+    # the cache over the environment — so an env-only fix silently does
+    # nothing on a rebuild. -D updates the cache entry itself.
+    cmake -B build -S . \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_C_FLAGS="$CFLAGS" \
+        -DCMAKE_CXX_FLAGS="$CXXFLAGS"
+    cmake --build build -j"$(nproc)"
+}
+
+package() {
+    cd "$srcdir/$pkgname/build/output"
+
+    install -d "$pkgdir$_libdir"
+
+    # The executable plus the shared objects and CEF data files it needs. The
+    # rest of output/ is submodule test/benchmark binaries (qjs, glslang,
+    # spirv-*, *-float, api-test) that nothing at runtime touches.
+    install -Dm755 linux-wallpaperengine "$pkgdir$_libdir/linux-wallpaperengine"
+
+    local so
+    for so in liblinux-wallpaperengine-lib.so libcef.so libEGL.so libGLESv2.so \
+              libvk_swiftshader.so; do
+        install -Dm755 "$so" "$pkgdir$_libdir/$so"
+    done
+
+    local data
+    for data in chrome_100_percent.pak chrome_200_percent.pak resources.pak \
+                icudtl.dat v8_context_snapshot.bin vk_swiftshader_icd.json; do
+        install -Dm644 "$data" "$pkgdir$_libdir/$data"
+    done
+
+    cp -a locales "$pkgdir$_libdir/locales"
+    find "$pkgdir$_libdir/locales" -type f -exec chmod 644 {} +
+
+    # chrome-sandbox ships NON-setuid deliberately. Chromium's setuid helper is
+    # only needed where unprivileged user namespaces are off; they are on here,
+    # so the namespace sandbox covers it and the package stays free of setuid
+    # root binaries.
+    install -Dm755 chrome-sandbox "$pkgdir$_libdir/chrome-sandbox"
+
+    # Wrapper: CEF resolves its siblings relative to the process, so cd first.
+    # __GL_THREADED_OPTIMIZATIONS=0 is upstream's documented NVIDIA workaround.
+    install -d "$pkgdir/usr/bin"
+    cat > "$pkgdir/usr/bin/linux-wallpaperengine" <<EOF
+#!/bin/sh
+cd "$_libdir" || exit 1
+export __GL_THREADED_OPTIMIZATIONS=\${__GL_THREADED_OPTIMIZATIONS:-0}
+exec "$_libdir/linux-wallpaperengine" "\$@"
+EOF
+    chmod 755 "$pkgdir/usr/bin/linux-wallpaperengine"
+
+    install -Dm755 "$srcdir/synui-wpengine" "$pkgdir/usr/bin/synui-wpengine"
+
+    install -Dm644 "$srcdir/$pkgname/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

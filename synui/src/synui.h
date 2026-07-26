@@ -227,6 +227,7 @@ extern const int                 synui_welcome_menu_len;
 
 /* ── Wallpaper picker (wppick.c) ─────────────────────────── */
 #define WPPICK_FOUND_MAX 64   /* images the browse scan will list */
+#define WPPICK_WE_MAX   256   /* Steam Workshop wallpapers the scan will list */
 #define WPPICK_ROWS      10   /* rows visible at once; the rest scroll */
 
 /* ── Cursor theme picker (cursor.c) ──────────────────────── */
@@ -949,6 +950,14 @@ extern const char *const syn_wallpaper_mode_names[SYN_WALLPAPER_MODE_COUNT];
 typedef enum {
     SYN_WP_SRC_IMAGE = 0,     /* static image / solid (wallpaper.c) */
     SYN_WP_SRC_MATRIX,        /* animated kanji rain (matrix.c) */
+    /* A Steam Workshop wallpaper rendered by linux-wallpaperengine, which is
+     * an external layer-shell client, NOT a synui backend: it paints its own
+     * BACKGROUND surface, which sits above wallpaper_tree and so covers
+     * whatever wallpaper.c drew. synui only starts and stops it (via
+     * synui-wpengine); nothing here renders. Never persisted to
+     * wallpaper.state — synui-wpengine owns that state, and the synuirc
+     * autostart line replays it at login. */
+    SYN_WP_SRC_WPENGINE,
 } syn_wallpaper_src_t;
 
 /* Which screen edge the dock lives on (dock.c). BOTTOM/TOP render a
@@ -2228,6 +2237,23 @@ struct syn_server {
          * into ~/Pictures shows up without restarting the compositor. */
         char found[WPPICK_FOUND_MAX][256];
         int  found_count;
+
+        /* Steam Workshop wallpapers (Wallpaper Engine), listed after the
+         * images. These are handed to linux-wallpaperengine rather than
+         * decoded here, so the row only needs the id to pass along and the
+         * title to show. `type` is scene/video/web, shown so it is obvious
+         * which are the animated ones. */
+        struct {
+            char id[24];
+            char title[96];
+            char type[12];
+        } we[WPPICK_WE_MAX];
+        int  we_count;
+
+        /* Applying a Workshop wallpaper restarts a GPU process, so unlike the
+         * images it must NOT fire on every arrow keypress. Rows past the
+         * images defer to Enter, and this is the row Enter should commit. */
+        int  pending_we;    /* row index, or -1 when nothing is deferred */
     } wppick;
 
     /* Cursor theme picker (cursor.c) — Super+C. Same modal shape as wppick. */

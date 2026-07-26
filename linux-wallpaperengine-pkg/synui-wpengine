@@ -1,0 +1,233 @@
+#!/bin/bash
+# synui-wpengine — drive linux-wallpaperengine as a layer-shell wallpaper on synui.
+#
+# Wallpaper Engine itself is a Windows app; under Proton it renders into a
+# Windows desktop window that does not exist here, so its own "Apply" is a
+# no-op on Wayland. This runs the native reimplementation instead, which
+# reads the same Steam Workshop assets and paints a wlr-layer-shell
+# BACKGROUND surface. synui creates layer_tree[BACKGROUND] above its own
+# wallpaper_tree, so that surface covers whatever wallpaper.c drew.
+#
+# The chosen wallpapers persist in ~/.config/synui/wpengine.state, one
+# "<output> <workshop-id>" per line, and `restore` replays them at login.
+
+set -uo pipefail
+
+STEAM="${STEAM_ROOT:-$HOME/.local/share/Steam}"
+WORKSHOP="$STEAM/steamapps/workshop/content/431960"
+ASSETS="$STEAM/steamapps/common/wallpaper_engine/assets"
+# Prefer the packaged wrapper (it cds into /usr/lib and sets the NVIDIA env
+# itself); fall back to an uninstalled build tree for development.
+if [ -n "${SYNUI_WPENGINE_BIN:-}" ]; then
+    ENGINE="$SYNUI_WPENGINE_BIN"
+elif [ -x /usr/bin/linux-wallpaperengine ]; then
+    ENGINE=/usr/bin/linux-wallpaperengine
+else
+    ENGINE="$HOME/SYNAPSE/linux-wallpaperengine/build/output/linux-wallpaperengine"
+fi
+STATE="$HOME/.config/synui/wpengine.state"
+LOG="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.log"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.pid"
+
+# Linux truncates /proc/PID/comm to 15 chars, so "linux-wallpaperengine" shows up
+# as "linux-wallpaper" and `pgrep -x linux-wallpaperengine` never matches. We
+# track the pid ourselves and only fall back to the truncated comm.
+COMM=linux-wallpaper
+
+# linux-wallpaperengine resolves its CEF/asset siblings relative to the
+# binary, so an uninstalled build has to be started from its own output
+# directory. The packaged wrapper already does that for us.
+ENGINE_DIR="$(dirname "$ENGINE")"
+[ "$ENGINE" = /usr/bin/linux-wallpaperengine ] && ENGINE_DIR=/
+
+die() { echo "synui-wpengine: $*" >&2; exit 1; }
+
+need_engine() {
+    [ -x "$ENGINE" ] || die "engine not found at $ENGINE (set SYNUI_WPENGINE_BIN)"
+    [ -d "$ASSETS" ] || die "Wallpaper Engine assets not found at $ASSETS"
+}
+
+# Workshop id -> "type<TAB>title", read straight from project.json.
+meta() {
+    python3 - "$1" <<'PY' 2>/dev/null
+import json, sys, os
+d = sys.argv[1]
+try:
+    j = json.load(open(os.path.join(d, "project.json")))
+except Exception:
+    sys.exit(1)
+print("%s\t%s" % (j.get("type", "?").lower(), j.get("title", "?")))
+PY
+}
+
+cmd_list() {
+    [ -d "$WORKSHOP" ] || die "no workshop content at $WORKSHOP"
+    for d in "$WORKSHOP"/*/; do
+        id="$(basename "$d")"
+        m="$(meta "$d")" || continue
+        printf '%-12s %-6s %s\n' "$id" "${m%%	*}" "${m##*	}"
+    done
+}
+
+outputs() {
+    synctl outputs 2>/dev/null |
+        python3 -c 'import json,sys; print("\n".join(o["name"] for o in json.load(sys.stdin)))' 2>/dev/null
+}
+
+# Echo the pids of our running engine(s), preferring the pidfile.
+engine_pids() {
+    local pid
+    if [ -r "$PIDFILE" ] && read -r pid < "$PIDFILE" &&
+       [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$COMM" ]; then
+        echo "$pid"
+        return 0
+    fi
+    pgrep -x "$COMM" 2>/dev/null
+}
+
+cmd_stop() {
+    local pids; pids="$(engine_pids)"
+    [ -n "$pids" ] && kill $pids 2>/dev/null
+    # give the layer surface a moment to go away so synui repaints its own
+    for _ in $(seq 30); do
+        [ -n "$(engine_pids)" ] || break
+        sleep 0.1
+    done
+    # still there? it is wedged, take it down hard
+    pids="$(engine_pids)"
+    [ -n "$pids" ] && kill -9 $pids 2>/dev/null
+    rm -f "$PIDFILE"
+    return 0
+}
+
+# Build the engine arguments for the saved state, into ARGS.
+#
+# Entries are dropped when the compositor we are talking to has no such output.
+# That is what keeps a NESTED synui harmless: synui autostarts this by absolute
+# path, so a nested instance runs the real script, and without this filter its
+# `restore` would kill the engine painting the real seat and relaunch it on a
+# 1280x720 HEADLESS-1. An empty `synctl outputs` means we could not ask (IPC not
+# up yet at login), which is NOT the same as "no match" — trust the state file
+# then rather than silently never starting.
+ARGS=()
+build_args() {
+    ARGS=()
+    [ -s "$STATE" ] || return 0
+
+    local live out id
+    live="$(outputs)"
+
+    while read -r out id; do
+        case "$out" in ''|'#'*) continue ;; esac
+        if [ -n "$live" ] && ! printf '%s\n' "$live" | grep -qxF "$out"; then
+            continue
+        fi
+        [ -d "$WORKSHOP/$id" ] || { echo "synui-wpengine: skipping unknown id $id" >&2; continue; }
+        ARGS+=(--screen-root "$out" --bg "$id" --scaling fill)
+    done < "$STATE"
+}
+
+# Launch one engine process covering every output named in the state file.
+# One process handles all screens; outputs with no entry keep synui's own
+# wallpaper, since the engine only creates layer surfaces for the ones asked for.
+start_from_state() {
+    need_engine
+    build_args
+    local args=("${ARGS[@]}")
+
+    [ ${#args[@]} -gt 0 ] || return 0
+
+    cd "$ENGINE_DIR" || die "cannot enter $ENGINE_DIR"
+    # __GL_THREADED_OPTIMIZATIONS=0 is the upstream-documented NVIDIA workaround.
+    __GL_THREADED_OPTIMIZATIONS=0 \
+    setsid "$ENGINE" --assets-dir "$ASSETS" --layer background \
+        --fps "${SYNUI_WPENGINE_FPS:-30}" --silent "${args[@]}" \
+        >"$LOG" 2>&1 </dev/null &
+    echo $! > "$PIDFILE"
+    disown
+
+    # setsid execs when it can and forks when it cannot, so $! is only
+    # sometimes the engine. Let it settle, then record the pid we can see.
+    local pid
+    for _ in $(seq 30); do
+        pid="$(pgrep -x "$COMM" 2>/dev/null | head -1)"
+        [ -n "$pid" ] && { echo "$pid" > "$PIDFILE"; return 0; }
+        sleep 0.1
+    done
+    return 0
+}
+
+cmd_set() {
+    local id="${1:-}" out="${2:-}"
+    [ -n "$id" ] || die "usage: synui-wpengine set <workshop-id> [output|all]"
+    [ -d "$WORKSHOP/$id" ] || die "no such wallpaper: $id"
+
+    mkdir -p "$(dirname "$STATE")"
+    touch "$STATE"
+
+    if [ -z "$out" ] || [ "$out" = all ]; then
+        : > "$STATE"
+        local o
+        for o in $(outputs); do printf '%s %s\n' "$o" "$id" >> "$STATE"; done
+    else
+        # replace this output's line, keep the others
+        local tmp; tmp="$(mktemp)"
+        grep -v "^$out " "$STATE" > "$tmp" 2>/dev/null || true
+        printf '%s %s\n' "$out" "$id" >> "$tmp"
+        mv "$tmp" "$STATE"
+    fi
+
+    cmd_stop
+    start_from_state
+    echo "synui-wpengine: applied $id"
+}
+
+cmd_off() {
+    cmd_stop
+    : > "$STATE"
+    echo "synui-wpengine: stopped, synui wallpaper restored"
+}
+
+cmd_status() {
+    local pids; pids="$(engine_pids)"
+    if [ -n "$pids" ]; then
+        echo "running (pid $(echo $pids))"
+    else
+        echo "not running"
+    fi
+    if [ -s "$STATE" ]; then
+        echo "--- $STATE"
+        while read -r out id; do
+            [ -n "$out" ] || continue
+            m="$(meta "$WORKSHOP/$id")" || { echo "$out  $id  (missing)"; continue; }
+            printf '%-10s %-12s %-6s %s\n' "$out" "$id" "${m%%	*}" "${m##*	}"
+        done < "$STATE"
+    fi
+}
+
+case "${1:-}" in
+    list)    cmd_list ;;
+    set)     shift; cmd_set "$@" ;;
+    off)     cmd_off ;;
+    restore)
+        # Decide BEFORE stopping anything: with nothing to run here (a nested
+        # or headless synui), leave whatever is on the real seat alone.
+        build_args
+        if [ ${#ARGS[@]} -eq 0 ]; then
+            echo "synui-wpengine: no saved wallpaper for this session's outputs" >&2
+            exit 0
+        fi
+        cmd_stop; start_from_state ;;
+    status)  cmd_status ;;
+    *)
+        cat <<EOF
+usage: synui-wpengine <command>
+
+  list                     list subscribed Workshop wallpapers (id, type, title)
+  set <id> [output|all]    apply a wallpaper (default: every output) and persist
+  off                      stop the engine, hand the background back to synui
+  restore                  re-apply the saved state (for autostart)
+  status                   show what is running and what is saved
+EOF
+        exit 1 ;;
+esac
