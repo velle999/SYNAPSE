@@ -211,6 +211,37 @@ Full detail in the wiki: [Cursor Themes](https://github.com/velle999/SYNAPSE/wik
 [The Desktop](https://github.com/velle999/SYNAPSE/wiki/The-Desktop) ·
 [Window Effects](https://github.com/velle999/SYNAPSE/wiki/Window-Effects).
 
+### Gaming
+
+Running a 7B model as a system service means something has to give when a game
+starts — it holds around 4 GB of VRAM and a pile of worker threads.
+
+**Game mode** (`Super`+`G`) is that negotiation. A fullscreen XWayland client is
+the signal (Steam, Proton/Wine and native X11 games all present that way, while
+desktop apps are Wayland-native and never match), and while one is up synui stops
+`synapd` to hand over the VRAM and holds off the idle stages — a gamepad is not a
+seat input device, so without that the screen blanks mid-game. Everything is
+restored on exit, including if synui itself dies. Firefox and the bundled apps
+are excluded, so going fullscreen on a video does not stop the AI.
+
+**`synui-game-run`** is the other half, for launch time — `gamemoderun`, the
+MangoHud overlay, and optionally gamescope:
+
+```bash
+synui-game-run -- ./game.x86_64          # or as a Steam launch option:
+synui-game-run -- %command%
+```
+
+Every wrapper is optional and a missing tool is dropped rather than fatal.
+`gamescope` and `wine` ship on the ISO; `mangohud` and `gamemode` are optdepends.
+The overlay is loaded but hidden — **`Shift_R`+`F12`** toggles it.
+
+> `MANGOHUD=1` only hooks Vulkan. An OpenGL game needs the wrapper, which is the
+> usual reason the overlay "doesn't work".
+
+See [Gaming](https://github.com/velle999/SYNAPSE/wiki/Gaming) for the settings,
+the exclusion list, and the fullscreen/monitor traps.
+
 ---
 
 ## Services
