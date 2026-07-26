@@ -28,6 +28,21 @@ fi
 STATE="$HOME/.config/synui/wpengine.state"
 LOG="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.log"
 PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.pid"
+LOCKFILE="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.lock"
+
+# Every mutating command is read-modify-write across three things that must
+# agree: the state file, the pidfile, and the running engine. synui fires this
+# script from the Super+W picker without waiting for it, so two picks in quick
+# succession overlap — and they did: one invocation rewrote the state while
+# another was between its build_args and its launch, leaving an engine painting
+# ids that appear nowhere in the state file, and the next pick reasoning from a
+# state that did not describe the screen. Serialize them instead. The lock is
+# held until the process exits, which is what makes stop-then-start atomic.
+take_lock() {
+    exec 9>"$LOCKFILE" || return 0
+    flock -w 30 9 ||
+        echo "synui-wpengine: timed out waiting for the lock, continuing" >&2
+}
 
 # Linux truncates /proc/PID/comm to 15 chars, so "linux-wallpaperengine" shows up
 # as "linux-wallpaper" and `pgrep -x linux-wallpaperengine` never matches. We
@@ -162,6 +177,8 @@ cmd_set() {
     [ -n "$id" ] || die "usage: synui-wpengine set <workshop-id> [output|all]"
     [ -d "$WORKSHOP/$id" ] || die "no such wallpaper: $id"
 
+    take_lock
+
     mkdir -p "$(dirname "$STATE")"
     touch "$STATE"
 
@@ -184,6 +201,8 @@ cmd_set() {
 
 cmd_off() {
     local out="${1:-}"
+
+    take_lock
 
     # One process paints every screen in the state file, so dropping a single
     # output means restarting it without that output's line — not leaving it
@@ -231,6 +250,7 @@ case "${1:-}" in
     set)     shift; cmd_set "$@" ;;
     off)     shift; cmd_off "$@" ;;
     restore)
+        take_lock
         # Decide BEFORE stopping anything: with nothing to run here (a nested
         # or headless synui), leave whatever is on the real seat alone.
         build_args

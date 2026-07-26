@@ -2844,6 +2844,14 @@ void set_scene_buffer(struct wlr_scene_buffer **node,
                        struct wlr_scene_tree *parent, struct wlr_buffer *buf);
 void cairo_begin(cairo_t *cr);   /* clear to transparent + set default font */
 
+/* Copy a UTF-8 string into a fixed buffer, dropping invalid bytes and never
+ * truncating mid-character. Anything drawn from data we did not write (a Steam
+ * Workshop title, a window title, a filename) must go through this. */
+void syn_utf8_copy(char *dst, size_t n, const char *src);
+/* cairo_show_text() that cannot silently blank the rest of a panel — see the
+ * comment on the definition in render.c. */
+void syn_show_text(cairo_t *cr, const char *text);
+
 /* ── wallpaper.c ─────────────────────────────────────────── */
 void wallpaper_init(syn_server_t *s);             /* create wallpaper_tree, decode initial config */
 void wallpaper_output_created(syn_output_t *o);   /* paint this output (server_new_output) */

@@ -221,8 +221,19 @@ static void wppick_apply(syn_server_t *s, int idx)
     /* Leaving a Workshop wallpaper: the engine holds an opaque surface over
      * the output, so repainting wallpaper.c under it would change nothing
      * visible until it is gone. Only this scope's surface goes — another
-     * monitor's Workshop wallpaper is not ours to stop. */
-    if (was == SYN_WP_SRC_WPENGINE) {
+     * monitor's Workshop wallpaper is not ours to stop.
+     *
+     * Whether one is up has to come from the engine's own state file, NOT from
+     * wallpaper_src. SYN_WP_SRC_WPENGINE is set when a pick is made and is
+     * never persisted (the script owns that), while synuirc autostarts
+     * `synui-wpengine restore` at login — so after every restart the config
+     * says IMAGE with the engine painting over it, this stop was skipped, and
+     * picking anything did nothing visible at all. current_index() already
+     * reads the state file for exactly this reason; this is the other half. */
+    char live_we[24];
+    wppick_active_we(live_we, sizeof(live_we), scope);
+
+    if (live_we[0] || was == SYN_WP_SRC_WPENGINE) {
         char cmd[96];
         snprintf(cmd, sizeof(cmd), "synui-wpengine off%s%s",
                  scope ? " " : "", scope ? scope : "");
@@ -476,13 +487,15 @@ static void wppick_scan_workshop(syn_server_t *s)
                 >= (int)sizeof(proj))
             continue;
 
-        char title[96], type[12];
+        /* Read the title at full length and let syn_utf8_copy do the cutting
+         * below. A plain snprintf into the row's buffer cuts on a byte, and a
+         * title long enough to need cutting is long enough to be non-ASCII —
+         * the half character it leaves behind is invalid UTF-8, which cairo
+         * refuses to draw, taking every row under it blank with it. */
+        char title[256], type[12];
         wp_project_meta(proj, title, sizeof(title), type, sizeof(type));
 
-        /* A stale or partial subscription (no project.json, or no title in
-         * it) still gets a row — the id is enough to hand to the engine. */
-        if (!title[0]) snprintf(title, sizeof(title), "%s", e->d_name);
-        if (!type[0])  snprintf(type,  sizeof(type),  "?");
+        if (!type[0]) snprintf(type, sizeof(type), "?");
 
         /* project.json spells the type both "Web" and "web" depending on who
          * published it; fold it so the subtitle column does not look ragged. */
@@ -491,8 +504,16 @@ static void wppick_scan_workshop(syn_server_t *s)
 
         int i = s->wppick.we_count++;
         snprintf(s->wppick.we[i].id,    sizeof(s->wppick.we[i].id),    "%s", e->d_name);
-        snprintf(s->wppick.we[i].title, sizeof(s->wppick.we[i].title), "%s", title);
+        syn_utf8_copy(s->wppick.we[i].title, sizeof(s->wppick.we[i].title), title);
         snprintf(s->wppick.we[i].type,  sizeof(s->wppick.we[i].type),  "%s", type);
+
+        /* A stale or partial subscription (no project.json, or no title in it)
+         * still gets a row — the id is enough to hand to the engine. Checked
+         * after the copy, since a title that was nothing but invalid bytes
+         * comes out of it empty too. */
+        if (!s->wppick.we[i].title[0])
+            snprintf(s->wppick.we[i].title, sizeof(s->wppick.we[i].title),
+                     "%s", e->d_name);
     }
     closedir(d);
 

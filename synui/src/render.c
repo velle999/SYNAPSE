@@ -128,6 +128,106 @@ void cairo_begin(cairo_t *cr)
                            CAIRO_FONT_WEIGHT_NORMAL);
 }
 
+/* ── Drawing text we did not write ───────────────────────────
+ *
+ * Two separate things make a string undrawable here, and both used to take the
+ * rest of the panel down with them.
+ *
+ * Invalid UTF-8 puts the cairo_t into CAIRO_STATUS_INVALID_STRING, and every
+ * later operation on that context — every remaining row, the legend, the
+ * counter — is then a silent no-op. One Steam Workshop title cut mid-character
+ * by a fixed-size buffer was enough to blank the whole bottom half of the
+ * wallpaper picker.
+ *
+ * And the toy font API resolves to a single face with NO per-glyph fallback, so
+ * a character the font has no glyph for just draws nothing. A CJK or emoji
+ * title is invisible on a box with no CJK font installed, which is most of
+ * them.
+ *
+ * So: bad bytes are dropped, and characters the font cannot draw become '?'
+ * (runs collapsed, or a ten-character CJK title becomes ten question marks).
+ * A row is then always identifiable, even when it cannot be spelled.
+ */
+
+void syn_utf8_copy(char *dst, size_t n, const char *src)
+{
+    if (!n) return;
+
+    size_t o = 0;
+    for (const unsigned char *p = (const unsigned char *)src; *p; ) {
+        int len;
+        if      (*p < 0x80)                 len = 1;
+        else if (*p >= 0xC2 && *p <= 0xDF)  len = 2;
+        else if (*p >= 0xE0 && *p <= 0xEF)  len = 3;
+        else if (*p >= 0xF0 && *p <= 0xF4)  len = 4;
+        else { p++; continue; }   /* stray continuation byte, or an invalid lead */
+
+        /* A NUL is not a continuation byte, so this stops at the end of the
+         * string rather than reading past it. */
+        bool ok = true;
+        for (int i = 1; i < len; i++)
+            if ((p[i] & 0xC0) != 0x80) { ok = false; break; }
+        if (!ok) { p++; continue; }
+
+        if (o + (size_t)len + 1 > n) break;   /* truncate on a char boundary */
+        memcpy(dst + o, p, (size_t)len);
+        o += (size_t)len;
+        p += len;
+    }
+    dst[o] = '\0';
+}
+
+void syn_show_text(cairo_t *cr, const char *text)
+{
+    char safe[512];
+    syn_utf8_copy(safe, sizeof(safe), text);
+    if (!safe[0]) return;
+
+    cairo_glyph_t *glyphs = NULL;
+    cairo_text_cluster_t *clusters = NULL;
+    int nglyphs = 0, nclusters = 0;
+    cairo_text_cluster_flags_t cflags = 0;
+
+    /* Clusters are what tie a glyph back to the bytes it came from, which is
+     * the only way to know WHICH character the font is missing. Right-to-left
+     * output would need the walk below run backwards; not worth it for a
+     * fallback path, so it just draws the string as-is. */
+    if (cairo_scaled_font_text_to_glyphs(cairo_get_scaled_font(cr), 0, 0,
+                                         safe, -1, &glyphs, &nglyphs,
+                                         &clusters, &nclusters,
+                                         &cflags) != CAIRO_STATUS_SUCCESS ||
+        (cflags & CAIRO_TEXT_CLUSTER_FLAG_BACKWARD)) {
+        cairo_show_text(cr, safe);
+        goto out;
+    }
+
+    char sub[512];
+    size_t o = 0, b = 0;
+    int g = 0;
+
+    for (int i = 0; i < nclusters; i++) {
+        bool missing = false;
+        for (int j = 0; j < clusters[i].num_glyphs; j++)
+            if (glyphs[g + j].index == 0) { missing = true; break; }
+
+        if (missing) {
+            if (!(o && sub[o - 1] == '?') && o + 1 < sizeof(sub))
+                sub[o++] = '?';
+        } else if (o + (size_t)clusters[i].num_bytes < sizeof(sub)) {
+            memcpy(sub + o, safe + b, (size_t)clusters[i].num_bytes);
+            o += (size_t)clusters[i].num_bytes;
+        }
+        b += (size_t)clusters[i].num_bytes;
+        g += clusters[i].num_glyphs;
+    }
+    sub[o] = '\0';
+    cairo_show_text(cr, sub);
+
+out:
+    if (glyphs)   cairo_glyph_free(glyphs);
+    if (clusters) cairo_text_cluster_free(clusters);
+}
+
 /* ── Panel accent ────────────────────────────────────────────
  * Every compositor-drawn panel used to hard-code the house neon cyan for its
  * headers, selections and rules — so switching themes reskinned window chrome
@@ -1048,11 +1148,15 @@ void synui_render_wppick(syn_server_t *s)
         const char *label, *desc;
         wppick_row(s, i, &label, &desc);
 
+        /* Neither of these is our text — a Workshop title comes from whoever
+         * published it and an image row is a filename — so both go through
+         * syn_show_text(). A row whose title cannot be drawn must still leave
+         * the rows under it readable. */
         cairo_set_font_size(cr, 15);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
         cairo_move_to(cr, pad + 8, ry + 22);
-        cairo_show_text(cr, label);
+        syn_show_text(cr, label);
 
         /* A found image's subtitle is its full path, which can be far wider
          * than the panel — clip it to the row so it cannot spill over the
@@ -1064,7 +1168,7 @@ void synui_render_wppick(syn_server_t *s)
         cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
                               sel ? 0.85 : 0.60, 1.0);
         cairo_move_to(cr, pad + 8, ry + 38);
-        cairo_show_text(cr, desc);
+        syn_show_text(cr, desc);
         cairo_restore(cr);
     }
 
