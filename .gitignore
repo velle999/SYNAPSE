@@ -117,5 +117,7 @@ archiso/out/*.b2sum
 # sources.
 /linux-wallpaperengine/
 /linux-wallpaperengine-pkg/src/
+# makepkg's bare git cache for the VCS source
+/linux-wallpaperengine-pkg/linux-wallpaperengine/
 /linux-wallpaperengine-pkg/pkg/
 /linux-wallpaperengine-pkg/*.pkg.tar.zst

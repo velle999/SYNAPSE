@@ -11,6 +11,12 @@ license=('GPL-3.0-or-later')
 depends=('glew' 'sdl2-compat' 'ffmpeg' 'glfw' 'mpv' 'fftw' 'libpulse' 'libxrandr'
          'libx11' 'nss' 'nspr' 'alsa-lib' 'dbus' 'gtk3')
 makedepends=('git' 'cmake' 'glm' 'python')
+# !debug, and it is not a preference: makepkg.conf carries `debug` globally, and
+# splitting debug symbols out of CEF means objcopy walking a 1.3 GB libcef.so —
+# it ran for over ten minutes here without finishing and yields a debug package
+# nobody will ever load. Plain strip takes the same library to ~219 MB in about
+# a minute, which is the only part worth having.
+options=('!debug' 'strip')
 optdepends=('steam: to subscribe to Workshop wallpapers'
             'synui: the compositor synui-wpengine drives')
 # The engine reads Wallpaper Engine's own assets/ tree at runtime; it is not
