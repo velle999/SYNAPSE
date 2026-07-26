@@ -118,13 +118,27 @@ titlebar_height = 26
 # ever a move.
 # snap = on
 
+# ── Wallpaper ──────────────────────────────────────────────
+# Drawn by the compositor itself, so nothing has to be autostarted for it.
+#   default          the bundled SYNAPSE image (/usr/share/synui) — the default
+#   matrix           animated kanji rain (GLES2 only)
+#   none             flat bg_color
+#   /path/to/img     any PNG or JPEG; ~ expands to $HOME
+# Super+W picks one live and writes wallpaper.state, which then overrides this
+# line — delete that file to hand control back here.
+# wallpaper      = default
+# wallpaper_mode = fill        # fill | fit | stretch | center
+
 # ── GLES post-process effects ──────────────────────────────
 # CRT-style pass on real GPUs; automatically off on pixman (VMs).
-# Strengths 0..1, 0 disables the individual effect (defaults shown).
+# OFF by default — it is a look, not a desktop. Turn it on here, or live in
+# the Super+E filters panel (which saves to filters.state and overrides this).
+# Strengths 0..1, 0 disables the individual effect (values shown are what
+# `effects = on` gives you).
 # effect_glitch is event-driven: a brief screen glitch on window close,
 # a focus change pulses aberration, and a synguard ALERT/DENY verdict
 # on any window glitches the screen for as long as it stands.
-# effects           = on
+# effects           = off
 # effect_scanline   = 0.35
 # effect_curvature  = 0.25
 # effect_aberration = 0.40

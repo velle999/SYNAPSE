@@ -1010,6 +1010,22 @@ typedef struct {
      * xdg-decoration and keeps a GTK shadow margin inside its own surface. */
     int   glass_halo;            /* px; default 0 = off */
 
+    /* Crop a client's surface to its xdg window geometry.
+     *
+     * A client that draws its own decorations reserves an invisible margin
+     * around the visible window for its CSD drop shadow, and reports the window
+     * proper via xdg_surface.set_window_geometry. synui says SERVER_SIDE over
+     * xdg-decoration, but a client only has to obey if it *binds* the protocol
+     * and Firefox never does — so it keeps painting a heavy GTK shadow in that
+     * margin, OUTSIDE synui's own border, on top of synui's shadow. The result
+     * is a second, bigger, square-cornered ring around exactly one app.
+     *
+     * Cropping to the geometry box hides the margin, so every window's ring is
+     * the one synui draws: same size, same rounded corners, everywhere. It also
+     * takes the margin's input region off the grab ring, which is what made
+     * Firefox unresizable by its edges (see xdg_toplevel_request_resize). */
+    int   clip_csd_margin;       /* default 1 = on */
+
     /* Drop shadow (scenefx wlr_scene_shadow, one node per window frame, drawn
      * behind everything and clipped out from under the window itself so it is a
      * soft outer ring — see view_shadow_update). `shadow` gates it; disabled
@@ -1233,6 +1249,13 @@ struct syn_view {
     struct wlr_xdg_surface      *xdg_surface;
     struct wlr_xwayland_surface *xsurface;
     struct wlr_scene_tree       *scene_tree;
+    /* The subsurface tree *inside* scene_tree — the client's own surfaces and
+     * nothing else. xdg popups are added to scene_tree as siblings of it, and
+     * wlr_scene_subsurface_tree_set_clip() recurses into every subsurface tree
+     * below the node it is given, so clipping scene_tree would crop the menus
+     * too. Captured at creation, when the xdg surface tree has exactly one
+     * child; NULL for X11 views (no window geometry to clip to). */
+    struct wlr_scene_tree       *client_tree;
 
     int mapped;
     int floating;
@@ -2389,6 +2412,9 @@ int  view_deco_titlebar(const syn_view_t *view);
 void view_content_box(const syn_view_t *view, struct wlr_box *out);
 /* Redraw borders + titlebar for the view's current geometry/focus/title. */
 void view_update_decorations(syn_view_t *view);
+/* Crop the client's surfaces to its xdg window geometry, hiding a CSD shadow
+ * margin (Firefox's). Called by view_update_decorations; see clip_csd_margin. */
+void view_clip_csd_margin(syn_view_t *view);
 /* Force the next view_update_decorations to repaint the titlebar surface even
  * if its size/focus/title are unchanged — see the definition (theme switches). */
 void view_invalidate_titlebar(syn_view_t *view);

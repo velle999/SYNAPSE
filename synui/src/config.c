@@ -32,10 +32,18 @@
  *
  * Wallpaper (wallpaper.c):
  *   wallpaper = /path/to/image.png   (PNG or JPEG; ~ expands to $HOME)
+ *   wallpaper = default|matrix|none  (bundled image / kanji rain / flat colour)
  *   wallpaper_mode = fill|fit|stretch|center   (default fill)
- * Empty/absent path, or a decode failure, falls back to the solid
- * background color. Super+Shift+W (or a SIGHUP) reloads synuirc and
- * repaints from the current wallpaper path/mode.
+ * Defaults to `default`, the bundled SYNAPSE image: a config that never says
+ * otherwise should still look like a desktop. `none`, or a decode failure,
+ * falls back to the solid background color. Super+Shift+W (or a SIGHUP)
+ * reloads synuirc and repaints from the current wallpaper path/mode.
+ *
+ * Client CSD margins (deco.c):
+ *   clip_csd_margin = on|off    (default on)
+ * Crop each client to the window geometry it declared, so a client that
+ * ignores xdg-decoration and keeps drawing its own drop shadow (Firefox)
+ * doesn't wear a second, wider, square-cornered one outside synui's border.
  *
  * Cursor theme (cursor.c) — Super+Shift+P opens the picker ("pointer"; super+c
  * and super+shift+c were both already taken). An empty theme inherits
@@ -471,6 +479,11 @@ void synui_config_load(syn_config_t *cfg)
     /* Glass halo: OFF. It costs a wider blur pass per window and it is a strong
      * look — opt in with `glass_halo = 14` or so. */
     cfg->glass_halo       = 0;
+    /* Crop clients to their window geometry: ON. synui draws the shadow for
+     * every window, so a client that ignores xdg-decoration and paints its own
+     * on top (Firefox) is a second, bigger, square-cornered ring on one app.
+     * `clip_csd_margin = off` puts the client's margin back. */
+    cfg->clip_csd_margin  = 1;
     /* Drop shadow: on, a soft dark halo dropped a touch downward. */
     cfg->shadow           = 1;
     cfg->shadow_blur_sigma = 18.0f;
@@ -486,12 +499,14 @@ void synui_config_load(syn_config_t *cfg)
     cfg->panel_accent[0] = 0.00f; cfg->panel_accent[1] = 0.85f;
     cfg->panel_accent[2] = 0.75f; cfg->panel_accent[3] = 1.00f;
 
-    /* GLES post-process: on by default, harmless on pixman (effects_init
-     * refuses and the plain path is used). Strengths tuned for subtlety.
-     * These are the defaults; the Super+E panel edits them live and saves to
-     * ~/.config/synui/filters.state, which filters_state_load() lays over the
-     * top at startup. */
-    cfg->effects           = 1;
+    /* GLES post-process: OFF by default. Scanlines, curvature and chromatic
+     * aberration over the whole screen are a look, not a desktop — and every
+     * config that never mentions `effects` was getting them, which is how the
+     * live ISO and a fresh install came up as a CRT simulation before their
+     * owner had chosen anything. Opt in with `effects = on`, or turn it on
+     * live in the Super+E panel. The strengths below stay tuned for that
+     * moment, so `effects = on` alone still gives the full look. */
+    cfg->effects           = 0;
     cfg->effect_scanline   = 0.35f;
     cfg->effect_curvature  = 0.25f;
     cfg->effect_aberration = 0.40f;
@@ -521,7 +536,13 @@ void synui_config_load(syn_config_t *cfg)
     cfg->accel_speed    = 0.0f;
     cfg->accel_speed_set = 0;
 
-    cfg->wallpaper[0]   = '\0';
+    /* The bundled SYNAPSE image, not an empty path. An empty one paints
+     * bg_color and a desktop with no wallpaper reads as a blank screen rather
+     * than a distro — which is what the live ISO and a fresh install looked
+     * like, since neither writes a `wallpaper` line. `wallpaper = none` is
+     * still how you ask for the flat colour. */
+    strncpy(cfg->wallpaper, SYNUI_DATADIR "/wallpaper.png",
+            sizeof(cfg->wallpaper) - 1);
     cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
     cfg->wallpaper_src  = SYN_WP_SRC_IMAGE;
 
@@ -759,6 +780,9 @@ void synui_config_load(syn_config_t *cfg)
             if (cfg->glass_halo < 0)  cfg->glass_halo = 0;
             if (cfg->glass_halo > 64) cfg->glass_halo = 64;
         }
+        else if (strcmp(key, "clip_csd_margin") == 0)
+            cfg->clip_csd_margin = strcmp(val, "on") == 0 ||
+                                   strcmp(val, "1")  == 0;
         else if (strcmp(key, "blur_passes") == 0) {
             cfg->blur_passes = atoi(val);
             if (cfg->blur_passes < 1) cfg->blur_passes = 1;

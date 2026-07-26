@@ -988,6 +988,15 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data)
     struct wlr_scene_tree *frame = view_frame_create(view, server->window_tree);
     view->scene_tree = wlr_scene_xdg_surface_create(frame, xdg_surface);
     view->scene_tree->node.data = view;
+    /* Right now — before any popup can be parented here — the xdg surface tree
+     * holds exactly one child, the client's subsurface tree. That is the node
+     * view_clip_csd_margin() crops; see syn_view_t::client_tree. */
+    if (!wl_list_empty(&view->scene_tree->children)) {
+        struct wlr_scene_node *n =
+            wl_container_of(view->scene_tree->children.next, n, link);
+        if (n->type == WLR_SCENE_NODE_TREE)
+            view->client_tree = wlr_scene_tree_from_node(n);
+    }
     xdg_surface->data = view->scene_tree;
 
     /* Land on the current desktop, on the monitor the user is looking at. */

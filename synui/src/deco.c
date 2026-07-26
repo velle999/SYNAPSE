@@ -418,9 +418,71 @@ static void titlebar_render(syn_view_t *view)
     snprintf(view->tb_title, sizeof(view->tb_title), "%s", title);
 }
 
+/* ── Cropping a client's CSD shadow margin ───────────────────
+ *
+ * An xdg client may paint outside the window it reports through
+ * set_window_geometry; the classic use is an invisible margin holding a
+ * client-drawn drop shadow. Under xdg-decoration that never happens, because a
+ * client taking SERVER_SIDE stops drawing its own frame — but only a client
+ * that *binds* the protocol is bound by it, and Firefox does not bind it at
+ * all. So its GTK shadow lands outside synui's border, on top of synui's own
+ * shadow: a second ring, wider (its margin is bigger than our blur reaches)
+ * and square-cornered (GTK clips it to the rectangular margin), around exactly
+ * one app. Measured on velle's desktop at pkgrel 182: 37 px of client shadow to
+ * the left of the frame against Dolphin's 32 px of synui shadow, with a hard
+ * step back to the wallpaper at its outer edge instead of a gaussian tail.
+ *
+ * Cropping to the geometry box drops those pixels, so every window's ring is
+ * the one this file draws. It also takes the margin's input region off the grab
+ * ring — the reason Firefox could not be resized by its edges (see
+ * xdg_toplevel_request_resize in synui_main.c).
+ *
+ * The clip is in root-surface coordinates, which is exactly what
+ * wlr_xdg_surface.geometry is. Both setters early-return when nothing changed,
+ * so this is cheap enough to run from the per-commit decoration update — and it
+ * has to, because a client can move its geometry on any commit.
+ */
+void view_clip_csd_margin(syn_view_t *view)
+{
+    /* X11 has no window geometry to clip to, and no CSD margin either. */
+    if (!view->client_tree || !view->xdg_surface) return;
+
+    struct wlr_box geo = view->xdg_surface->geometry;
+    struct wlr_box ext = {0};
+    wlr_surface_get_extents(view->xdg_surface->surface, &ext);
+
+    /* Nothing to crop unless the client paints outside the window it declared.
+     * Almost no one does — measured in the nested rig, foot reports geometry
+     * 1260x637 against extents of exactly 1260x637, while Firefox reports
+     * 896x490 at (26,23) inside a 948x542 surface: 26 px of margin on three
+     * sides and 29 on the bottom. Skipping the no-op case matters because a
+     * clip is not free even when it covers everything: it puts a source box and
+     * a destination size on the scene buffer, and that alone shifted the
+     * blurred backdrop around foot by ~7/255. Every SSD client therefore keeps
+     * the exact pixels it had before this existed. */
+    bool inside = ext.x >= geo.x && ext.y >= geo.y &&
+                  ext.x + ext.width  <= geo.x + geo.width &&
+                  ext.y + ext.height <= geo.y + geo.height;
+
+    if (!view->server->config.clip_csd_margin || inside ||
+        geo.width <= 0 || geo.height <= 0) {
+        /* NULL clears it. Free when there was none: wlr_box_equal() treats an
+         * empty box and NULL as the same thing and returns early. */
+        wlr_scene_subsurface_tree_set_clip(&view->client_tree->node, NULL);
+        return;
+    }
+
+    wlr_scene_subsurface_tree_set_clip(&view->client_tree->node, &geo);
+}
+
 /* ── Borders + titlebar ──────────────────────────────────── */
 void view_update_decorations(syn_view_t *view)
 {
+    /* Before the early returns below: a fullscreen window has no chrome but
+     * still has a margin to crop, and an unsized one still has to be able to
+     * drop the clip when the setting goes off. */
+    view_clip_csd_margin(view);
+
     if (!view->mapped || !view->frame) return;
     /* No sane geometry yet (e.g. focused at map before the first layout) — the
      * chrome is (re)created once the window is sized. */
@@ -765,15 +827,17 @@ void view_frame_destroy(syn_view_t *view)
 
     if (view->frame) {
         wlr_scene_node_destroy(&view->frame->node);
-        view->frame      = NULL;
-        view->scene_tree = NULL;   /* was a child of the frame */
+        view->frame       = NULL;
+        view->scene_tree  = NULL;   /* was a child of the frame */
+        view->client_tree = NULL;   /* …and that was a child of scene_tree */
         return;
     }
     /* Override-redirect surfaces have no frame: their tree hangs straight off
      * the overlay layer (xw_map), so it has to be destroyed on its own. */
     if (view->scene_tree) {
         wlr_scene_node_destroy(&view->scene_tree->node);
-        view->scene_tree = NULL;
+        view->scene_tree  = NULL;
+        view->client_tree = NULL;
     }
 }
 
