@@ -926,6 +926,14 @@ echo "  Hostname: synapse"
 # "language pack" part: noto-fonts covers Latin/Greek/Cyrillic and ships as a
 # base, CJK needs noto-fonts-cjk (~130MB, which is why it is not simply always
 # installed), and noto-fonts-extra carries the Indic/Arabic/Hebrew coverage.
+#
+# THE LABELS ARE ASCII ON PURPOSE. This menu is drawn on the Linux VT, whose
+# font is ter-116n — the Latin-1 Terminus. Cyrillic came out as lookalike
+# rubbish and every CJK/Devanagari/Arabic name came out as a row of boxes, so
+# the entries that most needed to be readable were the only unreadable ones.
+# A Unicode console font does not fix it either: a VT font holds at most 512
+# glyphs, which cannot cover CJK by two orders of magnitude. The native name is
+# a nice touch this screen cannot cash — the locale code carries the meaning.
 LOCALE_ROWS="
 English (US)|en_US.UTF-8|us|
 English (UK)|en_GB.UTF-8|uk|
@@ -936,12 +944,12 @@ Português (Brasil)|pt_BR.UTF-8|br|
 Italiano|it_IT.UTF-8|it|
 Nederlands|nl_NL.UTF-8|nl|
 Polski|pl_PL.UTF-8|pl|
-Русский|ru_RU.UTF-8|ru|
-日本語|ja_JP.UTF-8|jp106|noto-fonts-cjk
-中文 (简体)|zh_CN.UTF-8|us|noto-fonts-cjk
-한국어|ko_KR.UTF-8|kr|noto-fonts-cjk
-हिन्दी|hi_IN.UTF-8|us|noto-fonts-extra
-العربية|ar_EG.UTF-8|us|noto-fonts-extra
+Russian|ru_RU.UTF-8|ru|
+Japanese|ja_JP.UTF-8|jp106|noto-fonts-cjk
+Chinese (Simplified)|zh_CN.UTF-8|us|noto-fonts-cjk
+Korean|ko_KR.UTF-8|kr|noto-fonts-cjk
+Hindi|hi_IN.UTF-8|us|noto-fonts-extra
+Arabic|ar_EG.UTF-8|us|noto-fonts-extra
 "
 
 header
@@ -955,7 +963,10 @@ echo "$LOCALE_ROWS" | while IFS= read -r row; do
 done
 echo "   0) Other — enter a locale by hand"
 echo ""
-prompt "Language [1-15, default=1]:"
+# Counted, not typed: a hardcoded range beside a list it is not derived from
+# is wrong the first time anyone adds a language.
+_n_locales=$(echo "$LOCALE_ROWS" | grep -c '|')
+prompt "Language [1-${_n_locales}, default=1]:"
 read -r lang_choice
 lang_choice="${lang_choice:-1}"
 
@@ -1002,14 +1013,125 @@ arch-chroot /mnt pacman -S --noconfirm --needed $FONT_PKGS 2>&1 | tail -2 \
     || warn "Font install failed — $LOCALE may render as boxes"
 
 # ── Timezone ──────────────────────────────────────────────
+#
+# This was a bare "Timezone (e.g. Europe/Berlin):" prompt, which assumed you
+# knew that tzdata wants a Region/City pair. Typing the thing a US user
+# actually knows their zone by — "cst" — silently fell through to UTC, and the
+# screen offered no way to find out what it wanted instead. A wrong clock on a
+# fresh install is a bad first five minutes.
+#
+# So: a short menu of the common zones, the same shape as the language picker
+# above, plus an Other that still takes any tzdata name. The abbreviations are
+# accepted because they are what people type; the full name is echoed back so
+# the mapping is visible rather than magic.
+TZ_ROWS="
+America/New_York|US Eastern (EST/EDT)
+America/Chicago|US Central (CST/CDT)
+America/Denver|US Mountain (MST/MDT)
+America/Phoenix|US Arizona (MST, no DST)
+America/Los_Angeles|US Pacific (PST/PDT)
+America/Anchorage|US Alaska
+Pacific/Honolulu|US Hawaii
+America/Toronto|Canada Eastern
+America/Sao_Paulo|Brazil
+Europe/London|UK (GMT/BST)
+Europe/Berlin|Central Europe (CET/CEST)
+Europe/Moscow|Moscow
+Asia/Kolkata|India
+Asia/Shanghai|China
+Asia/Tokyo|Japan
+Australia/Sydney|Australia Eastern
+UTC|UTC — no local time
+"
+
+# The abbreviations people type instead of a tzdata name. Deliberately only the
+# unambiguous ones: "IST" is India, Ireland and Israel, so it is not here.
+tz_from_abbrev() {
+    case "$(echo "$1" | tr '[:lower:]' '[:upper:]')" in
+        EST|EDT|ET)     echo "America/New_York" ;;
+        CST|CDT|CT)     echo "America/Chicago" ;;
+        MST|MDT|MT)     echo "America/Denver" ;;
+        PST|PDT|PT)     echo "America/Los_Angeles" ;;
+        AKST|AKDT)      echo "America/Anchorage" ;;
+        HST)            echo "Pacific/Honolulu" ;;
+        GMT|BST)        echo "Europe/London" ;;
+        CET|CEST)       echo "Europe/Berlin" ;;
+        JST)            echo "Asia/Tokyo" ;;
+        AEST|AEDT)      echo "Australia/Sydney" ;;
+        UTC|Z)          echo "UTC" ;;
+        *)              echo "" ;;
+    esac
+}
+
 echo ""
-prompt "Timezone (e.g. Europe/Berlin, blank for UTC):"
-read -r TZ_CHOICE
-TZ_CHOICE="${TZ_CHOICE:-UTC}"
-if [ ! -f "/mnt/usr/share/zoneinfo/$TZ_CHOICE" ]; then
-    warn "Unknown timezone '$TZ_CHOICE' — using UTC"
-    TZ_CHOICE="UTC"
-fi
+step "Step 7 — Timezone"
+i=0
+echo "$TZ_ROWS" | while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    i=$((i + 1))
+    printf '  %2d) %-22s %s\n' "$i" "${row%%|*}" "${row#*|}"
+done
+echo "   0) Other — enter any tzdata name (e.g. Europe/Lisbon)"
+echo ""
+_n_tz=$(echo "$TZ_ROWS" | grep -c '|')
+
+TZ_CHOICE=""
+while [ -z "$TZ_CHOICE" ]; do
+    prompt "Timezone [1-${_n_tz}, a name, or an abbreviation like CST; blank=UTC]:"
+    read -r tz_input
+    tz_input="${tz_input:-UTC}"
+
+    case "$tz_input" in
+        0)
+            prompt "tzdata name (Region/City):"
+            read -r tz_input
+            ;;
+    esac
+
+    # A number picks from the list; anything else is a name or an abbreviation.
+    case "$tz_input" in
+        ''|*[!0-9]*) ;;
+        *)  row=$(echo "$TZ_ROWS" | sed -n "$((tz_input + 1))p")
+            [ -n "$row" ] && tz_input="${row%%|*}"
+            ;;
+    esac
+
+    # Abbreviation -> tzdata name, but only if it is not already a real zone.
+    if [ ! -f "/mnt/usr/share/zoneinfo/$tz_input" ]; then
+        mapped=$(tz_from_abbrev "$tz_input")
+        if [ -n "$mapped" ]; then
+            echo "    $tz_input -> $mapped"
+            tz_input="$mapped"
+        fi
+    fi
+
+    if [ -n "$tz_input" ] && [ -f "/mnt/usr/share/zoneinfo/$tz_input" ]; then
+        TZ_CHOICE="$tz_input"
+    else
+        # Re-ask rather than silently installing UTC. Offer near misses: a
+        # city name on its own ("Chicago") is the other thing people type.
+        near=$(cd /mnt/usr/share/zoneinfo 2>/dev/null && \
+               find . -type f -ipath "*${tz_input}*" 2>/dev/null \
+               | sed 's|^\./||' | grep -vE '^(posix|right)/' | head -5)
+        # Exactly one match is not a guess. "Chicago" is the other thing people
+        # type after "CST", and making them retype it as America/Chicago when
+        # nothing else could have been meant is the same unhelpfulness in a
+        # politer voice.
+        if [ "$(echo "$near" | grep -c .)" = "1" ]; then
+            echo "    $tz_input -> $near"
+            TZ_CHOICE="$near"
+            continue
+        fi
+        warn "Not a timezone: '$tz_input'"
+        if [ -n "$near" ]; then
+            echo "  Did you mean:"
+            echo "$near" | sed 's/^/    /'
+        else
+            echo "  Pick a number from the list, or see: ls /mnt/usr/share/zoneinfo"
+        fi
+        echo ""
+    fi
+done
 arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$TZ_CHOICE" /etc/localtime 2>/dev/null || true
 arch-chroot /mnt hwclock --systohc 2>/dev/null || true
 
