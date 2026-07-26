@@ -57,19 +57,59 @@ if [[ ! -f "$DISK" ]]; then
 fi
 
 # OVMF (UEFI firmware)
+#
+# The paths this used to search — /usr/share/ovmf/OVMF.fd and friends — do not
+# exist on a current Arch host: edk2-ovmf ships /usr/share/edk2/x64/. So the
+# loop fell through on every machine it was meant to serve, printed one line of
+# warning, and booted BIOS. Every "tested in QEMU" for a distro whose boot path
+# is GRUB + Secure Boot was therefore a BIOS test. Split CODE/VARS is tried
+# first (the modern layout, and the only one that can persist boot entries or
+# an enrolled key), then the single-file images, then the legacy paths.
 OVMF=""
-for ovmf_path in \
-    /usr/share/ovmf/OVMF.fd \
-    /usr/share/OVMF/OVMF.fd \
-    /usr/lib/ovmf/OVMF.fd
-do
-    if [[ -f "$ovmf_path" ]]; then
-        OVMF="-drive if=pflash,format=raw,readonly=on,file=${ovmf_path}"
-        echo "UEFI: $ovmf_path"
-        break
-    fi
+OVMF_VARS_SRC=""
+for d in /usr/share/edk2/x64 /usr/share/edk2-ovmf/x64 /usr/share/OVMF /usr/share/ovmf/x64; do
+    for code in OVMF_CODE.4m.fd OVMF_CODE.fd; do
+        if [[ -f "$d/$code" ]]; then
+            for vars in OVMF_VARS.4m.fd OVMF_VARS.fd; do
+                [[ -f "$d/$vars" ]] && OVMF_VARS_SRC="$d/$vars" && break
+            done
+            [[ -n "$OVMF_VARS_SRC" ]] && OVMF="$d/$code" && break 2
+        fi
+    done
 done
-[[ -z "$OVMF" ]] && echo "Warning: OVMF not found — using legacy BIOS boot"
+
+OVMF_ARGS=""
+if [[ -n "$OVMF" ]]; then
+    # VARS is per-VM and writable, so the firmware can keep its boot entries.
+    # Beside the test disk, and only seeded once, or every run would silently
+    # discard whatever the last boot wrote.
+    OVMF_VARS="${DISK%.qcow2}-OVMF_VARS.fd"
+    [[ -f "$OVMF_VARS" ]] || cp "$OVMF_VARS_SRC" "$OVMF_VARS"
+    OVMF_ARGS="-drive if=pflash,format=raw,readonly=on,file=${OVMF},unit=0"
+    OVMF_ARGS+=" -drive if=pflash,format=raw,file=${OVMF_VARS},unit=1"
+    echo "UEFI: $OVMF (vars: $OVMF_VARS)"
+else
+    for single in /usr/share/edk2/x64/OVMF.4m.fd /usr/share/ovmf/OVMF.fd \
+                  /usr/share/OVMF/OVMF.fd /usr/lib/ovmf/OVMF.fd; do
+        if [[ -f "$single" ]]; then
+            OVMF_ARGS="-drive if=pflash,format=raw,readonly=on,file=${single}"
+            echo "UEFI: $single (single-image; boot entries will not persist)"
+            break
+        fi
+    done
+fi
+
+if [[ -z "$OVMF_ARGS" ]]; then
+    # Loud, because the thing being tested boots differently in this mode and
+    # nothing later in the run will say so again.
+    echo ""
+    echo "  ############################################################"
+    echo "  #  NO UEFI FIRMWARE FOUND — THIS IS A LEGACY BIOS BOOT     #"
+    echo "  #  It does NOT test GRUB's UEFI path or Secure Boot.       #"
+    echo "  #  Install edk2-ovmf to test the way real machines boot.   #"
+    echo "  ############################################################"
+    echo ""
+fi
 
 echo ""
 echo "⚡ Starting SynapseOS in QEMU"
@@ -83,7 +123,7 @@ echo ""
 
 qemu-system-x86_64 \
     $KVM \
-    $OVMF \
+    $OVMF_ARGS \
     -m "$RAM" \
     -smp "$CPUS" \
     -vga "$VGA" \
