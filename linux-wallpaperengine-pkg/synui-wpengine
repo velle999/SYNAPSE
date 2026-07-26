@@ -194,7 +194,12 @@ cmd_off() {
         grep -v "^$out " "$STATE" > "$tmp" 2>/dev/null || true
         mv "$tmp" "$STATE"
         cmd_stop
-        start_from_state
+        # Only relaunch when another output still wants a wallpaper. With the
+        # state now empty there is nothing to run, and calling start_from_state
+        # anyway would fail need_engine on a box that has the script but no
+        # Wallpaper Engine assets — an error where the old global `off` simply
+        # said "stopped".
+        [ -s "$STATE" ] && start_from_state
         echo "synui-wpengine: stopped on $out, synui wallpaper restored there"
         return 0
     fi
