@@ -234,6 +234,13 @@ static int method_notify(sd_bus_message *m, void *data, sd_bus_error *e)
     synui_render_notifs(s);
     notif_arm_timer(s);
 
+    /* Only for a NEW notification: a progress bar re-posting the same id many
+     * times a second is one notification, and chiming per update would be a
+     * machine-gun. `replaces` is exactly that distinction. */
+    if (!replaces)
+        sound_play(s, urgency == NOTIF_URGENCY_CRITICAL ? SOUND_EVT_ERROR
+                                                        : SOUND_EVT_NOTIFY);
+
     wlr_log(WLR_DEBUG, "synui: notif: #%u from %s: %s", item->id, item->app,
             item->summary);
     return sd_bus_reply_method_return(m, "u", item->id);

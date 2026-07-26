@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=184
+pkgrel=185
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -48,6 +48,15 @@ makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 
 optdepends=('xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
             'imagemagick: same — most cursor makefiles render their PNGs with it'
             'cava: audio visualiser widget (synui-widgets visualizer on)'
+            # Event sounds (Super+S) ship OFF, so neither of these is needed for
+            # a working desktop — but with sounds turned on and no theme
+            # installed, every event resolves to a sample that is not there and
+            # the panel's toggles look broken. sound-theme-freedesktop is the
+            # one every other desktop uses; libcanberra does the XDG lookup
+            # (theme inheritance included) that synui-sound only approximates
+            # with a directory search when it is absent.
+            'sound-theme-freedesktop: samples for the Super+S event sounds'
+            'libcanberra: XDG sound-theme lookup for the event sounds'
             'wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'
@@ -192,6 +201,13 @@ package() {
     # implementation of the toggle however it is reached.
     install -Dm755 systemd/synui-widgets.sh \
         "$pkgdir/usr/bin/synui-widgets"
+
+    # The single writer of sounds.state AND the thing that plays a sample —
+    # both jobs in one script so "is this event enabled?" has one answer. The
+    # compositor caches the same file to skip a fork when everything is off,
+    # which is the shipped default: nothing here makes a sound until asked.
+    install -Dm755 systemd/synui-sound.sh \
+        "$pkgdir/usr/bin/synui-sound"
     install -Dm755 systemd/synui-bar.sh \
         "$pkgdir/usr/bin/synui-bar"
 

@@ -626,6 +626,7 @@ void synui_lock(syn_server_t *s)
 
     lock_render(s);
     wlr_log(WLR_INFO, "synui: session locked (native)");
+    sound_play(s, SOUND_EVT_LOCK);
 }
 
 void synui_unlock(syn_server_t *s)
@@ -634,6 +635,7 @@ void synui_unlock(syn_server_t *s)
 
     s->nlock.active = 0;
     s->locked = 0;
+    sound_play(s, SOUND_EVT_UNLOCK);
 
     lock_auth_cleanup(s);
     if (s->nlock.t_clock) { wl_event_source_remove(s->nlock.t_clock); s->nlock.t_clock = NULL; }

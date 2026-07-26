@@ -1535,6 +1535,275 @@ void synui_render_filters(syn_server_t *s)
     set_scene_buffer(&s->filters_ui.text_buf, s->filters_ui.tree, buf);
 }
 
+/* ── Desktop widget manager (widgets.c) ──────────────────── */
+
+void synui_render_widgets(syn_server_t *s)
+{
+    syn_widgets_t *w = &s->widgets;
+
+    if (!w->visible) {
+        wlr_scene_node_set_enabled(&s->widgets_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 34, top = 66, pad = 18;
+    int pw = 520;
+    int ph = top + WIDGET_ROW_COUNT * row_h + 96;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->widgets_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->widgets_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->widgets_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->widgets_ui.bg)
+        s->widgets_ui.bg = wlr_scene_rect_create(s->widgets_ui.tree,
+                                                 pw, ph, bg_color);
+    if (!s->widgets_ui.accent)
+        s->widgets_ui.accent = wlr_scene_rect_create(s->widgets_ui.tree,
+                                                     pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->widgets_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "DESKTOP WIDGETS");
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+    cairo_move_to(cr, 18, 50);
+    cairo_show_text(cr, "each one on its own \xc2\xb7 Space is still all-or-nothing");
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 58);
+    cairo_line_to(cr, pw - 18, 58);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < WIDGET_ROW_COUNT; i++) {
+        int sel = (i == w->selected);
+        int ry  = top + i * row_h;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+
+        /* The master row is a summary of the four below it, so it is set apart
+         * by a rule rather than left to read as a fifth widget. */
+        if (i == WIDGET_ROW_ALL + 1) {
+            cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.45);
+            cairo_move_to(cr, 18, ry - 22);
+            cairo_line_to(cr, pw - 18, ry - 22);
+            cairo_stroke(cr);
+        }
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        cairo_show_text(cr, widget_row_label(i));
+
+        const char *val = widgets_row_value(s, i);
+        if (strcmp(val, "off") == 0)
+            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        else
+            set_accent(cr, 1.0);
+        cairo_move_to(cr, 330, ry + 4);
+        cairo_show_text(cr, val);
+
+        /* A widget that is on and still invisible needs saying so on its own
+         * row, not only in the status line after you toggle it. */
+        if (i == WIDGET_ROW_VISUALIZER && !w->have_cava) {
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+            cairo_move_to(cr, 390, ry + 4);
+            cairo_show_text(cr, "needs cava");
+        }
+    }
+
+    if (w->status[0]) {
+        cairo_set_font_size(cr, 12);
+        set_accent(cr, 0.9);
+        cairo_move_to(cr, 18, ph - 56);
+        cairo_show_text(cr, w->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 34);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on");
+    cairo_move_to(cr, 18, ph - 16);
+    cairo_show_text(cr, "Space all on/off \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->widgets_ui.text_buf, s->widgets_ui.tree, buf);
+}
+
+/* ── Event sounds panel (sound.c) ────────────────────────── */
+
+void synui_render_sound(syn_server_t *s)
+{
+    syn_sound_t *snd = &s->sound;
+
+    if (!snd->visible) {
+        wlr_scene_node_set_enabled(&s->sound_ui.tree->node, false);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 30, top = 66, pad = 18;
+    int pw = 560;
+    int ph = top + SOUND_ROW_COUNT * row_h + 96;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->sound_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->sound_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->sound_ui.tree->node);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->sound_ui.bg)
+        s->sound_ui.bg = wlr_scene_rect_create(s->sound_ui.tree,
+                                               pw, ph, bg_color);
+    if (!s->sound_ui.accent)
+        s->sound_ui.accent = wlr_scene_rect_create(s->sound_ui.tree,
+                                                   pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->sound_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "EVENT SOUNDS");
+
+    /* The master switch off is the shipped default, not a fault — so it is
+     * stated plainly rather than in the warning colour the filters panel uses
+     * for a setting that is fighting you. */
+    cairo_set_font_size(cr, 12);
+    if (!snd->enabled) {
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        cairo_move_to(cr, 18, 50);
+        cairo_show_text(cr, "silent \xc2\xb7 Space turns event sounds on");
+    } else {
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        cairo_move_to(cr, 18, 50);
+        cairo_show_text(cr, "t plays the selected sound without enabling it");
+    }
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 58);
+    cairo_line_to(cr, pw - 18, 58);
+    cairo_stroke(cr);
+
+    /* With the master switch off, an event's own on/off decides nothing. */
+    int dimmed = !snd->enabled;
+
+    for (int i = 0; i < SOUND_ROW_COUNT; i++) {
+        int sel = (i == snd->selected);
+        int ry  = top + i * row_h;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry - 16, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+
+        if (i == SOUND_ROW_EVENT) {
+            cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.45);
+            cairo_move_to(cr, 18, ry - 20);
+            cairo_line_to(cr, pw - 18, ry - 20);
+            cairo_stroke(cr);
+        }
+
+        const char *label;
+        char value[64];
+        int is_event = 0, on = 0;
+
+        if (i == SOUND_ROW_ENABLED) {
+            label = "Event sounds";
+            snprintf(value, sizeof(value), "%s", snd->enabled ? "on" : "off");
+            on = snd->enabled;
+        } else if (i == SOUND_ROW_VOLUME) {
+            label = "Volume";
+            snprintf(value, sizeof(value), "%d%%", snd->volume);
+        } else if (i == SOUND_ROW_THEME) {
+            label = "Sound theme";
+            snprintf(value, sizeof(value), "%s", snd->theme);
+        } else {
+            int evt = i - SOUND_ROW_EVENT;
+            label = sound_event_label(evt);
+            on = snd->on[evt];
+            snprintf(value, sizeof(value), "%s", on ? "on" : "off");
+            is_event = 1;
+        }
+
+        cairo_set_font_size(cr, 14);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        cairo_show_text(cr, label);
+
+        if (i == SOUND_ROW_VOLUME) {
+            draw_slider(cr, 300, ry - 9, 180, 12, snd->volume / 100.0f,
+                        sel, dimmed);
+            cairo_set_font_size(cr, 12);
+            if (dimmed) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            else        set_accent(cr, 1.0);
+            cairo_move_to(cr, 492, ry + 4);
+            cairo_show_text(cr, value);
+        } else {
+            if ((is_event && dimmed) || !on)
+                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            else
+                set_accent(cr, 1.0);
+            /* The theme is a name, not a state, so it is never greyed as "off". */
+            if (i == SOUND_ROW_THEME)
+                cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+            cairo_move_to(cr, 300, ry + 4);
+            cairo_show_text(cr, value);
+        }
+    }
+
+    if (snd->status[0]) {
+        cairo_set_font_size(cr, 12);
+        set_accent(cr, 0.9);
+        cairo_move_to(cr, 18, ph - 56);
+        cairo_show_text(cr, snd->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 34);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on");
+    cairo_move_to(cr, 18, ph - 16);
+    cairo_show_text(cr, "t play \xc2\xb7 Space all sounds on/off \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->sound_ui.text_buf, s->sound_ui.tree, buf);
+}
+
 /* ── Clock & Time settings panel (clock.c) ───────────────── */
 
 void synui_render_clock(syn_server_t *s)
@@ -3539,6 +3808,8 @@ void synui_ui_init(syn_server_t *s)
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->news_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->widgets_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->sound_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->clock_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->cal_ui.tree     = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
@@ -3565,6 +3836,8 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->news_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->widgets_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->sound_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->clock_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);

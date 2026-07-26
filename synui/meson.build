@@ -19,6 +19,9 @@ threads   = dependency('threads')
 cairo     = dependency('cairo')
 rsvg      = dependency('librsvg-2.0')  # icons.c rasterizes SVG-only app icons
 libinput  = dependency('libinput')
+# sound.c watches udev so a device being plugged in can make a noise. Already
+# installed as a wlroots dependency, so this adds no package to the ISO.
+libudev   = dependency('libudev')
 # screensaver.c: sd-bus, to own org.freedesktop.ScreenSaver
 libsystemd = dependency('libsystemd')
 libjpeg   = dependency('libjpeg')  # provided by libjpeg-turbo; wallpaper.c JPEG decode
@@ -171,6 +174,8 @@ synui_exe = executable('synui',
     'src/power.c',
     'src/game.c',
     'src/filters.c',
+  'src/widgets.c',
+  'src/sound.c',
     'src/clock.c',
     'src/greeter.c',
     'src/ctlpanel.c',
@@ -219,7 +224,7 @@ synui_exe = executable('synui',
   # /drag/output-layout helpers build scenefx-native (type-3) buffer nodes that can
   # carry blur/corners/shadow. wlroots-first gives a mixed tree and dead clicks.
   dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
-                  libinput, libjpeg, libcurl, libdisplay_info,
+                  libinput, libudev, libjpeg, libcurl, libdisplay_info,
                   xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',

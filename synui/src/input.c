@@ -462,10 +462,16 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         else
             snprintf(cmd, sizeof(cmd), "synui-screenshot full");
         spawn(cmd);
+        /* The shutter, fired here rather than inside synui-screenshot so the
+         * region form (which is bound straight to `spawn synui-screenshot
+         * region`) is not the odd one out — and so one switch governs it. */
+        sound_play(s, SOUND_EVT_SCREENSHOT);
+    } else if (strcmp(action, "quit") == 0) {
+        /* The logout chime lives in synui_destroy, not here: greetd's SIGTERM
+         * and ^C never reach this branch and deserve it just as much. */
+        wl_display_terminate(s->display);
     } else if (strcmp(action, "close") == 0) {
         if (s->focused_view) view_close(s->focused_view);
-    } else if (strcmp(action, "quit") == 0) {
-        wl_display_terminate(s->display);
     } else if (strcmp(action, "layout_cycle") == 0) {
         ws->layout = (ws->layout + 1) % 4;
         static const char *lnames[] = {"tiling","floating","monocle","AI"};
@@ -558,6 +564,11 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
         else
             wlr_log(WLR_ERROR, "synui: volume: bad arg '%s'", arg ? arg : "");
+        /* The feedback blip, off by default like every other event sound. Not
+         * on mute: a sound to confirm silence is the one case where the sound
+         * is the wrong answer. */
+        if (arg && strcmp(arg, "mute") != 0)
+            sound_play(s, SOUND_EVT_VOLUME);
     } else if (strcmp(action, "power") == 0) {
         power_toggle(s);
     } else if (strcmp(action, "taskmgr") == 0) {
@@ -597,6 +608,16 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         spawn(s->config.network_cmd);
     } else if (strcmp(action, "wallpaper_reload") == 0) {
         synui_config_reload(s);
+    } else if (strcmp(action, "widgets") == 0) {
+        /* Super+Shift+A: the widget manager, one row per widget. It replaced a
+         * blind group toggle, exactly as the filter panel replaced one — and,
+         * as there, the old behaviour is still one key: Space from any row.
+         * `spawn synui-widgets toggle` remains bindable for anyone who wants
+         * the panel-less version back. */
+        widgets_toggle(s);
+    } else if (strcmp(action, "sounds") == 0) {
+        /* Super+S: event sounds. Everything is off until turned on here. */
+        sound_toggle(s);
     } else if (strcmp(action, "filters") == 0) {
         /* Super+E: the filter panel (sliders for each strength). The blind
          * on/off toggle it replaced is still available as "effects_toggle"
@@ -1029,6 +1050,18 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* CRT filter panel: same modal contract as the power panel. */
         for (int i = 0; i < nsyms; i++)
             if (filters_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Desktop widget manager: same modal contract. */
+        for (int i = 0; i < nsyms; i++)
+            if (widgets_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Event sounds panel: same modal contract. */
+        for (int i = 0; i < nsyms; i++)
+            if (sound_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 

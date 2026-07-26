@@ -1,0 +1,545 @@
+/*
+ * sound.c — event sounds, and the Super+S panel that turns them on.
+ *
+ * The desktop is SILENT by default and stays that way until someone asks for a
+ * noise: sounds.state does not exist until the first toggle, and with no file
+ * every event here returns without doing anything. That is deliberate — a
+ * desktop that starts chiming after an upgrade gets its speakers muted, and then
+ * the one sound the user did want is gone too.
+ *
+ * Three pieces:
+ *
+ *   sound_play()          the rest of the compositor's entry point. Cheap enough
+ *                         to call from a hot path: with sounds off it is a stat
+ *                         and two compares.
+ *   the Super+S panel     master switch, volume, theme, one row per event, and
+ *                         `t` to hear a sample without enabling it.
+ *   the udev monitor      what makes "USB plugged in" an event at all.
+ *
+ * synui-sound is the single writer of sounds.state and the thing that actually
+ * plays a sample; this file never writes the file and never opens an audio
+ * device. What it keeps is a CACHE of the file, refreshed whenever its mtime
+ * moves, and the cache can only ever skip a fork — the helper re-reads the state
+ * itself, so a stale copy here can delay a sound, never play one that is off.
+ *
+ * Samples come from the XDG sound theme, so they are the samples every other
+ * desktop uses and the user's own theme in ~/.local/share/sounds just works.
+ *
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ * https://github.com/velle999/SYNAPSE
+ */
+
+#define _GNU_SOURCE
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+
+#include <libudev.h>
+#include <wlr/util/log.h>
+
+#include "synui.h"
+
+/* The key in sounds.state, and the argument to `synui-sound play`. Must match
+ * the helper's $EVENTS list exactly — this is the whole binding between them. */
+const char *sound_event_name(syn_sound_event_t evt)
+{
+    switch (evt) {
+    case SOUND_EVT_LOGIN:          return "login";
+    case SOUND_EVT_LOGOUT:         return "logout";
+    case SOUND_EVT_DEVICE_ADDED:   return "device_added";
+    case SOUND_EVT_DEVICE_REMOVED: return "device_removed";
+    case SOUND_EVT_LOCK:           return "lock";
+    case SOUND_EVT_UNLOCK:         return "unlock";
+    case SOUND_EVT_NOTIFY:         return "notify";
+    case SOUND_EVT_SCREENSHOT:     return "screenshot";
+    /* volume_change, not volume: `volume` is already the master level's key in
+     * the same flat file, and an event of that name read its own line into the
+     * level and silenced everything. */
+    case SOUND_EVT_VOLUME:         return "volume_change";
+    case SOUND_EVT_ERROR:          return "error";
+    default:                       return NULL;
+    }
+}
+
+const char *sound_event_label(syn_sound_event_t evt)
+{
+    switch (evt) {
+    case SOUND_EVT_LOGIN:          return "Login";
+    case SOUND_EVT_LOGOUT:         return "Logout";
+    case SOUND_EVT_DEVICE_ADDED:   return "Device plugged in";
+    case SOUND_EVT_DEVICE_REMOVED: return "Device unplugged";
+    case SOUND_EVT_LOCK:           return "Screen locked";
+    case SOUND_EVT_UNLOCK:         return "Screen unlocked";
+    case SOUND_EVT_NOTIFY:         return "Notification";
+    case SOUND_EVT_SCREENSHOT:     return "Screenshot";
+    case SOUND_EVT_VOLUME:         return "Volume change";
+    case SOUND_EVT_ERROR:          return "Error / alert";
+    default:                       return "?";
+    }
+}
+
+/* ── The cached sounds.state ─────────────────────────────── */
+
+static void sound_defaults(syn_sound_t *snd)
+{
+    snd->enabled = 0;
+    snd->volume  = 70;
+    for (int i = 0; i < SOUND_EVT_COUNT; i++) snd->on[i] = 0;
+    snprintf(snd->theme, sizeof(snd->theme), "freedesktop");
+}
+
+/*
+ * Re-read the file if it has moved since the last look. Keying on mtime rather
+ * than a reload hook is what lets `synui-sound login on` in a terminal take
+ * effect immediately without the compositor being told: there is no reload path
+ * to remember to call, and no way for the two to drift.
+ *
+ * An absent file resets to the defaults — that is `synui-sound` never having
+ * been run, or the user deleting it to get the silence back.
+ */
+void sound_state_refresh(syn_server_t *s)
+{
+    syn_sound_t *snd = &s->sound;
+
+    char path[256];
+    if (!syn_config_path(path, sizeof(path), "sounds.state")) {
+        if (!snd->loaded) { sound_defaults(snd); snd->loaded = 1; }
+        return;
+    }
+
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        if (snd->mtime != 0 || !snd->loaded) {
+            sound_defaults(snd);
+            snd->mtime  = 0;
+            snd->loaded = 1;
+        }
+        return;
+    }
+    if (snd->loaded && snd->mtime == (long)st.st_mtime) return;
+
+    sound_defaults(snd);
+    snd->mtime  = (long)st.st_mtime;
+    snd->loaded = 1;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+
+    char line[192];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+
+        char *key = line;
+        while (*key == ' ' || *key == '\t') key++;
+        char *end = key + strlen(key);
+        while (end > key && (end[-1] == ' ' || end[-1] == '\t')) *--end = '\0';
+
+        char *val = eq + 1;
+        while (*val == ' ' || *val == '\t') val++;
+        end = val + strlen(val);
+        while (end > val && (end[-1] == ' ' || end[-1] == '\t')) *--end = '\0';
+
+        if (strcmp(key, "enabled") == 0) {
+            snd->enabled = (strcmp(val, "on") == 0);
+        } else if (strcmp(key, "volume") == 0) {
+            int v = atoi(val);
+            snd->volume = v < 0 ? 0 : v > 100 ? 100 : v;
+        } else if (strcmp(key, "theme") == 0) {
+            snprintf(snd->theme, sizeof(snd->theme), "%s", val);
+        } else {
+            for (int i = 0; i < SOUND_EVT_COUNT; i++) {
+                const char *n = sound_event_name(i);
+                if (n && strcmp(key, n) == 0)
+                    snd->on[i] = (strcmp(val, "on") == 0);
+            }
+        }
+    }
+    fclose(f);
+}
+
+/* ── Playing ─────────────────────────────────────────────── */
+
+void sound_play(syn_server_t *s, syn_sound_event_t evt)
+{
+    if (!s || evt < 0 || evt >= SOUND_EVT_COUNT) return;
+
+    sound_state_refresh(s);
+
+    /* The fast path, and the only reason the cache exists: on a silent desktop
+     * — the default — an event costs a stat and two compares instead of a fork.
+     * synui-sound checks all three of these again for itself, so being wrong
+     * here can only ever mean a missed sound, never an unwanted one. */
+    if (!s->sound.enabled) return;
+    if (!s->sound.on[evt]) return;
+    if (s->sound.volume <= 0) return;
+
+    const char *name = sound_event_name(evt);
+    if (!name) return;
+
+    char cmd[96];
+    snprintf(cmd, sizeof(cmd), "synui-sound play %s", name);
+    synui_spawn(cmd);
+}
+
+/* ── udev: a device appearing is an event ────────────────── */
+/*
+ * The reason "USB plugged in" can make a noise at all. Filtered to the usb
+ * subsystem's usb_device devtype, which is one event per physical thing plugged
+ * in — the unfiltered stream fires once per interface as well, so a keyboard
+ * with a hub in it would chime three times.
+ *
+ * The monitor fd goes on the wl_event_loop like every other watcher in synui
+ * (see synapd_mon.c, notif.c): no thread, no poll, and it dies with the display.
+ */
+static int udev_readable(int fd, uint32_t mask, void *data)
+{
+    (void)fd; (void)mask;
+    syn_server_t *s = data;
+
+    struct udev_device *dev;
+    /* Drain, don't handle one: several devices can land in one wakeup, and a
+     * receive that is not drained leaves the fd readable and spins the loop. */
+    while ((dev = udev_monitor_receive_device(s->udev_mon)) != NULL) {
+        const char *action = udev_device_get_action(dev);
+        if (action) {
+            if (strcmp(action, "add") == 0)
+                sound_play(s, SOUND_EVT_DEVICE_ADDED);
+            else if (strcmp(action, "remove") == 0)
+                sound_play(s, SOUND_EVT_DEVICE_REMOVED);
+        }
+        udev_device_unref(dev);
+    }
+    return 0;
+}
+
+void sound_udev_init(syn_server_t *s)
+{
+    /* Everything here is optional. A compositor that will not start because it
+     * could not open a udev socket would be a far worse trade than a desktop
+     * with no plug-in chime. */
+    s->udev = udev_new();
+    if (!s->udev) {
+        wlr_log(WLR_INFO, "synui: sound: no udev — device sounds unavailable");
+        return;
+    }
+
+    s->udev_mon = udev_monitor_new_from_netlink(s->udev, "udev");
+    if (!s->udev_mon) {
+        wlr_log(WLR_INFO, "synui: sound: no udev monitor — device sounds unavailable");
+        udev_unref(s->udev);
+        s->udev = NULL;
+        return;
+    }
+
+    udev_monitor_filter_add_match_subsystem_devtype(s->udev_mon, "usb", "usb_device");
+    /* Storage that is not on USB (an SD card reader, a hot-plugged SATA disk)
+     * arrives on the block subsystem instead, and "a disk appeared" is the same
+     * event to a user. Whole disks only: a stick with four partitions is one
+     * thing plugged in, not five. */
+    udev_monitor_filter_add_match_subsystem_devtype(s->udev_mon, "block", "disk");
+    udev_monitor_enable_receiving(s->udev_mon);
+
+    int fd = udev_monitor_get_fd(s->udev_mon);
+    if (fd < 0) {
+        sound_udev_finish(s);
+        return;
+    }
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    s->udev_src = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE,
+                                       udev_readable, s);
+    if (!s->udev_src) {
+        sound_udev_finish(s);
+        return;
+    }
+    wlr_log(WLR_INFO, "synui: sound: udev device monitor up");
+}
+
+void sound_udev_finish(syn_server_t *s)
+{
+    if (s->udev_src) { wl_event_source_remove(s->udev_src); s->udev_src = NULL; }
+    if (s->udev_mon) { udev_monitor_unref(s->udev_mon);     s->udev_mon = NULL; }
+    if (s->udev)     { udev_unref(s->udev);                 s->udev     = NULL; }
+}
+
+/* ── Panel ───────────────────────────────────────────────── */
+
+#define SOUND_VOL_STEP 5
+
+/* Every change goes through synui-sound, which is the single writer, and is
+ * mirrored into the cache immediately: re-reading the file after the spawn would
+ * race the child and draw the previous value under the cursor.
+ *
+ * The mtime is deliberately LEFT ALONE. The next refresh re-reads only if the
+ * file has moved — which, once the child has run, it has, and the value it finds
+ * is the one already on screen. If the child has not run yet the mtime is
+ * unchanged, no read happens, and the optimistic value stands. Zeroing it here
+ * (the first cut) forced an unconditional re-read and so reintroduced exactly
+ * the race the optimism exists to avoid. */
+static void sound_apply(syn_server_t *s, const char *cmd)
+{
+    synui_spawn(cmd);
+}
+
+static void sound_set_event(syn_server_t *s, int evt, int on)
+{
+    s->sound.on[evt] = on;
+    /* Enabling any one event implies wanting sound at all, exactly as
+     * synui-sound does it — otherwise the first thing anyone turns on is
+     * followed by silence and a hunt for the master switch. */
+    if (on) s->sound.enabled = 1;
+
+    char cmd[96];
+    snprintf(cmd, sizeof(cmd), "synui-sound %s %s",
+             sound_event_name(evt), on ? "on" : "off");
+    sound_apply(s, cmd);
+
+    snprintf(s->sound.status, sizeof(s->sound.status), "%s %s",
+             sound_event_label(evt), on ? "on" : "off");
+}
+
+static void sound_set_master(syn_server_t *s, int on)
+{
+    s->sound.enabled = on;
+    sound_apply(s, on ? "synui-sound master on" : "synui-sound master off");
+    snprintf(s->sound.status, sizeof(s->sound.status),
+             "event sounds %s", on ? "on" : "off");
+}
+
+static void sound_set_volume(syn_server_t *s, int vol)
+{
+    if (vol < 0)   vol = 0;
+    if (vol > 100) vol = 100;
+    if (vol == s->sound.volume) return;
+    s->sound.volume = vol;
+
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "synui-sound volume %d", vol);
+    sound_apply(s, cmd);
+
+    if (vol == 0)
+        snprintf(s->sound.status, sizeof(s->sound.status),
+                 "volume 0%% \xc2\xb7 muted");
+    else
+        snprintf(s->sound.status, sizeof(s->sound.status), "volume %d%%", vol);
+}
+
+/* The theme row cycles whatever is installed. Reading the directory listing here
+ * rather than shelling out keeps the panel's redraw synchronous — the list is
+ * two or three entries and it is only walked on a keypress. */
+#define SOUND_THEMES_MAX 24
+
+static int sound_themes_list(char names[SOUND_THEMES_MAX][SOUND_THEME_MAX])
+{
+    /* Same search path synui-sound uses, user's own first. */
+    char home_base[256] = "";
+    const char *data_home = getenv("XDG_DATA_HOME");
+    const char *home      = getenv("HOME");
+    if (data_home && *data_home)
+        snprintf(home_base, sizeof(home_base), "%s/sounds", data_home);
+    else if (home && *home)
+        snprintf(home_base, sizeof(home_base), "%s/.local/share/sounds", home);
+
+    const char *bases[] = {
+        home_base, "/usr/local/share/sounds", "/usr/share/sounds",
+    };
+    int n = 0;
+
+    for (size_t b = 0; b < sizeof(bases) / sizeof(bases[0]); b++) {
+        if (!bases[b] || !*bases[b]) continue;
+
+        DIR *d = opendir(bases[b]);
+        if (!d) continue;
+        struct dirent *e;
+        while ((e = readdir(d)) != NULL && n < SOUND_THEMES_MAX) {
+            if (e->d_name[0] == '.') continue;
+
+            char full[512];
+            snprintf(full, sizeof(full), "%s/%s", bases[b], e->d_name);
+            struct stat st;
+            if (stat(full, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+
+            /* Skipped rather than truncated: a clipped name would be offered in
+             * the picker and then rejected by synui-sound, which validates the
+             * name against the same directories. No real theme is this long. */
+            if (strlen(e->d_name) >= SOUND_THEME_MAX) continue;
+
+            int dup = 0;
+            for (int i = 0; i < n; i++)
+                if (strcmp(names[i], e->d_name) == 0) { dup = 1; break; }
+            if (dup) continue;
+
+            memcpy(names[n], e->d_name, strlen(e->d_name) + 1);
+            n++;
+        }
+        closedir(d);
+    }
+    return n;
+}
+
+static void sound_cycle_theme(syn_server_t *s, int dir)
+{
+    char names[SOUND_THEMES_MAX][SOUND_THEME_MAX];
+    int n = sound_themes_list(names);
+    if (n <= 0) {
+        snprintf(s->sound.status, sizeof(s->sound.status),
+                 "no sound themes installed under /usr/share/sounds");
+        return;
+    }
+
+    int cur = 0;
+    for (int i = 0; i < n; i++)
+        if (strcmp(names[i], s->sound.theme) == 0) { cur = i; break; }
+
+    cur = (cur + dir + n) % n;
+    snprintf(s->sound.theme, sizeof(s->sound.theme), "%s", names[cur]);
+
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "synui-sound theme %s", names[cur]);
+    sound_apply(s, cmd);
+
+    snprintf(s->sound.status, sizeof(s->sound.status),
+             "theme: %s \xc2\xb7 t to hear it", names[cur]);
+}
+
+void sound_show(syn_server_t *s)
+{
+    /* Force a read: the panel is the one place that must show what is on disk,
+     * not what the cache last saw. */
+    s->sound.mtime  = 0;
+    s->sound.loaded = 0;
+    sound_state_refresh(s);
+
+    s->sound.visible   = 1;
+    s->sound.selected  = SOUND_ROW_EVENT;   /* the first event, not the master */
+    s->sound.status[0] = '\0';
+    synui_render_sound(s);
+}
+
+void sound_hide(syn_server_t *s)
+{
+    s->sound.visible = 0;
+    synui_render_sound(s);
+}
+
+void sound_toggle(syn_server_t *s)
+{
+    if (s->sound.visible) sound_hide(s);
+    else                  sound_show(s);
+}
+
+static void sound_adjust(syn_server_t *s, int dir)
+{
+    int row = s->sound.selected;
+
+    if (row == SOUND_ROW_ENABLED) { sound_set_master(s, dir > 0); return; }
+    if (row == SOUND_ROW_VOLUME)  { sound_set_volume(s, s->sound.volume + dir * SOUND_VOL_STEP); return; }
+    if (row == SOUND_ROW_THEME)   { sound_cycle_theme(s, dir); return; }
+
+    int evt = row - SOUND_ROW_EVENT;
+    if (evt >= 0 && evt < SOUND_EVT_COUNT)
+        sound_set_event(s, evt, dir > 0);
+}
+
+static void sound_activate(syn_server_t *s)
+{
+    int row = s->sound.selected;
+
+    if (row == SOUND_ROW_ENABLED) { sound_set_master(s, !s->sound.enabled); return; }
+    if (row == SOUND_ROW_VOLUME || row == SOUND_ROW_THEME) {
+        /* Neither is a switch; Enter previews instead of doing nothing. */
+        synui_spawn("synui-sound test login");
+        snprintf(s->sound.status, sizeof(s->sound.status),
+                 "playing a sample from %s", s->sound.theme);
+        return;
+    }
+
+    int evt = row - SOUND_ROW_EVENT;
+    if (evt >= 0 && evt < SOUND_EVT_COUNT)
+        sound_set_event(s, evt, !s->sound.on[evt]);
+}
+
+/* `t` plays the selected event's sample whatever its switch says. Hearing what
+ * you are about to enable is most of the point of a sound panel, and it is also
+ * the only way to tell "this event is off" apart from "this theme has no such
+ * sample" or "the audio stack is broken". */
+static void sound_test(syn_server_t *s)
+{
+    int evt = s->sound.selected - SOUND_ROW_EVENT;
+    if (evt < 0 || evt >= SOUND_EVT_COUNT) evt = SOUND_EVT_LOGIN;
+
+    char cmd[96];
+    snprintf(cmd, sizeof(cmd), "synui-sound test %s", sound_event_name(evt));
+    synui_spawn(cmd);
+
+    if (s->sound.volume <= 0)
+        snprintf(s->sound.status, sizeof(s->sound.status),
+                 "%s \xc2\xb7 volume is 0%%, nothing will be heard",
+                 sound_event_label(evt));
+    else
+        snprintf(s->sound.status, sizeof(s->sound.status),
+                 "playing %s", sound_event_label(evt));
+}
+
+int sound_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
+{
+    if (!s->sound.visible) return 0;
+
+    /* Before acting. The volume row adjusts s->sound.volume RELATIVELY, so a
+     * copy left stale by a `synui-sound volume` in a terminal would not just
+     * display the old number — it would write it back over the new one. */
+    sound_state_refresh(s);
+
+    if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
+                WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
+        return 0;
+
+    switch (sym) {
+    case XKB_KEY_Escape:
+    case XKB_KEY_q:
+        sound_hide(s);
+        return 1;
+    case XKB_KEY_Up:
+    case XKB_KEY_k:
+        if (s->sound.selected > 0) s->sound.selected--;
+        synui_render_sound(s);
+        return 1;
+    case XKB_KEY_Down:
+    case XKB_KEY_j:
+        if (s->sound.selected < SOUND_ROW_COUNT - 1) s->sound.selected++;
+        synui_render_sound(s);
+        return 1;
+    case XKB_KEY_Left:
+    case XKB_KEY_h:
+        sound_adjust(s, -1);
+        synui_render_sound(s);
+        return 1;
+    case XKB_KEY_Right:
+    case XKB_KEY_l:
+        sound_adjust(s, +1);
+        synui_render_sound(s);
+        return 1;
+    case XKB_KEY_Return:
+    case XKB_KEY_KP_Enter:
+        sound_activate(s);
+        synui_render_sound(s);
+        return 1;
+    case XKB_KEY_space:
+        /* The master switch from any row, as Space is in filters.c. */
+        sound_set_master(s, !s->sound.enabled);
+        synui_render_sound(s);
+        return 1;
+    case XKB_KEY_t:
+        sound_test(s);
+        synui_render_sound(s);
+        return 1;
+    default:
+        return 1;   /* modal */
+    }
+}

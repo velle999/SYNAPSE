@@ -1,0 +1,312 @@
+#!/bin/sh
+# synui-sound — the desktop's event sounds, and the single writer of their state.
+#
+# SynapseOS boots SILENT. Every event below is off and this file does not exist
+# until someone turns one on, exactly like the desktop widgets: a system that
+# starts making noises after an upgrade is a system that gets its speakers muted,
+# and then the notification you actually wanted is gone too.
+#
+# Modelled on synui-widgets down to the layout, because a second state file that
+# worked a second way would be its own small bug. Two jobs in one script on
+# purpose:
+#
+#   synui-sound play login        the compositor's side — play it IF enabled
+#   synui-sound login on          the panel's side — change the setting
+#
+# Keeping both here is what makes "is this event enabled?" a question with one
+# answer. The compositor caches the same file to skip the fork when everything is
+# off (sound.c), but it is a cache: this script re-checks, so a sound is never
+# played because the compositor's copy was stale.
+#
+# Sounds come from the XDG sound theme (freedesktop.org sound-naming spec), so
+# they are the same samples every other desktop uses and a user's own theme in
+# ~/.local/share/sounds works with no changes here.
+#
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+# https://github.com/velle999/SYNAPSE
+set -u
+
+CONF_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+STATE="$CONF_HOME/synui/sounds.state"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+
+# The event named for the volume OSD is volume_change, not volume: `volume` is
+# already a setting key in the same flat file, and an event of that name made
+# get()/load() read the event's line into the master volume and silence
+# everything. One namespace, so the names have to be distinct.
+EVENTS="login logout device_added device_removed lock unlock notify screenshot volume_change error"
+
+# XDG sound id per event, primary first. The primary is the name the sound-naming
+# spec gives the event; the fallback is one the freedesktop theme actually ships.
+# Several spec names (desktop-login, desktop-screen-lock) are in the spec but in
+# no theme on disk, and canberra answering "no such sample" is indistinguishable
+# from a broken toggle — so every event resolves to something audible out of the
+# box, and a theme that DOES ship the proper name wins because it is tried first.
+ids() {
+    case "$1" in
+        login)          echo "desktop-login service-login" ;;
+        logout)         echo "desktop-logout service-logout" ;;
+        device_added)   echo "device-added" ;;
+        device_removed) echo "device-removed" ;;
+        lock)           echo "desktop-screen-lock bell" ;;
+        unlock)         echo "desktop-unlock complete" ;;
+        notify)         echo "message-new-instant message" ;;
+        screenshot)     echo "screen-capture camera-shutter" ;;
+        volume_change)  echo "audio-volume-change" ;;
+        error)          echo "dialog-error" ;;
+        *)              echo "" ;;
+    esac
+}
+
+label() {
+    case "$1" in
+        login)          echo "Login" ;;
+        logout)         echo "Logout" ;;
+        device_added)   echo "Device plugged in" ;;
+        device_removed) echo "Device unplugged" ;;
+        lock)           echo "Screen locked" ;;
+        unlock)         echo "Screen unlocked" ;;
+        notify)         echo "Notification" ;;
+        screenshot)     echo "Screenshot" ;;
+        volume_change)  echo "Volume change" ;;
+        error)          echo "Error / alert" ;;
+        *)              echo "$1" ;;
+    esac
+}
+
+usage() {
+    cat <<EOF
+usage: synui-sound [play|test] <event>
+       synui-sound <event>|all [on|off|toggle]
+       synui-sound theme [<name>]
+       synui-sound volume [0-100]
+
+  events: $EVENTS
+
+  synui-sound                       show the current state
+  synui-sound login on              turn one on
+  synui-sound all off               silence everything (the default)
+  synui-sound test login            play it once, whatever the setting says
+  synui-sound themes                list the installed sound themes
+
+Everything is off until switched on. Sounds come from the XDG sound theme, so
+"theme" is a directory under /usr/share/sounds or ~/.local/share/sounds.
+EOF
+}
+
+# --- state ----------------------------------------------------------------
+
+get() {
+    [ -f "$STATE" ] || { echo "${2:-off}"; return; }
+    val=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p" "$STATE" | tail -1)
+    [ -n "$val" ] && echo "$val" || echo "${2:-off}"
+}
+
+load() {
+    new_enabled=$(get enabled off)
+    new_theme=$(get theme freedesktop)
+    new_volume=$(get volume 70)
+    for e in $EVENTS; do eval "new_$e=\$(get $e off)"; done
+}
+
+# Whole file rewritten from the current values, temp+rename so a reader can
+# never see it half-written (the panel re-reads it after every change).
+put() {
+    mkdir -p "$(dirname "$STATE")" 2>/dev/null
+    tmp="$STATE.tmp.$$"
+    {
+        echo "# Generated by synui-sound — desktop event sounds."
+        echo "# Edit with synui-sound (or the Super+S panel), not by hand."
+        printf 'enabled = %s\n' "$new_enabled"
+        printf 'theme = %s\n'   "$new_theme"
+        printf 'volume = %s\n'  "$new_volume"
+        for e in $EVENTS; do
+            eval "printf '%s = %s\n' \"\$e\" \"\$new_$e\""
+        done
+    } > "$tmp" 2>/dev/null || { rm -f "$tmp"; echo "synui-sound: cannot write $STATE" >&2; exit 1; }
+    mv -f "$tmp" "$STATE" || { rm -f "$tmp"; exit 1; }
+}
+
+valid() {
+    for e in $EVENTS; do [ "$1" = "$e" ] && return 0; done
+    return 1
+}
+
+flip() { [ "$1" = on ] && echo off || echo on; }
+
+report() {
+    printf '  %-16s %s\n' "master" "$new_enabled"
+    printf '  %-16s %s\n' "theme"  "$new_theme"
+    printf '  %-16s %s\n' "volume" "$new_volume"
+    for e in $EVENTS; do
+        eval "cur=\$new_$e"
+        printf '  %-16s %-4s  (%s)\n' "$e" "$cur" "$(label "$e")"
+    done
+}
+
+themes() {
+    for base in "$DATA_HOME/sounds" /usr/local/share/sounds /usr/share/sounds; do
+        [ -d "$base" ] || continue
+        for d in "$base"/*/; do
+            [ -d "$d" ] || continue
+            name=${d%/}; name=${name##*/}
+            echo "$name"
+        done
+    done | sort -u
+}
+
+# --- playing --------------------------------------------------------------
+
+# Resolve one sound id to a file inside the theme. Only used when libcanberra is
+# absent; canberra does the full spec lookup (including theme inheritance) and
+# this does not pretend to — it covers the layout every real theme uses.
+find_file() {
+    for base in "$DATA_HOME/sounds" /usr/local/share/sounds /usr/share/sounds; do
+        for sub in stereo .; do
+            for ext in oga ogg wav; do
+                f="$base/$new_theme/$sub/$1.$ext"
+                [ -f "$f" ] && { echo "$f"; return 0; }
+            done
+        done
+    done
+    return 1
+}
+
+# 0..100 as a percentage of full scale, in the dB libcanberra wants. 100 is 0 dB
+# (the sample as recorded); 0 never gets here, it is treated as mute by play().
+db() {
+    awk -v v="$1" 'BEGIN { if (v <= 0) v = 1; printf "%.2f", 20 * log(v / 100) / log(10) }'
+}
+
+play() {
+    ev=$1
+    force=${2:-no}
+
+    if [ "$force" != force ]; then
+        [ "$new_enabled" = on ] || return 0
+        eval "cur=\$new_$ev"
+        [ "$cur" = on ] || return 0
+    fi
+    [ "$new_volume" -gt 0 ] 2>/dev/null || return 0
+
+    for id in $(ids "$ev"); do
+        if command -v canberra-gtk-play >/dev/null 2>&1; then
+            # --property sets the theme for this one sample, so the setting takes
+            # effect without touching the user's global GTK sound-theme-name.
+            canberra-gtk-play -i "$id" \
+                --property=canberra.xdg-theme.name="$new_theme" \
+                -V "$(db "$new_volume")" >/dev/null 2>&1 && return 0
+        else
+            f=$(find_file "$id") || continue
+            if command -v pw-play >/dev/null 2>&1; then
+                pw-play --volume="$(awk -v v="$new_volume" 'BEGIN{printf "%.3f", v/100}')" \
+                    "$f" >/dev/null 2>&1 && return 0
+            elif command -v paplay >/dev/null 2>&1; then
+                paplay --volume="$(awk -v v="$new_volume" 'BEGIN{printf "%d", v*655.35}')" \
+                    "$f" >/dev/null 2>&1 && return 0
+            fi
+        fi
+    done
+    return 0   # a theme with no such sample is silence, not an error
+}
+
+# --- dispatch -------------------------------------------------------------
+
+case "${1:-}" in
+    -h|--help|help) usage; exit 0 ;;
+    themes)         themes; exit 0 ;;
+esac
+
+load
+
+if [ $# -eq 0 ]; then report; exit 0; fi
+
+case "$1" in
+play|test)
+    ev="${2:-}"
+    if ! valid "$ev"; then
+        echo "synui-sound: unknown event '${ev}'" >&2
+        usage >&2
+        exit 2
+    fi
+    # `play` is the compositor's call and honours every switch; `test` is the
+    # panel's preview and deliberately ignores them, so you can hear what you are
+    # about to enable (and prove the audio stack works) before enabling it.
+    [ "$1" = test ] && play "$ev" force || play "$ev"
+    exit 0
+    ;;
+theme)
+    if [ $# -lt 2 ]; then echo "$new_theme"; exit 0; fi
+    if ! themes | grep -qx "$2"; then
+        echo "synui-sound: no sound theme '$2' installed" >&2
+        echo "installed:" >&2
+        themes | sed 's/^/  /' >&2
+        exit 2
+    fi
+    new_theme=$2
+    put
+    echo "  theme            $new_theme"
+    exit 0
+    ;;
+volume)
+    if [ $# -lt 2 ]; then echo "$new_volume"; exit 0; fi
+    case "$2" in
+        ''|*[!0-9]*) echo "synui-sound: volume must be 0-100" >&2; exit 2 ;;
+    esac
+    [ "$2" -gt 100 ] && { echo "synui-sound: volume must be 0-100" >&2; exit 2; }
+    new_volume=$2
+    put
+    echo "  volume           $new_volume"
+    exit 0
+    ;;
+esac
+
+target="$1"
+action="${2:-toggle}"
+
+case "$action" in
+    on|off|toggle) ;;
+    *) echo "synui-sound: unknown action '$action'" >&2; usage >&2; exit 2 ;;
+esac
+
+if [ "$target" = all ]; then
+    # Group-toggle turns everything OFF if anything is on, so "make it stop" is
+    # always one predictable command.
+    if [ "$action" = toggle ]; then
+        anyon=off
+        for e in $EVENTS; do
+            eval "cur=\$new_$e"
+            [ "$cur" = on ] && anyon=on
+        done
+        [ "$anyon" = on ] && action=off || action=on
+    fi
+    for e in $EVENTS; do eval "new_$e=\$action"; done
+    # Turning any sound on implies wanting sound: the master switch follows,
+    # or "all on" would be ten switches flipped and still silence.
+    [ "$action" = on ] && new_enabled=on
+    put
+    report
+    exit 0
+fi
+
+if [ "$target" = master ] || [ "$target" = enabled ]; then
+    [ "$action" = toggle ] && action=$(flip "$new_enabled")
+    new_enabled=$action
+    put
+    printf '  %-16s %s\n' master "$new_enabled"
+    exit 0
+fi
+
+if ! valid "$target"; then
+    echo "synui-sound: unknown event '$target'" >&2
+    usage >&2
+    exit 2
+fi
+
+eval "cur=\$new_$target"
+[ "$action" = toggle ] && action=$(flip "$cur")
+eval "new_$target=\$action"
+[ "$action" = on ] && new_enabled=on
+put
+printf '  %-16s %-4s  (%s)\n' "$target" "$action" "$(label "$target")"

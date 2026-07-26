@@ -338,7 +338,14 @@ static void seed_default_binds(syn_config_t *cfg)
          * command line all go through one implementation. Group-toggles: if any
          * widget is on it turns them all off, so the key is always a reliable
          * "clear the desktop". */
-        { "super+shift+a",   "spawn synui-widgets toggle" },
+        /* The widget manager, one row per widget. It was `spawn synui-widgets
+         * toggle` — a blind group flip — until the panel existed; Space from
+         * any row in the panel still does exactly that, so nothing got slower.
+         * The old form stays bindable for anyone who preferred no UI. */
+        { "super+shift+a",   "widgets" },
+        /* Event sounds. Plain super+s was the only unused letter left, and it
+         * is the obvious one. */
+        { "super+s",         "sounds" },
         { "super+shift+c",   "cat" },
         { "super+o",         "move_output" },
         { "super+shift+o",   "move_output prev" },

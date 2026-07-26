@@ -64,11 +64,12 @@ const char *ctlpanel_row_label(int row)
     case CTL_ROW_TITLEBARS:  return "Titlebars";
     case CTL_ROW_LAUNCHER:   return "Start button";
     case CTL_ROW_TRANSPARENCY: return "Transparency";
-    case CTL_ROW_WIDGETS:    return "Desktop widgets";
     case CTL_ROW_SEP:        return "";
     case CTL_ROW_THEME:      return "Theme \xe2\x80\xa6";
     case CTL_ROW_DISPLAYS:   return "Display settings";
     case CTL_ROW_FILTERS:    return "CRT filters \xe2\x80\xa6";
+    case CTL_ROW_WIDGETS:    return "Desktop widgets \xe2\x80\xa6";
+    case CTL_ROW_SOUNDS:     return "Event sounds \xe2\x80\xa6";
     case CTL_ROW_WALLPAPER:  return "Wallpaper \xe2\x80\xa6";
     case CTL_ROW_POWER:      return "Power saving \xe2\x80\xa6";
     case CTL_ROW_TASKMGR:    return "Task manager \xe2\x80\xa6";
@@ -135,6 +136,26 @@ static const char *widgets_label(void)
     return on == total ? "on" : "partial";
 }
 
+/* Event sounds, summarised the same way. Unlike the widgets this state IS
+ * mirrored in syn_server_t (sound.c caches it to skip a fork per event), so the
+ * summary is read from the cache — refreshed first, because the panel is one of
+ * the few places that must show what is on disk right now. "off" covers both a
+ * silent master switch and every event being off: from this row's height they
+ * are the same desktop. */
+static const char *sounds_label(syn_server_t *s)
+{
+    sound_state_refresh(s);
+    if (!s->sound.enabled) return "off";
+
+    int on = 0;
+    for (int i = 0; i < SOUND_EVT_COUNT; i++)
+        if (s->sound.on[i]) on++;
+
+    if (on == 0)               return "off";
+    if (s->sound.volume <= 0)  return "muted";
+    return on == SOUND_EVT_COUNT ? "on" : "partial";
+}
+
 void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
 {
     switch (row) {
@@ -177,6 +198,9 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         break;
     case CTL_ROW_WIDGETS:
         snprintf(buf, n, "%s", widgets_label());
+        break;
+    case CTL_ROW_SOUNDS:
+        snprintf(buf, n, "%s", sounds_label(s));
         break;
     case CTL_ROW_THEME:
         /* A jump-off, but showing the active theme here saves opening the panel
@@ -231,6 +255,8 @@ static const char *action_desc(const char *action, const char *arg)
         { "wallpaper",         "Wallpaper picker" },
         { "wallpaper_reload",  "Reload wallpaper / config" },
         { "filters",           "CRT filter panel" },
+        { "widgets",           "Desktop widget manager" },
+        { "sounds",            "Event sounds" },
         { "effects_toggle",    "CRT effects on/off" },
         { "power",             "Power saving panel" },
         { "taskmgr",           "Task manager" },
@@ -371,8 +397,10 @@ int ctlpanel_tick(syn_server_t *s)
         return 0;
     }
 
-    const char *poll_name =
-        s->ctlpanel.poll_row == CTL_ROW_WIDGETS ? "desktop widgets" : "AI backend";
+    /* Only the AI backend polls now: it is the one row whose value is set by a
+     * helper this panel cannot wait on. The desktop-widget row used to, back
+     * when it flipped the widgets in place; it opens the manager instead. */
+    const char *poll_name = "AI backend";
 
     char now_val[16];
     ctlpanel_row_value(s, s->ctlpanel.poll_row, now_val, sizeof(now_val));
@@ -532,26 +560,16 @@ static void ctlpanel_activate(syn_server_t *s)
                  "switching AI backend \xe2\x80\xa6");
         return;
 
-    case CTL_ROW_WIDGETS:
-        /* synui does not own this state and deliberately does not learn to:
-         * synui-widgets is the single writer of widgets.state and the bar
-         * watches it, so the compositor, the Super+Shift+A bind and this row all
-         * go through the same command. Spawning is async, so the row reads the
-         * OLD value on return — poll it exactly like the AI backend above rather
-         * than leaving a stale "off" under the cursor. */
-        ctlpanel_row_value(s, CTL_ROW_WIDGETS, s->ctlpanel.backend_before,
-                           sizeof(s->ctlpanel.backend_before));
-        synui_spawn("synui-widgets toggle");
-        s->ctlpanel.poll_row = CTL_ROW_WIDGETS;
-        s->ctlpanel.backend_poll_until = ctl_now_secs() + CTL_BACKEND_POLL_SECS;
-        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "desktop widgets \xe2\x80\xa6");
-        return;
-
     /* Jump-offs: the panel that owns the setting is the one that should edit
      * it, so hand over rather than grow a second set of controls here. */
     case CTL_ROW_DISPLAYS:  ctlpanel_hide(s); synui_binding_execute(s, "displays",  NULL); return;
     case CTL_ROW_FILTERS:   ctlpanel_hide(s); synui_binding_execute(s, "filters",   NULL); return;
+    /* Was an in-place group toggle here until the widget manager existed. A row
+     * that flipped all four at once is strictly less than a row that opens the
+     * panel where each one is switchable — and the panel's Space key still does
+     * the group flip, so nothing was lost by handing over. */
+    case CTL_ROW_WIDGETS:   ctlpanel_hide(s); synui_binding_execute(s, "widgets",   NULL); return;
+    case CTL_ROW_SOUNDS:    ctlpanel_hide(s); synui_binding_execute(s, "sounds",    NULL); return;
     case CTL_ROW_WALLPAPER: ctlpanel_hide(s); synui_binding_execute(s, "wallpaper", NULL); return;
     case CTL_ROW_POWER:     ctlpanel_hide(s); synui_binding_execute(s, "power",     NULL); return;
     case CTL_ROW_TASKMGR:   ctlpanel_hide(s); synui_binding_execute(s, "taskmgr",   NULL); return;

@@ -287,6 +287,101 @@ typedef struct {
     char status[96];
 } syn_filters_t;
 
+/* ── Desktop widget manager (widgets.c) ──────────────────── */
+/*
+ * The four quickshell desktop widgets, one row each, plus a master row that is
+ * the old group toggle. They were all-or-nothing from the desktop until now:
+ * `synui-widgets <name> on` could always address one, but Super+Shift+A and the
+ * control panel row both ran the group form, so the only way to have the clock
+ * without the visualiser was the command line.
+ *
+ * Order is display order AND the order of synui-widgets' own $WIDGETS list, so
+ * widget_name() below is the whole binding between the two.
+ */
+typedef enum {
+    WIDGET_ROW_ALL = 0,        /* master: everything on/off, the old bind */
+    WIDGET_ROW_VISUALIZER,
+    WIDGET_ROW_SYSMON,
+    WIDGET_ROW_CLOCK,
+    WIDGET_ROW_LAUNCHER,
+    WIDGET_ROW_COUNT,
+} syn_widget_row_t;
+
+typedef struct {
+    int  visible;
+    int  selected;                 /* syn_widget_row_t */
+    /* The panel's own model of widgets.state, read on open. Indexed by
+     * syn_widget_row_t, so slot WIDGET_ROW_ALL is unused. It is updated the
+     * instant a key is pressed and the helper is spawned to persist: re-reading
+     * the file after the spawn would race it and show the previous value under
+     * the cursor, which is exactly the bug the control panel's AI-backend row
+     * had to grow a poll for. */
+    int  on[WIDGET_ROW_COUNT];
+    /* st_mtime of the widgets.state the copy above came from. Re-read only when
+     * that moves, which is what lets the panel notice a `synui-widgets` run in a
+     * terminal WITHOUT undoing its own optimistic change: this panel's own write
+     * goes through a spawned child, so an unconditional re-read on the next
+     * keypress could land before the child had written and show the previous
+     * value under the cursor. An unchanged mtime means the child has not landed
+     * yet and the optimistic value is the better answer. */
+    long mtime;
+    /* cava is an optdepend and the visualiser is dark without it — the panel
+     * says so rather than letting a toggle look broken. Probed on open. */
+    int  have_cava;
+    char status[96];
+} syn_widgets_t;
+
+/* ── Event sounds (sound.c) ──────────────────────────────── */
+/*
+ * Order is display order and, via sound_event_name(), the key in sounds.state
+ * and the argument to `synui-sound play`. Everything is OFF by default: the
+ * desktop is silent until someone asks for a noise.
+ */
+typedef enum {
+    SOUND_EVT_LOGIN = 0,
+    SOUND_EVT_LOGOUT,
+    SOUND_EVT_DEVICE_ADDED,     /* USB (and any udev device) plugged in */
+    SOUND_EVT_DEVICE_REMOVED,
+    SOUND_EVT_LOCK,
+    SOUND_EVT_UNLOCK,
+    SOUND_EVT_NOTIFY,
+    SOUND_EVT_SCREENSHOT,
+    SOUND_EVT_VOLUME,
+    SOUND_EVT_ERROR,
+    SOUND_EVT_COUNT,
+} syn_sound_event_t;
+
+/* Two fixed rows above the per-event ones: the master switch and the volume
+ * slider. SOUND_ROW_EVENT is where the event rows start, so
+ * row - SOUND_ROW_EVENT is the syn_sound_event_t. */
+enum {
+    SOUND_ROW_ENABLED = 0,
+    SOUND_ROW_VOLUME,
+    SOUND_ROW_THEME,
+    SOUND_ROW_EVENT,
+    SOUND_ROW_COUNT = SOUND_ROW_EVENT + SOUND_EVT_COUNT,
+};
+
+#define SOUND_THEME_MAX 64
+
+typedef struct {
+    int  visible;
+    int  selected;
+
+    /* The compositor's copy of sounds.state. Re-read whenever the file's mtime
+     * moves (sound_state_refresh), so a `synui-sound` run from a terminal takes
+     * effect with no reload — and so this stays a CACHE that only ever skips a
+     * fork, never the authority on whether a sound plays. The helper re-checks. */
+    int   enabled;                    /* master switch */
+    int   volume;                     /* 0..100; 0 is mute */
+    int   on[SOUND_EVT_COUNT];
+    char  theme[SOUND_THEME_MAX];
+    long  mtime;                      /* st_mtime of the file this came from */
+    int   loaded;
+
+    char status[96];
+} syn_sound_t;
+
 /* ── Clock & Time / Calendar (clock.c) ───────────────────── */
 #define CLOCK_ZONES_MAX    6
 #define CLOCK_SETTING_ROWS 3   /* format, seconds, NTP — see clock_row_label() */
@@ -369,11 +464,12 @@ typedef enum {
     CTL_ROW_TITLEBARS,
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch */
-    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher */
     CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
     CTL_ROW_THEME,         /* jump-off: the Super+T theme manager */
     CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
     CTL_ROW_FILTERS,
+    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher */
+    CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
     CTL_ROW_WALLPAPER,
     CTL_ROW_POWER,
     CTL_ROW_TASKMGR,
@@ -1933,6 +2029,30 @@ struct syn_server {
 
     syn_filters_t   filters;
 
+    /* Desktop widget manager (Super+Shift+A) — one row per quickshell widget. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } widgets_ui;
+
+    syn_widgets_t   widgets;
+
+    /* Event sounds (Super+S) — the panel, plus the udev monitor that turns a
+     * device appearing into SOUND_EVT_DEVICE_ADDED. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } sound_ui;
+
+    syn_sound_t     sound;
+    struct udev            *udev;
+    struct udev_monitor    *udev_mon;
+    struct wl_event_source *udev_src;
+
     /* Clock & Time settings panel ("Date & Time" on the Settings menu) and the
      * calendar popup (Super+Shift+T, or a click on the bar clock). Two trees
      * because the calendar can open over the settings panel and vice-versa. */
@@ -2752,6 +2872,40 @@ const char *filters_row_label(int row);
 float filters_row_value(syn_server_t *s, int row, char *buf, size_t n);
 void synui_render_filters(syn_server_t *s);
 void synui_render_power(syn_server_t *s);
+
+/* ── Desktop widget manager (widgets.c) ──────────────────── */
+void widgets_show(syn_server_t *s);
+void widgets_hide(syn_server_t *s);
+void widgets_toggle(syn_server_t *s);
+int  widgets_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* The name synui-widgets knows this row by ("visualizer", "sysmon", …), or NULL
+ * for the master row. This is the whole binding between the enum and the helper. */
+const char *widget_row_name(int row);
+const char *widget_row_label(int row);
+/* The word a row shows. The master row answers all/some/none, because "on" with
+ * one widget off would be a lie. */
+const char *widgets_row_value(syn_server_t *s, int row);
+void synui_render_widgets(syn_server_t *s);
+
+/* ── Event sounds (sound.c) ──────────────────────────────── */
+/* Play one event's sound, if it is enabled. Cheap and safe to call from
+ * anywhere: it does nothing at all when sounds are off, which is the default. */
+void sound_play(syn_server_t *s, syn_sound_event_t evt);
+const char *sound_event_name(syn_sound_event_t evt);   /* sounds.state key */
+const char *sound_event_label(syn_sound_event_t evt);  /* panel text */
+/* Read sounds.state if it has changed since the last look. Called by sound_play
+ * and by the panel; there is no reload hook to remember. */
+void sound_state_refresh(syn_server_t *s);
+void sound_show(syn_server_t *s);
+void sound_hide(syn_server_t *s);
+void sound_toggle(syn_server_t *s);
+int  sound_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+void synui_render_sound(syn_server_t *s);
+/* udev monitor: a device appearing or going away becomes a sound event. Both
+ * are no-ops if udev is unavailable — a desktop with no device notifications is
+ * a smaller loss than a compositor that will not start. */
+void sound_udev_init(syn_server_t *s);
+void sound_udev_finish(syn_server_t *s);
 
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
 void ctlpanel_show(syn_server_t *s);

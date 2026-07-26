@@ -253,6 +253,8 @@ PanelWindow {
                     { kind: "action", label: "Display",         action: "displays" },
                     { kind: "action", label: "Wallpaper",       action: "wallpaper" },
                     { kind: "action", label: "CRT Filters",     action: "filters" },
+                    { kind: "action", label: "Desktop Widgets",  action: "widgets" },
+                    { kind: "action", label: "Event Sounds",     action: "sounds" },
                     { kind: "action", label: "Night Light",     action: "night_light" },
                     { kind: "action", label: "Power Saving",    action: "power" },
                     { kind: "action", label: "Network / Wi-Fi", action: "network" },
