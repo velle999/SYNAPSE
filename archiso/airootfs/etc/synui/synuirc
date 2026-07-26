@@ -23,6 +23,19 @@ border_width = 2
 gap = 8
 master_factor = 0.60
 
+# The SYNAPSE wallpaper, from /usr/share/synui (shipped by synui). The live
+# session has no home directory to put one in and nothing autostarts a
+# wallpaper daemon, so without this the ISO booted onto a flat colour and
+# looked like a compositor that had failed to finish starting.
+wallpaper = default
+wallpaper_mode = fill
+
+# CRT post-process off. The first thing anyone sees of SynapseOS is this
+# session, and scanlines + curvature + chromatic aberration over the whole
+# screen read as a broken display rather than a style choice. Super+E turns
+# them on live for anyone who wants a look at them.
+effects = off
+
 # AI features
 ai_layout = on
 ai_ctx_decor = on

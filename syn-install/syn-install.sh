@@ -1363,7 +1363,6 @@ cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
 terminal = foot
 # greetd launches synui after login; the synsh terminal is autostarted
 # here (synui-foot.service is only used on the live ISO).
-autostart = swaybg -c '#0b0b14'
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
 # opens — so there is no generator to run before the bar starts. synui-bar
@@ -1380,6 +1379,14 @@ border_width    = 2
 gap             = 8
 master_factor   = 0.60
 
+# The SYNAPSE wallpaper synui ships in /usr/share/synui. Drawn by the
+# compositor itself (wallpaper.c), so nothing has to be autostarted to
+# paint the desktop — a swaybg here would only cover it. Super+W picks a
+# different one and records the choice in wallpaper.state, which from then
+# on overrides this line. `wallpaper = none` gives a flat colour.
+wallpaper       = default
+wallpaper_mode  = fill
+
 # "night drive" palette — matches foot.ini and waybar style.css
 border_color_norm  = #2a2a40
 border_color_focus = #ff296d
@@ -1387,13 +1394,16 @@ border_color_ai    = #05d9e8
 border_color_warn  = #ff3524
 
 # CRT post-process (GPU only; VMs fall back to the plain look).
-# Glitch fires on window close and, sustained, while synguard holds
-# any window in ALERT/DENY — the screen corrupts under attack.
-effects           = on
-effect_scanline   = 0.35
-effect_curvature  = 0.25
-effect_aberration = 0.40
-effect_glitch     = 0.60
+# OFF: a new desktop should look like a desktop, and scanlines over
+# everything is a taste, not a default. Set `effects = on` here — or turn it
+# on live in the Super+E filters panel, which saves to filters.state — and
+# the strengths below take effect. Glitch fires on window close and,
+# sustained, while synguard holds any window in ALERT/DENY.
+effects           = off
+# effect_scanline   = 0.35
+# effect_curvature  = 0.25
+# effect_aberration = 0.40
+# effect_glitch     = 0.60
 ai_layout       = on
 ai_ctx_decor    = on
 start_overlay   = off
