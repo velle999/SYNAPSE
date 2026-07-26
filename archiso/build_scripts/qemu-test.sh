@@ -77,6 +77,8 @@ echo "   ISO:  $ISO"
 echo "   RAM:  $RAM"
 echo "   CPUs: $CPUS"
 echo "   Disk: $DISK"
+echo "  SSH:    ssh -p 2222 root@localhost   (the ISO autologins root; sshd is enabled)"
+echo "          — use this rather than the QEMU window when you need paste or scrollback."
 echo ""
 
 qemu-system-x86_64 \
@@ -89,7 +91,7 @@ qemu-system-x86_64 \
     -drive file="$DISK",if=virtio,format=qcow2 \
     -cdrom "$ISO" \
     -boot order=dc \
-    -netdev user,id=net0 \
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device virtio-net-pci,netdev=net0 \
     -usb -device usb-tablet \
     -device intel-hda -device hda-duplex \
