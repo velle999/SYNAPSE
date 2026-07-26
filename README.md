@@ -39,7 +39,7 @@ lives on the machine.
 It boots to `synsh`, a shell where you can type a command or just say what you
 want, and into `synui`, a wlroots compositor that knows the AI daemon exists.
 
-> **Status: alpha.** Version 0.1.x. This is a real, actively developed system —
+> **Status: alpha.** Version 0.2.x. This is a real, actively developed system —
 > the author daily-drives it — but it is early, moves fast, and will break.
 > Try it in a VM before you give it a disk.
 

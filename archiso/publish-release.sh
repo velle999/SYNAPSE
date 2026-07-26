@@ -21,9 +21,22 @@ if [[ ! -f $iso.part00 ]]; then
 fi
 sha256sum "$iso".part[0-9]* > "$iso.parts.sha256"
 
+# Per-release notes, if they have been written: archiso/release-notes/<ver>.md.
+# They go ABOVE the download boilerplate, because "what changed" is what someone
+# opening a release page came for — the reassembly instructions are reference.
+# Without one you get the boilerplate alone, which is what every release before
+# 0.2.0 shipped with.
 notes="$(mktemp)"
 trap 'rm -f "$notes"' EXIT
-cat > "$notes" <<EOF
+custom="$(dirname "$0")/release-notes/${ver}.md"
+if [[ -f $custom ]]; then
+    cat "$custom" >> "$notes"
+    printf '\n---\n\n' >> "$notes"
+    echo "using release notes: $custom"
+else
+    echo "no release-notes/${ver}.md — publishing with the download boilerplate only"
+fi
+cat >> "$notes" <<EOF
 ## Download
 
 The ISO is split into parts to fit GitHub's 2 GiB release-asset limit.
