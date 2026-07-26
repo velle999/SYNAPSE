@@ -144,6 +144,23 @@ titlebar_height = 26
 # effect_aberration = 0.40
 # effect_glitch     = 0.60
 
+# ── Window effects (scenefx) ───────────────────────────────
+# Rounded corners, drop shadow and backdrop blur, per window. These are the
+# SECOND page of the Super+E panel — press Tab there to turn any of them while
+# watching the window, which is the only honest way to judge a shadow. That page
+# saves to uifx.state and overrides these lines, exactly as the CRT page does.
+# Values shown are the defaults.
+# corner_radius     = 12       # px, 0 = square. Retro chrome (XP/95) forces 0.
+# shadow            = on
+# shadow_blur_sigma = 9        # how far the shadow reaches, in px
+# shadow_spread     = 0        # solid band outside the window before the tail
+# shadow_offset_y   = 3        # how far it is dropped downward
+# shadow_opacity    = 0.45
+# blur              = on       # only paints behind translucent windows
+# blur_radius       = 5
+# blur_passes       = 3
+# glass_halo        = 0        # px of blur reaching PAST the window; 0 = off
+
 # ── AI features ────────────────────────────────────────────
 # AI layout suggestions (requires synapd)
 ai_layout       = on

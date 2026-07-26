@@ -254,7 +254,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "displays",          "Display settings" },
         { "wallpaper",         "Wallpaper picker" },
         { "wallpaper_reload",  "Reload wallpaper / config" },
-        { "filters",           "CRT filter panel" },
+        { "filters",           "Visual effects (CRT + window)" },
         { "widgets",           "Desktop widget manager" },
         { "sounds",            "Event sounds" },
         { "effects_toggle",    "CRT effects on/off" },

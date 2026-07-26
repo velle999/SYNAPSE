@@ -1723,6 +1723,14 @@ int synui_init(syn_server_t *s)
      * the config defaults. */
     filters_state_load(s);
 
+    /* Page two of the same panel: corners, shadow, blur, translucency. The
+     * apply() is owed here and not by the CRT page — the scene took its blur
+     * data from the config back at wlr_scene_create, so a loaded blur_radius
+     * would otherwise sit in the config unpushed until someone opened the panel
+     * and moved something. No windows are mapped yet, so it costs one call. */
+    uifx_state_load(s);
+    uifx_apply(s);
+
     /* Titlebars-hidden, as last left by Super+Shift+D. Nothing is mapped yet,
      * so the flag is simply in place for the first layout — no deco_refresh_all
      * is owed here. */

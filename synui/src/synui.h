@@ -280,10 +280,56 @@ typedef enum {
     FILTER_ROW_COUNT,
 } syn_filter_row_t;
 
+/* ── Window-effect rows (uifx.c) ─────────────────────────────
+ *
+ * Page two of the same Super+E panel. The CRT rows above are one shader over the
+ * whole screen; these are the per-window scenefx knobs — corners, drop shadow,
+ * backdrop blur, translucency. They were synuirc-only until now, which made the
+ * one class of setting you can only judge by eye the one class that cost a
+ * restart to try. Same keys, same panel, second page.
+ *
+ * Kept a separate enum (rather than more FILTER_ROWs) because the two pages
+ * scale differently: a CRT strength is always 0..1, while these are pixels,
+ * pass counts and percentages, each with its own range and notch.
+ */
+typedef enum {
+    UIFX_ROW_CORNER = 0,        /* corner_radius */
+    UIFX_ROW_SHADOW,            /* shadow — a word, not a bar */
+    UIFX_ROW_SHADOW_SIZE,       /* shadow_blur_sigma */
+    UIFX_ROW_SHADOW_SPREAD,     /* shadow_spread */
+    UIFX_ROW_SHADOW_DROP,       /* shadow_offset_y */
+    UIFX_ROW_SHADOW_OPACITY,    /* shadow_color[3] */
+    UIFX_ROW_BLUR,              /* blur — a word, not a bar */
+    UIFX_ROW_BLUR_RADIUS,       /* blur_radius */
+    UIFX_ROW_BLUR_PASSES,       /* blur_passes */
+    UIFX_ROW_HALO,              /* glass_halo */
+    /* These last two are NOT this page's to own: theme.c drives translucency
+     * (one slider sets both levels and pushes foot's own alpha) and persists it
+     * in theme.state. They are shown here because this is where you look for
+     * them, but they are edited through transparency_set_*() and saved by that
+     * code — see uifx_adjust and uifx_state_save. */
+    UIFX_ROW_TRANSPARENCY,      /* transparency — a word, not a bar */
+    UIFX_ROW_OPACITY,           /* active_opacity; inactive follows it */
+    UIFX_ROW_COUNT,
+} syn_uifx_row_t;
+
+/* Which page Super+E is showing; Tab cycles. */
+typedef enum {
+    FILTER_PAGE_CRT = 0,
+    FILTER_PAGE_UIFX,
+    FILTER_PAGE_COUNT,
+} syn_filter_page_t;
+
 typedef struct {
     int  visible;
-    int  selected;     /* syn_filter_row_t */
+    int  page;         /* syn_filter_page_t */
+    int  selected;     /* syn_filter_row_t — the CRT page's cursor */
     int  dirty;        /* edited since the last save — drives the panel hint */
+    /* The window-effects page keeps its own cursor and dirty flag: the pages
+     * have different lengths and save to different files, so sharing either
+     * would put the cursor out of range on a switch and make `s` ambiguous. */
+    int  uifx_selected;
+    int  uifx_dirty;
     char status[96];
 } syn_filters_t;
 
@@ -2877,6 +2923,30 @@ const char *filters_row_label(int row);
 float filters_row_value(syn_server_t *s, int row, char *buf, size_t n);
 void synui_render_filters(syn_server_t *s);
 void synui_render_power(syn_server_t *s);
+
+/* ── Window-effect page of that panel (uifx.c) ───────────── */
+/* Same shape as the filters rows above, so render.c draws both with one loop:
+ * a label, a value string, and the 0..1 fraction for the bar (-1.0f = a word). */
+const char *uifx_row_label(int row);
+float uifx_row_value(syn_server_t *s, int row, char *buf, size_t n);
+/* Move the selected row by one notch and push the result to the live scene. */
+void uifx_adjust(syn_server_t *s, int dir);
+/* Why THIS row is currently doing nothing — "shadow is off", "retro chrome is
+ * square" — or NULL when it bites. render.c greys a row that has a reason and
+ * uifx_adjust appends it to the status, the way the CRT page names an off master
+ * switch rather than letting a moving number look broken. */
+const char *uifx_row_inert(syn_server_t *s, int row);
+/* The same idea for the panel as a whole, drawn under the title, or NULL. */
+const char *uifx_note(syn_server_t *s);
+/* Persisted to ~/.config/synui/uifx.state, over the config defaults at startup. */
+void uifx_state_load(syn_server_t *s);
+void uifx_state_save(syn_server_t *s);
+/* Re-push every window-effect value to the scene graph. Public because startup
+ * loads uifx.state after the scene already took the config's blur data. */
+void uifx_apply(syn_server_t *s);
+/* Space on this page: toggle the selected row if it is a switch, else the
+ * switch that GOVERNS it — which is the one you want when a row is greyed. */
+void uifx_space(syn_server_t *s);
 
 /* ── Desktop widget manager (widgets.c) ──────────────────── */
 void widgets_show(syn_server_t *s);

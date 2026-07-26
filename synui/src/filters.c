@@ -1,5 +1,6 @@
 /*
- * filters.c — the Super+E panel for the CRT post-process filters.
+ * filters.c — the Super+E panel: CRT post-process filters, and (page two, in
+ * uifx.c) the window effects.
  *
  * effects.c owns the GLES pass; this owns the knobs. Super+E used to be a blind
  * on/off toggle, which left the four strengths (scanline, curvature, chromatic
@@ -15,6 +16,13 @@
  * Modelled on power.c, down to the keys (Up/Down select, Left/Right adjust,
  * Space toggle, s save, Esc close), because a second panel that worked a second
  * way would be its own small bug.
+ *
+ * Tab switches to the window-effects page (uifx.c) and back. The two pages are
+ * one panel rather than two binds because they answer the same question — "how
+ * does this desktop look, and let me turn that while watching it" — and because
+ * Super+E is already the key people learned for it. Everything below dispatches
+ * on fl->page; the uifx page owns its own cursor, dirty flag and state file, so
+ * the only thing shared is the frame and the status line.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -191,6 +199,13 @@ void filters_show(syn_server_t *s)
     s->filters.visible   = 1;
     s->filters.selected  = FILTER_ROW_SCANLINE;   /* the knob people came for */
     s->filters.status[0] = '\0';
+    /* The page is deliberately NOT reset: it stays where you left it, so tuning
+     * a shadow over several sessions does not cost a Tab each time. It does mean
+     * the other page has to announce itself, or Super+E would look like it had
+     * quietly become a different panel. */
+    if (s->filters.page == FILTER_PAGE_UIFX)
+        snprintf(s->filters.status, sizeof(s->filters.status),
+                 "window effects \xc2\xb7 Tab for CRT filters");
     synui_render_filters(s);
 }
 
@@ -265,14 +280,83 @@ static void filters_adjust(syn_server_t *s, int dir)
     filters_repaint(s);
 }
 
+/* The window-effects page, same keys against uifx.c's rows. Unmodified keys
+ * only — the caller has already handled Tab and let modified combos through. */
+static int filters_key_uifx(syn_server_t *s, xkb_keysym_t sym)
+{
+    switch (sym) {
+    case XKB_KEY_Escape:
+    case XKB_KEY_q:
+    case XKB_KEY_Return:
+    case XKB_KEY_KP_Enter:
+        filters_hide(s);
+        return 1;
+    case XKB_KEY_Up:
+    case XKB_KEY_k:
+        if (s->filters.uifx_selected > 0) s->filters.uifx_selected--;
+        break;
+    case XKB_KEY_Down:
+    case XKB_KEY_j:
+        if (s->filters.uifx_selected < UIFX_ROW_COUNT - 1) s->filters.uifx_selected++;
+        break;
+    case XKB_KEY_Left:
+    case XKB_KEY_h:
+        uifx_adjust(s, -1);
+        break;
+    case XKB_KEY_Right:
+    case XKB_KEY_l:
+        uifx_adjust(s, +1);
+        break;
+    case XKB_KEY_space:
+        uifx_space(s);
+        break;
+    case XKB_KEY_s:
+        uifx_state_save(s);
+        break;
+    default:
+        return 1;   /* modal: swallow other unmodified keys while open */
+    }
+    synui_render_filters(s);
+    return 1;
+}
+
+/* Tab, both ways. With two pages the direction does not matter yet, but the
+ * cycle is written as one so a third page needs no new key. */
+static void filters_page_cycle(syn_server_t *s, int dir)
+{
+    syn_filters_t *fl = &s->filters;
+    fl->page = (fl->page + dir + FILTER_PAGE_COUNT) % FILTER_PAGE_COUNT;
+    snprintf(fl->status, sizeof(fl->status), "%s",
+             fl->page == FILTER_PAGE_UIFX ? "window effects \xc2\xb7 Tab for CRT filters"
+                                          : "CRT filters \xc2\xb7 Tab for window effects");
+    synui_render_filters(s);
+}
+
 int filters_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->filters.visible) return 0;
+
+    /* Shift+Tab is the one modified key this panel claims — it is the other half
+     * of Tab, and no global bind uses it. Everything else modified (Super+…)
+     * still reaches the bind table. */
+    if (sym == XKB_KEY_ISO_Left_Tab &&
+        !(mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))) {
+        filters_page_cycle(s, -1);
+        return 1;
+    }
 
     /* Modified combos (Super+…) still reach the global bind table. */
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
                 WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
         return 0;
+
+    if (sym == XKB_KEY_Tab) {
+        filters_page_cycle(s, +1);
+        return 1;
+    }
+
+    if (s->filters.page == FILTER_PAGE_UIFX)
+        return filters_key_uifx(s, sym);
 
     switch (sym) {
     case XKB_KEY_Escape:

@@ -1427,9 +1427,17 @@ void synui_render_filters(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
+    /* Two pages of different lengths share this frame, so nothing here may
+     * assume FILTER_ROW_COUNT — including the background rect, which used to be
+     * created once at the CRT page's height and never resized. */
+    int uifx = (fl->page == FILTER_PAGE_UIFX);
+    int rows = uifx ? UIFX_ROW_COUNT : FILTER_ROW_COUNT;
+    int sel_row = uifx ? fl->uifx_selected : fl->selected;
+    int page_dirty = uifx ? fl->uifx_dirty : fl->dirty;
+
     const int row_h = 34, top = 66, pad = 18;
     int pw = 560;
-    int ph = top + FILTER_ROW_COUNT * row_h + 96;
+    int ph = top + rows * row_h + 96;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->filters_ui.tree->node, px, py);
@@ -1442,6 +1450,8 @@ void synui_render_filters(syn_server_t *s)
     if (!s->filters_ui.bg)
         s->filters_ui.bg = wlr_scene_rect_create(s->filters_ui.tree,
                                                  pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->filters_ui.bg, pw, ph);
     if (!s->filters_ui.accent)
         s->filters_ui.accent = wlr_scene_rect_create(s->filters_ui.tree,
                                                      pw, 2, accent);
@@ -1456,12 +1466,28 @@ void synui_render_filters(syn_server_t *s)
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
-    cairo_show_text(cr, "CRT FILTERS");
+    cairo_show_text(cr, uifx ? "WINDOW EFFECTS" : "CRT FILTERS");
 
-    /* Two ways for a slider to do nothing, and the panel names both: the master
-     * switch is off, or there is no GLES pass to configure at all (pixman). */
+    /* The page you are NOT on, named at the top right, because a panel that
+     * hides half of itself behind an unadvertised Tab has hidden it. */
     cairo_set_font_size(cr, 12);
-    if (!s->effects) {
+    cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+    cairo_move_to(cr, pw - 210, 30);
+    cairo_show_text(cr, uifx ? "Tab \xe2\x86\x92 CRT filters"
+                             : "Tab \xe2\x86\x92 window effects");
+
+    /* Why a row on this page might be doing nothing. The CRT page has two such
+     * reasons (master off, or no GLES pass at all — pixman); the window page
+     * asks uifx.c, whose answer is about the chrome style. */
+    cairo_set_font_size(cr, 12);
+    if (uifx) {
+        const char *note = uifx_note(s);
+        if (note) {
+            cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
+            cairo_move_to(cr, 18, 50);
+            cairo_show_text(cr, note);
+        }
+    } else if (!s->effects) {
         cairo_set_source_rgba(cr, 0.75, 0.45, 0.45, 1.0);
         cairo_move_to(cr, 18, 50);
         cairo_show_text(cr, "no GLES renderer \xc2\xb7 filters unavailable on this display");
@@ -1477,13 +1503,15 @@ void synui_render_filters(syn_server_t *s)
     cairo_line_to(cr, pw - 18, 58);
     cairo_stroke(cr);
 
-    /* A slider that cannot bite is drawn as such: master off (or no GLES pass)
-     * greys every strength, because none of them is doing anything. */
-    int dimmed = (!s->config.effects || !s->effects);
+    /* A slider that cannot bite is drawn as such. On the CRT page that is all of
+     * them at once (master off, or no GLES pass); on the window page it is
+     * per-row, since "shadow is off" greys four rows and leaves blur alone. */
+    int all_dimmed = !uifx && (!s->config.effects || !s->effects);
 
-    for (int i = 0; i < FILTER_ROW_COUNT; i++) {
-        int sel = (i == fl->selected);
+    for (int i = 0; i < rows; i++) {
+        int sel = (i == sel_row);
         int ry = top + i * row_h;
+        int dimmed = all_dimmed || (uifx && uifx_row_inert(s, i) != NULL);
 
         if (sel) {
             set_accent(cr, 0.35);
@@ -1492,17 +1520,21 @@ void synui_render_filters(syn_server_t *s)
         }
 
         char value[32];
-        float frac = filters_row_value(s, i, value, sizeof(value));
+        float frac = uifx ? uifx_row_value(s, i, value, sizeof(value))
+                          : filters_row_value(s, i, value, sizeof(value));
 
         cairo_set_font_size(cr, 14);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
         cairo_move_to(cr, pad + 8, ry + 4);
-        cairo_show_text(cr, filters_row_label(i));
+        cairo_show_text(cr, uifx ? uifx_row_label(i) : filters_row_label(i));
 
-        if (frac < 0.0f) {              /* master switch: a word, not a bar */
-            if (s->config.effects) set_accent(cr, 1.0);
-            else                   cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        if (frac < 0.0f) {              /* a switch: a word, not a bar */
+            /* "on" reads as live only when the row is actually biting — an
+             * accent-coloured "on" over a shadow the chrome has dropped would
+             * be the panel contradicting the screen. */
+            if (strcmp(value, "on") == 0 && !dimmed) set_accent(cr, 1.0);
+            else cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
             cairo_move_to(cr, 250, ry + 4);
             cairo_show_text(cr, value);
         } else {
@@ -1528,8 +1560,8 @@ void synui_render_filters(syn_server_t *s)
     cairo_move_to(cr, 18, ph - 34);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space on/off");
     cairo_move_to(cr, 18, ph - 16);
-    cairo_show_text(cr, fl->dirty ? "s save (unsaved changes) \xc2\xb7 Esc close"
-                                  : "s save \xc2\xb7 Esc close");
+    cairo_show_text(cr, page_dirty ? "s save (unsaved changes) \xc2\xb7 Tab page \xc2\xb7 Esc close"
+                                   : "s save \xc2\xb7 Tab page \xc2\xb7 Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->filters_ui.text_buf, s->filters_ui.tree, buf);

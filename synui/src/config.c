@@ -25,8 +25,10 @@
  * cursor, cursor_reload,
  * filters, effects_toggle, power, lock, game, taskmgr, network, news.
  * A bind with the same combo as a default replaces it.
- * "filters" (Super+E) opens the CRT filter panel; "effects_toggle" is the older
- * blind on/off flip, kept for anyone who bound it.
+ * "filters" (Super+E) opens the visual-effects panel — CRT filter strengths, and
+ * Tab for the window effects (corners, shadow, blur, translucency), which are
+ * the same keys as the lines further down this file; "effects_toggle" is the
+ * older blind on/off flip, kept for anyone who bound it.
  * "decorations_toggle" (Super+Shift+D) hides every titlebar until you press it
  * again; `titlebar_height = 0` below is the permanent version.
  *
@@ -491,14 +493,23 @@ void synui_config_load(syn_config_t *cfg)
      * on top (Firefox) is a second, bigger, square-cornered ring on one app.
      * `clip_csd_margin = off` puts the client's margin back. */
     cfg->clip_csd_margin  = 1;
-    /* Drop shadow: on, a soft dark halo dropped a touch downward. */
+    /* Drop shadow: on, a soft dark halo dropped a touch downward.
+     *
+     * Halved from 18/6 on 2026-07-26. An 18px sigma throws a shadow wider than
+     * the titlebar is tall, which on a tiled desktop reads as haze in every gap
+     * rather than as depth under a window — and it was set before the glass
+     * work gave windows a blurred backdrop to sit on, which does much of the
+     * same job. 9/3 keeps the same shape at half the reach. Anyone who wants
+     * the old weight has both `shadow_blur_sigma = 18` and, now, the Shadow
+     * size row in Super+E. */
     cfg->shadow           = 1;
-    cfg->shadow_blur_sigma = 18.0f;
+    cfg->shadow_blur_sigma = 9.0f;
     /* No spread: the shadow is a pure gaussian tail outside the window, the
      * look synui has always had. Non-zero is the opt-in "GTK weight" look. */
     cfg->shadow_spread    = 0.0f;
     cfg->shadow_offset_x  = 0;
-    cfg->shadow_offset_y  = 6;
+    cfg->shadow_offset_y  = 3;   /* halved with the sigma above, to keep the drop
+                                    proportional to the blur it falls out of */
     cfg->shadow_color[0]  = 0.00f; cfg->shadow_color[1] = 0.00f;
     cfg->shadow_color[2]  = 0.00f; cfg->shadow_color[3] = 0.45f;
     /* SYNAPSE's neon cyan — the panel accent render.c starts on; theme_apply()

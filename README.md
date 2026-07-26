@@ -145,7 +145,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`A` | Neural activity overlay |
 | `Super`+`D` | Display settings |
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker / reload the wallpaper |
-| `Super`+`E` | Visual effects panel (per-filter strength sliders) |
+| `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
 | `Super`+`Shift`+`T` | Calendar |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
@@ -204,7 +204,9 @@ synui-widgets sysmon on                              # desktop widgets, off by d
 
 Event sounds ship **silent** and the desktop widgets ship **off** — an upgrade
 should not start making noises or redecorating a desktop nobody asked it to.
-Window effects are off on a fresh install too; turn them on with `Super`+`E`.
+The CRT filters are off on a fresh install too; turn them on with `Super`+`E`.
+`Tab` on that panel is the second page: rounded corners, drop shadow, backdrop
+blur and translucency, each on a knob you turn while watching the window change.
 
 Full detail in the wiki: [Cursor Themes](https://github.com/velle999/SYNAPSE/wiki/Cursor-Themes) ·
 [Sound Themes](https://github.com/velle999/SYNAPSE/wiki/Sound-Themes) ·
