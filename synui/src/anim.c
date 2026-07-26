@@ -512,16 +512,25 @@ void anim_apply_alpha(syn_view_t *view)
     bool translucent = view_is_glass_native(view) || (s && s->config.transparency);
     bool decorated = view->titlebar && view->titlebar->node.enabled;
     int  radius    = (boxy || !s) ? 0 : chrome_corner_radius(&s->config);
+    int  halo      = (boxy || !s) ? 0 : s->config.glass_halo;
     struct view_effect_params p = {
         .alpha            = a,
         .corner_radius    = radius,
-        .blur             = s && s->config.blur && !view->fullscreen && translucent,
+        /* The halo is the exception to "blur behind an opaque window is
+         * invisible": it grows the companion PAST the window, and that ring is
+         * over the desktop, not over the client. Gating on translucency alone
+         * meant every server-side-decorated window (Dolphin, foot) computed a
+         * halo, handed it to blur_set, and had the companion refused — the
+         * halo could only ever appear on a glass-native app or with the
+         * transparency master switch on. */
+        .blur             = s && s->config.blur && !view->fullscreen &&
+                            (translucent || halo > 0),
         .kde_blur_ok      = s && s->config.blur && !view->fullscreen,
         /* Same edge-to-edge rule the shadow and the corner radii follow: a
          * maximized or fullscreen window has no desktop beside it to blur, so
          * the halo would only reach onto the neighbouring tile or off the
          * output. */
-        .halo             = (boxy || !s) ? 0 : s->config.glass_halo,
+        .halo             = halo,
         .titlebar         = view->titlebar,
         .titlebar_corners = corner_radii_top(radius),
         .content_corners  = decorated ? corner_radii_bottom(radius)

@@ -474,6 +474,9 @@ void synui_config_load(syn_config_t *cfg)
     /* Drop shadow: on, a soft dark halo dropped a touch downward. */
     cfg->shadow           = 1;
     cfg->shadow_blur_sigma = 18.0f;
+    /* No spread: the shadow is a pure gaussian tail outside the window, the
+     * look synui has always had. Non-zero is the opt-in "GTK weight" look. */
+    cfg->shadow_spread    = 0.0f;
     cfg->shadow_offset_x  = 0;
     cfg->shadow_offset_y  = 6;
     cfg->shadow_color[0]  = 0.00f; cfg->shadow_color[1] = 0.00f;
@@ -780,6 +783,11 @@ void synui_config_load(syn_config_t *cfg)
             cfg->shadow_blur_sigma = (float)atof(val);
             if (cfg->shadow_blur_sigma < 0.0f)  cfg->shadow_blur_sigma = 0.0f;
             if (cfg->shadow_blur_sigma > 80.0f) cfg->shadow_blur_sigma = 80.0f;
+        }
+        else if (strcmp(key, "shadow_spread") == 0) {
+            cfg->shadow_spread = (float)atof(val);
+            if (cfg->shadow_spread < 0.0f)  cfg->shadow_spread = 0.0f;
+            if (cfg->shadow_spread > 64.0f) cfg->shadow_spread = 64.0f;
         }
         else if (strcmp(key, "shadow_offset_x") == 0)
             cfg->shadow_offset_x = atoi(val);

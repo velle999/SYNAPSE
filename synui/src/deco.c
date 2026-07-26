@@ -675,13 +675,24 @@ void view_shadow_update(syn_view_t *view)
 
     int   sigma  = (int)lroundf(cfg->shadow_blur_sigma);
     if (sigma < 1) sigma = 1;
+    int   spread = (int)lroundf(cfg->shadow_spread);
+    if (spread < 0) spread = 0;
     int   radius = chrome_corner_radius(cfg);   /* match the glass corners */
     int   w = view->w, h = view->h;
 
-    int bx  = -sigma + cfg->shadow_offset_x;
-    int by  = -sigma + cfg->shadow_offset_y;
-    int bw2 = w + 2 * sigma;
-    int bh2 = h + 2 * sigma;
+    /* Growing the node by MORE than sigma is what produces a spread: the shader
+     * insets its solid rect by sigma from the node box either way, so at
+     * sigma+S the solid rect lands S px outside the window on every side and
+     * the gaussian starts from there. At S = 0 this is the old geometry
+     * exactly. The node's own corners grow with it so the solid band stays
+     * concentric with the window; a square window (radius 0) stays square. */
+    int   grow   = sigma + spread;
+    int   sradius = radius > 0 ? radius + spread : 0;
+
+    int bx  = -grow + cfg->shadow_offset_x;
+    int by  = -grow + cfg->shadow_offset_y;
+    int bw2 = w + 2 * grow;
+    int bh2 = h + 2 * grow;
 
     /* Fold fade × focus-translucency into the shadow alpha, exactly like the
      * border rects, so a fading or hidden window's shadow fades away with it. */
@@ -694,10 +705,10 @@ void view_shadow_update(syn_view_t *view)
 
     if (!view->shadow) {
         view->shadow = wlr_scene_shadow_create(view->frame, bw2, bh2,
-                                               radius, (float)sigma, color);
+                                               sradius, (float)sigma, color);
     } else {
         wlr_scene_shadow_set_size(view->shadow, bw2, bh2);
-        wlr_scene_shadow_set_corner_radius(view->shadow, radius);
+        wlr_scene_shadow_set_corner_radius(view->shadow, sradius);
         wlr_scene_shadow_set_blur_sigma(view->shadow, (float)sigma);
         wlr_scene_shadow_set_color(view->shadow, color);
     }

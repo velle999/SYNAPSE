@@ -1014,11 +1014,20 @@ typedef struct {
      * behind everything and clipped out from under the window itself so it is a
      * soft outer ring — see view_shadow_update). `shadow` gates it; disabled
      * while maximized/fullscreen (an edge-to-edge window's shadow is clipped to
-     * nothing). shadow_blur_sigma is the softness/spread in px; the box is grown
+     * nothing). shadow_blur_sigma is the softness in px; the box is grown
      * 2·sigma so the falloff isn't cut off. shadow_offset_{x,y} bias the drop
-     * direction (default straight down a touch). shadow_color is RGBA. */
+     * direction (default straight down a touch). shadow_color is RGBA.
+     *
+     * shadow_spread pushes the shader's SOLID rect out past the window instead
+     * of leaving only the gaussian tail outside it. Without it, peak darkening
+     * at the border is half of shadow_color's alpha however high that alpha
+     * goes — the shader insets the solid rect by sigma, so the window edge sits
+     * exactly at the gaussian's half-way point and 50% is the ceiling. A
+     * spread of S gives S px at FULL alpha before the tail begins, which is how
+     * a GTK CSD shadow (Firefox's) gets its weight and its hard outer edge. */
     int   shadow;                /* master switch; default 1 */
     float shadow_blur_sigma;     /* px; default 18 */
+    float shadow_spread;         /* px of solid shadow outside the window; default 0 */
     int   shadow_offset_x;       /* px; default 0 */
     int   shadow_offset_y;       /* px; default 6 */
     float shadow_color[4];       /* default black @ 0.45 */
