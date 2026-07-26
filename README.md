@@ -17,12 +17,12 @@ An Arch-based operating system with a local LLM wired into the system layer — 
 
 [![Build](https://github.com/velle999/SYNAPSE/actions/workflows/build.yml/badge.svg)](https://github.com/velle999/SYNAPSE/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/velle999/SYNAPSE)](https://github.com/velle999/SYNAPSE/releases/latest)
-[![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](#license)
+[![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](#license)
 ![Platform](https://img.shields.io/badge/platform-x86__64-1793d1)
 
 <img src="docs/screenshots/synui-desktop.jpg" alt="synui — the SynapseOS compositor" width="900">
 
-<sub><i>synui, the wlroots compositor: waybar status bar, auto-hiding dock, CRT post-process filters.</i></sub>
+<sub><i>synui, the wlroots compositor: native quickshell bar, auto-hiding dock, CRT post-process filters.</i></sub>
 <img src="docs/screenshots//synapse-20260717-215931.png" alt="synui — amber crt effects on" width="900">
 
 <sub><i>CRT post-process filters example in amber phosphor.</i></sub>
@@ -63,6 +63,11 @@ and attaches a persistent 20 GB test disk. Give it 8 GB+ of RAM when the model
 is embedded. Kernel and boot output are mirrored to the serial console —
 `View → serial0` in the QEMU window.
 
+When you are ready to install, `syn-install` from the live session offers a
+whole-disk install with optional **LUKS2 full-disk encryption**, or — on UEFI,
+where the disk already holds another OS — a non-destructive **dual-boot** install
+into existing free space, reusing the machine's ESP.
+
 ---
 
 ## Components
@@ -73,7 +78,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 |---|---|
 | **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. |
 | **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell. |
-| **`synui`** | Wayland compositor on wlroots 0.19 — tiling and monocle layouts, per-output workspaces, XWayland, layer-shell. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
+| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling and monocle layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
@@ -86,8 +91,10 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`chibi`** | Voice-interactive AI companion with a security-sentinel aspect over `synguard`'s verdict feed. See the [Chibi wiki page](https://github.com/velle999/SYNAPSE/wiki/Chibi). |
 | **`nexus-chat`**, **`tepris`** | Bundled web apps (Firefox app-mode packages). |
 
-Supporting pieces: `syn-install`, `syn-firstboot`, `syn-model`, `waybar/`
-(status bar config), and `archiso/` (install media).
+Supporting pieces: `syn-install`, `syn-firstboot`, `syn-model`, `syn-crypt`,
+`scenefx/` (the vendored scene-graph fork synui renders through),
+`synui/quickshell/` (the bar and the desktop widgets), and `archiso/`
+(install media).
 
 ---
 
@@ -117,9 +124,14 @@ Supporting pieces: `syn-install`, `syn-firstboot`, `syn-model`, `waybar/`
 ## The desktop
 
 `synui` is a compositor written for this system rather than adapted to it. It
-draws its own display-settings panel, wallpaper picker, and dock; it renders an
-optional CRT-style post-process pass; and it holds a live subscription to
-`synguard`'s verdict feed and `synapd`'s activity.
+draws its own display-settings panel, wallpaper picker, dock, cursor picker,
+sound panel and control panel; it renders glass, blur and shadows through
+scenefx plus an optional CRT-style post-process pass; and it holds a live
+subscription to `synguard`'s verdict feed and `synapd`'s activity.
+
+The status bar and the desktop widgets are a native [quickshell](https://quickshell.org/)
+shell — waybar was replaced in synui pkgrel 154, and the start button and menu
+moved into the bar shortly after.
 
 Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 
@@ -134,8 +146,11 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`D` | Display settings |
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker / reload the wallpaper |
 | `Super`+`E` | Visual effects panel (per-filter strength sliders) |
-| `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95) |
+| `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
 | `Super`+`Shift`+`T` | Calendar |
+| `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
+| `Super`+`S` | Event sounds — all silent until you turn them on |
+| `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch) |
 | `Super`+`Escape` | Menu |
 | `Super`+`Tab` | Cycle layout |
 | `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Most-recently-used window switch |
@@ -167,11 +182,34 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
-`Super`+`Shift`+`A` is deliberately unbound — the theme manager moved to
-`Super`+`T`, so it is free for a `bind =` line of your own.
+Rebind anything with a `bind = <combo>, <action>` line in `synuirc`. Note that
+a duplicate combo is not a conflict you will notice — the first match wins, so
+the older binding silently goes dead. synui logs `DUPLICATE default bind` at
+startup for exactly that reason.
 
 Screenshots land in `~/Pictures/Screenshots` *and* on the clipboard, so you can
 paste one straight into a chat without opening the file.
+
+### Making it yours
+
+Themes, cursors and sounds all have a panel *and* a command-line tool, and both
+write the same state — so whichever you reach for, there is one place a setting
+can be wrong.
+
+```bash
+synui-cursor install ~/Downloads/some-theme.tar.gz   # then: synui-cursor set <name>
+synui-sound install ~/Downloads/some-sounds.tar.gz   # then: synui-sound all on
+synui-widgets sysmon on                              # desktop widgets, off by default
+```
+
+Event sounds ship **silent** and the desktop widgets ship **off** — an upgrade
+should not start making noises or redecorating a desktop nobody asked it to.
+Window effects are off on a fresh install too; turn them on with `Super`+`E`.
+
+Full detail in the wiki: [Cursor Themes](https://github.com/velle999/SYNAPSE/wiki/Cursor-Themes) ·
+[Sound Themes](https://github.com/velle999/SYNAPSE/wiki/Sound-Themes) ·
+[The Desktop](https://github.com/velle999/SYNAPSE/wiki/The-Desktop) ·
+[Window Effects](https://github.com/velle999/SYNAPSE/wiki/Window-Effects).
 
 ---
 
@@ -202,8 +240,14 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
+| `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
+| `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
 | `synui-ai-backend` | Switch `synapd`'s inference device — `gpu` / `cpu` / `off` / `toggle` / `status` (drives the "AI backend" row; see below) |
 | `synapd` / `synguard` / `synnet` / `synui` | The daemons and compositor themselves — normally started by systemd, not by hand |
+
+Desktop helpers, each the command-line half of a `synui` panel:
+`synui-sound`, `synui-cursor`, `synui-widgets`, `synui-apply-theme`,
+`synui-screenshot`, `synui-record`, `synui-game-run`, `synui-iso-mount`.
 
 ### Privileged desktop actions
 
@@ -265,8 +309,8 @@ card: build it with `sudo archiso/build.sh --gpu=rocm`.
 ## Building
 
 **Prerequisites** — an Arch (or Arch-based) host with `archiso`, `base-devel`,
-`meson`, `ninja`, `wlroots0.19`, `qemu`, and `ovmf`. Budget ~22 GB of free disk
-with the embedded model, ~9 GB without.
+`meson`, `ninja`, `wlroots0.20`, `scenefx0.5`, `quickshell`, `qemu`, and `ovmf`.
+Budget ~22 GB of free disk with the embedded model, ~9 GB without.
 
 `archiso/build.sh` runs the whole pipeline: builds llama.cpp (pinned at tag
 `b8272`, matching CI), packages every component through its `PKGBUILD` into a
@@ -333,4 +377,14 @@ typedef struct {
 
 ## License
 
-GPLv2 — the SynapseOS Project.
+SPDX identifiers, per component:
+
+| Scope | License |
+|---|---|
+| `synapse_kmod` (kernel module) | `GPL-2.0-only` — it links the kernel |
+| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-firstboot`, `vibe` | `GPL-2.0-or-later` |
+| `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
+| `shelly` | `GPL-3.0-only` |
+
+The kernel module is `-only` deliberately: it is a derived work of the kernel,
+which is GPL-2.0-only, so relicensing it forward is not ours to do.
