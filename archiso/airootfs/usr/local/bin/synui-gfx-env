@@ -4,6 +4,24 @@
 # Setup must complete on any machine, so when there is no working
 # EGL/Vulkan stack we fall back to software rendering instead of letting
 # the renderer autocreate kill the session.
+#
+# WHAT SOFTWARE RENDERING MEANS SINCE THE SCENEFX MIGRATION: synui builds
+# its renderer with fx_renderer_create(), which is GLES2-only and NEVER
+# reads WLR_RENDERER. So `WLR_RENDERER=pixman` on its own is a no-op here
+# and a machine with no usable GLES2 still dies at:
+#
+#   [render/fx_renderer/util.c] drmGetDevices2 failed
+#   [render/fx_renderer/fx_renderer.c] Cannot create GLES2 renderer: no DRM FD
+#
+# The knobs fx_renderer/EGL actually read are the two below, and EITHER
+# ALONE STILL FAILS: FORCE skips the DRM hunt and passes drm_fd = -1, and
+# only then does ALLOW let EGL select the llvmpipe (EGL_MESA_device_software)
+# device. WLR_RENDERER is still emitted for anything else in the session
+# that honours it. Keep them together — dropping one is a black screen.
+SOFTWARE_RENDER='WLR_RENDERER_FORCE_SOFTWARE=1
+WLR_RENDERER_ALLOW_SOFTWARE=1
+WLR_RENDERER=pixman
+WLR_NO_HARDWARE_CURSORS=1'
 
 # nvidia-utils blacklists nouveau, and nvidia-open only binds Turing and
 # newer. On older NVIDIA cards that leaves no DRM device at all — load
@@ -15,9 +33,15 @@ if ! ls /dev/dri/card* >/dev/null 2>&1; then
 fi
 
 # VMs: no usable GPU acceleration.
+#
+# synui's own detect_vm() sets the same two software flags before wlroots
+# init, so this branch is belt-and-braces rather than the only thing
+# standing between a VM and a black screen — but it must still be right.
+# A VM that stops reporting a known DMI vendor would otherwise fall
+# through to the bare-metal path in BOTH places at once.
 if [ -f /sys/class/dmi/id/sys_vendor ] && \
    grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-    printf 'WLR_RENDERER=pixman\nWLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n'
+    printf '%s\nWLR_BACKENDS=drm,libinput\n' "$SOFTWARE_RENDER"
     exit 0
 fi
 
@@ -26,10 +50,18 @@ fi
 for drv in /sys/class/drm/card*/device/driver; do
     case "$(readlink "$drv" 2>/dev/null)" in
         *nouveau)
-            printf 'WLR_RENDERER=pixman\nWLR_NO_HARDWARE_CURSORS=1\n'
+            printf '%s\n' "$SOFTWARE_RENDER"
             exit 0
             ;;
     esac
 done
+
+# No DRM card at all — the modprobe above did not produce one. There is no
+# GPU to fail over to, so this is the case the whole script exists for:
+# software-render rather than let fx_renderer die on a missing DRM FD.
+if ! ls /dev/dri/card* >/dev/null 2>&1; then
+    printf '%s\n' "$SOFTWARE_RENDER"
+    exit 0
+fi
 
 exit 0

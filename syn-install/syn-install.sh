@@ -1223,6 +1223,11 @@ SDDMEOF
 #!/bin/sh
 if [ -f /sys/class/dmi/id/sys_vendor ] && \
    grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+    # fx_renderer is GLES2-only and ignores WLR_RENDERER, so these two are
+    # what actually select llvmpipe; either alone still fails. See
+    # archiso/airootfs/usr/local/bin/synui-gfx-env for the long version.
+    export WLR_RENDERER_FORCE_SOFTWARE=1
+    export WLR_RENDERER_ALLOW_SOFTWARE=1
     export WLR_RENDERER=pixman
     export WLR_BACKENDS=drm,libinput
     export WLR_NO_HARDWARE_CURSORS=1
@@ -1231,7 +1236,10 @@ else
     # instead of dying at renderer autocreate.
     for drv in /sys/class/drm/card*/device/driver; do
         case "$(readlink "$drv" 2>/dev/null)" in
-            *nouveau) export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+            *nouveau) export WLR_RENDERER_FORCE_SOFTWARE=1 \
+                             WLR_RENDERER_ALLOW_SOFTWARE=1 \
+                             WLR_RENDERER=pixman \
+                             WLR_NO_HARDWARE_CURSORS=1 ;;
         esac
     done
 fi
@@ -1278,13 +1286,21 @@ SESSION_EOF
 #!/bin/sh
 if [ -f /sys/class/dmi/id/sys_vendor ] && \
    grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+    # fx_renderer is GLES2-only and ignores WLR_RENDERER, so these two are
+    # what actually select llvmpipe; either alone still fails. See
+    # archiso/airootfs/usr/local/bin/synui-gfx-env for the long version.
+    export WLR_RENDERER_FORCE_SOFTWARE=1
+    export WLR_RENDERER_ALLOW_SOFTWARE=1
     export WLR_RENDERER=pixman
     export WLR_BACKENDS=drm,libinput
     export WLR_NO_HARDWARE_CURSORS=1
 else
     for drv in /sys/class/drm/card*/device/driver; do
         case "$(readlink "$drv" 2>/dev/null)" in
-            *nouveau) export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+            *nouveau) export WLR_RENDERER_FORCE_SOFTWARE=1 \
+                             WLR_RENDERER_ALLOW_SOFTWARE=1 \
+                             WLR_RENDERER=pixman \
+                             WLR_NO_HARDWARE_CURSORS=1 ;;
         esac
     done
 fi
@@ -1332,13 +1348,20 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         mkdir -p "$XDG_RUNTIME_DIR"
         if [ -f /sys/class/dmi/id/sys_vendor ] && \
            grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+            # See synui-gfx-env: fx_renderer ignores WLR_RENDERER, these two
+            # are what actually select llvmpipe, and either alone fails.
+            export WLR_RENDERER_FORCE_SOFTWARE=1
+            export WLR_RENDERER_ALLOW_SOFTWARE=1
             export WLR_RENDERER=pixman
             export WLR_BACKENDS=drm,libinput
             export WLR_NO_HARDWARE_CURSORS=1
         else
             for drv in /sys/class/drm/card*/device/driver; do
                 case "$(readlink "$drv" 2>/dev/null)" in
-                    *nouveau) export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+                    *nouveau) export WLR_RENDERER_FORCE_SOFTWARE=1 \
+                                     WLR_RENDERER_ALLOW_SOFTWARE=1 \
+                                     WLR_RENDERER=pixman \
+                                     WLR_NO_HARDWARE_CURSORS=1 ;;
                 esac
             done
         fi
