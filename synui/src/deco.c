@@ -496,7 +496,7 @@ void view_update_decorations(syn_view_t *view)
         if (view->titlebar) wlr_scene_node_set_enabled(&view->titlebar->node, false);
         view_grab_ring_update(view);
         view_shadow_update(view);   /* disables it — fullscreen has no shadow */
-        anim_lower_halos(view);     /* …which just re-lowered the chrome over it */
+        view_halo_update(view);     /* likewise: no desktop beside it to blur */
         return;
     }
 
@@ -572,9 +572,10 @@ void view_update_decorations(syn_view_t *view)
     view_grab_ring_update(view);
     view_shadow_update(view);
     titlebar_render(view);
-    /* Last: both of those lower chrome to the bottom of the frame, which is
-     * where a haloed blur node lives. See anim_lower_halos(). */
-    anim_lower_halos(view);
+    /* Last, and in this order: the border and then the shadow each lower
+     * themselves to the bottom of the frame, so the halo has to be lowered after
+     * both of them to end up underneath. See view_halo_update(). */
+    view_halo_update(view);
 }
 
 /* ── Runtime titlebar toggle ─────────────────────────────── */
@@ -792,6 +793,90 @@ void view_shadow_update(syn_view_t *view)
     wlr_scene_node_lower_to_bottom(&view->shadow->node);
 }
 
+/* ── Glass halo ──────────────────────────────────────────────
+ *
+ * The backdrop blur that reaches PAST the window: a ring of blurred desktop
+ * `glass_halo` px wide around the frame, the effect Firefox has always had by
+ * accident (it never binds xdg-decoration, so its GTK shadow margin lives inside
+ * its own surface and the per-buffer blur covers that too).
+ *
+ * ONE node owned by the frame, exactly like the shadow — NOT a grown version of
+ * each buffer's blur companion, which is what it was until now and is why the
+ * ring squared off at the top. A decorated window is two stacked buffers, and
+ * their corner radii carry the seam rule (titlebar rounds the top, content the
+ * bottom, so the edges that meet in the middle stay straight). Growing those
+ * boxes outwards inherits the seam: the content buffer's ring covered the whole
+ * left edge but kept SQUARE top corners, and it started `glass_halo` px below
+ * the titlebar's bottom rather than at the window's top. Measured on velle's
+ * desktop at pkgrel 183 (Firefox, frame top y=46, titlebar 26 + border 2): the
+ * blurred band began at y=60 = content_top − halo with a hard right angle, while
+ * the bottom corners curved correctly. A window is one rounded rect, so its ring
+ * is one rounded rect too — the seam rule has no business out here.
+ *
+ * Lowered to the bottom of the frame (under the shadow, which is under the
+ * border), so the stack reads backdrop → halo → shadow → border → client. The
+ * window's own rounded rect is cut out via clipped_region, leaving a pure ring:
+ * inside the frame the blur that belongs there is the per-buffer masked one, and
+ * a second pass under a translucent client would only double-blur it.
+ */
+void view_halo_update(syn_view_t *view)
+{
+    if (!view->frame) return;   /* override-redirect: no frame, no halo */
+
+    syn_config_t *cfg = &view->server->config;
+
+    /* Same edge-to-edge rule the shadow and the corner radii follow: a maximized
+     * or fullscreen window has no desktop beside it, so the ring would only
+     * reach onto the neighbouring tile or off the output. */
+    int  spread = cfg->glass_halo;
+    bool want = cfg->blur && spread > 0 && view->mapped &&
+                !view->fullscreen && !view->maximized &&
+                view->w > 0 && view->h > 0;
+    if (!want) {
+        if (view->halo)
+            wlr_scene_node_set_enabled(&view->halo->node, false);
+        return;
+    }
+
+    int radius = chrome_corner_radius(cfg);   /* match the glass corners */
+    int w = view->w, h = view->h;
+
+    if (!view->halo) {
+        view->halo = wlr_scene_blur_create(view->frame,
+                                           w + 2 * spread, h + 2 * spread);
+        if (!view->halo) return;
+        /* No transparency mask, deliberately — a mask blurs only where its
+         * source RENDERS, and every pixel of this node is outside the window.
+         * (It could not be dropped later anyway: scenefx's setter dereferences
+         * the source before its NULL check.) */
+    } else {
+        wlr_scene_blur_set_size(view->halo, w + 2 * spread, h + 2 * spread);
+    }
+
+    /* The ring is concentric with the window, so its arcs grow with it. A square
+     * window (radius 0 — retro chrome, or corner_radius off) stays square. */
+    wlr_scene_blur_set_corner_radii(view->halo,
+        corner_radii_all(radius > 0 ? radius + spread : 0));
+
+    /* Fold fade × focus-translucency in, exactly like the shadow and the border
+     * rects, so a fading or hidden window's ring goes with it. */
+    float eff = view->alpha * anim_view_opacity(view);
+    wlr_scene_blur_set_alpha(view->halo, eff > 0.0f ? eff : 0.0f);
+
+    wlr_scene_node_set_position(&view->halo->node, -spread, -spread);
+
+    /* Cut the window out. clipped_region.area is node-relative, and the frame
+     * box (0,0,w,h) sits at (spread,spread) from the halo's origin. */
+    struct clipped_region clip = {
+        .area    = { .x = spread, .y = spread, .width = w, .height = h },
+        .corners = corner_radii_all(radius),
+    };
+    wlr_scene_blur_set_clipped_region(view->halo, clip);
+
+    wlr_scene_node_set_enabled(&view->halo->node, true);
+    wlr_scene_node_lower_to_bottom(&view->halo->node);
+}
+
 void view_deco_destroy(syn_view_t *view)
 {
     if (view->border)        { wlr_scene_node_destroy(&view->border->node);        view->border        = NULL; }
@@ -801,6 +886,7 @@ void view_deco_destroy(syn_view_t *view)
     if (view->grab_left)     { wlr_scene_node_destroy(&view->grab_left->node);     view->grab_left     = NULL; }
     if (view->grab_right)    { wlr_scene_node_destroy(&view->grab_right->node);    view->grab_right    = NULL; }
     if (view->shadow)        { wlr_scene_node_destroy(&view->shadow->node);        view->shadow        = NULL; }
+    if (view->halo)          { wlr_scene_node_destroy(&view->halo->node);          view->halo          = NULL; }
 
     if (view->server->deco_hover_view    == view) view->server->deco_hover_view    = NULL;
     if (view->server->tb_last_click_view == view) view->server->tb_last_click_view = NULL;

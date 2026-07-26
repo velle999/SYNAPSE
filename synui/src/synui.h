@@ -1312,6 +1312,13 @@ struct syn_view {
      * override-redirect surfaces (no frame) and while shadows are off. */
     struct wlr_scene_shadow *shadow;
 
+    /* Glass halo (scenefx): one blur node lowered below the shadow, sized
+     * glass_halo px larger than the frame on every side and clipped to exclude
+     * the window rect — the ring of blurred desktop around the window (see
+     * view_halo_update). Distinct from the per-buffer backdrop blur inside the
+     * window, which anim.c owns. NULL while glass_halo is 0. */
+    struct wlr_scene_blur *halo;
+
     /* Invisible resize-grab ring: four fully transparent rects sitting *outside*
      * the window, one per edge, overhanging the corners. The visible border is
      * only border_width px thick, so before these existed a corner grab meant
@@ -2456,6 +2463,7 @@ void view_grab_ring_update(syn_view_t *view);
  * view_update_decorations; a no-op (disables the node) when shadows are off or
  * the window is maximized/fullscreen. */
 void view_shadow_update(syn_view_t *view);
+void view_halo_update(syn_view_t *view);
 /* Maximize/restore for real: fills the output's usable box and leaves the
  * tiling flow, restoring the previous geometry (and tiled-ness) on the way
  * back. */
@@ -2992,7 +3000,6 @@ void anim_apply_alpha(syn_view_t *view);
 /* Re-assert the glass halo's place under the frame's chrome. Called by the
  * decoration pass, which lowers the border and shadow on its own schedule; a
  * no-op unless glass_halo is set. See anim.c. */
-void anim_lower_halos(syn_view_t *view);
 /* The window's settled translucency (config.active/inactive_opacity gated by
  * config.transparency), by whether it is the focused view. 1.0 when off. */
 float anim_view_opacity(syn_view_t *view);
