@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=185
+pkgrel=186
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -57,6 +57,14 @@ optdepends=('xorg-xcursorgen: build cursor themes from source (synui-cursor buil
             # with a directory search when it is absent.
             'sound-theme-freedesktop: samples for the Super+S event sounds'
             'libcanberra: XDG sound-theme lookup for the event sounds'
+            # Extra sound themes. Each adds one entry to the Super+S theme row
+            # and to `synui-sound themes`; listed here because "how do I get
+            # different sounds?" has no answer the desktop can show you
+            # otherwise. Anything not packaged goes in with `synui-sound install`.
+            'ocean-sound-theme: extra sound theme for the Super+S picker (Plasma)'
+            'sound-theme-elementary: extra sound theme for the Super+S picker'
+            'pop-sound-theme: extra sound theme for the Super+S picker'
+            'deepin-sound-theme: extra sound theme for the Super+S picker'
             'wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'

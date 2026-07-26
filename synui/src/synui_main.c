@@ -1689,6 +1689,12 @@ int synui_init(syn_server_t *s)
      * synui-apply-theme once so Dolphin/GTK/Firefox match on login. */
     theme_state_load(s);
 
+    /* Event sounds: the udev watch that makes "device plugged in" an event, and
+     * the login chime. Both no-op on a desktop that has never turned a sound on,
+     * which is every desktop until someone does. */
+    sound_udev_init(s);
+    sound_play(s, SOUND_EVT_LOGIN);
+
     return 0;
 }
 
@@ -1737,6 +1743,13 @@ int synui_run(syn_server_t *s)
 void synui_destroy(syn_server_t *s)
 {
     s->shutting_down = 1;
+
+    /* The logout chime, here rather than on the quit action so that every way
+     * out gets it — greetd's SIGTERM and ^C reach this and never touch that
+     * branch. It is fire-and-forget by nature: the sample plays on after synui
+     * is gone, which is what a logout sound is. */
+    sound_play(s, SOUND_EVT_LOGOUT);
+    sound_udev_finish(s);
 
     /* Stop the background threads first: after this point nothing else
      * touches the server struct while we tear it down, and their pipes and

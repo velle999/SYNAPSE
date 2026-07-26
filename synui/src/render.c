@@ -1667,7 +1667,10 @@ void synui_render_sound(syn_server_t *s)
     get_output_box(s, &ob);
 
     const int row_h = 30, top = 66, pad = 18;
-    int pw = 560;
+    /* Wide enough for the sample column at x=350 and the two footer lines; the
+     * volume row's slider and its readout sit next to each other rather than
+     * against the right edge, so they are unaffected. */
+    int pw = 620;
     int ph = top + SOUND_ROW_COUNT * row_h + 96;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
@@ -1738,8 +1741,15 @@ void synui_render_sound(syn_server_t *s)
         }
 
         const char *label;
-        char value[64];
+        /* Wide enough for a max-length theme name plus the "not a sound theme"
+         * suffix; every other value here is a word or two. */
+        char value[SOUND_THEME_MAX + 32];
         int is_event = 0, on = 0;
+
+        /* The sample column: what this event will actually play. Filled only
+         * for event rows; `missing` is a theme that has no sound for it. */
+        char sample[SOUND_SAMPLE_MAX] = "";
+        int  picked = 0, missing = 0;
 
         if (i == SOUND_ROW_ENABLED) {
             label = "Event sounds";
@@ -1750,13 +1760,19 @@ void synui_render_sound(syn_server_t *s)
             snprintf(value, sizeof(value), "%d%%", snd->volume);
         } else if (i == SOUND_ROW_THEME) {
             label = "Sound theme";
-            snprintf(value, sizeof(value), "%s", snd->theme);
+            if (sound_theme_installed(snd->theme))
+                snprintf(value, sizeof(value), "%s", snd->theme);
+            else
+                snprintf(value, sizeof(value), "%s \xe2\x80\x94 not a sound theme",
+                         snd->theme);
         } else {
             int evt = i - SOUND_ROW_EVENT;
             label = sound_event_label(evt);
             on = snd->on[evt];
             snprintf(value, sizeof(value), "%s", on ? "on" : "off");
             is_event = 1;
+            picked  = snd->sample[evt][0] != '\0';
+            missing = !sound_resolved_id(snd, evt, sample, sizeof(sample));
         }
 
         cairo_set_font_size(cr, 14);
@@ -1778,11 +1794,34 @@ void synui_render_sound(syn_server_t *s)
                 cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
             else
                 set_accent(cr, 1.0);
-            /* The theme is a name, not a state, so it is never greyed as "off". */
-            if (i == SOUND_ROW_THEME)
-                cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+            /* The theme is a name, not a state, so it is never greyed as "off" —
+             * unless it is not a theme at all, which is worth shouting about. */
+            if (i == SOUND_ROW_THEME) {
+                if (sound_theme_installed(snd->theme))
+                    cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+                else
+                    cairo_set_source_rgba(cr, 0.85, 0.55, 0.35, 1.0);
+            }
             cairo_move_to(cr, 300, ry + 4);
             cairo_show_text(cr, value);
+        }
+
+        /* Which sample the event plays, alongside its switch. Three states worth
+         * telling apart, because "on and still silent" otherwise looks like a
+         * broken toggle: a deliberate pick ([ ]) is brightest, the automatic
+         * choice is dimmer, and a theme with no sound for this event says so
+         * outright rather than showing the name of a file that is not there. */
+        if (is_event && sample[0]) {
+            cairo_set_font_size(cr, 12);
+            if (missing)
+                cairo_set_source_rgba(cr, 0.85, 0.55, 0.35, 1.0);
+            else if (picked)
+                cairo_set_source_rgba(cr, 0.72, 0.78, 0.92, 1.0);
+            else
+                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+
+            cairo_move_to(cr, 350, ry + 4);
+            cairo_show_text(cr, missing ? "not in this theme" : sample);
         }
     }
 
@@ -1796,9 +1835,9 @@ void synui_render_sound(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 34);
-    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on");
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on \xc2\xb7 [ ] pick sound");
     cairo_move_to(cr, 18, ph - 16);
-    cairo_show_text(cr, "t play \xc2\xb7 Space all sounds on/off \xc2\xb7 Esc close");
+    cairo_show_text(cr, "t play \xc2\xb7 Space all sounds on/off \xc2\xb7 Esc close \xc2\xb7 more: synui-sound --help");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->sound_ui.text_buf, s->sound_ui.tree, buf);

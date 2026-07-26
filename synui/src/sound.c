@@ -81,13 +81,39 @@ const char *sound_event_label(syn_sound_event_t evt)
     }
 }
 
+/* Must match synui-sound's ids() — the primary is the sound-naming spec's name
+ * for the event, the rest are what real themes actually ship under. Duplicated
+ * here for one reason: so the panel can show which sample an event will play,
+ * resolved against the theme on disk. Several spec names (desktop-login,
+ * desktop-screen-lock) exist in no installed theme, so printing the primary
+ * would name a sample nobody ever hears. */
+const char *sound_event_ids(syn_sound_event_t evt)
+{
+    switch (evt) {
+    case SOUND_EVT_LOGIN:          return "desktop-login service-login";
+    case SOUND_EVT_LOGOUT:         return "desktop-logout service-logout";
+    case SOUND_EVT_DEVICE_ADDED:   return "device-added";
+    case SOUND_EVT_DEVICE_REMOVED: return "device-removed";
+    case SOUND_EVT_LOCK:           return "desktop-screen-lock bell";
+    case SOUND_EVT_UNLOCK:         return "desktop-unlock complete";
+    case SOUND_EVT_NOTIFY:         return "message-new-instant message";
+    case SOUND_EVT_SCREENSHOT:     return "screen-capture camera-shutter";
+    case SOUND_EVT_VOLUME:         return "audio-volume-change";
+    case SOUND_EVT_ERROR:          return "dialog-error";
+    default:                       return "";
+    }
+}
+
 /* ── The cached sounds.state ─────────────────────────────── */
 
 static void sound_defaults(syn_sound_t *snd)
 {
     snd->enabled = 0;
     snd->volume  = 70;
-    for (int i = 0; i < SOUND_EVT_COUNT; i++) snd->on[i] = 0;
+    for (int i = 0; i < SOUND_EVT_COUNT; i++) {
+        snd->on[i] = 0;
+        snd->sample[i][0] = '\0';   /* no pick — the automatic chain */
+    }
     snprintf(snd->theme, sizeof(snd->theme), "freedesktop");
 }
 
@@ -155,8 +181,28 @@ void sound_state_refresh(syn_server_t *s)
         } else {
             for (int i = 0; i < SOUND_EVT_COUNT; i++) {
                 const char *n = sound_event_name(i);
-                if (n && strcmp(key, n) == 0)
+                if (!n) continue;
+
+                if (strcmp(key, n) == 0) {
                     snd->on[i] = (strcmp(val, "on") == 0);
+                    break;
+                }
+
+                /* "<event>_sound" — which sample this event plays. Matched by
+                 * building the key rather than comparing a prefix: "login" is a
+                 * prefix of nothing here today, but an event added later that
+                 * extends another's name would silently steal its line. */
+                char skey[64];
+                snprintf(skey, sizeof(skey), "%s_sound", n);
+                if (strcmp(key, skey) == 0) {
+                    /* "default"/"auto" is the absence of a pick, not a sample. */
+                    if (strcmp(val, "default") == 0 || strcmp(val, "auto") == 0 ||
+                        val[0] == '\0')
+                        snd->sample[i][0] = '\0';
+                    else
+                        snprintf(snd->sample[i], SOUND_SAMPLE_MAX, "%s", val);
+                    break;
+                }
             }
         }
     }
@@ -333,25 +379,56 @@ static void sound_set_volume(syn_server_t *s, int vol)
 /* The theme row cycles whatever is installed. Reading the directory listing here
  * rather than shelling out keeps the panel's redraw synchronous — the list is
  * two or three entries and it is only walked on a keypress. */
-#define SOUND_THEMES_MAX 24
+#define SOUND_THEMES_MAX  24
+#define SOUND_SAMPLES_MAX 256
 
-static int sound_themes_list(char names[SOUND_THEMES_MAX][SOUND_THEME_MAX])
+/* Same test synui-sound's is_theme() makes, and for the same reason:
+ * /usr/share/sounds/alsa is nine channel-test .wav files dropped there by
+ * alsa-utils, with no index.theme and no output-profile directory. It was being
+ * offered in the picker, and selecting it silenced every event — it holds no XDG
+ * sample id at all — with nothing on screen to say why. */
+static int sound_dir_is_theme(const char *dir)
 {
-    /* Same search path synui-sound uses, user's own first. */
-    char home_base[256] = "";
+    char p[512];
+    struct stat st;
+
+    snprintf(p, sizeof(p), "%s/index.theme", dir);
+    if (stat(p, &st) == 0 && S_ISREG(st.st_mode)) return 1;
+    snprintf(p, sizeof(p), "%s/stereo", dir);
+    if (stat(p, &st) == 0 && S_ISDIR(st.st_mode)) return 1;
+    snprintf(p, sizeof(p), "%s/mono", dir);
+    if (stat(p, &st) == 0 && S_ISDIR(st.st_mode)) return 1;
+    return 0;
+}
+
+/* The three share/sounds directories, user's own first — the same search path,
+ * in the same order, that synui-sound looks along. Written into the caller's
+ * buffer because the first entry is built from the environment. */
+#define SOUND_BASES 3
+
+static void sound_search_path(char home_base[256], const char *bases[SOUND_BASES])
+{
+    home_base[0] = '\0';
     const char *data_home = getenv("XDG_DATA_HOME");
     const char *home      = getenv("HOME");
     if (data_home && *data_home)
-        snprintf(home_base, sizeof(home_base), "%s/sounds", data_home);
+        snprintf(home_base, 256, "%s/sounds", data_home);
     else if (home && *home)
-        snprintf(home_base, sizeof(home_base), "%s/.local/share/sounds", home);
+        snprintf(home_base, 256, "%s/.local/share/sounds", home);
 
-    const char *bases[] = {
-        home_base, "/usr/local/share/sounds", "/usr/share/sounds",
-    };
+    bases[0] = home_base;
+    bases[1] = "/usr/local/share/sounds";
+    bases[2] = "/usr/share/sounds";
+}
+
+static int sound_themes_list(char names[SOUND_THEMES_MAX][SOUND_THEME_MAX])
+{
+    char home_base[256];
+    const char *bases[SOUND_BASES];
+    sound_search_path(home_base, bases);
     int n = 0;
 
-    for (size_t b = 0; b < sizeof(bases) / sizeof(bases[0]); b++) {
+    for (size_t b = 0; b < SOUND_BASES; b++) {
         if (!bases[b] || !*bases[b]) continue;
 
         DIR *d = opendir(bases[b]);
@@ -369,6 +446,7 @@ static int sound_themes_list(char names[SOUND_THEMES_MAX][SOUND_THEME_MAX])
              * the picker and then rejected by synui-sound, which validates the
              * name against the same directories. No real theme is this long. */
             if (strlen(e->d_name) >= SOUND_THEME_MAX) continue;
+            if (!sound_dir_is_theme(full)) continue;
 
             int dup = 0;
             for (int i = 0; i < n; i++)
@@ -381,6 +459,23 @@ static int sound_themes_list(char names[SOUND_THEMES_MAX][SOUND_THEME_MAX])
         closedir(d);
     }
     return n;
+}
+
+/*
+ * Is the selected theme one the picker would offer? Not the same as "the
+ * directory exists": a state file written before the ghost-theme filter existed
+ * can name /usr/share/sounds/alsa, which is nine channel-test .wav files and no
+ * sample ids — every event on, and total silence, with nothing to explain it.
+ * Dropping it from the cycle list stops anyone ARRIVING there; this is what
+ * tells the people already there what is wrong.
+ */
+int sound_theme_installed(const char *theme)
+{
+    static char names[SOUND_THEMES_MAX][SOUND_THEME_MAX];
+    int n = sound_themes_list(names);
+    for (int i = 0; i < n; i++)
+        if (strcmp(names[i], theme) == 0) return 1;
+    return 0;
 }
 
 static void sound_cycle_theme(syn_server_t *s, int dir)
@@ -406,6 +501,185 @@ static void sound_cycle_theme(syn_server_t *s, int dir)
 
     snprintf(s->sound.status, sizeof(s->sound.status),
              "theme: %s \xc2\xb7 t to hear it", names[cur]);
+}
+
+/* ── Which sample an event plays ─────────────────────────── */
+
+/* Does the theme ship this sample? Only the layout every real theme uses is
+ * checked (stereo/, mono/, the theme root); libcanberra does the full spec
+ * lookup, inheritance included, and this does not pretend to. Being wrong here
+ * costs a label in the panel, never a sound: the helper resolves it again. */
+static int sound_sample_exists(const char *theme, const char *id)
+{
+    static const char *subs[] = { "stereo", "mono", "." };
+    static const char *exts[] = { "oga", "ogg", "wav" };
+
+    char home_base[256];
+    const char *bases[SOUND_BASES];
+    sound_search_path(home_base, bases);
+
+    for (size_t b = 0; b < SOUND_BASES; b++) {
+        if (!bases[b] || !*bases[b]) continue;
+        for (size_t su = 0; su < sizeof(subs) / sizeof(subs[0]); su++) {
+            for (size_t e = 0; e < sizeof(exts) / sizeof(exts[0]); e++) {
+                char p[640];
+                snprintf(p, sizeof(p), "%s/%s/%s/%s.%s",
+                         bases[b], theme, subs[su], id, exts[e]);
+                struct stat st;
+                if (stat(p, &st) == 0 && S_ISREG(st.st_mode)) return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/*
+ * The sample this event will actually play, for display. A picked one is shown
+ * as-is. Otherwise the automatic chain is walked and the first id the theme has
+ * on disk wins — which is the honest answer and not the same as the first id in
+ * the chain: desktop-login is the spec's name for the login sound and is in no
+ * installed theme, so a panel printing it would name a sample nobody hears.
+ *
+ * Returns 0 when nothing in the chain exists. That is a real state — a theme
+ * that simply has no sound for this event — and the panel says so, because
+ * "enabled but silent" is otherwise indistinguishable from a broken toggle.
+ */
+int sound_resolved_id(const syn_sound_t *snd, int evt, char *out, size_t outsz)
+{
+    if (snd->sample[evt][0]) {
+        snprintf(out, outsz, "%s", snd->sample[evt]);
+        return sound_sample_exists(snd->theme, snd->sample[evt]);
+    }
+
+    const char *chain = sound_event_ids(evt);
+    char first[SOUND_SAMPLE_MAX] = "";
+
+    while (*chain) {
+        const char *sp = strchr(chain, ' ');
+        size_t len = sp ? (size_t)(sp - chain) : strlen(chain);
+        if (len >= SOUND_SAMPLE_MAX) len = SOUND_SAMPLE_MAX - 1;
+
+        char id[SOUND_SAMPLE_MAX];
+        memcpy(id, chain, len);
+        id[len] = '\0';
+        if (!first[0]) snprintf(first, sizeof(first), "%s", id);
+
+        if (sound_sample_exists(snd->theme, id)) {
+            snprintf(out, outsz, "%s", id);
+            return 1;
+        }
+        if (!sp) break;
+        chain = sp + 1;
+    }
+
+    /* Nothing on disk: name the one it would have wanted, and report the miss. */
+    snprintf(out, outsz, "%s", first);
+    return 0;
+}
+
+static int sound_samples_list(const char *theme,
+                              char ids[SOUND_SAMPLES_MAX][SOUND_SAMPLE_MAX])
+{
+    static const char *subs[] = { "stereo", "mono", "." };
+
+    char home_base[256];
+    const char *bases[SOUND_BASES];
+    sound_search_path(home_base, bases);
+    int n = 0;
+
+    for (size_t b = 0; b < SOUND_BASES && n < SOUND_SAMPLES_MAX; b++) {
+        if (!bases[b] || !*bases[b]) continue;
+        for (size_t su = 0; su < sizeof(subs) / sizeof(subs[0]); su++) {
+            char dir[512];
+            snprintf(dir, sizeof(dir), "%s/%s/%s", bases[b], theme, subs[su]);
+
+            DIR *d = opendir(dir);
+            if (!d) continue;
+            struct dirent *e;
+            while ((e = readdir(d)) != NULL && n < SOUND_SAMPLES_MAX) {
+                if (e->d_name[0] == '.') continue;
+
+                const char *dot = strrchr(e->d_name, '.');
+                if (!dot) continue;
+                if (strcmp(dot, ".oga") != 0 && strcmp(dot, ".ogg") != 0 &&
+                    strcmp(dot, ".wav") != 0) continue;
+
+                size_t len = (size_t)(dot - e->d_name);
+                if (len == 0 || len >= SOUND_SAMPLE_MAX) continue;
+
+                char id[SOUND_SAMPLE_MAX];
+                memcpy(id, e->d_name, len);
+                id[len] = '\0';
+
+                /* The same id can be in two of the three bases, and in both
+                 * .oga and .wav. The picker must offer it once. */
+                int dup = 0;
+                for (int i = 0; i < n; i++)
+                    if (strcmp(ids[i], id) == 0) { dup = 1; break; }
+                if (dup) continue;
+
+                memcpy(ids[n], id, len + 1);
+                n++;
+            }
+            closedir(d);
+        }
+    }
+    return n;
+}
+
+static int sound_id_cmp(const void *a, const void *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+/*
+ * [ and ] step the selected event through the theme's samples. The list is
+ * sorted so the two keys are inverses of each other and a second pass lands in
+ * the same place — readdir order is neither stable nor alphabetical, and a
+ * picker that walks a different sequence each time it is opened is unusable.
+ *
+ * Position 0 is "auto", the absence of a pick, so backing off a choice is one
+ * keypress rather than a trip to the terminal.
+ */
+static void sound_cycle_sample(syn_server_t *s, int evt, int dir)
+{
+    /* static: 16K of ids is more than belongs on the stack, and this only ever
+     * runs on the main thread from the key handler. */
+    static char ids[SOUND_SAMPLES_MAX][SOUND_SAMPLE_MAX];
+    int n = sound_samples_list(s->sound.theme, ids);
+    if (n <= 0) {
+        snprintf(s->sound.status, sizeof(s->sound.status),
+                 "theme %s ships no samples", s->sound.theme);
+        return;
+    }
+    qsort(ids, (size_t)n, SOUND_SAMPLE_MAX, sound_id_cmp);
+
+    /* 0 = auto, 1..n = ids[0..n-1]. */
+    int cur = 0;
+    if (s->sound.sample[evt][0]) {
+        for (int i = 0; i < n; i++)
+            if (strcmp(ids[i], s->sound.sample[evt]) == 0) { cur = i + 1; break; }
+    }
+
+    cur = (cur + dir + (n + 1)) % (n + 1);
+
+    char cmd[192];
+    if (cur == 0) {
+        s->sound.sample[evt][0] = '\0';
+        snprintf(cmd, sizeof(cmd), "synui-sound sound %s default",
+                 sound_event_name(evt));
+    } else {
+        snprintf(s->sound.sample[evt], SOUND_SAMPLE_MAX, "%s", ids[cur - 1]);
+        snprintf(cmd, sizeof(cmd), "synui-sound sound %s %s",
+                 sound_event_name(evt), ids[cur - 1]);
+    }
+    sound_apply(s, cmd);
+
+    char shown[SOUND_SAMPLE_MAX];
+    sound_resolved_id(&s->sound, evt, shown, sizeof(shown));
+    snprintf(s->sound.status, sizeof(s->sound.status),
+             "%s: %s%s \xc2\xb7 t to hear it", sound_event_label(evt), shown,
+             cur == 0 ? " (automatic)" : "");
 }
 
 void sound_show(syn_server_t *s)
@@ -539,6 +813,21 @@ int sound_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         sound_test(s);
         synui_render_sound(s);
         return 1;
+    /* [ and ] pick which sample the selected event plays. Unshifted on the
+     * layouts this ships on, which matters: the guard above drops anything with
+     * a modifier, so Shift+Left would never reach here. */
+    case XKB_KEY_bracketleft:
+    case XKB_KEY_bracketright: {
+        int evt = s->sound.selected - SOUND_ROW_EVENT;
+        if (evt < 0 || evt >= SOUND_EVT_COUNT) {
+            snprintf(s->sound.status, sizeof(s->sound.status),
+                     "[ ] picks a sound \xc2\xb7 select an event row first");
+        } else {
+            sound_cycle_sample(s, evt, sym == XKB_KEY_bracketright ? +1 : -1);
+        }
+        synui_render_sound(s);
+        return 1;
+    }
     default:
         return 1;   /* modal */
     }

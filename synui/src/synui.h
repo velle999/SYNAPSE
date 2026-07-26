@@ -362,7 +362,8 @@ enum {
     SOUND_ROW_COUNT = SOUND_ROW_EVENT + SOUND_EVT_COUNT,
 };
 
-#define SOUND_THEME_MAX 64
+#define SOUND_THEME_MAX  64
+#define SOUND_SAMPLE_MAX 64
 
 typedef struct {
     int  visible;
@@ -376,6 +377,10 @@ typedef struct {
     int   volume;                     /* 0..100; 0 is mute */
     int   on[SOUND_EVT_COUNT];
     char  theme[SOUND_THEME_MAX];
+    /* The sample picked for each event, from the "<event>_sound" keys. Empty
+     * means none was picked and the automatic chain in sound_event_ids() is
+     * used — which is not the same as a sample literally named "default". */
+    char  sample[SOUND_EVT_COUNT][SOUND_SAMPLE_MAX];
     long  mtime;                      /* st_mtime of the file this came from */
     int   loaded;
 
@@ -2893,6 +2898,18 @@ void synui_render_widgets(syn_server_t *s);
 void sound_play(syn_server_t *s, syn_sound_event_t evt);
 const char *sound_event_name(syn_sound_event_t evt);   /* sounds.state key */
 const char *sound_event_label(syn_sound_event_t evt);  /* panel text */
+/* The automatic sample ids for an event, best first, space-separated — the same
+ * chain synui-sound's ids() holds, and it must stay the same. Used only to show
+ * what an event WILL play; the helper is still the one that resolves and plays. */
+const char *sound_event_ids(syn_sound_event_t evt);
+/* The sample id this event will actually play, written to `out`. Returns 0 when
+ * the theme has no such sample — an event that is on and still silent, which the
+ * panel has to be able to say out loud or it reads as a broken toggle. */
+int sound_resolved_id(const syn_sound_t *snd, int evt, char *out, size_t outsz);
+/* Whether the selected theme is one the picker offers. A state file written
+ * before the ghost-theme filter can name one that is not (alsa), which is a
+ * desktop with every sound on and nothing audible. */
+int sound_theme_installed(const char *theme);
 /* Read sounds.state if it has changed since the last look. Called by sound_play
  * and by the panel; there is no reload hook to remember. */
 void sound_state_refresh(syn_server_t *s);
