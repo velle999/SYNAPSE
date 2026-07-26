@@ -1343,27 +1343,14 @@ SDDMEOF
         mkdir -p /mnt/usr/local/bin
         cat > /mnt/usr/local/bin/synui-session << 'SESSION_EOF'
 #!/bin/sh
+# synui picks its own renderer: it tries hardware GLES2 and falls back to
+# software if that cannot come up. Forcing software here was wrong — a VM with
+# 3D enabled has a working GPU, and llvmpipe is where the layer surfaces
+# corrupt. Only the cursor and backend policy belongs at this level.
 if [ -f /sys/class/dmi/id/sys_vendor ] && \
    grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-    # fx_renderer is GLES2-only and ignores WLR_RENDERER, so these two are
-    # what actually select llvmpipe; either alone still fails. See
-    # archiso/airootfs/usr/local/bin/synui-gfx-env for the long version.
-    export WLR_RENDERER_FORCE_SOFTWARE=1
-    export WLR_RENDERER_ALLOW_SOFTWARE=1
-    export WLR_RENDERER=pixman
     export WLR_BACKENDS=drm,libinput
     export WLR_NO_HARDWARE_CURSORS=1
-else
-    # nouveau has no usable EGL/Vulkan on modern cards — software-render
-    # instead of dying at renderer autocreate.
-    for drv in /sys/class/drm/card*/device/driver; do
-        case "$(readlink "$drv" 2>/dev/null)" in
-            *nouveau) export WLR_RENDERER_FORCE_SOFTWARE=1 \
-                             WLR_RENDERER_ALLOW_SOFTWARE=1 \
-                             WLR_RENDERER=pixman \
-                             WLR_NO_HARDWARE_CURSORS=1 ;;
-        esac
-    done
 fi
 # ~/.local/bin on PATH for synui and everything it spawns. greetd runs this
 # through a login shell, so /etc/profile.d is already applied — but the ISO's
@@ -1408,23 +1395,10 @@ SESSION_EOF
 #!/bin/sh
 if [ -f /sys/class/dmi/id/sys_vendor ] && \
    grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-    # fx_renderer is GLES2-only and ignores WLR_RENDERER, so these two are
-    # what actually select llvmpipe; either alone still fails. See
-    # archiso/airootfs/usr/local/bin/synui-gfx-env for the long version.
-    export WLR_RENDERER_FORCE_SOFTWARE=1
-    export WLR_RENDERER_ALLOW_SOFTWARE=1
-    export WLR_RENDERER=pixman
+    # synui picks its own renderer (hardware first, software on failure);
+    # only cursor/backend policy belongs here. See synui-gfx-env.
     export WLR_BACKENDS=drm,libinput
     export WLR_NO_HARDWARE_CURSORS=1
-else
-    for drv in /sys/class/drm/card*/device/driver; do
-        case "$(readlink "$drv" 2>/dev/null)" in
-            *nouveau) export WLR_RENDERER_FORCE_SOFTWARE=1 \
-                             WLR_RENDERER_ALLOW_SOFTWARE=1 \
-                             WLR_RENDERER=pixman \
-                             WLR_NO_HARDWARE_CURSORS=1 ;;
-        esac
-    done
 fi
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=synui
@@ -1470,22 +1444,10 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         mkdir -p "$XDG_RUNTIME_DIR"
         if [ -f /sys/class/dmi/id/sys_vendor ] && \
            grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-            # See synui-gfx-env: fx_renderer ignores WLR_RENDERER, these two
-            # are what actually select llvmpipe, and either alone fails.
-            export WLR_RENDERER_FORCE_SOFTWARE=1
-            export WLR_RENDERER_ALLOW_SOFTWARE=1
-            export WLR_RENDERER=pixman
+            # synui picks its own renderer (hardware first, software on
+            # failure); only cursor/backend policy belongs here.
             export WLR_BACKENDS=drm,libinput
             export WLR_NO_HARDWARE_CURSORS=1
-        else
-            for drv in /sys/class/drm/card*/device/driver; do
-                case "$(readlink "$drv" 2>/dev/null)" in
-                    *nouveau) export WLR_RENDERER_FORCE_SOFTWARE=1 \
-                                     WLR_RENDERER_ALLOW_SOFTWARE=1 \
-                                     WLR_RENDERER=pixman \
-                                     WLR_NO_HARDWARE_CURSORS=1 ;;
-                esac
-            done
         fi
         export XDG_SESSION_TYPE=wayland
         export XDG_CURRENT_DESKTOP=synui

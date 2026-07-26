@@ -1,67 +1,45 @@
 #!/bin/sh
-# synui-gfx-env — decide how synui should render on this hardware.
+# synui-gfx-env — prepare the graphics environment synui starts in.
 # Prints KEY=VALUE lines (systemd EnvironmentFile format; eval-able).
-# Setup must complete on any machine, so when there is no working
-# EGL/Vulkan stack we fall back to software rendering instead of letting
-# the renderer autocreate kill the session.
 #
-# WHAT SOFTWARE RENDERING MEANS SINCE THE SCENEFX MIGRATION: synui builds
-# its renderer with fx_renderer_create(), which is GLES2-only and NEVER
-# reads WLR_RENDERER. So `WLR_RENDERER=pixman` on its own is a no-op here
-# and a machine with no usable GLES2 still dies at:
+# THIS SCRIPT NO LONGER PICKS THE RENDERER, and that is the point.
 #
-#   [render/fx_renderer/util.c] drmGetDevices2 failed
-#   [render/fx_renderer/fx_renderer.c] Cannot create GLES2 renderer: no DRM FD
+# It used to force software rendering whenever it saw a hypervisor or a nouveau
+# card. Forcing it in a VM was wrong twice over: any hypervisor with 3D enabled
+# — virtio-gpu+virgl, VirtualBox 3D, VMware 3D — exposes a working render node,
+# and llvmpipe is precisely where synui's layer surfaces come out corrupted, so
+# the guess threw away working acceleration and bought a rendering bug with the
+# proceeds. Measured in a virgl guest: forced llvmpipe corrupts the bar on
+# pointer motion, the same guest on its GPU changes zero pixels.
 #
-# The knobs fx_renderer/EGL actually read are the two below, and EITHER
-# ALONE STILL FAILS: FORCE skips the DRM hunt and passes drm_fd = -1, and
-# only then does ALLOW let EGL select the llvmpipe (EGL_MESA_device_software)
-# device. WLR_RENDERER is still emitted for anything else in the session
-# that honours it. Keep them together — dropping one is a black screen.
-SOFTWARE_RENDER='WLR_RENDERER_FORCE_SOFTWARE=1
-WLR_RENDERER_ALLOW_SOFTWARE=1
-WLR_RENDERER=pixman
-WLR_NO_HARDWARE_CURSORS=1'
+# It was also unreliable in the other direction. `WLR_RENDERER=pixman` has done
+# nothing since the scenefx migration (fx_renderer is GLES2-only and never reads
+# it), so the nouveau branch that looked like a software fallback had not been
+# one for months.
+#
+# synui decides for itself now: it tries hardware GLES2 and falls back to
+# software if fx_renderer_create() cannot come up. That is a test of what
+# actually works rather than a guess from a device name, it lives in one place
+# instead of four, and it covers cards nobody thought to special-case.
+#
+# What is left here is the part synui cannot do for itself: loading a driver so
+# there is a card at all, and the cursor policy.
 
-# nvidia-utils blacklists nouveau, and nvidia-open only binds Turing and
-# newer. On older NVIDIA cards that leaves no DRM device at all — load
-# nouveau by hand (a blacklist only stops autoloading) so there is a KMS
-# card to software-render on.
+# nvidia-utils blacklists nouveau, and nvidia-open only binds Turing and newer.
+# On older NVIDIA cards that leaves no DRM device at all — load nouveau by hand
+# (a blacklist only stops autoloading) so there is something to render on. If
+# its GL turns out to be unusable, synui's fallback catches it.
 if ! ls /dev/dri/card* >/dev/null 2>&1; then
     modprobe nouveau 2>/dev/null || true
     udevadm settle --timeout=5 2>/dev/null || sleep 1
 fi
 
-# VMs: no usable GPU acceleration.
-#
-# synui's own detect_vm() sets the same two software flags before wlroots
-# init, so this branch is belt-and-braces rather than the only thing
-# standing between a VM and a black screen — but it must still be right.
-# A VM that stops reporting a known DMI vendor would otherwise fall
-# through to the bare-metal path in BOTH places at once.
+# VMs: no hardware cursor plane worth trusting (vmwgfx in particular cannot do
+# it), and the DRM backend is the one to use. Neither of these is a renderer
+# choice, so both are safe to state up front.
 if [ -f /sys/class/dmi/id/sys_vendor ] && \
    grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-    printf '%s\nWLR_BACKENDS=drm,libinput\n' "$SOFTWARE_RENDER"
-    exit 0
-fi
-
-# nouveau has no usable EGL/Vulkan on modern cards: renderer autocreate
-# (GLES2 → Vulkan) dies before synui's own code runs.
-for drv in /sys/class/drm/card*/device/driver; do
-    case "$(readlink "$drv" 2>/dev/null)" in
-        *nouveau)
-            printf '%s\n' "$SOFTWARE_RENDER"
-            exit 0
-            ;;
-    esac
-done
-
-# No DRM card at all — the modprobe above did not produce one. There is no
-# GPU to fail over to, so this is the case the whole script exists for:
-# software-render rather than let fx_renderer die on a missing DRM FD.
-if ! ls /dev/dri/card* >/dev/null 2>&1; then
-    printf '%s\n' "$SOFTWARE_RENDER"
-    exit 0
+    printf 'WLR_BACKENDS=drm,libinput\nWLR_NO_HARDWARE_CURSORS=1\n'
 fi
 
 exit 0

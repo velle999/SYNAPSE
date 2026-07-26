@@ -1318,6 +1318,19 @@ int synui_init(syn_server_t *s)
      * the wlr_renderer interface (allocator autocreate, wl_display init, the CRT
      * post-pass) treats it as an ordinary renderer. */
     s->renderer = fx_renderer_create(s->backend);
+    if (!s->renderer && !getenv("WLR_RENDERER_FORCE_SOFTWARE")) {
+        /* The GPU we decided to trust cannot drive scenefx — nouveau is the
+         * standing example, and a hypervisor advertising a render node it
+         * cannot back is another. Falling back beats exiting: a soft, slow
+         * desktop is recoverable, a black screen at login is not. Retrying
+         * here is safe because the backend is already up and fx_renderer reads
+         * these on the call, not at backend creation. */
+        fprintf(stderr, "synui: hardware GLES2 unavailable — falling back to "
+                        "software rendering\n");
+        setenv("WLR_RENDERER_FORCE_SOFTWARE", "1", 1);
+        setenv("WLR_RENDERER_ALLOW_SOFTWARE", "1", 1);
+        s->renderer = fx_renderer_create(s->backend);
+    }
     if (!s->renderer) {
         fprintf(stderr, "synui: fx_renderer_create() failed (WLR_RENDERER=%s)\n",
                 getenv("WLR_RENDERER") ? getenv("WLR_RENDERER") : "(auto)");
@@ -1401,6 +1414,37 @@ int synui_init(syn_server_t *s)
     s->output_layout = wlr_output_layout_create(s->display);
 
     /* Scene graph */
+    /*
+     * Software rendering: re-render the whole scene every frame.
+     *
+     * Measured, not guessed. In a VM (fx_renderer on llvmpipe, software
+     * cursor) the bar's layer surface comes out wrong: the SYNAPSE badge draws
+     * over itself and the active-workspace pip goes missing, and moving the
+     * pointer across the bar loses more of it. A/B against a full-re-render
+     * reference frame, comparing only the static left section so the clock
+     * could not skew it:
+     *
+     *     normal damage tracking      2950 pixels wrong
+     *     whole-output damage         2042 pixels wrong   (blur's add_whole path)
+     *     WLR_SCENE_DEBUG_DAMAGE=rerender   0
+     *
+     * Note the middle row: damaging the whole output is NOT enough, so this is
+     * not a damage-region problem — the scene has to actually re-render its
+     * nodes. That also rules out the effects: the clean run above had blur,
+     * shadow and corner_radius at their defaults, so there is nothing to gain
+     * by clamping them here.
+     *
+     * Yes, this is a debug knob. It is a documented, stable wlroots/scenefx
+     * one, it is the only setting that produced a correct frame, and the cost
+     * — a full repaint per frame — is paid only where the renderer is already
+     * software. An explicit setting from the environment always wins.
+     */
+    if (getenv("WLR_RENDERER_FORCE_SOFTWARE") && !getenv("WLR_SCENE_DEBUG_DAMAGE")) {
+        setenv("WLR_SCENE_DEBUG_DAMAGE", "rerender", 1);
+        fprintf(stderr, "synui: software rendering — full re-render per frame "
+                        "(set WLR_SCENE_DEBUG_DAMAGE to override)\n");
+    }
+
     s->scene = wlr_scene_create();
     s->scene_layout = wlr_scene_attach_output_layout(s->scene, s->output_layout);
 
@@ -1864,6 +1908,25 @@ void synui_destroy(syn_server_t *s)
  * Reads /sys/class/dmi/id/sys_vendor to detect hypervisors.
  * Returns 1 if running in VirtualBox, VMware, or QEMU; 0 otherwise.
  */
+/*
+ * Is there a GPU here we could actually render on?
+ *
+ * A render node is the thing fx_renderer needs: it is what EGL opens to get a
+ * GLES2 context. Its presence is not a promise that GL works (nouveau ships one
+ * and cannot drive scenefx), which is why the renderer path below falls back on
+ * failure rather than trusting this.
+ */
+static int have_render_node(void)
+{
+    for (int i = 128; i < 136; i++) {
+        char path[32];
+        snprintf(path, sizeof(path), "/dev/dri/renderD%d", i);
+        if (access(path, R_OK | W_OK) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 static int detect_vm(void)
 {
     static const char *const vendors[] = {
@@ -2031,10 +2094,22 @@ int main(int argc, char *argv[])
          * "no DRM FD available" instead of falling back. These are the knobs
          * fx_renderer/EGL actually reads. WLR_RENDERER is still set for the
          * benefit of anything else in the process that honours it. */
-        fprintf(stderr, "synui: VM/hypervisor detected — using software GLES2 (llvmpipe)\n");
-        setenv("WLR_RENDERER_FORCE_SOFTWARE", "1", 1);
-        setenv("WLR_RENDERER_ALLOW_SOFTWARE", "1", 1);
-        setenv("WLR_RENDERER", "pixman", 1);
+        /* But only when there is nothing to render WITH. This used to force
+         * llvmpipe in EVERY VM, which threw away working acceleration on any
+         * hypervisor with 3D enabled — virtio-gpu+virgl, VirtualBox 3D,
+         * VMware 3D all expose a render node — and llvmpipe is where the
+         * layer-surface corruption lives. A guest with a GPU should use it.
+         * If the GPU turns out not to work, fx_renderer_create() below falls
+         * back to software rather than leaving a black screen. */
+        if (have_render_node()) {
+            fprintf(stderr, "synui: VM/hypervisor detected, but a render node "
+                            "exists — trying hardware GLES2 first\n");
+        } else {
+            fprintf(stderr, "synui: VM/hypervisor detected — using software GLES2 (llvmpipe)\n");
+            setenv("WLR_RENDERER_FORCE_SOFTWARE", "1", 1);
+            setenv("WLR_RENDERER_ALLOW_SOFTWARE", "1", 1);
+            setenv("WLR_RENDERER", "pixman", 1);
+        }
         /* Only set WLR_BACKENDS if caller hasn't already chosen one */
         if (!getenv("WLR_BACKENDS"))
             setenv("WLR_BACKENDS", "drm,libinput", 1);
@@ -2042,36 +2117,6 @@ int main(int argc, char *argv[])
         setenv("WLR_NO_HARDWARE_CURSORS", "1", 1);
     }
 
-    /*
-     * Software rendering: re-render the whole scene every frame.
-     *
-     * Measured, not guessed. In a VM (fx_renderer on llvmpipe, software
-     * cursor) the bar's layer surface comes out wrong: the SYNAPSE badge draws
-     * over itself and the active-workspace pip goes missing, and moving the
-     * pointer across the bar loses more of it. A/B against a full-re-render
-     * reference frame, comparing only the static left section so the clock
-     * could not skew it:
-     *
-     *     normal damage tracking      2950 pixels wrong
-     *     whole-output damage         2042 pixels wrong   (blur's add_whole path)
-     *     WLR_SCENE_DEBUG_DAMAGE=rerender   0
-     *
-     * Note the middle row: damaging the whole output is NOT enough, so this is
-     * not a damage-region problem — the scene has to actually re-render its
-     * nodes. That also rules out the effects: the clean run above had blur,
-     * shadow and corner_radius at their defaults, so there is nothing to gain
-     * by clamping them here.
-     *
-     * Yes, this is a debug knob. It is a documented, stable wlroots/scenefx
-     * one, it is the only setting that produced a correct frame, and the cost
-     * — a full repaint per frame — is paid only where the renderer is already
-     * software. An explicit setting from the environment always wins.
-     */
-    if (getenv("WLR_RENDERER_FORCE_SOFTWARE") && !getenv("WLR_SCENE_DEBUG_DAMAGE")) {
-        setenv("WLR_SCENE_DEBUG_DAMAGE", "rerender", 1);
-        fprintf(stderr, "synui: software rendering — full re-render per frame "
-                        "(set WLR_SCENE_DEBUG_DAMAGE to override)\n");
-    }
 
     syn_server_t server = {0};
     synui_config_load(&server.config);
