@@ -127,7 +127,16 @@ titlebar_height = 26
 # Super+W picks one live and writes wallpaper.state, which then overrides this
 # line — delete that file to hand control back here.
 # wallpaper      = default
-# wallpaper_mode = fill        # fill | fit | stretch | center
+# wallpaper_mode = fill        # fill | fit | stretch | center | tile
+#
+# Per monitor: name a connector (as `synctl outputs` spells it) and give it the
+# same values the two keys above take. A monitor with no line here follows them.
+# In the Super+W picker, Tab switches between "All monitors" and one screen —
+# picking with a screen scoped writes these same overrides into wallpaper.state,
+# and picking with "All monitors" clears them again.
+# wallpaper_output      = DP-1 matrix
+# wallpaper_output      = HDMI-A-1 ~/Pictures/ultrawide.jpg
+# wallpaper_output_mode = HDMI-A-1 fit
 
 # ── GLES post-process effects ──────────────────────────────
 # CRT-style pass on real GPUs; automatically off on pixman (VMs).

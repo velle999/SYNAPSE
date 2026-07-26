@@ -183,6 +183,22 @@ cmd_set() {
 }
 
 cmd_off() {
+    local out="${1:-}"
+
+    # One process paints every screen in the state file, so dropping a single
+    # output means restarting it without that output's line — not leaving it
+    # alone. With no output named, or none left afterwards, start_from_state
+    # finds nothing to run and the engine simply stays down.
+    if [ -n "$out" ] && [ "$out" != all ]; then
+        local tmp; tmp="$(mktemp)"
+        grep -v "^$out " "$STATE" > "$tmp" 2>/dev/null || true
+        mv "$tmp" "$STATE"
+        cmd_stop
+        start_from_state
+        echo "synui-wpengine: stopped on $out, synui wallpaper restored there"
+        return 0
+    fi
+
     cmd_stop
     : > "$STATE"
     echo "synui-wpengine: stopped, synui wallpaper restored"
@@ -208,7 +224,7 @@ cmd_status() {
 case "${1:-}" in
     list)    cmd_list ;;
     set)     shift; cmd_set "$@" ;;
-    off)     cmd_off ;;
+    off)     shift; cmd_off "$@" ;;
     restore)
         # Decide BEFORE stopping anything: with nothing to run here (a nested
         # or headless synui), leave whatever is on the real seat alone.
@@ -225,7 +241,8 @@ usage: synui-wpengine <command>
 
   list                     list subscribed Workshop wallpapers (id, type, title)
   set <id> [output|all]    apply a wallpaper (default: every output) and persist
-  off                      stop the engine, hand the background back to synui
+  off [output|all]         stop the engine (on one output, or everywhere) and
+                           hand the background back to synui
   restore                  re-apply the saved state (for autostart)
   status                   show what is running and what is saved
 EOF

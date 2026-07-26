@@ -5,8 +5,17 @@
  * switching wallpaper without editing synuirc:
  *
  *   Up/Down (j/k)     move the highlight (applies live for instant preview)
+ *   Tab               cycle the scope: all monitors, or one of them
+ *   m                 cycle the scaling mode
  *   Enter / Esc / q   close
  *   r                 rescan for images
+ *
+ * The scope is what makes per-monitor wallpapers reachable without editing
+ * synuirc: with it on "All monitors" a pick sets the global wallpaper and drops
+ * every per-monitor override, and with it on a connector the pick becomes that
+ * monitor's override alone (config.wallpaper_out[], see wallpaper.c). The
+ * scaling mode follows the same scope, so one screen can fill while another
+ * fits.
  *
  * Below the built-ins, the panel lists image files found in the usual wallpaper
  * directories (~/Pictures and friends, /usr/share/backgrounds) — that is the
@@ -56,13 +65,58 @@ const int wppick_option_count =
  * need to tell a Workshop row from an image row. */
 static int wppick_we_index(syn_server_t *s, int row);
 
+/* ── Scope ───────────────────────────────────────────────── */
+
+/* The connector the panel is currently pointed at, or NULL for "all
+ * monitors". */
+const char *wppick_scope_output(syn_server_t *s)
+{
+    if (s->wppick.scope < 0 || s->wppick.scope >= s->wppick.out_count)
+        return NULL;
+    return s->wppick.out[s->wppick.scope];
+}
+
+/* Human-readable scope for the panel's title row. */
+const char *wppick_scope_label(syn_server_t *s)
+{
+    const char *out = wppick_scope_output(s);
+    return out ? out : "All monitors";
+}
+
+/* Snapshot the connected outputs. One entry per monitor, in layout order —
+ * which is the order the outputs list is in, so Tab walks the screens the way
+ * they are arranged rather than in hotplug order. */
+static void wppick_scan_outputs(syn_server_t *s)
+{
+    s->wppick.out_count = 0;
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (s->wppick.out_count >= SYN_WP_PEROUT_MAX) break;
+        if (!o->wlr_output->name) continue;
+        snprintf(s->wppick.out[s->wppick.out_count],
+                 sizeof(s->wppick.out[0]), "%s", o->wlr_output->name);
+        s->wppick.out_count++;
+    }
+}
+
+/* The wallpaper the current scope shows. Under "all monitors" that is the
+ * global config; under a connector it is that monitor's effective wallpaper,
+ * so opening the panel on a screen with its own picture highlights that
+ * picture. */
+static void wppick_scope_state(syn_server_t *s, syn_wallpaper_src_t *src,
+                               const char **path)
+{
+    wallpaper_effective(&s->config, wppick_scope_output(s), src, path, NULL);
+}
+
 /* Which option currently matches the live config, so the panel opens with the
  * active wallpaper highlighted. */
 /* The id synui-wpengine currently has applied, or "" when it is not running.
  * synui does not mirror that state — the script owns it — so the picker reads
  * it back rather than trusting a copy that a `synui-wpengine off` from a
  * terminal would have made stale. */
-static void wppick_active_we(char *out, size_t n)
+static void wppick_active_we(char *out, size_t n, const char *scope)
 {
     out[0] = '\0';
 
@@ -77,13 +131,17 @@ static void wppick_active_we(char *out, size_t n)
     FILE *f = fopen(path, "r");
     if (!f) return;
 
-    /* Every line is "<output> <id>"; the picker applies to all outputs at
-     * once, so the first line's id identifies the choice. */
+    /* Every line is "<output> <id>". A monitor scope wants that monitor's
+     * line; "all monitors" has no one line to point at, so the first one
+     * stands in — which is exactly right when they all match and is the only
+     * defensible guess when they do not. */
     char line[256];
-    if (fgets(line, sizeof(line), f)) {
-        char id[24];
-        if (sscanf(line, "%*s %23s", id) == 1)
-            snprintf(out, n, "%s", id);
+    while (fgets(line, sizeof(line), f)) {
+        char name[64], id[24];
+        if (sscanf(line, "%63s %23s", name, id) != 2) continue;
+        if (scope && strcmp(name, scope) != 0) continue;
+        snprintf(out, n, "%s", id);
+        break;
     }
     fclose(f);
 }
@@ -94,23 +152,27 @@ static int current_index(syn_server_t *s)
      * what is actually on screen. Checked against the state file rather than
      * wallpaper_src so a choice made before this synui started still lands. */
     char active[24];
-    wppick_active_we(active, sizeof(active));
+    wppick_active_we(active, sizeof(active), wppick_scope_output(s));
     if (active[0]) {
         for (int i = 0; i < s->wppick.we_count; i++)
             if (strcmp(s->wppick.we[i].id, active) == 0)
                 return wppick_option_count + s->wppick.found_count + i;
     }
 
-    if (s->config.wallpaper_src == SYN_WP_SRC_MATRIX)
+    syn_wallpaper_src_t src;
+    const char *path;
+    wppick_scope_state(s, &src, &path);
+
+    if (src == SYN_WP_SRC_MATRIX)
         return 1;   /* "matrix" */
-    if (s->config.wallpaper[0] == '\0')
+    if (path[0] == '\0')
         return 2;   /* "none" */
 
     /* A browsed image: highlight the row it actually is, so reopening the
      * panel lands on the wallpaper you are looking at rather than on
      * "Synapse". */
     for (int i = 0; i < s->wppick.found_count; i++)
-        if (strcmp(s->wppick.found[i], s->config.wallpaper) == 0)
+        if (strcmp(s->wppick.found[i], path) == 0)
             return wppick_option_count + i;
 
     return 0;       /* the bundled image (or a path from synuirc) */
@@ -132,50 +194,70 @@ static void wppick_apply(syn_server_t *s, int idx)
 {
     if (idx < 0 || idx >= wppick_total(s)) return;
 
+    const char *scope = wppick_scope_output(s);
+    syn_wallpaper_src_t was;
+    wppick_scope_state(s, &was, NULL);
+
     /* A Workshop wallpaper is not painted here at all: hand the id to
      * synui-wpengine, which starts linux-wallpaperengine as a layer-shell
-     * client above wallpaper_tree. It persists the choice itself, so there is
-     * nothing for wallpaper_state_save to record. */
+     * client above wallpaper_tree. It persists the choice itself (per output,
+     * which is why the scope can just be passed along), so there is nothing
+     * for wallpaper_state_save to record. */
     int we = wppick_we_index(s, idx);
     if (we >= 0) {
-        char cmd[128];
-        snprintf(cmd, sizeof(cmd), "synui-wpengine set %s all", s->wppick.we[we].id);
+        char cmd[160];
+        snprintf(cmd, sizeof(cmd), "synui-wpengine set %s %s",
+                 s->wppick.we[we].id, scope ? scope : "all");
         synui_spawn(cmd);
-        s->config.wallpaper_src = SYN_WP_SRC_WPENGINE;
+        if (scope) {
+            syn_wp_output_t *e = wallpaper_output_entry(&s->config, scope, true);
+            if (e) e->src = SYN_WP_SRC_WPENGINE;
+        } else {
+            s->config.wallpaper_src = SYN_WP_SRC_WPENGINE;
+        }
         return;
     }
 
     /* Leaving a Workshop wallpaper: the engine holds an opaque surface over
-     * the whole output, so repainting wallpaper.c under it would change
-     * nothing visible until it is gone. */
-    if (s->config.wallpaper_src == SYN_WP_SRC_WPENGINE)
-        synui_spawn("synui-wpengine off");
+     * the output, so repainting wallpaper.c under it would change nothing
+     * visible until it is gone. Only this scope's surface goes — another
+     * monitor's Workshop wallpaper is not ours to stop. */
+    if (was == SYN_WP_SRC_WPENGINE) {
+        char cmd[96];
+        snprintf(cmd, sizeof(cmd), "synui-wpengine off%s%s",
+                 scope ? " " : "", scope ? scope : "");
+        synui_spawn(cmd);
+    }
+
+    /* "All monitors" means exactly that: the per-monitor overrides go, so a
+     * screen that had its own picture follows the global choice again rather
+     * than ignoring the pick that was just made. */
+    if (!scope) wallpaper_output_clear(&s->config, NULL);
 
     /* A row past the built-ins is an image the scan found: point the config
      * straight at its path. wallpaper_state_save already persists an arbitrary
      * path, so a browsed choice survives a restart with no extra machinery. */
-    if (idx >= wppick_option_count) {
-        s->config.wallpaper_src = SYN_WP_SRC_IMAGE;
-        snprintf(s->config.wallpaper, sizeof(s->config.wallpaper), "%s",
-                 s->wppick.found[idx - wppick_option_count]);
-        goto repaint;
-    }
+    const char *tok = idx >= wppick_option_count
+                      ? s->wppick.found[idx - wppick_option_count]
+                      : wppick_options[idx].token;
 
-    const char *tok = wppick_options[idx].token;
-
-    if (strcmp(tok, "matrix") == 0) {
+    if (scope) {
+        wallpaper_output_apply(&s->config, scope, tok, -1);
+    } else if (strcmp(tok, "matrix") == 0) {
         s->config.wallpaper_src = SYN_WP_SRC_MATRIX;
     } else if (strcmp(tok, "default") == 0) {
         s->config.wallpaper_src = SYN_WP_SRC_IMAGE;
         strncpy(s->config.wallpaper, SYNUI_DATADIR "/wallpaper.png",
                 sizeof(s->config.wallpaper) - 1);
         s->config.wallpaper[sizeof(s->config.wallpaper) - 1] = '\0';
-    } else { /* "none" */
+    } else if (strcmp(tok, "none") == 0) {
         s->config.wallpaper_src = SYN_WP_SRC_IMAGE;
         s->config.wallpaper[0] = '\0';
+    } else {
+        s->config.wallpaper_src = SYN_WP_SRC_IMAGE;
+        snprintf(s->config.wallpaper, sizeof(s->config.wallpaper), "%s", tok);
     }
 
-repaint:
     /* Repaint the static backend (decodes/clears wallpaper_buf). The matrix
      * backend picks up / tears down on the next frame via matrix_active(). */
     wallpaper_reload(s);
@@ -465,7 +547,12 @@ void wppick_show(syn_server_t *s)
 {
     wppick_scan(s);
     wppick_scan_workshop(s);
+    wppick_scan_outputs(s);
     s->wppick.visible = 1;
+    /* Opens on "all monitors" every time. A scope that persisted would be an
+     * invisible mode: the panel looks the same and the next pick silently
+     * lands on one screen. */
+    s->wppick.scope = -1;
     s->wppick.selected = current_index(s);
     s->wppick.scroll = 0;
     s->wppick.pending_we = -1;
@@ -530,15 +617,39 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             synui_render_wppick(s);
         }
         return 1;
-    case XKB_KEY_m:
+    case XKB_KEY_Tab:
+        /* Cycle the scope: all monitors → each connector → back. Nothing is
+         * applied by moving it — it only redirects the next pick — so this is
+         * safe to spin through, and the highlight follows to whatever that
+         * scope is currently showing. */
+        if (s->wppick.out_count > 0) {
+            s->wppick.scope++;
+            if (s->wppick.scope >= s->wppick.out_count) s->wppick.scope = -1;
+            s->wppick.pending_we = -1;
+            s->wppick.selected = current_index(s);
+            wppick_scroll_to_selection(s);
+            synui_render_wppick(s);
+        }
+        return 1;
+    case XKB_KEY_m: {
         /* Cycle fill → fit → stretch → center → tile. The mode was previously
          * only reachable by hand-editing synuirc's wallpaper_mode, which is why
          * nobody knew stretch and center already existed.
          *
-         * Repaint every output rather than just the selected entry: the mode is
-         * global, so a live preview has to show on all of them. */
-        s->config.wallpaper_mode =
-            (s->config.wallpaper_mode + 1) % SYN_WALLPAPER_MODE_COUNT;
+         * Follows the scope like a pick does: under "all monitors" it moves the
+         * global mode (and the overrides are gone anyway once a pick is made
+         * there), under a connector only that monitor's. */
+        const char *scope = wppick_scope_output(s);
+        syn_wallpaper_mode_t cur;
+        wallpaper_effective(&s->config, scope, NULL, NULL, &cur);
+        int next = (cur + 1) % SYN_WALLPAPER_MODE_COUNT;
+
+        if (scope) wallpaper_output_apply(&s->config, scope, NULL, next);
+        else       s->config.wallpaper_mode = (syn_wallpaper_mode_t)next;
+
+        /* Repaint every output rather than just the selected entry: even a
+         * scoped change has to go through the same reload, and the others
+         * simply repaint identically. */
         wallpaper_reload(s);
         syn_output_t *wo;
         wl_list_for_each(wo, &s->outputs, link)
@@ -546,6 +657,7 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         wallpaper_state_save(s);
         synui_render_wppick(s);
         return 1;
+    }
     case XKB_KEY_r:
         /* Rescan without closing — for when you have just saved an image into
          * ~/Pictures and want it in the list. */

@@ -982,9 +982,11 @@ void synui_render_wppick(syn_server_t *s)
 
     /* Scaling mode. fill/fit/stretch/center existed for ages but only as a
      * synuirc key, so nobody knew they were there — show the current one and
-     * how to change it. */
+     * how to change it. Reads through wallpaper_effective so a scoped monitor
+     * shows ITS mode, which is the one [m] would move. */
     {
-        syn_wallpaper_mode_t m = s->config.wallpaper_mode;
+        syn_wallpaper_mode_t m;
+        wallpaper_effective(&s->config, wppick_scope_output(s), NULL, NULL, &m);
         const char *mname = (m >= 0 && m < SYN_WALLPAPER_MODE_COUNT)
                             ? syn_wallpaper_mode_names[m] : "?";
         char label[64];
@@ -993,6 +995,25 @@ void synui_render_wppick(syn_server_t *s)
         cairo_text_extents_t te;
         cairo_text_extents(cr, label, &te);
         cairo_set_source_rgba(cr, 0.75, 0.55, 0.95, 1.0);
+        right_edge -= te.width;
+        cairo_move_to(cr, right_edge, 30);
+        cairo_show_text(cr, label);
+        right_edge -= 12;   /* gutter before whatever packs in next */
+    }
+
+    /* Scope: which monitor the next pick lands on. Drawn brighter than the
+     * mode and in the accent when it is narrowed to one screen — this is the
+     * one piece of panel state that silently changes what a keypress does, so
+     * it must not read as decoration. */
+    {
+        const char *scope = wppick_scope_output(s);
+        char label[64];
+        snprintf(label, sizeof(label), "[Tab] %s", wppick_scope_label(s));
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, label, &te);
+        if (scope) set_accent(cr, 1.0);
+        else       cairo_set_source_rgba(cr, 0.55, 0.60, 0.72, 1.0);
         right_edge -= te.width;
         cairo_move_to(cr, right_edge, 30);
         cairo_show_text(cr, label);
@@ -1063,7 +1084,8 @@ void synui_render_wppick(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 20);
-    cairo_show_text(cr, "Up/Down preview \xc2\xb7 r rescan \xc2\xb7 Enter/Esc close");
+    cairo_show_text(cr, "Up/Down preview \xc2\xb7 Tab monitor \xc2\xb7 m scaling "
+                        "\xc2\xb7 r rescan \xc2\xb7 Enter/Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->wppick_ui.text_buf, s->wppick_ui.tree, buf);

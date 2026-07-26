@@ -960,6 +960,23 @@ typedef enum {
     SYN_WP_SRC_WPENGINE,
 } syn_wallpaper_src_t;
 
+/* How many outputs can carry their own wallpaper. Overrides are keyed by
+ * connector name rather than by index so a monitor keeps its picture across
+ * a hotplug that renumbers the others. */
+#define SYN_WP_PEROUT_MAX 8
+
+/* One monitor's wallpaper, overriding the global `wallpaper` keys for that
+ * connector only. An output with no entry here uses the global config, so an
+ * untouched setup behaves exactly as it did before per-monitor wallpapers
+ * existed. Written by the Super+W picker (scope = a monitor) and by the
+ * synuirc `wallpaper_output` key. */
+typedef struct {
+    char                  output[32];   /* connector name, e.g. "DP-1" */
+    char                  path[256];    /* image path; empty = solid bg_color */
+    syn_wallpaper_mode_t  mode;
+    syn_wallpaper_src_t   src;
+} syn_wp_output_t;
+
 /* Which screen edge the dock lives on (dock.c). BOTTOM/TOP render a
  * horizontal bar; LEFT/RIGHT render a vertical column. Set in synuirc
  * (`dock_edge`) or by dragging the dock to another edge. */
@@ -1243,6 +1260,13 @@ typedef struct {
     char                  wallpaper[256];
     syn_wallpaper_mode_t  wallpaper_mode;
     syn_wallpaper_src_t   wallpaper_src;   /* IMAGE (default) or MATRIX */
+
+    /* Per-monitor overrides of the three keys above (synuirc
+     * `wallpaper_output`, or the Super+W picker with a monitor scope). An
+     * output with no entry falls back to the global values, which is the only
+     * state a setup that never asked for per-monitor wallpapers can be in. */
+    syn_wp_output_t       wallpaper_out[SYN_WP_PEROUT_MAX];
+    int                   wallpaper_out_n;
 
     /* Cursor theme (cursor.c). Empty name = whatever XCURSOR_THEME says, which
      * is what synui did unconditionally before this existed. The size is pinned
@@ -1751,6 +1775,17 @@ struct syn_server {
                                                    below layer[BACKGROUND] */
     struct {
         cairo_surface_t *src;   /* decoded source image; NULL = none/failed */
+
+        /* Decoded images for the per-output overrides, keyed by path. Two
+         * monitors pointed at the same file share one entry — the cache is
+         * keyed by path and not by output for exactly that reason, since the
+         * common "same picture, different scaling" case would otherwise decode
+         * (and hold) the image twice. Rebuilt wholesale by wallpaper_reload. */
+        struct {
+            char             path[256];
+            cairo_surface_t *surf;
+        } per[SYN_WP_PEROUT_MAX];
+        int per_n;
     } wallpaper;
 
     struct wlr_xdg_shell      *xdg_shell;
@@ -2254,6 +2289,16 @@ struct syn_server {
          * images it must NOT fire on every arrow keypress. Rows past the
          * images defer to Enter, and this is the row Enter should commit. */
         int  pending_we;    /* row index, or -1 when nothing is deferred */
+
+        /* Which monitor a pick applies to, cycled with Tab. -1 = all of them
+         * (clears the per-monitor overrides and sets the global wallpaper);
+         * otherwise an index into out[], the connector names snapshotted when
+         * the panel opened. Snapshotted rather than walked live because the
+         * scope has to survive a monitor being unplugged mid-pick without the
+         * index silently coming to mean a different screen. */
+        char out[SYN_WP_PEROUT_MAX][32];
+        int  out_count;
+        int  scope;
     } wppick;
 
     /* Cursor theme picker (cursor.c) — Super+C. Same modal shape as wppick. */
@@ -2812,6 +2857,28 @@ void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from cu
 void wallpaper_state_save(syn_server_t *s);
 void wallpaper_state_load(syn_config_t *cfg);
 
+/* ── Per-monitor overrides ───────────────────────────────── */
+/* This output's entry in cfg->wallpaper_out[], or NULL when it has none.
+ * `create` allocates one (seeded from the global config) if there is room. */
+syn_wp_output_t *wallpaper_output_entry(syn_config_t *cfg, const char *name,
+                                        bool create);
+/* The wallpaper that actually applies to `name`: its override if it has one,
+ * the global config otherwise. Any out-parameter may be NULL. `path` points
+ * into the config and stays valid until the config changes. */
+void wallpaper_effective(syn_config_t *cfg, const char *name,
+                         syn_wallpaper_src_t *src, const char **path,
+                         syn_wallpaper_mode_t *mode);
+/* Drop one output's override (NULL name = all of them), handing it back to
+ * the global config. */
+void wallpaper_output_clear(syn_config_t *cfg, const char *name);
+/* Point one monitor at `tok` — the same vocabulary the synuirc `wallpaper` key
+ * takes (matrix / default / none / a path), creating the override if needed.
+ * NULL tok changes only the mode; mode < 0 changes only the token. */
+void wallpaper_output_apply(syn_config_t *cfg, const char *name,
+                            const char *tok, int mode);
+/* syn_wallpaper_mode_t for a mode name, or -1 if it is not one. */
+int  wallpaper_mode_from_name(const char *name);
+
 /* ── Power saving (power.c) ──────────────────────────────── */
 /* Create the idle timers and arm them from the current config. */
 void power_init(syn_server_t *s);
@@ -3182,7 +3249,8 @@ void power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
 /* ── matrix.c (animated wallpaper) ───────────────────────── */
 void matrix_init(syn_server_t *s);                /* compile shader, load atlas (no-op on non-GLES2) */
 void matrix_finish(syn_server_t *s);
-bool matrix_active(syn_server_t *s);              /* config selects matrix AND it initialized */
+bool matrix_active(syn_server_t *s);              /* SOME output selects matrix AND it initialized */
+bool matrix_output_active(syn_output_t *o);       /* ...and specifically this one does */
 bool matrix_output_frame(syn_output_t *o);        /* render one frame; true = keep animating */
 void matrix_output_destroy(syn_output_t *o);      /* drop this output's buffer + swapchain */
 
@@ -3200,6 +3268,10 @@ void wppick_scan(syn_server_t *s);
 int  wppick_total(syn_server_t *s);
 /* Label + subtitle for one row; wppick.c owns the text, render.c draws it. */
 void wppick_row(syn_server_t *s, int row, const char **label, const char **desc);
+/* The monitor a pick currently applies to: its connector name, or NULL for
+ * "all monitors". The _label form is the same thing spelled for the panel. */
+const char *wppick_scope_output(syn_server_t *s);
+const char *wppick_scope_label(syn_server_t *s);
 void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
 int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);

@@ -8,6 +8,13 @@
  * falls back to the compositor's existing solid bg_color — this feature is
  * strictly additive and never fatal.
  *
+ * A monitor can override the global keys with its own image, scaling mode and
+ * backend (`wallpaper_output` in synuirc, or the Super+W picker scoped to one
+ * monitor). Overrides are keyed by connector name and live in the config;
+ * wallpaper_effective() is the single place that resolves "what does this
+ * output show", and every consumer — the painter below, matrix.c, the picker —
+ * goes through it rather than reading cfg->wallpaper directly.
+ *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -252,6 +259,125 @@ static void wallpaper_paint_box(cairo_t *cr, cairo_surface_t *src,
     cairo_restore(cr);
 }
 
+/* ── Per-monitor overrides ───────────────────────────────── */
+
+syn_wp_output_t *wallpaper_output_entry(syn_config_t *cfg, const char *name,
+                                        bool create)
+{
+    if (!name || !*name) return NULL;
+
+    for (int i = 0; i < cfg->wallpaper_out_n; i++)
+        if (strcmp(cfg->wallpaper_out[i].output, name) == 0)
+            return &cfg->wallpaper_out[i];
+
+    if (!create || cfg->wallpaper_out_n >= SYN_WP_PEROUT_MAX) {
+        if (create)
+            wlr_log(WLR_ERROR, "synui: wallpaper: no room for a per-monitor "
+                    "wallpaper on '%s' (max %d)", name, SYN_WP_PEROUT_MAX);
+        return NULL;
+    }
+
+    /* Seed a new override from the global config: scoping the picker to a
+     * monitor and then only cycling the scaling mode should change the mode
+     * and nothing else. */
+    syn_wp_output_t *e = &cfg->wallpaper_out[cfg->wallpaper_out_n++];
+    snprintf(e->output, sizeof(e->output), "%s", name);
+    snprintf(e->path, sizeof(e->path), "%s", cfg->wallpaper);
+    e->mode = cfg->wallpaper_mode;
+    e->src  = cfg->wallpaper_src;
+    return e;
+}
+
+void wallpaper_effective(syn_config_t *cfg, const char *name,
+                         syn_wallpaper_src_t *src, const char **path,
+                         syn_wallpaper_mode_t *mode)
+{
+    const syn_wp_output_t *e = wallpaper_output_entry(cfg, name, false);
+
+    if (src)  *src  = e ? e->src  : cfg->wallpaper_src;
+    if (path) *path = e ? e->path : cfg->wallpaper;
+    if (mode) *mode = e ? e->mode : cfg->wallpaper_mode;
+}
+
+void wallpaper_output_clear(syn_config_t *cfg, const char *name)
+{
+    if (!name) {
+        cfg->wallpaper_out_n = 0;
+        return;
+    }
+    for (int i = 0; i < cfg->wallpaper_out_n; i++) {
+        if (strcmp(cfg->wallpaper_out[i].output, name) != 0) continue;
+        cfg->wallpaper_out[i] = cfg->wallpaper_out[--cfg->wallpaper_out_n];
+        return;
+    }
+}
+
+/* ── Decoded-image cache ─────────────────────────────────── */
+
+/* The decoded surface for `path`, or NULL when it is empty/undecodable. The
+ * global wallpaper keeps its own long-standing s->wallpaper.src slot; every
+ * per-monitor override shares the small path-keyed cache beside it. Both are
+ * populated by wallpaper_reload and only read here, so a paint can never be
+ * the thing that decodes a multi-megabyte JPEG. */
+static cairo_surface_t *wallpaper_surface(syn_server_t *s, const char *path)
+{
+    if (!path || !*path) return NULL;
+    if (strcmp(path, s->config.wallpaper) == 0) return s->wallpaper.src;
+
+    for (int i = 0; i < s->wallpaper.per_n; i++)
+        if (strcmp(s->wallpaper.per[i].path, path) == 0)
+            return s->wallpaper.per[i].surf;
+    return NULL;
+}
+
+/* True when some monitor actually shows the global image — either because it
+ * has no override, or because its override names the same path. Keeps a
+ * `wallpaper = matrix` session from decoding the bundled PNG that
+ * cfg->wallpaper still holds but nothing displays. */
+static bool wallpaper_global_used(syn_server_t *s)
+{
+    syn_config_t *cfg = &s->config;
+
+    if (cfg->wallpaper_src == SYN_WP_SRC_IMAGE) return true;
+
+    for (int i = 0; i < cfg->wallpaper_out_n; i++)
+        if (cfg->wallpaper_out[i].src == SYN_WP_SRC_IMAGE &&
+            strcmp(cfg->wallpaper_out[i].path, cfg->wallpaper) == 0)
+            return true;
+    return false;
+}
+
+/* Decode every distinct override path into the cache. Callers must have
+ * cleared it first (wallpaper_cache_drop). */
+static void wallpaper_cache_fill(syn_server_t *s)
+{
+    syn_config_t *cfg = &s->config;
+
+    for (int i = 0; i < cfg->wallpaper_out_n; i++) {
+        const syn_wp_output_t *e = &cfg->wallpaper_out[i];
+        if (e->src != SYN_WP_SRC_IMAGE || !e->path[0]) continue;
+        if (strcmp(e->path, cfg->wallpaper) == 0) continue;   /* the global slot has it */
+
+        bool dup = false;
+        for (int j = 0; j < s->wallpaper.per_n; j++)
+            if (strcmp(s->wallpaper.per[j].path, e->path) == 0) { dup = true; break; }
+        if (dup || s->wallpaper.per_n >= SYN_WP_PEROUT_MAX) continue;
+
+        int n = s->wallpaper.per_n++;
+        snprintf(s->wallpaper.per[n].path, sizeof(s->wallpaper.per[n].path),
+                 "%s", e->path);
+        s->wallpaper.per[n].surf = wallpaper_decode(e->path);
+    }
+}
+
+static void wallpaper_cache_drop(syn_server_t *s)
+{
+    for (int i = 0; i < s->wallpaper.per_n; i++)
+        if (s->wallpaper.per[i].surf)
+            cairo_surface_destroy(s->wallpaper.per[i].surf);
+    s->wallpaper.per_n = 0;
+}
+
 /* Paint (or clear) a single output's wallpaper buffer from the server's
  * currently-decoded source image. Used both when an output first appears
  * and when the layout is reflowed (resize/rotate/move). */
@@ -259,10 +385,15 @@ static void paint_output(syn_output_t *o)
 {
     syn_server_t *s = o->server;
 
+    syn_wallpaper_src_t src;
+    const char *path;
+    syn_wallpaper_mode_t mode;
+    wallpaper_effective(&s->config, o->wlr_output->name, &src, &path, &mode);
+
     /* The animated matrix backend owns the background instead; keep the
      * static buffer torn down so the two never both paint into
      * wallpaper_tree. */
-    if (s->config.wallpaper_src == SYN_WP_SRC_MATRIX) {
+    if (src == SYN_WP_SRC_MATRIX) {
         if (o->wallpaper_buf) {
             wlr_scene_node_destroy(&o->wallpaper_buf->node);
             o->wallpaper_buf = NULL;
@@ -270,7 +401,8 @@ static void paint_output(syn_output_t *o)
         return;
     }
 
-    if (!s->wallpaper.src) {
+    cairo_surface_t *img = wallpaper_surface(s, path);
+    if (!img) {
         if (o->wallpaper_buf) {
             wlr_scene_node_destroy(&o->wallpaper_buf->node);
             o->wallpaper_buf = NULL;
@@ -295,7 +427,7 @@ static void paint_output(syn_output_t *o)
     if (!buf) return;
 
     cairo_begin(cr);
-    wallpaper_paint_box(cr, s->wallpaper.src, pw, ph, s->config.wallpaper_mode);
+    wallpaper_paint_box(cr, img, pw, ph, mode);
     cairo_destroy(cr);
 
     set_scene_buffer(&o->wallpaper_buf, s->wallpaper_tree, buf);
@@ -309,10 +441,11 @@ void wallpaper_init(syn_server_t *s)
 {
     s->wallpaper_tree = wlr_scene_tree_create(&s->scene->tree);
     s->wallpaper.src = NULL;
+    s->wallpaper.per_n = 0;
 
-    if (s->config.wallpaper_src == SYN_WP_SRC_IMAGE &&
-        s->config.wallpaper[0] != '\0')
+    if (s->config.wallpaper[0] != '\0' && wallpaper_global_used(s))
         s->wallpaper.src = wallpaper_decode(s->config.wallpaper);
+    wallpaper_cache_fill(s);
 }
 
 void wallpaper_output_created(syn_output_t *o)
@@ -341,9 +474,11 @@ void wallpaper_reload(syn_server_t *s)
         cairo_surface_destroy(s->wallpaper.src);
         s->wallpaper.src = NULL;
     }
-    if (s->config.wallpaper_src == SYN_WP_SRC_IMAGE &&
-        s->config.wallpaper[0] != '\0')
+    wallpaper_cache_drop(s);
+
+    if (s->config.wallpaper[0] != '\0' && wallpaper_global_used(s))
         s->wallpaper.src = wallpaper_decode(s->config.wallpaper);
+    wallpaper_cache_fill(s);
 
     wallpaper_relayout(s);
 }
@@ -379,6 +514,43 @@ static void wallpaper_apply_token(syn_config_t *cfg, const char *tok)
     }
 }
 
+/* Name → syn_wallpaper_mode_t, or -1. Shared by the state loader and the
+ * synuirc parser's per-output key. */
+int wallpaper_mode_from_name(const char *name)
+{
+    for (int m = 0; m < SYN_WALLPAPER_MODE_COUNT; m++)
+        if (strcmp(name, syn_wallpaper_mode_names[m]) == 0)
+            return m;
+    return -1;
+}
+
+/* Apply one token to a per-monitor override, creating it if needed. Mirrors
+ * wallpaper_apply_token's keyword handling against the override's own fields.
+ * `mode` < 0 leaves the entry's scaling mode alone. */
+void wallpaper_output_apply(syn_config_t *cfg, const char *name,
+                            const char *tok, int mode)
+{
+    syn_wp_output_t *e = wallpaper_output_entry(cfg, name, true);
+    if (!e) return;   /* table full — already logged */
+
+    if (tok) {
+        if (strcmp(tok, "matrix") == 0) {
+            e->src = SYN_WP_SRC_MATRIX;
+        } else if (strcmp(tok, "default") == 0) {
+            e->src = SYN_WP_SRC_IMAGE;
+            snprintf(e->path, sizeof(e->path), "%s", SYNUI_DATADIR "/wallpaper.png");
+        } else if (strcmp(tok, "none") == 0) {
+            e->src = SYN_WP_SRC_IMAGE;
+            e->path[0] = '\0';
+        } else {
+            e->src = SYN_WP_SRC_IMAGE;
+            snprintf(e->path, sizeof(e->path), "%s", tok);
+        }
+    }
+    if (mode >= 0 && mode < SYN_WALLPAPER_MODE_COUNT)
+        e->mode = (syn_wallpaper_mode_t)mode;
+}
+
 void wallpaper_state_load(syn_config_t *cfg)
 {
     char path[256];
@@ -387,30 +559,48 @@ void wallpaper_state_load(syn_config_t *cfg)
     FILE *f = fopen(path, "r");
     if (!f) return;   /* no persisted choice — synuirc stands */
 
-    char line[256];
-    if (fgets(line, sizeof(line), f)) {
+    /* Line-typed rather than positional: the file started as "token, then an
+     * optional `mode <name>`" and now also carries `output <NAME> …` lines, so
+     * dispatching on the leading keyword is what keeps a state file written by
+     * any of those versions loadable. An unrecognised line is skipped, not
+     * fatal. */
+    char line[320];
+    while (fgets(line, sizeof(line), f)) {
         line[strcspn(line, "\r\n")] = '\0';
         char *p = line;
         while (*p == ' ' || *p == '\t') p++;
-        if (*p) wallpaper_apply_token(cfg, p);
-    }
-    /* Optional second line, "mode <name>", written by the Super+W picker.
-     * Older state files have only the token line and still load — an absent
-     * second line just leaves synuirc's wallpaper_mode standing. */
-    if (fgets(line, sizeof(line), f)) {
-        line[strcspn(line, "\r\n")] = '\0';
-        char *p = line;
-        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) continue;
+
         if (strncmp(p, "mode ", 5) == 0) {
             p += 5;
             while (*p == ' ' || *p == '\t') p++;
-            for (int m = 0; m < SYN_WALLPAPER_MODE_COUNT; m++) {
-                if (strcmp(p, syn_wallpaper_mode_names[m]) == 0) {
-                    cfg->wallpaper_mode = (syn_wallpaper_mode_t)m;
-                    break;
-                }
-            }
+            int m = wallpaper_mode_from_name(p);
+            if (m >= 0) cfg->wallpaper_mode = (syn_wallpaper_mode_t)m;
+            continue;
         }
+
+        /* "output <NAME> <token>" / "output <NAME> mode <name>" */
+        if (strncmp(p, "output ", 7) == 0) {
+            p += 7;
+            while (*p == ' ' || *p == '\t') p++;
+            char *sp = strchr(p, ' ');
+            if (!sp) continue;
+            *sp = '\0';
+            char *val = sp + 1;
+            while (*val == ' ' || *val == '\t') val++;
+            if (!*val) continue;
+
+            if (strncmp(val, "mode ", 5) == 0) {
+                val += 5;
+                while (*val == ' ' || *val == '\t') val++;
+                wallpaper_output_apply(cfg, p, NULL, wallpaper_mode_from_name(val));
+            } else {
+                wallpaper_output_apply(cfg, p, val, -1);
+            }
+            continue;
+        }
+
+        wallpaper_apply_token(cfg, p);
     }
     fclose(f);
 }
@@ -442,5 +632,25 @@ void wallpaper_state_save(syn_server_t *s)
         s->config.wallpaper_mode < SYN_WALLPAPER_MODE_COUNT)
         fprintf(f, "mode %s\n",
                 syn_wallpaper_mode_names[s->config.wallpaper_mode]);
+
+    /* Then one pair of lines per monitor that overrides the global choice.
+     * These are written for every override, including ones for monitors that
+     * are not currently connected: an unplugged monitor must get its own
+     * wallpaper back when it returns, not silently inherit the global one
+     * because a save happened while it was dark. */
+    for (int i = 0; i < s->config.wallpaper_out_n; i++) {
+        const syn_wp_output_t *e = &s->config.wallpaper_out[i];
+
+        if (e->src == SYN_WP_SRC_MATRIX)
+            fprintf(f, "output %s matrix\n", e->output);
+        else if (e->path[0] == '\0')
+            fprintf(f, "output %s none\n", e->output);
+        else
+            fprintf(f, "output %s %s\n", e->output, e->path);
+
+        if (e->mode >= 0 && e->mode < SYN_WALLPAPER_MODE_COUNT)
+            fprintf(f, "output %s mode %s\n", e->output,
+                    syn_wallpaper_mode_names[e->mode]);
+    }
     fclose(f);
 }

@@ -563,6 +563,7 @@ void synui_config_load(syn_config_t *cfg)
             sizeof(cfg->wallpaper) - 1);
     cfg->wallpaper_mode = SYN_WALLPAPER_FILL;
     cfg->wallpaper_src  = SYN_WP_SRC_IMAGE;
+    cfg->wallpaper_out_n = 0;   /* every monitor follows the keys above */
 
     /* Empty theme = inherit XCURSOR_THEME, which is exactly what synui did
      * before cursor.c existed, so an untouched system behaves identically.
@@ -943,6 +944,36 @@ void synui_config_load(syn_config_t *cfg)
             } else {
                 cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
                 strncpy(cfg->wallpaper, val, sizeof(cfg->wallpaper) - 1);
+            }
+        }
+        else if (strcmp(key, "wallpaper_output") == 0 ||
+                 strcmp(key, "wallpaper_output_mode") == 0) {
+            /* value = "<connector> <token>" — a per-monitor override of the two
+             * keys above, e.g. "wallpaper_output = DP-1 matrix". The token
+             * vocabulary is identical to `wallpaper`, so there is one thing to
+             * learn rather than two; _mode takes a wallpaper_mode name instead.
+             * Lines are read in order, and an override inherits whatever the
+             * global keys hold when it is first named. */
+            char *sp = val;
+            while (*sp && !isspace(*sp)) sp++;
+            if (!*sp) {
+                wlr_log(WLR_ERROR, "synui: %s '%s': expected "
+                        "'<output> <value>'", key, val);
+            } else {
+                *sp++ = '\0';
+                while (isspace(*sp)) sp++;
+                if (!*sp) {
+                    wlr_log(WLR_ERROR, "synui: %s '%s': missing value", key, val);
+                } else if (strcmp(key, "wallpaper_output") == 0) {
+                    wallpaper_output_apply(cfg, val, sp, -1);
+                } else {
+                    int m = wallpaper_mode_from_name(sp);
+                    if (m < 0)
+                        wlr_log(WLR_ERROR, "synui: wallpaper_output_mode: "
+                                "unknown '%s'", sp);
+                    else
+                        wallpaper_output_apply(cfg, val, NULL, m);
+                }
             }
         }
         else if (strcmp(key, "wallpaper_mode") == 0) {

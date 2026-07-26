@@ -371,7 +371,26 @@ void matrix_finish(syn_server_t *s)
 
 bool matrix_active(syn_server_t *s)
 {
-    return s->matrix != NULL && s->config.wallpaper_src == SYN_WP_SRC_MATRIX;
+    if (!s->matrix) return false;
+    if (s->config.wallpaper_src == SYN_WP_SRC_MATRIX) return true;
+
+    /* A per-monitor override can select the rain even when the global
+     * wallpaper is an image, so "is the matrix on" is no longer a single
+     * config field. */
+    for (int i = 0; i < s->config.wallpaper_out_n; i++)
+        if (s->config.wallpaper_out[i].src == SYN_WP_SRC_MATRIX)
+            return true;
+    return false;
+}
+
+bool matrix_output_active(syn_output_t *o)
+{
+    syn_server_t *s = o->server;
+    if (!s->matrix) return false;
+
+    syn_wallpaper_src_t src;
+    wallpaper_effective(&s->config, o->wlr_output->name, &src, NULL, NULL);
+    return src == SYN_WP_SRC_MATRIX;
 }
 
 void matrix_output_destroy(syn_output_t *o)
@@ -392,7 +411,10 @@ bool matrix_output_frame(syn_output_t *o)
     struct syn_matrix *m = s->matrix;
     struct wlr_output *wo = o->wlr_output;
 
-    if (!matrix_active(s)) {
+    /* Per output, not per server: with the rain picked for one monitor only,
+     * the others must keep painting their own wallpaper and must not be kept
+     * awake re-rendering a shader they do not show. */
+    if (!matrix_output_active(o)) {
         matrix_output_destroy(o);
         return false;
     }
