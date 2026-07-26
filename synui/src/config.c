@@ -665,11 +665,6 @@ void synui_config_load(syn_config_t *cfg)
     cfg->autostart_count = 0;
 
     char line[512];
-    /* Explicit intent, tracked so the software-render clamp at the bottom of
-     * this function can leave a deliberate setting alone. Only the three knobs
-     * that clamp need this; everything else is unconditional. */
-    bool set_shadow = false, set_blur = false, set_corner = false;
-
     while (fgets(line, sizeof(line), f)) {
         char *s = strip(line);
         if (!*s || *s == '#') continue;
@@ -781,15 +776,12 @@ void synui_config_load(syn_config_t *cfg)
             if (cfg->foot_alpha > 1.0f) cfg->foot_alpha = 1.0f;
         }
         else if (strcmp(key, "corner_radius") == 0) {
-            set_corner = true;
             cfg->corner_radius = atoi(val);
             if (cfg->corner_radius < 0)  cfg->corner_radius = 0;
             if (cfg->corner_radius > 48) cfg->corner_radius = 48;
         }
-        else if (strcmp(key, "blur") == 0) {
-            set_blur = true;
+        else if (strcmp(key, "blur") == 0)
             cfg->blur = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
-        }
         else if (strcmp(key, "glass_halo") == 0) {
             cfg->glass_halo = atoi(val);
             if (cfg->glass_halo < 0)  cfg->glass_halo = 0;
@@ -816,10 +808,8 @@ void synui_config_load(syn_config_t *cfg)
             cfg->blur_contrast = (float)atof(val);
         else if (strcmp(key, "blur_saturation") == 0)
             cfg->blur_saturation = (float)atof(val);
-        else if (strcmp(key, "shadow") == 0) {
-            set_shadow = true;
+        else if (strcmp(key, "shadow") == 0)
             cfg->shadow = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
-        }
         else if (strcmp(key, "shadow_blur_sigma") == 0) {
             cfg->shadow_blur_sigma = (float)atof(val);
             if (cfg->shadow_blur_sigma < 0.0f)  cfg->shadow_blur_sigma = 0.0f;
@@ -1082,45 +1072,4 @@ void synui_config_load(syn_config_t *cfg)
     welcome_state_load(cfg);
     launcher_state_load(cfg);
     deskicons_state_load(cfg);
-
-    /*
-     * Software rendering: drop the per-window effect nodes unless they were
-     * asked for by name.
-     *
-     * On a VM (or nouveau, or anything with no usable GLES2) two things are
-     * true at once that are not true on real hardware: the renderer is
-     * llvmpipe, and the cursor is composited in software because there is no
-     * hardware cursor plane. A software cursor repaints through the scene's
-     * damage on every motion event, and the shadow and rounded-corner nodes
-     * extend past the window box they are attached to — so pointer motion
-     * smears them. On real hardware the cursor sits on its own plane and never
-     * touches scene damage, which is why this has only ever shown up in a VM.
-     *
-     * Keyed on WLR_RENDERER_FORCE_SOFTWARE because that is already the one
-     * signal every no-GPU path sets: detect_vm() in synui_main.c, and
-     * synui-gfx-env for nouveau and for a machine with no DRM node at all.
-     * WLR_RENDERER is NOT usable here — fx_renderer never reads it.
-     *
-     * An explicit synuirc line always wins, so a headless A/B rig measuring
-     * blur or shadow still gets what it configured.
-     *
-     * This is a mitigation, not the fix: the damage regions are still wrong.
-     */
-    if (getenv("WLR_RENDERER_FORCE_SOFTWARE")) {
-        if (!set_shadow && cfg->shadow) {
-            cfg->shadow = 0;
-            wlr_log(WLR_INFO, "synui: software rendering — shadows off "
-                              "(set `shadow = on` to override)");
-        }
-        if (!set_blur && cfg->blur) {
-            cfg->blur = 0;
-            wlr_log(WLR_INFO, "synui: software rendering — blur off "
-                              "(set `blur = on` to override)");
-        }
-        if (!set_corner && cfg->corner_radius) {
-            cfg->corner_radius = 0;
-            wlr_log(WLR_INFO, "synui: software rendering — square corners "
-                              "(set `corner_radius = N` to override)");
-        }
-    }
 }

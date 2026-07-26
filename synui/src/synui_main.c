@@ -2042,6 +2042,37 @@ int main(int argc, char *argv[])
         setenv("WLR_NO_HARDWARE_CURSORS", "1", 1);
     }
 
+    /*
+     * Software rendering: re-render the whole scene every frame.
+     *
+     * Measured, not guessed. In a VM (fx_renderer on llvmpipe, software
+     * cursor) the bar's layer surface comes out wrong: the SYNAPSE badge draws
+     * over itself and the active-workspace pip goes missing, and moving the
+     * pointer across the bar loses more of it. A/B against a full-re-render
+     * reference frame, comparing only the static left section so the clock
+     * could not skew it:
+     *
+     *     normal damage tracking      2950 pixels wrong
+     *     whole-output damage         2042 pixels wrong   (blur's add_whole path)
+     *     WLR_SCENE_DEBUG_DAMAGE=rerender   0
+     *
+     * Note the middle row: damaging the whole output is NOT enough, so this is
+     * not a damage-region problem — the scene has to actually re-render its
+     * nodes. That also rules out the effects: the clean run above had blur,
+     * shadow and corner_radius at their defaults, so there is nothing to gain
+     * by clamping them here.
+     *
+     * Yes, this is a debug knob. It is a documented, stable wlroots/scenefx
+     * one, it is the only setting that produced a correct frame, and the cost
+     * — a full repaint per frame — is paid only where the renderer is already
+     * software. An explicit setting from the environment always wins.
+     */
+    if (getenv("WLR_RENDERER_FORCE_SOFTWARE") && !getenv("WLR_SCENE_DEBUG_DAMAGE")) {
+        setenv("WLR_SCENE_DEBUG_DAMAGE", "rerender", 1);
+        fprintf(stderr, "synui: software rendering — full re-render per frame "
+                        "(set WLR_SCENE_DEBUG_DAMAGE to override)\n");
+    }
+
     syn_server_t server = {0};
     synui_config_load(&server.config);
 
