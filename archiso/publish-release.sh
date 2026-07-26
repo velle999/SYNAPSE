@@ -7,6 +7,11 @@ set -euo pipefail
 
 ver="${1:?usage: publish-release.sh <version>   e.g. publish-release.sh 0.1.0}"
 out="$(cd "$(dirname "$0")/out" && pwd)"
+# Resolved BEFORE the cd below, like $out is. It was relative once, which after
+# `cd "$out"` pointed at archiso/out/archiso/release-notes and silently found
+# nothing — the release went out with boilerplate and the script said so in a
+# line that scrolled past.
+notesdir="$(cd "$(dirname "$0")" && pwd)/release-notes"
 iso="SynapseOS-${ver}-x86_64.iso"
 
 cd "$out"
@@ -28,7 +33,7 @@ sha256sum "$iso".part[0-9]* > "$iso.parts.sha256"
 # 0.2.0 shipped with.
 notes="$(mktemp)"
 trap 'rm -f "$notes"' EXIT
-custom="$(dirname "$0")/release-notes/${ver}.md"
+custom="${notesdir}/${ver}.md"
 if [[ -f $custom ]]; then
     cat "$custom" >> "$notes"
     printf '\n---\n\n' >> "$notes"
