@@ -82,6 +82,11 @@ struct buffer_blur {
     struct wlr_scene_blur *blur;
     struct wlr_addon       addon;
     struct wl_listener     blur_destroy;
+    /* The halo the node was BUILT for, not the current setting. Only whether it
+     * was zero matters: a masked node and a haloed one differ in a property that
+     * cannot be changed afterwards (see blur_set), so crossing that line has to
+     * rebuild the node rather than re-sync it. */
+    int                    halo;
 };
 
 static void blur_addon_destroy(struct wlr_addon *addon);
@@ -137,6 +142,49 @@ static void blur_buffer_size(struct wlr_scene_buffer *buffer, int *w, int *h)
     }
 }
 
+/*
+ * The frame tree a buffer belongs to — the node view_frame_create() stamped with
+ * the view, which is the same "walk up until something carries a view" rule
+ * surface_at() uses. A haloed blur node is parented HERE rather than beside its
+ * buffer: it now covers the ring where synui's border rect lives, and inside the
+ * surface subtree there is no way to get underneath that rect (the subtree as a
+ * whole sits above it), so the first cut of the halo swallowed the focus border.
+ */
+static struct wlr_scene_tree *buffer_frame_tree(struct wlr_scene_buffer *buffer)
+{
+    for (struct wlr_scene_tree *t = buffer->node.parent; t; t = t->node.parent) {
+        /* Ask the view for its frame rather than taking the first tree that
+         * carries one. More than one ancestor does — the surface tree holds the
+         * view too, so surface_at() can answer from any node it hits — and
+         * stopping there lands back INSIDE the subtree that sits above the
+         * border, which is exactly the stacking this is trying to escape. */
+        syn_view_t *v = t->node.data;
+        if (v && v->frame) return v->frame;
+    }
+    return buffer->node.parent;   /* no frame (layer surface, drag icon): as before */
+}
+
+/* Where the buffer sits relative to `ancestor`. Node coordinates are relative to
+ * the immediate parent, so a companion hung off the frame instead of the buffer's
+ * own tree has to add every intermediate tree's offset — otherwise a window whose
+ * surface tree is offset by the border/titlebar (all of them) gets its halo
+ * parked at the frame origin. */
+static void buffer_offset_in(struct wlr_scene_buffer *buffer,
+                             struct wlr_scene_tree *ancestor, int *ox, int *oy)
+{
+    int x = 0, y = 0;
+    struct wlr_scene_node *n = &buffer->node;
+    while (n) {
+        x += n->x;
+        y += n->y;
+        struct wlr_scene_tree *p = n->parent;
+        if (!p || p == ancestor) break;
+        n = &p->node;
+    }
+    *ox = x;
+    *oy = y;
+}
+
 /* Match the companion's *geometry* to its buffer. Cheap enough to call on every
  * client paint: each setter early-returns when the value is unchanged.
  *
@@ -150,7 +198,7 @@ static void blur_buffer_size(struct wlr_scene_buffer *buffer, int *w, int *h)
  * used to fill, and the click was a focus change, which does re-sync.
  */
 static void blur_sync_geometry(struct buffer_blur *bb,
-                               struct wlr_scene_buffer *buffer)
+                               struct wlr_scene_buffer *buffer, int halo)
 {
     if (!bb->blur) return;
 
@@ -161,25 +209,48 @@ static void blur_sync_geometry(struct buffer_blur *bb,
         return;
     }
 
-    wlr_scene_blur_set_size(bb->blur, w, h);
-    wlr_scene_node_set_position(&bb->blur->node, buffer->node.x, buffer->node.y);
-    wlr_scene_node_place_below(&bb->blur->node, &buffer->node);
+    wlr_scene_blur_set_size(bb->blur, w + 2 * halo, h + 2 * halo);
+
+    int bx, by;
+    buffer_offset_in(buffer, bb->blur->node.parent, &bx, &by);
+    wlr_scene_node_set_position(&bb->blur->node, bx - halo, by - halo);
+
+    /* Directly under its own buffer normally — a titlebar's blur belongs under
+     * the titlebar, not under the window. A haloed node instead goes to the
+     * bottom of the frame, under the shadow and the border, so the stack reads
+     * backdrop → halo → shadow → border → client. That is the order Firefox's
+     * accidental version already has, and it is re-asserted by anim_lower_halos()
+     * because the decoration pass lowers those rects on its own schedule. */
+    if (halo > 0)
+        wlr_scene_node_lower_to_bottom(&bb->blur->node);
+    else
+        wlr_scene_node_place_below(&bb->blur->node, &buffer->node);
     wlr_scene_node_set_enabled(&bb->blur->node, true);
 }
 
 /* Geometry plus the corner radii, which only the effects walk knows. */
 static void blur_sync(struct buffer_blur *bb, struct wlr_scene_buffer *buffer,
-                      struct fx_corner_radii corners)
+                      struct fx_corner_radii corners, int halo)
 {
     if (!bb->blur) return;
 
-    blur_sync_geometry(bb, buffer);
+    blur_sync_geometry(bb, buffer, halo);
+    /* The halo grows the node outwards on every side, so each corner's arc has
+     * to grow with it or the ring would square off around a rounded window. A
+     * corner the window does not round (radius 0 — the seam between titlebar and
+     * content) stays square, which is what keeps that seam straight. */
+    if (halo > 0)
+        corners = corner_radii_new(
+            corners.top_left     ? corners.top_left     + halo : 0,
+            corners.top_right    ? corners.top_right    + halo : 0,
+            corners.bottom_right ? corners.bottom_right + halo : 0,
+            corners.bottom_left  ? corners.bottom_left  + halo : 0);
     wlr_scene_blur_set_corner_radii(bb->blur, corners);
 }
 
 /* Turn blur on or off for one buffer, creating or destroying the companion. */
 static void blur_set(struct wlr_scene_buffer *buffer, bool want,
-                     struct fx_corner_radii corners)
+                     struct fx_corner_radii corners, int halo)
 {
     struct buffer_blur *bb = blur_find(buffer);
 
@@ -188,23 +259,50 @@ static void blur_set(struct wlr_scene_buffer *buffer, bool want,
         return;
     }
 
+    /* Turning the halo on or off at runtime (a SIGHUP config reload) means the
+     * mask has to come or go, and scenefx cannot CLEAR one: its setter
+     * dereferences the source before the NULL check
+     * (wlr_scene.c:1153 `linked_node_destroy(&source->blur)`), so passing NULL
+     * to drop a mask is a segfault, not a no-op. Rebuild instead. */
+    if (bb && (bb->halo > 0) != (halo > 0)) {
+        blur_addon_destroy(&bb->addon);
+        bb = NULL;
+    }
+
     if (!bb) {
         int w, h;
         blur_buffer_size(buffer, &w, &h);
         if (w <= 0 || h <= 0) return;   /* nothing painted yet; try next frame */
 
-        struct wlr_scene_tree *parent = buffer->node.parent;
+        struct wlr_scene_tree *parent = halo > 0 ? buffer_frame_tree(buffer)
+                                                 : buffer->node.parent;
         if (!parent) return;
 
         bb = calloc(1, sizeof(*bb));
         if (!bb) return;
-        bb->blur = wlr_scene_blur_create(parent, w, h);
+        bb->blur = wlr_scene_blur_create(parent, w + 2 * halo, h + 2 * halo);
         if (!bb->blur) { free(bb); return; }
 
         /* Blur only where the buffer paints — the 0.4 "ignore transparent"
          * behaviour, without which the blur would fill the square corners the
-         * client left transparent. */
-        wlr_scene_blur_set_transparency_mask_source(bb->blur, buffer);
+         * client left transparent.
+         *
+         * The halo is the deliberate exception. The mask blurs only where its
+         * source RENDERS, so a node grown past its buffer would draw nothing in
+         * the ring — the whole point of the halo. Dropping the mask is what
+         * gives the ring its blur; the grown corner radii above take over the
+         * job of keeping the corners round, which is the other thing the mask
+         * was doing for us.
+         *
+         * This is the effect Firefox already gets for free: it never binds
+         * xdg-decoration, so its surface keeps a GTK shadow margin, the blur
+         * node is sized from that whole surface, and the margin renders as
+         * blurred backdrop under GTK's shadow. Everything that honours
+         * server-side decorations stops at the frame and so had no halo at all.
+         */
+        if (halo <= 0)
+            wlr_scene_blur_set_transparency_mask_source(bb->blur, buffer);
+        bb->halo = halo;
 
         bb->blur_destroy.notify = blur_node_destroyed;
         wl_signal_add(&bb->blur->node.events.destroy, &bb->blur_destroy);
@@ -212,7 +310,32 @@ static void blur_set(struct wlr_scene_buffer *buffer, bool want,
                        &blur_addon_impl);
     }
 
-    blur_sync(bb, buffer, corners);
+    blur_sync(bb, buffer, corners, halo);
+}
+
+/* Push every haloed companion back under the frame's chrome.
+ *
+ * The decoration pass lowers the border rect and then the shadow to the BOTTOM of
+ * the frame, in that order, whenever anything about the chrome changes — a focus
+ * change, a resize, a theme reload. Each of those calls puts them back underneath
+ * a halo that was lowered earlier, and the halo covers the ring the border draws
+ * in, so the border would blink out until the client's next paint re-lowered it.
+ * Re-asserting right after the chrome moves is what makes the stacking a rule
+ * rather than a race between two schedules. A no-op when nothing is haloed.
+ */
+static void lower_halo(struct wlr_scene_buffer *buffer, int sx, int sy, void *data)
+{
+    (void)sx; (void)sy; (void)data;
+    struct buffer_blur *bb = blur_find(buffer);
+    if (bb && bb->halo > 0 && bb->blur)
+        wlr_scene_node_lower_to_bottom(&bb->blur->node);
+}
+
+void anim_lower_halos(syn_view_t *view)
+{
+    if (!view || !view->mapped || !view->server) return;
+    if (view->server->config.glass_halo <= 0) return;
+    wlr_scene_node_for_each_buffer(view_node(view), lower_halo, NULL);
 }
 
 /* ── Applying alpha + scenefx glass to a whole window ─────── */
@@ -228,6 +351,9 @@ struct view_effect_params {
      * master switch and the fullscreen guard are not, since those are the
      * user's call and the compositor's, not the client's. */
     bool  kde_blur_ok;
+    /* How far the backdrop blur reaches PAST the window, in px. 0 = the old
+     * behaviour (blur stops at the frame). See blur_set. */
+    int   halo;
     /* Which corners each buffer rounds. A decorated window is two stacked
      * buffers — titlebar above content — so rounding all four on both curves the
      * two edges that meet in the middle, pinching the window's waist. The
@@ -276,7 +402,7 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
      * back to live blur — an error log per window per frame for a setting that
      * never did anything. 0.5 makes that an explicit node type we simply do not
      * create; live blur is the honest description of what we render. */
-    blur_set(buffer, blur, corners);
+    blur_set(buffer, blur, corners, p->halo);
 }
 
 /*
@@ -391,6 +517,11 @@ void anim_apply_alpha(syn_view_t *view)
         .corner_radius    = radius,
         .blur             = s && s->config.blur && !view->fullscreen && translucent,
         .kde_blur_ok      = s && s->config.blur && !view->fullscreen,
+        /* Same edge-to-edge rule the shadow and the corner radii follow: a
+         * maximized or fullscreen window has no desktop beside it to blur, so
+         * the halo would only reach onto the neighbouring tile or off the
+         * output. */
+        .halo             = (boxy || !s) ? 0 : s->config.glass_halo,
         .titlebar         = view->titlebar,
         .titlebar_corners = corner_radii_top(radius),
         .content_corners  = decorated ? corner_radii_bottom(radius)
@@ -413,7 +544,10 @@ static void set_buffer_opacity(struct wlr_scene_buffer *buffer,
      * that has to move it — see blur_sync_geometry. Existing companions only:
      * whether a window *gets* blur is the effects walk's call, not this one's. */
     struct buffer_blur *bb = blur_find(buffer);
-    if (bb) blur_sync_geometry(bb, buffer);
+    /* bb->halo, not the live config: this path re-seats an EXISTING node, and a
+     * node built without a halo has a transparency mask that a halo would have
+     * to remove — which is the effects walk's job (it rebuilds), not a resize's. */
+    if (bb) blur_sync_geometry(bb, buffer, bb->halo);
 }
 
 /*

@@ -434,6 +434,7 @@ void view_update_decorations(syn_view_t *view)
         if (view->titlebar) wlr_scene_node_set_enabled(&view->titlebar->node, false);
         view_grab_ring_update(view);
         view_shadow_update(view);   /* disables it — fullscreen has no shadow */
+        anim_lower_halos(view);     /* …which just re-lowered the chrome over it */
         return;
     }
 
@@ -509,6 +510,9 @@ void view_update_decorations(syn_view_t *view)
     view_grab_ring_update(view);
     view_shadow_update(view);
     titlebar_render(view);
+    /* Last: both of those lower chrome to the bottom of the frame, which is
+     * where a haloed blur node lives. See anim_lower_halos(). */
+    anim_lower_halos(view);
 }
 
 /* ── Runtime titlebar toggle ─────────────────────────────── */

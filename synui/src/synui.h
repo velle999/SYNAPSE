@@ -1003,6 +1003,12 @@ typedef struct {
     float blur_brightness;       /* default 0.90 */
     float blur_contrast;         /* default 1.00 */
     float blur_saturation;       /* default 1.15 */
+    /* How far the blur reaches PAST the window, in px. 0 (default) keeps it
+     * inside the frame. Non-zero grows each blurred buffer's companion node and
+     * drops its transparency mask, giving a blurred ring around the window —
+     * the halo Firefox has always had by accident, because it ignores
+     * xdg-decoration and keeps a GTK shadow margin inside its own surface. */
+    int   glass_halo;            /* px; default 0 = off */
 
     /* Drop shadow (scenefx wlr_scene_shadow, one node per window frame, drawn
      * behind everything and clipped out from under the window itself so it is a
@@ -2948,6 +2954,10 @@ void anim_fade_in(syn_view_t *view);
 void anim_fade_out_and_hide(syn_view_t *view);
 void anim_reset(syn_view_t *view);
 void anim_apply_alpha(syn_view_t *view);
+/* Re-assert the glass halo's place under the frame's chrome. Called by the
+ * decoration pass, which lowers the border and shadow on its own schedule; a
+ * no-op unless glass_halo is set. See anim.c. */
+void anim_lower_halos(syn_view_t *view);
 /* The window's settled translucency (config.active/inactive_opacity gated by
  * config.transparency), by whether it is the focused view. 1.0 when off. */
 float anim_view_opacity(syn_view_t *view);

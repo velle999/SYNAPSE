@@ -468,6 +468,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->blur_brightness  = 0.90f;
     cfg->blur_contrast    = 1.00f;
     cfg->blur_saturation  = 1.15f;
+    /* Glass halo: OFF. It costs a wider blur pass per window and it is a strong
+     * look — opt in with `glass_halo = 14` or so. */
+    cfg->glass_halo       = 0;
     /* Drop shadow: on, a soft dark halo dropped a touch downward. */
     cfg->shadow           = 1;
     cfg->shadow_blur_sigma = 18.0f;
@@ -748,6 +751,11 @@ void synui_config_load(syn_config_t *cfg)
         }
         else if (strcmp(key, "blur") == 0)
             cfg->blur = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
+        else if (strcmp(key, "glass_halo") == 0) {
+            cfg->glass_halo = atoi(val);
+            if (cfg->glass_halo < 0)  cfg->glass_halo = 0;
+            if (cfg->glass_halo > 64) cfg->glass_halo = 64;
+        }
         else if (strcmp(key, "blur_passes") == 0) {
             cfg->blur_passes = atoi(val);
             if (cfg->blur_passes < 1) cfg->blur_passes = 1;
