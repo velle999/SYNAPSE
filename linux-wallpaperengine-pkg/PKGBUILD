@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers, with the synui-wpengine control script"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"

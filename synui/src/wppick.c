@@ -205,6 +205,18 @@ static void wppick_apply(syn_server_t *s, int idx)
      * for wallpaper_state_save to record. */
     int we = wppick_we_index(s, idx);
     if (we >= 0) {
+        /* A preset or an asset pack (see wp_project_meta): the engine would
+         * stop, come back up with nothing to draw, and leave the screen on
+         * whatever synui paints underneath. Keeping what is already there is
+         * both the honest outcome and the cheaper one; the row's subtitle is
+         * what explains it. */
+        if (!s->wppick.we[we].renderable) {
+            wlr_log(WLR_INFO, "synui: wppick: '%s' (%s) is not a renderable "
+                    "wallpaper — leaving the current one alone",
+                    s->wppick.we[we].title, s->wppick.we[we].type);
+            return;
+        }
+
         char cmd[160];
         snprintf(cmd, sizeof(cmd), "synui-wpengine set %s %s",
                  s->wppick.we[we].id, scope ? scope : "all");
@@ -401,7 +413,8 @@ static void wp_json_token(FILE *f, char *out, size_t n)
     if (out && n) out[i] = '\0';
 }
 
-/* Pull the TOP-LEVEL "title" and "type" out of a project.json.
+/* Pull the TOP-LEVEL "title" and "type" out of a project.json. Returns false
+ * when the item is positively identified as something the engine cannot render.
  *
  * No JSON library here, but a flat strstr for "type" is not good enough: a
  * project.json carries a general.properties object whose every entry has its
@@ -411,17 +424,19 @@ static void wp_json_token(FILE *f, char *out, size_t n)
  * brace/bracket depth and only accept keys sitting directly in the root
  * object. Streamed rather than slurped because the properties block can be
  * far larger than the two strings we actually want. */
-static void wp_project_meta(const char *path, char *title, size_t tn,
+static bool wp_project_meta(const char *path, char *title, size_t tn,
                             char *type, size_t yn)
 {
     title[0] = '\0';
     type[0]  = '\0';
 
     FILE *f = fopen(path, "r");
-    if (!f) return;
+    if (!f) return true;   /* unreadable — let the engine be the judge */
 
     int depth = 0;
     char pending[32] = "";   /* the depth-1 key whose value comes next */
+    char category[32] = "";  /* "Asset" on an editor asset pack */
+    bool preset = false;     /* a saved property set for some other wallpaper */
     int c;
 
     while ((c = fgetc(f)) != EOF) {
@@ -441,8 +456,15 @@ static void wp_project_meta(const char *path, char *title, size_t tn,
 
         if (nxt == ':') {
             /* Only root-object keys are the ones we mean. */
-            if (depth == 1) snprintf(pending, sizeof(pending), "%s", tok);
-            else pending[0] = '\0';
+            if (depth == 1) {
+                snprintf(pending, sizeof(pending), "%s", tok);
+                /* "preset" is an OBJECT, so the '{' that follows bumps the
+                 * depth and clears pending before the value branch below could
+                 * ever see it. Note it here, while the key is still in hand. */
+                if (strcmp(tok, "preset") == 0) preset = true;
+            } else {
+                pending[0] = '\0';
+            }
             continue;
         }
         if (nxt != EOF) ungetc(nxt, f);
@@ -453,11 +475,36 @@ static void wp_project_meta(const char *path, char *title, size_t tn,
             snprintf(title, tn, "%s", tok);
         else if (strcmp(pending, "type") == 0)
             snprintf(type, yn, "%s", tok);
+        else if (strcmp(pending, "category") == 0)
+            snprintf(category, sizeof(category), "%s", tok);
         pending[0] = '\0';
 
         if (title[0] && type[0]) break;   /* both found — stop reading */
     }
     fclose(f);
+
+    if (type[0]) return true;
+
+    /* No top-level "type". Two kinds of subscription land in the Workshop tree
+     * without one, and neither is a wallpaper: a PRESET is only a property set
+     * plus a "dependency" naming the wallpaper it re-configures, and an ASSET
+     * pack ("category": "Asset", "file": "assets.json") is a particle/visualiser
+     * component for the Wallpaper Engine editor. Handing either id to the engine
+     * gets "Project type missing" and a screen that does not change — which is
+     * exactly what these rows used to do, labelled a bare "?". Say what they are
+     * instead, and let wppick_apply leave the current wallpaper alone.
+     *
+     * Anything else typeless is left renderable on purpose: a subscription this
+     * parser simply did not understand is the engine's call, not ours. */
+    if (preset) {
+        snprintf(type, yn, "preset (not a wallpaper)");
+        return false;
+    }
+    if (strcasecmp(category, "asset") == 0) {
+        snprintf(type, yn, "asset (not a wallpaper)");
+        return false;
+    }
+    return true;
 }
 
 /* Wallpaper Engine is Steam AppID 431960; its subscriptions land in the usual
@@ -492,8 +539,9 @@ static void wppick_scan_workshop(syn_server_t *s)
          * title long enough to need cutting is long enough to be non-ASCII —
          * the half character it leaves behind is invalid UTF-8, which cairo
          * refuses to draw, taking every row under it blank with it. */
-        char title[256], type[12];
-        wp_project_meta(proj, title, sizeof(title), type, sizeof(type));
+        char title[256], type[32];
+        bool renderable = wp_project_meta(proj, title, sizeof(title),
+                                          type, sizeof(type));
 
         if (!type[0]) snprintf(type, sizeof(type), "?");
 
@@ -506,6 +554,7 @@ static void wppick_scan_workshop(syn_server_t *s)
         snprintf(s->wppick.we[i].id,    sizeof(s->wppick.we[i].id),    "%s", e->d_name);
         syn_utf8_copy(s->wppick.we[i].title, sizeof(s->wppick.we[i].title), title);
         snprintf(s->wppick.we[i].type,  sizeof(s->wppick.we[i].type),  "%s", type);
+        s->wppick.we[i].renderable = renderable;
 
         /* A stale or partial subscription (no project.json, or no title in it)
          * still gets a row — the id is enough to hand to the engine. Checked

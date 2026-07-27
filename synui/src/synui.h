@@ -2277,11 +2277,19 @@ struct syn_server {
          * images. These are handed to linux-wallpaperengine rather than
          * decoded here, so the row only needs the id to pass along and the
          * title to show. `type` is scene/video/web, shown so it is obvious
-         * which are the animated ones. */
+         * which are the animated ones.
+         *
+         * Not every Workshop subscription is a wallpaper: property presets
+         * (which only re-configure some OTHER wallpaper) and editor asset packs
+         * subscribe into the same tree and have no top-level "type" at all. The
+         * engine answers "Project type missing" and draws nothing, so `renderable`
+         * marks them and `type` says so on the row — otherwise they are 19 rows
+         * here that look exactly like wallpapers and silently do nothing. */
         struct {
             char id[24];
             char title[96];
-            char type[12];
+            char type[32];
+            bool renderable;
         } we[WPPICK_WE_MAX];
         int  we_count;
 

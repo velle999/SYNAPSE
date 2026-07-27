@@ -38,6 +38,16 @@ LOCKFILE="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.lock"
 # ids that appear nowhere in the state file, and the next pick reasoning from a
 # state that did not describe the screen. Serialize them instead. The lock is
 # held until the process exits, which is what makes stop-then-start atomic.
+#
+# "until the process exits" means THIS process and no other: an flock belongs to
+# the open file description, not to the fd, so a child that inherits fd 9 keeps
+# the lock alive for as long as IT runs. The engine we launch is a daemon, so
+# that made every later pick — a Workshop id or a plain image, since leaving the
+# engine also has to take the lock — sit out the full `-w 30` before doing
+# anything at all, and then proceed unserialized anyway, which is the very race
+# the lock exists to prevent. The engine launch below closes fd 9 explicitly
+# (`9>&-`); anything else spawned from here is short-lived and finishes while we
+# still hold the lock, so it costs nothing to let those inherit it.
 take_lock() {
     exec 9>"$LOCKFILE" || return 0
     flock -w 30 9 ||
@@ -154,10 +164,12 @@ start_from_state() {
 
     cd "$ENGINE_DIR" || die "cannot enter $ENGINE_DIR"
     # __GL_THREADED_OPTIMIZATIONS=0 is the upstream-documented NVIDIA workaround.
+    # 9>&- drops the lock fd: the engine outlives this script, and an inherited
+    # fd 9 would hold take_lock's flock for the whole session (see take_lock).
     __GL_THREADED_OPTIMIZATIONS=0 \
     setsid "$ENGINE" --assets-dir "$ASSETS" --layer background \
         --fps "${SYNUI_WPENGINE_FPS:-30}" --silent "${args[@]}" \
-        >"$LOG" 2>&1 </dev/null &
+        >"$LOG" 2>&1 </dev/null 9>&- &
     echo $! > "$PIDFILE"
     disown
 
