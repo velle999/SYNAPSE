@@ -1210,6 +1210,10 @@ arch-chroot /mnt bash -c "
     grep -qxF '/usr/bin/synsh' /etc/shells 2>/dev/null || echo '/usr/bin/synsh' >> /etc/shells
 
     echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
+    # 440 like every other drop-in: without it the file lands 0644 and
+    # 'visudo -c' fails the whole ruleset with "bad permissions", which is
+    # the one check anyone would run to confirm this directory is sane.
+    chmod 440 /etc/sudoers.d/wheel
 
     # ── Why every NOPASSWD drop-in below is named zz-* ───────────────────
     # sudo parses /etc/sudoers.d in SORTED LEXICAL ORDER, and when several
