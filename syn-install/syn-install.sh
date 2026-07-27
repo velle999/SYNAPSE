@@ -1468,15 +1468,19 @@ PROFILEEOF
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
 cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
 terminal = foot
-# greetd launches synui after login; the synsh terminal is autostarted
-# here (synui-foot.service is only used on the live ISO).
+# greetd launches synui after login.
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
 # opens — so there is no generator to run before the bar starts. synui-bar
 # starts quickshell against the QML tree synui packages to
 # /usr/share/synui/quickshell.
 autostart = synui-bar
-autostart = foot synsh
+# A synsh terminal used to be autostarted here, and the live ISO used to do the
+# same through synui-foot.service. The live session dropped it — it is a desktop
+# now, not a shell with a compositor around it — and an installed system has even
+# less reason to open one: Super+Return is the terminal, and the start menu has
+# it too. Uncomment to get a shell on every login.
+# autostart = foot synsh
 # Any GUI app that needs root goes through polkit, and pkexec refuses to
 # prompt on a terminal it doesn't have — without an authentication agent
 # registered for the session it fails instantly and, launched from a menu,
