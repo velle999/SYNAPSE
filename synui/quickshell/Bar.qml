@@ -34,8 +34,11 @@ PanelWindow {
 
     // Wanted up when it is not hiding at all, while the pointer is anywhere over
     // it, or while its menu is open — closing the bar out from under its own
-    // menu would be a fine way to make the menu unusable.
-    readonly property bool wantsReveal: !bar.autohide || edgeHover.hovered || menu.visible
+    // menu would be a fine way to make the menu unusable. The mixer counts for
+    // the same reason: adjusting a slider means the pointer is on the popup and
+    // not on the bar, which is exactly when auto-hide would pull it away.
+    readonly property bool wantsReveal: !bar.autohide || edgeHover.hovered
+                                        || menu.visible || volume.mixerOpen
 
     // …but `revealed` is a latch, not that binding. Going up is immediate; going
     // down waits, so a pointer that only crosses the top edge on its way to a
@@ -187,7 +190,8 @@ PanelWindow {
                     Media     { barVisible: BarConfig.get(bar.outName, "media") }
                     GameMode  {}
                     Battery   {}
-                    Volume    { barVisible: BarConfig.get(bar.outName, "volume") }
+                    Volume    { id: volume
+                                barVisible: BarConfig.get(bar.outName, "volume") }
                     Cpu       { barVisible: BarConfig.get(bar.outName, "sysinfo") }
                     Memory    { barVisible: BarConfig.get(bar.outName, "sysinfo") }
                     Bluetooth { barVisible: BarConfig.get(bar.outName, "netbt") }

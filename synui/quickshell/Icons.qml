@@ -29,6 +29,10 @@ QtObject {
     readonly property string volMed:   "\uF027"
     readonly property string volHigh:  "\uF028"
 
+    // Mixer only: a speaker over a microphone row says the wrong thing.
+    readonly property string mic:      "\uF130"
+    readonly property string micMuted: "\uF131"
+
     // -- Bluetooth --
     readonly property string btOff:       "\uF293"
     readonly property string btOn:        "\uF293"
