@@ -124,14 +124,26 @@
  *   game_exclude = firefox chibi tepris nexus-chat foot
  *       Space-separated app_ids that are NOT games; REPLACES the built-in list.
  *       This is what keeps a fullscreen Firefox video from stopping the AI.
- *   game_ai_stop_cmd = sudo -n systemctl stop synapd
- *   game_ai_start_cmd = sudo -n systemctl start synapd
+ *   game_ai_stop_cmd = sudo -n systemctl stop synapd.socket synapd.service
+ *   game_ai_start_cmd = sudo -n systemctl start synapd.socket synapd.service
  *       synapd is a *system* unit, so a plain `systemctl stop` from the session
  *       user gets bounced by polkit ("interactive authentication required") —
  *       and synui_spawn is fire-and-forget, so that failure was invisible: game
  *       mode logged that it had suspended synapd while synapd kept running.
  *       sudo -n never prompts; the grant is /etc/sudoers.d/synapd-gamemode,
- *       exactly these two commands (see syn-install.sh).
+ *       exactly these two commands (see syn-install.sh). Change one and you
+ *       MUST change the other: sudoers matches the whole command line, so a
+ *       command that no longer matches fails silently all over again.
+ *
+ *       THE SOCKET IS PART OF THE COMMAND, and not for tidiness. synapd.service
+ *       is socket-activated (Requires=synapd.socket). Stopping the service alone
+ *       leaves the socket listening, so the next client to connect — synguard,
+ *       synnet, chibi, vibe, synsh, any of them — makes systemd start synapd
+ *       straight back up, in the same second. Measured: `Stopped` immediately
+ *       followed by `Started`, with no `Scheduled restart job` line, which is
+ *       how you tell socket activation from Restart=. Game mode therefore
+ *       looked intermittent — it worked whenever nothing happened to connect
+ *       during the game, and silently did nothing whenever something did.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -630,9 +642,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->game_suspend_ai   = 1;
     cfg->game_inhibit_idle = 1;
     snprintf(cfg->game_ai_stop_cmd,  sizeof(cfg->game_ai_stop_cmd),
-             "sudo -n systemctl stop synapd");
+             "sudo -n systemctl stop synapd.socket synapd.service");
     snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd),
-             "sudo -n systemctl start synapd");
+             "sudo -n systemctl start synapd.socket synapd.service");
     /* The fullscreen X11 clients on this system that are NOT games. Without
      * these, going fullscreen on a YouTube video would stop synapd. The
      * firefox-app-mode apps (tepris, nexus-chat) report their own app_id via

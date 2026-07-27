@@ -13,11 +13,15 @@ a shell here-doc would happily let a window title close the quote.
 
 import json
 import os
+import subprocess
 import sys
 
 
 def read_state(path):
-    state = {"state": "off", "mode": "auto", "app": ""}
+    # "ai" is absent from files written by synui pkgrel < 198; an empty value
+    # means "this synui did not say", which is reported as unknown rather than
+    # guessed either way.
+    state = {"state": "off", "mode": "auto", "app": "", "ai": ""}
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -29,6 +33,40 @@ def read_state(path):
     except OSError:
         pass
     return state
+
+
+def synapd_is_active():
+    """Ask systemd, rather than repeating what synui hoped for.
+
+    The tooltip used to state "synapd suspended (GPU freed)" for any state=on.
+    It was a fixed string, so it read as success in exactly the case that was
+    broken: synapd is socket-activated, and a stop that is immediately undone
+    by the next client connecting looks identical from synui's side. Costs one
+    short-lived subprocess, and only while game mode is on.
+    """
+    try:
+        r = subprocess.run(["systemctl", "is-active", "synapd.service"],
+                           capture_output=True, text=True, timeout=2)
+        return r.stdout.strip() == "active"
+    except (OSError, subprocess.SubprocessError):
+        return None       # cannot tell — say so instead of picking a side
+
+
+def ai_line(ai):
+    if ai == "untouched":
+        return "synapd left running (game_suspend_ai = off)"
+    if ai != "suspended":
+        # Either an older synui, or one that decided not to suspend.
+        return "synapd running"
+    live = synapd_is_active()
+    if live is None:
+        return "synapd suspend requested (could not verify)"
+    if live:
+        # The whole point of this line. Socket activation is the usual cause:
+        # stopping synapd.service alone leaves synapd.socket listening, and the
+        # next client to connect starts it straight back up.
+        return "⚠ synapd STILL RUNNING — the suspend did not hold"
+    return "synapd suspended (GPU freed)"
 
 
 def main():
@@ -45,7 +83,8 @@ def main():
     if on:
         text = ""   # Nerd Font gamepad (fa-gamepad); CSS colours it yellow
         tooltip = f"Game mode ON — {app}" if app else "Game mode ON"
-        tooltip += "\nsynapd suspended (GPU freed), idle timers held off"
+        tooltip += "\n" + ai_line(st["ai"])
+        tooltip += "\nidle timers held off"
     else:
         # Not hidden when off: a bar element that only ever appears when
         # something is on gives you no way to tell "off" from "broken" — which

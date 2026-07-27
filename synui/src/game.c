@@ -74,6 +74,13 @@ static void game_publish(syn_server_t *s)
     fprintf(f, "mode=%s\n", s->game.forced > 0 ? "forced-on" :
                             s->game.forced < 0 ? "forced-off" : "auto");
     fprintf(f, "app=%s\n", s->game.app);
+    /* What we did about synapd, so the indicator stops asserting it. The bar
+     * used to print "synapd suspended (GPU freed)" for any state=on, which is
+     * how a stop that got undone by socket activation still read as success.
+     * This is still only what synui *asked for* — synui-game-status checks
+     * whether it held. */
+    fprintf(f, "ai=%s\n", s->game.ai_suspended ? "suspended" :
+                          s->config.game_suspend_ai ? "running" : "untouched");
     fclose(f);
 
     /* Rename, so the poller never reads a half-written file. */

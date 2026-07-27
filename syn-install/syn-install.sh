@@ -1223,7 +1223,16 @@ arch-chroot /mnt bash -c "
     # is refused by polkit — and synui spawns it fire-and-forget, so the
     # refusal was silent: game mode said it had suspended synapd while
     # synapd carried on holding ~4GB of VRAM. sudo -n, scoped to these two.
-    echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl stop synapd, /usr/bin/systemctl start synapd' \
+    #
+    # The SOCKET is named alongside the service because synapd is socket
+    # activated (Requires=synapd.socket): stopping the service on its own
+    # leaves the socket listening, and the next client to connect has systemd
+    # start synapd again within the same second. That made game mode look
+    # random — it held whenever nothing connected, and silently did nothing
+    # whenever something did. These strings must stay character-for-character
+    # in step with game_ai_{stop,start}_cmd in synui/src/config.c: sudoers
+    # matches the whole command line, so a drift here is another silent no-op.
+    echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl stop synapd.socket synapd.service, /usr/bin/systemctl start synapd.socket synapd.service' \
         > /etc/sudoers.d/synapd-gamemode
     chmod 440 /etc/sudoers.d/synapd-gamemode
 
