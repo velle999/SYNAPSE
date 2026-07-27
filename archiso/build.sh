@@ -507,6 +507,13 @@ PACKAGES=(
     # 'shelly-bin'). Prebuilt-binary PKGBUILD: makepkg downloads the pinned
     # release tarball at build time, so this needs network like pacstrap does.
     shelly
+    # Wallpaper Engine renderer (dir 'linux-wallpaperengine-pkg' builds pkg
+    # 'linux-wallpaperengine'). Git-sourced from a pinned commit, so it needs
+    # network, and cmake fetches a ~1.3 GB CEF blob at configure time into the
+    # build dir — budget ~6 GB of /var/tmp scratch for it on top of the ISO.
+    # Order does not matter: nothing depends on it (synui lists it nowhere),
+    # it is on the ISO because packages.x86_64 names it.
+    linux-wallpaperengine-pkg
 )
 
 # Create build user for makepkg (can't run as root)

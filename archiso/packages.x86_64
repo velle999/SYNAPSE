@@ -130,3 +130,15 @@ xdg-desktop-portal-gtk
 slurp
 grim
 rtkit
+
+# Wallpaper Engine backgrounds (the Workshop rows in synui's Super+W picker,
+# driven by the synui-wpengine script this package also ships). Built from
+# linux-wallpaperengine-pkg/PKGBUILD against a pinned upstream commit; it is in
+# no pacman repo, so pacstrap can only get it from our local-repo.
+#
+# synui does NOT depend on it — the picker simply shows no Workshop rows when
+# it is absent — so this line is the only thing putting it on the ISO. It is
+# listed rather than left off because the wallpapers come from Steam Workshop
+# subscriptions, and a user who has just subscribed to one should not then have
+# to build a CEF-carrying package by hand to see it.
+linux-wallpaperengine
