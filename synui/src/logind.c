@@ -137,6 +137,15 @@ static int on_prepare_for_sleep(sd_bus_message *m, void *data, sd_bus_error *e)
     } else {
         wlr_log(WLR_INFO, "synui: logind: resumed");
         logind_take_inhibitor();
+
+        /* A Workshop wallpaper does not survive a suspend: linux-wallpaperengine
+         * loses its layer surfaces and cannot rebuild them, so the screen wakes
+         * to whatever wallpaper.c paints underneath. Armed here as well as from
+         * server_new_output() because the surfaces can go without synui having
+         * destroyed an output — this is the one signal that fires either way.
+         * Both share a timer, so a resume that also recreates the connectors
+         * still restarts the engine exactly once. */
+        wpengine_restore_soon(s);
     }
     return 0;
 }

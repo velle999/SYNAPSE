@@ -418,6 +418,11 @@ static void output_destroy(struct wl_listener *listener, void *data)
         matrix_output_destroy(output);
         dock_output_destroy(output);
         lock_output_destroy(output);   /* drop the pane before its wlr_output frees */
+        /* The Workshop wallpaper engine gets no say in this: synui is about to
+         * close its layer surface for this output, and it has no code that can
+         * ever build another one. Remember that it happened, so the connector
+         * coming back re-launches it (wppick.c). */
+        wpengine_output_lost(server);
 
         syn_output_t *home = wl_list_empty(&server->outputs)
                                  ? NULL
@@ -537,6 +542,12 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * suspend/resume cycle wakes to the lock's black backstop: still locked,
      * still takes the password, but paints nothing. */
     lock_output_create(output);
+
+    /* Same class of problem one layer up: a connector recreated by a
+     * suspend/resume leaves linux-wallpaperengine with a dead layer surface it
+     * cannot replace, so the Workshop wallpaper never comes back. No-op unless
+     * an output was lost earlier — see wpengine_output_added(). */
+    wpengine_output_added(server);
 
     /* A new monitor doesn't claim a workspace — every desktop already spans it.
      * It simply comes up showing the current desktop's share, which is empty

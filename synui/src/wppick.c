@@ -146,6 +146,90 @@ static void wppick_active_we(char *out, size_t n, const char *scope)
     fclose(f);
 }
 
+/* ── Re-arming the engine after a suspend or a monitor change ────────── */
+/*
+ * linux-wallpaperengine cannot survive losing an output. Its registry
+ * global_remove handler is literally `// todo: outputs` (a no-op), and
+ * onLayerClose() frees a viewport's EGL surface, layer surface and wl_surface
+ * and erases it from m_screens with nothing that ever rebuilds it — while
+ * setupOutputLayerSurfaces(), the only caller of setupLS(), runs once at init.
+ * A wl_output that appears later does get a viewport, but never a surface.
+ *
+ * So when a suspend/resume takes an output away and brings it back, the engine
+ * process stays alive, ends up with no layer surfaces at all, and blocks in
+ * poll() at 0% CPU forever. What is left on screen is whatever wallpaper.c
+ * paints underneath, which reads as "the wallpaper did not come back from
+ * standby" — and nothing short of restarting the engine fixes it, because
+ * there is no code path in it that can.
+ *
+ * synui cannot repair the client, so it restarts it. The trigger is
+ * deliberately not "an output was recreated": the surfaces can also be lost
+ * without synui destroying anything (the compositor is not the only thing a
+ * GPU suspend disturbs), so the resume itself arms this too — see logind.c.
+ * Both funnel through one timer, which is what keeps three monitors coming
+ * back at once from meaning three engine restarts.
+ */
+
+/* Long enough for a DRM re-probe to finish adding the connectors back, so
+ * `synui-wpengine restore` sees the full output list: build_args drops any
+ * state line naming an output synctl cannot see, and a restore that ran while
+ * two of three monitors were still missing would helpfully persist that. Each
+ * trigger re-arms, so this is measured from the LAST one, not the first. */
+#define WPENGINE_RESTORE_DELAY_MS 2500
+
+static int wpengine_restore_cb(void *data)
+{
+    syn_server_t *s = data;
+
+    /* Re-checked at fire time rather than only at arm time: a `synui-wpengine
+     * off` in the window between the two means there is no longer an engine to
+     * bring back, and restarting one would put a wallpaper back that the user
+     * just took away. */
+    char id[24];
+    wppick_active_we(id, sizeof(id), NULL);
+    if (!id[0]) return 0;
+
+    wlr_log(WLR_INFO, "synui: wpengine: restoring the Workshop wallpaper "
+            "(the engine cannot re-create its own layer surfaces)");
+    synui_spawn("synui-wpengine restore");
+    return 0;
+}
+
+void wpengine_restore_soon(syn_server_t *s)
+{
+    if (!s || !s->display) return;
+
+    /* No Workshop wallpaper configured — the overwhelmingly common case, and
+     * the one where spawning a shell script per resume would be pure noise.
+     * NULL scope takes the first line: any line at all means the engine is
+     * meant to be up, and `restore` re-applies every one of them anyway. */
+    char id[24];
+    wppick_active_we(id, sizeof(id), NULL);
+    if (!id[0]) return;
+
+    if (!s->wpengine.timer) {
+        s->wpengine.timer = wl_event_loop_add_timer(
+            wl_display_get_event_loop(s->display), wpengine_restore_cb, s);
+        if (!s->wpengine.timer) return;
+    }
+    /* Re-arming an armed timer replaces the deadline, which is the coalescing. */
+    wl_event_source_timer_update(s->wpengine.timer, WPENGINE_RESTORE_DELAY_MS);
+}
+
+void wpengine_output_lost(syn_server_t *s)
+{
+    if (s) s->wpengine.lost_output = 1;
+}
+
+void wpengine_output_added(syn_server_t *s)
+{
+    /* Every output fires this at startup, where synuirc's autostart line is
+     * already running `synui-wpengine restore` — a second one would stop the
+     * engine it just started and flash the desktop. Only an output that comes
+     * back AFTER one went away can have cost the engine a surface. */
+    if (s && s->wpengine.lost_output) wpengine_restore_soon(s);
+}
+
 static int current_index(syn_server_t *s)
 {
     /* An engine wallpaper wins over anything wallpaper.c holds: its surface is

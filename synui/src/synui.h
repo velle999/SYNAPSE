@@ -2309,6 +2309,16 @@ struct syn_server {
         int  scope;
     } wppick;
 
+    /* Re-arming linux-wallpaperengine after a suspend or a monitor change —
+     * see wpengine_restore_soon() in wppick.c. The timer coalesces a burst of
+     * triggers into one engine restart; lost_output gates the new-output
+     * trigger so it cannot fire during startup, when synuirc's autostart line
+     * is already running `synui-wpengine restore`. */
+    struct {
+        struct wl_event_source *timer;
+        int lost_output;   /* an output was destroyed earlier this session */
+    } wpengine;
+
     /* Cursor theme picker (cursor.c) — Super+C. Same modal shape as wppick. */
     struct {
         struct wlr_scene_tree   *tree;
@@ -3291,6 +3301,18 @@ const char *wppick_scope_label(syn_server_t *s);
 void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
 int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+
+/* Restart linux-wallpaperengine shortly from now, if wpengine.state says one
+ * should be running. Coalescing and no-op-when-idle both live inside, so it is
+ * safe to call from anywhere that might have cost the engine its surfaces —
+ * a resume, an output coming back — as often as that happens. */
+void wpengine_restore_soon(syn_server_t *s);
+/* An output was destroyed: from here on, one coming back is a reason to
+ * re-arm the engine. Called from output_destroy(). */
+void wpengine_output_lost(syn_server_t *s);
+/* An output came up. No-op until wpengine_output_lost() has been seen, so the
+ * outputs present at startup do not trigger a second restore. */
+void wpengine_output_added(syn_server_t *s);
 void synui_render_wppick(syn_server_t *s);
 
 /* ── cursor.c (cursor theme + picker) ────────────────────── */
