@@ -131,7 +131,9 @@ subscription to `synguard`'s verdict feed and `synapd`'s activity.
 
 The status bar and the desktop widgets are a native [quickshell](https://quickshell.org/)
 shell — waybar was replaced in synui pkgrel 154, and the start button and menu
-moved into the bar shortly after.
+moved into the bar shortly after. Right-clicking the bar's volume module opens a
+mixer drawn by the bar itself: output and input devices, and a slider per
+application.
 
 Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 
@@ -144,7 +146,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Backspace` | Ask the AI |
 | `Super`+`A` | Neural activity overlay |
 | `Super`+`D` | Display settings |
-| `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker / reload the wallpaper |
+| `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
 | `Super`+`Shift`+`T` | Calendar |
@@ -211,7 +213,48 @@ blur and translucency, each on a knob you turn while watching the window change.
 Full detail in the wiki: [Cursor Themes](https://github.com/velle999/SYNAPSE/wiki/Cursor-Themes) ·
 [Sound Themes](https://github.com/velle999/SYNAPSE/wiki/Sound-Themes) ·
 [The Desktop](https://github.com/velle999/SYNAPSE/wiki/The-Desktop) ·
+[Wallpapers](https://github.com/velle999/SYNAPSE/wiki/Wallpapers) ·
 [Window Effects](https://github.com/velle999/SYNAPSE/wiki/Window-Effects).
+
+### Wallpapers
+
+`Super`+`W` picks one live: the bundled **Synapse** image, an animated **Matrix**
+rain rendered on the GPU, a flat colour, or any PNG/JPEG it finds in `~/Pictures`
+and the usual directories. `Tab` scopes the pick to **one monitor** (and back to
+all of them), `m` cycles the scaling mode — `fill`, `fit`, `stretch`, `center`,
+`tile`. The same thing from `synuirc`:
+
+```ini
+wallpaper             = matrix
+wallpaper_output      = HDMI-A-1 ~/Pictures/ultrawide.jpg
+wallpaper_output_mode = HDMI-A-1 fit
+```
+
+A pick writes `~/.config/synui/wallpaper.state`, which deliberately overrides
+those keys — delete that file to hand control back to `synuirc`.
+
+**Steam Workshop wallpapers** work too, through the optional
+`linux-wallpaperengine` package (built from `linux-wallpaperengine-pkg/`; not on
+the ISO, and it needs Steam with Wallpaper Engine installed for its asset tree).
+Subscribed wallpapers then show up in the `Super`+`W` picker, and
+**`synui-wpengine`** is the command-line half:
+
+```bash
+synui-wpengine list                # id, type, title of every subscription
+synui-wpengine set <id> [output]   # apply and persist (default: every monitor)
+synui-wpengine off [output]        # hand the background back to synui
+synui-wpengine restore             # re-apply the saved state
+synui-wpengine status              # what is running, and what is saved
+```
+
+Scene and video wallpapers render; **web ones come back black** — an upstream bug
+in the renderer's CEF path. Steam's own Wallpaper Engine can never apply a
+wallpaper here, Proton or not: it paints into a Windows desktop window that does
+not exist on Wayland.
+
+> The renderer cannot rebuild a layer surface it has lost, so a suspend used to
+> leave it running and painting nothing. synui re-runs `synui-wpengine restore`
+> on resume and after a monitor comes back (pkgrel 196).
 
 ### Gaming
 
@@ -281,6 +324,8 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 Desktop helpers, each the command-line half of a `synui` panel:
 `synui-sound`, `synui-cursor`, `synui-widgets`, `synui-apply-theme`,
 `synui-screenshot`, `synui-record`, `synui-game-run`, `synui-iso-mount`.
+`synui-wpengine` (Workshop wallpapers) is the one that ships with the optional
+`linux-wallpaperengine` package rather than with `synui`.
 
 ### Privileged desktop actions
 
