@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
@@ -24,6 +24,26 @@ _commit=4a322ef7ad94d98f8ed7044f408c62051a738c91
 #
 # The base ISO ships no audio stack at all, so chibi is what pulls the whole
 # thing in (pipewire + wireplumber + alsa-utils).
+#
+# NOTE: sdl2 alone is NOT enough, and the reason is easy to miss. There is no
+# manylinux cp314 wheel for pygame yet, so pip *compiles it from source* here
+# and links each submodule against whatever SDL2 satellite libs the build host
+# happens to have. The result is a pygame whose font/imageext/mixer/pypm
+# extensions carry DT_NEEDED entries no declared dep provides:
+#
+#     font.so       -> libSDL2_ttf-2.0.so.0     (sdl2_ttf)
+#     imageext.so   -> libSDL2_image-2.0.so.0   (sdl2_image)
+#     mixer*.so     -> libSDL2_mixer-2.0.so.0   (sdl2_mixer)
+#     pypm.so       -> libportmidi.so.2         (portmidi)
+#
+# pygame swallows those ImportErrors and installs a MissingModule placeholder,
+# so nothing fails at import — it fails on first use. On the 0.2.1 ISO that was
+# main.py's very first status-bar draw calling pygame.font.SysFont, i.e. Chibi
+# crashed on launch with "NotImplementedError: font module not available" on
+# both the live ISO and a fresh install. Verified by chroot into the built
+# airootfs: without these four, pygame.font is a MissingModule; with them, font,
+# image, mixer and midi all load. Do not drop them because "sdl2 is already
+# there" — sdl2 (via sdl2-compat) only provides libSDL2 itself.
 depends=(
     'python'
     'pipewire'
@@ -35,6 +55,10 @@ depends=(
     'sox'                 # TTS pitch shift (the "cute" voice)
     'espeak-ng'           # last-resort TTS fallback if piper fails
     'sdl2'                # pygame's backend
+    'sdl2_ttf'            # pygame.font — REQUIRED, see note above
+    'sdl2_image'          # pygame.imageext
+    'sdl2_mixer'          # pygame.mixer — voice_output's playback fallback
+    'portmidi'            # pygame.midi (pypm)
     'synapd'              # default LLM backend on SynapseOS (no Ollama needed)
     'synguard'            # security mode subscribes to its verdict feed
 )
@@ -100,6 +124,50 @@ sha256sums=(
     '967d7f9481e27383d09ec460a0c238974ae76658af9cbbc0cc2f34012de11243'
 )
 
+# Walks the declared `depends` closure with plain pacman (no pacman-contrib /
+# pactree makedepend) and reports every soname a vendored extension needs that
+# neither pydeps itself nor that closure provides. See the call site.
+_check_vendored_sonames() {
+    local pydir="$1"
+    local -A provided=() seen=()
+    local queue=("${depends[@]}") p real f d soname sofile owner rc=0
+
+    while read -r f; do
+        [[ -n $f ]] && provided["$f"]=1
+    done < <(find "$pydir" -name '*.so*' -printf '%f\n')
+
+    while ((${#queue[@]})); do
+        p="${queue[0]%%[<>=]*}"; queue=("${queue[@]:1}")
+        [[ -z $p ]] && continue
+        # `sdl2` and friends are virtuals; ask pacman what really provides them.
+        real="$(pacman -Qq "$p" 2>/dev/null)" || real=""
+        if [[ -z $real ]]; then
+            warning "dep '$p' is not installed on the build host — its libraries can't be checked"
+            continue
+        fi
+        [[ -n ${seen[$real]:-} ]] && continue
+        seen["$real"]=1
+        while read -r f; do
+            f="${f%/}"; [[ -n ${f##*/} ]] && provided["${f##*/}"]=1
+        done < <(pacman -Qlq "$real" 2>/dev/null | grep '\.so')
+        while read -r d; do
+            [[ -n $d && $d != None ]] && queue+=("$d")
+        done < <(pacman -Qi "$real" 2>/dev/null |
+                 awk '/^Depends On/{sub(/^[^:]*: /,""); print}' | tr ' ' '\n')
+    done
+
+    while read -r soname sofile; do
+        [[ -n ${provided[$soname]:-} ]] && continue
+        owner="$(pacman -Qoq "/usr/lib/$soname" 2>/dev/null)" || owner=""
+        error "vendored ${sofile##*/} needs $soname, which no declared dependency provides — add '${owner:-the owning package}' to depends"
+        rc=1
+    done < <(find "$pydir" \( -name '*.so' -o -name '*.so.*' \) -print0 |
+             xargs -0 -r -n1 sh -c 'objdump -p "$1" 2>/dev/null |
+                 awk -v F="$1" "/NEEDED/{print \$2\" \"F}"' _ | sort -u)
+
+    return $rc
+}
+
 build() {
     # Vendored wheels are built against the ABI of the python this runs under,
     # so the package is tied to that python minor version. Record it, and let
@@ -156,6 +224,21 @@ package() {
     install -d "$pkgdir/usr/lib/chibi"
     cp -a "$srcdir/pydeps" "$pkgdir/usr/lib/chibi/pydeps"
     python -m compileall -q "$pkgdir/usr/lib/chibi/pydeps" || true
+
+    # ── Guard: no vendored .so may need a lib we don't depend on ─────────
+    # These wheels are compiled against the BUILD host, which has far more
+    # installed than a fresh SynapseOS does, so a missing runtime lib is
+    # invisible here and only shows up on the ISO. pygame makes that worse by
+    # failing *soft*: an ImportError becomes a MissingModule placeholder, so
+    # nothing breaks until the app first touches it. That is how 0.1.0-5
+    # shipped a Chibi that crashed on launch with "font module not available".
+    #
+    # So resolve every DT_NEEDED soname of every vendored extension against
+    # the libs vendored alongside it plus the file list of our own declared
+    # dependency closure, and hard-fail on anything left over. Missing tools or
+    # an uninstalled dep only warn — this must never fail the build for a
+    # reason that isn't a real unsatisfied library.
+    _check_vendored_sonames "$pkgdir/usr/lib/chibi/pydeps" || return 1
 
     # ── Models ───────────────────────────────────────────────────────────
     install -Dm644 "$srcdir/$_voice.onnx" \
