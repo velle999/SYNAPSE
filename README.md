@@ -233,10 +233,11 @@ wallpaper_output_mode = HDMI-A-1 fit
 A pick writes `~/.config/synui/wallpaper.state`, which deliberately overrides
 those keys — delete that file to hand control back to `synuirc`.
 
-**Steam Workshop wallpapers** work too, through the optional
-`linux-wallpaperengine` package (built from `linux-wallpaperengine-pkg/`; not on
-the ISO, and it needs Steam with Wallpaper Engine installed for its asset tree).
-Subscribed wallpapers then show up in the `Super`+`W` picker, and
+**Steam Workshop wallpapers** work too, through the `linux-wallpaperengine`
+package (built from `linux-wallpaperengine-pkg/`), **on the ISO since 0.2.1** —
+nothing to install. It still needs Steam with Wallpaper Engine installed for its
+asset tree, which is not redistributable and so stays where Steam put it.
+Subscribed wallpapers show up in the `Super`+`W` picker, and
 **`synui-wpengine`** is the command-line half:
 
 ```bash
@@ -324,8 +325,9 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 Desktop helpers, each the command-line half of a `synui` panel:
 `synui-sound`, `synui-cursor`, `synui-widgets`, `synui-apply-theme`,
 `synui-screenshot`, `synui-record`, `synui-game-run`, `synui-iso-mount`.
-`synui-wpengine` (Workshop wallpapers) is the one that ships with the optional
-`linux-wallpaperengine` package rather than with `synui`.
+`synui-wpengine` (Workshop wallpapers) is the one that ships with the
+`linux-wallpaperengine` package rather than with `synui` — both are on the ISO
+as of 0.2.1.
 
 ### Privileged desktop actions
 
