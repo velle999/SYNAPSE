@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
-pkgrel=5
+pkgrel=7
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers, with the synui-wpengine control script"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -73,13 +73,33 @@ build() {
 }
 
 package() {
-    cd "$srcdir/$pkgname/build/output"
+    # Stage through upstream's install() rather than copying out of build/output
+    # directly. Those two are NOT the same files: build/output holds the linked
+    # artifacts with their build-time RUNPATH — absolute $srcdir paths — and
+    # install(TARGETS) is where cmake rewrites that to $ORIGIN. Copying from
+    # build/output skipped the rewrite entirely, and the result only worked on
+    # the machine that built it.
+    #
+    # It is not a tidiness matter. CEF resolves icudtl.dat, the .pak files and
+    # locales/ relative to WHERE libcef.so WAS LOADED FROM, so a binary that
+    # finds libcef back in build/cef/.../Release/ — which holds the .so files and
+    # none of the data — gets no ICU data. Chromium then tries to LOG that
+    # failure, and its logger reenters the sandbox's localtime hook through
+    # pthread_once and deadlocks against itself: the engine hangs before drawing
+    # a frame, forever, silently. That is half of "web wallpapers are black".
+    #
+    # The stage also carries the submodule test binaries (qjs, glslang, spirv-*,
+    # api-test) and an include/ tree; the curated list below is what ships.
+    local stage="$srcdir/_stage"
+    rm -rf "$stage"
+    cmake --install "$srcdir/$pkgname/build" --prefix "$stage"
+    cd "$stage"
 
     install -d "$pkgdir$_libdir"
 
     # The executable plus the shared objects and CEF data files it needs. The
-    # rest of output/ is submodule test/benchmark binaries (qjs, glslang,
-    # spirv-*, *-float, api-test) that nothing at runtime touches.
+    # rest of the stage is submodule test/benchmark binaries (qjs, glslang,
+    # spirv-*, api-test) and static archives that nothing at runtime touches.
     install -Dm755 linux-wallpaperengine "$pkgdir$_libdir/linux-wallpaperengine"
 
     local so
@@ -87,6 +107,16 @@ package() {
               libvk_swiftshader.so; do
         install -Dm755 "$so" "$pkgdir$_libdir/$so"
     done
+
+    # kissfft (the audio-reactive FFT) is built as a submodule and lands in
+    # lib/, not beside the executable. It used to be reachable only because the
+    # binary carried a RUNPATH into the build tree — which is exactly the thing
+    # that had to go, so it has to actually ship now. lib/ and not flat: the
+    # RUNPATH cmake writes is "$ORIGIN:$ORIGIN/lib:$ORIGIN/lib64", so keeping
+    # upstream's layout is what makes it resolve. cp -a to keep the SONAME
+    # symlink; there is no ldconfig hook here to recreate it.
+    install -d "$pkgdir$_libdir/lib"
+    cp -a lib/libkissfft-float.so* "$pkgdir$_libdir/lib/"
 
     local data
     for data in chrome_100_percent.pak chrome_200_percent.pak resources.pak \
@@ -105,11 +135,22 @@ package() {
 
     # Wrapper: CEF resolves its siblings relative to the process, so cd first.
     # __GL_THREADED_OPTIMIZATIONS=0 is upstream's documented NVIDIA workaround.
+    #
+    # LD_PRELOAD of libcef.so is not belt-and-braces, it is load ORDER. Chromium
+    # interposes close() (base/files/scoped_file_linux.cc) and recovers the real
+    # one with dlsym(RTLD_NEXT, "close"), which only searches objects loaded
+    # AFTER libcef. Reached through liblinux-wallpaperengine-lib.so, libcef is a
+    # second-level dependency and lands after libc, so the lookup finds nothing
+    # and Chromium IMMEDIATE_CRASHes with "close symbol missing" the moment a
+    # web wallpaper calls CefInitialize. Preloading puts libcef ahead of libc
+    # and CEF starts normally. Harmless for scene/video wallpapers, which never
+    # touch CEF at all.
     install -d "$pkgdir/usr/bin"
     cat > "$pkgdir/usr/bin/linux-wallpaperengine" <<EOF
 #!/bin/sh
 cd "$_libdir" || exit 1
 export __GL_THREADED_OPTIMIZATIONS=\${__GL_THREADED_OPTIMIZATIONS:-0}
+export LD_PRELOAD="$_libdir/libcef.so\${LD_PRELOAD:+:\$LD_PRELOAD}"
 exec "$_libdir/linux-wallpaperengine" "\$@"
 EOF
     chmod 755 "$pkgdir/usr/bin/linux-wallpaperengine"
@@ -118,4 +159,35 @@ EOF
 
     install -Dm644 "$srcdir/$pkgname/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # HARD check, not the makepkg warning. A RUNPATH into $srcdir does not fail
+    # the build and does not fail on THIS machine — the build tree is still
+    # there, so it silently loads the 1.4 GB unstripped libcef out of it and
+    # takes the resource directory with it. It only breaks on every other
+    # machine, i.e. on the ISO. Fail here instead of shipping that.
+    local elf
+    for elf in "$pkgdir$_libdir/linux-wallpaperengine" \
+               "$pkgdir$_libdir/liblinux-wallpaperengine-lib.so"; do
+        local rp
+        rp=$(readelf -d "$elf" | sed -n 's/.*R\(UN\)\?PATH.*\[\(.*\)\]/\2/p')
+        case "$rp" in
+            *"$srcdir"*|*/home/*|*/build/*)
+                error "RUNPATH of ${elf#$pkgdir} leaks the build tree: $rp"
+                return 1 ;;
+        esac
+
+        # And the other half of the same lesson: that build-tree RUNPATH was
+        # LOAD-BEARING — it was the only thing resolving libkissfft, which lives
+        # in lib/ and was never packaged. Dropping the RUNPATH without noticing
+        # turned every wallpaper into "engine exits instantly". A missing
+        # library is not a warning here, it is a package that cannot run.
+        # `|| true` because package() runs under set -e and grep exits 1 when it
+        # finds nothing — i.e. exactly on success.
+        local missing
+        missing=$(cd "$pkgdir$_libdir" && ldd "$elf" 2>/dev/null | grep 'not found') || true
+        if [ -n "$missing" ]; then
+            error "${elf#$pkgdir} has unresolved libraries:"$'\n'"$missing"
+            return 1
+        fi
+    done
 }
