@@ -9,6 +9,9 @@
 #
 # Detection is audio-output based (any app making sound), not MPRIS: a paused
 # player drops its stream to "idle"/"suspended"; only "running" counts.
+#
+# ...with one exception, see IGNORE below: a *wallpaper* must never be able to
+# hold the screen awake.
 set -u
 
 # Wait for synui to publish its Wayland display.
@@ -51,10 +54,33 @@ try:
     objs = json.load(sys.stdin)
 except Exception:
     sys.exit(2)   # transient pw-dump/parse failure: leave state unchanged
+# Streams that never count as "media playing", however loud PipeWire thinks they
+# are. linux-wallpaperengine opens an SDL playback device even when synui-wpengine
+# starts it with --silent (that flag only mutes the engines own mixer, so from
+# out here the node reads volume 1.0, mute false) and pins it at state "running"
+# for its whole lifetime via node.always-process. That matched the test below on
+# every boot a Workshop wallpaper was set, held a real idle inhibitor forever, and
+# so silently disabled every power.c stage — dim, blank and lock all stopped
+# firing. A wallpaper is background decoration; it does not get a vote here.
+#
+# Match on the *names*, not application.process.binary: that prop is absent from
+# the running stream node (it sits on a sibling node of the same process), so
+# keying on it matches nothing at all.
+IGNORE = ("linux-wallpaperengine",)
+
+def ignored(props):
+    for key in ("application.name", "node.name", "node.description", "media.name"):
+        if str(props.get(key, "")).strip().lower() in IGNORE:
+            return True
+    return False
+
 for o in objs:
     info = o.get("info") or {}
-    mclass = str((info.get("props") or {}).get("media.class", ""))
+    props = info.get("props") or {}
+    mclass = str(props.get("media.class", ""))
     if mclass.startswith("Stream/Output/Audio") and info.get("state") == "running":
+        if ignored(props):
+            continue
         sys.exit(0)
 sys.exit(1)
 '; then
