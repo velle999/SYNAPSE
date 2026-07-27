@@ -1211,12 +1211,35 @@ arch-chroot /mnt bash -c "
 
     echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
 
+    # ── Why every NOPASSWD drop-in below is named zz-* ───────────────────
+    # sudo parses /etc/sudoers.d in SORTED LEXICAL ORDER, and when several
+    # entries match a command the LAST match wins — not the most specific.
+    # The blanket '%wheel ALL=(ALL:ALL) ALL' above matches every command and
+    # carries no NOPASSWD, so any exception in a file sorting BEFORE 'wheel'
+    # is silently overridden: sudo demands a password, 'sudo -n' fails, and
+    # every caller here is fire-and-forget, so the refusal is invisible.
+    #
+    # That is exactly what shipped: power-menu, synapd-backend and
+    # synapd-gamemode all sort before 'wheel' (p, s < w), so on a fresh
+    # install game mode never suspended synapd, the start menu could not
+    # reboot, and the AI backend row did nothing — while all three rules were
+    # present and looked correct in 'sudo -l'. It went unnoticed because the
+    # dev box carries a personal 'zz-*' NOPASSWD:ALL file that sorts last and
+    # masked the whole problem.
+    #
+    # The zz- prefix is load-bearing. Do not rename these to something
+    # tidier that sorts before 'wheel'.
+    #
+    # Clear the pre-zz names so an install over an older target can't leave
+    # both copies behind.
+    rm -f /etc/sudoers.d/power-menu /etc/sudoers.d/synapd-gamemode /etc/sudoers.d/synapd-backend
+
     # The SYNAPSE start menu's Reboot/Shut Down entries run with no
     # terminal to type a password into, and the target has no polkit —
     # allow exactly these two commands passwordless.
     echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff' \
-        > /etc/sudoers.d/power-menu
-    chmod 440 /etc/sudoers.d/power-menu
+        > /etc/sudoers.d/zz-power-menu
+    chmod 440 /etc/sudoers.d/zz-power-menu
 
     # Game mode stops synapd to hand the GPU to the game (synui/src/game.c).
     # synapd is a system unit, so the session user's plain 'systemctl stop'
@@ -1233,8 +1256,8 @@ arch-chroot /mnt bash -c "
     # in step with game_ai_{stop,start}_cmd in synui/src/config.c: sudoers
     # matches the whole command line, so a drift here is another silent no-op.
     echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/systemctl stop synapd.socket synapd.service, /usr/bin/systemctl start synapd.socket synapd.service' \
-        > /etc/sudoers.d/synapd-gamemode
-    chmod 440 /etc/sudoers.d/synapd-gamemode
+        > /etc/sudoers.d/zz-synapd-gamemode
+    chmod 440 /etc/sudoers.d/zz-synapd-gamemode
 
     # The 'AI backend' row (welcome menu / control panel) toggles synapd
     # between GPU/CPU/off via synui-ai-backend, which rewrites synapd's
@@ -1242,8 +1265,8 @@ arch-chroot /mnt bash -c "
     # the user, who cannot do that and has no polkit agent to prompt — so the
     # helper re-execs under sudo -n. Scope it to exactly this command.
     echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/synui-ai-backend gpu, /usr/bin/synui-ai-backend cpu, /usr/bin/synui-ai-backend off, /usr/bin/synui-ai-backend toggle' \
-        > /etc/sudoers.d/synapd-backend
-    chmod 440 /etc/sudoers.d/synapd-backend
+        > /etc/sudoers.d/zz-synapd-backend
+    chmod 440 /etc/sudoers.d/zz-synapd-backend
 "
 
 # useradd runs outside the masked bash -c block: if it fails, nothing
