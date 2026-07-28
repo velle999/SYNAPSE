@@ -2281,10 +2281,14 @@ struct syn_server {
          *
          * Not every Workshop subscription is a wallpaper: property presets
          * (which only re-configure some OTHER wallpaper) and editor asset packs
-         * subscribe into the same tree and have no top-level "type" at all. The
-         * engine answers "Project type missing" and draws nothing, so `renderable`
-         * marks them and `type` says so on the row — otherwise they are 19 rows
-         * here that look exactly like wallpapers and silently do nothing. */
+         * subscribe into the same tree and have no top-level "type" at all, and
+         * their own id makes the engine answer "Project type missing" and draw
+         * nothing. A preset is still reachable — synui-wpengine resolves it to
+         * the wallpaper its "dependency" names plus a --set-property per saved
+         * value — so it counts as renderable whenever that base wallpaper is
+         * also subscribed. Asset packs, and presets whose base is missing, are
+         * not: `renderable` marks them and `type` says so on the row, rather
+         * than leaving rows that look like wallpapers and silently do nothing. */
         struct {
             char id[24];
             char title[96];

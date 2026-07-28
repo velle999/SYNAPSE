@@ -289,11 +289,11 @@ static void wppick_apply(syn_server_t *s, int idx, bool commit)
      * for wallpaper_state_save to record. */
     int we = wppick_we_index(s, idx);
     if (we >= 0) {
-        /* A preset or an asset pack (see wp_project_meta): the engine would
-         * stop, come back up with nothing to draw, and leave the screen on
-         * whatever synui paints underneath. Keeping what is already there is
-         * both the honest outcome and the cheaper one; the row's subtitle is
-         * what explains it. */
+        /* An asset pack, or a preset whose base wallpaper is not subscribed
+         * (see wp_project_meta): the engine would stop, come back up with
+         * nothing to draw, and leave the screen on whatever synui paints
+         * underneath. Keeping what is already there is both the honest outcome
+         * and the cheaper one; the row's subtitle is what explains it. */
         if (!s->wppick.we[we].renderable) {
             wlr_log(WLR_INFO, "synui: wppick: '%s' (%s) is not a renderable "
                     "wallpaper — leaving the current one alone",
@@ -563,7 +563,20 @@ static void wp_json_token(FILE *f, char *out, size_t n)
  * brace/bracket depth and only accept keys sitting directly in the root
  * object. Streamed rather than slurped because the properties block can be
  * far larger than the two strings we actually want. */
-static bool wp_project_meta(const char *path, char *title, size_t tn,
+/* Is there a subscription with this id in the Workshop tree? Used to tell a
+ * preset whose base wallpaper is installed from one whose is not. */
+static bool wp_id_present(const char *root, const char *id)
+{
+    char p[512];
+    if (snprintf(p, sizeof(p), "%s/%s", root, id) >= (int)sizeof(p))
+        return false;
+
+    struct stat st;
+    return stat(p, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static bool wp_project_meta(const char *path, const char *root,
+                            char *title, size_t tn,
                             char *type, size_t yn, char *preview, size_t pn)
 {
     title[0] = '\0';
@@ -576,6 +589,7 @@ static bool wp_project_meta(const char *path, char *title, size_t tn,
     int depth = 0;
     char pending[32] = "";   /* the depth-1 key whose value comes next */
     char category[32] = "";  /* "Asset" on an editor asset pack */
+    char dep[24] = "";       /* the wallpaper a preset re-configures */
     bool preset = false;     /* a saved property set for some other wallpaper */
     int c;
 
@@ -617,6 +631,8 @@ static bool wp_project_meta(const char *path, char *title, size_t tn,
             snprintf(type, yn, "%s", tok);
         else if (strcmp(pending, "category") == 0)
             snprintf(category, sizeof(category), "%s", tok);
+        else if (strcmp(pending, "dependency") == 0)
+            snprintf(dep, sizeof(dep), "%s", tok);
         else if (strcmp(pending, "preview") == 0)
             snprintf(preview, pn, "%s", tok);
         pending[0] = '\0';
@@ -631,18 +647,34 @@ static bool wp_project_meta(const char *path, char *title, size_t tn,
     if (type[0]) return true;
 
     /* No top-level "type". Two kinds of subscription land in the Workshop tree
-     * without one, and neither is a wallpaper: a PRESET is only a property set
-     * plus a "dependency" naming the wallpaper it re-configures, and an ASSET
-     * pack ("category": "Asset", "file": "assets.json") is a particle/visualiser
-     * component for the Wallpaper Engine editor. Handing either id to the engine
-     * gets "Project type missing" and a screen that does not change — which is
-     * exactly what these rows used to do, labelled a bare "?". Say what they are
-     * instead, and let wppick_apply leave the current wallpaper alone.
+     * without one, and only one of them can be put on screen.
+     *
+     * A PRESET is a saved property set plus a "dependency" naming the wallpaper
+     * it re-configures — in practice most of them are configurations of audio
+     * visualisers, which is why they look like wallpapers in the Workshop. Its
+     * own id draws nothing ("Project type missing"), but synui-wpengine resolves
+     * it to that base wallpaper plus a --set-property per saved value, which is
+     * what Wallpaper Engine itself does with one. So a preset IS renderable —
+     * as long as the wallpaper it depends on is subscribed too. When it is not
+     * there is nothing to configure, and the row says so rather than starting
+     * an engine that would come up blank.
+     *
+     * An ASSET pack ("category": "Asset", "file": "assets.json") is a
+     * particle/visualiser component for the Wallpaper Engine editor. There is
+     * no wallpaper inside it at all, so it stays a labelled dead row and
+     * wppick_apply leaves the current wallpaper alone.
      *
      * Anything else typeless is left renderable on purpose: a subscription this
      * parser simply did not understand is the engine's call, not ours. */
     if (preset) {
-        snprintf(type, yn, "preset (not a wallpaper)");
+        /* `dep` is reliably in hand here whatever order the file spells its
+         * keys in: the early break above needs a "type", and a preset never
+         * has one, so the scan always ran to EOF. */
+        if (dep[0] && wp_id_present(root, dep)) {
+            snprintf(type, yn, "preset");
+            return true;
+        }
+        snprintf(type, yn, "preset (base missing)");
         return false;
     }
     if (strcasecmp(category, "asset") == 0) {
@@ -685,7 +717,7 @@ static void wppick_scan_workshop(syn_server_t *s)
          * the half character it leaves behind is invalid UTF-8, which cairo
          * refuses to draw, taking every row under it blank with it. */
         char title[256], type[32], preview[96];
-        bool renderable = wp_project_meta(proj, title, sizeof(title),
+        bool renderable = wp_project_meta(proj, root, title, sizeof(title),
                                           type, sizeof(type),
                                           preview, sizeof(preview));
 

@@ -10,6 +10,29 @@
 #
 # The chosen wallpapers persist in ~/.config/synui/wpengine.state, one
 # "<output> <workshop-id>" per line, and `restore` replays them at login.
+#
+# ONE ENGINE PROCESS PER OUTPUT
+#
+# The engine can drive several screens from a single process (--screen-root A
+# --bg 1 --screen-root B --bg 2) and this script used to do exactly that. It
+# cannot any more, because --set-property does not scope: every override lands
+# in one flat map (ApplicationContext.cpp) and setupProperties() hands that same
+# map to EVERY loaded background, so a preset's `color` or `size` would bleed
+# onto whatever is painting the other monitor. Names that generic collide
+# constantly. One process per screen is what makes the override map per-screen.
+#
+# It also makes a per-output change genuinely local: setting or clearing one
+# monitor no longer has to stop and restart the wallpaper on all of them.
+#
+# PRESETS
+#
+# A subscription with no top-level "type", but with a "preset" object and a
+# "dependency", is not a wallpaper of its own — it is a saved property set for
+# the wallpaper "dependency" names (most of them are configs of audio
+# visualisers). Handing its own id to the engine gets "Project type missing"
+# and a screen that does not change. resolve_bg() turns it into the base
+# wallpaper plus a --set-property per saved value, which is what Wallpaper
+# Engine itself does with one.
 
 set -uo pipefail
 
@@ -26,15 +49,23 @@ else
     ENGINE="$HOME/SYNAPSE/linux-wallpaperengine/build/output/linux-wallpaperengine"
 fi
 STATE="$HOME/.config/synui/wpengine.state"
-LOG="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.log"
-PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.pid"
-LOCKFILE="${XDG_RUNTIME_DIR:-/tmp}/synui-wpengine.lock"
+RUNDIR="${XDG_RUNTIME_DIR:-/tmp}"
+LOCKFILE="$RUNDIR/synui-wpengine.lock"
+# What older versions of this script wrote, when one process covered every
+# screen. Kept only so an upgrade in a live session can still reap it.
+LEGACY_PIDFILE="$RUNDIR/synui-wpengine.pid"
+
+# One pidfile and one log per output. Connector names ("DP-1", "HDMI-A-1") are
+# already filename-safe, but sanitise rather than trust a name into a path.
+slug()        { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'; }
+pidfile_for() { printf '%s/synui-wpengine.%s.pid' "$RUNDIR" "$(slug "$1")"; }
+logfile_for() { printf '%s/synui-wpengine.%s.log' "$RUNDIR" "$(slug "$1")"; }
 
 # Every mutating command is read-modify-write across three things that must
-# agree: the state file, the pidfile, and the running engine. synui fires this
+# agree: the state file, the pidfiles, and the running engines. synui fires this
 # script from the Super+W picker without waiting for it, so two picks in quick
 # succession overlap — and they did: one invocation rewrote the state while
-# another was between its build_args and its launch, leaving an engine painting
+# another was between its resolve and its launch, leaving an engine painting
 # ids that appear nowhere in the state file, and the next pick reasoning from a
 # state that did not describe the screen. Serialize them instead. The lock is
 # held until the process exits, which is what makes stop-then-start atomic.
@@ -55,8 +86,7 @@ take_lock() {
 }
 
 # Linux truncates /proc/PID/comm to 15 chars, so "linux-wallpaperengine" shows up
-# as "linux-wallpaper" and `pgrep -x linux-wallpaperengine` never matches. We
-# track the pid ourselves and only fall back to the truncated comm.
+# as "linux-wallpaper" and `pgrep -x linux-wallpaperengine` never matches.
 COMM=linux-wallpaper
 
 # linux-wallpaperengine resolves its CEF/asset siblings relative to the
@@ -72,16 +102,98 @@ need_engine() {
     [ -d "$ASSETS" ] || die "Wallpaper Engine assets not found at $ASSETS"
 }
 
-# Workshop id -> "type<TAB>title", read straight from project.json.
+# Workshop DIRECTORY -> "type<TAB>title", read straight from project.json.
+#
+# A preset has no "type" of its own; report it as one and name the wallpaper it
+# re-configures, because a bare "?" said nothing about why it behaves
+# differently. An asset pack is called out for the same reason.
 meta() {
-    python3 - "$1" <<'PY' 2>/dev/null
-import json, sys, os
-d = sys.argv[1]
+    python3 - "$1" "$WORKSHOP" <<'PY' 2>/dev/null
+import json, os, sys
+
+def load(path):
+    with open(os.path.join(path, "project.json"), encoding="utf-8-sig") as f:
+        return json.load(f)
+
+d, root = sys.argv[1], sys.argv[2]
 try:
-    j = json.load(open(os.path.join(d, "project.json")))
+    j = load(d)
 except Exception:
     sys.exit(1)
-print("%s\t%s" % (j.get("type", "?").lower(), j.get("title", "?")))
+
+t = str(j.get("type", "") or "")
+title = j.get("title", "?")
+
+if not t:
+    if isinstance(j.get("preset"), dict) and j.get("dependency") is not None:
+        dep = str(j["dependency"])
+        try:
+            base = load(os.path.join(root, dep)).get("title", dep)
+            t, title = "preset", "%s  [preset of %s]" % (title, base)
+        except Exception:
+            t, title = "preset!", "%s  [base %s not subscribed]" % (title, dep)
+    elif str(j.get("category", "")).lower() == "asset":
+        t = "asset"
+    else:
+        t = "?"
+
+print("%s\t%s" % (t.lower(), title))
+PY
+}
+
+# Workshop id -> what the engine should actually be told to render: the id to
+# pass to --bg, then any override arguments, NUL-separated on stdout.
+#
+# For an ordinary wallpaper that is just the id back. For a PRESET it is the
+# "dependency" wallpaper plus one --set-property per saved value. The engine
+# parses `name=value` into a flat map and setupPropertiesForProject() looks each
+# name up against the project's OWN properties, so names the base does not have
+# are never consulted and cost nothing — which is what lets the editor's
+# bookkeeping keys through harmlessly. JSON booleans become 1/0, the only
+# spelling PropertyBool accepts besides "true"; nulls are dropped.
+#
+# Prints nothing and fails when it IS a preset whose dependency is not
+# subscribed: there is no wallpaper to render, and the caller skips that output
+# rather than starting an engine that would draw nothing.
+resolve_bg() {
+    python3 - "$WORKSHOP" "$1" <<'PY'
+import json, os, sys
+
+root, wid = sys.argv[1], sys.argv[2]
+
+def load(i):
+    with open(os.path.join(root, i, "project.json"), encoding="utf-8-sig") as f:
+        return json.load(f)
+
+try:
+    j = load(wid)
+except Exception:
+    # Unreadable project.json: hand the id over as-is and let the engine be the
+    # judge, which is what happened before presets were understood at all.
+    sys.stdout.write(wid + "\0")
+    sys.exit(0)
+
+preset = j.get("preset")
+args = []
+
+if not j.get("type") and isinstance(preset, dict) and j.get("dependency") is not None:
+    dep = str(j["dependency"])
+    try:
+        load(dep)
+    except Exception:
+        sys.exit(1)
+    args.append(dep)
+    for k, v in preset.items():
+        if v is None or isinstance(v, (dict, list)):
+            continue
+        if isinstance(v, bool):
+            v = "1" if v else "0"
+        args.append("--set-property")
+        args.append("%s=%s" % (k, v))
+else:
+    args.append(wid)
+
+sys.stdout.write("\0".join(args) + "\0")
 PY
 }
 
@@ -90,7 +202,7 @@ cmd_list() {
     for d in "$WORKSHOP"/*/; do
         id="$(basename "$d")"
         m="$(meta "$d")" || continue
-        printf '%-12s %-6s %s\n' "$id" "${m%%	*}" "${m##*	}"
+        printf '%-12s %-8s %s\n' "$id" "${m%%	*}" "${m##*	}"
     done
 }
 
@@ -99,33 +211,76 @@ outputs() {
         python3 -c 'import json,sys; print("\n".join(o["name"] for o in json.load(sys.stdin)))' 2>/dev/null
 }
 
-# Echo the pids of our running engine(s), preferring the pidfile.
-engine_pids() {
-    local pid
-    if [ -r "$PIDFILE" ] && read -r pid < "$PIDFILE" &&
-       [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$COMM" ]; then
+# Is this pid one of our engines, and is it the one painting $out?
+#
+# Every engine we start names its output on the command line, which is a better
+# identifier than the pidfile: it survives a stale or deleted pidfile, and it is
+# what keeps a per-output stop from reaching another screen's engine. Only
+# --screen-root takes a connector name (--bg takes an id, --set-property takes
+# k=v), so matching the line after it cannot collide with another argument.
+#
+# It also reaps the single all-screens process older versions of this script
+# ran: that one lists every output, so it matches — and it should, since it
+# really is what is painting that screen.
+pid_is_ours_for() {
+    local pid="$1" out="$2"
+    [ -n "$pid" ] || return 1
+    [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$COMM" ] || return 1
+    tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null |
+        grep -A1 -x -e '--screen-root' | grep -qxF -e "$out"
+}
+
+# The engine painting one output. Pidfile first, then a scan by cmdline.
+pids_for_output() {
+    local out="$1" pid pf
+    pf="$(pidfile_for "$out")"
+    if [ -r "$pf" ] && read -r pid < "$pf" && pid_is_ours_for "$pid" "$out"; then
         echo "$pid"
         return 0
     fi
-    pgrep -x "$COMM" 2>/dev/null
-}
-
-cmd_stop() {
-    local pids; pids="$(engine_pids)"
-    [ -n "$pids" ] && kill $pids 2>/dev/null
-    # give the layer surface a moment to go away so synui repaints its own
-    for _ in $(seq 30); do
-        [ -n "$(engine_pids)" ] || break
-        sleep 0.1
+    for pid in $(pgrep -x "$COMM" 2>/dev/null); do
+        pid_is_ours_for "$pid" "$out" && echo "$pid"
     done
-    # still there? it is wedged, take it down hard
-    pids="$(engine_pids)"
-    [ -n "$pids" ] && kill -9 $pids 2>/dev/null
-    rm -f "$PIDFILE"
     return 0
 }
 
-# Build the engine arguments for the saved state, into ARGS.
+all_engine_pids() { pgrep -x "$COMM" 2>/dev/null; }
+
+# Kill whatever the given lister command reports, politely then not. The list is
+# re-queried each pass rather than `kill -0`-ing a saved copy, which cannot tell
+# "one of these is gone" from "all of them are".
+reap() {
+    local pids _
+    pids="$("$@")"
+    [ -n "$pids" ] && kill $pids 2>/dev/null
+    for _ in $(seq 30); do
+        [ -n "$("$@")" ] || break
+        sleep 0.1
+    done
+    pids="$("$@")"
+    [ -n "$pids" ] && kill -9 $pids 2>/dev/null
+    return 0
+}
+
+# Stop the engine on ONE output and leave every other screen painting.
+stop_output() {
+    local out="$1"
+    reap pids_for_output "$out"
+    rm -f "$(pidfile_for "$out")"
+    return 0
+}
+
+# Stop everything, including engines this script did not start: a leftover from
+# a previous session, or the old single all-screens process, whose pidfile name
+# is not in the per-output scheme and which would otherwise survive every stop
+# and keep painting over the wallpaper synui just restored.
+stop_all() {
+    reap all_engine_pids
+    rm -f "$RUNDIR"/synui-wpengine.*.pid "$LEGACY_PIDFILE"
+    return 0
+}
+
+# The state lines that apply to THIS session, "<output> <id>" per line.
 #
 # Entries are dropped when the compositor we are talking to has no such output.
 # That is what keeps a NESTED synui harmless: synui autostarts this by absolute
@@ -134,9 +289,7 @@ cmd_stop() {
 # 1280x720 HEADLESS-1. An empty `synctl outputs` means we could not ask (IPC not
 # up yet at login), which is NOT the same as "no match" — trust the state file
 # then rather than silently never starting.
-ARGS=()
-build_args() {
-    ARGS=()
+live_entries() {
     [ -s "$STATE" ] || return 0
 
     local live out id
@@ -144,44 +297,67 @@ build_args() {
 
     while read -r out id; do
         case "$out" in ''|'#'*) continue ;; esac
+        [ -n "$id" ] || continue
         if [ -n "$live" ] && ! printf '%s\n' "$live" | grep -qxF "$out"; then
             continue
         fi
         [ -d "$WORKSHOP/$id" ] || { echo "synui-wpengine: skipping unknown id $id" >&2; continue; }
-        ARGS+=(--screen-root "$out" --bg "$id" --scaling fill)
+        printf '%s %s\n' "$out" "$id"
     done < "$STATE"
 }
 
-# Launch one engine process covering every output named in the state file.
-# One process handles all screens; outputs with no entry keep synui's own
-# wallpaper, since the engine only creates layer surfaces for the ones asked for.
-start_from_state() {
-    need_engine
-    build_args
-    local args=("${ARGS[@]}")
+# Launch one engine for one output. Caller has already cd'd to $ENGINE_DIR.
+start_output() {
+    local out="$1" id="$2"
+    local args=() props=() bg pid
 
-    [ ${#args[@]} -gt 0 ] || return 0
+    mapfile -t -d '' args < <(resolve_bg "$id")
+    if [ ${#args[@]} -eq 0 ]; then
+        echo "synui-wpengine: cannot resolve $id for $out" \
+             "(a preset whose base wallpaper is not subscribed?), skipping" >&2
+        return 1
+    fi
+    bg="${args[0]}"
+    [ ${#args[@]} -gt 1 ] && props=("${args[@]:1}")
 
-    cd "$ENGINE_DIR" || die "cannot enter $ENGINE_DIR"
     # __GL_THREADED_OPTIMIZATIONS=0 is the upstream-documented NVIDIA workaround.
     # 9>&- drops the lock fd: the engine outlives this script, and an inherited
     # fd 9 would hold take_lock's flock for the whole session (see take_lock).
     __GL_THREADED_OPTIMIZATIONS=0 \
     setsid "$ENGINE" --assets-dir "$ASSETS" --layer background \
-        --fps "${SYNUI_WPENGINE_FPS:-30}" --silent "${args[@]}" \
-        >"$LOG" 2>&1 </dev/null 9>&- &
-    echo $! > "$PIDFILE"
+        --fps "${SYNUI_WPENGINE_FPS:-30}" --silent \
+        --screen-root "$out" --bg "$bg" --scaling fill "${props[@]}" \
+        >"$(logfile_for "$out")" 2>&1 </dev/null 9>&- &
+    echo $! > "$(pidfile_for "$out")"
     disown
 
     # setsid execs when it can and forks when it cannot, so $! is only
-    # sometimes the engine. Let it settle, then record the pid we can see.
-    local pid
+    # sometimes the engine. Let it settle, then record the pid we can see —
+    # identified by the output it names, since several are running now.
     for _ in $(seq 30); do
-        pid="$(pgrep -x "$COMM" 2>/dev/null | head -1)"
-        [ -n "$pid" ] && { echo "$pid" > "$PIDFILE"; return 0; }
+        pid="$(pids_for_output "$out" | head -1)"
+        [ -n "$pid" ] && { echo "$pid" > "$(pidfile_for "$out")"; return 0; }
         sleep 0.1
     done
     return 0
+}
+
+# One engine per line of the saved state. Outputs with no entry keep synui's own
+# wallpaper, since nothing is started for them.
+start_from_state() {
+    need_engine
+
+    local entries
+    entries="$(live_entries)"
+    [ -n "$entries" ] || return 0
+
+    cd "$ENGINE_DIR" || die "cannot enter $ENGINE_DIR"
+
+    local out id
+    while read -r out id; do
+        [ -n "$out" ] || continue
+        start_output "$out" "$id"
+    done <<< "$entries"
 }
 
 cmd_set() {
@@ -198,16 +374,24 @@ cmd_set() {
         : > "$STATE"
         local o
         for o in $(outputs); do printf '%s %s\n' "$o" "$id" >> "$STATE"; done
+        stop_all
+        start_from_state
     else
         # replace this output's line, keep the others
         local tmp; tmp="$(mktemp)"
         grep -v "^$out " "$STATE" > "$tmp" 2>/dev/null || true
         printf '%s %s\n' "$out" "$id" >> "$tmp"
         mv "$tmp" "$STATE"
+
+        # Only this screen's engine is touched. The others keep painting and
+        # never even flicker — with one process for everything they all had to
+        # come down and back up for a change to a single monitor.
+        stop_output "$out"
+        need_engine
+        cd "$ENGINE_DIR" || die "cannot enter $ENGINE_DIR"
+        start_output "$out" "$id"
     fi
 
-    cmd_stop
-    start_from_state
     echo "synui-wpengine: applied $id"
 }
 
@@ -215,46 +399,47 @@ cmd_off() {
     local out="${1:-}"
 
     take_lock
+    mkdir -p "$(dirname "$STATE")"
 
-    # One process paints every screen in the state file, so dropping a single
-    # output means restarting it without that output's line — not leaving it
-    # alone. With no output named, or none left afterwards, start_from_state
-    # finds nothing to run and the engine simply stays down.
     if [ -n "$out" ] && [ "$out" != all ]; then
         local tmp; tmp="$(mktemp)"
         grep -v "^$out " "$STATE" > "$tmp" 2>/dev/null || true
         mv "$tmp" "$STATE"
-        cmd_stop
-        # Only relaunch when another output still wants a wallpaper. With the
-        # state now empty there is nothing to run, and calling start_from_state
-        # anyway would fail need_engine on a box that has the script but no
-        # Wallpaper Engine assets — an error where the old global `off` simply
-        # said "stopped".
-        [ -s "$STATE" ] && start_from_state
+        stop_output "$out"
         echo "synui-wpengine: stopped on $out, synui wallpaper restored there"
         return 0
     fi
 
-    cmd_stop
+    stop_all
     : > "$STATE"
     echo "synui-wpengine: stopped, synui wallpaper restored"
 }
 
 cmd_status() {
-    local pids; pids="$(engine_pids)"
-    if [ -n "$pids" ]; then
-        echo "running (pid $(echo $pids))"
-    else
-        echo "not running"
+    local stray
+    if [ ! -s "$STATE" ]; then
+        stray="$(all_engine_pids)"
+        if [ -n "$stray" ]; then
+            echo "not running by us, but an engine is alive (pid $(echo $stray))"
+        else
+            echo "not running"
+        fi
+        return 0
     fi
-    if [ -s "$STATE" ]; then
-        echo "--- $STATE"
-        while read -r out id; do
-            [ -n "$out" ] || continue
-            m="$(meta "$WORKSHOP/$id")" || { echo "$out  $id  (missing)"; continue; }
-            printf '%-10s %-12s %-6s %s\n' "$out" "$id" "${m%%	*}" "${m##*	}"
-        done < "$STATE"
-    fi
+
+    local out id pids m
+    printf '%-10s %-8s %-12s %-8s %s\n' OUTPUT PID ID TYPE TITLE
+    while read -r out id; do
+        [ -n "$out" ] || continue
+        pids="$(pids_for_output "$out")"
+        [ -n "$pids" ] || pids='-'
+        if m="$(meta "$WORKSHOP/$id")"; then
+            printf '%-10s %-8s %-12s %-8s %s\n' \
+                   "$out" "$(echo $pids)" "$id" "${m%%	*}" "${m##*	}"
+        else
+            printf '%-10s %-8s %-12s %-8s %s\n' "$out" "$(echo $pids)" "$id" '?' '(missing)'
+        fi
+    done < "$STATE"
 }
 
 case "${1:-}" in
@@ -265,12 +450,17 @@ case "${1:-}" in
         take_lock
         # Decide BEFORE stopping anything: with nothing to run here (a nested
         # or headless synui), leave whatever is on the real seat alone.
-        build_args
-        if [ ${#ARGS[@]} -eq 0 ]; then
+        entries="$(live_entries)"
+        if [ -z "$entries" ]; then
             echo "synui-wpengine: no saved wallpaper for this session's outputs" >&2
             exit 0
         fi
-        cmd_stop; start_from_state ;;
+        # Stop only the outputs about to be repainted — NOT stop_all. A nested
+        # synui that does have a matching output must not take down the real
+        # seat's other screens, and this is also what reaps the old single
+        # all-screens process on the first restore after an upgrade.
+        while read -r out _; do stop_output "$out"; done <<< "$entries"
+        start_from_state ;;
     status)  cmd_status ;;
     *)
         cat <<EOF
@@ -282,6 +472,10 @@ usage: synui-wpengine <command>
                            hand the background back to synui
   restore                  re-apply the saved state (for autostart)
   status                   show what is running and what is saved
+
+One engine process runs per output, so a preset's property overrides stay on
+the screen they were picked for. A preset (a saved property set for some other
+wallpaper) is resolved to that wallpaper plus its overrides automatically.
 EOF
         exit 1 ;;
 esac
