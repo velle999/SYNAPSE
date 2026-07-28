@@ -148,6 +148,24 @@ case "$EXE" in
 esac
 VRAM_MIB=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
 say "VRAM in use : ${VRAM_MIB:-?} MiB   <- the dump is sized by THIS"
+
+# What is resident AT DUMP TIME, which is not what is resident now.
+#
+# synapd's system-sleep hook releases the model between this preflight and the
+# notifier that does the copying, so measuring against the preflight total
+# understates the ratio by exactly the thing the hook exists to remove — the
+# first run with the hook installed wrote 448 MiB against a preflight 7272 MiB
+# and got scored "NOT the dump, look for a notifier that hangs", which is the
+# opposite of what had just happened. Subtract synapd's share when the hook is
+# there to release it.
+SYNAPD_MIB=$(nvidia-smi --query-compute-apps=process_name,used_memory --format=csv,noheader,nounits 2>/dev/null \
+    | awk -F', *' '$1 ~ /synapd/ {s+=$2} END{print s+0}')
+VRAM_AT_DUMP=$VRAM_MIB
+if [ -x /usr/lib/systemd/system-sleep/synapd-sleep-hook ] && [ "${SYNAPD_MIB:-0}" -gt 0 ]; then
+    VRAM_AT_DUMP=$(( ${VRAM_MIB:-0} - SYNAPD_MIB ))
+    say "  synapd holds : ${SYNAPD_MIB} MiB — its sleep hook releases this first"
+    say "  so the dump should size against ~${VRAM_AT_DUMP} MiB, not ${VRAM_MIB}"
+fi
 nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader 2>/dev/null \
     | sed 's/^/  gpu client: /' | tee -a "$REPORT"
 say "nvidia sleep units: $(systemctl is-enabled nvidia-suspend.service nvidia-resume.service 2>&1 | tr '\n' ' ')"
@@ -291,7 +309,7 @@ say "   which would put the time in the notifier chain rather than a driver)"
 say ""
 say "DISK WRITTEN DURING THE STALL — this is the discriminator:"
 say "  the dump is sized by VRAM, so compare the two, not against a constant."
-awk -F'\t' -v e="$ENTRY" -v v="${VRAM_MIB:-0}" '
+awk -F"\t" -v e="$ENTRY" -v v="${VRAM_AT_DUMP:-0}" '
     NR>1 && $1!="" {
         if (first=="") { first=$2; ft=$1 }
         last=$2; lt=$1; n++
