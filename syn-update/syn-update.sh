@@ -330,12 +330,81 @@ refresh_local_repo() {
         sudo cp -f "$pkg" "$LOCAL_REPO/" && copied=$((copied + 1))
     done
 
-    [ "$copied" -gt 0 ] || { warn "no freshly built packages found to publish"; return 0; }
-
-    sudo bash -c "cd '$LOCAL_REPO' && repo-add --quiet synapseos.db.tar.gz *.pkg.tar.zst" >/dev/null 2>&1 ||
-        warn "repo-add failed; [synapseos] may still list the old versions"
+    prune_superseded
+    rebuild_db
     sudo pacman -Sy --quiet >/dev/null 2>&1 || true
-    ok "published $copied package(s) to $LOCAL_REPO"
+    [ "$copied" -gt 0 ] && ok "published $copied package(s) to $LOCAL_REPO"
+    return 0
+}
+
+# Rebuild the repo index from the files actually present, from scratch.
+#
+# NOT a plain `repo-add db *.pkg.tar.zst`: repo-add only ever ADDS, so entries
+# for packages whose files have gone stay in the database forever. Combined with
+# prune_superseded that is worse than the downgrade it was fixing — the index
+# would keep advertising synui 0.1.0-8 and pacman would then fail to find the
+# file it was promised. Deleting the database first is what makes the index
+# describe the directory instead of accumulating everything it has ever seen.
+rebuild_db() {
+    shopt -s nullglob
+    local pkgs=("$LOCAL_REPO"/*.pkg.tar.zst)
+    shopt -u nullglob
+
+    if [ ${#pkgs[@]} -eq 0 ]; then
+        # repo-add with no packages errors out; an empty repo is legitimate
+        # here (everything in it was superseded), so just clear the index.
+        sudo rm -f "$LOCAL_REPO"/synapseos.db* "$LOCAL_REPO"/synapseos.files*
+        warn "$LOCAL_REPO now holds no packages; [synapseos] is empty"
+        return 0
+    fi
+
+    sudo rm -f "$LOCAL_REPO"/synapseos.db* "$LOCAL_REPO"/synapseos.files*
+    sudo repo-add --quiet "$LOCAL_REPO/synapseos.db.tar.gz" "${pkgs[@]}" >/dev/null 2>&1 ||
+        { warn "repo-add failed; [synapseos] index may be incomplete"; return 0; }
+
+    # syn-install creates these by hand at install time, so recreate them here
+    # rather than assuming repo-add left them behind.
+    sudo ln -sf synapseos.db.tar.gz    "$LOCAL_REPO/synapseos.db"
+    sudo ln -sf synapseos.files.tar.gz "$LOCAL_REPO/synapseos.files"
+    return 0
+}
+
+# Retire package FILES in the local repo that are older than what is installed.
+#
+# /var/cache/synapseos is seeded from the ISO at install time and then never
+# touched, so after a few updates it advertises versions far behind the running
+# system — measured on the dev box, it offered synui 0.1.0-8 against 0.1.0-203
+# installed, plus eight others. pacman will not downgrade of its own accord, but
+# `pacman -S synui` to repair a broken install would fetch that 195-release-old
+# package without hesitating, and `-Syuu` would take the whole system back.
+#
+# A repo entry that can only ever offer a downgrade has no upside, so move those
+# files out of the indexed directory. Moved rather than deleted: they are the
+# only copy of what the installing ISO shipped, which is occasionally worth
+# having, and they are small.
+prune_superseded() {
+    local f name ver inst moved=0
+    shopt -s nullglob
+    for f in "$LOCAL_REPO"/*.pkg.tar.zst; do
+        # Ask pacman rather than parsing the filename: a package name can
+        # contain dashes (syn-install, synui-debug) and so can the version, so
+        # splitting on "-" gets it wrong in both directions.
+        read -r name ver < <(pacman -Qp "$f" 2>/dev/null)
+        [ -n "$name" ] && [ -n "$ver" ] || continue
+
+        inst=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
+        [ -n "$inst" ] || continue          # not installed: not a downgrade risk
+
+        if [ "$(vercmp "$ver" "$inst")" -lt 0 ]; then
+            sudo mkdir -p "$LOCAL_REPO/superseded"
+            sudo mv -f "$f" "$LOCAL_REPO/superseded/" && moved=$((moved + 1))
+        fi
+    done
+    shopt -u nullglob
+
+    [ "$moved" -gt 0 ] &&
+        info "retired $moved package file(s) older than what is installed -> $LOCAL_REPO/superseded"
+    return 0
 }
 
 cmd_status() {
