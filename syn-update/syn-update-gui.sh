@@ -29,6 +29,10 @@ fi
 
 [ -r "$QML" ] || { echo "syn-update-gui: missing $QML" >&2; exit 1; }
 
-# -n: clicking the menu entry twice should focus the existing window's config
-# rather than start a second copy of the updater.
+# -n (--no-duplicate) does NOT raise or focus an existing window — quickshell
+# has no such flag. It only means "exit immediately if this config is already
+# running", and it exits 0 doing so. It is safe here solely because shell.qml
+# quits on window close, so a live instance always has a window on screen. If
+# that handler is ever removed, this flag turns every later launch into a
+# silent no-op with a success exit code.
 exec qs -n --path "$QML" "$@"

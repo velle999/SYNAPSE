@@ -160,6 +160,23 @@ ShellRoot {
 
         Component.onCompleted: root.check()
 
+        /*
+         * Closing the window must END the process.
+         *
+         * ShellRoot is built for a persistent shell — a bar or an OSD, which
+         * outlives every window it draws. This is not that: it is one dialog,
+         * and destroying the FloatingWindow leaves `qs` alive owning nothing,
+         * invisible and unreachable. `syn-update-gui` then runs
+         * `qs -n`, whose --no-duplicate sees that corpse and exits 0 without
+         * drawing anything, so the menu entry reports success and does nothing.
+         * That is the "closed it, now it will not reopen" bug — and exit 0 is
+         * why it produced no error anywhere to notice.
+         *
+         * Quitting here means no instance can outlive its window, so
+         * --no-duplicate only ever matches a window actually on screen.
+         */
+        onClosed: Qt.quit()
+
         Rectangle {
             anchors.fill: parent
             color: root.cBg
