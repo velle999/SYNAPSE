@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=204
+pkgrel=205
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -156,6 +156,33 @@ package() {
     # the stock logind.conf without replacing a file pacman would then own.
     install -Dm644 config/logind.conf.d/synapse-lid.conf \
         "$pkgdir/etc/systemd/logind.conf.d/synapse-lid.conf"
+
+    # MASK nvidia's sleep hooks, permanently.
+    #
+    # nvidia-{suspend,resume,hibernate} put this hardware back to a black
+    # screen across suspend, so they were turned off by hand long ago — and on
+    # 2026-07-28 they were found ENABLED again. Nothing re-enabled them
+    # deliberately; an nvidia package upgrade did, because `systemctl disable`
+    # only removes the .wants symlinks and the driver's own packaging puts them
+    # straight back. A disable is therefore a band-aid that survives exactly
+    # until the next driver update, which is not a fix on a machine that is
+    # supposed to keep working unattended.
+    #
+    # A mask IS durable: /etc/systemd/system/<unit> shadows the unit in
+    # /usr/lib (see the /etc-shadows-/usr/lib rule), a symlink to /dev/null
+    # makes the unit unstartable rather than merely un-wanted, and `systemctl
+    # preset` cannot undo it. Shipping it as a PACKAGE FILE rather than running
+    # `systemctl mask` also keeps the symlink owned by pacman — a hand-made
+    # mask here would be an unowned file in a path this package writes, i.e. a
+    # file-conflict that aborts a later upgrade.
+    #
+    # Revisit if a future driver needs these to preserve VRAM allocations; the
+    # trade is deliberate, not an oversight.
+    install -d "$pkgdir/etc/systemd/system"
+    local _u
+    for _u in nvidia-suspend nvidia-resume nvidia-hibernate; do
+        ln -sf /dev/null "$pkgdir/etc/systemd/system/$_u.service"
+    done
 
     # System-wide MangoHud defaults. The session sets MANGOHUD=1, so the Vulkan
     # layer loads in every game regardless of launcher; this file is what keeps

@@ -21,6 +21,7 @@
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <inttypes.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -638,10 +639,39 @@ static void primary_push(const char *display, const char *want)
 
 /* Hotplug and the display panel can queue several of these in a row, so the
  * pushes are serialised and the newest wins: an older worker that loses the
- * race for the lock must not land its stale primary on top of a newer one. */
-static pthread_mutex_t primary_lock = PTHREAD_MUTEX_INITIALIZER;
-static uint64_t primary_gen;    /* requests handed out */
-static uint64_t primary_done;   /* newest request already pushed to X */
+ * race for the lock must not land its stale primary on top of a newer one.
+ *
+ * THE MAIN THREAD MUST NEVER TAKE primary_push_lock.
+ *
+ * primary_push() blocks on X *while holding it*, and this lock used to be the
+ * same one xwayland_apply_primary() grabbed to stamp a generation number. On
+ * 2026-07-28 that froze the whole desktop: Xwayland had died leaving a stale
+ * /tmp/.X11-unix socket, a worker connected to it and hung in the handshake
+ * (a dead peer that never answers does NOT fail, it waits), and the next
+ * resume event walked libseat -> wlroots -> xwayland_apply_primary ->
+ * pthread_mutex_lock and stopped the compositor dead. Alive, dispatching
+ * nothing, drawing nothing — indistinguishable from a lock screen to the
+ * person sitting in front of it.
+ *
+ * So the generation counter is ATOMIC and the push lock belongs to the workers
+ * alone. A hung X server can now stall other pushes, which is a cosmetic loss,
+ * but it can no longer stall the event loop, which is the whole desktop.
+ *
+ * This is the third instance of one rule: never let an X round-trip sit between
+ * the event loop and progress. pkgrel 55 called xcb_connect() on the loop
+ * itself; 56 moved it to a worker; this moves the LOCK off the loop too. */
+static pthread_mutex_t primary_push_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t primary_done;   /* newest request already pushed; push_lock */
+
+/* Stamped by the main thread, so it must not need a mutex. */
+static atomic_uint_least64_t primary_gen;
+
+/* Workers queued behind the push lock. A dead X server makes primary_push()
+ * block forever, so without a cap every hotplug and every resume would pile
+ * another thread onto it. The compositor survives either way now; leaking
+ * threads until something else breaks is still not "surviving". */
+static atomic_int primary_inflight;
+#define PRIMARY_MAX_INFLIGHT 3
 
 struct primary_job {
     char    *display;   /* owned */
@@ -653,13 +683,16 @@ static void *primary_worker(void *data)
 {
     struct primary_job *job = data;
 
-    pthread_mutex_lock(&primary_lock);
+    /* Worker-only lock. primary_push() blocks on X inside it, which is safe
+     * precisely because nothing on the event loop can ever wait here. */
+    pthread_mutex_lock(&primary_push_lock);
     if (job->gen > primary_done) {   /* else: overtaken while we queued */
         primary_done = job->gen;
         primary_push(job->display, job->want);
     }
-    pthread_mutex_unlock(&primary_lock);
+    pthread_mutex_unlock(&primary_push_lock);
 
+    atomic_fetch_sub(&primary_inflight, 1);
     free(job->display);
     free(job->want);
     free(job);
@@ -679,6 +712,17 @@ void xwayland_apply_primary(syn_server_t *s)
     syn_output_t *primary = server_primary_output(s);
     if (!primary) return;
 
+    /* Pushes are backed up, which means X is not answering. Spawning another
+     * worker would only lengthen the queue: they all serialise behind the same
+     * push lock, and the newest-wins check means whatever finally gets through
+     * would carry a stale generation anyway. Drop it and log — the next hotplug
+     * or the next Xwayland ready re-applies. */
+    if (atomic_load(&primary_inflight) >= PRIMARY_MAX_INFLIGHT) {
+        wlr_log(WLR_INFO, "synui: X11 primary pushes are backed up "
+                "(Xwayland not answering?) — skipping this one");
+        return;
+    }
+
     struct primary_job *job = calloc(1, sizeof *job);
     if (!job) return;
 
@@ -687,13 +731,16 @@ void xwayland_apply_primary(syn_server_t *s)
     if (!job->display || !job->want) goto fail;
 
     /* Snapshot above, thread below: the worker touches no server state, so it
-     * needs no lock on ours and cannot be tripped by a hotplug mid-flight. */
-    pthread_mutex_lock(&primary_lock);
-    job->gen = ++primary_gen;
-    pthread_mutex_unlock(&primary_lock);
+     * needs no lock on ours and cannot be tripped by a hotplug mid-flight.
+     * Atomic rather than mutex-guarded so this path — which runs ON THE EVENT
+     * LOOP — cannot block behind a worker stuck talking to X. */
+    job->gen = atomic_fetch_add(&primary_gen, 1) + 1;
+
+    atomic_fetch_add(&primary_inflight, 1);
 
     pthread_t tid;
     if (pthread_create(&tid, NULL, primary_worker, job) != 0) {
+        atomic_fetch_sub(&primary_inflight, 1);
         wlr_log(WLR_ERROR, "synui: can't spawn X11 primary-output worker");
         goto fail;
     }
@@ -857,6 +904,32 @@ fail:
 }
 
 /* ── Server ready: publish DISPLAY, set the X cursor ─────── */
+/* The X server process is gone.
+ *
+ * Nothing used to clear xwayland_up — it was set once on ready and stayed set
+ * for the life of the compositor. So after Xwayland died, every hotplug and
+ * every resume still believed X was up and dialled it again. That is not
+ * harmless: a dead Xwayland can leave its socket behind in /tmp/.X11-unix with
+ * nothing listening, and connecting to THAT hangs in the handshake instead of
+ * failing, because a peer that never answers is not an error. One such worker
+ * wedged the desktop on 2026-07-28.
+ *
+ * wlroots destroys and recreates the server for lazy Xwayland, so this is
+ * re-armed from xwayland_ready() against whichever server is current. */
+static void xwayland_server_gone(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_server_t *s = wl_container_of(listener, s, xwayland_server_destroy);
+
+    wlr_log(WLR_INFO, "synui: Xwayland exited — X11 pushes disabled until it returns");
+    s->xwayland_up = 0;
+
+    /* The signal dies with the server; drop off it so the re-arm below is not
+     * adding a second link, and so nothing walks a freed list. */
+    wl_list_remove(&s->xwayland_server_destroy.link);
+    wl_list_init(&s->xwayland_server_destroy.link);
+}
+
 static void xwayland_ready(struct wl_listener *listener, void *data)
 {
     (void)data;
@@ -868,6 +941,16 @@ static void xwayland_ready(struct wl_listener *listener, void *data)
     /* Only now is it safe to speak X: an earlier connect would have *started*
      * lazy Xwayland from inside our own event loop and deadlocked us. */
     s->xwayland_up = 1;
+
+    /* Re-arm the death watch on the CURRENT server. Lazy Xwayland is destroyed
+     * and recreated, so a listener attached once at startup would be hanging
+     * off a freed signal by the second ready. */
+    wl_list_remove(&s->xwayland_server_destroy.link);
+    wl_list_init(&s->xwayland_server_destroy.link);
+    if (s->xwayland->server)
+        wl_signal_add(&s->xwayland->server->events.destroy,
+                      &s->xwayland_server_destroy);
+
     xwayland_apply_primary(s);
 
     struct wlr_xcursor *xc =
@@ -895,6 +978,12 @@ void xwayland_setup(syn_server_t *s)
     wl_signal_add(&s->xwayland->events.new_surface, &s->new_xwayland_surface);
     s->xwayland_ready.notify = xwayland_ready;
     wl_signal_add(&s->xwayland->events.ready, &s->xwayland_ready);
+
+    /* Armed on the first ready, not here: with lazy Xwayland there is no
+     * server to watch yet. Self-linked so the unconditional remove/re-arm in
+     * xwayland_ready() is safe on the very first pass. */
+    s->xwayland_server_destroy.notify = xwayland_server_gone;
+    wl_list_init(&s->xwayland_server_destroy.link);
 
     wlr_xwayland_set_seat(s->xwayland, s->seat);
 

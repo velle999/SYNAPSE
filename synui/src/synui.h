@@ -2455,9 +2455,16 @@ struct syn_server {
     struct wl_listener new_layer_surface;
     struct wl_listener new_xwayland_surface;
     struct wl_listener xwayland_ready;
+    /* Cleared when the X server exits. Re-armed on every ready, because lazy
+     * Xwayland is destroyed and recreated rather than reused. */
+    struct wl_listener xwayland_server_destroy;
     int xwayland_up;    /* the X server is actually running (ready has fired),
                          * not merely socket-listening — see the lazy-start
-                         * deadlock note in xwayland_apply_primary() */
+                         * deadlock note in xwayland_apply_primary().
+                         * MUST be cleared when Xwayland dies: a stale socket in
+                         * /tmp/.X11-unix accepts a connection and then never
+                         * answers, so believing a dead X server is still up is
+                         * what hangs a worker forever. */
     /* Every X11 view, mapped or not, in syn_view::xw_link. The workspace lists
      * hold only mapped views, so this is the one place a never-mapped surface
      * is still reachable. Read by xwayland_unwedge(). */
