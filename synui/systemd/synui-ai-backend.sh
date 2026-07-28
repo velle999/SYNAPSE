@@ -9,7 +9,8 @@
 #
 #   gpu  → --gpu-layers -1  (auto-detect; offloads to the GPU when present)
 #   cpu  → --gpu-layers 0   (force CPU-only)
-#   off  → synapd stopped   (frees the model's RAM/VRAM; no inference at all)
+#   off  → synapd.socket AND synapd.service stopped (frees the model's RAM/VRAM;
+#          no inference at all, and nothing can socket-activate it back)
 #
 # Needs root (writes /etc/systemd, restarts synapd) — synui.service runs as
 # root, so the menu action has the privilege it needs.
@@ -46,7 +47,15 @@ EOF
     mkdir -p "$(dirname "$STATE")"
     echo "$mode" > "$STATE"
     systemctl daemon-reload
-    systemctl restart synapd
+    # Coming back from 'off' the sockets are stopped too, so start them
+    # explicitly. (restart would pull synapd.socket in via Requires=, but saying
+    # it here means the two verbs are symmetric and neither depends on that
+    # resolution order.) The bridge only comes back if it was enabled.
+    systemctl start synapd.socket
+    systemctl restart synapd.service
+    if systemctl is-enabled --quiet synapd-bridge.socket 2>/dev/null; then
+        systemctl start synapd-bridge.socket || true
+    fi
     echo "synapd backend → $mode (gpu-layers=$layers)"
 }
 
@@ -56,11 +65,42 @@ EOF
 # The drop-in is left in place, so the next gpu/cpu apply restarts synapd on the
 # device it last used. Record "off" so synui labels the row and the toggle cycle
 # knows where it is.
+#
+# The SOCKETS go down with the service, and that is the whole fix. Stopping
+# synapd.service alone leaves two listeners that each start it straight back up:
+#
+#   synapd.socket        — synapd.service Requires= it, so the next LOCAL client
+#                          to connect socket-activates the daemon, in the same
+#                          second. This is what "the AI backend is set to off but
+#                          chibi turns it on anyway" was: chibi connects on its
+#                          first message and off silently undid itself. Game mode
+#                          had the identical bug, fixed there in synui pkgrel 198;
+#                          this path was missed.
+#   synapd-bridge.socket — 0.0.0.0:11435. synapd-bridge.service Requires=
+#                          synapd.service, so any client on the LAN (the Pi's
+#                          chibi polls this box) resurrects synapd over the
+#                          network, where nothing on this machine can see why.
+#                          Only touched when it is enabled; plenty of installs
+#                          never turn the bridge on.
+#
+# Off must mean off until the user picks gpu/cpu again.
 off_backend() {
     mkdir -p "$(dirname "$STATE")"
     echo off > "$STATE"
-    systemctl stop synapd
-    echo "synapd backend → off (stopped)"
+    if systemctl is-enabled --quiet synapd-bridge.socket 2>/dev/null; then
+        systemctl stop synapd-bridge.socket synapd-bridge.service || true
+    fi
+    systemctl stop synapd.socket synapd.service
+    # Say what actually happened, not what was intended. A stop that did not
+    # hold looks identical from here unless it is checked — and one resurrection
+    # path survives this one: synguard, synnet and synui all carry
+    # Wants=synapd.service, so an automatic Restart= of any of them re-enqueues
+    # it. Rare on healthy hardware (NRestarts stays 0), common in a VM.
+    if systemctl is-active --quiet synapd.service; then
+        echo "synapd backend → off requested, but synapd is STILL RUNNING" >&2
+        exit 1
+    fi
+    echo "synapd backend → off (stopped, sockets closed)"
 }
 
 # The welcome menu / control panel row fires this as the SESSION USER: synui
