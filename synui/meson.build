@@ -45,6 +45,11 @@ xcb_randr = dependency('xcb-randr')   # xwayland.c marks the primary output
 # transitively via cairo today; naming it means that staying true is not load
 # bearing.
 cc = meson.get_compiler('c')
+
+# giflib has no pkg-config file, so it is found as a plain library + header.
+# Needed because 62 of the Workshop previews here are .gif — without it
+# nearly half the wallpaper picker previews blank (wpthumb.c).
+giflib    = cc.find_library('gif', required : true)
 libm = cc.find_library('m', required : false)
 
 wl_scanner = find_program('wayland-scanner')
@@ -200,7 +205,9 @@ synui_exe = executable('synui',
     'src/effects.c',
     'src/wallpaper.c',
     'src/matrix.c',
+    'src/imgdec.c',
     'src/wppick.c',
+    'src/wpthumb.c',
     'src/cursor.c',
     'src/icons.c',
     'src/dock.c',
@@ -225,7 +232,7 @@ synui_exe = executable('synui',
   # /drag/output-layout helpers build scenefx-native (type-3) buffer nodes that can
   # carry blur/corners/shadow. wlroots-first gives a mixed tree and dead clicks.
   dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
-                  libinput, libudev, libjpeg, libcurl, libdisplay_info,
+                  libinput, libudev, libjpeg, giflib, libcurl, libdisplay_info,
                   xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
   c_args : ['-DWLR_USE_UNSTABLE',
@@ -320,6 +327,24 @@ cat_render_test = executable('cat_render_test',
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])
+
+# Every preview image the picker can be asked to draw, through the real
+# decoders. The preview pane fails silently by design (it draws "Preview
+# unavailable" and moves on), so nothing at runtime would report a decoder
+# that had stopped working — 62 of the previews here are GIFs handled by code
+# that exists for no other purpose.
+#
+# With no argument it runs a synthesised suite (valid PNG, corrupt file,
+# missing file, cache re-hit) so it is meaningful without Wallpaper Engine
+# installed. Pass a Workshop content tree to check the real mix:
+#   ./wpthumb_test ~/.local/share/Steam/steamapps/workshop/content/431960
+wpthumb_test = executable('wpthumb_test',
+  ['tests/wpthumb_test.c', 'src/wpthumb.c', 'src/imgdec.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, libjpeg, giflib],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('wpthumb', wpthumb_test)
 
 # Desktop-icon grid, drag-to-move and deskicons.state. Links deskmenu.c against
 # stubs for the compositor half (outputs, render, config paths) because there is

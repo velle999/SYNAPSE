@@ -564,10 +564,11 @@ static void wp_json_token(FILE *f, char *out, size_t n)
  * object. Streamed rather than slurped because the properties block can be
  * far larger than the two strings we actually want. */
 static bool wp_project_meta(const char *path, char *title, size_t tn,
-                            char *type, size_t yn)
+                            char *type, size_t yn, char *preview, size_t pn)
 {
     title[0] = '\0';
     type[0]  = '\0';
+    preview[0] = '\0';
 
     FILE *f = fopen(path, "r");
     if (!f) return true;   /* unreadable — let the engine be the judge */
@@ -616,9 +617,14 @@ static bool wp_project_meta(const char *path, char *title, size_t tn,
             snprintf(type, yn, "%s", tok);
         else if (strcmp(pending, "category") == 0)
             snprintf(category, sizeof(category), "%s", tok);
+        else if (strcmp(pending, "preview") == 0)
+            snprintf(preview, pn, "%s", tok);
         pending[0] = '\0';
 
-        if (title[0] && type[0]) break;   /* both found — stop reading */
+        /* All three, not just title+type: every one of the 139 subscriptions
+         * here names a preview, and stopping early at the first two would skip
+         * it whenever it is spelled last in the file. */
+        if (title[0] && type[0] && preview[0]) break;
     }
     fclose(f);
 
@@ -678,9 +684,10 @@ static void wppick_scan_workshop(syn_server_t *s)
          * title long enough to need cutting is long enough to be non-ASCII —
          * the half character it leaves behind is invalid UTF-8, which cairo
          * refuses to draw, taking every row under it blank with it. */
-        char title[256], type[32];
+        char title[256], type[32], preview[96];
         bool renderable = wp_project_meta(proj, title, sizeof(title),
-                                          type, sizeof(type));
+                                          type, sizeof(type),
+                                          preview, sizeof(preview));
 
         if (!type[0]) snprintf(type, sizeof(type), "?");
 
@@ -695,6 +702,21 @@ static void wppick_scan_workshop(syn_server_t *s)
         snprintf(s->wppick.we[i].type,  sizeof(s->wppick.we[i].type),  "%s", type);
         s->wppick.we[i].renderable = renderable;
 
+        /* Full path now, while the root and the id are both in hand. project.json
+         * names the file (always "preview.<ext>" in practice, but it is a field,
+         * not a convention, so it is read rather than assumed). */
+        s->wppick.we[i].preview[0] = '\0';
+        if (preview[0] && strchr(preview, '/') == NULL) {
+            /* A truncated path would name some other file, or nothing — either
+             * way it is not this wallpaper, so drop it and let the pane say
+             * there is no preview rather than decode whatever it landed on. */
+            int n = snprintf(s->wppick.we[i].preview,
+                             sizeof(s->wppick.we[i].preview),
+                             "%s/%s/%s", root, e->d_name, preview);
+            if (n < 0 || n >= (int)sizeof(s->wppick.we[i].preview))
+                s->wppick.we[i].preview[0] = '\0';
+        }
+
         /* A stale or partial subscription (no project.json, or no title in it)
          * still gets a row — the id is enough to hand to the engine. Checked
          * after the copy, since a title that was nothing but invalid bytes
@@ -707,6 +729,32 @@ static void wppick_scan_workshop(syn_server_t *s)
 
     wlr_log(WLR_INFO, "synui: wppick: %d Workshop wallpaper(s) found",
             s->wppick.we_count);
+}
+
+/* The image that represents a row, for the panel's preview pane.
+ *
+ * NULL where there is genuinely nothing to show rather than a placeholder
+ * picture: "None" is a solid colour and Matrix is a live GPU shader, so any
+ * still image for either would be inventing one. render.c draws its own
+ * caption in that case, which is honest about there being no preview instead
+ * of implying the decode failed.
+ */
+const char *wppick_row_preview(syn_server_t *s, int row)
+{
+    if (row < 0 || row >= wppick_total(s)) return NULL;
+
+    int we = wppick_we_index(s, row);
+    if (we >= 0)
+        return s->wppick.we[we].preview[0] ? s->wppick.we[we].preview : NULL;
+
+    /* A browsed image is its own preview. */
+    if (row >= wppick_option_count)
+        return s->wppick.found[row - wppick_option_count];
+
+    if (strcmp(wppick_options[row].token, "default") == 0)
+        return SYNUI_DATADIR "/wallpaper.png";
+
+    return NULL;   /* matrix, none */
 }
 
 /* Built-ins first, then the images the scan turned up, then Workshop. */

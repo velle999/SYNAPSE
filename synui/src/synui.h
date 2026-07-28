@@ -2290,6 +2290,10 @@ struct syn_server {
             char title[96];
             char type[32];
             bool renderable;
+            /* Full path to the preview image project.json names, or empty.
+             * Resolved at scan time because the Workshop root and the id are
+             * both in hand there and neither is kept afterwards. */
+            char preview[320];
         } we[WPPICK_WE_MAX];
         int  we_count;
 
@@ -2902,6 +2906,15 @@ void wallpaper_output_destroy(syn_output_t *o);   /* destroy this output's buffe
 void wallpaper_relayout(syn_server_t *s);         /* repaint all outputs (output_layout_changed) */
 void wallpaper_reload(syn_server_t *s);           /* re-decode + repaint from current config */
 
+/* ── imgdec.c ────────────────────────────────────────────── */
+
+/* JPEG -> cairo surface, shared by wallpaper.c and wpthumb.c. The PNG decoders
+ * in the tree are duplicated on purpose (each is a five-line cairo wrapper),
+ * but this one carries a libjpeg error manager and a longjmp, and a second copy
+ * is a second place for a corrupt JPEG to abort the compositor.
+ * NULL on any failure; caller owns the surface. */
+cairo_surface_t *syn_decode_jpeg(const char *path);
+
 /* Persisted wallpaper choice (~/.config/synui/wallpaper.state). Written by
  * the wppick.c picker; applied over the parsed config on every load so a
  * GUI choice survives restart without rewriting synuirc. */
@@ -3319,6 +3332,18 @@ void wppick_scan(syn_server_t *s);
 int  wppick_total(syn_server_t *s);
 /* Label + subtitle for one row; wppick.c owns the text, render.c draws it. */
 void wppick_row(syn_server_t *s, int row, const char **label, const char **desc);
+/* Path of the image that previews one row, or NULL when there is nothing real
+ * to show (a solid colour, or the live Matrix shader). */
+const char *wppick_row_preview(syn_server_t *s, int row);
+
+/* ── wpthumb.c (decoded preview images for the picker) ───── */
+
+/* Decoded, downscaled thumbnail for `path`, or NULL if it cannot be read.
+ * Cached — the returned surface belongs to wpthumb.c, so do not destroy it.
+ * Handles PNG, JPEG and GIF (first frame). */
+cairo_surface_t *wpthumb_get(const char *path);
+/* Drop every cached thumbnail. */
+void wpthumb_clear(void);
 /* The monitor a pick currently applies to: its connector name, or NULL for
  * "all monitors". The _label form is the same thing spelled for the panel. */
 const char *wppick_scope_output(syn_server_t *s);

@@ -1037,7 +1037,12 @@ void synui_render_wppick(syn_server_t *s)
     int shown = total < WPPICK_ROWS ? total : WPPICK_ROWS;
     if (shown < 1) shown = 1;
 
-    int pw = 520;
+    /* The list keeps its old 520 and the preview pane is added beside it, so
+     * the rows lay out exactly as they did and only the panel gets wider. */
+    const int list_w  = 520;
+    const int prev_w  = 300;                 /* pane, including its gutter */
+    const int prev_im = prev_w - 22;         /* image box inside it */
+    int pw = list_w + prev_w;
     int ph = top + shown * row_h + 56;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
@@ -1137,11 +1142,11 @@ void synui_render_wppick(syn_server_t *s)
 
         if (sel) {
             set_accent(cr, 0.35);
-            cairo_rectangle(cr, 12, ry, pw - 24, row_h - 8);
+            cairo_rectangle(cr, 12, ry, list_w - 24, row_h - 8);
             cairo_fill(cr);
             cairo_set_line_width(cr, 2);
             set_accent(cr, 1.0);
-            cairo_rectangle(cr, 12.5, ry + 0.5, pw - 25, row_h - 9);
+            cairo_rectangle(cr, 12.5, ry + 0.5, list_w - 25, row_h - 9);
             cairo_stroke(cr);
         }
 
@@ -1162,7 +1167,7 @@ void synui_render_wppick(syn_server_t *s)
          * than the panel — clip it to the row so it cannot spill over the
          * border. */
         cairo_save(cr);
-        cairo_rectangle(cr, pad, ry + 26, pw - 2 * pad - 8, 16);
+        cairo_rectangle(cr, pad, ry + 26, list_w - 2 * pad - 8, 16);
         cairo_clip(cr);
         cairo_set_font_size(cr, 12);
         cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
@@ -1170,6 +1175,64 @@ void synui_render_wppick(syn_server_t *s)
         cairo_move_to(cr, pad + 8, ry + 38);
         syn_show_text(cr, desc);
         cairo_restore(cr);
+    }
+
+    /* ── Preview pane ────────────────────────────────────────
+     *
+     * What the highlighted row actually looks like. This is not decoration:
+     * a Workshop row is deferred to Enter, and so is everything else while a
+     * Workshop wallpaper is on screen (wppick.c), so for those rows nothing is
+     * applied by moving the highlight and this pane is the only thing that
+     * shows what you are about to pick. Titles do not — a Workshop title is
+     * whatever its publisher typed.
+     */
+    {
+        const int bx = list_w, by = top;
+        const int bw = prev_im, bh = shown * row_h - 8;
+
+        /* Frame, so an image with dark edges still reads as a pane. */
+        cairo_set_source_rgba(cr, 0.10, 0.10, 0.18, 1.0);
+        cairo_rectangle(cr, bx, by, bw, bh);
+        cairo_fill(cr);
+
+        const char *ppath = wppick_row_preview(s, s->wppick.selected);
+        cairo_surface_t *thumb = ppath ? wpthumb_get(ppath) : NULL;
+
+        if (thumb) {
+            const int iw = cairo_image_surface_get_width(thumb);
+            const int ih = cairo_image_surface_get_height(thumb);
+            if (iw > 0 && ih > 0) {
+                /* Fit, not fill: a preview that is cropped to the pane can hide
+                 * the very part of the wallpaper someone is choosing by. */
+                double sc = (double)bw / iw;
+                if (ih * sc > bh) sc = (double)bh / ih;
+                const double dw = iw * sc, dh = ih * sc;
+
+                cairo_save(cr);
+                cairo_translate(cr, bx + (bw - dw) / 2, by + (bh - dh) / 2);
+                cairo_scale(cr, sc, sc);
+                cairo_set_source_surface(cr, thumb, 0, 0);
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+                cairo_paint(cr);
+                cairo_restore(cr);
+            }
+        } else {
+            /* Say which of the two it is. "No preview" on a Workshop row whose
+             * file failed to decode and on "None", which has nothing to show by
+             * definition, would read as the same bug. */
+            const char *why = ppath ? "Preview unavailable" : "No preview";
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, 0.40, 0.40, 0.50, 1.0);
+            cairo_text_extents_t te;
+            cairo_text_extents(cr, why, &te);
+            cairo_move_to(cr, bx + (bw - te.width) / 2, by + bh / 2);
+            cairo_show_text(cr, why);
+        }
+
+        cairo_set_line_width(cr, 1);
+        cairo_set_source_rgba(cr, 0.30, 0.30, 0.40, 0.6);
+        cairo_rectangle(cr, bx + 0.5, by + 0.5, bw - 1, bh - 1);
+        cairo_stroke(cr);
     }
 
     /* Scroll position, when there is more than one screenful. */
