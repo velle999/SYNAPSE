@@ -140,6 +140,12 @@ static void handle_query(work_item_t *w) {
     }
     prompt[w->hdr.payload_len - 1] = '\0';
 
+    if (atomic_load(&w->state->model_sleeping)) {
+        send_error(w->client_fd, w->hdr.request_id,
+                   "AI model was released for suspend and is reloading — "
+                   "try again in a moment");
+        return;
+    }
     if (!w->state->model_loaded && atomic_load(&w->state->model_loading)) {
         send_error(w->client_fd, w->hdr.request_id,
                    "AI model is still loading — try again in a moment");
@@ -222,7 +228,9 @@ static void handle_status(work_item_t *w) {
         "synapd/%s model=%s requests=%lu active=%lu ctx_used=%u ctx_window=%u",
         SYNAPD_VERSION,
         w->state->model_loaded ? "loaded"
-            : atomic_load(&w->state->model_loading) ? "loading" : "none",
+            : atomic_load(&w->state->model_loading) ? "loading"
+            : atomic_load(&w->state->model_sleeping) ? "released-for-suspend"
+            : "none",
         (unsigned long)atomic_load(&w->state->requests_total),
         (unsigned long)atomic_load(&w->state->requests_active),
         context_used_tokens(w->state),
@@ -230,6 +238,87 @@ static void handle_status(work_item_t *w) {
     );
     send_response(w->client_fd, w->hdr.request_id,
                   SYN_MSG_STATUS, buf, strlen(buf) + 1);
+}
+
+/* ── Suspend / resume ─────────────────────────────────────── */
+/*
+ * Release the model so the NVIDIA driver has nothing to copy.
+ *
+ * MUST NOT return until the VRAM is actually gone: the caller is a systemd
+ * system-sleep hook, and systemd only holds the suspend while that hook runs.
+ * Answer early and the driver starts its dump with the model still resident,
+ * which is the whole cost this exists to avoid.
+ *
+ * The write lock is what makes it safe. Queries hold the read lock for their
+ * full duration, so this blocks until every in-flight one has finished rather
+ * than freeing the model under it. A generation mid-suspend is rare and worth
+ * waiting for; the alternative is a crash.
+ */
+static void handle_sleep(work_item_t *w) {
+    synapd_state_t *s = w->state;
+
+    /* Set BEFORE taking the lock so queries arriving while we wait are turned
+     * away with the right reason instead of queueing behind the unload. */
+    atomic_store(&s->model_sleeping, 1);
+
+    pthread_rwlock_wrlock(&s->model_rw);
+    int had_model = s->model_loaded;
+    if (had_model) {
+        syn_log(LOG_INFO, "synapd: releasing model for suspend");
+        inference_destroy(s);
+    }
+    pthread_rwlock_unlock(&s->model_rw);
+
+    const char *msg = had_model ? "model released" : "no model was loaded";
+    syn_log(LOG_INFO, "synapd: sleep — %s", msg);
+    send_response(w->client_fd, w->hdr.request_id,
+                  SYN_MSG_SLEEP, msg, strlen(msg) + 1);
+}
+
+/* Reload on a detached thread. Loading a multi-GB model takes tens of seconds
+ * and nothing is waiting on it — a person coming back to a resumed desktop is
+ * not typing an AI prompt in the first breath. Queries in that window get the
+ * "reloading" error, exactly as they already do at boot. */
+static void *reload_thread(void *arg) {
+    synapd_state_t *s = arg;
+
+    pthread_rwlock_wrlock(&s->model_rw);
+    atomic_store(&s->model_loading, 1);
+    if (inference_init(s) < 0)
+        syn_log(LOG_WARNING, "synapd: model reload after resume FAILED");
+    else
+        syn_log(LOG_INFO, "synapd: model reloaded after resume");
+    atomic_store(&s->model_loading, 0);
+    /* Cleared last: until the model is back, a query should say "reloading",
+     * not "no model". */
+    atomic_store(&s->model_sleeping, 0);
+    pthread_rwlock_unlock(&s->model_rw);
+    return NULL;
+}
+
+static void handle_wake(work_item_t *w) {
+    synapd_state_t *s = w->state;
+
+    if (s->model_loaded && !atomic_load(&s->model_sleeping)) {
+        const char *msg = "model already loaded";
+        send_response(w->client_fd, w->hdr.request_id,
+                      SYN_MSG_WAKE, msg, strlen(msg) + 1);
+        return;
+    }
+
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, reload_thread, s) != 0) {
+        /* Leaving model_sleeping set would wedge every future query behind a
+         * reload that is never coming. */
+        atomic_store(&s->model_sleeping, 0);
+        send_error(w->client_fd, w->hdr.request_id, "cannot spawn reload thread");
+        return;
+    }
+    pthread_detach(tid);
+
+    const char *msg = "reloading in background";
+    send_response(w->client_fd, w->hdr.request_id,
+                  SYN_MSG_WAKE, msg, strlen(msg) + 1);
 }
 
 static void handle_context_get(work_item_t *w) {
@@ -251,9 +340,25 @@ static void *worker_thread(void *arg) {
         atomic_fetch_add(&w->state->requests_active, 1);
 
         switch (w->hdr.msg_type) {
-        case SYN_MSG_QUERY:         handle_query(w);         break;
-        case SYN_MSG_SYSCALL_EVENT: handle_syscall_event(w); break;
-        case SYN_MSG_SCHED_HINT:    handle_sched_hint(w);    break;
+        /* Everything that touches the model runs under the READ lock, held for
+         * the whole handler. inference_run() checks s->inference and only then
+         * takes inf->lock, so without this an unload could free it in between.
+         * Read locks do not exclude each other, so concurrent queries are
+         * unaffected — the only thing that waits is an unload. */
+        case SYN_MSG_QUERY:
+        case SYN_MSG_SYSCALL_EVENT:
+        case SYN_MSG_SCHED_HINT:
+            pthread_rwlock_rdlock(&w->state->model_rw);
+            if      (w->hdr.msg_type == SYN_MSG_QUERY)         handle_query(w);
+            else if (w->hdr.msg_type == SYN_MSG_SYSCALL_EVENT) handle_syscall_event(w);
+            else                                               handle_sched_hint(w);
+            pthread_rwlock_unlock(&w->state->model_rw);
+            break;
+
+        /* Take the WRITE lock themselves, so they must not be nested here. */
+        case SYN_MSG_SLEEP:         handle_sleep(w);         break;
+        case SYN_MSG_WAKE:          handle_wake(w);          break;
+
         case SYN_MSG_STATUS:        handle_status(w);        break;
         case SYN_MSG_CONTEXT_GET:   handle_context_get(w);   break;
         default:

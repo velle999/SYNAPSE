@@ -44,6 +44,7 @@ struct synapd_state g_state = {
     .running       = 1,
     .debug         = 0,
     .model_loaded  = 0,
+    .model_rw      = PTHREAD_RWLOCK_INITIALIZER,
     .socket_fd     = -1,
     .requests_total = 0,
     .config = {

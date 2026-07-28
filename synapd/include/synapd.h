@@ -38,6 +38,16 @@ typedef enum {
     SYN_MSG_STATUS         = 0x06, /* status/ping */
     SYN_MSG_RELOAD         = 0x07, /* reload model / config */
     SYN_MSG_SHUTDOWN       = 0x08, /* graceful shutdown (root only) */
+    /* Drop the model off the GPU before the machine suspends, and put it back
+     * afterwards. NVreg_PreserveVideoMemoryAllocations makes the driver copy
+     * every resident byte of VRAM to /var/tmp inside its PM_SUSPEND_PREPARE
+     * notifier, and the machine is awake with its monitors dark for the whole
+     * copy — measured at 1:1 with VRAM in use, and synapd's model is the bulk
+     * of it. SLEEP is synchronous: it answers only once the VRAM is actually
+     * released, so the hook that sends it can hold off the suspend until then.
+     * WAKE answers immediately and reloads on a thread. */
+    SYN_MSG_SLEEP          = 0x09, /* release the model; replies when VRAM is freed */
+    SYN_MSG_WAKE           = 0x0A, /* start a background reload; replies at once */
     SYN_MSG_RESPONSE       = 0x80, /* response flag OR'd with request type */
     SYN_MSG_ERROR          = 0xFF,
 } syn_msg_type_t;
@@ -154,6 +164,22 @@ typedef struct synapd_state {
     /* Set while inference_init runs — the socket is already serving then,
      * so handlers can tell "still loading" apart from "no model". */
     _Atomic int         model_loading;
+
+    /* Guards the EXISTENCE of s->inference, not its contents (inf->lock does
+     * that). Readers are the handlers that run the model; the writer is a
+     * load or an unload.
+     *
+     * Needed because inference_run() copies s->inference to a local, checks it
+     * for NULL, and only then takes inf->lock — so a concurrent
+     * inference_destroy() frees the object in the window between the check and
+     * the lock. That was harmless while unloads only happened at shutdown; the
+     * moment a suspend can unload underneath a live query it is a
+     * use-after-free. Held for the whole of a query, so an unload waits for
+     * in-flight work rather than pulling the model out from under it. */
+    pthread_rwlock_t    model_rw;
+    /* Unloaded for suspend, as opposed to never loaded or still loading —
+     * so a query during sleep can say so instead of "no model". */
+    _Atomic int         model_sleeping;
 
 } synapd_state_t;
 

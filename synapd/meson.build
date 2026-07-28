@@ -74,6 +74,21 @@ wire_test = executable('wire_test',
   include_directories: include_directories('include'))
 test('wire', wire_test)
 
+# The system-sleep hook. Links nothing but libc — no llama, no threads — so a
+# wedged or unbuilt model stack cannot stop it running, and it must run: it is
+# what holds the suspend until the GPU is clear.
+#
+# install_mode is load-bearing. systemd runs only the EXECUTABLE files in
+# system-sleep/ and silently ignores the rest, so a hook installed 0644 is not
+# an error anywhere — it simply never runs, and the only symptom is that sleep
+# quietly goes back to being slow.
+executable('synapd-sleep-hook',
+  files('src/sleep_hook.c'),
+  include_directories: llama_inc,
+  install: true,
+  install_dir: '/usr/lib/systemd/system-sleep',
+  install_mode: 'rwxr-xr-x')
+
 install_data('systemd/synapd.service',
   install_dir: '/usr/lib/systemd/system')
 install_data('config/synapd.conf',
