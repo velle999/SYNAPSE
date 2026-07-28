@@ -35,7 +35,7 @@ if [[ -f "$ISO" && "$(stat -c %U "$ISO")" != "$(whoami)" ]]; then
     sudo chown "$(whoami):$(id -gn)" "$ISO"
 fi
 
-RAM="${QEMU_RAM:-4G}"
+RAM="${QEMU_RAM:-8G}"
 CPUS="${QEMU_CPUS:-4}"
 VGA="${QEMU_VGA:-virtio}"
 
