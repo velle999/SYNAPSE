@@ -612,13 +612,29 @@ int ai_translate(synsh_state_t *s,
      * player — and every one of those looks plausible until you run it.
      * synsh_intent_toolinfo() is resolved from $PATH, so it cannot drift from
      * reality the way a hardcoded list would. */
+    /* What the model is told about who is asking. It used to be the login
+     * account name, unconditionally — which is how a fresh install whose account
+     * was named after its owner ended up answering "hello" with "Hello <name>":
+     * the account name was in every prompt, so the model addressed it. A shell
+     * translator has no use for a name; what it can actually act on is whether
+     * this session is root, which decides if the command needs sudo at all — and
+     * that was never being sent. So send the privilege, not the identity. Set
+     * `ai_user_name` in ~/.synshrc to be addressed by name again. */
+    char whoami[128];
+    if (s->ai_user_name[0])
+        snprintf(whoami, sizeof(whoami), "User: %s (%s)\n", s->ai_user_name,
+                 geteuid() == 0 ? "root" : "not root — use sudo for privileged commands");
+    else
+        snprintf(whoami, sizeof(whoami), "Privilege: %s\n",
+                 geteuid() == 0 ? "root" : "not root — use sudo for privileged commands");
+
     char prompt[SYNSH_MAX_LINE * 2];
     snprintf(prompt, sizeof(prompt),
         "[TRANSLATE TO SHELL]\n"
         "OS: SynapseOS — Arch Linux. NOT Debian/Ubuntu/Fedora.\n"
         "Installed: %s\n"
         "CWD: %s\n"
-        "User: %s\n"
+        "%s"
         "Request: %s\n"
         "\n"
         "Reply in EXACTLY this format (two lines only):\n"
@@ -636,11 +652,12 @@ int ai_translate(synsh_state_t *s,
         "  that is not there, CMD must be the pacman -S that installs it.\n"
         "- If the request is ambiguous, pick the safest interpretation\n"
         "- Never include rm -rf without explicit confirmation request\n"
-        "- Use sudo for privileged commands, NEVER su — the root account is locked\n"
+        "- Privileged commands take sudo, NEVER su — the root account is locked.\n"
+        "  Skip the sudo when Privilege above already says root.\n"
         "- If no shell command makes sense, write CMD: # not possible\n",
         synsh_intent_toolinfo(),
         s->cwd   ? s->cwd   : "/",
-        s->user  ? s->user  : "user",
+        whoami,
         natural_input
     );
 

@@ -8,6 +8,12 @@ set ai_confirm on      # ask before running AI-generated commands
 set ai_explain on      # show exit codes
 set color on
 
+# What the AI is told to call you. Off by default so a fresh install ships no
+# identity: the login account name used to go into every prompt, and the model
+# answered "hello" by name. Uncomment and put your own name here to turn it
+# back on — in ~/.synshrc, not this file, which is system-wide.
+#set ai_user_name Alex
+
 # Useful aliases
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'

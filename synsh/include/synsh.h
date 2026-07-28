@@ -92,6 +92,12 @@ typedef struct synsh_state {
     char       *cwd;
     char       *home;
     char       *user;
+    /* What the AI is told to call you. EMPTY by default, on purpose: the login
+     * account name used to go into every translation prompt, so a machine whose
+     * account happened to be named after its owner had synsh greeting them by
+     * name on a fresh install — an identity the image never should have carried.
+     * Opt back in with `set ai_user_name <name>` in ~/.synshrc. See ai_translate(). */
+    char        ai_user_name[64];
     int         ai_confirm;
     int         ai_explain;
     int         ai_enabled;

@@ -31,6 +31,7 @@ int synsh_init(synsh_state_t *s, int argc, char *argv[]) {
     memset(s->alias_values, 0, sizeof(s->alias_values));
     s->ai_confirm = 1;   /* ask before running AI commands by default */
     s->ai_explain = 1;
+    s->ai_user_name[0] = '\0';   /* the AI is told no name unless you set one */
     s->color      = synsh_color_supported();
     s->pid        = getpid();
     s->synapd_fd  = -1;
@@ -69,6 +70,7 @@ int synsh_init(synsh_state_t *s, int argc, char *argv[]) {
  *   set ai_confirm off      → disable confirmation for AI commands
  *   set ai_explain on
  *   set color on|off
+ *   set ai_user_name Alex   → let the AI address you by name (default: off)
  *   alias ll='ls -la'
  *   export PATH=$PATH:/usr/local/sbin
  *   <any shell command>
@@ -113,6 +115,14 @@ void synsh_load_rc(synsh_state_t *s) {
                     }
                     else if (strcmp(key, "verbose") == 0)
                         s->verbose = (strcmp(val, "on") == 0 || strcmp(val, "1") == 0);
+                    else if (strcmp(key, "ai_user_name") == 0) {
+                        /* `set ai_user_name off` (or empty) clears it again, so a
+                         * user RC can undo a name a system RC set. */
+                        if (strcmp(val, "off") == 0 || *val == '\0')
+                            s->ai_user_name[0] = '\0';
+                        else
+                            snprintf(s->ai_user_name, sizeof(s->ai_user_name), "%s", val);
+                    }
                 }
                 continue;
             }
