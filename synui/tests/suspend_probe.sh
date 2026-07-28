@@ -95,12 +95,15 @@ outputs_state() { timeout 15 synctl outputs 2>/dev/null; }
 
 # ── optional: wedge X ────────────────────────────────────────
 XW=""; HOLDER=""
-cleanup_x() {
+restore_pm() { :; }   # replaced once pm_print_times has been touched
+cleanup_all() {
     [ -n "$XW" ] && kill -CONT "$XW" 2>/dev/null
     [ -n "$HOLDER" ] && kill "$HOLDER" 2>/dev/null   # by pid: `pkill -f` matches itself
+    [ -n "${SAMPLER:-}" ] && kill "$SAMPLER" 2>/dev/null
+    restore_pm
     return 0
 }
-trap cleanup_x EXIT
+trap cleanup_all EXIT INT TERM
 
 if [ "$FREEZE_X" = 1 ]; then
     say "== arming the frozen-X reproduction =="
@@ -163,27 +166,59 @@ fi
 # point: if this keeps producing rows after `PM: suspend entry`, the machine
 # was never asleep. It gets frozen with everything else at the real freeze and
 # thaws on resume, so the gap in its own timestamps is the true sleep.
-printf 'time\tvram_used\tsleep_task_wchan\tvartmp_nvidia_bytes\n' >"$SAMPLES"
+# NO nvidia-smi in this loop, and nothing else that talks to the GPU.
+#
+# v1 sampled nvidia-smi every second and produced exactly one row: querying the
+# driver while it is preparing to suspend BLOCKS, so the sampler wedged on the
+# very thing it was there to measure and the whole stall went unobserved. Only
+# cheap /proc reads here.
+#
+# This can only ever see the PRE-FREEZE stall. Once the kernel freezes
+# userspace this loop is frozen with it, so the freeze -> S3 window is
+# invisible from here by construction — that half needs pm_print_times below.
+printf 'time\tsleep_task\twchan\n' >"$SAMPLES"
 (
     while :; do
-        v=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null | tr -d ' ')
         sp=$(pgrep -x systemd-sleep | head -1)
         w="-"
         [ -n "$sp" ] && w=$(cat /proc/"$sp"/wchan 2>/dev/null || echo "-")
-        b=$(du -sb /var/tmp 2>/dev/null | cut -f1)
-        printf '%s\t%s\t%s\t%s\n' "$(date '+%H:%M:%S')" "${v:--}" "${w:--}" "${b:--}"
+        printf '%s\t%s\t%s\n' "$(date '+%H:%M:%S')" "${sp:--}" "${w:--}"
         sleep 1
     done
 ) >>"$SAMPLES" 2>/dev/null &
 SAMPLER=$!
 
+# Kernel-side per-device timing. The stall moves between phases run to run
+# (233s/127s all pre-freeze, then 42s pre-freeze + 141s in device suspend), and
+# device suspend happens with every process frozen — no userspace sampler can
+# see it. pm_print_times makes the kernel time each device's callback and print
+# it, which is the only way to name the device that is actually slow.
+PM_TIMES_WAS=$(cat /sys/power/pm_print_times 2>/dev/null || echo 0)
+PM_DEBUG_WAS=$(cat /sys/power/pm_debug_messages 2>/dev/null || echo 0)
+sudo -n sh -c 'echo 1 > /sys/power/pm_print_times; echo 1 > /sys/power/pm_debug_messages' 2>/dev/null \
+    && say "pm_print_times/pm_debug_messages: ON (restored on exit)" \
+    || say "pm_print_times: could not enable (need sudo) — device timings unavailable"
+restore_pm() {
+    sudo -n sh -c "echo ${PM_TIMES_WAS:-0} > /sys/power/pm_print_times;
+                   echo ${PM_DEBUG_WAS:-0} > /sys/power/pm_debug_messages" 2>/dev/null
+}
+
 hr; say "SUSPENDING at $(date '+%H:%M:%S') — wake it when you are ready"
 systemctl suspend
 
 # ── wait for resume ──────────────────────────────────────────
+# grep -c, NOT grep -q, and the count compared separately.
+#
+# `journalctl | grep -q` under `set -o pipefail` is a trap: grep -q exits the
+# instant it matches, journalctl then dies of SIGPIPE (141), and pipefail
+# reports the PIPELINE as failed even though the match succeeded. The loop
+# therefore spins forever precisely BECAUSE the machine resumed. It did — this
+# probe sat in this loop for six minutes after a successful wake on its first
+# real run. grep -c consumes all of its input, so nothing gets SIGPIPE.
 while :; do
-    if journalctl --since "$MARK" 2>/dev/null \
-        | grep -qE 'PM: suspend exit|System returned from sleep'; then break; fi
+    n=$(journalctl --since "$MARK" 2>/dev/null \
+        | grep -cE 'PM: suspend exit|System returned from sleep')
+    [ "${n:-0}" -gt 0 ] && break
     sleep 5
 done
 
@@ -211,12 +246,32 @@ journalctl -k --since "$MARK" --no-pager 2>/dev/null \
 
 ENTRY=$(journalctl -k --since "$MARK" --no-pager 2>/dev/null | grep -m1 'PM: suspend entry' | awk '{print $3}')
 FREEZE=$(journalctl -k --since "$MARK" --no-pager 2>/dev/null | grep -m1 'Freezing user space processes$' | awk '{print $3}')
+S3=$(journalctl -k --since "$MARK" --no-pager 2>/dev/null | grep -m1 'Preparing to enter' | awk '{print $3}')
+
+# Two separate stalls, and they trade places between runs, so report both or a
+# short pre-freeze gap reads as "fixed" while the time simply moved.
 if [ -n "$ENTRY" ] && [ -n "$FREEZE" ]; then
     gap=$(( $(date -d "$FREEZE" +%s) - $(date -d "$ENTRY" +%s) ))
     say ""
-    say "  >> PRE-FREEZE STALL: ${gap}s awake after 'suspend entry'"
-    [ "$gap" -gt 20 ] && say "  >> the machine was NOT asleep for those ${gap}s — monitors dark, box running"
+    say "  >> PRE-FREEZE STALL : ${gap}s   (entry -> freeze; userspace LIVE, monitors dark)"
+    [ "$gap" -gt 20 ] && say "     the machine was NOT asleep for those ${gap}s"
 fi
+if [ -n "$FREEZE" ] && [ -n "$S3" ]; then
+    gap2=$(( $(date -d "$S3" +%s) - $(date -d "$FREEZE" +%s) ))
+    say "  >> DEVICE-SUSPEND STALL: ${gap2}s   (freeze -> S3; everything frozen, drivers only)"
+fi
+if [ -n "$ENTRY" ] && [ -n "$S3" ]; then
+    say "  >> TOTAL AWAKE AFTER ASKING TO SLEEP: $(( $(date -d "$S3" +%s) - $(date -d "$ENTRY" +%s) ))s"
+fi
+
+say ""
+say "SLOWEST DEVICE CALLBACKS (pm_print_times — names the driver, if enabled):"
+journalctl -k --since "$MARK" --no-pager 2>/dev/null \
+    | grep -oE 'call [^ ]+ returned [0-9-]+ after [0-9]+ usecs' \
+    | awk '{u=$(NF-1); printf "%12d us  %s\n", u, $2}' \
+    | sort -rn | head -10 | sed 's/^/  /' | tee -a "$REPORT"
+say "  (empty => pm_print_times was off, or no callback was individually slow,"
+say "   which would put the time in the notifier chain rather than a driver)"
 
 say ""
 say "ROWS LOGGED DURING THE STALL (proof userspace was live):"
