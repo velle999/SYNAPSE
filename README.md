@@ -70,6 +70,37 @@ into existing free space, reusing the machine's ESP.
 
 ---
 
+## Staying up to date
+
+An installed system needs **two** update commands, because they cover different
+halves of it:
+
+```bash
+sudo pacman -Syu     # Arch: kernel, Mesa, Qt, everything from the Arch repos
+syn-update check     # SynapseOS: synui, synapd, synguard and the rest
+syn-update apply     # rebuild what changed and install it
+```
+
+`syn-update` clones the project to `/var/lib/synapse-src` and rebuilds only the
+components whose `pkgver`/`pkgrel` moved, using `makepkg` — so it needs
+`base-devel`, and components are compiled on the target rather than downloaded.
+Components with a large prebuilt payload (`synapse-llama`,
+`linux-wallpaperengine`, `chibi`) are **reported rather than skipped silently**
+and move with an ISO upgrade instead. There is a GUI at **SynapseOS Updates** in
+the start menu, distinct from **Update System**, which is Arch.
+
+> **This did not work before 0.2.3.** `syn-install` gave every system a
+> `[synapseos]` repository pointing at `/var/cache/synapseos` — a directory
+> copied off the ISO at install time that nothing ever wrote to again. `pacman
+> -Syu` upgraded all of Arch and could never see a newer `synui`, `synapd` or
+> `synguard`, **with no error to notice**. An installed SynapseOS was frozen at
+> whatever ISO installed it. If you installed from an older ISO, install
+> `syn-update` and run it once.
+
+Full details: **[Updating](https://github.com/velle999/SYNAPSE/wiki/Updating)**.
+
+---
+
 ## Components
 
 Each lives in its own directory with its own `PKGBUILD`.
@@ -316,6 +347,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
+| `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `pacman -Syu`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
 | `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
 | `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
