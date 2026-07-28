@@ -146,7 +146,8 @@ case "$EXE" in
         say "  !! first if that is what you meant to check."
         say "" ;;
 esac
-say "VRAM in use : $(nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null || echo n/a)"
+VRAM_MIB=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
+say "VRAM in use : ${VRAM_MIB:-?} MiB   <- the dump is sized by THIS"
 nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader 2>/dev/null \
     | sed 's/^/  gpu client: /' | tee -a "$REPORT"
 say "nvidia sleep units: $(systemctl is-enabled nvidia-suspend.service nvidia-resume.service 2>&1 | tr '\n' ' ')"
@@ -289,8 +290,8 @@ say "   which would put the time in the notifier chain rather than a driver)"
 
 say ""
 say "DISK WRITTEN DURING THE STALL — this is the discriminator:"
-say "  a VRAM dump moves GIGABYTES here; a hung notifier moves nothing."
-awk -F'\t' -v e="$ENTRY" '
+say "  the dump is sized by VRAM, so compare the two, not against a constant."
+awk -F'\t' -v e="$ENTRY" -v v="${VRAM_MIB:-0}" '
     NR>1 && $1!="" {
         if (first=="") { first=$2; ft=$1 }
         last=$2; lt=$1; n++
@@ -299,9 +300,19 @@ awk -F'\t' -v e="$ENTRY" '
         if (n<2) { print "  (too few samples — the sampler was blocked again)"; exit }
         mb=(last-first)*512/1048576
         printf "  %s -> %s over %d samples\n", ft, lt, n
-        printf "  written: %.1f MiB\n", mb
-        if (mb > 1024) print "  >> GIGABYTES written: consistent with the VRAM dump"
-        else           print "  >> essentially NOTHING written: NOT a VRAM dump — a stuck notifier"
+        printf "  written: %.1f MiB   against %s MiB of VRAM in use\n", mb, v
+        # Judge against VRAM, never a fixed number. A run with the AI daemon
+        # stopped wrote 416 MiB and a hardcoded 1 GB floor called that "nothing
+        # written, a stuck notifier" — flatly wrong, since 416 MiB against 2655
+        # MiB of VRAM is exactly the expected dump. The A/B that produced it
+        # showed dVRAM 4645 MiB against dWritten 4117 MiB, near 1:1, so the
+        # only meaningful comparison is a ratio.
+        if (v+0 > 0) {
+            r = mb / v
+            printf "  ratio  : %.2f written per MiB of VRAM\n", r
+            if (r > 0.10) print "  >> tracks VRAM: this is the PreserveVideoMemoryAllocations dump"
+            else          print "  >> far below VRAM: NOT the dump — look for a notifier that hangs"
+        } else if (mb > 1024) print "  >> gigabytes written (VRAM unknown): probably the dump"
     }' "$SAMPLES" | tee -a "$REPORT"
 say "  (full sample set: $SAMPLES)"
 
