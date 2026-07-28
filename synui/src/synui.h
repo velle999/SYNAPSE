@@ -2295,8 +2295,33 @@ struct syn_server {
 
         /* Applying a Workshop wallpaper restarts a GPU process, so unlike the
          * images it must NOT fire on every arrow keypress. Rows past the
-         * images defer to Enter, and this is the row Enter should commit. */
+         * images defer to Enter, and this is the row Enter should commit.
+         *
+         * A row that is NOT a Workshop entry defers too, but only while the
+         * scope already has a Workshop wallpaper running: applying one there
+         * means stopping the engine, and it cannot be restarted cheaply (see
+         * wpengine_restore_soon), so an arrow key must never trigger it. */
         int  pending_we;    /* row index, or -1 when nothing is deferred */
+
+        /* A live preview is on screen that has not been committed. Any close
+         * other than Enter puts `saved` back, so arrowing through the list and
+         * changing your mind leaves the wallpaper exactly as you found it. */
+        bool previewed;
+
+        /* The wallpaper config as it stood when the panel opened. Preview no
+         * longer persists anything, so the on-disk state still matches this —
+         * restoring is purely an in-memory revert plus a repaint.
+         *
+         * The per-output table is here because a pick under "all monitors"
+         * calls wallpaper_output_clear(): without a copy, arrowing past one
+         * row would silently discard every per-monitor wallpaper. */
+        struct {
+            char                  wallpaper[256];
+            syn_wallpaper_mode_t  mode;
+            syn_wallpaper_src_t   src;
+            syn_wp_output_t       out[SYN_WP_PEROUT_MAX];
+            int                   out_n;
+        } saved;
 
         /* Which monitor a pick applies to, cycled with Tab. -1 = all of them
          * (clears the per-monitor overrides and sets the global wallpaper);

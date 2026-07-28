@@ -274,7 +274,7 @@ static void wppick_scroll_to_selection(syn_server_t *s)
 
 /* Apply an option token to the live config and repaint. Mirrors the synuirc
  * `wallpaper` key semantics for the built-in keywords. */
-static void wppick_apply(syn_server_t *s, int idx)
+static void wppick_apply(syn_server_t *s, int idx, bool commit)
 {
     if (idx < 0 || idx >= wppick_total(s)) return;
 
@@ -376,22 +376,77 @@ static void wppick_apply(syn_server_t *s, int idx)
     wl_list_for_each(o, &s->outputs, link)
         wlr_output_schedule_frame(o->wlr_output);
 
-    wallpaper_state_save(s);
+    /* Only a committed pick is written out. A preview that is arrowed past —
+     * or abandoned with Esc — used to persist here on every keypress, so the
+     * last row the highlight happened to cross became the saved wallpaper. */
+    if (commit) wallpaper_state_save(s);
+}
+
+/* Does the current scope have a Workshop wallpaper on screen right now?
+ *
+ * Same two-part test wppick_apply uses to decide whether to stop the engine:
+ * the engine's own state file is the truth (a `synui-wpengine off` from a
+ * terminal would make a mirrored copy stale), with wallpaper_src covering a
+ * pick made in this session that the script has not recorded yet. */
+static bool wppick_scope_has_we(syn_server_t *s)
+{
+    const char *scope = wppick_scope_output(s);
+
+    char live_we[24];
+    wppick_active_we(live_we, sizeof(live_we), scope);
+    if (live_we[0]) return true;
+
+    syn_wallpaper_src_t src;
+    wppick_scope_state(s, &src, NULL);
+    return src == SYN_WP_SRC_WPENGINE;
+}
+
+/* Put back the wallpaper config the panel opened with, and repaint. Nothing
+ * was persisted while previewing, so the on-disk state already agrees with
+ * this and must not be rewritten. */
+static void wppick_restore(syn_server_t *s)
+{
+    snprintf(s->config.wallpaper, sizeof(s->config.wallpaper), "%s",
+             s->wppick.saved.wallpaper);
+    s->config.wallpaper_mode = s->wppick.saved.mode;
+    s->config.wallpaper_src  = s->wppick.saved.src;
+    memcpy(s->config.wallpaper_out, s->wppick.saved.out,
+           sizeof(s->config.wallpaper_out));
+    s->config.wallpaper_out_n = s->wppick.saved.out_n;
+
+    wallpaper_reload(s);
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        wlr_output_schedule_frame(o->wlr_output);
 }
 
 /* Highlight moved. Images and built-ins are cheap enough to apply live, which
  * is the whole point of the panel; a Workshop wallpaper spawns a GPU process
  * and would thrash if it fired on every arrow key, so it is only remembered
- * here and committed on Enter. */
+ * here and committed on Enter.
+ *
+ * A Workshop wallpaper already on screen makes every row defer, not just the
+ * Workshop ones. Two reasons, and the first is the one that matters:
+ *
+ *   - Applying a static wallpaper stops the engine, and linux-wallpaperengine
+ *     cannot rebuild a layer surface it has lost, so "undo" would mean
+ *     restarting the process — seconds of the wallpaper vanishing and coming
+ *     back for every arrow key. Not stopping it in the first place is both
+ *     cheaper and what the user asked for by not pressing Enter yet.
+ *   - There is nothing to see anyway: the engine holds an OPAQUE surface over
+ *     the output, so a static wallpaper painted underneath is invisible until
+ *     the engine is gone. The live preview was buying nothing here and paying
+ *     for it with the only destructive act in the panel. */
 static void wppick_preview(syn_server_t *s, int idx)
 {
-    if (wppick_we_index(s, idx) >= 0) {
+    if (wppick_we_index(s, idx) >= 0 || wppick_scope_has_we(s)) {
         s->wppick.pending_we = idx;
         return;
     }
 
     s->wppick.pending_we = -1;
-    wppick_apply(s, idx);
+    wppick_apply(s, idx, false);
+    s->wppick.previewed = true;
 }
 
 /* ── Browse: find images on disk ─────────────────────────── */
@@ -710,12 +765,32 @@ void wppick_show(syn_server_t *s)
     s->wppick.selected = current_index(s);
     s->wppick.scroll = 0;
     s->wppick.pending_we = -1;
+
+    /* Snapshot before anything can preview over it. */
+    s->wppick.previewed = false;
+    snprintf(s->wppick.saved.wallpaper, sizeof(s->wppick.saved.wallpaper),
+             "%s", s->config.wallpaper);
+    s->wppick.saved.mode  = s->config.wallpaper_mode;
+    s->wppick.saved.src   = s->config.wallpaper_src;
+    memcpy(s->wppick.saved.out, s->config.wallpaper_out,
+           sizeof(s->wppick.saved.out));
+    s->wppick.saved.out_n = s->config.wallpaper_out_n;
+
     wppick_scroll_to_selection(s);
     synui_render_wppick(s);
 }
 
 void wppick_hide(syn_server_t *s)
 {
+    /* Every close that is not Enter lands here with `previewed` still set —
+     * Esc, and Super+W toggled shut. Reverting here rather than in the Esc
+     * case is what stops a second close path from quietly keeping a preview.
+     * Enter clears the flag itself once it has committed. */
+    if (s->wppick.previewed) {
+        wppick_restore(s);
+        s->wppick.previewed = false;
+    }
+    s->wppick.pending_we = -1;
     s->wppick.visible = 0;
     synui_render_wppick(s);
 }
@@ -738,18 +813,25 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     switch (sym) {
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
-        /* Commit a deferred Workshop row. Everything else already applied on
-         * the way past it, so Enter is just "close" for those. */
+        /* Enter is the only thing that writes a choice down. Either a deferred
+         * row has to be applied now, or a live preview is already on screen
+         * and just needs persisting — it was deliberately not saved while the
+         * highlight was moving. */
         if (s->wppick.pending_we >= 0) {
-            wppick_apply(s, s->wppick.pending_we);
+            wppick_apply(s, s->wppick.pending_we, true);
             s->wppick.pending_we = -1;
+            s->wppick.previewed = false;
+        } else if (s->wppick.previewed) {
+            wallpaper_state_save(s);
+            s->wppick.previewed = false;
         }
         wppick_hide(s);
         return 1;
     case XKB_KEY_Escape:
     case XKB_KEY_q:
         /* Esc abandons a deferred row rather than committing it — arrowing
-         * through 131 Workshop entries must not leave one applied. */
+         * through 131 Workshop entries must not leave one applied. A live
+         * preview is reverted by wppick_hide for the same reason. */
         s->wppick.pending_we = -1;
         wppick_hide(s);
         return 1;
@@ -809,6 +891,15 @@ int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         wl_list_for_each(wo, &s->outputs, link)
             wlr_output_schedule_frame(wo->wlr_output);
         wallpaper_state_save(s);
+
+        /* Unlike a highlight, pressing `m` is someone deliberately changing
+         * the mode, so it commits — and the snapshot has to move with it or
+         * closing with Esc would take the new mode back out again. */
+        s->wppick.saved.mode  = s->config.wallpaper_mode;
+        memcpy(s->wppick.saved.out, s->config.wallpaper_out,
+               sizeof(s->wppick.saved.out));
+        s->wppick.saved.out_n = s->config.wallpaper_out_n;
+
         synui_render_wppick(s);
         return 1;
     }
