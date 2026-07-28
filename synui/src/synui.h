@@ -1844,6 +1844,7 @@ struct syn_server {
     struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
     struct wlr_pointer_constraints_v1      *pointer_constraints;
     struct wlr_pointer_constraint_v1       *active_constraint;  /* on the pointer-focused surface */
+    struct wl_event_source                 *pointer_rebase_idle; /* coalesced pointer_rebase() */
     struct wlr_pointer_gestures_v1         *pointer_gestures;
     int                                     touch_devices;
 
@@ -2693,6 +2694,10 @@ int  constraints_apply_motion(syn_server_t *s, double *dx, double *dy);
 void input_setup(syn_server_t *s);
 void input_reload_config(syn_server_t *s);   /* reapply keymap/repeat/libinput */
 void pointer_update_focus(syn_server_t *s, uint32_t time_msec);
+/* Re-derive pointer focus after a scene change with a stationary cursor (a
+ * surface mapping or unmapping). Without it a client gets no wl_pointer.enter
+ * until the mouse physically moves. Safe to call from map/unmap handlers. */
+void pointer_rebase(syn_server_t *s);
 /* Take the cursor image for the compositor's own chrome (`name` = an xcursor
  * name), or give it back to the client under the pointer (`name` = NULL). */
 void cursor_set_deco(syn_server_t *s, const char *name, uint32_t time_msec);

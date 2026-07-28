@@ -222,6 +222,11 @@ static void xw_map(struct wl_listener *listener, void *data)
 
     anim_fade_in(view);          /* windows arrive, they don't just appear */
     synui_welcome_hide(s);
+
+    /* Same reason as xdg_surface_map: a window mapping under a cursor that
+     * never moved must still get wl_pointer.enter. Matters more here — SDL
+     * games are the clients that ask for a pointer lock the moment they map. */
+    pointer_rebase(s);
 }
 
 static void xw_unmap(struct wl_listener *listener, void *data)
@@ -266,6 +271,8 @@ static void xw_unmap(struct wl_listener *listener, void *data)
         if (was_focused)
             workspace_focus_first(s, view->workspace);
     }
+    /* Whatever this window was covering is now under the cursor. */
+    pointer_rebase(s);
 }
 
 /* ── Fullscreen upscale for sub-native X11 clients ───────────

@@ -48,6 +48,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <linux/input-event-codes.h>
@@ -1589,6 +1590,58 @@ void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
         wlr_seat_pointer_notify_clear_focus(s->seat);
     }
     constraints_focus_surface(s, surface);
+}
+
+/*
+ * Re-derive pointer focus after the scene changed under a cursor that did not
+ * move. Every other caller of pointer_update_focus() is driven by motion, so
+ * without this a window that maps (or unmaps, exposing what was behind it)
+ * beneath a stationary pointer never receives wl_pointer.enter — the client
+ * only finds out it has the pointer once the user physically nudges the mouse.
+ *
+ * That is not merely cosmetic for clients that want the pointer at startup.
+ * SDL only engages a pointer lock once its window holds pointer focus, so it
+ * reports SDL_SetRelativeMouseMode(true) as SUCCEEDING while sending no
+ * lock_pointer request at all: the client believes it grabbed the pointer and
+ * has not. Verified with a fullscreen SDL window mapped under a still cursor —
+ * zero enter events in three seconds.
+ *
+ * Timestamp: these events are not input-driven, so there is no hardware time to
+ * quote. CLOCK_MONOTONIC matches what wlroots feeds the seat elsewhere.
+ */
+static void pointer_rebase_handler(void *data)
+{
+    syn_server_t *s = data;
+    s->pointer_rebase_idle = NULL;
+    if (s->shutting_down) return;
+    /* Mid-click the implicit grab pins focus anyway, and pointer_update_focus
+     * would only re-send motion against the grab surface — skip the churn. */
+    if (s->seat->pointer_state.button_count > 0) return;
+
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    pointer_update_focus(s, (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000));
+}
+
+void pointer_rebase(syn_server_t *s)
+{
+    if (s->shutting_down) return;
+    if (s->pointer_rebase_idle) return;   /* already queued for this dispatch */
+
+    /*
+     * Deferred to an idle, and that is the whole trick. Calling
+     * pointer_update_focus() straight from a map handler finds NOTHING under
+     * the cursor: wlr_scene subscribes to the surface commit too, and on the
+     * commit that maps a window synui's map listener runs first, so the scene
+     * buffer node the hit test needs does not exist yet. surface_at() returns
+     * NULL, pointer focus is cleared, and the bug looks unfixed. An idle runs
+     * once the whole dispatch is done and the scene is current.
+     *
+     * It also coalesces: mapping one window can fire several of these (map,
+     * layout, occlusion), and they would all compute the same answer.
+     */
+    s->pointer_rebase_idle = wl_event_loop_add_idle(
+        wl_display_get_event_loop(s->display), pointer_rebase_handler, s);
 }
 
 /* Shared relative-motion path: broadcast the raw delta to relative-pointer

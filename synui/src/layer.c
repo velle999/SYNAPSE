@@ -162,6 +162,10 @@ static void layer_surface_map(struct wl_listener *listener, void *data)
     if (ls->layer_surface->current.keyboard_interactive !=
         ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)
         layer_keyboard_enter(ls->server, ls->layer_surface->surface);
+
+    /* A panel/launcher can map right under a cursor that never moved; it needs
+     * wl_pointer.enter now, not on the next physical nudge. */
+    pointer_rebase(ls->server);
 }
 
 static void layer_surface_unmap(struct wl_listener *listener, void *data)
@@ -176,6 +180,8 @@ static void layer_surface_unmap(struct wl_listener *listener, void *data)
 
     if (!s->shutting_down)
         layer_arrange_output(ls->output);
+    /* A dismissed launcher/menu uncovers whatever was beneath it. */
+    pointer_rebase(s);
 }
 
 static void layer_surface_commit(struct wl_listener *listener, void *data)

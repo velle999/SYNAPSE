@@ -616,6 +616,12 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
 
     /* Hide welcome screen when first window opens */
     synui_welcome_hide(view->server);
+
+    /* The window may have appeared under a cursor that never moved; without
+     * this it gets no wl_pointer.enter until the user nudges the mouse, and a
+     * client that wants the pointer at startup (SDL pointer lock) silently
+     * never gets it. Last, so the geometry below it has settled. */
+    pointer_rebase(view->server);
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data)
@@ -652,6 +658,8 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data)
         if (was_focused)
             workspace_focus_first(server, view->workspace);
     }
+    /* Whatever this window was covering is now under the cursor. */
+    pointer_rebase(server);
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data)
