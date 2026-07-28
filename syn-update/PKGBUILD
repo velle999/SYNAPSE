@@ -1,0 +1,23 @@
+pkgname=syn-update
+pkgver=0.1.0
+pkgrel=2
+pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
+arch=('any')
+license=('GPL-2.0-or-later')
+# git fetches the tree; base-devel supplies makepkg and a compiler, which is the
+# whole premise of updating from source. vercmp and repo-add both ship in pacman
+# itself. sudo is used only for the pacman and repo-add steps — syn-update
+# refuses to run as root, because makepkg does.
+#
+# cmake and meson are deliberately NOT here: makepkg -s installs each
+# component's own makedepends when it builds it, so a system only pays for the
+# toolchain it actually uses. Hard-depending on cmake would add ~150 MiB
+# (cmake + boost-libs) for the benefit of one component that this tool does not
+# update anyway.
+depends=('bash' 'git' 'base-devel' 'pacman' 'sudo')
+source=("syn-update.sh")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "$srcdir/syn-update.sh" "$pkgdir/usr/bin/syn-update"
+}

@@ -608,7 +608,7 @@ REPOEOF
 # which is what made ldconfig warn "is not a symbolic link" on every pacman run.
 arch-chroot /mnt pacman -Sy --noconfirm \
     synapd synsh synnet synguard synui synapse_kmod \
-    syn syn-model syn-firstboot \
+    syn syn-model syn-firstboot syn-update \
     chibi nexus-chat tepris vibe \
     samsung-m2020 shelly-bin \
     2>&1 || warn "Some SynapseOS packages failed to install — verifying below"
@@ -624,7 +624,9 @@ arch-chroot /mnt pacman -Sy --noconfirm \
 #
 # Retry individually before giving up: that way one bad package fails alone
 # instead of taking the other nine with it, and the error names the culprit.
-SYN_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot"
+# syn-update is core, not an app: without it an installed system can never
+# receive another SynapseOS package again, which is the gap it exists to close.
+SYN_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
 # Apps, not the OS. They ship in the live repo but were never installed to disk,
 # so an installed SynapseOS had no chibi at all — you only got her on the ISO.
 SYN_EXTRA="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"

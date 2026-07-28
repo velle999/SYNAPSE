@@ -30,7 +30,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 # the last build's source.
 ONLY=("$@")
 KNOWN=(synapse-llama synapd synsh synnet synguard synui synapse_kmod
-       syn syn-model syn-install syn-firstboot nexus-chat tepris)
+       syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -191,6 +191,10 @@ build_component synapse_kmod
 build_script_pkg syn
 build_script_pkg syn-model
 build_script_pkg syn-install
+# syn-update drives THIS script to rebuild components on an installed system,
+# so it is deliberately built by it too — if build-all.sh cannot package
+# syn-update, syn-update could never have shipped a fix to itself.
+build_script_pkg syn-update
 build_script_pkg syn-firstboot
 
 # Build web apps. No source tarball to stage — their PKGBUILDs pull a pinned

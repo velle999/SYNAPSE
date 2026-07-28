@@ -33,6 +33,7 @@ src/*-0.1.0/
 syn/src/
 syn-model/src/
 syn-firstboot/src/
+syn-update/src/
 syn-install/src/
 # makepkg srcdir + downloaded upstream tarball for the scenefx packages. The
 # canonical source is upstream's tagged release (pinned in each PKGBUILD) plus

@@ -15,6 +15,7 @@ Usage:
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
   syn install             Install SynapseOS to disk
+  syn update [check|apply]  Update SynapseOS itself from git
   syn help                This help
 
 HELP
@@ -103,6 +104,7 @@ case "${1:-help}" in
     net)            shift; cmd_net "$@" ;;
     guard)          shift; cmd_guard "$@" ;;
     install)        exec syn-install ;;
+    update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;
     ui)             exec synui ;;
     help|-h|--help) usage ;;

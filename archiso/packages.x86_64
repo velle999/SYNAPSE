@@ -55,6 +55,7 @@ syn-model
 syn
 syn-firstboot
 syn-install
+syn-update
 synapse_kmod
 nexus-chat
 tepris

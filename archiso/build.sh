@@ -494,6 +494,11 @@ PACKAGES=(
     syn-firstboot
     syn-model
     syn-install
+    # Updates an installed system from git by driving build-all.sh. Pulls
+    # base-devel + git (17 packages, ~118 MiB) onto the ISO as dependencies —
+    # that toolchain is the whole point, since it rebuilds components from
+    # source on the target rather than downloading binaries.
+    syn-update
     nexus-chat
     tepris
     chibi
