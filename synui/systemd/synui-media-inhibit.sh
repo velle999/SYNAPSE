@@ -63,16 +63,43 @@ except Exception:
 # so silently disabled every power.c stage — dim, blank and lock all stopped
 # firing. A wallpaper is background decoration; it does not get a vote here.
 #
-# Match on the *names*, not application.process.binary: that prop is absent from
-# the running stream node (it sits on a sibling node of the same process), so
-# keying on it matches nothing at all.
+# NB: no apostrophes anywhere below — this whole block is a single-quoted shell
+# argument, so one closes it and bash then tries to run the Python.
+#
+# Matching the names on the stream node itself is necessary but NOT sufficient.
+# For a
+# scene wallpaper the node really is called linux-wallpaperengine, but for a
+# VIDEO wallpaper the engine plays it through an embedded mpv, and that stream
+# node identifies itself as mpv, with media.name "<video file> - mpv". Nothing
+# on the node names the wallpaper at all, so the name test above missed it and
+# the inhibitor was held forever again — the exact pkgrel-195 symptom, one layer
+# deeper: dim, blank and lock all dead for as long as a video wallpaper was set.
+#
+# The owning process is the reliable answer, and it IS recorded — just not on
+# the stream node. The node carries client.id, and THAT Client object has
+# application.process.binary (this is the "sibling object" the pkgrel-195 note
+# describes; it is reachable, not merely absent). So resolve the node to its
+# client and judge the process, which covers the engine however many players it
+# embeds and whatever they choose to call themselves.
 IGNORE = ("linux-wallpaperengine",)
+NAME_KEYS = ("application.name", "node.name", "node.description", "media.name")
+CLIENT_KEYS = ("application.process.binary", "application.name")
 
-def ignored(props):
-    for key in ("application.name", "node.name", "node.description", "media.name"):
+clients = {}
+for o in objs:
+    if str(o.get("type", "")).endswith(":Client"):
+        clients[o.get("id")] = ((o.get("info") or {}).get("props") or {})
+
+def matches(props, keys):
+    for key in keys:
         if str(props.get(key, "")).strip().lower() in IGNORE:
             return True
     return False
+
+def ignored(props):
+    if matches(props, NAME_KEYS):
+        return True
+    return matches(clients.get(props.get("client.id"), {}), CLIENT_KEYS)
 
 for o in objs:
     info = o.get("info") or {}

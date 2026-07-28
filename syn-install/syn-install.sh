@@ -1202,7 +1202,18 @@ echo "  Creating user '$NEW_USER'..."
 arch-chroot /mnt sh -c 'touch /etc/.rw-check && rm -f /etc/.rw-check' \
     || die "Target filesystem is no longer writable (disk errors? check 'dmesg') — aborting"
 
-arch-chroot /mnt bash -c "
+# Fed on stdin as a QUOTED heredoc, not `bash -c "..."`. This block is mostly
+# prose, and inside a double-quoted argument the outer shell still honours " $
+# and ` — so an ordinary phrase in double quotes inside a COMMENT silently ends
+# the string. That is not hypothetical: it shipped in pkgrel 20. A "bad
+# permissions" in the comment below cut the block in half; the chmod and all
+# three NOPASSWD drop-ins after it were handed to `bash -c` as unused
+# positional parameters and never ran. Every install from that build got
+# /etc/sudoers.d/wheel at 0644 and nothing else — game mode could not suspend
+# synapd, the start menu could not reboot, the AI-backend row did nothing, and
+# arch-chroot exited 0 throughout. <<'SYN_CHROOT' quotes the delimiter, so the
+# outer shell neither expands nor parses anything in here and prose is safe.
+arch-chroot /mnt bash <<'SYN_CHROOT'
     groupadd -r synapse  2>/dev/null || true
     groupadd -r synguard 2>/dev/null || true
     groupadd -r seat     2>/dev/null || true
@@ -1211,7 +1222,7 @@ arch-chroot /mnt bash -c "
 
     echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
     # 440 like every other drop-in: without it the file lands 0644 and
-    # 'visudo -c' fails the whole ruleset with "bad permissions", which is
+    # 'visudo -c' fails the whole ruleset with 'bad permissions', which is
     # the one check anyone would run to confirm this directory is sane.
     chmod 440 /etc/sudoers.d/wheel
 
@@ -1271,7 +1282,29 @@ arch-chroot /mnt bash -c "
     echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/synui-ai-backend gpu, /usr/bin/synui-ai-backend cpu, /usr/bin/synui-ai-backend off, /usr/bin/synui-ai-backend toggle' \
         > /etc/sudoers.d/zz-synapd-backend
     chmod 440 /etc/sudoers.d/zz-synapd-backend
-"
+SYN_CHROOT
+
+# HARD VERIFY the drop-ins landed. The block above is masked (its failures do
+# not stop the install), and it has now failed silently twice in two different
+# ways: first the pre-zz names were parsed before the blanket wheel rule and
+# lost to it, then the whole tail of the block was cut off by a stray quote.
+# Both shipped a system where every sudo -n caller — all of them
+# fire-and-forget — failed with nothing written anywhere. A missing file here
+# is not cosmetic, so check for it rather than trusting that the block ran.
+for f in zz-power-menu zz-synapd-gamemode zz-synapd-backend wheel; do
+    [ -s "/mnt/etc/sudoers.d/$f" ] \
+        || die "sudoers drop-in /etc/sudoers.d/$f was not written — privileged desktop actions (game mode, reboot, AI backend) would silently do nothing"
+done
+# Order matters as much as presence: sudo takes the LAST match, so every
+# NOPASSWD file must sort after 'wheel'. Catch a rename that undoes that.
+for f in zz-power-menu zz-synapd-gamemode zz-synapd-backend; do
+    [ "$(printf '%s\nwheel\n' "$f" | sort | tail -n1)" = "$f" ] \
+        || die "sudoers drop-in '$f' sorts before 'wheel' — the blanket wheel rule would override it"
+done
+# visudo -c parses the whole directory the way sudo will, and fails on a bad
+# mode as well as bad syntax, so it covers the 0644 case too.
+arch-chroot /mnt visudo -c >/dev/null \
+    || die "sudoers ruleset is invalid after writing the drop-ins — refusing to ship a system that cannot sudo"
 
 # useradd runs outside the masked bash -c block: if it fails, nothing
 # after it can produce a bootable login, so fail loudly and stop.
