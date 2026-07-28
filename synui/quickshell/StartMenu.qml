@@ -238,7 +238,15 @@ PanelWindow {
                     // Software Manager GUI drives, so CLI and GUI stay in
                     // agreement — not raw pacman, and never a partial-upgrade
                     // -Sy. --hold so the window survives the run.
-                    { kind: "exec", label: "Update System",    argv: ["foot", "--hold", "sudo", "shelly", "upgrade"] }
+                    { kind: "exec", label: "Update System",    argv: ["foot", "--hold", "sudo", "shelly", "upgrade"] },
+                    // SynapseOS's OWN components, which shelly cannot see at
+                    // all: they come from the [synapseos] repo, which is a
+                    // frozen copy of the installing ISO that nothing ever
+                    // writes to. Deliberately NOT folded into "Update System"
+                    // above — that upgrades Arch, this upgrades the distro, and
+                    // conflating them is how someone ends up believing they are
+                    // current while synui sits 200 releases behind.
+                    { kind: "exec", label: "SynapseOS Updates", argv: ["syn-update-gui"] }
                 ]
 
                 // Every settings panel synui owns. These are bind ACTIONS, not

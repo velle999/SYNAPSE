@@ -259,7 +259,15 @@ cmd_check() {
     local c
     for c in "${COMPONENTS[@]}"; do
         mkdir -p "$tmp/$c"
-        git -C "$SRC" show "origin/$REPO_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null || rmdir "$tmp/$c"
+        # `rm -rf`, not `rmdir`: the redirect creates the file BEFORE git runs,
+        # so a component that does not exist at the remote revision leaves an
+        # empty PKGBUILD behind. rmdir then fails loudly ("Directory not
+        # empty") and the empty file goes on to trip scan()'s "cannot read
+        # pkgver/pkgrel" warning — two pieces of noise for a component that is
+        # simply not there yet, which is the normal case when an older system
+        # updates to a tree that has since gained a component.
+        git -C "$SRC" show "origin/$REPO_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null ||
+            rm -rf "$tmp/$c"
     done
     local real="$SRC"; SRC="$tmp"; scan; SRC="$real"
 

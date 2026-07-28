@@ -49,9 +49,9 @@
 #define POWER_DIM_ALPHA 0.65f
 
 /* Timeouts the panel's Left/Right steps through. 0 first, so stepping left
- * off the bottom lands on "never" rather than wrapping to two hours. */
+ * off the bottom lands on "never" rather than wrapping to three hours. */
 static const int power_ladder[] = {
-    0, 30, 60, 120, 180, 240, 300, 600, 900, 1200, 1800, 2700, 3600, 7200,
+    0, 30, 60, 120, 180, 240, 300, 600, 900, 1200, 1800, 2700, 3600, 7200, 10800,
 };
 static const int power_ladder_len =
     (int)(sizeof(power_ladder) / sizeof(power_ladder[0]));
@@ -83,13 +83,18 @@ static const char *row_label(int row)
     }
 }
 
-/* "never" / "45s" / "5m" / "1m30s" — compact enough for a table column. */
+/* "never" / "45s" / "5m" / "1m30s" / "3h" — compact enough for a table column.
+ *
+ * Whole hours get an hours unit rather than "180m": the top of the ladder was
+ * already showing two hours as "120m", which reads as a misconfiguration more
+ * than a setting, and it only gets worse the further the ladder goes. */
 static void power_format_timeout(int secs, char *buf, size_t n)
 {
-    if (secs <= 0)           snprintf(buf, n, "never");
-    else if (secs < 60)      snprintf(buf, n, "%ds", secs);
-    else if (secs % 60 == 0) snprintf(buf, n, "%dm", secs / 60);
-    else                     snprintf(buf, n, "%dm%ds", secs / 60, secs % 60);
+    if (secs <= 0)             snprintf(buf, n, "never");
+    else if (secs < 60)        snprintf(buf, n, "%ds", secs);
+    else if (secs % 3600 == 0) snprintf(buf, n, "%dh", secs / 3600);
+    else if (secs % 60 == 0)   snprintf(buf, n, "%dm", secs / 60);
+    else                       snprintf(buf, n, "%dm%ds", secs / 60, secs % 60);
 }
 
 /* ── Dim overlay ─────────────────────────────────────────── */

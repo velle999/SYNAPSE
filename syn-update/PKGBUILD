@@ -1,6 +1,6 @@
 pkgname=syn-update
 pkgver=0.1.0
-pkgrel=3
+pkgrel=6
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -15,9 +15,26 @@ license=('GPL-2.0-or-later')
 # (cmake + boost-libs) for the benefit of one component that this tool does not
 # update anyway.
 depends=('bash' 'git' 'base-devel' 'pacman' 'sudo')
-source=("syn-update.sh")
-sha256sums=('SKIP')
+# The GUI is optional on purpose. Every SynapseOS install has quickshell
+# already (synui's bar is built on it), so in practice the window is always
+# there — but a headless or minimal install should not be made to pull Qt in
+# order to get a command-line updater. syn-update-gui says so itself rather
+# than failing silently when quickshell is absent.
+optdepends=('quickshell: graphical updater (syn-update-gui, "SynapseOS Updates" in the menu)'
+            'qt6-declarative: QtQuick runtime for the graphical updater'
+            'foot: terminal the GUI hands the privileged build off to'
+            'zenity: dialog used to report a missing quickshell')
+source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update-gui.desktop")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
-    install -Dm755 "$srcdir/syn-update.sh" "$pkgdir/usr/bin/syn-update"
+    install -Dm755 "$srcdir/syn-update.sh"     "$pkgdir/usr/bin/syn-update"
+    install -Dm755 "$srcdir/syn-update-gui.sh" "$pkgdir/usr/bin/syn-update-gui"
+
+    install -Dm644 "$srcdir/shell.qml" "$pkgdir/usr/share/syn-update/shell.qml"
+
+    # The menu is a freedesktop .desktop scan (quickshell's DesktopEntries), so
+    # dropping the file here is all that is needed for the entry to appear.
+    install -Dm644 "$srcdir/syn-update-gui.desktop" \
+        "$pkgdir/usr/share/applications/syn-update-gui.desktop"
 }
