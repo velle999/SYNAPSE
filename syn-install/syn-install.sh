@@ -892,6 +892,13 @@ case "$DE_CHOICE" in
         # greetd/quickshell/swaybg/wtype are the desktop itself and are not
         # optional. Bluetooth and printing are, and were chosen in step 4 —
         # a VM or a headless box has no use for either.
+        #
+        # Declining Bluetooth does not remove the bluez LIBRARY: synui depends
+        # on it, so it arrives regardless (verified on a Minimal install —
+        # `pacman -Qi bluez` reports "Required By: synui"). What declining does
+        # is skip bluez-utils and leave bluetooth.service disabled, so the radio
+        # stays down and synui's panel reports no adapter. That is the whole
+        # user-visible effect, and it is what the option promises.
         DESKTOP_PKGS="greetd greetd-tuigreet quickshell swaybg python wtype"
         [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
         [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
