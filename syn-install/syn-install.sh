@@ -574,7 +574,138 @@ success "Base system installed"
 
 # ── Install SynapseOS packages ────────────────────────────
 header
-step "Step 4 — Installing SynapseOS"
+step "Step 4 — Choose What to Install"
+
+# Everything used to be installed unconditionally. The presets below keep that
+# available (Full) and make it the thing you get by pressing Enter through the
+# defaults you would have got anyway, while letting a small disk, a VM or a
+# headless box drop the parts it does not want.
+#
+# Choices are ALL gathered here, before anything is installed, including the
+# ones applied much later in the desktop step — an installer that asks a new
+# question twenty minutes into a copy is one you cannot walk away from.
+#
+# The AI model is the single biggest item on the disk by an order of magnitude
+# (~4.3 GB against ~1 GB for every SynapseOS package combined), which is why it
+# is a line of its own rather than folded into a preset's package list.
+
+# Defaults = Standard.
+WANT_MODEL=1          # copy the ~4.3 GB gguf off the ISO
+WANT_BLUETOOTH=1      # bluez + bluez-utils
+WANT_PRINTING=1       # cups + drivers
+SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
+SEL_APPS="chibi vibe"
+
+echo "  What should be installed alongside the SynapseOS core?"
+echo ""
+echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing"
+echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Chibi + Vibe  (default)"
+echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing"
+echo "    $(bold '4)') Custom    — pick each item individually"
+echo ""
+prompt "Choice [1-4, default=2]:"
+read -r install_preset || true
+INSTALL_PRESET="${install_preset:-2}"
+
+case "$INSTALL_PRESET" in
+    1)
+        SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
+        WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
+        success "Full install selected"
+        ;;
+    3)
+        SEL_APPS=""
+        WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
+        success "Minimal install selected"
+        ;;
+    4)
+        echo ""
+        echo "  Answer y/n for each. The default (shown in caps) is the Standard install."
+        echo ""
+
+        # Apps. Descriptions rather than bare package names — "shelly-bin" tells
+        # a first-time installer nothing about what it would be giving up.
+        ask_opt() {   # ask_opt <varname> <default 0|1> <description>
+            local __var=$1 __def=$2 __desc=$3 __hint __ans
+            if [ "$__def" = 1 ]; then __hint="[Y/n]"; else __hint="[y/N]"; fi
+            prompt "$__desc $__hint:"
+            read -r __ans || true
+            case "${__ans,,}" in
+                y|yes) printf -v "$__var" '%s' 1 ;;
+                n|no)  printf -v "$__var" '%s' 0 ;;
+                *)     printf -v "$__var" '%s' "$__def" ;;
+            esac
+        }
+
+        ask_opt want_chibi   1 "Chibi — voice companion + security sentinel"
+        ask_opt want_vibe    1 "Vibe — local AI coding assistant"
+        ask_opt want_nexus   0 "Nexus Chat — peer-to-peer chat"
+        ask_opt want_tepris  0 "TEPRIS — block game"
+        ask_opt want_m2020   0 "Samsung M2020 printer driver"
+        ask_opt want_shelly  0 "Shelly — graphical package manager"
+        echo ""
+        ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
+        ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
+        ask_opt WANT_PRINTING   1 "Printing (CUPS)"
+
+        SEL_APPS=""
+        [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
+        [ "$want_vibe"   = 1 ] && SEL_APPS="$SEL_APPS vibe"
+        [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
+        [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
+        [ "$want_m2020"  = 1 ] && SEL_APPS="$SEL_APPS samsung-m2020"
+        [ "$want_shelly" = 1 ] && SEL_APPS="$SEL_APPS shelly-bin"
+        SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
+
+        # Core daemons, offered last and separately. Dropping one is allowed —
+        # it was asked for — but it stops being SynapseOS, so it is behind an
+        # extra question rather than in the same list as a block game.
+        echo ""
+        prompt "Customise the core daemons too? Removing any means this is no longer SynapseOS [y/N]:"
+        read -r core_custom || true
+        if [ "${core_custom,,}" = y ] || [ "${core_custom,,}" = yes ]; then
+            warn "The core daemons are what SynapseOS is. Deselecting them produces
+  an Arch system with some SynapseOS parts, and the AI, security and
+  desktop features will not work as documented."
+            echo ""
+            ask_opt core_synapd  1 "synapd — the LLM daemon (everything AI depends on)"
+            ask_opt core_synui   1 "synui — the Wayland compositor / desktop"
+            ask_opt core_synsh   1 "synsh — the AI-native shell"
+            ask_opt core_synnet  1 "synnet — network policy daemon"
+            ask_opt core_guard   1 "synguard + kernel module — security monitor"
+            ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
+
+            SEL_CORE="syn syn-model syn-firstboot"
+            [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
+            [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
+            [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"
+            [ "$core_synnet" = 1 ] && SEL_CORE="$SEL_CORE synnet"
+            [ "$core_guard"  = 1 ] && SEL_CORE="$SEL_CORE synguard synapse_kmod"
+            [ "$core_update" = 1 ] && SEL_CORE="$SEL_CORE syn-update"
+            SEL_CORE=$(echo $SEL_CORE)
+
+            [ "$core_update" = 1 ] || warn "syn-update deselected: this machine will have no way to receive
+  another SynapseOS package. Fixing that later means reinstalling."
+        fi
+        success "Custom install configured"
+        ;;
+    *)
+        success "Standard install selected"
+        ;;
+esac
+
+# Read the selection back before touching the disk. A picker whose result you
+# only discover afterwards is worse than no picker.
+echo ""
+echo "  $(bold 'Installing:')"
+echo "    Core     : $(echo $SEL_CORE | wc -w) package(s)"
+echo "    Apps     : ${SEL_APPS:-none}"
+echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo 'yes (~4.3 GB)' || echo 'no')"
+echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
+echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
+echo ""
+
+step "Step 4b — Installing SynapseOS"
 
 LIVE_REPO="/run/archiso/airootfs/local-repo"
 CHROOT_REPO="/mnt/var/cache/synapseos"
@@ -606,11 +737,7 @@ REPOEOF
 # offload was on), and plain `cp` dereferenced the soname symlinks, writing
 # three identical 4 MB regular files per library instead of a symlink chain,
 # which is what made ldconfig warn "is not a symbolic link" on every pacman run.
-arch-chroot /mnt pacman -Sy --noconfirm \
-    synapd synsh synnet synguard synui synapse_kmod \
-    syn syn-model syn-firstboot syn-update \
-    chibi nexus-chat tepris vibe \
-    samsung-m2020 shelly-bin \
+arch-chroot /mnt pacman -Sy --noconfirm $SEL_CORE $SEL_APPS \
     2>&1 || warn "Some SynapseOS packages failed to install — verifying below"
 
 # ── Hard verify the SynapseOS packages landed ─────────────
@@ -626,10 +753,15 @@ arch-chroot /mnt pacman -Sy --noconfirm \
 # instead of taking the other nine with it, and the error names the culprit.
 # syn-update is core, not an app: without it an installed system can never
 # receive another SynapseOS package again, which is the gap it exists to close.
-SYN_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
+#
+# Verify what was SELECTED in step 4, not a fixed list. Hard-failing on a
+# package the user deliberately declined would make Minimal and Custom
+# impossible to complete — the guard has to enforce the user's choice, not
+# override it.
+SYN_CORE="$SEL_CORE"
 # Apps, not the OS. They ship in the live repo but were never installed to disk,
 # so an installed SynapseOS had no chibi at all — you only got her on the ISO.
-SYN_EXTRA="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
+SYN_EXTRA="$SEL_APPS"
 
 syn_missing() {
     local out="" p
@@ -661,10 +793,19 @@ if [ -n "$missing_core" ]; then
   Check the pacman output above."
 fi
 
-success "SynapseOS packages verified: $(echo $SYN_CORE | wc -w) core, \
+if [ -n "$SYN_EXTRA" ]; then
+    success "SynapseOS packages verified: $(echo $SYN_CORE | wc -w) core, \
 $(( $(echo $SYN_EXTRA | wc -w) - $(echo $missing_extra | wc -w) ))/$(echo $SYN_EXTRA | wc -w) apps"
+else
+    success "SynapseOS packages verified: $(echo $SYN_CORE | wc -w) core, no apps selected"
+fi
 
-# Copy AI model if present on live ISO
+# Copy AI model if present on live ISO — and if it was asked for. Skipping it
+# is a supported choice (Minimal, or Custom with the model declined), so say
+# how to get it later rather than treating its absence as a problem.
+if [ "$WANT_MODEL" != 1 ]; then
+    echo "  AI model skipped — install it later with: syn model download"
+else
 MODEL_SRC=""
 for f in /run/archiso/airootfs/var/lib/synapd/models/*.gguf \
          /var/lib/synapd/models/*.gguf; do
@@ -677,6 +818,7 @@ if [ -n "$MODEL_SRC" ]; then
     success "AI model installed"
 else
     warn "No AI model on live ISO — download later with: syn model download"
+fi
 fi
 
 success "SynapseOS packages installed"
@@ -747,10 +889,13 @@ case "$DE_CHOICE" in
         # quickshell is the bar as of 2026-07-24, replacing waybar — synui
         # depends on it, but name it here too so what an install pulls in is
         # readable rather than inferred from someone else's depends.
-        arch-chroot /mnt pacman -S --noconfirm \
-            greetd greetd-tuigreet quickshell swaybg python wtype \
-            bluez bluez-utils \
-            cups cups-pdf ghostscript nss-mdns \
+        # greetd/quickshell/swaybg/wtype are the desktop itself and are not
+        # optional. Bluetooth and printing are, and were chosen in step 4 —
+        # a VM or a headless box has no use for either.
+        DESKTOP_PKGS="greetd greetd-tuigreet quickshell swaybg python wtype"
+        [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
+        [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
+        arch-chroot /mnt pacman -S --noconfirm $DESKTOP_PKGS \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
         success "SynapseUI selected (included)"
         ;;
@@ -955,7 +1100,7 @@ Arabic|ar_EG.UTF-8|us|noto-fonts-extra
 "
 
 header
-step "Step 6 — Language & Region"
+step "Step 7 — Language & Region"
 
 i=0
 echo "$LOCALE_ROWS" | while IFS= read -r row; do
@@ -1066,7 +1211,7 @@ tz_from_abbrev() {
 }
 
 echo ""
-step "Step 7 — Timezone"
+step "Step 8 — Timezone"
 i=0
 echo "$TZ_ROWS" | while IFS= read -r row; do
     [ -n "$row" ] || continue
@@ -1339,30 +1484,46 @@ echo "  User '$NEW_USER' created (uid=$USER_UID)"
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 # Bluetooth: bluez ships the unit but enables nothing. Without this the radio
 # stays down and synui's panel (Super+B) correctly reports no adapter.
-arch-chroot /mnt systemctl enable bluetooth 2>/dev/null || true
-# Printing. cups.socket, not cups.service: socket activation means no daemon
-# runs until something actually prints. avahi is what finds driverless
-# (IPP Everywhere / AirPrint) printers, which is most printers made since ~2015.
-arch-chroot /mnt systemctl enable cups.socket avahi-daemon 2>/dev/null || true
-# cups.socket binds only the unix socket, so the web admin UI at localhost:631 —
-# the whole printer story, opened from the start menu and control panel — can
-# never connect. Append a loopback TCP listener (ListenStream is a list, so the
-# unix socket stays); socket activation is preserved, cupsd still idles until
-# the port or a print job is touched.
-mkdir -p /mnt/etc/systemd/system/cups.socket.d
-cat > /mnt/etc/systemd/system/cups.socket.d/tcp.conf << 'CUPSTCP_EOF'
+# Skipped entirely when step 4 declined it — the unit is not even installed.
+[ "$WANT_BLUETOOTH" = 1 ] && \
+    arch-chroot /mnt systemctl enable bluetooth 2>/dev/null || true
+# Printing — the whole block is skipped when step 4 declined it, including the
+# cups.socket drop-in and the nsswitch edit. Writing a drop-in for a unit that
+# is not installed leaves a config file referring to nothing, and the mDNS entry
+# would point glibc at a resolver that isn't there.
+if [ "$WANT_PRINTING" = 1 ]; then
+    # cups.socket, not cups.service: socket activation means no daemon runs
+    # until something actually prints. avahi is what finds driverless
+    # (IPP Everywhere / AirPrint) printers, i.e. most made since ~2015.
+    arch-chroot /mnt systemctl enable cups.socket avahi-daemon 2>/dev/null || true
+    # cups.socket binds only the unix socket, so the web admin UI at
+    # localhost:631 — the whole printer story, opened from the start menu and
+    # control panel — can never connect. Append a loopback TCP listener
+    # (ListenStream is a list, so the unix socket stays); socket activation is
+    # preserved, cupsd still idles until the port or a print job is touched.
+    mkdir -p /mnt/etc/systemd/system/cups.socket.d
+    cat > /mnt/etc/systemd/system/cups.socket.d/tcp.conf << 'CUPSTCP_EOF'
 [Socket]
 ListenStream=127.0.0.1:631
 ListenStream=[::1]:631
 CUPSTCP_EOF
-# The glibc half of mDNS. Without it cups discovers the printer and then cannot
-# resolve its .local name, so discovery works and printing fails.
-if [ -f /mnt/etc/nsswitch.conf ] && ! grep -q mdns_minimal /mnt/etc/nsswitch.conf; then
-    sed -i '/^hosts:/s/ myhostname/ myhostname mdns_minimal [NOTFOUND=return]/' \
-        /mnt/etc/nsswitch.conf
+    # The glibc half of mDNS. Without it cups discovers the printer and then
+    # cannot resolve its .local name, so discovery works and printing fails.
+    if [ -f /mnt/etc/nsswitch.conf ] && ! grep -q mdns_minimal /mnt/etc/nsswitch.conf; then
+        sed -i '/^hosts:/s/ myhostname/ myhostname mdns_minimal [NOTFOUND=return]/' \
+            /mnt/etc/nsswitch.conf
+    fi
 fi
-arch-chroot /mnt systemctl enable synapd synnet synguard 2>/dev/null || true
-arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
+# Only enable what was actually selected — `systemctl enable` on a unit whose
+# package was declined fails silently, which would look identical to a broken
+# install in the journal afterwards.
+syn_selected() { case " $SEL_CORE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+for svc in synapd synnet synguard; do
+    syn_selected "$svc" && \
+        arch-chroot /mnt systemctl enable "$svc" 2>/dev/null || true
+done
+syn_selected synapse_kmod && \
+    arch-chroot /mnt systemctl enable synapse-kmod-build 2>/dev/null || true
 # Module-signature policy: safe to enable — only enforces when Secure Boot is
 # on and all modules are kernel-trusted, otherwise it's a no-op (assume SB on,
 # fall back if not).
