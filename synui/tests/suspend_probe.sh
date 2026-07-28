@@ -176,13 +176,27 @@ fi
 # This can only ever see the PRE-FREEZE stall. Once the kernel freezes
 # userspace this loop is frozen with it, so the freeze -> S3 window is
 # invisible from here by construction — that half needs pm_print_times below.
-printf 'time\tsleep_task\twchan\n' >"$SAMPLES"
+# Only /proc files that are plain reads. NOTHING that inspects another task.
+#
+# v2 sampled `pgrep systemd-sleep` and that task's /proc/PID/wchan, and managed
+# 38 rows in 613 seconds — about 16s an iteration. Reading wchan unwinds the
+# target's kernel stack and blocks while it sits in an uninterruptible PM
+# callback, so the sampler stalled on the same thing it was watching. Twice
+# now (nvidia-smi in v1) the instrument has been blocked BY the phenomenon.
+#
+# What actually separates the two hypotheses is bytes written. If the stall is
+# NVIDIA dumping VRAM to /var/tmp under PreserveVideoMemoryAllocations, the
+# disk counters climb by gigabytes. If it is a notifier hanging, they are flat.
+# /proc/diskstats and /proc/meminfo are cheap, lock-free reads.
+printf 'time\tsectors_written\tdirty_kb\twriteback_kb\n' >"$SAMPLES"
 (
     while :; do
-        sp=$(pgrep -x systemd-sleep | head -1)
-        w="-"
-        [ -n "$sp" ] && w=$(cat /proc/"$sp"/wchan 2>/dev/null || echo "-")
-        printf '%s\t%s\t%s\n' "$(date '+%H:%M:%S')" "${sp:--}" "${w:--}"
+        # field 10 of each diskstats row is sectors written; sum whole disks
+        # only (skip partitions) so nothing is counted twice.
+        w=$(awk '$3 ~ /^(nvme[0-9]+n[0-9]+|sd[a-z]+)$/ {s+=$10} END{print s+0}' /proc/diskstats 2>/dev/null)
+        d=$(awk '/^Dirty:/{print $2}' /proc/meminfo 2>/dev/null)
+        b=$(awk '/^Writeback:/{print $2}' /proc/meminfo 2>/dev/null)
+        printf '%s\t%s\t%s\t%s\n' "$(date '+%H:%M:%S')" "${w:-0}" "${d:-0}" "${b:-0}"
         sleep 1
     done
 ) >>"$SAMPLES" 2>/dev/null &
@@ -274,13 +288,22 @@ say "  (empty => pm_print_times was off, or no callback was individually slow,"
 say "   which would put the time in the notifier chain rather than a driver)"
 
 say ""
-say "ROWS LOGGED DURING THE STALL (proof userspace was live):"
-awk -v e="$ENTRY" 'NR>1 && e!="" && $1>=e' "$SAMPLES" | head -8 | sed 's/^/  /' | tee -a "$REPORT"
+say "DISK WRITTEN DURING THE STALL — this is the discriminator:"
+say "  a VRAM dump moves GIGABYTES here; a hung notifier moves nothing."
+awk -F'\t' -v e="$ENTRY" '
+    NR>1 && $1!="" {
+        if (first=="") { first=$2; ft=$1 }
+        last=$2; lt=$1; n++
+    }
+    END {
+        if (n<2) { print "  (too few samples — the sampler was blocked again)"; exit }
+        mb=(last-first)*512/1048576
+        printf "  %s -> %s over %d samples\n", ft, lt, n
+        printf "  written: %.1f MiB\n", mb
+        if (mb > 1024) print "  >> GIGABYTES written: consistent with the VRAM dump"
+        else           print "  >> essentially NOTHING written: NOT a VRAM dump — a stuck notifier"
+    }' "$SAMPLES" | tee -a "$REPORT"
 say "  (full sample set: $SAMPLES)"
-
-say ""
-say "WHAT THE SLEEPING TASK WAS BLOCKED ON:"
-awk -F'\t' 'NR>1 && $3!="-" {print $3}' "$SAMPLES" | sort | uniq -c | sort -rn | head -5 | sed 's/^/  /' | tee -a "$REPORT"
 
 say ""
 say "COMPOSITOR"
