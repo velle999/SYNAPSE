@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=205
+pkgrel=206
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -157,32 +157,28 @@ package() {
     install -Dm644 config/logind.conf.d/synapse-lid.conf \
         "$pkgdir/etc/systemd/logind.conf.d/synapse-lid.conf"
 
-    # MASK nvidia's sleep hooks, permanently.
+    # DO NOT mask nvidia-{suspend,resume,hibernate} here. pkgrel 205 shipped
+    # those three as symlinks to /dev/null and it was wrong.
     #
-    # nvidia-{suspend,resume,hibernate} put this hardware back to a black
-    # screen across suspend, so they were turned off by hand long ago — and on
-    # 2026-07-28 they were found ENABLED again. Nothing re-enabled them
-    # deliberately; an nvidia package upgrade did, because `systemctl disable`
-    # only removes the .wants symlinks and the driver's own packaging puts them
-    # straight back. A disable is therefore a band-aid that survives exactly
-    # until the next driver update, which is not a fix on a machine that is
-    # supposed to keep working unattended.
+    # This hardware sets NVreg_PreserveVideoMemoryAllocations=1, which only
+    # tells the driver to dump VRAM to TemporaryFilePath on suspend. The dump
+    # and the reload are performed by nvidia-sleep.sh, which runs ONLY from
+    # those three units. Param on + units off is the combination that wakes the
+    # GPU with lost framebuffers, i.e. the unrecoverable black screen of
+    # 2026-07-17; enabling them was that day's fix.
     #
-    # A mask IS durable: /etc/systemd/system/<unit> shadows the unit in
-    # /usr/lib (see the /etc-shadows-/usr/lib rule), a symlink to /dev/null
-    # makes the unit unstartable rather than merely un-wanted, and `systemctl
-    # preset` cannot undo it. Shipping it as a PACKAGE FILE rather than running
-    # `systemctl mask` also keeps the symlink owned by pacman — a hand-made
-    # mask here would be an unowned file in a path this package writes, i.e. a
-    # file-conflict that aborts a later upgrade.
+    # 205's rationale was that they had been "found enabled again" after an
+    # nvidia upgrade, read as a driver package undoing a deliberate disable.
+    # Enabled was the intended state. The journal shows the units running on 17
+    # consecutive suspend/resume cycles from Jul 17 19:41 to Jul 28 09:50,
+    # including four clean resumes AFTER the Jul 26 22:02 driver upgrade. The
+    # one bad resume in that run, Jul 28 09:50, was this compositor deadlocking
+    # on primary_lock — same blank screen, unrelated cause. Fixing that is what
+    # the rest of 205 does.
     #
-    # Revisit if a future driver needs these to preserve VRAM allocations; the
-    # trade is deliberate, not an oversight.
-    install -d "$pkgdir/etc/systemd/system"
-    local _u
-    for _u in nvidia-suspend nvidia-resume nvidia-hibernate; do
-        ln -sf /dev/null "$pkgdir/etc/systemd/system/$_u.service"
-    done
+    # If suspend ever regresses again, get a backtrace before blaming these
+    # units: synui alive with `synctl` hanging is a main-thread block, not a
+    # GPU fault.
 
     # System-wide MangoHud defaults. The session sets MANGOHUD=1, so the Vulkan
     # layer loads in every game regardless of launcher; this file is what keeps
