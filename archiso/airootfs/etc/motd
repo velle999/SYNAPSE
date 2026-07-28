@@ -5,8 +5,8 @@
   Shell:     synsh    (type naturally or use shell commands)
   Compositor: synui  (WLR_BACKENDS=drm synui)
 
-  To enable AI: copy a GGUF model to /var/lib/synapd/models/synapse.gguf
-                then: systemctl restart synapd
+  The AI model ships on this media — synapd runs here, on CPU, so it is
+  slow but real. `syn status` shows the model and the daemon.
 
   To install to disk:  syn-install
 
