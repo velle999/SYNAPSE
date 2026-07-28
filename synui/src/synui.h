@@ -2961,6 +2961,9 @@ void power_finish(syn_server_t *s);
 /* Called from every input event (via notify_activity) and whenever an idle
  * inhibitor appears/disappears: undoes any stage that has fired and rearms. */
 void power_notify_activity(syn_server_t *s);
+/* Un-dim and un-blank on resume, then re-arm. NOT power_notify_activity():
+ * that clears power.locked, which after a sleep-lock is still true. */
+void power_wake_display(syn_server_t *s);
 /* Re-arm after the config changed (panel edit, config reload). */
 void power_reload(syn_server_t *s);
 

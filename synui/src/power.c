@@ -267,6 +267,28 @@ void power_notify_activity(syn_server_t *s)
     power_arm(s);
 }
 
+/* A resume has to light the screens itself.
+ *
+ * Nothing else does it. The blank stage commits every output disabled, and the
+ * only thing that ever re-enabled them was power_notify_activity() off an input
+ * event — so after a wake the machine sat there running with all outputs still
+ * committed off, and the user had to type blind to find out it was up. Not even
+ * the lock screen was visible, which is what made "did it resume?" unanswerable
+ * without touching the mouse.
+ *
+ * Deliberately NOT power_notify_activity(): that is the input path and it also
+ * clears power.locked, whose contract is "power management has a lock up". A
+ * resume is not input. The session was locked on the way down and still is, so
+ * clearing the flag here would let power_lock_cb() fire synui_lock() a second
+ * time on an already-locked session. Undo only the two reversible display
+ * stages and re-arm the idle countdown from now. */
+void power_wake_display(syn_server_t *s)
+{
+    power_set_dim(s, false);
+    power_set_blank(s, false);
+    power_arm(s);
+}
+
 void power_reload(syn_server_t *s)
 {
     power_arm(s);

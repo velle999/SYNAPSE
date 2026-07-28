@@ -138,6 +138,20 @@ static int on_prepare_for_sleep(sd_bus_message *m, void *data, sd_bus_error *e)
         wlr_log(WLR_INFO, "synui: logind: resumed");
         logind_take_inhibitor();
 
+        /* Light the screens back up. Until this existed, a wake left every
+         * output committed off until the user produced an input event, so the
+         * machine looked dead on resume and the only way to learn it was up
+         * was to type at a black screen. */
+        power_wake_display(s);
+
+        /* And show the clock. The lock pane fades down while it sits idle, so
+         * un-blanking on its own can reveal a screen that is dark for a second
+         * reason. This brightens it and restarts the fade hold, which puts the
+         * clock in front of the user at the moment the machine is ready — the
+         * "it's awake now" signal there was no way to see before. No-op when
+         * the session is not locked; the bar's clock is already on screen. */
+        lock_notify_activity(s);
+
         /* A Workshop wallpaper does not survive a suspend: linux-wallpaperengine
          * loses its layer surfaces and cannot rebuild them, so the screen wakes
          * to whatever wallpaper.c paints underneath. Armed here as well as from
