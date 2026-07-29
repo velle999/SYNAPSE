@@ -67,13 +67,34 @@ Row {
                 }
             }
 
+            /*
+             * Anchor to the ITEM, not to a hand-computed rect.
+             *
+             * This used to be `window:` + `rect.x: item.mapToItem(null,0,0).x`,
+             * and the menus opened offset from their icon — sometimes left,
+             * sometimes right. mapToItem() is a function call, so QML records no
+             * dependency on the geometry it reads: the binding is evaluated once
+             * when the delegate is created, which is BEFORE the Row has laid the
+             * delegate out, and never again. Every icon therefore anchored to a
+             * position it no longer occupied, and the error grew with the item's
+             * index and changed whenever an app added or removed its icon.
+             *
+             * `rect.y: Theme.barHeight` was wrong for a second reason: the bar
+             * autohides by sliding `content.y`, so the icon's offset inside the
+             * window is not a constant.
+             *
+             * PopupAnchor tracks an item's real position and size, so the menu
+             * follows the icon through layout changes and the autohide slide,
+             * and `gravity` lets it size itself against a rect with actual
+             * width instead of the zero-width one a bare x/y pair produced.
+             */
             QsMenuAnchor {
                 id: menuAnchor
                 menu: item.modelData.menu
                 anchor {
-                    window: item.QsWindow.window
-                    rect.x: item.mapToItem(null, 0, 0).x
-                    rect.y: Theme.barHeight
+                    item: item
+                    edges: Edges.Bottom
+                    gravity: Edges.Bottom
                 }
             }
         }
