@@ -234,6 +234,7 @@ typedef struct {
     uint64_t  rules_matched;
     uint64_t  ai_queries;
     uint64_t  ai_timeouts;
+    uint64_t  ai_skipped;        /* classifications skipped to keep draining */
     uint64_t  denials;
     uint64_t  alerts;
     uint64_t  quarantines;
@@ -322,6 +323,17 @@ int          rules_load(synguard_state_t *s, const char *dir);
  * AND a loaded rule (or an AI verdict allowed to stand) can ask for it. */
 void         rules_census(const synguard_state_t *s, int *counts, size_t n);
 int          rules_enforcement_reachable(const synguard_state_t *s);
+/*
+ * Warn about acting `event open` rules whose path the kmod never reports, so
+ * a rule that loads and counts as enforceable but can never match says so at
+ * startup instead of passing for a quiet system. Returns how many it found.
+ */
+int          rules_report_unreachable_paths(const synguard_state_t *s);
+/* Same check against an explicit prefix-list file, so it is testable without
+ * the kmod loaded. rules_report_unreachable_paths() is this with the real
+ * /sys/kernel/synapse/sensitive_paths. */
+int          rules_report_unreachable_paths_from(const synguard_state_t *s,
+                                                 const char *sysfs_path);
 sg_verdict_t rules_evaluate(synguard_state_t *s, const sg_event_t *e,
                              const sg_rule_t **matched_rule);
 void         rules_free(synguard_state_t *s);

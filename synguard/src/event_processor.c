@@ -433,6 +433,73 @@ sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
     return threat;
 }
 
+/* ── AI duty cycle on the reader thread ───────────────────── */
+/*
+ * synguard_ai_classify() is a blocking round trip to synapd with a 3s timeout,
+ * and it runs ON THE DRAIN THREAD. Every sudo produces a setuid event that
+ * escalate-setuid-to-root hands to the classifier, so under ordinary desktop
+ * use the reader spent more wall time waiting on a model than reading the ring.
+ *
+ * Measured 2026-07-29: an ENFORCE daemon fell a full ring (~250s at 130
+ * events/s) behind, and 100 rule-matching /etc/shadow opens were never
+ * reported at all — while the same binary, same rules, with --no-ai reported
+ * one in under a second. AUDIT mode looked healthy throughout because it does
+ * not run the baseline check that feeds the classifier, which is what made
+ * this read as a rule-matching bug for so long.
+ *
+ * That is the worst failure this daemon has: a detector whose throughput is
+ * coupled to model latency goes blind exactly when something is generating
+ * events, and generating events is free to any process that can touch a
+ * watched path in a loop. It is also silent — `dropped` only counts a lapped
+ * ring, not a reader that never got there.
+ *
+ * So the classifier gets a duty cycle rather than only a per-call timeout: it
+ * may consume at most SG_AI_DUTY_PCT of the reader's wall time in any
+ * SG_AI_DUTY_WINDOW_S window. Past that, classification is skipped using the
+ * SAME safe fallback a timeout already produces (VERDICT_ALERT / THREAT_LOW),
+ * so the event is still reported — only unrefined. Draining outranks
+ * classifying, because an event never read cannot be classified at all.
+ *
+ * This bounds the coupling; it does not remove it. Moving classification to a
+ * worker thread would, and is the deeper fix.
+ */
+#define SG_AI_DUTY_PCT       20
+#define SG_AI_DUTY_WINDOW_S  10
+
+static uint64_t ai_win_start_ns;   /* reader thread only — no lock needed */
+static uint64_t ai_win_spent_ns;
+
+static uint64_t mono_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+/* Nonzero if the classifier may run now. Rolls the window when it expires so
+ * a single early stall cannot disable classification forever. */
+static int ai_duty_allows(void)
+{
+    uint64_t now = mono_ns();
+
+    if (!ai_win_start_ns) {
+        ai_win_start_ns = now;
+        return 1;
+    }
+
+    uint64_t elapsed = now - ai_win_start_ns;
+    if (elapsed >= (uint64_t)SG_AI_DUTY_WINDOW_S * 1000000000ull) {
+        ai_win_start_ns = now;
+        ai_win_spent_ns = 0;
+        return 1;
+    }
+
+    /* Compare as spent*100 vs elapsed*PCT to stay in integers. */
+    return (ai_win_spent_ns * 100) <= (elapsed * SG_AI_DUTY_PCT);
+}
+
+static void ai_duty_charge(uint64_t ns) { ai_win_spent_ns += ns; }
+
 /* ── Full decision pipeline ───────────────────────────────── */
 void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
 {
@@ -494,7 +561,27 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
         char ctx[512];
         build_ai_context(e, ctx, sizeof(ctx));
 
-        if (synguard_ai_classify(s, e, ctx, &ai_result) == 0) {
+        /* Out of duty budget: take the timeout fallback WITHOUT paying for it.
+         * The event still gets reported at ALERT, which is what a 3s timeout
+         * would have produced anyway — the difference is that the reader is
+         * back on the ring immediately instead of 3s from now. */
+        if (!ai_duty_allows()) {
+            s->stats.ai_skipped++;
+            ai_result.verdict      = VERDICT_ALERT;
+            ai_result.threat_level = THREAT_LOW;
+            strncpy(ai_result.reason,
+                    "AI skipped (reader falling behind) — defaulting to alert",
+                    sizeof(ai_result.reason) - 1);
+            if (verdict == VERDICT_ESCALATE)
+                verdict = VERDICT_ALERT;
+            goto ai_done;
+        }
+
+        uint64_t ai_t0 = mono_ns();
+        int ai_rc = synguard_ai_classify(s, e, ctx, &ai_result);
+        ai_duty_charge(mono_ns() - ai_t0);
+
+        if (ai_rc == 0) {
             sg_log(LOG_DEBUG, "AI: threat=%d verdict=%s confidence=%.2f reason=%.80s",
                    (int)ai_result.threat_level,
                    verdict_name(ai_result.verdict),
@@ -520,6 +607,7 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
             sg_log(LOG_DEBUG, "AI classification failed — keeping rule verdict");
         }
     }
+ai_done:
 
     /* Baseline update (after classification, not before) */
     baseline_update(s, e);

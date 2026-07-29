@@ -145,9 +145,27 @@ int secfeed_init(void)
         return -1;
     }
 
+    struct sockaddr_un addr = { .sun_family = AF_UNIX };
+
+    /* sun_path is 108 bytes and strncpy would silently truncate to fit, so a
+     * too-long path binds to a DIFFERENT socket than the one we unlink, log,
+     * and tell clients about. That fails in a maximally confusing way: the
+     * first start succeeds at the truncated name, and every restart then hits
+     * EADDRINUSE because the unlink above cleared a path that was never used.
+     * Refuse instead — a build- or packaging-time path this long is a mistake,
+     * and it should say so rather than half-work. */
+    if (strlen(SYNGUARD_SECFEED_SOCKET) >= sizeof(addr.sun_path)) {
+        sg_log(LOG_ERR,
+               "secfeed: socket path is %zu bytes, max %zu: %s",
+               strlen(SYNGUARD_SECFEED_SOCKET), sizeof(addr.sun_path) - 1,
+               SYNGUARD_SECFEED_SOCKET);
+        close(listen_fd);
+        listen_fd = -1;
+        return -1;
+    }
+
     unlink(SYNGUARD_SECFEED_SOCKET);   /* clear a stale socket from a crash */
 
-    struct sockaddr_un addr = { .sun_family = AF_UNIX };
     strncpy(addr.sun_path, SYNGUARD_SECFEED_SOCKET, sizeof(addr.sun_path) - 1);
 
     if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {

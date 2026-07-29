@@ -296,6 +296,101 @@ void rules_census(const synguard_state_t *s, int *counts, size_t n)
     }
 }
 
+/* ── Can an acting open-rule ever be told about its path? ── */
+/*
+ * The kmod reports opens only for a compile-time list of path prefixes
+ * (synapse_sensitive_paths[], published at the sysfs node below). An
+ * `event open` rule naming any other path parses, loads, counts toward the
+ * census above, and can never match — the kernel simply never mentions that
+ * path to us. Nothing said so, which is how deny-bpf-canary sat armed and
+ * inert: the positive control for enforcement was the one rule guaranteed not
+ * to fire, and a control that cannot trip reads exactly like a quiet system.
+ *
+ * Reachability is prefix OVERLAP in either direction — the rule may sit inside
+ * a watched subtree ("/dev/input/" covers "/dev/input/event0") or be broader
+ * than one (an "/etc/" pattern ending in a wildcard subsumes "/etc/shadow") —
+ * and only the literal head of the pattern, up to the first wildcard, can be
+ * compared.
+ *
+ * Returns the number of acting rules found to be unreachable.
+ */
+#define SG_SENSITIVE_PATHS_SYSFS "/sys/kernel/synapse/sensitive_paths"
+
+static int rule_is_acting_open_path(const sg_rule_t *r)
+{
+    if (!r->enabled)                 return 0;
+    if (r->verdict < VERDICT_DENY)   return 0;
+    /* A rule covering other event types can still act through those, so only
+     * an open-ONLY rule is rendered inert by the open filter. */
+    if (r->evt_mask != EVT_OPEN)     return 0;
+    if (!r->path_pattern[0])         return 0;   /* no path constraint */
+    return 1;
+}
+
+int rules_report_unreachable_paths(const synguard_state_t *s)
+{
+    return rules_report_unreachable_paths_from(s, SG_SENSITIVE_PATHS_SYSFS);
+}
+
+int rules_report_unreachable_paths_from(const synguard_state_t *s,
+                                        const char *sysfs_path)
+{
+    FILE *f = fopen(sysfs_path, "r");
+    if (!f) {
+        /* An older kmod, or none. Being unable to check is itself worth a
+         * line — silence here would read as a clean bill of health. */
+        for (const sg_rule_t *r = s->rules_head; r; r = r->next) {
+            if (!rule_is_acting_open_path(r)) continue;
+            sg_log(LOG_WARNING,
+                   "policy: cannot verify open-rule reachability — %s is "
+                   "absent (kmod too old, or not loaded). A deny rule on an "
+                   "unwatched path would never fire and this check is blind.",
+                   sysfs_path);
+            break;
+        }
+        return 0;
+    }
+
+    static char prefixes[64][RULE_MAX_PATTERN];
+    int np = 0;
+    char line[RULE_MAX_PATTERN];
+    while (np < 64 && fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\n")] = '\0';
+        if (line[0])
+            snprintf(prefixes[np++], RULE_MAX_PATTERN, "%s", line);
+    }
+    fclose(f);
+    if (np == 0) return 0;
+
+    int bad = 0;
+    for (const sg_rule_t *r = s->rules_head; r; r = r->next) {
+        if (!rule_is_acting_open_path(r)) continue;
+
+        /* Compare only up to the first wildcard: past it the pattern no
+         * longer constrains a literal prefix. */
+        size_t lit = strcspn(r->path_pattern, "*?[");
+        int reachable = 0;
+        for (int i = 0; i < np && !reachable; i++) {
+            size_t pl = strlen(prefixes[i]);
+            size_t n  = lit < pl ? lit : pl;
+            if (strncmp(r->path_pattern, prefixes[i], n) == 0)
+                reachable = 1;
+        }
+        if (reachable) continue;
+
+        bad++;
+        sg_log(LOG_WARNING,
+               "policy: rule '%s' (%s on open of \"%s\") CAN NEVER FIRE — the "
+               "kmod reports opens only under the prefixes listed in %s. The "
+               "rule loads and counts as enforceable, but the kernel never "
+               "reports that path, so nothing will ever match it.",
+               r->name,
+               r->verdict == VERDICT_DENY ? "deny" : "quarantine",
+               r->path_pattern, sysfs_path);
+    }
+    return bad;
+}
+
 /* ── Can anything actually be enforced? ──────────────────── */
 /*
  * "mode=ENFORCE" says only that acting is permitted, not that any loaded rule

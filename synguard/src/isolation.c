@@ -188,14 +188,49 @@ int sg_pid_identity_ok(pid_t pid, const char *expect_comm)
     return strncmp(now, expect_comm, SG_COMM_LEN - 1) == 0;
 }
 
-/* A kernel thread has no userspace executable, so readlink(/proc/pid/exe)
- * fails with ENOENT (we run as root, so EACCES is not in play). */
+/* PF_KTHREAD, from the kernel's include/linux/sched.h. Published to userspace
+ * as field 9 (flags) of /proc/pid/stat. */
+#define SG_PF_KTHREAD 0x00200000u
+
+/* Is `pid` a kernel thread?  1 = yes, 0 = no, -1 = the pid is gone.
+ *
+ * readlink(/proc/pid/exe) is NOT a usable test, though it looks like one: it
+ * fails with ENOENT for a kernel thread, but equally for a pid that has
+ * already exited (there is no /proc/pid at all) and for a zombie (the exe
+ * link is dropped at exit while the directory lingers until the parent
+ * reaps). Every dead process therefore answered "kernel thread".
+ *
+ * That is not cosmetic. sg_is_protected() runs BEFORE the stale-pid guard, so
+ * a target that died between the verdict and the action was refused as "is a
+ * kernel thread" and charged to protected_skips — which is a statement about
+ * the kernel's own tasks, not about a race — while stale_pid_skips, the
+ * counter that exists to measure exactly this race, stayed at zero. Observed
+ * 2026-07-29: five refusals naming a dead `claude` as a kernel thread.
+ *
+ * The task's own PF_KTHREAD flag tells all three cases apart, and reading it
+ * from /proc/pid/stat answers existence in the same open(). */
 static int proc_is_kthread(pid_t pid)
 {
     char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/exe", pid);
-    char link[16];
-    return (readlink(path, link, sizeof(link)) < 0 && errno == ENOENT);
+    snprintf(path, sizeof(path), "/proc/%d/stat", pid);
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+
+    char buf[1024];
+    char *got = fgets(buf, sizeof(buf), f);
+    fclose(f);
+    if (!got) return -1;
+
+    /* comm is parenthesised and may itself contain ')', so parse after the
+     * LAST one. Fields from there: state ppid pgrp session tty_nr tpgid flags */
+    char *rp = strrchr(buf, ')');
+    if (!rp) return -1;
+
+    unsigned int flags = 0;
+    if (sscanf(rp + 1, " %*c %*d %*d %*d %*d %*d %u", &flags) != 1)
+        return -1;
+
+    return (flags & SG_PF_KTHREAD) ? 1 : 0;
 }
 
 /* A process counts as "alive" only if it exists and is not a zombie. A
@@ -241,7 +276,14 @@ int sg_is_protected(pid_t pid, char *why, size_t wlen)
         DENY_REASON("pid=%d shares synguard's process group", pid);
         return 1;
     }
-    if (proc_is_kthread(pid)) {
+    /* A pid that is simply gone is NOT protected. Saying so here would spend
+     * the answer on the wrong guard: the caller would log "protected" and
+     * increment protected_skips, when what actually happened is that the
+     * target exited before we could act on it. Fall through and let
+     * sg_pid_identity_ok() name it — that is the guard that understands
+     * exits and pid reuse, and its counter is the one worth watching. */
+    int kt = proc_is_kthread(pid);
+    if (kt > 0) {
         DENY_REASON("pid=%d is a kernel thread", pid);
         return 1;
     }

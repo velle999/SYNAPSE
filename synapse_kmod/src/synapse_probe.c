@@ -369,28 +369,47 @@ static inline struct pt_regs *syscall_uregs(struct pt_regs *regs)
 /*
  * We don't hook every open() — only opens of sensitive paths.
  * This dramatically reduces noise.
+ *
+ * THIS LIST IS THE REACHABILITY BOUNDARY FOR synguard's `event open` RULES.
+ * A rule on a path outside it parses, loads, and counts toward the "N
+ * enforceable rules" banner, but the kmod never reports the open, so the rule
+ * can never match. Nothing said so, which is how deny-bpf-canary — the
+ * positive control that exists purely to prove enforcement can fire — became
+ * the one rule guaranteed not to fire (its /var/lib/synguard/ path was not
+ * listed). A control that cannot trip is worse than no control: it reads as a
+ * quiet system.
+ *
+ * So the list is published at /sys/kernel/synapse/sensitive_paths and
+ * synguard checks every deny rule against it at load time. Add paths HERE and
+ * only here; userspace reads this array rather than keeping a copy that drifts.
  */
+const char *const synapse_sensitive_paths[] = {
+    "/etc/passwd", "/etc/shadow", "/etc/sudoers",
+    "/etc/ssh/",   "/root/",      "/proc/kcore",
+    "/dev/mem",    "/dev/kmem",   "/boot/",
+    "/sys/kernel/", "/proc/sysrq-trigger",
+    /* Raw input devices: a userland keylogger reads keystrokes from
+     * these. Only the compositor (synui) legitimately opens them, so
+     * any other opener is worth a synguard verdict. */
+    "/dev/input/",
+    /* System persistence & injection surfaces. synguard already had rules
+     * for several of these (ld.so.preload, cron, systemd units) that never
+     * fired because the kmod wasn't reporting the paths. */
+    "/etc/ld.so.preload", "/etc/cron", "/var/spool/cron/",
+    "/etc/systemd/system/", "/etc/profile.d/", "/etc/xdg/autostart/",
+    "/etc/rc.local",
+    /* synguard's own state directory. baseline.db is what "known good"
+     * means, so tampering with it is worth seeing; and this is what makes
+     * the bpf-canary positive control reachable at all. */
+    "/var/lib/synguard/",
+    NULL
+};
+
 static bool is_sensitive_path(const char *path)
 {
-    static const char *const sensitive[] = {
-        "/etc/passwd", "/etc/shadow", "/etc/sudoers",
-        "/etc/ssh/",   "/root/",      "/proc/kcore",
-        "/dev/mem",    "/dev/kmem",   "/boot/",
-        "/sys/kernel/", "/proc/sysrq-trigger",
-        /* Raw input devices: a userland keylogger reads keystrokes from
-         * these. Only the compositor (synui) legitimately opens them, so
-         * any other opener is worth a synguard verdict. */
-        "/dev/input/",
-        /* System persistence & injection surfaces. synguard already had rules
-         * for several of these (ld.so.preload, cron, systemd units) that never
-         * fired because the kmod wasn't reporting the paths. */
-        "/etc/ld.so.preload", "/etc/cron", "/var/spool/cron/",
-        "/etc/systemd/system/", "/etc/profile.d/", "/etc/xdg/autostart/",
-        "/etc/rc.local",
-        NULL
-    };
-    for (int i = 0; sensitive[i]; i++)
-        if (strncmp(path, sensitive[i], strlen(sensitive[i])) == 0)
+    for (int i = 0; synapse_sensitive_paths[i]; i++)
+        if (strncmp(path, synapse_sensitive_paths[i],
+                    strlen(synapse_sensitive_paths[i])) == 0)
             return true;
     return false;
 }

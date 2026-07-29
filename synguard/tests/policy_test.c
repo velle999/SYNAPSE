@@ -180,6 +180,103 @@ int main(void)
        rules_enforcement_reachable(&s) == 1);
     rules_free(&s);
 
+    /* ── Can an acting open-rule ever be told about its path? ── */
+    /*
+     * Reaching a deny verdict is not enough: the kmod reports opens only for
+     * the prefixes in synapse_sensitive_paths[], so a deny rule naming any
+     * other path loads, counts as enforceable, and can never match. That is
+     * how deny-bpf-canary — the positive control whose entire job is to prove
+     * enforcement fires — sat armed and inert on 2026-07-29, and why the
+     * banner's "REACHABLE" was true and still misleading.
+     */
+    char plist[512];
+    snprintf(plist, sizeof(plist), "%s/sensitive_paths", dir);
+
+    /* The kmod's list as it stood when the canary was written: no /var/lib. */
+    write_rules(dir, "sensitive_paths",
+        "/etc/passwd\n/etc/shadow\n/etc/ld.so.preload\n/dev/input/\n");
+
+    unlink_rules(dir, "40-enforce.rules");
+    write_rules(dir, "40-enforce.rules",
+        "rule deny-ld-preload {\n    event open\n    path /etc/ld.so.preload\n"
+        "    verdict deny\n    priority 0\n}\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("a deny rule on a watched path is reachable",
+       rules_report_unreachable_paths_from(&s, plist) == 0);
+    rules_free(&s);
+
+    /* THE regression: the canary's path is not watched, so it can never fire
+     * and the operator must be told so. */
+    unlink_rules(dir, "40-enforce.rules");
+    write_rules(dir, "40-enforce.rules",
+        "rule deny-bpf-canary {\n    event open\n"
+        "    path /var/lib/synguard/bpf-canary\n"
+        "    verdict deny\n    priority 0\n}\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("the canary on an UNWATCHED path is reported unreachable",
+       rules_report_unreachable_paths_from(&s, plist) == 1);
+    ok("...while the verdict census still calls enforcement REACHABLE",
+       rules_enforcement_reachable(&s) == 1);
+    rules_free(&s);
+
+    /* Same rule, once the kmod publishes the prefix that makes it work. */
+    unlink_rules(dir, "sensitive_paths");
+    write_rules(dir, "sensitive_paths",
+        "/etc/passwd\n/etc/shadow\n/etc/ld.so.preload\n/dev/input/\n"
+        "/var/lib/synguard/\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("the canary IS reachable once /var/lib/synguard/ is watched",
+       rules_report_unreachable_paths_from(&s, plist) == 0);
+    rules_free(&s);
+
+    /* Overlap must work in both directions. */
+    unlink_rules(dir, "40-enforce.rules");
+    write_rules(dir, "40-enforce.rules",
+        "rule inside {\n    event open\n    path /dev/input/event0\n"
+        "    verdict deny\n    priority 0\n}\n"
+        "rule broader {\n    event open\n    path /etc/*\n"
+        "    verdict deny\n    priority 1\n}\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("a rule inside a watched subtree, and one broader than a prefix, "
+       "are both reachable",
+       rules_report_unreachable_paths_from(&s, plist) == 0);
+    rules_free(&s);
+
+    /* Only ACTING rules matter. An alert rule on an unwatched path is merely
+     * quiet, not a false claim of enforcement, so it must not be reported. */
+    unlink_rules(dir, "40-enforce.rules");
+    write_rules(dir, "40-enforce.rules",
+        "rule just-alert {\n    event open\n    path /nowhere/at/all\n"
+        "    verdict alert\n    priority 0\n}\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("an ALERT rule on an unwatched path is not reported",
+       rules_report_unreachable_paths_from(&s, plist) == 0);
+    rules_free(&s);
+
+    /* A rule covering more than open can still act through those other
+     * events, so the open filter does not render it inert. */
+    unlink_rules(dir, "40-enforce.rules");
+    write_rules(dir, "40-enforce.rules",
+        "rule any-event {\n    event any\n    path /nowhere/at/all\n"
+        "    verdict deny\n    priority 0\n}\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("a deny rule covering all events is not reported as open-unreachable",
+       rules_report_unreachable_paths_from(&s, plist) == 0);
+    rules_free(&s);
+
+    /* No kmod, no list: the check is blind and must not invent a verdict. */
+    unlink_rules(dir, "40-enforce.rules");
+    write_rules(dir, "40-enforce.rules",
+        "rule deny-bpf-canary {\n    event open\n"
+        "    path /var/lib/synguard/bpf-canary\n"
+        "    verdict deny\n    priority 0\n}\n");
+    load(&s, dir, MODE_ENFORCE, 1, 0);
+    ok("a missing prefix list reports nothing rather than guessing",
+       rules_report_unreachable_paths_from(&s, "/nonexistent/sensitive_paths")
+           == 0);
+    rules_free(&s);
+
+    unlink_rules(dir, "sensitive_paths");
     unlink_rules(dir, "40-enforce.rules");
     unlink_rules(dir, "10-mixed.rules");
     rmdir(dir);

@@ -111,6 +111,10 @@ static void print_banner(const synguard_state_t *s)
     if (rules_enforcement_reachable(s)) {
         sg_log(LOG_INFO, "policy: enforcement is REACHABLE — "
                          "matching events can be killed or frozen");
+        /* REACHABLE is a statement about verdicts, not about paths: a deny
+         * rule still needs the kmod to report the open it names. Say which
+         * ones it never will, or "armed" keeps covering for inert rules. */
+        rules_report_unreachable_paths(s);
     } else if (s->config.mode == MODE_ENFORCE ||
                s->config.mode == MODE_LOCKDOWN) {
         /* The case a stock install is in. Not an error — it is a deliberate
@@ -229,12 +233,14 @@ static int run_event_loop(synguard_state_t *s)
         /* Log stats every 60s */
         if (now - last_stats > 60) {
             sg_log(LOG_INFO,
-                "synguard: stats — events=%lu rules=%lu ai=%lu denials=%lu "
+                "synguard: stats — events=%lu rules=%lu ai=%lu ai-skipped=%lu "
+                "denials=%lu "
                 "alerts=%lu quarantines=%lu protected-skips=%lu "
                 "stale-pid-skips=%lu dropped=%lu suppressed=%lu",
                 s->stats.events_processed,
                 s->stats.rules_matched,
                 s->stats.ai_queries,
+                s->stats.ai_skipped,
                 s->stats.denials,
                 s->stats.alerts,
                 s->stats.quarantines,

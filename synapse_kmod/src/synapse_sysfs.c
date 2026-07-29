@@ -304,6 +304,36 @@ static ssize_t version_show(struct kobject *kobj,
 static struct kobj_attribute version_attr =
     __ATTR(version, 0444, version_show, NULL);
 
+/* ── /sys/kernel/synapse/sensitive_paths ─────────────────── */
+/*
+ * One path prefix per line: the complete set of opens the kmod will report.
+ * synguard reads this at rule-load time so it can say out loud when an
+ * `event open` rule names a path the kernel will never tell it about — a rule
+ * that loads, counts as enforceable, and silently can never match. World
+ * readable: it is a static compile-time list, and knowing which paths are
+ * watched is not the secret worth keeping (the rules are the secret, and they
+ * are 0640).
+ */
+static ssize_t sensitive_paths_show(struct kobject *kobj,
+                                    struct kobj_attribute *attr,
+                                    char *buf)
+{
+    ssize_t len = 0;
+    int i;
+
+    for (i = 0; synapse_sensitive_paths[i]; i++) {
+        /* Never let the last entry run off the end of the page. */
+        if (len >= PAGE_SIZE - 1)
+            break;
+        len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
+                         synapse_sensitive_paths[i]);
+    }
+    return len;
+}
+
+static struct kobj_attribute sensitive_paths_attr =
+    __ATTR(sensitive_paths, 0444, sensitive_paths_show, NULL);
+
 /* ── Attribute group ──────────────────────────────────────── */
 static struct attribute *synapse_attrs[] = {
     &status_attr.attr,
@@ -313,6 +343,7 @@ static struct attribute *synapse_attrs[] = {
     &config_attr.attr,
     &lockdown_attr.attr,
     &version_attr.attr,
+    &sensitive_paths_attr.attr,
     NULL,
 };
 

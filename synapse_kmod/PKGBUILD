@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=22
+pkgrel=23
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')

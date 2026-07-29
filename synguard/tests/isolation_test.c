@@ -179,6 +179,82 @@ int main(void)
         }
     }
 
+    /* ── A dead pid is not a kernel thread ──────────────────── */
+    /*
+     * sg_is_protected() runs BEFORE the identity guard, so if it claims a dead
+     * pid, the refusal is attributed to the kernel owning that task and
+     * charged to protected_skips — and stale_pid_skips, the counter that
+     * exists to measure exactly this race, never moves. That is what happened
+     * on 2026-07-29: five refusals named a dead userspace process "a kernel
+     * thread", because the old test was readlink(/proc/pid/exe), which fails
+     * with ENOENT for kernel threads, exited pids and zombies alike.
+     *
+     * The assertion is deliberately about WHICH guard answers: a dead pid must
+     * fall through sg_is_protected() to sg_pid_identity_ok().
+     */
+    char why[160] = "";
+
+    /* Use a ZOMBIE, not a reaped pid. It is both the exact incident shape (we
+     * SIGKILLed it, the parent has not reaped it yet) and the only
+     * deterministic one: an unreaped child's pid cannot be recycled underneath
+     * the assertion, whereas a fully reaped pid may already belong to someone
+     * else by the time we look — which is precisely how this bug survived. */
+    pid_t zomb = fork();
+    if (zomb == 0) {
+        /* Leave our process group first, or sg_is_protected() refuses it as
+         * "shares synguard's process group" — correct, but a different guard
+         * than the one under test. The real target was an unrelated process. */
+        setpgid(0, 0);
+        _exit(0);
+    }
+    if (zomb > 0) {
+        setpgid(zomb, zomb);   /* race-free: whichever call lands first wins */
+        /* Wait for it to actually reach Z, without reaping it. */
+        for (int i = 0; i < 200; i++) {
+            char sp[64], sbuf[512];
+            snprintf(sp, sizeof(sp), "/proc/%d/stat", zomb);
+            FILE *sf = fopen(sp, "r");
+            if (!sf) break;
+            char *g = fgets(sbuf, sizeof(sbuf), sf);
+            fclose(sf);
+            char *rp2 = g ? strrchr(sbuf, ')') : NULL;
+            char st = 0;
+            if (rp2) sscanf(rp2 + 1, " %c", &st);
+            if (st == 'Z') break;
+            usleep(1000);
+        }
+
+        ok("a zombie is NOT reported as protected",
+           sg_is_protected(zomb, why, sizeof(why)) == 0);
+        ok("a zombie is NOT called a kernel thread",
+           strstr(why, "kernel thread") == NULL);
+        ok("a zombie is still refused, by the identity guard",
+           sg_pid_identity_ok(zomb, NULL) == 0);
+
+        int zst;
+        waitpid(zomb, &zst, 0);
+    }
+
+    why[0] = '\0';
+    ok("a reaped pid is still refused, by the identity guard",
+       sg_pid_identity_ok(dead, NULL) == 0);
+
+    /* The genuine article still has to be caught. kthreadd is PID 2 on every
+     * Linux system and is always a kernel thread. */
+    why[0] = '\0';
+    if (kill(2, 0) == 0 || errno == EPERM) {
+        ok("pid 2 (kthreadd) IS still reported as a kernel thread",
+           sg_is_protected(2, why, sizeof(why)) == 1 &&
+           strstr(why, "kernel thread") != NULL);
+    }
+
+    /* And a live userspace process must not be swept up by the new flags
+     * test — PF_KTHREAD is clear for us. */
+    why[0] = '\0';
+    ok("a live userspace process is not called a kernel thread",
+       strstr((sg_is_protected(getpid(), why, sizeof(why)), why),
+              "kernel thread") == NULL);
+
     printf(failures ? "isolation: FAILED (%d)\n" : "isolation: all passed\n",
            failures);
     return failures ? 1 : 0;

@@ -20,3 +20,13 @@ ssize_t synapse_probe_read_from(char *buf, size_t buf_len,
 u32     synapse_probe_ring_tail(void);
 void    synapse_probe_set_enabled(bool enabled);
 int     synapse_probe_integrity_check(void);   /* 0 = probes healthy */
+
+/*
+ * The open() path allowlist, NULL-terminated. Only opens whose path starts
+ * with one of these prefixes are reported at all, which makes this the
+ * reachability boundary for synguard's `event open` rules — a rule outside it
+ * can never match. Published via /sys/kernel/synapse/sensitive_paths so
+ * userspace can check its rules against the live kernel's list instead of
+ * keeping a second copy that drifts out of step.
+ */
+extern const char *const synapse_sensitive_paths[];
