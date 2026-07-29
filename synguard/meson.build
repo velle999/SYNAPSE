@@ -20,6 +20,7 @@ sources = files(
   'src/isolation.c',
   'src/secfeed.c',
   'src/core.c',
+  'src/sg_log.c',
 )
 
 inc = include_directories('include')
@@ -36,7 +37,7 @@ executable('synguard', sources,
 # just it — no daemon, no kmod. The socket path is overridden to a temp file so
 # the test needs neither root nor /run.
 secfeed_test = executable('secfeed_test',
-  files('tests/secfeed_test.c', 'src/secfeed.c'),
+  files('tests/secfeed_test.c', 'src/secfeed.c', 'src/sg_log.c'),
   include_directories: inc,
   dependencies: [dep_threads, dep_systemd],
   c_args: ['-DSYNGUARD_SECFEED_SOCKET="@0@/synguard-secfeed-test.sock"'.format(
@@ -49,7 +50,7 @@ test('secfeed', secfeed_test, timeout: 60)
 # predicate over /proc, driven against the test's own pid and a child it reaps
 # itself.
 isolation_test = executable('isolation_test',
-  files('tests/isolation_test.c', 'src/isolation.c'),
+  files('tests/isolation_test.c', 'src/isolation.c', 'src/sg_log.c'),
   include_directories: inc)
 test('isolation', isolation_test, timeout: 60)
 
@@ -59,7 +60,7 @@ test('isolation', isolation_test, timeout: 60)
 # shipped rules/ tree to assert the stock policy stays detect-only — so
 # arming every install is a change that has to be made on purpose.
 policy_test = executable('policy_test',
-  files('tests/policy_test.c', 'src/rule_engine.c'),
+  files('tests/policy_test.c', 'src/rule_engine.c', 'src/sg_log.c'),
   include_directories: inc,
   c_args: ['-DSYNGUARD_SHIPPED_RULES_DIR="@0@/rules"'.format(
     meson.current_source_dir())])
@@ -69,7 +70,7 @@ test('policy', policy_test, timeout: 60)
 # kmod_parse_event() live in event_processor.c, which pulls in the pipeline, so
 # the test stubs the daemon entry points it never calls.
 netwatch_test = executable('netwatch_test',
-  files('tests/netwatch_test.c', 'src/event_processor.c', 'src/core.c'),
+  files('tests/netwatch_test.c', 'src/event_processor.c', 'src/core.c', 'src/sg_log.c'),
   include_directories: inc,
   dependencies: [dep_threads, dep_systemd])
 test('netwatch', netwatch_test, timeout: 60)

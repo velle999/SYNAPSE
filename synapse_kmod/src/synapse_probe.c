@@ -395,7 +395,17 @@ static int connect_pre_handler(struct kprobe *p, struct pt_regs *regs)
     struct pt_regs *u = syscall_uregs(regs);
     void __user *uaddr = (void __user *)u->si;
     int addrlen = (int)u->dx;
-    struct sockaddr_storage ss;
+    /*
+     * Zeroed, and it must stay that way. addrlen is attacker-controlled and
+     * only has to clear sizeof(sa_family_t) (2) to get past the check below,
+     * so a short connect() copies just a couple of bytes into this buffer —
+     * while the AF_INET branch then formats sin_addr (offset 4) and sin_port
+     * (offset 2), i.e. bytes copy_from_user() never wrote. Uninitialised, that
+     * is kernel stack rendered as an "IP:port" into the event ring, from where
+     * it reaches syscall_log, synguard, synapd's context, and anything the AI
+     * summarises. Any local process could do it in a loop.
+     */
+    struct sockaddr_storage ss = {0};
 
     if (!uaddr || addrlen < (int)sizeof(sa_family_t))
         return 0;
@@ -407,6 +417,18 @@ static int connect_pre_handler(struct kprobe *p, struct pt_regs *regs)
     struct synapse_syscall_event e = {0};
     fill_event(&e, __NR_connect, SYNAPSE_EVT_SOCKET);
     e.args[0] = ss.ss_family;
+
+    /*
+     * Zeroing stops the leak; this stops the lie. A 2-byte AF_INET connect()
+     * would otherwise be logged as a confident "0.0.0.0:0" that the process
+     * never asked for. Require the address the family actually defines before
+     * claiming to have read one — the kernel is going to reject these with
+     * EINVAL anyway.
+     */
+    if (ss.ss_family == AF_INET && addrlen < (int)sizeof(struct sockaddr_in))
+        return 0;
+    if (ss.ss_family == AF_INET6 && addrlen < (int)sizeof(struct sockaddr_in6))
+        return 0;
 
     if (ss.ss_family == AF_INET) {
         struct sockaddr_in *in = (struct sockaddr_in *)&ss;
