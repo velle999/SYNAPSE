@@ -188,7 +188,17 @@ static void handle_query(work_item_t *w) {
 
 static void handle_syscall_event(work_item_t *w) {
     char *evt = (char *)w->payload;
-    if (!evt) return;
+    /* payload_len is checked as well as the pointer. The write below indexes
+     * [payload_len - 1], so a zero length is an out-of-bounds write one byte
+     * BEFORE the buffer. Today that cannot happen — the receive loop only
+     * malloc()s when payload_len > 0, so a zero length always arrives as a
+     * NULL payload and the first test catches it. That invariant is implicit
+     * and lives ~250 lines away in the epoll loop; a later change to allocate
+     * unconditionally (malloc(len + 1) is the obvious refactor) would turn
+     * this into a one-byte heap underflow reachable from any client, and the
+     * TCP bridge makes "any client" mean another host. State it locally
+     * instead of depending on distant code, the way handle_query() does. */
+    if (!evt || w->hdr.payload_len == 0) return;
     evt[w->hdr.payload_len - 1] = '\0';
 
     context_push(w->state, CTX_SYSCALL, w->client_pid, evt);
@@ -210,7 +220,9 @@ static void handle_syscall_event(work_item_t *w) {
 
 static void handle_sched_hint(work_item_t *w) {
     char *intent = (char *)w->payload;
-    if (!intent) return;
+    /* Same zero-length guard as handle_syscall_event() — see the reasoning
+     * there. Every handler that indexes [payload_len - 1] needs this. */
+    if (!intent || w->hdr.payload_len == 0) return;
     intent[w->hdr.payload_len - 1] = '\0';
 
     int delta = 0;

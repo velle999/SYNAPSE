@@ -172,14 +172,38 @@ int secfeed_init(void)
      * which is a visible, logged degradation rather than a silent open door. */
     struct group *gr = getgrnam("synapse");
     if (gr) {
+        /* Loud, and it says what breaks. This chown failed silently-enough for
+         * a long time — EPERM, because the unit's CapabilityBoundingSet had no
+         * CAP_CHOWN — leaving the socket 0660 root:root. It "worked": bind,
+         * listen and accept all succeeded, the feed logged that it was
+         * listening, and nothing was ever marked failed. The compositor runs
+         * as the session user, so it simply got EPERM on connect() forever and
+         * no verdict ever reached the desktop. A one-line WARNING among the
+         * boot noise was not enough to notice an absence. */
         if (chown(SYNGUARD_SECFEED_SOCKET, 0, gr->gr_gid) < 0)
-            sg_log(LOG_WARNING, "secfeed: chown(%s, :synapse): %s",
+            sg_log(LOG_ERR,
+                   "secfeed: chown(%s, :synapse) FAILED: %s — the socket stays "
+                   "root-only, so synui cannot subscribe and NO verdict will "
+                   "reach the desktop. Needs CAP_CHOWN in the unit's "
+                   "CapabilityBoundingSet.",
                    SYNGUARD_SECFEED_SOCKET, strerror(errno));
     } else {
-        sg_log(LOG_WARNING,
-               "secfeed: no 'synapse' group — only root can subscribe");
+        sg_log(LOG_ERR,
+               "secfeed: no 'synapse' group — only root can subscribe, so no "
+               "verdict will reach the desktop");
     }
     chmod(SYNGUARD_SECFEED_SOCKET, 0660);
+
+    /* Report what the socket ACTUALLY ended up as, not what we asked for.
+     * Both calls above can fail independently, and the difference between
+     * "gated on a group" and "root-only" is the difference between a working
+     * feed and a silent one. */
+    struct stat sst;
+    if (stat(SYNGUARD_SECFEED_SOCKET, &sst) == 0)
+        sg_log(LOG_INFO, "secfeed: socket is %04o uid=%u gid=%u%s",
+               sst.st_mode & 07777, sst.st_uid, sst.st_gid,
+               (gr && sst.st_gid == gr->gr_gid) ? " (group synapse — ok)"
+                                                : " — ROOT-ONLY, no subscriber");
 
     if (listen(listen_fd, SECFEED_MAX_CLIENTS) < 0) {
         sg_log(LOG_WARNING, "secfeed: listen(): %s", strerror(errno));

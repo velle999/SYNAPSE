@@ -58,10 +58,26 @@ RestrictSUIDSGID=true
 #                        which is how a flagged pid gets classified at all
 #   CAP_DAC_READ_SEARCH  read /proc and /sys/kernel/synapse regardless of mode
 #   CAP_DAC_OVERRIDE     write /sys/fs/cgroup/... for the quarantine freeze
+#   CAP_CHOWN            hand /run/synguard.sock to the `synapse` group
 #
 # Notably NOT CAP_SYS_ADMIN: cgroup v2 mkdir, cgroup.procs and cgroup.freeze
 # are all plain file writes that DAC_OVERRIDE covers.
-CapabilityBoundingSet=CAP_KILL CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE
+#
+# CAP_CHOWN was missing, and its absence disabled the verdict feed entirely.
+# secfeed_init() gates the socket on the `synapse` group deliberately — a
+# world-readable feed would hand any local process a live commentary on what
+# this daemon detects, and let it occupy all SECFEED_MAX_CLIENTS slots and
+# starve the real subscriber. Without CAP_CHOWN that chown() returns EPERM, the
+# socket stays 0660 root:root, and synui — which runs as the session user — got
+# EPERM connecting. The feed fails closed, which is the right direction, and
+# then has no consumer at all: the compositor never receives a verdict, so the
+# only symptom is an absence nobody notices.
+#
+# This is the third time hardening here has silently switched off the thing it
+# was protecting (see ProtectControlGroups vs quarantine containment, and
+# ProtectKernelTunables). When adding a restriction to this unit, check what
+# the daemon does at STARTUP and not only in its steady state.
+CapabilityBoundingSet=CAP_KILL CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN
 AmbientCapabilities=
 
 # Cheap and non-negotiable: nothing here changes personality, needs realtime,
