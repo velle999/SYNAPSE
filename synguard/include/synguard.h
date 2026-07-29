@@ -235,6 +235,7 @@ typedef struct {
     uint64_t  protected_skips;   /* actions refused on a protected pid */
     uint64_t  stale_pid_skips;   /* actions refused: pid no longer the culprit */
     uint64_t  events_dropped;    /* events the ring lapped before we read them */
+    uint64_t  alerts_suppressed; /* repeat alerts collapsed into a summary */
     time_t    start_time;
 } sg_stats_t;
 
@@ -329,6 +330,12 @@ int synguard_ai_classify(synguard_state_t *s,
 /* Action engine */
 void action_deny(synguard_state_t *s, const sg_event_t *e, const char *reason);
 void action_alert(synguard_state_t *s, const sg_alert_t *alert);
+
+/*
+ * Emit "×N in Ms" lines for repeat-alert windows that have closed. Call from
+ * the main loop; it only does work when a window has actually expired.
+ */
+void alert_flush_summaries(synguard_state_t *s);
 void action_quarantine(synguard_state_t *s, const sg_event_t *e);
 
 /* Security-verdict broadcast feed (secfeed.c). A fixed-size record is sent to

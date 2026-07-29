@@ -205,12 +205,15 @@ static int run_event_loop(synguard_state_t *s)
             last_save = now;
         }
 
+        /* Close out any repeat-alert windows that have expired. */
+        alert_flush_summaries(s);
+
         /* Log stats every 60s */
         if (now - last_stats > 60) {
             sg_log(LOG_INFO,
                 "synguard: stats — events=%lu rules=%lu ai=%lu denials=%lu "
                 "alerts=%lu quarantines=%lu protected-skips=%lu "
-                "stale-pid-skips=%lu dropped=%lu",
+                "stale-pid-skips=%lu dropped=%lu suppressed=%lu",
                 s->stats.events_processed,
                 s->stats.rules_matched,
                 s->stats.ai_queries,
@@ -219,7 +222,8 @@ static int run_event_loop(synguard_state_t *s)
                 s->stats.quarantines,
                 s->stats.protected_skips,
                 s->stats.stale_pid_skips,
-                s->stats.events_dropped);
+                s->stats.events_dropped,
+                s->stats.alerts_suppressed);
             last_stats = now;
         }
     }
