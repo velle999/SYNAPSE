@@ -14,6 +14,14 @@ User=root
 Group=root
 
 ExecStartPre=/bin/mkdir -p /var/log/synguard /var/lib/synguard
+# The bpf-canary must EXIST or the positive control cannot work at all.
+# lsm/file_open only fires for an open that reaches a file, so a missing path
+# is invisible to the BPF gate; the kprobe path does see the attempt, but can
+# only kill after the fact, by which time a short-lived opener is gone. A
+# canary on a nonexistent path is therefore unenforceable on both paths, which
+# is exactly how it sat armed and inert. Leading '-' so a denied or read-only
+# recreate cannot block startup.
+ExecStartPre=-/usr/bin/install -m 600 /dev/null /var/lib/synguard/bpf-canary
 ExecStart=/usr/bin/synguard \
     --foreground \
     --mode enforce \

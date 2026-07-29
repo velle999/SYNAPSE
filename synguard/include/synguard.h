@@ -241,6 +241,8 @@ typedef struct {
     uint64_t  protected_skips;   /* actions refused on a protected pid */
     uint64_t  stale_pid_skips;   /* actions refused: pid no longer the culprit */
     uint64_t  events_dropped;    /* events the ring lapped before we read them */
+    uint64_t  reader_lag_ms;     /* age of the newest event we have processed */
+    uint64_t  reader_lag_max_ms; /* worst lag seen, so a transient stall shows */
     uint64_t  alerts_suppressed; /* repeat alerts collapsed into a summary */
     time_t    start_time;
 } sg_stats_t;

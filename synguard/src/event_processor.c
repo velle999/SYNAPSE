@@ -463,8 +463,26 @@ sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen)
  * This bounds the coupling; it does not remove it. Moving classification to a
  * worker thread would, and is the deeper fix.
  */
+/* Overridable so a build can put the ORIGINAL failure back and prove the lag
+ * gauge below actually rises: at 100 the limiter never trips and the reader
+ * blocks on the classifier exactly as it did before this existed. */
+#ifndef SG_AI_DUTY_PCT
 #define SG_AI_DUTY_PCT       20
+#endif
 #define SG_AI_DUTY_WINDOW_S  10
+
+/* Reader lag past which detection is meaningfully degraded. A cycle is 100ms,
+ * so seconds of lag already means events are being judged long after the fact;
+ * once lag exceeds the ring's span they are lost outright. The span is a hint
+ * for the message only — the ring is 32768 entries and the rate varies. */
+/* Overridable so a build can drop the threshold under the lag a healthy reader
+ * already shows, and prove the measure→threshold→warn path actually fires
+ * rather than trusting an alarm nobody has ever seen go off. */
+#ifndef SG_READER_LAG_WARN_MS
+#define SG_READER_LAG_WARN_MS  5000
+#endif
+#define SG_READER_LAG_WARN_S   60
+#define SG_RING_SPAN_HINT_S    250
 
 static uint64_t ai_win_start_ns;   /* reader thread only — no lock needed */
 static uint64_t ai_win_spent_ns;
@@ -730,6 +748,11 @@ static void *reader_thread_fn(void *arg)
     uint64_t last_ts = 0;
     int warned_fallback = 0;
 
+    /* Newest event timestamp we have actually looked at, for the lag gauge
+     * below. Separate from last_ts, which only gates the syscall_log fallback. */
+    uint64_t newest_ts    = 0;
+    time_t   last_lag_warn = 0;
+
     sg_log(LOG_INFO, "kmod_reader: started, polling every %dms",
            s->config.poll_interval_ms);
 
@@ -830,6 +853,8 @@ static void *reader_thread_fn(void *arg)
                             canary_pending = 0;
                             canary_misses  = 0;
                         }
+                        if (evt.timestamp_ns > newest_ts)
+                            newest_ts = evt.timestamp_ns;
                         synguard_process_event(s, &evt);
                     }
                 }
@@ -852,6 +877,48 @@ static void *reader_thread_fn(void *arg)
                 cursor = now;
         }
         close(fd);
+
+        /*
+         * How STALE is the stream, not merely whether the ring lapped.
+         *
+         * events_dropped counts a lapped ring only. A reader that simply never
+         * arrived is invisible to it, and that is precisely how a blocking AI
+         * call on this thread hid a total detection outage — 0 of 100
+         * rule-matching opens reported — behind a clean-looking dropped=0 for
+         * as long as it did. Lag is the gauge that would have shown it at a
+         * glance, so it is now reported every cycle and warned about.
+         *
+         * Event timestamps are ktime_get_raw_ns(), so CLOCK_MONOTONIC_RAW is
+         * the same clock: the subtraction is exactly the age of the newest
+         * event we have looked at, with no clock-domain guessing.
+         */
+        if (newest_ts) {
+            struct timespec rt;
+            clock_gettime(CLOCK_MONOTONIC_RAW, &rt);
+            uint64_t now_ns = (uint64_t)rt.tv_sec * 1000000000ull +
+                              (uint64_t)rt.tv_nsec;
+            uint64_t lag_ms = (now_ns > newest_ts)
+                                  ? (now_ns - newest_ts) / 1000000ull : 0;
+
+            s->stats.reader_lag_ms = lag_ms;
+            if (lag_ms > s->stats.reader_lag_max_ms)
+                s->stats.reader_lag_max_ms = lag_ms;
+
+            /* Rate limited: a reader that is behind would otherwise flood the
+             * journal with the news every poll interval. */
+            time_t nowt = time(NULL);
+            if (lag_ms >= SG_READER_LAG_WARN_MS &&
+                nowt - last_lag_warn >= SG_READER_LAG_WARN_S) {
+                last_lag_warn = nowt;
+                sg_log(LOG_WARNING,
+                       "kmod_reader: %llums BEHIND the ring — events are being "
+                       "evaluated late and will be LOST once the lag exceeds "
+                       "the ring (~%ds here). Detection is degraded now, not "
+                       "when dropped starts counting.",
+                       (unsigned long long)lag_ms,
+                       SG_RING_SPAN_HINT_S);
+            }
+        }
 
         /* Runs whether or not anything arrived, so blinding is caught even on
          * a silent system. */

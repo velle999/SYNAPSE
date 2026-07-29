@@ -329,6 +329,45 @@
 # }
 
 
+# ── A positive control, and why its file must exist ─────────────────────────
+#
+# A rule that never fires is indistinguishable from a rule that is not working,
+# so keep one deny rule that you can trip on demand. The canary below is that
+# rule, and getting it wrong taught the two blind spots worth knowing:
+#
+#   THE FILE MUST EXIST. lsm/file_open only fires for an open that actually
+#   reaches a file. A path that is not there fails at lookup with ENOENT and
+#   the BPF gate never sees it. The kprobe path DOES see the attempt — it reads
+#   the filename at syscall entry, so ENOENT opens are reported — but it can
+#   only kill after the fact, and a short-lived opener has already exited by
+#   then ("REFUSED deny: pid=N is no longer 'cat'"). A canary on a missing file
+#   is therefore unenforceable on BOTH paths while looking perfectly armed:
+#   it matches, it logs a reason, and nothing is ever prevented.
+#   synguard.service recreates it in ExecStartPre for exactly this reason.
+#
+#   THE PATH MUST BE ONE THE KMOD REPORTS. The kprobe reports opens only for
+#   the prefixes published at /sys/kernel/synapse/sensitive_paths. A deny rule
+#   outside that list parses, loads, counts toward the "N enforceable rules"
+#   banner, and can never match. synguard warns about this at startup now
+#   ("rule ... CAN NEVER FIRE"), but prefer a path already on the list.
+#
+# Verify it, don't assume it. As root:
+#
+#   systemd-run -q --collect cat /var/lib/synguard/bpf-canary
+#
+# Expect "Operation not permitted" — root, refused on a file root owns, which
+# only an LSM can do — and `bpf-lsm: denied=` incrementing in the journal. Run
+# it under systemd-run, not in your shell: a deny tears down the opener's
+# process TREE, and your shell is in it.
+#
+# rule deny-bpf-canary {
+#     event    open
+#     path     /var/lib/synguard/bpf-canary
+#     verdict  deny
+#     priority 0
+# }
+
+
 # ── Your own rules go below ──────────────────────────────────────────────────
 # Full syntax reference: /etc/synguard/rules.d/00-base.rules
 #
