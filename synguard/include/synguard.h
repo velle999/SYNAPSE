@@ -64,6 +64,21 @@
 
 /* ── Sysfs paths (from synapse_kmod) ─────────────────────── */
 #define KMOD_SYSCALL_LOG      "/sys/kernel/synapse/syscall_log"
+
+/*
+ * The event feed proper. Every open() gets its own cursor, so a second reader
+ * (an admin with `cat`, or an attacker draining the ring to blind us) cannot
+ * consume our events -- which reading syscall_log used to do, because that
+ * advanced the ring's single shared tail.
+ *
+ * We reopen it each poll and carry the cursor across with lseek() rather than
+ * holding the fd. An held fd pins the module (fops.owner) and would make
+ * `rmmod synapse_kmod` fail with EBUSY for as long as synguard runs, breaking
+ * the DKMS upgrade and reload workflow.
+ *
+ * Absent = an older kmod, where syscall_log is still the destructive drain.
+ */
+#define KMOD_EVENT_DEV        "/dev/synapse-events"
 #define KMOD_AI_HINTS         "/sys/kernel/synapse/ai_hints"
 #define KMOD_STATUS           "/sys/kernel/synapse/status"
 

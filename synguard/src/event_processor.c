@@ -613,25 +613,73 @@ static void *reader_thread_fn(void *arg)
 {
     synguard_state_t *s = (synguard_state_t *)arg;
 
-    sg_log(LOG_INFO, "kmod_reader: started, polling %s every %dms",
-           KMOD_SYSCALL_LOG, s->config.poll_interval_ms);
-
     char buf[4096];
 
+    /*
+     * Our position in the kmod's event ring, carried across reopens.
+     * (off_t)-1 means "no position yet" — the device seeds a fresh reader at
+     * the oldest buffered event, which is what we want on the first pass and
+     * after a module reload.
+     */
+    off_t cursor = (off_t)-1;
+
+    /*
+     * Only used on the syscall_log fallback path. That read is a
+     * non-destructive peek on a current kmod, so without a filter we would
+     * reprocess the newest events on every poll — duplicate alerts, and
+     * netwatch would manufacture a worm out of replayed connect()s. Timestamps
+     * are monotonic (ktime_get_raw_ns), so "newer than the last one seen" is
+     * the whole test. On an older kmod the drain never returns an old event
+     * and this costs a comparison.
+     */
+    uint64_t last_ts = 0;
+    int warned_fallback = 0;
+
+    sg_log(LOG_INFO, "kmod_reader: started, polling every %dms",
+           s->config.poll_interval_ms);
+
     while (s->running) {
-        int fd = open(KMOD_SYSCALL_LOG, O_RDONLY);
+        int using_dev = 1;
+        int fd = open(KMOD_EVENT_DEV, O_RDONLY);
+
+        if (fd < 0) {
+            using_dev = 0;
+            fd = open(KMOD_SYSCALL_LOG, O_RDONLY);
+            if (fd >= 0 && !warned_fallback) {
+                /* Worth saying once: on this path a second reader can still
+                 * steal our events, which is the bug the device fixes. */
+                sg_log(LOG_WARNING, "kmod_reader: %s absent — falling back to "
+                       "%s (older kmod; shared, consumable ring)",
+                       KMOD_EVENT_DEV, KMOD_SYSCALL_LOG);
+                warned_fallback = 1;
+            }
+        }
+
         if (fd < 0) {
             /* kmod not loaded — degrade gracefully */
             if (!s->kmod_present) {
-                sg_log(LOG_DEBUG, "kmod_reader: %s not available",
-                       KMOD_SYSCALL_LOG);
+                sg_log(LOG_DEBUG, "kmod_reader: no kmod event source available");
             }
+            /* A reload gives us a new ring; do not carry a stale position. */
+            cursor = (off_t)-1;
             usleep(s->config.poll_interval_ms * 1000);
             continue;
         }
 
         s->kmod_present = 1;
+
+        /* Resume where we stopped. Without this the device would restart us at
+         * the ring tail on every poll and we would reprocess the backlog. */
+        if (using_dev && cursor != (off_t)-1)
+            lseek(fd, cursor, SEEK_SET);
+
         ssize_t n = read(fd, buf, sizeof(buf) - 1);
+
+        if (using_dev) {
+            off_t now = lseek(fd, 0, SEEK_CUR);
+            if (now != (off_t)-1)
+                cursor = now;
+        }
         close(fd);
 
         if (n <= 0) {
@@ -648,7 +696,10 @@ static void *reader_thread_fn(void *arg)
         while (line) {
             if (*line) {
                 sg_event_t evt;
-                if (kmod_parse_event(line, &evt) == 0) {
+                if (kmod_parse_event(line, &evt) == 0 &&
+                    (using_dev || evt.timestamp_ns > last_ts)) {
+                    if (!using_dev)
+                        last_ts = evt.timestamp_ns;
                     /* Our own canary open coming back = probes are live.
                      * Check before process_event, which skips synguard's
                      * own events. */
@@ -672,9 +723,10 @@ static void *reader_thread_fn(void *arg)
 
 int kmod_reader_start(synguard_state_t *s)
 {
-    /* Check if kmod is present */
+    /* Check if kmod is present — either event source counts. */
     struct stat st;
-    s->kmod_present = (stat(KMOD_SYSCALL_LOG, &st) == 0);
+    s->kmod_present = (stat(KMOD_EVENT_DEV, &st) == 0) ||
+                      (stat(KMOD_SYSCALL_LOG, &st) == 0);
 
     if (!s->kmod_present)
         sg_log(LOG_WARNING, "synguard: synapse_kmod not loaded — "

@@ -167,11 +167,19 @@ static struct kobj_attribute ai_hints_attr =
 
 /* ── /sys/kernel/synapse/syscall_log ─────────────────────── */
 /*
- * Read-only. Returns captured syscall events as text lines.
- * Format: "TS_NS PID UID SYSCALL_NR COMM [filename]\n"
+ * Read-only, and NON-DESTRUCTIVE: a bounded peek at the newest events for a
+ * human with a shell. Reading it consumes nothing.
  *
- * synapd reads this file periodically and feeds events to
- * the inference engine for security analysis.
+ * It used to advance the ring's shared tail, which made `cat`ting this file
+ * steal events from synguard — an operational footgun and a post-root way to
+ * blind the detector. Consumers now use /dev/synapse-events, where every open
+ * has its own cursor. See synapse_evchr.c.
+ *
+ * Format: "TS_NS PID UID SYSCALL_NR COMM FILENAME|- FLAGS ARG0\n", where
+ * FLAGS is the SYNAPSE_EVT_* event type and ARG0 is the first syscall
+ * argument (openat: O_* flags; setuid: target uid). Fields only ever append.
+ *
+ * The consumer is synguard, not synapd — synapd never reads this.
  */
 static ssize_t syscall_log_show(struct kobject *kobj,
                                   struct kobj_attribute *attr,

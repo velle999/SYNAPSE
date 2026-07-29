@@ -151,60 +151,148 @@ static void syn_escape(char *dst, size_t dlen, const char *src, size_t slen)
 }
 
 /*
- * synapse_probe_read_log — drain ring buffer into buf for sysfs read.
- * Returns bytes written.
+ * format_event — render one event as its wire line. Caller holds g_ring.lock.
+ *
+ * The scratch buffers are static rather than stack because a fully-escaped
+ * filename is 4x its raw size; the lock serialises every caller.
  */
-ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
+static int format_event(char *line, size_t line_len,
+                        const struct synapse_syscall_event *e)
 {
-    /* Static, not stack: a fully-escaped filename is 4x. Every use is inside
-     * g_ring.lock, which serialises readers. */
     static char comm_esc[SYN_ESC_MAX_COMM];
     static char name_esc[SYN_ESC_MAX_FILENAME];
+
+    syn_escape(comm_esc, sizeof(comm_esc), e->comm, sizeof(e->comm));
+    syn_escape(name_esc, sizeof(name_esc), e->filename, sizeof(e->filename));
+
+    /* Trailing "flags arg0" lets userspace type events without guessing
+     * from syscall_nr and see arg0 (setuid: target uid, openat: O_* flags).
+     * Readers that stop at the filename keep working — fields only append. */
+    return scnprintf(line, line_len,
+        "%llu %u %u %u %s %s %02x %llu\n",
+        e->timestamp_ns,
+        e->pid, e->uid,
+        e->syscall_nr,
+        comm_esc,
+        name_esc[0] ? name_esc : "-",
+        e->flags,
+        (unsigned long long)e->args[0]
+    );
+}
+
+u32 synapse_probe_ring_tail(void)
+{
+    return (u32)atomic_read(&g_ring.tail);
+}
+
+/*
+ * synapse_probe_read_from — copy events after *cursor into buf.
+ *
+ * THE READ IS NOT DESTRUCTIVE. Only the caller's own cursor advances; the
+ * ring's tail is moved by ring_push() alone, when a new event overwrites an
+ * old one. That is the whole point:
+ *
+ * This used to `atomic_inc(&g_ring.tail)` per event emitted, making the ring a
+ * single-consumer queue exposed as a file with nothing enforcing the single
+ * consumer. Any second reader silently stole events from synguard. It was a
+ * live footgun — `cat /sys/kernel/synapse/syscall_log` while testing a
+ * detection rule consumed the very event under test, and did, twice — and a
+ * post-root evasion primitive: drain the ring in a loop and events never reach
+ * the detector, with no rmmod and no kprobe disarm for the integrity watchdog
+ * to notice.
+ *
+ * With per-reader cursors, concurrent readers cannot affect each other. The
+ * cost is that a reader can now fall behind and lose events instead of holding
+ * them; that is reported rather than hidden, via *dropped.
+ *
+ * All arithmetic is u32: head and tail free-run and wrap after ~200 days at
+ * this event rate, and a signed `%` would then yield a NEGATIVE index — an
+ * out-of-bounds access handed to userspace. `head - cursor` is correct across
+ * the wrap precisely because it is unsigned.
+ */
+ssize_t synapse_probe_read_from(char *buf, size_t buf_len,
+                                u32 *cursor, u64 *dropped)
+{
     static char line[SYN_LOG_LINE_MAX];
     size_t pos = 0;
 
     spin_lock(&g_ring.lock);
-    /* Unsigned for the same reason as ring_push(): these counters wrap after
-     * ~200 days at this event rate, and `(tail + i) % g_ring.size` below is a
-     * NEGATIVE index once tail passes INT_MAX — an out-of-bounds read of the
-     * event array, handed straight to userspace through syscall_log. */
+
     u32 tail = (u32)atomic_read(&g_ring.tail);
     u32 head = (u32)atomic_read(&g_ring.head);
+    u32 cur  = *cursor;
 
-    /* Read up to 32 events per sysfs read to avoid huge pages */
-    u32 max_read = min(head - tail, 32u);
+    /*
+     * Has the writer lapped this reader? `cur - tail` underflows to a huge
+     * value exactly when cur is behind tail, which is the test we want. The
+     * events between are gone; skip forward and say how many were missed
+     * rather than reading whatever now occupies those slots.
+     */
+    if ((u32)(cur - tail) > (u32)g_ring.size) {
+        if (dropped)
+            *dropped += (u64)(u32)(tail - cur);
+        cur = tail;
+    }
 
-    for (u32 i = 0; i < max_read; i++) {
-        u32 idx = (tail + i) % (u32)g_ring.size;
-        struct synapse_syscall_event *e = &g_ring.events[idx];
+    while (cur != head) {
+        struct synapse_syscall_event *e =
+            &g_ring.events[cur % (u32)g_ring.size];
 
-        syn_escape(comm_esc, sizeof(comm_esc), e->comm, sizeof(e->comm));
-        syn_escape(name_esc, sizeof(name_esc), e->filename, sizeof(e->filename));
+        int len = format_event(line, sizeof(line), e);
 
-        const char *fname = name_esc[0] ? name_esc : "-";
-        /* Trailing "flags arg0" lets userspace type events without guessing
-         * from syscall_nr and see arg0 (setuid: target uid). Readers that
-         * stop at the filename keep working — the fields only append. */
-        int len = scnprintf(line, sizeof(line),
-            "%llu %u %u %u %s %s %02x %llu\n",
-            e->timestamp_ns,
-            e->pid, e->uid,
-            e->syscall_nr,
-            comm_esc,
-            fname,
-            e->flags,
-            (unsigned long long)e->args[0]
-        );
-
-        /* Never emit a half line: leave the event queued for the next read
-         * rather than handing userspace a truncated record to misparse. */
+        /* Never emit a half line: leave the event for the next read rather
+         * than handing userspace a truncated record to misparse. */
         if (pos + (size_t)len >= buf_len)
             break;
 
         memcpy(buf + pos, line, (size_t)len);
         pos += (size_t)len;
-        atomic_inc(&g_ring.tail);
+        cur++;
     }
+
+    *cursor = cur;
+    spin_unlock(&g_ring.lock);
+
+    return (ssize_t)pos;
+}
+
+/*
+ * synapse_probe_read_log — the sysfs syscall_log view.
+ *
+ * A bounded, NON-DESTRUCTIVE peek at the most recent events, for a human with
+ * a shell. It consumes nothing, so `cat`ting this file can no longer blind
+ * synguard. Real consumers use /dev/synapse-events, which gives each open its
+ * own cursor.
+ */
+ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
+{
+    static char line[SYN_LOG_LINE_MAX];
+    size_t pos = 0;
+
+    spin_lock(&g_ring.lock);
+
+    u32 tail = (u32)atomic_read(&g_ring.tail);
+    u32 head = (u32)atomic_read(&g_ring.head);
+
+    /* Show the tail end of the ring: the newest events are what a human
+     * looking at this file wants, and only ~PAGE_SIZE of them fit anyway. */
+    u32 avail = head - tail;
+    u32 show  = min(avail, 32u);
+    u32 cur   = head - show;
+
+    while (cur != head) {
+        struct synapse_syscall_event *e =
+            &g_ring.events[cur % (u32)g_ring.size];
+
+        int len = format_event(line, sizeof(line), e);
+        if (pos + (size_t)len >= buf_len)
+            break;
+
+        memcpy(buf + pos, line, (size_t)len);
+        pos += (size_t)len;
+        cur++;
+    }
+
     spin_unlock(&g_ring.lock);
 
     return (ssize_t)pos;

@@ -37,6 +37,7 @@
 #include "synapse_kmod.h"
 #include "synapse_sysfs.h"
 #include "synapse_probe.h"
+#include "synapse_evchr.h"
 #include "synapse_sched.h"
 
 MODULE_LICENSE("GPL v2");
@@ -322,6 +323,16 @@ static int __init synapse_kmod_init(void)
             goto err_probe;
         }
         pr_info("synapse_kmod: kprobes installed\n");
+
+        /* 3b. The consumer-facing event feed. Only meaningful with the probes
+         * installed, so it lives inside this branch: with events disabled the
+         * device would exist and return nothing forever, which reads as a
+         * broken feed rather than a disabled one. */
+        ret = synapse_evchr_init();
+        if (ret) {
+            pr_err("synapse_kmod: event device init failed: %d\n", ret);
+            goto err_evchr;
+        }
     }
 
 
@@ -346,6 +357,9 @@ static int __init synapse_kmod_init(void)
     return 0;
 
 err_wq:
+    if (synapse_events)
+        synapse_evchr_exit();
+err_evchr:
     synapse_probe_exit();
 err_probe:
     synapse_sched_exit();
@@ -369,7 +383,11 @@ static void __exit synapse_kmod_exit(void)
         synapse_state.wq = NULL;
     }
 
-    /* Teardown in reverse init order */
+    /* Teardown in reverse init order. The device goes first: it hands out
+     * pointers into the ring, so it must stop accepting readers before the
+     * ring is freed. */
+    if (synapse_events)
+        synapse_evchr_exit();
     synapse_probe_exit();
     synapse_sched_exit();
     synapse_sysfs_exit(synapse_state.kobj);
