@@ -174,14 +174,16 @@ static int run_event_loop(synguard_state_t *s)
         if (now - last_stats > 60) {
             sg_log(LOG_INFO,
                 "synguard: stats — events=%lu rules=%lu ai=%lu denials=%lu "
-                "alerts=%lu quarantines=%lu protected-skips=%lu",
+                "alerts=%lu quarantines=%lu protected-skips=%lu "
+                "stale-pid-skips=%lu",
                 s->stats.events_processed,
                 s->stats.rules_matched,
                 s->stats.ai_queries,
                 s->stats.denials,
                 s->stats.alerts,
                 s->stats.quarantines,
-                s->stats.protected_skips);
+                s->stats.protected_skips,
+                s->stats.stale_pid_skips);
             last_stats = now;
         }
     }

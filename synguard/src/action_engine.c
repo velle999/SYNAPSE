@@ -39,14 +39,17 @@
 
 /* ── DENY: kill the offending process and its descendants ─── */
 /*
- * The actual termination (protected-pid guard, subtree teardown, kill
- * verification) lives in isolation.c::sg_kill_tree(). If the target is
- * protected, sg_kill_tree() refuses and returns -1; we do nothing further
- * (no kmod hint) so a spoofed/critical pid is never touched.
+ * The actual termination (protected-pid guard, stale-pid guard, subtree
+ * teardown, kill verification) lives in isolation.c::sg_kill_tree(). It
+ * refuses and returns -1 if the target is protected, or if e->pid is no
+ * longer the process e->comm names — by the time a verdict is acted on the
+ * event is up to poll_interval_ms old and the pid may have been recycled. On
+ * a refusal we do nothing further (no kmod hint), so neither a critical pid
+ * nor a bystander that inherited the pid is ever touched.
  */
 void action_deny(synguard_state_t *s, const sg_event_t *e, const char *reason)
 {
-    if (sg_kill_tree(s, (pid_t)e->pid, reason) < 0)
+    if (sg_kill_tree(s, (pid_t)e->pid, e->comm, reason) < 0)
         return;
 
     /* Write a hint to kmod so it can track the kill */
@@ -132,7 +135,7 @@ void action_quarantine(synguard_state_t *s, const sg_event_t *e)
      * SIGSTOP, cgroup v2 freeze) in isolation.c::sg_freeze_tree(). If the
      * target is protected it returns -1 and we leave no forensic note.
      */
-    if (sg_freeze_tree(s, (pid_t)e->pid) < 0)
+    if (sg_freeze_tree(s, (pid_t)e->pid, e->comm) < 0)
         return;
 
     sg_log(LOG_INFO, "quarantine: pid=%u frozen. Resume with: kill -CONT %u "

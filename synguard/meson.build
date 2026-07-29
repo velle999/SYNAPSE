@@ -43,6 +43,16 @@ secfeed_test = executable('secfeed_test',
     meson.current_build_dir())])
 test('secfeed', secfeed_test, timeout: 60)
 
+# The stale-pid guard on the DENY/QUARANTINE path. isolation.c needs only libc
+# and the header-only logger, so the test links just it — no daemon, no kmod,
+# no root, and nothing in it kills or stops a process: the guard is a pure
+# predicate over /proc, driven against the test's own pid and a child it reaps
+# itself.
+isolation_test = executable('isolation_test',
+  files('tests/isolation_test.c', 'src/isolation.c'),
+  include_directories: inc)
+test('isolation', isolation_test, timeout: 60)
+
 # The connect() wire format and the worm/C2 thresholds. netwatch_connect() and
 # kmod_parse_event() live in event_processor.c, which pulls in the pipeline, so
 # the test stubs the daemon entry points it never calls.

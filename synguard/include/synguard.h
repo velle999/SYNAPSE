@@ -194,6 +194,7 @@ typedef struct {
     uint64_t  alerts;
     uint64_t  quarantines;
     uint64_t  protected_skips;   /* actions refused on a protected pid */
+    uint64_t  stale_pid_skips;   /* actions refused: pid no longer the culprit */
     time_t    start_time;
 } sg_stats_t;
 
@@ -317,10 +318,29 @@ void secfeed_close(void);
  *
  * sg_kill_tree() / sg_freeze_tree() apply DENY / QUARANTINE to a process and
  * its entire descendant subtree; both return -1 (and take no action) if the
- * target is protected, 0 otherwise. Must run in process context as root. */
+ * target is protected, 0 otherwise. Must run in process context as root.
+ *
+ * Both take `expect_comm` — the comm recorded in the event that produced the
+ * verdict — and refuse to act if the pid no longer matches it. See
+ * sg_pid_identity_ok(): by the time a verdict is acted on, the event is up to
+ * poll_interval_ms old, and the pid may have been recycled onto an unrelated
+ * process. Pass NULL only for a pid observed in this same instant. */
 int  sg_is_protected(pid_t pid, char *why, size_t wlen);
-int  sg_kill_tree(synguard_state_t *s, pid_t target, const char *reason);
-int  sg_freeze_tree(synguard_state_t *s, pid_t target);
+int  sg_kill_tree(synguard_state_t *s, pid_t target, const char *expect_comm,
+                  const char *reason);
+int  sg_freeze_tree(synguard_state_t *s, pid_t target, const char *expect_comm);
+
+/* Identity re-check, exposed for testing.
+ *
+ * sg_proc_starttime() reads field 22 of /proc/<pid>/stat (start time in clock
+ * ticks since boot), the kernel's own tiebreaker for a recycled pid: two
+ * processes that share a pid cannot share a start time. Returns 0 on success.
+ *
+ * sg_pid_identity_ok() returns 1 when `pid` is still the process whose comm is
+ * `expect_comm`, 0 when it is gone or is now something else. A NULL or empty
+ * expect_comm skips the comm test and only confirms the pid is alive. */
+int  sg_proc_starttime(pid_t pid, unsigned long long *out);
+int  sg_pid_identity_ok(pid_t pid, const char *expect_comm);
 
 /* Audit log */
 int  audit_init(synguard_state_t *s);

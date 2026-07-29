@@ -165,17 +165,19 @@ jobs:
         run: |
           meson test -C synapd/_ci wire --print-errorlogs
           meson test -C synguard/_ci secfeed --print-errorlogs
+          meson test -C synguard/_ci isolation --print-errorlogs
 
-      # The step above proves these two parsers get the right answer; this one
-      # proves they do not corrupt memory getting there. Both are worth the
-      # second run: synapd's wire gate is the code that reads every byte
-      # arriving on /run/synapd/synapd.sock — which the TCP bridge fronts for
-      # another host — and secfeed is the verdict feed that once wedged at
-      # capacity through a slot leak.
+      # The step above proves these three get the right answer; this one proves
+      # they do not corrupt memory getting there. All three are worth the second
+      # run: synapd's wire gate is the code that reads every byte arriving on
+      # /run/synapd/synapd.sock — which the TCP bridge fronts for another host —
+      # secfeed is the verdict feed that once wedged at capacity through a slot
+      # leak, and isolation is the stale-pid guard standing between a DENY
+      # verdict and a SIGKILL'd bystander.
       #
       # Unlike the two synui smoke steps below, these need no GPU and so do NOT
-      # skip here: wire_test links only src/wire.c and secfeed_test only
-      # src/secfeed.c — no llama, no sockets, no daemon. Until this step existed
+      # skip here: each links exactly the one source it covers — no llama, no
+      # sockets, no daemon, and isolation_test kills nothing. Until this step existed
       # the repo's only sanitizer coverage was those smoke tests, which exit 77
       # on every GPU-less runner, so in practice CI was compiling ASan builds
       # and running none of them.
@@ -202,8 +204,10 @@ jobs:
           meson setup synguard/_asan synguard -Dbuildtype=debug -Db_sanitize=address,undefined
           meson compile -C synapd/_asan   wire_test
           meson compile -C synguard/_asan secfeed_test
-          meson test -C synapd/_asan   wire    --print-errorlogs
-          meson test -C synguard/_asan secfeed --print-errorlogs
+          meson compile -C synguard/_asan isolation_test
+          meson test -C synapd/_asan   wire      --print-errorlogs
+          meson test -C synguard/_asan secfeed   --print-errorlogs
+          meson test -C synguard/_asan isolation --print-errorlogs
 
       # Both smoke steps SKIP on a GPU-less runner (no /dev/dri/renderD*) and run
       # in full anywhere a real driver exists — a developer box, or a self-hosted
