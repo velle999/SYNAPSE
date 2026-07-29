@@ -68,9 +68,20 @@ typedef enum {
  * Read by synapd for security analysis and context tracking.
  *
  * sysfs line format (one event per line):
- *   <timestamp_ns> <pid> <uid> <syscall_nr> <comm> <filename|-> <flags:hex> <arg0>
- * The trailing "<flags> <arg0>" pair was appended in 0.1.1; readers must
- * treat it as optional. For SYNAPSE_EVT_SETUID, arg0 is the target uid.
+ *   <timestamp_ns> <pid> <uid> <syscall_nr> <comm> <filename|-> <flags:hex> <arg0> <ret|->
+ * The trailing "<flags> <arg0>" pair was appended in 0.1.1 and <ret> after it;
+ * readers must treat both as optional, since a reader may be newer than the
+ * loaded module. For SYNAPSE_EVT_SETUID, arg0 is the target uid.
+ *
+ * <ret> is the SYSCALL'S RETURN VALUE, or "-" when this event was reported at
+ * syscall entry and the outcome is therefore unknown. It exists because a
+ * consumer cannot otherwise tell an open that happened from one the kernel
+ * refused: the probes fire on ENTRY, so an ENOENT lookup failure and an EACCES
+ * permission failure both produce an event indistinguishable from success.
+ * synguard acted on those — it SIGKILLed two processes for opens that had
+ * already been denied by ordinary DAC — which is the whole reason this field
+ * is here. A negative <ret> is an errno: nothing was read, nothing was
+ * written, and no enforcement action is warranted on the strength of it.
  *
  * <comm> and <filename> are ESCAPED: any byte <= 0x20, 0x7f, or '\' is written
  * as \xHH, so each is exactly one whitespace-delimited token. Without this a
@@ -89,14 +100,19 @@ struct synapse_syscall_event {
     char      comm[16];           /* task->comm */
     char      filename[128];      /* for open/exec: filename */
     uint8_t   flags;              /* SYNAPSE_EVT_* */
-    uint8_t   pad[3];
+    uint8_t   has_ret;            /* 1: `ret` is the syscall's return value */
+    int32_t   ret;                /* syscall return; < 0 is -errno */
+    uint8_t   pad[2];
 };
 
 /* Worst-case escaped sizes (every byte becomes \xHH) + NUL, and the longest
- * log line they can produce once the numeric fields are added. */
+ * log line they can produce once the numeric fields are added. The numeric
+ * slack covers timestamp(20) pid(10) uid(10) nr(10) flags(2) arg0(20) ret(11)
+ * plus separators — 128 rather than a tight fit, because a wire field has been
+ * appended twice now and scnprintf() truncates silently. */
 #define SYN_ESC_MAX_COMM      (16  * 4 + 1)
 #define SYN_ESC_MAX_FILENAME  (128 * 4 + 1)
-#define SYN_LOG_LINE_MAX      (SYN_ESC_MAX_COMM + SYN_ESC_MAX_FILENAME + 96)
+#define SYN_LOG_LINE_MAX      (SYN_ESC_MAX_COMM + SYN_ESC_MAX_FILENAME + 128)
 
 #define SYNAPSE_EVT_EXEC    0x01  /* execve/execveat */
 #define SYNAPSE_EVT_OPEN    0x02  /* open/openat sensitive file */

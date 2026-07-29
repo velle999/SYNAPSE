@@ -129,10 +129,22 @@ typedef struct {
     uint32_t  syscall_nr;
     uint8_t   evt_type;       /* EVT_* */
     uint8_t   has_arg0;       /* wire carried arg0 (newer kmod log format) */
+    uint8_t   has_ret;        /* wire carried the syscall's return value */
+    int32_t   ret;            /* syscall return; < 0 is -errno */
     uint64_t  arg0;           /* first syscall arg (setuid: target uid) */
     char      comm[16];
     char      filename[128];
 } sg_event_t;
+
+/*
+ * has_ret == 0 means the kmod reported this event at syscall ENTRY and the
+ * outcome is unknown — every probe but openat still does, and an older kmod
+ * does for openat too. It does NOT mean the syscall succeeded. Code that acts
+ * on an event must treat "unknown" as its own case, because the alternative is
+ * what shipped: an attempt was read as an access, and the deny path killed two
+ * processes for opens the kernel had already refused with EACCES and ENOENT.
+ */
+#define SG_EVENT_FAILED(e)   ((e)->has_ret && (e)->ret < 0)
 
 /* ── Rule verdict ─────────────────────────────────────────── */
 typedef enum {
@@ -164,6 +176,11 @@ typedef struct {
 /* ── Rule ─────────────────────────────────────────────────── */
 #define RULE_MAX_PATTERN  256
 #define RULE_MAX_NAME     64
+
+/* Kernel-side rule capacity, mirrored here so synguard_state_t does not have
+ * to include sg_bpf.h (which is built only when BPF-LSM is available, and
+ * includes this header itself). core.c static-asserts the two agree. */
+#define SG_MAX_KERNEL_RULES  64
 
 typedef struct sg_rule {
     char          name[RULE_MAX_NAME];
@@ -254,6 +271,8 @@ typedef struct {
     _Atomic uint64_t  quarantines;
     _Atomic uint64_t  protected_skips; /* actions refused on a protected pid */
     _Atomic uint64_t  stale_pid_skips; /* refused: pid no longer the culprit */
+    _Atomic uint64_t  failed_syscall_skips; /* refused: the syscall itself failed */
+    _Atomic uint64_t  kernel_enforced_skips; /* refused: the BPF gate owns this rule */
     _Atomic uint64_t  events_dropped;  /* ring lapped before we read them */
     _Atomic uint64_t  reader_lag_ms;   /* age of the newest event processed */
     _Atomic uint64_t  reader_lag_max_ms; /* worst lag, so a stall still shows */
@@ -300,6 +319,21 @@ typedef struct synguard_state {
     sg_baseline_entry_t *baseline;
     int              baseline_count;
     pthread_mutex_t  baseline_lock;
+
+    /*
+     * Deny rules the BPF-LSM gate is enforcing, by name — recorded when the
+     * lowered policy loads AND arms, so it is empty on every path where the
+     * kernel is not actually refusing anything.
+     *
+     * By NAME rather than by sg_rule_t*, because a verdict can be dispatched
+     * from the AI worker thread after the rule list has been freed and
+     * reloaded underneath it; the existing code passes a name across that hop
+     * for the same reason. Written once during init, read by the reader and
+     * worker threads, never mutated after — no lock needed, and adding one
+     * would be a lie about its lifetime.
+     */
+    char             bpf_enforced_rules[SG_MAX_KERNEL_RULES][RULE_MAX_NAME];
+    int              bpf_enforced_count;
 
 } synguard_state_t;
 
@@ -370,6 +404,30 @@ int synguard_ai_classify(synguard_state_t *s,
 /* Action engine */
 void action_deny(synguard_state_t *s, const sg_event_t *e, const char *reason);
 void action_alert(synguard_state_t *s, const sg_alert_t *alert);
+
+/*
+ * Whether acting on a DENY would prevent anything. Returns NULL to enforce, or
+ * a short reason to log and stand down (event_processor.c).
+ *
+ * A verdict is decided from a record of something that already happened, and
+ * there are two cases where the record describes an access that never
+ * occurred: the syscall failed, or the BPF-LSM gate had already refused it.
+ * Killing then destroys a process tree to prevent nothing. Both have happened
+ * on a live desktop — once for an ENOENT ld.so preload probe, once for an
+ * EACCES read of a root-owned canary, which took out the session.
+ *
+ * "Unknown outcome" is NOT one of those cases and deliberately still enforces:
+ * an older kmod reports no return value at all, and disarming enforcement for
+ * every event it produces would be the worse failure.
+ */
+const char *sg_deny_suppression_reason(synguard_state_t *s,
+                                       const sg_event_t *e,
+                                       const char *rule_name);
+
+/* Test seam: replace the "is the kernel gate live?" probe. The BPF layer is a
+ * compile-time option, so without this the gate half of the predicate above is
+ * unreachable in any build that omits it. NULL restores the real probe. */
+void sg_deny_set_gate_probe_for_test(int (*fn)(void));
 
 /*
  * Emit "×N in Ms" lines for repeat-alert windows that have closed. Call from

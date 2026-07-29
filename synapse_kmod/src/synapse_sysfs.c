@@ -209,6 +209,7 @@ static ssize_t stats_show(struct kobject *kobj,
         "daemon_timeouts=%llu\n"
         "active_contexts=%u\n"
         "integrity_alerts=%llu\n"
+        "openat_ret_missed=%lu\n"
         "lockdown=%d\n"
         "kmod_version=0x%08x\n",
         st.events_captured,
@@ -220,6 +221,7 @@ static ssize_t stats_show(struct kobject *kobj,
         st.daemon_timeouts,
         st.active_contexts,
         synapse_integrity_alert_count(),
+        synapse_probe_openat_missed(),
         synapse_kmod_is_pinned() ? 1 : 0,
         st.kmod_version
     );

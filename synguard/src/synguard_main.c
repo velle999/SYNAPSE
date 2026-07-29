@@ -236,7 +236,8 @@ static int run_event_loop(synguard_state_t *s)
                 "synguard: stats — events=%lu rules=%lu ai=%lu ai-skipped=%lu "
                 "denials=%lu "
                 "alerts=%lu quarantines=%lu protected-skips=%lu "
-                "stale-pid-skips=%lu dropped=%lu suppressed=%lu "
+                "stale-pid-skips=%lu failed-syscall-skips=%lu "
+                "kernel-enforced-skips=%lu dropped=%lu suppressed=%lu "
                 "lag=%lums/%lumax",
                 s->stats.events_processed,
                 s->stats.rules_matched,
@@ -247,6 +248,8 @@ static int run_event_loop(synguard_state_t *s)
                 s->stats.quarantines,
                 s->stats.protected_skips,
                 s->stats.stale_pid_skips,
+                s->stats.failed_syscall_skips,
+                s->stats.kernel_enforced_skips,
                 s->stats.events_dropped,
                 s->stats.alerts_suppressed,
                 s->stats.reader_lag_ms,

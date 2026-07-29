@@ -31,6 +31,10 @@
 
 #include "synguard.h"
 #include "sg_log.h"
+#ifdef SYNGUARD_HAVE_BPF_LSM
+#include "sg_lower.h"
+#include "sg_bpf.h"
+#endif
 
 /* ── kmod event log format ────────────────────────────────── */
 /*
@@ -70,16 +74,18 @@ int kmod_parse_event(const char *line, sg_event_t *out)
      * mid-escape. */
     char comm_esc[SG_ESC_MAX_COMM] = {0};
     char fname_esc[SG_ESC_MAX_FILENAME] = {0};
+    char ret_tok[16] = {0};
     unsigned int wire_flags = 0;
     unsigned long long arg0 = 0;
     memset(out, 0, sizeof(*out));
 
-    /* The kmod appends "flags arg0" after the filename (newer log format);
-     * older kmods stop at the filename, so those fields are optional. */
-    int n = sscanf(line, "%llu %u %u %u %79s %639s %x %llu",
+    /* The kmod appends "flags arg0" after the filename (newer log format) and
+     * "ret" after that (newer still); older kmods stop earlier, so every
+     * trailing field is optional and absence must not be read as a value. */
+    int n = sscanf(line, "%llu %u %u %u %79s %639s %x %llu %15s",
                    (unsigned long long *)&out->timestamp_ns,
                    &out->pid, &out->uid, &out->syscall_nr,
-                   comm_esc, fname_esc, &wire_flags, &arg0);
+                   comm_esc, fname_esc, &wire_flags, &arg0, ret_tok);
 
     if (n < 5) return -1;
 
@@ -95,7 +101,98 @@ int kmod_parse_event(const char *line, sg_event_t *out)
     } else {
         out->evt_type = syscall_to_evt(out->syscall_nr);
     }
+
+    /*
+     * "-" is the kmod saying "reported at syscall entry, outcome unknown".
+     * strtol() is not a substitute for that check: it returns 0 for a
+     * non-numeric token, and 0 is "success" — the one misreading that would
+     * turn a refused open back into an enforceable access.
+     */
+    if (n >= 9 && strcmp(ret_tok, "-") != 0) {
+        char *end = NULL;
+        long v = strtol(ret_tok, &end, 10);
+        if (end && *end == '\0') {
+            out->ret     = (int32_t)v;
+            out->has_ret = 1;
+        }
+    }
     return 0;
+}
+
+/* ── Should a DENY actually kill? ─────────────────────────── */
+/*
+ * DENY means "this must not happen". It is dispatched from a record of
+ * something that ALREADY happened, so there are two cases where the kill
+ * prevents nothing at all and the process tree is destroyed for free. Both
+ * have now occurred on a live desktop, which is why they are checked here
+ * rather than documented as a caveat.
+ *
+ * Returns NULL to kill, or a short reason to log instead. The reason is
+ * written into the alert, so a suppressed kill is never silent: the operator
+ * still sees the detection and sees why enforcement stood down.
+ */
+/*
+ * Whether the kernel gate is refusing opens RIGHT NOW, behind one indirection.
+ *
+ * The BPF layer is a compile-time option, so in a build without it the check
+ * below would vanish entirely and the second half of this predicate would be
+ * dead code that no test could reach. The seam lets the test drive both
+ * answers on any build; the daemon never touches it.
+ */
+static int gate_live_default(void)
+{
+#ifdef SYNGUARD_HAVE_BPF_LSM
+    return sg_bpf_enforcement_live();
+#else
+    return 0;
+#endif
+}
+
+static int (*g_gate_live)(void) = gate_live_default;
+
+void sg_deny_set_gate_probe_for_test(int (*fn)(void))
+{
+    g_gate_live = fn ? fn : gate_live_default;
+}
+
+const char *sg_deny_suppression_reason(synguard_state_t *s,
+                                       const sg_event_t *e,
+                                       const char *rule_name)
+{
+    /*
+     * 1. The syscall failed. The probes report openat at syscall exit now, so
+     *    a negative return is the kernel saying the access did not occur —
+     *    ENOENT at lookup, EACCES at inode_permission, EPERM from an LSM.
+     *    Killing for a refused access punishes an attempt the system already
+     *    defeated. Detection still fires; only the kill stands down.
+     *
+     *    has_ret == 0 (an older kmod, or a probe still reporting at entry)
+     *    deliberately falls through to the kill. Unknown is not success, but
+     *    it is not failure either, and quietly disarming enforcement on every
+     *    event an older kmod produces would be a far worse failure than the
+     *    one this guards.
+     */
+    if (SG_EVENT_FAILED(e))
+        return "syscall failed";
+
+    /*
+     * 2. The BPF-LSM gate is armed for this exact rule. It returns -EPERM
+     *    from file_open synchronously, so the open this event describes was
+     *    already refused in-kernel — or never reached the hook, which means
+     *    it failed even earlier. sg_bpf_enforcement_live() is what makes this
+     *    safe to assume: it is false during warmup, false with the budget
+     *    spent, and false if the gate never attached, and in each of those
+     *    cases the post-hoc kill is the only enforcement there is.
+     */
+    for (int i = 0; i < s->bpf_enforced_count; i++) {
+        if (strcmp(s->bpf_enforced_rules[i], rule_name) != 0)
+            continue;
+        if (g_gate_live())
+            return "denied in-kernel";
+        break;   /* armed but not live — the post-hoc kill is all we have */
+    }
+
+    return NULL;
 }
 
 /* ── Verdict name (for logging) ───────────────────────────── */
@@ -871,22 +968,50 @@ static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
             audit_write(s, &alert);
         return;
 
-    case VERDICT_DENY:
+    case VERDICT_DENY: {
         s->stats.denials++;
-        snprintf(alert.action_taken, sizeof(alert.action_taken),
-                 s->config.mode == MODE_ENFORCE ? "SIGKILL" : "alert(audit-mode)");
 
-        if (s->config.mode == MODE_ENFORCE || s->config.mode == MODE_LOCKDOWN) {
-            action_deny(s, e, alert.reason);
+        const char *pointless =
+            sg_deny_suppression_reason(s, e, rule_name ? rule_name : "default");
+
+        if (pointless) {
+            snprintf(alert.action_taken, sizeof(alert.action_taken),
+                     "alert (no kill: %s)", pointless);
+
+            if (SG_EVENT_FAILED(e)) {
+                s->stats.failed_syscall_skips++;
+                sg_log(LOG_WARNING,
+                       "DENY not enforced: %s pid=%u %s — the syscall itself "
+                       "returned %d, so nothing was accessed; reason=%s",
+                       e->comm, e->pid,
+                       e->filename[0] ? e->filename : "",
+                       e->ret, alert.reason);
+            } else {
+                s->stats.kernel_enforced_skips++;
+                sg_log(LOG_WARNING,
+                       "DENY not enforced: %s pid=%u %s — the BPF-LSM gate "
+                       "already refused it in-kernel; reason=%s",
+                       e->comm, e->pid,
+                       e->filename[0] ? e->filename : "",
+                       alert.reason);
+            }
         } else {
-            /* In AUDIT/LEARNING mode, log but don't actually kill */
-            sg_log(LOG_WARNING, "WOULD-DENY: %s pid=%u reason=%s",
-                   e->comm, e->pid, alert.reason);
+            snprintf(alert.action_taken, sizeof(alert.action_taken),
+                     s->config.mode == MODE_ENFORCE ? "SIGKILL" : "alert(audit-mode)");
+
+            if (s->config.mode == MODE_ENFORCE || s->config.mode == MODE_LOCKDOWN) {
+                action_deny(s, e, alert.reason);
+            } else {
+                /* In AUDIT/LEARNING mode, log but don't actually kill */
+                sg_log(LOG_WARNING, "WOULD-DENY: %s pid=%u reason=%s",
+                       e->comm, e->pid, alert.reason);
+            }
         }
         action_alert(s, &alert);
         if (s->config.audit_enabled)
             audit_write(s, &alert);
         return;
+    }
 
     case VERDICT_QUARANTINE:
         s->stats.quarantines++;
@@ -901,7 +1026,20 @@ static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
          * observe and do not act. Freezing is less final than killing, but a
          * hung process tree is still an action, and an operator running AUDIT
          * to sample a policy safely would have gotten one. */
-        if (s->config.mode == MODE_ENFORCE || s->config.mode == MODE_LOCKDOWN) {
+        if (SG_EVENT_FAILED(e)) {
+            /* Same reasoning as DENY: the access did not happen, so there is
+             * nothing to contain. Only the failed-syscall half applies here —
+             * QUARANTINE is never lowered to the kernel (an LSM hook cannot
+             * freeze a subtree), so the gate can never have handled it. */
+            s->stats.failed_syscall_skips++;
+            snprintf(alert.action_taken, sizeof(alert.action_taken),
+                     "alert (no freeze: syscall failed)");
+            sg_log(LOG_WARNING,
+                   "QUARANTINE not enforced: %s pid=%u %s — the syscall itself "
+                   "returned %d, so nothing was accessed; reason=%s",
+                   e->comm, e->pid, e->filename[0] ? e->filename : "",
+                   e->ret, alert.reason);
+        } else if (s->config.mode == MODE_ENFORCE || s->config.mode == MODE_LOCKDOWN) {
             action_quarantine(s, e);
         } else {
             sg_log(LOG_WARNING, "WOULD-QUARANTINE: %s pid=%u reason=%s",

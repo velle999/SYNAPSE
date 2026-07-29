@@ -22,6 +22,14 @@ void    synapse_probe_set_enabled(bool enabled);
 int     synapse_probe_integrity_check(void);   /* 0 = probes healthy */
 
 /*
+ * openat events lost because no kretprobe return instance was free. Nonzero
+ * means file-open events were dropped BEFORE the ring, so `events_captured`
+ * and the ring's own `dropped` counter cannot see them — the reason this is
+ * published rather than merely bounded by maxactive.
+ */
+unsigned long synapse_probe_openat_missed(void);
+
+/*
  * The open() path allowlist, NULL-terminated. Only opens whose path starts
  * with one of these prefixes are reported at all, which makes this the
  * reachability boundary for synguard's `event open` rules — a rule outside it

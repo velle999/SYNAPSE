@@ -167,16 +167,31 @@ static int format_event(char *line, size_t line_len,
 
     /* Trailing "flags arg0" lets userspace type events without guessing
      * from syscall_nr and see arg0 (setuid: target uid, openat: O_* flags).
-     * Readers that stop at the filename keep working — fields only append. */
+     * Readers that stop at the filename keep working — fields only append.
+     *
+     * "ret" is last and is "-" for every probe that still reports at syscall
+     * ENTRY, where the outcome is not yet known. It is NOT rendered as a
+     * number-that-means-unknown: any sentinel integer is a return value some
+     * syscall can legitimately produce, and a consumer that mistook one for
+     * the other would draw exactly the wrong conclusion about whether the
+     * access succeeded. "-" cannot be misread, and matches how an absent
+     * filename has always been written. */
+    char ret_buf[16];
+    if (e->has_ret)
+        scnprintf(ret_buf, sizeof(ret_buf), "%d", e->ret);
+    else
+        strscpy(ret_buf, "-", sizeof(ret_buf));
+
     return scnprintf(line, line_len,
-        "%llu %u %u %u %s %s %02x %llu\n",
+        "%llu %u %u %u %s %s %02x %llu %s\n",
         e->timestamp_ns,
         e->pid, e->uid,
         e->syscall_nr,
         comm_esc,
         name_esc[0] ? name_esc : "-",
         e->flags,
-        (unsigned long long)e->args[0]
+        (unsigned long long)e->args[0],
+        ret_buf
     );
 }
 
@@ -478,46 +493,119 @@ static struct kprobe kp_execveat = {
     .pre_handler = execve_pre_handler,   /* same handler, args differ */
 };
 
-/* ── openat kprobe ────────────────────────────────────────── */
-static int openat_pre_handler(struct kprobe *p, struct pt_regs *regs)
+/* ── openat kretprobe ─────────────────────────────────────── */
+/*
+ * openat is the one probe that reports at syscall EXIT rather than entry, so
+ * the event can carry whether the open actually happened.
+ *
+ * Entry-time reporting made a failed open indistinguishable from a successful
+ * one. Every consumer therefore had to treat an attempt as an access, and
+ * synguard's deny path did exactly that: it SIGKILLed a process for opening a
+ * root-owned 0600 file it could never have read (EACCES at inode_permission),
+ * and another for probing an ld.so preload file that did not exist (ENOENT at
+ * lookup). Neither process ever saw a byte. The kernel had already refused
+ * both, and the enforcement added nothing but a dead process tree.
+ *
+ * The filter still runs at entry, where the filename argument is a valid user
+ * pointer and the O_* flags are readable — see the note on syscall_uregs(),
+ * whose pt_regs indirection is only meaningful there. What the entry handler
+ * decides to report is stashed in the kretprobe instance and pushed by the
+ * return handler, which adds regs_return_value().
+ *
+ * The cost is one rethook instance per openat SYSTEM-WIDE, taken before the
+ * entry handler runs and recycled immediately for the ~99.9% of opens the path
+ * filter rejects. That is a freelist pop and push. The exhaustion case is the
+ * one worth watching: no instance means no return probe and the event is lost
+ * ENTIRELY, where the old entry-only probe would have recorded it. That must
+ * never be silent, so kr_openat.nmissed is published in the stats attribute —
+ * this ring has been through one episode of losing events with every counter
+ * reading zero, and once was enough.
+ */
+struct openat_ctx {
+    char kbuf[128];
+    int  oflags;
+};
+
+static int openat_entry_handler(struct kretprobe_instance *ri,
+                                struct pt_regs *regs)
 {
-    if (!synapse_events_enabled()) return 0;
+    struct openat_ctx *ctx = (struct openat_ctx *)ri->data;
+
+    if (!synapse_events_enabled()) return 1;
 
     /* openat(dfd, filename, flags, mode): filename is 2nd arg, flags is 3rd. */
     struct pt_regs *u = syscall_uregs(regs);
     const char __user *filename = (const char __user *)u->si;
-    if (!filename) return 0;
+    if (!filename) return 1;
     int oflags = (int)u->dx;
 
     char kbuf[128] = {0};
     if (strncpy_from_user(kbuf, filename, sizeof(kbuf) - 1) <= 0)
-        return 0;
+        return 1;
 
     bool sens    = is_sensitive_path(kbuf);
     bool persist = sens ? false : is_persistence_path(kbuf);
-    if (!sens && !persist) return 0;
+    if (!sens && !persist) return 1;
 
     /* Persistence files are read on every shell/session start; only a
      * write/create/truncate is worth reporting. Sensitive system paths
      * (shadow, ssh keys, kernel) are reported on any access. */
     if (persist &&
         !(oflags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)))
-        return 0;
+        return 1;
 
+    /* Returning 0 arms the return handler, which is what holds the instance
+     * for the duration of the syscall. Everything above returns 1 so the
+     * instance is recycled now. */
+    memcpy(ctx->kbuf, kbuf, sizeof(ctx->kbuf));
+    ctx->oflags = oflags;
+    return 0;
+}
+
+static int openat_ret_handler(struct kretprobe_instance *ri,
+                              struct pt_regs *regs)
+{
+    struct openat_ctx *ctx = (struct openat_ctx *)ri->data;
     struct synapse_syscall_event e = {0};
+
+    /* Still the same task at syscall exit, so comm/pid/uid are the caller's.
+     * The timestamp is now the completion time rather than the attempt time —
+     * a sub-microsecond shift on a syscall, and the more accurate one to
+     * report for an access that did occur. */
     fill_event(&e, __NR_openat, SYNAPSE_EVT_OPEN);
-    e.args[0] = (u64)(unsigned int)oflags;   /* open flags → wire arg0 */
-    strncpy(e.filename, kbuf, sizeof(e.filename) - 1);
+    e.args[0] = (u64)(unsigned int)ctx->oflags;   /* open flags → wire arg0 */
+    strncpy(e.filename, ctx->kbuf, sizeof(e.filename) - 1);
+
+    e.ret     = (int32_t)regs_return_value(regs);
+    e.has_ret = 1;
 
     ring_push(&e);
     synapse_stat_event();
     return 0;
 }
 
-static struct kprobe kp_openat = {
-    .symbol_name = "__x64_sys_openat",
-    .pre_handler = openat_pre_handler,
+/*
+ * maxactive bounds concurrent in-flight instances. Only opens that pass the
+ * path filter hold one across the syscall; the rest are recycled inside the
+ * entry handler, so the live count is bounded by CPUs plus however many
+ * sensitive opens are blocked in lookup at once. 64 is generous for that, and
+ * nmissed says so if it ever is not.
+ */
+static struct kretprobe kr_openat = {
+    .kp.symbol_name = "__x64_sys_openat",
+    .entry_handler  = openat_entry_handler,
+    .handler        = openat_ret_handler,
+    .data_size      = sizeof(struct openat_ctx),
+    .maxactive      = 64,
 };
+
+/* Published in the stats attribute: how many openat events were lost because
+ * no return instance was free. Losing events is the failure this ring has
+ * actually suffered, so it gets a counter rather than a comment. */
+unsigned long synapse_probe_openat_missed(void)
+{
+    return kr_openat.nmissed;
+}
 
 /* ── socket / connect kprobe ─────────────────────────────── */
 static int socket_pre_handler(struct kprobe *p, struct pt_regs *regs)
@@ -700,10 +788,12 @@ static struct kprobe kp_setuid = {
 };
 
 /* ── Probe table ──────────────────────────────────────────── */
+/* openat is NOT here: it is a kretprobe and registers separately. Its inner
+ * kp is still handed to the integrity watchdog below, so disarming it is as
+ * visible as disarming any of these. */
 static struct kprobe *all_probes[] = {
     &kp_execve,
     &kp_execveat,
-    &kp_openat,
     &kp_socket,
     &kp_connect,
     &kp_ptrace,
@@ -719,6 +809,9 @@ static struct kprobe *all_probes[] = {
  * never-registered kprobe is undefined. */
 static bool probe_registered[ARRAY_SIZE(all_probes)];
 
+/* Same, for the openat kretprobe, which is not in all_probes[]. */
+static bool openat_registered;
+
 /* ── Enable / disable ─────────────────────────────────────── */
 static bool g_probes_enabled = true;
 
@@ -732,10 +825,12 @@ void synapse_probe_set_enabled(bool enabled)
     if (enabled) {
         for (int i = 0; i < (int)N_PROBES; i++)
             if (probe_registered[i]) enable_kprobe(all_probes[i]);
+        if (openat_registered) enable_kretprobe(&kr_openat);
         pr_info("synapse_kmod: probes enabled\n");
     } else {
         for (int i = 0; i < (int)N_PROBES; i++)
             if (probe_registered[i]) disable_kprobe(all_probes[i]);
+        if (openat_registered) disable_kretprobe(&kr_openat);
         pr_info("synapse_kmod: probes disabled\n");
     }
 }
@@ -764,6 +859,15 @@ int synapse_probe_integrity_check(void)
             (KPROBE_FLAG_DISABLED | KPROBE_FLAG_GONE))
             tampered++;
     }
+
+    /* The kretprobe's inner kp carries the same flags, so openat is covered
+     * by the watchdog exactly as it was when it was a plain kprobe. Leaving it
+     * out would have made the file-open probe the one probe an attacker could
+     * disarm unobserved. */
+    if (openat_registered &&
+        (kr_openat.kp.flags & (KPROBE_FLAG_DISABLED | KPROBE_FLAG_GONE)))
+        tampered++;
+
     return tampered;
 }
 
@@ -789,14 +893,30 @@ int synapse_probe_init(int ring_size)
         }
     }
 
+    /* openat separately: it is a kretprobe so it can report the syscall's
+     * return value. A failure here is not fatal for the same reason the others
+     * are not, but it is louder — openat is the probe the file-access rules are
+     * built on, and losing it silently would leave a policy that looks armed
+     * with nothing feeding it. */
+    ret = register_kretprobe(&kr_openat);
+    if (ret) {
+        pr_warn("synapse_kmod: kretprobe %s failed: %d — file-open events "
+                "are NOT being reported this boot\n",
+                kr_openat.kp.symbol_name, ret);
+        openat_registered = false;
+    } else {
+        openat_registered = true;
+        ok++;
+    }
+
     if (ok == 0) {
         pr_err("synapse_kmod: no kprobes registered — probes disabled\n");
         ring_free();
         return -ENODEV;
     }
 
-    pr_info("synapse_kmod: %d/%zu kprobes registered, ring_size=%d\n",
-            ok, N_PROBES, ring_size);
+    pr_info("synapse_kmod: %d/%zu probes registered (openat=kretprobe), "
+            "ring_size=%d\n", ok, N_PROBES + 1, ring_size);
     return 0;
 }
 
@@ -807,6 +927,12 @@ void synapse_probe_exit(void)
         for (i = 0; i < (int)N_PROBES; i++) {
             if (probe_registered[i])
                 unregister_kprobe(all_probes[i]);
+        }
+        /* unregister_kretprobe() waits out in-flight return instances, so no
+         * handler can still be running against the ring we free below. */
+        if (openat_registered) {
+            unregister_kretprobe(&kr_openat);
+            openat_registered = false;
         }
         ring_free();
     }

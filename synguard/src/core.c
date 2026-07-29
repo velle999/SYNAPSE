@@ -359,6 +359,32 @@ int synguard_init(synguard_state_t *s)
              */
             if (s->config.bpf_enforce) {
                 sg_bpf_set_enforce(1);
+
+                /*
+                 * Remember which rules the kernel is now refusing, so the
+                 * userspace deny path can stand down for them.
+                 *
+                 * For an armed lowered rule, a userspace SIGKILL cannot
+                 * prevent anything the kernel has not already prevented. An
+                 * open that reached the LSM hook was refused there with
+                 * -EPERM; an open that never reached it failed earlier still,
+                 * at DAC or at lookup. Either way the process did not get the
+                 * file, and killing it afterwards only widens the blast
+                 * radius — it took out a whole process tree over a canary
+                 * read that had already returned EACCES.
+                 *
+                 * Only when ARMED. Loading a policy without --bpf-enforce
+                 * leaves the gate closed, and the post-hoc kill is then the
+                 * only enforcement there is.
+                 */
+                _Static_assert(SG_BPF_MAX_RULES <= SG_MAX_KERNEL_RULES,
+                               "bpf_enforced_rules[] is too small for the "
+                               "kernel-side rule capacity");
+                for (int i = 0; i < nl; i++)
+                    snprintf(s->bpf_enforced_rules[i],
+                             sizeof(s->bpf_enforced_rules[i]),
+                             "%s", lowered[i].rule_name);
+                s->bpf_enforced_count = nl;
             } else {
                 sg_log(LOG_WARNING,
                        "bpf-lsm: %d rule%s loaded but NOT armed (--bpf-enforce "

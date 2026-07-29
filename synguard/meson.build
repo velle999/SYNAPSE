@@ -179,6 +179,16 @@ aggregate_test = executable('aggregate_test',
   dependencies: [dep_threads])
 test('aggregate', aggregate_test, timeout: 60)
 
+# The syscall return value on the wire, and the two cases where acting on a
+# DENY prevents nothing. Same link set as netwatch_test: kmod_parse_event() and
+# sg_deny_suppression_reason() both live in event_processor.c.
+syscall_ret_test = executable('syscall_ret_test',
+  files('tests/syscall_ret_test.c', 'src/event_processor.c', 'src/core.c',
+        'src/sg_log.c'),
+  include_directories: inc,
+  dependencies: [dep_threads, dep_systemd])
+test('syscall_ret', syscall_ret_test, timeout: 60)
+
 # The connect() wire format and the worm/C2 thresholds. netwatch_connect() and
 # kmod_parse_event() live in event_processor.c, which pulls in the pipeline, so
 # the test stubs the daemon entry points it never calls.
