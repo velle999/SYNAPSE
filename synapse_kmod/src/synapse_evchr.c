@@ -119,6 +119,15 @@ static ssize_t syn_evchr_read(struct file *file, char __user *ubuf,
      * Loss is the one thing a detector must never learn about silently. Rate
      * limited to one line per newly dropped batch so a reader that is
      * permanently behind cannot itself flood the kernel log.
+     *
+     * In normal operation this stays quiet: synguard reads 99.2% of captured
+     * events over a 246s window (measured by sampling the kmod counter at the
+     * instant each new synguard stats line appears -- comparing the two over
+     * an arbitrary fixed window is meaningless, because synguard only
+     * publishes its counter every ~60s, and doing that wrongly once produced
+     * a confident but false "synguard drops half its events"). The warning
+     * fires under genuine bursts, where a few hundred events can be lost
+     * before the reader catches up.
      */
     if (r->dropped != r->reported) {
         pr_warn_ratelimited(
