@@ -177,6 +177,8 @@ static void usage(const char *prog)
         "  -r, --rules DIR      Rules directory (default: /etc/synguard/rules.d/)\n"
         "  --no-ai              Disable AI classification (rules only)\n"
         "  --ai-enforce         Allow AI verdicts to DENY/QUARANTINE.\n"
+        "  --bpf-enforce        Arm the BPF-LSM gate: enforceable deny rules are\n"
+        "                       refused in-kernel instead of killed afterwards.\n"
         "                       Off by default: the classifier is advisory and\n"
         "                       its verdicts are clamped to alert. Only rule\n"
         "                       verdicts can kill without this flag.\n"
@@ -263,6 +265,7 @@ int main(int argc, char *argv[])
         {"rules",      required_argument, 0, 'r'},
         {"no-ai",      no_argument,       0, 'A'},
         {"ai-enforce", no_argument,       0, 'E'},
+        {"bpf-enforce",no_argument,       0, 'B'},
         {"no-audit",   no_argument,       0, 'U'},
         {"debug",      no_argument,       0, 'd'},
         {"foreground", no_argument,       0, 'f'},
@@ -272,12 +275,13 @@ int main(int argc, char *argv[])
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "m:r:AEUdfvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:r:AEBUdfvh", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'm': mode_str = optarg; break;
         case 'r': g_state.config.rules_dir = optarg; break;
         case 'A': g_state.config.ai_enabled = 0; break;
         case 'E': g_state.config.ai_enforce = 1; break;
+        case 'B': g_state.config.bpf_enforce = 1; break;
         case 'U': g_state.config.audit_enabled = 0; break;
         case 'd': g_state.debug = 1; foreground = 1; break;
         case 'f': foreground = 1; break;

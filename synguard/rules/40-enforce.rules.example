@@ -25,11 +25,12 @@
 #
 # That is a deliberate default for a desktop distro, for two reasons.
 #
-# 1. ENFORCEMENT HERE IS AFTER THE FACT, NOT PREVENTION.
+# 1. MOST ENFORCEMENT HERE IS AFTER THE FACT, NOT PREVENTION.
 #
-#    synapse_kmod observes syscalls with kprobe pre-handlers. It does not
-#    implement an LSM hook and never returns -EPERM, so it cannot refuse
-#    anything. The sequence is:
+#    There are now TWO paths, and which one a rule gets decides what it can
+#    actually do. Read this before writing anything.
+#
+#    THE USERSPACE PATH — always present, always after the fact.
 #
 #        syscall runs and SUCCEEDS
 #          → kmod appends a record to /sys/kernel/synapse/syscall_log
@@ -37,11 +38,54 @@
 #              → rules match, possibly an AI round-trip
 #                → SIGKILL
 #
-#    By the time a process is killed for reading /etc/shadow, it has read
-#    /etc/shadow. A deny rule buys you "it does not get to continue" — real
-#    value against persistence, C2 beacons and staged payloads, and no value
-#    at all as a way to stop the first act. Write rules with that in mind:
-#    target the things whose damage is ongoing, not instantaneous.
+#    synapse_kmod observes with kprobe pre-handlers. It does not implement an
+#    LSM hook and never returns -EPERM, so it cannot refuse anything. By the
+#    time a process is killed for reading /etc/shadow, it has read /etc/shadow.
+#    A deny rule buys you "it does not get to continue" — real value against
+#    persistence, C2 beacons and staged payloads, and no value at all as a way
+#    to stop the first act. Write rules with that in mind: target the things
+#    whose damage is ongoing, not instantaneous.
+#
+#    THE KERNEL PATH — real prevention, but only for some rules, and only if
+#    you arm it.
+#
+#        open() enters the kernel
+#          → BPF-LSM hook evaluates the rule ON THE CALLING THREAD
+#            → open() returns -EPERM. The read never happens.
+#
+#    No 100ms window, no pid-reuse race, no AI. A rule on this path stops the
+#    first act rather than punishing it. Four things must all be true:
+#
+#      a. `event open`. The hook is lsm/file_open. Rules on exec, socket,
+#         ptrace, module, mount and setuid stay on the userspace path — there
+#         is no hook for them yet.
+#      b. The rule's patterns must LOWER, and
+#      c. no earlier rule may pre-empt it — both under WHICH RULES CAN BE
+#         ENFORCED IN THE KERNEL, below.
+#      d. synguard must run with --bpf-enforce. It is NOT in the shipped unit.
+#
+#    Without (d) the rule is still compiled and loaded into the kernel maps —
+#    the daemon will say so — but the gate stays shut and the rule is enforced
+#    only after the fact, by the userspace path. Arming is deliberate because
+#    prevention is deliberate: a rule that merely kills late is recoverable,
+#    and one that refuses a syscall your login needs is not.
+#
+#    To arm it, add --bpf-enforce to ExecStart:
+#        sudo systemctl edit synguard
+#        [Service]
+#        ExecStart=
+#        ExecStart=/usr/bin/synguard --foreground --mode enforce \
+#            --rules /etc/synguard/rules.d/ --bpf-enforce
+#
+#    THE WAY OUT, if an armed rule locks you out of your own machine: add
+#
+#        synapse.bpf_enforce=0
+#
+#    to the kernel command line at the boot menu. synguard then never loads the
+#    BPF object at all, and comes up detect-only. Do this before reaching for a
+#    live USB. The gate also fails open on its own if synguard dies or wedges,
+#    and refuses to act for the first 30 seconds after it attaches, so you get
+#    a login even when a rule is badly wrong.
 #
 # 2. A FALSE POSITIVE COSTS A PROCESS TREE.
 #
@@ -50,6 +94,100 @@
 #    startup chain and you can log a user out. sg_is_protected() refuses PID
 #    0/1, kernel threads, synguard, synapd, synnet and synsh — that is all it
 #    refuses. Your desktop, your editor and your browser are not protected.
+#
+# WHICH RULES CAN BE ENFORCED IN THE KERNEL
+#
+# A BPF program gets map lookups and bounded string work — it has no fnmatch.
+# So synguard COMPILES each deny rule down to an exact string or a prefix, and
+# refuses anything it cannot express exactly. It never approximates, because
+# both directions of approximation are bugs you would not find: too narrow and
+# the rule quietly under-enforces, too broad and it refuses things your policy
+# permits.
+#
+# A refusal is not silent. synguard names the rule at startup and carries on
+# with the userspace path:
+#
+#     bpf-lsm: policy NOT loaded — rule 'deny-tmp-scripts': path pattern
+#     cannot be expressed in-kernel: "/tmp/*.sh"; kernel enforcement is off,
+#     the userspace path is unaffected
+#
+# ENFORCEABLE:
+#     path /etc/ld.so.preload      an exact path, no wildcard
+#     path /etc/profile.d/*        a directory, one level deep
+#     comm sshd                    an exact comm
+#     comm python*                 a comm prefix
+#
+# NOT ENFORCEABLE (userspace only):
+#     path /tmp/*.sh               `*` anywhere but the very end
+#     path /etc/*/shadow           same
+#     path /dev/input/event?       `?` and [...] have no lowered form
+#     path /etc/sha*               a prefix that does not end at a '/' — the
+#                                  matcher does exact and directory lookups,
+#                                  so this one needs work synguard has not
+#                                  done yet rather than being impossible
+#     (no path at all)             a deny rule with no path would match every
+#                                  open on the system
+#
+# Note that `/etc/profile.d/*` covers /etc/profile.d/x and NOT
+# /etc/profile.d/sub/x. That is FNM_PATHNAME — `*` stops at a '/' — and the
+# kernel matcher reproduces it exactly, so a directory rule means one level in
+# both paths. If you want deeper, write the deeper rule too.
+#
+# ORDERING ALSO HAS TO LOWER, AND THIS IS THE PART THAT WILL BITE YOU.
+#
+# Rules are first-match-wins, so an earlier `allow` beats a later `deny`. The
+# kernel only knows the rules it was handed, so a deny rule is enforceable only
+# when no earlier rule could match the same input, and synguard refuses when it
+# cannot PROVE they are disjoint.
+#
+# 00-base.rules opens with `allow-synguard` and `allow-synapd` at priority 1,
+# and both are `comm <name>` with NO path — they match any event on any file.
+# Nothing can be proved disjoint from that. So a deny rule written at the
+# priorities suggested further down this file is refused outright:
+#
+#     rule deny-ld-preload-write { event open; path /etc/ld.so.preload;
+#                                  verdict deny; priority 10 }
+#     → bpf-lsm: policy NOT loaded — rule 'deny-ld-preload-write': an earlier
+#       rule may pre-empt it (rule 'allow-synguard' comes first)
+#
+# The same rule at `priority 0` lowers and arms cleanly, because it now comes
+# before every allow.
+#
+# THAT IS A REAL TRADE, NOT A TRICK. Below the allows, your rule is enforced
+# late but synguard and synapd are exempt from it. Above them, it is enforced
+# in the kernel and it applies to synguard and synapd too. For a file neither
+# daemon touches — /etc/ld.so.preload, a udev rules directory — that is fine
+# and priority 0 is right. For anything they might legitimately open, putting a
+# deny above the self-exemption can make synguard kill its own supporting cast,
+# so leave it below the allows and accept post-hoc enforcement.
+#
+# Note this makes the advice further down ("keep these numbers well above
+# them") correct for the userspace path and wrong for the kernel path. There is
+# no single right answer; pick per rule, based on whether the daemons touch the
+# thing you are protecting.
+#
+# The conservatism is on purpose. The alternative is two engines that disagree
+# about the same policy file, with nothing at runtime to tell you which one you
+# are looking at.
+#
+# HOW TO CHECK WHAT IS ACTUALLY ARMED
+#
+#     journalctl -u synguard | grep bpf-lsm
+#
+#     bpf-lsm: attached · 2 rules armed · gate OPEN (armed)
+#     bpf-lsm: denied=0 budget=64 opens[switch=0 warmup=0 heartbeat=0 budget=0] longpath=0
+#
+# `gate CLOSED` tells you why in the same line: not armed, warming up, daemon
+# heartbeat stale, or deny budget spent. The opens[] counters say how often the
+# gate declined to act for each of those reasons — non-zero heartbeat= means
+# real denials were dropped because synguard was wedged. `longpath=` counts
+# opens whose path was too long to evaluate (over 256 bytes); those are not
+# enforced in the kernel, and the number is there so that gap is visible
+# rather than silent.
+#
+# The gate also disarms ITSELF after 64 denials, so a rule that matches far
+# more than you intended stops making the machine unusable. Refilled each time
+# synguard reports the spend.
 #
 # HOW TO ROLL OUT A DENY RULE WITHOUT REGRETTING IT
 #
@@ -67,7 +205,10 @@
 #
 # Rules are matched in priority order, lowest number first, and the FIRST match
 # wins. The allow-rules in 00-base.rules use priority 1 so they beat anything
-# here — keep these numbers well above them.
+# here — keep these numbers well above them, UNLESS you want the rule enforced
+# in the kernel, in which case it has to come before them and the trade under
+# "ORDERING ALSO HAS TO LOWER" applies. Every rule below is written for the
+# userspace path; move one to priority 0 only after reading that section.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 

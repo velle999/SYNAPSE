@@ -191,6 +191,11 @@ typedef enum {
 typedef struct {
     sg_mode_t   mode;
     int         ai_enabled;        /* use synapd for classification */
+    int         bpf_enforce;       /* arm the BPF-LSM gate, so a lowered deny rule
+                                      is refused in-kernel rather than only killed
+                                      after the fact. Off by default: the kernel
+                                      path PREVENTS, and turning that on for every
+                                      install has to be deliberate. */
     int         ai_enforce;        /* let an AI verdict escalate to DENY/QUARANTINE.
                                       Off by default: the classifier is advisory, and a
                                       hallucinated "deny" must never SIGKILL the login

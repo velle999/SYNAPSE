@@ -264,6 +264,34 @@ static void test_shipped(void)
 	 */
 	ok(n == 0, "shipped policy lowers to ZERO enforceable rules (got %d%s%s)",
 	   n, n < 0 ? ": " : "", n < 0 ? err : "");
+
+	/*
+	 * 40-enforce.rules.example tells admins, with a worked example, that a
+	 * deny rule placed AFTER the shipped allows is refused and the same rule
+	 * at priority 0 arms cleanly. That is a factual claim about this code,
+	 * and if it stops being true the documentation becomes wrong silently.
+	 * Pin both halves.
+	 *
+	 * The rule list is already priority-sorted, so appending simulates a high
+	 * priority number and prepending simulates priority 0.
+	 */
+	sg_rule_t *deny = mkrule("deny-ld-preload-write", NULL,
+	                         "/etc/ld.so.preload", VERDICT_DENY, NULL);
+
+	sg_rule_t *tail = s.rules_head;
+	while (tail->next) tail = tail->next;
+	tail->next = deny;
+
+	n = sg_lower_policy(s.rules_head, out, 64, err, sizeof(err));
+	ok(n < 0, "a deny AFTER the shipped allows is refused (doc's example)");
+	ok(n < 0 && strstr(err, "allow-synguard") != NULL,
+	   "…naming allow-synguard as the blocker: %s", err);
+
+	tail->next = NULL;
+	deny->next = s.rules_head;
+	n = sg_lower_policy(deny, out, 64, err, sizeof(err));
+	ok(n == 1, "the same deny at priority 0 lowers (got %d%s%s)",
+	   n, n < 0 ? ": " : "", n < 0 ? err : "");
 }
 
 int main(void)

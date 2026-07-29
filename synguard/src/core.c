@@ -350,6 +350,21 @@ int synguard_init(synguard_state_t *s)
             sg_log(LOG_WARNING,
                    "bpf-lsm: policy NOT loaded — %s; kernel enforcement is "
                    "off, the userspace path is unaffected", lerr);
+        } else if (nl > 0) {
+            /*
+             * Arming is opt-in and separate from loading, exactly as
+             * --ai-enforce is separate from having an AI. The kernel path
+             * PREVENTS rather than reacts, so switching it on for every
+             * install must be something someone chose.
+             */
+            if (s->config.bpf_enforce) {
+                sg_bpf_set_enforce(1);
+            } else {
+                sg_log(LOG_WARNING,
+                       "bpf-lsm: %d rule%s loaded but NOT armed (--bpf-enforce "
+                       "unset) — they are enforced only after the fact, by the "
+                       "userspace path", nl, nl == 1 ? "" : "s");
+            }
         }
     }
 #endif
