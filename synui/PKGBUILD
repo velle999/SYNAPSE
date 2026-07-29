@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=209
+pkgrel=210
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -65,6 +65,12 @@ optdepends=('xorg-xcursorgen: build cursor themes from source (synui-cursor buil
             'sound-theme-elementary: extra sound theme for the Super+S picker'
             'pop-sound-theme: extra sound theme for the Super+S picker'
             'deepin-sound-theme: extra sound theme for the Super+S picker'
+            # synui-open-folder takes any of these, so this is a genuine choice
+            # rather than a hint — dolphin is only first because the KIO service
+            # menus (Mount Image, Run with Wine) are Dolphin-only.
+            'dolphin: file manager for the Files button, desktop menu and ISO mounter'
+            'nautilus: file manager, alternative to dolphin'
+            'thunar: file manager, alternative to dolphin'
             'wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'
@@ -316,6 +322,12 @@ package() {
     # changes synui's own pointer and nothing else on the desktop follows.
     install -Dm755 systemd/synui-cursor.sh \
         "$pkgdir/usr/bin/synui-cursor"
+
+    # The one place that knows how to open a folder. dolphin is an optdepend,
+    # so the bar's Files button, the desktop menu and the ISO mounter all go
+    # through this instead of naming it — see the script for the search order.
+    install -Dm755 systemd/synui-open-folder.sh \
+        "$pkgdir/usr/bin/synui-open-folder"
 
     # Right-click an .iso in Dolphin -> Mount/Unmount Image, Write to USB Stick.
     # The service menu must be executable or KIO 6 skips it. See

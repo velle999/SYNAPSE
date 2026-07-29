@@ -918,21 +918,22 @@ case "$DE_CHOICE" in
         # has no use for it. synui ships the /etc/xdg files that make KDE apps
         # work outside Plasma (applications.menu, kdeglobals) — see its PKGBUILD.
         #
-        # Declining it is a REAL loss of desktop function, not just a missing
-        # app: synui hardcodes dolphin in three places — the bar's Files button
-        # (quickshell/widgets/QuickLaunch.qml), the desktop right-click menu
-        # (src/deskmenu.c) and the ISO mounter's "open the mount" step
-        # (synui-iso-mount.sh). Each of those becomes a click that does nothing.
-        # So say so here instead of shipping three dead buttons silently.
+        # synui no longer names dolphin: the bar's Files button, the desktop
+        # right-click menu and the ISO mounter all go through
+        # synui-open-folder, which takes any file manager on PATH and raises a
+        # notification when there is none. So declining this is survivable —
+        # install nautilus or thunar instead and the desktop follows. Still
+        # warn, because with NOTHING installed those three are inert.
         DESKTOP_PKGS="greetd greetd-tuigreet quickshell swaybg python wtype"
         [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
         [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
         [ "$WANT_FILEMGR"   = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS dolphin"
         arch-chroot /mnt pacman -S --noconfirm $DESKTOP_PKGS \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
-        [ "$WANT_FILEMGR" = 1 ] || warn "No file manager installed: the bar's Files button, the desktop
-  right-click 'Open File Manager' entry and the ISO mounter will do
-  nothing. Install one later with 'sudo pacman -S dolphin'."
+        [ "$WANT_FILEMGR" = 1 ] || warn "No file manager installed. The bar's Files button, the desktop
+  right-click entry and the ISO mounter will report that rather than
+  doing nothing. Installing any of dolphin / nautilus / thunar later
+  is all that is needed — nothing hardcodes a particular one."
         success "SynapseUI selected (included)"
         ;;
 esac

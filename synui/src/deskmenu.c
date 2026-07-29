@@ -229,7 +229,10 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
         synui_spawn(s->config.terminal[0] ? s->config.terminal : "foot");
         break;
     case SYN_DESKACT_FILES:
-        synui_spawn("dolphin");
+        /* Not "dolphin": it is an optdepend, and a Minimal install has none,
+         * which made this entry a click that did nothing. The helper finds
+         * whatever file manager exists and says so when there is none. */
+        synui_spawn("synui-open-folder");
         break;
     case SYN_DESKACT_APPS:
         /* The start menu is the bar's now, so this goes out the same door the

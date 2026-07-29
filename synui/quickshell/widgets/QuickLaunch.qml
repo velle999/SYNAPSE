@@ -46,7 +46,7 @@ PanelWindow {
     readonly property var entries: [
         { name: "terminal",     sub: "foot",              exec: ["foot"] },
         { name: "app launcher", sub: "all applications",  exec: ["synctl", "dispatch", "menu"] },
-        { name: "files",        sub: "dolphin",           exec: ["dolphin"] },
+        { name: "files",        sub: "file manager",      exec: ["synui-open-folder"] },
         { name: "browser",      sub: "firefox",           exec: ["firefox"] },
         { name: "select wall",  sub: "wallpaper library", exec: ["synctl", "dispatch", "wallpaper"] }
     ]

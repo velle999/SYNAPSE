@@ -105,7 +105,7 @@ mount)
             >/dev/null 2>&1 || true
     fi
 
-    exec dolphin "$mp"
+    exec synui-open-folder "$mp"
     ;;
 unmount)
     loop=$(loop_for_image) || die "${image##*/} is not mounted."
