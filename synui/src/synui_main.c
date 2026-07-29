@@ -49,6 +49,7 @@
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_data_control_v1.h>
+#include <wlr/types/wlr_security_context_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
@@ -60,6 +61,77 @@
 #include "synui.h"
 #include "effects.h"
 #include "kde_blur.h"
+
+/* ── Security context: which globals a sandboxed client may see ──── */
+/*
+ * wlroots hands every Wayland client the full set of globals, so on a stock
+ * build ANY application the user runs — a game, a Flatpak, a browser helper —
+ * can bind zwlr_screencopy_manager_v1 and read the screen continuously, bind
+ * zwp_input_method_manager_v2 and see everything typed, or bind
+ * zwlr_data_control_manager_v1 and watch the clipboard. That is the default
+ * for every wlroots compositor (sway and Hyprland included), not something
+ * synui invented, but it deserves saying plainly on a system that advertises
+ * itself as security-focused: synguard watches /dev/input specifically to
+ * catch keyloggers, and none of the above touches /dev/input at all.
+ *
+ * BE CLEAR ABOUT WHAT THIS FIXES. A client is restricted only if it HAS a
+ * security context, and a security context is something a sandbox (Flatpak,
+ * snap, a bubblewrap wrapper) sets on the client's behalf before handing over
+ * the socket. A native binary the user launches from a shell simply never
+ * creates one and keeps full access. So this makes sandboxing MEAN something
+ * here; it is not a defence against arbitrary code the user chose to run —
+ * that code already runs as the user. Do not let this land in a changelog as
+ * "synui now blocks keylogging".
+ *
+ * The list is deny-by-name rather than allow-by-name on purpose: a wlroots
+ * upgrade that adds a global should not silently start restricting it and
+ * break an app. New privileged protocols must be added here deliberately.
+ */
+static const char *const privileged_globals[] = {
+    /* Screen capture — the whole framebuffer, no prompt, no indicator. */
+    "zwlr_screencopy_manager_v1",
+    "zwlr_export_dmabuf_manager_v1",
+    /* Clipboard snooping: these watch every copy, not just paste-on-demand. */
+    "zwlr_data_control_manager_v1",
+    "ext_data_control_manager_v1",
+    /* Input injection and input interception. */
+    "zwp_virtual_keyboard_manager_v1",
+    "zwp_input_method_manager_v2",
+    /* Other windows: enumerate, focus, close. */
+    "zwlr_foreign_toplevel_manager_v1",
+    "ext_foreign_toplevel_list_v1",
+    /* Display manipulation — gamma, DPMS, and output layout. */
+    "zwlr_gamma_control_manager_v1",
+    "zwlr_output_power_manager_v1",
+    "zwlr_output_manager_v1",
+    /* A sandboxed client must not be able to mint contexts for others. */
+    "wp_security_context_manager_v1",
+};
+
+static bool security_context_filter(const struct wl_client *client,
+                                    const struct wl_global *global,
+                                    void *data)
+{
+    syn_server_t *s = data;
+
+    /* No context => not sandboxed => unchanged behaviour. This is the path
+     * grim, wl-clipboard, the bar and every ordinary app take. */
+    if (!s->security_context_mgr ||
+        !wlr_security_context_manager_v1_lookup_client(s->security_context_mgr,
+                                                       client))
+        return true;
+
+    const struct wl_interface *iface = wl_global_get_interface(global);
+    if (!iface || !iface->name)
+        return true;
+
+    for (size_t i = 0; i < sizeof(privileged_globals) /
+                           sizeof(privileged_globals[0]); i++) {
+        if (strcmp(iface->name, privileged_globals[i]) == 0)
+            return false;
+    }
+    return true;
+}
 
 /* ── Signal handling ─────────────────────────────────────── */
 static int handle_terminate_signal(int sig, void *data)
@@ -1531,6 +1603,17 @@ int synui_init(syn_server_t *s)
 
     /* ext-session-lock (swaylock). */
     session_lock_setup(s);
+
+    /* security-context: the gate that makes the privileged globals below mean
+     * something for a sandboxed app. Must be created BEFORE the filter it
+     * feeds; see security_context_filter() for what is restricted and, just as
+     * importantly, what this does NOT protect against. */
+    s->security_context_mgr = wlr_security_context_manager_v1_create(s->display);
+    if (s->security_context_mgr)
+        wl_display_set_global_filter(s->display, security_context_filter, s);
+    else
+        wlr_log(WLR_ERROR, "security-context: manager creation failed — "
+                           "sandboxed clients will NOT be restricted");
 
     /* screencopy (grim, slurp-based tools) + export-dmabuf (wf-recorder). */
     wlr_screencopy_manager_v1_create(s->display);

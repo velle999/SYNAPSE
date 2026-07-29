@@ -2485,6 +2485,13 @@ struct syn_server {
     struct wlr_cursor_shape_manager_v1 *cursor_shape_mgr;
     struct wl_listener                  request_set_shape;
 
+    /* security-context-v1: lets a sandbox (Flatpak et al) tag its client so
+     * the global filter in synui_main.c can withhold screen capture, input
+     * interception and clipboard snooping from it. NULL means the manager
+     * failed to create, in which case the filter passes everything through —
+     * see security_context_filter() for the limits of what this protects. */
+    struct wlr_security_context_manager_v1 *security_context_mgr;
+
     /* xdg-toplevel-icon-v1: a window can name its own icon, which is the only
      * way to get an icon for an app that ships no .desktop file. */
     struct wlr_xdg_toplevel_icon_manager_v1 *toplevel_icon_mgr;
