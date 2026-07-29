@@ -128,3 +128,4 @@ archiso/out/*.b2sum
 # tracked until 2026-07-29 and had gone stale pointing at ~/Documents/GitHub.
 # A shared .claude/settings.json is still fine to commit.
 .claude/settings.local.json
+**/.claude/settings.local.json
