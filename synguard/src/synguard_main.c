@@ -288,8 +288,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    print_banner(&g_state);
-
     /* Connect to synapd */
     if (g_state.config.ai_enabled) {
         if (sg_synapd_connect(&g_state) < 0) {
@@ -302,6 +300,25 @@ int main(int argc, char *argv[])
     if (kmod_reader_start(&g_state) < 0) {
         sg_log(LOG_WARNING, "synguard: kmod reader failed — running without kernel events");
     }
+
+    /* Banner LAST, not first.
+     *
+     * It used to print here-minus-two-steps, before either of the facts it
+     * reports had been established. kmod_present is assigned in exactly one
+     * place — kmod_reader_start(), below — so the banner read it while it was
+     * still the zero from synguard_init() and announced "kmod=absent
+     * (degraded)" on every boot ever, including the boots where the module was
+     * loaded and the reader went on to drain millions of events from it. The
+     * one line an operator actually reads said monitoring was dead while it
+     * was working.
+     *
+     * ai= had the same shape: printed before sg_synapd_connect() could fail
+     * and turn ai_enabled back off, so it could claim ai=on for a daemon that
+     * had just given up on synapd.
+     *
+     * A startup banner is a report, so it goes after the things it reports on.
+     * Anything that needs to announce itself earlier should log for itself. */
+    print_banner(&g_state);
 
     /*
      * Tell systemd we are up.

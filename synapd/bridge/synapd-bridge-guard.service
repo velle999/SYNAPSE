@@ -1,0 +1,45 @@
+[Unit]
+Description=Restrict the synapd TCP bridge to a single peer
+Documentation=file:///etc/nftables.d/synapd-bridge.nft
+# The port must never be listening without the guard in front of it.
+Before=synapd-bridge.socket
+
+# ── Why DefaultDependencies=no ───────────────────────────────────────────────
+# Without it this unit cannot work, and fails in a way that leaves no error.
+#
+# A normal service gets an implicit After=basic.target. basic.target is ordered
+# After=sockets.target. sockets.target pulls in synapd-bridge.socket, which is
+# ordered After= this unit. That is a cycle:
+#
+#   synapd-bridge.socket → after → synapd-bridge-guard.service
+#                                → after → basic.target
+#                                        → after → sockets.target
+#                                                → wants → synapd-bridge.socket
+#
+# systemd breaks a cycle by deleting one job from it, and the job it picked was
+# synapd-bridge.socket/start. The guard came up, `nft list tables` showed the
+# table installed, `systemctl is-active synapd-bridge-guard` said active — and
+# the bridge port was never opened at all. It stayed that way for 16 boots.
+# The only trace is one line at boot:
+#
+#   sockets.target: Found ordering cycle: synapd-bridge.socket/start after ...
+#   sockets.target: Job synapd-bridge.socket/start deleted to break ordering cycle
+#
+# Dropping the implicit dependencies removes basic.target from the chain and
+# the cycle with it. Everything DefaultDependencies=no would have given us is
+# then stated explicitly below. nft(8) and the nf_tables module are available
+# from sysinit.target onwards, which is well before any socket unit.
+DefaultDependencies=no
+After=sysinit.target
+Before=sockets.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f /etc/nftables.d/synapd-bridge.nft
+ExecStop=/usr/bin/nft destroy table inet synapd_bridge_guard
+
+[Install]
+WantedBy=multi-user.target

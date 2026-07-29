@@ -1,0 +1,40 @@
+[Unit]
+Description=TCP bridge to synapd's unix socket (chibi on the Pi)
+Documentation=file:///etc/nftables.d/synapd-bridge.nft
+Requires=synapd.service
+After=synapd.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd /run/synapd/synapd.sock
+
+# The proxy needs no privilege of its own: /run/synapd/synapd.sock is
+# srw-rw---- root:synapse, so group membership alone is enough to connect.
+# A transient user keeps this off the passwd file entirely.
+DynamicUser=yes
+SupplementaryGroups=synapse
+
+# This process is reachable from the LAN, so it gets fenced in much harder than
+# synapd itself can be. It only moves bytes between two sockets.
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

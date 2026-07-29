@@ -1,0 +1,22 @@
+[Unit]
+Description=TCP bridge to synapd's unix socket (chibi on the Pi)
+Documentation=file:///etc/nftables.d/synapd-bridge.nft
+
+# Fail closed: if the nftables guard cannot be installed, never open the port.
+# Requires= (not Wants=) is deliberate — synapd's wire protocol has no
+# authentication of any kind, so an unguarded 11435 would hand its parser to
+# every host on the subnet.
+#
+# synapd is NOT root (synapd.service: User=synapd, CapabilityBoundingSet= empty,
+# RestrictAddressFamilies=AF_UNIX, SystemCallFilter=@system-service), so a
+# parser compromise starts from an unprivileged confined account rather than
+# from uid 0. That is a mitigation, not a reason to drop the guard: the daemon
+# still holds the model, the context, and a socket every local session trusts.
+Requires=synapd-bridge-guard.service
+After=synapd-bridge-guard.service
+
+[Socket]
+ListenStream=0.0.0.0:11435
+
+[Install]
+WantedBy=sockets.target

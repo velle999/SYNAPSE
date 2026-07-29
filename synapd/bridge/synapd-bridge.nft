@@ -1,0 +1,45 @@
+#!/usr/bin/nft -f
+#
+# Restrict the synapd TCP bridge (tcp/11435) to loopback and chibi's Raspberry Pi.
+#
+# The bridge fronts /run/synapd/synapd.sock so chibi on the Pi can use synapd's
+# model instead of making ollama load a second copy of the same Mistral 7B.
+#
+# synapd's wire protocol has no authentication of any kind, so this guard is
+# what makes the bridge acceptable to expose at all: without it, binding
+# 0.0.0.0:11435 hands that parser to every host on 192.168.40.0/24.
+#
+# This comment used to add "and synapd itself runs as root", which is no longer
+# true and had not been for some time. synapd.service runs User=synapd with an
+# empty CapabilityBoundingSet, NoNewPrivileges, RestrictAddressFamilies=AF_UNIX
+# and SystemCallFilter=@system-service, precisely so the process parsing every
+# byte off this socket is not the privileged one. A compromise therefore starts
+# from a confined unprivileged account, not uid 0 — which lowers the ceiling but
+# does not remove the reason for this file: that account still holds the loaded
+# model, the conversation context, and a socket every local session trusts.
+# Getting the threat model wrong in the safe direction is still getting it
+# wrong, and a stale claim like that is how a control gets dropped later by
+# someone who checks it and finds it false.
+#
+# ── SITE-SPECIFIC ────────────────────────────────────────────────────────────
+# The peer address below is this network's Raspberry Pi. Anyone reusing this
+# file MUST change it — an allowlist pointing at someone else's LAN is an
+# allowlist of one arbitrary host on yours.
+#
+# Mirrors /etc/nftables.d/ollama.nft: its own table, so it cannot disturb
+# synguard's `inet synnet` table or /etc/nftables.conf. The chain policy is
+# accept and every drop rule is qualified by `tcp dport 11435`, so nothing else
+# can be affected -- UDP and ICMP never match a rule here and fall through.
+
+destroy table inet synapd_bridge_guard
+
+table inet synapd_bridge_guard {
+    chain input {
+        type filter hook input priority filter; policy accept;
+
+        iif lo accept
+        tcp dport 11435 ip saddr 192.168.40.248 counter accept   # chibi @ raspberrypi.lan
+        tcp dport 11435 counter drop                             # everyone else; also IPv6,
+                                                                 # which cannot match ip saddr
+    }
+}
