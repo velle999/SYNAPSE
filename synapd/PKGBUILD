@@ -1,6 +1,6 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=19
+pkgrel=20
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -48,6 +48,14 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synapd.socket"
     install -Dm644 systemd/synapd-setup.service \
         "$pkgdir/usr/lib/systemd/system/synapd-setup.service"
+
+    # Re-asserts synapd's ownership of the kmod's writable sysfs nodes, which a
+    # module reload silently resets to root:root. See the unit for why this is
+    # a timer and not an event.
+    install -Dm644 systemd/synapd-kmod-perms.service \
+        "$pkgdir/usr/lib/systemd/system/synapd-kmod-perms.service"
+    install -Dm644 systemd/synapd-kmod-perms.timer \
+        "$pkgdir/usr/lib/systemd/system/synapd-kmod-perms.timer"
 
     # Creates the unprivileged `synapd` user and owns its state dirs, so the
     # daemon that parses socket input is not root. The tmpfiles Z lines also

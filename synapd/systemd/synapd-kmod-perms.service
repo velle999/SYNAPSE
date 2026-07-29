@@ -1,0 +1,66 @@
+# Re-assert synapd's ownership of the two writable synapse_kmod sysfs nodes.
+#
+# WHY THIS EXISTS
+#
+# synapd runs as User=synapd with no capabilities, so it can only write
+# /sys/kernel/synapse/{ai_hints,status} because synapd-setup.service chowns
+# them at boot. Those nodes are created by the kernel module, and a module
+# reload destroys and recreates them — as root:root. Nothing re-runs the chown,
+# so after any rmmod/modprobe synapd silently stops being able to write its
+# heartbeat: daemon_heartbeats stops climbing, the kmod's 30s watchdog declares
+# the daemon dead and reverts its AI scheduling hints, and the only clue is one
+# line in synapd's log.
+#
+# Observed exactly that while reloading the module by hand, twice.
+#
+# WHY IT IS A TIMER AND NOT AN EVENT
+#
+# There is no reliable trigger to hang this on, and each candidate was tested
+# rather than assumed:
+#
+#   - A systemd .path unit with PathExists=/sys/kernel/synapse/ai_hints does
+#     NOT fire. sysfs does not deliver the inotify event systemd needs; tried
+#     it against a real rmmod/modprobe and ownership stayed root:root.
+#   - kobj_type.get_ownership() would fix it in the module itself, but it is
+#     per-KOBJECT, not per-attribute: it would hand synapd every node under
+#     /sys/kernel/synapse, including lockdown and config. That is a privilege
+#     widening, not a fix. The chown belongs in userspace precisely because it
+#     can be selective.
+#   - A modprobe.d `install` line would recurse: synapd-setup.service itself
+#     runs modprobe synapse_kmod, so having modprobe start synapd-setup would
+#     have it wait on a unit that is already starting.
+#
+# So: poll, cheaply. The work is two stat calls when nothing is wrong.
+# ConditionPathExists means it does not even run without the module loaded.
+
+[Unit]
+Description=Restore synapd's ownership of the synapse_kmod sysfs nodes
+Documentation=https://github.com/velle999/SYNAPSE
+ConditionPathExists=/sys/kernel/synapse/ai_hints
+
+[Service]
+Type=oneshot
+# Idempotent and quiet: only chowns a node that is actually wrong, so the
+# common case touches nothing and logs nothing.
+ExecStart=/bin/sh -c 'for f in ai_hints status; do \
+      p=/sys/kernel/synapse/$f; \
+      [ -e "$p" ] || continue; \
+      [ "$(stat -c %%U "$p")" = synapd ] && continue; \
+      chown synapd "$p" && \
+        echo "restored synapd ownership of $p (module reloaded?)"; \
+    done; exit 0'
+
+# Nothing here needs more than the one capability the chown itself takes.
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_CHOWN
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+PrivateNetwork=true
+RestrictAddressFamilies=
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

@@ -171,9 +171,26 @@ int scheduler_write_hint(synapd_state_t *s, pid_t pid,
 void scheduler_write_status(synapd_state_t *s, const char *status) {
     int fd = open(SYNAPD_SYSFS_STATUS, O_WRONLY | O_CLOEXEC);
     if (fd < 0) {
-        /* sysfs gone — kmod was unloaded */
+        /*
+         * ENOENT and EACCES are different problems and used to produce the
+         * same sentence. Reloading the kernel module recreates every node
+         * under /sys/kernel/synapse as root:root, discarding the chown that
+         * synapd-setup.service does at boot — so after any rmmod/modprobe the
+         * module IS loaded and synapd simply cannot write to it. Reporting
+         * that as "lost connection to synapse_kmod" sends whoever reads the
+         * log looking for a module that is sitting right there.
+         */
         if (s->scheduler.kmod_present) {
-            syn_log(LOG_WARNING, "scheduler: lost connection to synapse_kmod");
+            if (errno == EACCES || errno == EPERM)
+                syn_log(LOG_ERR,
+                        "scheduler: cannot write %s: %s — the kmod is loaded "
+                        "but the node is not owned by synapd. It was probably "
+                        "reloaded; `systemctl restart synapd-setup.service` "
+                        "restores the ownership.",
+                        SYNAPD_SYSFS_STATUS, strerror(errno));
+            else
+                syn_log(LOG_WARNING, "scheduler: lost connection to "
+                                     "synapse_kmod: %s", strerror(errno));
             if (s->scheduler.sysfs_fd >= 0)
                 close(s->scheduler.sysfs_fd);
             s->scheduler.sysfs_fd     = -1;

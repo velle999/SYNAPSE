@@ -1,0 +1,21 @@
+# Drives synapd-kmod-perms.service — see that unit for why this is a timer.
+#
+# 15s, because the kernel module's daemon watchdog gives up after 30s
+# (synapse_daemon_timeout) and then reverts every AI scheduling hint it has
+# applied. Re-asserting well inside that window means a module reload costs a
+# couple of missed heartbeats instead of a visible fallback.
+
+[Unit]
+Description=Periodically restore synapd's ownership of the synapse_kmod sysfs nodes
+Documentation=https://github.com/velle999/SYNAPSE
+
+[Timer]
+OnBootSec=30s
+# OnUnitInactiveSec, not OnUnitActiveSec: the service is a oneshot that exits
+# immediately, so it is essentially never "active" and OnUnitActiveSec would
+# schedule off a moment that barely exists.
+OnUnitInactiveSec=15s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
