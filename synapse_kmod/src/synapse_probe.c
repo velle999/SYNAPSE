@@ -217,10 +217,41 @@ static void fill_event(struct synapse_syscall_event *e,
 {
     struct task_struct *task = current;
     e->timestamp_ns = ktime_get_raw_ns();
-    e->pid          = task_pid_vnr(task);
-    e->tgid         = task_tgid_vnr(task);
-    e->uid          = from_kuid_munged(current_user_ns(),
-                                       task_uid(task));
+    /*
+     * Identity in the INITIAL namespaces, never the task's own view of itself.
+     *
+     * These were task_pid_vnr()/task_tgid_vnr() and
+     * from_kuid_munged(current_user_ns(), ...), i.e. the pid and uid as seen
+     * from inside whatever namespace the traced task happens to sit in. For a
+     * security monitor that is exactly backwards: it lets the subject choose
+     * the identity it is reported under.
+     *
+     * The uid was the dangerous half, and it was reachable by any local user.
+     * kernel.unprivileged_userns_clone is 1 on a stock Arch kernel, so
+     * `unshare -U -r` maps the caller to uid 0 inside its own user namespace —
+     * and every event it generated was logged as uid=0. Measured, not
+     * theorised: as uid 1000, `unshare -U -r /tmp/probe` produced ring records
+     * reading `... 0 59 unshare /tmp/probe ...`.
+     *
+     * That is a detection bypass, because synguard's shipped policy has
+     *   rule allow-root-exec { event exec  uid 0  verdict log  priority 5 }
+     * and first match wins on the lowest priority number. So an unprivileged
+     * user in a user namespace matched allow-root-exec ahead of every
+     * exec-path rule (escalate-exec-from-tmp is 35, the alert-*-exec rules are
+     * 26-46) and had all of their execs quietly downgraded to "log".
+     *
+     * The pid half is the same mistake with a different consequence: synguard
+     * resolves these numbers against /proc in the ROOT namespace, so a
+     * container-local pid pointed it at an unrelated process — a misdirected
+     * scheduling hint today, and a misdirected kill if a deny rule is ever
+     * added.
+     *
+     * init_user_ns/global pid it is. This is the identity that matches what
+     * every consumer of syscall_log can actually look up.
+     */
+    e->pid          = task_pid_nr(task);
+    e->tgid         = task_tgid_nr(task);
+    e->uid          = from_kuid_munged(&init_user_ns, task_uid(task));
     e->syscall_nr   = syscall_nr;
     e->flags        = flags;
     memcpy(e->comm, task->comm, TASK_COMM_LEN);
