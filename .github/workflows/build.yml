@@ -166,6 +166,45 @@ jobs:
           meson test -C synapd/_ci wire --print-errorlogs
           meson test -C synguard/_ci secfeed --print-errorlogs
 
+      # The step above proves these two parsers get the right answer; this one
+      # proves they do not corrupt memory getting there. Both are worth the
+      # second run: synapd's wire gate is the code that reads every byte
+      # arriving on /run/synapd/synapd.sock — which the TCP bridge fronts for
+      # another host — and secfeed is the verdict feed that once wedged at
+      # capacity through a slot leak.
+      #
+      # Unlike the two synui smoke steps below, these need no GPU and so do NOT
+      # skip here: wire_test links only src/wire.c and secfeed_test only
+      # src/secfeed.c — no llama, no sockets, no daemon. Until this step existed
+      # the repo's only sanitizer coverage was those smoke tests, which exit 77
+      # on every GPU-less runner, so in practice CI was compiling ASan builds
+      # and running none of them.
+      #
+      # Only the test targets are built, not the daemons: a full synapd link
+      # would drag libllama into an ASan build for no added coverage, since
+      # nothing here calls it.
+      #
+      # UBSAN_OPTIONS is set deliberately, and the exact value matters.
+      # UndefinedBehaviorSanitizer's own default is to print a diagnostic and
+      # CARRY ON — the process still exits 0, so meson still reports a pass and
+      # the step would be theatre. meson patches around that by injecting
+      # halt_on_error/abort_on_error itself, but only when the variable is unset
+      # (mesonbuild/mtest.py). That cuts both ways: setting a weaker value here
+      # would suppress meson's stronger default rather than add to it. So this
+      # matches meson's set and does not drop a flag from it. ASan aborts on
+      # error without being asked; only UBSan needs telling.
+      - name: Daemon unit tests (ASan + UBSan)
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_stacktrace=1:print_summary=1
+        run: |
+          set -e
+          meson setup synapd/_asan   synapd   -Dbuildtype=debug -Db_sanitize=address,undefined
+          meson setup synguard/_asan synguard -Dbuildtype=debug -Db_sanitize=address,undefined
+          meson compile -C synapd/_asan   wire_test
+          meson compile -C synguard/_asan secfeed_test
+          meson test -C synapd/_asan   wire    --print-errorlogs
+          meson test -C synguard/_asan secfeed --print-errorlogs
+
       # Both smoke steps SKIP on a GPU-less runner (no /dev/dri/renderD*) and run
       # in full anywhere a real driver exists — a developer box, or a self-hosted
       # runner with a GPU, where they are worth wiring up. meson reports the skip
