@@ -143,9 +143,22 @@ profiles() {
     done
 }
 
+# ── Reading profiles() ───────────────────────────────────────────────────────
+# `while read` fed by process substitution, NEVER `for prof in $(profiles)`.
+# profiles() prints one full path per line precisely because a path can contain
+# a space, and unquoted command substitution word-splits it right back apart.
+# This box has "Oj1FEnYZ.Profile 1", which split into ".../Oj1FEnYZ.Profile"
+# and "1" — so `mkdir -p "1/chrome"` created a junk ./1/chrome directory in
+# whatever the CWD happened to be (two of them ended up in the repo, and one
+# rode into synui's source tarball), the real profile never got glass, and
+# `off` could not revert its prefs — which leaves Firefox transparent with no
+# CSS to shape it. The first token also matched a DIFFERENT real profile.
+#
+# Process substitution, not a pipe: install_glass returns via $n, and a pipe
+# would run the loop in a subshell where the increment is lost.
 install_glass() {
     local prof chrome n=0
-    for prof in $(profiles); do
+    while IFS= read -r prof; do
         chrome="$prof/chrome"
         mkdir -p "$chrome" 2>/dev/null || continue
         for f in userChrome.css userContent.css; do
@@ -159,13 +172,13 @@ install_glass() {
         write_tint "$chrome"
         write_prefs "$prof" on
         n=$((n + 1))
-    done
+    done < <(profiles)
     [ "$n" -gt 0 ]
 }
 
 remove_glass() {
     local prof chrome f
-    for prof in $(profiles); do
+    while IFS= read -r prof; do
         chrome="$prof/chrome"
         # Revert the prefs FIRST — that is the half that actually persists.
         write_prefs "$prof" off
@@ -174,7 +187,7 @@ remove_glass() {
             owned "$chrome/$f" && rm -f "$chrome/$f" 2>/dev/null
         done
         rmdir "$chrome" 2>/dev/null   # only if we left it empty
-    done
+    done < <(profiles)
 }
 
 case "$cmd" in
@@ -195,13 +208,13 @@ status)
     if [ -e "$state" ]; then echo "setting: OFF ($state)"
     else                     echo "setting: on (default; disable with: synui-firefox-glass off)"
     fi
-    for prof in $(profiles); do
+    while IFS= read -r prof; do
         if [ -f "$prof/chrome/userChrome.css" ]; then
             printf '  %s: glass installed\n' "$(basename "$prof")"
         else
             printf '  %s: no glass\n' "$(basename "$prof")"
         fi
-    done
+    done < <(profiles)
     ;;
 *)
     # The login / theme-switch hook. Honour the setting silently: re-apply the
