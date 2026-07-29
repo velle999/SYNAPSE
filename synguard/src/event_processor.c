@@ -613,7 +613,14 @@ static void *reader_thread_fn(void *arg)
 {
     synguard_state_t *s = (synguard_state_t *)arg;
 
-    char buf[4096];
+    /*
+     * 32K a read, drained in a loop below. One 4K read per 100ms poll capped
+     * this thread at ~620 events/sec, which is fine at the idle rate of ~46/s
+     * and useless under a burst: 20,000 events in 51ms cost 15,930 of them,
+     * measured. The buffer is the cheap half of the fix and the loop is the
+     * important half.
+     */
+    char buf[32768];
 
     /*
      * Our position in the kmod's event ring, carried across reopens.
@@ -673,7 +680,83 @@ static void *reader_thread_fn(void *arg)
         if (using_dev && cursor != (off_t)-1)
             lseek(fd, cursor, SEEK_SET);
 
-        ssize_t n = read(fd, buf, sizeof(buf) - 1);
+        /*
+         * Drain everything queued, not one buffer of it. A burst puts events
+         * in the ring far faster than any poll interval, so a single read per
+         * cycle guarantees the reader is lapped and the kmod reports the loss.
+         *
+         * Bounded so one cycle cannot run forever if events arrive as fast as
+         * we consume them: at 32K a read that is ~470 events per batch, so the
+         * cap is well over a full ring and the canary still ticks on schedule.
+         */
+        ssize_t n;
+        int batches = 0;
+        while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
+            buf[n] = '\0';
+
+            /* Parse each line */
+            char *line = strtok(buf, "\n");
+            while (line) {
+                /*
+                 * "!dropped N" — the kmod telling us, in band, that the ring
+                 * lapped and we missed N events. Treat it as a security event,
+                 * not a statistic: flooding the ring is a way to hide inside
+                 * the gap, and it is available to anything that can touch a
+                 * sensitive path in a loop. A detector that goes blind quietly
+                 * is worse than one that says so.
+                 */
+                if (line[0] == '!') {
+                    unsigned long long lost = 0;
+                    if (sscanf(line, "!dropped %llu", &lost) == 1 && lost) {
+                        s->stats.events_dropped += lost;
+                        sg_alert_t drop_alert = {
+                            .timestamp = time(NULL),
+                            .verdict   = VERDICT_ALERT,
+                            .threat    = THREAT_HIGH,
+                        };
+                        snprintf(drop_alert.event.comm,
+                                 sizeof(drop_alert.event.comm), "kernel");
+                        snprintf(drop_alert.reason, sizeof(drop_alert.reason),
+                                 "event-loss: %llu events missed — ring lapped; "
+                                 "monitoring was blind for that window", lost);
+                        snprintf(drop_alert.action_taken,
+                                 sizeof(drop_alert.action_taken), "alert");
+                        s->stats.alerts++;
+                        action_alert(s, &drop_alert);
+                        if (s->config.audit_enabled)
+                            audit_write(s, &drop_alert);
+                    }
+                    line = strtok(NULL, "\n");
+                    continue;
+                }
+                if (*line) {
+                    sg_event_t evt;
+                    if (kmod_parse_event(line, &evt) == 0 &&
+                        (using_dev || evt.timestamp_ns > last_ts)) {
+                        if (!using_dev)
+                            last_ts = evt.timestamp_ns;
+                        /* Our own canary open coming back = probes are live.
+                         * Check before process_event, which skips synguard's
+                         * own events. */
+                        if (is_canary_event(&evt)) {
+                            canary_pending = 0;
+                            canary_misses  = 0;
+                        }
+                        synguard_process_event(s, &evt);
+                    }
+                }
+                line = strtok(NULL, "\n");
+            }
+
+            if (++batches >= SG_MAX_BATCHES_PER_CYCLE)
+                break;
+
+            /* The syscall_log fallback is a repeating peek, not a queue: it
+             * returns the same newest events every time, so draining it in a
+             * loop would spin. One read per cycle is all that path supports. */
+            if (!using_dev)
+                break;
+        }
 
         if (using_dev) {
             off_t now = lseek(fd, 0, SEEK_CUR);
@@ -682,37 +765,8 @@ static void *reader_thread_fn(void *arg)
         }
         close(fd);
 
-        if (n <= 0) {
-            /* Quiet system: still run the canary so blinding is caught even
-             * when no other events are flowing. */
-            canary_tick(s);
-            usleep(s->config.poll_interval_ms * 1000);
-            continue;
-        }
-        buf[n] = '\0';
-
-        /* Parse each line */
-        char *line = strtok(buf, "\n");
-        while (line) {
-            if (*line) {
-                sg_event_t evt;
-                if (kmod_parse_event(line, &evt) == 0 &&
-                    (using_dev || evt.timestamp_ns > last_ts)) {
-                    if (!using_dev)
-                        last_ts = evt.timestamp_ns;
-                    /* Our own canary open coming back = probes are live.
-                     * Check before process_event, which skips synguard's
-                     * own events. */
-                    if (is_canary_event(&evt)) {
-                        canary_pending = 0;
-                        canary_misses  = 0;
-                    }
-                    synguard_process_event(s, &evt);
-                }
-            }
-            line = strtok(NULL, "\n");
-        }
-
+        /* Runs whether or not anything arrived, so blinding is caught even on
+         * a silent system. */
         canary_tick(s);
         usleep(s->config.poll_interval_ms * 1000);
     }

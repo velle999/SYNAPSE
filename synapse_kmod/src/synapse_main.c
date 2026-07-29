@@ -63,9 +63,18 @@ module_param(synapse_daemon_timeout, int, 0644);
 MODULE_PARM_DESC(synapse_daemon_timeout, "Seconds before daemon considered dead (default: 30)");
 
 /* Ring buffer size for syscall event log */
-static int synapse_ring_size = 4096;
+/*
+ * 32768 events x 208 bytes = ~6.8MB, kvzalloc'd.
+ *
+ * It was 4096 (~850KB), which is ~90 seconds at the idle rate of ~46 events/s
+ * and about 10 milliseconds under a burst. A process opening sensitive paths
+ * in a tight loop produced 20,000 events in 51ms and the reader lost 15,930 of
+ * them -- the ring had lapped several times over before its next poll. The
+ * ring has to cover the consumer's polling latency, not its average rate.
+ */
+static int synapse_ring_size = 32768;
 module_param(synapse_ring_size, int, 0444);
-MODULE_PARM_DESC(synapse_ring_size, "Syscall event ring buffer size (default: 4096)");
+MODULE_PARM_DESC(synapse_ring_size, "Syscall event ring buffer size (default: 32768)");
 
 
 /* ── Global module state ──────────────────────────────────── */

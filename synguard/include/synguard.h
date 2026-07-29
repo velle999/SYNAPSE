@@ -79,6 +79,14 @@
  * Absent = an older kmod, where syscall_log is still the destructive drain.
  */
 #define KMOD_EVENT_DEV        "/dev/synapse-events"
+
+/*
+ * How many read() batches one poll cycle may drain before yielding. At 32K a
+ * read (~470 events) this is far more than a full ring, so in practice the
+ * loop always ends because the ring is empty; the cap exists only so a
+ * pathological producer cannot hold the thread forever and stall the canary.
+ */
+#define SG_MAX_BATCHES_PER_CYCLE  256
 #define KMOD_AI_HINTS         "/sys/kernel/synapse/ai_hints"
 #define KMOD_STATUS           "/sys/kernel/synapse/status"
 
@@ -226,6 +234,7 @@ typedef struct {
     uint64_t  quarantines;
     uint64_t  protected_skips;   /* actions refused on a protected pid */
     uint64_t  stale_pid_skips;   /* actions refused: pid no longer the culprit */
+    uint64_t  events_dropped;    /* events the ring lapped before we read them */
     time_t    start_time;
 } sg_stats_t;
 

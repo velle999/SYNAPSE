@@ -52,8 +52,11 @@
 #include "synapse_evchr.h"
 
 /* One read() formats at most this much text. Bounded so a large read() from
- * userspace cannot ask the module for an arbitrary kernel allocation. */
-#define SYN_EVCHR_BUF   8192
+ * userspace cannot ask the module for an arbitrary kernel allocation.
+ *
+ * 64K is ~940 events a call. It was 8K, which quietly capped a reader that
+ * asked for more and meant clearing a full ring took many round trips. */
+#define SYN_EVCHR_BUF   65536
 
 /*
  * Per-open state that does NOT fit in *ppos. The cursor itself lives in
@@ -111,9 +114,30 @@ static ssize_t syn_evchr_read(struct file *file, char __user *ubuf,
     if (!kbuf)
         return -ENOMEM;
 
+    /*
+     * Report loss IN BAND, ahead of the events it precedes, so the consumer
+     * learns exactly how much it missed and where in the stream.
+     *
+     * A dmesg line is not enough. Losing events is not merely a performance
+     * matter here: generating events faster than they can be consumed is a way
+     * to flush the ring and hide inside the gap, and it is available to any
+     * process that can touch a sensitive path in a loop. The detector has to
+     * see its own blindness, so synguard turns this into an alert.
+     *
+     * The marker is not a valid event line, so a reader that does not know it
+     * fails to parse it and skips it -- the same way older readers tolerate
+     * appended fields.
+     */
+    size_t off = 0;
+    if (r->dropped != r->reported) {
+        off = scnprintf(kbuf, len, "!dropped %llu\n", r->dropped - r->reported);
+        r->reported = r->dropped;
+    }
+
     cursor = (u32)*ppos;
-    n = synapse_probe_read_from(kbuf, len, &cursor, &r->dropped);
+    n = synapse_probe_read_from(kbuf + off, len - off, &cursor, &r->dropped);
     *ppos = (loff_t)cursor;
+    n = (n < 0) ? (ssize_t)off : n + (ssize_t)off;
 
     /*
      * Loss is the one thing a detector must never learn about silently. Rate
@@ -129,12 +153,10 @@ static ssize_t syn_evchr_read(struct file *file, char __user *ubuf,
      * fires under genuine bursts, where a few hundred events can be lost
      * before the reader catches up.
      */
-    if (r->dropped != r->reported) {
+    if (r->dropped != r->reported)
         pr_warn_ratelimited(
             "synapse: event reader (%s pid %d) fell behind, %llu events lost\n",
             current->comm, task_pid_nr(current), r->dropped - r->reported);
-        r->reported = r->dropped;
-    }
 
     if (n > 0 && copy_to_user(ubuf, kbuf, (size_t)n)) {
         /* The cursor already moved. Rewinding it would re-deliver events on

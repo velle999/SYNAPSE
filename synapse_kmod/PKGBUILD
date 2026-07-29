@@ -1,6 +1,6 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=19
+pkgrel=22
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')
@@ -53,10 +53,16 @@ package() {
         "$pkgdir/usr/lib/modules-load.d/synapse.conf"
     echo "synapse_kmod" > "$pkgdir/usr/lib/modules-load.d/synapse.conf"
 
-    # Default module parameters
+    # Default module parameters.
+    #
+    # This file, not the C default, is what every real system loads with --
+    # so raising synapse_ring_size in synapse_main.c alone changed nothing and
+    # the ring stayed at 4096 through a full rebuild and reload. If you change
+    # a module parameter default, change it in BOTH places and then check
+    # /sys/module/synapse_kmod/parameters/ rather than the source.
     install -Dm644 /dev/null \
         "$pkgdir/usr/lib/modprobe.d/synapse.conf"
-    echo "options synapse_kmod synapse_events=1 synapse_sched=1 synapse_daemon_timeout=30 synapse_ring_size=4096" \
+    echo "options synapse_kmod synapse_events=1 synapse_sched=1 synapse_daemon_timeout=30 synapse_ring_size=32768" \
         > "$pkgdir/usr/lib/modprobe.d/synapse.conf"
 
     # Kernel hardening sysctls (kptr_restrict, dmesg_restrict, kexec latch)
