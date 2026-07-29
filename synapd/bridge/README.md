@@ -25,25 +25,44 @@ control protecting a LAN-facing port was unversioned, unreviewed, and one
 | `synapd-bridge.service` | `/etc/systemd/system/` |
 | `synapd-bridge-guard.service` | `/etc/systemd/system/` |
 | `synapd-bridge.nft` | `/etc/nftables.d/` |
+| `ollama-guard.service` | `/etc/systemd/system/` |
+| `ollama.nft` | `/etc/nftables.d/` |
+| `ollama.service.d-override.conf` | `/etc/systemd/system/ollama.service.d/override.conf` |
+
+The ollama files are here for the same reason and guard the same peer: the
+override sets `OLLAMA_HOST=0.0.0.0:11434`, and `ollama.nft` is what keeps that
+from being an unauthenticated model API open to the whole subnet.
 
 ## Install
 
 ```sh
-sudo install -m644 synapd-bridge.socket synapd-bridge.service \
-                   synapd-bridge-guard.service /etc/systemd/system/
-sudo install -m644 synapd-bridge.nft /etc/nftables.d/
-sudo $EDITOR /etc/nftables.d/synapd-bridge.nft     # set YOUR peer address
-sudo systemctl daemon-reload
-sudo systemctl enable --now synapd-bridge-guard.service synapd-bridge.socket
+sudo $EDITOR synapd-bridge.nft ollama.nft   # set YOUR peer address in both
+./deploy.sh
+sudo systemctl enable synapd-bridge-guard.service synapd-bridge.socket \
+                      ollama-guard.service
 ```
 
-Verify it actually came up — see below for why that is not a formality:
+`deploy.sh` installs every file, syntax-checks both rulesets with `nft -c`
+before anything is reloaded, and then checks the **ports and tables** rather
+than the unit states — see below for why that distinction is the whole point.
+
+## Keeping /etc and this directory in sync
 
 ```sh
-systemctl is-active synapd-bridge.socket      # expect: active
-ss -ltn | grep 11435                          # expect: a LISTEN line
-sudo nft list table inet synapd_bridge_guard  # expect: the accept/drop rules
+./deploy.sh --check     # 0 = in sync, 1 = drifted, prints the diff
 ```
+
+Nothing here is packaged, so pacman never updates these files and nothing
+notices when the repo moves ahead of `/etc`. That is not hypothetical. The
+`DefaultDependencies=no` fix described below was committed to this directory
+and never applied to the machine, so it kept booting the old unit and kept
+losing `synapd-bridge.socket` to the very cycle that fix removes. The repo was
+correct, the system was broken, and every check on either side in isolation
+looked fine. Only the diff between them showed it.
+
+**A control that lives only in `/etc` is unreviewed; a control that lives only
+in git is not running.** `--check` is the cheap way to notice which one you
+have.
 
 ## The failure this directory exists to document
 
@@ -81,8 +100,28 @@ Two general lessons, both already learned here the hard way once:
 - **A fail-closed dependency can fail so closed the feature never runs.**
   `Requires=` guarantees the guard is up before the port opens. It does not
   guarantee the port ever opens. Those need separate verification, which is why
-  the install steps above end with three commands that check the port, not the
-  units.
+  `deploy.sh` ends by checking the ports and the tables, not the units.
+
+## The same bug, the other way round: ollama
+
+`ollama.service.d/override.conf` had `Wants=ollama-guard.service` where this
+socket has `Requires=`. `Wants=` orders but does not gate, so a guard that
+failed for any reason — a bad ruleset, a renamed file, an nft upgrade — left
+ollama starting normally and binding `0.0.0.0:11434` with no rules in front of
+it. Its own comment said "never open the port before the rules that fence it
+off are loaded", which is what `After=` does; it is not what the file was
+relied on to do.
+
+Demonstrated rather than argued, by making the guard's `nft -f` fail:
+
+```
+Wants=      guard: failed   ollama: active     11434: LISTEN 0.0.0.0   ← exposed
+Requires=   guard: failed   ollama: inactive   11434: closed
+```
+
+Two ports, the same threat, the same author, one word apart. When the same
+control is expressed in more than one place, the copies drift — so when you
+fix one, go and read the others.
 
 ## Threat model
 

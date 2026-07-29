@@ -1,0 +1,15 @@
+[Unit]
+Description=Restrict the ollama API to chibi's Raspberry Pi
+Documentation=file:///etc/nftables.d/ollama.nft
+Before=ollama.service
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f /etc/nftables.d/ollama.nft
+ExecStop=/usr/bin/nft destroy table inet ollama_guard
+
+[Install]
+WantedBy=multi-user.target
