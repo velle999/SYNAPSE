@@ -4,7 +4,6 @@
  * Reads /sys/kernel/synapse/ and displays a formatted report.
  * Also provides a simple test harness for:
  *   - Writing scheduling hints manually
- *   - Sending AI_CTX_SET to the current process
  *   - Reading the syscall event log
  *
  * Usage:
@@ -155,23 +154,6 @@ static void send_hint(const char *hint)
         printf(C_OK "Hint sent: %s\n" C_RESET, hint);
 }
 
-/* ── AI_CTX_SET test ──────────────────────────────────────── */
-static void ctx_set_test(const char *intent)
-{
-    struct ai_ctx_set_args args = {0};
-    args.flags = AI_CTX_FLAG_COMPUTE | AI_CTX_FLAG_INTERACTIVE;
-    strncpy(args.intent, intent, sizeof(args.intent) - 1);
-
-    long ret = syscall(NR_AI_CTX_SET, &args);
-    if (ret == 0)
-        printf(C_OK "AI_CTX_SET OK — intent registered with kernel\n" C_RESET);
-    else if (errno == ENOSYS)
-        printf(C_WARN "AI_CTX_SET: ENOSYS — kernel does not support AI_CTX\n"
-               C_DIM "(requires Linux 7.0 or synapse_kmod kprobe shim)\n" C_RESET);
-    else
-        printf(C_ERR "AI_CTX_SET failed: %s\n" C_RESET, strerror(errno));
-}
-
 /* ── main ─────────────────────────────────────────────────── */
 static void usage(const char *prog) {
     fprintf(stderr,
@@ -184,8 +166,6 @@ static void usage(const char *prog) {
         "  --stats              Show stats only\n"
         "  --log                Dump syscall event log\n"
         "  --hint HINT          Write scheduling hint (e.g. 'pid=1234 nice=-5 class=interactive')\n"
-        "  --ctx-set INTENT     Test AI_CTX_SET syscall with given intent string\n"
-        "  --ctx-get            Test AI_CTX_GET syscall (show current AI scheduling class)\n"
         "  -h, --help           This help\n",
         prog
     );
@@ -211,22 +191,6 @@ int main(int argc, char *argv[])
 
         } else if (strcmp(argv[i], "--hint") == 0 && i+1 < argc) {
             send_hint(argv[++i]);
-
-        } else if (strcmp(argv[i], "--ctx-set") == 0 && i+1 < argc) {
-            ctx_set_test(argv[++i]);
-
-        } else if (strcmp(argv[i], "--ctx-get") == 0) {
-            struct ai_ctx_get_result res = {0};
-            long ret = syscall(NR_AI_CTX_GET, &res);
-            if (ret == 0) {
-                printf("sched_class: %d\n", (int)res.sched_class);
-                printf("nice_value:  %d\n", res.nice_value);
-                printf("reason:      %s\n", res.reason);
-            } else if (errno == ENOSYS) {
-                printf(C_WARN "AI_CTX_GET: ENOSYS (no AI_CTX support)\n" C_RESET);
-            } else {
-                printf(C_ERR "AI_CTX_GET failed: %s\n" C_RESET, strerror(errno));
-            }
 
         } else if (strcmp(argv[i], "-h") == 0 ||
                    strcmp(argv[i], "--help") == 0) {

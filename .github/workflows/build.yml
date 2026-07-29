@@ -238,3 +238,15 @@ jobs:
           make -C synapse_kmod KERNELDIR="$KDIR"
           test -f synapse_kmod/synapse_kmod.ko
           echo "synapse_kmod.ko built"
+
+          # The package builds a userspace tool against the same headers, and
+          # this step used to stop at the .ko — so a commit could delete
+          # something from include/synapse_kmod.h, pass CI green, and only fail
+          # at makepkg on a real machine. That is exactly what happened when
+          # the AI_CTX family was removed: the module built fine, and
+          # syn-kmod-status.c still referenced NR_AI_CTX_SET and
+          # struct ai_ctx_set_args. Compile it the way the PKGBUILD does.
+          gcc -Isynapse_kmod/include -Wall -Wextra \
+              -o /tmp/syn-kmod-status synapse_kmod/tools/syn-kmod-status.c \
+              || { echo "::error::syn-kmod-status.c does not build against include/"; exit 1; }
+          echo "syn-kmod-status built"
