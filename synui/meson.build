@@ -307,6 +307,36 @@ if x11.found()
   smoke_args += [x11_remap_test]
 endif
 
+# security-context client bindings, for the test below. Client-side this time:
+# every other generated protocol here is server-side, because synui is the
+# compositor — this one has to act like an application to prove anything.
+security_context_xml = join_paths(
+  wayland_protos.get_variable('pkgdatadir'),
+  'staging/security-context/security-context-v1.xml')
+
+security_context_client_h = custom_target('security-context-v1-client-protocol.h',
+  output  : 'security-context-v1-client-protocol.h',
+  input   : security_context_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+security_context_client_c = custom_target('security-context-v1-client-protocol.c',
+  output  : 'security-context-v1-client-protocol.c',
+  input   : security_context_xml,
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
+# Proves the RESTRICTING half of the global filter: that a client holding a
+# security context really is refused screen capture, input interception and
+# clipboard snooping. The smoke suite's other tests only show that ordinary
+# clients still work — a filter that never matches would pass those too.
+#
+# smoke.sh finds this next to the synui binary rather than taking it as another
+# positional argument, since $2 is already optional.
+security_context_test = executable('security_context_test',
+  ['tests/security_context_test.c',
+   security_context_client_h, security_context_client_c],
+  dependencies : [wayland_client],
+  build_by_default : true)
+
 test('smoke',
   find_program('tests/smoke.sh'),
   args : smoke_args,

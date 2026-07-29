@@ -516,6 +516,53 @@ else
     echo "ok 13 # SKIP x11_remap_test or Xwayland not available"
 fi
 
+# ── 14. security-context actually restricts a sandboxed client ──────────────
+#
+# Test 2 checks the globals are advertised and test 4 that grim can still
+# capture — both only prove the filter did not break anything. Neither would
+# notice a filter that never matches, which looks identical from the outside
+# and is the failure mode that matters: a restriction nobody can see is not
+# working is worse than none, because it gets relied on.
+#
+# security_context_test connects normally, records which privileged globals it
+# is offered, then creates a wp_security_context_v1 over a socket of its own
+# and reconnects through it — asserting the privileged globals are gone and the
+# ordinary ones are not.
+#
+# Located next to the synui binary rather than passed as an argument, because
+# $2 is already the optional x11_remap_test.
+SECCTX="$(dirname "$SYNUI")/security_context_test"
+if [ -x "$SECCTX" ]; then
+    LOG=$(mktemp)
+    "$SYNUI" >"$LOG" 2>&1 &
+    SYNUI_PID=$!
+
+    SOCK=
+    i=0
+    while [ $i -lt 100 ]; do
+        SOCK=$(sed -n 's/.*running on WAYLAND_DISPLAY=\(wayland-[0-9]*\).*/\1/p' "$LOG" | head -1)
+        [ -n "$SOCK" ] && break
+        kill -0 "$SYNUI_PID" 2>/dev/null || fail "secctx: synui died during startup"
+        sleep 0.1
+        i=$((i + 1))
+    done
+    [ -n "$SOCK" ] || fail "secctx: no Wayland socket within 10s"
+
+    SECOUT=$(WAYLAND_DISPLAY="$SOCK" "$SECCTX" 2>&1) || {
+        echo "$SECOUT" | sed 's/^/    /'
+        fail "secctx: a sandboxed client was NOT denied the privileged globals"
+    }
+    echo "$SECOUT" | sed 's/^/    /'
+    echo "ok 14 - a security-context client is denied the privileged globals"
+
+    kill "$SYNUI_PID" 2>/dev/null
+    wait "$SYNUI_PID" 2>/dev/null
+    SYNUI_PID=
+    rm -f "$LOG"
+else
+    echo "ok 14 # SKIP security_context_test not built"
+fi
+
 SYNUI_PID=
 cleanup
 echo "PASS"
