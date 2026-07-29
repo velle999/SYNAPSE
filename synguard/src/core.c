@@ -379,6 +379,9 @@ void synguard_destroy(synguard_state_t *s)
     sg_bpf_shutdown();
 #endif
     secfeed_close();
+    /* Worker first: it only produces results for the reader to act on, so the
+     * reader has to still be running to drain what is already classified. */
+    synguard_ai_worker_stop();
     pthread_join(s->reader_thread, NULL);
     rules_free(s);
     free(s->baseline);

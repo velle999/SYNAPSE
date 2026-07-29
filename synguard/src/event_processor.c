@@ -518,6 +518,191 @@ static int ai_duty_allows(void)
 
 static void ai_duty_charge(uint64_t ns) { ai_win_spent_ns += ns; }
 
+/* ── Classifier worker ────────────────────────────────────── */
+/*
+ * The blocking synapd round trip now happens HERE, on its own thread, instead
+ * of inside the ring-drain loop. The duty cycle above bounded that coupling;
+ * this removes it.
+ *
+ * THE WORKER DOES EXACTLY ONE THING: it calls synguard_ai_classify(). It
+ * touches no stats, no baseline, no actions, no audit log. Classified jobs go
+ * back to the reader on a completion queue and the reader dispatches them, so
+ * every piece of mutable daemon state keeps a single writer and this change
+ * introduces no locking around any of it. Handing a security daemon a second
+ * thread that can SIGKILL a process tree, on the argument that the counters
+ * are "probably fine" racy, is not a trade worth making.
+ *
+ * Cost of the split: an AI-refined verdict lands on the next reader cycle
+ * (≤100ms) after the model answers, rather than blocking the ring for up to
+ * 3s to get it. Under --ai-enforce that means a model-recommended kill is
+ * issued up to a poll interval later, and the stale-pid guard may then refuse
+ * it because the target already exited — which is honest: it is what was
+ * already happening whenever the classifier took longer than the process
+ * lived, only now the rest of the ring is still being read while it happens.
+ */
+#define SG_AI_QUEUE_MAX 256
+
+typedef struct {
+    sg_event_t     e;
+    sg_verdict_t   verdict;             /* rule verdict, pre-AI */
+    char           rule[RULE_MAX_NAME]; /* the NAME, never the pointer: a rules
+                                           reload frees the rule out from under
+                                           an in-flight job */
+    int            anomalous;
+    sg_ai_result_t ai;                  /* filled in by the worker */
+    int            ai_ok;
+} sg_ai_job_t;
+
+static struct {
+    pthread_mutex_t lock;
+    pthread_cond_t  work;      /* jobs available, or shutting down */
+    pthread_cond_t  room;      /* space freed in `done` */
+    sg_ai_job_t     jobs[SG_AI_QUEUE_MAX];
+    int             jh, jn;
+    sg_ai_job_t     done[SG_AI_QUEUE_MAX];
+    int             dh, dn;
+    pthread_t       thread;
+    int             started;
+    volatile int    stop;
+} aiq;
+
+/* Reader → worker. Returns -1 when full; the caller then handles the event
+ * itself rather than dropping it. */
+static int ai_job_push(const sg_ai_job_t *j)
+{
+    pthread_mutex_lock(&aiq.lock);
+    if (aiq.jn >= SG_AI_QUEUE_MAX) {
+        pthread_mutex_unlock(&aiq.lock);
+        return -1;
+    }
+    aiq.jobs[(aiq.jh + aiq.jn) % SG_AI_QUEUE_MAX] = *j;
+    aiq.jn++;
+    pthread_cond_signal(&aiq.work);
+    pthread_mutex_unlock(&aiq.lock);
+    return 0;
+}
+
+/* Worker → reader. Returns -1 when empty. */
+static int ai_done_pop(sg_ai_job_t *out)
+{
+    pthread_mutex_lock(&aiq.lock);
+    if (aiq.dn == 0) {
+        pthread_mutex_unlock(&aiq.lock);
+        return -1;
+    }
+    *out = aiq.done[aiq.dh];
+    aiq.dh = (aiq.dh + 1) % SG_AI_QUEUE_MAX;
+    aiq.dn--;
+    pthread_cond_signal(&aiq.room);
+    pthread_mutex_unlock(&aiq.lock);
+    return 0;
+}
+
+static void *ai_worker_fn(void *arg)
+{
+    synguard_state_t *s = arg;
+
+    for (;;) {
+        sg_ai_job_t j;
+
+        pthread_mutex_lock(&aiq.lock);
+        while (aiq.jn == 0 && !aiq.stop)
+            pthread_cond_wait(&aiq.work, &aiq.lock);
+        if (aiq.stop && aiq.jn == 0) {
+            pthread_mutex_unlock(&aiq.lock);
+            break;
+        }
+        j = aiq.jobs[aiq.jh];
+        aiq.jh = (aiq.jh + 1) % SG_AI_QUEUE_MAX;
+        aiq.jn--;
+        pthread_mutex_unlock(&aiq.lock);
+
+        char ctx[512];
+        build_ai_context(&j.e, ctx, sizeof(ctx));
+        j.ai.threat_level = THREAT_NONE;
+        j.ai.verdict      = j.verdict;
+        j.ai.confidence   = 0.0f;
+        j.ai_ok = (synguard_ai_classify(s, &j.e, ctx, &j.ai) == 0);
+
+        /* Wait for room rather than dropping: the reader has NOT acted on this
+         * event, so losing it here would lose the event outright — the exact
+         * failure this whole thread exists to end. The reader drains `done`
+         * every cycle, so this waits ~one poll interval at worst. */
+        pthread_mutex_lock(&aiq.lock);
+        while (aiq.dn >= SG_AI_QUEUE_MAX && !aiq.stop)
+            pthread_cond_wait(&aiq.room, &aiq.lock);
+        if (aiq.dn < SG_AI_QUEUE_MAX) {
+            aiq.done[(aiq.dh + aiq.dn) % SG_AI_QUEUE_MAX] = j;
+            aiq.dn++;
+        }
+        pthread_mutex_unlock(&aiq.lock);
+    }
+    return NULL;
+}
+
+static void ai_worker_start(synguard_state_t *s)
+{
+    pthread_mutex_init(&aiq.lock, NULL);
+    pthread_cond_init(&aiq.work, NULL);
+    pthread_cond_init(&aiq.room, NULL);
+    aiq.jh = aiq.jn = aiq.dh = aiq.dn = 0;
+    aiq.stop = 0;
+
+    if (pthread_create(&aiq.thread, NULL, ai_worker_fn, s) != 0) {
+        /* Not fatal, but say so plainly: without the worker, classification
+         * falls back to running INLINE on the drain thread, which is the
+         * configuration that went blind. The duty cycle still caps it there. */
+        sg_log(LOG_WARNING,
+               "ai_worker: pthread_create failed (%s) — classifying inline on "
+               "the reader thread, capped at %d%% duty",
+               strerror(errno), SG_AI_DUTY_PCT);
+        aiq.started = 0;
+        return;
+    }
+    aiq.started = 1;
+    sg_log(LOG_INFO, "ai_worker: started — classification is off the drain path");
+}
+
+void synguard_ai_worker_stop(void)
+{
+    if (!aiq.started) return;
+    pthread_mutex_lock(&aiq.lock);
+    aiq.stop = 1;
+    pthread_cond_broadcast(&aiq.work);
+    pthread_cond_broadcast(&aiq.room);
+    pthread_mutex_unlock(&aiq.lock);
+    pthread_join(aiq.thread, NULL);
+    aiq.started = 0;
+    sg_log(LOG_INFO, "ai_worker: stopped");
+}
+
+/* ── Applying an AI answer, and dispatching ───────────────── */
+/* Split out so the inline path and the worker-completion path cannot drift:
+ * one place decides what an AI verdict is allowed to do, one place acts. */
+static sg_verdict_t apply_ai_verdict(synguard_state_t *s, const sg_event_t *e,
+                                     sg_verdict_t verdict,
+                                     const sg_ai_result_t *ai)
+{
+    if (verdict != VERDICT_ESCALATE)
+        return verdict;
+
+    /* The classifier is advisory unless ai_enforce is set: a model
+     * hallucination must never be able to SIGKILL a process tree. Only rules
+     * written by a human may carry a DENY. */
+    if (ai->verdict >= VERDICT_DENY && !s->config.ai_enforce) {
+        sg_log(LOG_WARNING,
+               "AI recommended %s for pid=%u (%s) — clamped to alert "
+               "(--ai-enforce not set): %.120s",
+               verdict_name(ai->verdict), e->pid, e->comm, ai->reason);
+        return VERDICT_ALERT;
+    }
+    return ai->verdict;
+}
+
+static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
+                             sg_verdict_t verdict, const char *rule_name,
+                             const sg_ai_result_t *ai);
+
 /* ── Full decision pipeline ───────────────────────────────── */
 void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
 {
@@ -566,23 +751,51 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
            verdict_name(verdict),
            anomalous);
 
-    /* ── Step 3: AI classification on ESCALATE ──────────────── */
+    /* ── Step 3: AI classification, OFF this thread ─────────── */
     sg_ai_result_t ai_result = {
         .threat_level = THREAT_NONE,
         .verdict      = verdict,
         .confidence   = 0.0f,
     };
+    const char *rname = matched_rule ? matched_rule->name : "default";
 
-    if (verdict == VERDICT_ESCALATE ||
-        (anomalous && s->config.ai_enabled && verdict >= VERDICT_LOG)) {
+    /* Baseline update happens here, on the reader, in ring order — for the
+     * deferred path it can no longer wait until "after classification", and
+     * this is the better place anyway: the classifier never modifies the
+     * event, so the recorded baseline is identical either way, and doing it
+     * in ring order keeps it deterministic instead of dependent on model
+     * latency. */
+    baseline_update(s, e);
 
-        char ctx[512];
-        build_ai_context(e, ctx, sizeof(ctx));
+    int wants_ai = (verdict == VERDICT_ESCALATE ||
+                    (anomalous && s->config.ai_enabled &&
+                     verdict >= VERDICT_LOG));
 
-        /* Out of duty budget: take the timeout fallback WITHOUT paying for it.
-         * The event still gets reported at ALERT, which is what a 3s timeout
-         * would have produced anyway — the difference is that the reader is
-         * back on the ring immediately instead of 3s from now. */
+    if (wants_ai && aiq.started) {
+        sg_ai_job_t j;
+        memset(&j, 0, sizeof(j));
+        j.e         = *e;
+        j.verdict   = verdict;
+        j.anomalous = anomalous;
+        snprintf(j.rule, sizeof(j.rule), "%s", rname);
+
+        if (ai_job_push(&j) == 0)
+            return;   /* the worker owns this event; get back to the ring */
+
+        /* Queue full: the classifier cannot keep up with the ring. Take the
+         * same safe fallback a timeout produces rather than blocking here —
+         * blocking here is the whole bug. */
+        s->stats.ai_skipped++;
+        ai_result.verdict      = VERDICT_ALERT;
+        ai_result.threat_level = THREAT_LOW;
+        strncpy(ai_result.reason,
+                "AI queue full (classifier behind the ring) — defaulting to alert",
+                sizeof(ai_result.reason) - 1);
+        verdict = apply_ai_verdict(s, e, verdict, &ai_result);
+
+    } else if (wants_ai) {
+        /* No worker thread. Classify inline, but keep the duty cap so this
+         * degrades to "late verdicts" instead of back to "blind". */
         if (!ai_duty_allows()) {
             s->stats.ai_skipped++;
             ai_result.verdict      = VERDICT_ALERT;
@@ -590,45 +803,32 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
             strncpy(ai_result.reason,
                     "AI skipped (reader falling behind) — defaulting to alert",
                     sizeof(ai_result.reason) - 1);
-            if (verdict == VERDICT_ESCALATE)
-                verdict = VERDICT_ALERT;
-            goto ai_done;
-        }
-
-        uint64_t ai_t0 = mono_ns();
-        int ai_rc = synguard_ai_classify(s, e, ctx, &ai_result);
-        ai_duty_charge(mono_ns() - ai_t0);
-
-        if (ai_rc == 0) {
-            sg_log(LOG_DEBUG, "AI: threat=%d verdict=%s confidence=%.2f reason=%.80s",
-                   (int)ai_result.threat_level,
-                   verdict_name(ai_result.verdict),
-                   ai_result.confidence,
-                   ai_result.reason);
-            /* AI verdict overrides rule verdict for ESCALATE — but the
-             * classifier is advisory unless ai_enforce is set: a model
-             * hallucination must never be able to SIGKILL a process tree.
-             * Only rules written by a human may carry a DENY. */
-            if (verdict == VERDICT_ESCALATE) {
-                if (ai_result.verdict >= VERDICT_DENY && !s->config.ai_enforce) {
-                    sg_log(LOG_WARNING,
-                           "AI recommended %s for pid=%u (%s) — clamped to "
-                           "alert (--ai-enforce not set): %.120s",
-                           verdict_name(ai_result.verdict),
-                           e->pid, e->comm, ai_result.reason);
-                    verdict = VERDICT_ALERT;
-                } else {
-                    verdict = ai_result.verdict;
-                }
-            }
+            verdict = apply_ai_verdict(s, e, verdict, &ai_result);
         } else {
-            sg_log(LOG_DEBUG, "AI classification failed — keeping rule verdict");
+            char ctx[512];
+            build_ai_context(e, ctx, sizeof(ctx));
+            uint64_t ai_t0 = mono_ns();
+            int ai_rc = synguard_ai_classify(s, e, ctx, &ai_result);
+            ai_duty_charge(mono_ns() - ai_t0);
+            if (ai_rc == 0)
+                verdict = apply_ai_verdict(s, e, verdict, &ai_result);
+            else
+                sg_log(LOG_DEBUG,
+                       "AI classification failed — keeping rule verdict");
         }
     }
-ai_done:
 
-    /* Baseline update (after classification, not before) */
-    baseline_update(s, e);
+    dispatch_verdict(s, e, verdict, rname, &ai_result);
+}
+
+/* Dispatch a decided verdict. Reader thread only — this is where stats,
+ * actions and the audit log are mutated, and keeping it single-writer is why
+ * the worker hands results back instead of acting on them itself. */
+static void dispatch_verdict(synguard_state_t *s, const sg_event_t *e,
+                             sg_verdict_t verdict, const char *rule_name,
+                             const sg_ai_result_t *ai)
+{
+    sg_ai_result_t ai_result = *ai;
 
     /* ── Step 4: Action dispatch ─────────────────────────────── */
     sg_alert_t alert = {
@@ -638,7 +838,7 @@ ai_done:
         .threat      = ai_result.threat_level,
     };
     snprintf(alert.reason, sizeof(alert.reason), "%s%s%s",
-             matched_rule ? matched_rule->name : "default",
+             rule_name ? rule_name : "default",
              ai_result.reason[0] ? " / AI: " : "",
              ai_result.reason);
 
@@ -920,6 +1120,31 @@ static void *reader_thread_fn(void *arg)
             }
         }
 
+        /*
+         * Dispatch everything the classifier finished while we were reading.
+         * This is why the worker hands results back instead of acting on them:
+         * stats, actions and the audit log stay single-writer on this thread.
+         * Drained to empty so a completion cannot sit for more than one cycle.
+         */
+        {
+            sg_ai_job_t fin;
+            while (ai_done_pop(&fin) == 0) {
+                sg_verdict_t v = fin.verdict;
+                if (fin.ai_ok) {
+                    sg_log(LOG_DEBUG,
+                           "AI: threat=%d verdict=%s confidence=%.2f reason=%.80s",
+                           (int)fin.ai.threat_level,
+                           verdict_name(fin.ai.verdict),
+                           fin.ai.confidence, fin.ai.reason);
+                    v = apply_ai_verdict(s, &fin.e, v, &fin.ai);
+                } else {
+                    sg_log(LOG_DEBUG,
+                           "AI classification failed — keeping rule verdict");
+                }
+                dispatch_verdict(s, &fin.e, v, fin.rule, &fin.ai);
+            }
+        }
+
         /* Runs whether or not anything arrived, so blinding is caught even on
          * a silent system. */
         canary_tick(s);
@@ -940,6 +1165,10 @@ int kmod_reader_start(synguard_state_t *s)
     if (!s->kmod_present)
         sg_log(LOG_WARNING, "synguard: synapse_kmod not loaded — "
                             "operating in userspace-only mode");
+
+    /* Start the classifier before the reader, so the very first cycle already
+     * has somewhere to hand work and never classifies inline. */
+    ai_worker_start(s);
 
     if (pthread_create(&s->reader_thread, NULL, reader_thread_fn, s) != 0) {
         sg_log(LOG_ERR, "synguard: failed to start reader thread: %s",

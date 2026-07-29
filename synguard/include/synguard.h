@@ -37,6 +37,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <sys/types.h>
 #include <time.h>
@@ -229,22 +230,35 @@ typedef struct {
 } sg_alert_t;
 
 /* ── Stats ────────────────────────────────────────────────── */
+/*
+ * _Atomic because these are written by the reader thread and by the AI
+ * classifier worker, and read by main every 60s to print the stats line.
+ * Plain uint64_t made that a data race — three of them, which ThreadSanitizer
+ * flagged on the very first run once a worker thread existed to expose the
+ * pattern properly. A torn counter in a log line is harmless in practice, but
+ * it is still UB, and "the numbers are probably fine" is a poor foundation for
+ * the one output an operator uses to decide whether the detector is healthy.
+ *
+ * Lock-free on x86_64, and `++` on an _Atomic lvalue is an atomic RMW, so all
+ * 21 increment sites stay exactly as they were. start_time is set once before
+ * any thread exists and stays plain.
+ */
 typedef struct {
-    uint64_t  events_processed;
-    uint64_t  rules_matched;
-    uint64_t  ai_queries;
-    uint64_t  ai_timeouts;
-    uint64_t  ai_skipped;        /* classifications skipped to keep draining */
-    uint64_t  denials;
-    uint64_t  alerts;
-    uint64_t  quarantines;
-    uint64_t  protected_skips;   /* actions refused on a protected pid */
-    uint64_t  stale_pid_skips;   /* actions refused: pid no longer the culprit */
-    uint64_t  events_dropped;    /* events the ring lapped before we read them */
-    uint64_t  reader_lag_ms;     /* age of the newest event we have processed */
-    uint64_t  reader_lag_max_ms; /* worst lag seen, so a transient stall shows */
-    uint64_t  alerts_suppressed; /* repeat alerts collapsed into a summary */
-    time_t    start_time;
+    _Atomic uint64_t  events_processed;
+    _Atomic uint64_t  rules_matched;
+    _Atomic uint64_t  ai_queries;
+    _Atomic uint64_t  ai_timeouts;
+    _Atomic uint64_t  ai_skipped;      /* classifications skipped, queue full */
+    _Atomic uint64_t  denials;
+    _Atomic uint64_t  alerts;
+    _Atomic uint64_t  quarantines;
+    _Atomic uint64_t  protected_skips; /* actions refused on a protected pid */
+    _Atomic uint64_t  stale_pid_skips; /* refused: pid no longer the culprit */
+    _Atomic uint64_t  events_dropped;  /* ring lapped before we read them */
+    _Atomic uint64_t  reader_lag_ms;   /* age of the newest event processed */
+    _Atomic uint64_t  reader_lag_max_ms; /* worst lag, so a stall still shows */
+    _Atomic uint64_t  alerts_suppressed; /* repeats collapsed into a summary */
+    time_t            start_time;
 } sg_stats_t;
 
 /* ── Global daemon state ──────────────────────────────────── */
@@ -262,7 +276,9 @@ typedef struct synguard_state {
 
     /* kmod interface */
     int              kmod_fd;       /* fd to KMOD_SYSCALL_LOG */
-    int              kmod_present;
+    /* Set by the reader thread each cycle, read by main for the banner and by
+     * canary_tick — atomic for the same reason the counters are. */
+    _Atomic int      kmod_present;
 
     /* synapd IPC */
     int              synapd_fd;
@@ -309,6 +325,11 @@ void sg_str_unescape(char *dst, size_t dlen, const char *src);
 
 /* Event processing */
 void synguard_process_event(synguard_state_t *s, const sg_event_t *e);
+
+/* Stops the AI classifier worker and joins it. Call before joining the reader:
+ * the worker only ever produces results for the reader to dispatch, so the
+ * reader must still be alive to drain whatever is already classified. */
+void synguard_ai_worker_stop(void);
 int  kmod_parse_event(const char *line, sg_event_t *out);
 
 /* Worm/C2 egress detector (event_processor.c). Exposed for tests: returns the
