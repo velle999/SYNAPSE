@@ -131,6 +131,21 @@ policy_test = executable('policy_test',
     meson.current_source_dir())])
 test('policy', policy_test, timeout: 60)
 
+# Lowering rules to a form a BPF hook can run. The load-bearing assertion is
+# differential: every lowerable pattern must agree with the real fnmatch() call
+# rules_evaluate() makes, over a corpus of paths. Two engines that disagree
+# means the policy an admin wrote is not the policy the machine runs, and
+# nothing at runtime would report it. Also guards that the SHIPPED policy keeps
+# lowering to zero enforceable rules.
+lower_test = executable('lower_test',
+  files('tests/lower_test.c', 'src/policy_lower.c', 'src/rule_engine.c',
+        'src/sg_log.c'),
+  include_directories: inc,
+  dependencies: [dep_threads],
+  c_args: ['-DSYNGUARD_SHIPPED_RULES_DIR="@0@/rules"'.format(
+    meson.current_source_dir())])
+test('lower', lower_test, timeout: 60)
+
 # The `access read|write|any` filter. Same shape as policy_test — real parser,
 # real shipped rules/ — and it asserts both halves: the persistence surfaces
 # stay quiet on a read, and the credential/device paths were NOT narrowed
