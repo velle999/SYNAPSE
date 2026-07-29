@@ -87,6 +87,8 @@ SynapseOS-0.1.0-x86_64.iso
 archiso/out/*.iso
 archiso/out/*.iso.part*
 archiso/out/test-disk.qcow2
+# OVMF's per-VM variable store, written by qemu-test.sh alongside the qcow2.
+archiso/out/*OVMF_VARS*.fd
 
 # ── archiso work dir (12G of scratch) ───────────────────────
 /archiso/work
@@ -129,3 +131,25 @@ archiso/out/*.b2sum
 # A shared .claude/settings.json is still fine to commit.
 .claude/settings.local.json
 **/.claude/settings.local.json
+
+# chibi's makepkg scratch. Its PKGBUILD pip-installs pydeps and clones
+# chibi-llm into $srcdir, and SRCDEST drops the voice/whisper payloads in the
+# package root — 7100+ generated files that buried `git status`, which is where
+# a genuinely-untracked source file (synui/src/ctlpanel.c, once) has to be
+# visible. Anchored per-package on purpose: synui, synguard, synapd, synsh,
+# synnet and synapse_kmod all have a REAL tracked src/.
+/chibi/src/
+/chibi/chibi-llm/
+/chibi/whisper-model.bin
+/chibi/whisper-config.json
+/chibi/whisper-tokenizer.json
+/chibi/whisper-vocabulary.txt
+/chibi/*.onnx
+/chibi/*.onnx.json
+
+# Debug leavings from bugs that are already fixed. The xwayland-abort dir is
+# 365 MB of core dumps and strace logs from the SIGCHLD/wait4 abort (fixed);
+# it is forensics, not source, and must never enter a release tarball.
+synui/crash-*/
+synui/*-capture-*.log
+synui/cat.png
