@@ -89,6 +89,14 @@ executable('synapd-sleep-hook',
   install_dir: '/usr/lib/systemd/system-sleep',
   install_mode: 'rwxr-xr-x')
 
+# Same directory, same install_mode reasoning as above: 0644 here would mean a
+# hook that never runs, and the only symptom would be a suspend that fails to
+# freeze again some night. This one stops OTHER processes' GPU contexts (Plex
+# transcodes) and names whoever is still holding the driver — see the script.
+install_data('systemd/synapse-gpu-sleep',
+  install_dir: '/usr/lib/systemd/system-sleep',
+  install_mode: 'rwxr-xr-x')
+
 install_data('systemd/synapd.service',
   install_dir: '/usr/lib/systemd/system')
 install_data('config/synapd.conf',

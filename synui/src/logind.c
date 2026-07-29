@@ -130,6 +130,20 @@ static int on_prepare_for_sleep(sd_bus_message *m, void *data, sd_bus_error *e)
             s->power.locked = 1;
             synui_lock(s);
         }
+        /*
+         * Get the wallpaper engines down BEFORE releasing the delay, because
+         * this is the only moment we still have one. They hold a CUDA context,
+         * and an engine caught exiting inside nvidia_uvm's teardown cannot be
+         * frozen: on 2026-07-28 that cost 20 seconds, aborted the suspend
+         * half-done, and left DP-3 scanning out a frozen console with a 0-byte
+         * EDID until the machine was rebooted. Blocking and bounded to ~2.3s,
+         * which fits inside InhibitDelayMaxSec with room for the lock.
+         *
+         * The resume path restarts them from the state file, so this costs
+         * nothing visible — see wpengine_restore_soon() below.
+         */
+        wpengine_stop_for_sleep();
+
         /* Release the delay so the machine can actually sleep. The lock command
          * has been spawned; logind gives us InhibitDelayMaxSec (5s) and we do
          * not need it — swaylock maps and takes the session on its own clock. */

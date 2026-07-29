@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# synapse-gpu-sleep — release GPU contexts before the machine suspends.
+#
+# A process holding an NVIDIA CUDA/UVM context can be caught exiting inside
+# nvidia_uvm's teardown, where it is UNFREEZABLE. When that happens the kernel
+# waits 20 seconds and then gives up:
+#
+#   Freezing user space processes failed after 20.004 seconds
+#     (1 tasks refusing to freeze, wq_busy=0):
+#   task:module-rt  state:D  ... uvm_va_space_mm_shutdown [nvidia_uvm]
+#
+# The suspend is then ABORTED half-completed, and the NVIDIA driver comes back
+# with inconsistent state. On 2026-07-28 that produced
+#
+#   nvidia-modeset: ERROR: Invalid request parameters, planePitch or
+#                          rmObjectSizeInBytes, passed during surface registration
+#
+# and left DP-3 — the primary 2560x1440 display — scanning out a frozen console
+# for a day, its connector reading `disconnected` with a 0-byte EDID. Only a
+# reboot recovered it.
+#
+# The fix is not to prevent suspending; it is to make the GPU holders let go
+# while the system is still fully awake, so their teardown has no deadline.
+#
+# WHAT THIS STOPS
+#
+#   Plex Transcoder — the usual cause here, because the machine's sleep timer
+#   fires while a bedroom client is mid-stream. The stream is ending either way
+#   the moment the box suspends; Plex starts a new transcode when the client
+#   reconnects, so killing it costs a resume-time restart and nothing else.
+#
+# synui stops linux-wallpaperengine itself, from its logind PrepareForSleep
+# handler, because it owns that process's lifecycle and restarts it on resume.
+#
+# WHAT THIS DOES NOT DO
+#
+# It never fails the suspend. A hook that exits non-zero does not stop systemd
+# sleeping, so refusing here would buy nothing and cost a confusing log line —
+# if something still holds the GPU after we have asked, the only useful thing
+# left is to NAME it, which the last block does. That line is the difference
+# between diagnosing this from a kernel stack trace the next day and reading
+# who did it.
+#
+# SynapseOS Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set -u
+
+[ "${1:-}" = "pre" ] || exit 0
+
+log() { logger -t synapse-gpu-sleep "$@"; echo "synapse-gpu-sleep: $*" >&2; }
+
+# /proc/PID/comm is truncated to 15 characters, so "Plex Transcoder" is exactly
+# at the limit and longer names must be matched by their truncation. pgrep -x
+# matches against that same truncated comm.
+TRANSCODER_COMM='Plex Transcoder'
+
+# ── Stop transcodes ─────────────────────────────────────────────────────────
+pids="$(pgrep -x "$TRANSCODER_COMM" 2>/dev/null || true)"
+if [ -n "$pids" ]; then
+    n=$(echo "$pids" | wc -l)
+    log "stopping $n Plex transcode(s) before suspend"
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+
+    for _ in $(seq 30); do          # up to 3s
+        pgrep -x "$TRANSCODER_COMM" >/dev/null 2>&1 || break
+        sleep 0.1
+    done
+
+    pids="$(pgrep -x "$TRANSCODER_COMM" 2>/dev/null || true)"
+    if [ -n "$pids" ]; then
+        log "transcode(s) ignored SIGTERM for 3s — sending SIGKILL"
+        # shellcheck disable=SC2086
+        kill -9 $pids 2>/dev/null || true
+        sleep 0.3
+    fi
+fi
+
+# ── Report anyone still holding the GPU ─────────────────────────────────────
+#
+# Not fatal, and deliberately not a kill list: synapd holds a context on
+# purpose and has its own hook (synapd-sleep-hook) that releases the model
+# first. This exists so that the NEXT time a suspend fails to freeze, the
+# journal already says which process was holding the driver, by name.
+[ -e /dev/nvidia-uvm ] || exit 0
+
+holders=""
+for p in /proc/[0-9]*; do
+    [ -r "$p/comm" ] || continue
+    if ls -l "$p/fd" 2>/dev/null | grep -q nvidia-uvm; then
+        holders="$holders $(cat "$p/comm" 2>/dev/null)($(basename "$p"))"
+    fi
+done
+
+[ -n "$holders" ] && log "GPU contexts still open at suspend:$holders"
+
+exit 0

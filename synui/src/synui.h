@@ -3383,6 +3383,12 @@ int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
  * safe to call from anywhere that might have cost the engine its surfaces —
  * a resume, an output coming back — as often as that happens. */
 void wpengine_restore_soon(syn_server_t *s);
+/* Kill the engines and WAIT for them to be gone, before we let the machine
+ * sleep. They hold a CUDA context, and one caught exiting inside nvidia_uvm's
+ * teardown is unfreezable — that aborted a suspend and wedged an output until
+ * reboot. Blocking, bounded to ~2.3s so it fits inside logind's 5s
+ * InhibitDelayMaxSec; call it BEFORE dropping the inhibitor. */
+void wpengine_stop_for_sleep(void);
 /* An output was destroyed: from here on, one coming back is a reason to
  * re-arm the engine. Called from output_destroy(). */
 void wpengine_output_lost(syn_server_t *s);
