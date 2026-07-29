@@ -59,6 +59,19 @@ RestrictSUIDSGID=true
 #   CAP_DAC_READ_SEARCH  read /proc and /sys/kernel/synapse regardless of mode
 #   CAP_DAC_OVERRIDE     write /sys/fs/cgroup/... for the quarantine freeze
 #   CAP_CHOWN            hand /run/synguard.sock to the `synapse` group
+#   CAP_BPF              load the BPF-LSM object and its maps
+#   CAP_PERFMON          attach it — BPF_PROG_TYPE_LSM is a tracing-family
+#                        program type, so CAP_BPF alone is NOT enough
+#
+# The BPF pair was measured, not assumed: with the five caps above the object
+# fails to load, CAP_BPF alone still fails, CAP_PERFMON alone still fails, and
+# the two together work. CAP_SYS_ADMIN also works and is what most BPF
+# documentation reaches for — it is deliberately NOT used here, because it
+# would hand a compromised monitor the whole box back.
+#
+# If enforcement ever reports "load failed" in the journal, check this line
+# before suspecting the policy: a missing cap here presents as a daemon that
+# starts fine and simply never enforces.
 #
 # Notably NOT CAP_SYS_ADMIN: cgroup v2 mkdir, cgroup.procs and cgroup.freeze
 # are all plain file writes that DAC_OVERRIDE covers.
@@ -77,7 +90,7 @@ RestrictSUIDSGID=true
 # was protecting (see ProtectControlGroups vs quarantine containment, and
 # ProtectKernelTunables). When adding a restriction to this unit, check what
 # the daemon does at STARTUP and not only in its steady state.
-CapabilityBoundingSet=CAP_KILL CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN
+CapabilityBoundingSet=CAP_KILL CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_BPF CAP_PERFMON
 AmbientCapabilities=
 
 # Cheap and non-negotiable: nothing here changes personality, needs realtime,

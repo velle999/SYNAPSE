@@ -1,11 +1,15 @@
 pkgname=synguard
 pkgver=0.1.0
-pkgrel=22
+pkgrel=23
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
-depends=('glibc' 'systemd-libs')
-makedepends=('meson' 'ninja' 'gcc' 'pkg-config')
+depends=('glibc' 'systemd-libs' 'libbpf')
+# clang and bpftool are BUILD-time only. The BPF-LSM object is compiled to
+# CO-RE bytecode here and loaded by libbpf at runtime, so an installed system
+# needs no compiler and there is no vermagic to go stale against the running
+# kernel — the whole reason enforcement went this way instead of into the kmod.
+makedepends=('meson' 'ninja' 'gcc' 'pkg-config' 'clang' 'bpf')
 optdepends=('synapd: AI threat classification')
 source=("synguard-0.1.0.tar.gz")
 sha256sums=('SKIP')
@@ -42,12 +46,30 @@ prepare() {
 
 build() {
     cd "$srcdir/synguard-0.1.0"
-    meson setup build --prefix=/usr --buildtype=release
+    # -Dbpf_lsm=enabled, never 'auto'. On auto a build host missing clang or
+    # bpftool produces a package that compiles, installs and runs perfectly
+    # while silently containing no enforcement layer at all — an optional
+    # component has no failure tell. Enabled makes that a configure-time error.
+    #
+    # bpftool reads /sys/kernel/btf/vmlinux to generate vmlinux.h, so the build
+    # environment needs /sys mounted (devtools chroots do; a bare container may
+    # not). CO-RE keeps the resulting object portable, so this is not a pin to
+    # the build host's kernel.
+    meson setup build --prefix=/usr --buildtype=release -Dbpf_lsm=enabled
     meson compile -C build
 }
 
 package() {
     cd "$srcdir/synguard-0.1.0"
+
+    # Prove the thing we just claimed to build is in there. A commit and a
+    # pkgrel bump ship nothing on their own, and "enforcement is missing" is
+    # invisible at runtime until the day a rule was supposed to fire.
+    if ! readelf -d build/synguard | grep -q 'NEEDED.*libbpf'; then
+        error "synguard built WITHOUT the BPF-LSM gate (not linked against libbpf)"
+        return 1
+    fi
+
     meson install -C build --destdir="$pkgdir"
     install -dm750 "$pkgdir/etc/synguard/rules.d"
     install -Dm640 rules/00-base.rules "$pkgdir/etc/synguard/rules.d/00-base.rules"

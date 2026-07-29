@@ -28,6 +28,12 @@
 #include "synguard.h"
 #include "sg_log.h"
 
+/* Defined only for the daemon target; the unit tests that link core.c do not
+ * get it, so they never need libbpf. */
+#ifdef SYNGUARD_HAVE_BPF_LSM
+#include "sg_bpf.h"
+#endif
+
 #define BASELINE_MAX_ENTRIES  1024
 #define SENSITIVE_EVT_MASK    (EVT_EXEC | EVT_PTRACE | EVT_MODULE | EVT_SETUID)
 
@@ -302,12 +308,33 @@ int synguard_init(synguard_state_t *s)
     /* Start the security-verdict broadcast feed (non-fatal if it fails). */
     secfeed_init();
 
+#ifdef SYNGUARD_HAVE_BPF_LSM
+    /*
+     * Attach the BPF-LSM gate. This does NOT arm it: sg_bpf_init() seeds the
+     * control record with enforce=0 and a running warmup, and the only hook
+     * currently shipped denies a canary inode that defaults to none. Arming is
+     * a separate, deliberate act.
+     *
+     * Non-fatal on purpose. A kernel without BPF-LSM, a unit whose
+     * CapabilityBoundingSet is missing CAP_BPF/CAP_PERFMON, or
+     * `synapse.bpf_enforce=0` on the cmdline all land here, and in every case
+     * synguard should keep detecting rather than refuse to start. The failure
+     * is logged loudly by sg_bpf_init() itself so it cannot pass for silence.
+     */
+    if (sg_bpf_init() != 0)
+        sg_log(LOG_WARNING,
+               "bpf-lsm: unavailable — synguard is detect-only this boot");
+#endif
+
     return 0;
 }
 
 void synguard_destroy(synguard_state_t *s)
 {
     s->running = 0;
+#ifdef SYNGUARD_HAVE_BPF_LSM
+    sg_bpf_shutdown();
+#endif
     secfeed_close();
     pthread_join(s->reader_thread, NULL);
     rules_free(s);
