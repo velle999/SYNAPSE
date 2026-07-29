@@ -345,6 +345,19 @@ static struct kprobe kp_syscall64 = {
     .pre_handler = syscall64_pre_handler,
 };
 
+/*
+ * Tracks whether kp_syscall64 is actually registered, so synapse_ctx_exit() is
+ * idempotent and safe to call when init never ran or failed.
+ *
+ * Both cases are now reachable. synapse_ctx_init() is gated behind the
+ * synapse_ai_ctx_syscalls module param (off by default), and the module's
+ * error paths in synapse_main.c call synapse_ctx_exit() unconditionally —
+ * including when synapse_ctx_init() returned an error, which was already true
+ * before the gate existed. unregister_kprobe() on a kprobe that was never
+ * registered walks a hlist the kprobe is not on.
+ */
+static bool kp_registered;
+
 int synapse_ctx_init(void)
 {
     int ret = register_kprobe(&kp_syscall64);
@@ -353,6 +366,7 @@ int synapse_ctx_init(void)
                 "(AI_CTX syscalls unavailable)\n", ret);
         return ret;
     }
+    kp_registered = true;
     pr_info("synapse_kmod: AI_CTX syscalls available via kprobe shim "
             "(nr: SET=%d GET=%d QUERY=%d)\n",
             NR_AI_CTX_SET, NR_AI_CTX_GET, NR_AI_CTX_QUERY);
@@ -361,6 +375,9 @@ int synapse_ctx_init(void)
 
 void synapse_ctx_exit(void)
 {
+    if (!kp_registered)
+        return;
     unregister_kprobe(&kp_syscall64);
+    kp_registered = false;
 }
 #endif  /* SYNAPSE_NATIVE_AI_CTX */

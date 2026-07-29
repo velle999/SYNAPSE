@@ -82,15 +82,37 @@ static void ring_free(void)
 /*
  * ring_push — add an event to the ring buffer.
  * If the ring is full, the oldest event is overwritten (lossy).
+ *
+ * head and tail are free-running counters that are never reset, so they WILL
+ * wrap. Every use of them here is therefore unsigned: u32 wraparound is
+ * defined, and `head - tail` stays the true distance across the wrap, which is
+ * the same trick kfifo uses.
+ *
+ * They were plain signed ints, and that was a live out-of-bounds write waiting
+ * on the clock. atomic_t is a signed 32-bit counter; this box logs ~440k
+ * events/hour, so head reaches INT_MAX after roughly 200 days of uptime and
+ * goes negative. C's % keeps the sign of the dividend, so `head % size` then
+ * yields a NEGATIVE index and the memcpy below writes a ~200-byte event before
+ * the start of the ring — kernel heap corruption on an uptime threshold, with
+ * nothing in the logs leading up to it.
+ *
+ * It is the INDEX that breaks, not the distance: `head - tail` keeps returning
+ * the correct gap across the wrap even when signed, because the kernel builds
+ * with -fno-strict-overflow. Simulated at the boundary, the old code's push
+ * index goes 4095 -> 0 -> -4095 while the gap stays a steady 100. So the read
+ * path is not spared either — once tail wraps, `(tail + i) % size` is equally
+ * negative and reads out of bounds.
  */
 static void ring_push(const struct synapse_syscall_event *evt)
 {
     spin_lock(&g_ring.lock);
-    int idx = atomic_read(&g_ring.head) % g_ring.size;
-    memcpy(&g_ring.events[idx], evt, sizeof(*evt));
+    u32 size = (u32)g_ring.size;
+    u32 head = (u32)atomic_read(&g_ring.head);
+    memcpy(&g_ring.events[head % size], evt, sizeof(*evt));
     atomic_inc(&g_ring.head);
-    /* Advance tail if we've lapped */
-    if (atomic_read(&g_ring.head) - atomic_read(&g_ring.tail) > g_ring.size)
+    /* Advance tail if we've lapped. Unsigned, so this stays correct when the
+     * counters straddle the wrap. */
+    if ((u32)atomic_read(&g_ring.head) - (u32)atomic_read(&g_ring.tail) > size)
         atomic_inc(&g_ring.tail);
     spin_unlock(&g_ring.lock);
 }
@@ -142,14 +164,18 @@ ssize_t synapse_probe_read_log(char *buf, size_t buf_len)
     size_t pos = 0;
 
     spin_lock(&g_ring.lock);
-    int tail = atomic_read(&g_ring.tail);
-    int head = atomic_read(&g_ring.head);
+    /* Unsigned for the same reason as ring_push(): these counters wrap after
+     * ~200 days at this event rate, and `(tail + i) % g_ring.size` below is a
+     * NEGATIVE index once tail passes INT_MAX — an out-of-bounds read of the
+     * event array, handed straight to userspace through syscall_log. */
+    u32 tail = (u32)atomic_read(&g_ring.tail);
+    u32 head = (u32)atomic_read(&g_ring.head);
 
     /* Read up to 32 events per sysfs read to avoid huge pages */
-    int max_read = min(head - tail, 32);
+    u32 max_read = min(head - tail, 32u);
 
-    for (int i = 0; i < max_read; i++) {
-        int idx = (tail + i) % g_ring.size;
+    for (u32 i = 0; i < max_read; i++) {
+        u32 idx = (tail + i) % (u32)g_ring.size;
         struct synapse_syscall_event *e = &g_ring.events[idx];
 
         syn_escape(comm_esc, sizeof(comm_esc), e->comm, sizeof(e->comm));
@@ -289,8 +315,14 @@ static int execve_pre_handler(struct kprobe *p, struct pt_regs *regs)
      */
     struct pt_regs *u = syscall_uregs(regs);
     const char __user *filename = (const char __user *)u->di;
-    if (filename)
-        strncpy_from_user(e.filename, filename, sizeof(e.filename) - 1);
+    /* The result is deliberately discarded, but say so: strncpy_from_user() is
+     * __must_check, and an ignored -EFAULT here is harmless only because `e` is
+     * zero-initialised, so a failed copy leaves an empty filename rather than
+     * stack contents. Stating that keeps the build clean, so a real
+     * unused-result warning elsewhere is not lost in the noise. */
+    if (filename && strncpy_from_user(e.filename, filename,
+                                      sizeof(e.filename) - 1) < 0)
+        e.filename[0] = '\0';
 
     ring_push(&e);
     synapse_stat_event();
