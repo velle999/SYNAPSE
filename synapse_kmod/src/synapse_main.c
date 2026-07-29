@@ -143,6 +143,15 @@ static void synapse_watchdog_fn(struct timer_list *t)
         }
     }
 
+    /*
+     * Release scheduling hints for processes that have exited. Nothing else
+     * ever removes them: hint_remove() had no caller at all, so the table grew
+     * for the module's lifetime and a recycled pid would inherit the dead
+     * process's saved nice/policy on revert. Riding the watchdog keeps the
+     * cost off the exit path, which every process on the system takes.
+     */
+    synapse_sched_sweep();
+
     /* Reschedule watchdog */
     mod_timer(&s->watchdog, now + secs_to_jiffies(5));
 }

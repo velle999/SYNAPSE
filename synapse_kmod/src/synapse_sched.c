@@ -31,6 +31,7 @@
 #include <linux/sched/signal.h>
 #include <uapi/linux/sched/types.h>   /* struct sched_attr */
 #include <linux/pid.h>
+#include <linux/pid_namespace.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/hashtable.h>
@@ -54,6 +55,14 @@ extern struct workqueue_struct *synapse_get_wq(void);
 
 struct pid_hint {
     pid_t             pid;
+    /*
+     * The kernel's own tiebreaker for a recycled PID: two tasks that share a
+     * pid cannot share a start time. Without it a hint is keyed on the pid
+     * alone, and nothing here could tell "the process we hinted" from "some
+     * unrelated process that later inherited its number" — see
+     * hint_is_live(). Same field on both sides, so no cross-clock comparison.
+     */
+    u64               start_boottime;
     ai_sched_class_t  sched_class;
     int               nice_original;   /* saved for revert */
     int               nice_applied;
@@ -83,24 +92,94 @@ static struct pid_hint *hint_find(pid_t pid)
     return NULL;
 }
 
-static struct pid_hint *hint_alloc(pid_t pid)
+static struct pid_hint *hint_alloc(pid_t pid, struct task_struct *task)
 {
     struct pid_hint *h = kzalloc(sizeof(*h), GFP_ATOMIC);
     if (!h) return NULL;
-    h->pid = pid;
+    h->pid            = pid;
+    h->start_boottime = task ? task->start_boottime : 0;
     hash_add(hint_table, &h->node, (u32)pid);
     synapse_ctx_inc();
     return h;
 }
 
-static void hint_remove(pid_t pid)
+/* Caller must hold hint_table_lock. */
+static void hint_drop(struct pid_hint *h)
 {
-    struct pid_hint *h = hint_find(pid);
-    if (h) {
-        hash_del(&h->node);
-        kfree(h);
-        synapse_ctx_dec();
+    hash_del(&h->node);
+    kfree(h);
+    synapse_ctx_dec();
+}
+
+/*
+ * Is this hint still about the process it was created for?
+ *
+ * Returns the task with a reference taken when yes; NULL when the pid is gone
+ * OR now belongs to somebody else. Callers must put_task_struct() a non-NULL
+ * result.
+ *
+ * find_pid_ns(&init_pid_ns) rather than find_vpid(): find_vpid() resolves in
+ * *current's* namespace, and the sweep below runs from the watchdog timer
+ * where `current` is simply whichever task was interrupted. Naming the
+ * namespace makes the lookup mean the same thing in every context.
+ */
+static struct task_struct *hint_is_live(const struct pid_hint *h)
+{
+    struct task_struct *task;
+
+    rcu_read_lock();
+    task = pid_task(find_pid_ns(h->pid, &init_pid_ns), PIDTYPE_PID);
+    if (task && task->start_boottime == h->start_boottime)
+        get_task_struct(task);
+    else
+        task = NULL;
+    rcu_read_unlock();
+
+    return task;
+}
+
+/*
+ * Drop hints whose process is gone, or whose pid has been handed to somebody
+ * else. Called from the daemon watchdog, so it must not sleep — it does not:
+ * spin_lock, RCU lookup, hash_del and kfree are all fine in timer context.
+ *
+ * This exists because NOTHING removed entries. The file header has always said
+ * the table is here "so we can revert when processes exit", and there was even
+ * a hint_remove() to do it — with no callers anywhere. Every process that was
+ * ever hinted left a struct pid_hint behind for the module's lifetime. Two
+ * bugs in one:
+ *
+ *   - the table grew without bound, and
+ *   - hint_find() on a RECYCLED pid returned the dead process's record, so
+ *     revert_all_hints() would restore a stranger's saved nice/policy onto an
+ *     unrelated task.
+ *
+ * A sweep is used rather than a do_exit hook on purpose: the watchdog already
+ * runs every 5s, so this costs nothing on the exit path, which every process
+ * on the system takes. Entries linger for at most one tick, and every consumer
+ * re-checks identity anyway.
+ */
+void synapse_sched_sweep(void)
+{
+    struct pid_hint *h;
+    struct hlist_node *tmp;
+    unsigned int bkt;
+    int dropped = 0;
+
+    spin_lock(&hint_table_lock);
+    hash_for_each_safe(hint_table, bkt, tmp, h, node) {
+        struct task_struct *task = hint_is_live(h);
+        if (task) {
+            put_task_struct(task);
+            continue;
+        }
+        hint_drop(h);
+        dropped++;
     }
+    spin_unlock(&hint_table_lock);
+
+    if (dropped)
+        pr_debug("synapse_kmod: swept %d stale scheduling hint(s)\n", dropped);
 }
 
 /* ── Class → scheduler parameters ────────────────────────── */
@@ -233,8 +312,23 @@ void synapse_sched_apply_hint(pid_t pid, int nice_delta, ai_sched_class_t cls)
 
     spin_lock(&hint_table_lock);
     struct pid_hint *h = hint_find(pid);
+
+    /*
+     * An existing record for this pid is only ours if it belongs to THIS task.
+     * Otherwise the previous holder of the number died and the record still
+     * carries its saved nice/policy — reusing it would mean never recording
+     * the new task's originals, and reverting would later push a dead
+     * process's values onto this one. Drop it and start clean.
+     */
+    if (h && h->start_boottime != task->start_boottime) {
+        pr_debug("synapse_kmod: pid=%d was reused — discarding the previous "
+                 "task's hint\n", pid);
+        hint_drop(h);
+        h = NULL;
+    }
+
     if (!h) {
-        h = hint_alloc(pid);
+        h = hint_alloc(pid, task);
         if (!h) {
             spin_unlock(&hint_table_lock);
             put_task_struct(task);
@@ -315,11 +409,14 @@ static void revert_all_hints(void)
     spin_unlock(&hint_table_lock);
 
     hlist_for_each_entry_safe(h, tmp, &drain, node) {
-        rcu_read_lock();
-        struct task_struct *task = pid_task(find_vpid(h->pid), PIDTYPE_PID);
-        if (task)
-            get_task_struct(task);
-        rcu_read_unlock();
+        /*
+         * hint_is_live(), not a bare pid lookup: this used to restore
+         * h->nice_original to whatever task happened to hold the pid, so a
+         * process that inherited a dead one's number was handed a stranger's
+         * saved scheduling parameters. A hint whose owner has exited has
+         * nothing left to revert — the values died with it.
+         */
+        struct task_struct *task = hint_is_live(h);
 
         if (task) {
             set_user_nice(task, h->nice_original);
