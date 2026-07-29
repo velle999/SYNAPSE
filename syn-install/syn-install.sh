@@ -545,12 +545,14 @@ pacman-key --init
 pacman-key --populate archlinux
 
 echo "  Running pacstrap (this may take several minutes)..."
-# dolphin is the file manager; it drags in Qt6 + KF6, so it is much the largest
-# thing here. synui ships the /etc/xdg files that make KDE work outside Plasma
-# (applications.menu, kdeglobals) — see its PKGBUILD.
-# wine (+ wine-mono for .NET installers) makes .exe/.msi runnable out of the
-# box: wine.desktop drives double-click and synui's "Run with Wine" right-click
-# service menu drives the context menu. Matches the dev machine's local setup.
+# Only things every install needs go here — this runs BEFORE step 4 asks what to
+# install, so anything in this list is unconditional by construction.
+#
+# dolphin (Qt6 + KF6) and wine + wine-mono used to be on this line, which meant a
+# Minimal install — the VM/small-disk/headless case the presets exist for — paid
+# for the two largest optional dependency trees in the install with no way to say
+# no. They are now WANT_FILEMGR / WANT_WINE in step 4 and are installed in the
+# desktop step below.
 pacstrap /mnt \
     base linux linux-firmware linux-headers foot \
     grub efibootmgr os-prober ntfs-3g \
@@ -558,8 +560,7 @@ pacstrap /mnt \
     seatd ttf-dejavu \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
     rtkit polkit-gnome xorg-xhost \
-    mkinitcpio dkms dolphin \
-    wine wine-mono \
+    mkinitcpio dkms \
     cryptsetup \
     2>&1 || die "pacstrap failed — check network connection"
 
@@ -593,14 +594,16 @@ step "Step 4 — Choose What to Install"
 WANT_MODEL=1          # copy the ~4.3 GB gguf off the ISO
 WANT_BLUETOOTH=1      # bluez + bluez-utils
 WANT_PRINTING=1       # cups + drivers
+WANT_FILEMGR=1        # dolphin — synui's Files button and desktop menu launch it
+WANT_WINE=1           # wine + wine-mono
 SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
 SEL_APPS="chibi vibe"
 
 echo "  What should be installed alongside the SynapseOS core?"
 echo ""
-echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing"
-echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Chibi + Vibe  (default)"
-echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing"
+echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine"
+echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, Chibi + Vibe  (default)"
+echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine"
 echo "    $(bold '4)') Custom    — pick each item individually"
 echo ""
 prompt "Choice [1-4, default=2]:"
@@ -611,11 +614,13 @@ case "$INSTALL_PRESET" in
     1)
         SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
         WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
+        WANT_FILEMGR=1; WANT_WINE=1
         success "Full install selected"
         ;;
     3)
         SEL_APPS=""
         WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
+        WANT_FILEMGR=0; WANT_WINE=0
         success "Minimal install selected"
         ;;
     4)
@@ -647,6 +652,8 @@ case "$INSTALL_PRESET" in
         ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
         ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
         ask_opt WANT_PRINTING   1 "Printing (CUPS)"
+        ask_opt WANT_FILEMGR    1 "File manager (Dolphin) — the desktop's Files button opens it"
+        ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
 
         SEL_APPS=""
         [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
@@ -703,6 +710,8 @@ echo "    Apps     : ${SEL_APPS:-none}"
 echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo 'yes (~4.3 GB)' || echo 'no')"
 echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
 echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
+echo "    Files    : $([ "$WANT_FILEMGR" = 1 ] && echo 'yes (Dolphin)' || echo no)"
+echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
 echo ""
 
 step "Step 4b — Installing SynapseOS"
@@ -866,6 +875,9 @@ DE_CHOICE="${de_choice:-1}"
 
 case "$DE_CHOICE" in
     2)
+        # kde-applications-meta contains dolphin, so KDE gets a file manager
+        # whether or not step 4 asked for one — same shape as bluez arriving
+        # via synui's depends. Declining the file manager here buys nothing.
         echo "  Installing KDE Plasma..."
         arch-chroot /mnt pacman -S --noconfirm \
             plasma-meta sddm kde-applications-meta \
@@ -899,14 +911,52 @@ case "$DE_CHOICE" in
         # is skip bluez-utils and leave bluetooth.service disabled, so the radio
         # stays down and synui's panel reports no adapter. That is the whole
         # user-visible effect, and it is what the option promises.
+        #
+        # dolphin is the file manager, chosen in step 4 and installed here
+        # rather than in pacstrap: it drags in Qt6 + KF6, so it is much the
+        # largest optional item in the install and a headless or small-disk box
+        # has no use for it. synui ships the /etc/xdg files that make KDE apps
+        # work outside Plasma (applications.menu, kdeglobals) — see its PKGBUILD.
+        #
+        # Declining it is a REAL loss of desktop function, not just a missing
+        # app: synui hardcodes dolphin in three places — the bar's Files button
+        # (quickshell/widgets/QuickLaunch.qml), the desktop right-click menu
+        # (src/deskmenu.c) and the ISO mounter's "open the mount" step
+        # (synui-iso-mount.sh). Each of those becomes a click that does nothing.
+        # So say so here instead of shipping three dead buttons silently.
         DESKTOP_PKGS="greetd greetd-tuigreet quickshell swaybg python wtype"
         [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
         [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
+        [ "$WANT_FILEMGR"   = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS dolphin"
         arch-chroot /mnt pacman -S --noconfirm $DESKTOP_PKGS \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
+        [ "$WANT_FILEMGR" = 1 ] || warn "No file manager installed: the bar's Files button, the desktop
+  right-click 'Open File Manager' entry and the ISO mounter will do
+  nothing. Install one later with 'sudo pacman -S dolphin'."
         success "SynapseUI selected (included)"
         ;;
 esac
+
+# ── Wine ──────────────────────────────────────────────────
+#
+# wine (+ wine-mono, so .NET installers do not stop to download Mono on first
+# run) makes .exe/.msi runnable out of the box: wine.desktop registers the
+# Windows mimetypes and drives double-click, and synui's "Run with Wine"
+# service menu drives the right-click entry. Chosen in step 4, not pacstrapped:
+# it is a large tree and the Minimal preset exists to skip exactly this.
+#
+# Outside the DE case above because it is an application, not part of any one
+# desktop — synui's service menu is the only integration and it is an
+# optdepend there, harmless when wine is absent (see synui/PKGBUILD).
+if [ "$WANT_WINE" = 1 ]; then
+    step "Installing Wine"
+    if arch-chroot /mnt pacman -S --noconfirm --needed wine wine-mono 2>&1; then
+        success "Wine installed"
+    else
+        warn "wine failed to install — Windows .exe/.msi will not run.
+  Install it later with 'sudo pacman -S wine wine-mono'."
+    fi
+fi
 
 # ── Video driver ──────────────────────────────────────────
 header
