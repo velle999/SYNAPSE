@@ -584,8 +584,23 @@ void synguard_process_event(synguard_state_t *s, const sg_event_t *e)
 
     case VERDICT_QUARANTINE:
         s->stats.quarantines++;
-        snprintf(alert.action_taken, sizeof(alert.action_taken), "quarantine");
-        action_quarantine(s, e);
+        snprintf(alert.action_taken, sizeof(alert.action_taken),
+                 (s->config.mode == MODE_ENFORCE ||
+                  s->config.mode == MODE_LOCKDOWN)
+                     ? "quarantine" : "alert(audit-mode)");
+
+        /* Mode-gated exactly like DENY above. This branch used to freeze
+         * unconditionally, so a QUARANTINE rule would SIGSTOP a subtree even
+         * in AUDIT and LEARNING mode — whose entire contract is that they
+         * observe and do not act. Freezing is less final than killing, but a
+         * hung process tree is still an action, and an operator running AUDIT
+         * to sample a policy safely would have gotten one. */
+        if (s->config.mode == MODE_ENFORCE || s->config.mode == MODE_LOCKDOWN) {
+            action_quarantine(s, e);
+        } else {
+            sg_log(LOG_WARNING, "WOULD-QUARANTINE: %s pid=%u reason=%s",
+                   e->comm, e->pid, alert.reason);
+        }
         action_alert(s, &alert);
         if (s->config.audit_enabled)
             audit_write(s, &alert);

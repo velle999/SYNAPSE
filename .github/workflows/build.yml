@@ -166,6 +166,7 @@ jobs:
           meson test -C synapd/_ci wire --print-errorlogs
           meson test -C synguard/_ci secfeed --print-errorlogs
           meson test -C synguard/_ci isolation --print-errorlogs
+          meson test -C synguard/_ci policy --print-errorlogs
 
       # The step above proves these three get the right answer; this one proves
       # they do not corrupt memory getting there. All three are worth the second
@@ -205,9 +206,11 @@ jobs:
           meson compile -C synapd/_asan   wire_test
           meson compile -C synguard/_asan secfeed_test
           meson compile -C synguard/_asan isolation_test
+          meson compile -C synguard/_asan policy_test
           meson test -C synapd/_asan   wire      --print-errorlogs
           meson test -C synguard/_asan secfeed   --print-errorlogs
           meson test -C synguard/_asan isolation --print-errorlogs
+          meson test -C synguard/_asan policy    --print-errorlogs
 
       # Both smoke steps SKIP on a GPU-less runner (no /dev/dri/renderD*) and run
       # in full anywhere a real driver exists — a developer box, or a self-hosted

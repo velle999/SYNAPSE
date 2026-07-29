@@ -90,6 +90,41 @@ static void print_banner(const synguard_state_t *s)
            s->config.ai_enabled ? "on" : "off",
            s->config.ai_enforce ? "enforcing" : "advisory",
            s->kmod_present ? "present" : "absent (degraded)");
+
+    /* What the loaded policy can actually do, not just how much of it there
+     * is. A rule count says nothing about capability: the shipped set is
+     * entirely alert/escalate/allow/log, so "mode=ENFORCE rules=55" reads as
+     * an armed system while nothing can reach a kill. Print the census, and
+     * say plainly when acting is unreachable. */
+    int n[VERDICT_QUARANTINE + 1];
+    rules_census(s, n, sizeof(n) / sizeof(n[0]));
+
+    sg_log(LOG_INFO,
+           "policy: %d alert · %d escalate · %d allow · %d log · "
+           "%d deny · %d quarantine",
+           n[VERDICT_ALERT], n[VERDICT_ESCALATE], n[VERDICT_ALLOW],
+           n[VERDICT_LOG], n[VERDICT_DENY], n[VERDICT_QUARANTINE]);
+
+    if (rules_enforcement_reachable(s)) {
+        sg_log(LOG_INFO, "policy: enforcement is REACHABLE — "
+                         "matching events can be killed or frozen");
+    } else if (s->config.mode == MODE_ENFORCE ||
+               s->config.mode == MODE_LOCKDOWN) {
+        /* The case a stock install is in. Not an error — it is a deliberate
+         * default — but it must not be mistaken for an armed system. */
+        sg_log(LOG_WARNING,
+               "policy: mode=%s but NO rule carries deny/quarantine%s — "
+               "nothing can be killed or frozen; synguard is detecting and "
+               "alerting only. See /etc/synguard/rules.d/40-enforce.rules.example",
+               mode_str[s->config.mode],
+               (n[VERDICT_ESCALATE] && !s->config.ai_enforce)
+                   ? " and the AI classifier is advisory (--ai-enforce unset)"
+                   : "");
+    } else {
+        sg_log(LOG_INFO,
+               "policy: mode=%s does not act — deny verdicts are logged as "
+               "WOULD-DENY", mode_str[s->config.mode]);
+    }
 }
 
 /* ── Runtime directory setup ─────────────────────────────── */

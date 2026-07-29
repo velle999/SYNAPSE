@@ -1,0 +1,182 @@
+# /etc/synguard/rules.d/40-enforce.rules.example
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# THIS FILE DOES NOTHING. It is a template, not a policy.
+#
+# synguard loads only files ending in `.rules`. This one ends in `.example`,
+# so it is parsed by nobody. To arm any of it:
+#
+#     sudo cp /etc/synguard/rules.d/40-enforce.rules.example \
+#             /etc/synguard/rules.d/40-enforce.rules
+#     sudo $EDITOR /etc/synguard/rules.d/40-enforce.rules   # uncomment what you want
+#     sudo systemctl reload synguard
+#
+# Copying it as-is arms NOTHING — every rule below is commented out. That is
+# deliberate: turning on a rule that kills processes should be a thing you did
+# on purpose, one rule at a time.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHY THE STOCK POLICY HAS NO DENY RULES
+#
+# SynapseOS ships 55 rules and not one of them carries `deny` or `quarantine`.
+# The daemon runs with --mode enforce, so acting is *permitted*; nothing loaded
+# ever *asks* for it. synguard as installed detects and alerts. It does not
+# kill. The startup banner says so in as many words.
+#
+# That is a deliberate default for a desktop distro, for two reasons.
+#
+# 1. ENFORCEMENT HERE IS AFTER THE FACT, NOT PREVENTION.
+#
+#    synapse_kmod observes syscalls with kprobe pre-handlers. It does not
+#    implement an LSM hook and never returns -EPERM, so it cannot refuse
+#    anything. The sequence is:
+#
+#        syscall runs and SUCCEEDS
+#          → kmod appends a record to /sys/kernel/synapse/syscall_log
+#            → synguard drains the ring (poll_interval_ms, default 100ms)
+#              → rules match, possibly an AI round-trip
+#                → SIGKILL
+#
+#    By the time a process is killed for reading /etc/shadow, it has read
+#    /etc/shadow. A deny rule buys you "it does not get to continue" — real
+#    value against persistence, C2 beacons and staged payloads, and no value
+#    at all as a way to stop the first act. Write rules with that in mind:
+#    target the things whose damage is ongoing, not instantaneous.
+#
+# 2. A FALSE POSITIVE COSTS A PROCESS TREE.
+#
+#    sg_kill_tree() kills the matched process AND ITS DESCENDANTS. Match a
+#    shell and you take its children with it; match something in the session
+#    startup chain and you can log a user out. sg_is_protected() refuses PID
+#    0/1, kernel threads, synguard, synapd, synnet and synsh — that is all it
+#    refuses. Your desktop, your editor and your browser are not protected.
+#
+# HOW TO ROLL OUT A DENY RULE WITHOUT REGRETTING IT
+#
+#   a. Write it with `verdict alert` first and leave it for a few days.
+#      Every alert it produces is a process it WOULD have killed.
+#         journalctl -u synguard | grep <your-rule-name>
+#   b. Only when that log is empty of things you recognise, switch the verdict
+#      to `deny`.
+#   c. Or run the whole daemon in `--mode audit` for a while: deny rules then
+#      log `WOULD-DENY:` lines and kill nothing. Same for `WOULD-QUARANTINE:`.
+#
+# Prefer `quarantine` to `deny` when you want to keep the evidence: it SIGSTOPs
+# the subtree and freezes it in a cgroup instead of killing it, so you can
+# attach a debugger, read /proc/<pid>/, and then resume or kill it yourself.
+#
+# Rules are matched in priority order, lowest number first, and the FIRST match
+# wins. The allow-rules in 00-base.rules use priority 1 so they beat anything
+# here — keep these numbers well above them.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── /etc/ld.so.preload ───────────────────────────────────────────────────────
+# The classic userland-rootkit hook: anything listed there is loaded into every
+# dynamically linked process that starts afterwards. Nothing on a normal Arch
+# system writes this file — there is no package that manages it — so a write is
+# close to unambiguous, and the damage is ongoing rather than instantaneous
+# (every subsequent exec inherits it), which is exactly the shape a post-hoc
+# kill can still do something about.
+#
+# Verify before arming:  test -e /etc/ld.so.preload && cat /etc/ld.so.preload
+# (on a clean system it does not exist at all)
+#
+# rule deny-ld-preload-write {
+#     event    open
+#     path     /etc/ld.so.preload
+#     verdict  deny
+#     priority 10
+# }
+
+
+# ── Execution out of /dev ────────────────────────────────────────────────────
+# /dev is a devtmpfs of device nodes. A regular executable file there is not a
+# thing a working system produces, and running one is a well-worn way to stage
+# a payload somewhere nobody audits. 00-base.rules already escalates this to
+# the AI classifier; this promotes it to an outright kill.
+#
+# Quarantine rather than deny is suggested here: if this ever fires you will
+# want to look at the process rather than lose it.
+#
+# `path` is matched with FNM_PATHNAME, so `*` stops at a `/`: the first rule
+# covers /dev/foo and NOT /dev/shm/foo. /dev/shm is the more likely staging
+# ground of the two, so it needs its own line — a one-level glob here is a
+# common way to think you have covered /dev when you have not.
+#
+# rule quarantine-exec-from-dev {
+#     event    exec
+#     path     /dev/*
+#     verdict  quarantine
+#     priority 12
+# }
+#
+# rule quarantine-exec-from-dev-subdir {
+#     event    exec
+#     path     /dev/*/*
+#     verdict  quarantine
+#     priority 12
+# }
+
+
+# ── Kernel module loads by an unexpected program ─────────────────────────────
+# 00-base.rules allows modprobe, udev and the kmod tooling by name and alerts
+# on everything else. A module load from anything else is either a packaging
+# bug or someone loading a rootkit.
+#
+# READ THIS BEFORE ARMING: DKMS rebuilds, nvidia driver updates, VirtualBox,
+# VMware and anything else that ships out-of-tree modules will load modules
+# from programs not on the allow-list. Run it as `alert` across at least one
+# full system update and one reboot before you trust it.
+#
+# rule deny-unexpected-module-load {
+#     event    module
+#     verdict  deny
+#     priority 20
+# }
+
+
+# ── Shell spawned by a network-facing service ────────────────────────────────
+# The reverse-shell signature. This is the highest-value rule in this file and
+# also the easiest to get wrong: `comm` matches the process that made the call,
+# and plenty of legitimate daemons spawn shells (cron jobs, hooks, CGI,
+# systemd's ExecStartPre, package scriptlets, sudo).
+#
+# Do NOT arm this without tailoring the pattern to services you actually run
+# and watching it in `alert` for a week. It is included because it is the rule
+# people come here wanting, and shipping it commented with this warning is
+# safer than leaving everyone to write it from scratch.
+#
+# One rule per service: `comm` is matched with fnmatch(3), which has globs but
+# NO alternation. `comm nginx|httpd|sshd` is not a pattern that matches three
+# names — it is a literal string that matches nothing, and a rule that can
+# never fire looks identical to a rule that never needed to.
+#
+# rule deny-shell-from-nginx {
+#     event    exec
+#     comm     nginx
+#     path     /usr/bin/sh
+#     verdict  deny
+#     priority 15
+# }
+#
+# rule deny-shell-from-sshd {
+#     event    exec
+#     comm     sshd
+#     path     /usr/bin/sh
+#     verdict  deny
+#     priority 15
+# }
+
+
+# ── Your own rules go below ──────────────────────────────────────────────────
+# Full syntax reference: /etc/synguard/rules.d/00-base.rules
+#
+#   event    exec | open | socket | ptrace | module | mount | setuid
+#   uid      <numeric uid>, omit for any
+#   comm     fnmatch pattern against the process name (max 15 chars — the
+#            kernel truncates comm, so "systemd-userwork" is "systemd-userwor")
+#   path     fnmatch pattern against the file or target
+#   verdict  allow | log | alert | escalate | deny | quarantine
+#   priority lower number = matched first; first match wins

@@ -53,6 +53,18 @@ isolation_test = executable('isolation_test',
   include_directories: inc)
 test('isolation', isolation_test, timeout: 60)
 
+# Verdict census + enforcement reachability: whether "mode=ENFORCE" actually
+# means anything for the loaded policy. Links rule_engine.c only (the real
+# parser is in the loop, via a temp rules dir), and additionally loads the
+# shipped rules/ tree to assert the stock policy stays detect-only — so
+# arming every install is a change that has to be made on purpose.
+policy_test = executable('policy_test',
+  files('tests/policy_test.c', 'src/rule_engine.c'),
+  include_directories: inc,
+  c_args: ['-DSYNGUARD_SHIPPED_RULES_DIR="@0@/rules"'.format(
+    meson.current_source_dir())])
+test('policy', policy_test, timeout: 60)
+
 # The connect() wire format and the worm/C2 thresholds. netwatch_connect() and
 # kmod_parse_event() live in event_processor.c, which pulls in the pipeline, so
 # the test stubs the daemon entry points it never calls.

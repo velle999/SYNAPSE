@@ -248,6 +248,54 @@ int rules_load(synguard_state_t *s, const char *dir)
     return total;
 }
 
+/* ── Verdict census ──────────────────────────────────────── */
+/* Count enabled rules by verdict, so the banner can report what the loaded
+ * policy is actually capable of instead of just how many rules there are. */
+void rules_census(const synguard_state_t *s, int *counts, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+        counts[i] = 0;
+
+    for (const sg_rule_t *r = s->rules_head; r; r = r->next) {
+        if (!r->enabled) continue;
+        if ((size_t)r->verdict < n)
+            counts[r->verdict]++;
+    }
+}
+
+/* ── Can anything actually be enforced? ──────────────────── */
+/*
+ * "mode=ENFORCE" says only that acting is permitted, not that any loaded rule
+ * can ask for it. The shipped rule set is entirely alert/escalate/allow/log,
+ * so a stock install reports ENFORCE while no code path can reach
+ * action_deny() or action_quarantine() at all. That gap is worth reporting:
+ * an operator who believes enforcement is live when it is structurally
+ * unreachable is worse off than one who knows the system only watches.
+ *
+ * Two ways to reach an action:
+ *   - a human-written rule carrying DENY or QUARANTINE, or
+ *   - an ESCALATE rule whose AI verdict is allowed to stand, which requires
+ *     both ai_enabled and ai_enforce (without ai_enforce, event_processor.c
+ *     clamps an AI DENY back to ALERT).
+ */
+int rules_enforcement_reachable(const synguard_state_t *s)
+{
+    if (s->config.mode != MODE_ENFORCE && s->config.mode != MODE_LOCKDOWN)
+        return 0;
+
+    int has_acting = 0, has_escalate = 0;
+    for (const sg_rule_t *r = s->rules_head; r; r = r->next) {
+        if (!r->enabled) continue;
+        if (r->verdict >= VERDICT_DENY)     has_acting  = 1;
+        if (r->verdict == VERDICT_ESCALATE) has_escalate = 1;
+    }
+
+    if (has_acting)
+        return 1;
+
+    return s->config.ai_enabled && s->config.ai_enforce && has_escalate;
+}
+
 /* ── Evaluate rules against an event ─────────────────────── */
 sg_verdict_t rules_evaluate(synguard_state_t *s, const sg_event_t *e,
                              const sg_rule_t **matched_out)

@@ -269,6 +269,13 @@ sg_threat_t netwatch_connect(const sg_event_t *e, char *reason, size_t rlen);
 
 /* Rule engine */
 int          rules_load(synguard_state_t *s, const char *dir);
+
+/* Count enabled rules by verdict into counts[0..n-1], indexed by sg_verdict_t.
+ * rules_enforcement_reachable() returns nonzero only when some verdict path
+ * can actually reach action_deny()/action_quarantine() — mode permits acting
+ * AND a loaded rule (or an AI verdict allowed to stand) can ask for it. */
+void         rules_census(const synguard_state_t *s, int *counts, size_t n);
+int          rules_enforcement_reachable(const synguard_state_t *s);
 sg_verdict_t rules_evaluate(synguard_state_t *s, const sg_event_t *e,
                              const sg_rule_t **matched_rule);
 void         rules_free(synguard_state_t *s);

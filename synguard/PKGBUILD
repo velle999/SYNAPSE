@@ -1,6 +1,6 @@
 pkgname=synguard
 pkgver=0.1.0
-pkgrel=13
+pkgrel=14
 pkgdesc="SynapseOS AI-driven security monitor and threat classifier"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -54,6 +54,10 @@ package() {
     install -Dm640 rules/10-ai-assist.rules "$pkgdir/etc/synguard/rules.d/10-ai-assist.rules"
     install -Dm640 rules/20-input-devices.rules "$pkgdir/etc/synguard/rules.d/20-input-devices.rules"
     install -Dm640 rules/30-network-persistence.rules "$pkgdir/etc/synguard/rules.d/30-network-persistence.rules"
+    # Template, not policy. rules_load() only parses *.rules, so the .example
+    # suffix keeps this inert while still putting it where an admin will find
+    # it — next to the rules it is a template for, not buried in /usr/share.
+    install -Dm640 rules/40-enforce.rules.example "$pkgdir/etc/synguard/rules.d/40-enforce.rules.example"
     install -dm750 "$pkgdir/var/lib/synguard"
     install -dm750 "$pkgdir/var/log/synguard"
     install -Dm644 systemd/synguard.service \
