@@ -272,7 +272,52 @@ static __always_inline int path_to_rule(struct sg_scratch *sc, __u32 len)
 
 /* ── hooks ───────────────────────────────────────────────────────────── */
 
+#define SG_EVT_EXEC 0x01   /* mirrors EVT_EXEC */
 #define SG_EVT_OPEN 0x02   /* mirrors EVT_OPEN */
+
+/*
+ * Shared tail for both hooks: resolve the path, find a rule, check the
+ * conditions that are not the key, then ask the gate. Returns -EPERM or 0.
+ *
+ * Both hooks funnel through here so there is exactly one place a denial can
+ * be produced, and exactly one call to sg_may_deny(). A second hook that grew
+ * its own copy of this is how one of them would eventually skip the gate.
+ */
+static __always_inline int sg_evaluate(struct path *p, __u8 evt)
+{
+	__u32 zero = 0;
+	struct sg_scratch *sc = bpf_map_lookup_elem(&sg_scratch_map, &zero);
+	if (!sc)
+		return 0;
+
+	long n = bpf_d_path(p, sc->path.p, SG_BPF_PATH_MAX);
+	if (n <= 0) {
+		__sync_fetch_and_add(&sg_path_too_long, 1);
+		return 0;
+	}
+
+	int idx = path_to_rule(sc, (__u32)(n - 1));
+	if (idx < 0)
+		return 0;		/* the overwhelmingly common case */
+
+	__u32 uidx = (__u32)idx;
+	struct sg_bpf_rule *r = bpf_map_lookup_elem(&sg_rules, &uidx);
+	if (!r)
+		return 0;
+
+	if (!rule_conditions_hold(r, evt))
+		return 0;
+
+	/*
+	 * A rule matched. Everything above decided WHETHER policy says to deny;
+	 * sg_may_deny() decides whether we are in any state to act on it, and
+	 * fails open if not.
+	 */
+	if (!sg_may_deny())
+		return 0;
+
+	return -1;   /* -EPERM */
+}
 
 SEC("lsm/file_open")
 int BPF_PROG(sg_file_open, struct file *file)
@@ -289,43 +334,53 @@ int BPF_PROG(sg_file_open, struct file *file)
 		return -1;
 	}
 
-	/* Policy path. */
-	struct sg_scratch *sc = bpf_map_lookup_elem(&sg_scratch_map, &zero);
-	if (!sc)
+	/*
+	 * An exec opens its binary internally (do_open_execat), so this hook
+	 * fires for it too — with FMODE_EXEC set. Left alone, an `event open`
+	 * rule would therefore also block execution of the file, which is
+	 * over-enforcement AND a divergence from the userspace engine: execve
+	 * never calls openat, so the kmod's openat kprobe never sees it and the
+	 * same rule would not match there.
+	 *
+	 * Hand it to bprm_check_security instead, which is where an exec rule
+	 * belongs and where comm still names the caller. Caught by
+	 * bpf_policy_test asserting that an open rule does NOT deny exec.
+	 *
+	 * The bit lives in f_flags, NOT f_mode: do_open_execat puts
+	 * __FMODE_EXEC in open_flag and do_dentry_open copies that straight to
+	 * f_flags, while OPEN_FMODE() does not carry it across into f_mode.
+	 * Checking f_mode compiles, verifies, and silently never matches. The
+	 * kernel does the same test in fsnotify.h — `file->f_flags &
+	 * __FMODE_EXEC`. Both are #defines, so BTF cannot supply the value;
+	 * it is (1 << 5) from include/linux/fs.h.
+	 */
+	if (BPF_CORE_READ(file, f_flags) & (1 << 5))   /* __FMODE_EXEC */
 		return 0;
 
 	/*
-	 * No memset here — scan_cb zero-fills the tail as it goes. bpf_d_path
-	 * returns the length INCLUDING the NUL, and it fails with -ENAMETOOLONG
-	 * for anything longer than the buffer. That is a silent under-enforce
-	 * for very deep paths, so it is counted rather than ignored: fail open,
-	 * but visibly.
+	 * No memset of the scratch here — scan_cb zero-fills the tail as it
+	 * goes. bpf_d_path fails with -ENAMETOOLONG beyond the buffer, which is
+	 * a silent under-enforce for very deep paths, so sg_evaluate counts it:
+	 * fail open, but visibly.
 	 */
-	long n = bpf_d_path(&file->f_path, sc->path.p, SG_BPF_PATH_MAX);
-	if (n <= 0) {
-		__sync_fetch_and_add(&sg_path_too_long, 1);
-		return 0;		/* unresolvable path: no opinion */
-	}
+	return sg_evaluate(&file->f_path, SG_EVT_OPEN);
+}
 
-	int idx = path_to_rule(sc, (__u32)(n - 1));
-	if (idx < 0)
-		return 0;		/* the overwhelmingly common case */
-
-	__u32 uidx = (__u32)idx;
-	struct sg_bpf_rule *r = bpf_map_lookup_elem(&sg_rules, &uidx);
-	if (!r)
-		return 0;
-
-	if (!rule_conditions_hold(r, SG_EVT_OPEN))
-		return 0;
-
-	/*
-	 * A rule matched. Everything up to here decided WHETHER policy says to
-	 * deny; sg_may_deny() decides whether we are in any state to act on it,
-	 * and fails open if not.
-	 */
-	if (!sg_may_deny())
-		return 0;
-
-	return -1;   /* -EPERM */
+/*
+ * exec. The path matched is the BINARY being executed, and comm is still the
+ * CALLING process — the kernel does not install the new comm until
+ * begin_new_exec(), which runs after this hook. That is what makes the
+ * reverse-shell shape work as written: `comm nginx` + `path /usr/bin/sh`
+ * matches nginx executing a shell, not the shell executing itself. It also
+ * matches the userspace path's semantics, where the kmod's execve kprobe
+ * records comm at syscall entry.
+ *
+ * Denying exec is sharper than denying open: a bad rule here can stop a login
+ * chain rather than just fail a read. Same gate, same failsafes, and the same
+ * 30-second warmup that exists so a badly-armed policy still lets you in.
+ */
+SEC("lsm/bprm_check_security")
+int BPF_PROG(sg_bprm_check, struct linux_binprm *bprm)
+{
+	return sg_evaluate(&bprm->file->f_path, SG_EVT_EXEC);
 }

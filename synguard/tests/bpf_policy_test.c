@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include "sg_lower.h"
 #include "sg_bpf.h"
@@ -74,6 +75,30 @@ static sg_lowered_t mk(const char *name, const char *path, const char *comm)
 	l.access_mode = ACCESS_ANY;
 	l.verdict   = VERDICT_DENY;
 	return l;
+}
+
+/* Same, but scoped to one event type. */
+static sg_lowered_t mk_evt(const char *name, const char *path, const char *comm,
+                           uint8_t evt)
+{
+	sg_lowered_t l = mk(name, path, comm);
+	l.evt_mask = evt;
+	return l;
+}
+
+/* 1 if execve() was refused with EPERM. Runs in a child; the parent reads the
+ * child's exit status, because a denied exec leaves the child alive in the
+ * pre-exec state rather than killing it. */
+static int exec_denied(const char *path)
+{
+	pid_t p = fork();
+	if (p == 0) {
+		execl(path, path, (char *)NULL);
+		_exit(errno == EPERM ? 42 : 43);
+	}
+	int st;
+	waitpid(p, &st, 0);
+	return WIFEXITED(st) && WEXITSTATUS(st) == 42;
 }
 
 /* Arm past the warmup so denials can actually land. */
@@ -222,6 +247,74 @@ int main(void)
 	ok(denied(DIR "/target"), "denied while armed");
 	ok(sg_bpf_set_enforce(0) == 0, "disarmed");
 	ok(!denied(DIR "/target"), "master switch off: policy rule FAILS OPEN");
+
+	/* ── exec ────────────────────────────────────────────────────── */
+	puts("\nexec (lsm/bprm_check_security):");
+	{
+		/* A real binary to run, and a second one that must be untouched. */
+		if (system("cp /usr/bin/true " DIR "/prog 2>/dev/null") != 0 ||
+		    system("cp /usr/bin/true " DIR "/prog2 2>/dev/null") != 0) {
+			ok(0, "could not stage test binaries");
+		} else {
+			rules[0] = mk_evt("deny-exec", DIR "/prog", NULL, EVT_EXEC);
+			n = sg_bpf_load_policy(rules, 1, err, sizeof(err));
+			ok(n == 1, "exec rule loaded");
+			ok(arm() == 0, "armed");
+
+			ok(exec_denied(DIR "/prog"),  "exec of target DENIED");
+			ok(!exec_denied(DIR "/prog2"), "exec of sibling NOT denied");
+
+			/*
+			 * Event discrimination. The two hooks share one path map,
+			 * so a rule scoped to exec must not leak into open, or
+			 * every exec rule would silently also block reading the
+			 * binary — which would break far more than it protects.
+			 */
+			ok(!denied(DIR "/prog"),
+			   "an EXEC rule does not deny OPEN of the same file");
+
+			rules[0] = mk_evt("deny-open", DIR "/prog", NULL, EVT_OPEN);
+			n = sg_bpf_load_policy(rules, 1, err, sizeof(err));
+			ok(n == 1, "open rule loaded");
+			ok(arm() == 0, "armed");
+			ok(denied(DIR "/prog"), "…OPEN of it is denied");
+			ok(!exec_denied(DIR "/prog"),
+			   "an OPEN rule does not deny EXEC of the same file");
+
+			/*
+			 * comm is the CALLER at bprm_check_security time — the
+			 * kernel installs the new comm later, in begin_new_exec().
+			 * That is what makes "comm nginx + path /usr/bin/sh" mean
+			 * "nginx ran a shell". Assert it rather than trust it.
+			 */
+			char self[32];
+			int f = open("/proc/self/comm", O_RDONLY);
+			int rr = f >= 0 ? (int)read(f, self, sizeof(self) - 1) : 0;
+			if (f >= 0) close(f);
+			if (rr > 0) {
+				if (self[rr - 1] == '\n') rr--;
+				self[rr] = '\0';
+
+				rules[0] = mk_evt("deny-exec-bycaller", DIR "/prog",
+				                  self, EVT_EXEC);
+				n = sg_bpf_load_policy(rules, 1, err, sizeof(err));
+				ok(n == 1, "caller-comm exec rule loaded");
+				ok(arm() == 0, "armed");
+				ok(exec_denied(DIR "/prog"),
+				   "comm matches the CALLER, not the new binary");
+
+				rules[0] = mk_evt("deny-exec-byprog", DIR "/prog",
+				                  "prog", EVT_EXEC);
+				n = sg_bpf_load_policy(rules, 1, err, sizeof(err));
+				ok(n == 1, "target-name exec rule loaded");
+				ok(arm() == 0, "armed");
+				ok(!exec_denied(DIR "/prog"),
+				   "…so a rule naming the TARGET does not match");
+			}
+
+			unlink(DIR "/prog"); unlink(DIR "/prog2");
+		}
+	}
 
 	/* ── the status line must not lie ────────────────────────────── */
 	/*

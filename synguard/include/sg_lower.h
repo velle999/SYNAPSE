@@ -64,7 +64,7 @@ typedef struct sg_lowered {
 	uint8_t      evt_mask;
 	uint32_t     uid_match;
 	sg_access_t  access_mode;
-	sg_verdict_t verdict;      /* only DENY or QUARANTINE reach here */
+	sg_verdict_t verdict;      /* only DENY reaches here */
 } sg_lowered_t;
 
 /* Why a rule could not be lowered. Reported per-rule, by name. */
@@ -92,7 +92,9 @@ void sg_pat_classify(const char *pattern, int pathname, sg_pat_t *out);
 int sg_pat_matches(const sg_pat_t *p, const char *s);
 
 /*
- * Lower every DENY/QUARANTINE rule in the list. Returns the number written to
+ * Lower every DENY rule in the list. QUARANTINE is NOT lowered: an LSM hook
+ * can only return -EPERM, so enforcing it in-kernel would turn "freeze this
+ * and keep it" into "refuse it" and destroy the evidence. Returns the number written to
  * `out`, or -1 on the first rule that cannot be lowered, with `err` filled in
  * (rule name + reason). Rules with other verdicts are skipped: alert, log and
  * escalate stay on the userspace path, and `allow` must NEVER become an

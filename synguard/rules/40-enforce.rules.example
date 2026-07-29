@@ -49,16 +49,21 @@
 #    THE KERNEL PATH — real prevention, but only for some rules, and only if
 #    you arm it.
 #
-#        open() enters the kernel
+#        open() or execve() enters the kernel
 #          → BPF-LSM hook evaluates the rule ON THE CALLING THREAD
-#            → open() returns -EPERM. The read never happens.
+#            → the syscall returns -EPERM. The read, or the exec, never happens.
 #
 #    No 100ms window, no pid-reuse race, no AI. A rule on this path stops the
 #    first act rather than punishing it. Four things must all be true:
 #
-#      a. `event open`. The hook is lsm/file_open. Rules on exec, socket,
-#         ptrace, module, mount and setuid stay on the userspace path — there
-#         is no hook for them yet.
+#      a. `event open` or `event exec`. The hooks are lsm/file_open and
+#         lsm/bprm_check_security. Rules on socket, ptrace, module, mount and
+#         setuid stay on the userspace path — there is no hook for them yet.
+#      a2. `verdict deny`, not `quarantine`. An LSM hook can return -EPERM and
+#         nothing else; it cannot SIGSTOP a subtree or freeze a cgroup, which
+#         is what quarantine MEANS. A quarantine rule therefore stays on the
+#         userspace path rather than being silently demoted to a refusal that
+#         destroys the evidence you chose quarantine to keep.
 #      b. The rule's patterns must LOWER, and
 #      c. no earlier rule may pre-empt it — both under WHICH RULES CAN BE
 #         ENFORCED IN THE KERNEL, below.
@@ -111,6 +116,17 @@
 #     cannot be expressed in-kernel: "/tmp/*.sh"; kernel enforcement is off,
 #     the userspace path is unaffected
 #
+# For `event exec` the path matched is the BINARY, and `comm` is the process
+# CALLING execve — the kernel does not install the new name until after this
+# hook. That is what makes the reverse-shell shape below work as written:
+# `comm nginx` + `path /usr/bin/sh` means "nginx ran a shell", not "the shell
+# ran itself". A rule naming the TARGET binary in `comm` will never match.
+#
+# Note also that an exec opens its binary internally, so lsm/file_open sees it
+# too. synguard skips those (FMODE_EXEC) so an `event open` rule does NOT also
+# block execution — which would over-enforce, and would disagree with the
+# userspace path, where execve never goes through openat at all.
+#
 # ENFORCEABLE:
 #     path /etc/ld.so.preload      an exact path, no wildcard
 #     path /etc/profile.d/*        a directory, one level deep
@@ -127,6 +143,8 @@
 #                                  done yet rather than being impossible
 #     (no path at all)             a deny rule with no path would match every
 #                                  open on the system
+#     verdict quarantine           userspace only — a hook cannot freeze a
+#                                  process, only refuse the syscall
 #
 # Note that `/etc/profile.d/*` covers /etc/profile.d/x and NOT
 # /etc/profile.d/sub/x. That is FNM_PATHNAME — `*` stops at a '/' — and the

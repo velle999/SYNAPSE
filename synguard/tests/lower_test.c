@@ -192,6 +192,20 @@ static void test_lowering(void)
 		free_rules(r);
 	}
 
+	/*
+	 * QUARANTINE must NOT lower. The hook can only return -EPERM, so
+	 * enforcing it in-kernel would silently demote "freeze and keep the
+	 * process" to "refuse the syscall" — losing exactly what the admin
+	 * chose quarantine for.
+	 */
+	{
+		sg_rule_t *r = mkrule("freeze-it", NULL, "/etc/shadow",
+		                      VERDICT_QUARANTINE, NULL);
+		n = sg_lower_policy(r, out, 16, err, sizeof(err));
+		ok(n == 0, "quarantine does NOT lower (got %d)", n);
+		free_rules(r);
+	}
+
 	/* A plain deny with an exact path lowers. */
 	{
 		sg_rule_t *r = mkrule("kill-shadow", NULL, "/etc/shadow",

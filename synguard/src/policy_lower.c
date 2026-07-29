@@ -184,13 +184,23 @@ int sg_lower_policy(const sg_rule_t *head, sg_lowered_t *out, int max,
 			continue;
 
 		/*
-		 * Only denials are lowered. alert/log/escalate stay on the
-		 * userspace path where the AI and the audit log live, and
-		 * `allow` deliberately lowers to nothing: an affirmative allow
-		 * in an LSM hook would shortcut the chain and could override a
-		 * user's AppArmor/SELinux verdict.
+		 * Only DENY is lowered.
+		 *
+		 * alert/log/escalate stay on the userspace path where the AI
+		 * and the audit log live, and `allow` deliberately lowers to
+		 * nothing: an affirmative allow in an LSM hook would shortcut
+		 * the chain and could override a user's AppArmor/SELinux
+		 * verdict.
+		 *
+		 * QUARANTINE is excluded for a sharper reason. An LSM hook can
+		 * return -EPERM and nothing else — it cannot SIGSTOP a subtree
+		 * or move it into a frozen cgroup, which is what quarantine
+		 * MEANS. Lowering it would silently turn "freeze this and keep
+		 * it for me to look at" into "refuse it", destroying the
+		 * evidence the admin picked quarantine to preserve. It stays
+		 * on the userspace path, where sg_freeze_tree() exists.
 		 */
-		if (r->verdict != VERDICT_DENY && r->verdict != VERDICT_QUARANTINE)
+		if (r->verdict != VERDICT_DENY)
 			continue;
 
 		if (n >= max) {
