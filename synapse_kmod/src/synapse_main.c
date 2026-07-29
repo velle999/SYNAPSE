@@ -4,7 +4,6 @@
  * Entry point for synapse_kmod. Registers:
  *   - Kobject/sysfs at /sys/kernel/synapse/
  *   - kprobes on security-relevant syscalls
- *   - AI_CTX syscall handlers (Linux 7.0 extension points)
  *   - AI scheduling class within CFS
  *
  * Load:  modprobe synapse_kmod
@@ -12,7 +11,6 @@
  *
  * Dependencies:
  *   - Linux kernel 6.8+ (kprobe multi, sysfs attrs)
- *   - Linux 7.0 strongly preferred (AI_CTX syscall hooks)
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-only
@@ -40,7 +38,6 @@
 #include "synapse_sysfs.h"
 #include "synapse_probe.h"
 #include "synapse_sched.h"
-#include "synapse_ctx.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("SynapseOS Project <dev@synapseos.dev>");
@@ -69,40 +66,6 @@ static int synapse_ring_size = 4096;
 module_param(synapse_ring_size, int, 0444);
 MODULE_PARM_DESC(synapse_ring_size, "Syscall event ring buffer size (default: 4096)");
 
-/*
- * AI_CTX syscall family (451/452/453) — OFF by default, and it should stay off.
- *
- * On a stock kernel this is implemented by a kprobe on do_syscall_64 that
- * inspects every syscall on the system and dispatches three of them to us.
- * Three problems, any one of which justifies the default:
- *
- *  1. THE NUMBERS ARE TAKEN. 451/452/453 are cachestat, fchmodat2 and
- *     map_shadow_stack on current kernels. The design predates those
- *     allocations and assumed a patched "Linux 7.0" with AI extension points.
- *     There are no free numbers to move to — a real syscall needs an upstream
- *     allocation.
- *
- *  2. IT HAS NEVER WORKED, AND THAT IS THE ONLY REASON 1 HAS NOT BITTEN.
- *     syscall64_pre_handler reads regs->orig_ax and regs->di directly, but at a
- *     kprobe on do_syscall_64 those are the probe's own pt_regs, not the user
- *     frame — the same bug already fixed in synapse_probe.c with
- *     syscall_uregs(). So the dispatch never matches (verified: syscalls
- *     451-453 return the real kernel's EBADF/EINVAL, and ai_queries_routed has
- *     always read 0). Repairing that WITHOUT renumbering would hand this module
- *     fchmodat2 and map_shadow_stack system-wide, which glibc and CET use.
- *
- *  3. IT COSTS THE HOTTEST PATH IN THE KERNEL. The probe fires on every syscall
- *     made by every process, to deliver a feature that a connect() to
- *     /run/synapd/synapd.sock already provides.
- *
- * Left in place rather than deleted so the design is still readable, and so
- * turning it on for the patched-kernel path stays a one-flag decision.
- */
-static bool synapse_ai_ctx_syscalls = false;
-module_param(synapse_ai_ctx_syscalls, bool, 0444);
-MODULE_PARM_DESC(synapse_ai_ctx_syscalls,
-    "Register the AI_CTX syscall shim (default: false — 451/452/453 now collide "
-    "with cachestat/fchmodat2/map_shadow_stack; see synapse_ctx.c)");
 
 /* ── Global module state ──────────────────────────────────── */
 struct synapse_module_state {
@@ -352,27 +315,6 @@ static int __init synapse_kmod_init(void)
         pr_info("synapse_kmod: kprobes installed\n");
     }
 
-    /* 4. Register AI_CTX syscall handlers — opt-in only.
-     *
-     * Skipping this is what keeps the do_syscall_64 kprobe off the hot path,
-     * and what guarantees we cannot shadow cachestat/fchmodat2/
-     * map_shadow_stack. See synapse_ai_ctx_syscalls above for the full
-     * reasoning; the short version is that the feature has never functioned
-     * and its syscall numbers now belong to the kernel. */
-    if (synapse_ai_ctx_syscalls) {
-        pr_warn("synapse_kmod: AI_CTX syscall shim ENABLED by module param — "
-                "syscalls 451/452/453 collide with cachestat/fchmodat2/"
-                "map_shadow_stack on this kernel\n");
-        ret = synapse_ctx_init();
-        if (ret) {
-            pr_warn("synapse_kmod: AI_CTX syscall registration failed: %d "
-                    "(kernel may not support AI_CTX)\n", ret);
-            /* Non-fatal: AI_CTX is Linux 7.0+ only */
-        }
-    } else {
-        pr_info("synapse_kmod: AI_CTX syscall shim disabled (default) — "
-                "use synapse_ai_ctx_syscalls=1 to enable\n");
-    }
 
     /* 5. Create workqueue for deferred work */
     synapse_state.wq = alloc_workqueue("synapse_wq",
@@ -395,7 +337,6 @@ static int __init synapse_kmod_init(void)
     return 0;
 
 err_wq:
-    synapse_ctx_exit();
     synapse_probe_exit();
 err_probe:
     synapse_sched_exit();
@@ -420,7 +361,6 @@ static void __exit synapse_kmod_exit(void)
     }
 
     /* Teardown in reverse init order */
-    synapse_ctx_exit();
     synapse_probe_exit();
     synapse_sched_exit();
     synapse_sysfs_exit(synapse_state.kobj);

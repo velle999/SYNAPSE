@@ -26,8 +26,7 @@ $(MODULE_NAME)-objs := \
     src/synapse_main.o  \
     src/synapse_sysfs.o \
     src/synapse_probe.o \
-    src/synapse_sched.o \
-    src/synapse_ctx.o
+    src/synapse_sched.o
 
 # Include paths
 ccflags-y := -I$(src)/include -Wall -Wextra -Wno-unused-parameter

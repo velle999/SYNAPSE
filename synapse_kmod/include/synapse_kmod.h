@@ -17,10 +17,6 @@
  *     stats         r   — kmod exposes counters
  *     config        rw  — runtime configuration knobs
  *
- *   New syscalls (Linux 7.0 AI_CTX family):
- *     AI_CTX_SET    — process declares its intent to scheduler
- *     AI_CTX_GET    — process reads AI-assigned scheduling class
- *     AI_CTX_QUERY  — process asks AI directly (routed through kmod)
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-only
@@ -65,62 +61,6 @@ typedef enum {
     AI_SCHED_INFERENCE   = 5,   /* synapd inference threads: priority boost */
     AI_SCHED_MAX         = 6,
 } ai_sched_class_t;
-
-/* ── Process intent flags ─────────────────────────────────── */
-/*
- * Passed to AI_CTX_SET syscall. Describes what a process
- * is about to do, so the AI scheduler can make informed decisions.
- */
-#define AI_CTX_FLAG_COMPUTE     (1 << 0)  /* heavy CPU computation */
-#define AI_CTX_FLAG_IO_HEAVY    (1 << 1)  /* lots of disk/network I/O */
-#define AI_CTX_FLAG_LATENCY     (1 << 2)  /* latency-sensitive */
-#define AI_CTX_FLAG_BACKGROUND  (1 << 3)  /* background task */
-#define AI_CTX_FLAG_INFERENCE   (1 << 4)  /* AI inference workload */
-#define AI_CTX_FLAG_INTERACTIVE (1 << 5)  /* direct user interaction */
-#define AI_CTX_FLAG_EPHEMERAL   (1 << 6)  /* short-lived process */
-#define AI_CTX_FLAG_TRUSTED     (1 << 7)  /* trusted system process */
-
-/* ── AI_CTX syscall numbers ──────────────────────────────── */
-/*
- * Allocated by the SynapseOS kernel patch. On a stock kernel, processes
- * calling these get ENOSYS.
- *
- * These live in the shared header, not in the module source, so that the
- * kernel side and userspace callers (syn-kmod-status) cannot disagree about
- * which syscall is which.
- */
-#ifndef NR_AI_CTX_SET
-#define NR_AI_CTX_SET    451
-#define NR_AI_CTX_GET    452
-#define NR_AI_CTX_QUERY  453
-#endif
-
-/* ── AI_CTX syscall argument structures ──────────────────── */
-
-/* AI_CTX_SET: declare process intent */
-struct ai_ctx_set_args {
-    uint32_t  flags;           /* AI_CTX_FLAG_* bitmask */
-    char      intent[256];     /* natural language description (optional) */
-    uint32_t  priority_hint;   /* suggested priority 0-99 */
-    uint32_t  reserved[4];
-};
-
-/* AI_CTX_GET: read current AI scheduling class */
-struct ai_ctx_get_result {
-    ai_sched_class_t  sched_class;
-    int               nice_value;      /* current nice adjustment */
-    uint32_t          flags_applied;   /* which flags were used */
-    char              reason[128];     /* explanation from AI */
-    uint64_t          last_updated_ns;
-};
-
-/* AI_CTX_QUERY: ask AI a question, get response */
-struct ai_ctx_query_args {
-    char      prompt[512];
-    char      response[1024];
-    uint32_t  max_tokens;
-    uint32_t  timeout_ms;
-};
 
 /* ── Syscall event record ─────────────────────────────────── */
 /*
@@ -200,6 +140,6 @@ struct synapse_stats {
     uint64_t  ai_queries_routed;
     uint64_t  daemon_heartbeats;
     uint64_t  daemon_timeouts;
-    uint32_t  active_contexts;   /* PIDs with active AI_CTX */
+    uint32_t  active_contexts;   /* PIDs carrying a scheduling hint */
     uint32_t  kmod_version;
 };

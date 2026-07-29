@@ -126,9 +126,12 @@ static void class_to_params(ai_sched_class_t cls,
         break;
     case AI_SCHED_REALTIME:
         /*
-         * Full SCHED_RR/FIFO requires root. For user processes
-         * we give a generous nice bonus instead. synapd itself
-         * runs as root so it can get RT if it uses AI_CTX_SET.
+         * Full SCHED_RR/FIFO requires root, so a REALTIME class buys a
+         * generous nice bonus and nothing more. Nothing here ever grants a
+         * real RT policy: the only caller is an AI hint arriving over sysfs,
+         * and a model that mislabels a busy loop as realtime must not be able
+         * to starve the box. (This used to add "synapd can get RT via
+         * AI_CTX_SET" — that syscall family is gone.)
          */
         *out_policy = SCHED_NORMAL;
         *out_nice   = clamp(nice_delta, -20, -10);
