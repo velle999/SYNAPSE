@@ -122,3 +122,9 @@ archiso/out/*.b2sum
 /linux-wallpaperengine-pkg/linux-wallpaperengine/
 /linux-wallpaperengine-pkg/pkg/
 /linux-wallpaperengine-pkg/*.pkg.tar.zst
+
+# Claude Code per-machine state. settings.local.json is a personal tool
+# allowlist carrying absolute paths from whoever's checkout wrote it — it was
+# tracked until 2026-07-29 and had gone stale pointing at ~/Documents/GitHub.
+# A shared .claude/settings.json is still fine to commit.
+.claude/settings.local.json
