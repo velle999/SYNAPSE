@@ -66,6 +66,7 @@ rule escalate-sh-unusual {
 rule alert-boot-write {
     event   open
     path    /boot/*
+    access  write
     verdict alert
     priority 22
 }
@@ -84,6 +85,7 @@ rule alert-grub-cfg-access {
 rule alert-cron-write {
     event   open
     path    /etc/cron*
+    access  write
     verdict alert
     priority 28
 }
@@ -91,6 +93,7 @@ rule alert-cron-write {
 rule alert-crontab-user {
     event   open
     path    /var/spool/cron/*
+    access  write
     verdict alert
     priority 28
 }
@@ -100,6 +103,7 @@ rule alert-crontab-user {
 rule alert-systemd-unit-write {
     event   open
     path    /etc/systemd/system/*
+    access  write
     verdict alert
     priority 29
 }
@@ -109,6 +113,7 @@ rule alert-systemd-unit-write {
 rule alert-ld-preload {
     event   open
     path    /etc/ld.so.preload
+    access  write
     verdict alert
     priority 23
 }

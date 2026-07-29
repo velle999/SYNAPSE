@@ -37,12 +37,15 @@ rule alert-socat {
     priority 46
 }
 
-# ── User-level persistence (write-gated by the kmod) ─────────
-# The kmod only reports these on a write/create, so a match means something
-# is installing autostart/login persistence in a home directory.
+# ── User-level persistence (write-gated twice) ───────────────
+# The kmod only reports these on a write/create, so a match already means
+# something is installing autostart/login persistence in a home directory.
+# `access write` restates that in the policy rather than relying on the kmod:
+# if that gate is ever relaxed, these rules do not silently become a flood.
 rule alert-user-autostart {
     event   open
     path    /home/*/.config/autostart/*
+    access  write
     verdict alert
     priority 26
 }
@@ -50,6 +53,7 @@ rule alert-user-autostart {
 rule alert-user-systemd {
     event   open
     path    /home/*/.config/systemd/*
+    access  write
     verdict alert
     priority 26
 }
@@ -57,6 +61,7 @@ rule alert-user-systemd {
 rule alert-user-bashrc {
     event   open
     path    /home/*/.bashrc
+    access  write
     verdict alert
     priority 26
 }
@@ -64,6 +69,7 @@ rule alert-user-bashrc {
 rule alert-user-profile {
     event   open
     path    /home/*/.profile
+    access  write
     verdict alert
     priority 26
 }
@@ -71,6 +77,7 @@ rule alert-user-profile {
 rule alert-user-zshrc {
     event   open
     path    /home/*/.zshrc
+    access  write
     verdict alert
     priority 26
 }
@@ -78,9 +85,14 @@ rule alert-user-zshrc {
 # ── System persistence now reported by the kmod ──────────────
 # (These paths were referenced by rules before but the kmod never emitted
 #  them; it does now.)
+# Unlike the user paths above, the kmod reports these on ANY access -- they
+# live in its sensitive-path list -- and the system reads them constantly
+# (every login shell sources all of /etc/profile.d). `access write` is what
+# keeps these from drowning the alert log; do not drop it.
 rule alert-profiled-write {
     event   open
     path    /etc/profile.d/*
+    access  write
     verdict alert
     priority 27
 }
@@ -88,6 +100,7 @@ rule alert-profiled-write {
 rule alert-xdg-autostart-write {
     event   open
     path    /etc/xdg/autostart/*
+    access  write
     verdict alert
     priority 27
 }
@@ -95,6 +108,7 @@ rule alert-xdg-autostart-write {
 rule alert-rc-local-write {
     event   open
     path    /etc/rc.local
+    access  write
     verdict alert
     priority 27
 }

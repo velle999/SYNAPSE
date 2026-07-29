@@ -12,9 +12,23 @@
  *       uid     <uid>|any
  *       comm    <pattern>      # fnmatch: bash, python*, vim
  *       path    <pattern>      # fnmatch: /etc/shadow, /boot/*
+ *       access  read|write|any # open events only (default any)
  *       verdict allow|log|alert|escalate|deny|quarantine
  *       priority <number>      # lower = higher priority (default 50)
  *   }
+ *
+ * `access` narrows an open rule by the O_* flags the kmod reports. Use it on
+ * persistence surfaces, which the system reads constantly and a trojan writes:
+ *
+ *   rule alert-profiled-write {
+ *       event   open
+ *       path    /etc/profile.d/*
+ *       access  write           # without this, every login shell trips it
+ *       verdict alert
+ *   }
+ *
+ * Do NOT put `access write` on a credential or device path — reading
+ * /etc/shadow or /dev/input IS the attack, so those stay on any-access.
  *
  * Examples:
  *   rule allow-synguard-self {
@@ -57,6 +71,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fnmatch.h>
+#include <fcntl.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -89,6 +104,23 @@ static uint8_t parse_event(const char *s)
     if (strcmp(s, "any")    == 0) return 0xFF;
     return 0;
 }
+
+/* ── Access mode parsing ──────────────────────────────────── */
+static sg_access_t parse_access(const char *s)
+{
+    if (strcmp(s, "read")  == 0) return ACCESS_READ;
+    if (strcmp(s, "write") == 0) return ACCESS_WRITE;
+    if (strcmp(s, "any")   == 0) return ACCESS_ANY;
+    return ACCESS_ANY;  /* safe default: do not narrow a rule we misread */
+}
+
+/*
+ * The open-flag bits that make an open a write. Deliberately the same set the
+ * kmod uses to gate per-user persistence reports (synapse_probe.c), so the two
+ * halves of the system agree on what "write" means. These are kernel ABI
+ * values, identical in <fcntl.h> and the kmod on every arch we build for.
+ */
+#define SG_O_WRITE_MASK  (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)
 
 /* ── Rule allocation ──────────────────────────────────────── */
 static sg_rule_t *rule_alloc(void)
@@ -195,6 +227,7 @@ static int parse_rule_file(synguard_state_t *s, const char *path)
         }
         else if (strcmp(key, "comm")     == 0) strncpy(current->comm_pattern, val, RULE_MAX_PATTERN - 1);
         else if (strcmp(key, "path")     == 0) strncpy(current->path_pattern, val, RULE_MAX_PATTERN - 1);
+        else if (strcmp(key, "access")   == 0) current->access_mode = parse_access(val);
         else if (strcmp(key, "verdict")  == 0) current->verdict  = parse_verdict(val);
         else if (strcmp(key, "priority") == 0) current->priority = atoi(val);
         else if (strcmp(key, "enabled")  == 0) current->enabled  = atoi(val);
@@ -328,6 +361,30 @@ sg_verdict_t rules_evaluate(synguard_state_t *s, const sg_event_t *e,
             if (!e->filename[0]) continue;
             if (fnmatch(r->path_pattern, e->filename, FNM_NOESCAPE | FNM_PATHNAME) != 0)
                 continue;
+        }
+
+        /* Access-mode match (open events only) */
+        if (r->access_mode != ACCESS_ANY) {
+            /* Only open events carry O_* flags in arg0; for setuid it is the
+             * target uid, for socket the domain. An access filter on anything
+             * else is meaningless, so the rule does not match. */
+            if (e->evt_type != EVT_OPEN)
+                continue;
+            /*
+             * If the wire carried no arg0 (an older kmod, or a truncated
+             * line), we cannot tell a read from a write — so MATCH ANYWAY
+             * rather than narrow. A rule that silently stops matching is the
+             * exact failure this codebase has already shipped twice: the
+             * pt_regs arg bug left every path rule dead with alerts=0, and
+             * the kmod never emitted the persistence paths its rules named.
+             * Degrading to today's noisy behaviour is recoverable; degrading
+             * to silence is not.
+             */
+            if (e->has_arg0) {
+                int is_write = (e->arg0 & SG_O_WRITE_MASK) != 0;
+                if (r->access_mode == ACCESS_WRITE && !is_write) continue;
+                if (r->access_mode == ACCESS_READ  &&  is_write) continue;
+            }
         }
 
         /* Match found */

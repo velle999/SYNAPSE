@@ -66,6 +66,17 @@ policy_test = executable('policy_test',
     meson.current_source_dir())])
 test('policy', policy_test, timeout: 60)
 
+# The `access read|write|any` filter. Same shape as policy_test — real parser,
+# real shipped rules/ — and it asserts both halves: the persistence surfaces
+# stay quiet on a read, and the credential/device paths were NOT narrowed
+# along with them (reading /etc/shadow or /dev/input IS the attack).
+access_test = executable('access_test',
+  files('tests/access_test.c', 'src/rule_engine.c', 'src/sg_log.c'),
+  include_directories: inc,
+  c_args: ['-DSYNGUARD_SHIPPED_RULES_DIR="@0@/rules"'.format(
+    meson.current_source_dir())])
+test('access', access_test, timeout: 60)
+
 # The connect() wire format and the worm/C2 thresholds. netwatch_connect() and
 # kmod_parse_event() live in event_processor.c, which pulls in the pipeline, so
 # the test stubs the daemon entry points it never calls.

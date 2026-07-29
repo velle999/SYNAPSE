@@ -82,6 +82,21 @@ typedef enum {
     EVT_UNKNOWN = 0x00,
 } evt_type_t;
 
+/* ── Access mode (open events only) ──────────────────────── */
+/*
+ * Narrows an `open` rule to reads or writes. For open events the kmod ships
+ * the O_* flags as arg0, but nothing consulted them: every rule named
+ * "*-write" also fired on reads, and the persistence surfaces are *read*
+ * constantly by the system itself (systemd walks /etc/systemd/system, every
+ * login shell sources /etc/profile.d). That buried the real detections under
+ * thousands of benign lines per boot.
+ */
+typedef enum {
+    ACCESS_ANY   = 0,   /* default — flags are not consulted */
+    ACCESS_READ  = 1,
+    ACCESS_WRITE = 2,
+} sg_access_t;
+
 /* ── Raw event from kmod ──────────────────────────────────── */
 typedef struct {
     uint64_t  timestamp_ns;
@@ -132,6 +147,7 @@ typedef struct sg_rule {
     uint32_t      uid_match;          /* UID_ANY = 0xFFFFFFFF */
     char          comm_pattern[RULE_MAX_PATTERN];   /* fnmatch */
     char          path_pattern[RULE_MAX_PATTERN];   /* fnmatch */
+    sg_access_t   access_mode;        /* ACCESS_ANY unless the rule says otherwise */
     sg_verdict_t  verdict;
     int           priority;           /* lower = higher priority */
     int           enabled;
