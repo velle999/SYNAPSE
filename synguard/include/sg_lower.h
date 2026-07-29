@@ -55,8 +55,9 @@ typedef struct {
 	size_t        literal_len;
 } sg_pat_t;
 
-/* One rule, in a form the kernel side can evaluate. */
-typedef struct {
+/* One rule, in a form the kernel side can evaluate.
+ * Tagged so sg_bpf.h can forward-declare it without pulling in this header. */
+typedef struct sg_lowered {
 	char         rule_name[RULE_MAX_NAME];
 	sg_pat_t     path;
 	sg_pat_t     comm;

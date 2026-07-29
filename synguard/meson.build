@@ -68,7 +68,7 @@ if bpf_ok
     command: [cc_bpftool, 'gen', 'skeleton', '@INPUT@'],
     capture: true)
 
-  bpf_sources = [files('src/bpf_loader.c'), bpf_skel]
+  bpf_sources = [files('src/bpf_loader.c', 'src/policy_lower.c'), bpf_skel]
   bpf_deps    = [dep_bpf]
   bpf_args    = ['-DSYNGUARD_HAVE_BPF_LSM=1']
 
@@ -87,6 +87,19 @@ if bpf_ok
       '-DSG_BPF_CMDLINE_PATH_TEST="@0@"'.format(bpf_test_cmdline),
     ])
   test('bpf_failsafe', bpf_failsafe_test, timeout: 120)
+
+  # The kernel matcher, driven with real open() calls. lower_test proves the
+  # lowering agrees with fnmatch in userspace; this proves the kernel agrees
+  # too. The load-bearing assertion is negative: "/dir/*" must NOT reach a file
+  # one level deeper, because a deny rule matching more than it should is the
+  # dangerous direction.
+  bpf_policy_test = executable('bpf_policy_test',
+    files('tests/bpf_policy_test.c', 'src/bpf_loader.c', 'src/policy_lower.c',
+          'src/sg_log.c'),
+    bpf_skel,
+    include_directories: inc,
+    dependencies: [dep_threads, dep_bpf])
+  test('bpf_policy', bpf_policy_test, timeout: 120)
 endif
 
 executable('synguard', sources, bpf_sources,

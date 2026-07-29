@@ -31,6 +31,7 @@
 /* Defined only for the daemon target; the unit tests that link core.c do not
  * get it, so they never need libbpf. */
 #ifdef SYNGUARD_HAVE_BPF_LSM
+#include "sg_lower.h"
 #include "sg_bpf.h"
 #endif
 
@@ -321,9 +322,36 @@ int synguard_init(synguard_state_t *s)
      * synguard should keep detecting rather than refuse to start. The failure
      * is logged loudly by sg_bpf_init() itself so it cannot pass for silence.
      */
-    if (sg_bpf_init() != 0)
+    if (sg_bpf_init() != 0) {
         sg_log(LOG_WARNING,
                "bpf-lsm: unavailable — synguard is detect-only this boot");
+    } else {
+        /*
+         * Compile the loaded rules down to the kernel maps. Today this is
+         * almost always zero: the shipped policy carries no deny rule, and
+         * lowering only ever considers deny/quarantine.
+         *
+         * A lowering or population failure is NOT fatal, but it is loud and
+         * names the offending rule. The failure it guards against is an admin
+         * adding a deny rule that cannot be expressed in-kernel and never
+         * being told — the rule would sit in the file looking armed while the
+         * kernel had never heard of it.
+         */
+        sg_lowered_t lowered[SG_BPF_MAX_RULES];
+        char lerr[256];
+
+        int nl = sg_lower_policy(s->rules_head, lowered,
+                                 SG_BPF_MAX_RULES, lerr, sizeof(lerr));
+        if (nl < 0) {
+            sg_log(LOG_WARNING,
+                   "bpf-lsm: policy NOT loaded — %s; kernel enforcement is "
+                   "off, the userspace path is unaffected", lerr);
+        } else if (sg_bpf_load_policy(lowered, nl, lerr, sizeof(lerr)) < 0) {
+            sg_log(LOG_WARNING,
+                   "bpf-lsm: policy NOT loaded — %s; kernel enforcement is "
+                   "off, the userspace path is unaffected", lerr);
+        }
+    }
 #endif
 
     return 0;

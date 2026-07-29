@@ -41,6 +41,7 @@
 #include <bpf/bpf.h>      /* bpf_map_{lookup,update}_elem, BPF_ANY */
 
 #include "sg_bpf.h"
+#include "sg_lower.h"
 #include "sg_log.h"
 #include "sg_lsm.skel.h"
 
@@ -171,6 +172,127 @@ int sg_bpf_set_canary_ino(unsigned long long ino)
 		return -1;
 	return bpf_map_update_elem(bpf_map__fd(g_skel->maps.sg_canary_ino),
 				   &zero, &v, BPF_ANY);
+}
+
+/* ── policy population ───────────────────────────────────────────────── */
+
+/*
+ * Push a lowered policy into the maps.
+ *
+ * Refuses, by rule name, anything this matcher cannot evaluate exactly. The
+ * lowering pass is deliberately more general than the hook: sg_pat_classify()
+ * correctly lowers "/etc/sha*" to a prefix, but a partial-component prefix
+ * needs an LPM trie and the hook does plain hash lookups. Approximating it
+ * would broaden a DENY rule beyond what its author wrote, so it is an error.
+ *
+ * Population is all-or-nothing. A partially applied policy is the worst of
+ * both worlds: some rules enforcing, some not, and no way to tell which.
+ */
+int sg_bpf_load_policy(const sg_lowered_t *rules, int n, char *err, size_t errlen)
+{
+	if (err && errlen) err[0] = '\0';
+
+	if (!g_skel) {
+		if (err) snprintf(err, errlen, "bpf layer not loaded");
+		return -1;
+	}
+	if (n > SG_BPF_MAX_RULES) {
+		if (err) snprintf(err, errlen,
+		                  "%d enforceable rules exceeds the %d-rule map", n,
+		                  SG_BPF_MAX_RULES);
+		return -1;
+	}
+
+	int fd_exact = bpf_map__fd(g_skel->maps.sg_path_exact);
+	int fd_dir   = bpf_map__fd(g_skel->maps.sg_path_dir);
+	int fd_rules = bpf_map__fd(g_skel->maps.sg_rules);
+
+	/* Validate everything BEFORE writing anything. */
+	for (int i = 0; i < n; i++) {
+		const sg_lowered_t *l = &rules[i];
+
+		if (l->path.kind == SG_PAT_ANY) {
+			if (err) snprintf(err, errlen,
+			    "rule '%s': a deny rule with no path cannot be enforced on "
+			    "file_open — it would match every open on the system",
+			    l->rule_name);
+			return -1;
+		}
+		if (l->path.literal_len >= SG_BPF_PATH_MAX) {
+			if (err) snprintf(err, errlen, "rule '%s': path too long",
+			                  l->rule_name);
+			return -1;
+		}
+		if (l->path.kind == SG_PAT_PREFIX_NOSLASH &&
+		    (l->path.literal_len == 0 ||
+		     l->path.literal[l->path.literal_len - 1] != '/')) {
+			if (err) snprintf(err, errlen,
+			    "rule '%s': path prefix \"%s*\" must end at '/' — this "
+			    "matcher does exact and directory lookups only",
+			    l->rule_name, l->path.literal);
+			return -1;
+		}
+		if (l->comm.kind == SG_PAT_PREFIX &&
+		    l->comm.literal_len >= SG_BPF_COMM_MAX) {
+			if (err) snprintf(err, errlen,
+			    "rule '%s': comm prefix longer than comm itself",
+			    l->rule_name);
+			return -1;
+		}
+	}
+
+	/* Clear whatever was there, so a reload cannot leave stale rules armed. */
+	struct sg_path_key { char p[SG_BPF_PATH_MAX]; } k, next;
+	memset(&k, 0, sizeof(k));
+	for (int fd = 0; fd < 2; fd++) {
+		int m = fd ? fd_dir : fd_exact;
+		while (bpf_map_get_next_key(m, NULL, &next) == 0)
+			if (bpf_map_delete_elem(m, &next) != 0)
+				break;
+	}
+
+	for (int i = 0; i < n; i++) {
+		const sg_lowered_t *l = &rules[i];
+		struct sg_bpf_rule r;
+		__u32 idx = (__u32)i;
+
+		memset(&r, 0, sizeof(r));
+		r.path_kind   = l->path.kind == SG_PAT_EXACT ? SG_K_EXACT : SG_K_PREFIX;
+		r.evt_mask    = l->evt_mask;
+		r.access_mode = (__u8)l->access_mode;
+		r.uid_match   = l->uid_match;
+		r.verdict     = (__u32)l->verdict;
+
+		switch (l->comm.kind) {
+		case SG_PAT_ANY:    r.comm_kind = SG_K_ANY;    break;
+		case SG_PAT_EXACT:  r.comm_kind = SG_K_EXACT;  break;
+		default:            r.comm_kind = SG_K_PREFIX; break;
+		}
+		r.comm_len = (__u32)l->comm.literal_len;
+		snprintf(r.comm, sizeof(r.comm), "%s", l->comm.literal);
+
+		if (bpf_map_update_elem(fd_rules, &idx, &r, BPF_ANY) != 0) {
+			if (err) snprintf(err, errlen, "rule '%s': map update failed",
+			                  l->rule_name);
+			return -1;
+		}
+
+		memset(&k, 0, sizeof(k));
+		memcpy(k.p, l->path.literal, l->path.literal_len);
+
+		int m = l->path.kind == SG_PAT_EXACT ? fd_exact : fd_dir;
+		if (bpf_map_update_elem(m, &k, &idx, BPF_NOEXIST) != 0) {
+			if (err) snprintf(err, errlen,
+			    "rule '%s': duplicate path key \"%s\" — two deny rules on "
+			    "the same path cannot both be enforced",
+			    l->rule_name, l->path.literal);
+			return -1;
+		}
+	}
+
+	sg_log(LOG_INFO, "bpf-lsm: policy loaded — %d enforceable rule%s",
+	       n, n == 1 ? "" : "s");
+	return n;
 }
 
 int sg_bpf_enforcement_live(void)

@@ -93,6 +93,54 @@ struct sg_bpf_control {
 	__u32 deny_budget;        /* remaining denials before self-disable */
 };
 
+/* ── The lowered policy, as the kernel sees it ───────────────────────────
+ *
+ * Path is the selective dimension, so it is the map key: the overwhelming
+ * majority of opens match no rule at all and must cost one hash miss and
+ * nothing else. file_open is on every open() the system makes.
+ *
+ * Two key maps, both exact-match hashes:
+ *   sg_path_exact  full path, for a rule with no wildcard
+ *   sg_path_dir    a directory prefix INCLUDING its trailing '/', for a
+ *                  "/dir/*" rule. The hook truncates the path at its LAST
+ *                  separator to build this key, which gives FNM_PATHNAME's
+ *                  one-level semantics for free — the tail cannot contain a
+ *                  '/' because that is where we cut.
+ *
+ * Both map to an index into sg_rules, which carries the rest of the rule's
+ * conditions (comm, uid, event, access) so they can be checked after the
+ * cheap lookup has already excluded almost everything.
+ *
+ * MATCHER LIMITATION, enforced at population time: a path prefix must end at
+ * a '/'. sg_pat_classify() will happily lower "/etc/sha*" — that is a correct
+ * lowering and the differential test covers it — but this matcher cannot
+ * evaluate a partial-component prefix with plain hash lookups, and would need
+ * an LPM trie. Rather than approximate, sg_bpf_load_policy() refuses it by
+ * name. Lowering says what is expressible; population says what this code can
+ * actually run.
+ */
+#define SG_BPF_MAX_RULES   64
+#define SG_BPF_PATH_MAX    256
+#define SG_BPF_COMM_MAX    16
+
+/* Mirrors sg_pat_kind_t, narrowed to what the hook evaluates. */
+enum {
+	SG_K_ANY    = 0,   /* no constraint */
+	SG_K_EXACT  = 1,
+	SG_K_PREFIX = 2,
+};
+
+struct sg_bpf_rule {
+	__u8  path_kind;               /* SG_K_* */
+	__u8  comm_kind;               /* SG_K_* */
+	__u8  evt_mask;                /* 0xFF = any */
+	__u8  access_mode;             /* sg_access_t */
+	__u32 uid_match;               /* UID_ANY = 0xFFFFFFFF */
+	__u32 verdict;                 /* DENY or QUARANTINE */
+	__u32 comm_len;                /* prefix length when comm_kind==PREFIX */
+	char  comm[SG_BPF_COMM_MAX];
+};
+
 #ifndef SG_BPF_KERNEL
 /* ── Daemon-side API (src/bpf_loader.c) ──────────────────────────────────
  * All of these are safe no-ops when the BPF layer never loaded, so callers
@@ -124,6 +172,13 @@ int  sg_bpf_enforcement_live(void);
  * Exists so the failsafe suite can drive a real denial through the real gate
  * without any policy loaded. */
 int  sg_bpf_set_canary_ino(unsigned long long ino);
+
+/* Push a lowered policy into the maps. All-or-nothing: returns the number of
+ * rules armed, or -1 with `err` naming the rule this matcher cannot evaluate.
+ * Declared in sg_lower.h terms, so that header must be included first. */
+struct sg_lowered;
+int  sg_bpf_load_policy(const struct sg_lowered *rules, int n,
+                        char *err, size_t errlen);
 
 /* Refill the runaway brake; returns how much budget had been spent. */
 int  sg_bpf_refill_budget(unsigned int budget);
