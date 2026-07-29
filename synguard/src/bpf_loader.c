@@ -56,6 +56,7 @@ static pthread_t          g_hb_thread;
 static volatile int       g_hb_running;
 static volatile int       g_hb_paused;
 static int                g_attached;
+static int                g_policy_rules;   /* rules currently in the maps */
 
 /* CLOCK_MONOTONIC on both sides -- see the clock discipline note in sg_bpf.h. */
 static __u64 mono_ns(void)
@@ -290,9 +291,90 @@ int sg_bpf_load_policy(const sg_lowered_t *rules, int n, char *err, size_t errle
 		}
 	}
 
+	g_policy_rules = n;
 	sg_log(LOG_INFO, "bpf-lsm: policy loaded — %d enforceable rule%s",
 	       n, n == 1 ? "" : "s");
 	return n;
+}
+
+/* ── reporting ───────────────────────────────────────────────────────── */
+
+/*
+ * Why the gate would decline to deny RIGHT NOW, evaluated in userspace with
+ * the same precedence sg_may_deny() uses. The gate_opens counters say what has
+ * happened; this says what is true at this instant, which is what someone
+ * staring at a rule that "isn't working" actually needs.
+ */
+static enum sg_bpf_off_reason gate_reason_now(const struct sg_bpf_control *c)
+{
+	if (!c->enforce)
+		return SG_OFF_MASTER_SWITCH;
+	if (mono_ns() < c->warmup_until_ns)
+		return SG_OFF_WARMUP;
+	if (!c->heartbeat_ns ||
+	    mono_ns() - c->heartbeat_ns > c->heartbeat_max_ns)
+		return SG_OFF_HEARTBEAT;
+	if (!c->deny_budget)
+		return SG_OFF_BUDGET;
+	return SG_OFF_NONE;
+}
+
+static const char *reason_text(enum sg_bpf_off_reason r)
+{
+	switch (r) {
+	case SG_OFF_NONE:          return "armed";
+	case SG_OFF_MASTER_SWITCH: return "not armed";
+	case SG_OFF_WARMUP:        return "warming up";
+	case SG_OFF_HEARTBEAT:     return "daemon heartbeat stale";
+	case SG_OFF_BUDGET:        return "deny budget spent";
+	}
+	return "unknown";
+}
+
+const char *sg_bpf_status(char *buf, size_t len)
+{
+	struct sg_bpf_control c;
+
+	if (!g_attached || sg_bpf_read_control(&c) != 0) {
+		snprintf(buf, len, "not loaded — no kernel enforcement");
+		return buf;
+	}
+
+	enum sg_bpf_off_reason r = gate_reason_now(&c);
+	snprintf(buf, len, "attached · %d rule%s armed · gate %s (%s)",
+	         g_policy_rules, g_policy_rules == 1 ? "" : "s",
+	         r == SG_OFF_NONE ? "OPEN" : "CLOSED", reason_text(r));
+	return buf;
+}
+
+const char *sg_bpf_counters(char *buf, size_t len)
+{
+	struct sg_bpf_control c;
+
+	if (!g_attached || sg_bpf_read_control(&c) != 0) {
+		snprintf(buf, len, "bpf-lsm: not loaded");
+		return buf;
+	}
+
+	/*
+	 * gate_opens is broken out per reason rather than summed. "The gate was
+	 * open 4000 times" is not actionable; "4000 of them were a stale
+	 * heartbeat" points straight at a wedged daemon, and "all of them were
+	 * budget" points at a runaway rule.
+	 */
+	unsigned long long longpath = g_skel->bss ? g_skel->bss->sg_path_too_long : 0;
+
+	snprintf(buf, len,
+	         "bpf-lsm: denied=%llu budget=%u opens[switch=%llu warmup=%llu "
+	         "heartbeat=%llu budget=%llu] longpath=%llu",
+	         (unsigned long long)c.denies_total,
+	         c.deny_budget,
+	         (unsigned long long)c.gate_opens[SG_OFF_MASTER_SWITCH],
+	         (unsigned long long)c.gate_opens[SG_OFF_WARMUP],
+	         (unsigned long long)c.gate_opens[SG_OFF_HEARTBEAT],
+	         (unsigned long long)c.gate_opens[SG_OFF_BUDGET],
+	         longpath);
+	return buf;
 }
 
 int sg_bpf_enforcement_live(void)
@@ -455,4 +537,5 @@ void sg_bpf_shutdown(void)
 		g_skel = NULL;
 	}
 	g_attached = 0;
+	g_policy_rules = 0;
 }

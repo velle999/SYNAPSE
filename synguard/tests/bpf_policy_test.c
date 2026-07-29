@@ -20,6 +20,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -34,9 +35,14 @@
 
 static int failures;
 
-static void ok(int cond, const char *what)
+static void ok(int cond, const char *fmt, ...)
 {
-	printf("  [%s] %s\n", cond ? "PASS" : "FAIL", what);
+	va_list ap;
+	printf("  [%s] ", cond ? "PASS" : "FAIL");
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+	putchar('\n');
 	if (!cond)
 		failures++;
 }
@@ -217,8 +223,51 @@ int main(void)
 	ok(sg_bpf_set_enforce(0) == 0, "disarmed");
 	ok(!denied(DIR "/target"), "master switch off: policy rule FAILS OPEN");
 
+	/* ── the status line must not lie ────────────────────────────── */
+	/*
+	 * This whole reporting surface exists because the gate fails open, and a
+	 * silently open gate looks exactly like a quiet system. If the line says
+	 * OPEN while nothing can be denied, it is worse than printing nothing.
+	 */
+	puts("\nstatus reporting:");
+	{
+		char st[256];
+
+		rules[0] = mk("deny-target", DIR "/target", NULL);
+		sg_bpf_load_policy(rules, 1, err, sizeof(err));
+
+		sg_bpf_set_enforce(0);
+		sg_bpf_status(st, sizeof(st));
+		ok(strstr(st, "CLOSED") && strstr(st, "not armed"),
+		   "disarmed -> CLOSED/not armed: %s", st);
+		ok(strstr(st, "1 rule armed") != NULL, "…and reports the rule count");
+
+		/* Armed but inside warmup: still closed, and it must say WHY. */
+		sg_bpf_set_enforce(1);
+		sg_bpf_status(st, sizeof(st));
+		ok(strstr(st, "CLOSED") && strstr(st, "warming up"),
+		   "armed in warmup -> CLOSED/warming up: %s", st);
+
+		arm();
+		sg_bpf_status(st, sizeof(st));
+		ok(strstr(st, "OPEN") != NULL, "armed and warm -> OPEN: %s", st);
+		ok(denied(DIR "/target"), "…and it really can deny");
+
+		char cb[256];
+		sg_bpf_counters(cb, sizeof(cb));
+		ok(strstr(cb, "denied=") && strstr(cb, "heartbeat=") &&
+		   strstr(cb, "longpath="),
+		   "counters break opens out per reason: %s", cb);
+	}
+
 	sg_bpf_shutdown();
 	ok(!denied(DIR "/target"), "after shutdown: no residue");
+	{
+		char st[256];
+		sg_bpf_status(st, sizeof(st));
+		ok(strstr(st, "not loaded") != NULL,
+		   "after shutdown status says not loaded: %s", st);
+	}
 
 	unlink(DIR "/target"); unlink(DIR "/other"); unlink(SUB "/deep");
 	rmdir(SUB); rmdir(DIR);

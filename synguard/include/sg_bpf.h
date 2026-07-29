@@ -165,6 +165,15 @@ int  sg_bpf_set_enforce(int on);
 /* Read the control record back (for the banner / `synctl`). 0 on success. */
 int  sg_bpf_read_control(struct sg_bpf_control *out);
 
+/* One-line state for the banner: attached, rules armed, and whether the gate
+ * is open RIGHT NOW with the reason if not. Always writes something. */
+const char *sg_bpf_status(char *buf, size_t len);
+
+/* One-line counters for the periodic stats: denials, and gate opens broken out
+ * PER REASON — a sum is not actionable, but "4000 of them were a stale
+ * heartbeat" points straight at the problem. */
+const char *sg_bpf_counters(char *buf, size_t len);
+
 /* 1 once programs are attached AND the gate can actually reach a denial. */
 int  sg_bpf_enforcement_live(void);
 

@@ -37,6 +37,9 @@
 #include <time.h>
 
 #include "synguard.h"
+#ifdef SYNGUARD_HAVE_BPF_LSM
+#include "sg_bpf.h"
+#endif
 #include "sg_log.h"
 
 /* ── Global state ─────────────────────────────────────────── */
@@ -125,6 +128,19 @@ static void print_banner(const synguard_state_t *s)
                "policy: mode=%s does not act — deny verdicts are logged as "
                "WOULD-DENY", mode_str[s->config.mode]);
     }
+
+#ifdef SYNGUARD_HAVE_BPF_LSM
+    /*
+     * The kernel gate is a SECOND thing that can be silently inert, and it
+     * fails open by design — which looks identical to a quiet system. Report
+     * it next to the policy census for the same reason that census exists:
+     * "attached" says nothing about whether anything can be refused.
+     */
+    {
+        char st[256];
+        sg_log(LOG_INFO, "bpf-lsm: %s", sg_bpf_status(st, sizeof(st)));
+    }
+#endif
 }
 
 /* ── Runtime directory setup ─────────────────────────────── */
@@ -224,6 +240,12 @@ static int run_event_loop(synguard_state_t *s)
                 s->stats.stale_pid_skips,
                 s->stats.events_dropped,
                 s->stats.alerts_suppressed);
+#ifdef SYNGUARD_HAVE_BPF_LSM
+            {
+                char cb[256];
+                sg_log(LOG_INFO, "%s", sg_bpf_counters(cb, sizeof(cb)));
+            }
+#endif
             last_stats = now;
         }
     }
