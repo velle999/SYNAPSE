@@ -1,0 +1,9 @@
+# BPF-LSM enforcement gate.
+#
+# 'auto' builds it when clang + bpftool + libbpf are all present and quietly
+# skips it otherwise, so a build host without the toolchain still produces a
+# working detect-only synguard. Set 'enabled' in CI and in the PKGBUILD, where
+# a silently-missing enforcement layer would be a shipped regression rather
+# than a local convenience.
+option('bpf_lsm', type: 'feature', value: 'auto',
+       description: 'Build the BPF-LSM enforcement gate')

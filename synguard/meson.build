@@ -25,9 +25,74 @@ sources = files(
 
 inc = include_directories('include')
 
-executable('synguard', sources,
+# ── BPF-LSM enforcement gate ────────────────────────────────────────────
+# clang and bpftool are BUILD-time only: the CO-RE object is compiled once
+# here and loaded by libbpf at runtime, so an installed system needs no
+# compiler. That is the whole reason this path is preferable to growing the
+# DKMS kmod — no vermagic to go stale against the running kernel.
+bpf_opt   = get_option('bpf_lsm')
+cc_clang  = find_program('clang',   required: bpf_opt.enabled())
+cc_bpftool= find_program('bpftool', required: bpf_opt.enabled())
+dep_bpf   = dependency('libbpf', required: bpf_opt.enabled())
+
+bpf_ok = not bpf_opt.disabled() and cc_clang.found() \
+         and cc_bpftool.found() and dep_bpf.found()
+
+bpf_sources = []
+bpf_deps    = []
+bpf_args    = []
+
+if bpf_ok
+  # vmlinux.h from the BUILD host's BTF. CO-RE relocations keep the resulting
+  # object portable to other kernels, so this is not a build-host pin.
+  vmlinux_h = custom_target('vmlinux.h',
+    output: 'vmlinux.h',
+    command: [cc_bpftool, 'btf', 'dump', 'file', '/sys/kernel/btf/vmlinux',
+              'format', 'c'],
+    capture: true)
+
+  bpf_o = custom_target('sg_lsm.bpf.o',
+    input: 'bpf/sg_lsm.bpf.c',
+    output: 'sg_lsm.bpf.o',
+    depends: vmlinux_h,
+    command: [cc_clang, '-O2', '-g', '-target', 'bpf', '-D__TARGET_ARCH_x86',
+              '-I' + meson.current_build_dir(),
+              '-I' + meson.current_source_dir() / 'include',
+              '-c', '@INPUT@', '-o', '@OUTPUT@'])
+
+  # The skeleton is what lets the daemon reference maps and programs by name
+  # instead of by index.
+  bpf_skel = custom_target('sg_lsm.skel.h',
+    input: bpf_o,
+    output: 'sg_lsm.skel.h',
+    command: [cc_bpftool, 'gen', 'skeleton', '@INPUT@'],
+    capture: true)
+
+  bpf_sources = [files('src/bpf_loader.c'), bpf_skel]
+  bpf_deps    = [dep_bpf]
+  bpf_args    = ['-DSYNGUARD_HAVE_BPF_LSM=1']
+
+  # The failsafes, exercised against a REAL attached hook rather than a mock:
+  # each gate is driven until it opens, and the suite also proves the gate can
+  # close, so a permanently-inert layer cannot pass by failing open everywhere.
+  # Needs root; reports meson SKIP otherwise instead of a false pass.
+  bpf_test_cmdline = meson.current_build_dir() / 'failsafe-cmdline.txt'
+  bpf_failsafe_test = executable('bpf_failsafe_test',
+    files('tests/bpf_failsafe_test.c', 'src/bpf_loader.c', 'src/sg_log.c'),
+    bpf_skel,
+    include_directories: inc,
+    dependencies: [dep_threads, dep_bpf],
+    c_args: [
+      '-DSG_BPF_CMDLINE_PATH="@0@"'.format(bpf_test_cmdline),
+      '-DSG_BPF_CMDLINE_PATH_TEST="@0@"'.format(bpf_test_cmdline),
+    ])
+  test('bpf_failsafe', bpf_failsafe_test, timeout: 120)
+endif
+
+executable('synguard', sources, bpf_sources,
   include_directories: inc,
-  dependencies: [dep_threads, dep_systemd],
+  dependencies: [dep_threads, dep_systemd] + bpf_deps,
+  c_args: bpf_args,
   install: true,
   install_dir: get_option('bindir'),
 )
