@@ -1,7 +1,27 @@
 [Unit]
 Description=TCP bridge to synapd's unix socket (chibi on the Pi)
 Documentation=file:///etc/nftables.d/synapd-bridge.nft
-Requires=synapd.service
+# NOT Requires=synapd.service, and that is the whole point of this comment.
+#
+# This service is socket-activated from the LAN. With Requires= it pulled synapd
+# up as a dependency of its own start, so every poll from the Pi's chibi
+# resurrected the daemon — 7B model straight back onto the GPU — seconds after
+# game mode (Super+G) or the AI-backend "off" switch had stopped it. Measured at
+# 29s on the first attempt, and invisible locally: the trigger arrives over the
+# network and the journal shows only "Started SynapseOS AI Daemon".
+#
+# It is also unnecessary. /run/synapd/synapd.sock is itself socket-activated by
+# synapd.socket, so the proxy connecting to it starts synapd on demand exactly as
+# before — verified: with synapd.socket up and the service stopped, a connection
+# to 11435 brought synapd up in 2s. With synapd.socket stopped the connect fails
+# ("Failed to connect to remote host: Connection refused", once per attempt, no
+# restart loop), which is what "stopped" is supposed to mean.
+#
+# NB: this cannot be fixed with a drop-in. systemd dependency lists are
+# additive-only — an empty `Requires=` does NOT reset them, whatever it does for
+# ExecStart=, and a drop-in that tries reads as correct while changing nothing
+# (confirmed on systemd 258 with daemon-reload AND daemon-reexec). It has to be
+# the fragment.
 After=synapd.service
 
 [Service]

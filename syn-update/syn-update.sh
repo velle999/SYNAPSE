@@ -113,11 +113,27 @@ need_tools() {
 
 # ── the source tree ──────────────────────────────────────────
 
+# sudo needs either a cached credential or a terminal to prompt on, and the
+# updater GUI has neither — Quickshell runs `check` with no controlling
+# terminal. Without this guard sudo's own diagnosis is what reaches the user:
+#
+#   sudo: a terminal is required to read the password; either use the -S option
+#   sudo: a password is required
+#   fail  cannot create /var/lib/synapse-src
+#
+# — in a window with no way to answer it, on a fresh install, from a button
+# whose whole contract is that it only READS. Fresh installs now get the
+# directory from syn-install, so this fires only on an older install or after
+# someone removed it: say what to run instead of failing at an invisible prompt.
+can_sudo() { sudo -n true 2>/dev/null || [ -t 0 ]; }
+
 setup_src() {
     if [ -d "$SRC/.git" ]; then
         # Someone else's tree, or one left root-owned by an older run: makepkg
         # writes into it, so it has to be ours.
         if [ ! -w "$SRC" ]; then
+            can_sudo || die "$SRC is not writable by $(id -un), and this session cannot ask for a password.
+  Run this once in a terminal:  sudo chown -R $(id -un):$(id -gn) $SRC"
             info "taking ownership of $SRC"
             sudo chown -R "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
         fi
@@ -125,6 +141,9 @@ setup_src() {
     fi
 
     [ -e "$SRC" ] && die "$SRC exists but is not a git checkout — move it aside"
+
+    can_sudo || die "$SRC does not exist yet, and this session cannot ask for a password.
+  Run this once in a terminal:  sudo install -d -o $(id -un) -g $(id -gn) $SRC"
 
     info "first run: cloning $REPO_URL into $SRC"
     sudo install -d -o "$(id -un)" -g "$(id -gn)" "$SRC" || die "cannot create $SRC"

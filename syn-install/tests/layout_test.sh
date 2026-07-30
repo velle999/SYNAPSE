@@ -168,6 +168,57 @@ for bl in $SYN_BOOTLOADERS; do
     fi
 done
 
+echo "=== no runaway heredocs ==="
+#
+# A heredoc terminator only closes the heredoc when it is alone at column 0.
+# `    EOF` does not close `<< EOF` — it is body text, and the heredoc runs on to
+# the NEXT line that is exactly the terminator. That happened to the grub branch:
+# an indented EOF swallowed 70 lines, including grub-install, grub-mkconfig, the
+# whole `elif systemd-boot` arm and `mkdir -p /mnt/boot/loader/entries`. bash -n
+# passes, because the file still parses — just not into the program anyone wrote.
+# Every install from that ISO was affected: grub died on a systemd-boot check,
+# and choosing systemd-boot silently installed limine.
+#
+# So: no line may be whitespace followed by a word used as a heredoc terminator.
+terms=$(grep -oE '<<[ \t]*"?[A-Za-z_][A-Za-z0-9_]*"?' "$here/../syn-install.sh" \
+        | sed 's/<<[ \t]*//; s/"//g' | sort -u)
+runaway=0
+for t in $terms; do
+    n=$(grep -cE "^[[:space:]]+$t\$" "$here/../syn-install.sh" || true)
+    [ "$n" -gt 0 ] && { runaway=$((runaway + n)); echo "        (indented '$t' x$n)"; }
+done
+check "no heredoc terminator is indented" "0" "$runaway"
+
+# And the consequence, asserted directly: strip every heredoc BODY, then require
+# that the commands which actually install a bootloader are still code. This is
+# what went to zero while the file still looked correct in an editor.
+strip_heredocs() {
+    awk '
+        term != "" { if ($0 == term) term=""; next }
+        /^[[:space:]]*#/ { print; next }
+        match($0, /<<-?[ \t]*"?[A-Za-z_][A-Za-z0-9_]*"?/) {
+            w = substr($0, RSTART, RLENGTH); sub(/<<-?[ \t]*/, "", w); gsub(/"/, "", w)
+            term = w; print; next
+        }
+        { print }
+    ' "$here/../syn-install.sh"
+}
+codeonly=$(strip_heredocs)
+for needle in 'grub-install' 'grub-mkconfig' 'bootctl' 'mkdir -p /mnt/boot/loader/entries'; do
+    check "'$needle' survives as executable code" "yes" \
+        "$(grep -qF -- "$needle" <<<"$codeonly" && echo yes || echo no)"
+done
+check "the systemd-boot arm is reachable" "yes" \
+    "$(grep -qF -- 'elif [ "$BOOTLOADER" = "systemd-boot" ]' <<<"$codeonly" && echo yes || echo no)"
+
+# The updater's GUI runs `syn-update check` with no controlling terminal, so
+# anything it touches must already exist: creating this on first use meant a
+# sudo password prompt nobody could answer.
+check "syn-update's source tree is pre-created for the user" "yes" \
+    "$(grep -qF -- 'install -d -o "$NEW_USER" -g "$NEW_USER" /var/lib/synapse-src' <<<"$codeonly" \
+       && echo yes || echo no)"
+
+echo
 echo "=== boot entries must name files that exist ==="
 
 # The dead "(fallback initramfs)" entry passed every install-time check on both

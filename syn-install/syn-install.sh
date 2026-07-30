@@ -2075,6 +2075,18 @@ success "Password set for '$NEW_USER' (verified in shadow)"
 USER_UID=$(arch-chroot /mnt id -u "$NEW_USER" 2>/dev/null || echo 1000)
 echo "  User '$NEW_USER' created (uid=$USER_UID)"
 
+# syn-update's source tree, created HERE and owned by the user who will run it.
+#
+# syn-update clones into /var/lib/synapse-src on first use, and creating that
+# directory needs root — so it shells out to `sudo install -d`. That works in a
+# terminal and fails in the updater GUI, which Quickshell runs with no
+# controlling terminal: sudo answers "a terminal is required to read the
+# password", the window shows "cannot create /var/lib/synapse-src", and the only
+# thing the user did was open Updates on a fresh install. Making the directory
+# now means the read-only half of the updater stays read-only.
+arch-chroot /mnt install -d -o "$NEW_USER" -g "$NEW_USER" /var/lib/synapse-src \
+    2>/dev/null || warn "could not pre-create /var/lib/synapse-src — the updater will ask for a password on first run"
+
 # ── Enable services ──────────────────────────────────────
 arch-chroot /mnt systemctl enable NetworkManager seatd 2>/dev/null || true
 # Bluetooth: bluez ships the unit but enables nothing. Without this the radio
@@ -2559,17 +2571,17 @@ fi
 
 if [ "$BOOTLOADER" = "grub" ]; then
     cat > /mnt/etc/default/grub << EOF
-    GRUB_DEFAULT=0
-    GRUB_TIMEOUT=5
-    GRUB_DISTRIBUTOR="SynapseOS"
-    GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
-    GRUB_CMDLINE_LINUX="$GRUB_CRYPT_CMDLINE"
-    # os-prober ON so grub-mkconfig detects Windows / other OSes and adds their
-    # boot menu entries. Recent GRUB disables it by default for security; a
-    # single-OS install just finds nothing, so enabling it globally is safe and is
-    # what makes the alongside (dual-boot) install actually offer the other OS.
-    GRUB_DISABLE_OS_PROBER=false
-    EOF
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=5
+GRUB_DISTRIBUTOR="SynapseOS"
+GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
+GRUB_CMDLINE_LINUX="$GRUB_CRYPT_CMDLINE"
+# os-prober ON so grub-mkconfig detects Windows / other OSes and adds their
+# boot menu entries. Recent GRUB disables it by default for security; a
+# single-OS install just finds nothing, so enabling it globally is safe and is
+# what makes the alongside (dual-boot) install actually offer the other OS.
+GRUB_DISABLE_OS_PROBER=false
+EOF
 
     mkdir -p /mnt/boot/grub
 
