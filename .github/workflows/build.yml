@@ -161,6 +161,16 @@ jobs:
           done
           echo "all userspace components built"
 
+      # The installer's filesystem/bootloader decision table. syn-install cannot
+      # be tested as a whole in CI — it partitions disks — but the table is a set
+      # of pure functions, and a wrong entry there produces an install that
+      # formats, reports success, and fails at first boot on someone else's
+      # machine. Sourcing is safe: SYN_INSTALL_SOURCE_ONLY stops the script
+      # before its root check and first prompt.
+      - name: Installer layout table (filesystem × bootloader × encryption)
+        run: |
+          ./syn-install/tests/layout_test.sh
+
       - name: Daemon unit tests (synapd wire gate, synguard verdict feed)
         run: |
           meson test -C synapd/_ci wire --print-errorlogs

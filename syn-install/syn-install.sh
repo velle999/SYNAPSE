@@ -121,6 +121,159 @@ largest_free_region() {
 }
 
 # ── Must be root ──────────────────────────────────────────
+# ── Filesystem and bootloader capability table ────────────
+#
+# Every one of these is a PURE function of its arguments — no globals, no side
+# effects — because the interesting risk here is combinatorial, not procedural.
+# Four filesystems by four bootloaders by encrypted-or-not by UEFI-or-BIOS is
+# sixty-four combinations, and the ones that go wrong go wrong at FIRST BOOT, on
+# someone else's machine, after the installer has already reported success.
+# Pure functions can be asserted against a table in tests/layout_test.sh; the
+# procedural install path cannot.
+#
+# WHAT IS AND IS NOT A VALID OPTION was measured, not assumed:
+#
+#   fs        kernel mounts it?   GRUB reads it?   verdict
+#   ext4      builtin             ext2.mod         default, works everywhere
+#   btrfs     builtin             btrfs.mod        subvolumes + snapshots
+#   xfs       module              xfs.mod          no snapshots, cannot shrink
+#   f2fs      module              f2fs.mod         flash-oriented
+#   reiserfs  REMOVED from kernel  —               not offerable
+#   bcachefs  not in this kernel  no module        fails both axes
+#   zfs       not in this kernel  zfs.mod          needs archzfs: 3rd-party DKMS
+#
+# jfs and nilfs2 are technically available on both axes and are deliberately NOT
+# offered: nobody should put a root filesystem on either in 2026, and a choice
+# that is a trap is worse than no choice.
+
+# Filesystems this installer can create. Order is the order they are offered.
+SYN_FILESYSTEMS="ext4 btrfs xfs f2fs"
+
+# Bootloaders. grub is the default and the only one that covers BIOS, Secure
+# Boot as already built here, os-prober dual-boot detection AND bootable
+# snapshots. See bootloader_supported() for the gating.
+SYN_BOOTLOADERS="grub systemd-boot"
+
+# mkfs invocation for a filesystem. Echoes the command; the caller runs it.
+fs_mkfs_cmd() {
+    case "$1" in
+        ext4)  echo "mkfs.ext4 -F" ;;
+        btrfs) echo "mkfs.btrfs -f" ;;
+        # -f twice is not a typo: the first is mkfs.xfs's force, and -m
+        # bigtime=1,inobtcount=1 are the defaults on current xfsprogs anyway —
+        # stated explicitly so a future xfsprogs default change is visible here
+        # rather than silently altering what we write to people's disks.
+        xfs)   echo "mkfs.xfs -f" ;;
+        f2fs)  echo "mkfs.f2fs -f" ;;
+        *)     return 1 ;;
+    esac
+}
+
+# Packages the TARGET needs for a root on this filesystem.
+#
+# This is not optional and it is not the same as what the ISO needs. `base`
+# pulls in e2fsprogs and nothing else, so an xfs root on an installed system has
+# no mkfs.xfs, no xfs_repair and no fsck.xfs — the filesystem cannot be checked
+# or repaired on the one machine that most needs to. mkinitcpio's fsck hook also
+# silently skips a filesystem whose fsck binary is missing.
+fs_target_pkgs() {
+    case "$1" in
+        ext4)  echo "e2fsprogs" ;;
+        btrfs) echo "btrfs-progs" ;;
+        xfs)   echo "xfsprogs" ;;
+        f2fs)  echo "f2fs-tools" ;;
+        *)     return 1 ;;
+    esac
+}
+
+# Default mount options written into fstab for the root filesystem.
+fs_mount_opts() {
+    case "$1" in
+        # zstd:3 is a real win on a ~7 GB install and costs little CPU; noatime
+        # keeps snapshots from churning on every read.
+        btrfs) echo "noatime,compress=zstd:3,space_cache=v2" ;;
+        ext4)  echo "noatime" ;;
+        xfs)   echo "noatime" ;;
+        f2fs)  echo "noatime,compress_algorithm=zstd" ;;
+        *)     return 1 ;;
+    esac
+}
+
+# Can this filesystem carry bootable snapshots?
+fs_supports_snapshots() {
+    [ "$1" = "btrfs" ]
+}
+
+# Is this bootloader usable in this firmware mode?
+#
+# systemd-boot is UEFI-only by construction — it is an EFI stub loader and there
+# is no BIOS build of it. Offering it on a BIOS machine and failing at
+# bootctl-install time would be a menu entry that lies.
+bootloader_supported() {
+    case "$1" in
+        grub)         return 0 ;;                      # BIOS and UEFI
+        systemd-boot) [ "$2" = "uefi" ] ;;
+        limine)       return 0 ;;                      # not offered yet
+        refind)       [ "$2" = "uefi" ] ;;             # not offered yet
+        *)            return 1 ;;
+    esac
+}
+
+# Can this bootloader boot a btrfs snapshot?
+#
+# GRUB only, and only because grub-btrfs is in the official repos. limine's
+# equivalent (limine-snapper-sync) is AUR, and systemd-boot has no equivalent at
+# all. The installer warns rather than silently dropping the feature.
+bootloader_supports_snapshots() {
+    [ "$1" = "grub" ]
+}
+
+# Does this combination need /boot on its OWN plain ext4 partition?
+#
+# Three separate reasons converge here, which is exactly why it is one function
+# and not three scattered conditionals:
+#
+#   1. GRUB + encryption. GRUB can only open a LUKS2 volume that uses PBKDF2,
+#      not the argon2id cryptsetup defaults to — and argon2id is most of why
+#      LUKS2 is worth having. A plain /boot keeps the initramfs the only thing
+#      that unlocks anything.
+#
+#   2. systemd-boot needs NO separate /boot even when encrypted, which is a
+#      genuine improvement rather than a preference: kernels live on the ESP and
+#      the initramfs does the unlocking, so the argon2id compromise disappears.
+#
+#   3. xfs and f2fs. Both are readable by the GRUB we ship, but mkfs.xfs enables
+#      on-disk features as xfsprogs advances and GRUB's f2fs support is thin —
+#      a plain ext4 /boot sidesteps the entire question of whether this year's
+#      mkfs wrote something this year's GRUB cannot read.
+#
+# btrfs deliberately keeps /boot INSIDE the root: a rollback that restores
+# /usr/lib/modules but not the kernel that loads them is a mismatched pair.
+layout_separate_boot() {
+    local fs="$1" loader="$2" encrypt="$3"
+
+    if [ "$loader" = "systemd-boot" ]; then
+        echo "no"; return 0
+    fi
+    if [ "$encrypt" = "yes" ]; then
+        echo "yes"; return 0
+    fi
+    case "$fs" in
+        xfs|f2fs) echo "yes" ;;
+        *)        echo "no" ;;
+    esac
+}
+
+
+# Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
+# pure decision functions above and stops HERE, before the root check, the
+# EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
+# whole filesystem/bootloader table that way — the table is where the
+# combinatorial risk lives, and it is the only part testable without a disk.
+if [ "${SYN_INSTALL_SOURCE_ONLY:-}" = "1" ]; then
+    return 0 2>/dev/null || exit 0
+fi
+
 [ "$(id -u)" = "0" ] || die "syn-install must be run as root"
 
 # Best-effort unmount of the target area on any unexpected exit.
