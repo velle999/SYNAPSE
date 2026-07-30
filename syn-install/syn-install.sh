@@ -54,8 +54,13 @@ prompt() {
     printf "  $(bold "$1") "
 }
 
-# Unmount the target on failure so a stale /mnt doesn't block a retry.
-cleanup() { umount -R /mnt 2>/dev/null || true; }
+# Unmount the target on failure so a stale /mnt doesn't block a retry — and turn
+# off any swap the ADVANCED path enabled, or a retry finds the partition busy and
+# the live session keeps paging to a disk the user is about to repartition.
+cleanup() {
+    umount -R /mnt 2>/dev/null || true
+    [ -n "${PART_SWAP:-}" ] && swapoff "$PART_SWAP" 2>/dev/null || true
+}
 die() { fail "$*"; cleanup; exit 1; }
 
 # ── Minimum target disk size (base system + SynapseOS + model headroom) ──
@@ -1104,11 +1109,43 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
         done
     fi
 
+    # Swap. Optional, and only reachable here: the automatic paths give the root
+    # 100% of what is left, so there is nowhere to put one without changing a
+    # layout that is tested. Nothing else in this installer has ever made swap —
+    # a swap partition created in the editor and not named here stays ignored.
+    PART_SWAP=""; FORMAT_SWAP="no"
+    while :; do
+        echo ""
+        prompt "Swap partition (blank for none):"
+        read -r _sw || true
+        [ -n "${_sw:-}" ] || break
+        case "$_sw" in /dev/*) ;; *) _sw="/dev/$_sw" ;; esac
+        _why="$(part_usable "$_sw" "swap" $((128 * 1024 * 1024)))" || { warn "$_why"; continue; }
+        PART_SWAP="$_sw"; FORMAT_SWAP="yes"
+        # An existing swap is likely shared with another Linux, and mkswap gives
+        # it a new UUID — which is exactly what that system's fstab and its
+        # hibernation resume= point at. Default to leaving it alone.
+        if [ "$(blkid -s TYPE -o value "$PART_SWAP" 2>/dev/null)" = "swap" ]; then
+            echo "    $PART_SWAP is already swap — another system may resume from it."
+            prompt "Re-make it? Its UUID changes, breaking that system's fstab [y/N]:"
+            read -r _mk || true
+            case "${_mk,,}" in y|yes) FORMAT_SWAP="yes" ;; *) FORMAT_SWAP="no" ;; esac
+        fi
+        break
+    done
+
     # Say exactly which devices are about to be written, and nothing implied.
     echo ""
     echo "  $(bold 'These partitions will be FORMATTED') — everything on them is lost:"
     echo "    root : $PART_ROOT  → $ROOT_FS$([ "$ENCRYPT" = "yes" ] && echo " inside LUKS2")"
     [ -n "$PART_BOOT" ] && echo "    /boot: $PART_BOOT  → ext4"
+    if [ -n "$PART_SWAP" ]; then
+        if [ "$FORMAT_SWAP" = "yes" ]; then
+            echo "    swap : $PART_SWAP  → mkswap"
+        else
+            echo "    swap : $PART_SWAP  → used as-is, not re-made"
+        fi
+    fi
     if [ -n "$PART_EFI" ]; then
         if [ "$FORMAT_ESP" = "yes" ]; then
             echo "    ESP  : $PART_EFI  → FAT32"
@@ -1141,6 +1178,20 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
         ESP_MOUNT="$(layout_esp_mount "$BOOTLOADER")"
         mkdir -p "/mnt${ESP_MOUNT}"
         mount "$PART_EFI" "/mnt${ESP_MOUNT}" || die "Failed to mount EFI at $ESP_MOUNT"
+    fi
+
+    # swapon, not just mkswap. fstab comes from `genfstab -U /mnt` further down,
+    # and genfstab writes a swap line for swap that is ON at that moment and for
+    # nothing else — so a swap made here but left off would work for this session
+    # and be forgotten at the first boot, which is the failure nobody notices
+    # until the machine starts OOM-killing.
+    if [ -n "$PART_SWAP" ]; then
+        if [ "$FORMAT_SWAP" = "yes" ]; then
+            echo "  Making swap on $PART_SWAP..."
+            mkswap "$PART_SWAP" >/dev/null || die "mkswap failed on $PART_SWAP"
+        fi
+        swapon "$PART_SWAP" || die "swapon $PART_SWAP failed"
+        success "Swap enabled ($PART_SWAP, $(lsblk -dno SIZE "$PART_SWAP" 2>/dev/null))"
     fi
 
 elif [ "$BOOT_MODE" = "uefi" ]; then
@@ -1849,6 +1900,16 @@ step "Configuring System"
 # fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 echo "  fstab generated"
+
+# genfstab records the swap only because the ADVANCED path turned it on before
+# reaching here. Check rather than assume: a swap the installer set up and fstab
+# never mentions is one the machine has for this session and forgets at the next
+# boot, and nothing about that looks wrong until it starts OOM-killing.
+if [ -n "${PART_SWAP:-}" ]; then
+    grep -qE '^[^#]*[[:space:]]swap[[:space:]]' /mnt/etc/fstab \
+        || die "swap ($PART_SWAP) is missing from the generated fstab — it would not come back after a reboot"
+    success "Swap recorded in fstab"
+fi
 
 # hostname
 echo "synapse" > /mnt/etc/hostname

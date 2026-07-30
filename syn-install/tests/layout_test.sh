@@ -30,6 +30,20 @@ check() {  # check <description> <expected> <actual>
     fi
 }
 
+# Comments quote both the failure mode and the command that caused it, so these
+# have to look at code lines only or they match the explanation.
+#
+# Read once into a variable and match from a here-string. NOT `strip | grep -q`:
+# sourcing syn-install.sh turns on `set -o pipefail`, and `grep -q` exits the
+# moment it matches, so the producer takes SIGPIPE and the pipeline reports 141.
+# For a string early in the file that turns every "must be absent" check into
+# "no" whether the string is there or not — the checks below would have passed
+# over the exact commands they exist to forbid. -F because every pattern here is
+# a literal, and $0 and "$@" do not need to be spelled as regex.
+codetext=$(grep -vE '^[[:space:]]*#' "$here/../syn-install.sh")
+in_code()    { grep -qF -- "$1" <<<"$codetext" && echo yes || echo no; }
+count_code() { grep -cF -- "$1" <<<"$codetext"; }
+
 echo "=== filesystem table ==="
 
 # Every offered filesystem must answer every question. A filesystem that is
@@ -216,6 +230,29 @@ for needle in luks_format_root format_and_mount_root part_usable available_part_
 done
 check "the manual arm never runs mklabel" "no" \
     "$(grep -qF -- 'mklabel' <<<"$manual_arm" && echo yes || echo no)"
+
+# ── swap ──
+# It is offered only here, and the ordering is the part that silently breaks:
+# genfstab writes a swap line for swap that is ON at that moment and nothing
+# else, so a mkswap without a swapon BEFORE genfstab gives a machine that has
+# swap for one session and forgets it at the next boot.
+check "the manual arm offers swap" "yes" \
+    "$(grep -qF -- 'Swap partition (blank for none)' <<<"$manual_arm" && echo yes || echo no)"
+check "it makes and enables the swap" "yes" \
+    "$(grep -qF -- 'mkswap' <<<"$manual_arm" && grep -qF -- 'swapon' <<<"$manual_arm" && echo yes || echo no)"
+swapon_line=$(grep -n '^        swapon "\$PART_SWAP"' "$here/../syn-install.sh" | cut -d: -f1)
+genfstab_line=$(grep -n '^genfstab -U /mnt' "$here/../syn-install.sh" | cut -d: -f1)
+check "swapon comes before genfstab" "yes" \
+    "$([ -n "$swapon_line" ] && [ -n "$genfstab_line" ] && [ "$swapon_line" -lt "$genfstab_line" ] \
+       && echo yes || echo no)"
+check "and fstab is checked for the swap line afterwards" "yes" \
+    "$(in_code 'missing from the generated fstab')"
+# Re-making an existing swap changes its UUID, which is what another system's
+# fstab and its hibernation resume= point at. That must not be the default.
+check "an existing swap is not re-made by default" "yes" \
+    "$(grep -A2 'Re-make it?' <<<"$manual_arm" | grep -q '\*) FORMAT_SWAP="no"' && echo yes || echo no)"
+check "cleanup turns the swap back off" "yes" \
+    "$(in_code 'swapoff "$PART_SWAP"')"
 check "the manual arm confirms before formatting" "yes" \
     "$(grep -qF -- "Type 'yes' to format these" <<<"$manual_arm" && echo yes || echo no)"
 
@@ -379,19 +416,6 @@ check "limine.conf names no fallback initramfs" "0" \
 # /.snapshots, which is already the mounted @snapshots subvolume, and fails with
 # errno 17. Calling it and tolerating the failure produced installs whose
 # `snapper list-configs` was empty — snapshots enabled, no snapshot possible.
-# Comments quote both the failure mode and the command that caused it, so these
-# have to look at code lines only or they match the explanation.
-#
-# Read once into a variable and match from a here-string. NOT `strip | grep -q`:
-# sourcing syn-install.sh turns on `set -o pipefail`, and `grep -q` exits the
-# moment it matches, so the producer takes SIGPIPE and the pipeline reports 141.
-# For a string early in the file that turns every "must be absent" check into
-# "no" whether the string is there or not — the checks below would have passed
-# over the exact commands they exist to forbid. -F because every pattern here is
-# a literal, and $0 and "$@" do not need to be spelled as regex.
-codetext=$(grep -vE '^[[:space:]]*#' "$here/../syn-install.sh")
-in_code()    { grep -qF -- "$1" <<<"$codetext" && echo yes || echo no; }
-count_code() { grep -cF -- "$1" <<<"$codetext"; }
 
 # ── The plan must be confirmable while it is still free to change ──
 #
