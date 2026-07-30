@@ -1335,6 +1335,7 @@ pacstrap /mnt \
     rtkit polkit-gnome xorg-xhost \
     mkinitcpio dkms \
     cryptsetup \
+    zram-generator \
     2>&1 || die "pacstrap failed — check network connection"
 
 # Hard verify grub landed in the chroot
@@ -1909,6 +1910,57 @@ if [ -n "${PART_SWAP:-}" ]; then
     grep -qE '^[^#]*[[:space:]]swap[[:space:]]' /mnt/etc/fstab \
         || die "swap ($PART_SWAP) is missing from the generated fstab — it would not come back after a reboot"
     success "Swap recorded in fstab"
+fi
+
+# ── zram ──────────────────────────────────────────────────
+#
+# Compressed swap in RAM, on every install. Until now this installer made no
+# swap of any kind: a 4 GiB VM running a 4.3 GB model plus a desktop had no
+# cushion at all, and the first thing the OOM killer reaches for is synapd.
+#
+# zram rather than a partition because it is the only answer that fits every
+# layout — ERASE and ALONGSIDE both give the root 100% of what is left, so there
+# is nowhere to put a swap partition without changing a tested layout. The
+# ADVANCED path still offers a real one, for the two things zram cannot do:
+# hibernate (the image has to survive power-off) and add capacity that is not
+# itself RAM.
+#
+# min(ram / 2, 8192) matches Fedora, which is where this default has had the
+# most testing. priority 100 puts it ahead of a disk swap from fstab (which
+# defaults to -2), so zram takes the pressure first and the disk is overflow.
+#
+# NOTE: llama.cpp mmaps the model, so those pages are file-backed and get
+# evicted rather than swapped. This is a cushion for the rest of the desktop,
+# not for the model.
+cat > /mnt/etc/systemd/zram-generator.conf << 'EOF'
+# Managed by syn-install. See zram-generator.conf(5).
+[zram0]
+zram-size = min(ram / 2, 8192)
+compression-algorithm = zstd
+swap-priority = 100
+EOF
+
+# Run the real generator against the target and check it produces the unit.
+#
+# This is not ceremony. A config the generator cannot parse makes it emit
+# NOTHING and say nothing — verified here by feeding it a bad zram-size and
+# watching it write zero units without an error — and the machine then boots
+# with no swap, which looks exactly like a machine that was never configured.
+# ZRAM_GENERATOR_ROOT is its documented test mode; running it inside the chroot
+# means / is the target and /proc is the live kernel's, which is what it needs.
+_zg=/usr/lib/systemd/system-generators/zram-generator
+if arch-chroot /mnt test -x "$_zg"; then
+    arch-chroot /mnt rm -rf /tmp/zram-check
+    arch-chroot /mnt mkdir -p /tmp/zram-check
+    arch-chroot /mnt env ZRAM_GENERATOR_ROOT=/ "$_zg" /tmp/zram-check >/dev/null 2>&1 || true
+    if arch-chroot /mnt test -f /tmp/zram-check/dev-zram0.swap; then
+        success "zram configured (compressed swap, half of RAM up to 8 GiB)"
+    else
+        die "zram-generator produced no swap unit from the config just written — the system would boot with no swap"
+    fi
+    arch-chroot /mnt rm -rf /tmp/zram-check
+else
+    warn "zram-generator is not installed in the target — no compressed swap"
 fi
 
 # hostname

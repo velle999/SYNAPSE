@@ -153,3 +153,4 @@ grub-btrfs
 inotify-tools
 limine
 limine-snapper-sync
+zram-generator

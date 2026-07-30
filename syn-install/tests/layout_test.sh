@@ -253,6 +253,30 @@ check "an existing swap is not re-made by default" "yes" \
     "$(grep -A2 'Re-make it?' <<<"$manual_arm" | grep -q '\*) FORMAT_SWAP="no"' && echo yes || echo no)"
 check "cleanup turns the swap back off" "yes" \
     "$(in_code 'swapoff "$PART_SWAP"')"
+
+# ── zram ──
+# Unconditional, on every layout, because ERASE and ALONGSIDE have nowhere to
+# put a partition. The package has to be installed AND the config written AND
+# the result checked: a config zram-generator cannot parse makes it emit nothing
+# and say nothing, so "no units" and "no zram" look identical to a working boot.
+check "zram-generator is pacstrapped" "yes"      "$(in_code 'zram-generator \')"
+check "the zram config is written"    "yes"      "$(in_code '/mnt/etc/systemd/zram-generator.conf')"
+check "sized min(ram / 2, 8192)"      "yes"      "$(in_code 'zram-size = min(ram / 2, 8192)')"
+check "compressed with zstd"          "yes"      "$(in_code 'compression-algorithm = zstd')"
+# Ahead of a disk swap from fstab, which genfstab writes with no pri= (so -2).
+check "zram outranks a disk swap"     "yes"      "$(in_code 'swap-priority = 100')"
+check "the generator is actually run against the target" "yes" \
+    "$(in_code 'ZRAM_GENERATOR_ROOT=/')"
+check "and a config that yields no unit is fatal" "yes" \
+    "$(in_code 'produced no swap unit from the config just written')"
+check "zram-generator ships on the ISO" "yes" \
+    "$(grep -qx 'zram-generator' "$here/../../archiso/packages.x86_64" && echo yes || echo no)"
+# The package alone does nothing: with no config the generator reports "No
+# configuration found" and emits zero units. The live root is an overlay in RAM
+# running a compositor and pacstrap, which is exactly where a 4 GiB install dies.
+check "the live ISO carries a zram config too" "yes" \
+    "$(grep -q 'zram-size' "$here/../../archiso/airootfs/etc/systemd/zram-generator.conf" 2>/dev/null \
+       && echo yes || echo no)"
 check "the manual arm confirms before formatting" "yes" \
     "$(grep -qF -- "Type 'yes' to format these" <<<"$manual_arm" && echo yes || echo no)"
 
