@@ -348,6 +348,54 @@ layout_separate_boot() {
 # Both formats name paths relative to the ESP — systemd-boot as bare "linux" and
 # "initrd" keys, limine as "kernel_path:"/"module_path:" behind its boot():
 # notation for "the partition this config is on".
+# The partition editors this image can offer, best first. cfdisk is the one that
+# is always there (util-linux, in base) and the only one a first-time user can
+# drive without reading a manual; the rest are listed because someone who asked
+# for ADVANCED may well want fdisk's expert commands or parted's resize. gparted
+# is included for completeness and simply will not appear on an image without
+# it — the ISO does not ship it today.
+SYN_PART_EDITORS="cfdisk cgdisk fdisk gdisk parted gparted"
+
+# Which of them exist here, in that order. Separate from the prompt so the test
+# suite can assert the list without a disk.
+available_part_editors() {
+    local e out=""
+    for e in $SYN_PART_EDITORS; do
+        command -v "$e" >/dev/null 2>&1 && out="$out $e"
+    done
+    echo "${out# }"
+}
+
+# Is <dev> usable as the partition for <role>? Echoes the reason it is not and
+# returns 1; silent and returns 0 when it is fine.
+#
+# This is the whole safety net of the ADVANCED path. The automatic paths know
+# what they created; here the user types a device name, and the ways that goes
+# wrong are all quiet: a typo naming the live USB, the disk instead of the
+# partition, something already mounted, a root too small to hold the system.
+part_usable() {   # part_usable <dev> <role> [min-bytes]
+    local dev="$1" role="$2" min="${3:-0}" sz
+    [ -n "$dev" ]            || { echo "no device given for $role"; return 1; }
+    [ -b "$dev" ]            || { echo "$dev is not a block device"; return 1; }
+    case "$(lsblk -dno TYPE "$dev" 2>/dev/null)" in
+        part|crypt|lvm|raid1|raid0) ;;
+        disk) echo "$dev is a whole disk, not a partition — partition it first"; return 1 ;;
+        *)    echo "$dev is not a partition"; return 1 ;;
+    esac
+    if lsblk -nro MOUNTPOINT "$dev" 2>/dev/null | grep -q .; then
+        echo "$dev is mounted — unmount it first"; return 1
+    fi
+    if is_live_disk "$(lsblk -no PKNAME "$dev" 2>/dev/null | head -1 | sed 's|^|/dev/|')"; then
+        echo "$dev is on the live/boot device — that is the installer's own media"; return 1
+    fi
+    sz="$(lsblk -bdno SIZE "$dev" 2>/dev/null)"
+    if [ "$min" -gt 0 ] && [[ "$sz" =~ ^[0-9]+$ ]] && [ "$sz" -lt "$min" ]; then
+        echo "$dev is $((sz / 1024 / 1024)) MiB — $role needs at least $((min / 1024 / 1024)) MiB"
+        return 1
+    fi
+    return 0
+}
+
 esp_entry_missing_file() {   # esp_entry_missing_file <esp-root>
     local esp="$1" ent key val rest p
 
@@ -534,20 +582,44 @@ if [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] \
     echo ""
     echo "    1) Install $(bold 'ALONGSIDE') — use the free space, keep everything else"
     echo "    2) $(bold 'ERASE') the whole disk — delete every partition and all data"
+    echo "    3) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
+    echo ""
+    prompt "Install mode [1-3]:"
+    read -r _mode
+    case "${_mode:-1}" in
+        1) INSTALL_MODE="alongside" ;;
+        3) INSTALL_MODE="manual" ;;
+        *) INSTALL_MODE="erase" ;;
+    esac
+else
+    if [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] && [ -n "$ESP_DEV" ]; then
+        # Another OS is here, but not enough room to sit beside it.
+        warn "This disk holds another OS but only $((FREE_MIB / 1024)) GiB is free —
+  under the $((MIN_ROOT_MIB / 1024)) GiB SynapseOS needs. To dual-boot, shrink the
+  existing OS first (Windows: Disk Management -> Shrink Volume), then re-run.
+  Continuing now would ERASE the whole disk."
+    fi
+
+    # ADVANCED is offered on every disk, not only the dual-boot-capable ones:
+    # its whole point is the layouts this installer does not generate — a
+    # separate /home, a reused ESP that the alongside path's conditions rejected,
+    # a partition left over from another distro.
+    echo ""
+    echo "    1) $(bold 'ERASE') the whole disk — delete every partition and all data  (default)"
+    echo "    2) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
     echo ""
     prompt "Install mode [1/2]:"
     read -r _mode
     case "${_mode:-1}" in
-        1) INSTALL_MODE="alongside" ;;
+        2) INSTALL_MODE="manual" ;;
         *) INSTALL_MODE="erase" ;;
     esac
-elif [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] && [ -n "$ESP_DEV" ]; then
-    # Another OS is here, but not enough room to sit beside it.
-    warn "This disk holds another OS but only $((FREE_MIB / 1024)) GiB is free —
-  under the $((MIN_ROOT_MIB / 1024)) GiB SynapseOS needs. To dual-boot, shrink the
-  existing OS first (Windows: Disk Management -> Shrink Volume), then re-run.
-  Continuing now would ERASE the whole disk."
 fi
+case "$INSTALL_MODE" in
+    manual)    success "Install mode: ADVANCED (manual partitioning)" ;;
+    alongside) success "Install mode: alongside" ;;
+    *)         success "Install mode: erase" ;;
+esac
 
 # ── Full-disk encryption ──────────────────────────────────
 #
@@ -571,7 +643,7 @@ fi
 # not offering it.
 ENCRYPT="no"
 CRYPT_NAME="cryptroot"
-if [ "$INSTALL_MODE" = "erase" ]; then
+if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo ""
     echo "  $(bold 'Encrypt this installation?')"
     echo ""
@@ -600,7 +672,7 @@ fi
 # reinstalling, so "btrfs cannot be shrunk" belongs here, not in a wiki.
 ROOT_FS="ext4"
 SNAPSHOTS="no"
-if [ "$INSTALL_MODE" = "erase" ]; then
+if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo ""
     echo "  $(bold 'Root filesystem')"
     echo ""
@@ -629,7 +701,7 @@ fi
 # on a BIOS machine it is not offered at all rather than offered and then
 # failing at install time.
 BOOTLOADER="grub"
-if [ "$INSTALL_MODE" = "erase" ] && [ "$BOOT_MODE" = "uefi" ]; then
+if { [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; } && [ "$BOOT_MODE" = "uefi" ]; then
     echo ""
     echo "  $(bold 'Bootloader')"
     echo ""
@@ -745,11 +817,11 @@ echo ""
 echo "  $(bold 'Review the plan — nothing has been written yet:')"
 echo ""
 echo "    Disk          : $DISK"
-if [ "$INSTALL_MODE" = "erase" ]; then
-    echo "    Mode          : ERASE the whole disk"
-else
-    echo "    Mode          : install alongside, into $((FREE_MIB / 1024)) GiB of free space"
-fi
+case "$INSTALL_MODE" in
+    erase)  echo "    Mode          : ERASE the whole disk" ;;
+    manual) echo "    Mode          : ADVANCED — you partition, then pick the partitions" ;;
+    *)      echo "    Mode          : install alongside, into $((FREE_MIB / 1024)) GiB of free space" ;;
+esac
 echo "    Firmware      : $BOOT_MODE"
 echo "    Filesystem    : $ROOT_FS"
 echo "    Bootloader    : $BOOTLOADER"
@@ -934,6 +1006,142 @@ if [ "$INSTALL_MODE" = "alongside" ]; then
     mkdir -p /mnt/boot/efi
     # REUSE, never mkfs: this ESP carries Windows' bootloader.
     mount "$PART_EFI" /mnt/boot/efi || die "Failed to mount the existing ESP"
+
+elif [ "$INSTALL_MODE" = "manual" ]; then
+    # ── ADVANCED: the user partitions, the installer formats ──
+    #
+    # The installer stops deciding the LAYOUT here and starts asking. What it
+    # does NOT hand over is the filesystem work: the mkfs, the btrfs subvolume
+    # layout and the LUKS container still go through luks_format_root and
+    # format_and_mount_root, exactly as the automatic paths do. A manual install
+    # is a different partition table, not a second implementation of the parts
+    # that are subtle.
+    #
+    # Nothing on the disk is touched until every partition has been named and
+    # the summary confirmed, and only the partitions named here are formatted —
+    # anything else on the disk is left alone, including a /home the user wants
+    # to keep.
+    FORMAT_ESP="no"   # set for real below; declared here so `set -u` holds on BIOS
+    _editors="$(available_part_editors)"
+    [ -n "$_editors" ] || die "no partition editor on this image (cfdisk, fdisk and parted are all missing)"
+
+    echo ""
+    echo "  $(bold 'Partition') $DISK $(bold 'now.') The installer will re-read the table when you exit."
+    echo ""
+    echo "  Available editors:$(printf ' %s' $_editors)"
+    echo ""
+    echo "  What this install needs:"
+    echo "    • a root partition, at least $((MIN_DISK_BYTES / 1024 / 1024 / 1024)) GiB"
+    [ "$BOOT_MODE" = "uefi" ] && \
+    echo "    • an EFI System Partition (type EF00 / 'esp' flag) — an existing one can be reused"
+    [ "$SEPARATE_BOOT" = "yes" ] && \
+    echo "    • a separate /boot of ~1 GiB — $BOOTLOADER with this layout cannot read the root"
+    echo ""
+    _ed="${_editors%% *}"
+    prompt "Editor to run [$_ed]:"
+    read -r _ed_pick || true
+    case " $_editors " in
+        *" ${_ed_pick:-$_ed} "*) _ed="${_ed_pick:-$_ed}" ;;
+        *) [ -z "$_ed_pick" ] || warn "$_ed_pick is not available here — using $_ed" ;;
+    esac
+
+    echo ""
+    echo "  Starting $_ed on $DISK — write your changes before quitting."
+    sleep 1
+    "$_ed" "$DISK" || warn "$_ed exited non-zero — check the table below before continuing"
+
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 2
+
+    echo ""
+    echo "  $(bold 'Partitions now on') $DISK:"
+    lsblk -o NAME,SIZE,FSTYPE,PARTTYPENAME,MOUNTPOINTS "$DISK" 2>/dev/null | sed 's/^/    /' \
+        || lsblk "$DISK" | sed 's/^/    /'
+    echo ""
+
+    # Root. Asked in a loop rather than validated once and aborted: the user is
+    # standing at the machine with the editor one keystroke away, so a typo
+    # should cost a retry, not a re-run of the whole installer.
+    while :; do
+        prompt "Root partition (e.g. ${DISK}2):"
+        read -r PART_ROOT || true
+        [ -n "${PART_ROOT:-}" ] || continue
+        case "$PART_ROOT" in /dev/*) ;; *) PART_ROOT="/dev/$PART_ROOT" ;; esac
+        _why="$(part_usable "$PART_ROOT" "the root filesystem" "$MIN_DISK_BYTES")" && break
+        warn "$_why"
+    done
+
+    PART_EFI=""
+    if [ "$BOOT_MODE" = "uefi" ]; then
+        while :; do
+            prompt "EFI System Partition (e.g. ${DISK}1):"
+            read -r PART_EFI || true
+            [ -n "${PART_EFI:-}" ] || continue
+            case "$PART_EFI" in /dev/*) ;; *) PART_EFI="/dev/$PART_EFI" ;; esac
+            _why="$(part_usable "$PART_EFI" "the EFI partition" $((256 * 1024 * 1024)))" || { warn "$_why"; continue; }
+            # An ESP that already carries a bootloader is the dual-boot case:
+            # formatting it would take Windows' with it. Ask, default to keeping.
+            FORMAT_ESP="yes"
+            if [ "$(blkid -s TYPE -o value "$PART_EFI" 2>/dev/null)" = "vfat" ]; then
+                echo "    $PART_EFI is already FAT — it may hold another OS's bootloader."
+                prompt "Format it? Everything on it is lost [y/N]:"
+                read -r _fmt || true
+                case "${_fmt,,}" in y|yes) FORMAT_ESP="yes" ;; *) FORMAT_ESP="no" ;; esac
+            fi
+            break
+        done
+    fi
+
+    PART_BOOT=""
+    if [ "$SEPARATE_BOOT" = "yes" ]; then
+        while :; do
+            prompt "Separate /boot partition:"
+            read -r PART_BOOT || true
+            [ -n "${PART_BOOT:-}" ] || continue
+            case "$PART_BOOT" in /dev/*) ;; *) PART_BOOT="/dev/$PART_BOOT" ;; esac
+            _why="$(part_usable "$PART_BOOT" "/boot" $((512 * 1024 * 1024)))" && break
+            warn "$_why"
+        done
+    fi
+
+    # Say exactly which devices are about to be written, and nothing implied.
+    echo ""
+    echo "  $(bold 'These partitions will be FORMATTED') — everything on them is lost:"
+    echo "    root : $PART_ROOT  → $ROOT_FS$([ "$ENCRYPT" = "yes" ] && echo " inside LUKS2")"
+    [ -n "$PART_BOOT" ] && echo "    /boot: $PART_BOOT  → ext4"
+    if [ -n "$PART_EFI" ]; then
+        if [ "$FORMAT_ESP" = "yes" ]; then
+            echo "    ESP  : $PART_EFI  → FAT32"
+        else
+            echo "    ESP  : $PART_EFI  → kept as-is, mounted only"
+        fi
+    fi
+    echo ""
+    echo "  Everything else on $DISK is left untouched."
+    echo ""
+    prompt "Type 'yes' to format these:"
+    read -r confirm
+    [ "$confirm" = "yes" ] || die "Aborted"
+
+    if [ -n "$PART_EFI" ] && [ "$FORMAT_ESP" = "yes" ]; then
+        echo "  Formatting EFI partition..."
+        mkfs.fat -F32 "$PART_EFI" || die "Failed to format $PART_EFI"
+    fi
+    luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
+    format_and_mount_root       # mkfs + mount, and btrfs subvolumes if chosen
+
+    if [ -n "$PART_BOOT" ]; then
+        echo "  Formatting /boot partition..."
+        mkfs.ext4 -F "$PART_BOOT" || die "Failed to format $PART_BOOT"
+        mkdir -p /mnt/boot
+        mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
+    fi
+
+    if [ -n "$PART_EFI" ]; then
+        ESP_MOUNT="$(layout_esp_mount "$BOOTLOADER")"
+        mkdir -p "/mnt${ESP_MOUNT}"
+        mount "$PART_EFI" "/mnt${ESP_MOUNT}" || die "Failed to mount EFI at $ESP_MOUNT"
+    fi
 
 elif [ "$BOOT_MODE" = "uefi" ]; then
     warn "This will ERASE all data on $DISK"

@@ -168,6 +168,58 @@ for bl in $SYN_BOOTLOADERS; do
     fi
 done
 
+echo "=== advanced (manual) partitioning ==="
+
+# The editor list must degrade to what the image actually has. An empty list is
+# not a menu, it is a dead end — and the ISO ships neither gparted nor gdisk.
+eds="$(available_part_editors)"
+check "at least one partition editor is available" "yes" \
+    "$([ -n "$eds" ] && echo yes || echo no)"
+check "cfdisk leads the list when present" "yes" \
+    "$(case "$eds" in "cfdisk"*) echo yes ;; *) command -v cfdisk >/dev/null && echo no || echo yes ;; esac)"
+check "the list contains only installed editors" "yes" \
+    "$(ok=yes; for e in $eds; do command -v "$e" >/dev/null || ok=no; done; echo $ok)"
+
+# part_usable is the whole safety net of the manual path: the user types a
+# device name and every way that goes wrong is quiet. These are read-only —
+# nothing is opened for writing, and the "whole disk" case uses whatever disk
+# this machine actually has rather than a name baked into the test.
+check "an empty device is rejected" "no" \
+    "$(part_usable "" root 0 >/dev/null && echo yes || echo no)"
+check "a nonexistent device is rejected" "no" \
+    "$(part_usable /dev/synapse-no-such-device root 0 >/dev/null && echo yes || echo no)"
+somedisk="/dev/$(lsblk -dno NAME -e7 2>/dev/null | head -1)"
+check "a whole disk is rejected as a partition" "no" \
+    "$(part_usable "$somedisk" root 0 >/dev/null && echo yes || echo no)"
+check "and it says why" "yes" \
+    "$(case "$(part_usable "$somedisk" root 0)" in *"whole disk"*) echo yes ;; *) echo no ;; esac)"
+mountedpart="$(lsblk -rno NAME,MOUNTPOINT -e7 2>/dev/null | awk '$2=="/"{print "/dev/"$1; exit}')"
+if [ -n "$mountedpart" ]; then
+    check "a mounted partition is rejected" "no" \
+        "$(part_usable "$mountedpart" root 0 >/dev/null && echo yes || echo no)"
+fi
+# Size: ask for more than the device has, using a real partition as the subject.
+anypart="$(lsblk -rno NAME,TYPE -e7 2>/dev/null | awk '$2=="part"{print "/dev/"$1; exit}')"
+if [ -n "$anypart" ]; then
+    check "a too-small partition is rejected" "no" \
+        "$(part_usable "$anypart" root 999999999999999 >/dev/null && echo yes || echo no)"
+fi
+
+# The manual path must reuse the shared filesystem helpers, not reimplement
+# them: that is what keeps LUKS and the btrfs subvolume layout identical to the
+# automatic paths.
+manual_arm=$(awk '/^elif \[ "\$INSTALL_MODE" = "manual" \]; then$/,/^elif \[ "\$BOOT_MODE" = "uefi" \]; then$/' \
+             "$here/../syn-install.sh")
+for needle in luks_format_root format_and_mount_root part_usable available_part_editors; do
+    check "the manual arm calls $needle" "yes" \
+        "$(grep -qF -- "$needle" <<<"$manual_arm" && echo yes || echo no)"
+done
+check "the manual arm never runs mklabel" "no" \
+    "$(grep -qF -- 'mklabel' <<<"$manual_arm" && echo yes || echo no)"
+check "the manual arm confirms before formatting" "yes" \
+    "$(grep -qF -- "Type 'yes' to format these" <<<"$manual_arm" && echo yes || echo no)"
+
+echo
 echo "=== no runaway heredocs ==="
 #
 # A heredoc terminator only closes the heredoc when it is alone at column 0.
@@ -288,10 +340,13 @@ selfcalls=$(awk '/^format_and_mount_root\(\) \{/,/^\}/' "$here/../syn-install.sh
             | grep -c '^[[:space:]]*format_and_mount_root[[:space:]]*$')
 check "format_and_mount_root does not call itself" "0" "$selfcalls"
 
-# Both partitioning branches must go through the helper, or one of them formats
-# without creating subvolumes and btrfs snapshots silently do not work.
+# Every partitioning branch that lays down a chosen filesystem must go through
+# the helper, or one of them formats without creating the subvolumes and btrfs
+# snapshots silently do not work. That is three: UEFI erase, BIOS erase, and the
+# ADVANCED (manual) path. The alongside path is deliberately NOT one of them — it
+# writes ext4 into free space beside another OS and says so in its own comment.
 calls=$(grep -c '^[[:space:]]\+format_and_mount_root\b' "$here/../syn-install.sh")
-check "both partitioning branches call the helper" "2" "$calls"
+check "every filesystem-choosing branch calls the helper" "3" "$calls"
 
 # Every mkfs of a ROOT device goes through fs_mkfs_cmd. A literal mkfs.ext4 on a
 # root device would ignore the user's filesystem choice entirely.
