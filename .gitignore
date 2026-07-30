@@ -3,6 +3,12 @@
 models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
 archiso/airootfs/var/lib/synapd/models/synapse-7b-q4_k_m.gguf
 archiso/airootfs/var/lib/synapd/models/synapse.gguf
+# Written by archiso/build.sh next to the weights above, with a build timestamp
+# in it, so it reappears modified after every ISO build. Nothing reads it — only
+# build.sh mentions it — and build.sh mkdir -p's the directory (line 244)
+# regardless of --no-model, as do syn-firstboot and syn-model before they
+# download, so untracking it costs neither the file nor the directory.
+archiso/airootfs/var/lib/synapd/models/manifest.txt
 
 # ── Vendored / prebuilt llama.cpp (build it locally; see README) ─
 llama.cpp/
