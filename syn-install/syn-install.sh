@@ -313,6 +313,48 @@ layout_separate_boot() {
 }
 
 
+# Read the boot entries back and report the first file they name that is not
+# actually on the ESP. Prints "<entry>: <path>" and returns 0 when something is
+# missing, returns 1 when every entry checks out — the shape a caller wants for
+# `msg=$(...) && die`.
+#
+# WHY THIS EXISTS: the per-loader checks only ever looked for the ONE kernel and
+# initramfs the default entry uses, so a second entry naming a file that is never
+# generated passed every check and failed only at boot. That is precisely what
+# the "(fallback initramfs)" entry did on both systemd-boot and limine, for as
+# long as those loaders have been offered: Arch's linux.preset ships
+# PRESETS=('default'), so initramfs-linux-fallback.img does not exist.
+#
+# Both formats name paths relative to the ESP — systemd-boot as bare "linux" and
+# "initrd" keys, limine as "kernel_path:"/"module_path:" behind its boot():
+# notation for "the partition this config is on".
+esp_entry_missing_file() {   # esp_entry_missing_file <esp-root>
+    local esp="$1" ent key val rest p
+
+    for ent in "$esp"/loader/entries/*.conf; do
+        [ -f "$ent" ] || continue
+        while read -r key val rest; do
+            case "$key" in
+                linux|initrd)
+                    [ -f "$esp/$val" ] || { echo "$(basename "$ent"): $val"; return 0; } ;;
+            esac
+        done < "$ent"
+    done
+
+    if [ -f "$esp/limine.conf" ]; then
+        while read -r key val rest; do
+            case "$key" in
+                kernel_path:|module_path:)
+                    p="${val#boot():}"
+                    [ -f "$esp/$p" ] || { echo "limine.conf: $p"; return 0; } ;;
+            esac
+        done < "$esp/limine.conf"
+    fi
+
+    return 1
+}
+
+
 # Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
 # pure decision functions above and stops HERE, before the root check, the
 # EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
@@ -2497,12 +2539,13 @@ initrd  /initramfs-linux.img
 options $SDB_ROOT rw $GPU_KERNEL_PARAMS
 EOF
 
-    cat > /mnt/boot/loader/entries/synapseos-fallback.conf << EOF
-title   SynapseOS (fallback initramfs)
-linux   /vmlinuz-linux
-initrd  /initramfs-linux-fallback.img
-options $SDB_ROOT rw
-EOF
+    # There is deliberately no "(fallback initramfs)" entry. Arch's linux.preset
+    # ships PRESETS=('default') — `pacman -Qkk linux` confirms that file
+    # unmodified — so /boot/initramfs-linux-fallback.img is never generated, and
+    # the entry that named it for years could only ever fail to boot. Adding the
+    # fallback back means adding 'fallback' to the preset and rerunning
+    # mkinitcpio -P, not writing the entry; the loop below now refuses the
+    # entry-without-image combination outright.
 
     # The kernel must actually be ON the ESP. If pacstrap ran before the ESP was
     # mounted at /boot, these entries would point at files that are not there and
@@ -2513,6 +2556,14 @@ EOF
         || die "initramfs is not on the ESP — systemd-boot would find nothing to boot"
     [ -f /mnt/boot/EFI/BOOT/BOOTX64.EFI ] || [ -f /mnt/boot/EFI/systemd/systemd-bootx64.efi ] \
         || die "systemd-boot did not install its EFI binary"
+
+    # And EVERY entry must name files that exist, not just the default one. The
+    # two checks above pass whatever else the menu claims — which is exactly how
+    # a dead fallback entry survived: nothing here ever read the entry files
+    # back. This does, so the next entry added without its image fails the
+    # install instead of the boot.
+    _miss="$(esp_entry_missing_file /mnt/boot)" \
+        && die "a boot entry names a file that is not on the ESP — $_miss"
 
 else
     # ── limine ────────────────────────────────────────────
@@ -2588,6 +2639,12 @@ EOF
         || die "limine's EFI binary is not on the ESP"
     grep -q 'kernel_path' /mnt/boot/limine.conf \
         || die "limine.conf has no kernel entry"
+
+    # The same read-it-back check the systemd-boot branch does. This is what
+    # would have caught the fallback entry naming an initramfs that mkinitcpio
+    # never generates.
+    _miss="$(esp_entry_missing_file /mnt/boot)" \
+        && die "a limine entry names a file that is not on the ESP — $_miss"
 fi
 
 # Hard-verify the encrypted boot path. Every one of these is a way to end up

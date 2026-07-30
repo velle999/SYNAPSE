@@ -168,6 +168,66 @@ for bl in $SYN_BOOTLOADERS; do
     fi
 done
 
+echo "=== boot entries must name files that exist ==="
+
+# The dead "(fallback initramfs)" entry passed every install-time check on both
+# systemd-boot and limine because nothing read the entry files back. This is the
+# check that would have caught it, so it gets a real fake ESP rather than a grep.
+esp=$(mktemp -d)
+trap 'rm -rf "$esp"' EXIT
+mkdir -p "$esp/loader/entries"
+: > "$esp/vmlinuz-linux"
+: > "$esp/initramfs-linux.img"
+
+cat > "$esp/loader/entries/synapseos.conf" << 'ENTRY'
+title   SynapseOS
+linux   /vmlinuz-linux
+initrd  /initramfs-linux.img
+options root=UUID=x rw
+ENTRY
+check "a complete systemd-boot entry passes" "no" \
+    "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
+
+# The exact entry that shipped broken.
+cat > "$esp/loader/entries/synapseos-fallback.conf" << 'ENTRY'
+title   SynapseOS (fallback initramfs)
+linux   /vmlinuz-linux
+initrd  /initramfs-linux-fallback.img
+options root=UUID=x rw
+ENTRY
+check "a fallback entry with no image is caught" "yes" \
+    "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
+check "and it names the missing file" "synapseos-fallback.conf: /initramfs-linux-fallback.img" \
+    "$(esp_entry_missing_file "$esp")"
+rm -f "$esp/loader/entries/synapseos-fallback.conf"
+
+# limine's own notation, including the nested snapshot entries the sync tool
+# appends — those point into limine_history and must be checked the same way.
+cat > "$esp/limine.conf" << 'LIMINE'
+timeout: 5
+
+/+SynapseOS
+comment: machine-id=deadbeef
+
+    //SynapseOS
+    protocol: linux
+    kernel_path: boot():/vmlinuz-linux
+    module_path: boot():/initramfs-linux.img
+    kernel_cmdline: root=UUID=x rw
+LIMINE
+check "a complete limine.conf passes" "no" \
+    "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
+
+printf '     ////SynapseOS\n     kernel_path: boot():/limine_history/vmlinuz_gone\n' >> "$esp/limine.conf"
+check "a limine entry with no kernel is caught" "yes" \
+    "$(esp_entry_missing_file "$esp" >/dev/null && echo yes || echo no)"
+check "and it strips boot():" "limine.conf: /limine_history/vmlinuz_gone" \
+    "$(esp_entry_missing_file "$esp")"
+
+rm -rf "$esp"
+trap - EXIT
+
+echo
 echo "=== structural checks on the script itself ==="
 
 # format_and_mount_root() must not call itself. An editing slip made it do
@@ -216,6 +276,12 @@ check "limine.conf names no fallback initramfs" "0" \
 # Comments quote both the failure mode and the command that caused it, so these
 # have to look at code lines only or they match the explanation.
 code() { grep -vE '^[[:space:]]*#' "$here/../syn-install.sh"; }
+
+# Neither loader may name it — the systemd-boot entry had the identical defect.
+check "no loader entry names the fallback initramfs" "no" \
+    "$(code | grep -q 'initramfs-linux-fallback' && echo yes || echo no)"
+check "both loaders read their entries back" "2" \
+    "$(code | grep -c 'esp_entry_missing_file /mnt/boot')"
 
 check "no reliance on snapper create-config" "no" \
     "$(code | grep -q 'create-config' && echo yes || echo no)"
