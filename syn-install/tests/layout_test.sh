@@ -202,21 +202,35 @@ check "an empty device is rejected" "no" \
     "$(part_usable "" root 0 >/dev/null && echo yes || echo no)"
 check "a nonexistent device is rejected" "no" \
     "$(part_usable /dev/synapse-no-such-device root 0 >/dev/null && echo yes || echo no)"
-somedisk="/dev/$(lsblk -dno NAME -e7 2>/dev/null | head -1)"
-check "a whole disk is rejected as a partition" "no" \
-    "$(part_usable "$somedisk" root 0 >/dev/null && echo yes || echo no)"
-check "and it says why" "yes" \
-    "$(case "$(part_usable "$somedisk" root 0)" in *"whole disk"*) echo yes ;; *) echo no ;; esac)"
+# The rest need a real device to look at, and a CI container has none — lsblk
+# comes back empty there, "/dev/$(…)" collapses to "/dev/", and the rejection
+# arrives for the wrong reason ("not a block device"), which is how these went
+# red on a machine with no disks. Say they were skipped rather than passing
+# vacuously or asserting hardware that isn't there.
+somedisk="$(lsblk -dno NAME -e7 2>/dev/null | head -1)"
+somedisk="${somedisk:+/dev/$somedisk}"
+if [ -n "$somedisk" ] && [ -b "$somedisk" ]; then
+    check "a whole disk is rejected as a partition" "no" \
+        "$(part_usable "$somedisk" root 0 >/dev/null && echo yes || echo no)"
+    check "and it says why" "yes" \
+        "$(case "$(part_usable "$somedisk" root 0)" in *"whole disk"*) echo yes ;; *) echo no ;; esac)"
+else
+    printf '  skip  whole-disk rejection (no block devices on this host)\n'
+fi
 mountedpart="$(lsblk -rno NAME,MOUNTPOINT -e7 2>/dev/null | awk '$2=="/"{print "/dev/"$1; exit}')"
 if [ -n "$mountedpart" ]; then
     check "a mounted partition is rejected" "no" \
         "$(part_usable "$mountedpart" root 0 >/dev/null && echo yes || echo no)"
+else
+    printf '  skip  mounted-partition rejection (nothing mounted at / here)\n'
 fi
 # Size: ask for more than the device has, using a real partition as the subject.
 anypart="$(lsblk -rno NAME,TYPE -e7 2>/dev/null | awk '$2=="part"{print "/dev/"$1; exit}')"
 if [ -n "$anypart" ]; then
     check "a too-small partition is rejected" "no" \
         "$(part_usable "$anypart" root 999999999999999 >/dev/null && echo yes || echo no)"
+else
+    printf '  skip  too-small rejection (no partitions on this host)\n'
 fi
 
 # The manual path must reuse the shared filesystem helpers, not reimplement
