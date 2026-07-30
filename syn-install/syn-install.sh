@@ -554,7 +554,7 @@ echo "  Running pacstrap (this may take several minutes)..."
 # no. They are now WANT_FILEMGR / WANT_WINE in step 4 and are installed in the
 # desktop step below.
 pacstrap /mnt \
-    base linux linux-firmware linux-headers foot \
+    base linux linux-firmware linux-headers kitty foot \
     grub efibootmgr os-prober ntfs-3g \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
@@ -1757,7 +1757,7 @@ PROFILEEOF
 # synui config
 mkdir -p "/mnt/home/$NEW_USER/.config/synui"
 cat > "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'SYNUIRC'
-terminal = foot
+terminal = kitty
 # greetd launches synui after login.
 # The bar is just the bar. The start menu it used to carry is synui's own
 # panel (Super tap), which scans the installed .desktop files itself when it
@@ -1770,7 +1770,7 @@ autostart = synui-bar
 # now, not a shell with a compositor around it — and an installed system has even
 # less reason to open one: Super+Return is the terminal, and the start menu has
 # it too. Uncomment to get a shell on every login.
-# autostart = foot synsh
+# autostart = kitty synsh
 # Any GUI app that needs root goes through polkit, and pkexec refuses to
 # prompt on a terminal it doesn't have — without an authentication agent
 # registered for the session it fails instantly and, launched from a menu,
@@ -1788,7 +1788,7 @@ master_factor   = 0.60
 wallpaper       = default
 wallpaper_mode  = fill
 
-# "night drive" palette — matches foot.ini and waybar style.css
+# "night drive" palette — matches kitty.conf/foot.ini and waybar style.css
 border_color_norm  = #2a2a40
 border_color_focus = #ff296d
 border_color_ai    = #05d9e8
@@ -1823,7 +1823,56 @@ SYNUIRC
 # nothing else in it expands.
 echo "xkb_layout = $SYNUI_XKB" >> "/mnt/home/$NEW_USER/.config/synui/synuirc"
 
-# foot terminal — "night drive" palette (matches synuirc border colors)
+# kitty terminal — "night drive" palette (matches synuirc border colors).
+#
+# dynamic_background_opacity is NOT optional here. kitty's documentation is
+# explicit that the option cannot be turned on by reloading the config, and that
+# a background_opacity change on reload only takes effect if dynamic opacity was
+# already enabled when kitty started. So a kitty.conf written without it leaves
+# synui's transparency slider permanently inert for this user, and writing the
+# line later does not repair it — kitty has to be restarted. It ships on.
+mkdir -p "/mnt/home/$NEW_USER/.config/kitty"
+cat > "/mnt/home/$NEW_USER/.config/kitty/kitty.conf" << 'KITTYEOF'
+font_family              monospace
+font_size                11
+window_padding_width     8
+
+background_opacity         0.92
+dynamic_background_opacity yes
+
+background               #0b0b14
+foreground               #c8e3ee
+cursor                   #05d9e8
+cursor_text_color        #0b0b14
+
+color0                   #16161e
+color1                   #ff296d
+color2                   #05ffa1
+color3                   #ffd319
+color4                   #2d9cee
+color5                   #d817ff
+color6                   #05d9e8
+color7                   #94a3b8
+color8                   #3b3b54
+color9                   #ff5c8d
+color10                  #57ffbe
+color11                  #ffe14d
+color12                  #5cb8ff
+color13                  #e55cff
+color14                  #4de8f4
+color15                  #d6e5f5
+
+selection_foreground     #0b0b14
+selection_background     #05d9e8
+url_color                #05d9e8
+KITTYEOF
+
+# foot, same palette — kept as the rescue terminal, not as a second default.
+# kitty is GPU-accelerated and needs working OpenGL; foot renders on the CPU and
+# works anywhere, which matters on a VM falling back to llvmpipe. It is 793 KiB
+# against kitty's 65 MiB, so carrying it is what makes synui's
+# `kitty || foot || alacritty || xterm` chain an actual rescue rather than a
+# decorative one. Themed to match so the fallback does not look broken.
 mkdir -p "/mnt/home/$NEW_USER/.config/foot"
 cat > "/mnt/home/$NEW_USER/.config/foot/foot.ini" << 'FOOTEOF'
 [main]

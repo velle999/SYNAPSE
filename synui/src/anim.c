@@ -289,21 +289,29 @@ static void set_buffer_effects(struct wlr_scene_buffer *buffer,
 
 /*
  * "App-native glass" windows draw their own translucent background with opaque
- * text (foot's [colors-dark] alpha), so a compositor-wide uniform fade on top of
- * that would drag the *text* down with the background — the exact "everything
- * fades together" the glass look is meant to avoid. Such windows are left fully
- * opaque at the compositor; synui-glass drives their real alpha instead, keeping
- * the glyphs crisp at any transparency. Keyed on app_id:
- *   - foot/footclient: [colors-dark] alpha (synui-glass).
+ * text (kitty's background_opacity, foot's [colors-dark] alpha), so a
+ * compositor-wide uniform fade on top of that would drag the *text* down with
+ * the background — the exact "everything fades together" the glass look is meant
+ * to avoid. Such windows are left fully opaque at the compositor; synui-glass
+ * drives their real alpha instead, keeping the glyphs crisp at any transparency.
+ * Keyed on app_id:
+ *   - kitty: background_opacity (synui-glass). The default terminal.
+ *   - foot/footclient: [colors-dark] alpha (synui-glass). Still supported —
+ *     `terminal = foot` remains valid and upgraded systems keep their foot.ini.
  *   - firefox: glass chrome via userChrome.css (widget.wayland.opaque-region
  *     disabled). Its page content is opaque anyway, so a uniform fade would only
  *     wash out the text it can't make transparent — leave it to draw its own.
+ *
+ * A terminal MISSING from this list is a silent fault, not a loud one: it keeps
+ * drawing its own alpha and then gets the compositor's fade stacked on top, so
+ * the text washes out exactly as if glass were broken. Nothing logs it.
  */
 static bool view_is_glass_native(syn_view_t *view)
 {
     const char *id = view_app_id(view);
     if (!id) return false;
-    return strcmp(id, "foot") == 0 || strcmp(id, "footclient") == 0 ||
+    return strcmp(id, "kitty") == 0 ||
+           strcmp(id, "foot") == 0 || strcmp(id, "footclient") == 0 ||
            strcmp(id, "firefox") == 0 || strcmp(id, "org.mozilla.firefox") == 0;
 }
 

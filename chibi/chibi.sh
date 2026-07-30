@@ -20,7 +20,12 @@ die() {
     if [ -t 2 ]; then
         printf '%s\n' "$msg" >&2
     else
-        MSG="$msg" foot --hold -e sh -c 'printf "%s\n" "$MSG"' >/dev/null 2>&1 || true
+        # Launched from a .desktop with no tty, so the error has nowhere to go
+        # but a terminal window. kitty is the default; fall back to foot, which
+        # is what pre-kitty installs have and what still works without OpenGL.
+        MSG="$msg" kitty --hold -e sh -c 'printf "%s\n" "$MSG"' >/dev/null 2>&1 \
+            || MSG="$msg" foot --hold -e sh -c 'printf "%s\n" "$MSG"' >/dev/null 2>&1 \
+            || true
     fi
     exit 1
 }

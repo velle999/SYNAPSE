@@ -149,7 +149,7 @@ ShellRoot {
     // matching how the start menu already launches `shelly upgrade`.
     Process {
         id: applyProc
-        command: ["foot", "--hold", "syn-update", "apply"]
+        command: ["kitty", "--hold", "syn-update", "apply"]
         running: false
     }
 

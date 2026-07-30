@@ -93,7 +93,7 @@ jobs:
             readline systemd-libs \
             wlroots0.20 wayland wayland-protocols libxkbcommon pixman cairo librsvg \
             linux-headers \
-            wayland-utils foot grim ttf-dejavu \
+            wayland-utils foot kitty grim ttf-dejavu \
             mesa libglvnd \
             xorg-xwayland
         # xorg-xwayland: without it smoke test 13 (an X11 toplevel re-mapped 6

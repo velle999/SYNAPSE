@@ -3,7 +3,7 @@
 # Read at startup (restart synui to apply changes).
 
 # ── Terminal emulator ──────────────────────────────────────
-terminal = foot
+terminal = kitty
 
 # ── Startup applications ───────────────────────────────────
 # Run on first launch. The terminal comes from synui-foot.service

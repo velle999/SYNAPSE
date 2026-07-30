@@ -222,13 +222,13 @@ PanelWindow {
                     { kind: "header", label: "SYSTEM" },
                     { kind: "action", label: "Control Panel", action: "control" },
                     { kind: "action", label: "Task Manager",  action: "taskmgr" },
-                    { kind: "exec",   label: "Terminal",      argv: ["foot"] }
+                    { kind: "exec",   label: "Terminal",      argv: ["kitty"] }
                 ]
 
                 p["System Tools"] = [
-                    { kind: "exec", label: "AI Shell (synsh)", argv: ["foot", "synsh"] },
-                    { kind: "exec", label: "System Status",    argv: ["foot", "--hold", "syn", "status"] },
-                    { kind: "exec", label: "Network Setup",    argv: ["foot", "-e", "nmtui"] },
+                    { kind: "exec", label: "AI Shell (synsh)", argv: ["kitty", "synsh"] },
+                    { kind: "exec", label: "System Status",    argv: ["kitty", "--hold", "syn", "status"] },
+                    { kind: "exec", label: "Network Setup",    argv: ["kitty", "-e", "nmtui"] },
                     // Shelly is a GUI (Terminal=false in its .desktop), so it
                     // runs bare, no foot wrapper. Its own .desktop also lands it
                     // on a category page via the scan; this is its fixed
@@ -238,7 +238,7 @@ PanelWindow {
                     // Software Manager GUI drives, so CLI and GUI stay in
                     // agreement — not raw pacman, and never a partial-upgrade
                     // -Sy. --hold so the window survives the run.
-                    { kind: "exec", label: "Update System",    argv: ["foot", "--hold", "sudo", "shelly", "upgrade"] },
+                    { kind: "exec", label: "Update System",    argv: ["kitty", "--hold", "sudo", "shelly", "upgrade"] },
                     // SynapseOS's OWN components, which shelly cannot see at
                     // all: they come from the [synapseos] repo, which is a
                     // frozen copy of the installing ISO that nothing ever

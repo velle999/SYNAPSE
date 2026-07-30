@@ -443,11 +443,11 @@ void syn_config_ensure_dir(void)
 void synui_config_load(syn_config_t *cfg)
 {
     /* Defaults */
-    strncpy(cfg->terminal, "foot", sizeof(cfg->terminal) - 1);
+    strncpy(cfg->terminal, "kitty", sizeof(cfg->terminal) - 1);
     cfg->night_light = 0;
     cfg->night_light_temp = 4000;
     cfg->autostart_count = 1;
-    strncpy(cfg->autostart[0], "foot", sizeof(cfg->autostart[0]) - 1);
+    strncpy(cfg->autostart[0], "kitty", sizeof(cfg->autostart[0]) - 1);
     cfg->border_width = BORDER_WIDTH_DEFAULT;
     cfg->gap = GAP_DEFAULT;
     cfg->master_factor = 0.60f;
@@ -629,8 +629,10 @@ void synui_config_load(syn_config_t *cfg)
     snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
              "systemctl suspend");
 
+    /* kitty accepts -e for compatibility with foot/xterm even though its own
+     * help does not list it, so this form stays valid across either terminal. */
     snprintf(cfg->network_cmd, sizeof(cfg->network_cmd),
-             "foot -e nmtui");
+             "kitty -e nmtui");
 
     /* News (news.c). No sources here: an empty list means "use the built-in
      * ones" (news.c owns that table), and the first `news_source =` line in
@@ -650,7 +652,7 @@ void synui_config_load(syn_config_t *cfg)
      * firefox-app-mode apps (tepris, nexus-chat) report their own app_id via
      * MOZ_APP_REMOTINGNAME, so they need naming separately from firefox. */
     static const char *const defaults[] = {
-        "firefox", "chibi", "tepris", "nexus-chat", "foot",
+        "firefox", "chibi", "tepris", "nexus-chat", "kitty", "foot",
     };
     cfg->game_exclude_count = 0;
     for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)

@@ -62,6 +62,7 @@ tepris
 chibi
 vibe
 foot
+kitty
 firefox
 # File manager. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
 # /etc/xdg files KDE-outside-Plasma needs to actually work: menus/applications.menu

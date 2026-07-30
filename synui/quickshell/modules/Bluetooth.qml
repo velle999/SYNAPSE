@@ -48,5 +48,5 @@ BarModule {
     onRightClicked: console_.running = true
 
     Process { id: panel;    command: ["synctl", "dispatch", "bluetooth"] }
-    Process { id: console_; command: ["foot", "-e", "bluetoothctl"] }
+    Process { id: console_; command: ["kitty", "-e", "bluetoothctl"] }
 }

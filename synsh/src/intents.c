@@ -60,9 +60,12 @@ static const char *const file_managers[] = {
     "dolphin", "thunar", "nautilus", "pcmanfm", NULL
 };
 /* For the intents that need a tty when we haven't got one — see run_foreground().
- * $TERMINAL wins if it names something real; foot is what SynapseOS ships. */
+ * $TERMINAL wins if it names something real; kitty is what SynapseOS ships by
+ * default, with foot right behind it — foot is still installed as the rescue
+ * terminal (it renders on the CPU, so it works where kitty's OpenGL does not),
+ * and systems installed before the switch have only foot. */
 static const char *const terminals[] = {
-    "foot", "alacritty", "kitty", "konsole", "xterm", NULL
+    "kitty", "foot", "alacritty", "konsole", "xterm", NULL
 };
 
 /* Is `prog` on $PATH? execvp-style lookup without spawning anything. */
@@ -105,13 +108,18 @@ const char *synsh_intent_toolinfo(void)
     const char *mus = first_present(music_players);
     const char *web = first_present(browsers);
     const char *fm  = first_present(file_managers);
+    /* Ask the same list run_foreground() will actually use, rather than naming
+     * one terminal. This used to hardcode `have("foot")`, so a box with kitty
+     * and no foot reported `terminal=NONE INSTALLED` to the model — which then
+     * had no reason to offer any intent that needs a tty. */
+    const char *trm = first_present(terminals);
 
     snprintf(buf, sizeof(buf),
         "browser=%s file-manager=%s music-player=%s terminal=%s opener=%s",
         web ? web : "NONE INSTALLED",
         fm  ? fm  : "NONE INSTALLED",
         mus ? mus : "NONE INSTALLED",
-        have("foot") ? "foot" : "NONE INSTALLED",
+        trm ? trm : "NONE INSTALLED",
         have("xdg-open") ? "xdg-open" : "NONE INSTALLED");
     done = true;
     return buf;
@@ -235,7 +243,7 @@ static int run_foreground(synsh_state_t *s, const char *cmd, bool keep_open)
     const char *term = find_terminal();
     if (!term) {
         fprintf(stderr, "  synsh: no terminal installed to run: %s\n"
-                        "         sudo pacman -S foot\n", cmd);
+                        "         sudo pacman -S kitty\n", cmd);
         return 1;
     }
 

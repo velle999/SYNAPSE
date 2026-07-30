@@ -226,7 +226,7 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
 
     switch (act) {
     case SYN_DESKACT_TERMINAL:
-        synui_spawn(s->config.terminal[0] ? s->config.terminal : "foot");
+        synui_spawn(s->config.terminal[0] ? s->config.terminal : "kitty");
         break;
     case SYN_DESKACT_FILES:
         /* Not "dolphin": it is an optdepend, and a Minimal install has none,

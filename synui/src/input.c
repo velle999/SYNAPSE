@@ -439,9 +439,20 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     if (strcmp(action, "spawn") == 0) {
         spawn(arg);
     } else if (strcmp(action, "term") == 0) {
-        /* Default config: fall back through common terminals. */
-        if (strcmp(s->config.terminal, "foot") == 0)
-            spawn("foot || alacritty || xterm");
+        /*
+         * Default config: fall back through common terminals, so a box whose
+         * terminal package failed to install still opens SOMETHING rather than
+         * a keybind that silently does nothing.
+         *
+         * The chain is only used when the configured terminal is still the
+         * shipped default — an explicit `terminal = <x>` in synuirc is a choice,
+         * and quietly launching a different program when it is missing would
+         * hide the mistake. foot stays in the chain behind kitty: it is what
+         * every system installed before this shipped, and it is 793 KiB against
+         * kitty's 65 MiB, so it is also the sensible rescue.
+         */
+        if (strcmp(s->config.terminal, "kitty") == 0)
+            spawn("kitty || foot || alacritty || xterm");
         else
             spawn(s->config.terminal);
     } else if (strcmp(action, "cmdbar") == 0) {

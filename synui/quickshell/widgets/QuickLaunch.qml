@@ -44,7 +44,7 @@ PanelWindow {
     // where it does not. `synctl dispatch <action>` runs the exact keybind
     // action, so these can never drift from what the keyboard does.
     readonly property var entries: [
-        { name: "terminal",     sub: "foot",              exec: ["foot"] },
+        { name: "terminal",     sub: "kitty",             exec: ["kitty"] },
         { name: "app launcher", sub: "all applications",  exec: ["synctl", "dispatch", "menu"] },
         { name: "files",        sub: "file manager",      exec: ["synui-open-folder"] },
         { name: "browser",      sub: "firefox",           exec: ["firefox"] },

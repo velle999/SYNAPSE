@@ -43,7 +43,48 @@ install -Dm440 /dev/null /etc/sudoers.d/wheel
 echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/wheel
 
 # ── syn user configs ──────────────────────────────────────────
-# foot terminal — Synapse brand colors
+# kitty terminal — Synapse brand colors.
+#
+# dynamic_background_opacity ships ON deliberately. kitty cannot enable that
+# option via a config reload (its own docs say so), and a background_opacity
+# change only lands on reload if dynamic opacity was already on when kitty
+# started — so a live session whose kitty.conf lacked it would have synui's
+# transparency slider do nothing at all, unfixably, for the life of that kitty.
+install -dm755 /home/syn/.config/kitty
+cat > /home/syn/.config/kitty/kitty.conf << 'EOF'
+font_family              monospace
+font_size                11
+
+background_opacity         0.92
+dynamic_background_opacity yes
+
+background               #0d0f14
+foreground               #cdd6f4
+cursor                   #12d9f5
+cursor_text_color        #0d0f14
+
+color0                   #45475a
+color1                   #f38ba8
+color2                   #a6e3a1
+color3                   #f9e2af
+color4                   #89b4fa
+color5                   #f5c2e7
+color6                   #94e2d5
+color7                   #bac2de
+color8                   #585b70
+color9                   #f38ba8
+color10                  #a6e3a1
+color11                  #f9e2af
+color12                  #89b4fa
+color13                  #f5c2e7
+color14                  #94e2d5
+color15                  #a6ef87
+EOF
+
+# foot, same palette — the rescue terminal. kitty needs working OpenGL; foot
+# renders on the CPU, which is what makes it the useful fallback in a VM on
+# llvmpipe. It is 793 KiB, so carrying it is what makes synui's
+# `kitty || foot || alacritty || xterm` chain real rather than decorative.
 install -dm755 /home/syn/.config/foot
 cat > /home/syn/.config/foot/foot.ini << 'EOF'
 [main]

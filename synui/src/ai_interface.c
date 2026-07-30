@@ -929,12 +929,18 @@ static bool cmdbar_is_launch(const char *line)
     return false;
 }
 
-/* Fire-and-forget launch of a typed command in a foot terminal. --hold keeps
- * the window after the command exits, so a one-shot's output ("ls -la") is not
- * lost the instant it prints; an interactive program (htop, vim) holds it open
- * itself until quit. sh -c carries the line verbatim — flags, pipes and quoting
- * mean what a shell would make of them, without this code re-quoting the user's
- * own words. Returns false only if the process could not be started at all. */
+/* Fire-and-forget launch of a typed command in a terminal. --hold keeps the
+ * window after the command exits, so a one-shot's output ("ls -la") is not lost
+ * the instant it prints; an interactive program (htop, vim) holds it open itself
+ * until quit. sh -c carries the line verbatim — flags, pipes and quoting mean
+ * what a shell would make of them, without this code re-quoting the user's own
+ * words. Returns false only if the process could not be started at all.
+ *
+ * kitty first, then foot: execlp() only RETURNS when the exec fails, so chaining
+ * them is the whole fallback — no need to probe for the binary first, and no
+ * window where a check passes and the exec then fails anyway. Both spell the
+ * flag `--hold` and both take the command as trailing arguments, so one form
+ * covers them. */
 static bool cmdbar_launch_term(const char *line)
 {
     pid_t pid = fork();
@@ -942,7 +948,8 @@ static bool cmdbar_launch_term(const char *line)
     if (pid == 0) {
         setsid();                                 /* outlive the compositor */
         synui_child_reset_signals();
-        execlp("foot", "foot", "--hold", "sh", "-c", line, (char *)NULL);
+        execlp("kitty", "kitty", "--hold", "sh", "-c", line, (char *)NULL);
+        execlp("foot",  "foot",  "--hold", "sh", "-c", line, (char *)NULL);
         _exit(127);
     }
     return true;
