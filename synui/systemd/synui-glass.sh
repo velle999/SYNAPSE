@@ -33,7 +33,30 @@ a=$(awk -v x="$a" 'BEGIN{ if(x<0)x=0; if(x>1)x=1; printf "%.2f", x }')
 # shipped kitty.conf template carries the line for exactly this reason; this
 # function adds it too, so a hand-written config picks it up from the next launch
 # rather than staying mysteriously inert forever.
+#
+# The file is CREATED when it is missing, which is not a detail. kitty ships no
+# default kitty.conf — it runs on built-in defaults — so a user who installed
+# before kitty became the default terminal, or who simply never wrote one, has
+# no file here at all. Guarding this whole block on `[ -f ]` meant the slider
+# moved, the compositor did its half, and the terminal silently ignored it,
+# forever, with nothing written anywhere to say why. A fresh install gets a full
+# template from syn-install; this is the path for everyone else, and two keys are
+# all it needs — kitty defaults the rest.
 kitty_conf="$HOME/.config/kitty/kitty.conf"
+if [ ! -e "$kitty_conf" ]; then
+    if mkdir -p "$(dirname "$kitty_conf")" 2>/dev/null; then
+        cat > "$kitty_conf" << KITTYNEW
+# Created by synui-glass. kitty defaults apply to everything not named here.
+#
+# dynamic_background_opacity must be present when kitty STARTS: kitty does not
+# support enabling it via config reload, so a kitty already running when this
+# file appeared will ignore background_opacity until it is restarted.
+background_opacity         $a
+dynamic_background_opacity yes
+KITTYNEW
+    fi
+fi
+
 if [ -f "$kitty_conf" ]; then
     tmp=$(mktemp) || exit 0
 
