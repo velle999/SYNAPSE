@@ -1104,129 +1104,152 @@ step "Step 4 — Choose What to Install"
 # (~4.3 GB against ~1 GB for every SynapseOS package combined), which is why it
 # is a line of its own rather than folded into a preset's package list.
 
-# Defaults = Standard.
-WANT_MODEL=1          # copy the ~4.3 GB gguf off the ISO
-WANT_BLUETOOTH=1      # bluez + bluez-utils
-WANT_PRINTING=1       # cups + drivers
-WANT_FILEMGR=1        # dolphin — synui's Files button and desktop menu launch it
-WANT_WINE=1           # wine + wine-mono
-SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
-SEL_APPS="chibi vibe"
+# ── Choose, then confirm; "no" asks again ─────────────────
+#
+# The loop is in place rather than a re-exec like the disk plan: pacstrap has
+# already run by here, so restarting the installer would repartition the disk.
+# What makes looping safe is that the defaults below are re-initialised on every
+# pass — WANT_*, SEL_CORE and SEL_APPS all start from Standard again, so a second
+# pass cannot inherit an app the first one appended to SEL_APPS.
+while :; do
+    # Defaults = Standard.
+    WANT_MODEL=1          # copy the ~4.3 GB gguf off the ISO
+    WANT_BLUETOOTH=1      # bluez + bluez-utils
+    WANT_PRINTING=1       # cups + drivers
+    WANT_FILEMGR=1        # dolphin — synui's Files button and desktop menu launch it
+    WANT_WINE=1           # wine + wine-mono
+    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
+    SEL_APPS="chibi vibe"
 
-echo "  What should be installed alongside the SynapseOS core?"
-echo ""
-echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine"
-echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, Chibi + Vibe  (default)"
-echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine"
-echo "    $(bold '4)') Custom    — pick each item individually"
-echo ""
-prompt "Choice [1-4, default=2]:"
-read -r install_preset || true
-INSTALL_PRESET="${install_preset:-2}"
+    echo "  What should be installed alongside the SynapseOS core?"
+    echo ""
+    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine"
+    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, Chibi + Vibe  (default)"
+    echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine"
+    echo "    $(bold '4)') Custom    — pick each item individually"
+    echo ""
+    prompt "Choice [1-4, default=2]:"
+    read -r install_preset || true
+    INSTALL_PRESET="${install_preset:-2}"
 
-case "$INSTALL_PRESET" in
-    1)
-        SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
-        WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
-        WANT_FILEMGR=1; WANT_WINE=1
-        success "Full install selected"
-        ;;
-    3)
-        SEL_APPS=""
-        WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
-        WANT_FILEMGR=0; WANT_WINE=0
-        success "Minimal install selected"
-        ;;
-    4)
-        echo ""
-        echo "  Answer y/n for each. The default (shown in caps) is the Standard install."
-        echo ""
+    case "$INSTALL_PRESET" in
+        1)
+            SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
+            WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
+            WANT_FILEMGR=1; WANT_WINE=1
+            success "Full install selected"
+            ;;
+        3)
+            SEL_APPS=""
+            WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
+            WANT_FILEMGR=0; WANT_WINE=0
+            success "Minimal install selected"
+            ;;
+        4)
+            echo ""
+            echo "  Answer y/n for each. The default (shown in caps) is the Standard install."
+            echo ""
 
-        # Apps. Descriptions rather than bare package names — "shelly-bin" tells
-        # a first-time installer nothing about what it would be giving up.
-        ask_opt() {   # ask_opt <varname> <default 0|1> <description>
-            local __var=$1 __def=$2 __desc=$3 __hint __ans
-            if [ "$__def" = 1 ]; then __hint="[Y/n]"; else __hint="[y/N]"; fi
-            prompt "$__desc $__hint:"
-            read -r __ans || true
-            case "${__ans,,}" in
-                y|yes) printf -v "$__var" '%s' 1 ;;
-                n|no)  printf -v "$__var" '%s' 0 ;;
-                *)     printf -v "$__var" '%s' "$__def" ;;
-            esac
-        }
+            # Apps. Descriptions rather than bare package names — "shelly-bin" tells
+            # a first-time installer nothing about what it would be giving up.
+            ask_opt() {   # ask_opt <varname> <default 0|1> <description>
+                local __var=$1 __def=$2 __desc=$3 __hint __ans
+                if [ "$__def" = 1 ]; then __hint="[Y/n]"; else __hint="[y/N]"; fi
+                prompt "$__desc $__hint:"
+                read -r __ans || true
+                case "${__ans,,}" in
+                    y|yes) printf -v "$__var" '%s' 1 ;;
+                    n|no)  printf -v "$__var" '%s' 0 ;;
+                    *)     printf -v "$__var" '%s' "$__def" ;;
+                esac
+            }
 
-        ask_opt want_chibi   1 "Chibi — voice companion + security sentinel"
-        ask_opt want_vibe    1 "Vibe — local AI coding assistant"
-        ask_opt want_nexus   0 "Nexus Chat — peer-to-peer chat"
-        ask_opt want_tepris  0 "TEPRIS — block game"
-        ask_opt want_m2020   0 "Samsung M2020 printer driver"
-        ask_opt want_shelly  0 "Shelly — graphical package manager"
-        echo ""
-        ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
-        ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
-        ask_opt WANT_PRINTING   1 "Printing (CUPS)"
-        ask_opt WANT_FILEMGR    1 "File manager (Dolphin) — the desktop's Files button opens it"
-        ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
+            ask_opt want_chibi   1 "Chibi — voice companion + security sentinel"
+            ask_opt want_vibe    1 "Vibe — local AI coding assistant"
+            ask_opt want_nexus   0 "Nexus Chat — peer-to-peer chat"
+            ask_opt want_tepris  0 "TEPRIS — block game"
+            ask_opt want_m2020   0 "Samsung M2020 printer driver"
+            ask_opt want_shelly  0 "Shelly — graphical package manager"
+            echo ""
+            ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
+            ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
+            ask_opt WANT_PRINTING   1 "Printing (CUPS)"
+            ask_opt WANT_FILEMGR    1 "File manager (Dolphin) — the desktop's Files button opens it"
+            ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
 
-        SEL_APPS=""
-        [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
-        [ "$want_vibe"   = 1 ] && SEL_APPS="$SEL_APPS vibe"
-        [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
-        [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
-        [ "$want_m2020"  = 1 ] && SEL_APPS="$SEL_APPS samsung-m2020"
-        [ "$want_shelly" = 1 ] && SEL_APPS="$SEL_APPS shelly-bin"
-        SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
+            SEL_APPS=""
+            [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
+            [ "$want_vibe"   = 1 ] && SEL_APPS="$SEL_APPS vibe"
+            [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
+            [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
+            [ "$want_m2020"  = 1 ] && SEL_APPS="$SEL_APPS samsung-m2020"
+            [ "$want_shelly" = 1 ] && SEL_APPS="$SEL_APPS shelly-bin"
+            SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
 
-        # Core daemons, offered last and separately. Dropping one is allowed —
-        # it was asked for — but it stops being SynapseOS, so it is behind an
-        # extra question rather than in the same list as a block game.
-        echo ""
-        prompt "Customise the core daemons too? Removing any means this is no longer SynapseOS [y/N]:"
-        read -r core_custom || true
-        if [ "${core_custom,,}" = y ] || [ "${core_custom,,}" = yes ]; then
-            warn "The core daemons are what SynapseOS is. Deselecting them produces
+            # Core daemons, offered last and separately. Dropping one is allowed —
+            # it was asked for — but it stops being SynapseOS, so it is behind an
+            # extra question rather than in the same list as a block game.
+            echo ""
+            prompt "Customise the core daemons too? Removing any means this is no longer SynapseOS [y/N]:"
+            read -r core_custom || true
+            if [ "${core_custom,,}" = y ] || [ "${core_custom,,}" = yes ]; then
+                warn "The core daemons are what SynapseOS is. Deselecting them produces
   an Arch system with some SynapseOS parts, and the AI, security and
   desktop features will not work as documented."
-            echo ""
-            ask_opt core_synapd  1 "synapd — the LLM daemon (everything AI depends on)"
-            ask_opt core_synui   1 "synui — the Wayland compositor / desktop"
-            ask_opt core_synsh   1 "synsh — the AI-native shell"
-            ask_opt core_synnet  1 "synnet — network policy daemon"
-            ask_opt core_guard   1 "synguard + kernel module — security monitor"
-            ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
+                echo ""
+                ask_opt core_synapd  1 "synapd — the LLM daemon (everything AI depends on)"
+                ask_opt core_synui   1 "synui — the Wayland compositor / desktop"
+                ask_opt core_synsh   1 "synsh — the AI-native shell"
+                ask_opt core_synnet  1 "synnet — network policy daemon"
+                ask_opt core_guard   1 "synguard + kernel module — security monitor"
+                ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
 
-            SEL_CORE="syn syn-model syn-firstboot"
-            [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
-            [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
-            [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"
-            [ "$core_synnet" = 1 ] && SEL_CORE="$SEL_CORE synnet"
-            [ "$core_guard"  = 1 ] && SEL_CORE="$SEL_CORE synguard synapse_kmod"
-            [ "$core_update" = 1 ] && SEL_CORE="$SEL_CORE syn-update"
-            SEL_CORE=$(echo $SEL_CORE)
+                SEL_CORE="syn syn-model syn-firstboot"
+                [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
+                [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
+                [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"
+                [ "$core_synnet" = 1 ] && SEL_CORE="$SEL_CORE synnet"
+                [ "$core_guard"  = 1 ] && SEL_CORE="$SEL_CORE synguard synapse_kmod"
+                [ "$core_update" = 1 ] && SEL_CORE="$SEL_CORE syn-update"
+                SEL_CORE=$(echo $SEL_CORE)
 
-            [ "$core_update" = 1 ] || warn "syn-update deselected: this machine will have no way to receive
+                [ "$core_update" = 1 ] || warn "syn-update deselected: this machine will have no way to receive
   another SynapseOS package. Fixing that later means reinstalling."
-        fi
-        success "Custom install configured"
-        ;;
-    *)
-        success "Standard install selected"
-        ;;
-esac
+            fi
+            success "Custom install configured"
+            ;;
+        *)
+            success "Standard install selected"
+            ;;
+    esac
 
-# Read the selection back before touching the disk. A picker whose result you
-# only discover afterwards is worse than no picker.
-echo ""
-echo "  $(bold 'Installing:')"
-echo "    Core     : $(echo $SEL_CORE | wc -w) package(s)"
-echo "    Apps     : ${SEL_APPS:-none}"
-echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo 'yes (~4.3 GB)' || echo 'no')"
-echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
-echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
-echo "    Files    : $([ "$WANT_FILEMGR" = 1 ] && echo 'yes (Dolphin)' || echo no)"
-echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
-echo ""
+    # Read the selection back before touching the disk. A picker whose result you
+    # only discover afterwards is worse than no picker.
+    echo ""
+    echo "  $(bold 'Installing:')"
+    echo "    Core     : $(echo $SEL_CORE | wc -w) package(s)"
+    echo "    Apps     : ${SEL_APPS:-none}"
+    echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo 'yes (~4.3 GB)' || echo 'no')"
+    echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
+    echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
+    echo "    Files    : $([ "$WANT_FILEMGR" = 1 ] && echo 'yes (Dolphin)' || echo no)"
+    echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
+    echo ""
+    # ── Confirm the selection ─────────────────────────────
+    #
+    # Same rule as the disk plan: read it back, then ask. Nothing is installed
+    # until Step 4b below, so "no" costs only the questions again.
+    prompt "Install this selection? [Y/n]:"
+    read -r _sel_ok || true
+    case "${_sel_ok,,}" in
+        n|no)
+            echo ""
+            warn "Choosing again — nothing has been installed yet."
+            continue
+            ;;
+    esac
+    break
+done
 
 step "Step 4b — Installing SynapseOS"
 

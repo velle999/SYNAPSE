@@ -309,6 +309,29 @@ check "the passphrase is asked after the review" "yes" \
 check "answering no re-execs instead of looping" "yes" \
     "$(in_code 'exec "$0" "$@"')"
 
+# ── The package selection must be confirmable, and re-askable safely ──
+#
+# This one loops in place (pacstrap has already run, so a re-exec would
+# repartition the disk), which is only safe because the defaults are inside the
+# loop. If SEL_APPS/SEL_CORE initialisation ever drifts above `while`, a second
+# pass inherits the first one's appends and installs a set nobody picked — and
+# the first pass would still look perfect.
+sel_loop=$(grep -n '^while :; do' "$here/../syn-install.sh" | tail -1 | cut -d: -f1)
+sel_defaults=$(grep -n '^    SEL_APPS="chibi vibe"' "$here/../syn-install.sh" | cut -d: -f1)
+sel_confirm=$(grep -n 'Install this selection' "$here/../syn-install.sh" | cut -d: -f1)
+check "the selection defaults are re-initialised inside the loop" "yes" \
+    "$([ -n "$sel_loop" ] && [ -n "$sel_defaults" ] && [ "$sel_loop" -lt "$sel_defaults" ] \
+       && echo yes || echo no)"
+check "the selection is confirmed after the defaults" "yes" \
+    "$([ -n "$sel_confirm" ] && [ "$sel_defaults" -lt "$sel_confirm" ] && echo yes || echo no)"
+# It must NOT re-exec here: that would repartition a disk that is already
+# formatted and pacstrapped.
+sel_block=$(sed -n "${sel_loop},\$p" "$here/../syn-install.sh" | sed -n '1,/^done$/p')
+check "the selection loop does not re-exec the installer" "0" \
+    "$(printf '%s\n' "$sel_block" | grep -c 'exec "\$0"')"
+check "the selection loop can be exited" "1" \
+    "$(printf '%s\n' "$sel_block" | grep -cE '^[[:space:]]+break$')"
+
 # Neither loader may name it — the systemd-boot entry had the identical defect.
 check "no loader entry names the fallback initramfs" "no" \
     "$(in_code 'initramfs-linux-fallback')"
