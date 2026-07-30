@@ -1948,17 +1948,30 @@ EOF
 # with no swap, which looks exactly like a machine that was never configured.
 # ZRAM_GENERATOR_ROOT is its documented test mode; running it inside the chroot
 # means / is the target and /proc is the live kernel's, which is what it needs.
+# ONE arch-chroot invocation, and this is not a style preference.
+#
+# arch-chroot mounts a FRESH tmpfs on the target's /tmp for every call and
+# unmounts it again on exit (its chroot_setup mounts `tmp`, and line 1 of the
+# script is a `trap chroot_teardown EXIT`). Split across calls — mkdir, run,
+# test -f — each step got its own /tmp and the next one saw an empty one, so the
+# check threw away the generator's output and then reported that the generator
+# had produced nothing. It aborted a working install at "Configuring System".
+#
+# The generator's own stderr is captured and quoted in the failure, because
+# "produced no swap unit" without its reason is exactly the blind message this
+# check exists to prevent.
 _zg=/usr/lib/systemd/system-generators/zram-generator
 if arch-chroot /mnt test -x "$_zg"; then
-    arch-chroot /mnt rm -rf /tmp/zram-check
-    arch-chroot /mnt mkdir -p /tmp/zram-check
-    arch-chroot /mnt env ZRAM_GENERATOR_ROOT=/ "$_zg" /tmp/zram-check >/dev/null 2>&1 || true
-    if arch-chroot /mnt test -f /tmp/zram-check/dev-zram0.swap; then
+    if _zout=$(arch-chroot /mnt env ZRAM_GENERATOR_ROOT=/ ZG="$_zg" sh -c '
+            d=$(mktemp -d) || exit 2
+            out=$("$ZG" "$d" 2>&1)
+            if [ -f "$d/dev-zram0.swap" ]; then rm -rf "$d"; exit 0; fi
+            printf "%s" "$out"; rm -rf "$d"; exit 1
+        ' 2>&1); then
         success "zram configured (compressed swap, half of RAM up to 8 GiB)"
     else
-        die "zram-generator produced no swap unit from the config just written — the system would boot with no swap"
+        die "zram-generator produced no swap unit from the config just written — the system would boot with no swap: ${_zout:-no output from the generator}"
     fi
-    arch-chroot /mnt rm -rf /tmp/zram-check
 else
     warn "zram-generator is not installed in the target — no compressed swap"
 fi
