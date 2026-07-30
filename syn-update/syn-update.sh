@@ -140,13 +140,39 @@ setup_src() {
         return 0
     fi
 
-    [ -e "$SRC" ] && die "$SRC exists but is not a git checkout — move it aside"
-
-    can_sudo || die "$SRC does not exist yet, and this session cannot ask for a password.
-  Run this once in a terminal:  sudo install -d -o $(id -un) -g $(id -gn) $SRC"
+    # An EMPTY directory is not "something else is here".
+    #
+    # This used to refuse anything at $SRC that was not a git checkout, which was
+    # right when the only way the path existed was somebody putting something
+    # there. It is wrong now: syn-install creates /var/lib/synapse-src empty and
+    # user-owned at install time, precisely so the updater GUI never has to ask
+    # for a password it cannot prompt for. The guard then rejected the very
+    # directory that fix creates, and every fresh install opened Updates to
+    # "exists but is not a git checkout — move it aside".
+    #
+    # git clones into an existing empty directory quite happily, so the only
+    # thing worth refusing is a path with something IN it.
+    if [ -e "$SRC" ] && [ ! -d "$SRC" ]; then
+        die "$SRC exists and is not a directory — move it aside"
+    fi
+    if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
+        die "$SRC exists but is not a git checkout — move it aside"
+    fi
 
     info "first run: cloning $REPO_URL into $SRC"
-    sudo install -d -o "$(id -un)" -g "$(id -gn)" "$SRC" || die "cannot create $SRC"
+
+    # Pre-created by syn-install in the common case, so nothing here needs root.
+    # Only reach for sudo when the directory is genuinely absent, or is there but
+    # owned by someone else.
+    if [ ! -d "$SRC" ]; then
+        can_sudo || die "$SRC does not exist yet, and this session cannot ask for a password.
+  Run this once in a terminal:  sudo install -d -o $(id -un) -g $(id -gn) $SRC"
+        sudo install -d -o "$(id -un)" -g "$(id -gn)" "$SRC" || die "cannot create $SRC"
+    elif [ ! -w "$SRC" ]; then
+        can_sudo || die "$SRC is not writable by $(id -un), and this session cannot ask for a password.
+  Run this once in a terminal:  sudo chown $(id -un):$(id -gn) $SRC"
+        sudo chown "$(id -un):$(id -gn)" "$SRC" || die "cannot take ownership of $SRC"
+    fi
     git clone --branch "$REPO_REF" "$REPO_URL" "$SRC" || die "clone failed"
     ok "cloned"
 }
