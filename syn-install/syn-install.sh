@@ -722,6 +722,51 @@ if [ "$SNAPSHOTS" = "yes" ]; then
         || die "btrfs is missing from this installer image — subvolumes cannot be created"
 fi
 
+# ── Confirm the plan ──────────────────────────────────────
+#
+# Everything above this line is a question. Everything below it writes to the
+# disk. So this is the last moment an answer can be taken back for free, and
+# until now there was none: a mistyped filesystem or the wrong disk could only be
+# undone by killing the installer and starting again — after the confirmations
+# that follow have already been answered "yes".
+#
+# Answering no re-execs the installer rather than looping back over the questions
+# in place. That is deliberate. Nothing has been written yet, so a restart is
+# exactly equivalent to a loop, and it cannot leave one answer from the previous
+# pass behind: eight of these are prompted and two more (SEPARATE_BOOT, the free
+# region) are derived from them, and a loop that re-asks the eight while a
+# derived value keeps its old meaning is the kind of bug that surfaces as a
+# partition table nobody chose. exec also means no nesting, however many times
+# the answer is no.
+#
+# The passphrase is asked AFTER this on purpose — no point typing it twice to
+# find out the disk was wrong.
+echo ""
+echo "  $(bold 'Review the plan — nothing has been written yet:')"
+echo ""
+echo "    Disk          : $DISK"
+if [ "$INSTALL_MODE" = "erase" ]; then
+    echo "    Mode          : ERASE the whole disk"
+else
+    echo "    Mode          : install alongside, into $((FREE_MIB / 1024)) GiB of free space"
+fi
+echo "    Firmware      : $BOOT_MODE"
+echo "    Filesystem    : $ROOT_FS"
+echo "    Bootloader    : $BOOTLOADER"
+echo "    Separate /boot: $SEPARATE_BOOT"
+echo "    Encryption    : $ENCRYPT"
+echo "    Snapshots     : $SNAPSHOTS"
+echo ""
+prompt "Are these correct? [Y/n]:"
+read -r _plan_ok || true
+case "${_plan_ok,,}" in
+    n|no)
+        echo ""
+        warn "Starting the questions over — the disk has not been touched."
+        exec "$0" "$@"
+        ;;
+esac
+
 if [ "$ENCRYPT" = "yes" ]; then
     command -v cryptsetup >/dev/null \
         || die "cryptsetup is not available on this installer image"

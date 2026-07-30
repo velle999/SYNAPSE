@@ -275,29 +275,61 @@ check "limine.conf names no fallback initramfs" "0" \
 # `snapper list-configs` was empty — snapshots enabled, no snapshot possible.
 # Comments quote both the failure mode and the command that caused it, so these
 # have to look at code lines only or they match the explanation.
-code() { grep -vE '^[[:space:]]*#' "$here/../syn-install.sh"; }
+#
+# Read once into a variable and match from a here-string. NOT `strip | grep -q`:
+# sourcing syn-install.sh turns on `set -o pipefail`, and `grep -q` exits the
+# moment it matches, so the producer takes SIGPIPE and the pipeline reports 141.
+# For a string early in the file that turns every "must be absent" check into
+# "no" whether the string is there or not — the checks below would have passed
+# over the exact commands they exist to forbid. -F because every pattern here is
+# a literal, and $0 and "$@" do not need to be spelled as regex.
+codetext=$(grep -vE '^[[:space:]]*#' "$here/../syn-install.sh")
+in_code()    { grep -qF -- "$1" <<<"$codetext" && echo yes || echo no; }
+count_code() { grep -cF -- "$1" <<<"$codetext"; }
+
+# ── The plan must be confirmable while it is still free to change ──
+#
+# The point of the review prompt is that it sits between the last question and
+# the first write. A later edit that moves a prompt below it, or moves the first
+# parted call above it, would leave a "review" that reviews a disk already
+# repartitioned — and would look completely fine in isolation.
+confirm_line=$(grep -n 'Are these correct' "$here/../syn-install.sh" | cut -d: -f1)
+write_line=$(grep -nE 'parted -s "\$DISK" (mkpart|mklabel)|wipefs|mkfs\.[a-z0-9]+ .*\$PART_' \
+             "$here/../syn-install.sh" | head -1 | cut -d: -f1)
+check "the plan is reviewed before anything is written" "yes" \
+    "$([ -n "$confirm_line" ] && [ -n "$write_line" ] && [ "$confirm_line" -lt "$write_line" ] \
+       && echo yes || echo no)"
+# The passphrase costs the most to retype, so it must be asked after the review.
+pass_line=$(grep -n 'prompt "Encryption passphrase:"' "$here/../syn-install.sh" | cut -d: -f1)
+check "the passphrase is asked after the review" "yes" \
+    "$([ -n "$pass_line" ] && [ "$confirm_line" -lt "$pass_line" ] && echo yes || echo no)"
+# "no" restarts the process rather than looping in place: SEPARATE_BOOT and the
+# free region are derived, and a loop that re-asks the prompts while a derived
+# value keeps its old meaning installs a layout nobody chose.
+check "answering no re-execs instead of looping" "yes" \
+    "$(in_code 'exec "$0" "$@"')"
 
 # Neither loader may name it — the systemd-boot entry had the identical defect.
 check "no loader entry names the fallback initramfs" "no" \
-    "$(code | grep -q 'initramfs-linux-fallback' && echo yes || echo no)"
+    "$(in_code 'initramfs-linux-fallback')"
 check "both loaders read their entries back" "2" \
-    "$(code | grep -c 'esp_entry_missing_file /mnt/boot')"
+    "$(count_code 'esp_entry_missing_file /mnt/boot')"
 
 check "no reliance on snapper create-config" "no" \
-    "$(code | grep -q 'create-config' && echo yes || echo no)"
+    "$(in_code 'create-config')"
 check "the root config is written from snapper's template" "yes" \
-    "$(code | grep -q 'config-templates/default /mnt/etc/snapper/configs/root' && echo yes || echo no)"
+    "$(in_code 'config-templates/default /mnt/etc/snapper/configs/root')"
 check "the root config is registered in SNAPPER_CONFIGS" "yes" \
-    "$(code | grep -q 'SNAPPER_CONFIGS="root"' && echo yes || echo no)"
+    "$(in_code 'SNAPPER_CONFIGS="root"')"
 check "snapper itself is asked to confirm the config" "yes" \
-    "$(code | grep -q 'snapper --no-dbus list-configs' && echo yes || echo no)"
+    "$(in_code 'snapper --no-dbus list-configs')"
 
 # limine-snapper-sync reads /proc/self/mounts, which inside arch-chroot is the
 # installer's mount table, so it can only run on the booted target.
 check "limine-snapper-sync is not run in the chroot" "no" \
-    "$(code | grep -q 'arch-chroot /mnt limine-snapper-sync' && echo yes || echo no)"
+    "$(in_code 'arch-chroot /mnt limine-snapper-sync')"
 check "a first-boot sync unit is installed instead" "yes" \
-    "$(code | grep -q 'synapseos-limine-snapshot-sync.service << ' && echo yes || echo no)"
+    "$(in_code 'synapseos-limine-snapshot-sync.service << ')"
 
 echo
 if [ "$fails" -gt 0 ]; then
