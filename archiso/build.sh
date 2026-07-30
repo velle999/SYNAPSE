@@ -135,6 +135,13 @@ declare -A TOOL_PKG=(
     [dialog]="dialog"
     [parted]="parted"
     [repo-add]="pacman"
+    # limine-snapper-sync is a GraalVM native-image build and this is its
+    # compiler. It has to be listed HERE rather than left to its PKGBUILD's
+    # makedepends, because packages are built with `makepkg -fd` — the -d skips
+    # dependency resolution and there is no -s, so nothing installs it. Without
+    # this line the ISO build runs for twenty minutes and then dies on
+    # "gradle: command not found".
+    [gradle]="gradle"
 )
 
 MISSING_PKGS=()
@@ -519,6 +526,18 @@ PACKAGES=(
     # Order does not matter: nothing depends on it (synui lists it nowhere),
     # it is on the ISO because packages.x86_64 names it.
     linux-wallpaperengine-pkg
+    # Bootable btrfs snapshots for limine, vendored from the AUR because it is
+    # in no official repo — the same reason scenefx0.5 is in this list. Order
+    # does not matter: nothing depends on it, it reaches the ISO because
+    # packages.x86_64 names it.
+    #
+    # THE EXPENSIVE ONE. A GraalVM native-image build: it downloads a ~300 MB
+    # GraalVM tarball, needs `gradle` (its own JDK, ~150 MiB), and the gradle
+    # step fetches plugins and Java dependencies from the NETWORK at build time.
+    # If a build fails here with no obvious cause, suspect the network before
+    # the code. See limine-snapper-sync/PKGBUILD for what it does and why the
+    # ESP is sized the way it is.
+    limine-snapper-sync
 )
 
 # Create build user for makepkg (can't run as root)

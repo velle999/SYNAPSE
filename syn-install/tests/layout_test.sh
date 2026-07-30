@@ -138,6 +138,36 @@ for fs in $SYN_FILESYSTEMS; do
     done
 done
 
+echo "=== limine ==="
+
+check "limine is offered"                    "yes"    "$(case " $SYN_BOOTLOADERS " in *" limine "*) echo yes ;; *) echo no ;; esac)"
+check "limine allowed on UEFI"               "yes"    "$(bootloader_supported limine uefi && echo yes || echo no)"
+# Only the UEFI path is implemented, and the prompt is UEFI-only anyway.
+check "limine REFUSED on BIOS"               "no"     "$(bootloader_supported limine bios && echo yes || echo no)"
+check "limine CAN boot snapshots"            "yes"    "$(bootloader_supports_snapshots limine && echo yes || echo no)"
+check "limine mounts the ESP at /boot"       "/boot"  "$(layout_esp_mount limine)"
+check "limine needs no separate /boot"       "no"     "$(layout_separate_boot btrfs limine no)"
+check "limine needs no separate /boot (enc)" "no"     "$(layout_separate_boot btrfs limine yes)"
+
+# The sizing that actually matters. limine-snapper-sync copies EVERY retained
+# snapshot's kernel and initramfs onto the ESP (~150 MB each) and stops adding
+# entries at 85% full — so a snapshot install needs a far bigger ESP, and
+# getting this wrong shows up months later as snapshots silently vanishing.
+check "limine without snapshots: 1 GiB ESP"  "1024"   "$(layout_esp_size_mib limine no)"
+check "limine WITH snapshots: 4 GiB ESP"     "4096"   "$(layout_esp_size_mib limine yes)"
+# The snapshot answer must not inflate the other loaders' ESPs.
+check "grub ESP unaffected by snapshots"     "512"    "$(layout_esp_size_mib grub yes)"
+check "systemd-boot ESP unaffected"          "1024"   "$(layout_esp_size_mib systemd-boot yes)"
+
+# Every loader that claims snapshots must have something that generates the
+# entries, or the installer offers a menu that will not appear.
+for bl in $SYN_BOOTLOADERS; do
+    if bootloader_supports_snapshots "$bl"; then
+        check "$bl claims snapshots and is grub or limine" "yes" \
+            "$(case "$bl" in grub|limine) echo yes ;; *) echo no ;; esac)"
+    fi
+done
+
 echo "=== structural checks on the script itself ==="
 
 # format_and_mount_root() must not call itself. An editing slip made it do

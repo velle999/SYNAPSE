@@ -151,3 +151,5 @@ snapper
 snap-pac
 grub-btrfs
 inotify-tools
+limine
+limine-snapper-sync

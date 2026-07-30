@@ -152,7 +152,7 @@ SYN_FILESYSTEMS="ext4 btrfs xfs f2fs"
 # Bootloaders. grub is the default and the only one that covers BIOS, Secure
 # Boot as already built here, os-prober dual-boot detection AND bootable
 # snapshots. See bootloader_supported() for the gating.
-SYN_BOOTLOADERS="grub systemd-boot"
+SYN_BOOTLOADERS="grub systemd-boot limine"
 
 # mkfs invocation for a filesystem. Echoes the command; the caller runs it.
 fs_mkfs_cmd() {
@@ -213,7 +213,9 @@ bootloader_supported() {
     case "$1" in
         grub)         return 0 ;;                      # BIOS and UEFI
         systemd-boot) [ "$2" = "uefi" ] ;;
-        limine)       return 0 ;;                      # not offered yet
+        # limine handles BIOS and UEFI, but only the UEFI path is implemented
+        # here — the bootloader prompt is UEFI-only, so BIOS never reaches it.
+        limine)       [ "$2" = "uefi" ] ;;
         refind)       [ "$2" = "uefi" ] ;;             # not offered yet
         *)            return 1 ;;
     esac
@@ -225,7 +227,11 @@ bootloader_supported() {
 # equivalent (limine-snapper-sync) is AUR, and systemd-boot has no equivalent at
 # all. The installer warns rather than silently dropping the feature.
 bootloader_supports_snapshots() {
-    [ "$1" = "grub" ]
+    case "$1" in
+        grub)   return 0 ;;   # grub-btrfs, official repos
+        limine) return 0 ;;   # limine-snapper-sync, vendored in-tree
+        *)      return 1 ;;
+    esac
 }
 
 # Does this combination need /boot on its OWN plain ext4 partition?
@@ -257,8 +263,12 @@ bootloader_supports_snapshots() {
 # it at /boot directly. This is why the two cannot share a partition layout.
 layout_esp_mount() {
     case "$1" in
-        systemd-boot) echo "/boot" ;;
-        *)            echo "/boot/efi" ;;
+        # limine's own FAQ is explicit that it expects the kernel and modules on
+        # a FAT32 partition rather than teaching the bootloader every
+        # filesystem, and limine-snapper-sync copies snapshot kernels there too.
+        # So, like systemd-boot, the ESP IS /boot.
+        systemd-boot|limine) echo "/boot" ;;
+        *)                   echo "/boot/efi" ;;
     esac
 }
 
@@ -271,6 +281,13 @@ layout_esp_mount() {
 layout_esp_size_mib() {
     case "$1" in
         systemd-boot) echo 1024 ;;
+        # limine with snapshots is the greedy case: limine-snapper-sync copies
+        # EVERY retained snapshot's kernel and initramfs onto the ESP, ~150 MB
+        # each, and simply stops adding entries once the partition passes 85%
+        # full. A 1 GiB ESP therefore holds about four snapshots before the
+        # feature quietly stops working, with nothing to explain why. 4 GiB is
+        # the difference between a snapshot menu and a disappointment.
+        limine)       [ "${2:-no}" = "yes" ] && echo 4096 || echo 1024 ;;
         *)            echo 512 ;;
     esac
 }
@@ -278,9 +295,14 @@ layout_esp_size_mib() {
 layout_separate_boot() {
     local fs="$1" loader="$2" encrypt="$3"
 
-    if [ "$loader" = "systemd-boot" ]; then
-        echo "no"; return 0
-    fi
+    # systemd-boot and limine both keep the kernels ON the ESP, which is FAT32
+    # and unencrypted by necessity — so the ESP already plays the role a plain
+    # /boot plays for GRUB, and a second unencrypted partition would be pure
+    # duplication. This is what lets an encrypted install keep argon2id: nothing
+    # but the initramfs ever has to open the LUKS volume.
+    case "$loader" in
+        systemd-boot|limine) echo "no"; return 0 ;;
+    esac
     if [ "$encrypt" = "yes" ]; then
         echo "yes"; return 0
     fi
@@ -559,11 +581,16 @@ if [ "$INSTALL_MODE" = "erase" ] && [ "$BOOT_MODE" = "uefi" ]; then
         echo "                          initramfs unlocks, so /boot needs no separate"
         echo "                          unencrypted partition."
     fi
+    echo "    $(bold '3)') limine        — modern and fast, and it CAN boot snapshots."
+    echo "                          It copies each snapshot's kernel onto the EFI"
+    echo "                          partition, so that partition is made much"
+    echo "                          larger when snapshots are enabled."
     echo ""
-    prompt "Bootloader [1-2, default 1]:"
+    prompt "Bootloader [1-3, default 1]:"
     read -r _bl
     case "${_bl:-1}" in
         2) BOOTLOADER="systemd-boot" ;;
+        3) BOOTLOADER="limine" ;;
         *) BOOTLOADER="grub" ;;
     esac
     success "Bootloader: $BOOTLOADER"
@@ -797,7 +824,7 @@ elif [ "$BOOT_MODE" = "uefi" ]; then
     [ "$confirm" = "yes" ] || die "Aborted"
 
     echo "  Creating GPT partition table..."
-    ESP_MIB="$(layout_esp_size_mib "$BOOTLOADER")"
+    ESP_MIB="$(layout_esp_size_mib "$BOOTLOADER" "$SNAPSHOTS")"
     ESP_END=$((1 + ESP_MIB))
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart ESP fat32 1MiB "${ESP_END}MiB"
@@ -909,8 +936,17 @@ FS_PKGS="$(fs_target_pkgs "$ROOT_FS")"
 # every pacman transaction bracketed by a pre/post pair.
 SNAP_PKGS=""
 if [ "$SNAPSHOTS" = "yes" ]; then
-    SNAP_PKGS="snapper snap-pac grub-btrfs inotify-tools"
+    SNAP_PKGS="snapper snap-pac inotify-tools"
+    # The thing that turns snapshots into BOOT ENTRIES differs per loader:
+    # grub-btrfs generates a GRUB submenu, limine-snapper-sync copies each
+    # snapshot's kernel onto the ESP and writes limine.conf entries.
+    case "$BOOTLOADER" in
+        grub)   SNAP_PKGS="$SNAP_PKGS grub-btrfs" ;;
+        limine) SNAP_PKGS="$SNAP_PKGS limine limine-snapper-sync" ;;
+    esac
 fi
+# limine itself is needed whether or not snapshots are on.
+[ "$BOOTLOADER" = "limine" ] && SNAP_PKGS="$SNAP_PKGS limine"
 
 pacstrap /mnt \
     base linux linux-firmware linux-headers kitty foot \
@@ -2418,7 +2454,7 @@ if [ "$BOOTLOADER" = "grub" ]; then
 
     [ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
 
-else
+elif [ "$BOOTLOADER" = "systemd-boot" ]; then
     # ── systemd-boot ──────────────────────────────────────
     #
     # No filesystem drivers, no config generator, no OS prober: it reads the ESP
@@ -2477,6 +2513,75 @@ EOF
         || die "initramfs is not on the ESP — systemd-boot would find nothing to boot"
     [ -f /mnt/boot/EFI/BOOT/BOOTX64.EFI ] || [ -f /mnt/boot/EFI/systemd/systemd-bootx64.efi ] \
         || die "systemd-boot did not install its EFI binary"
+
+else
+    # ── limine ────────────────────────────────────────────
+    #
+    # Two files and a text config. limine ships the EFI binary as a data file in
+    # /usr/share/limine; installing it means copying that onto the ESP, which is
+    # why the ESP is mounted at /boot for this loader — limine expects the
+    # kernels on FAT32 beside it rather than reading the root filesystem.
+    echo "  Installing limine..."
+    mkdir -p /mnt/boot/EFI/BOOT
+    cp /usr/share/limine/BOOTX64.EFI /mnt/boot/EFI/BOOT/BOOTX64.EFI \
+        || die "could not copy limine's EFI binary to the ESP"
+
+    LIM_ROOT=""
+    if [ "$ENCRYPT" = "yes" ]; then
+        if [ "$CRYPT_HOOK" = "sd-encrypt" ]; then
+            LIM_ROOT="rd.luks.name=$LUKS_UUID=$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME"
+        else
+            LIM_ROOT="cryptdevice=UUID=$LUKS_UUID:$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME"
+        fi
+    else
+        _ruuid="$(blkid -s UUID -o value "$ROOT_FS_DEV")"
+        [ -n "$_ruuid" ] || die "could not read the root filesystem UUID"
+        LIM_ROOT="root=UUID=$_ruuid"
+    fi
+    [ "$ROOT_FS" = "btrfs" ] && LIM_ROOT="$LIM_ROOT rootflags=subvol=@"
+
+    # boot():/ is limine's own notation for "the partition this config is on",
+    # which here is the ESP. The machine-id comment is not decoration:
+    # limine-snapper-sync uses it to find which entry to hang snapshots under,
+    # and without it the tool matches on the OS name and silently does nothing
+    # when that name does not line up.
+    cat > /mnt/boot/limine.conf << EOF
+timeout: 5
+
+/SynapseOS
+    comment: machine-id=$(cat /mnt/etc/machine-id 2>/dev/null)
+    protocol: linux
+    kernel_path: boot():/vmlinuz-linux
+    kernel_cmdline: $LIM_ROOT rw $GPU_KERNEL_PARAMS
+    module_path: boot():/initramfs-linux.img
+
+/SynapseOS (fallback initramfs)
+    protocol: linux
+    kernel_path: boot():/vmlinuz-linux
+    kernel_cmdline: $LIM_ROOT rw
+    module_path: boot():/initramfs-linux-fallback.img
+EOF
+
+    # limine does not register itself with the firmware; without this the
+    # machine falls back to the removable-media path and may not boot at all on
+    # firmware that ignores it.
+    if [ -n "${PART_EFI:-}" ]; then
+        _esp_disk="$(lsblk -no PKNAME "$PART_EFI" 2>/dev/null | head -1)"
+        _esp_num="$(lsblk -no PARTN "$PART_EFI" 2>/dev/null | head -1)"
+        if [ -n "$_esp_disk" ] && [ -n "$_esp_num" ]; then
+            arch-chroot /mnt efibootmgr --create --disk "/dev/$_esp_disk" \
+                --part "$_esp_num" --loader '\EFI\BOOT\BOOTX64.EFI' \
+                --label "SynapseOS" --unicode >/dev/null 2>&1 \
+                || warn "efibootmgr entry not created — the removable-media path still applies"
+        fi
+    fi
+
+    [ -f /mnt/boot/vmlinuz-linux ] \
+        || die "vmlinuz-linux is not on the ESP — limine would find nothing to boot"
+    [ -f /mnt/boot/EFI/BOOT/BOOTX64.EFI ] \
+        || die "limine's EFI binary is not on the ESP"
+    grep -q 'kernel_path' /mnt/boot/limine.conf \
+        || die "limine.conf has no kernel entry"
 fi
 
 # Hard-verify the encrypted boot path. Every one of these is a way to end up
@@ -2493,13 +2598,17 @@ if [ "$ENCRYPT" = "yes" ]; then
     # the entry file written above. Checking the wrong file would pass
     # vacuously — grep on a path that does not exist is simply a failure — so
     # this asks the loader that is actually installed.
-    if [ "$BOOTLOADER" = "grub" ]; then
-        grep -q "$LUKS_UUID" /mnt/boot/grub/grub.cfg \
-            || die "grub.cfg never mentions $LUKS_UUID — it would not unlock at boot"
-    else
-        grep -q "$LUKS_UUID" /mnt/boot/loader/entries/synapseos.conf \
-            || die "the systemd-boot entry never mentions $LUKS_UUID — it would not unlock at boot"
-    fi
+    case "$BOOTLOADER" in
+        grub)
+            grep -q "$LUKS_UUID" /mnt/boot/grub/grub.cfg \
+                || die "grub.cfg never mentions $LUKS_UUID — it would not unlock at boot" ;;
+        systemd-boot)
+            grep -q "$LUKS_UUID" /mnt/boot/loader/entries/synapseos.conf \
+                || die "the systemd-boot entry never mentions $LUKS_UUID — it would not unlock at boot" ;;
+        limine)
+            grep -q "$LUKS_UUID" /mnt/boot/limine.conf \
+                || die "limine.conf never mentions $LUKS_UUID — it would not unlock at boot" ;;
+    esac
 
     grep -qE "^HOOKS=.*[( ]$CRYPT_HOOK[ )]" /mnt/etc/mkinitcpio.conf \
         || die "the $CRYPT_HOOK hook is missing from mkinitcpio.conf"
@@ -2555,17 +2664,28 @@ if [ "$SNAPSHOTS" = "yes" ]; then
             /mnt/etc/snapper/configs/root
     fi
 
-    # grub-btrfsd watches /.snapshots and regenerates the boot menu when one
-    # appears; without it the entries only refresh on a manual grub-mkconfig.
-    arch-chroot /mnt systemctl enable grub-btrfsd.service 2>/dev/null \
-        || warn "could not enable grub-btrfsd — snapshots will not appear in the boot menu automatically"
     arch-chroot /mnt systemctl enable snapper-cleanup.timer 2>/dev/null || true
 
-    # Regenerate now that grub-btrfs is installed, so the snapshot submenu
-    # exists on the very first boot rather than after the first upgrade.
-    arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
-
-    success "Snapshots enabled (snapper + snap-pac, bootable from GRUB)"
+    # What turns a snapshot into a boot entry is loader-specific.
+    if [ "$BOOTLOADER" = "grub" ]; then
+        # grub-btrfsd watches /.snapshots and regenerates the menu when one
+        # appears; without it the entries only refresh on a manual
+        # grub-mkconfig.
+        arch-chroot /mnt systemctl enable grub-btrfsd.service 2>/dev/null \
+            || warn "could not enable grub-btrfsd — snapshots will not appear in the boot menu automatically"
+        # Regenerate now, so the submenu exists on the very first boot rather
+        # than only after the first upgrade.
+        arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+        success "Snapshots enabled (snapper + snap-pac, bootable from GRUB)"
+    else
+        # limine-snapper-sync copies each snapshot's kernel and initramfs onto
+        # the ESP. Its watcher does that when snapshots appear; running it once
+        # here means the menu is populated before the first reboot.
+        arch-chroot /mnt systemctl enable limine-snapper-sync.service 2>/dev/null \
+            || warn "could not enable limine-snapper-sync — snapshots will not reach the boot menu automatically"
+        arch-chroot /mnt limine-snapper-sync 2>/dev/null || true
+        success "Snapshots enabled (snapper + snap-pac, bootable from limine)"
+    fi
 fi
 
 success "Bootloader installed"
