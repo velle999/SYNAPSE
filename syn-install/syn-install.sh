@@ -2545,21 +2545,27 @@ else
     # limine-snapper-sync uses it to find which entry to hang snapshots under,
     # and without it the tool matches on the OS name and silently does nothing
     # when that name does not line up.
+    #
+    # THE NESTING IS LOAD-BEARING. limine's config format distinguishes a branch
+    # ("/name", "/+name" for one that opens expanded) from a kernel entry nested
+    # under it ("//name"). A flat "/SynapseOS" carrying kernel_path directly is a
+    # perfectly bootable menu, and it is what this wrote until snapshots were
+    # tested end to end: limine-snapper-sync refuses it with "Your OS entry has
+    # no kernel in /boot/limine.conf. Please add at least a kernel entry
+    # '//<kernel name>'" — and then EXITS 0, so nothing upstream of it notices.
+    # It needs a branch it can append its own "//Snapshots" subtree to. This is
+    # the shape of upstream's own documented example.
     cat > /mnt/boot/limine.conf << EOF
 timeout: 5
 
-/SynapseOS
-    comment: machine-id=$(cat /mnt/etc/machine-id 2>/dev/null)
+/+SynapseOS
+comment: machine-id=$(cat /mnt/etc/machine-id 2>/dev/null)
+
+    //SynapseOS
     protocol: linux
     kernel_path: boot():/vmlinuz-linux
     kernel_cmdline: $LIM_ROOT rw $GPU_KERNEL_PARAMS
     module_path: boot():/initramfs-linux.img
-
-/SynapseOS (fallback initramfs)
-    protocol: linux
-    kernel_path: boot():/vmlinuz-linux
-    kernel_cmdline: $LIM_ROOT rw
-    module_path: boot():/initramfs-linux-fallback.img
 EOF
 
     # limine does not register itself with the firmware; without this the
@@ -2633,36 +2639,58 @@ fi
 
 # ── Snapshots ─────────────────────────────────────────────
 #
-# snapper's own `create-config` would try to create /.snapshots itself and fails
-# when the subvolume is already mounted there — which it is, by design, because
-# that is the layout `snapper rollback` needs. So the config is written directly
-# and the existing subvolume is kept.
+# snapper's own `create-config` CANNOT run here, and this is not a maybe:
+#
+#   create subvolume failed, btrfs_util_create_subvolume_fd() failed, errno:17
+#   Creating config failed (creating btrfs subvolume .snapshots failed since it
+#   already exists).
+#
+# It insists on creating /.snapshots itself, and /.snapshots is already the
+# @snapshots subvolume mounted there — by design, because that is the layout
+# `snapper rollback` needs. This used to call it anyway with `2>/dev/null ||
+# true`, guard the tuning on a config file that therefore never appeared, and
+# still print "Snapshots enabled". The result was an install with snapper
+# installed, snapper-cleanup enabled, limine-snapper-sync running — and
+# `snapper list-configs` EMPTY, so not one snapshot could ever be taken.
+#
+# So the config is written directly from snapper's own template, which already
+# carries SUBVOLUME="/" and FSTYPE="btrfs", and the existing subvolume is kept.
 if [ "$SNAPSHOTS" = "yes" ]; then
     step "Configuring snapshots"
 
-    arch-chroot /mnt snapper --no-dbus -c root create-config / 2>/dev/null || true
-
-    # create-config replaces /.snapshots with a fresh subvolume of its own if it
-    # got that far. Put ours back: the one that is mounted is the one fstab
-    # names, and a mismatch here means snapshots land somewhere nothing reads.
-    if [ ! -d /mnt/.snapshots ]; then
-        mkdir -p /mnt/.snapshots
-        mount -o "$(fs_mount_opts btrfs),subvol=@snapshots" "$ROOT_FS_DEV" /mnt/.snapshots \
-            || die "could not restore the @snapshots mount"
-    fi
+    [ -f /mnt/usr/share/snapper/config-templates/default ] \
+        || die "snapper's config template is missing — snapshots cannot be configured"
+    mkdir -p /mnt/etc/snapper/configs
+    cp /mnt/usr/share/snapper/config-templates/default /mnt/etc/snapper/configs/root \
+        || die "could not write /etc/snapper/configs/root"
 
     # The defaults keep hourly timeline snapshots forever and are how a btrfs
     # system quietly fills its own disk. Timeline off, and a bounded number of
     # pacman snapshots: the ones worth having are the pre/post pairs around an
     # upgrade, not a photograph of every hour the machine was idle.
-    if [ -f /mnt/etc/snapper/configs/root ]; then
-        sed -i \
-            -e 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="no"/' \
-            -e 's/^NUMBER_CLEANUP=.*/NUMBER_CLEANUP="yes"/' \
-            -e 's/^NUMBER_LIMIT=.*/NUMBER_LIMIT="12"/' \
-            -e 's/^NUMBER_LIMIT_IMPORTANT=.*/NUMBER_LIMIT_IMPORTANT="6"/' \
-            /mnt/etc/snapper/configs/root
+    sed -i \
+        -e 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="no"/' \
+        -e 's/^NUMBER_CLEANUP=.*/NUMBER_CLEANUP="yes"/' \
+        -e 's/^NUMBER_LIMIT=.*/NUMBER_LIMIT="12"/' \
+        -e 's/^NUMBER_LIMIT_IMPORTANT=.*/NUMBER_LIMIT_IMPORTANT="6"/' \
+        /mnt/etc/snapper/configs/root
+
+    # A config file nothing lists is still not a config: snapper-cleanup and
+    # snapper's own tooling read the set from SNAPPER_CONFIGS, and the package
+    # ships it empty.
+    if grep -q '^SNAPPER_CONFIGS=' /mnt/etc/conf.d/snapper 2>/dev/null; then
+        sed -i 's/^SNAPPER_CONFIGS=.*/SNAPPER_CONFIGS="root"/' /mnt/etc/conf.d/snapper
+    else
+        echo 'SNAPPER_CONFIGS="root"' >> /mnt/etc/conf.d/snapper
     fi
+
+    # Ask snapper itself rather than trusting the file we just wrote — a
+    # template that changes shape upstream, or a sed that stops matching, both
+    # look exactly like success from here.
+    arch-chroot /mnt snapper --no-dbus list-configs 2>/dev/null | grep -qE '^root\s' \
+        || die "snapper does not see the 'root' config — snapshots would never be taken"
+    grep -q '^TIMELINE_CREATE="no"' /mnt/etc/snapper/configs/root \
+        || die "snapper's root config was not tuned — timeline snapshots would fill the disk"
 
     arch-chroot /mnt systemctl enable snapper-cleanup.timer 2>/dev/null || true
 
@@ -2679,11 +2707,56 @@ if [ "$SNAPSHOTS" = "yes" ]; then
         success "Snapshots enabled (snapper + snap-pac, bootable from GRUB)"
     else
         # limine-snapper-sync copies each snapshot's kernel and initramfs onto
-        # the ESP. Its watcher does that when snapshots appear; running it once
-        # here means the menu is populated before the first reboot.
+        # the ESP and writes the entries under the OS branch in limine.conf.
         arch-chroot /mnt systemctl enable limine-snapper-sync.service 2>/dev/null \
             || warn "could not enable limine-snapper-sync — snapshots will not reach the boot menu automatically"
-        arch-chroot /mnt limine-snapper-sync 2>/dev/null || true
+
+        # The desktop entry limine-snapper-sync ships ("Limine-snapper-restore")
+        # opens a terminal to show the restore running. Its own fallback chain
+        # checks foot BEFORE kitty, so on SynapseOS the one third-party menu item
+        # that opens a terminal would open the rescue one. TERMINAL takes a
+        # command with its exec flag, the same shape as its konsole example.
+        if ! grep -q '^TERMINAL=' /mnt/etc/limine-snapper-sync.conf 2>/dev/null; then
+            printf '\n# SynapseOS: kitty is the default terminal; upstream probes foot first.\nTERMINAL="kitty -e"\n' \
+                >> /mnt/etc/limine-snapper-sync.conf
+        fi
+
+        # One snapshot to restore TO. snap-pac only fires on a pacman
+        # transaction, so without this a fresh install has an empty snapshot
+        # list and the desktop's "Limine-snapper-restore" entry has nothing to
+        # work with. Soft: an install is not worth failing over a snapshot.
+        arch-chroot /mnt snapper --no-dbus -c root create -d "post-install" 2>/dev/null \
+            || warn "could not take the post-install snapshot"
+
+        # This CANNOT be `arch-chroot /mnt limine-snapper-sync`. The tool reads
+        # /proc/self/mounts to find the root subvolume, and inside arch-chroot
+        # that is the installer's own mount table — it answers "No root
+        # subvolume found in /proc/self/mounts", and it EXITS 0 doing it, so
+        # `|| true` never caught anything. It has to run on the booted target.
+        #
+        # And it cannot be left to the watcher either: limine-snapper-sync.service
+        # is inotify-only. Restarting it does NOT sync snapshots that already
+        # exist (verified — the Snapshots subtree stays absent across a restart),
+        # so the entries would first appear only after the next snapshot event,
+        # i.e. after the user's first pacman transaction.
+        cat > /mnt/etc/systemd/system/synapseos-limine-snapshot-sync.service << 'EOF'
+[Unit]
+Description=Populate limine's snapshot boot entries once, on the first boot
+ConditionPathExists=!/var/lib/synapseos/limine-snapshots.synced
+After=local-fs.target
+RequiresMountsFor=/boot /.snapshots
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/limine-snapper-sync
+ExecStartPost=/usr/bin/sh -c 'mkdir -p /var/lib/synapseos && touch /var/lib/synapseos/limine-snapshots.synced'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        arch-chroot /mnt systemctl enable synapseos-limine-snapshot-sync.service 2>/dev/null \
+            || warn "could not enable the first-boot snapshot sync — the menu fills in after the first upgrade instead"
+
         success "Snapshots enabled (snapper + snap-pac, bootable from limine)"
     fi
 fi

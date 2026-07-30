@@ -187,6 +187,52 @@ check "both partitioning branches call the helper" "2" "$calls"
 badroot=$(grep -c 'mkfs\.ext4 -F "\$ROOT_FS_DEV"' "$here/../syn-install.sh")
 check "no hardcoded mkfs.ext4 on the root device" "0" "$badroot"
 
+# ── limine.conf must stay in the shape limine-snapper-sync accepts ──
+#
+# A flat "/SynapseOS" entry carrying kernel_path directly boots perfectly well,
+# which is why this shipped broken: limine-snapper-sync rejects it with "Your OS
+# entry has no kernel in /boot/limine.conf" and then exits 0, so the installer
+# saw success and the snapshot menu was simply never populated. The branch plus
+# nested "//" kernel entry is what gives it something to append to.
+limineconf=$(awk '/^    cat > \/mnt\/boot\/limine\.conf/{f=1;next} f&&/^EOF$/{exit} f' \
+             "$here/../syn-install.sh")
+check "limine.conf writes a branch entry" "1" \
+    "$(printf '%s\n' "$limineconf" | grep -c '^/+SynapseOS$')"
+check "limine.conf nests the kernel entry under it" "1" \
+    "$(printf '%s\n' "$limineconf" | grep -cE '^[[:space:]]+//SynapseOS$')"
+check "limine.conf keeps the machine-id comment" "1" \
+    "$(printf '%s\n' "$limineconf" | grep -c 'comment: machine-id=')"
+# Arch's linux.preset ships PRESETS=('default') only, so no fallback image is
+# ever generated and an entry naming one is a menu item that cannot boot.
+check "limine.conf names no fallback initramfs" "0" \
+    "$(printf '%s\n' "$limineconf" | grep -c 'initramfs-linux-fallback')"
+
+# ── snapper must be configured, not merely installed ──
+#
+# `snapper create-config /` cannot work here: it insists on creating
+# /.snapshots, which is already the mounted @snapshots subvolume, and fails with
+# errno 17. Calling it and tolerating the failure produced installs whose
+# `snapper list-configs` was empty — snapshots enabled, no snapshot possible.
+# Comments quote both the failure mode and the command that caused it, so these
+# have to look at code lines only or they match the explanation.
+code() { grep -vE '^[[:space:]]*#' "$here/../syn-install.sh"; }
+
+check "no reliance on snapper create-config" "no" \
+    "$(code | grep -q 'create-config' && echo yes || echo no)"
+check "the root config is written from snapper's template" "yes" \
+    "$(code | grep -q 'config-templates/default /mnt/etc/snapper/configs/root' && echo yes || echo no)"
+check "the root config is registered in SNAPPER_CONFIGS" "yes" \
+    "$(code | grep -q 'SNAPPER_CONFIGS="root"' && echo yes || echo no)"
+check "snapper itself is asked to confirm the config" "yes" \
+    "$(code | grep -q 'snapper --no-dbus list-configs' && echo yes || echo no)"
+
+# limine-snapper-sync reads /proc/self/mounts, which inside arch-chroot is the
+# installer's mount table, so it can only run on the booted target.
+check "limine-snapper-sync is not run in the chroot" "no" \
+    "$(code | grep -q 'arch-chroot /mnt limine-snapper-sync' && echo yes || echo no)"
+check "a first-boot sync unit is installed instead" "yes" \
+    "$(code | grep -q 'synapseos-limine-snapshot-sync.service << ' && echo yes || echo no)"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"
