@@ -32,7 +32,27 @@ step()    { echo ""; cyan "  ▶ $*"; echo ""; }
 success() { echo ""; green "  ✓ $*"; echo ""; }
 fail()    { echo ""; red "  ✗ $*"; echo ""; }
 warn()    { echo ""; yellow "  ⚠ $*"; echo ""; }
-prompt()  { printf "  $(bold "$1") "; }
+# Every interactive question in this script prints through here, which makes it
+# the one place that can drop typeahead — and it has to.
+#
+# pacman-key --populate and pacstrap run for minutes with nothing to do but
+# watch. A key pressed during them does not go anywhere: it waits in the
+# terminal's input buffer until the next `read` consumes it. The next read after
+# pacstrap is "Choice [1-4, default=2]", and a queued newline answers it
+# instantly — the menu appears and is gone in the same frame, and the installer
+# reports "Standard install selected" for a choice nobody made. Whatever else was
+# typed then answers the prompts after it, in order.
+#
+# So: discard what is already queued, then ask. Only when stdin is a terminal —
+# a piped or automated run has its answers on stdin legitimately and must not
+# have them eaten.
+prompt() {
+    if [ -t 0 ]; then
+        local _typeahead
+        read -r -t 0.1 -N 4096 _typeahead 2>/dev/null || true
+    fi
+    printf "  $(bold "$1") "
+}
 
 # Unmount the target on failure so a stale /mnt doesn't block a retry.
 cleanup() { umount -R /mnt 2>/dev/null || true; }
@@ -643,17 +663,23 @@ bootloader_supported "$BOOTLOADER" "$BOOT_MODE" \
 
 # ── Snapshots ─────────────────────────────────────────────
 #
-# Only meaningful on btrfs, and only bootable under GRUB. Offering it with
-# systemd-boot would promise a boot menu that cannot exist: grub-btrfs is what
-# generates those entries and it is GRUB-specific.
+# Only meaningful on btrfs: these are btrfs subvolume snapshots, and no other
+# filesystem offered here has an equivalent — ext4, xfs and f2fs would need
+# something like LVM thin snapshots, which is a different design and not one this
+# installer implements.
+#
+# And only bootable under GRUB or limine, by different machinery: grub-btrfs
+# generates GRUB's submenu, limine-snapper-sync copies each snapshot's kernel
+# onto the ESP and writes limine's entries. systemd-boot has neither, so offering
+# it there would promise a boot menu that cannot exist.
 if fs_supports_snapshots "$ROOT_FS"; then
     if bootloader_supports_snapshots "$BOOTLOADER"; then
         echo ""
         echo "  $(bold 'Automatic snapshots?')"
         echo ""
         echo "  snapper takes a snapshot before and after every pacman"
-        echo "  transaction, and GRUB grows a menu to boot any of them. A bad"
-        echo "  upgrade becomes a reboot instead of a rescue USB."
+        echo "  transaction, and $BOOTLOADER grows a menu to boot any of them. A"
+        echo "  bad upgrade becomes a reboot instead of a rescue USB."
         echo ""
         echo "  Snapshots are cheap but not free: they hold the old copy of"
         echo "  anything that changes, so a disk near full stays near full."
@@ -666,8 +692,13 @@ if fs_supports_snapshots "$ROOT_FS"; then
         esac
         success "Snapshots: $SNAPSHOTS"
     else
-        warn "Snapshots need GRUB — $BOOTLOADER cannot boot them. Continuing without."
+        warn "Snapshots need GRUB or limine — $BOOTLOADER cannot boot them. Continuing without."
     fi
+else
+    # Say it out loud. The bootloader case above explains itself; this one used to
+    # skip in silence, so choosing ext4 made the question vanish with no way to
+    # tell a deliberate exclusion from a bug.
+    warn "Snapshots need btrfs — $ROOT_FS has no snapshot mechanism. Not offered."
 fi
 
 # The layout follows from the three answers above; compute it once, here, so
