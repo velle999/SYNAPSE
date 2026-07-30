@@ -2951,6 +2951,32 @@ elif [ "$BOOTLOADER" = "systemd-boot" ]; then
     arch-chroot /mnt bootctl --esp-path=/boot install 2>&1 \
         || die "bootctl install failed"
 
+    # bootctl is supposed to register the loader with the FIRMWARE as well as
+    # copy it onto the ESP, and when it cannot it says so on stderr and exits 0.
+    # The result is an ESP that looks perfect — systemd-bootx64.efi, the
+    # removable \EFI\BOOT\BOOTX64.EFI, loader.conf, a correct entry, the kernel
+    # and initramfs all present — attached to a machine whose NVRAM has never
+    # heard of it. The next boot goes to whatever else the firmware knows about,
+    # which with the install media still attached is the installer, and the whole
+    # thing reads as "the install did not happen".
+    #
+    # Seen exactly that in a UEFI VM: every file in place, no "Linux Boot
+    # Manager" entry in NVRAM, next boot went to the DVD. GRUB does not have this
+    # problem because grub-install writes its own entry, and the limine branch
+    # below has always created one explicitly. This is the one loader that was
+    # trusting someone else to do it.
+    if ! arch-chroot /mnt efibootmgr 2>/dev/null | grep -qi "Linux Boot Manager"; then
+        _esp_disk="$(lsblk -no PKNAME "$PART_EFI" 2>/dev/null | head -1)"
+        _esp_num="$(lsblk -no PARTN "$PART_EFI" 2>/dev/null | head -1)"
+        if [ -n "$_esp_disk" ] && [ -n "$_esp_num" ]; then
+            echo "  Registering systemd-boot with the firmware..."
+            arch-chroot /mnt efibootmgr --create --disk "/dev/$_esp_disk" \
+                --part "$_esp_num" --loader '\EFI\systemd\systemd-bootx64.efi' \
+                --label "SynapseOS" --unicode >/dev/null 2>&1 \
+                || warn "efibootmgr entry not created — the removable-media path still applies"
+        fi
+    fi
+
     # The root has to be named on the kernel command line. GRUB derives this
     # itself from grub-mkconfig; here it is written by hand, so it is written
     # from the same facts the fstab was: the LUKS mapper when encrypting, the
@@ -3090,6 +3116,36 @@ EOF
     # never generates.
     _miss="$(esp_entry_missing_file /mnt/boot)" \
         && die "a limine entry names a file that is not on the ESP — $_miss"
+fi
+
+# ── The firmware has to know the disk is bootable ─────────
+#
+# Everything above this line puts files on the ESP. None of it makes the machine
+# boot them: UEFI boots what its NVRAM points at, and an install whose loader is
+# perfect but unregistered boots the installer media instead — silently, and
+# looking exactly like an install that never ran.
+#
+# Not fatal. Removable media (\EFI\BOOT\BOOTX64.EFI) is a real fallback that a
+# lot of firmware honours, and some firmware refuses NVRAM writes from a chroot
+# outright, so failing the install here would be worse than saying so. But it is
+# said LOUDLY, with the fix, because the symptom names nothing.
+if [ "$BOOT_MODE" = "uefi" ]; then
+    if arch-chroot /mnt efibootmgr 2>/dev/null \
+         | grep -qiE "SynapseOS|Linux Boot Manager"; then
+        success "Registered with the firmware ($(arch-chroot /mnt efibootmgr 2>/dev/null \
+                 | grep -iE 'SynapseOS|Linux Boot Manager' | head -1 | cut -c1-40))"
+    else
+        warn "No EFI boot entry names this install.
+
+  The bootloader IS on the EFI partition, but the firmware has not been told
+  about it, so it will boot the install media or the network first — which
+  looks exactly like the install did not happen. Remove the install media and
+  try again; if it still does not boot, pick the disk from the firmware's boot
+  menu once, or add the entry by hand:
+
+      efibootmgr --create --disk $DISK --part 1 --label SynapseOS \\
+          --loader '\\EFI\\BOOT\\BOOTX64.EFI'"
+    fi
 fi
 
 # Hard-verify the encrypted boot path. Every one of these is a way to end up

@@ -338,6 +338,27 @@ done
 check "the systemd-boot arm is reachable" "yes" \
     "$(grep -qF -- 'elif [ "$BOOTLOADER" = "systemd-boot" ]' <<<"$codeonly" && echo yes || echo no)"
 
+# Files on the ESP do not make a machine boot: UEFI boots what NVRAM points at.
+# GRUB registers itself (grub-install), limine has always been registered here
+# explicitly — systemd-boot was trusting bootctl, which reports failure on
+# stderr and exits 0, producing a perfect ESP the firmware has never heard of.
+sdb_arm=$(awk '/^    # ── systemd-boot ─/,/^    # ── limine ─/' "$here/../syn-install.sh")
+check "systemd-boot's firmware entry is created if bootctl skipped it" "yes" \
+    "$(grep -qF -- 'efibootmgr --create' <<<"$sdb_arm" && echo yes || echo no)"
+check "and only when bootctl did not already do it" "yes" \
+    "$(grep -qF -- 'Linux Boot Manager' <<<"$sdb_arm" && echo yes || echo no)"
+# Both UEFI loaders that need an explicit entry must create one.
+check "both explicit registrations exist" "2" \
+    "$(count_code '--label "SynapseOS" --unicode')"
+check "every UEFI install is checked against NVRAM afterwards" "yes" \
+    "$(in_code 'No EFI boot entry names this install')"
+# It must NOT be fatal: removable media is a real fallback and some firmware
+# refuses NVRAM writes from a chroot.
+nvram_arm=$(awk '/^# ── The firmware has to know the disk is bootable ─/,/^# Hard-verify the encrypted boot path/' \
+            "$here/../syn-install.sh")
+check "and reported without aborting the install" "0" \
+    "$(grep -c '^[[:space:]]*die ' <<<"$nvram_arm")"
+
 # The updater's GUI runs `syn-update check` with no controlling terminal, so
 # anything it touches must already exist: creating this on first use meant a
 # sudo password prompt nobody could answer.
