@@ -144,3 +144,10 @@ rtkit
 # subscriptions, and a user who has just subscribed to one should not then have
 # to build a CEF-carrying package by hand to see it.
 linux-wallpaperengine
+btrfs-progs
+xfsprogs
+f2fs-tools
+snapper
+snap-pac
+grub-btrfs
+inotify-tools

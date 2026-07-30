@@ -111,6 +111,52 @@ check "grub + ext4  unencrypted → no separate /boot"     "no"  "$(layout_separ
 check "grub + xfs   unencrypted → separate /boot"        "yes" "$(layout_separate_boot xfs   grub no)"
 check "grub + f2fs  unencrypted → separate /boot"        "yes" "$(layout_separate_boot f2fs  grub no)"
 
+echo "=== ESP mount point and size ==="
+
+# GRUB reads a real filesystem, so the ESP is a side-car at /boot/efi.
+# systemd-boot reads ONLY the ESP, so the kernels have to be on it — which
+# means it is /boot itself. Getting this backwards produces a machine that
+# installs cleanly and then finds nothing to boot.
+check "grub mounts the ESP at /boot/efi"       "/boot/efi" "$(layout_esp_mount grub)"
+check "systemd-boot mounts the ESP at /boot"   "/boot"     "$(layout_esp_mount systemd-boot)"
+
+# systemd-boot stores every kernel and initramfs on the ESP; 512 MiB runs out
+# on the second kernel, and running out looks like a failed pacman upgrade.
+check "grub ESP is 512 MiB"                    "512"       "$(layout_esp_size_mib grub)"
+check "systemd-boot ESP is larger"             "1024"      "$(layout_esp_size_mib systemd-boot)"
+
+# The invariant tying the two together: whenever there is no separate /boot AND
+# the loader is GRUB, the kernels live on the root filesystem — so GRUB must be
+# able to read that filesystem. Every offered combination has to satisfy it.
+for fs in $SYN_FILESYSTEMS; do
+    for enc in yes no; do
+        sep="$(layout_separate_boot "$fs" grub "$enc")"
+        if [ "$sep" = "no" ]; then
+            check "grub + $fs + encrypt=$enc: kernels on root, so /boot is NOT separate" \
+                "no" "$sep"
+        fi
+    done
+done
+
+echo "=== structural checks on the script itself ==="
+
+# format_and_mount_root() must not call itself. An editing slip made it do
+# exactly that once, and bash -n is perfectly happy with infinite recursion —
+# it would have been discovered by a disk that never got formatted.
+selfcalls=$(awk '/^format_and_mount_root\(\) \{/,/^\}/' "$here/../syn-install.sh" \
+            | grep -c '^[[:space:]]*format_and_mount_root[[:space:]]*$')
+check "format_and_mount_root does not call itself" "0" "$selfcalls"
+
+# Both partitioning branches must go through the helper, or one of them formats
+# without creating subvolumes and btrfs snapshots silently do not work.
+calls=$(grep -c '^[[:space:]]\+format_and_mount_root\b' "$here/../syn-install.sh")
+check "both partitioning branches call the helper" "2" "$calls"
+
+# Every mkfs of a ROOT device goes through fs_mkfs_cmd. A literal mkfs.ext4 on a
+# root device would ignore the user's filesystem choice entirely.
+badroot=$(grep -c 'mkfs\.ext4 -F "\$ROOT_FS_DEV"' "$here/../syn-install.sh")
+check "no hardcoded mkfs.ext4 on the root device" "0" "$badroot"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"

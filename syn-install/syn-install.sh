@@ -249,6 +249,32 @@ bootloader_supports_snapshots() {
 #
 # btrfs deliberately keeps /boot INSIDE the root: a rollback that restores
 # /usr/lib/modules but not the kernel that loads them is a mismatched pair.
+# Where the EFI System Partition gets mounted.
+#
+# GRUB keeps the ESP at /boot/efi and the kernels on /boot — a real filesystem
+# it can read. systemd-boot has no filesystem drivers at all: it reads the ESP
+# and nothing else, so the kernels have to BE on the ESP, which means mounting
+# it at /boot directly. This is why the two cannot share a partition layout.
+layout_esp_mount() {
+    case "$1" in
+        systemd-boot) echo "/boot" ;;
+        *)            echo "/boot/efi" ;;
+    esac
+}
+
+# How big to make the ESP, in MiB.
+#
+# 512 is plenty for GRUB, which puts one small binary there. systemd-boot has
+# every installed kernel and initramfs on it — roughly 150 MiB per kernel with
+# its fallback image — so 512 runs out on the second kernel, and running out
+# looks like a pacman transaction failing halfway through an upgrade.
+layout_esp_size_mib() {
+    case "$1" in
+        systemd-boot) echo 1024 ;;
+        *)            echo 512 ;;
+    esac
+}
+
 layout_separate_boot() {
     local fs="$1" loader="$2" encrypt="$3"
 
@@ -479,6 +505,123 @@ if [ "$INSTALL_MODE" = "erase" ]; then
     esac
 fi
 
+# ── Filesystem ────────────────────────────────────────────
+#
+# Offered on the erase paths only. The alongside path creates a root in free
+# space beside another OS and is its own testing surface; adding four
+# filesystems to it at the same time would multiply an already-delicate path.
+#
+# Each entry states its real trade-off rather than a marketing line. Someone
+# choosing a root filesystem at install time cannot undo the choice without
+# reinstalling, so "btrfs cannot be shrunk" belongs here, not in a wiki.
+ROOT_FS="ext4"
+SNAPSHOTS="no"
+if [ "$INSTALL_MODE" = "erase" ]; then
+    echo ""
+    echo "  $(bold 'Root filesystem')"
+    echo ""
+    echo "    $(bold '1)') ext4   — the default. Boring, proven, repairable by anything."
+    echo "    $(bold '2)') btrfs  — snapshots + zstd compression. Roll back a bad update"
+    echo "                    from the boot menu. Uses more RAM and more CPU."
+    echo "    $(bold '3)') xfs    — fast on large files. No snapshots, and it cannot be"
+    echo "                    SHRUNK once created."
+    echo "    $(bold '4)') f2fs   — built for flash. Good on SD cards and cheap SSDs;"
+    echo "                    unusual enough that fewer rescue tools know it."
+    echo ""
+    prompt "Filesystem [1-4, default 1]:"
+    read -r _fs
+    case "${_fs:-1}" in
+        2) ROOT_FS="btrfs" ;;
+        3) ROOT_FS="xfs" ;;
+        4) ROOT_FS="f2fs" ;;
+        *) ROOT_FS="ext4" ;;
+    esac
+    success "Filesystem: $ROOT_FS"
+fi
+
+# ── Bootloader ────────────────────────────────────────────
+#
+# Gated by firmware: systemd-boot is an EFI stub loader with no BIOS build, so
+# on a BIOS machine it is not offered at all rather than offered and then
+# failing at install time.
+BOOTLOADER="grub"
+if [ "$INSTALL_MODE" = "erase" ] && [ "$BOOT_MODE" = "uefi" ]; then
+    echo ""
+    echo "  $(bold 'Bootloader')"
+    echo ""
+    echo "    $(bold '1)') GRUB          — the default. Detects other operating systems,"
+    echo "                          and the only one here that can boot a btrfs"
+    echo "                          snapshot."
+    echo "    $(bold '2)') systemd-boot  — minimal. No OS detection, no snapshot menu."
+    if [ "$ENCRYPT" = "yes" ]; then
+        echo "                          With encryption it is the BETTER choice: the"
+        echo "                          kernel lives on the EFI partition and only the"
+        echo "                          initramfs unlocks, so /boot needs no separate"
+        echo "                          unencrypted partition."
+    fi
+    echo ""
+    prompt "Bootloader [1-2, default 1]:"
+    read -r _bl
+    case "${_bl:-1}" in
+        2) BOOTLOADER="systemd-boot" ;;
+        *) BOOTLOADER="grub" ;;
+    esac
+    success "Bootloader: $BOOTLOADER"
+fi
+
+bootloader_supported "$BOOTLOADER" "$BOOT_MODE" \
+    || die "$BOOTLOADER cannot boot a $BOOT_MODE system"
+
+# ── Snapshots ─────────────────────────────────────────────
+#
+# Only meaningful on btrfs, and only bootable under GRUB. Offering it with
+# systemd-boot would promise a boot menu that cannot exist: grub-btrfs is what
+# generates those entries and it is GRUB-specific.
+if fs_supports_snapshots "$ROOT_FS"; then
+    if bootloader_supports_snapshots "$BOOTLOADER"; then
+        echo ""
+        echo "  $(bold 'Automatic snapshots?')"
+        echo ""
+        echo "  snapper takes a snapshot before and after every pacman"
+        echo "  transaction, and GRUB grows a menu to boot any of them. A bad"
+        echo "  upgrade becomes a reboot instead of a rescue USB."
+        echo ""
+        echo "  Snapshots are cheap but not free: they hold the old copy of"
+        echo "  anything that changes, so a disk near full stays near full."
+        echo ""
+        prompt "Enable snapshots? [Y/n]:"
+        read -r _sn
+        case "${_sn,,}" in
+            n|no) SNAPSHOTS="no" ;;
+            *)    SNAPSHOTS="yes" ;;
+        esac
+        success "Snapshots: $SNAPSHOTS"
+    else
+        warn "Snapshots need GRUB — $BOOTLOADER cannot boot them. Continuing without."
+    fi
+fi
+
+# The layout follows from the three answers above; compute it once, here, so
+# every partitioning branch reads the same decision instead of re-deriving it.
+SEPARATE_BOOT="$(layout_separate_boot "$ROOT_FS" "$BOOTLOADER" "$ENCRYPT")"
+
+# The chosen filesystem's mkfs has to exist ON THIS IMAGE, and this is the last
+# moment it can be checked for free. Discovering it at format time means the
+# partition table has already been rewritten: the difference between "pick
+# another filesystem" and a disk that is now neither the old system nor a new
+# one. mkfs.ext4 is checked too — a separate /boot needs it whatever the root is.
+_mkfs_bin="$(fs_mkfs_cmd "$ROOT_FS" | awk '{print $1}')"
+command -v "$_mkfs_bin" >/dev/null \
+    || die "$_mkfs_bin is missing from this installer image — a $ROOT_FS root cannot be created here"
+if [ "$SEPARATE_BOOT" = "yes" ]; then
+    command -v mkfs.ext4 >/dev/null \
+        || die "mkfs.ext4 is missing from this installer image — /boot cannot be created"
+fi
+if [ "$SNAPSHOTS" = "yes" ]; then
+    command -v btrfs >/dev/null \
+        || die "btrfs is missing from this installer image — subvolumes cannot be created"
+fi
+
 if [ "$ENCRYPT" = "yes" ]; then
     command -v cryptsetup >/dev/null \
         || die "cryptsetup is not available on this installer image"
@@ -548,6 +691,49 @@ luks_format_root() {
     success "Root encrypted (LUKS2, UUID $LUKS_UUID)"
 }
 
+# ── Root filesystem: format, mount, and lay out subvolumes ──
+#
+# Shared by the UEFI and BIOS partitioning branches. It exists as a function
+# because the btrfs half is thirty lines of ordering that has to be identical in
+# both: create the subvolumes on the bare filesystem, unmount, then mount @ as
+# the root and everything else beneath it. Duplicating that is how the two
+# branches drift until one of them produces a system snapper cannot roll back.
+format_and_mount_root() {
+    echo "  Formatting root partition ($ROOT_FS)..."
+    $(fs_mkfs_cmd "$ROOT_FS") "$ROOT_FS_DEV" \
+        || die "Failed to format root partition as $ROOT_FS"
+
+    echo "  Mounting..."
+    mount -o "$(fs_mount_opts "$ROOT_FS")" "$ROOT_FS_DEV" /mnt \
+        || die "Failed to mount root"
+
+    [ "$ROOT_FS" = "btrfs" ] || return 0
+
+    # The names and the /.snapshots mount point are what `snapper rollback`
+    # expects. A layout that merely looks similar gives you snapshots that
+    # cannot be rolled back to, which is discovered on the day it matters.
+    echo "  Creating btrfs subvolumes..."
+    btrfs subvolume create /mnt/@          >/dev/null || die "btrfs: could not create @"
+    btrfs subvolume create /mnt/@home      >/dev/null || die "btrfs: could not create @home"
+    btrfs subvolume create /mnt/@snapshots >/dev/null || die "btrfs: could not create @snapshots"
+    btrfs subvolume create /mnt/@var_log   >/dev/null || die "btrfs: could not create @var_log"
+    btrfs subvolume create /mnt/@pkg       >/dev/null || die "btrfs: could not create @pkg"
+    umount /mnt || die "could not remount the btrfs root onto @"
+
+    local o
+    o="$(fs_mount_opts btrfs)"
+    mount -o "$o,subvol=@" "$ROOT_FS_DEV" /mnt || die "Failed to mount @"
+    mkdir -p /mnt/home /mnt/.snapshots /mnt/var/log /mnt/var/cache/pacman/pkg
+    mount -o "$o,subvol=@home"      "$ROOT_FS_DEV" /mnt/home       || die "Failed to mount @home"
+    mount -o "$o,subvol=@snapshots" "$ROOT_FS_DEV" /mnt/.snapshots || die "Failed to mount @snapshots"
+    mount -o "$o,subvol=@var_log"   "$ROOT_FS_DEV" /mnt/var/log    || die "Failed to mount @var_log"
+    # The package cache is deliberately NOT compressed and NOT snapshotted: the
+    # payload is already-compressed .zst, and rolling the cache back with the
+    # system achieves nothing except holding dead downloads on disk.
+    mount -o "noatime,subvol=@pkg"  "$ROOT_FS_DEV" /mnt/var/cache/pacman/pkg \
+        || die "Failed to mount @pkg"
+}
+
 # Clean up any previous failed install attempt
 umount -R /mnt 2>/dev/null || true
 
@@ -590,7 +776,12 @@ if [ "$INSTALL_MODE" = "alongside" ]; then
     PART_ROOT="/dev/$_new"
     PART_EFI="$ESP_DEV"
 
-    echo "  Formatting new root ($PART_ROOT)..."
+    # ext4 unconditionally, and not fs_mkfs_cmd: the filesystem and bootloader
+    # prompts are erase-only, so ROOT_FS is still its default here. Stated
+    # rather than inherited, because a later change that offers the choice on
+    # this path would otherwise silently start writing btrfs into free space
+    # beside someone's Windows install with none of the layout below adjusted.
+    echo "  Formatting new root ($PART_ROOT, ext4)..."
     mkfs.ext4 -F "$PART_ROOT" || die "Failed to format root partition"
 
     echo "  Mounting..."
@@ -606,18 +797,21 @@ elif [ "$BOOT_MODE" = "uefi" ]; then
     [ "$confirm" = "yes" ] || die "Aborted"
 
     echo "  Creating GPT partition table..."
+    ESP_MIB="$(layout_esp_size_mib "$BOOTLOADER")"
+    ESP_END=$((1 + ESP_MIB))
     parted -s "$DISK" mklabel gpt
-    parted -s "$DISK" mkpart ESP fat32 1MiB 513MiB
+    parted -s "$DISK" mkpart ESP fat32 1MiB "${ESP_END}MiB"
     parted -s "$DISK" set 1 esp on
-    if [ "$ENCRYPT" = "yes" ]; then
-        # Encrypted: ESP, a plain /boot for the kernel + initramfs, then LUKS.
-        parted -s "$DISK" mkpart boot ext4 513MiB 1537MiB
-        parted -s "$DISK" mkpart root ext4 1537MiB 100%
+    if [ "$SEPARATE_BOOT" = "yes" ]; then
+        # ESP, a plain ext4 /boot for the kernel + initramfs, then the root.
+        BOOT_END=$((ESP_END + 1024))
+        parted -s "$DISK" mkpart boot ext4 "${ESP_END}MiB" "${BOOT_END}MiB"
+        parted -s "$DISK" mkpart root "$ROOT_FS" "${BOOT_END}MiB" 100%
         PART_EFI="$(part_name "$DISK" 1)"
         PART_BOOT="$(part_name "$DISK" 2)"
         PART_ROOT="$(part_name "$DISK" 3)"
     else
-        parted -s "$DISK" mkpart root ext4 513MiB 100%
+        parted -s "$DISK" mkpart root "$ROOT_FS" "${ESP_END}MiB" 100%
         PART_EFI="$(part_name "$DISK" 1)"
         PART_ROOT="$(part_name "$DISK" 2)"
     fi
@@ -625,22 +819,23 @@ elif [ "$BOOT_MODE" = "uefi" ]; then
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
 
-    echo "  Formatting EFI partition..."
+    echo "  Formatting EFI partition (${ESP_MIB} MiB)..."
     mkfs.fat -F32 "$PART_EFI" || die "Failed to format EFI partition"
     luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
-    echo "  Formatting root partition..."
-    mkfs.ext4 -F "$ROOT_FS_DEV" || die "Failed to format root partition"
+    format_and_mount_root       # mkfs + mount, and btrfs subvolumes if chosen
 
-    echo "  Mounting..."
-    mount "$ROOT_FS_DEV" /mnt || die "Failed to mount root"
-    if [ "$ENCRYPT" = "yes" ]; then
+    if [ "$SEPARATE_BOOT" = "yes" ]; then
         echo "  Formatting /boot partition..."
         mkfs.ext4 -F "$PART_BOOT" || die "Failed to format boot partition"
         mkdir -p /mnt/boot
         mount "$PART_BOOT" /mnt/boot || die "Failed to mount /boot"
     fi
-    mkdir -p /mnt/boot/efi
-    mount "$PART_EFI" /mnt/boot/efi || die "Failed to mount EFI"
+
+    # systemd-boot reads the ESP and nothing else, so the ESP IS /boot and the
+    # kernels install straight onto it. GRUB keeps it one level down.
+    ESP_MOUNT="$(layout_esp_mount "$BOOTLOADER")"
+    mkdir -p "/mnt${ESP_MOUNT}"
+    mount "$PART_EFI" "/mnt${ESP_MOUNT}" || die "Failed to mount EFI at $ESP_MOUNT"
 else
     # BIOS/MBR whole-disk. Alongside is UEFI-only, so BIOS is always an erase.
     warn "This will ERASE all data on $DISK"
@@ -650,15 +845,15 @@ else
 
     echo "  Creating MBR partition table..."
     parted -s "$DISK" mklabel msdos
-    if [ "$ENCRYPT" = "yes" ]; then
+    if [ "$SEPARATE_BOOT" = "yes" ]; then
         # Same split as UEFI, minus the ESP: GRUB's core reads a plain /boot.
         parted -s "$DISK" mkpart primary ext4 1MiB 1025MiB
         parted -s "$DISK" set 1 boot on
-        parted -s "$DISK" mkpart primary ext4 1025MiB 100%
+        parted -s "$DISK" mkpart primary "$ROOT_FS" 1025MiB 100%
         PART_BOOT="$(part_name "$DISK" 1)"
         PART_ROOT="$(part_name "$DISK" 2)"
     else
-        parted -s "$DISK" mkpart primary ext4 1MiB 100%
+        parted -s "$DISK" mkpart primary "$ROOT_FS" 1MiB 100%
         parted -s "$DISK" set 1 boot on
         PART_ROOT="$(part_name "$DISK" 1)"
     fi
@@ -667,11 +862,8 @@ else
     sleep 2
 
     luks_format_root            # no-op unless encrypting; sets ROOT_FS_DEV
-    echo "  Formatting root partition..."
-    mkfs.ext4 -F "$ROOT_FS_DEV" || die "Failed to format root partition"
-    echo "  Mounting..."
-    mount "$ROOT_FS_DEV" /mnt || die "Failed to mount root"
-    if [ "$ENCRYPT" = "yes" ]; then
+    format_and_mount_root
+    if [ "$SEPARATE_BOOT" = "yes" ]; then
         echo "  Formatting /boot partition..."
         mkfs.ext4 -F "$PART_BOOT" || die "Failed to format boot partition"
         mkdir -p /mnt/boot
@@ -706,9 +898,24 @@ echo "  Running pacstrap (this may take several minutes)..."
 # for the two largest optional dependency trees in the install with no way to say
 # no. They are now WANT_FILEMGR / WANT_WINE in step 4 and are installed in the
 # desktop step below.
+# Filesystem tooling for the root that was actually chosen. `base` pulls in
+# e2fsprogs and nothing else, so without this an xfs or btrfs root ships with no
+# fsck and no repair tool on the one machine that will eventually need them —
+# and mkinitcpio's fsck hook silently skips a filesystem whose fsck is absent.
+FS_PKGS="$(fs_target_pkgs "$ROOT_FS")"
+
+# Snapshot stack, only when asked for. grub-btrfs generates the boot entries and
+# grub-btrfsd regenerates them when a snapshot appears; snap-pac is what makes
+# every pacman transaction bracketed by a pre/post pair.
+SNAP_PKGS=""
+if [ "$SNAPSHOTS" = "yes" ]; then
+    SNAP_PKGS="snapper snap-pac grub-btrfs inotify-tools"
+fi
+
 pacstrap /mnt \
     base linux linux-firmware linux-headers kitty foot \
     grub efibootmgr os-prober ntfs-3g \
+    $FS_PKGS $SNAP_PKGS \
     networkmanager openssh sudo \
     seatd ttf-dejavu \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk slurp \
@@ -2173,42 +2380,104 @@ if [ "$ENCRYPT" = "yes" ]; then
     fi
 fi
 
-cat > /mnt/etc/default/grub << EOF
-GRUB_DEFAULT=0
-GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="SynapseOS"
-GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
-GRUB_CMDLINE_LINUX="$GRUB_CRYPT_CMDLINE"
-# os-prober ON so grub-mkconfig detects Windows / other OSes and adds their
-# boot menu entries. Recent GRUB disables it by default for security; a
-# single-OS install just finds nothing, so enabling it globally is safe and is
-# what makes the alongside (dual-boot) install actually offer the other OS.
-GRUB_DISABLE_OS_PROBER=false
+if [ "$BOOTLOADER" = "grub" ]; then
+    cat > /mnt/etc/default/grub << EOF
+    GRUB_DEFAULT=0
+    GRUB_TIMEOUT=5
+    GRUB_DISTRIBUTOR="SynapseOS"
+    GRUB_CMDLINE_LINUX_DEFAULT="$GPU_KERNEL_PARAMS"
+    GRUB_CMDLINE_LINUX="$GRUB_CRYPT_CMDLINE"
+    # os-prober ON so grub-mkconfig detects Windows / other OSes and adds their
+    # boot menu entries. Recent GRUB disables it by default for security; a
+    # single-OS install just finds nothing, so enabling it globally is safe and is
+    # what makes the alongside (dual-boot) install actually offer the other OS.
+    GRUB_DISABLE_OS_PROBER=false
+    EOF
+
+    mkdir -p /mnt/boot/grub
+
+    echo "  Installing GRUB ($BOOT_MODE)..."
+    if [ "$BOOT_MODE" = "uefi" ]; then
+        arch-chroot /mnt grub-install \
+            --target=x86_64-efi \
+            --efi-directory=/boot/efi \
+            --bootloader-id=SynapseOS \
+            --recheck \
+            2>&1 || die "grub-install (UEFI) failed"
+    else
+        arch-chroot /mnt grub-install \
+            --target=i386-pc \
+            --recheck \
+            "$DISK" \
+            2>&1 || die "grub-install (BIOS) failed"
+    fi
+
+    echo "  Generating GRUB config..."
+    arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 \
+        || die "grub-mkconfig failed"
+
+    [ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
+
+else
+    # ── systemd-boot ──────────────────────────────────────
+    #
+    # No filesystem drivers, no config generator, no OS prober: it reads the ESP
+    # and boots what it finds. That is the whole appeal, and it is why the ESP is
+    # mounted at /boot here — the kernels have to live where it can see them.
+    echo "  Installing systemd-boot..."
+    arch-chroot /mnt bootctl --esp-path=/boot install 2>&1 \
+        || die "bootctl install failed"
+
+    # The root has to be named on the kernel command line. GRUB derives this
+    # itself from grub-mkconfig; here it is written by hand, so it is written
+    # from the same facts the fstab was: the LUKS mapper when encrypting, the
+    # filesystem UUID otherwise, plus the subvolume when the root is btrfs.
+    SDB_ROOT=""
+    if [ "$ENCRYPT" = "yes" ]; then
+        if [ "$CRYPT_HOOK" = "sd-encrypt" ]; then
+            SDB_ROOT="rd.luks.name=$LUKS_UUID=$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME"
+        else
+            SDB_ROOT="cryptdevice=UUID=$LUKS_UUID:$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME"
+        fi
+    else
+        _ruuid="$(blkid -s UUID -o value "$ROOT_FS_DEV")"
+        [ -n "$_ruuid" ] || die "could not read the root filesystem UUID"
+        SDB_ROOT="root=UUID=$_ruuid"
+    fi
+    [ "$ROOT_FS" = "btrfs" ] && SDB_ROOT="$SDB_ROOT rootflags=subvol=@"
+
+    mkdir -p /mnt/boot/loader/entries
+    cat > /mnt/boot/loader/loader.conf << EOF
+default synapseos.conf
+timeout 5
+console-mode keep
+editor no
 EOF
 
-mkdir -p /mnt/boot/grub
+    cat > /mnt/boot/loader/entries/synapseos.conf << EOF
+title   SynapseOS
+linux   /vmlinuz-linux
+initrd  /initramfs-linux.img
+options $SDB_ROOT rw $GPU_KERNEL_PARAMS
+EOF
 
-echo "  Installing GRUB ($BOOT_MODE)..."
-if [ "$BOOT_MODE" = "uefi" ]; then
-    arch-chroot /mnt grub-install \
-        --target=x86_64-efi \
-        --efi-directory=/boot/efi \
-        --bootloader-id=SynapseOS \
-        --recheck \
-        2>&1 || die "grub-install (UEFI) failed"
-else
-    arch-chroot /mnt grub-install \
-        --target=i386-pc \
-        --recheck \
-        "$DISK" \
-        2>&1 || die "grub-install (BIOS) failed"
+    cat > /mnt/boot/loader/entries/synapseos-fallback.conf << EOF
+title   SynapseOS (fallback initramfs)
+linux   /vmlinuz-linux
+initrd  /initramfs-linux-fallback.img
+options $SDB_ROOT rw
+EOF
+
+    # The kernel must actually be ON the ESP. If pacstrap ran before the ESP was
+    # mounted at /boot, these entries would point at files that are not there and
+    # the machine would drop to the boot menu with nothing to boot.
+    [ -f /mnt/boot/vmlinuz-linux ] \
+        || die "vmlinuz-linux is not on the ESP — systemd-boot would find nothing to boot"
+    [ -f /mnt/boot/initramfs-linux.img ] \
+        || die "initramfs is not on the ESP — systemd-boot would find nothing to boot"
+    [ -f /mnt/boot/EFI/BOOT/BOOTX64.EFI ] || [ -f /mnt/boot/EFI/systemd/systemd-bootx64.efi ] \
+        || die "systemd-boot did not install its EFI binary"
 fi
-
-echo "  Generating GRUB config..."
-arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 \
-    || die "grub-mkconfig failed"
-
-[ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
 
 # Hard-verify the encrypted boot path. Every one of these is a way to end up
 # with an install that partitions, formats and reports success, then drops to a
@@ -2219,8 +2488,18 @@ if [ "$ENCRYPT" = "yes" ]; then
     cryptsetup isLuks "$PART_ROOT" \
         || die "$PART_ROOT is not a LUKS volume after install"
 
-    grep -q "$LUKS_UUID" /mnt/boot/grub/grub.cfg \
-        || die "grub.cfg never mentions $LUKS_UUID — it would not unlock at boot"
+    # The bootloader has to name the LUKS volume, and where that is written
+    # differs: grub-mkconfig bakes it into grub.cfg, systemd-boot takes it from
+    # the entry file written above. Checking the wrong file would pass
+    # vacuously — grep on a path that does not exist is simply a failure — so
+    # this asks the loader that is actually installed.
+    if [ "$BOOTLOADER" = "grub" ]; then
+        grep -q "$LUKS_UUID" /mnt/boot/grub/grub.cfg \
+            || die "grub.cfg never mentions $LUKS_UUID — it would not unlock at boot"
+    else
+        grep -q "$LUKS_UUID" /mnt/boot/loader/entries/synapseos.conf \
+            || die "the systemd-boot entry never mentions $LUKS_UUID — it would not unlock at boot"
+    fi
 
     grep -qE "^HOOKS=.*[( ]$CRYPT_HOOK[ )]" /mnt/etc/mkinitcpio.conf \
         || die "the $CRYPT_HOOK hook is missing from mkinitcpio.conf"
@@ -2241,6 +2520,52 @@ if [ "$ENCRYPT" = "yes" ]; then
         || die "/boot is missing from fstab — it would not be mounted after boot"
 
     success "Encrypted boot path verified"
+fi
+
+# ── Snapshots ─────────────────────────────────────────────
+#
+# snapper's own `create-config` would try to create /.snapshots itself and fails
+# when the subvolume is already mounted there — which it is, by design, because
+# that is the layout `snapper rollback` needs. So the config is written directly
+# and the existing subvolume is kept.
+if [ "$SNAPSHOTS" = "yes" ]; then
+    step "Configuring snapshots"
+
+    arch-chroot /mnt snapper --no-dbus -c root create-config / 2>/dev/null || true
+
+    # create-config replaces /.snapshots with a fresh subvolume of its own if it
+    # got that far. Put ours back: the one that is mounted is the one fstab
+    # names, and a mismatch here means snapshots land somewhere nothing reads.
+    if [ ! -d /mnt/.snapshots ]; then
+        mkdir -p /mnt/.snapshots
+        mount -o "$(fs_mount_opts btrfs),subvol=@snapshots" "$ROOT_FS_DEV" /mnt/.snapshots \
+            || die "could not restore the @snapshots mount"
+    fi
+
+    # The defaults keep hourly timeline snapshots forever and are how a btrfs
+    # system quietly fills its own disk. Timeline off, and a bounded number of
+    # pacman snapshots: the ones worth having are the pre/post pairs around an
+    # upgrade, not a photograph of every hour the machine was idle.
+    if [ -f /mnt/etc/snapper/configs/root ]; then
+        sed -i \
+            -e 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="no"/' \
+            -e 's/^NUMBER_CLEANUP=.*/NUMBER_CLEANUP="yes"/' \
+            -e 's/^NUMBER_LIMIT=.*/NUMBER_LIMIT="12"/' \
+            -e 's/^NUMBER_LIMIT_IMPORTANT=.*/NUMBER_LIMIT_IMPORTANT="6"/' \
+            /mnt/etc/snapper/configs/root
+    fi
+
+    # grub-btrfsd watches /.snapshots and regenerates the boot menu when one
+    # appears; without it the entries only refresh on a manual grub-mkconfig.
+    arch-chroot /mnt systemctl enable grub-btrfsd.service 2>/dev/null \
+        || warn "could not enable grub-btrfsd — snapshots will not appear in the boot menu automatically"
+    arch-chroot /mnt systemctl enable snapper-cleanup.timer 2>/dev/null || true
+
+    # Regenerate now that grub-btrfs is installed, so the snapshot submenu
+    # exists on the very first boot rather than after the first upgrade.
+    arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+
+    success "Snapshots enabled (snapper + snap-pac, bootable from GRUB)"
 fi
 
 success "Bootloader installed"
