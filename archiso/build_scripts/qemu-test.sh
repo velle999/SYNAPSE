@@ -4,6 +4,7 @@
 # Usage:
 #   ./qemu-test.sh path/to/SynapseOS.iso
 #   ./qemu-test.sh                            # auto-detect latest ISO
+#   QEMU_NO_CD=1 ./qemu-test.sh               # boot the INSTALLED disk, no media
 #
 # Requirements: qemu, ovmf (for UEFI)
 #
@@ -15,6 +16,7 @@
 #   QEMU_DISK=20G    Create a virtual disk of this size (default: 20G)
 #   QEMU_AUDIO=1     Enable audio passthrough
 #   QEMU_NET=user    Network mode (default: user)
+#   QEMU_NO_CD=1     Detach the install media and boot the test disk
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
@@ -26,11 +28,22 @@ ISO="${1:-$(ls -t "${SCRIPT_DIR}/../out"/*.iso 2>/dev/null | head -1)}"
 shift || true   # Remove ISO from $@ so it isn't passed to QEMU as a bare arg
 DISK="${SCRIPT_DIR}/../out/test-disk.qcow2"
 
-[[ -z "$ISO" ]] && { echo "Usage: $0 <iso>"; exit 1; }
-[[ -f "$ISO" ]] || { echo "ISO not found: $ISO"; exit 1; }
+# QEMU_NO_CD=1 — boot the test DISK with no install media attached.
+#
+# This is how you check that an install actually boots, and it is not the same
+# test as "the installer finished". With the ISO attached the firmware may
+# simply prefer it: an install whose bootloader is on the ESP but which never
+# got an NVRAM entry boots the installer again and looks like it was never
+# installed. Detaching the CD is what tells the two apart.
+NO_CD="${QEMU_NO_CD:-0}"
+
+if [[ "$NO_CD" != "1" ]]; then
+    [[ -z "$ISO" ]] && { echo "Usage: $0 <iso>   (or QEMU_NO_CD=1 $0 to boot the disk)"; exit 1; }
+    [[ -f "$ISO" ]] || { echo "ISO not found: $ISO"; exit 1; }
+fi
 
 # Build creates files as root — fix ownership so QEMU can open them
-if [[ -f "$ISO" && "$(stat -c %U "$ISO")" != "$(whoami)" ]]; then
+if [[ "$NO_CD" != "1" && -f "$ISO" && "$(stat -c %U "$ISO")" != "$(whoami)" ]]; then
     echo "ISO owned by root — fixing ownership with sudo..."
     sudo chown "$(whoami):$(id -gn)" "$ISO"
 fi
@@ -112,8 +125,14 @@ if [[ -z "$OVMF_ARGS" ]]; then
 fi
 
 echo ""
+if [[ "$NO_CD" == "1" ]]; then
+    CD_ARGS="-boot order=c"
+else
+    CD_ARGS="-cdrom $ISO -boot order=dc"
+fi
+
 echo "⚡ Starting SynapseOS in QEMU"
-echo "   ISO:  $ISO"
+echo "   ISO:  ${CD_ARGS/#-boot order=c/(none — booting the installed disk)}"
 echo "   RAM:  $RAM"
 echo "   CPUs: $CPUS"
 echo "   Disk: $DISK"
@@ -129,8 +148,7 @@ qemu-system-x86_64 \
     -vga "$VGA" \
     -display gtk,zoom-to-fit=on \
     -drive file="$DISK",if=virtio,format=qcow2 \
-    -cdrom "$ISO" \
-    -boot order=dc \
+    $CD_ARGS \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device virtio-net-pci,netdev=net0 \
     -usb -device usb-tablet \
