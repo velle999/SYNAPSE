@@ -1310,11 +1310,15 @@ void synui_render_power(syn_server_t *s)
      * do anything — and there is no other way to see which of the two the
      * machine would use right now. */
     {
-        const char *lid;
-        if (!s->power.lid_seen)   lid = "no lid switch";
-        else if (p->lid_closed)   lid = "lid closed";
-        else if (power_docked(s)) lid = "lid open \xc2\xb7 docked";
-        else                      lid = "lid open";
+        /* Naming the live case is what makes the three lid rows legible: they
+         * are listed least-specific first but resolved docked-then-mains-then-
+         * battery, and this says which one a lid close would use right now. */
+        char lid[64];
+        if (!s->power.lid_seen)
+            snprintf(lid, sizeof(lid), "no lid switch");
+        else
+            snprintf(lid, sizeof(lid), "lid %s \xc2\xb7 %s",
+                     p->lid_closed ? "closed" : "open", power_lid_case(s));
 
         cairo_set_font_size(cr, 12);
         cairo_text_extents_t te;

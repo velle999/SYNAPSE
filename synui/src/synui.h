@@ -719,10 +719,12 @@ typedef enum {
 } syn_bt_ask_t;
 
 /* ── Power saving panel + idle state machine (power.c) ───── */
-/* What closing a laptop lid does. Two of these are configured — one for the
- * undocked machine and one for "an external monitor is connected" — because
- * the right answer genuinely differs: a lid closed on the sofa means "sleep",
- * a lid closed on a desk with a monitor attached means "keep working".
+/* What closing a laptop lid does. Three of these are configured, because the
+ * right answer genuinely differs with the situation: a lid closed on the sofa
+ * means "sleep", a lid closed on a desk with a monitor attached means "keep
+ * working", and one closed on a charger is somewhere in between. Same three
+ * cases logind splits HandleLidSwitch / ExternalPower / Docked into, and
+ * resolved in the same order — docked wins, then mains, then battery.
  *
  * SYN_LID_SYSTEM hands the lid back to logind (whatever HandleLidSwitch= in
  * logind.conf says). Every other value means synui takes logind's
@@ -744,15 +746,19 @@ int lid_action_from_name(const char *name);
 
 /* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch,
  * the four after it each map to one syn_config_t idle timeout, and the last
- * two pick a syn_lid_action_t rather than a timeout. */
+ * three pick a syn_lid_action_t rather than a timeout. The lid rows are listed
+ * least-specific first, which is the reverse of the order they are resolved
+ * in — the panel's header note names whichever one is live, so the precedence
+ * is visible without the rows having to encode it. */
 typedef enum {
     POWER_ROW_ENABLED = 0,
     POWER_ROW_DIM,
     POWER_ROW_BLANK,
     POWER_ROW_LOCK,
     POWER_ROW_SUSPEND,
-    POWER_ROW_LID,
-    POWER_ROW_LID_DOCKED,
+    POWER_ROW_LID,          /* on battery */
+    POWER_ROW_LID_AC,       /* plugged in */
+    POWER_ROW_LID_DOCKED,   /* external monitor — beats both of the above */
     POWER_ROW_COUNT,
 } syn_power_row_t;
 
@@ -1376,13 +1382,16 @@ typedef struct {
      * would have truncated it mid-flag, silently. */
     char  power_lock_cmd[512];
 
-    /* Laptop lid (syn_lid_action_t). Two settings, chosen between at the
-     * moment the lid shuts by whether an external output is connected. Both
-     * default to what systemd's own HandleLidSwitch/HandleLidSwitchDocked
-     * default to, so a machine that never opens the panel behaves the way its
-     * owner already expects. Persisted to power.state alongside the timeouts. */
-    int   lid_close_action;         /* default SYN_LID_SUSPEND */
-    int   lid_close_docked_action;  /* default SYN_LID_IGNORE */
+    /* Laptop lid (syn_lid_action_t). Three settings, chosen between at the
+     * moment the lid shuts: docked first, then mains power, then the plain
+     * on-battery case. All three default to what the matching systemd setting
+     * defaults to (HandleLidSwitch / HandleLidSwitchExternalPower /
+     * HandleLidSwitchDocked), so a machine that never opens the panel behaves
+     * the way its owner already expects. Persisted to power.state alongside
+     * the timeouts. */
+    int   lid_close_action;         /* on battery;  default SYN_LID_SUSPEND */
+    int   lid_close_ac_action;      /* plugged in;  default SYN_LID_SUSPEND */
+    int   lid_close_docked_action;  /* has monitor; default SYN_LID_IGNORE */
 
     /* Wi-Fi / network configuration UI. nmtui in a terminal by default: synui
      * has no text entry to type a passphrase into, so there is nothing native
@@ -3070,6 +3079,14 @@ void power_lid_set(syn_server_t *s, bool closed);
 /* True when an output that is not the built-in panel is enabled, i.e. the
  * laptop is docked and closing the lid should not necessarily stop anything. */
 bool power_docked(syn_server_t *s);
+/* True when a charger is plugged in. Read from /sys/class/power_supply at the
+ * moment it is asked, so it is never stale; a machine that reports no mains
+ * supply at all (a desktop) counts as on mains. */
+bool power_on_ac(void);
+/* Which of the three lid cases is live right now — "docked", "plugged in" or
+ * "on battery". The panel names it so the rows do not have to spell out their
+ * own precedence. */
+const char *power_lid_case(syn_server_t *s);
 
 /* ── GPU telemetry (gpu.c) ───────────────────────────────── */
 /* Probes NVML (dlopen) then amdgpu sysfs; leaves gpu_n at 0 if neither is
@@ -3373,6 +3390,14 @@ void logind_brightness_step(syn_server_t *s, int pct);
  * lid config: synui has to hold it to stop logind suspending out from under a
  * lid action of its own. Idempotent — call it after any config change. */
 void logind_lid_update(syn_server_t *s);
+/* Is synui holding that inhibitor? False means logind still acts on the lid
+ * itself and power.c must keep its hands off. */
+bool logind_holds_lid(void);
+/* logind's own configured handler for one lid case ("suspend", "ignore",
+ * "lock", "hibernate", …), so a lid row left on `system` can do what logind
+ * would have done even while synui holds the inhibitor for the other rows.
+ * False if it cannot be read (no bus). */
+bool logind_lid_handler(bool docked, bool on_ac, char *buf, size_t n);
 
 /* ── Notifications (notif.c) ─────────────────────────────── */
 /* notif_init takes org.freedesktop.Notifications on the session bus. Safe where

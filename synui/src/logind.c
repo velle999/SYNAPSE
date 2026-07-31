@@ -155,7 +155,14 @@ void logind_lid_update(syn_server_t *s)
      * would log an error. */
     if (!lg.bus) return;
 
+    /* Any one case wanting synui to act means synui has to hold the inhibitor
+     * for all of them: the inhibitor is not per-case, and which case is live
+     * is not known until the lid actually shuts. A row left on `system` is
+     * then honoured by power.c doing nothing — which is not quite what logind
+     * would have done, and is why the panel greys those rows rather than
+     * claiming they are active. */
     bool want = s->config.lid_close_action        != SYN_LID_SYSTEM ||
+                s->config.lid_close_ac_action     != SYN_LID_SYSTEM ||
                 s->config.lid_close_docked_action != SYN_LID_SYSTEM;
 
     if (want == (lg.lid_fd >= 0)) return;
@@ -169,12 +176,65 @@ void logind_lid_update(syn_server_t *s)
 
     lg.lid_fd = logind_inhibit("handle-lid-switch",
                                "synui handles the lid switch", "block");
+
     if (lg.lid_fd >= 0)
         wlr_log(WLR_INFO, "synui: logind: handling the lid switch");
     else
         wlr_log(WLR_ERROR, "synui: logind: no handle-lid-switch inhibitor —"
                 " logind keeps the lid, so the lid rows in Super+P will not"
                 " take effect");
+}
+
+bool logind_holds_lid(void)
+{
+    return lg.lid_fd >= 0;
+}
+
+/*
+ * What logind itself would have done with this lid close.
+ *
+ * Needed because holding the inhibitor is all-or-nothing while the *setting*
+ * is per-case: with, say, docked=blank and battery=system, synui holds the lid
+ * for every case, and a `system` case would otherwise mean "nothing happens"
+ * rather than "logind's policy". That is the difference between a laptop that
+ * sleeps when it goes in a bag and one that cooks in it, so it is not
+ * something to leave as a documented quirk.
+ *
+ * logind publishes the three handlers as plain string properties, so this is
+ * exact rather than a guess at what logind.conf might say — and it picks up an
+ * edited drop-in with no synui restart. Values are the same vocabulary
+ * systemd documents for HandleLidSwitch=: ignore, lock, suspend, hibernate,
+ * poweroff, and friends.
+ */
+bool logind_lid_handler(bool docked, bool on_ac, char *buf, size_t n)
+{
+    if (!lg.bus) return false;
+
+    const char *prop = docked ? "HandleLidSwitchDocked"
+                     : on_ac  ? "HandleLidSwitchExternalPower"
+                              : "HandleLidSwitch";
+
+    sd_bus_error err = SD_BUS_ERROR_NULL;
+    sd_bus_message *reply = NULL;
+    const char *val = NULL;
+    bool ok = false;
+
+    int r = sd_bus_get_property(lg.bus, LOGIND_SVC, LOGIND_MGR_PATH,
+                                LOGIND_MGR_IF, prop, &err, &reply, "s");
+    if (r < 0) {
+        wlr_log(WLR_ERROR, "synui: logind: cannot read %s: %s", prop,
+                err.message ? err.message : strerror(-r));
+        goto out;
+    }
+    if (sd_bus_message_read(reply, "s", &val) < 0 || !val) goto out;
+
+    snprintf(buf, n, "%s", val);
+    ok = true;
+
+out:
+    sd_bus_error_free(&err);
+    sd_bus_message_unref(reply);
+    return ok;
 }
 
 /* PrepareForSleep(true)  — about to sleep: lock, then get out of the way.

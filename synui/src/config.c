@@ -106,14 +106,16 @@
  *   power_lock_cmd = swaylock -f -c 000000
  *   power_suspend_cmd = systemctl suspend
  *
- * Laptop lid (power.c) — what closing the lid does, picked between by whether
- * an external monitor is connected. system|ignore|blank|lock|suspend, where
- * `system` leaves the lid to logind.conf and every other value has synui take
- * logind's handle-lid-switch inhibitor and act itself. `blank` turns the
- * built-in panel off and leaves external monitors alone. The defaults match
- * systemd's own; Super+P edits them and writes them to power.state:
- *   lid_close_action = suspend
- *   lid_close_docked_action = ignore
+ * Laptop lid (power.c) — what closing the lid does. Three cases, resolved
+ * docked first, then mains, then battery, exactly as logind resolves its own
+ * three. system|ignore|blank|lock|suspend, where `system` leaves the lid to
+ * logind.conf and every other value has synui take logind's
+ * handle-lid-switch inhibitor and act itself. `blank` turns the built-in panel
+ * off and leaves external monitors alone. The defaults match systemd's own;
+ * Super+P edits them and writes them to power.state:
+ *   lid_close_action = suspend           (on battery)
+ *   lid_close_ac_action = suspend        (charger plugged in)
+ *   lid_close_docked_action = ignore     (external monitor; beats both)
  *
  * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
  * entry to type a passphrase into, so there is nothing native to point at yet:
@@ -644,12 +646,14 @@ void synui_config_load(syn_config_t *cfg)
     snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
              "systemctl suspend");
 
-    /* Same defaults systemd ships (HandleLidSwitch=suspend,
-     * HandleLidSwitchDocked=ignore), so a laptop that never opens Super+P
-     * behaves the way its owner already expects — synui just does it itself,
-     * which is what makes the docked case configurable at all. No effect on a
-     * machine with no lid switch. */
+    /* Same defaults systemd ships (HandleLidSwitch and
+     * HandleLidSwitchExternalPower both suspend, HandleLidSwitchDocked
+     * ignores), so a laptop that never opens Super+P behaves the way its owner
+     * already expects — synui just does it itself, which is what makes the
+     * three cases separately configurable at all. No effect on a machine with
+     * no lid switch. */
     cfg->lid_close_action        = SYN_LID_SUSPEND;
+    cfg->lid_close_ac_action     = SYN_LID_SUSPEND;
     cfg->lid_close_docked_action = SYN_LID_IGNORE;
 
     /* kitty accepts -e for compatibility with foot/xterm even though its own
@@ -1045,6 +1049,11 @@ void synui_config_load(syn_config_t *cfg)
             int a = lid_action_from_name(val);
             if (a >= 0) cfg->lid_close_action = a;
             else wlr_log(WLR_ERROR, "synui: lid_close_action: unknown '%s'", val);
+        }
+        else if (strcmp(key, "lid_close_ac_action") == 0) {
+            int a = lid_action_from_name(val);
+            if (a >= 0) cfg->lid_close_ac_action = a;
+            else wlr_log(WLR_ERROR, "synui: lid_close_ac_action: unknown '%s'", val);
         }
         else if (strcmp(key, "lid_close_docked_action") == 0) {
             int a = lid_action_from_name(val);

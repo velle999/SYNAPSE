@@ -2343,7 +2343,24 @@ static void server_new_switch(syn_server_t *s, struct wlr_input_device *dev)
 
     id->toggle.notify = switch_handle_toggle;
     wl_signal_add(&wlr_switch_from_input_device(dev)->events.toggle, &id->toggle);
-    wlr_log(WLR_INFO, "synui: input: switch device '%s'", dev->name);
+
+    /* Whether this switch is a *lid*, asked here rather than inferred from the
+     * first toggle event. A laptop whose lid has not moved since login emits
+     * no toggle at all, so waiting for one would have the power panel report
+     * "no lid switch" on a machine that plainly has one — the lid rows would
+     * read as dead on exactly the hardware they exist for. A tablet-mode-only
+     * switch must still not claim to be a lid, which is why this asks libinput
+     * instead of assuming any switch is one. */
+    bool is_lid = false;
+    if (wlr_input_device_is_libinput(dev)) {
+        struct libinput_device *li = wlr_libinput_get_device_handle(dev);
+        is_lid = li &&
+                 libinput_device_switch_has_switch(li, LIBINPUT_SWITCH_LID) > 0;
+        if (is_lid) s->power.lid_seen = 1;
+    }
+
+    wlr_log(WLR_INFO, "synui: input: switch device '%s'%s", dev->name,
+            is_lid ? " (lid)" : "");
 }
 
 static void server_new_input(struct wl_listener *listener, void *data)

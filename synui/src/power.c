@@ -34,6 +34,7 @@
  */
 
 #define _GNU_SOURCE
+#include <dirent.h>    /* /sys/class/power_supply — see power_on_ac */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,6 +97,7 @@ static int *row_action_field(syn_server_t *s, int row)
 {
     switch (row) {
     case POWER_ROW_LID:        return &s->config.lid_close_action;
+    case POWER_ROW_LID_AC:     return &s->config.lid_close_ac_action;
     case POWER_ROW_LID_DOCKED: return &s->config.lid_close_docked_action;
     default:                   return NULL;
     }
@@ -109,7 +111,8 @@ static const char *row_label(int row)
     case POWER_ROW_BLANK:      return "Blank displays";
     case POWER_ROW_LOCK:       return "Lock session";
     case POWER_ROW_SUSPEND:    return "Suspend system";
-    case POWER_ROW_LID:        return "Lid closed";
+    case POWER_ROW_LID:        return "Lid closed (battery)";
+    case POWER_ROW_LID_AC:     return "Lid closed (plugged in)";
     case POWER_ROW_LID_DOCKED: return "Lid closed (docked)";
     default:                   return "?";
     }
@@ -184,6 +187,68 @@ bool power_docked(syn_server_t *s)
     wl_list_for_each(o, &s->outputs, link)
         if (!output_is_internal(o->wlr_output)) return true;
     return false;
+}
+
+/* ── Mains power ─────────────────────────────────────────── */
+
+/* Overridden only by tests/lid_test.c, which points it at a scratch tree it
+ * builds itself — there is no other way to run the on-battery branch on a
+ * machine that is plugged in. Compile-time, so the shipped binary has no way
+ * to be aimed anywhere but the real sysfs. */
+#ifndef SYNUI_POWER_SUPPLY_DIR
+#define SYNUI_POWER_SUPPLY_DIR "/sys/class/power_supply"
+#endif
+
+/* Is a charger plugged in?
+ *
+ * Straight out of /sys/class/power_supply, read at the moment it is asked
+ * rather than cached off a udev watch: this is consulted when a lid shuts and
+ * when the panel repaints, which is nowhere near often enough to be worth
+ * keeping a subscription alive — and a cache is one more thing that can be
+ * wrong at exactly the moment it matters.
+ *
+ * `USB` counts as well as `Mains`. USB-C charging is the normal case on a
+ * modern laptop, and a machine charging over USB-PD that we called "on
+ * battery" would suspend itself on a full battery. Any one supply being
+ * online is enough, so an extra port sitting at online=0 cannot outvote the
+ * charger that is actually connected.
+ *
+ * A machine with no mains-side supply at all is a desktop (or a kernel that
+ * does not report one) and counts as plugged in — treating it as "on battery"
+ * would apply the wrong lid setting to the case with no battery in it. */
+bool power_on_ac(void)
+{
+    DIR *d = opendir(SYNUI_POWER_SUPPLY_DIR);
+    if (!d) return true;
+
+    bool mains_seen = false, mains_online = false;
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+
+        char path[288], type[32] = "";
+        snprintf(path, sizeof(path), "%s/%s/type",
+                 SYNUI_POWER_SUPPLY_DIR, e->d_name);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;
+        if (!fgets(type, sizeof(type), f)) type[0] = '\0';
+        fclose(f);
+        type[strcspn(type, "\r\n")] = '\0';
+
+        if (strcmp(type, "Mains") != 0 && strcmp(type, "USB") != 0) continue;
+        mains_seen = true;
+
+        snprintf(path, sizeof(path), "%s/%s/online",
+                 SYNUI_POWER_SUPPLY_DIR, e->d_name);
+        f = fopen(path, "r");
+        if (!f) continue;
+        int online = 0;
+        if (fscanf(f, "%d", &online) == 1 && online) mains_online = true;
+        fclose(f);
+    }
+    closedir(d);
+
+    return mains_seen ? mains_online : true;
 }
 
 /* Commit every output to the state the two blank flags say it should be in.
@@ -383,15 +448,100 @@ void power_reload(syn_server_t *s)
 
 /* ── Laptop lid ──────────────────────────────────────────── */
 
-/* Which of the two lid settings applies right now. Decided at the moment the
- * lid shuts rather than cached, so plugging a monitor in changes the answer
- * without anything having to notice the hotplug. */
-static int lid_action_now(syn_server_t *s)
+/* Which of the three lid settings applies right now, and the name of the case
+ * it picked (for the log and the panel's header note).
+ *
+ * Docked beats mains beats battery — the same order logind resolves
+ * HandleLidSwitchDocked / ExternalPower / HandleLidSwitch in. Decided at the
+ * moment the lid shuts rather than cached, so plugging in a monitor or a
+ * charger changes the answer with nothing having to notice the event. */
+static int lid_action_now(syn_server_t *s, const char **why)
 {
-    int a = power_docked(s) ? s->config.lid_close_docked_action
-                            : s->config.lid_close_action;
+    int a;
+    if (power_docked(s))   { a = s->config.lid_close_docked_action;
+                             if (why) *why = "docked"; }
+    else if (power_on_ac()) { a = s->config.lid_close_ac_action;
+                              if (why) *why = "plugged in"; }
+    else                    { a = s->config.lid_close_action;
+                              if (why) *why = "on battery"; }
+
     if (a < 0 || a >= SYN_LID_ACTION_COUNT) return SYN_LID_SYSTEM;
     return a;
+}
+
+/* The name of the case that is live right now — what the panel puts in its
+ * header so the three rows do not have to encode their own precedence. */
+const char *power_lid_case(syn_server_t *s)
+{
+    const char *why = "";
+    lid_action_now(s, &why);
+    return why;
+}
+
+/* A lid row left on `system`, honoured properly.
+ *
+ * If synui holds no inhibitor, logind has already acted and there is nothing
+ * to do — the normal case, and the whole meaning of `system`.
+ *
+ * If synui *does* hold it (because one of the other two rows wanted an action
+ * of its own — the inhibitor is not per-case), then logind has been stopped
+ * and doing nothing here would silently turn `system` into `ignore`. On a
+ * laptop going into a bag that is the difference between sleeping and cooking,
+ * so ask logind what it would have done and do that.
+ *
+ * The handler names are systemd's, and the ones that are not `ignore` or
+ * `lock` are all systemctl verbs. They are matched against a fixed list rather
+ * than interpolated into the command: the value crosses a process boundary and
+ * ends up in a shell, and a whitelist costs one array. */
+static void power_lid_run_system(syn_server_t *s)
+{
+    if (!logind_holds_lid()) {
+        wlr_log(WLR_INFO, "synui: power: lid left to logind");
+        return;
+    }
+
+    char handler[64] = "";
+    if (!logind_lid_handler(power_docked(s), power_on_ac(),
+                            handler, sizeof(handler))) {
+        /* Cannot ask. systemd's documented default, and what SynapseOS's own
+         * drop-in says, is to suspend — the safe way to be wrong here. */
+        snprintf(handler, sizeof(handler), "suspend");
+        wlr_log(WLR_ERROR, "synui: power: lid 'system' but logind would not"
+                " say what it does — suspending");
+    }
+
+    wlr_log(WLR_INFO, "synui: power: lid 'system' -> logind's %s", handler);
+
+    if (strcmp(handler, "ignore") == 0)
+        return;
+
+    if (strcmp(handler, "lock") == 0) {
+        if (!s->power.locked) { s->power.locked = 1; synui_lock(s); }
+        power_set_lid_blank(s, true);
+        return;
+    }
+
+    if (strcmp(handler, "suspend") == 0) {
+        /* The user's own suspend command, not a hardcoded systemctl: they may
+         * have pointed power_suspend_cmd somewhere deliberately. */
+        synui_spawn(s->config.power_suspend_cmd);
+        return;
+    }
+
+    static const char *const verbs[] = {
+        "hibernate", "hybrid-sleep", "suspend-then-hibernate",
+        "poweroff", "halt", "kexec", "reboot",
+    };
+    for (size_t i = 0; i < sizeof(verbs) / sizeof(verbs[0]); i++) {
+        if (strcmp(handler, verbs[i]) != 0) continue;
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "systemctl %s", verbs[i]);
+        synui_spawn(cmd);
+        return;
+    }
+
+    wlr_log(WLR_ERROR, "synui: power: logind lid handler '%s' is not one synui"
+            " knows — doing nothing", handler);
 }
 
 void power_lid_set(syn_server_t *s, bool closed)
@@ -416,14 +566,14 @@ void power_lid_set(syn_server_t *s, bool closed)
         return;
     }
 
-    int action = lid_action_now(s);
-    wlr_log(WLR_INFO, "synui: power: lid closed (%s%s)",
-            syn_lid_action_names[action], power_docked(s) ? ", docked" : "");
+    const char *why = "";
+    int action = lid_action_now(s, &why);
+    wlr_log(WLR_INFO, "synui: power: lid closed, %s -> %s",
+            why, syn_lid_action_names[action]);
 
     switch (action) {
     case SYN_LID_SYSTEM:
-        /* logind still owns the lid — we never took its inhibitor, so it has
-         * already acted and there is nothing for us to do. */
+        power_lid_run_system(s);
         break;
     case SYN_LID_IGNORE:
         break;
@@ -499,6 +649,8 @@ void power_state_save(syn_server_t *s)
     fprintf(f, "suspend=%d\n", s->config.power_suspend);
     fprintf(f, "lid=%s\n",
             syn_lid_action_names[s->config.lid_close_action]);
+    fprintf(f, "lid_ac=%s\n",
+            syn_lid_action_names[s->config.lid_close_ac_action]);
     fprintf(f, "lid_docked=%s\n",
             syn_lid_action_names[s->config.lid_close_docked_action]);
     fclose(f);
@@ -537,6 +689,9 @@ void power_state_load(syn_config_t *cfg)
         else if (strcmp(key, "lid") == 0) {
             int a = lid_action_from_name(sval);
             if (a >= 0) cfg->lid_close_action = a;
+        } else if (strcmp(key, "lid_ac") == 0) {
+            int a = lid_action_from_name(sval);
+            if (a >= 0) cfg->lid_close_ac_action = a;
         } else if (strcmp(key, "lid_docked") == 0) {
             int a = lid_action_from_name(sval);
             if (a >= 0) cfg->lid_close_docked_action = a;

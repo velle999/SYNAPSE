@@ -403,10 +403,16 @@ test('edid_hdr', edid_hdr_test)
 # the lid cannot be closed headless — wlroots' headless backend has no input
 # devices, and the only real alternative is a uinput switch, which the *live*
 # session's synui would pick up and act on. See the test's header.
+# SYNUI_POWER_SUPPLY_DIR aims power_on_ac() at a scratch tree the test builds,
+# since there is no other way to exercise the on-battery branch on a machine
+# that is plugged in. Only this target defines it; the shipped binary keeps the
+# real /sys/class/power_supply.
 lid_test = executable('lid_test',
   ['tests/lid_test.c', 'src/power.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman],
-  c_args : ['-DWLR_USE_UNSTABLE'],
+  c_args : ['-DWLR_USE_UNSTABLE',
+            '-DSYNUI_POWER_SUPPLY_DIR="' + meson.current_build_dir() +
+            '/lid_test_power_supply"'],
   build_by_default : false)
 test('lid', lid_test)
