@@ -180,7 +180,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
-| `Super`+`Shift`+`T` | Calendar |
+| `Super`+`Shift`+`T` | Tile windows |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch) |
