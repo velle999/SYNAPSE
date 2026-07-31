@@ -41,14 +41,36 @@ case "$scheme" in
     *) echo "usage: synui-apply-theme <dark|light> <r> <g> <b>" >&2; exit 2 ;;
 esac
 
-# Pick a real theme name for GTK / KDE widget style, preferring Breeze (ships
-# with the KDE integration) and falling back to Adwaita, which GTK always has.
+# Pick a real theme name for GTK, preferring Breeze (ships with the KDE
+# integration) and falling back to Adwaita, which GTK always has.
 gtk_theme=Adwaita
 [ "$scheme" = dark ] && gtk_theme=Adwaita-dark
 if [ -d /usr/share/themes/Breeze ] || [ -d "$HOME/.local/share/themes/Breeze" ]; then
     gtk_theme=Breeze
     [ "$scheme" = dark ] && gtk_theme=Breeze-Dark
 fi
+
+# And the Qt widget style, which is a SEPARATE question from the GTK theme above
+# and was being answered without asking it: kdeglobals got widgetStyle=Breeze
+# unconditionally, on a distro that does not ship the `breeze` package at all.
+# Qt then found no such style, fell back to its default, and every Qt app ran
+# with a config claiming a style that was never loaded — invisible, because the
+# COLOURS still land (KDE apps read the Colors:* groups below through
+# KColorScheme regardless of which QStyle is in use), so only the widget shapes
+# were ever wrong.
+#
+# The two live in different places, which is why the check above does not cover
+# this: /usr/share/themes/Breeze is the GTK theme, while the Qt style is a
+# plugin under the Qt tree. Fusion is the honest fallback — it ships with
+# qt6-base so it is always present, and it follows QPalette properly, which is
+# what makes the themed colours land on a system with no Breeze.
+qt_style=Fusion
+for d in /usr/lib/qt6/plugins/styles /usr/lib/qt/plugins/styles \
+         /usr/lib64/qt6/plugins/styles; do
+    for so in "$d"/breeze6.so "$d"/breeze.so; do
+        [ -e "$so" ] && { qt_style=Breeze; break 2; }
+    done
+done
 
 prefer_dark=0; color_scheme=default
 if [ "$scheme" = dark ]; then prefer_dark=1; color_scheme=prefer-dark; fi
@@ -135,7 +157,7 @@ if [ -n "$kw" ]; then
     fi
     set_col() { "$kw" --file kdeglobals --group "$1" --key "$2" "$3" 2>/dev/null; }
     set_col General ColorScheme "$name"
-    "$kw" --file kdeglobals --group KDE --key widgetStyle Breeze 2>/dev/null
+    "$kw" --file kdeglobals --group KDE --key widgetStyle "$qt_style" 2>/dev/null
     set_col "Colors:Window"    BackgroundNormal "$wb"
     set_col "Colors:Window"    ForegroundNormal "$wf"
     set_col "Colors:View"      BackgroundNormal "$vb"

@@ -18,6 +18,19 @@ terminal = kitty
 # nothing in its home.
 autostart = synui-bar
 
+# KDE Connect. The indicator rather than kdeconnectd, because starting it does
+# both jobs: it D-Bus-activates the daemon (org.kde.kdeconnect.service) and
+# puts the tray icon in the bar, and starting the daemon alone would leave the
+# session with no way to see or pair a device.
+#
+# It has to be named here at all because the package's own
+# /etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop never runs: nothing in a
+# synui session implements the XDG autostart spec. Without this line the daemon
+# only ever starts when something first talks to it, so a phone could not reach
+# the desktop until the user had manually opened the app — which reads as "KDE
+# Connect doesn't work" rather than "it isn't running".
+autostart = kdeconnect-indicator
+
 # Window appearance
 border_width = 2
 gap = 8

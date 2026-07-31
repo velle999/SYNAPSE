@@ -69,6 +69,19 @@ firefox
 # (or every file opens the "Open With" chooser) and kdeglobals (or "Open Terminal"
 # silently does nothing, KIO's fallback being a konsole we don't ship).
 dolphin
+# Phone pairing: notifications, file transfer, clipboard, remote control.
+# Costs almost nothing on top of dolphin — the KF6 tree is already paid for by
+# the line above — and the parts that would normally need theming work are
+# already SynapseOS's: the phone's notifications go through knotifications to
+# org.freedesktop.Notifications, which synui itself serves and draws, and the
+# indicator is a StatusNotifierItem, which the quickshell bar already hosts.
+#
+# The daemon is what has to be running for a phone to reach the desktop, and
+# the /etc/xdg/autostart file the package ships for it is DEAD HERE: nothing in
+# a synui session implements the XDG autostart spec (synui's autostart is
+# synuirc `autostart =` lines). /etc/synui/synuirc starts the indicator, which
+# D-Bus-activates the daemon and supplies the tray icon in one go.
+kdeconnect
 gamescope
 # The bar. Neither of these was on the ISO, so the live session had no bar at
 # all — no clock, no tray, no network indicator — while an installed system had

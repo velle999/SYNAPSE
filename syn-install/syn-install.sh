@@ -1493,14 +1493,15 @@ while :; do
     WANT_PRINTING=1       # cups + drivers
     WANT_FILEMGR=1        # dolphin — synui's Files button and desktop menu launch it
     WANT_WINE=1           # wine + wine-mono
+    WANT_PHONE=1          # kdeconnect — pair a phone with the desktop
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
     SEL_APPS="chibi vibe"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
-    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine"
-    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, Chibi + Vibe  (default)"
-    echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine"
+    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine, phone"
+    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, phone, Chibi + Vibe  (default)"
+    echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine/phone"
     echo "    $(bold '4)') Custom    — pick each item individually"
     echo ""
     prompt "Choice [1-4, default=2]:"
@@ -1511,13 +1512,13 @@ while :; do
         1)
             SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
-            WANT_FILEMGR=1; WANT_WINE=1
+            WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1
             success "Full install selected"
             ;;
         3)
             SEL_APPS=""
             WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
-            WANT_FILEMGR=0; WANT_WINE=0
+            WANT_FILEMGR=0; WANT_WINE=0; WANT_PHONE=0
             success "Minimal install selected"
             ;;
         4)
@@ -1551,6 +1552,7 @@ while :; do
             ask_opt WANT_PRINTING   1 "Printing (CUPS)"
             ask_opt WANT_FILEMGR    1 "File manager (Dolphin) — the desktop's Files button opens it"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
+            ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
 
             SEL_APPS=""
             [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
@@ -1609,6 +1611,7 @@ while :; do
     echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
     echo "    Files    : $([ "$WANT_FILEMGR" = 1 ] && echo 'yes (Dolphin)' || echo no)"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
+    echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
     echo ""
     # ── Confirm the selection ─────────────────────────────
     #
@@ -1840,6 +1843,11 @@ case "$DE_CHOICE" in
         [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
         [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
         [ "$WANT_FILEMGR"   = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS dolphin"
+        # Phone pairing. Optional for the same reason dolphin is: on a Minimal
+        # install it would drag the whole KF6 tree in on its own, which is
+        # exactly the cost the WANT_FILEMGR split exists to let people decline.
+        # Alongside dolphin it is nearly free — the tree is already paid for.
+        [ "$WANT_PHONE"     = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS kdeconnect"
         arch-chroot /mnt pacman -S --noconfirm $DESKTOP_PKGS \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
         [ "$WANT_FILEMGR" = 1 ] || warn "No file manager installed. The bar's Files button, the desktop
@@ -2856,6 +2864,28 @@ SYNUIRC
 # fonts. Appended rather than put in the heredoc above, which is quoted so that
 # nothing else in it expands.
 echo "xkb_layout = $SYNUI_XKB" >> "/mnt/home/$NEW_USER/.config/synui/synuirc"
+
+# KDE Connect, and only when it was actually installed — an autostart line
+# naming a binary that is not there just makes sh log "command not found" on
+# every login.
+#
+# The indicator, not kdeconnectd: starting it D-Bus-activates the daemon
+# (org.kde.kdeconnect.service) *and* puts the tray icon in the bar, where
+# starting the daemon alone would leave no way to see or pair a device.
+#
+# It has to be named here because the package's own
+# /etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop never runs: nothing in a
+# synui session implements the XDG autostart spec. Without this the daemon
+# starts only when something first talks to it, so a phone cannot reach the
+# desktop until the user has opened the app by hand — which reads as "KDE
+# Connect is broken" rather than "it is not running".
+if [ "$WANT_PHONE" = 1 ]; then
+    cat >> "/mnt/home/$NEW_USER/.config/synui/synuirc" << 'KDECONNECT_EOF'
+# KDE Connect: pairs a phone (notifications, files, clipboard, remote input).
+# The indicator starts the daemon and supplies the tray icon.
+autostart = kdeconnect-indicator
+KDECONNECT_EOF
+fi
 
 # kitty terminal — "night drive" palette (matches synuirc border colors).
 #
