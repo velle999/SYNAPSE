@@ -118,6 +118,15 @@ titlebar_height = 26
 # ever a move.
 # snap = on
 
+# ── Alt+Tab switcher ───────────────────────────────────────
+# Alt+Tab walks windows in the order you last used them, and puts a grid of live
+# window thumbnails on screen while you hold Alt — the tile it outlines is the
+# window you land on when you let go. Alt+Shift+Tab walks back. More than
+# eighteen windows pages the grid; the cycle still reaches all of them.
+#
+# Off keeps the cycle exactly as it is and loses only the picture of it.
+# alt_tab_preview = on
+
 # ── Wallpaper ──────────────────────────────────────────────
 # Drawn by the compositor itself, so nothing has to be autostarted for it.
 #   default          the bundled SYNAPSE image (/usr/share/synui) — the default

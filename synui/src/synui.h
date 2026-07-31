@@ -1036,6 +1036,14 @@ typedef enum {
     SYN_ARRANGE_DATE,        /* most recently modified first */
 } syn_arrange_t;
 
+/* How many tiles the Alt+Tab switcher can put on screen at once — six columns
+ * by three rows. Not a cap on the *cycle*, which still walks every candidate:
+ * a nineteenth window scrolls the grid a page (render.c), the way the clipboard
+ * panel pages its rows. Six across is what fits at a legible tile size on a
+ * 1920-wide screen; more would mean shrinking the thumbnails to thumbnails of
+ * thumbnails. */
+#define SYN_ALTTAB_TILES  18
+
 /* One spelling of each mode, shared by deskicons.state and synuirc. */
 const char *syn_arrange_name(syn_arrange_t a);
 bool syn_arrange_parse(const char *s, syn_arrange_t *out);
@@ -1086,6 +1094,12 @@ typedef struct {
     /* Drag a window against a screen edge to snap it to that half/quarter
      * (snap.c). Off means a drag is only ever a move. */
     int   snap;
+
+    /* The grid of window thumbnails Alt+Tab puts on screen while Alt is held
+     * (render.c synui_render_alttab). Off leaves the cycle itself untouched —
+     * Alt+Tab still walks the MRU order, it just does it silently, which is what
+     * it did before the overlay existed. */
+    int   alt_tab_preview;
 
     /* Border colors (RGBA 0..1) by window role; defaults COLOR_BORDER_*. */
     float border_color_norm[4];
@@ -1971,6 +1985,31 @@ struct syn_server {
         int      depth;
     } alttab;
     uint64_t focus_counter;
+
+    /* The switcher overlay Alt+Tab draws while Alt is held: a grid of live
+     * window thumbnails with the one you would land on highlighted.
+     *
+     * `thumb` is one scene buffer per tile, each showing the *client's* current
+     * buffer scaled down — the window itself, not a picture of it, so a video
+     * playing in a tile is the frame that was on screen when the tile was
+     * built. A scene buffer takes its own lock on what it is given, which is why
+     * the tiles survive a window closing mid-cycle, and why alttab_hide() has to
+     * set them back to NULL: a client buffer held past the overlay is one the
+     * client cannot reuse.
+     *
+     * Deliberately holds no syn_view_t pointers. The candidate list is passed in
+     * per render and not kept, so the "no snapshot to dangle" property the cycle
+     * itself has (see the alttab struct above) survives the overlay. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+        /* Own tree so the thumbnails stay above the cairo layer whatever order
+         * the two get (re)built in. */
+        struct wlr_scene_tree   *thumb_tree;
+        struct wlr_scene_buffer *thumb[SYN_ALTTAB_TILES];
+    } alttab_ui;
 
     /* Scene-graph z-order (bottom→top): bg_rect, wallpaper_tree,
      * layer[BACKGROUND], layer[BOTTOM], window_tree, layer[TOP],
@@ -3238,6 +3277,17 @@ void clipboard_toggle(syn_server_t *s);
 void clipboard_clear(syn_server_t *s);
 int  clipboard_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 void synui_render_clipboard(syn_server_t *s);
+
+/* ── Alt+Tab switcher overlay (render.c, driven by input.c) ──
+ *
+ * Draw the tile grid for one step of the cycle. `cands` is the candidate list
+ * as input.c just rebuilt it, `sel` the index within it of the window now
+ * focused. Neither is retained past the call — the pointers are read, drawn and
+ * dropped — so a view destroyed between two presses can never be reached
+ * through the overlay. */
+void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel);
+/* Take the overlay down and release the client buffers the tiles were holding. */
+void synui_alttab_hide(syn_server_t *s);
 
 /* ── Night light (nightlight.c) ──────────────────────────── */
 /* Writes the gamma LUT on every output. No-op where the backend has no gamma

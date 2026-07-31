@@ -4050,6 +4050,371 @@ void synui_render_deskicons(syn_server_t *s)
     synui_move_deskicon_drag(s);
 }
 
+/* ── Alt+Tab switcher (driven by input.c) ────────────────────
+ *
+ * The tile grid Alt+Tab puts on screen while Alt is held: one tile per
+ * candidate window, the one you would land on outlined in the panel accent, and
+ * the selected window's full title along the bottom — a tile label has room for
+ * about twenty characters, and a browser tab does not.
+ *
+ * A tile shows the client's *own* current buffer, scaled by the scene graph.
+ * The compositor copies no pixels and touches no GPU of its own here, which is
+ * the only reason a grid of eighteen live windows is affordable at all. Two
+ * consequences are worth knowing:
+ *
+ *   - A tile is the frame that happened to be committed when it was built, not
+ *     a live view. Every press rebuilds every tile, so a playing video steps
+ *     once per press. Making them live would mean a commit listener per tile
+ *     for an overlay that is on screen for well under a second.
+ *   - Only the toplevel's root surface is in it. A client that paints part of
+ *     itself into a subsurface shows that part as a hole. The alternative is a
+ *     second scene tree per window (wlr_scene_subsurface_tree_create), which
+ *     buys correctness by putting the client's surfaces into a second set of
+ *     output enter/leave and frame callbacks for as long as the tile lives.
+ *
+ * A window with nothing committed — including an X11 window caught between
+ * buffers — falls back to its app icon, so a tile is never an empty rectangle.
+ */
+
+#define ATB_TILE_W     208
+#define ATB_TILE_H     132      /* thumbnail area; the label row sits under it */
+#define ATB_LABEL_H     30
+#define ATB_GAP         14
+#define ATB_PAD         20
+#define ATB_HEAD        46
+#define ATB_FOOT        34
+#define ATB_COLS_MAX     6
+#define ATB_ROWS_MAX     3
+#define ATB_INSET        5      /* thumbnail inset within its tile plate */
+#define ATB_BADGE       20      /* app icon in the label row */
+
+_Static_assert(ATB_COLS_MAX * ATB_ROWS_MAX == SYN_ALTTAB_TILES,
+               "the thumb[] array must hold a full page of tiles");
+
+/* What a tile draws: the client's current buffer, the region of it that is the
+ * window proper, and the size that region stands for in logical pixels. The
+ * logical size is what the tile's aspect ratio has to come from — a buffer's own
+ * dimensions are multiplied by buffer_scale and permuted by its transform. */
+typedef struct {
+    struct wlr_buffer        *buf;
+    struct wlr_fbox           src;    /* buffer pixels to sample */
+    int                       lw, lh; /* logical size that region stands for */
+    enum wl_output_transform  transform;
+} atb_source_t;
+
+static bool alttab_tile_source(syn_view_t *v, atb_source_t *out)
+{
+    struct wlr_surface *surf = view_surface(v);
+    if (!surf || !surf->buffer) return false;
+
+    /* The client's own viewport crop, in buffer pixels: the whole of what this
+     * surface displays, wp_viewport or not. */
+    wlr_surface_get_buffer_source_box(surf, &out->src);
+    out->buf       = &surf->buffer->base;
+    out->transform = surf->current.transform;
+    out->lw        = surf->current.width;
+    out->lh        = surf->current.height;
+    if (out->lw <= 0 || out->lh <= 0 ||
+        out->src.width <= 0 || out->src.height <= 0)
+        return false;
+
+    /* Crop off a CSD client's shadow margin — the same pixels
+     * view_clip_csd_margin() takes off the live window, and for the same reason.
+     * Uncropped, a Firefox tile is its window adrift in 26 px of transparent
+     * padding on three sides, and the aspect ratio the tile fits to is the
+     * padding's rather than the window's.
+     *
+     * Only for an untransformed buffer: surface-local x/y map straight onto
+     * buffer x/y there, and a rotated toplevel — which essentially does not
+     * exist — is not worth an axis-swap table to shave a margin off. */
+    struct wlr_box geo = {0};
+    if (v->xdg_surface) geo = v->xdg_surface->geometry;
+    if (geo.width <= 0 || geo.height <= 0 ||
+        out->transform != WL_OUTPUT_TRANSFORM_NORMAL)
+        return true;
+
+    /* Clamp into the surface first. A client may declare a geometry bigger than
+     * what it actually painted, and a source box running off the end of the
+     * buffer samples whatever happens to be there. */
+    int gx = geo.x < 0 ? 0 : geo.x;
+    int gy = geo.y < 0 ? 0 : geo.y;
+    int gw = geo.width, gh = geo.height;
+    if (gx + gw > out->lw) gw = out->lw - gx;
+    if (gy + gh > out->lh) gh = out->lh - gy;
+    if (gw <= 0 || gh <= 0) return true;
+    if (!gx && !gy && gw == out->lw && gh == out->lh) return true;   /* no margin */
+
+    double fx = out->src.width  / (double)out->lw;
+    double fy = out->src.height / (double)out->lh;
+    out->src.x     += gx * fx;
+    out->src.y     += gy * fy;
+    out->src.width  = gw * fx;
+    out->src.height = gh * fy;
+    out->lw = gw;
+    out->lh = gh;
+    return true;
+}
+
+/* The app icon, centred on (cx, cy) — what a window with no committed buffer
+ * gets instead of a thumbnail, and what every tile gets as its label badge. */
+static void alttab_draw_icon(cairo_t *cr, const char *app_id,
+                             double cx, double cy, double size)
+{
+    const syn_icon_entry_t *ic = app_id ? icon_lookup(app_id) : NULL;
+    if (ic && ic->icon_surface) {
+        int iw = cairo_image_surface_get_width(ic->icon_surface);
+        int ih = cairo_image_surface_get_height(ic->icon_surface);
+        if (iw > 0 && ih > 0) {
+            cairo_save(cr);
+            cairo_translate(cr, cx - size / 2.0, cy - size / 2.0);
+            cairo_scale(cr, size / iw, size / ih);
+            cairo_set_source_surface(cr, ic->icon_surface, 0, 0);
+            cairo_paint(cr);
+            cairo_restore(cr);
+            return;
+        }
+    }
+    icon_draw_monogram(cr, app_id, cx - size / 2.0, cy - size / 2.0, size);
+}
+
+/* Release the client buffer a tile is holding and take the tile off screen.
+ * The release is the point: a scene buffer locks what it is given, and a client
+ * buffer still locked after the overlay is gone is one the client cannot put
+ * back into its own rotation. */
+static void alttab_tile_clear(syn_server_t *s, int i)
+{
+    struct wlr_scene_buffer *node = s->alttab_ui.thumb[i];
+    if (!node) return;
+    wlr_scene_buffer_set_buffer(node, NULL);
+    wlr_scene_node_set_enabled(&node->node, false);
+}
+
+void synui_alttab_hide(syn_server_t *s)
+{
+    if (!s->alttab_ui.tree) return;
+    for (int i = 0; i < SYN_ALTTAB_TILES; i++)
+        alttab_tile_clear(s, i);
+    wlr_scene_node_set_enabled(&s->alttab_ui.tree->node, false);
+}
+
+void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
+{
+    if (!s->alttab_ui.tree) return;
+    if (!s->config.alt_tab_preview || n < 1 || sel < 0 || sel >= n) {
+        synui_alttab_hide(s);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    /* As many columns as the screen has room for, never more than the grid
+     * holds and never more than there are windows — three windows should be
+     * three tiles wide, not three tiles adrift in a six-wide panel. */
+    int cols = (ob.width - 2 * ATB_PAD + ATB_GAP) / (ATB_TILE_W + ATB_GAP);
+    if (cols > ATB_COLS_MAX) cols = ATB_COLS_MAX;
+    if (cols > n)            cols = n;
+    if (cols < 1)            cols = 1;
+
+    /* Page the grid rather than scroll it a tile at a time: the selection then
+     * walks across a still grid instead of the whole grid sliding under a fixed
+     * selection. Same window-of-rows idea as the clipboard panel. */
+    int page  = cols * ATB_ROWS_MAX;
+    int first = (sel / page) * page;
+    int shown = n - first;
+    if (shown > page) shown = page;
+
+    int rows = (shown + cols - 1) / cols;
+    if (rows < 1) rows = 1;
+
+    /* Only now, with the page decided, narrow the panel to the tiles actually
+     * on it — a last page of two windows should be two tiles wide, not two
+     * tiles adrift in the six-wide frame the full pages used. The page size
+     * above deliberately stays computed from the *unshrunk* column count, so
+     * which windows land on which page does not change with it. Tile positions
+     * are unaffected: this can only shrink cols when shown < cols, and every
+     * tile on such a page is already in row 0 at column i. */
+    if (shown < cols) cols = shown;
+
+    int pw = 2 * ATB_PAD + cols * ATB_TILE_W + (cols - 1) * ATB_GAP;
+    int ph = ATB_HEAD + rows * (ATB_TILE_H + ATB_LABEL_H)
+             + (rows - 1) * ATB_GAP + ATB_FOOT;
+    int px = ob.x + (ob.width  - pw) / 2;
+    int py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->alttab_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->alttab_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->alttab_ui.tree->node);
+
+    float bg_color[4] = { 0.05f, 0.05f, 0.10f, 0.93f };
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->alttab_ui.bg) {
+        s->alttab_ui.bg = wlr_scene_rect_create(s->alttab_ui.tree, pw, ph,
+                                                bg_color);
+    } else {
+        /* Both dimensions track the grid: the panel is as wide as the columns
+         * that fit and as tall as the rows in use, and both change with the
+         * window count between one press and the next. */
+        wlr_scene_rect_set_size(s->alttab_ui.bg, pw, ph);
+    }
+    if (!s->alttab_ui.accent)
+        s->alttab_ui.accent = wlr_scene_rect_create(s->alttab_ui.tree, pw, 2,
+                                                    accent);
+    else {
+        wlr_scene_rect_set_size(s->alttab_ui.accent, pw, 2);
+        wlr_scene_rect_set_color(s->alttab_ui.accent, accent);
+    }
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, ATB_PAD, 30);
+    cairo_show_text(cr, "WINDOWS");
+
+    if (n > page) {
+        char count[48];
+        snprintf(count, sizeof(count), "%d\xe2\x80\x93%d of %d",
+                 first + 1, first + shown, n);
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        draw_right(cr, pw - ATB_PAD, 30, count);
+    }
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, ATB_PAD, 38);
+    cairo_line_to(cr, pw - ATB_PAD, 38);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < shown; i++) {
+        syn_view_t *v = cands[first + i];
+        int  col = i % cols, row = i / cols;
+        int  tx  = ATB_PAD  + col * (ATB_TILE_W + ATB_GAP);
+        int  ty  = ATB_HEAD + row * (ATB_TILE_H + ATB_LABEL_H + ATB_GAP);
+        bool cur = (first + i == sel);
+        int  th  = ATB_TILE_H + ATB_LABEL_H;
+
+        /* Something opaque has to sit under the thumbnail: a client buffer with
+         * an alpha channel — any GTK window with rounded corners — would
+         * otherwise show the desktop through its own corners. */
+        cairo_set_source_rgba(cr, 0.10, 0.10, 0.16, cur ? 0.96 : 0.78);
+        cairo_rectangle(cr, tx, ty, ATB_TILE_W, th);
+        cairo_fill(cr);
+
+        if (cur) {
+            set_accent(cr, 0.20);
+            cairo_rectangle(cr, tx, ty, ATB_TILE_W, th);
+            cairo_fill(cr);
+            set_accent(cr, 1.0);
+            cairo_set_line_width(cr, 2);
+            cairo_rectangle(cr, tx + 1, ty + 1, ATB_TILE_W - 2, th - 2);
+            cairo_stroke(cr);
+        }
+
+        int aw = ATB_TILE_W - 2 * ATB_INSET;
+        int ah = ATB_TILE_H - 2 * ATB_INSET;
+
+        atb_source_t src;
+        if (alttab_tile_source(v, &src)) {
+            /* Fit, not fill. Cropping a thumbnail to the tile hides the part of
+             * the window that would have said which one it is. */
+            double sc = (double)aw / src.lw;
+            if ((double)ah / src.lh < sc) sc = (double)ah / src.lh;
+            if (sc > 1.0) sc = 1.0;     /* never blow a small window up */
+            int dw = (int)(src.lw * sc + 0.5);
+            int dh = (int)(src.lh * sc + 0.5);
+            if (dw < 1) dw = 1;
+            if (dh < 1) dh = 1;
+
+            struct wlr_scene_buffer **node = &s->alttab_ui.thumb[i];
+            if (!*node)
+                *node = wlr_scene_buffer_create(s->alttab_ui.thumb_tree,
+                                                src.buf);
+            else
+                wlr_scene_buffer_set_buffer(*node, src.buf);
+
+            if (*node) {
+                /* No wlr_buffer_drop() to pair with these, unlike every cairo
+                 * buffer in this file: the surface owns this one and the scene
+                 * takes its own lock. Dropping here would free a buffer the
+                 * client is still drawing into. */
+                wlr_scene_buffer_set_source_box(*node, &src.src);
+                wlr_scene_buffer_set_dest_size(*node, dw, dh);
+                wlr_scene_buffer_set_transform(*node, src.transform);
+                wlr_scene_buffer_set_opacity(*node, cur ? 1.0f : 0.85f);
+                wlr_scene_node_set_position(&(*node)->node,
+                                            tx + ATB_INSET + (aw - dw) / 2,
+                                            ty + ATB_INSET + (ah - dh) / 2);
+                wlr_scene_node_set_enabled(&(*node)->node, true);
+            }
+        } else {
+            alttab_tile_clear(s, i);
+            alttab_draw_icon(cr, view_app_id(v), tx + ATB_TILE_W / 2.0,
+                             ty + ATB_TILE_H / 2.0, 56);
+        }
+
+        /* Label row: the app's icon, then as much of the title as fits. */
+        alttab_draw_icon(cr, view_app_id(v),
+                         tx + ATB_INSET + ATB_BADGE / 2.0,
+                         ty + ATB_TILE_H + ATB_LABEL_H / 2.0, ATB_BADGE);
+
+        const char *title = view_title(v);
+        if (!title || !title[0]) title = view_app_id(v);
+        if (!title || !title[0]) title = "(untitled)";
+
+        /* A title is whatever bytes the client felt like sending. Invalid UTF-8
+         * puts the cairo context into a permanent error state, which would
+         * silently blank every tile drawn after this one. */
+        char label[192];
+        syn_utf8_copy(label, sizeof(label), title);
+        if (!label[0]) snprintf(label, sizeof(label), "(untitled)");
+
+        cairo_set_font_size(cr, 12);
+        if (cur) cairo_set_source_rgba(cr, 0.97, 1.00, 1.00, 1.0);
+        else     cairo_set_source_rgba(cr, 0.74, 0.74, 0.82, 1.0);
+        double lx = tx + ATB_INSET + ATB_BADGE + 6;
+        draw_clipped(cr, lx, ty + ATB_TILE_H + ATB_LABEL_H / 2.0 + 4,
+                     tx + ATB_TILE_W - ATB_INSET - lx, label);
+    }
+
+    /* Tiles the grid is not using this press still hold a client buffer from
+     * the last one. */
+    for (int i = shown; i < SYN_ALTTAB_TILES; i++)
+        alttab_tile_clear(s, i);
+
+    /* The selected window's title in full, because the tile's copy is clipped
+     * to about twenty characters and every tab of one browser looks alike. */
+    const char *ftitle = view_title(cands[sel]);
+    if (!ftitle || !ftitle[0]) ftitle = view_app_id(cands[sel]);
+    if (!ftitle || !ftitle[0]) ftitle = "(untitled)";
+    char fbuf[256];
+    syn_utf8_copy(fbuf, sizeof(fbuf), ftitle);
+
+    const char *hint = "Alt+Tab next \xc2\xb7 Alt+Shift+Tab back";
+    cairo_set_font_size(cr, 12);
+    cairo_text_extents_t hext;
+    cairo_text_extents(cr, hint, &hext);
+
+    cairo_set_source_rgba(cr, 0.88, 0.90, 0.96, 1.0);
+    draw_clipped(cr, ATB_PAD, ph - 13,
+                 pw - 2 * ATB_PAD - hext.width - 24, fbuf);
+
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    draw_right(cr, pw - ATB_PAD, ph - 13, hint);
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->alttab_ui.text_buf, s->alttab_ui.tree, buf);
+
+    /* Above the cairo layer, which set_scene_buffer may have just created as a
+     * later sibling of the thumbnail tree. */
+    wlr_scene_node_raise_to_top(&s->alttab_ui.thumb_tree->node);
+}
+
 /* ── Initialize all UI scene trees ───────────────────────── */
 
 void synui_ui_init(syn_server_t *s)
@@ -4077,6 +4442,11 @@ void synui_ui_init(syn_server_t *s)
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->clip_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
+    s->alttab_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
+    /* Created with the panel, not lazily with the first tile: the thumbnails
+     * have to be a later sibling than the cairo layer to sit on top of it, and
+     * the cairo layer's node is itself created lazily on the first render. */
+    s->alttab_ui.thumb_tree = wlr_scene_tree_create(s->alttab_ui.tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->deskmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
@@ -4105,6 +4475,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->alttab_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
 

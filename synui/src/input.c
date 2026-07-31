@@ -269,6 +269,10 @@ static void alttab_finish(syn_server_t *s)
     if (!s->alttab.active) return;
     s->alttab.active = false;
     s->alttab.depth  = 0;
+    /* Unconditional, not gated on config.alt_tab_preview: turning the preview
+     * off mid-cycle would otherwise leave the grid painted on screen forever,
+     * and hiding an already-hidden overlay costs nothing. */
+    synui_alttab_hide(s);
     if (s->focused_view)
         s->focused_view->focus_seq = ++s->focus_counter;
 }
@@ -279,7 +283,14 @@ static void alttab_step(syn_server_t *s, int dir)
 {
     syn_view_t *cands[ALTTAB_MAX];
     int n = alttab_candidates(s, cands, ALTTAB_MAX);
-    if (n < 2) return;          /* nothing to switch to */
+    if (n < 2) {
+        /* Nothing to switch to. Mid-cycle this means the windows closed under
+         * us, so the grid still on screen is a picture of windows that no
+         * longer exist — take it down rather than leave it there until Alt
+         * comes up. A no-op when no cycle is running. */
+        synui_alttab_hide(s);
+        return;
+    }
 
     if (!s->alttab.active) {
         s->alttab.active = true;
@@ -295,6 +306,17 @@ static void alttab_step(syn_server_t *s, int dir)
     syn_view_t *target = cands[idx];
     if (target != s->focused_view)
         focus_view(s, target, view_surface(target));
+
+    /* The tile grid, rebuilt from the same list this press just walked. It is
+     * drawn *after* the focus change, so the tile it outlines is the window
+     * that is now focused rather than the one that was — and so a focus_view()
+     * that bailed out (a view mid-teardown) does not leave the overlay claiming
+     * a window the cycle never reached.
+     *
+     * `cands` is on this stack and stays there: render.c reads it and keeps
+     * nothing, which is what lets the cycle go on rebuilding the list from live
+     * views every press instead of holding a snapshot to dangle. */
+    synui_render_alttab(s, cands, n, idx);
 }
 
 static void focus_next(syn_server_t *s, int dir)

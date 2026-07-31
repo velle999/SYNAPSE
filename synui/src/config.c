@@ -62,6 +62,11 @@
  * Drag a window to the top edge to maximize it, to a side for that half, into a
  * corner for that quarter; dragging it off again restores its old size.
  *
+ * Alt+Tab switcher (render.c):
+ *   alt_tab_preview = on|off    (default on)
+ * The grid of window thumbnails Alt+Tab shows while Alt is held. Off keeps the
+ * cycle and loses only the picture of it.
+ *
  * Cat mode (cat.c):
  *   cat = on|off                (default off; Super+Shift+C toggles at runtime)
  *
@@ -465,6 +470,7 @@ void synui_config_load(syn_config_t *cfg)
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
     cfg->snap = 1;
+    cfg->alt_tab_preview = 1;
 
     /* Theme + transparency. SYNAPSE's colours ARE the border/titlebar defaults
      * set just above, so leaving theme = SYNAPSE changes nothing; a `theme =`
@@ -780,6 +786,8 @@ void synui_config_load(syn_config_t *cfg)
             cfg->start_overlay = strcmp(val, "on") == 0;
         else if (strcmp(key, "snap") == 0)
             cfg->snap = strcmp(val, "on") == 0;
+        else if (strcmp(key, "alt_tab_preview") == 0)
+            cfg->alt_tab_preview = strcmp(val, "on") == 0;
         else if (strcmp(key, "theme") == 0) {
             /* Seeds the chrome colours from the preset; an explicit
              * border_color_* / titlebar_* line placed AFTER this still wins,
