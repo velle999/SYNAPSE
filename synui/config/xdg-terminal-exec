@@ -1,0 +1,93 @@
+#!/bin/sh
+# xdg-terminal-exec — run a command in the user's terminal.
+#
+# WHY THIS EXISTS
+#
+# A .desktop entry with `Terminal=true` cannot be launched at all on SynapseOS
+# without it. GLib is what actually launches those entries (xdg-open, Firefox's
+# URI handlers, Dolphin, anything going through GAppInfo), and to run one it has
+# to find a terminal. It looks for `xdg-terminal-exec` first, and failing that
+# falls back to a list compiled into libgio:
+#
+#     color-xterm dtterm gnome-terminal konsole mate-terminal
+#     nxterm rxvt tilix xfce4-terminal xterm
+#
+# SynapseOS ships kitty and foot. Neither is on that list and never will be, so
+# with no xdg-terminal-exec in PATH every Terminal=true entry fails with
+# "Unable to find terminal required for application" — silently, because the
+# thing that launched it is usually a browser or a file manager with nowhere to
+# put the error.
+#
+# This is the same shape as config/kdeglobals, which exists because KIO's
+# terminal fallback is a hard-coded konsole we do not ship. Third-party software
+# keeps hard-coding terminal lists; we keep pointing them at ours.
+#
+# The bug that made this visible: NordVPN's login is an OAuth round trip that
+# comes back as a `nordvpn://` URI, and its handler (nordvpn.desktop, shipped by
+# upstream) is Terminal=true. So the browser reported a successful login, the
+# callback never launched, and the daemon sat there having never received a
+# token — `nordvpn account` said "You're not logged in" with nothing in any log
+# to say why.
+#
+# CALLING CONVENTION
+#
+#   xdg-terminal-exec [--] [COMMAND [ARG...]]
+#
+# GLib passes the command directly with no options. The spec allows a leading
+# `--` separator, so accept and drop one. With no command at all, open a plain
+# interactive terminal.
+set -eu
+
+# Written as an `if` rather than `[ ... ] && shift`: under `set -e` that form
+# makes the no-separator case -- which is every call GLib makes -- the script's
+# last exit status if it ever ends up at the tail of a list.
+if [ "${1-}" = "--" ]; then
+    shift
+fi
+
+# Which terminal, in order of how deliberately it was chosen:
+#   1. $TERMINAL      — the conventional override, and what a user who set it
+#                       expects to win over anything we decide here.
+#   2. synuirc        — synui's own `terminal =` setting, so a user who changed
+#                       their terminal in one place does not have to change it
+#                       in two.
+#   3. kitty || foot || alacritty || xterm — the same chain synui's `term`
+#      keybind uses (input.c). foot sits behind kitty because kitty needs
+#      working OpenGL and foot renders on the CPU, which is what makes it the
+#      rescue terminal on llvmpipe.
+rc="${XDG_CONFIG_HOME:-$HOME/.config}/synui/synuirc"
+configured=""
+if [ -r "$rc" ]; then
+    # `terminal = kitty`. Strip an inline comment and surrounding whitespace.
+    # Last assignment wins, matching how config.c parses the file.
+    configured=$(sed -n 's/^[[:space:]]*terminal[[:space:]]*=[[:space:]]*//p' "$rc" \
+                 | sed 's/#.*//; s/[[:space:]]*$//' | grep -v '^$' | tail -n1) || true
+fi
+
+term=""
+for candidate in "${TERMINAL-}" "$configured" kitty foot alacritty xterm; do
+    [ -n "$candidate" ] || continue
+    # $TERMINAL is conventionally a bare command, but tolerate "kitty -e" and
+    # friends by testing only the program word.
+    if command -v "${candidate%% *}" >/dev/null 2>&1; then
+        term=$candidate
+        break
+    fi
+done
+
+if [ -z "$term" ]; then
+    echo "xdg-terminal-exec: no terminal emulator found" >&2
+    exit 127
+fi
+
+# No command: an interactive terminal is the whole request.
+[ "$#" -gt 0 ] || exec $term
+
+# `-e` is accepted by every terminal in the chain -- foot documents it as
+# "ignored (for compatibility with xterm -e)", xterm and alacritty require it,
+# and kitty accepts it even though its --help does not list it (the same
+# reason config.c:673 uses this form for `kitty -e nmtui`). So one shape works
+# across all four, and COMMAND is passed as separate argv words rather than
+# through a shell -- these arguments arrive from a URI handler, and re-quoting
+# them into `sh -c` is how a filename with a space becomes a command.
+exec $term -e "$@"

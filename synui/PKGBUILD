@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=231
+pkgrel=232
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -155,6 +155,15 @@ package() {
     # config/kdeglobals.
     install -Dm644 config/kdeglobals \
         "$pkgdir/etc/xdg/kdeglobals"
+
+    # Same problem one layer down: GLib launches every Terminal=true .desktop
+    # entry, and its built-in terminal list has neither kitty nor foot, so
+    # without this ALL of them fail with "Unable to find terminal required for
+    # application" -- silently, since the launcher is usually a browser. GLib
+    # looks for this name in PATH before falling back to that list. See
+    # config/xdg-terminal-exec.
+    install -Dm755 config/xdg-terminal-exec \
+        "$pkgdir/usr/bin/xdg-terminal-exec"
 
     # PAM service for the native lock's auth helper (synui-lock-auth). Without
     # it pam_start("synui-lock") fails and the screen can never be unlocked.
