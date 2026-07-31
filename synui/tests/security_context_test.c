@@ -221,8 +221,20 @@ int main(void)
         ok(msg, sb.ord_seen[i]);
     }
 
+    /* Destroy the proxies before dropping the displays. wl_display_disconnect()
+     * releases the object map but not the wl_proxy allocations themselves —
+     * those belong to whoever bound them — so leaving these two behind cost
+     * 192 bytes and aborted the whole test under -Db_sanitize=address. smoke.sh
+     * reads any non-zero exit here as "a sandboxed client was NOT denied the
+     * privileged globals", so a leak in the test reported itself as a security
+     * regression. sb.sec_mgr is NULL whenever the filter is doing its job; it
+     * is destroyed anyway so that a regression fails on the assertion above
+     * rather than on a leak. */
+    if (sb.sec_mgr) wp_security_context_manager_v1_destroy(sb.sec_mgr);
     wl_display_disconnect(sandboxed);
     close(closefd[1]);
+    wp_security_context_v1_destroy(ctx);
+    wp_security_context_manager_v1_destroy(base.sec_mgr);
     wl_display_disconnect(plain);
     unlink(sock_path);
 

@@ -98,7 +98,17 @@ export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
 # then faults on memory ASan is protecting. Kept now that the suite runs against
 # real drivers, which JIT too. halt_on_error stays so a genuine ASan report
 # still fails the run rather than scrolling past.
-export ASAN_OPTIONS="protect_shadow_gap=0:halt_on_error=1:abort_on_error=1:print_summary=1"
+#
+# fast_unwind_on_malloc=0: the default frame-pointer unwinder cannot walk out of
+# a closed-source graphics driver, so leak stacks that originate there truncate
+# inside whatever library happened to call malloc — for the NVIDIA driver, that
+# is libdbus-1, which is why its EGL-init D-Bus connection reads as a libdbus
+# leak. Nothing attributable is left to write a suppression against; its GBM
+# backend truncates at "<unknown module>" on the first frame. The slow unwinder
+# is what lets tests/lsan.supp name the driver instead of the allocator. Kept in
+# sync with the meson.build add_test_setup() that supplies these under
+# `meson test`; this export is what covers a standalone run.
+export ASAN_OPTIONS="protect_shadow_gap=0:fast_unwind_on_malloc=0:halt_on_error=1:abort_on_error=1:print_summary=1"
 
 unset DISPLAY WAYLAND_DISPLAY
 

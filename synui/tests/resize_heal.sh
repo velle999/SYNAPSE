@@ -40,6 +40,13 @@ TESTDIR=$(dirname "$0")
 # Same suppressions smoke.sh uses, for the same reason: an ASan build otherwise
 # reports cairo/fontconfig's own caches as synui leaks.
 export LSAN_OPTIONS="suppressions=$TESTDIR/lsan.supp:print_suppressions=0"
+# And the same ASan flags, which this script was missing entirely — see the
+# block in smoke.sh for what each buys. fast_unwind_on_malloc=0 is load-bearing
+# for the suppressions: without it the NVIDIA driver's EGL-init leak stacks
+# truncate inside libdbus-1 and cannot be attributed to the driver that owns
+# them. Both scripts run standalone as well as under `meson test`, so they set
+# this themselves rather than relying on meson.build's add_test_setup().
+export ASAN_OPTIONS="protect_shadow_gap=0:fast_unwind_on_malloc=0:halt_on_error=1:abort_on_error=1:print_summary=1"
 
 SYNUI=${1:?usage: resize_heal.sh /path/to/synui /path/to/stubborn_client /path/to/synctl}
 CLIENT=${2:?usage: resize_heal.sh /path/to/synui /path/to/stubborn_client /path/to/synctl}

@@ -161,10 +161,26 @@ static void set_ac(bool online)
     }
 }
 
+/* Drop every output add_output() allocated. Also called once at exit, so the
+ * last case's outputs are not left behind either. */
+static void free_outputs(void)
+{
+    syn_output_t *o, *tmp;
+    wl_list_for_each_safe(o, tmp, &srv->outputs, link)
+        free(o);
+}
+
 /* Back to a known state between cases: lid open, nothing blanked, both
  * outputs on, counters zeroed. */
 static void reset(bool docked, bool on_ac)
 {
+    /* Free the previous case's outputs before dropping the list. wl_list_init()
+     * on a populated list just forgets it, so every reset() after the first
+     * leaked one syn_output_t per output — 320 bytes a case, which is what
+     * failed this test under -Db_sanitize=address. main() wl_list_init()s
+     * srv->outputs before the first call, so this walks an empty list then
+     * rather than the NULL links calloc() left. */
+    free_outputs();
     wl_list_init(&srv->outputs);
     panel = add_output("eDP-1", &panel_out);
     monitor = docked ? add_output("DP-2", &monitor_out) : NULL;
@@ -193,6 +209,9 @@ int main(void)
 
     srv = calloc(1, sizeof(*srv));
     assert(srv);
+    /* calloc() leaves the list links NULL, which is not an empty wl_list —
+     * reset() walks this before repopulating it, so it has to be a real one. */
+    wl_list_init(&srv->outputs);
     snprintf(srv->config.power_suspend_cmd, sizeof(srv->config.power_suspend_cmd),
              "systemctl suspend");
 
@@ -409,6 +428,9 @@ int main(void)
         unlink(path);
         rmdir(scratch);
     }
+
+    free_outputs();
+    free(srv);
 
     if (failures) { printf("lid_test: %d failure(s)\n", failures); return 1; }
     printf("lid_test: OK\n");

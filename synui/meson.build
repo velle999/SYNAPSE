@@ -289,6 +289,35 @@ install_data('data/synapse-logo.png',
 install_data('data/synapse-logo-electrified.png',
              install_dir : get_option('prefix') / get_option('datadir') / 'backgrounds')
 
+# Sanitizer environment for EVERY test, not just the ones that remember to set
+# it. smoke.sh and resize_heal.sh exported LSAN_OPTIONS themselves (they have
+# to — they are also run by hand, outside meson), and nothing else got it at
+# all: the C-binary tests ran with no suppression file, so cat_render aborted
+# on the very libfontconfig/libcairo entries tests/lsan.supp already listed.
+# A suppression file that only some tests load is worse than none, because the
+# entries look covered.
+#
+# fast_unwind_on_malloc=0 buys the frames the suppressions need. The default
+# frame-pointer unwinder truncates a leak stack inside whichever library did
+# the allocating, which for the NVIDIA driver's D-Bus connection means the
+# stack ends in libdbus-1 and for its GBM backend means it ends at
+# "<unknown module>" — in both cases with the actual owner, several frames
+# further out, never recorded. Suppressing what a truncated stack DOES show
+# means suppressing by allocator instead of by owner. The slow unwinder costs
+# this suite a few seconds and is what lets tests/lsan.supp name the driver.
+#
+# protect_shadow_gap=0 is smoke.sh's, for the same reason it gives there: a
+# real graphics driver JITs into the shadow gap. Kept in sync with the values
+# the two scripts export; theirs win when they are run standalone.
+add_test_setup('sanitize',
+  is_default : true,
+  env : [
+    'LSAN_OPTIONS=suppressions=' + meson.current_source_dir() /
+      'tests/lsan.supp' + ':print_suppressions=0',
+    'ASAN_OPTIONS=protect_shadow_gap=0:fast_unwind_on_malloc=0:' +
+      'halt_on_error=1:abort_on_error=1:print_summary=1',
+  ])
+
 # Headless smoke test: boots the compositor on the headless backend, checks
 # the advertised globals, maps a client (if foot is installed), screenshots
 # (if grim is installed) and asserts a clean SIGTERM teardown. Run with

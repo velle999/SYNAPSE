@@ -1,4 +1,10 @@
-# LeakSanitizer suppressions for the synui smoke test.
+# LeakSanitizer suppressions for the synui test suite.
+#
+# Wired in from meson.build's add_test_setup(), so EVERY test gets it — not
+# just the two shell scripts that used to export LSAN_OPTIONS themselves. The
+# C-binary tests got no LSAN_OPTIONS at all before that, which is the whole
+# reason cat_render failed on the libfontconfig/libcairo entries directly
+# below: they were written, but never loaded for that test.
 #
 # One-time static caches inside system libraries — allocated on first use,
 # never released by design, and not reachable from synui's own teardown.
@@ -31,3 +37,34 @@ leak:libgallium
 # session summary — but not something to bury in a smoke-test change.
 leak:fx_effect_framebuffers
 leak:fx_framebuffer_get_or_create_custom
+
+# NVIDIA's proprietary EGL/GBM driver, on any box with an NVIDIA GPU. This is
+# the "1322 bytes leaked in 4 allocations" that failed smoke and resize_heal.
+#
+# It reads as a libdbus-1 leak and it is NOT one. libdbus is only the
+# allocator: at EGL init the NVIDIA driver opens its own D-Bus connection
+# (dbus_bus_register -> dbus_connection_send_with_reply_and_block) and keeps it
+# for the life of the process, so the reply messages the loader queued are
+# still held at exit. Three of the four allocations are those messages; the
+# fourth is the NVIDIA GBM backend's per-device state under gbm_create_device.
+#
+# Proof it is the driver and not us: synui already destroys the allocator,
+# renderer and backend in synui_destroy() (synui_main.c), so eglTerminate has
+# run by the time LSan looks — and re-running the exact same binary with the
+# NVIDIA vendor libraries out of the picture reports zero leaks and exits 0:
+#
+#   __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json \
+#   LIBGL_ALWAYS_SOFTWARE=1 GBM_BACKEND=dri WLR_RENDERER_ALLOW_SOFTWARE=1 \
+#   ./synui
+#
+# Scoped to the driver, deliberately NOT to libdbus-1. A blanket
+# `leak:libdbus-1` would suppress by allocator rather than by owner — it would
+# cover any future D-Bus use of our own, and it still would not catch the
+# gbm_create_device allocation, which never touches libdbus at all.
+#
+# These only match with fast_unwind_on_malloc=0 (set alongside this file in
+# meson.build): under the default frame-pointer unwinder the stacks truncate
+# inside libdbus, and the GBM one truncates at "<unknown module>" on frame #1,
+# with nothing attributable left to match on.
+leak:libEGL_nvidia
+leak:gbm_create_device
