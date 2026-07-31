@@ -3181,7 +3181,9 @@ void layout_float_place(syn_server_t *s, syn_view_t *view);
 
 /* Put a window back where its app last left it. Called from both map paths
  * (and from layout_float_place, where the remembered box beats the centred
- * default). Returns false if the app has nothing saved. */
+ * default). A window opening on a tiling or AI desktop skips the table
+ * entirely — those layouts place their own windows. Returns false if the app
+ * has nothing saved, or if the layout owns the placement. */
 bool layout_restore_geometry(syn_server_t *s, syn_view_t *view);
 
 /* geom_persist.c: per-app window geometry, remembered across restarts.

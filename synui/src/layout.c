@@ -650,31 +650,49 @@ void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
  * reopens the size it was closed at, and from layout_float_place, where a
  * remembered box beats the centred default.
  *
- * A remembered *box* and a remembered *maximized state* are two different
- * claims, so they restore under different conditions:
+ * WHICH DESKTOP DECIDES. A layout that places windows itself owns their
+ * geometry, and a remembered box is the user's answer to a question those
+ * layouts do not ask. So a window *opening* on a tiling or AI desktop skips
+ * this entirely: it goes wherever the layout puts it, which on tiling is the
+ * whole usable box for the first window and a master/stack slot after that.
  *
- *  - The box only applies to a window the user positions themselves: a
- *    floating view, or any view on a floating desktop. A tiled window's
- *    geometry belongs to the layout engine, and handing it a saved box would
- *    only be overwritten by the next layout_apply anyway. But "is this view
- *    floating" is a question about the window that is opening *now*, and a
- *    freshly-mapped one is never floating yet — so on a tiling desktop that
- *    test alone rejected every restore, and the remembered box was only ever
- *    visible to someone running a floating desktop. Whether the window was free
- *    is a property of the *entry*, which is why floating is persisted with it:
- *    a window the user floated and sized reopens floating, and the tiler is
- *    told to reflow around it.
- *  - The maximized state applies whatever the layout is — maximize is not a
- *    tiling feature (same reasoning as the re-fit pass in layout_apply). A
- *    tiled window restored maximized keeps saved_floating = 0, so
- *    un-maximizing hands it back to the tiler rather than stranding it
- *    floating on a tiling desktop.
+ * That is not a refinement of the old rule, it replaces one. The entry carries
+ * a floating flag (see geom_persist_save) and this function used to honour it
+ * on any desktop, re-floating the window so its box would survive. On velle's
+ * tiling desktop that made the tiler look broken: every app reopened floating,
+ * every layout skips floating windows, and closing one wrote floating=1 back
+ * out — self-sustaining, and Super+Tab moved nothing because there was nothing
+ * left in the flow to move. Edge-snapping seeded it (snap_view sets floating
+ * for the duration and unmap records the live flag), but any window ever
+ * floated would have done.
  *
- * Returns false when the app has nothing saved, in which case the caller's
- * own placement stands.
+ * The floating and monocle desktops keep the whole feature: on those, where a
+ * window sits is the user's business, so a saved box is worth honouring.
+ *
+ * Two ways in that ARE still honoured on a tiling desktop, because neither is
+ * a window merely opening:
+ *
+ *  - Super+F (and a drag that auto-floats): the caller sets view->floating
+ *    before calling through layout_float_place, so the window has already left
+ *    the flow and is asking where it used to live. Freshly-mapped views are
+ *    never floating yet, which is exactly what separates the two cases.
+ *  - A client that asks to be maximized before it ever commits (Firefox does,
+ *    restoring its session) — that is the client's own request, handled by the
+ *    map path, not something read out of windows.conf.
+ *
+ * Returns false when the app has nothing saved — or when the layout owns the
+ * placement — in which case the caller's own placement stands.
  */
 bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
 {
+    /* Ask before the lookup: on these desktops the table has no say at all,
+     * and not touching it keeps that visible in a trace. */
+    bool layout_places_it = view->workspace &&
+                            (view->workspace->layout == LAYOUT_TILING ||
+                             view->workspace->layout == LAYOUT_AI);
+    if (layout_places_it && !view->floating)
+        return false;
+
     struct wlr_box saved;
     int saved_max = 0, saved_float = 0;
     if (!geom_persist_lookup(view, &saved, &saved_max, &saved_float))
@@ -688,7 +706,8 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
      * saved geometry is dropped. Not needed on a floating desktop (nothing
      * tiles there), and not for a maximized entry: view_apply_maximized below
      * floats it for the duration anyway, and saved_floating has to stay 0 so
-     * un-maximizing hands it back to the tiler. */
+     * un-maximizing hands it back to the tiler. Only monocle reaches this now
+     * — tiling and AI returned above. */
     bool refloated = false;
     if (saved_float && !saved_max && !view->floating && !on_floating_desk) {
         view->floating = 1;

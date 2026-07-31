@@ -69,6 +69,13 @@ titlebar_height = 26
 # layout engine and a fullscreen one's to the monitor, so neither is saved.
 # A remembered box is always clamped back onto a monitor that exists now, so
 # an entry written on a wider desk can't reopen a window off-screen.
+#
+# It is also only *replayed* on the desktops where you place windows yourself:
+# floating and monocle. A window opening on a tiling or AI desktop ignores the
+# table and goes where the layout puts it — otherwise every app that had ever
+# been floated or edge-snapped reopened floating, and the tiler had nothing
+# left to tile. Super+F still reopens the remembered box on any desktop: that
+# is you asking for the window back, not the window merely opening.
 # remember_geometry = on
 
 # ── Desktop icons ──────────────────────────────────────────

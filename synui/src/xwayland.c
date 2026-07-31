@@ -203,7 +203,9 @@ static void xw_map(struct wl_listener *listener, void *data)
         layout_float_place(s, view);   /* consults the remembered box itself */
         wlr_scene_node_raise_to_top(view_node(view));
     } else {
-        /* A tiled window still reopens maximized if that is how it was left. */
+        /* A no-op on a tiling or AI desktop, where the layout owns the
+         * placement; on floating and monocle it reopens the window maximized
+         * if that is how it was left. */
         layout_restore_geometry(s, view);
     }
     focus_view(s, view, xs->surface);

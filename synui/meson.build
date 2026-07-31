@@ -494,3 +494,14 @@ test('resize_heal', resize_heal,
                 synctl_exe.full_path()],
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 60)
+
+# Whether windows.conf gets a say on the desktop that is opening the window
+# (layout_restore_geometry, layout.c). Reuses the same client: it only has to be
+# a real xdg-shell toplevel with a stable app_id to look up. Four layouts, one
+# window each, so the timeout is the roomier one.
+geom_layout = find_program('tests/geom_layout.sh')
+test('geom_layout', geom_layout,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
