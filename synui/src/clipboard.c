@@ -358,6 +358,64 @@ static void clip_move(syn_clipboard_t *c, int dir)
     if (c->selected >= c->scroll + CLIP_ROWS) c->scroll = c->selected - CLIP_ROWS + 1;
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. A left click on an entry pastes it
+ * — the same thing Enter does, hiding the panel first and copying the text out
+ * before it does, for the reason clipboard_key spells out: offering re-enters
+ * handle_set_selection and the history can reorder underneath. */
+
+int clipboard_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_clipboard_t *c = &s->clipboard;
+    if (!c->visible) return 0;
+
+    int i = hit_index_at(&c->hit, lx, ly);
+    if (i < 0 || i >= c->count || i == c->selected) return 1;
+    c->selected = i;
+    synui_render_clipboard(s);
+    return 1;
+}
+
+int clipboard_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    syn_clipboard_t *c = &s->clipboard;
+    if (!c->visible) return 0;
+
+    if (!hit_in_panel(&c->hit, lx, ly)) {
+        clipboard_hide(s);
+        return 1;
+    }
+
+    clipboard_motion(s, lx, ly);
+
+    if (button != BTN_LEFT) return 1;
+
+    int i = hit_index_at(&c->hit, lx, ly);
+    if (i < 0 || i >= c->count) return 1;   /* chrome, or the empty-list line */
+
+    char *text = strdup(c->items[i].text);
+    clipboard_hide(s);
+    if (text) { clip_offer(s, text); free(text); }
+    return 1;
+}
+
+int clipboard_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    syn_clipboard_t *c = &s->clipboard;
+    if (!c->visible) return 0;
+    if (delta == 0) return 1;
+
+    /* clip_move() is the scroll: it moves the selection and drags the window
+     * along with it, so there is no second notion of "where the list is". */
+    clip_move(c, delta > 0 ? 1 : -1);
+    synui_render_clipboard(s);
+    return 1;
+}
+
 int clipboard_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     syn_clipboard_t *c = &s->clipboard;

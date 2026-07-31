@@ -776,6 +776,62 @@ static void power_adjust(syn_server_t *s, int dir)
     power_arm(s);
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. Every row here is a value that
+ * Left/Right step through (a timeout, a lid action), and Enter just closes, so a
+ * left click steps forward and a right click back. Clicking a row cannot close
+ * the panel — that is what the click OFF it is for.
+ *
+ * Nothing here saves: `s` still does that, as the footer says. The panel is
+ * explicitly two-stage and a pointer that committed on every click would be a
+ * different panel from the one the keyboard drives. */
+
+int power_motion(syn_server_t *s, double lx, double ly)
+{
+    if (!s->power.visible) return 0;
+
+    int row = hit_row_at(&s->power.hit, lx, ly);
+    if (row < 0 || row == s->power.selected) return 1;
+    s->power.selected = row;
+    synui_render_power(s);
+    return 1;
+}
+
+int power_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    if (!s->power.visible) return 0;
+
+    if (!hit_in_panel(&s->power.hit, lx, ly)) {
+        power_hide(s);
+        return 1;
+    }
+
+    power_motion(s, lx, ly);
+
+    if (hit_row_at(&s->power.hit, lx, ly) < 0) return 1;   /* chrome */
+    if (button != BTN_LEFT && button != BTN_RIGHT) return 1;
+
+    power_adjust(s, button == BTN_LEFT ? +1 : -1);
+    synui_render_power(s);
+    return 1;
+}
+
+int power_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->power.visible) return 0;
+    if (delta == 0) return 1;
+
+    int next = s->power.selected + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= POWER_ROW_COUNT) return 1;
+    s->power.selected = next;
+    synui_render_power(s);
+    return 1;
+}
+
 int power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->power.visible) return 0;

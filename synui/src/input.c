@@ -1682,6 +1682,84 @@ void pointer_rebase(syn_server_t *s)
         wl_display_get_event_loop(s->display), pointer_rebase_handler, s);
 }
 
+/* ── The pointer's modal chain ───────────────────────────────
+ *
+ * The same panels the keyboard chain in keyboard_handle_key walks, in the same
+ * order, for the same reason: exactly one of them is up at a time, each one
+ * claims the event while it is, and the order settles the rare case where two
+ * are. Each handler answers 1 if it was open and took the event.
+ *
+ * THE LIST IS WRITTEN ONCE. Four things walk it — motion, button, wheel, and
+ * "is anything open" — and four hand-kept copies is four chances to add a panel
+ * to three of them. This is the bug the control panel's item table was built to
+ * stop happening to settings rows; the same argument applies here.
+ *
+ * X(prefix, member): `prefix` names the panel's three handlers, `member` its
+ * struct in syn_server_t. They differ for two of them (calendar/cal,
+ * theme/thememgr), which is exactly why both are spelled out.
+ *
+ * Bluetooth is NOT here: it had a pointer long before this contract existed and
+ * keeps its own wiring in pointer_button below, where the pairing-prompt case
+ * (BlueZ is blocked on the answer, so a click must not dismiss it) already
+ * lives. Nor are the dock and desktop menus, for the same reason.
+ */
+#define SYN_PANEL_LIST(X) \
+    X(dispcfg,  dispcfg)  \
+    X(wppick,   wppick)   \
+    X(curpick,  curpick)  \
+    X(power,    power)    \
+    X(taskmgr,  taskmgr)  \
+    X(news,     news)     \
+    X(filters,  filters)  \
+    X(widgets,  widgets)  \
+    X(sound,    sound)    \
+    X(clock,    clock)    \
+    X(calendar, cal)      \
+    X(ctlpanel, ctlpanel) \
+    X(theme,    thememgr) \
+    X(clipboard, clipboard)
+
+/* Is any of them open? Asked where there is nothing to hand the event to but it
+ * still must not reach the window underneath — a horizontal wheel, and the
+ * release of a click the panel already swallowed the press of. */
+static bool panel_pointer_active(syn_server_t *s)
+{
+    /* The command bar is not in the list — it has no rows, so no _motion and no
+     * _scroll — but it is just as modal, and the two things this answers (swallow
+     * the wheel, swallow the stray release) apply to it identically. */
+    if (s->cmdbar.visible) return true;
+#define X(fn, mem) if (s->mem.visible) return true;
+    SYN_PANEL_LIST(X)
+#undef X
+    return false;
+}
+
+static bool panel_pointer_motion(syn_server_t *s, double lx, double ly)
+{
+#define X(fn, mem) if (fn##_motion(s, lx, ly)) return true;
+    SYN_PANEL_LIST(X)
+#undef X
+    return false;
+}
+
+static bool panel_pointer_click(syn_server_t *s, double lx, double ly,
+                                uint32_t button, uint32_t time_msec)
+{
+#define X(fn, mem) if (fn##_click(s, lx, ly, button, time_msec)) return true;
+    SYN_PANEL_LIST(X)
+#undef X
+    return false;
+}
+
+static bool panel_pointer_scroll(syn_server_t *s, double lx, double ly,
+                                 double delta)
+{
+#define X(fn, mem) if (fn##_scroll(s, lx, ly, delta)) return true;
+    SYN_PANEL_LIST(X)
+#undef X
+    return false;
+}
+
 /* Shared relative-motion path: broadcast the raw delta to relative-pointer
  * clients, let an active constraint absorb (locked) or clamp (confined) the
  * move, then move the cursor and update pointer focus. */
@@ -1736,6 +1814,13 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
 
     if (s->bt.visible)
         bt_motion(s, s->cursor->x, s->cursor->y);
+
+    /* An open settings panel takes the motion and the routine below it does not
+     * run. A modal panel is drawn over whatever is under the cursor, so lighting
+     * up a titlebar button or a hover state the click can never reach would be
+     * feedback for something that is not going to happen. */
+    if (panel_pointer_motion(s, s->cursor->x, s->cursor->y))
+        return;
 
     /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);
@@ -1793,6 +1878,28 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
      * dock or panel underneath may be reached. */
     if (s->nlock.active) {
         lock_notify_activity(s);
+        return;
+    }
+
+    /* A settings panel is up, so this button is not the desktop's. The RELEASE
+     * matters as much as the press: the press was swallowed by the panel, and
+     * forwarding only the release hands the focused client a release it has no
+     * matching press for — which is how a client ends up thinking a button is
+     * still down. Only the release of a press the seat actually saw is sent,
+     * which is the same test the grab-release path below makes.
+     *
+     * Every in-flight drag is excluded first. A panel can be opened by a KEYBIND
+     * in the middle of one (Super+P while dragging a window is a keystroke away),
+     * and taking this branch then would eat the release that ends the grab — a
+     * window welded to the cursor, with no way to put it down. Those releases
+     * belong to the three branches below; this one only claims a button that
+     * genuinely has nowhere else to go. */
+    if (panel_pointer_active(s) &&
+        state == WL_POINTER_BUTTON_STATE_RELEASED &&
+        s->cursor_mode == SYNUI_CURSOR_PASSTHROUGH &&
+        !s->dock_drag.active && !s->deskicon_drag.active) {
+        if (seat_button_is_down(s->seat, button))
+            wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
         return;
     }
 
@@ -1860,6 +1967,19 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
             else                    bt_hide(s);
             return;
         }
+
+        /* The command bar first: it holds the keyboard while it is up (see the
+         * cmdbar branch at the top of keyboard_handle_key), so it outranks the
+         * panels for the same reason it outranks them there. */
+        if (cmdbar_click(s, s->cursor->x, s->cursor->y))
+            return;
+
+        /* The settings panels, in the order the keyboard chain walks them. One
+         * of them being open means the click is theirs: on a row it does what
+         * that row's key does, and off the panel it closes it — the
+         * click-off-to-close every one of them went without until now. */
+        if (panel_pointer_click(s, s->cursor->x, s->cursor->y, button, time_msec))
+            return;
 
         /* The dock context menu is modal for the pointer while open: a left
          * click runs the item under the cursor, any other click dismisses. */
@@ -2070,6 +2190,17 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
     if (s->bt.visible &&
         event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         bt_scroll(s, event->delta);
+        return;
+    }
+
+    /* An open settings panel takes the wheel, wherever the pointer is. Vertical
+     * only: every one of these panels is a column, and a horizontal wheel (or a
+     * touchpad's sideways flick) has nothing to mean in one. It is swallowed
+     * rather than forwarded, because a modal panel must not scroll the window
+     * underneath it. */
+    if (panel_pointer_active(s)) {
+        if (event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL)
+            panel_pointer_scroll(s, s->cursor->x, s->cursor->y, event->delta);
         return;
     }
 

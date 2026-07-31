@@ -428,6 +428,23 @@ void cmdbar_hide(syn_server_t *s)
     wlr_log(WLR_DEBUG, "cmdbar: hidden");
 }
 
+/* Click off the bar to close it — Escape, with the mouse. The bar swallows
+ * every key while it is up, so a user who opened it by accident and reached for
+ * the mouse had nothing to reach for: clicking it did nothing, and clicking
+ * past it did nothing either, because the click went to a window that could not
+ * have the keyboard.
+ *
+ * A click ON the bar is swallowed and no more. There is nothing in it to
+ * point at — no rows, no buttons — but letting the click through to the window
+ * underneath would move focus out from under a prompt that still holds the
+ * keyboard, and the next thing typed would go nowhere anyone expected. */
+int cmdbar_click(syn_server_t *s, double lx, double ly)
+{
+    if (!s->cmdbar.visible) return 0;
+    if (!hit_in_panel(&s->cmdbar.hit, lx, ly)) cmdbar_hide(s);
+    return 1;
+}
+
 void cmdbar_key(syn_server_t *s, uint32_t keysym)
 {
     syn_cmdbar_t *bar = &s->cmdbar;

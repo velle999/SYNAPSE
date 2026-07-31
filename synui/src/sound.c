@@ -762,6 +762,65 @@ static void sound_test(syn_server_t *s)
                  "playing %s", sound_event_label(evt));
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. Enter acts on the row here, so a
+ * left click is Enter. A right click is Left, which is what makes the volume row
+ * usable with a mouse at all: it is a slider, and a slider you can only push one
+ * way is not a slider. */
+
+int sound_motion(syn_server_t *s, double lx, double ly)
+{
+    if (!s->sound.visible) return 0;
+
+    int row = hit_row_at(&s->sound.hit, lx, ly);
+    if (row < 0 || row == s->sound.selected) return 1;
+    s->sound.selected = row;
+    synui_render_sound(s);
+    return 1;
+}
+
+int sound_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    if (!s->sound.visible) return 0;
+
+    if (!hit_in_panel(&s->sound.hit, lx, ly)) {
+        sound_hide(s);
+        return 1;
+    }
+
+    sound_motion(s, lx, ly);
+
+    if (hit_row_at(&s->sound.hit, lx, ly) < 0) return 1;   /* chrome */
+    if (button != BTN_LEFT && button != BTN_RIGHT) return 1;
+
+    /* Same refresh the key path does first: the volume row adjusts RELATIVELY,
+     * so a stale copy would not merely display the old number, it would write it
+     * back over a newer one. */
+    sound_state_refresh(s);
+
+    if (button == BTN_RIGHT) sound_adjust(s, -1);
+    else                     sound_activate(s);
+
+    synui_render_sound(s);
+    return 1;
+}
+
+int sound_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->sound.visible) return 0;
+    if (delta == 0) return 1;
+
+    int next = s->sound.selected + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= SOUND_ROW_COUNT) return 1;
+    s->sound.selected = next;
+    synui_render_sound(s);
+    return 1;
+}
+
 int sound_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->sound.visible) return 0;

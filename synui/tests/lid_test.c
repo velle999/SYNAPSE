@@ -52,6 +52,13 @@ void synui_spawn(const char *cmd)
 void synui_lock(syn_server_t *s)          { (void)s; locked++; }
 void synui_render_power(syn_server_t *s)  { (void)s; rendered++; }
 void logind_lid_update(syn_server_t *s)   { (void)s; }
+/* power_hide() tells the control panel its child closed. Stubbed because this
+ * test links power.c alone; without it the test does not link at all, which is
+ * the state it was in from the moment the control panel grew that call. */
+void ctlpanel_child_closed(syn_server_t *s, const char *action)
+{
+    (void)s; (void)action;
+}
 
 /* Whether synui holds logind's lid inhibitor, and what logind would have done
  * — both driven by the test, because a `system` row means different things

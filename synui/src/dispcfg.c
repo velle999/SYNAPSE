@@ -418,6 +418,73 @@ void dispcfg_outputs_changed(syn_server_t *s)
     synui_render_dispcfg(s);
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h — with the same exception the
+ * Bluetooth panel makes, for the same reason. The actions here are several
+ * (rotate, make primary, toggle deep colour) and one click cannot mean all of
+ * them, so it means the one thing it unambiguously can: this is the monitor I
+ * am talking about. The keys the footer names still do the rest.
+ *
+ * The mini-map is clickable as well as the list, because a picture of your
+ * monitors is what a pointer will go for first, and having it be the one part
+ * of the panel that does not respond would read as broken.
+ */
+
+/* order[] index under (lx,ly): a mini-map cell, or a list row. -1 for neither. */
+static int dispcfg_at(const syn_dispcfg_t *d, double lx, double ly)
+{
+    for (int i = 0; i < d->count && i < DISPCFG_MAX_OUTPUTS; i++) {
+        const struct wlr_box *c = &d->cell[i];
+        if (c->width <= 0) continue;
+        if (lx >= c->x && lx < c->x + c->width &&
+            ly >= c->y && ly < c->y + c->height)
+            return i;
+    }
+    int row = hit_row_at(&d->hit, lx, ly);
+    return (row >= 0 && row < d->count) ? row : -1;
+}
+
+int dispcfg_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_dispcfg_t *d = &s->dispcfg;
+    if (!d->visible) return 0;
+
+    int i = dispcfg_at(d, lx, ly);
+    if (i < 0 || i == d->selected) return 1;
+    d->selected = i;
+    synui_render_dispcfg(s);
+    return 1;
+}
+
+int dispcfg_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)button; (void)time_msec;
+    syn_dispcfg_t *d = &s->dispcfg;
+    if (!d->visible) return 0;
+
+    if (!hit_in_panel(&d->hit, lx, ly)) {
+        dispcfg_hide(s);
+        return 1;
+    }
+    return dispcfg_motion(s, lx, ly);   /* select, and nothing else */
+}
+
+int dispcfg_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    syn_dispcfg_t *d = &s->dispcfg;
+    if (!d->visible) return 0;
+    if (delta == 0) return 1;
+
+    int next = d->selected + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= d->count) return 1;
+    d->selected = next;
+    synui_render_dispcfg(s);
+    return 1;
+}
+
 int dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     syn_dispcfg_t *d = &s->dispcfg;

@@ -96,6 +96,15 @@ PopupWindow {
     color: "transparent"
     visible: false
 
+    // See BarMenu: an xdg_popup grab is what makes a click anywhere else close
+    // this, instead of the pointer-leave timer having to be the whole answer.
+    grabFocus: true
+
+    // The compositor broke the grab and the window is already down; put the QML
+    // property back in step, or the next toggleAt() reads `visible` as true and
+    // toggles a window that is not there into a window that is still not there.
+    onClosed: mixer.visible = false
+
     function toggleAt(x) {
         if (mixer.visible) { mixer.visible = false; return }
         mixer.anchorX = x
@@ -123,9 +132,10 @@ PopupWindow {
         rect.y: Theme.barHeight + 2
     }
 
-    // Dismissal is pointer-leave plus an explicit Done, not a click-anywhere
-    // grab — same trade as BarMenu. Longer than the menu's 1200ms because this
-    // panel is aimed at with the pointer far more than it is read.
+    // A BACKSTOP for the grab above, not the mechanism — same as BarMenu. It is
+    // what closes the mixer if the grab is ever refused, and it refuses to fire
+    // mid-drag: a slider drag that wanders off the popup still holds the
+    // implicit pointer grab, so "exited" arrives during a live gesture.
     Timer {
         id: closeTimer
         interval: 1600
@@ -141,6 +151,11 @@ PopupWindow {
         color: Theme.popupBg
         border.color: Theme.magenta
         border.width: 1
+
+        // Escape closes, now that the grab brings keyboard focus with it.
+        focus: true
+        Keys.onEscapePressed: mixer.visible = false
+        onVisibleChanged: if (visible) forceActiveFocus()
 
         MouseArea {
             anchors.fill: parent

@@ -613,6 +613,77 @@ static void theme_move(syn_server_t *s, int dir)
     s->thememgr.selected = t;
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. A left click applies the theme it
+ * lands on — Enter's job — because that is the whole panel: there is nothing
+ * else a theme row does.
+ *
+ * Hover only moves the cursor and does NOT apply. Applying a theme rewrites
+ * kdeglobals, the GTK settings and Firefox's prefs and re-decorates every
+ * window; doing that to each row the pointer crosses on its way down the list
+ * would be a spectacular way to make the desktop unusable for a few seconds. */
+
+int theme_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_thememgr_t *tm = &s->thememgr;
+    if (!tm->visible) return 0;
+
+    /* NO HOVER WHILE THE LIST IS SCROLLED, and this is not fussiness.
+     * synui_render_thememgr() derives its scroll window from the selection —
+     * `first = selected - rows/2`, deliberately stateless — so moving the
+     * selection MOVES THE LIST. Hover-selecting a row other than the middle one
+     * therefore shifts the list under the pointer, which puts a different row
+     * under it, which shifts it again: the list bolts to one end and stops. It
+     * only bites where the list does not fit (a 1024x768 VM, the ISO's default),
+     * which is exactly where nobody would look for it. The wheel and the arrow
+     * keys move the selection deliberately and one row at a time, so they are
+     * fine; a pointer merely passing over is not. */
+    if (tm->hit.rows < SYN_THEME_COUNT) return 1;
+
+    int i = hit_index_at(&tm->hit, lx, ly);
+    if (i < 0 || i >= SYN_THEME_COUNT || i == tm->selected) return 1;
+    tm->selected = i;
+    synui_render_thememgr(s);
+    return 1;
+}
+
+int theme_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    syn_thememgr_t *tm = &s->thememgr;
+    if (!tm->visible) return 0;
+
+    if (!hit_in_panel(&tm->hit, lx, ly)) {
+        theme_hide(s);
+        return 1;
+    }
+
+    theme_motion(s, lx, ly);
+
+    if (button != BTN_LEFT) return 1;
+
+    int i = hit_index_at(&tm->hit, lx, ly);
+    if (i < 0 || i >= SYN_THEME_COUNT) return 1;   /* chrome / the slider row */
+
+    theme_apply(s, i, 1);
+    snprintf(tm->status, sizeof(tm->status), "applied: %s", theme_name(i));
+    synui_render_thememgr(s);
+    return 1;
+}
+
+int theme_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->thememgr.visible) return 0;
+    if (delta == 0) return 1;
+
+    theme_move(s, delta > 0 ? 1 : -1);
+    synui_render_thememgr(s);
+    return 1;
+}
+
 int theme_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->thememgr.visible) return 0;

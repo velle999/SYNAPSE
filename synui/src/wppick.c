@@ -979,6 +979,95 @@ void wppick_toggle(syn_server_t *s)
     else                   wppick_show(s);
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. This panel is the one place the
+ * contract needs a second gesture, because it has two distinct steps that the
+ * keyboard splits across two keys: arrowing PREVIEWS, Enter COMMITS. That split
+ * is load-bearing here — a Workshop pick restarts a GPU process, and Esc has to
+ * be able to put back what you found — so a single click cannot mean both.
+ *
+ * So: one click previews (the arrow keys' job), a double click commits (Enter's
+ * job). 400ms, the same window the titlebar and the desktop icons already use.
+ * A click off the panel is Esc, which reverts the preview like every other exit
+ * that is not Enter.
+ */
+
+int wppick_motion(syn_server_t *s, double lx, double ly)
+{
+    (void)lx; (void)ly;
+    /* Deliberately no hover preview. Moving the selection here applies the
+     * wallpaper for real (that is what "preview" means in this panel — the
+     * desktop actually changes), and doing that to every row the pointer
+     * crosses on its way down a list of 131 Workshop entries would restart a
+     * GPU process per row. The click is the deliberate act; hovering is not. */
+    return s->wppick.visible ? 1 : 0;
+}
+
+int wppick_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec)
+{
+    if (!s->wppick.visible) return 0;
+
+    if (!hit_in_panel(&s->wppick.hit, lx, ly)) {
+        /* Esc, not Enter: abandon the deferred row rather than commit it. */
+        s->wppick.pending_we = -1;
+        wppick_hide(s);
+        return 1;
+    }
+
+    if (button != BTN_LEFT) return 1;
+
+    int i = hit_index_at(&s->wppick.hit, lx, ly);
+    if (i < 0 || i >= wppick_total(s)) return 1;   /* chrome / preview pane */
+
+    bool dbl = (s->wppick.last_click_row == i) &&
+               (time_msec - s->wppick.last_click_ms < 400);
+    s->wppick.last_click_row = dbl ? -1 : i;
+    s->wppick.last_click_ms  = time_msec;
+
+    if (!dbl) {
+        /* First click: select and preview — exactly what Up/Down do. */
+        s->wppick.selected = i;
+        wppick_preview(s, i);
+        wppick_scroll_to_selection(s);
+        synui_render_wppick(s);
+        return 1;
+    }
+
+    /* Second click: Enter. Same two cases it has — a deferred row to apply, or
+     * a live preview that only needs writing down. */
+    if (s->wppick.pending_we >= 0) {
+        wppick_apply(s, s->wppick.pending_we, true);
+        s->wppick.pending_we = -1;
+        s->wppick.previewed = false;
+    } else if (s->wppick.previewed) {
+        wallpaper_state_save(s);
+        s->wppick.previewed = false;
+    }
+    wppick_hide(s);
+    return 1;
+}
+
+int wppick_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->wppick.visible) return 0;
+    if (delta == 0) return 1;
+
+    /* The wheel scrolls the WINDOW and leaves the selection alone, unlike every
+     * other panel here. Moving the selection is what previews, and a wheel that
+     * applied a wallpaper per notch would be unusable. */
+    int total = wppick_total(s);
+    if (total <= WPPICK_ROWS) return 1;
+
+    s->wppick.scroll += delta > 0 ? 3 : -3;
+    if (s->wppick.scroll > total - WPPICK_ROWS) s->wppick.scroll = total - WPPICK_ROWS;
+    if (s->wppick.scroll < 0) s->wppick.scroll = 0;
+    synui_render_wppick(s);
+    return 1;
+}
+
 int wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->wppick.visible) return 0;

@@ -160,6 +160,7 @@ synui_exe = executable('synui',
   sources : [
     'src/synui_main.c',
     'src/input.c',
+    'src/hit.c',
     'src/constraints.c',
     'src/deco.c',
     'src/snap.c',
@@ -392,6 +393,30 @@ test('deskicon_drag', deskicon_drag_test)
 # libdisplay-info, so this links it directly — no stubs, no wlroots, and the
 # fixtures are the two real monitors on the dev desk (one HDR10, one SDR) so
 # the test pins the distinction the old 10-bit-framebuffer probe could not make.
+# The row/column arithmetic every panel's pointer handler sits on. Pure
+# geometry, so it needs no compositor at all — but it does need synui.h, which
+# drags in wlroots and cairo for their types.
+hit_test = executable('hit_test',
+  ['tests/hit_test.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('hit', hit_test)
+
+# The panel pointer contract, on a real panel. There is no way to synthesise a
+# click into a headless synui — no virtual-pointer protocol, no input devices on
+# the headless backend, and uinput would be picked up by the LIVE session — so
+# the handlers are called directly, exactly as input.c's chain calls them.
+# Stubs are lid_test's; see that file's header for why power.c links alone.
+panel_pointer_test = executable('panel_pointer_test',
+  ['tests/panel_pointer_test.c', 'src/power.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('panel_pointer', panel_pointer_test)
+
 edid_hdr_test = executable('edid_hdr_test',
   ['tests/edid_hdr_test.c', 'src/edid.c'],
   include_directories : include_directories('src'),
@@ -408,7 +433,9 @@ test('edid_hdr', edid_hdr_test)
 # that is plugged in. Only this target defines it; the shipped binary keeps the
 # real /sys/class/power_supply.
 lid_test = executable('lid_test',
-  ['tests/lid_test.c', 'src/power.c'],
+  # hit.c is linked in rather than stubbed: it is pure geometry with no wlroots
+  # in it, so the pointer handlers power.c grew are exercised for real.
+  ['tests/lid_test.c', 'src/power.c', 'src/hit.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman],
   c_args : ['-DWLR_USE_UNSTABLE',

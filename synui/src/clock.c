@@ -255,6 +255,60 @@ static void clock_activate(syn_server_t *s)
     }
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. Every row here is a toggle or a
+ * cycle that Enter, Space and Left/Right all drive the same way, so a click is
+ * simply clock_activate() on the row under it. */
+
+int clock_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_clock_t *c = &s->clock;
+    if (!c->visible) return 0;
+
+    int row = hit_row_at(&c->hit, lx, ly);
+    if (row < 0 || row == c->selected) return 1;
+    c->selected = row;
+    synui_render_clock(s);
+    return 1;
+}
+
+int clock_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    syn_clock_t *c = &s->clock;
+    if (!c->visible) return 0;
+
+    if (!hit_in_panel(&c->hit, lx, ly)) {
+        clock_hide(s);
+        return 1;
+    }
+
+    clock_motion(s, lx, ly);
+
+    if (button != BTN_LEFT) return 1;
+    if (hit_row_at(&c->hit, lx, ly) < 0) return 1;   /* chrome / world clocks */
+
+    clock_activate(s);
+    synui_render_clock(s);
+    return 1;
+}
+
+int clock_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    syn_clock_t *c = &s->clock;
+    if (!c->visible) return 0;
+    if (delta == 0) return 1;
+
+    int next = c->selected + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= CLOCK_SETTING_ROWS) return 1;
+    c->selected = next;
+    synui_render_clock(s);
+    return 1;
+}
+
 int clock_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     syn_clock_t *c = &s->clock;
@@ -388,6 +442,82 @@ static void cal_step_day(syn_cal_t *cal, int delta)
     if (cal->sel < 1)    { cal_step_month(cal, -1);
                            cal->sel = calendar_days_in_month(cal->year, cal->mon); }
     else if (cal->sel > dim) { cal_step_month(cal, +1); cal->sel = 1; }
+}
+
+/* ── Calendar pointer ────────────────────────────────────────
+ *
+ * The one panel whose rows are a grid rather than a list, so it does its own
+ * two-axis test on top of the shared row band: render.c records the band as all
+ * seven day columns at once, and the cell width falls out of dividing it by
+ * seven — which keeps the number in one file instead of two that can disagree.
+ *
+ * A click picks a day; it does not close the popup. Picking a date and having
+ * the calendar vanish is the behaviour of a date picker being used to fill in a
+ * field, and this one is a calendar you look at. */
+
+/* Day number under (lx,ly), or -1 for the header, the footer and the blank
+ * cells before the 1st and after the last. */
+static int cal_day_at(const syn_cal_t *cal, double lx, double ly)
+{
+    int row = hit_row_at(&cal->hit, lx, ly);
+    if (row < 0) return -1;
+
+    int cell_w = cal->hit.row_w / 7;
+    if (cell_w <= 0) return -1;
+    int col = (int)((lx - cal->hit.row_x) / cell_w);
+    if (col < 0 || col > 6) return -1;
+
+    /* Invert the draw: day 1 sits at column calendar_first_weekday(), and the
+     * grid runs on from there. */
+    int day = row * 7 + col - calendar_first_weekday(cal->year, cal->mon) + 1;
+    if (day < 1 || day > calendar_days_in_month(cal->year, cal->mon)) return -1;
+    return day;
+}
+
+int calendar_motion(syn_server_t *s, double lx, double ly)
+{
+    (void)lx; (void)ly;
+    /* Deliberately no hover highlight. The selected day is also the day the
+     * arrow keys are on, and having it chase the pointer across the grid would
+     * make the panel flicker under any cursor merely passing over it. */
+    return s->cal.visible ? 1 : 0;
+}
+
+int calendar_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    syn_cal_t *cal = &s->cal;
+    if (!cal->visible) return 0;
+
+    if (!hit_in_panel(&cal->hit, lx, ly)) {
+        calendar_hide(s);
+        return 1;
+    }
+
+    if (button != BTN_LEFT) return 1;
+
+    int day = cal_day_at(cal, lx, ly);
+    if (day < 0) return 1;                 /* header, footer, a blank cell */
+    if (day == cal->sel) return 1;
+
+    cal->sel = day;
+    synui_render_calendar(s);
+    return 1;
+}
+
+int calendar_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    syn_cal_t *cal = &s->cal;
+    if (!cal->visible) return 0;
+    if (delta == 0) return 1;
+
+    /* The wheel is the month, not the day: a calendar's one long axis is the
+     * months, and Page Up/Down (which the footer names) already mean that. */
+    cal_step_month(cal, delta > 0 ? 1 : -1);
+    synui_render_calendar(s);
+    return 1;
 }
 
 int calendar_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)

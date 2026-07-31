@@ -12,6 +12,12 @@ Working:
 - Tiling (master-stack) and monocle layouts; 9 workspaces
 - Keyboard bindings; basic pointer (focus / click / axis); clipboard selection
 - Cairo-rendered UI: welcome screen, AI command bar, neural overlay
+- Every compositor-drawn panel takes the pointer as well as the keyboard: hover
+  selects, a left click does the row's primary key, a click off the panel closes
+  it, and the wheel scrolls. One contract, documented at the top of `synui.h`;
+  one row-geometry struct (`syn_hit_t`, `hit.c`) written by `render.c` and read
+  by the panels; one list of panels in `input.c` (`SYN_PANEL_LIST`) walked by all
+  four pointer paths
 - AI thread IPC to synapd (hardened: framed `write_all` + reassembling poll)
 - Security-border colour states (rendering only)
 - Interactive move/resize; per-workspace master factor; multi-output aware

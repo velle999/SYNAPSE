@@ -14,6 +14,11 @@
 #include <sys/types.h>
 #include <time.h>
 
+/* BTN_LEFT and friends. Every panel that takes a click has to name the button
+ * it is answering, so the codes belong here rather than in fifteen separate
+ * includes that would each have to be remembered. */
+#include <linux/input-event-codes.h>
+
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
@@ -98,6 +103,110 @@ typedef enum {
 } syn_deco_region_t;
 #define COLOR_OVERLAY_BG    { 0.05f, 0.05f, 0.10f, 0.85f }
 #define COLOR_BRAND         { 0.00f, 0.85f, 0.75f, 1.0f }
+
+/* ── Panel pointer geometry (hit.c) ──────────────────────────
+ *
+ * Every panel the compositor draws is the same shape: a rectangle somewhere on
+ * the focused output, with a column of fixed-pitch rows inside it. That is all
+ * a pointer needs to know, so it is recorded once, in one struct, rather than
+ * each panel growing its own set of x/y/w/h fields — which is how the
+ * Bluetooth panel (the first one to get a pointer) did it, and doing that
+ * fourteen more times would be fourteen more places for the drawn geometry and
+ * the hit-tested geometry to drift apart.
+ *
+ * The render function is the only writer, because the render function is the
+ * only code that knows where the panel actually landed: the rect is centred on
+ * whichever output has focus, and several panels size themselves to their
+ * content. It writes this on every paint and blanks it when the panel is
+ * hidden, so a hit test can never be answered from a stale rect.
+ *
+ * All coordinates are LAYOUT coords — the same space s->cursor->x/y are in —
+ * so a hit test is a comparison and never a transform.
+ */
+typedef struct {
+    int x, y, w, h;      /* panel rect; w == 0 means "not on screen" */
+    int row_x, row_y;    /* top-left of row 0's hit box */
+    int row_w, row_h;    /* one row's hit box; row_h is also the pitch */
+    int rows;            /* rows currently drawn — the hit-testable window */
+    /* List index of the first DRAWN row, for the panels whose list scrolls.
+     * Several of them (the theme manager) derive it from the selection on every
+     * render and keep no scroll position at all, so the only place that knows
+     * where the window sits is the render pass — which is exactly why it is
+     * recorded here rather than recomputed by the hit test. 0 for the panels
+     * that draw their whole list. */
+    int first;
+} syn_hit_t;
+
+/* Record the panel rect. Call once px/py/pw/ph are known. */
+void hit_set_panel(syn_hit_t *g, int x, int y, int w, int h);
+/* Record the row grid in PANEL-LOCAL coords — the same numbers the cairo draw
+ * uses — so no render function has to add its own origin back on by hand.
+ * Must follow hit_set_panel(). `n` is the number of rows actually drawn, not
+ * the number that exist: a scrolling list only hit-tests its visible window. */
+void hit_set_rows(syn_hit_t *g, int lx, int ly, int w, int h, int n);
+/* Record which list index the first drawn row is, for a scrolling list. Follows
+ * hit_set_rows(); leaving it out means "the window starts at 0". */
+void hit_set_first(syn_hit_t *g, int first);
+/* Blank the rect. A hidden panel must hit-test as nothing at all. */
+void hit_clear(syn_hit_t *g);
+int  hit_in_panel(const syn_hit_t *g, double lx, double ly);
+/* Row index under (lx,ly) counting from the first DRAWN row, or -1 for the
+ * panel's chrome and for anywhere outside it. Callers holding a scrolled list
+ * add their own first-row offset. */
+int  hit_row_at(const syn_hit_t *g, double lx, double ly);
+/* The same test in LIST coordinates: hit_row_at() plus the scroll offset above,
+ * so a panel with a scrolling list never has to add it back on itself and get it
+ * wrong on the one path that forgot. -1 for a miss, as ever. */
+int  hit_index_at(const syn_hit_t *g, double lx, double ly);
+
+/* ── The panel pointer contract ──────────────────────────────
+ *
+ * Every compositor-drawn panel exposes the same three functions, and input.c
+ * walks them in the same order it walks the key handlers. They exist because
+ * these panels were keyboard-only: they were each written as "press Super+X,
+ * then arrow around", and a desktop where half the settings cannot be clicked
+ * is a desktop that is half broken for anyone holding a mouse.
+ *
+ *   int <p>_motion(syn_server_t *s, double lx, double ly);
+ *   int <p>_click (syn_server_t *s, double lx, double ly, uint32_t button,
+ *                 uint32_t time_msec);
+ *   int <p>_scroll(syn_server_t *s, double lx, double ly, double delta);
+ *
+ * All three return 1 if the panel was open and therefore consumed the event,
+ * and 0 if it was not — the same "did you take it" answer <p>_key gives, so the
+ * pointer chain in input.c reads like the keyboard chain above it.
+ *
+ * What they must do, so that learning one panel is learning all of them:
+ *
+ *   motion — the row under the pointer becomes the selected row. Hover IS the
+ *            cursor; nothing else moves and nothing fires.
+ *   click  — BTN_LEFT on a row does that row's primary keyboard action, by
+ *            calling the panel's own path rather than a second copy of it.
+ *            On most panels that is Enter. On the panels whose Enter is a second
+ *            spelling of Esc (filters, power) it is instead Right — the key that
+ *            drives the row — because a click that closed the panel you just
+ *            aimed at would be indistinguishable from a misfire. BTN_RIGHT on
+ *            such a cycling row steps the other way, i.e. Left.
+ *            A click on the panel's chrome does nothing but is swallowed: these
+ *            panels are modal, and letting a near-miss fall through to the
+ *            window underneath is how you act on something you cannot see.
+ *   click  — anything OFF the panel closes it, whichever button it was. This is
+ *            the click-off-to-close every menu on every desktop has, and the
+ *            panels went without it for far too long.
+ *   scroll — scrolls a list that scrolls, and otherwise moves the selection.
+ *            The same split Up/Down already have in that panel. It is given the
+ *            cursor position because a wheel acts on what is under the pointer,
+ *            not on whatever the keyboard happens to be focused on — which is
+ *            the whole difference between the two devices, and matters on the
+ *            two-column panels where they can be looking at different lists.
+ *            Only the vertical wheel gets here: every one of these panels is a
+ *            column, so a horizontal one has nothing to mean in it — input.c
+ *            swallows that rather than letting it scroll the window underneath.
+ *
+ * A panel with a genuinely destructive row (the task manager's kill) must NOT
+ * put it on a click. The mouse gets the safe actions; the key that already
+ * spells out the dangerous one keeps it.
+ */
 
 /* ── Enums ───────────────────────────────────────────────── */
 typedef enum {
@@ -184,6 +293,9 @@ typedef struct {
     char  out[CMDBAR_OUT_LINES][CMDBAR_OUT_COLS];
     int   out_lines;
     int   out_more;     /* lines produced beyond the ones we kept */
+    /* Pointer geometry, written by synui_render_cmdbar(). Rect only — see
+     * there. */
+    syn_hit_t hit;
 } syn_cmdbar_t;
 
 /* ── Neural overlay ──────────────────────────────────────── */
@@ -252,6 +364,12 @@ typedef struct {
     syn_output_t *order[DISPCFG_MAX_OUTPUTS];  /* panel list, reading order
                                                  * (grid_y then grid_x) */
     char status[96];   /* last action / error, shown in the panel */
+    /* Pointer geometry, written by synui_render_dispcfg(). */
+    syn_hit_t hit;                          /* panel rect + the monitor rows */
+    /* The mini-map box each monitor is drawn in, LAYOUT coords, parallel to
+     * order[]. Not a row grid: the boxes sit at arrangement-grid positions,
+     * which can leave holes, so each one is recorded as it is drawn. */
+    struct wlr_box cell[DISPCFG_MAX_OUTPUTS];
 } syn_dispcfg_t;
 
 /* ── CRT filter panel (filters.c) ────────────────────────── */
@@ -332,6 +450,8 @@ typedef struct {
     int  uifx_selected;
     int  uifx_dirty;
     char status[96];
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_filters_t;
 
 /* ── Desktop widget manager (widgets.c) ──────────────────── */
@@ -376,6 +496,8 @@ typedef struct {
      * says so rather than letting a toggle look broken. Probed on open. */
     int  have_cava;
     char status[96];
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_widgets_t;
 
 /* ── Event sounds (sound.c) ──────────────────────────────── */
@@ -432,6 +554,8 @@ typedef struct {
     int   loaded;
 
     char status[96];
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_sound_t;
 
 /* ── Clock & Time / Calendar (clock.c) ───────────────────── */
@@ -449,6 +573,8 @@ typedef struct {
     int  visible;
     int  selected;     /* 0..CLOCK_SETTING_ROWS-1 */
     struct wl_event_source *timer;    /* 1 Hz repaint while the panel is open */
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_clock_t;
 
 typedef struct {
@@ -456,6 +582,9 @@ typedef struct {
     int year;
     int mon;   /* 0-11 */
     int sel;   /* selected day, 1-based */
+    /* Pointer geometry, written by synui_render_calendar(). The row band spans
+     * all seven day columns; clock.c splits it back up. */
+    syn_hit_t hit;
 } syn_cal_t;
 
 /* ── Theme manager (theme.c) ─────────────────────────────── */
@@ -499,6 +628,8 @@ typedef struct {
     int  visible;
     int  selected;     /* syn_theme_t */
     char status[96];
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_thememgr_t;
 
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
@@ -634,6 +765,12 @@ typedef struct {
      * shape (fire a helper, the value lands a moment later), so the row is a
      * field rather than a second copy of the machinery. */
     int    poll_row;
+    /* Pointer geometry, written by synui_render_ctlpanel(). Two grids because
+     * the panel is two columns and a click has to know which one it landed in —
+     * that is the same question Tab answers for the keyboard. Both carry the
+     * same panel rect, so either one answers "was this click off the panel". */
+    syn_hit_t hit;         /* panel rect; rows = the category sidebar */
+    syn_hit_t hit_items;   /* same rect; rows = the settings/shortcuts pane */
 } syn_ctlpanel_t;
 
 
@@ -708,6 +845,8 @@ typedef struct {
     int             scroll;
     int             count;
     syn_clip_item_t items[CLIP_HISTORY_MAX];   /* [0] is most recent */
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_clipboard_t;
 
 /* ── Bluetooth panel (bt.c) ──────────────────────────────── */
@@ -853,6 +992,8 @@ typedef struct {
     int lid_closed;
     int lid_blanked;
     int lid_seen;      /* a lid switch exists — the panel says so if it doesn't */
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_power_t;
 
 /* ── Game mode (game.c) ───────────────────────────────────── */
@@ -939,6 +1080,8 @@ typedef struct {
     unsigned long swap_used_kb, swap_total_kb;
 
     struct wl_event_source *timer;  /* 1 Hz, armed only while visible */
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
 } syn_taskmgr_t;
 
 /* ── News aggregator (news.c) ────────────────────────────── */
@@ -1016,6 +1159,12 @@ typedef struct {
     syn_news_item_t  fetched[NEWS_ITEMS_MAX];
     int              n_fetched;
     int              fetch_failed;
+    /* Pointer geometry, written by this panel's synui_render_*. */
+    syn_hit_t hit;
+    /* Row and time of the last left click — a double click opens the story,
+     * on the same 400ms window as the pickers and the titlebar. */
+    int       last_click_row;
+    uint32_t  last_click_ms;
 } syn_news_t;
 
 /* ── Keybinding (table-driven; syntax in config.c) ───────── */
@@ -2504,6 +2653,16 @@ struct syn_server {
         char out[SYN_WP_PEROUT_MAX][32];
         int  out_count;
         int  scope;
+
+        /* Pointer geometry, written by synui_render_wppick(). Covers the LIST
+         * only, not the preview pane beside it. */
+        syn_hit_t hit;
+        /* The row and time of the last left click, for the double-click that
+         * commits a pick — same 400ms window the titlebar and the desktop icons
+         * use, because a desktop with three different double-click speeds is
+         * three bugs waiting to be reported. */
+        int      last_click_row;
+        uint32_t last_click_ms;
     } wppick;
 
     /* Re-arming linux-wallpaperengine after a suspend or a monitor change —
@@ -2534,6 +2693,11 @@ struct syn_server {
         /* What was active when the panel opened, so Esc can undo the live
          * preview — arrowing onto an unreadable cursor is otherwise a trap. */
         char restore_theme[64];
+
+        /* Pointer geometry + double-click state, exactly as in wppick. */
+        syn_hit_t hit;
+        int       last_click_row;
+        uint32_t  last_click_ms;
     } curpick;
 
     /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
@@ -2811,6 +2975,11 @@ void dispcfg_toggle(syn_server_t *s);
  * (navigation/rotate/reorder); modified combos fall through to the bind
  * table. Returns 1 if the key was consumed. */
 int  dispcfg_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  dispcfg_motion(syn_server_t *s, double lx, double ly);
+int  dispcfg_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  dispcfg_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* 10-bit scanout. _set returns whether the backend accepted it; _probe fills
  * deep_color_capable. See the syn_output_t fields for why this is not HDR. */
 int  dispcfg_set_deep_color(syn_server_t *s, syn_output_t *o, int enable);
@@ -3030,6 +3199,10 @@ void cmdbar_show(syn_server_t *s);
 void cmdbar_ask_window(syn_server_t *s);
 void cmdbar_hide(syn_server_t *s);
 void cmdbar_key(syn_server_t *s, uint32_t keysym);
+/* The pointer contract's click-off half, and only that half: the bar is a
+ * prompt with nothing in it to point at, so there is no _motion and no
+ * _scroll. Returns 1 if the bar was open and took the click. */
+int  cmdbar_click(syn_server_t *s, double lx, double ly);
 void cmdbar_submit(syn_server_t *s);
 void overlay_toggle(syn_server_t *s);
 void overlay_update(syn_server_t *s);
@@ -3188,6 +3361,11 @@ void taskmgr_toggle(syn_server_t *s);
 /* Modal key handling while the panel is open, as in power_key: unmodified keys
  * are absorbed, Super+… still reaches the global binds. Returns 1 if handled. */
 int  taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  taskmgr_motion(syn_server_t *s, double lx, double ly);
+int  taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  taskmgr_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* One /proc + GPU poll into s->taskmgr. Public so the panel can resample
  * immediately after a sort or a kill instead of waiting for the next tick. */
 void taskmgr_sample(syn_server_t *s);
@@ -3202,6 +3380,11 @@ void news_hide(syn_server_t *s);
 void news_toggle(syn_server_t *s);
 /* Modal while visible; returns 1 if the key was consumed. */
 int  news_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  news_motion(syn_server_t *s, double lx, double ly);
+int  news_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  news_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* Age of an item as "3m"/"5h"/"2d", for the panel's right-hand column. */
 void news_age(time_t ts, char *buf, size_t n);
 /* Host of a URL ("lwn.net"), sans "www.". Empty for a URL we can't parse. */
@@ -3254,6 +3437,11 @@ void power_show(syn_server_t *s);
 void power_hide(syn_server_t *s);
 void power_toggle(syn_server_t *s);
 int  power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  power_motion(syn_server_t *s, double lx, double ly);
+int  power_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  power_scroll(syn_server_t *s, double lx, double ly, double delta);
 
 /* ── Clock & Time settings + calendar (clock.c) ──────────── */
 void clock_init(syn_server_t *s);
@@ -3264,6 +3452,11 @@ void clock_show(syn_server_t *s);
 void clock_hide(syn_server_t *s);
 void clock_toggle(syn_server_t *s);
 int  clock_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  clock_motion(syn_server_t *s, double lx, double ly);
+int  clock_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  clock_scroll(syn_server_t *s, double lx, double ly, double delta);
 const char *clock_row_label(int row);
 void clock_row_value(syn_server_t *s, int row, char *out, size_t n);
 void clock_local_string(syn_server_t *s, char *out, size_t n);
@@ -3274,6 +3467,11 @@ void calendar_show(syn_server_t *s);
 void calendar_hide(syn_server_t *s);
 void calendar_toggle(syn_server_t *s);
 int  calendar_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  calendar_motion(syn_server_t *s, double lx, double ly);
+int  calendar_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  calendar_scroll(syn_server_t *s, double lx, double ly, double delta);
 int  calendar_days_in_month(int year, int mon);
 int  calendar_first_weekday(int year, int mon);
 void synui_render_calendar(syn_server_t *s);
@@ -3284,6 +3482,11 @@ void filters_hide(syn_server_t *s);
 void filters_toggle(syn_server_t *s);
 /* Modal key handling while the panel is open, as in power_key. */
 int  filters_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  filters_motion(syn_server_t *s, double lx, double ly);
+int  filters_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  filters_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* Persisted strengths (~/.config/synui/filters.state), applied over the config
  * defaults at startup so a look tuned by eye survives a restart. */
 void filters_state_load(syn_server_t *s);
@@ -3324,6 +3527,11 @@ void widgets_show(syn_server_t *s);
 void widgets_hide(syn_server_t *s);
 void widgets_toggle(syn_server_t *s);
 int  widgets_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  widgets_motion(syn_server_t *s, double lx, double ly);
+int  widgets_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  widgets_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* The name synui-widgets knows this row by ("visualizer", "sysmon", …), or NULL
  * for the master row. This is the whole binding between the enum and the helper. */
 const char *widget_row_name(int row);
@@ -3358,6 +3566,11 @@ void sound_show(syn_server_t *s);
 void sound_hide(syn_server_t *s);
 void sound_toggle(syn_server_t *s);
 int  sound_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  sound_motion(syn_server_t *s, double lx, double ly);
+int  sound_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  sound_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_sound(syn_server_t *s);
 /* udev monitor: a device appearing or going away becomes a sound event. Both
  * are no-ops if udev is unavailable — a desktop with no device notifications is
@@ -3379,6 +3592,13 @@ int  ctlpanel_cat_from_name(const char *name);
 int  ctlpanel_tick(syn_server_t *s);
 /* Modal key handling while the panel is open, as in filters_key. */
 int  ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this header.
+ * Hovering the sidebar moves focus there as well as selecting, because the two
+ * columns are a menu and its submenu — see ctlpanel.c. */
+int  ctlpanel_motion(syn_server_t *s, double lx, double ly);
+int  ctlpanel_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  ctlpanel_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* Row text. value[] is filled with the row's current state ("on"/"off"/"GPU"),
  * or left empty for a row that only opens a panel and holds no state itself. */
 const char *ctlpanel_row_label(int row);
@@ -3435,6 +3655,11 @@ void theme_show(syn_server_t *s);
 void theme_hide(syn_server_t *s);
 void theme_toggle(syn_server_t *s);
 int  theme_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  theme_motion(syn_server_t *s, double lx, double ly);
+int  theme_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  theme_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_thememgr(syn_server_t *s);
 
 /* ── Clipboard history (clipboard.c) ─────────────────────── */
@@ -3445,6 +3670,11 @@ void clipboard_hide(syn_server_t *s);
 void clipboard_toggle(syn_server_t *s);
 void clipboard_clear(syn_server_t *s);
 int  clipboard_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  clipboard_motion(syn_server_t *s, double lx, double ly);
+int  clipboard_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  clipboard_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_clipboard(syn_server_t *s);
 
 /* ── Alt+Tab switcher overlay (render.c, driven by input.c) ──
@@ -3610,6 +3840,11 @@ const char *wppick_scope_label(syn_server_t *s);
 void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
 int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  wppick_motion(syn_server_t *s, double lx, double ly);
+int  wppick_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  wppick_scroll(syn_server_t *s, double lx, double ly, double delta);
 
 /* Restart linux-wallpaperengine shortly from now, if wpengine.state says one
  * should be running. Coalescing and no-op-when-idle both live inside, so it is
@@ -3655,6 +3890,11 @@ int  curpick_total(syn_server_t *s);
 /* Label + subtitle for one row; cursor.c owns the text, render.c draws it. */
 void curpick_row(syn_server_t *s, int row, const char **label, const char **desc);
 int  curpick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  curpick_motion(syn_server_t *s, double lx, double ly);
+int  curpick_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  curpick_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_curpick(syn_server_t *s);
 
 /* ── icons.c ─────────────────────────────────────────────── */

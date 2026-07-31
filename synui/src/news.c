@@ -1179,6 +1179,69 @@ static int news_search_key(syn_server_t *s, xkb_keysym_t sym)
     return 1;
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. A list of headlines is the one
+ * thing on this desktop that already behaves like a web page, so it behaves
+ * like one: hovering highlights, one click selects, and a double click opens
+ * the story — the same 400ms window the pickers use.
+ *
+ * Not single-click-to-open. Launching a browser is the most expensive thing any
+ * of these panels can do, and doing it on a stray click while scrolling a feed
+ * would be the worst possible time for it. */
+
+int news_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_news_t *n = &s->news;
+    if (!n->visible) return 0;
+    if (n->searching) return 1;      /* the search box owns the panel */
+
+    int i = hit_index_at(&n->hit, lx, ly);
+    if (i < 0 || i >= n->n_view || i == n->selected) return 1;
+    n->selected = i;
+    synui_render_news(s);
+    return 1;
+}
+
+int news_click(syn_server_t *s, double lx, double ly, uint32_t button,
+               uint32_t time_msec)
+{
+    syn_news_t *n = &s->news;
+    if (!n->visible) return 0;
+
+    if (!hit_in_panel(&n->hit, lx, ly)) {
+        news_hide(s);
+        return 1;
+    }
+
+    if (button != BTN_LEFT || n->searching) return 1;
+
+    int i = hit_index_at(&n->hit, lx, ly);
+    if (i < 0 || i >= n->n_view) return 1;   /* chrome */
+
+    bool dbl = (n->last_click_row == i) &&
+               (time_msec - n->last_click_ms < 400);
+    n->last_click_row = dbl ? -1 : i;
+    n->last_click_ms  = time_msec;
+
+    n->selected = i;
+    if (dbl) news_open(s, 0, 1);             /* what Enter does */
+    else     synui_render_news(s);
+    return 1;
+}
+
+int news_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    syn_news_t *n = &s->news;
+    if (!n->visible) return 0;
+    if (delta == 0) return 1;
+
+    news_move(n, delta > 0 ? 3 : -3);
+    synui_render_news(s);
+    return 1;
+}
+
 int news_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     syn_news_t *n = &s->news;

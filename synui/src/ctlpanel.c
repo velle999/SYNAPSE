@@ -871,7 +871,7 @@ static void ctlpanel_activate(syn_server_t *s)
 
 /* Clamp the shortcuts scroll to the list — the panel draws CTL_SHORTCUT_ROWS
  * of it at a time, so scrolling past the end would show empty space. */
-static void ctlpanel_scroll(syn_server_t *s, int dir)
+static void ctlpanel_scroll_by(syn_server_t *s, int dir)
 {
     syn_ctl_shortcut_t sc[CTL_SHORTCUTS_MAX];
     int n = ctlpanel_shortcuts(s, sc, CTL_SHORTCUTS_MAX);
@@ -894,6 +894,129 @@ static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
     transparency_set_opacity(s, s->config.active_opacity + dir * 0.05f);
     snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
              "transparency %d%%", (int)(s->config.active_opacity * 100 + 0.5f));
+}
+
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * The panel a user is most likely to open first was the one with no pointer at
+ * all: every row here says "Enter activate" and none of them could be clicked.
+ *
+ * The contract is the one every panel in synui now follows, so that knowing one
+ * of them is knowing all of them:
+ *
+ *   - Moving over a row selects it, and over the sidebar selects the category
+ *     *and* moves focus there — hovering the categories while focus is stuck in
+ *     the rows would highlight a column that the keys are not driving, which is
+ *     precisely the confusion Tab exists to avoid.
+ *   - A left click does what Enter does on that row. Not "select, then press
+ *     Enter": a settings row that needs two gestures to flip is the reason
+ *     people say a panel is keyboard-only.
+ *   - A click anywhere off the panel closes it, exactly like Esc from the
+ *     category column.
+ *   - The wheel scrolls the shortcuts list and moves the selection everywhere
+ *     else, which is the same split Up/Down already have.
+ *
+ * Everything routes through ctlpanel_activate()/ctlpanel_move(), the functions
+ * the keys call. A pointer path with its own copy of "what this row does" is a
+ * second definition of the item table, and the whole point of this panel is
+ * that there is only one.
+ */
+
+int ctlpanel_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+    if (!cp->visible) return 0;
+
+    int cat = hit_row_at(&cp->hit, lx, ly);
+    if (cat >= 0 && cat < CTL_CAT_COUNT) {
+        if (cat == cp->cat && cp->focus == CTL_FOCUS_CATS) return 1;
+        ctlpanel_set_cat(s, cat);
+        cp->focus = CTL_FOCUS_CATS;
+        synui_render_ctlpanel(s);
+        return 1;
+    }
+
+    int i = hit_row_at(&cp->hit_items, lx, ly);
+    if (i >= 0) {
+        if (i == cp->item && cp->focus == CTL_FOCUS_ITEMS) return 1;
+        cp->item  = i;
+        cp->focus = CTL_FOCUS_ITEMS;
+        synui_render_ctlpanel(s);
+    }
+    return 1;
+}
+
+int ctlpanel_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+    if (!cp->visible) return 0;
+
+    if (!hit_in_panel(&cp->hit, lx, ly)) {
+        ctlpanel_hide(s);
+        return 1;
+    }
+
+    /* Put the cursor where the pointer is first, so the activation below acts on
+     * the row that was pointed at even if no motion event preceded this press
+     * (a tap, a tablet, a warped cursor). */
+    ctlpanel_motion(s, lx, ly);
+
+    if (button != BTN_LEFT) return 1;   /* swallowed: the panel is modal */
+
+    /* In the sidebar a click opens the category — the same "step into the
+     * submenu" Enter and Right mean there. Only in the row pane does it fire. */
+    if (hit_row_at(&cp->hit, lx, ly) >= 0) {
+        ctlpanel_focus_items(s);
+        synui_render_ctlpanel(s);
+        return 1;
+    }
+
+    if (hit_row_at(&cp->hit_items, lx, ly) >= 0) {
+        ctlpanel_activate(s);
+        /* A row that handed off has already hidden this panel and opened
+         * another; re-rendering would draw this one back over the top of it. */
+        if (cp->visible) synui_render_ctlpanel(s);
+    }
+    return 1;
+}
+
+int ctlpanel_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+    if (!cp->visible) return 0;
+    if (delta == 0) return 1;
+
+    int dir = delta > 0 ? 1 : -1;
+
+    /* Which column the wheel drives is decided by where the POINTER is, not by
+     * which column has keyboard focus. On a two-column panel those are routinely
+     * different — focus follows Tab, the pointer follows the hand — and a wheel
+     * that scrolled the far column while sitting over this one would be the
+     * single most confusing thing in the panel. Off the panel entirely (the
+     * chrome, the footer) the focused column is the only sensible answer. */
+    int over_cats = hit_row_at(&cp->hit, lx, ly) >= 0;
+    int over_rows = hit_in_panel(&cp->hit_items, lx, ly) && !over_cats;
+
+    if (over_cats) {
+        ctlpanel_set_cat(s, cp->cat + dir);
+        cp->focus = CTL_FOCUS_CATS;
+    } else if (cp->cat == CTL_CAT_SHORTCUTS && over_rows) {
+        /* The shortcuts pane is one long list with no rows to step through, so
+         * there the wheel is the scroll — the same thing Up/Down do in it. */
+        ctlpanel_scroll_by(s, dir * 3);
+    } else if (over_rows) {
+        cp->focus = CTL_FOCUS_ITEMS;
+        ctlpanel_move(s, dir);
+    } else if (cp->focus == CTL_FOCUS_ITEMS && ctlpanel_item_count(s) == 0) {
+        ctlpanel_scroll_by(s, dir * 3);
+    } else {
+        ctlpanel_move(s, dir);
+    }
+
+    synui_render_ctlpanel(s);
+    return 1;
 }
 
 int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
@@ -929,13 +1052,13 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     case XKB_KEY_Up:
     case XKB_KEY_k:
-        if (list_only) ctlpanel_scroll(s, -1);
+        if (list_only) ctlpanel_scroll_by(s, -1);
         else           ctlpanel_move(s, -1);
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_Down:
     case XKB_KEY_j:
-        if (list_only) ctlpanel_scroll(s, +1);
+        if (list_only) ctlpanel_scroll_by(s, +1);
         else           ctlpanel_move(s, +1);
         synui_render_ctlpanel(s);
         return 1;
@@ -981,11 +1104,11 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         return 1;
 
     case XKB_KEY_Prior:     /* Page Up — always the shortcuts scroll */
-        ctlpanel_scroll(s, -CTL_SHORTCUT_ROWS / 2);
+        ctlpanel_scroll_by(s, -CTL_SHORTCUT_ROWS / 2);
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_Next:      /* Page Down */
-        ctlpanel_scroll(s, +CTL_SHORTCUT_ROWS / 2);
+        ctlpanel_scroll_by(s, +CTL_SHORTCUT_ROWS / 2);
         synui_render_ctlpanel(s);
         return 1;
 

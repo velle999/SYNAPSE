@@ -5,16 +5,21 @@ import ".."
 /*
  * The bar's right-click menu — per-monitor feature toggles.
  *
- * Dismissal is a pointer-leave timer plus an explicit Done row, NOT a
- * click-anywhere grab. A menu that grabs the pointer globally would have to
- * cover the screen with an input region, and this one sits on a bar that is
- * often right next to whatever the user actually meant to click. Leaving it
- * open while the pointer is on it also means several toggles can be flipped in
- * one visit, which is the common case when fitting a narrow monitor.
+ * DISMISSAL IS A POPUP GRAB. `grabFocus` makes this an xdg_popup with a real
+ * grab, which is the mechanism every menu on every desktop uses and the one the
+ * tray menus here (QsMenuAnchor) have always had: the COMPOSITOR notices a click
+ * outside and dismisses, so there is no screen-covering input region to get
+ * wrong, and the click that dismissed it does not also land on whatever was
+ * underneath. It brings keyboard focus with it, which is how Escape can close
+ * the menu — and it is given back the moment the menu goes away, so the "don't
+ * steal keys from the focused window" objection this file used to carry does
+ * not apply: the menu only holds them while it is up and you opened it.
  *
- * It does not take keyboard focus. The bar is pointer-driven and stealing keys
- * from the focused window to run a menu nobody navigates with arrows would be
- * a regression for no gain.
+ * The pointer-leave timer is kept as a BACKSTOP, not as the mechanism. It is
+ * what closes the menu if the grab is ever refused, which would otherwise leave
+ * a menu with no way out but the Done row — the complaint that got this fixed.
+ * Toggles still leave the menu open on purpose: fitting a narrow monitor
+ * usually means turning off two or three things in one visit.
  */
 PopupWindow {
     id: menu
@@ -44,6 +49,15 @@ PopupWindow {
     color: "transparent"
     visible: false
 
+    // See the header: this is what makes a click anywhere else close the menu.
+    grabFocus: true
+
+    // The compositor broke the grab (a click outside, a Super+key, a window
+    // taking focus). The window is already down; this is what puts the QML
+    // property back in step with it, or the next openAt() would set visible to
+    // a value it already held and map nothing.
+    onClosed: menu.visible = false
+
     function openAt(x) {
         menu.anchorX = x
         menu.visible = true
@@ -68,6 +82,14 @@ PopupWindow {
         color: Theme.popupBg
         border.color: Theme.magenta
         border.width: 1
+
+        // Escape closes, now that the grab brings keyboard focus with it. Focus
+        // is taken when the menu maps rather than declared once: a hidden window
+        // has no focus to hold, so an unconditional `focus: true` would be
+        // claimed at load and never re-claimed on the second open.
+        focus: true
+        Keys.onEscapePressed: menu.visible = false
+        onVisibleChanged: if (visible) forceActiveFocus()
 
         MouseArea {
             anchors.fill: parent

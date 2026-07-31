@@ -503,9 +503,15 @@ void synui_render_cmdbar(syn_server_t *s)
 
     if (!s->cmdbar.visible) {
         wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, false);
+        hit_clear(&s->cmdbar.hit);
         return;
     }
     wlr_scene_node_set_enabled(&s->cmdbar_ui.tree->node, true);
+
+    /* Pointer geometry. No rows: the bar is a prompt, not a list — the only
+     * thing a pointer has to say about it is "not this", which is the click
+     * off it that closes it. */
+    hit_set_panel(&s->cmdbar.hit, bx, by, bw, bh);
     wlr_scene_node_raise_to_top(&s->cmdbar_ui.tree->node);
 
     /* Background */
@@ -770,6 +776,7 @@ void synui_render_dispcfg(syn_server_t *s)
 
     if (!d->visible) {
         wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, false);
+        hit_clear(&d->hit);
         return;
     }
 
@@ -810,6 +817,13 @@ void synui_render_dispcfg(syn_server_t *s)
     wlr_scene_node_set_position(&s->dispcfg_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->dispcfg_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->dispcfg_ui.tree->node);
+
+    /* Pointer geometry: the monitor rows. The mini-map cells are recorded
+     * separately as they are drawn — they sit at grid positions that can have
+     * holes in them, so they are not a row grid and there is nothing to be
+     * gained by pretending otherwise. */
+    hit_set_panel(&d->hit, px, py, pw, ph);
+    hit_set_rows(&d->hit, 12, list_top - 18, pw - 24, 28, d->count);
 
     /* Background + accent; the panel height depends on the monitor count,
      * so resize them on every render (hotplug can change the count). */
@@ -858,6 +872,11 @@ void synui_render_dispcfg(syn_server_t *s)
             cairo_set_source_rgba(cr, 0.14, 0.14, 0.20, 1.0);
         cairo_rectangle(cr, cx, cy, cell_w, cell_h);
         cairo_fill(cr);
+
+        /* Remember the cell in LAYOUT coords so a click can pick the monitor
+         * by pointing at the picture of it, which is the only part of this
+         * panel a pointer would go for first. */
+        d->cell[i] = (struct wlr_box){ px + cx, py + cy, cell_w, cell_h };
 
         cairo_set_line_width(cr, sel ? 2 : 1);
         if (sel)
@@ -1025,6 +1044,7 @@ void synui_render_wppick(syn_server_t *s)
 {
     if (!s->wppick.visible) {
         wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, false);
+        hit_clear(&s->wppick.hit);
         return;
     }
 
@@ -1050,6 +1070,13 @@ void synui_render_wppick(syn_server_t *s)
     wlr_scene_node_set_position(&s->wppick_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->wppick_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->wppick_ui.tree->node);
+
+    /* Pointer geometry. Only the LIST is hit-tested, not the preview pane
+     * beside it: the preview is a picture of the selection, and clicking a
+     * picture of the thing you already picked cannot mean anything. */
+    hit_set_panel(&s->wppick.hit, px, py, pw, ph);
+    hit_set_rows(&s->wppick.hit, 12, top, list_w - 24, row_h, shown);
+    hit_set_first(&s->wppick.hit, s->wppick.scroll);
 
     /* More opaque than the 0.94 the sparser panels use: the browse list puts a
      * small-type path under every row, and at 0.94 whatever is behind the panel
@@ -1267,6 +1294,7 @@ void synui_render_power(syn_server_t *s)
 
     if (!p->visible) {
         wlr_scene_node_set_enabled(&s->power_ui.tree->node, false);
+        hit_clear(&p->hit);
         return;
     }
 
@@ -1281,6 +1309,12 @@ void synui_render_power(syn_server_t *s)
     wlr_scene_node_set_position(&s->power_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->power_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->power_ui.tree->node);
+
+    /* Pointer geometry: the panel rect, and a row grid matching the
+     * selection highlight drawn below, so the row that lights up under the
+     * cursor is the row a click lands on. */
+    hit_set_panel(&p->hit, px, py, pw, ph);
+    hit_set_rows(&p->hit, 12, top -16, pw - 24, row_h, POWER_ROW_COUNT);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -1455,6 +1489,7 @@ void synui_render_curpick(syn_server_t *s)
 {
     if (!s->curpick.visible) {
         wlr_scene_node_set_enabled(&s->curpick_ui.tree->node, false);
+        hit_clear(&s->curpick.hit);
         return;
     }
 
@@ -1473,6 +1508,11 @@ void synui_render_curpick(syn_server_t *s)
     wlr_scene_node_set_position(&s->curpick_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->curpick_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->curpick_ui.tree->node);
+
+    /* Pointer geometry, as in the wallpaper picker above. */
+    hit_set_panel(&s->curpick.hit, px, py, pw, ph);
+    hit_set_rows(&s->curpick.hit, 12, top, pw - 24, row_h, shown);
+    hit_set_first(&s->curpick.hit, s->curpick.scroll);
 
     /* Same near-opaque background as the wallpaper picker, and for the same
      * reason: every row carries a small-type path underneath it. */
@@ -1634,6 +1674,7 @@ void synui_render_filters(syn_server_t *s)
 
     if (!fl->visible) {
         wlr_scene_node_set_enabled(&s->filters_ui.tree->node, false);
+        hit_clear(&fl->hit);
         return;
     }
 
@@ -1656,6 +1697,12 @@ void synui_render_filters(syn_server_t *s)
     wlr_scene_node_set_position(&s->filters_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->filters_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->filters_ui.tree->node);
+
+    /* Pointer geometry: the panel rect, and a row grid matching the
+     * selection highlight drawn below, so the row that lights up under the
+     * cursor is the row a click lands on. */
+    hit_set_panel(&fl->hit, px, py, pw, ph);
+    hit_set_rows(&fl->hit, 12, top -18, pw - 24, row_h, rows);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -1788,6 +1835,7 @@ void synui_render_widgets(syn_server_t *s)
 
     if (!w->visible) {
         wlr_scene_node_set_enabled(&s->widgets_ui.tree->node, false);
+        hit_clear(&w->hit);
         return;
     }
 
@@ -1802,6 +1850,12 @@ void synui_render_widgets(syn_server_t *s)
     wlr_scene_node_set_position(&s->widgets_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->widgets_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->widgets_ui.tree->node);
+
+    /* Pointer geometry: the panel rect, and a row grid matching the
+     * selection highlight drawn below, so the row that lights up under the
+     * cursor is the row a click lands on. */
+    hit_set_panel(&w->hit, px, py, pw, ph);
+    hit_set_rows(&w->hit, 12, top -18, pw - 24, row_h, WIDGET_ROW_COUNT);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -1905,6 +1959,7 @@ void synui_render_sound(syn_server_t *s)
 
     if (!snd->visible) {
         wlr_scene_node_set_enabled(&s->sound_ui.tree->node, false);
+        hit_clear(&snd->hit);
         return;
     }
 
@@ -1922,6 +1977,12 @@ void synui_render_sound(syn_server_t *s)
     wlr_scene_node_set_position(&s->sound_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->sound_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->sound_ui.tree->node);
+
+    /* Pointer geometry: the panel rect, and a row grid matching the
+     * selection highlight drawn below, so the row that lights up under the
+     * cursor is the row a click lands on. */
+    hit_set_panel(&snd->hit, px, py, pw, ph);
+    hit_set_rows(&snd->hit, 12, top -16, pw - 24, row_h, SOUND_ROW_COUNT);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2096,6 +2157,7 @@ void synui_render_clock(syn_server_t *s)
 
     if (!c->visible) {
         wlr_scene_node_set_enabled(&s->clock_ui.tree->node, false);
+        hit_clear(&c->hit);
         return;
     }
 
@@ -2110,6 +2172,11 @@ void synui_render_clock(syn_server_t *s)
     wlr_scene_node_set_position(&s->clock_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->clock_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->clock_ui.tree->node);
+
+    /* Pointer geometry. Only the three SETTING rows are hit-tested; the world
+     * clocks below them are a readout, not a list you can put a cursor on. */
+    hit_set_panel(&c->hit, px, py, pw, ph);
+    hit_set_rows(&c->hit, 12, top - 18, pw - 24, row_h, CLOCK_SETTING_ROWS);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2215,6 +2282,7 @@ void synui_render_calendar(syn_server_t *s)
 
     if (!cal->visible) {
         wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
+        hit_clear(&cal->hit);
         return;
     }
 
@@ -2237,6 +2305,13 @@ void synui_render_calendar(syn_server_t *s)
     wlr_scene_node_set_position(&s->cal_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->cal_ui.tree->node);
+
+    /* Pointer geometry. The calendar is the one panel whose "rows" are a 2-D
+     * grid, so the row band is the full seven cells wide and clock.c divides it
+     * back into columns — row_w / 7 is the cell width, which keeps the two
+     * files from each carrying their own copy of the number. */
+    hit_set_panel(&cal->hit, px, py, pw, ph);
+    hit_set_rows(&cal->hit, grid_x, grid_y + 12, 7 * cell_w, cell_h, 6);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2346,6 +2421,8 @@ void synui_render_ctlpanel(syn_server_t *s)
 
     if (!cp->visible) {
         wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
+        hit_clear(&cp->hit);
+        hit_clear(&cp->hit_items);
         return;
     }
 
@@ -2364,6 +2441,16 @@ void synui_render_ctlpanel(syn_server_t *s)
     wlr_scene_node_set_position(&s->ctlpanel_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->ctlpanel_ui.tree->node);
+
+    /* Pointer geometry. The sidebar's grid is fixed; the row pane's row count
+     * depends on the category, so it is filled in down in the branch that draws
+     * it — the same place the count is computed for the draw. The x/width of
+     * each grid are the highlight rectangles below, so what lights up under the
+     * pointer is exactly what a click lands on. */
+    hit_set_panel(&cp->hit, px, py, pw, ph);
+    hit_set_rows(&cp->hit, 10, CTL_TOP - 16, CTL_SIDEBAR - 22,
+                 CTL_ROW_H, CTL_CAT_COUNT);
+    hit_set_panel(&cp->hit_items, px, py, pw, ph);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2497,6 +2584,13 @@ void synui_render_ctlpanel(syn_server_t *s)
         int nrows = ctlpanel_cat_items(cp->cat, rows, CTL_CAT_ITEMS_MAX);
         int cur   = ctlpanel_selected_row(s);
 
+        /* The pane's rows are clickable; the shortcuts list above is not (it is
+         * a read-only view of the bind table), so it leaves the grid empty and
+         * only the wheel does anything over it. */
+        hit_set_rows(&cp->hit_items, CTL_COL_RIGHT - 12, CTL_TOP - 16,
+                     (CTL_SETTING_V + 12) - (CTL_COL_RIGHT - 12),
+                     CTL_ROW_H, nrows);
+
         for (int i = 0; i < nrows; i++) {
             int ry  = CTL_TOP + i * CTL_ROW_H;
             int row = rows[i];
@@ -2609,6 +2703,7 @@ void synui_render_thememgr(syn_server_t *s)
 
     if (!tm->visible) {
         wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, false);
+        hit_clear(&tm->hit);
         return;
     }
 
@@ -2637,6 +2732,14 @@ void synui_render_thememgr(syn_server_t *s)
     wlr_scene_node_set_position(&s->thememgr_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->thememgr_ui.tree->node);
+
+    /* Pointer geometry. `first` is derived from the selection here and stored
+     * nowhere else, so the hit test would have no way to recompute it — this is
+     * the case syn_hit_t::first exists for. */
+    hit_set_panel(&tm->hit, px, py, pw, ph);
+    hit_set_rows(&tm->hit, THM_PAD - 10, THM_TOP - 26,
+                 pw - 2 * (THM_PAD - 10), THM_ROW_H, rows);
+    hit_set_first(&tm->hit, first);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2792,6 +2895,7 @@ void synui_render_clipboard(syn_server_t *s)
 
     if (!c->visible) {
         wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
+        hit_clear(&c->hit);
         return;
     }
 
@@ -2808,6 +2912,13 @@ void synui_render_clipboard(syn_server_t *s)
     wlr_scene_node_set_position(&s->clip_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->clip_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->clip_ui.tree->node);
+
+    /* Pointer geometry. The scroll clamp below decides which entry the top row
+     * is, so hit_set_first() is called down there rather than here. */
+    hit_set_panel(&c->hit, px, py, pw, ph);
+    hit_set_rows(&c->hit, CLIP_PAD - 8, CLIP_TOP - 15,
+                 pw - 2 * (CLIP_PAD - 8), CLIP_ROW_H,
+                 c->count < CLIP_ROWS ? c->count : CLIP_ROWS);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2840,6 +2951,7 @@ void synui_render_clipboard(syn_server_t *s)
     int first = c->scroll;
     if (first > c->count - CLIP_ROWS) first = c->count - CLIP_ROWS;
     if (first < 0) first = 0;
+    hit_set_first(&c->hit, first);
 
     if (c->count == 0) {
         cairo_set_font_size(cr, 13);
@@ -3346,6 +3458,7 @@ void synui_render_taskmgr(syn_server_t *s)
 
     if (!t->visible) {
         wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, false);
+        hit_clear(&t->hit);
         return;
     }
 
@@ -3365,6 +3478,13 @@ void synui_render_taskmgr(syn_server_t *s)
     wlr_scene_node_set_position(&s->taskmgr_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->taskmgr_ui.tree->node);
+
+    /* Pointer geometry: the process table. */
+    hit_set_panel(&t->hit, px, py, pw, ph);
+    hit_set_rows(&t->hit, 12, table_top, pw - 24, TM_ROW_H,
+                 t->n - t->scroll < TASKMGR_ROWS ? t->n - t->scroll
+                                                 : TASKMGR_ROWS);
+    hit_set_first(&t->hit, t->scroll);
 
     /* Denser than the other panels, so it is more opaque than their 0.94: at
      * that alpha the wallpaper (the Matrix one animates) and the welcome
@@ -3617,6 +3737,7 @@ void synui_render_news(syn_server_t *s)
 
     if (!n->visible) {
         wlr_scene_node_set_enabled(&s->news_ui.tree->node, false);
+        hit_clear(&n->hit);
         return;
     }
 
@@ -3630,6 +3751,13 @@ void synui_render_news(syn_server_t *s)
     wlr_scene_node_set_position(&s->news_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->news_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->news_ui.tree->node);
+
+    /* Pointer geometry: the headline rows. */
+    hit_set_panel(&n->hit, px, py, pw, ph);
+    hit_set_rows(&n->hit, 12, NW_TOP, pw - 24, NW_ROW_H,
+                 n->n_view - n->scroll < NEWS_ROWS ? n->n_view - n->scroll
+                                                   : NEWS_ROWS);
+    hit_set_first(&n->hit, n->scroll);
 
     /* As opaque as the task manager, and for the same reason: this is a dense
      * table of small type, and at 0.94 the (animated) wallpaper reads through

@@ -333,6 +333,79 @@ static void filters_page_cycle(syn_server_t *s, int dir)
     synui_render_filters(s);
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. This panel's Enter is a second
+ * spelling of Esc, so a left click is Right (step the value on) and a right
+ * click is Left — clicking a slider row to close the panel would be nothing but
+ * a way to lose your place.
+ *
+ * Both pages share these: the row cursor they move is chosen by fl->page, the
+ * same way filters_key does it, so switching page cannot leave the pointer
+ * driving the other page's selection. */
+
+/* The selected-row cursor for whichever page is up. */
+static int *filters_cursor(syn_server_t *s)
+{
+    return s->filters.page == FILTER_PAGE_UIFX ? &s->filters.uifx_selected
+                                               : &s->filters.selected;
+}
+
+static void filters_page_adjust(syn_server_t *s, int dir)
+{
+    if (s->filters.page == FILTER_PAGE_UIFX) uifx_adjust(s, dir);
+    else                                     filters_adjust(s, dir);
+}
+
+int filters_motion(syn_server_t *s, double lx, double ly)
+{
+    if (!s->filters.visible) return 0;
+
+    int row = hit_row_at(&s->filters.hit, lx, ly);
+    int *cur = filters_cursor(s);
+    if (row < 0 || row == *cur) return 1;
+    *cur = row;
+    synui_render_filters(s);
+    return 1;
+}
+
+int filters_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    if (!s->filters.visible) return 0;
+
+    if (!hit_in_panel(&s->filters.hit, lx, ly)) {
+        filters_hide(s);
+        return 1;
+    }
+
+    filters_motion(s, lx, ly);            /* act on the row pointed at */
+
+    if (hit_row_at(&s->filters.hit, lx, ly) < 0) return 1;   /* chrome */
+    if (button != BTN_LEFT && button != BTN_RIGHT) return 1;
+
+    filters_page_adjust(s, button == BTN_LEFT ? +1 : -1);
+    synui_render_filters(s);
+    return 1;
+}
+
+int filters_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->filters.visible) return 0;
+    if (delta == 0) return 1;
+
+    int rows = s->filters.page == FILTER_PAGE_UIFX ? UIFX_ROW_COUNT
+                                                   : FILTER_ROW_COUNT;
+    int *cur = filters_cursor(s);
+    int next = *cur + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= rows) return 1;   /* stop at the ends, as Up/Down do */
+    *cur = next;
+    synui_render_filters(s);
+    return 1;
+}
+
 int filters_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->filters.visible) return 0;

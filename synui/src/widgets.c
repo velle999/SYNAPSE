@@ -215,6 +215,61 @@ void widgets_toggle(syn_server_t *s)
     else                    widgets_show(s);
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h. Enter acts on the row here rather
+ * than closing, so a left click is Enter: every row is an on/off and clicking
+ * one flips it, which is the only thing a click on a checkbox has ever meant. */
+
+int widgets_motion(syn_server_t *s, double lx, double ly)
+{
+    if (!s->widgets.visible) return 0;
+
+    int row = hit_row_at(&s->widgets.hit, lx, ly);
+    if (row < 0 || row == s->widgets.selected) return 1;
+    s->widgets.selected = row;
+    synui_render_widgets(s);
+    return 1;
+}
+
+int widgets_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)time_msec;   /* only the pickers need it, for their double click */
+    if (!s->widgets.visible) return 0;
+
+    if (!hit_in_panel(&s->widgets.hit, lx, ly)) {
+        widgets_hide(s);
+        return 1;
+    }
+
+    widgets_motion(s, lx, ly);
+
+    if (button != BTN_LEFT) return 1;
+    if (hit_row_at(&s->widgets.hit, lx, ly) < 0) return 1;   /* chrome */
+
+    /* Same refresh the key path does first, and for the same reason: the group
+     * row decides which way to flip from the live state, so a change made in a
+     * terminal has to be in hand before it does. */
+    widgets_state_refresh(s);
+    widgets_activate(s);
+    synui_render_widgets(s);
+    return 1;
+}
+
+int widgets_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    if (!s->widgets.visible) return 0;
+    if (delta == 0) return 1;
+
+    int next = s->widgets.selected + (delta > 0 ? 1 : -1);
+    if (next < 0 || next >= WIDGET_ROW_COUNT) return 1;
+    s->widgets.selected = next;
+    synui_render_widgets(s);
+    return 1;
+}
+
 int widgets_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->widgets.visible) return 0;

@@ -540,6 +540,70 @@ static void taskmgr_ask_kill(syn_server_t *s, syn_tm_confirm_t what)
     t->status[0] = '\0';
 }
 
+/* ── Pointer ─────────────────────────────────────────────────
+ *
+ * See the panel pointer contract in synui.h — including the rule that a panel
+ * with a destructive row does not put it on a click. THIS IS THAT PANEL. x and
+ * Shift+X kill processes and they stay on the keyboard, where they are spelled
+ * out and confirmed; a click here picks the process and nothing more. A mouse
+ * that could SIGKILL something by being clicked twice near the wrong row is not
+ * a feature anybody asked for.
+ *
+ * A click while a kill is pending answers nothing: the panel is asking y/n and
+ * a click is neither, so it is swallowed. Same reason the key handler refuses
+ * everything but y/n there. */
+
+int taskmgr_motion(syn_server_t *s, double lx, double ly)
+{
+    syn_taskmgr_t *t = &s->taskmgr;
+    if (!t->visible) return 0;
+    if (t->confirm != TM_CONFIRM_NONE) return 1;
+
+    int i = hit_index_at(&t->hit, lx, ly);
+    if (i < 0 || i >= t->n || i == t->selected) return 1;
+    t->selected = i;
+    t->sel_pid  = t->procs[i].pid;
+    synui_render_taskmgr(s);
+    return 1;
+}
+
+int taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                  uint32_t time_msec)
+{
+    (void)button; (void)time_msec;
+    syn_taskmgr_t *t = &s->taskmgr;
+    if (!t->visible) return 0;
+
+    if (!hit_in_panel(&t->hit, lx, ly)) {
+        /* A pending kill has to be answered, not clicked away — the same reason
+         * the Bluetooth panel refuses to close under a pairing prompt. Cancel
+         * it, which is the safe reading of "the user looked somewhere else". */
+        if (t->confirm != TM_CONFIRM_NONE) {
+            t->confirm = TM_CONFIRM_NONE;
+            snprintf(t->status, sizeof(t->status), "cancelled");
+            synui_render_taskmgr(s);
+            return 1;
+        }
+        taskmgr_hide(s);
+        return 1;
+    }
+    return taskmgr_motion(s, lx, ly);
+}
+
+int taskmgr_scroll(syn_server_t *s, double lx, double ly, double delta)
+{
+    (void)lx; (void)ly;
+    syn_taskmgr_t *t = &s->taskmgr;
+    if (!t->visible) return 0;
+    if (delta == 0 || t->confirm != TM_CONFIRM_NONE) return 1;
+
+    /* taskmgr_move() drags the window along with the selection, so there is one
+     * notion of where the table is rather than two that can disagree. */
+    taskmgr_move(s, delta > 0 ? 3 : -3);
+    synui_render_taskmgr(s);
+    return 1;
+}
+
 int taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     syn_taskmgr_t *t = &s->taskmgr;
