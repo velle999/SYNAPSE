@@ -2485,6 +2485,16 @@ struct syn_server {
     atomic_int      ai_stopping;
     int             ai_disabled;        /* --no-ai: AI thread never starts */
 
+    /* Set when SYNUI_RUNNING was ALREADY in the environment at startup, i.e.
+     * this synui is nested inside another one (the test rig, a headless run).
+     * Recorded before synui_init() sets that variable for our own children.
+     *
+     * It gates anything that reaches OUTSIDE this compositor into shared
+     * session state: a nested synui shares the session D-Bus with the live
+     * desktop, so pushing our socket name into the activation environment
+     * would repoint the real desktop's services at the nested display. */
+    int             nested;
+
     /* --greeter: run as the greetd login greeter. Draws the same panel as the
      * lock screen (lock.c), but Enter hands the password to greetd to start the
      * session instead of unlocking one. See greeter.c. */

@@ -102,6 +102,16 @@ export ASAN_OPTIONS="protect_shadow_gap=0:halt_on_error=1:abort_on_error=1:print
 
 unset DISPLAY WAYLAND_DISPLAY
 
+# Declare the rig nested, so synui_run() skips the session-wide setup that has
+# no business running from a test: it pushes WAYLAND_DISPLAY into the D-Bus
+# activation environment, and this rig shares the session bus with whatever
+# desktop is logged in — an unguarded run would repoint that desktop's
+# activated services at the throwaway socket below. Set explicitly rather than
+# relied on: it is inherited when the suite is run from a terminal inside a
+# synui session, but NOT when it is run from a bare TTY, and the rig should
+# behave the same either way.
+export SYNUI_RUNNING=1
+
 # ── 1. Boot ────────────────────────────────────────────────
 "$SYNUI" >"$LOG" 2>&1 &
 SYNUI_PID=$!

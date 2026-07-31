@@ -1343,6 +1343,11 @@ static void server_new_idle_inhibitor(struct wl_listener *listener, void *data)
 /* ── Server init ─────────────────────────────────────────── */
 int synui_init(syn_server_t *s)
 {
+    /* Read BEFORE the setenv below overwrites it: if SYNUI_RUNNING is already
+     * in the environment we were launched from inside another synui, and the
+     * session-wide things below must not reach out and clobber that session. */
+    s->nested = (getenv("SYNUI_RUNNING") != NULL);
+
     /* Tell synui it's a SynapseOS compositor */
     setenv("SYNUI_RUNNING", "1", 1);
     setenv("XDG_SESSION_TYPE", "wayland", 1);
@@ -1878,6 +1883,72 @@ int synui_run(syn_server_t *s)
      * needs to pick a starting spot and a destination already exist. */
     if (s->config.cat_start)
         cat_toggle(s);
+
+    /* Publish the session's display variables to the D-Bus activation
+     * environment and, through --systemd, to the systemd user manager.
+     *
+     * Without this the user manager's environment holds only what greetd/PAM
+     * put there — no WAYLAND_DISPLAY, no XDG_CURRENT_DESKTOP. That is fine for
+     * everything we fork below, which inherits our environment directly, but
+     * dbus-broker turns a traditional /usr/share/dbus-1/services `Exec=` into a
+     * TRANSIENT SYSTEMD UNIT, and that unit inherits the user manager's
+     * environment instead of the caller's. So a D-Bus-activated GUI service
+     * comes up with no display, falls back to the Qt xcb platform plugin, finds
+     * nothing, and abort()s — while the process that asked for it sees only
+     * "Could not activate remote peer '<name>': unit failed", which names
+     * neither the display nor Qt. kdeconnectd is the case that found this
+     * (the tray icon appeared, the daemon behind it died on every activation,
+     * so no phone could pair); it is not specific to kdeconnect.
+     *
+     * Ordered BEFORE the autostart loop deliberately: an autostarted client
+     * that activates a service on startup (kdeconnect-indicator does, at once)
+     * would otherwise race us and lose. Hence also the wait below rather than
+     * fire-and-forget — this is one short D-Bus round trip, and the race it
+     * closes is the whole point of running it here.
+     *
+     * All three variables are set unconditionally by synui_init(), so naming
+     * them bare (read from our own environment) can't hit the unset case.
+     *
+     * NOT done when nested: a nested synui shares the session bus with the
+     * desktop hosting it, so this would repoint that desktop's activation
+     * environment at our socket. */
+    if (!s->nested) {
+        sigset_t chld, prev;
+        sigemptyset(&chld);
+        sigaddset(&chld, SIGCHLD);
+        sigprocmask(SIG_BLOCK, &chld, &prev);
+
+        pid_t pid = fork();
+        if (pid == 0) {
+            int devnull = open("/dev/null", O_WRONLY);
+            if (devnull >= 0) {
+                dup2(devnull, STDOUT_FILENO);
+                dup2(devnull, STDERR_FILENO);
+                if (devnull > 2) close(devnull);
+            }
+            synui_child_reset_signals();
+            execlp("dbus-update-activation-environment",
+                   "dbus-update-activation-environment", "--systemd",
+                   "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+                   (char *)NULL);
+            _exit(127);
+        }
+        if (pid > 0) {
+            /* SIGCHLD stays blocked across the wait so reap_children() cannot
+             * take the status out from under us. */
+            int st = 0;
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
+                ;
+            if (!WIFEXITED(st) || WEXITSTATUS(st) != 0)
+                wlr_log(WLR_ERROR, "synui: dbus-update-activation-environment "
+                        "failed — D-Bus-activated services will start without a "
+                        "display (is dbus installed?)");
+        } else {
+            wlr_log(WLR_ERROR, "synui: fork for dbus-update-activation-environment "
+                    "failed: %s", strerror(errno));
+        }
+        sigprocmask(SIG_SETMASK, &prev, NULL);
+    }
 
     /* Autostart configured applications */
     for (int i = 0; i < s->config.autostart_count; i++) {
