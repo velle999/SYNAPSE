@@ -137,6 +137,69 @@ for arg in "$@"; do
 done
 
 # ── Preflight ─────────────────────────────────────────────────
+# Declared here rather than beside the build loop below because the
+# preflight needs it: the dependency check reads these packages' PKGBUILDs,
+# and it has to run BEFORE the 20-minute llama build, not after it.
+# All packages with a PKGBUILD in the project root
+PACKAGES=(
+    # Must precede synapd — synapd depends on it.
+    synapse-llama
+    synapd
+    synsh
+    synguard
+    synnet
+    # Must precede synui — synui depends on it, and scenefx is in no pacman
+    # repo (it's a local fork of wlr_scene), so pacstrap can only satisfy
+    # synui's dependency from our local-repo. Omitting it fails the ISO at
+    # pacstrap with "unable to satisfy dependency 'scenefx0.5'".
+    # scenefx0.5, not scenefx: the two are separate packages tracking wlroots
+    # (0.4.x = 0.19, 0.5.x = 0.20), and synui moved to the 0.20 pair.
+    scenefx0.5
+    synui
+    synapse_kmod
+    syn
+    syn-firstboot
+    syn-model
+    syn-install
+    # Updates an installed system from git by driving build-all.sh. Pulls
+    # base-devel + git (17 packages, ~118 MiB) onto the ISO as dependencies —
+    # that toolchain is the whole point, since it rebuilds components from
+    # source on the target rather than downloading binaries.
+    syn-update
+    nexus-chat
+    tepris
+    chibi
+    vibe
+    # Printer driver for the Xpress M2020W — an SPL printer too old for the
+    # driverless IPP path cups otherwise relies on. Script/data package:
+    # ships the vendor ULD rastertospl filter, its dlopen'd libscmssc.so, and
+    # the rastertospl PPD. See samsung-m2020/PKGBUILD for the two traps.
+    samsung-m2020
+    # Shelly — GTK4/libalpm package manager (dir 'shelly' builds pkg
+    # 'shelly-bin'). Prebuilt-binary PKGBUILD: makepkg downloads the pinned
+    # release tarball at build time, so this needs network like pacstrap does.
+    shelly
+    # Wallpaper Engine renderer (dir 'linux-wallpaperengine-pkg' builds pkg
+    # 'linux-wallpaperengine'). Git-sourced from a pinned commit, so it needs
+    # network, and cmake fetches a ~1.3 GB CEF blob at configure time into the
+    # build dir — budget ~6 GB of /var/tmp scratch for it on top of the ISO.
+    # Order does not matter: nothing depends on it (synui lists it nowhere),
+    # it is on the ISO because packages.x86_64 names it.
+    linux-wallpaperengine-pkg
+    # Bootable btrfs snapshots for limine, vendored from the AUR because it is
+    # in no official repo — the same reason scenefx0.5 is in this list. Order
+    # does not matter: nothing depends on it, it reaches the ISO because
+    # packages.x86_64 names it.
+    #
+    # THE EXPENSIVE ONE. A GraalVM native-image build: it downloads a ~300 MB
+    # GraalVM tarball, needs `gradle` (its own JDK, ~150 MiB), and the gradle
+    # step fetches plugins and Java dependencies from the NETWORK at build time.
+    # If a build fails here with no obvious cause, suspect the network before
+    # the code. See limine-snapper-sync/PKGBUILD for what it does and why the
+    # ESP is sized the way it is.
+    limine-snapper-sync
+)
+
 step "Preflight checks"
 
 [[ "$(id -u)" -eq 0 ]] || err "Must run as root (needed for mkarchiso)"
@@ -203,42 +266,79 @@ for file in "${!FILE_PKG[@]}"; do
     fi
 done
 
-# ── makedepends, read from the PKGBUILDs themselves ────────────────────────
+# ── Build deps, read from the PKGBUILDs themselves ─────────────────────────
 # Packages are built with `makepkg -fd`: the -d skips dependency resolution and
-# there is no -s, so NOTHING installs a makedepend. Every one of them has to be
-# on this host before the build starts.
+# there is no -s, so NOTHING gets installed for them. Every build dependency
+# has to already be on this host before the build starts.
 #
-# This is derived rather than hand-listed because the hand-listed version is
-# how gradle, then clang, then bpf/glm/python-pillow/python-pip each got to
-# fail a release build on their own — one 20-minute run per missing package,
-# every one of them sitting in plain sight in a PKGBUILD the whole time. A list
-# maintained here drifts from what the packages actually declare; reading the
-# declarations cannot.
+# Derived rather than hand-listed, because the hand-listed version is how
+# gradle, then clang, then bpf/glm/python-pillow/python-pip, then glew/glfw/mpv
+# each got to fail a release build on their own — one 20-minute run per missing
+# package, every one of them sitting in plain sight in a PKGBUILD the whole
+# time. A list maintained here drifts from what the packages declare; reading
+# the declarations cannot.
 #
-# `pacman -T` rather than `pacman -Q`: it understands both version constraints
-# and provides, so 'pkg-config' resolves through pkgconf instead of being
-# reported missing forever.
-MAKEDEPS=()
-for _pb in "${PROJECT_ROOT}"/*/PKGBUILD; do
-    [[ -f "$_pb" ]] || continue
+# BOTH depends and makedepends. `makepkg -fd` skips both, and a package that
+# links a library needs that library's headers to compile — on Arch those ship
+# in the same package, which is listed under depends, not makedepends. Checking
+# only makedepends is what let linux-wallpaperengine reach CMake and die on
+# "Could NOT find GLEW": glew is a depend.
+#
+# Scoped to PACKAGES, not */PKGBUILD. The tree still carries directories that
+# are no longer built — legacy scenefx/ (the 0.4.x/wlroots0.19 pair synui left
+# behind at 0.2.0) is one — and scanning those asks the host to install
+# dependencies for something nobody builds.
+#
+# `pacman -T` rather than `pacman -Q`: it understands version constraints and
+# provides, so 'pkg-config' resolves through pkgconf instead of being reported
+# missing on every run forever.
+BUILD_DEPS=()
+for _p in "${PACKAGES[@]}"; do
+    _pb="${PROJECT_ROOT}/${_p}/PKGBUILD"
+    [[ -f "$_pb" ]] || { warn "no PKGBUILD for package '$_p'"; continue; }
     while IFS= read -r _d; do
-        [[ -n "$_d" ]] && MAKEDEPS+=("$_d")
-    done < <(bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "${makedepends[@]-}"' _ "$_pb" 2>/dev/null)
+        [[ -n "$_d" ]] && BUILD_DEPS+=("$_d")
+    done < <(bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "${depends[@]-}" "${makedepends[@]-}"' _ "$_pb" 2>/dev/null)
 done
 
-if [[ ${#MAKEDEPS[@]} -gt 0 ]]; then
+# SynapseOS's own packages appear in each other's depends (synui needs
+# scenefx0.5, synapd needs synapse-llama). Those are built by this script in the
+# order PACKAGES lists them, exist in no upstream repo, and must never be handed
+# to pacman. Identify them by the pkgname/provides the PKGBUILDs declare.
+#
+# Do NOT identify them as "whatever `pacman -Si` cannot find". -Si matches on
+# package NAME only, so it misses provides: it cannot find 'pkg-config' (pkgconf
+# provides it) or 'sdl2' (sdl2-compat does), and both would be filed as ours and
+# silently never installed. `pacman -T` gets provides right when deciding
+# SATISFACTION; this list only has to answer "do we build it ourselves".
+OUR_PKGS=()
+for _p in "${PACKAGES[@]}"; do
+    _pb="${PROJECT_ROOT}/${_p}/PKGBUILD"
+    [[ -f "$_pb" ]] || continue
+    while IFS= read -r _n; do
+        [[ -n "$_n" ]] && OUR_PKGS+=("${_n%%[<>=]*}")
+    done < <(bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "${pkgname[@]-}" "${provides[@]-}"' _ "$_pb" 2>/dev/null)
+done
+
+if [[ ${#BUILD_DEPS[@]} -gt 0 ]]; then
     UNSATISFIED=()
     while IFS= read -r _d; do
-        [[ -n "$_d" ]] && UNSATISFIED+=("$_d")
-    done < <(pacman -T "${MAKEDEPS[@]}" 2>/dev/null || true)
+        [[ -z "$_d" ]] && continue
+        _bare="${_d%%[<>=]*}"
+        # Ours? Then this script builds it; pacman has never heard of it.
+        for _o in "${OUR_PKGS[@]}"; do
+            [[ "$_bare" == "$_o" ]] && continue 2
+        done
+        UNSATISFIED+=("$_bare")
+    done < <(pacman -T "${BUILD_DEPS[@]}" 2>/dev/null || true)
 
     if [[ ${#UNSATISFIED[@]} -gt 0 ]]; then
         for _d in "${UNSATISFIED[@]}"; do
-            warn "makedepend not satisfied — will install: $_d"
+            warn "build dep not satisfied — will install: $_d"
             MISSING_PKGS+=("$_d")
         done
     else
-        ok "all PKGBUILD makedepends satisfied"
+        ok "all PKGBUILD build deps satisfied"
     fi
 fi
 
@@ -259,14 +359,20 @@ if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
     for file in "${!FILE_PKG[@]}"; do
         [[ -e "$file" ]] || STILL_MISSING+=("$file (${FILE_PKG[$file]})")
     done
-    # And the makedepends. A makedepend that pacman accepted but did not
-    # actually satisfy would otherwise surface as a compile error deep inside
-    # one package's build(), which is the exact failure this section exists to
-    # prevent.
-    if [[ ${#MAKEDEPS[@]} -gt 0 ]]; then
+    # And the build deps. One that pacman accepted but did not actually satisfy
+    # would otherwise surface as a compile error deep inside a package's
+    # build(), which is the exact failure this section exists to prevent. Our
+    # own packages are skipped again here — they are not built yet, so pacman
+    # still cannot see them and would report every one as missing.
+    if [[ ${#BUILD_DEPS[@]} -gt 0 ]]; then
         while IFS= read -r _d; do
-            [[ -n "$_d" ]] && STILL_MISSING+=("$_d (makedepend)")
-        done < <(pacman -T "${MAKEDEPS[@]}" 2>/dev/null || true)
+            [[ -z "$_d" ]] && continue
+            _bare="${_d%%[<>=]*}"
+            for _o in "${OUR_PKGS[@]}"; do
+                [[ "$_bare" == "$_o" ]] && continue 2
+            done
+            STILL_MISSING+=("$_bare (build dep)")
+        done < <(pacman -T "${BUILD_DEPS[@]}" 2>/dev/null || true)
     fi
     [[ ${#STILL_MISSING[@]} -eq 0 ]] || err "Still missing: ${STILL_MISSING[*]}"
     ok "All dependencies installed"
@@ -595,65 +701,6 @@ cd "${SCRIPT_DIR}"
 # ── Build SynapseOS packages ──────────────────────────────────
 step "Building SynapseOS packages"
 
-# All packages with a PKGBUILD in the project root
-PACKAGES=(
-    # Must precede synapd — synapd depends on it.
-    synapse-llama
-    synapd
-    synsh
-    synguard
-    synnet
-    # Must precede synui — synui depends on it, and scenefx is in no pacman
-    # repo (it's a local fork of wlr_scene), so pacstrap can only satisfy
-    # synui's dependency from our local-repo. Omitting it fails the ISO at
-    # pacstrap with "unable to satisfy dependency 'scenefx0.5'".
-    # scenefx0.5, not scenefx: the two are separate packages tracking wlroots
-    # (0.4.x = 0.19, 0.5.x = 0.20), and synui moved to the 0.20 pair.
-    scenefx0.5
-    synui
-    synapse_kmod
-    syn
-    syn-firstboot
-    syn-model
-    syn-install
-    # Updates an installed system from git by driving build-all.sh. Pulls
-    # base-devel + git (17 packages, ~118 MiB) onto the ISO as dependencies —
-    # that toolchain is the whole point, since it rebuilds components from
-    # source on the target rather than downloading binaries.
-    syn-update
-    nexus-chat
-    tepris
-    chibi
-    vibe
-    # Printer driver for the Xpress M2020W — an SPL printer too old for the
-    # driverless IPP path cups otherwise relies on. Script/data package:
-    # ships the vendor ULD rastertospl filter, its dlopen'd libscmssc.so, and
-    # the rastertospl PPD. See samsung-m2020/PKGBUILD for the two traps.
-    samsung-m2020
-    # Shelly — GTK4/libalpm package manager (dir 'shelly' builds pkg
-    # 'shelly-bin'). Prebuilt-binary PKGBUILD: makepkg downloads the pinned
-    # release tarball at build time, so this needs network like pacstrap does.
-    shelly
-    # Wallpaper Engine renderer (dir 'linux-wallpaperengine-pkg' builds pkg
-    # 'linux-wallpaperengine'). Git-sourced from a pinned commit, so it needs
-    # network, and cmake fetches a ~1.3 GB CEF blob at configure time into the
-    # build dir — budget ~6 GB of /var/tmp scratch for it on top of the ISO.
-    # Order does not matter: nothing depends on it (synui lists it nowhere),
-    # it is on the ISO because packages.x86_64 names it.
-    linux-wallpaperengine-pkg
-    # Bootable btrfs snapshots for limine, vendored from the AUR because it is
-    # in no official repo — the same reason scenefx0.5 is in this list. Order
-    # does not matter: nothing depends on it, it reaches the ISO because
-    # packages.x86_64 names it.
-    #
-    # THE EXPENSIVE ONE. A GraalVM native-image build: it downloads a ~300 MB
-    # GraalVM tarball, needs `gradle` (its own JDK, ~150 MiB), and the gradle
-    # step fetches plugins and Java dependencies from the NETWORK at build time.
-    # If a build fails here with no obvious cause, suspect the network before
-    # the code. See limine-snapper-sync/PKGBUILD for what it does and why the
-    # ESP is sized the way it is.
-    limine-snapper-sync
-)
 
 # Create build user for makepkg (can't run as root)
 id -u synbuild &>/dev/null || useradd -r -s /bin/bash -m synbuild
