@@ -74,6 +74,15 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
     struct wlr_box c;
     view_content_box(view, &c);
 
+    /* Record what the client is being asked for, and reset the heal budget
+     * whenever that target changes — view_heal_size() re-sends this configure a
+     * bounded number of times if the client settles on a different size. */
+    if (c.width != view->cfg_w || c.height != view->cfg_h) {
+        view->cfg_w = c.width;
+        view->cfg_h = c.height;
+        view->heal_tries = 0;
+    }
+
     /* Commit the size to the client. X11 clients also need their absolute
      * layout position, which the xdg path derives from the scene node. */
     if (view->is_xwayland)

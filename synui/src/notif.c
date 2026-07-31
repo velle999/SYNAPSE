@@ -156,11 +156,79 @@ static void notif_text(char *dst, size_t cap, const char *src)
 
 /* ── Notify ──────────────────────────────────────────────── */
 
+/*
+ * Put a toast on the stack. The body of org.freedesktop.Notifications.Notify,
+ * split out so synui can post its own — a compositor that runs the notification
+ * daemon should not have to go out over the bus and back to tell the user what
+ * a keybinding just did.
+ *
+ * `replaces` is the same distinction the spec draws and everything below relies
+ * on: 0 appends a new toast (and chimes), a live id updates that one in place
+ * (and does not). A binding the user can hold down wants the second, or every
+ * press stacks another card.
+ *
+ * `expire` follows the protocol: -1 server default, 0 never.
+ * Returns the id, which is what a caller passes back as `replaces` next time.
+ */
+uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
+                    const char *body, int urgency, int32_t expire,
+                    uint32_t replaces)
+{
+    syn_notifs_t *n = &s->notifs;
+
+    /* Find the slot: a replaces_id updates in place (a progress notification
+     * re-posts the same id many times a second — appending would flood the
+     * stack), otherwise append, dropping the oldest if full. */
+    syn_notif_t *item = NULL;
+    if (replaces) {
+        for (int i = 0; i < n->count; i++)
+            if (n->items[i].id == replaces) { item = &n->items[i]; break; }
+    }
+    bool fresh = (item == NULL);
+    if (!item) {
+        if (n->count >= NOTIF_MAX)
+            notif_remove_at(s, 0, NOTIF_CLOSED_EXPIRED);
+        item = &n->items[n->count++];
+        memset(item, 0, sizeof(*item));
+        /* An id of 0 means "none" to callers, so never hand one out. */
+        item->id = replaces ? replaces : ++n->next_id;
+        if (item->id == 0) item->id = ++n->next_id;
+    }
+
+    notif_text(item->app,     sizeof(item->app),     app);
+    notif_text(item->summary, sizeof(item->summary), summary);
+    notif_text(item->body,    sizeof(item->body),    body);
+    item->urgency = urgency;
+
+    /* expire_timeout: -1 = server default, 0 = never. Critical is never
+     * auto-expired regardless of what the client asked for — the spec is
+     * explicit, and it is the whole point of the urgency. */
+    if (urgency == NOTIF_URGENCY_CRITICAL)  item->expires_ms = 0;
+    else if (expire == 0)                   item->expires_ms = 0;
+    else if (expire < 0)                    item->expires_ms = now_ms() + NOTIF_DEFAULT_MS;
+    else                                    item->expires_ms = now_ms() + expire;
+
+    synui_render_notifs(s);
+    notif_arm_timer(s);
+
+    /* Only for a NEW notification: a progress bar re-posting the same id many
+     * times a second is one notification, and chiming per update would be a
+     * machine-gun. Keyed on whether a slot was actually allocated rather than on
+     * `replaces` alone, so a caller re-posting an id that has already expired
+     * out from under it is a new toast and sounds like one. */
+    if (fresh)
+        sound_play(s, urgency == NOTIF_URGENCY_CRITICAL ? SOUND_EVT_ERROR
+                                                        : SOUND_EVT_NOTIFY);
+
+    wlr_log(WLR_DEBUG, "synui: notif: #%u from %s: %s", item->id, item->app,
+            item->summary);
+    return item->id;
+}
+
 static int method_notify(sd_bus_message *m, void *data, sd_bus_error *e)
 {
     (void)e;
     syn_server_t *s = data;
-    syn_notifs_t *n = &s->notifs;
 
     const char *app, *icon, *summary, *body;
     uint32_t replaces;
@@ -200,50 +268,8 @@ static int method_notify(sd_bus_message *m, void *data, sd_bus_error *e)
     r = sd_bus_message_read(m, "i", &expire);
     if (r < 0) return r;
 
-    /* Find the slot: a replaces_id updates in place (a progress notification
-     * re-posts the same id many times a second — appending would flood the
-     * stack), otherwise append, dropping the oldest if full. */
-    syn_notif_t *item = NULL;
-    if (replaces) {
-        for (int i = 0; i < n->count; i++)
-            if (n->items[i].id == replaces) { item = &n->items[i]; break; }
-    }
-    if (!item) {
-        if (n->count >= NOTIF_MAX)
-            notif_remove_at(s, 0, NOTIF_CLOSED_EXPIRED);
-        item = &n->items[n->count++];
-        memset(item, 0, sizeof(*item));
-        /* An id of 0 means "none" to callers, so never hand one out. */
-        item->id = replaces ? replaces : ++n->next_id;
-        if (item->id == 0) item->id = ++n->next_id;
-    }
-
-    notif_text(item->app,     sizeof(item->app),     app);
-    notif_text(item->summary, sizeof(item->summary), summary);
-    notif_text(item->body,    sizeof(item->body),    body);
-    item->urgency = urgency;
-
-    /* expire_timeout: -1 = server default, 0 = never. Critical is never
-     * auto-expired regardless of what the client asked for — the spec is
-     * explicit, and it is the whole point of the urgency. */
-    if (urgency == NOTIF_URGENCY_CRITICAL)  item->expires_ms = 0;
-    else if (expire == 0)                   item->expires_ms = 0;
-    else if (expire < 0)                    item->expires_ms = now_ms() + NOTIF_DEFAULT_MS;
-    else                                    item->expires_ms = now_ms() + expire;
-
-    synui_render_notifs(s);
-    notif_arm_timer(s);
-
-    /* Only for a NEW notification: a progress bar re-posting the same id many
-     * times a second is one notification, and chiming per update would be a
-     * machine-gun. `replaces` is exactly that distinction. */
-    if (!replaces)
-        sound_play(s, urgency == NOTIF_URGENCY_CRITICAL ? SOUND_EVT_ERROR
-                                                        : SOUND_EVT_NOTIFY);
-
-    wlr_log(WLR_DEBUG, "synui: notif: #%u from %s: %s", item->id, item->app,
-            item->summary);
-    return sd_bus_reply_method_return(m, "u", item->id);
+    uint32_t id = notif_post(s, app, summary, body, urgency, expire, replaces);
+    return sd_bus_reply_method_return(m, "u", id);
 }
 
 static int method_close(sd_bus_message *m, void *data, sd_bus_error *e)
@@ -338,6 +364,17 @@ void notif_init(syn_server_t *s)
     memset(&nf, 0, sizeof(nf));
     memset(&s->notifs, 0, sizeof(s->notifs));
 
+    /* The expiry timer is armed before the bus, and survives every failure
+     * below, because the bus is no longer the only thing that posts toasts:
+     * notif_post() is called from inside synui (Super+Tab says which layout it
+     * cycled to). Left where it was — after sd_bus_request_name — a box with a
+     * mako or dunst already running got a NULL timer, notif_arm_timer()'s early
+     * return, and synui's own toasts pinned to the screen forever. */
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    nf.timer = wl_event_loop_add_timer(loop, notif_expire_cb, s);
+    if (!nf.timer)
+        wlr_log(WLR_ERROR, "synui: notif: no expiry timer — toasts will not fade");
+
     int r = sd_bus_open_user(&nf.bus);
     if (r < 0) {
         wlr_log(WLR_INFO, "synui: notif: no session bus (%s) — no toasts",
@@ -364,12 +401,9 @@ void notif_init(syn_server_t *s)
         goto fail;
     }
 
-    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
     nf.src = wl_event_loop_add_fd(loop, sd_bus_get_fd(nf.bus), WL_EVENT_READABLE,
                                   notif_readable, s);
     if (!nf.src) goto fail;
-    nf.timer = wl_event_loop_add_timer(loop, notif_expire_cb, s);
-    if (!nf.timer) goto fail;
 
     wlr_log(WLR_INFO, "synui: notif: serving %s", NOTIF_BUS_NAME);
     return;

@@ -1727,6 +1727,14 @@ struct syn_view {
     int minimized;
     int x, y, w, h;
 
+    /* The content size view_resize() last asked the client for, and how many
+     * times we have re-asked for *this* size after the client committed
+     * something else. See view_heal_size() (synui_main.c): a client that ends up
+     * at a size we never configured stays that way, because nothing in synui
+     * re-configures a window that is not being moved or re-laid-out. */
+    int cfg_w, cfg_h;
+    int heal_tries;
+
     /* When this view was last focused, from the server's focus_counter. Higher
      * is more recent; 0 means never focused. This is what Alt+Tab orders by —
      * the workspace list is in stacking order, which is not the order anyone
@@ -2520,6 +2528,10 @@ struct syn_server {
     } notif_ui;
 
     syn_notifs_t    notifs;
+
+    /* The toast Super+Tab posts, kept so the next press replaces it instead of
+     * stacking a card per press. 0 until the first one. */
+    uint32_t        layout_notif_id;
 
     /* Clipboard history (Super+V) — see syn_clipboard_t. */
     struct {
@@ -3735,6 +3747,14 @@ bool logind_lid_handler(bool docked, bool on_ac, char *buf, size_t n);
 void notif_init(syn_server_t *s);
 void notif_finish(syn_server_t *s);
 void synui_render_notifs(syn_server_t *s);
+/* Post a toast from inside synui — the body of Notify(), so a compositor that
+ * *is* the notification daemon does not have to go over the bus to reach it.
+ * `replaces` 0 appends a new toast and chimes; a live id updates it in place and
+ * stays quiet. `expire` is the protocol's: -1 server default, 0 never. Returns
+ * the id to pass back as `replaces`. */
+uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
+                    const char *body, int urgency, int32_t expire,
+                    uint32_t replaces);
 /* Dismiss the toast under (lx, ly) in layout coords. Returns 1 if one was hit,
  * so the click is not also delivered to whatever is behind it. */
 int  notif_click(syn_server_t *s, double lx, double ly);

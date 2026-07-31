@@ -512,6 +512,18 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         static const char *lnames[] = {"tiling","floating","monocle","AI"};
         wlr_log(WLR_INFO, "synui: layout → %s", lnames[ws->layout]);
         layout_apply(s, ws);
+        /* Say so on screen. Cycling the layout of a desktop whose windows are
+         * all floating — which every layout skips — moves nothing at all, so a
+         * log line was the only evidence the key had done anything, and the
+         * binding read as dead while quietly walking the workspace round to AI.
+         * Replaces its own toast (layout_notif_id) rather than stacking one
+         * card per press. */
+        char lbody[96];
+        snprintf(lbody, sizeof(lbody), "Desktop %d — %s",
+                 ws->index + 1, ws->name);
+        s->layout_notif_id = notif_post(s, "synui", lnames[ws->layout], lbody,
+                                        NOTIF_URGENCY_LOW, 1500,
+                                        s->layout_notif_id);
     } else if (strcmp(action, "master_shrink") == 0) {
         layout_adjust_master(s, ws, -0.05f);
     } else if (strcmp(action, "master_grow") == 0) {

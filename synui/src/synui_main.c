@@ -676,6 +676,17 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
      * layout_apply, which would otherwise tile straight over the restored box,
      * and after mapped = 1, which view_apply_maximized requires. */
     layout_restore_geometry(view->server, view);
+
+    /* A client that asked to be maximized before it ever mapped (Firefox does,
+     * restoring its session) only had the request held by wlroots — see
+     * xdg_toplevel_request_maximize. Make it real now, through the one path that
+     * also floats the window and records saved_geo. After
+     * layout_restore_geometry, which may have maximized it already from
+     * windows.conf: view_apply_maximized early-returns when the flag matches, so
+     * whichever ran first owns the restore box. */
+    if (view->xdg_surface->toplevel->requested.maximized && !view->maximized)
+        view_apply_maximized(view->server, view, 1);
+
     foreign_toplevel_map(view);
     anim_fade_in(view);          /* windows arrive, they don't just appear */
 
@@ -764,6 +775,100 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data)
     free(view);
 }
 
+/*
+ * Re-send a configure the client never took.
+ *
+ * view_resize() is the ONLY place synui sizes a window, and it always moves the
+ * frame and configures the client in the same breath — so the two can never
+ * disagree at the moment it runs. What it does not do is check afterwards, and
+ * nothing else ever re-configures a window that is not being moved or re-laid
+ * out. A client that ends up at a size synui never asked for therefore *stays*
+ * there, under chrome drawn at the size synui thinks it has, until the user
+ * happens to drag the window and the next view_resize() puts it right.
+ *
+ * That is exactly what velle reported (2026-07-31): a maximized Firefox frame
+ * at 2544x1396 with the page rendered into 552x304 in its top-left corner and
+ * the desktop showing through the rest, "resets if you move it". The one place
+ * synui hands a client its own choice of size is the 0x0 answer to the initial
+ * commit above — pick your own, the layout resizes you on map — and a client
+ * that misses or loses the configure that follows keeps whatever it picked.
+ *
+ * So: whenever the client is settled (nothing in flight) and the size it
+ * declares is not the size it was told, say it again.
+ *
+ * Every guard here is about not fighting a client that is already doing the
+ * right thing:
+ *  - a non-empty configure_list means the client simply has not caught up yet,
+ *    which is every ordinary resize;
+ *  - min/max size are the client's own declared limits, so a box outside them
+ *    is one it is *entitled* to refuse, and re-asking would never end;
+ *  - a client only a little inside the box is rounding, not refusing. There is
+ *    no size-increment protocol in xdg-shell (that was X11's WM_NORMAL_HINTS),
+ *    so a terminal snapping to a character cell simply commits a few px short
+ *    and wlroots has nothing to consult about it. Measured in the nested rig,
+ *    foot lands 2 px under on height and 14 px under at the worst — under 5% —
+ *    while the bug this exists for was at 22% of its box. Anything the client
+ *    could have reached by rounding is therefore left alone: without this the
+ *    heal cost every terminal on the desktop two redundant configures on every
+ *    single resize (22 of them across three windows and eight layout ops), all
+ *    of which foot answered by committing the same size again;
+ *  - and the heal budget is per *target* size (view_resize resets it), which is
+ *    the backstop that makes a storm impossible even for a client whose idea of
+ *    "close enough" is outside the band above.
+ */
+#define SYN_HEAL_MAX 2
+/* How near the client has to land to count as complying, as a fraction of the
+ * box: 7/8 leaves an eighth of slack in either dimension. */
+#define SYN_HEAL_NUM 7
+#define SYN_HEAL_DEN 8
+
+static void view_heal_size(syn_view_t *view)
+{
+    syn_server_t *s = view->server;
+
+    if (!view->mapped || view->is_xwayland || !view->xdg_surface) return;
+    if (view->w <= 0 || view->h <= 0) return;
+
+    /* A configure is still on its way to the client. */
+    if (!wl_list_empty(&view->xdg_surface->configure_list)) return;
+    if (view->xdg_surface->configure_idle) return;
+
+    /* Mid-drag the resize itself is generating configures faster than this
+     * could usefully add to them. */
+    if (s->grabbed_view == view && s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH)
+        return;
+
+    /* Nothing declared yet — there is no size to disagree with. */
+    struct wlr_box geo = view->xdg_surface->geometry;
+    if (geo.width <= 0 || geo.height <= 0) return;
+
+    struct wlr_box c;
+    view_content_box(view, &c);
+    if (geo.width * SYN_HEAL_DEN >= c.width  * SYN_HEAL_NUM &&
+        geo.height * SYN_HEAL_DEN >= c.height * SYN_HEAL_NUM) {
+        view->heal_tries = 0;         /* settled at, or near enough to, the box */
+        return;
+    }
+
+    /* A box the client told us it cannot take is not a client ignoring us. */
+    struct wlr_xdg_toplevel_state *st = &view->xdg_surface->toplevel->current;
+    if ((st->min_width  > 0 && c.width  < st->min_width)  ||
+        (st->min_height > 0 && c.height < st->min_height) ||
+        (st->max_width  > 0 && c.width  > st->max_width)  ||
+        (st->max_height > 0 && c.height > st->max_height))
+        return;
+
+    if (view->heal_tries >= SYN_HEAL_MAX) return;
+    view->heal_tries++;
+
+    wlr_log(WLR_DEBUG, "synui: re-configuring %s: committed %dx%d, asked %dx%d "
+                       "(try %d/%d)",
+            view_app_id(view) ? view_app_id(view) : "?",
+            geo.width, geo.height, c.width, c.height,
+            view->heal_tries, SYN_HEAL_MAX);
+    wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, c.width, c.height);
+}
+
 static void xdg_surface_commit(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, commit);
@@ -779,9 +884,11 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
         wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, 0, 0);
         /* Apply a maximize request the client made before this first
          * commit (see xdg_toplevel_request_maximize) now that the surface
-         * is actually initialized. */
-        if (view->maximized)
-            wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
+         * is actually initialized. Read from `requested`, not view->maximized:
+         * the view is not maximized yet, and pretending it is here is what left
+         * it maximized-but-tiled (see xdg_surface_map). */
+        if (view->xdg_surface->toplevel->requested.maximized)
+            wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, true);
         /* Same for a fullscreen request made before this first commit — the
          * surface is initialized by now, so the configure is safe to send. */
         if (view->fullscreen)
@@ -792,6 +899,10 @@ static void xdg_surface_commit(struct wl_listener *listener, void *data)
     /* Update borders when surface geometry changes */
     if (view->mapped)
         view_update_decorations(view);
+
+    /* …and, on the same signal, notice when the geometry that just changed is
+     * not the one the client was configured with. */
+    view_heal_size(view);
 
     /* The client just painted, and scenefx's own commit handler (which ran
      * before this one — wlr_scene_xdg_surface_create is called before we add
@@ -806,21 +917,38 @@ static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *da
     (void)data;
     syn_view_t *view = wl_container_of(listener, view, request_maximize);
     /* Honour the requested state (not a blind toggle). Once mapped this really
-     * does resize the window (view_apply_maximized); before the first commit we
-     * can only record it — the initial_commit path applies it. */
+     * does resize the window (view_apply_maximized).
+     *
+     * Before the map there is nothing to resize, and the request is deliberately
+     * NOT copied into view->maximized: that flag means "this window has been
+     * through view_apply_maximized", which is what sets floating = 1, saved_geo
+     * and saved_floating. Setting it here instead produced a window that claimed
+     * to be maximized while still in the tiling flow, so layout_tile placed it
+     * in a master slot while the re-fit pass in layout_apply pulled it to the
+     * full usable box — and, because layout_restore_geometry only maximizes
+     * `if (saved_max && !view->maximized)`, the real path was skipped for good.
+     * Super+M was a dead first press for the same reason (view_apply_maximized
+     * early-returns when the flag already matches).
+     *
+     * wlroots keeps the request in toplevel->requested.maximized, so nothing has
+     * to be recorded here at all: the initial_commit path sends the state, and
+     * xdg_surface_map applies it once the window is real. */
     int want = view->xdg_surface->toplevel->requested.maximized;
     if (view->mapped)
         view_apply_maximized(view->server, view, want);
-    else
-        view->maximized = want;
     /* Clients may send set_maximized before their first commit, while
      * xdg_surface->initialized is still false. wlroots asserts on that in
      * wlr_xdg_surface_schedule_configure(), aborting the whole compositor.
-     * The state is already recorded above; xdg_surface_commit's
-     * initial_commit path will pick it up once the surface is ready. */
+     * wlroots is holding the request for us; xdg_surface_commit's initial_commit
+     * path sends it once the surface is ready. */
     if (!view->xdg_surface->initialized)
         return;
-    wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel, view->maximized);
+    /* Mapped, this is the state view_apply_maximized just settled on. Unmapped
+     * but initialized, view->maximized is still 0 and would answer a request to
+     * maximize with a refusal we do not mean — the window will be maximized at
+     * map, so acknowledge what was asked for. */
+    wlr_xdg_toplevel_set_maximized(view->xdg_surface->toplevel,
+                                   view->mapped ? view->maximized : want);
     foreign_toplevel_update_state(view);
 }
 

@@ -242,7 +242,7 @@ synui_exe = executable('synui',
 
 # synctl: the control-socket client (hyprctl equivalent). Talks to the socket
 # synui exports as SYNUI_SOCKET; no Wayland connection of its own.
-executable('synctl',
+synctl_exe = executable('synctl',
   sources : ['src/synctl.c'],
   install : true)
 
@@ -443,3 +443,25 @@ lid_test = executable('lid_test',
             '/lid_test_power_supply"'],
   build_by_default : false)
 test('lid', lid_test)
+
+# Re-sending a configure the client never took (view_heal_size, synui_main.c).
+# The client is a real xdg-shell client that drops one configure, which is what
+# left a maximized Firefox rendering into 552x304 of its own full-screen frame;
+# see tests/stubborn_client.c. It needs the CLIENT half of xdg-shell, where the
+# compositor uses the server half generated above.
+xdg_shell_client_h = custom_target('xdg-shell-client-protocol.h',
+  output  : 'xdg-shell-client-protocol.h',
+  input   : xdg_shell_xml,
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+stubborn_client = executable('stubborn_client',
+  ['tests/stubborn_client.c', xdg_shell_client_h, xdg_shell_c],
+  dependencies : [wayland_client],
+  build_by_default : false)
+
+resize_heal = find_program('tests/resize_heal.sh')
+test('resize_heal', resize_heal,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 60)
