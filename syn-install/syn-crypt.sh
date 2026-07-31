@@ -53,7 +53,17 @@ EOF
 #
 root_luks_device() {
     local src parent
-    src="$(findmnt -no SOURCE / 2>/dev/null || true)"
+    # --nofsroot is not a refinement, it is the difference between this tool
+    # working and not. findmnt appends the subvolume as "[/@]" on a btrfs mount
+    # (and "[/dir]" on a bind mount), so plain SOURCE returns
+    # "/dev/mapper/cryptroot[/@]" — a string no lsblk, blkid or cryptsetup can
+    # resolve. On an encrypted BTRFS root, which is the installer's own layout
+    # whenever snapshots are chosen, resolution failed and `status` therefore
+    # reported a genuinely LUKS-encrypted disk as NOT ENCRYPTED, while every
+    # key operation refused with "the root filesystem is not encrypted — pass a
+    # device explicitly". Verified on this machine: root is /dev/mapper/cryptroot
+    # on /dev/nvme1n1p2 (crypto_LUKS), and status said NOT ENCRYPTED.
+    src="$(findmnt -no SOURCE --nofsroot / 2>/dev/null || true)"
     [ -n "$src" ] || die "could not determine the root device"
 
     case "$src" in
@@ -62,9 +72,28 @@ root_luks_device() {
     esac
 
     # The mapper node's single slave is the underlying partition.
-    parent="$(lsblk -nso NAME "$src" 2>/dev/null | sed -n '2p' | tr -d ' ')"
+    #
+    # -r is load-bearing. `lsblk -s` renders a TREE, and it does so whether or
+    # not stdout is a terminal, so line 2 came back as "└─nvme0n1p2" — and the
+    # `tr -d ' '` this used to rely on strips ASCII spaces, not the U+2514/U+2500
+    # box-drawing characters. Every default-device operation then resolved to
+    # "/dev/└─nvme0n1p2": status printed that as the container with a blank UUID,
+    # and add-key/change-key/remove-key/backup-header all died on "is not a block
+    # device". Since DEVICE is optional and the installer's closing screen tells
+    # people to run all four WITHOUT one, that was the whole tool on an encrypted
+    # install. -r prints one raw name per line instead.
+    parent="$(lsblk -nsro NAME "$src" 2>/dev/null | sed -n '2p')"
     [ -n "$parent" ] || return 1
-    printf '/dev/%s' "$parent"
+    parent="/dev/$parent"
+
+    # A mapper node is not by itself proof of encryption — an LVM logical volume
+    # is one too, and this function's answer is what `status` prints ENCRYPTED
+    # from. Ask what the parent actually holds rather than inferring it from the
+    # name. lsblk reads udev's database, so this still works without root, which
+    # `blkid` and `cryptsetup isLuks` do not.
+    [ "$(lsblk -dno FSTYPE "$parent" 2>/dev/null)" = "crypto_LUKS" ] || return 1
+
+    printf '%s' "$parent"
 }
 
 # Resolve the device an operation should act on: an explicit argument if given,
@@ -98,8 +127,11 @@ cmd_status() {
 
     printf 'Root filesystem: \033[1;32mENCRYPTED\033[0m\n'
     printf '  container : %s\n' "$dev"
-    printf '  mapper    : %s\n' "$(findmnt -no SOURCE /)"
-    printf '  UUID      : %s\n' "$(blkid -s UUID -o value "$dev")"
+    printf '  mapper    : %s\n' "$(findmnt -no SOURCE --nofsroot /)"
+    # lsblk, not blkid: blkid has to read the device itself and returns nothing
+    # at all to a non-root user, so this line printed an empty UUID in exactly
+    # the case the "(run as root for … detail)" branch below says is supported.
+    printf '  UUID      : %s\n' "$(lsblk -dno UUID "$dev" 2>/dev/null)"
 
     # luksDump needs root; without it, report what we can rather than failing.
     if [ "$(id -u)" -eq 0 ]; then
@@ -173,6 +205,15 @@ cmd_backup_header() {
   it was taken — including ones you later removed. Store it like a key,
   not like a backup, and keep it OFF this machine."
 }
+
+# Test seam, the same shape as syn-install.sh's SYN_INSTALL_SOURCE_ONLY: sourcing
+# this with SYN_CRYPT_SOURCE_ONLY=1 defines the functions and stops HERE, before
+# the dispatch below runs a command. tests/crypt_test.sh drives root_luks_device
+# against fake findmnt/lsblk, which is the only way to exercise the device
+# resolution without a real LUKS volume and root.
+if [ "${SYN_CRYPT_SOURCE_ONLY:-}" = "1" ]; then
+    return 0 2>/dev/null || exit 0
+fi
 
 case "${1:-}" in
     status)        shift; cmd_status "$@" ;;

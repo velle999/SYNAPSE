@@ -171,6 +171,15 @@ jobs:
         run: |
           ./syn-install/tests/layout_test.sh
 
+      # syn-crypt aims LUKS operations at a block device. Resolving that wrongly
+      # is not cosmetic — luksRemoveKey on the wrong device damages a disk, and
+      # resolving to something that does not exist breaks every command that
+      # takes no explicit DEVICE, which is how all of them are documented. Driven
+      # against fake findmnt/lsblk, so it needs no root and no LUKS volume.
+      - name: Installer disk-encryption tool (syn-crypt device resolution)
+        run: |
+          ./syn-install/tests/crypt_test.sh
+
       - name: Daemon unit tests (synapd wire gate, synguard verdict feed)
         run: |
           meson test -C synapd/_ci wire --print-errorlogs
