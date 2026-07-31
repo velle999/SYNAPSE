@@ -7,7 +7,11 @@
  *              First window is master (left, 60% width).
  *              Remaining windows stack right.
  *
- *   MONOCLE  — All windows fullscreen, cycle with Alt+Tab.
+ *   MONOCLE  — One window per output, filling that output's usable
+ *              box; the rest of its windows are hidden. Which one is
+ *              whichever has focus, so Alt+Tab and Super+J/K change it
+ *              (focus_view reflows the desktop for exactly this).
+ *              Floating windows are exempt and stay on top.
  *
  *   AI       — Ask synapd to suggest positions based on
  *              workspace intent + running apps. If AI is
@@ -181,9 +185,17 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
     wl_list_for_each(v, &ws->windows, link) {
         if (!v->mapped || v->floating || v->minimized) continue;
         if (v->output != o) continue;
-        place_view(v,
-                   area.x, area.y,
-                   area.width, area.height);
+        /* Only configure a window whose box actually moved. Every window here
+         * is already at the same full-usable-box, and focus_view() now reflows
+         * a monocle desktop on every focus change — without the compare that
+         * would send each client a redundant configure per Alt+Tab press, per
+         * click, per Super+J. Same guard, same reason, as the maximize re-fit
+         * in layout_apply. */
+        if (v->x != area.x || v->y != area.y ||
+            v->w != area.width || v->h != area.height)
+            place_view(v,
+                       area.x, area.y,
+                       area.width, area.height);
         wlr_scene_node_set_enabled(view_node(v), v == top);
     }
 }

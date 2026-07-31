@@ -112,6 +112,23 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
     /* Raise to top of scene */
     wlr_scene_node_raise_to_top(view_node(view));
 
+    /* Monocle keys visibility off the focused view — layout_monocle enables
+     * exactly one scene node per output and disables the rest — but nothing on
+     * the focus path reflowed, and that toggle has only ever run from
+     * layout_apply(). So Alt+Tab, Super+J/K, the dock and a click all moved the
+     * keyboard to a window that stayed hidden, leaving you typing into a window
+     * you could not see while the old one sat on screen; it only came right
+     * when something unrelated (a window opening or closing, a desktop switch,
+     * Super+F, retile) happened to reflow the desktop. layout.c's own header
+     * claimed "cycle with Alt+Tab" — this is what makes that true.
+     *
+     * Gated on the one layout whose windows can be hidden. The others only
+     * place geometry, so reflowing them on every focus change would be a
+     * configure storm for no visible gain. Safe against recursion: layout_apply
+     * never calls back into focus_view. */
+    if (view->workspace && view->workspace->layout == LAYOUT_MONOCLE)
+        layout_apply(s, view->workspace);
+
     /* Toggle activated state (X11 clients need this to accept input) and
      * refresh border colours. */
     if (prev && prev != view) {

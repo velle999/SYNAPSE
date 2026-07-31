@@ -519,6 +519,17 @@ test('retile', retile,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# Whether the window you focus on a MONOCLE desktop is the window you can see
+# (layout_monocle + the reflow in focus_view). Three windows on one headless
+# output, focus moved by both cycles, plus the floating-window exemption. Same
+# client again.
+monocle_focus = find_program('tests/monocle_focus.sh')
+test('monocle_focus', monocle_focus,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 alttab_scope = find_program('tests/alttab_scope.sh')
 test('alttab_scope', alttab_scope,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),
