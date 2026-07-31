@@ -1,15 +1,28 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
-pkgrel=8
+pkgrel=9
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers, with the synui-wpengine control script"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
 license=('GPL-3.0-or-later')
 # The renderer links these directly; mpv/ffmpeg drive video wallpapers, fftw
 # and libpulse the audio-reactive ones, glfw/glew the GL context.
+#
+# freeglut, lz4, freetype2 and zlib are every remaining `find_package(...
+# REQUIRED)` in upstream's CMakeLists that this list did not already name.
+# They were missing because this package only ever built on a machine that
+# happened to have them: makepkg runs with -fd here, so nothing checks depends
+# and CMake just links the host's copy. The tell was freeglut on a freshly
+# installed box —
+#
+#     Could NOT find GLUT (missing: GLUT_glut_LIBRARY GLUT_INCLUDE_DIR)
+#
+# — where the other three survived only because something else had pulled them
+# in. Declared together because they fail as a class, not one at a time.
 depends=('glew' 'sdl2-compat' 'ffmpeg' 'glfw' 'mpv' 'fftw' 'libpulse' 'libxrandr'
-         'libx11' 'nss' 'nspr' 'alsa-lib' 'dbus' 'gtk3')
+         'libx11' 'nss' 'nspr' 'alsa-lib' 'dbus' 'gtk3'
+         'freeglut' 'lz4' 'freetype2' 'zlib')
 makedepends=('git' 'cmake' 'glm' 'python')
 # !debug, and it is not a preference: makepkg.conf carries `debug` globally, and
 # splitting debug symbols out of CEF means objcopy walking a 1.3 GB libcef.so —
