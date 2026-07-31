@@ -203,6 +203,45 @@ for file in "${!FILE_PKG[@]}"; do
     fi
 done
 
+# ── makedepends, read from the PKGBUILDs themselves ────────────────────────
+# Packages are built with `makepkg -fd`: the -d skips dependency resolution and
+# there is no -s, so NOTHING installs a makedepend. Every one of them has to be
+# on this host before the build starts.
+#
+# This is derived rather than hand-listed because the hand-listed version is
+# how gradle, then clang, then bpf/glm/python-pillow/python-pip each got to
+# fail a release build on their own — one 20-minute run per missing package,
+# every one of them sitting in plain sight in a PKGBUILD the whole time. A list
+# maintained here drifts from what the packages actually declare; reading the
+# declarations cannot.
+#
+# `pacman -T` rather than `pacman -Q`: it understands both version constraints
+# and provides, so 'pkg-config' resolves through pkgconf instead of being
+# reported missing forever.
+MAKEDEPS=()
+for _pb in "${PROJECT_ROOT}"/*/PKGBUILD; do
+    [[ -f "$_pb" ]] || continue
+    while IFS= read -r _d; do
+        [[ -n "$_d" ]] && MAKEDEPS+=("$_d")
+    done < <(bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "${makedepends[@]-}"' _ "$_pb" 2>/dev/null)
+done
+
+if [[ ${#MAKEDEPS[@]} -gt 0 ]]; then
+    UNSATISFIED=()
+    while IFS= read -r _d; do
+        [[ -n "$_d" ]] && UNSATISFIED+=("$_d")
+    done < <(pacman -T "${MAKEDEPS[@]}" 2>/dev/null || true)
+
+    if [[ ${#UNSATISFIED[@]} -gt 0 ]]; then
+        for _d in "${UNSATISFIED[@]}"; do
+            warn "makedepend not satisfied — will install: $_d"
+            MISSING_PKGS+=("$_d")
+        done
+    else
+        ok "all PKGBUILD makedepends satisfied"
+    fi
+fi
+
 MISSING_PKGS=($(printf '%s\n' "${MISSING_PKGS[@]}" | sort -u))
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
@@ -220,6 +259,15 @@ if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
     for file in "${!FILE_PKG[@]}"; do
         [[ -e "$file" ]] || STILL_MISSING+=("$file (${FILE_PKG[$file]})")
     done
+    # And the makedepends. A makedepend that pacman accepted but did not
+    # actually satisfy would otherwise surface as a compile error deep inside
+    # one package's build(), which is the exact failure this section exists to
+    # prevent.
+    if [[ ${#MAKEDEPS[@]} -gt 0 ]]; then
+        while IFS= read -r _d; do
+            [[ -n "$_d" ]] && STILL_MISSING+=("$_d (makedepend)")
+        done < <(pacman -T "${MAKEDEPS[@]}" 2>/dev/null || true)
+    fi
     [[ ${#STILL_MISSING[@]} -eq 0 ]] || err "Still missing: ${STILL_MISSING[*]}"
     ok "All dependencies installed"
 else
