@@ -629,6 +629,69 @@ check "a failed swap puts the CPU build back" "1:synapse-llama" "$(swap_case 0 0
 check "installed-but-no-.so is a failure, not a success" "1:synapse-llama-cuda" "$(swap_case 1 1 0)"
 rm -rf "$fake"
 
+echo "=== language table: keymaps resolve in BOTH namespaces ==="
+
+# LOCALE_ROWS lives past the SYN_INSTALL_SOURCE_ONLY guard, so it is read out of
+# the file rather than inherited. Each row is
+# label|locale|console-keymap|xkb-layout|font-package(s).
+#
+# The column that needs asserting is the keyboard, and it needs asserting TWICE,
+# because it is two namespaces that look like one. `KEYMAP=` goes to loadkeys,
+# which wants a file under /usr/share/kbd/keymaps; `xkb_layout` goes to
+# xkbcommon, which wants a layout in xkeyboard-config. They agree often enough
+# to seem interchangeable and disagreed on four of these fifteen rows: 'uk' and
+# 'jp106' are real keymaps and not layouts ('gb', 'jp'), while 'br' and 'kr' are
+# real layouts and not keymaps (br-abnt2, and kbd has no Korean map at all).
+#
+# Both failures are silent at install time and only show up as a keyboard that
+# types the wrong characters, so nothing but a check like this catches them.
+# File existence is the oracle: no daemon, no extra package, and it agrees with
+# `localectl list-keymaps` and `xkbcli compile-keymap` on every row here.
+locale_rows=$(awk '/^LOCALE_ROWS="$/{f=1;next} f&&/^"$/{exit} f' "$here/../syn-install.sh")
+check "the language table was found" "yes" \
+    "$([ -n "$locale_rows" ] && echo yes || echo no)"
+
+# Skipped rather than passed vacuously where the data files are absent — a
+# container without kbd or xkeyboard-config must not report this table as sound.
+if [ -d /usr/share/kbd/keymaps ]; then
+    while IFS='|' read -r label locale km xkb fonts; do
+        [ -n "$label" ] || continue
+        check "console keymap '$km' exists ($label)" "yes" \
+            "$(find /usr/share/kbd/keymaps -name "$km.map*" -print -quit 2>/dev/null \
+               | grep -q . && echo yes || echo no)"
+    done <<<"$locale_rows"
+else
+    printf '  skip  console keymaps (kbd is not installed on this host)\n'
+fi
+
+if [ -d /usr/share/X11/xkb/symbols ]; then
+    while IFS='|' read -r label locale km xkb fonts; do
+        [ -n "$label" ] || continue
+        check "xkb layout '$xkb' exists ($label)" "yes" \
+            "$([ -f "/usr/share/X11/xkb/symbols/$xkb" ] && echo yes || echo no)"
+    done <<<"$locale_rows"
+else
+    printf '  skip  xkb layouts (xkeyboard-config is not installed on this host)\n'
+fi
+
+# Every row must fill all five columns. A missing xkb column would make cut -f4
+# return the font package and cut -f5 return nothing — the desktop layout would
+# become "noto-fonts-cjk" and no font would be installed, and both halves fail
+# quietly in exactly the way this section exists to prevent.
+while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    check "row '${row%%|*}' has 5 columns" "5" "$(awk -F'|' '{print NF}' <<<"$row")"
+done <<<"$locale_rows"
+
+# The two namespaces must stay SEPARATE variables all the way to the files they
+# are written into. Collapsing them back to one is the original bug.
+check "the console keymap is what reaches vconsole.conf" "yes" \
+    "$(in_code 'echo "KEYMAP=$KEYMAP" > /mnt/etc/vconsole.conf')"
+check "the xkb layout, not the keymap, reaches synuirc" "yes" \
+    "$(in_code 'SYNUI_XKB="$XKB_LAYOUT"')"
+check "the keymap is no longer fed straight to xkb" "no" \
+    "$(in_code 'SYNUI_XKB="$KEYMAP"')"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"

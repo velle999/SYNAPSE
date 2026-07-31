@@ -2056,10 +2056,34 @@ echo "  Hostname: synapse"
 # is not more international, it is unusable — these cover the large majority,
 # and Other takes any locale glibc has.
 #
-# Each row: label|locale|keymap|font-package(s). The font column is the
-# "language pack" part: noto-fonts covers Latin/Greek/Cyrillic and ships as a
-# base, CJK needs noto-fonts-cjk (~130MB, which is why it is not simply always
-# installed), and noto-fonts-extra carries the Indic/Arabic/Hebrew coverage.
+# Each row: label|locale|console-keymap|xkb-layout|font-package(s). The font
+# column is the "language pack" part: noto-fonts covers Latin/Greek/Cyrillic and
+# ships as a base, CJK needs noto-fonts-cjk (~130MB, which is why it is not
+# simply always installed), and noto-fonts-extra carries the Indic/Arabic/Hebrew
+# coverage.
+#
+# THE KEYBOARD IS TWO COLUMNS BECAUSE IT IS TWO NAMESPACES, and it used to be
+# one. `KEYMAP=` in vconsole.conf names a file under /usr/share/kbd/keymaps that
+# loadkeys must find; `xkb_layout` in synuirc names a layout in
+# xkeyboard-config's rules that xkbcommon must compile. They overlap enough to
+# look like the same thing and disagree on four of the fifteen rows below:
+#
+#   row                 was      console        XKB
+#   English (UK)        uk       uk.map.gz ok   NO 'uk' layout — it is 'gb'
+#   Japanese            jp106    jp106.map.gz   'jp106' is a MODEL, layout is 'jp'
+#   Português (Brasil)  br       NO br.map.gz   'br' ok  (console is br-abnt2)
+#   Korean              kr       NO kr.map.gz   'kr' ok  (kbd has no Korean map)
+#
+# Measured, not guessed: `xkbcli compile-keymap --layout uk` and `--layout jp106`
+# both exit 1 and produce nothing, and neither br.map.gz nor kr.map.gz exists in
+# kbd at all. Both halves fail SILENTLY — synui logs "failed to compile — using
+# default" to a log nobody reads and hands the user a US desktop layout, and
+# systemd-vconsole-setup fails and leaves the VT on its built-in US map. So a UK
+# or Japanese user got the console they asked for and a US desktop, and a
+# Brazilian or Korean user got the reverse. Which is the same "asked and then
+# ignored" failure the comment further down swears this block exists to prevent.
+#
+# tests/layout_test.sh asserts every cell against both namespaces.
 #
 # THE LABELS ARE ASCII ON PURPOSE. This menu is drawn on the Linux VT, whose
 # font is ter-116n — the Latin-1 Terminus. Cyrillic came out as lookalike
@@ -2069,21 +2093,21 @@ echo "  Hostname: synapse"
 # glyphs, which cannot cover CJK by two orders of magnitude. The native name is
 # a nice touch this screen cannot cash — the locale code carries the meaning.
 LOCALE_ROWS="
-English (US)|en_US.UTF-8|us|
-English (UK)|en_GB.UTF-8|uk|
-Deutsch|de_DE.UTF-8|de|
-Français|fr_FR.UTF-8|fr|
-Español|es_ES.UTF-8|es|
-Português (Brasil)|pt_BR.UTF-8|br|
-Italiano|it_IT.UTF-8|it|
-Nederlands|nl_NL.UTF-8|nl|
-Polski|pl_PL.UTF-8|pl|
-Russian|ru_RU.UTF-8|ru|
-Japanese|ja_JP.UTF-8|jp106|noto-fonts-cjk
-Chinese (Simplified)|zh_CN.UTF-8|us|noto-fonts-cjk
-Korean|ko_KR.UTF-8|kr|noto-fonts-cjk
-Hindi|hi_IN.UTF-8|us|noto-fonts-extra
-Arabic|ar_EG.UTF-8|us|noto-fonts-extra
+English (US)|en_US.UTF-8|us|us|
+English (UK)|en_GB.UTF-8|uk|gb|
+Deutsch|de_DE.UTF-8|de|de|
+Français|fr_FR.UTF-8|fr|fr|
+Español|es_ES.UTF-8|es|es|
+Português (Brasil)|pt_BR.UTF-8|br-abnt2|br|
+Italiano|it_IT.UTF-8|it|it|
+Nederlands|nl_NL.UTF-8|nl|nl|
+Polski|pl_PL.UTF-8|pl|pl|
+Russian|ru_RU.UTF-8|ru|ru|
+Japanese|ja_JP.UTF-8|jp106|jp|noto-fonts-cjk
+Chinese (Simplified)|zh_CN.UTF-8|us|us|noto-fonts-cjk
+Korean|ko_KR.UTF-8|us|kr|noto-fonts-cjk
+Hindi|hi_IN.UTF-8|us|us|noto-fonts-extra
+Arabic|ar_EG.UTF-8|us|us|noto-fonts-extra
 "
 
 header
@@ -2104,11 +2128,18 @@ prompt "Language [1-${_n_locales}, default=1]:"
 read -r lang_choice
 lang_choice="${lang_choice:-1}"
 
-LOCALE="en_US.UTF-8"; KEYMAP="us"; LANG_FONTS=""
+LOCALE="en_US.UTF-8"; KEYMAP="us"; XKB_LAYOUT="us"; LANG_FONTS=""
 if [ "$lang_choice" = "0" ]; then
     prompt "Locale (e.g. sv_SE.UTF-8):"; read -r LOCALE
-    prompt "Console keymap (e.g. sv):"; read -r KEYMAP
-    LOCALE="${LOCALE:-en_US.UTF-8}"; KEYMAP="${KEYMAP:-us}"
+    # Asked separately, and the examples differ on purpose: Swedish is
+    # 'sv-latin1' to loadkeys and 'se' to XKB. One question answering both is
+    # what broke four of the rows above, and typing a console keymap into
+    # xkb_layout mostly produces a layout that does not exist — which synui
+    # silently replaces with US.
+    prompt "Console keymap (e.g. sv-latin1):"; read -r KEYMAP
+    KEYMAP="${KEYMAP:-us}"
+    prompt "Desktop keyboard layout (e.g. se) [$KEYMAP]:"; read -r XKB_LAYOUT
+    LOCALE="${LOCALE:-en_US.UTF-8}"; XKB_LAYOUT="${XKB_LAYOUT:-$KEYMAP}"
     # No idea what script that is, so cover as much as possible rather than
     # hand someone a system that cannot draw their own alphabet.
     LANG_FONTS="noto-fonts-extra"
@@ -2117,7 +2148,8 @@ else
     if [ -n "$row" ]; then
         LOCALE=$(echo "$row" | cut -d'|' -f2)
         KEYMAP=$(echo "$row" | cut -d'|' -f3)
-        LANG_FONTS=$(echo "$row" | cut -d'|' -f4)
+        XKB_LAYOUT=$(echo "$row" | cut -d'|' -f4)
+        LANG_FONTS=$(echo "$row" | cut -d'|' -f5)
     fi
 fi
 
@@ -2129,13 +2161,39 @@ echo "$LOCALE $(echo "$LOCALE" | cut -d'.' -f2)" >> /mnt/etc/locale.gen
 [ "$LOCALE" = "en_US.UTF-8" ] || echo "en_US.UTF-8 UTF-8" >> /mnt/etc/locale.gen
 arch-chroot /mnt locale-gen 2>&1 | sed 's/^/    /'
 echo "LANG=$LOCALE" > /mnt/etc/locale.conf
+
+# Check both names against the data files that will have to resolve them, on
+# the image that has them. Neither failure reports itself later: loadkeys can't
+# find a map and systemd-vconsole-setup leaves the VT on its built-in US map,
+# xkbcommon can't compile a layout and synui swaps in the default — both to a
+# log, on a machine whose keyboard is now wrong, which is the hardest possible
+# state to go and read a log from.
+#
+# The files are the authority rather than `localectl list-keymaps` / xkbcli:
+# they need no daemon and no extra package, and they agree with both (verified
+# against all fifteen rows). Warn rather than die — a wrong keymap is not worth
+# throwing away a finished install over, and 'us' is at least typeable.
+# Guarded on the directory, not just the file: on an image carrying no kbd at
+# all every install would warn about a keymap that is fine.
+if [ -d /usr/share/kbd/keymaps ] \
+   && ! find /usr/share/kbd/keymaps -name "$KEYMAP.map*" -print -quit 2>/dev/null | grep -q .; then
+    warn "Console keymap '$KEYMAP' has no keymap file on this image — the text
+  console will stay on US. Fix after boot with: localectl set-keymap <name>"
+fi
 echo "KEYMAP=$KEYMAP" > /mnt/etc/vconsole.conf
-success "Locale: $LOCALE   Keymap: $KEYMAP"
 
 # synui reads its own layout from synuirc — the console keymap does not reach
 # Wayland, so without this the desktop stays on a US layout no matter what was
 # picked here. Written later with the rest of synuirc; recorded now.
-SYNUI_XKB="$KEYMAP"
+SYNUI_XKB="$XKB_LAYOUT"
+if [ -d /usr/share/X11/xkb/symbols ] \
+   && [ ! -f "/usr/share/X11/xkb/symbols/$SYNUI_XKB" ]; then
+    warn "Keyboard layout '$SYNUI_XKB' is not a layout xkbcommon knows — the
+  DESKTOP would silently come up on US. Falling back to 'us'; set
+  xkb_layout in ~/.config/synui/synuirc after boot."
+    SYNUI_XKB="us"
+fi
+success "Locale: $LOCALE   Console: $KEYMAP   Desktop layout: $SYNUI_XKB"
 
 # The language pack. Fonts are the whole point: without them the locale is set
 # correctly and every glyph is a box, which looks far more broken than English
