@@ -25,6 +25,7 @@
 #include <librsvg/rsvg.h>
 
 #include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_subcompositor.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <scenefx/types/wlr_scene.h>
 
@@ -4066,11 +4067,13 @@ void synui_render_deskicons(syn_server_t *s)
  *     a live view. Every press rebuilds every tile, so a playing video steps
  *     once per press. Making them live would mean a commit listener per tile
  *     for an overlay that is on screen for well under a second.
- *   - Only the toplevel's root surface is in it. A client that paints part of
- *     itself into a subsurface shows that part as a hole. The alternative is a
- *     second scene tree per window (wlr_scene_subsurface_tree_create), which
- *     buys correctness by putting the client's surfaces into a second set of
- *     output enter/leave and frame callbacks for as long as the tile lives.
+ *   - One surface is in it: the toplevel's root, or a subsurface that covers
+ *     the whole window standing in for it (see alttab_content_surface). A
+ *     client that paints only *part* of itself into a subsurface still shows
+ *     that part as a hole. The alternative is a second scene tree per window
+ *     (wlr_scene_subsurface_tree_create), which buys correctness by putting the
+ *     client's surfaces into a second set of output enter/leave and frame
+ *     callbacks for as long as the tile lives.
  *
  * A window with nothing committed — including an X11 window caught between
  * buffers — falls back to its app icon, so a tile is never an empty rectangle.
@@ -4102,10 +4105,91 @@ typedef struct {
     enum wl_output_transform  transform;
 } atb_source_t;
 
+/* Which surface actually holds the window's picture.
+ *
+ * Usually the toplevel's own, but Firefox keeps its root surface as a bare GTK
+ * CSD frame and paints the whole window — chrome and content both — into a
+ * single subsurface laid over it. Measured with WAYLAND_DEBUG on firefox
+ * 2026-07-30: over one run the root surface took 4 commits to the subsurface's
+ * 1052, and the four were resizes. Reading the root there gets a full-size
+ * buffer with nothing in it, so the tile came out an empty plate — and not even
+ * the app-icon fallback, since that turns on a *missing* buffer.
+ *
+ * A subsurface that covers the whole window box is, by definition, what is on
+ * screen for that window, so it can stand in for the root with no second scene
+ * tree and no extra frame callbacks. Anything more finely composited than that
+ * still shows holes; that is what the tree in the comment above would buy.
+ *
+ * `box` is the window box, in root-surface-local logical pixels going in and in
+ * the returned surface's local pixels coming out. */
+static struct wlr_surface *alttab_content_surface(struct wlr_surface *root,
+                                                  struct wlr_box *box)
+{
+    struct wl_list *lists[] = { &root->current.subsurfaces_below,
+                                &root->current.subsurfaces_above };
+    struct wlr_surface *best = NULL;
+    int bx = 0, by = 0;
+
+    /* Bottom to top, keeping the last cover found: if two subsurfaces both
+     * cover the window, the upper one is the one you can see. */
+    for (size_t i = 0; i < sizeof lists / sizeof lists[0]; i++) {
+        struct wlr_subsurface *sub;
+        wl_list_for_each(sub, lists[i], current.link) {
+            struct wlr_surface *ss = sub->surface;
+            if (!ss || !ss->buffer) continue;
+            if (ss->current.transform != WL_OUTPUT_TRANSFORM_NORMAL) continue;
+            int x = sub->current.x, y = sub->current.y;
+            if (x > box->x || y > box->y ||
+                x + ss->current.width  < box->x + box->width ||
+                y + ss->current.height < box->y + box->height)
+                continue;              /* partial: a doorhanger, a tooltip */
+            best = ss; bx = x; by = y;
+        }
+    }
+    if (!best) return root;
+
+    box->x -= bx;
+    box->y -= by;
+    return best;
+}
+
 static bool alttab_tile_source(syn_view_t *v, atb_source_t *out)
 {
-    struct wlr_surface *surf = view_surface(v);
-    if (!surf || !surf->buffer) return false;
+    struct wlr_surface *root = view_surface(v);
+    if (!root || !root->buffer) return false;
+    if (root->current.width <= 0 || root->current.height <= 0) return false;
+
+    /* The window box in root-surface-local logical pixels. For a CSD client
+     * that is its xdg geometry, which crops off the shadow margin — the same
+     * pixels view_clip_csd_margin() takes off the live window, and for the same
+     * reason. Uncropped, a Firefox tile is its window adrift in 26 px of
+     * transparent padding on three sides, and the aspect ratio the tile fits to
+     * is the padding's rather than the window's.
+     *
+     * Clamped into the surface first: a client may declare a geometry bigger
+     * than what it actually painted, and a source box running off the end of
+     * the buffer samples whatever happens to be there.
+     *
+     * Only for an untransformed buffer: surface-local x/y map straight onto
+     * buffer x/y there, and a rotated toplevel — which essentially does not
+     * exist — is not worth an axis-swap table to shave a margin off. */
+    struct wlr_box box = { 0, 0, root->current.width, root->current.height };
+    struct wlr_surface *surf = root;
+
+    if (root->current.transform == WL_OUTPUT_TRANSFORM_NORMAL) {
+        struct wlr_box geo = {0};
+        if (v->xdg_surface) geo = v->xdg_surface->geometry;
+        if (geo.width > 0 && geo.height > 0) {
+            int gx = geo.x < 0 ? 0 : geo.x;
+            int gy = geo.y < 0 ? 0 : geo.y;
+            int gw = geo.width, gh = geo.height;
+            if (gx + gw > box.width)  gw = box.width  - gx;
+            if (gy + gh > box.height) gh = box.height - gy;
+            if (gw > 0 && gh > 0)
+                box = (struct wlr_box){ gx, gy, gw, gh };
+        }
+        surf = alttab_content_surface(root, &box);
+    }
 
     /* The client's own viewport crop, in buffer pixels: the whole of what this
      * surface displays, wp_viewport or not. */
@@ -4118,40 +4202,24 @@ static bool alttab_tile_source(syn_view_t *v, atb_source_t *out)
         out->src.width <= 0 || out->src.height <= 0)
         return false;
 
-    /* Crop off a CSD client's shadow margin — the same pixels
-     * view_clip_csd_margin() takes off the live window, and for the same reason.
-     * Uncropped, a Firefox tile is its window adrift in 26 px of transparent
-     * padding on three sides, and the aspect ratio the tile fits to is the
-     * padding's rather than the window's.
-     *
-     * Only for an untransformed buffer: surface-local x/y map straight onto
-     * buffer x/y there, and a rotated toplevel — which essentially does not
-     * exist — is not worth an axis-swap table to shave a margin off. */
-    struct wlr_box geo = {0};
-    if (v->xdg_surface) geo = v->xdg_surface->geometry;
-    if (geo.width <= 0 || geo.height <= 0 ||
-        out->transform != WL_OUTPUT_TRANSFORM_NORMAL)
-        return true;
+    if (out->transform != WL_OUTPUT_TRANSFORM_NORMAL) return true;
 
-    /* Clamp into the surface first. A client may declare a geometry bigger than
-     * what it actually painted, and a source box running off the end of the
-     * buffer samples whatever happens to be there. */
-    int gx = geo.x < 0 ? 0 : geo.x;
-    int gy = geo.y < 0 ? 0 : geo.y;
-    int gw = geo.width, gh = geo.height;
-    if (gx + gw > out->lw) gw = out->lw - gx;
-    if (gy + gh > out->lh) gh = out->lh - gy;
-    if (gw <= 0 || gh <= 0) return true;
-    if (!gx && !gy && gw == out->lw && gh == out->lh) return true;   /* no margin */
+    if (box.x < 0) { box.width  += box.x; box.x = 0; }
+    if (box.y < 0) { box.height += box.y; box.y = 0; }
+    if (box.x + box.width  > out->lw) box.width  = out->lw - box.x;
+    if (box.y + box.height > out->lh) box.height = out->lh - box.y;
+    if (box.width <= 0 || box.height <= 0) return true;
+    if (!box.x && !box.y && box.width == out->lw && box.height == out->lh)
+        return true;                                            /* no margin */
 
     double fx = out->src.width  / (double)out->lw;
     double fy = out->src.height / (double)out->lh;
-    out->src.x     += gx * fx;
-    out->src.y     += gy * fy;
-    out->src.width  = gw * fx;
-    out->src.height = gh * fy;
-    out->lw = gw;
-    out->lh = gh;
+    out->src.x     += box.x * fx;
+    out->src.y     += box.y * fy;
+    out->src.width  = box.width  * fx;
+    out->src.height = box.height * fy;
+    out->lw = box.width;
+    out->lh = box.height;
     return true;
 }
 
