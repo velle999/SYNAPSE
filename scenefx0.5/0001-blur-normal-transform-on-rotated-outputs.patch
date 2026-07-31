@@ -1,0 +1,54 @@
+blur: use a normal transform when blurring offscreen buffers
+
+Backport of upstream scenefx PR #199, which closes upstream issue #197
+("blur_ignore_transparent samples the wrong region on rotated outputs").
+Applies cleanly to the 0.5 tarball. Drop this file once it is in a release.
+
+    https://github.com/wlrfx/scenefx/pull/199
+    https://github.com/wlrfx/scenefx/issues/197
+
+WHY SYNAPSE CARRIES IT: velle's HDMI-A-1 is a 1920x1080 panel run portrait at
+transform=3 (270), logical 1080x1920 — see ~/.config/synui/outputs.conf. With
+backdrop blur on, the blur on that monitor came out visibly wrong (a correct
+band across the top, then a hard rectangular break with the rest sampled from
+the wrong part of the buffer), while DP-3 and DP-2 (both transform=0) were
+perfect. Only rotated outputs are affected, which is exactly the reported
+symptom: "backdrop blur distorts on the portrait monitor only".
+
+THE BUG: get_main_buffer_blur() only ever samples and writes OFFSCREEN
+framebuffers, and those are always in output-buffer orientation. It nonetheless
+read tex_options.base.transform, which since upstream #154 carries the
+transparency mask buffer's transform composed with the OUTPUT transform. On a
+rotated output that value is 90 or 270, and it fed two separate things:
+
+  - wlr_region_transform() on a clip region that was ALREADY in buffer
+    coordinates, rotating it a second time, and
+  - the set_tex_matrix() call in every downscale and upscale pass.
+
+So the blur passes sampled and wrote the wrong part of the buffer.
+
+Forcing the transform to normal for the whole function covers both uses, which
+is why the now-redundant wlr_region_transform() call goes away rather than
+being corrected. Both callers pass a COPY of the options struct, so the
+transform needed afterwards to draw the stencil mask is untouched — this is the
+same thing #154 already does before the final draw, just early enough that the
+blur passes get it too.
+
+diff --git a/render/fx_renderer/fx_pass.c b/render/fx_renderer/fx_pass.c
+index 39b62264..b4867d30 100644
+--- a/render/fx_renderer/fx_pass.c
++++ b/render/fx_renderer/fx_pass.c
+@@ -994,12 +994,11 @@ static struct fx_framebuffer *get_main_buffer_blur(struct fx_gles_render_pass *p
+ 		return NULL;
+ 	}
+ 	fx_options->blur_data = &blur_data;
++	fx_options->tex_options.base.transform = WL_OUTPUT_TRANSFORM_NORMAL;
+
+ 	pixman_region32_t damage;
+ 	pixman_region32_init(&damage);
+ 	pixman_region32_copy(&damage, fx_options->tex_options.base.clip);
+-	wlr_region_transform(&damage, &damage, fx_options->tex_options.base.transform,
+-			buffer_bounds.width, buffer_bounds.height);
+
+ 	wlr_region_expand(&damage, &damage, blur_data_calc_size(&blur_data));
+ 	// Make sure that the region doesn't expand past the buffer bounds

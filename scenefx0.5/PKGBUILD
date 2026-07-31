@@ -32,7 +32,7 @@
 pkgname=scenefx0.5
 _pkgname=scenefx
 pkgver=0.5
-pkgrel=1
+pkgrel=2
 pkgdesc='wlr_scene fork with corner radius, blur and shadows (wlroots 0.20)'
 arch=('x86_64')
 url='https://github.com/wlrfx/scenefx'
@@ -46,11 +46,20 @@ source=("$_pkgname-$pkgver.tar.gz::https://github.com/wlrfx/scenefx/archive/refs
         'layer_shell_v1.c'
         'drag_icon.c'
         'output_layout.c'
-        'wlr-layer-shell-unstable-v1.xml')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'wlr-layer-shell-unstable-v1.xml'
+        '0001-blur-normal-transform-on-rotated-outputs.patch')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
     cd "$srcdir/$_pkgname-$pkgver"
+
+    # 0. Upstream fixes not yet in a release. The blur one is REQUIRED here:
+    #    velle's HDMI-A-1 runs portrait at transform=3, and without it backdrop
+    #    blur samples the wrong part of the buffer on that monitor only. The
+    #    patch file carries the full reasoning. Applied FIRST, and not with
+    #    `|| true` — a patch that stops applying after a version bump must fail
+    #    the build loudly rather than silently shipping the bug back.
+    patch -p1 < "$srcdir/0001-blur-normal-transform-on-rotated-outputs.patch"
 
     # 1. Drop the ported wlroots scene helper TUs into scenefx's scene dir.
     cp "$srcdir"/surface.c "$srcdir"/subsurface_tree.c "$srcdir"/xdg_shell.c \
