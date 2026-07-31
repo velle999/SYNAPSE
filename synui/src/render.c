@@ -1305,6 +1305,25 @@ void synui_render_power(syn_server_t *s)
     cairo_move_to(cr, 18, 30);
     cairo_show_text(cr, "POWER SAVING");
 
+    /* Lid state, right-aligned on the title line. Without it the two lid rows
+     * are a puzzle on a desktop — they would sit there configurable and never
+     * do anything — and there is no other way to see which of the two the
+     * machine would use right now. */
+    {
+        const char *lid;
+        if (!s->power.lid_seen)   lid = "no lid switch";
+        else if (p->lid_closed)   lid = "lid closed";
+        else if (power_docked(s)) lid = "lid open \xc2\xb7 docked";
+        else                      lid = "lid open";
+
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, lid, &te);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        cairo_move_to(cr, pw - 18 - te.width, 30);
+        cairo_show_text(cr, lid);
+    }
+
     /* An inhibitor beats every timeout, so say so where it can't be missed
      * rather than letting the panel imply the timeouts are counting down. */
     cairo_set_font_size(cr, 12);
@@ -1335,7 +1354,11 @@ void synui_render_power(syn_server_t *s)
         }
 
         char name[48], value[32];
-        power_panel_rows(s, i, name, sizeof(name), value, sizeof(value));
+        /* A stage at "never" (or a lid row at "ignore") is inert; power.c says
+         * which, so the panel reads at a glance as "these are armed, those are
+         * not" without render.c having to know the vocabulary. */
+        int off = power_panel_rows(s, i, name, sizeof(name),
+                                   value, sizeof(value));
 
         cairo_set_font_size(cr, 14);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
@@ -1343,10 +1366,6 @@ void synui_render_power(syn_server_t *s)
         cairo_move_to(cr, pad + 8, ry + 4);
         cairo_show_text(cr, name);
 
-        /* A stage at "never" is inert; grey it out so the panel reads at a
-         * glance as "these three are armed, those two are not". */
-        int off = (i == POWER_ROW_ENABLED) ? !s->config.power_enabled
-                                           : (strcmp(value, "never") == 0);
         if (off) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
         else     set_accent(cr, 1.0);
         cairo_move_to(cr, 330, ry + 4);

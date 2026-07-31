@@ -398,3 +398,15 @@ edid_hdr_test = executable('edid_hdr_test',
   dependencies : [libdisplay_info],
   build_by_default : false)
 test('edid_hdr', edid_hdr_test)
+
+# Laptop lid actions. Links power.c against stubs for the compositor, because
+# the lid cannot be closed headless — wlroots' headless backend has no input
+# devices, and the only real alternative is a uinput switch, which the *live*
+# session's synui would pick up and act on. See the test's header.
+lid_test = executable('lid_test',
+  ['tests/lid_test.c', 'src/power.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('lid', lid_test)

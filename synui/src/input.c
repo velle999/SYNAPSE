@@ -63,6 +63,7 @@
  * NumLock lock below) is only declared on the backend-facing interface. */
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_switch.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 
 #include "synui.h"
@@ -2298,18 +2299,51 @@ static void input_dev_handle_destroy(struct wl_listener *listener, void *data)
     (void)data;
     syn_input_dev_t *id = wl_container_of(listener, id, destroy);
     wl_list_remove(&id->destroy.link);
+    /* Initialised for every device, attached only for switches — so removing
+     * it is safe either way. */
+    wl_list_remove(&id->toggle.link);
     wl_list_remove(&id->link);
     free(id);
 }
 
-static void input_dev_track(syn_server_t *s, struct wlr_input_device *dev)
+static syn_input_dev_t *input_dev_track(syn_server_t *s,
+                                        struct wlr_input_device *dev)
 {
     syn_input_dev_t *id = calloc(1, sizeof(*id));
-    if (!id) return;
+    if (!id) return NULL;
+    id->server = s;
     id->dev = dev;
     id->destroy.notify = input_dev_handle_destroy;
     wl_signal_add(&dev->events.destroy, &id->destroy);
+    /* Only switch devices attach this one; init it either way so the destroy
+     * handler can remove it unconditionally. */
+    wl_list_init(&id->toggle.link);
     wl_list_insert(&s->input_devs, &id->link);
+    return id;
+}
+
+/* A switch flipped. libinput reports the lid as WLR_SWITCH_TYPE_LID with state
+ * ON meaning *closed* — the switch is "lid switch closed", not "lid open" —
+ * which is the one thing here worth getting the wrong way round. */
+static void switch_handle_toggle(struct wl_listener *listener, void *data)
+{
+    syn_input_dev_t *id = wl_container_of(listener, id, toggle);
+    struct wlr_switch_toggle_event *ev = data;
+
+    if (ev->switch_type != WLR_SWITCH_TYPE_LID) return;   /* tablet mode, etc. */
+    power_lid_set(id->server, ev->switch_state == WLR_SWITCH_STATE_ON);
+}
+
+/* Switches are not a seat capability and have no cursor to attach to, so they
+ * get tracked for the destroy bookkeeping and nothing else. */
+static void server_new_switch(syn_server_t *s, struct wlr_input_device *dev)
+{
+    syn_input_dev_t *id = input_dev_track(s, dev);
+    if (!id) return;
+
+    id->toggle.notify = switch_handle_toggle;
+    wl_signal_add(&wlr_switch_from_input_device(dev)->events.toggle, &id->toggle);
+    wlr_log(WLR_INFO, "synui: input: switch device '%s'", dev->name);
 }
 
 static void server_new_input(struct wl_listener *listener, void *data)
@@ -2329,6 +2363,9 @@ static void server_new_input(struct wl_listener *listener, void *data)
         input_apply_libinput_config(s, dev);
         input_dev_track(s, dev);
         wlr_cursor_attach_input_device(s->cursor, dev);
+        break;
+    case WLR_INPUT_DEVICE_SWITCH:
+        server_new_switch(s, dev);
         break;
     default:
         break;

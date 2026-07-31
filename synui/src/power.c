@@ -24,6 +24,10 @@
  * Idle inhibitors (zwp_idle_inhibit_manager_v1 — synui-media-inhibit creates
  * one whenever audio is playing) disarm every stage while any are held.
  *
+ * Closing a laptop lid is handled here too, though it is not an idle stage:
+ * it is an event, not a timeout, and it runs its action at once. See
+ * power_lid_set() at the bottom.
+ *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  * https://github.com/velle999/SYNAPSE
@@ -34,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>   /* strncasecmp — connector names are not case-normalised */
 #include <time.h>
 
 #include <wayland-server-core.h>
@@ -56,10 +61,25 @@ static const int power_ladder[] = {
 static const int power_ladder_len =
     (int)(sizeof(power_ladder) / sizeof(power_ladder[0]));
 
+/* Config-file, panel and power.state spelling of each lid action. Names, not
+ * indices, in the state file: the enum will grow (hibernate, screen off) and a
+ * saved 3 must not silently become a different action after it does. */
+const char *const syn_lid_action_names[SYN_LID_ACTION_COUNT] = {
+    "system", "ignore", "blank", "lock", "suspend",
+};
+
+int lid_action_from_name(const char *name)
+{
+    for (int i = 0; i < SYN_LID_ACTION_COUNT; i++)
+        if (strcmp(name, syn_lid_action_names[i]) == 0) return i;
+    return -1;
+}
+
 /* ── Config field <-> panel row ──────────────────────────── */
 
-/* The timeout a row edits. POWER_ROW_ENABLED has no timeout — it toggles the
- * master switch — so it maps to NULL and callers must check. */
+/* The idle timeout a row edits. POWER_ROW_ENABLED toggles the master switch
+ * and the lid rows pick an action, so both map to NULL and callers must
+ * check — row_action_field() covers the latter. */
 static int *row_field(syn_server_t *s, int row)
 {
     switch (row) {
@@ -71,15 +91,27 @@ static int *row_field(syn_server_t *s, int row)
     }
 }
 
+/* The syn_lid_action_t a row edits, or NULL if the row is not a lid row. */
+static int *row_action_field(syn_server_t *s, int row)
+{
+    switch (row) {
+    case POWER_ROW_LID:        return &s->config.lid_close_action;
+    case POWER_ROW_LID_DOCKED: return &s->config.lid_close_docked_action;
+    default:                   return NULL;
+    }
+}
+
 static const char *row_label(int row)
 {
     switch (row) {
-    case POWER_ROW_ENABLED: return "Power saving";
-    case POWER_ROW_DIM:     return "Dim screen";
-    case POWER_ROW_BLANK:   return "Blank displays";
-    case POWER_ROW_LOCK:    return "Lock session";
-    case POWER_ROW_SUSPEND: return "Suspend system";
-    default:                return "?";
+    case POWER_ROW_ENABLED:    return "Power saving";
+    case POWER_ROW_DIM:        return "Dim screen";
+    case POWER_ROW_BLANK:      return "Blank displays";
+    case POWER_ROW_LOCK:       return "Lock session";
+    case POWER_ROW_SUSPEND:    return "Suspend system";
+    case POWER_ROW_LID:        return "Lid closed";
+    case POWER_ROW_LID_DOCKED: return "Lid closed (docked)";
+    default:                   return "?";
     }
 }
 
@@ -130,15 +162,49 @@ static void power_set_dim(syn_server_t *s, bool on)
 
 /* ── Blank (DPMS) ────────────────────────────────────────── */
 
-/* Mirrors the wlr-output-power-management handler in output_mgmt.c: the only
- * thing DPMS off is, at this level, is committing the output disabled. */
-static void power_set_blank(syn_server_t *s, bool off)
+/* The built-in laptop panel, by connector type. wlroots names a DRM output
+ * after its connector, so this is the same test every other compositor uses to
+ * tell a lid from a monitor. A machine with none (a desktop, or any non-DRM
+ * backend) simply never matches, and the lid rows then have nothing to act on.
+ *
+ * Prefix, not exact: the connector is eDP-1 / LVDS-1 / DSI-1, and the index is
+ * not always 1 on a machine with more than one internal panel. */
+static bool output_is_internal(struct wlr_output *o)
 {
-    if (off == (bool)s->power.blanked) return;
-    s->power.blanked = off;
+    static const char *const internal[] = { "eDP-", "LVDS-", "DSI-" };
+    for (size_t i = 0; i < sizeof(internal) / sizeof(internal[0]); i++)
+        if (strncasecmp(o->name, internal[i], strlen(internal[i])) == 0)
+            return true;
+    return false;
+}
 
+bool power_docked(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (!output_is_internal(o->wlr_output)) return true;
+    return false;
+}
+
+/* Commit every output to the state the two blank flags say it should be in.
+ *
+ * Recomputed from the flags rather than toggled, because two independent
+ * things turn outputs off: the idle blank stage (all of them) and a lid
+ * action (the built-in panel only). Toggling meant opening the lid re-enabled
+ * a panel the idle stage was still legitimately holding down, and left the
+ * `blanked` flag claiming otherwise — so the next input event saw nothing to
+ * undo and the screen stayed black. */
+static void power_apply_blank(syn_server_t *s)
+{
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
+        bool off = s->power.blanked ||
+                   (s->power.lid_blanked && output_is_internal(o->wlr_output));
+        if (off == !o->wlr_output->enabled) continue;   /* already there */
+
+        /* Mirrors the wlr-output-power-management handler in output_mgmt.c:
+         * the only thing DPMS off is, at this level, is committing the output
+         * disabled. */
         struct wlr_output_state state;
         wlr_output_state_init(&state);
         wlr_output_state_set_enabled(&state, !off);
@@ -154,8 +220,25 @@ static void power_set_blank(syn_server_t *s, bool off)
             wlr_output_schedule_frame(o->wlr_output);
         }
     }
+}
 
+static void power_set_blank(syn_server_t *s, bool off)
+{
+    if (off == (bool)s->power.blanked) return;
+    s->power.blanked = off;
+    power_apply_blank(s);
     wlr_log(WLR_INFO, "synui: power: displays %s", off ? "off" : "on");
+}
+
+/* The lid's half of the same thing: the built-in panel only, so a docked
+ * machine keeps its monitors while the closed lid stops lighting a screen
+ * nobody can see. */
+static void power_set_lid_blank(syn_server_t *s, bool off)
+{
+    if (off == (bool)s->power.lid_blanked) return;
+    s->power.lid_blanked = off;
+    power_apply_blank(s);
+    wlr_log(WLR_INFO, "synui: power: built-in panel %s (lid)", off ? "off" : "on");
 }
 
 /* ── Stage timers ────────────────────────────────────────── */
@@ -292,6 +375,79 @@ void power_wake_display(syn_server_t *s)
 void power_reload(syn_server_t *s)
 {
     power_arm(s);
+    /* The lid inhibitor is part of the config too: switching a lid row to or
+     * from "system" has to hand the lid back to logind, or take it away. */
+    logind_lid_update(s);
+    if (s->power.visible) synui_render_power(s);
+}
+
+/* ── Laptop lid ──────────────────────────────────────────── */
+
+/* Which of the two lid settings applies right now. Decided at the moment the
+ * lid shuts rather than cached, so plugging a monitor in changes the answer
+ * without anything having to notice the hotplug. */
+static int lid_action_now(syn_server_t *s)
+{
+    int a = power_docked(s) ? s->config.lid_close_docked_action
+                            : s->config.lid_close_action;
+    if (a < 0 || a >= SYN_LID_ACTION_COUNT) return SYN_LID_SYSTEM;
+    return a;
+}
+
+void power_lid_set(syn_server_t *s, bool closed)
+{
+    s->power.lid_seen = 1;
+    if (closed == (bool)s->power.lid_closed) return;
+    s->power.lid_closed = closed;
+
+    if (!closed) {
+        wlr_log(WLR_INFO, "synui: power: lid opened");
+        /* Light the built-in panel back up whatever the action was — including
+         * after a suspend, where the machine comes back with the lid already
+         * open and this is the event that says so. Only the lid's own blank is
+         * undone; an idle blank stays down until there is real input. */
+        power_set_lid_blank(s, false);
+        /* Opening the lid is the user arriving, so the idle countdown starts
+         * again from here rather than from whenever they last typed. It is
+         * deliberately not power_notify_activity(): that also clears
+         * power.locked, and a lid that locked the session is still locked. */
+        power_arm(s);
+        if (s->power.visible) synui_render_power(s);
+        return;
+    }
+
+    int action = lid_action_now(s);
+    wlr_log(WLR_INFO, "synui: power: lid closed (%s%s)",
+            syn_lid_action_names[action], power_docked(s) ? ", docked" : "");
+
+    switch (action) {
+    case SYN_LID_SYSTEM:
+        /* logind still owns the lid — we never took its inhibitor, so it has
+         * already acted and there is nothing for us to do. */
+        break;
+    case SYN_LID_IGNORE:
+        break;
+    case SYN_LID_LOCK:
+        if (!s->power.locked) {
+            s->power.locked = 1;
+            synui_lock(s);
+        }
+        /* And blank, as SYN_LID_BLANK does: a locked session with the panel
+         * still lit is a lock screen glowing inside a shut laptop. */
+        power_set_lid_blank(s, true);
+        break;
+    case SYN_LID_BLANK:
+        power_set_lid_blank(s, true);
+        break;
+    case SYN_LID_SUSPEND:
+        /* No lock here: logind.c locks on PrepareForSleep, which covers this
+         * suspend and every other one. Doing it twice would spawn a second
+         * locker over the first. */
+        wlr_log(WLR_INFO, "synui: power: suspending (lid)");
+        synui_spawn(s->config.power_suspend_cmd);
+        break;
+    }
+
     if (s->power.visible) synui_render_power(s);
 }
 
@@ -341,6 +497,10 @@ void power_state_save(syn_server_t *s)
     fprintf(f, "blank=%d\n",   s->config.power_blank);
     fprintf(f, "lock=%d\n",    s->config.power_lock);
     fprintf(f, "suspend=%d\n", s->config.power_suspend);
+    fprintf(f, "lid=%s\n",
+            syn_lid_action_names[s->config.lid_close_action]);
+    fprintf(f, "lid_docked=%s\n",
+            syn_lid_action_names[s->config.lid_close_docked_action]);
     fclose(f);
 
     s->power.dirty = 0;
@@ -363,14 +523,24 @@ void power_state_load(syn_config_t *cfg)
         char *eq = strchr(line, '=');
         if (!eq) continue;
         *eq = '\0';
-        const char *key = line;
-        int val = atoi(eq + 1);
+        const char *key = line, *sval = eq + 1;
+        int val = atoi(sval);
 
         if      (strcmp(key, "enabled") == 0) cfg->power_enabled = val ? 1 : 0;
         else if (strcmp(key, "dim") == 0)     cfg->power_dim     = val < 0 ? 0 : val;
         else if (strcmp(key, "blank") == 0)   cfg->power_blank   = val < 0 ? 0 : val;
         else if (strcmp(key, "lock") == 0)    cfg->power_lock    = val < 0 ? 0 : val;
         else if (strcmp(key, "suspend") == 0) cfg->power_suspend = val < 0 ? 0 : val;
+        /* The lid keys are names, not numbers — a bad one leaves the synuirc
+         * value standing rather than silently selecting action 0 ("system"),
+         * which atoi() would have done to every one of them. */
+        else if (strcmp(key, "lid") == 0) {
+            int a = lid_action_from_name(sval);
+            if (a >= 0) cfg->lid_close_action = a;
+        } else if (strcmp(key, "lid_docked") == 0) {
+            int a = lid_action_from_name(sval);
+            if (a >= 0) cfg->lid_close_docked_action = a;
+        }
     }
     fclose(f);
 }
@@ -402,6 +572,22 @@ void power_toggle(syn_server_t *s)
  * sits between rungs (say 500) still moves on the first keypress. */
 static void power_adjust(syn_server_t *s, int dir)
 {
+    /* Lid rows step a list of actions, not the timeout ladder. Wraps, because
+     * the list is five short and stepping off one end to reach the other beats
+     * hitting a wall on a row where every value is equally valid. */
+    int *action = row_action_field(s, s->power.selected);
+    if (action) {
+        int next = (*action + dir) % SYN_LID_ACTION_COUNT;
+        if (next < 0) next += SYN_LID_ACTION_COUNT;
+        *action = next;
+        s->power.dirty = 1;
+        snprintf(s->power.status, sizeof(s->power.status), "%s: %s",
+                 row_label(s->power.selected), syn_lid_action_names[next]);
+        /* Whether synui or logind owns the lid just changed. */
+        logind_lid_update(s);
+        return;
+    }
+
     int *field = row_field(s, s->power.selected);
     if (!field) {                       /* the master switch row */
         s->config.power_enabled = !s->config.power_enabled;
@@ -474,8 +660,13 @@ int power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         /* Toggle the selected stage off, or back to its ladder default. */
         {
             int *field = row_field(s, s->power.selected);
+            /* The master switch and the lid rows have no timeout to zero, so
+             * Space just steps them the way Right does. */
             if (!field) { power_adjust(s, +1); synui_render_power(s); return 1; }
-            static const int fallback[POWER_ROW_COUNT] = { 0, 240, 600, 900, 0 };
+            static const int fallback[] = {
+                [POWER_ROW_DIM] = 240, [POWER_ROW_BLANK]   = 600,
+                [POWER_ROW_LOCK] = 900, [POWER_ROW_SUSPEND] = 0,
+            };
             *field = *field ? 0 : fallback[s->power.selected];
             s->power.dirty = 1;
             power_arm(s);
@@ -493,12 +684,27 @@ int power_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
 /* Rendering lives here rather than render.c only because every other panel's
  * draw does; keep it beside them. */
-void power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
-                      char *value, size_t vn)
+int power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
+                     char *value, size_t vn)
 {
     snprintf(name, nn, "%s", row_label(row));
-    if (row == POWER_ROW_ENABLED)
-        snprintf(value, vn, "%s", s->config.power_enabled ? "enabled" : "disabled");
-    else
-        power_format_timeout(*row_field(s, row), value, vn);
+
+    if (row == POWER_ROW_ENABLED) {
+        snprintf(value, vn, "%s",
+                 s->config.power_enabled ? "enabled" : "disabled");
+        return !s->config.power_enabled;
+    }
+
+    int *action = row_action_field(s, row);
+    if (action) {
+        snprintf(value, vn, "%s", syn_lid_action_names[*action]);
+        /* "system" is inert *for synui* — logind is still doing something with
+         * the lid, so it greys out the same way "ignore" does without either
+         * one claiming the lid is dead. */
+        return *action == SYN_LID_IGNORE || *action == SYN_LID_SYSTEM;
+    }
+
+    int secs = *row_field(s, row);
+    power_format_timeout(secs, value, vn);
+    return secs <= 0;
 }

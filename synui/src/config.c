@@ -106,6 +106,15 @@
  *   power_lock_cmd = swaylock -f -c 000000
  *   power_suspend_cmd = systemctl suspend
  *
+ * Laptop lid (power.c) — what closing the lid does, picked between by whether
+ * an external monitor is connected. system|ignore|blank|lock|suspend, where
+ * `system` leaves the lid to logind.conf and every other value has synui take
+ * logind's handle-lid-switch inhibitor and act itself. `blank` turns the
+ * built-in panel off and leaves external monitors alone. The defaults match
+ * systemd's own; Super+P edits them and writes them to power.state:
+ *   lid_close_action = suspend
+ *   lid_close_docked_action = ignore
+ *
  * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
  * entry to type a passphrase into, so there is nothing native to point at yet:
  *   network_cmd = foot -e nmtui
@@ -635,6 +644,14 @@ void synui_config_load(syn_config_t *cfg)
     snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd),
              "systemctl suspend");
 
+    /* Same defaults systemd ships (HandleLidSwitch=suspend,
+     * HandleLidSwitchDocked=ignore), so a laptop that never opens Super+P
+     * behaves the way its owner already expects — synui just does it itself,
+     * which is what makes the docked case configurable at all. No effect on a
+     * machine with no lid switch. */
+    cfg->lid_close_action        = SYN_LID_SUSPEND;
+    cfg->lid_close_docked_action = SYN_LID_IGNORE;
+
     /* kitty accepts -e for compatibility with foot/xterm even though its own
      * help does not list it, so this form stays valid across either terminal. */
     snprintf(cfg->network_cmd, sizeof(cfg->network_cmd),
@@ -1022,6 +1039,19 @@ void synui_config_load(syn_config_t *cfg)
             snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd), "%s", val);
         else if (strcmp(key, "power_suspend_cmd") == 0)
             snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
+        /* Driven off syn_lid_action_names so a new action only has to be added
+         * to the enum and that table, as with wallpaper_mode above. */
+        else if (strcmp(key, "lid_close_action") == 0) {
+            int a = lid_action_from_name(val);
+            if (a >= 0) cfg->lid_close_action = a;
+            else wlr_log(WLR_ERROR, "synui: lid_close_action: unknown '%s'", val);
+        }
+        else if (strcmp(key, "lid_close_docked_action") == 0) {
+            int a = lid_action_from_name(val);
+            if (a >= 0) cfg->lid_close_docked_action = a;
+            else wlr_log(WLR_ERROR,
+                         "synui: lid_close_docked_action: unknown '%s'", val);
+        }
         else if (strcmp(key, "network_cmd") == 0)
             snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
         else if (strcmp(key, "news_refresh") == 0) {

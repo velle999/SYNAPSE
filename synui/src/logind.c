@@ -33,6 +33,7 @@
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>     /* F_DUPFD_CLOEXEC — the inhibitor fds are duped */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,55 +61,120 @@ static struct {
      * is what lets the machine sleep. -1 when we hold none. */
     int                     inhibit_fd;
 
+    /* The handle-lid-switch *block* inhibitor. Held whenever synui has a lid
+     * action of its own, so logind does not suspend the machine before power.c
+     * gets a look at the switch. -1 when logind still owns the lid. */
+    int                     lid_fd;
+
     /* Backlight, resolved once from sysfs. name[0] == 0 means this machine has
      * none (a desktop), and the brightness binds then do nothing. */
     char                    bl_name[64];
     int                     bl_max;
 } lg = { .inhibit_fd = -1 };
 
-/* ── Sleep inhibitor ─────────────────────────────────────── */
+/* ── Inhibitors ──────────────────────────────────────────── */
 
-static void logind_take_inhibitor(void)
+/* Take one logind inhibitor and return the fd that holds it, or -1. Closing
+ * that fd is the only way to release it, so every caller owns what it gets. */
+static int logind_inhibit(const char *what, const char *why, const char *mode)
 {
-    if (!lg.bus || lg.inhibit_fd >= 0) return;
+    if (!lg.bus) return -1;
 
     sd_bus_message *reply = NULL;
     sd_bus_error err = SD_BUS_ERROR_NULL;
+    int out_fd = -1;
 
-    /* "delay", not "block": block refuses sleep outright. delay just buys us
-     * the few seconds needed to get the lock up first. */
     int r = sd_bus_call_method(lg.bus, LOGIND_SVC, LOGIND_MGR_PATH, LOGIND_MGR_IF,
                                "Inhibit", &err, &reply, "ssss",
-                               "sleep", "synui", "Lock the session before sleep",
-                               "delay");
+                               what, "synui", why, mode);
     if (r < 0) {
-        wlr_log(WLR_ERROR, "synui: logind: cannot take sleep inhibitor: %s",
-                err.message ? err.message : strerror(-r));
+        wlr_log(WLR_ERROR, "synui: logind: cannot take %s inhibitor: %s",
+                what, err.message ? err.message : strerror(-r));
         goto out;
     }
 
     int fd = -1;
     r = sd_bus_message_read(reply, "h", &fd);
     if (r < 0 || fd < 0) {
-        wlr_log(WLR_ERROR, "synui: logind: inhibitor reply had no fd");
+        wlr_log(WLR_ERROR, "synui: logind: %s inhibitor reply had no fd", what);
         goto out;
     }
 
     /* The fd belongs to the message and is closed with it — dup it, or the
-     * inhibitor evaporates the moment this reply is unreffed and the lock race
-     * comes back without a single error to show for it. */
-    lg.inhibit_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
-    if (lg.inhibit_fd < 0)
+     * inhibitor evaporates the moment this reply is unreffed and whatever it
+     * was holding off comes back without a single error to show for it. */
+    out_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+    if (out_fd < 0)
         wlr_log(WLR_ERROR, "synui: logind: dup inhibitor fd: %s", strerror(errno));
 
 out:
     sd_bus_error_free(&err);
     sd_bus_message_unref(reply);
+    return out_fd;
+}
+
+static void logind_take_inhibitor(void)
+{
+    if (!lg.bus || lg.inhibit_fd >= 0) return;
+
+    /* "delay", not "block": block refuses sleep outright. delay just buys us
+     * the few seconds needed to get the lock up first. */
+    lg.inhibit_fd = logind_inhibit("sleep", "Lock the session before sleep",
+                                   "delay");
 }
 
 static void logind_drop_inhibitor(void)
 {
     if (lg.inhibit_fd >= 0) { close(lg.inhibit_fd); lg.inhibit_fd = -1; }
+}
+
+/* ── Lid ─────────────────────────────────────────────────── */
+
+/*
+ * synui and logind cannot both act on the lid. logind's default
+ * HandleLidSwitch=suspend fires the moment the switch closes, which would beat
+ * power.c's action to it every time and make "Lid closed: blank" — the setting
+ * a docked laptop actually wants — do nothing but suspend the machine.
+ *
+ * So: any lid action other than SYN_LID_SYSTEM takes a *block* inhibitor on
+ * handle-lid-switch, which is the documented way to say "this session handles
+ * the lid" (it is what GNOME and KDE do, and the polkit action is allow_active
+ * = yes, so it needs no privileges). SYN_LID_SYSTEM drops it and hands the lid
+ * straight back to logind.conf.
+ *
+ * Failing to get it is not fatal and deliberately not retried: logind then
+ * still suspends on lid close, which is the same behaviour the machine had
+ * before any of this existed. If synui dies the fd dies with it and logind
+ * takes the lid back on its own — the failure mode is "the default", never "a
+ * laptop that no longer sleeps when shut".
+ */
+void logind_lid_update(syn_server_t *s)
+{
+    /* No system bus (a nested or headless synui) — logind_init already said so
+     * once, and there is nothing to inhibit. Silent, or every panel keypress
+     * would log an error. */
+    if (!lg.bus) return;
+
+    bool want = s->config.lid_close_action        != SYN_LID_SYSTEM ||
+                s->config.lid_close_docked_action != SYN_LID_SYSTEM;
+
+    if (want == (lg.lid_fd >= 0)) return;
+
+    if (!want) {
+        close(lg.lid_fd);
+        lg.lid_fd = -1;
+        wlr_log(WLR_INFO, "synui: logind: lid handed back to logind");
+        return;
+    }
+
+    lg.lid_fd = logind_inhibit("handle-lid-switch",
+                               "synui handles the lid switch", "block");
+    if (lg.lid_fd >= 0)
+        wlr_log(WLR_INFO, "synui: logind: handling the lid switch");
+    else
+        wlr_log(WLR_ERROR, "synui: logind: no handle-lid-switch inhibitor —"
+                " logind keeps the lid, so the lid rows in Super+P will not"
+                " take effect");
 }
 
 /* PrepareForSleep(true)  — about to sleep: lock, then get out of the way.
@@ -275,6 +341,7 @@ static int logind_readable(int fd, uint32_t mask, void *data)
 void logind_init(syn_server_t *s)
 {
     lg.inhibit_fd = -1;
+    lg.lid_fd     = -1;
     lg.bl_name[0] = '\0';
 
     /* login1 is on the system bus. */
@@ -302,6 +369,7 @@ void logind_init(syn_server_t *s)
 
     logind_find_backlight();
     logind_take_inhibitor();
+    logind_lid_update(s);
 
     wlr_log(WLR_INFO, "synui: logind: up (lock-on-sleep%s)",
             lg.bl_name[0] ? ", brightness" : ", no backlight");
@@ -315,10 +383,12 @@ fail:
 void logind_finish(syn_server_t *s)
 {
     (void)s;
-    /* Drop the inhibitor first: holding it while shutting down would make
-     * logind wait out its full delay on the next sleep for a compositor that
-     * is no longer there to lock anything. */
+    /* Drop the inhibitors first: holding the sleep one while shutting down
+     * would make logind wait out its full delay on the next sleep for a
+     * compositor that is no longer there to lock anything, and holding the lid
+     * one would leave a laptop that no longer sleeps when it is shut. */
     logind_drop_inhibitor();
+    if (lg.lid_fd >= 0) { close(lg.lid_fd); lg.lid_fd = -1; }
     if (lg.src) { wl_event_source_remove(lg.src); lg.src = NULL; }
     if (lg.bus) { sd_bus_unref(lg.bus); lg.bus = NULL; }
 }

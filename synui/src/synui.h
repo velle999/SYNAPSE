@@ -719,14 +719,40 @@ typedef enum {
 } syn_bt_ask_t;
 
 /* ── Power saving panel + idle state machine (power.c) ───── */
-/* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch;
- * the rest each map to one syn_config_t timeout, in the same order. */
+/* What closing a laptop lid does. Two of these are configured — one for the
+ * undocked machine and one for "an external monitor is connected" — because
+ * the right answer genuinely differs: a lid closed on the sofa means "sleep",
+ * a lid closed on a desk with a monitor attached means "keep working".
+ *
+ * SYN_LID_SYSTEM hands the lid back to logind (whatever HandleLidSwitch= in
+ * logind.conf says). Every other value means synui takes logind's
+ * handle-lid-switch inhibitor and acts itself. */
+typedef enum {
+    SYN_LID_SYSTEM = 0,   /* leave it to logind (default HandleLidSwitch) */
+    SYN_LID_IGNORE,       /* nothing at all */
+    SYN_LID_BLANK,        /* DPMS the built-in panel off, keep externals */
+    SYN_LID_LOCK,         /* blank the panel and lock the session */
+    SYN_LID_SUSPEND,      /* run power_suspend_cmd */
+    SYN_LID_ACTION_COUNT, /* keep last — the panel steps on it */
+} syn_lid_action_t;
+
+/* Names for the panel, the config parser and power.state, indexed by
+ * syn_lid_action_t. Defined in power.c; keep in step with the enum above. */
+extern const char *const syn_lid_action_names[SYN_LID_ACTION_COUNT];
+/* syn_lid_action_t for an action name, or -1 if it is not one. */
+int lid_action_from_name(const char *name);
+
+/* Panel rows, in display order. POWER_ROW_ENABLED toggles the master switch,
+ * the four after it each map to one syn_config_t idle timeout, and the last
+ * two pick a syn_lid_action_t rather than a timeout. */
 typedef enum {
     POWER_ROW_ENABLED = 0,
     POWER_ROW_DIM,
     POWER_ROW_BLANK,
     POWER_ROW_LOCK,
     POWER_ROW_SUSPEND,
+    POWER_ROW_LID,
+    POWER_ROW_LID_DOCKED,
     POWER_ROW_COUNT,
 } syn_power_row_t;
 
@@ -744,6 +770,14 @@ typedef struct {
     int blanked;
     int locked;        /* we spawned the locker and have seen no activity since */
     uint32_t last_arm_ms;  /* rearm throttle — see power_notify_activity */
+
+    /* Lid state, as last reported by a switch device. lid_blanked is separate
+     * from `blanked` above because the lid only ever turns the built-in panel
+     * off, so opening it again must not re-enable outputs the idle blank
+     * stage is legitimately holding down. */
+    int lid_closed;
+    int lid_blanked;
+    int lid_seen;      /* a lid switch exists — the panel says so if it doesn't */
 } syn_power_t;
 
 /* ── Game mode (game.c) ───────────────────────────────────── */
@@ -1342,6 +1376,14 @@ typedef struct {
      * would have truncated it mid-flag, silently. */
     char  power_lock_cmd[512];
 
+    /* Laptop lid (syn_lid_action_t). Two settings, chosen between at the
+     * moment the lid shuts by whether an external output is connected. Both
+     * default to what systemd's own HandleLidSwitch/HandleLidSwitchDocked
+     * default to, so a machine that never opens the panel behaves the way its
+     * owner already expects. Persisted to power.state alongside the timeouts. */
+    int   lid_close_action;         /* default SYN_LID_SUSPEND */
+    int   lid_close_docked_action;  /* default SYN_LID_IGNORE */
+
     /* Wi-Fi / network configuration UI. nmtui in a terminal by default: synui
      * has no text entry to type a passphrase into, so there is nothing native
      * to point this at yet. Overridable for non-NetworkManager setups. */
@@ -1758,12 +1800,16 @@ struct syn_keyboard {
     struct wl_listener destroy;
 };
 
-/* Non-keyboard input device (pointer/touch/tablet), tracked so a SIGHUP
+/* Non-keyboard input device (pointer/touch/tablet/switch), tracked so a SIGHUP
  * config reload can reapply libinput options to it. */
 typedef struct syn_input_dev {
     struct wl_list           link;
+    struct syn_server       *server;   /* switch events need it; see toggle */
     struct wlr_input_device *dev;
     struct wl_listener       destroy;
+    /* Switch devices only (the laptop lid). Its list link is initialised for
+     * every device so destroy can remove it without knowing the type. */
+    struct wl_listener       toggle;
 } syn_input_dev_t;
 
 /* ── Server (compositor state) ───────────────────────────── */
@@ -3017,6 +3063,13 @@ void power_notify_activity(syn_server_t *s);
 void power_wake_display(syn_server_t *s);
 /* Re-arm after the config changed (panel edit, config reload). */
 void power_reload(syn_server_t *s);
+/* A laptop lid toggled. `closed` is libinput's switch state, so the lid is
+ * shut when it is true. Runs the configured lid action (which one depends on
+ * whether an external output is connected — see syn_lid_action_t). */
+void power_lid_set(syn_server_t *s, bool closed);
+/* True when an output that is not the built-in panel is enabled, i.e. the
+ * laptop is docked and closing the lid should not necessarily stop anything. */
+bool power_docked(syn_server_t *s);
 
 /* ── GPU telemetry (gpu.c) ───────────────────────────────── */
 /* Probes NVML (dlopen) then amdgpu sysfs; leaves gpu_n at 0 if neither is
@@ -3316,6 +3369,10 @@ void logind_finish(syn_server_t *s);
 /* Step the backlight by a percentage of its range (+/-). No-op where there is
  * no panel. */
 void logind_brightness_step(syn_server_t *s, int pct);
+/* Take or drop logind's handle-lid-switch block inhibitor to match the current
+ * lid config: synui has to hold it to stop logind suspending out from under a
+ * lid action of its own. Idempotent — call it after any config change. */
+void logind_lid_update(syn_server_t *s);
 
 /* ── Notifications (notif.c) ─────────────────────────────── */
 /* notif_init takes org.freedesktop.Notifications on the session bus. Safe where
@@ -3382,9 +3439,11 @@ void synui_start_menu_open(syn_server_t *s);
 void power_state_save(syn_server_t *s);
 void power_state_load(syn_config_t *cfg);
 /* Name/value strings for one panel row; render.c draws, power.c owns the
- * formatting so the ladder and the labels stay in one place. */
-void power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
-                      char *value, size_t vn);
+ * formatting so the ladder and the labels stay in one place. Returns 1 when
+ * the row's value means "this does nothing" (never / ignore), so the panel can
+ * grey it out without having to know which strings those are. */
+int power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
+                     char *value, size_t vn);
 
 /* ── matrix.c (animated wallpaper) ───────────────────────── */
 void matrix_init(syn_server_t *s);                /* compile shader, load atlas (no-op on non-GLES2) */
