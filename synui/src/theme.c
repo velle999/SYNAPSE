@@ -595,6 +595,8 @@ void theme_hide(syn_server_t *s)
 {
     s->thememgr.visible = 0;
     synui_render_thememgr(s);
+    /* No-op unless the control panel is what opened this — see ctlpanel.c. */
+    ctlpanel_child_closed(s, "theme");
 }
 
 void theme_toggle(syn_server_t *s)

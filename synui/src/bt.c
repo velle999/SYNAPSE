@@ -838,6 +838,7 @@ void bt_hide(syn_server_t *s)
     if (s->bt.discovering) bt_scan_set(s, 0);
     s->bt.visible = 0;
     synui_render_bt(s);
+    ctlpanel_child_closed(s, "bluetooth");
 }
 
 void bt_toggle(syn_server_t *s)

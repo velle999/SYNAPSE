@@ -700,6 +700,7 @@ void sound_hide(syn_server_t *s)
 {
     s->sound.visible = 0;
     synui_render_sound(s);
+    ctlpanel_child_closed(s, "sounds");
 }
 
 void sound_toggle(syn_server_t *s)

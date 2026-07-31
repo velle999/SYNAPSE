@@ -206,6 +206,7 @@ void widgets_hide(syn_server_t *s)
 {
     s->widgets.visible = 0;
     synui_render_widgets(s);
+    ctlpanel_child_closed(s, "widgets");
 }
 
 void widgets_toggle(syn_server_t *s)

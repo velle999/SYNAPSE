@@ -214,6 +214,7 @@ void clock_hide(syn_server_t *s)
     s->clock.visible = 0;
     if (s->clock.timer) wl_event_source_timer_update(s->clock.timer, 0);
     synui_render_clock(s);
+    ctlpanel_child_closed(s, "clock");
 }
 
 void clock_toggle(syn_server_t *s)

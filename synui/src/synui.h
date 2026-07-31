@@ -502,35 +502,95 @@ typedef struct {
 } syn_thememgr_t;
 
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
-/* The settings column, in display order. The *shortcuts* column deliberately
- * has no table here: it is generated from the live bind table (syn_config_t::
- * binds) every time the panel renders, so it cannot drift out of step with the
- * binds actually in force — the failure the waybar start menu shipped once,
- * where a stale hand-maintained list mapped entries to the wrong actions. */
+/*
+ * One settings front door, shaped the way every other desktop shapes one: a
+ * category list down the left, that category's rows on the right, and the
+ * panels that own the details opening *from* it and returning *to* it.
+ *
+ * It was a flat list until it wasn't: twenty-one rows in one column, toggles
+ * and jump-offs interleaved with a separator doing the work a heading should,
+ * and every jump-off a one-way door — open Displays from here and Esc dropped
+ * you on the desktop, not back where you were. Categories make the list
+ * findable; syn_ctlpanel_t::child makes the doors swing both ways.
+ *
+ * The *shortcuts* category deliberately has no table here: it is generated from
+ * the live bind table (syn_config_t::binds) every time the panel renders, so it
+ * cannot drift out of step with the binds actually in force — the failure the
+ * waybar start menu shipped once, where a stale hand-maintained list mapped
+ * entries to the wrong actions.
+ */
 typedef enum {
-    CTL_ROW_EFFECTS = 0,   /* toggles: act in place, no panel */
-    CTL_ROW_GAME,
-    CTL_ROW_AI_BACKEND,
+    CTL_CAT_APPEARANCE = 0,
+    CTL_CAT_DESKTOP,       /* the shell furniture: dock, start button, widgets */
+    CTL_CAT_DISPLAY,
+    CTL_CAT_SOUND,
+    CTL_CAT_NETWORK,
+    CTL_CAT_POWER,
+    CTL_CAT_SYSTEM,
+    CTL_CAT_SHORTCUTS,     /* not settings — the live bind table, read-only */
+    CTL_CAT_COUNT,
+} syn_ctl_cat_t;
+
+/* Rows are grouped by category here purely so the enum reads like the panel;
+ * the category each one belongs to is declared in ctlpanel.c's item table, and
+ * that table is what the panel walks. Order within a category is display order. */
+typedef enum {
+    /* Appearance */
+    CTL_ROW_THEME = 0,
+    CTL_ROW_WALLPAPER,
+    CTL_ROW_CURSOR,        /* cursor theme picker (curpick.c) */
+    CTL_ROW_EFFECTS,       /* CRT post-process master switch */
+    CTL_ROW_FILTERS,       /* …and the per-filter strengths behind it */
+    CTL_ROW_TRANSPARENCY,  /* window translucency master switch + level */
+    CTL_ROW_TITLEBARS,
+    /* Desktop */
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
-    CTL_ROW_TITLEBARS,
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
-    CTL_ROW_TRANSPARENCY,  /* window translucency master switch */
-    CTL_ROW_SEP,           /* rule, not selectable — skipped by the cursor */
-    CTL_ROW_THEME,         /* jump-off: the Super+T theme manager */
-    CTL_ROW_DISPLAYS,      /* jump-offs: open the panel that owns the setting */
-    CTL_ROW_FILTERS,
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher */
+    /* Display */
+    CTL_ROW_DISPLAYS,
+    CTL_ROW_NIGHTLIGHT,
+    CTL_ROW_CLOCK,         /* date & time */
+    /* Sound */
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
-    CTL_ROW_WALLPAPER,
-    CTL_ROW_POWER,
-    CTL_ROW_TASKMGR,
+    /* Network */
     CTL_ROW_NETWORK,
     CTL_ROW_BLUETOOTH,
     CTL_ROW_PRINTERS,
+    /* Power */
+    CTL_ROW_POWER,
+    CTL_ROW_GAME,
     CTL_ROW_LOCK,
+    /* System */
+    CTL_ROW_TASKMGR,
+    CTL_ROW_AI_BACKEND,
+    CTL_ROW_NEWS,
+    CTL_ROW_CLIPBOARD,
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
+
+/* What activating a row does. The distinction is not cosmetic: only CTL_KIND_PANEL
+ * rows arm the return-to-the-control-panel path, because only they open something
+ * this panel can be handed back from. A LAUNCH row hands off to a process synui
+ * does not own, and an ACTION row (lock) means the panel should be gone. */
+typedef enum {
+    CTL_KIND_TOGGLE = 0,   /* flips in place; the panel stays up */
+    CTL_KIND_SLIDER,       /* toggle, plus Left/Right on a level */
+    CTL_KIND_PANEL,        /* opens a synui panel; its Esc comes back here */
+    CTL_KIND_LAUNCH,       /* spawns something external; the panel closes */
+    CTL_KIND_ACTION,       /* fires and closes */
+} syn_ctl_kind_t;
+
+/* Which column has the keyboard. Left/Right (and Tab) move between them, which
+ * is what makes the category list a menu and the rows its submenu. */
+enum {
+    CTL_FOCUS_CATS = 0,
+    CTL_FOCUS_ITEMS,
+};
+
+/* Longest category, so the panel body can be sized without walking the table. */
+#define CTL_CAT_ITEMS_MAX  8
 
 /* A shortcuts-column line. The nine workspace binds (and the nine move-to-
  * workspace binds) are collapsed into one row each — listed literally they are
@@ -544,9 +604,18 @@ typedef struct {
 
 typedef struct {
     int  visible;
-    int  selected;     /* syn_ctl_row_t, always a selectable row */
+    int  cat;          /* syn_ctl_cat_t — the highlighted category */
+    int  item;         /* index *within* that category, not a syn_ctl_row_t */
+    int  focus;        /* CTL_FOCUS_CATS / CTL_FOCUS_ITEMS */
     int  scroll;       /* first shortcuts row drawn */
     char status[96];
+    /* The bind action of the panel this one opened, empty when none is out.
+     * Set only for CTL_KIND_PANEL rows and only once the panel is confirmed up,
+     * because it is what every panel's hide path checks to decide whether its
+     * Esc means "back to the control panel" or "back to the desktop". A stale
+     * value here would pop the control panel open at some unrelated close. */
+    char child[24];
+    int  child_cat, child_item;   /* where the cursor was — restored on return */
     /* The AI-backend row's value is not compositor state: it is read back out of
      * /run/synapd/backend, which the synui-ai-backend helper only writes once it
      * has rewritten the drop-in and restarted synapd — a second or two later,
@@ -3300,15 +3369,35 @@ void sound_udev_finish(syn_server_t *s);
 void ctlpanel_show(syn_server_t *s);
 void ctlpanel_hide(syn_server_t *s);
 void ctlpanel_toggle(syn_server_t *s);
+/* Open onto a named category ("display", "appearance", … — the sidebar names,
+ * case-insensitively). The `control` bind action's argument, and how the start
+ * menu's Settings submenu reaches the same tree instead of listing its own copy
+ * of it. An unrecognised name falls back to a plain toggle. */
+void ctlpanel_show_cat(syn_server_t *s, const char *name);
+int  ctlpanel_cat_from_name(const char *name);
 /* Per-frame poll for the AI-backend row; 1 while it wants another frame. */
 int  ctlpanel_tick(syn_server_t *s);
 /* Modal key handling while the panel is open, as in filters_key. */
 int  ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
-/* Settings-column row text. value[] is filled with the row's current state
- * ("on"/"off"/"GPU"), or left empty for a jump-off row, which has none. */
+/* Row text. value[] is filled with the row's current state ("on"/"off"/"GPU"),
+ * or left empty for a row that only opens a panel and holds no state itself. */
 const char *ctlpanel_row_label(int row);
 void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n);
-int  ctlpanel_row_selectable(int row);
+/* Category name for the sidebar, and that category's rows in display order —
+ * both driven by the one item table in ctlpanel.c, so the sidebar, the row pane
+ * and the keyboard cursor can never disagree about what is in a category.
+ * ctlpanel_cat_items() returns how many row ids were written into out[]. */
+const char *ctlpanel_cat_name(int cat);
+int  ctlpanel_cat_items(int cat, int *out, int max);
+syn_ctl_kind_t ctlpanel_row_kind(int row);
+/* The row id the cursor is on, or -1 when the category has no rows of its own
+ * (the shortcuts list). Derived from cat+item rather than stored, so there is
+ * one answer to "what is selected" instead of two that can drift. */
+int  ctlpanel_selected_row(syn_server_t *s);
+/* Called by a panel's hide path with the bind action that opens it. A no-op
+ * unless the control panel is the thing that opened it, in which case the
+ * control panel comes back with the cursor where it was left. */
+void ctlpanel_child_closed(syn_server_t *s, const char *action);
 /* The shortcuts column, rebuilt from the live bind table on every render.
  * Returns how many rows were written into out[] (at most max). */
 int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);

@@ -1099,6 +1099,7 @@ void news_hide(syn_server_t *s)
     wl_event_source_timer_update(n->timer, 0);
     news_seen_save(n);
     synui_render_news(s);
+    ctlpanel_child_closed(s, "news");
 }
 
 void news_toggle(syn_server_t *s)

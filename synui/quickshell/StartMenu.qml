@@ -142,7 +142,7 @@ PanelWindow {
         //   { kind: "header", label }
         //   { kind: "back",   label }
         //   { kind: "page",   label, page }   -> descend
-        //   { kind: "action", label, action } -> synctl dispatch <action>
+        //   { kind: "action", label, action, arg? } -> synctl dispatch <action> [arg]
         //   { kind: "exec",   label, argv }   -> run argv directly
         //   { kind: "app",    label, entry }  -> entry.execute()
         QtObject {
@@ -249,33 +249,37 @@ PanelWindow {
                     { kind: "exec", label: "SynapseOS Updates", argv: ["syn-update-gui"] }
                 ]
 
-                // Every settings panel synui owns. These are bind ACTIONS, not
-                // .desktop files, so none of them appear under the scanned
-                // "Settings" category — which on a stock install holds only
-                // cups' "Manage Printing". The page id matches the CATEGORIES
-                // display name on purpose, so such an entry folds onto this page
-                // instead of creating a second one.
+                // The control panel's categories, not a second list of settings.
+                //
+                // This was thirteen hand-written rows naming individual panels,
+                // and it had already drifted: no Theme, no Cursor theme, no
+                // Printers, no Task manager, no Transparency, no Dock — nine
+                // settings the compositor owns and this menu did not know about.
+                // Nothing could have caught that, because the list was its own
+                // source of truth. Now each row names a CATEGORY and the
+                // compositor fills it from ctlpanel.c's item table, so a setting
+                // added there appears here with no edit to this file.
+                //
+                // These are bind ACTIONS, not .desktop files, so none of them
+                // appear under the scanned "Settings" category — which on a
+                // stock install holds only cups' "Manage Printing". The page id
+                // matches the CATEGORIES display name on purpose, so such an
+                // entry folds onto this page instead of creating a second one.
                 p["Settings"] = [
-                    { kind: "action", label: "Control Panel",   action: "control" },
-                    { kind: "action", label: "Date & Time",     action: "clock" },
-                    { kind: "action", label: "Display",         action: "displays" },
-                    { kind: "action", label: "Wallpaper",       action: "wallpaper" },
-                    { kind: "action", label: "CRT Filters",     action: "filters" },
-                    { kind: "action", label: "Desktop Widgets",  action: "widgets" },
-                    { kind: "action", label: "Event Sounds",     action: "sounds" },
-                    { kind: "action", label: "Night Light",     action: "night_light" },
-                    { kind: "action", label: "Power Saving",    action: "power" },
-                    { kind: "action", label: "Network / Wi-Fi", action: "network" },
-                    { kind: "action", label: "Bluetooth",       action: "bluetooth" },
-                    // The start button's style, with its current value in the
-                    // label. Activating flips it: the action is still the
-                    // compositor's (it owns the config and writes
-                    // launcher.state), and LauncherStyle watches that file, so
-                    // the button and this label both follow without a restart.
-                    { kind: "action",
-                      label: "Start Button: " + (LauncherStyle.logo ? "Logo" : "Text"),
-                      action: "launcher_style" },
-                    { kind: "action", label: "Lock Screen",     action: "lock" }
+                    { kind: "action", label: "Control Panel",  action: "control" },
+                    { kind: "action", label: "Appearance",     action: "control", arg: "appearance" },
+                    { kind: "action", label: "Desktop",        action: "control", arg: "desktop" },
+                    { kind: "action", label: "Display",        action: "control", arg: "display" },
+                    { kind: "action", label: "Sound",          action: "control", arg: "sound" },
+                    { kind: "action", label: "Network",        action: "control", arg: "network" },
+                    { kind: "action", label: "Power",          action: "control", arg: "power" },
+                    { kind: "action", label: "System",         action: "control", arg: "system" },
+                    { kind: "action", label: "Shortcuts",      action: "control", arg: "shortcuts" },
+                    // Lock stays a direct row. It is the one thing on this page
+                    // nobody wants two clicks away, and it is an action rather
+                    // than a setting — the control panel lists it under Power
+                    // for findability, not because it belongs to a category.
+                    { kind: "action", label: "Lock Screen",    action: "lock" }
                 ]
 
                 for (const c of rowModel.categoryNames) {
@@ -355,7 +359,12 @@ PanelWindow {
                 MenuState.page = row.page
                 return
             case "action":
-                dispatcher.command = ["synctl", "dispatch", row.action]
+                // The optional arg is one word from this file's own tables — a
+                // control-panel category — never anything scanned off disk, and
+                // it goes through argv rather than a shell either way.
+                dispatcher.command = row.arg
+                    ? ["synctl", "dispatch", row.action, row.arg]
+                    : ["synctl", "dispatch", row.action]
                 dispatcher.running = true
                 break
             case "exec":

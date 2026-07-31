@@ -2326,16 +2326,19 @@ void synui_render_calendar(syn_server_t *s)
 
 /* ── Control panel (ctlpanel.c) ──────────────────────────── */
 
-/* Two columns: shortcuts left, settings right. The column x's are tuned for the
- * 13px monospace face; CTL_SHORTCUT_ROWS (synui.h) is how many shortcut rows fit
- * between the header and the footer, and the panel height is derived from it, so
- * the two cannot disagree about how much room there is. */
+/* Sidebar left, that category's rows right — the shape every desktop's settings
+ * app has, and the shape the panel's own navigation assumes (Left/Right move
+ * between these two columns). The x's are tuned for the 13px monospace face;
+ * CTL_SHORTCUT_ROWS (synui.h) is how many shortcut rows fit between the header
+ * and the footer, and the panel height is derived from it, so the two cannot
+ * disagree about how much room there is. */
 #define CTL_W          860
 #define CTL_ROW_H       26
 #define CTL_TOP         92
 #define CTL_FOOTER      64
-#define CTL_COL_RIGHT  470   /* x of the settings column */
-#define CTL_SETTING_V  790   /* right edge of the settings value column */
+#define CTL_SIDEBAR    200   /* width of the category column */
+#define CTL_COL_RIGHT  226   /* x of the row pane */
+#define CTL_SETTING_V  (CTL_W - 30)   /* right edge of the value column */
 
 void synui_render_ctlpanel(syn_server_t *s)
 {
@@ -2349,10 +2352,11 @@ void synui_render_ctlpanel(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    /* The taller of the two columns sets the height — the settings column is a
-     * fixed CTL_ROW_COUNT, the shortcuts column scrolls within its window. */
-    int body_rows = CTL_ROW_COUNT > CTL_SHORTCUT_ROWS
-                  ? CTL_ROW_COUNT : CTL_SHORTCUT_ROWS;
+    /* The taller of the two columns sets the height. The sidebar is a fixed
+     * CTL_CAT_COUNT and no category has more rows than that; the shortcuts list
+     * is the long one, and it scrolls within its window. */
+    int body_rows = CTL_CAT_COUNT > CTL_SHORTCUT_ROWS
+                  ? CTL_CAT_COUNT : CTL_SHORTCUT_ROWS;
     int pw = CTL_W;
     int ph = CTL_TOP + body_rows * CTL_ROW_H + CTL_FOOTER;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
@@ -2378,10 +2382,22 @@ void synui_render_ctlpanel(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    int cats_focused = (cp->focus == CTL_FOCUS_CATS);
+
     cairo_set_font_size(cr, 15);
     set_accent(cr, 1.0);
     cairo_move_to(cr, 18, 30);
     cairo_show_text(cr, "CONTROL PANEL");
+
+    /* Breadcrumb. Which category you are in is otherwise only visible as a
+     * highlight in the sidebar, which is exactly the thing that goes quiet when
+     * focus moves into the rows. */
+    cairo_set_font_size(cr, 13);
+    cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+    cairo_move_to(cr, CTL_COL_RIGHT, 30);
+    cairo_show_text(cr, "\xe2\x80\xba  ");
+    cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+    cairo_show_text(cr, ctlpanel_cat_name(cp->cat));
 
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
     cairo_set_line_width(cr, 1);
@@ -2393,87 +2409,140 @@ void synui_render_ctlpanel(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
     cairo_move_to(cr, 18, 70);
-    cairo_show_text(cr, "SHORTCUTS");
+    cairo_show_text(cr, "CATEGORIES");
     cairo_move_to(cr, CTL_COL_RIGHT, 70);
-    cairo_show_text(cr, "SETTINGS");
+    cairo_show_text(cr, cp->cat == CTL_CAT_SHORTCUTS ? "KEYBOARD SHORTCUTS"
+                                                     : "SETTINGS");
 
     /* Divider between the columns */
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.35);
-    cairo_move_to(cr, CTL_COL_RIGHT - 24, 56);
-    cairo_line_to(cr, CTL_COL_RIGHT - 24, ph - CTL_FOOTER + 8);
+    cairo_move_to(cr, CTL_SIDEBAR, 56);
+    cairo_line_to(cr, CTL_SIDEBAR, ph - CTL_FOOTER + 8);
     cairo_stroke(cr);
 
-    /* ── Shortcuts column (live bind table) ── */
-    syn_ctl_shortcut_t sc[CTL_SHORTCUTS_MAX];
-    int n = ctlpanel_shortcuts(s, sc, CTL_SHORTCUTS_MAX);
+    /* ── Sidebar ── */
+    for (int i = 0; i < CTL_CAT_COUNT; i++) {
+        int ry  = CTL_TOP + i * CTL_ROW_H;
+        int sel = (i == cp->cat);
 
-    int first = cp->scroll;
-    if (first > n - CTL_SHORTCUT_ROWS) first = n - CTL_SHORTCUT_ROWS;
-    if (first < 0) first = 0;
-
-    cairo_set_font_size(cr, 13);
-    for (int i = 0; i < CTL_SHORTCUT_ROWS && first + i < n; i++) {
-        int ry = CTL_TOP + i * CTL_ROW_H;
-
-        set_accent(cr, 0.95);
-        cairo_move_to(cr, 18, ry);
-        cairo_show_text(cr, sc[first + i].combo);
-
-        cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
-        cairo_move_to(cr, 190, ry);
-        cairo_show_text(cr, sc[first + i].desc);
-    }
-
-    /* Say so when the list runs off the window, rather than silently truncating
-     * it — a shortcut you cannot see is a shortcut you do not have. */
-    if (n > CTL_SHORTCUT_ROWS) {
-        cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
-        char more[64];
-        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
-                 first + 1,
-                 first + CTL_SHORTCUT_ROWS < n ? first + CTL_SHORTCUT_ROWS : n,
-                 n);
-        cairo_move_to(cr, 18, CTL_TOP + CTL_SHORTCUT_ROWS * CTL_ROW_H + 6);
-        cairo_show_text(cr, more);
-    }
-
-    /* ── Settings column ── */
-    for (int i = 0; i < CTL_ROW_COUNT; i++) {
-        int ry = CTL_TOP + i * CTL_ROW_H;
-
-        if (i == CTL_ROW_SEP) {          /* a rule, not a row */
-            cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
-            cairo_move_to(cr, CTL_COL_RIGHT, ry - 8);
-            cairo_line_to(cr, CTL_SETTING_V + 40, ry - 8);
-            cairo_stroke(cr);
-            continue;
-        }
-
-        int sel = (i == cp->selected);
+        /* The current category stays marked while focus is in the rows, just
+         * dimmer: it is where Esc goes back to, so losing it entirely would
+         * leave the pane belonging to nothing. */
         if (sel) {
-            set_accent(cr, 0.35);
-            cairo_rectangle(cr, CTL_COL_RIGHT - 12, ry - 16,
-                            (CTL_SETTING_V + 52) - (CTL_COL_RIGHT - 12), CTL_ROW_H - 4);
+            set_accent(cr, cats_focused ? 0.35 : 0.14);
+            cairo_rectangle(cr, 10, ry - 16, CTL_SIDEBAR - 22, CTL_ROW_H - 4);
             cairo_fill(cr);
         }
 
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
-        cairo_move_to(cr, CTL_COL_RIGHT, ry);
-        cairo_show_text(cr, ctlpanel_row_label(i));
+        if (sel) cairo_set_source_rgba(cr, 0.95, 1.0, 0.99, 1.0);
+        else     cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+        cairo_move_to(cr, 18, ry);
+        cairo_show_text(cr, ctlpanel_cat_name(i));
 
-        char value[32];
-        ctlpanel_row_value(s, i, value, sizeof(value));
-        if (value[0]) {
-            /* "on" reads as live, everything else (off/n/a) as inert. */
-            if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0)
-                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-            else
-                set_accent(cr, 1.0);
+        /* A "›" on the selected row, so the sidebar reads as a menu that opens
+         * into the pane rather than a list of labels. */
+        if (sel) {
+            set_accent(cr, cats_focused ? 1.0 : 0.5);
             cairo_set_font_size(cr, 13);
-            draw_right(cr, CTL_SETTING_V + 40, ry, value);
+            draw_right(cr, CTL_SIDEBAR - 16, ry, "\xe2\x80\xba");
+        }
+    }
+
+    /* ── Row pane ── */
+    if (cp->cat == CTL_CAT_SHORTCUTS) {
+        /* Not settings: the live bind table, read-only, one scrolling list. */
+        syn_ctl_shortcut_t sc[CTL_SHORTCUTS_MAX];
+        int n = ctlpanel_shortcuts(s, sc, CTL_SHORTCUTS_MAX);
+
+        int first = cp->scroll;
+        if (first > n - CTL_SHORTCUT_ROWS) first = n - CTL_SHORTCUT_ROWS;
+        if (first < 0) first = 0;
+
+        cairo_set_font_size(cr, 13);
+        for (int i = 0; i < CTL_SHORTCUT_ROWS && first + i < n; i++) {
+            int ry = CTL_TOP + i * CTL_ROW_H;
+
+            set_accent(cr, 0.95);
+            cairo_move_to(cr, CTL_COL_RIGHT, ry);
+            cairo_show_text(cr, sc[first + i].combo);
+
+            /* +200 rather than the +172 the old narrow column used: the widest
+             * combo in the default binds is "XF86MonBrightnessDown", which ran
+             * straight into the description at 172. The pane is wide enough now
+             * that there is no reason to keep the collision. */
+            cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+            draw_clipped(cr, CTL_COL_RIGHT + 200, ry,
+                         CTL_SETTING_V - (CTL_COL_RIGHT + 200),
+                         sc[first + i].desc);
+        }
+
+        /* Say so when the list runs off the window, rather than silently
+         * truncating it — a shortcut you cannot see is a shortcut you do not
+         * have. */
+        if (n > CTL_SHORTCUT_ROWS) {
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+            char more[64];
+            snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+                     first + 1,
+                     first + CTL_SHORTCUT_ROWS < n ? first + CTL_SHORTCUT_ROWS : n,
+                     n);
+            cairo_move_to(cr, CTL_COL_RIGHT,
+                          CTL_TOP + CTL_SHORTCUT_ROWS * CTL_ROW_H + 6);
+            cairo_show_text(cr, more);
+        }
+    } else {
+        int rows[CTL_CAT_ITEMS_MAX];
+        int nrows = ctlpanel_cat_items(cp->cat, rows, CTL_CAT_ITEMS_MAX);
+        int cur   = ctlpanel_selected_row(s);
+
+        for (int i = 0; i < nrows; i++) {
+            int ry  = CTL_TOP + i * CTL_ROW_H;
+            int row = rows[i];
+            int sel = (row == cur);
+
+            if (sel) {
+                set_accent(cr, cats_focused ? 0.14 : 0.35);
+                cairo_rectangle(cr, CTL_COL_RIGHT - 12, ry - 16,
+                                (CTL_SETTING_V + 12) - (CTL_COL_RIGHT - 12),
+                                CTL_ROW_H - 4);
+                cairo_fill(cr);
+            }
+
+            cairo_set_font_size(cr, 14);
+            cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                                  sel ? 0.99 : 0.86, 1.0);
+            cairo_move_to(cr, CTL_COL_RIGHT, ry);
+            cairo_show_text(cr, ctlpanel_row_label(row));
+
+            char value[32];
+            ctlpanel_row_value(s, row, value, sizeof(value));
+
+            /* A row that opens something is marked as such, so the pane says
+             * which rows flip here and which lead somewhere — the distinction
+             * the old trailing "…" in the labels used to carry. */
+            syn_ctl_kind_t kind = ctlpanel_row_kind(row);
+            int leads_away = (kind == CTL_KIND_PANEL || kind == CTL_KIND_LAUNCH ||
+                              kind == CTL_KIND_ACTION);
+            double vx = CTL_SETTING_V;
+
+            if (leads_away) {
+                cairo_set_font_size(cr, 13);
+                cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+                draw_right(cr, CTL_SETTING_V, ry, "\xe2\x80\xba");
+                vx -= 18;
+            }
+
+            if (value[0]) {
+                /* "on" reads as live, everything else (off/n/a) as inert. */
+                if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0)
+                    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                else
+                    set_accent(cr, 1.0);
+                cairo_set_font_size(cr, 13);
+                draw_right(cr, vx, ry, value);
+            }
         }
     }
 
@@ -2485,11 +2554,23 @@ void synui_render_ctlpanel(syn_server_t *s)
         cairo_show_text(cr, cp->status);
     }
 
+    /* The keys on offer are not the same in the two columns, and a hint listing
+     * the ones that do nothing where you are is worse than none. */
+    /* Spelled out rather than drawn with arrow glyphs: the 13px monospace face
+     * the panels use has no U+2192, and a missing glyph in a key hint is a hint
+     * that reads as a typo. "›" (U+203A), used above, it does have. */
+    const char *hint;
+    if (cats_focused)
+        hint = "Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 Esc close";
+    else if (cp->cat == CTL_CAT_SHORTCUTS)
+        hint = "Up/Down \xc2\xb7 PgUp/PgDn scroll \xc2\xb7 Left or Esc goes back";
+    else
+        hint = "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 Left or Esc back \xc2\xb7 Tab column";
+
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 18);
-    cairo_show_text(cr,
-        "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 PgUp/PgDn scroll shortcuts \xc2\xb7 Esc close");
+    cairo_show_text(cr, hint);
 
     cairo_destroy(cr);
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);

@@ -970,6 +970,7 @@ void wppick_hide(syn_server_t *s)
     s->wppick.pending_we = -1;
     s->wppick.visible = 0;
     synui_render_wppick(s);
+    ctlpanel_child_closed(s, "wallpaper");
 }
 
 void wppick_toggle(syn_server_t *s)

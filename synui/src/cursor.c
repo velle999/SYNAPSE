@@ -371,6 +371,7 @@ void curpick_hide(syn_server_t *s)
 {
     s->curpick.visible = 0;
     synui_render_curpick(s);
+    ctlpanel_child_closed(s, "cursor");
 }
 
 void curpick_toggle(syn_server_t *s)

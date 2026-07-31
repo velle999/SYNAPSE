@@ -402,6 +402,7 @@ void dispcfg_hide(syn_server_t *s)
 {
     s->dispcfg.visible = 0;
     synui_render_dispcfg(s);
+    ctlpanel_child_closed(s, "displays");
 }
 
 void dispcfg_toggle(syn_server_t *s)

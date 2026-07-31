@@ -685,7 +685,11 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         if (s->welcome_ui.shown) synui_welcome_hide(s);
         else                     synui_render_welcome(s);
     } else if (strcmp(action, "control") == 0) {
-        ctlpanel_toggle(s);
+        /* Bare (Super+C) toggles the front door; with a category name it opens
+         * onto that category, which is what the start menu's Settings submenu
+         * dispatches — see ctlpanel_show_cat. */
+        if (arg && *arg) ctlpanel_show_cat(s, arg);
+        else             ctlpanel_toggle(s);
     } else if (strcmp(action, "theme") == 0) {
         theme_toggle(s);
     } else if (strcmp(action, "bluetooth") == 0) {

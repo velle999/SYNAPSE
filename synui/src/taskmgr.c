@@ -442,6 +442,7 @@ void taskmgr_hide(syn_server_t *s)
     s->taskmgr.confirm = TM_CONFIRM_NONE;
     wl_event_source_timer_update(s->taskmgr.timer, 0);
     synui_render_taskmgr(s);
+    ctlpanel_child_closed(s, "taskmgr");
 }
 
 void taskmgr_toggle(syn_server_t *s)

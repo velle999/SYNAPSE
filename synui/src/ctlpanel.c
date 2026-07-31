@@ -4,11 +4,24 @@
  *
  * synui grew its settings one panel at a time — displays on Super+D, filters on
  * Super+E, power on Super+P — each reachable only by already knowing its key.
- * This is the front door: the left column lists every shortcut, the right column
- * carries the handful of toggles worth having in one place, plus a jump-off into
- * each panel that owns the rest.
+ * This is the front door, and since the categories landed it is the *whole*
+ * front door rather than an index to twenty other ones: a category list down the
+ * left, that category's rows on the right, and the panels that own the details
+ * opening from it and handing control back to it when they close.
  *
- * The shortcuts column is *generated from the live bind table* rather than
+ * Two things make it one system rather than a launcher:
+ *
+ *   - One item table (ctl_items[] below) is the only place a setting is
+ *     declared. The sidebar, the row pane, the cursor and the key handler all
+ *     walk it, so a row cannot appear in one and be missing from another.
+ *
+ *   - A row that opens a panel arms syn_ctlpanel_t::child, and that panel's
+ *     hide path calls ctlpanel_child_closed(). Esc in Displays therefore lands
+ *     back on Display ▸ Display settings, not on the desktop. Opened by their
+ *     own keybind the same panels close to the desktop as they always did —
+ *     child is empty then, and the call is a no-op.
+ *
+ * The shortcuts category is *generated from the live bind table* rather than
  * written out here. That is the whole point of it: a hand-maintained list is a
  * list that drifts, and this project has already shipped that bug once, in the
  * waybar start menu, where a stale entry list mapped menu items to the wrong
@@ -20,6 +33,9 @@
  *
  * Keys follow filters.c/power.c (Up/Down select, Enter/Space activate, Esc
  * close), because a third panel that worked a third way would be its own bug.
+ * Left/Right and Tab are the addition categories needed: they move between the
+ * two columns, and Esc in the right column steps back to the left before it
+ * closes anything — the same "back out one level" every menu tree has.
  *
  * SynapseOS Project
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -51,39 +67,129 @@ static double ctl_now_secs(void)
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
-/* ── Settings column ─────────────────────────────────────── */
+/* ── The item table ──────────────────────────────────────────
+ *
+ * Every row in the panel, once. `action` is the bind action a PANEL/LAUNCH/
+ * ACTION row fires; the in-place toggles have none, because there is nothing to
+ * hand to — they are handled by id in ctlpanel_activate().
+ *
+ * Rows are listed in display order and grouped by category. Nothing enforces
+ * that grouping (the walk filters on .cat), but keeping the literal order and
+ * the drawn order the same means one read of this table tells you what the
+ * panel looks like.
+ */
+static const struct {
+    int             row;
+    syn_ctl_cat_t   cat;
+    syn_ctl_kind_t  kind;
+    const char     *label;
+    const char     *action;
+} ctl_items[] = {
+    /* Appearance */
+    { CTL_ROW_THEME,        CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Theme",            "theme"     },
+    { CTL_ROW_WALLPAPER,    CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Wallpaper",        "wallpaper" },
+    { CTL_ROW_CURSOR,       CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Cursor theme",     "cursor"    },
+    { CTL_ROW_EFFECTS,      CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "CRT effects",      NULL        },
+    { CTL_ROW_FILTERS,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "CRT filters",      "filters"   },
+    { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL        },
+    { CTL_ROW_TITLEBARS,    CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Titlebars",        NULL        },
 
-const char *ctlpanel_row_label(int row)
+    /* Desktop */
+    { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock",             NULL      },
+    { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock auto-hide",   NULL      },
+    { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL      },
+    { CTL_ROW_WIDGETS,       CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Desktop widgets",  "widgets" },
+
+    /* Display */
+    { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Display settings", "displays" },
+    { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL       },
+    { CTL_ROW_CLOCK,      CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Date & time",      "clock"    },
+
+    /* Sound */
+    { CTL_ROW_SOUNDS, CTL_CAT_SOUND, CTL_KIND_PANEL, "Event sounds", "sounds" },
+
+    /* Network. Two of the three hand off to something synui does not own —
+     * nmtui in a terminal, cups in a browser — so they close the panel rather
+     * than arming a return to it. */
+    { CTL_ROW_NETWORK,   CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Network / Wi-Fi", "network"   },
+    { CTL_ROW_BLUETOOTH, CTL_CAT_NETWORK, CTL_KIND_PANEL,  "Bluetooth",       "bluetooth" },
+    { CTL_ROW_PRINTERS,  CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Printers",        "printers"  },
+
+    /* Power */
+    { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power" },
+    { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL    },
+    { CTL_ROW_LOCK,  CTL_CAT_POWER, CTL_KIND_ACTION, "Lock screen",  "lock"  },
+
+    /* System */
+    { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr"   },
+    { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL        },
+    { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
+    { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Clipboard history", "clipboard" },
+};
+
+#define CTL_ITEM_COUNT ((int)(sizeof(ctl_items) / sizeof(ctl_items[0])))
+
+static int ctl_item_index(int row)
 {
-    switch (row) {
-    case CTL_ROW_EFFECTS:    return "CRT effects";
-    case CTL_ROW_GAME:       return "Game mode";
-    case CTL_ROW_AI_BACKEND: return "AI backend";
-    case CTL_ROW_DOCK:       return "Dock";
-    case CTL_ROW_DOCK_AUTOHIDE: return "Dock auto-hide";
-    case CTL_ROW_TITLEBARS:  return "Titlebars";
-    case CTL_ROW_LAUNCHER:   return "Start button";
-    case CTL_ROW_TRANSPARENCY: return "Transparency";
-    case CTL_ROW_SEP:        return "";
-    case CTL_ROW_THEME:      return "Theme \xe2\x80\xa6";
-    case CTL_ROW_DISPLAYS:   return "Display settings";
-    case CTL_ROW_FILTERS:    return "CRT filters \xe2\x80\xa6";
-    case CTL_ROW_WIDGETS:    return "Desktop widgets \xe2\x80\xa6";
-    case CTL_ROW_SOUNDS:     return "Event sounds \xe2\x80\xa6";
-    case CTL_ROW_WALLPAPER:  return "Wallpaper \xe2\x80\xa6";
-    case CTL_ROW_POWER:      return "Power saving \xe2\x80\xa6";
-    case CTL_ROW_TASKMGR:    return "Task manager \xe2\x80\xa6";
-    case CTL_ROW_NETWORK:    return "Network / Wi-Fi \xe2\x80\xa6";
-    case CTL_ROW_BLUETOOTH:  return "Bluetooth \xe2\x80\xa6";
-    case CTL_ROW_PRINTERS:   return "Printers \xe2\x80\xa6";
-    case CTL_ROW_LOCK:       return "Lock screen";
+    for (int i = 0; i < CTL_ITEM_COUNT; i++)
+        if (ctl_items[i].row == row) return i;
+    return -1;
+}
+
+const char *ctlpanel_cat_name(int cat)
+{
+    switch (cat) {
+    case CTL_CAT_APPEARANCE: return "Appearance";
+    case CTL_CAT_DESKTOP:    return "Desktop";
+    case CTL_CAT_DISPLAY:    return "Display";
+    case CTL_CAT_SOUND:      return "Sound";
+    case CTL_CAT_NETWORK:    return "Network";
+    case CTL_CAT_POWER:      return "Power";
+    case CTL_CAT_SYSTEM:     return "System";
+    case CTL_CAT_SHORTCUTS:  return "Shortcuts";
     default:                 return "?";
     }
 }
 
-int ctlpanel_row_selectable(int row)
+int ctlpanel_cat_items(int cat, int *out, int max)
 {
-    return row != CTL_ROW_SEP;
+    int n = 0;
+    for (int i = 0; i < CTL_ITEM_COUNT && n < max; i++)
+        if ((int)ctl_items[i].cat == cat) out[n++] = ctl_items[i].row;
+    return n;
+}
+
+syn_ctl_kind_t ctlpanel_row_kind(int row)
+{
+    int i = ctl_item_index(row);
+    return i < 0 ? CTL_KIND_TOGGLE : ctl_items[i].kind;
+}
+
+static const char *ctl_row_action(int row)
+{
+    int i = ctl_item_index(row);
+    return i < 0 ? NULL : ctl_items[i].action;
+}
+
+const char *ctlpanel_row_label(int row)
+{
+    int i = ctl_item_index(row);
+    return i < 0 ? "?" : ctl_items[i].label;
+}
+
+/* The shortcuts category has no rows of its own — it is one scrolling list, and
+ * the cursor there drives the scroll instead. -1 says so, and every caller that
+ * would act on a row has to check it. */
+int ctlpanel_selected_row(syn_server_t *s)
+{
+    int rows[CTL_CAT_ITEMS_MAX];
+    int n = ctlpanel_cat_items(s->ctlpanel.cat, rows, CTL_CAT_ITEMS_MAX);
+    if (n == 0) return -1;
+
+    int i = s->ctlpanel.item;
+    if (i < 0)  i = 0;
+    if (i >= n) i = n - 1;
+    return rows[i];
 }
 
 /* synapd's current inference device, as recorded by synui-ai-backend. Absent
@@ -196,6 +302,14 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         else
             snprintf(buf, n, "off");
         break;
+    case CTL_ROW_NIGHTLIGHT:
+        /* The temperature only means anything while it is on — off is the
+         * identity ramp, and "off · 4000K" would read as a warm screen. */
+        if (s->config.night_light)
+            snprintf(buf, n, "on \xc2\xb7 %dK", s->config.night_light_temp);
+        else
+            snprintf(buf, n, "off");
+        break;
     case CTL_ROW_WIDGETS:
         snprintf(buf, n, "%s", widgets_label());
         break;
@@ -243,6 +357,8 @@ static const char *action_desc(const char *action, const char *arg)
         { "master_grow",       "Grow master area" },
         { "focus_next",        "Focus next window" },
         { "focus_prev",        "Focus previous window" },
+        { "alt_tab",           "Switch window (Alt+Tab)" },
+        { "alt_tab_prev",      "Switch window, backwards" },
         { "stack_next",        "Move window down the stack" },
         { "stack_prev",        "Move window up the stack" },
         { "float_toggle",      "Float window" },
@@ -430,9 +546,12 @@ int ctlpanel_tick(syn_server_t *s)
 void ctlpanel_show(syn_server_t *s)
 {
     s->ctlpanel.visible   = 1;
-    s->ctlpanel.selected  = CTL_ROW_EFFECTS;
+    s->ctlpanel.cat       = CTL_CAT_APPEARANCE;
+    s->ctlpanel.item      = 0;
+    s->ctlpanel.focus     = CTL_FOCUS_CATS;
     s->ctlpanel.scroll    = 0;
     s->ctlpanel.status[0] = '\0';
+    s->ctlpanel.child[0]  = '\0';
     s->ctlpanel.backend_poll_until = 0.0;
     s->ctlpanel.poll_row  = CTL_ROW_AI_BACKEND;
     wlr_log(WLR_INFO, "synui: control panel shown");
@@ -441,7 +560,11 @@ void ctlpanel_show(syn_server_t *s)
 
 void ctlpanel_hide(syn_server_t *s)
 {
-    s->ctlpanel.visible = 0;
+    s->ctlpanel.visible  = 0;
+    /* Dismissing the panel abandons any return it was holding: the sub-panel may
+     * still be up, and it closing later must not resurrect a panel the user has
+     * already put away. */
+    s->ctlpanel.child[0] = '\0';
     synui_render_ctlpanel(s);
 }
 
@@ -451,21 +574,198 @@ void ctlpanel_toggle(syn_server_t *s)
     else                     ctlpanel_show(s);
 }
 
-/* Skip the separator in both directions rather than letting the cursor land on
- * a rule that does nothing when you press Enter. */
+int ctlpanel_cat_from_name(const char *name)
+{
+    if (!name || !*name) return -1;
+    for (int c = 0; c < CTL_CAT_COUNT; c++) {
+        if (strcasecmp(name, ctlpanel_cat_name(c)) == 0) return c;
+    }
+    return -1;
+}
+
+/*
+ * Open straight onto a category — what `synctl dispatch control display` does,
+ * and with it the start menu's Settings submenu.
+ *
+ * That submenu used to be its own hand-written list of thirteen bind actions in
+ * StartMenu.qml, which is the failure this file's header warns about in the
+ * other direction: it had drifted to missing Theme, Printers, Task manager and
+ * six more, and nothing could have told you. Naming a *category* leaves the
+ * contents to the one item table, so the two menus cannot disagree about what
+ * settings exist.
+ *
+ * Shows rather than toggles: a menu row that closed the panel when it happened
+ * to be open already would be a row that does the opposite of what it says.
+ */
+void ctlpanel_show_cat(syn_server_t *s, const char *name)
+{
+    int cat = ctlpanel_cat_from_name(name);
+    if (cat < 0) {                 /* unknown name: the plain front door */
+        ctlpanel_toggle(s);
+        return;
+    }
+
+    if (!s->ctlpanel.visible) ctlpanel_show(s);
+    s->ctlpanel.cat    = cat;
+    s->ctlpanel.item   = 0;
+    s->ctlpanel.scroll = 0;
+    /* Focus lands in the rows: the caller already chose the category, and
+     * putting the cursor back on the sidebar would make them choose it again. */
+    s->ctlpanel.focus  = CTL_FOCUS_ITEMS;
+    synui_render_ctlpanel(s);
+}
+
+/* Hide the panel *without* forgetting where the cursor was or which child is
+ * out — the difference between "the user closed it" and "it stepped aside for
+ * the panel it just opened". */
+static void ctlpanel_conceal(syn_server_t *s)
+{
+    s->ctlpanel.visible = 0;
+    synui_render_ctlpanel(s);
+}
+
+/* Bring it back on the category and row it was left on, rather than resetting to
+ * the top the way ctlpanel_show() does. */
+static void ctlpanel_resume(syn_server_t *s, int cat, int item)
+{
+    s->ctlpanel.visible = 1;
+    s->ctlpanel.cat     = cat;
+    s->ctlpanel.item    = item;
+    s->ctlpanel.focus   = CTL_FOCUS_ITEMS;
+    synui_render_ctlpanel(s);
+}
+
+/* Is the panel `action` opens actually on screen? Asked immediately after firing
+ * the action, to tell "it opened" from "it was already open and the toggle just
+ * closed it" — only the first arms a return, and the second has to reopen this
+ * panel or the keypress would look like it did nothing.
+ *
+ * A row whose panel is not listed here simply never arms a return. That is the
+ * safe direction to fail: a missed hook costs one Esc, a wrong one pops the
+ * control panel open at some unrelated moment. */
+static int ctl_child_is_up(syn_server_t *s, const char *action)
+{
+    if (strcmp(action, "theme") == 0)     return s->thememgr.visible;
+    if (strcmp(action, "wallpaper") == 0) return s->wppick.visible;
+    if (strcmp(action, "cursor") == 0)    return s->curpick.visible;
+    if (strcmp(action, "filters") == 0)   return s->filters.visible;
+    if (strcmp(action, "widgets") == 0)   return s->widgets.visible;
+    if (strcmp(action, "displays") == 0)  return s->dispcfg.visible;
+    if (strcmp(action, "clock") == 0)     return s->clock.visible;
+    if (strcmp(action, "sounds") == 0)    return s->sound.visible;
+    if (strcmp(action, "bluetooth") == 0) return s->bt.visible;
+    if (strcmp(action, "power") == 0)     return s->power.visible;
+    if (strcmp(action, "taskmgr") == 0)   return s->taskmgr.visible;
+    if (strcmp(action, "news") == 0)      return s->news.visible;
+    if (strcmp(action, "clipboard") == 0) return s->clipboard.visible;
+    return 0;
+}
+
+/* Step aside for the panel that owns this setting, and arrange to come back. */
+static void ctlpanel_open_child(syn_server_t *s, const char *action)
+{
+    int cat = s->ctlpanel.cat, item = s->ctlpanel.item;
+
+    s->ctlpanel.child[0] = '\0';   /* nothing armed while the action runs */
+    ctlpanel_conceal(s);
+    synui_binding_execute(s, action, NULL);
+
+    if (!ctl_child_is_up(s, action)) {
+        /* The action toggled a panel that was already open, so it is now shut
+         * and there is nothing to come back from. Come back immediately. */
+        ctlpanel_resume(s, cat, item);
+        return;
+    }
+
+    snprintf(s->ctlpanel.child, sizeof(s->ctlpanel.child), "%s", action);
+    s->ctlpanel.child_cat  = cat;
+    s->ctlpanel.child_item = item;
+}
+
+void ctlpanel_child_closed(syn_server_t *s, const char *action)
+{
+    if (!action || s->ctlpanel.child[0] == '\0') return;
+    if (strcmp(s->ctlpanel.child, action) != 0) return;
+
+    s->ctlpanel.child[0] = '\0';
+
+    /* A lock that came down while a sub-panel was open closes it as part of
+     * clearing the screen. Popping the control panel up behind the lock screen
+     * would leave it there for whoever unlocks. */
+    if (s->locked) return;
+
+    ctlpanel_resume(s, s->ctlpanel.child_cat, s->ctlpanel.child_item);
+}
+
+/* ── Navigation ──────────────────────────────────────────── */
+
+static int ctlpanel_item_count(syn_server_t *s)
+{
+    int rows[CTL_CAT_ITEMS_MAX];
+    return ctlpanel_cat_items(s->ctlpanel.cat, rows, CTL_CAT_ITEMS_MAX);
+}
+
+/* Moving to another category resets the row cursor and the shortcuts scroll:
+ * carrying row 4 into a category with two rows, or a scroll offset into a list
+ * that is not the one it was measured against, are the two ways this drifts. */
+static void ctlpanel_set_cat(syn_server_t *s, int cat)
+{
+    if (cat < 0 || cat >= CTL_CAT_COUNT || cat == s->ctlpanel.cat) return;
+    s->ctlpanel.cat    = cat;
+    s->ctlpanel.item   = 0;
+    s->ctlpanel.scroll = 0;
+}
+
 static void ctlpanel_move(syn_server_t *s, int dir)
 {
-    int row = s->ctlpanel.selected;
-    do {
-        row += dir;
-        if (row < 0 || row >= CTL_ROW_COUNT) return;   /* stop at the ends */
-    } while (!ctlpanel_row_selectable(row));
-    s->ctlpanel.selected = row;
+    if (s->ctlpanel.focus == CTL_FOCUS_CATS) {
+        ctlpanel_set_cat(s, s->ctlpanel.cat + dir);
+        return;
+    }
+
+    int n = ctlpanel_item_count(s);
+    if (n == 0) return;                    /* shortcuts: Up/Down scroll instead */
+
+    int next = s->ctlpanel.item + dir;
+    if (next < 0 || next >= n) return;     /* stop at the ends, as before */
+    s->ctlpanel.item = next;
+}
+
+/* Enter the row pane. Refused for a category with nothing in the pane at all, so
+ * focus can never sit in a column with nothing to drive.
+ *
+ * The shortcuts category has no *rows* but is not empty — it is one scrolling
+ * list, and focus there is what puts Up/Down on the scroll. Gating purely on the
+ * row count locked that category out of the pane entirely. */
+static void ctlpanel_focus_items(syn_server_t *s)
+{
+    if (ctlpanel_item_count(s) == 0 && s->ctlpanel.cat != CTL_CAT_SHORTCUTS)
+        return;
+    s->ctlpanel.focus = CTL_FOCUS_ITEMS;
 }
 
 static void ctlpanel_activate(syn_server_t *s)
 {
-    switch (s->ctlpanel.selected) {
+    int row = ctlpanel_selected_row(s);
+    if (row < 0) return;
+
+    /* Every row that hands off does it the same way, by kind, so a new panel row
+     * is one table line rather than another case here. Only the in-place toggles
+     * below need to know which row they are. */
+    switch (ctlpanel_row_kind(row)) {
+    case CTL_KIND_PANEL:
+        ctlpanel_open_child(s, ctl_row_action(row));
+        return;
+    case CTL_KIND_LAUNCH:
+    case CTL_KIND_ACTION:
+        ctlpanel_hide(s);
+        synui_binding_execute(s, ctl_row_action(row), NULL);
+        return;
+    default:
+        break;
+    }
+
+    switch (row) {
     case CTL_ROW_EFFECTS:
         if (!s->effects) {   /* no GLES pass — say so rather than lie */
             snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
@@ -540,9 +840,13 @@ static void ctlpanel_activate(syn_server_t *s)
                  (int)(s->config.active_opacity * 100 + 0.5f));
         return;
 
-    case CTL_ROW_THEME:
-        ctlpanel_hide(s);
-        synui_binding_execute(s, "theme", NULL);
+    case CTL_ROW_NIGHTLIGHT:
+        /* Same call the bind makes: it re-commits the colour transform on every
+         * output, so there is nothing to repaint by hand here. */
+        nightlight_toggle(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "night light %s", s->config.night_light ? "on" : "off");
+        ctlpanel_repaint(s);
         return;
 
     case CTL_ROW_AI_BACKEND:
@@ -559,24 +863,6 @@ static void ctlpanel_activate(syn_server_t *s)
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "switching AI backend \xe2\x80\xa6");
         return;
-
-    /* Jump-offs: the panel that owns the setting is the one that should edit
-     * it, so hand over rather than grow a second set of controls here. */
-    case CTL_ROW_DISPLAYS:  ctlpanel_hide(s); synui_binding_execute(s, "displays",  NULL); return;
-    case CTL_ROW_FILTERS:   ctlpanel_hide(s); synui_binding_execute(s, "filters",   NULL); return;
-    /* Was an in-place group toggle here until the widget manager existed. A row
-     * that flipped all four at once is strictly less than a row that opens the
-     * panel where each one is switchable — and the panel's Space key still does
-     * the group flip, so nothing was lost by handing over. */
-    case CTL_ROW_WIDGETS:   ctlpanel_hide(s); synui_binding_execute(s, "widgets",   NULL); return;
-    case CTL_ROW_SOUNDS:    ctlpanel_hide(s); synui_binding_execute(s, "sounds",    NULL); return;
-    case CTL_ROW_WALLPAPER: ctlpanel_hide(s); synui_binding_execute(s, "wallpaper", NULL); return;
-    case CTL_ROW_POWER:     ctlpanel_hide(s); synui_binding_execute(s, "power",     NULL); return;
-    case CTL_ROW_TASKMGR:   ctlpanel_hide(s); synui_binding_execute(s, "taskmgr",   NULL); return;
-    case CTL_ROW_NETWORK:   ctlpanel_hide(s); synui_binding_execute(s, "network",   NULL); return;
-    case CTL_ROW_BLUETOOTH: ctlpanel_hide(s); synui_binding_execute(s, "bluetooth", NULL); return;
-    case CTL_ROW_PRINTERS:  ctlpanel_hide(s); synui_binding_execute(s, "printers",  NULL); return;
-    case CTL_ROW_LOCK:      ctlpanel_hide(s); synui_binding_execute(s, "lock",      NULL); return;
 
     default:
         return;
@@ -600,7 +886,8 @@ static void ctlpanel_scroll(syn_server_t *s, int dir)
 
 /* Left/Right on the Transparency row are a slider: nudge the focused-window
  * opacity in 5% steps, turning transparency on first if it is off (you would not
- * be adjusting it otherwise). Everywhere else Left/Right scroll the shortcuts. */
+ * be adjusting it otherwise). Everywhere else Left/Right change column, and Tab
+ * does that from here too — a slider row is not a dead end. */
 static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
 {
     if (!s->config.transparency) transparency_set_enabled(s, 1);
@@ -619,45 +906,80 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
                 WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
         return 0;
 
+    int row = ctlpanel_selected_row(s);
+    int in_items = (s->ctlpanel.focus == CTL_FOCUS_ITEMS);
+    /* Up/Down mean "scroll" in the shortcuts list, which has no rows to step
+     * through — the one category where the row pane is a single object. */
+    int list_only = in_items && ctlpanel_item_count(s) == 0;
+
     switch (sym) {
     case XKB_KEY_Escape:
     case XKB_KEY_q:
-        ctlpanel_hide(s);
+        /* Back out one level before closing: from a row pane to the category
+         * list, and only from the category list to the desktop. Closing outright
+         * from anywhere would make Esc mean two different things depending on
+         * where you happened to be. */
+        if (in_items) {
+            s->ctlpanel.focus = CTL_FOCUS_CATS;
+            synui_render_ctlpanel(s);
+        } else {
+            ctlpanel_hide(s);
+        }
         return 1;
+
     case XKB_KEY_Up:
     case XKB_KEY_k:
-        ctlpanel_move(s, -1);
+        if (list_only) ctlpanel_scroll(s, -1);
+        else           ctlpanel_move(s, -1);
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_Down:
     case XKB_KEY_j:
-        ctlpanel_move(s, +1);
+        if (list_only) ctlpanel_scroll(s, +1);
+        else           ctlpanel_move(s, +1);
         synui_render_ctlpanel(s);
         return 1;
+
+    case XKB_KEY_Tab:
+        /* The one key that always swaps columns, whatever the row is doing with
+         * Left/Right. */
+        if (in_items) s->ctlpanel.focus = CTL_FOCUS_CATS;
+        else          ctlpanel_focus_items(s);
+        synui_render_ctlpanel(s);
+        return 1;
+
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
     case XKB_KEY_space:
-        ctlpanel_activate(s);
-        /* A jump-off already hid the panel and opened another one; re-rendering
-         * here would draw this panel back over the top of it. */
+        /* In the sidebar, Enter opens the category — the submenu step. In the
+         * row pane it activates the row. */
+        if (!in_items) ctlpanel_focus_items(s);
+        else           ctlpanel_activate(s);
+        /* A row that handed off already hid the panel and opened another one;
+         * re-rendering here would draw this panel back over the top of it. */
         if (s->ctlpanel.visible) synui_render_ctlpanel(s);
         return 1;
+
     case XKB_KEY_Left:
     case XKB_KEY_h:
-        if (s->ctlpanel.selected == CTL_ROW_TRANSPARENCY)
+        /* On a slider row Left/Right are the slider; everywhere else they are
+         * the column move, which is what makes the two panes feel like one menu
+         * and its submenu. */
+        if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_SLIDER)
             ctlpanel_adjust_opacity(s, -1);
         else
-            ctlpanel_scroll(s, -CTL_SHORTCUT_ROWS / 2);
+            s->ctlpanel.focus = CTL_FOCUS_CATS;
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_Right:
     case XKB_KEY_l:
-        if (s->ctlpanel.selected == CTL_ROW_TRANSPARENCY)
+        if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_SLIDER)
             ctlpanel_adjust_opacity(s, +1);
         else
-            ctlpanel_scroll(s, +CTL_SHORTCUT_ROWS / 2);
+            ctlpanel_focus_items(s);
         synui_render_ctlpanel(s);
         return 1;
+
     case XKB_KEY_Prior:     /* Page Up — always the shortcuts scroll */
         ctlpanel_scroll(s, -CTL_SHORTCUT_ROWS / 2);
         synui_render_ctlpanel(s);
@@ -666,6 +988,7 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         ctlpanel_scroll(s, +CTL_SHORTCUT_ROWS / 2);
         synui_render_ctlpanel(s);
         return 1;
+
     default:
         return 1;   /* modal: swallow other unmodified keys while open */
     }

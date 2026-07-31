@@ -714,6 +714,7 @@ void power_hide(syn_server_t *s)
 {
     s->power.visible = 0;
     synui_render_power(s);
+    ctlpanel_child_closed(s, "power");
 }
 
 void power_toggle(syn_server_t *s)

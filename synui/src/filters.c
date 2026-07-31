@@ -213,6 +213,7 @@ void filters_hide(syn_server_t *s)
 {
     s->filters.visible = 0;
     synui_render_filters(s);
+    ctlpanel_child_closed(s, "filters");
 }
 
 void filters_toggle(syn_server_t *s)

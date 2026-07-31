@@ -340,6 +340,7 @@ void clipboard_hide(syn_server_t *s)
 {
     s->clipboard.visible = 0;
     synui_render_clipboard(s);
+    ctlpanel_child_closed(s, "clipboard");
 }
 
 void clipboard_toggle(syn_server_t *s)
