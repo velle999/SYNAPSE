@@ -428,6 +428,86 @@ esp_entry_missing_file() {   # esp_entry_missing_file <esp-root>
 }
 
 
+# ── Swap the CPU llama build for a GPU one ────────────────
+#
+# synapse-llama-{cuda,vulkan} declare provides+conflicts on synapse-llama, so
+# putting inference on the GPU is a REPLACEMENT, not an install. That
+# distinction is a bug that shipped:
+#
+#   # pacman -S --noconfirm synapse-llama-cuda
+#   :: synapse-llama-cuda and synapse-llama are in conflict. Remove synapse-llama? [y/N]
+#   error: unresolvable package conflicts detected
+#
+# The conflict question defaults to NO, and --noconfirm answers every question
+# with its default. So that command could never succeed while the CPU build was
+# installed — and it always is, because synapd depends on synapse-llama and
+# pacstrap resolved it minutes earlier. An NVIDIA install answered "Enable GPU
+# inference?" with yes, printed a warning nobody saw under a wall of pacman
+# output, and then ran the entire reason the distro exists on the CPU. Which is
+# the *precise* failure the surrounding comments swore had been fixed: the code
+# was written to prevent a silent CPU fallback and then fell back silently.
+#
+# Two ways through, in order of preference:
+#
+#  1. --ask=4. ALPM_QUESTION_CONFLICT_PKG is (1 << 2) in alpm.h, so this
+#     auto-answers YES to the conflict question and to nothing else. It is one
+#     transaction — the old package is removed only once the new one is staged.
+#     But --ask is in neither `pacman --help` nor pacman(8): it works on pacman
+#     7.1.0 and is not promised to keep working, so it cannot be the only path.
+#  2. Explicit -Rdd then -S. Fully documented and will not rot, but there is a
+#     window with NO llama installed, so a failure inside it must put the old
+#     package back — a box where synapd cannot load a model at all is worse than
+#     one where it loads slowly. Hence second, not first.
+#
+# Downloads happen up front, while the working CPU build is still installed, so
+# the risky window in (2) contains no network.
+#
+# Returns 0 only if the backend's .so is really there afterwards. Never make
+# this trust pacman's exit status alone: "reported success, offloaded nothing"
+# is the failure mode this whole path exists to catch.
+SYN_CHROOT="${SYN_CHROOT:-arch-chroot /mnt}"
+
+swap_llama_backend() {   # swap_llama_backend <pkg> <so-name>
+    local pkg="$1" so="$2" old restored=""
+
+    # Whichever synapse-llama provider is installed now is what has to come
+    # back if the swap dies halfway. -Q resolves provides, so this names the
+    # real package (synapse-llama, or a GPU build on a re-run).
+    old=$($SYN_CHROOT pacman -Qq synapse-llama 2>/dev/null | head -1)
+
+    # Fetch the target and its dependencies (cuda is ~4.7 GiB) while the
+    # working build is still in place and nothing is half-removed.
+    $SYN_CHROOT pacman -Sw --noconfirm "$pkg" >/dev/null 2>&1 || true
+
+    if ! $SYN_CHROOT pacman -S --noconfirm --ask=4 "$pkg"; then
+        if [ -n "$old" ] && [ "$old" != "$pkg" ]; then
+            warn "One-step swap to $pkg failed; removing $old and retrying."
+            $SYN_CHROOT pacman -Rdd --noconfirm "$old" >/dev/null 2>&1
+            if ! $SYN_CHROOT pacman -S --noconfirm "$pkg"; then
+                $SYN_CHROOT pacman -S --noconfirm "$old" >/dev/null 2>&1 \
+                    && restored="
+  ($old put back — inference will work, on the CPU.)"
+                warn "Could not install $pkg — synapd will run on the CPU.$restored
+  Retry later with: sudo pacman -S $pkg"
+                return 1
+            fi
+        else
+            warn "Could not install $pkg — synapd will run on the CPU.
+  Retry later with: sudo pacman -S $pkg"
+            return 1
+        fi
+    fi
+
+    if ! $SYN_CHROOT sh -c "[ -e /usr/lib/$so ]"; then
+        warn "$pkg installed but $so is missing — synapd will run on the
+  CPU. Report this."
+        return 1
+    fi
+
+    success "GPU inference enabled ($pkg)"
+    return 0
+}
+
 # Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
 # pure decision functions above and stops HERE, before the root check, the
 # EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
@@ -1829,19 +1909,7 @@ elif [ -n "$HAS_NVIDIA" ]; then
   sudo pacman -S synapse-llama-cuda" ;;
             *)
                 echo "  Installing synapse-llama-cuda (this takes a while)..."
-                if arch-chroot /mnt pacman -S --noconfirm synapse-llama-cuda 2>&1; then
-                    # Verify rather than trust: this is the exact spot where a
-                    # silent CPU fallback would be indistinguishable from success.
-                    if arch-chroot /mnt sh -c '[ -e /usr/lib/libggml-cuda.so ]'; then
-                        success "GPU inference enabled (synapse-llama-cuda)"
-                    else
-                        warn "synapse-llama-cuda installed but libggml-cuda.so is missing —
-  synapd will run on the CPU. Report this."
-                    fi
-                else
-                    warn "Could not install synapse-llama-cuda — synapd will run on the
-  CPU. Retry later with: sudo pacman -S synapse-llama-cuda"
-                fi ;;
+                swap_llama_backend synapse-llama-cuda libggml-cuda.so ;;
         esac
     else
         # The ISO was built without a CUDA toolkit on the build host, so it
@@ -1875,17 +1943,7 @@ else
     if [ -n "$HAS_AMD" ] || [ -n "$HAS_INTEL" ]; then
         if arch-chroot /mnt pacman -Si synapse-llama-vulkan &>/dev/null; then
             echo "  Enabling GPU inference (synapse-llama-vulkan)..."
-            if arch-chroot /mnt pacman -S --noconfirm synapse-llama-vulkan 2>&1; then
-                if arch-chroot /mnt sh -c '[ -e /usr/lib/libggml-vulkan.so ]'; then
-                    success "GPU inference enabled (synapse-llama-vulkan)"
-                else
-                    warn "synapse-llama-vulkan installed but libggml-vulkan.so is missing —
-  synapd will run on the CPU. Report this."
-                fi
-            else
-                warn "Could not install synapse-llama-vulkan — synapd will run on the
-  CPU. Retry later with: sudo pacman -S synapse-llama-vulkan"
-            fi
+            swap_llama_backend synapse-llama-vulkan libggml-vulkan.so
         else
             warn "This ISO ships no Vulkan build of llama, so synapd will run on the CPU
   despite the AMD/Intel GPU. (Build the ISO on a host with 'shaderc' +

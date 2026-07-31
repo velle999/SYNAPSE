@@ -543,6 +543,92 @@ check "limine-snapper-sync is not run in the chroot" "no" \
 check "a first-boot sync unit is installed instead" "yes" \
     "$(in_code 'synapseos-limine-snapshot-sync.service << ')"
 
+echo "=== GPU inference backend swap ==="
+
+# The bug this section exists for: `pacman -S --noconfirm synapse-llama-cuda`
+# can NEVER succeed, because synapse-llama-cuda conflicts with the synapse-llama
+# that synapd's dependency already pulled in, and the conflict question defaults
+# to no. It shipped, and every NVIDIA install that answered "yes" to "Enable GPU
+# inference?" ran on the CPU anyway.
+check "no bare --noconfirm install of the CUDA build" "no" \
+    "$(in_code 'pacman -S --noconfirm synapse-llama-cuda')"
+check "no bare --noconfirm install of the Vulkan build" "no" \
+    "$(in_code 'pacman -S --noconfirm synapse-llama-vulkan')"
+check "both GPU branches go through the swap helper" "2" \
+    "$(count_code 'swap_llama_backend synapse-llama-')"
+# --ask is undocumented, so it may not be the only way through.
+check "the swap has an --ask-free fallback path" "yes" \
+    "$(in_code 'pacman -Rdd --noconfirm "$old"')"
+
+# The table above is shape only; it cannot see whether the fallback actually
+# restores anything. So drive the real function against a fake pacman whose
+# conflict semantics were measured against pacman 7.1.0:
+#   -S --noconfirm <gpu-pkg>  with the CPU build installed  ->  exit 1
+#   -S --noconfirm --ask=4 <gpu-pkg>                        ->  swaps, exit 0
+fake=$(mktemp -d /tmp/syn-llama-swap.XXXXXX)
+cat > "$fake/chroot" <<'FAKE'
+#!/usr/bin/env bash
+# Stand-in for `arch-chroot /mnt`. State = the one installed llama package.
+st="$FAKE_STATE"
+prov() { case "$(cat "$st")" in synapse-llama|synapse-llama-cuda|synapse-llama-vulkan) return 0;; *) return 1;; esac; }
+case "$1" in
+  sh)   [ "$FAKE_SO" = "1" ] ;;
+  pacman)
+    shift
+    args="$*"
+    case "$args" in
+      *-Qq*)  prov && cat "$st"; exit 0 ;;
+      *-Sw*)  exit 0 ;;
+      *-Rdd*) : > "$st"; exit 0 ;;
+      *-S*)
+        pkg="${args##* }"
+        case "$args" in *--ask=4*) ask=1 ;; *) ask=0 ;; esac
+        # A pacman that dropped the undocumented flag rejects the whole command.
+        [ "$ask" = 1 ] && [ "$FAKE_ASK" != "1" ] && \
+            { echo "error: invalid option '--ask'" >&2; exit 1; }
+        # The shipped failure: something else provides llama, the conflict
+        # question defaults to N, --noconfirm takes that default, abort.
+        if [ "$ask" = 0 ] && prov && [ "$pkg" != "$(cat "$st")" ]; then
+            echo ":: $pkg and $(cat "$st") are in conflict. Remove $(cat "$st")? [y/N]" >&2
+            echo "error: unresolvable package conflicts detected" >&2
+            exit 1
+        fi
+        # Only installing a GPU build can be made to fail; putting the CPU
+        # build back is the recovery path and must not be sabotaged.
+        case "$pkg" in
+          *-cuda|*-vulkan) [ "$FAKE_INSTALL_OK" = "1" ] || exit 1 ;;
+        esac
+        echo "$pkg" > "$st"; exit 0 ;;
+    esac ;;
+esac
+FAKE
+chmod +x "$fake/chroot"
+export FAKE_STATE="$fake/state"
+SYN_CHROOT="$fake/chroot"
+
+swap_case() {  # swap_case <ask> <install_ok> <so>  -> "<rc>:<installed>"
+    echo synapse-llama > "$FAKE_STATE"
+    FAKE_ASK="$1" FAKE_INSTALL_OK="$2" FAKE_SO="$3"
+    export FAKE_ASK FAKE_INSTALL_OK FAKE_SO
+    swap_llama_backend synapse-llama-cuda libggml-cuda.so >/dev/null 2>&1
+    echo "$?:$(cat "$FAKE_STATE")"
+}
+
+# First prove the fake reproduces the shipped bug, or the rest proves nothing.
+echo synapse-llama > "$FAKE_STATE"
+FAKE_ASK=1 FAKE_INSTALL_OK=1 FAKE_SO=1; export FAKE_ASK FAKE_INSTALL_OK FAKE_SO
+"$fake/chroot" pacman -S --noconfirm synapse-llama-cuda >/dev/null 2>&1
+check "the old command form still fails (fake matches pacman 7.1.0)" "1" "$?"
+
+check "--ask=4 swaps in one transaction" "0:synapse-llama-cuda" "$(swap_case 1 1 1)"
+check "a pacman without --ask still swaps, via -Rdd" "0:synapse-llama-cuda" "$(swap_case 0 1 1)"
+# The one that matters: the fallback removed the CPU build, then could not
+# install the GPU one. Leaving nothing installed means synapd cannot load a
+# model AT ALL — strictly worse than the slow inference we were fixing.
+check "a failed swap puts the CPU build back" "1:synapse-llama" "$(swap_case 0 0 1)"
+check "installed-but-no-.so is a failure, not a success" "1:synapse-llama-cuda" "$(swap_case 1 1 0)"
+rm -rf "$fake"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"
