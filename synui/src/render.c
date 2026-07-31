@@ -4477,6 +4477,32 @@ static void alttab_draw_icon(cairo_t *cr, const char *app_id,
     icon_draw_monogram(cr, app_id, cx - size / 2.0, cy - size / 2.0, size);
 }
 
+/* Where a window is, for the windows that are not in front of you.
+ *
+ * The cycle reaches every desktop and every minimized window, so a tile is no
+ * longer self-evidently a window you can see — two kitty windows on two
+ * desktops are the same picture, and the thumbnail of a minimized window is
+ * simply the last frame it drew. Empty for a window on the current desktop
+ * that is not minimized, which is the common case and draws nothing.
+ *
+ * `longform` is for the footer, which has room to spell it out; the tile label
+ * row does not. Plain ASCII either way — this font has no arrow glyph, and a
+ * missing glyph in a label is a box, not a hint. */
+static void alttab_where(syn_server_t *s, syn_view_t *v, bool longform,
+                         char *out, size_t n)
+{
+    char ws[32] = "", mn[16] = "";
+
+    if (v->workspace && v->workspace->index != s->active_workspace)
+        snprintf(ws, sizeof ws, longform ? "Desktop %d" : "D%d",
+                 v->workspace->index + 1);
+    if (v->minimized)
+        snprintf(mn, sizeof mn, "%s", longform ? "minimized" : "MIN");
+
+    snprintf(out, n, "%s%s%s", ws,
+             (ws[0] && mn[0]) ? (longform ? ", " : " ") : "", mn);
+}
+
 /* Release the client buffer a tile is holding and take the tile off screen.
  * The release is the point: a scene buffer locks what it is given, and a client
  * buffer still locked after the overlay is gone is one the client cannot put
@@ -4675,11 +4701,27 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
         if (!label[0]) snprintf(label, sizeof(label), "(untitled)");
 
         cairo_set_font_size(cr, 12);
+        double ly = ty + ATB_TILE_H + ATB_LABEL_H / 2.0 + 4;
+        double lr = tx + ATB_TILE_W - ATB_INSET;
+
+        /* The marker goes in the label row, not over the thumbnail: the
+         * thumbnails are scene buffers in a tree raised above this cairo layer
+         * (see the raise at the end of this function), so anything drawn into
+         * the thumbnail area is behind the client's own picture. */
+        char where[48];
+        alttab_where(s, v, false, where, sizeof where);
+        if (where[0]) {
+            cairo_text_extents_t wext;
+            cairo_text_extents(cr, where, &wext);
+            cairo_set_source_rgba(cr, 0.55, 0.58, 0.70, cur ? 1.0 : 0.85);
+            draw_right(cr, lr, ly, where);
+            lr -= wext.width + 8;
+        }
+
         if (cur) cairo_set_source_rgba(cr, 0.97, 1.00, 1.00, 1.0);
         else     cairo_set_source_rgba(cr, 0.74, 0.74, 0.82, 1.0);
         double lx = tx + ATB_INSET + ATB_BADGE + 6;
-        draw_clipped(cr, lx, ty + ATB_TILE_H + ATB_LABEL_H / 2.0 + 4,
-                     tx + ATB_TILE_W - ATB_INSET - lx, label);
+        draw_clipped(cr, lx, ly, lr - lx, label);
     }
 
     /* Tiles the grid is not using this press still hold a client buffer from
@@ -4694,6 +4736,16 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
     if (!ftitle || !ftitle[0]) ftitle = "(untitled)";
     char fbuf[256];
     syn_utf8_copy(fbuf, sizeof(fbuf), ftitle);
+
+    /* Spelled out here because the footer has the room the tile label does not,
+     * and because this is the line that says what letting go of Alt will do:
+     * landing on one of these switches desktop or restores the window. */
+    char fwhere[48];
+    alttab_where(s, cands[sel], true, fwhere, sizeof fwhere);
+    if (fwhere[0]) {
+        size_t fl = strlen(fbuf);
+        snprintf(fbuf + fl, sizeof(fbuf) - fl, "  \xc2\xb7  %s", fwhere);
+    }
 
     const char *hint = "Alt+Tab next \xc2\xb7 Alt+Shift+Tab back";
     cairo_set_font_size(cr, 12);

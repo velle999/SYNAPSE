@@ -228,24 +228,43 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
  * No snapshot of the candidate list is kept between presses. It is rebuilt from
  * live views every time, so a window that closes mid-cycle simply stops being a
  * candidate — there is no stale pointer to dangle, and no destroy hook to
- * remember to add in the two places (xdg + xwayland) that destroy views.
+ * remember to add in the two places (xdg + xwayland) that destroy views. That
+ * property is why the target is re-derived in alttab_finish() rather than
+ * remembered from the last press: a pending syn_view_t* would need clearing in
+ * all four places that null focused_view (two unmaps, two destroys), which is
+ * four chances to miss one.
  */
 #define ALTTAB_MAX 64
 
-/* Mapped, non-minimized views of the active workspace, most-recent first.
+/* Every mapped window, on every virtual desktop, most-recent first — including
+ * minimized ones.
  *
- * Minimized windows are skipped deliberately: you minimized them, so pulling
- * one back with Alt+Tab and leaving it minimized-but-focused would be a window
- * you cannot see eating your keystrokes. Super+Shift+N restores those. */
+ * "Alt+Tab" means "the window I was just in", and that window is just as often
+ * on another desktop or sitting minimized as it is on screen. Restricting the
+ * cycle to what is currently visible made those windows reachable only if you
+ * already remembered where you had put them, which is the thing a switcher
+ * exists to save you from.
+ *
+ * Neither kind can take focus where it stands, so neither is acted on until the
+ * cycle commits — see alttab_reveal(). A hidden window keeps its last committed
+ * buffer (workspace_switch only disables the scene node), so it still draws a
+ * real thumbnail rather than falling back to its app icon. */
 static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
 {
-    syn_workspace_t *ws = server_active_workspace(s);
     int n = 0;
-    syn_view_t *v;
-    wl_list_for_each(v, &ws->windows, link) {
-        if (!v->mapped || v->minimized) continue;
-        if (n >= max) break;
-        out[n++] = v;
+    int lo = 0, hi = WORKSPACE_MAX;
+    if (!s->config.alt_tab_all_desktops)
+        lo = s->active_workspace, hi = lo + 1;
+
+    for (int w = lo; w < hi && n < max; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link) {
+            if (!v->mapped) continue;
+            if (!v->minimized || s->config.alt_tab_minimized) {
+                if (n >= max) break;
+                out[n++] = v;
+            }
+        }
     }
 
     /* Insertion sort by focus_seq, newest first. n is a handful of windows, and
@@ -263,17 +282,66 @@ static int alttab_candidates(syn_server_t *s, syn_view_t **out, int max)
     return n;
 }
 
-/* Alt released: the window we landed on becomes the most recent, so the next
- * Alt+Tab comes back here. */
+/* Is this window somewhere focus can actually land right now? A window on
+ * another desktop or a minimized one is not: focusing it would hand the
+ * keyboard to something that is not on screen. */
+static bool alttab_view_onscreen(syn_server_t *s, syn_view_t *v)
+{
+    return !v->minimized && v->workspace &&
+           v->workspace->index == s->active_workspace;
+}
+
+/* Bring `v` out to where it can be used, whatever that takes, and focus it.
+ *
+ * Only ever called from alttab_finish(), never mid-cycle. Both halves are
+ * things you would notice: switching desktops cross-fades every window on the
+ * desk (layout.c workspace_switch), and restoring a minimized window puts it
+ * back on screen. Doing either on each Tab press would fire them for every
+ * window you merely tabbed *past* — three minimized windows passed on the way
+ * to a fourth would all be restored, and a cycle that crossed two desktops
+ * would cross-fade the desk twice before you had chosen anything. */
+static void alttab_reveal(syn_server_t *s, syn_view_t *v)
+{
+    /* Desktop first: view_apply_minimized() only actually shows a window whose
+     * workspace is visible, so restoring before switching would leave the node
+     * disabled and the window minimized-in-fact on arrival. */
+    if (v->workspace && v->workspace->index != s->active_workspace)
+        workspace_switch(s, v->workspace->index);
+
+    /* Raises and focuses on its own once the workspace is visible; the
+     * focus_view below is then a no-op. */
+    if (v->minimized)
+        view_apply_minimized(s, v, 0);
+
+    if (s->focused_view != v)
+        focus_view(s, v, view_surface(v));
+}
+
+/* Alt released: commit the window we landed on, which then becomes the most
+ * recent so the next Alt+Tab comes back here.
+ *
+ * The target is re-derived from `depth` rather than remembered from the last
+ * press, for the same reason alttab_step() rebuilds the list every time: a
+ * pending view pointer is a pointer to dangle. A window that closes between
+ * the last Tab and the Alt release therefore shifts what we land on by one —
+ * the alternative is a fifth place to remember to clear on destroy. */
 static void alttab_finish(syn_server_t *s)
 {
     if (!s->alttab.active) return;
     s->alttab.active = false;
-    s->alttab.depth  = 0;
     /* Unconditional, not gated on config.alt_tab_preview: turning the preview
      * off mid-cycle would otherwise leave the grid painted on screen forever,
      * and hiding an already-hidden overlay costs nothing. */
     synui_alttab_hide(s);
+
+    syn_view_t *cands[ALTTAB_MAX];
+    int n = alttab_candidates(s, cands, ALTTAB_MAX);
+    if (n > 0) {
+        int idx = ((s->alttab.depth % n) + n) % n;
+        alttab_reveal(s, cands[idx]);
+    }
+    s->alttab.depth = 0;
+
     if (s->focused_view)
         s->focused_view->focus_seq = ++s->focus_counter;
 }
@@ -304,8 +372,12 @@ static void alttab_step(syn_server_t *s, int dir)
     s->alttab.depth += dir;
     int idx = ((s->alttab.depth % n) + n) % n;
 
+    /* Only a window already on screen takes focus as you pass over it. One on
+     * another desktop or minimized is left exactly where it is until the cycle
+     * commits (alttab_reveal) — the grid is what tells you where you are, and
+     * it costs nothing to be wrong about for the half-second Alt is down. */
     syn_view_t *target = cands[idx];
-    if (target != s->focused_view)
+    if (alttab_view_onscreen(s, target) && target != s->focused_view)
         focus_view(s, target, view_surface(target));
 
     /* The tile grid, rebuilt from the same list this press just walked. It is
@@ -536,6 +608,17 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         alttab_step(s, 1);
     } else if (strcmp(action, "alt_tab_prev") == 0) {
         alttab_step(s, -1);
+    } else if (strcmp(action, "alt_tab_commit") == 0) {
+        /* What letting go of Alt does. Bound to no key — a real cycle ends on a
+         * modifier release, which only keyboard_handle_modifiers can see.
+         *
+         * It exists because everything the cycle DOES now happens here rather
+         * than on the way past (switch desktop, restore a minimized window),
+         * and a modifier release cannot be synthesised into a headless synui:
+         * the headless backend has no input devices, and uinput would be
+         * delivered to the live session instead. Same seam as
+         * SYNUI_POWER_SUPPLY_DIR in the lid tests. */
+        alttab_finish(s);
     } else if (strcmp(action, "stack_next") == 0) {
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, 1);
     } else if (strcmp(action, "stack_prev") == 0) {

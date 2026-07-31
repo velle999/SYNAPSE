@@ -1359,6 +1359,18 @@ typedef struct {
      * it did before the overlay existed. */
     int   alt_tab_preview;
 
+    /* What the cycle is allowed to reach (input.c alttab_candidates). Both
+     * default on: "the window I was just in" is as often on another desktop or
+     * minimized as it is on screen, and a switcher that cannot reach those
+     * makes you remember where you put them, which is the job it exists to do.
+     *
+     * Turning either off narrows the list only. Neither changes what happens
+     * when you land on such a window — that is alttab_reveal(), which switches
+     * desktop and un-minimizes at commit whatever these say, because a window
+     * that is in the list at all has to be reachable from it. */
+    int   alt_tab_all_desktops;
+    int   alt_tab_minimized;
+
     /* Border colors (RGBA 0..1) by window role; defaults COLOR_BORDER_*. */
     float border_color_norm[4];
     float border_color_focus[4];

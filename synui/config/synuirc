@@ -133,6 +133,16 @@ titlebar_height = 26
 #
 # Off keeps the cycle exactly as it is and loses only the picture of it.
 # alt_tab_preview = on
+#
+# The cycle reaches every window you have open, not only the ones on screen:
+# windows on your other virtual desktops, and minimized ones. Letting go of Alt
+# on one switches to its desktop / restores it — that happens at the end of the
+# cycle, not as you tab past, so passing over three minimized windows on the way
+# to a fourth does not restore all three.
+#
+# Turn either off to narrow the list back to what is in front of you.
+# alt_tab_all_desktops = on
+# alt_tab_minimized = on
 
 # ── Wallpaper ──────────────────────────────────────────────
 # Drawn by the compositor itself, so nothing has to be autostarted for it.
