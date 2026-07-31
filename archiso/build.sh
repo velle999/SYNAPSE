@@ -98,6 +98,27 @@ warn()  { echo -e "${C_WARN}[ warn ]${C_RESET} $*"; }
 err()   { echo -e "${C_ERR}[ err  ]${C_RESET} $*" >&2; exit 1; }
 step()  { echo -e "\n${C_BOLD}${C_BRAND}══ $* ══${C_RESET}"; }
 
+# The Vulkan backend needs BOTH a shader compiler and the Vulkan headers, and
+# they come from different packages (shaderc / vulkan-headers) so either can be
+# absent alone. A host with shaderc but no headers configured GGML_VULKAN and
+# then died inside CMake with "Could NOT find Vulkan (missing:
+# Vulkan_INCLUDE_DIR)" -- minutes in, after llama.cpp had already been cloned.
+#
+# Do NOT reach for `pkg-config --exists vulkan` here: vulkan-icd-loader ships
+# vulkan.pc, so it answers YES on a machine with no headers at all. CMake's
+# FindVulkan sets Vulkan_INCLUDE_DIR by probing for vulkan/vulkan.h, so probe
+# for the same file and be wrong in the same places it is.
+have_vulkan_headers() {
+    local d
+    for d in ${VULKAN_SDK:+"$VULKAN_SDK/include"} /usr/include /usr/local/include; do
+        [[ -e "$d/vulkan/vulkan.h" ]] && return 0
+    done
+    return 1
+}
+have_vulkan_toolchain() {
+    command -v glslc &>/dev/null && have_vulkan_headers
+}
+
 # ── Argument parsing ──────────────────────────────────────────
 for arg in "$@"; do
     case "$arg" in
@@ -142,6 +163,23 @@ declare -A TOOL_PKG=(
     # this line the ISO build runs for twenty minutes and then dies on
     # "gradle: command not found".
     [gradle]="gradle"
+    # The Vulkan shader compiler. synapse-llama-vulkan is expected to build on
+    # every release (see BUILD_VULKAN_PKG below), and it is an OPTIONAL package
+    # — nothing depends on it, so a host without this does not fail the build,
+    # it just quietly ships an ISO that cannot switch an AMD/Intel machine onto
+    # its GPU. Install it rather than letting that happen by accident.
+    [glslc]="shaderc"
+)
+
+# Dependencies that provide no command of their own, so the `command -v` loop
+# below is structurally incapable of seeing them. vulkan-headers is headers
+# only: a host with shaderc installed passes every command check above and then
+# dies inside CMake with "Could NOT find Vulkan (missing: Vulkan_INCLUDE_DIR)",
+# several minutes in, after llama.cpp has already been cloned and configured.
+# The same lesson as gradle above, one step further along — for a package that
+# ships no binary the check has to look for what it actually puts on disk.
+declare -A FILE_PKG=(
+    [/usr/include/vulkan/vulkan.h]="vulkan-headers"
 )
 
 MISSING_PKGS=()
@@ -151,6 +189,16 @@ for cmd in "${!TOOL_PKG[@]}"; do
     else
         pkg="${TOOL_PKG[$cmd]}"
         warn "$cmd not found — will install: $pkg"
+        MISSING_PKGS+=("$pkg")
+    fi
+done
+
+for file in "${!FILE_PKG[@]}"; do
+    pkg="${FILE_PKG[$file]}"
+    if [[ -e "$file" ]]; then
+        ok "$pkg"
+    else
+        warn "$file not found — will install: $pkg"
         MISSING_PKGS+=("$pkg")
     fi
 done
@@ -166,6 +214,11 @@ if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
     STILL_MISSING=()
     for cmd in "${!TOOL_PKG[@]}"; do
         command -v "$cmd" &>/dev/null || STILL_MISSING+=("$cmd")
+    done
+    # Re-verify the file-provided ones too. Skipping them here is what would
+    # let a failed vulkan-headers install read as "All dependencies installed".
+    for file in "${!FILE_PKG[@]}"; do
+        [[ -e "$file" ]] || STILL_MISSING+=("$file (${FILE_PKG[$file]})")
     done
     [[ ${#STILL_MISSING[@]} -eq 0 ]] || err "Still missing: ${STILL_MISSING[*]}"
     ok "All dependencies installed"
@@ -349,7 +402,11 @@ build_llama() {
     # back OFF and produces a CPU build wearing the vulkan name. Catch it here.
     if [[ "$backend" == "vulkan" ]]; then
         command -v glslc &>/dev/null \
-            || err "Vulkan build needs 'glslc' — install 'shaderc'. (also: vulkan-headers)"
+            || err "Vulkan build needs 'glslc' — install 'shaderc'."
+        # Checked separately from glslc because it is a separate package: this
+        # box had shaderc and no headers, which sailed past a glslc-only gate.
+        have_vulkan_headers \
+            || err "Vulkan build needs the Vulkan headers — install 'vulkan-headers'."
     fi
 
     log "CMake configure (GPU: ${backend})..."
@@ -450,12 +507,22 @@ fi
 BUILD_VULKAN_PKG=false
 if [[ "$WITH_GPU" == "vulkan" ]]; then
     BUILD_VULKAN_PKG=false   # ISO backend already vulkan; the one build covers it
-elif command -v glslc &>/dev/null; then
+elif have_vulkan_toolchain; then
     BUILD_VULKAN_PKG=true
 else
-    warn "No Vulkan shader compiler (glslc) on this host — synapse-llama-vulkan will NOT be built."
+    # Name the half that is actually missing. These are two packages, and the
+    # version of this check that only looked for glslc turned a host with
+    # shaderc-but-no-headers into a CMake failure several minutes into the run
+    # instead of a skip here.
+    if command -v glslc &>/dev/null; then
+        warn "No Vulkan headers on this host — synapse-llama-vulkan will NOT be built."
+        warn "Install 'vulkan-headers' to fix."
+    else
+        warn "No Vulkan shader compiler (glslc) on this host — synapse-llama-vulkan will NOT be built."
+        warn "Install 'shaderc' to fix."
+    fi
     warn "The ISO stays valid, but an AMD/Intel machine installed from it will run"
-    warn "inference on the CPU with no way to switch. Install 'shaderc' to fix."
+    warn "inference on the CPU with no way to switch."
 fi
 
 if [[ "$BUILD_VULKAN_PKG" == "true" && "$LLAMA_ONLY" != "true" ]]; then
