@@ -1,0 +1,23 @@
+# Regenerate SynapseOS's bluez quirk database whenever either half of it moves.
+#
+# pipewire-audio: it owns the database we copy. Without this trigger our copy
+#   freezes at whatever PipeWire shipped on the day synui was installed, and
+#   every quirk upstream adds afterwards is invisible on SynapseOS — a shadowing
+#   bug that gets quieter and worse the longer the machine runs.
+# synui: it owns the entries we inject, and the copy does not exist yet on a
+#   fresh install. Nothing else creates it.
+#
+# PostTransaction, because the script reads the database pacman is in the middle
+# of replacing.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = pipewire-audio
+Target = synui
+
+[Action]
+Description = Regenerating the SynapseOS bluetooth quirk database...
+When = PostTransaction
+Exec = /usr/bin/synui-bluez-quirks

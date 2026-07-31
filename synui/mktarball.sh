@@ -27,7 +27,7 @@ out="$top.tar.gz"
 
 # What actually gets compiled and installed. Adding a new top-level dir to
 # meson.build means adding it here as well, or it silently will not ship.
-contents=(config data meson.build protocols quickshell src systemd tests)
+contents=(config data hooks meson.build protocols quickshell src systemd tests)
 
 for c in "${contents[@]}"; do
     [[ -e $c ]] || { echo "mktarball: missing $c" >&2; exit 1; }

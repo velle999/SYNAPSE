@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=222
+pkgrel=223
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -110,7 +110,7 @@ prepare() {
     # so the check covers it again if it ever comes back.
     local -a watched=()
     local p
-    for p in src include meson.build config data protocols quickshell systemd tests; do
+    for p in src include meson.build config data hooks protocols quickshell systemd tests; do
         [ -e "$startdir/$p" ] && watched+=("$startdir/$p")
     done
 
@@ -190,6 +190,30 @@ package() {
     # If suspend ever regresses again, get a backtrace before blaming these
     # units: synui alive with `synctl` hanging is a main-thread block, not a
     # GPU fault.
+
+    # ── Bluetooth: headsets that connect at 100% ─────────────────────────────
+    #
+    # Some headsets announce max AVRCP absolute volume the moment the A2DP
+    # transport comes up, overwriting the volume WirePlumber restored — full
+    # blast into your ears on every connect. PipeWire's fix is a per-device
+    # `no-features = [ hw-volume ]` quirk, and it ships a list of the devices it
+    # knows about; bluez5-quirks.conf holds the ones it does not.
+    #
+    # The three parts have to ship together. The quirk list is not read from
+    # here: that database has no drop-in and no /etc path, so SPA_DATA_DIR is
+    # the only supported redirect and it redirects the whole tree. The hook
+    # regenerates our copy of the tree from PipeWire's on every upgrade — which
+    # is the only reason shadowing it is safe — and the drop-in arms the
+    # redirect. See synui-bluez-quirks for the full reasoning, including the two
+    # wireplumber settings that look like they replace all of this and do not.
+    install -Dm644 config/bluez5/synapse-quirks.conf \
+        "$pkgdir/usr/share/synui/bluez5-quirks.conf"
+    install -Dm755 systemd/synui-bluez-quirks.sh \
+        "$pkgdir/usr/bin/synui-bluez-quirks"
+    install -Dm644 hooks/72-synui-bluez-quirks.hook \
+        "$pkgdir/usr/share/libalpm/hooks/72-synui-bluez-quirks.hook"
+    install -Dm644 config/wireplumber.service.d/10-synapse-spa-data-dir.conf \
+        "$pkgdir/usr/lib/systemd/user/wireplumber.service.d/10-synapse-spa-data-dir.conf"
 
     # System-wide MangoHud defaults. The session sets MANGOHUD=1, so the Vulkan
     # layer loads in every game regardless of launcher; this file is what keeps
