@@ -629,6 +629,51 @@ check "a failed swap puts the CPU build back" "1:synapse-llama" "$(swap_case 0 0
 check "installed-but-no-.so is a failure, not a success" "1:synapse-llama-cuda" "$(swap_case 1 1 0)"
 rm -rf "$fake"
 
+echo "=== ADVANCED: one partition cannot hold two roles ==="
+
+# Pure, so it is asserted directly. The point is not that a duplicate would
+# destroy anything — every mkfs and mkswap refuses a mounted device — but that
+# without this it is only caught at format time, after the confirmation and
+# after the root has been made and mounted, and reported as "Failed to format".
+check "a free device is not taken" "no" \
+    "$(part_role_taken /dev/sda3 "the root filesystem=/dev/sda2" >/dev/null && echo yes || echo no)"
+check "a repeated device is taken" "yes" \
+    "$(part_role_taken /dev/sda2 "the root filesystem=/dev/sda2" >/dev/null && echo yes || echo no)"
+check "and it names the role that claimed it" "the root filesystem" \
+    "$(part_role_taken /dev/sda2 "the root filesystem=/dev/sda2")"
+check "the first claimant wins, not the last" "the EFI partition" \
+    "$(part_role_taken /dev/sda1 "the EFI partition=/dev/sda1" "/boot=/dev/sda1")"
+
+# A role not chosen yet is an EMPTY device, and must never match. Without the
+# skip, an unset PART_EFI on a BIOS install would make "" == "" and report the
+# swap partition as already being the EFI partition.
+check "an unchosen role never matches" "no" \
+    "$(part_role_taken "" "the EFI partition=" >/dev/null && echo yes || echo no)"
+check "an unchosen role does not swallow a real device" "no" \
+    "$(part_role_taken /dev/sda2 "the EFI partition=" "/boot=" >/dev/null && echo yes || echo no)"
+
+# The check is only meaningful if every later prompt names every earlier role.
+# Root is asked first and so checks nothing; ESP checks root; /boot checks both;
+# swap checks all three. A prompt that forgets one is a collision that still
+# reaches mkfs.
+manual_src=$(awk '/^elif \[ "\$INSTALL_MODE" = "manual" \]; then$/,/^elif \[ "\$BOOT_MODE" = "uefi" \]; then$/' \
+             "$here/../syn-install.sh")
+check "the ESP prompt checks the root" "1" \
+    "$(grep -c 'part_role_taken "\$PART_EFI"' <<<"$manual_src")"
+check "the /boot prompt checks the root" "yes" \
+    "$(grep -A2 'part_role_taken "\$PART_BOOT"' <<<"$manual_src" \
+       | grep -qF 'the root filesystem=$PART_ROOT' && echo yes || echo no)"
+check "the /boot prompt checks the ESP" "yes" \
+    "$(grep -A2 'part_role_taken "\$PART_BOOT"' <<<"$manual_src" \
+       | grep -qF 'the EFI partition=${PART_EFI:-}' && echo yes || echo no)"
+check "the swap prompt checks all three" "yes" \
+    "$(grep -A3 'part_role_taken "\$_sw"' <<<"$manual_src" \
+       | grep -qF 'the root filesystem=$PART_ROOT' \
+       && grep -A3 'part_role_taken "\$_sw"' <<<"$manual_src" \
+          | grep -qF 'the EFI partition=${PART_EFI:-}' \
+       && grep -A3 'part_role_taken "\$_sw"' <<<"$manual_src" \
+          | grep -qF '/boot=${PART_BOOT:-}' && echo yes || echo no)"
+
 echo "=== language table: keymaps resolve in BOTH namespaces ==="
 
 # LOCALE_ROWS lives past the SYN_INSTALL_SOURCE_ONLY guard, so it is read out of

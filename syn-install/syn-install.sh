@@ -401,6 +401,32 @@ part_usable() {   # part_usable <dev> <role> [min-bytes]
     return 0
 }
 
+# Is <dev> already spoken for by another role? Echoes the role that claimed it
+# and returns 0; silent and returns 1 when it is free.
+#
+# This is NOT a guardrail against something an advanced user might have meant.
+# One partition cannot be both a root and a swap, so a repeated device is always
+# a typo — there is no answer to honour.
+#
+# It is worth catching because of WHEN the collision otherwise surfaces, not
+# whether. Every tool involved does refuse a mounted device ("%s is mounted;
+# will not make a %s here!" from mkfs.ext4, "will not make swapspace" from
+# mkswap, and the fat/btrfs equivalents), so nothing is ever corrupted. But the
+# formatting order is ESP, root, /boot, swap — so a duplicate is discovered
+# AFTER the "Type 'yes' to format these" confirmation and AFTER the root has
+# been made and mounted, and it is reported as "Failed to format /dev/sdaN",
+# which names the symptom and not the cause. Asked at the prompt it costs a
+# retype; asked at format time it costs the root partition.
+part_role_taken() {   # part_role_taken <dev> <role=dev>...
+    local dev="$1" pair
+    shift
+    for pair in "$@"; do
+        [ -n "${pair#*=}" ] || continue          # role not chosen (yet)
+        [ "${pair#*=}" = "$dev" ] && { printf '%s' "${pair%%=*}"; return 0; }
+    done
+    return 1
+}
+
 esp_entry_missing_file() {   # esp_entry_missing_file <esp-root>
     local esp="$1" ent key val rest p
 
@@ -1164,6 +1190,8 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
             [ -n "${PART_EFI:-}" ] || continue
             case "$PART_EFI" in /dev/*) ;; *) PART_EFI="/dev/$PART_EFI" ;; esac
             _why="$(part_usable "$PART_EFI" "the EFI partition" $((256 * 1024 * 1024)))" || { warn "$_why"; continue; }
+            _who="$(part_role_taken "$PART_EFI" "the root filesystem=$PART_ROOT")" \
+                && { warn "$PART_EFI is already $_who — name a different partition."; continue; }
             # An ESP that already carries a bootloader is the dual-boot case:
             # formatting it would take Windows' with it. Ask, default to keeping.
             FORMAT_ESP="yes"
@@ -1184,8 +1212,11 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
             read -r PART_BOOT || true
             [ -n "${PART_BOOT:-}" ] || continue
             case "$PART_BOOT" in /dev/*) ;; *) PART_BOOT="/dev/$PART_BOOT" ;; esac
-            _why="$(part_usable "$PART_BOOT" "/boot" $((512 * 1024 * 1024)))" && break
-            warn "$_why"
+            _why="$(part_usable "$PART_BOOT" "/boot" $((512 * 1024 * 1024)))" || { warn "$_why"; continue; }
+            _who="$(part_role_taken "$PART_BOOT" "the root filesystem=$PART_ROOT" \
+                                                 "the EFI partition=${PART_EFI:-}")" \
+                && { warn "$PART_BOOT is already $_who — name a different partition."; continue; }
+            break
         done
     fi
 
@@ -1201,6 +1232,10 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
         [ -n "${_sw:-}" ] || break
         case "$_sw" in /dev/*) ;; *) _sw="/dev/$_sw" ;; esac
         _why="$(part_usable "$_sw" "swap" $((128 * 1024 * 1024)))" || { warn "$_why"; continue; }
+        _who="$(part_role_taken "$_sw" "the root filesystem=$PART_ROOT" \
+                                       "the EFI partition=${PART_EFI:-}" \
+                                       "/boot=${PART_BOOT:-}")" \
+            && { warn "$_sw is already $_who — name a different partition, or leave this blank for no swap."; continue; }
         PART_SWAP="$_sw"; FORMAT_SWAP="yes"
         # An existing swap is likely shared with another Linux, and mkswap gives
         # it a new UUID — which is exactly what that system's fstab and its
