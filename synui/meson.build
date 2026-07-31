@@ -509,6 +509,16 @@ test('geom_layout', geom_layout,
 # What Alt+Tab can reach (input.c alttab_candidates) and, more importantly, WHEN
 # it acts on it (alttab_reveal, at commit only). Three windows across three
 # desktops with one minimized, so every case is live at once; same client again.
+# Whether a tiling desktop can get its windows back (layout_reclaim, layout.c):
+# the `retile` action, the reclaim on selecting a tiling layout, and the
+# maximize/un-maximize fixed point that made the bug read as unfixable.
+retile = find_program('tests/retile.sh')
+test('retile', retile,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 alttab_scope = find_program('tests/alttab_scope.sh')
 test('alttab_scope', alttab_scope,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

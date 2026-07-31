@@ -353,6 +353,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "close",             "Close window" },
         { "quit",              "Quit synui" },
         { "layout_cycle",      "Cycle layout" },
+        { "retile",            "Tile this desktop" },
         { "master_shrink",     "Shrink master area" },
         { "master_grow",       "Grow master area" },
         { "focus_next",        "Focus next window" },

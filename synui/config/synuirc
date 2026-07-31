@@ -247,12 +247,22 @@ welcome_at_startup = on
 # Mods: super/logo/mod4, shift, ctrl, alt. Keys are XKB keysym names
 # (q, return, space, tab, backspace, f1, ...).
 # Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
-#          layout_cycle, focus_next/prev, alt_tab, alt_tab_prev,
+#          layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
 #          stack_next/prev,
 #          master_shrink/grow, float_toggle, maximize_toggle, ai_ask,
 #          ws <1-9>, movews <1-9>
 # alt_tab = focus the last-used window (most-recently-used order); hold alt and
 # press tab again to keep going back. Bound to alt+tab / alt+shift+tab.
+# retile = put every window on this desktop back in the layout — un-maximize,
+# un-snap, un-float — and tile it. Default super+shift+t ("t for tile"), and it
+# works from any layout: from a floating desktop it switches to tiling first,
+# since reclaiming there would do nothing you could see. Dialogs and fullscreen
+# windows are left alone. Selecting a tiling or AI layout now reclaims the same
+# way, so choosing the layout means "place these windows".
+#   Why you want it: dragging a window to move it, snapping it to an edge and
+#   maximizing all set the window "floating", every layout SKIPS floating
+#   windows, and until now only super+f could clear that, one window at a time.
+#   A tiling desktop could end up with nothing left to tile.
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
 # menu = the SYNAPSE OS welcome menu (default super+escape).

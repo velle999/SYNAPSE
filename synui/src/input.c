@@ -583,6 +583,18 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         ws->layout = (ws->layout + 1) % 4;
         static const char *lnames[] = {"tiling","floating","monocle","AI"};
         wlr_log(WLR_INFO, "synui: layout → %s", lnames[ws->layout]);
+
+        /* Choosing a layout that places windows means "place these windows".
+         * Without this the tiler inherits whatever the session floated —
+         * a drag, a snap, a maximize — and lays out an empty set, which reads
+         * as a tiler that has stopped working (see layout_reclaim).
+         *
+         * Only the two layouts that own their windows' geometry, the same pair
+         * layout_restore_geometry tests. Floating is where a window is meant to
+         * be free, and monocle deliberately keeps honouring a saved float. */
+        if (ws->layout == LAYOUT_TILING || ws->layout == LAYOUT_AI)
+            layout_reclaim(s, ws);
+
         layout_apply(s, ws);
         /* Say so on screen. Cycling the layout of a desktop whose windows are
          * all floating — which every layout skips — moves nothing at all, so a
@@ -594,6 +606,38 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         snprintf(lbody, sizeof(lbody), "Desktop %d — %s",
                  ws->index + 1, ws->name);
         s->layout_notif_id = notif_post(s, "synui", lnames[ws->layout], lbody,
+                                        NOTIF_URGENCY_LOW, 1500,
+                                        s->layout_notif_id);
+    } else if (strcmp(action, "retile") == 0) {
+        /* "Tile this desktop, now." Works from every layout, not just tiling —
+         * that is the point of having it as well as the reclaim on layout
+         * selection: reaching tiling by cycling costs up to four presses and
+         * walks the desktop through three layouts on the way.
+         *
+         * From a FLOATING desktop it also switches to tiling. Reclaiming there
+         * alone is a no-op you can see — nothing tiles on a floating desktop —
+         * and a key called "tile" that visibly does nothing is the bug this is
+         * fixing, one level up. The other three place windows already, so they
+         * are left as they are and only the reclaim runs. */
+        int switched = 0;
+        if (ws->layout == LAYOUT_FLOATING) {
+            ws->layout = LAYOUT_TILING;
+            switched = 1;
+        }
+        int taken = layout_reclaim(s, ws);
+        layout_apply(s, ws);
+
+        /* Always says something, including "nothing to do". Silence is what
+         * made this state confusing in the first place. */
+        char rbody[96];
+        if (taken)
+            snprintf(rbody, sizeof(rbody), "%d window%s back in the layout",
+                     taken, taken == 1 ? "" : "s");
+        else
+            snprintf(rbody, sizeof(rbody), "Desktop %d — every window was already tiled",
+                     ws->index + 1);
+        s->layout_notif_id = notif_post(s, "synui",
+                                        switched ? "tiling" : "Re-tiled", rbody,
                                         NOTIF_URGENCY_LOW, 1500,
                                         s->layout_notif_id);
     } else if (strcmp(action, "master_shrink") == 0) {

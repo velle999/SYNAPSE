@@ -12,7 +12,9 @@ import ".."
  * here would silently strand those toggles, which is the exact bug the waybar
  * config's own comment says custom/clock exists to avoid.
  *
- * Clicking pops synui's compositor-drawn calendar (Super+Shift+T).
+ * Clicking pops synui's compositor-drawn calendar. This is the ONLY way in by
+ * default since 2026-07-31 — Super+Shift+T became `retile` — so this handler is
+ * load-bearing rather than a convenience.
  */
 BarModule {
     id: root

@@ -3197,6 +3197,12 @@ void layout_float_place(syn_server_t *s, syn_view_t *view);
  * entirely — those layouts place their own windows. Returns false if the app
  * has nothing saved, or if the layout owns the placement. */
 bool layout_restore_geometry(syn_server_t *s, syn_view_t *view);
+/* Hand every window on ws back to the layout (un-maximize, un-snap, un-float);
+ * returns how many were taken back. Dialogs and fullscreen windows are left
+ * alone. Called when a layout that places windows is SELECTED, and by the
+ * `retile` action — never from layout_apply, or Super+F would be undone by the
+ * reflow it triggers. */
+int layout_reclaim(syn_server_t *s, syn_workspace_t *ws);
 
 /* geom_persist.c: per-app window geometry, remembered across restarts.
  * _save is called when a window unmaps; _lookup feeds layout_restore_geometry,

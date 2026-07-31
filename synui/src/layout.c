@@ -765,6 +765,72 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
     return true;
 }
 
+/* ── Reclaiming windows into the layout ──────────────────── */
+/*
+ * Hand every window on `ws` back to the layout: un-maximize it, drop its snap,
+ * and clear `floating`. Returns how many it took back.
+ *
+ * velle, 2026-07-31: "if it's in tile mode i want the tiling to work, this
+ * isn't intuitive." A tiling desktop can quietly end up with nothing to tile,
+ * because four things set view->floating during a session — dragging a window
+ * to move it (input.c), snapping it to an edge (snap.c), maximizing it
+ * (view_apply_maximized), and Super+F — and until now the ONLY thing that ever
+ * cleared it again was Super+F, one window at a time. So one drag took a window
+ * out of the tiler for the rest of the session, selecting the tiling layout did
+ * not bring it back, and the desktop looked like a tiler that had stopped
+ * working. It had not: it was running on an empty set.
+ *
+ * Maximize deserves its own note, because it is the one that looks like it
+ * should help and cannot. view_apply_maximized records saved_floating on the
+ * way in and restores it on the way out, so for a window that is ALREADY
+ * floating it reads 1 and writes 1 back — a fixed point. Maximizing and
+ * un-maximizing a floating window re-confirms floating every time, which is
+ * exactly what "even if i try to remaximize and try again" was describing.
+ * saved_floating is therefore cleared here too, or the next maximize/restore
+ * cycle would undo this one.
+ *
+ * Two kinds of window are left alone, because neither is in the flow by
+ * mistake: a fullscreen window (it is deliberately the whole output), and a
+ * dialog — an X11 modal or transient, or an xdg toplevel with a parent. Tiling
+ * a file picker into a master slot is not what "make tiling work" means, and it
+ * is the same exclusion geom_persist applies for the same reason.
+ */
+int layout_reclaim(syn_server_t *s, syn_workspace_t *ws)
+{
+    if (!ws) return 0;
+
+    int taken = 0;
+    syn_view_t *v, *tmp;
+    /* _safe: view_apply_maximized() below calls layout_apply(), and a
+     * reflow is not something to iterate a list across unguarded. */
+    wl_list_for_each_safe(v, tmp, &ws->windows, link) {
+        if (!v->mapped || v->fullscreen || v->override_redirect) continue;
+
+        if (v->is_xwayland) {
+            if (v->xsurface->parent || v->xsurface->modal) continue;
+        } else if (v->xdg_surface->toplevel->parent) {
+            continue;
+        }
+
+        if (!v->floating && !v->maximized && v->snapped == SYN_SNAP_NONE)
+            continue;                       /* already the layout's */
+
+        /* Through the real path, so the client is told and its saved_geo is
+         * restored rather than left describing a box it no longer has. */
+        if (v->maximized)
+            view_apply_maximized(s, v, 0);
+
+        v->snapped        = SYN_SNAP_NONE;
+        v->floating       = 0;
+        v->saved_floating = 0;
+        taken++;
+    }
+
+    if (taken)
+        layout_apply(s, ws);
+    return taken;
+}
+
 /* ── Floating placement ──────────────────────────────────── */
 /*
  * Give a newly-floating window a sane geometry: prefer the client's own

@@ -12,8 +12,10 @@
  *   second, no waybar reload needed.
  *
  *   Calendar (calendar_toggle, "calendar" action) — a month grid opened by
- *   the "c" key here, the Super+Shift+T bind, or a click on the bar clock
- *   (custom/clock's on-click runs `synctl dispatch calendar`).
+ *   the "c" key here, or a click on the bar clock (quickshell's
+ *   modules/Clock.qml runs `synctl dispatch calendar`). It had Super+Shift+T
+ *   until 2026-07-31, when T went to `retile`; the click is how it is actually
+ *   reached, so no default bind replaced it.
  *
  * Time zone and NTP changes shell out to timedatectl, which authenticates
  * through polkit (polkit-gnome is the session agent); a denial or failure is

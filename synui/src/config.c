@@ -17,8 +17,8 @@
  * off or with Shift held), so input.c maps them back. Bind "super+kp_1"
  * explicitly to give the keypad key its own action.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
- * layout_cycle, focus_next/prev, alt_tab, alt_tab_prev, stack_next/prev,
- * master_shrink/grow,
+ * layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
+ * stack_next/prev, master_shrink/grow,
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
@@ -335,7 +335,15 @@ static void seed_default_binds(syn_config_t *cfg)
          * guessable super+shift+a. That freed super+shift+a, which stayed
          * unbound until the desktop widgets claimed it below. */
         { "super+t",         "theme" },
-        { "super+shift+t",   "calendar" },
+        /* T for tile. This was the calendar until 2026-07-31, and the calendar
+         * lost nothing by it: clicking the bar clock opens it (quickshell's
+         * modules/Clock.qml runs `synctl dispatch calendar`), which is how
+         * everyone reaches it anyway, and the clock panel's own "c" key still
+         * does. Deliberately NOT rehomed onto super+shift+d — that is
+         * decorations_toggle, and a duplicate here would silently take the
+         * titlebar toggle out. Nothing is bound to `calendar` now; bind it back
+         * with a `bind =` line if you want a key for it. */
+        { "super+shift+t",   "retile" },
         { "super+i",         "network" },
         /* Not super+n: that is minimize, and has been since before there was
          * anything to read. R for RSS — the panel is a feed reader. */
