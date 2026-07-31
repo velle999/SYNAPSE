@@ -675,6 +675,7 @@ typedef enum {
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch + level */
     CTL_ROW_TITLEBARS,
     /* Desktop */
+    CTL_ROW_LAYOUT,        /* tiling / floating / monocle / AI — of the ACTIVE desktop */
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
@@ -3184,6 +3185,10 @@ void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
  * live on o. layout_apply() runs them for every output showing ws. */
 void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+/* A layout's name for a HUMAN ("AI", not "ai"): the Super+Tab toast, the
+ * control panel's Layout row, the AI overlay. Deliberately NOT ipc.c's
+ * layout_name(), which is the wire value synctl and the tests parse. */
+const char *layout_label(syn_layout_t l);
 void view_resize(syn_view_t *view, int x, int y, int w, int h);
 void layout_float_place(syn_server_t *s, syn_view_t *view);
 
@@ -3634,6 +3639,9 @@ int  ctlpanel_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* Row text. value[] is filled with the row's current state ("on"/"off"/"GPU"),
  * or left empty for a row that only opens a panel and holds no state itself. */
 const char *ctlpanel_row_label(int row);
+/* Redraw the panel if it is up, for state changed from outside it (a bind fired
+ * while it was open). No-op when the panel is hidden. */
+void ctlpanel_refresh(syn_server_t *s);
 void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n);
 /* Category name for the sidebar, and that category's rows in display order —
  * both driven by the one item table in ctlpanel.c, so the sidebar, the row pane

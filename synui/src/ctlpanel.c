@@ -94,7 +94,9 @@ static const struct {
     { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL        },
     { CTL_ROW_TITLEBARS,    CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Titlebars",        NULL        },
 
-    /* Desktop */
+    /* Desktop. Layout leads: it is the one row here that changes where your
+     * windows go rather than what the shell furniture looks like. */
+    { CTL_ROW_LAYOUT,        CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Layout",           NULL      },
     { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock",             NULL      },
     { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock auto-hide",   NULL      },
     { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL      },
@@ -277,6 +279,17 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
     case CTL_ROW_AI_BACKEND:
         snprintf(buf, n, "%s", ai_backend_label());
         break;
+    case CTL_ROW_LAYOUT: {
+        /* Layout is per-DESKTOP, not global, so this row is about the desktop
+         * you are on — the same one Super+Tab would cycle. Naming it keeps that
+         * honest: on desktop 3 the row would otherwise look like a global
+         * setting that mysteriously differs from desktop 2. */
+        syn_workspace_t *ws = server_active_workspace(s);
+        if (!ws) { snprintf(buf, n, "n/a"); break; }
+        snprintf(buf, n, "%s \xc2\xb7 desktop %d",
+                 layout_label(ws->layout), ws->index + 1);
+        break;
+    }
     case CTL_ROW_DOCK:
         snprintf(buf, n, "%s", s->config.dock_enabled ? "on" : "off");
         break;
@@ -490,6 +503,23 @@ static void ctlpanel_repaint(syn_server_t *s)
             wlr_damage_ring_add_whole(&o->scene_output->damage_ring);
         wlr_output_schedule_frame(o->wlr_output);
     }
+}
+
+/* Redraw the panel if it happens to be up; a no-op otherwise.
+ *
+ * For state that changes from OUTSIDE the panel. ctlpanel_key() passes modified
+ * combos straight through to the bind table on purpose — Super+C has to be able
+ * to close the panel it opened — so Super+Tab cycles the layout while the
+ * Layout row is on screen still reading the old value. The row is not wrong,
+ * it is just painted; nothing in a bind's path knows to redraw a panel.
+ *
+ * synui_render_ctlpanel(), not ctlpanel_repaint(): the repaint only damages the
+ * output so the existing panel buffer is re-composited, which is why the rows'
+ * in-place toggles pair it with the render the key handler runs straight after.
+ * A row's TEXT only changes when the panel is drawn again. */
+void ctlpanel_refresh(syn_server_t *s)
+{
+    if (s && s->ctlpanel.visible) synui_render_ctlpanel(s);
 }
 
 /*
@@ -784,6 +814,23 @@ static void ctlpanel_activate(syn_server_t *s)
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "game mode %s", s->game.active ? "on" : "off");
         return;
+
+    case CTL_ROW_LAYOUT: {
+        /* Enter cycles, exactly as Super+Tab does — and through the bind action,
+         * not a private copy of it, so this row inherits the reclaim on
+         * selecting tiling/AI and cannot drift from the key. Forward-only for
+         * the same reason the AI backend row is: Left/Right already mean "move
+         * columns" here, and only the slider row may take them.
+         *
+         * The desktop under the panel really does re-tile while you watch,
+         * which is the point of putting it here rather than only on a key. */
+        synui_binding_execute(s, "layout_cycle", NULL);
+        syn_workspace_t *ws = server_active_workspace(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "layout: %s", ws ? layout_label(ws->layout) : "?");
+        ctlpanel_repaint(s);
+        return;
+    }
 
     case CTL_ROW_DOCK:
         s->config.dock_enabled = !s->config.dock_enabled;

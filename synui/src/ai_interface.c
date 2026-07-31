@@ -1101,9 +1101,7 @@ void overlay_update(syn_server_t *s)
     snprintf(ov->ai_context, sizeof(ov->ai_context),
         "workspace: %s [%d]  windows: %d  layout: %s%s",
         ws->name, ws->index + 1, win_count,
-        ws->layout == LAYOUT_TILING   ? "tiling"   :
-        ws->layout == LAYOUT_MONOCLE  ? "monocle"  :
-        ws->layout == LAYOUT_AI       ? "AI"       : "floating",
+        layout_label(ws->layout),
         ws->intent[0] ? "  intent: " : ""
     );
     if (ws->intent[0])

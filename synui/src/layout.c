@@ -106,6 +106,26 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
 }
 #define place_view(v, x, y, w, h) view_resize((v), (x), (y), (w), (h))
 
+/* What a layout is called when a HUMAN reads it — the Super+Tab toast, the
+ * control panel's Layout row, the AI overlay's context line. All three used to
+ * spell the list out for themselves, and the control panel was about to be the
+ * fourth.
+ *
+ * NOT the same list as ipc.c's layout_name(), and they must not be merged: that
+ * one is the wire value `synctl` and the test rigs parse, so it is lowercase
+ * "ai" and changing it is an API break. This one is for reading, so it is "AI".
+ * Two audiences, two functions, on purpose. */
+const char *layout_label(syn_layout_t l)
+{
+    switch (l) {
+    case LAYOUT_TILING:   return "tiling";
+    case LAYOUT_FLOATING: return "floating";
+    case LAYOUT_MONOCLE:  return "monocle";
+    case LAYOUT_AI:       return "AI";
+    }
+    return "unknown";
+}
+
 /* ── TILING layout (master-stack) ────────────────────────── */
 /* Tiles only the windows of ws that live on o, into o's usable box. */
 void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)

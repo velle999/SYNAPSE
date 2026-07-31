@@ -598,8 +598,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         if (s->focused_view) view_close(s->focused_view);
     } else if (strcmp(action, "layout_cycle") == 0) {
         ws->layout = (ws->layout + 1) % 4;
-        static const char *lnames[] = {"tiling","floating","monocle","AI"};
-        wlr_log(WLR_INFO, "synui: layout → %s", lnames[ws->layout]);
+        wlr_log(WLR_INFO, "synui: layout → %s", layout_label(ws->layout));
 
         /* Choosing a layout that places windows means "place these windows".
          * Without this the tiler inherits whatever the session floated —
@@ -622,9 +621,13 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         char lbody[96];
         snprintf(lbody, sizeof(lbody), "Desktop %d — %s",
                  ws->index + 1, ws->name);
-        s->layout_notif_id = notif_post(s, "synui", lnames[ws->layout], lbody,
+        s->layout_notif_id = notif_post(s, "synui", layout_label(ws->layout), lbody,
                                         NOTIF_URGENCY_LOW, 1500,
                                         s->layout_notif_id);
+        /* The control panel's Layout row reads this workspace's layout, and
+         * ctlpanel_key() lets Super+Tab through to get here — so with the panel
+         * open the row would sit there showing the layout we just left. */
+        ctlpanel_refresh(s);
     } else if (strcmp(action, "retile") == 0) {
         /* "Tile this desktop, now." Works from every layout, not just tiling —
          * that is the point of having it as well as the reclaim on layout
