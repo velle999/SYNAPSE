@@ -1,0 +1,21 @@
+# Renders are derived and deterministic (fixed seeds, no clock input), so the
+# same commit always rebuilds the same bytes — see dendrite-tux/README.md.
+# The preview JPEGs are the exception: they are what each README shows.
+#
+# Every pattern is written `**/build/…`, not `build/…`. A pattern containing a
+# slash anywhere but the end is ANCHORED to the directory holding this file, so
+# a bare `build/*` here would only ever match `synapse-wallpapers/build/*` and
+# would miss `dendrite-tux/build/`, one level down. `**/` restores the
+# match-at-any-depth behaviour that the repo-root `build/` line has.
+#
+# The three lines are ordered, and none is redundant:
+#   !**/build/           the repo-root .gitignore excludes `build/` as a
+#                        DIRECTORY, and git does not descend into an excluded
+#                        directory — without this the negation below is
+#                        unreachable.
+#   **/build/*           exclude the contents (not the directory), which keeps
+#                        that negation eligible.
+#   !**/build/*-preview.jpg   re-include the previews.
+!**/build/
+**/build/*
+!**/build/*-preview.jpg

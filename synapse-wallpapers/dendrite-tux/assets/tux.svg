@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="520" viewBox="-10 0 420 520">
+  <!-- Tux, drawn to sit in front of the SynapseOS dendrite mark: the classic
+       silhouette, but lit from behind by the logo's purple (#a78bfa) so he
+       reads against the near-black #0a0a12 background. -->
+  <defs>
+    <linearGradient id="body" x1="0.15" y1="0" x2="0.9" y2="1">
+      <stop offset="0"   stop-color="#2a2a36"/>
+      <stop offset="0.5" stop-color="#16161e"/>
+      <stop offset="1"   stop-color="#0d0d14"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0.3" y1="0" x2="0.8" y2="1">
+      <stop offset="0"   stop-color="#ffffff"/>
+      <stop offset="1"   stop-color="#d8d8e4"/>
+    </linearGradient>
+    <linearGradient id="beak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#ffc94d"/>
+      <stop offset="1"   stop-color="#e8901a"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#f5ad2e"/>
+      <stop offset="1"   stop-color="#d97c11"/>
+    </linearGradient>
+  </defs>
+
+  <!-- flippers -->
+  <ellipse cx="76"  cy="308" rx="30" ry="94" fill="url(#body)" transform="rotate(14 76 308)"/>
+  <ellipse cx="324" cy="308" rx="30" ry="94" fill="url(#body)" transform="rotate(-14 324 308)"/>
+
+  <!-- body + head, one silhouette -->
+  <path d="M200 44
+           C 262 44, 300 92, 300 148
+           C 300 178, 288 202, 272 218
+           C 316 246, 336 316, 336 372
+           C 336 434, 282 470, 200 470
+           C 118 470, 64 434, 64 372
+           C 64 316, 84 246, 128 218
+           C 112 202, 100 178, 100 148
+           C 100 92, 138 44, 200 44 Z"
+        fill="url(#body)"/>
+
+  <!-- belly -->
+  <path d="M200 214
+           C 246 214, 286 268, 292 340
+           C 298 410, 258 452, 200 452
+           C 142 452, 102 410, 108 340
+           C 114 268, 154 214, 200 214 Z"
+        fill="url(#belly)"/>
+
+  <!-- eye patches -->
+  <ellipse cx="176" cy="140" rx="27" ry="34" fill="#ffffff" transform="rotate(-8 176 140)"/>
+  <ellipse cx="224" cy="140" rx="27" ry="34" fill="#ffffff" transform="rotate(8 224 140)"/>
+  <ellipse cx="184" cy="146" rx="10.5" ry="12.5" fill="#0b0b11"/>
+  <ellipse cx="216" cy="146" rx="10.5" ry="12.5" fill="#0b0b11"/>
+  <circle  cx="187" cy="141" r="3.4" fill="#ffffff" opacity="0.9"/>
+  <circle  cx="219" cy="141" r="3.4" fill="#ffffff" opacity="0.9"/>
+
+  <!-- beak: upper mandible over a darker lower one, so it reads as a bill
+       and not a sticker -->
+  <path d="M200 162 C 232 162, 252 178, 252 194 C 252 202, 228 206, 200 206
+           C 172 206, 148 202, 148 194 C 148 178, 168 162, 200 162 Z"
+        fill="url(#beak)" stroke="#b8710f" stroke-width="1.6"/>
+  <path d="M152 198 C 170 206, 230 206, 248 198 C 244 218, 224 228, 200 228
+           C 176 228, 156 218, 152 198 Z"
+        fill="#d9861a" stroke="#b8710f" stroke-width="1.4"/>
+  <ellipse cx="184" cy="178" rx="3.2" ry="2.2" fill="#a4650d" opacity="0.75"/>
+  <ellipse cx="216" cy="178" rx="3.2" ry="2.2" fill="#a4650d" opacity="0.75"/>
+
+  <!-- feet, splayed out in front of the body -->
+  <g stroke="#a2600c" stroke-width="2.2" stroke-linejoin="round">
+    <path d="M182 442 C 160 438, 118 448, 84 466 C 58 480, 62 492, 96 492
+             C 140 492, 176 476, 186 460 Z" fill="url(#foot)"/>
+    <path d="M218 442 C 240 438, 282 448, 316 466 C 342 480, 338 492, 304 492
+             C 260 492, 224 476, 214 460 Z" fill="url(#foot)"/>
+  </g>
+  <g stroke="#c07d12" stroke-width="2" fill="none" opacity="0.65" stroke-linecap="round">
+    <path d="M150 452 C 132 462, 116 474, 106 484"/>
+    <path d="M170 460 C 156 470, 144 480, 138 488"/>
+    <path d="M250 452 C 268 462, 284 474, 294 484"/>
+    <path d="M230 460 C 244 470, 256 480, 262 488"/>
+  </g>
+</svg>
