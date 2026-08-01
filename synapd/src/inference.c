@@ -44,6 +44,9 @@ struct synapd_inference {
     uint32_t              context_size;
     int                   n_threads;
     int                   n_gpu_layers;
+    float                 temperature;
+    float                 top_p;
+    int                   top_k;
 
     /* Stats */
     uint64_t total_tokens_in;
@@ -155,6 +158,9 @@ int inference_init(synapd_state_t *s) {
     strncpy(inf->model_path, s->config.model_path, sizeof(inf->model_path) - 1);
     inf->context_size = s->config.context_window;
     inf->n_threads    = s->config.n_threads;
+    inf->temperature  = s->config.temperature;
+    inf->top_p        = s->config.top_p;
+    inf->top_k        = s->config.top_k;
     inf->n_gpu_layers = s->config.n_gpu_layers < 0
                         ? detect_gpu_layers(s->config.model_path, st.st_size)
                         : s->config.n_gpu_layers;
@@ -186,9 +192,32 @@ int inference_init(synapd_state_t *s) {
         return -1;
     }
 
-    /* Greedy sampler (temperature/top-p added per request in future) */
+    /*
+     * Sampler chain.
+     *
+     * This was hardcoded greedy, which makes an identical prompt return a
+     * byte-identical reply forever. That is correct for a one-shot answer and
+     * wrong for anything a user can ask twice: Chiron's faction leaders greeted
+     * you with the same sentence, word for word, every single visit.
+     *
+     * Order matters -- narrow the candidates, then flatten the distribution,
+     * then draw. temperature 0 keeps the old deterministic behaviour, so a
+     * caller that depends on reproducibility can still ask for it.
+     */
     inf->sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(inf->sampler, llama_sampler_init_greedy());
+    if (inf->temperature <= 0.0f) {
+        llama_sampler_chain_add(inf->sampler, llama_sampler_init_greedy());
+        syn_log(LOG_INFO, "inference: sampler greedy (deterministic)");
+    } else {
+        if (inf->top_k > 0)
+            llama_sampler_chain_add(inf->sampler, llama_sampler_init_top_k(inf->top_k));
+        if (inf->top_p > 0.0f && inf->top_p < 1.0f)
+            llama_sampler_chain_add(inf->sampler, llama_sampler_init_top_p(inf->top_p, 1));
+        llama_sampler_chain_add(inf->sampler, llama_sampler_init_temp(inf->temperature));
+        llama_sampler_chain_add(inf->sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+        syn_log(LOG_INFO, "inference: sampler temp=%.2f top_p=%.2f top_k=%d",
+                (double)inf->temperature, (double)inf->top_p, inf->top_k);
+    }
 
     s->inference   = inf;
     s->model_loaded = 1;

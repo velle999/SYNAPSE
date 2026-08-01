@@ -55,6 +55,13 @@ struct synapd_state g_state = {
         .n_gpu_layers   = -1,  /* -1 = auto-detect+offload to GPU (0 forces CPU) */
         .log_level      = LOG_INFO,
         .max_clients    = 64,
+        /* Sampling was hardcoded greedy, so an identical prompt always came
+         * back byte-identical. That is fine for a one-shot answer and wrong for
+         * anything asked twice -- Chiron's faction leaders repeated themselves
+         * word for word on every visit. 0 restores the old behaviour. */
+        .temperature    = 0.8f,
+        .top_p          = 0.95f,
+        .top_k          = 40,
     }
 };
 
@@ -153,6 +160,9 @@ static void usage(const char *prog) {
         "  -t, --threads N        Inference threads (default: 4)\n"
         "  -g, --gpu-layers N     Layers to offload to GPU (default: auto)\n"
         "  -c, --context N        Context window tokens (default: 4096)\n"
+        "  -T, --temperature F    Sampling temperature, 0 = greedy (default: 0.8)\n"
+        "  -P, --top-p F          Nucleus sampling cutoff (default: 0.95)\n"
+        "  -K, --top-k N          Top-k candidates, 0 = off (default: 40)\n"
         "  -d, --debug            Debug mode (no daemonize, verbose log)\n"
         "  -f, --foreground       Run in foreground (no daemonize)\n"
         "  -v, --version          Print version\n"
@@ -213,6 +223,9 @@ int main(int argc, char *argv[]) {
         {"threads",    required_argument, 0, 't'},
         {"gpu-layers", required_argument, 0, 'g'},
         {"context",    required_argument, 0, 'c'},
+        {"temperature", required_argument, 0, 'T'},
+        {"top-p",      required_argument, 0, 'P'},
+        {"top-k",      required_argument, 0, 'K'},
         {"debug",      no_argument,       0, 'd'},
         {"foreground", no_argument,       0, 'f'},
         {"version",    no_argument,       0, 'v'},
@@ -221,8 +234,11 @@ int main(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "m:s:t:g:c:dfvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:s:t:g:c:T:P:K:dfvh", long_opts, NULL)) != -1) {
         switch (opt) {
+        case 'T': g_state.config.temperature    = (float)atof(optarg); break;
+        case 'P': g_state.config.top_p          = (float)atof(optarg); break;
+        case 'K': g_state.config.top_k          = atoi(optarg); break;
         case 'm': g_state.config.model_path     = optarg; break;
         case 's': g_state.config.socket_path    = optarg; break;
         case 't': g_state.config.n_threads      = atoi(optarg); break;

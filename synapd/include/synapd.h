@@ -99,6 +99,9 @@ typedef struct {
     int         n_gpu_layers;    /* -1 = auto */
     int         log_level;
     int         max_clients;
+    float       temperature;     /* 0 = greedy/deterministic */
+    float       top_p;           /* nucleus cutoff, applied when sampling */
+    int         top_k;           /* 0 = disabled */
 } synapd_config_t;
 
 /* ── Inference state (opaque to most subsystems) ─────────── */
