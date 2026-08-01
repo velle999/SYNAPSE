@@ -39,6 +39,14 @@ set -uo pipefail
 STEAM="${STEAM_ROOT:-$HOME/.local/share/Steam}"
 WORKSHOP="$STEAM/steamapps/workshop/content/431960"
 ASSETS="$STEAM/steamapps/common/wallpaper_engine/assets"
+# The read-only tree SynapseOS ships its OWN wallpapers in, searched after the
+# user's Workshop tree. This is what lets a wallpaper work on a box with no
+# Steam at all: the Workshop "content" directory is just a directory, nothing
+# about it requires Steam to have made it, and --bg takes a PATH as happily as
+# an id. Steam's assets tree is only read by SCENE wallpapers — a video one
+# renders fine with an empty --assets-dir. Both verified, not assumed.
+SYSROOT="${SYNUI_WPENGINE_SYSROOT:-/usr/share/synapse/wallpapers/431960}"
+WP_ROOTS=("$WORKSHOP" "$SYSROOT")
 # Prefer the packaged wrapper (it cds into /usr/lib and sets the NVIDIA env
 # itself); fall back to an uninstalled build tree for development.
 if [ -n "${SYNUI_WPENGINE_BIN:-}" ]; then
@@ -58,6 +66,16 @@ LEGACY_PIDFILE="$RUNDIR/synui-wpengine.pid"
 # One pidfile and one log per output. Connector names ("DP-1", "HDMI-A-1") are
 # already filename-safe, but sanitise rather than trust a name into a path.
 slug()        { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'; }
+
+# id -> the directory holding it, most specific root first. Fails if no root
+# has it, so callers can keep saying "no such wallpaper".
+wp_dir() {
+    local root
+    for root in "${WP_ROOTS[@]}"; do
+        if [ -d "$root/$1" ]; then printf '%s' "$root/$1"; return 0; fi
+    done
+    return 1
+}
 pidfile_for() { printf '%s/synui-wpengine.%s.pid' "$RUNDIR" "$(slug "$1")"; }
 logfile_for() { printf '%s/synui-wpengine.%s.log' "$RUNDIR" "$(slug "$1")"; }
 
@@ -99,7 +117,6 @@ die() { echo "synui-wpengine: $*" >&2; exit 1; }
 
 need_engine() {
     [ -x "$ENGINE" ] || die "engine not found at $ENGINE (set SYNUI_WPENGINE_BIN)"
-    [ -d "$ASSETS" ] || die "Wallpaper Engine assets not found at $ASSETS"
 }
 
 # Workshop DIRECTORY -> "type<TAB>title", read straight from project.json.
@@ -156,21 +173,41 @@ PY
 # subscribed: there is no wallpaper to render, and the caller skips that output
 # rather than starting an engine that would draw nothing.
 resolve_bg() {
-    python3 - "$WORKSHOP" "$1" <<'PY'
+    python3 - "$1" "${WP_ROOTS[@]}" <<'PY'
 import json, os, sys
 
-root, wid = sys.argv[1], sys.argv[2]
+wid, roots = sys.argv[1], sys.argv[2:]
+
+def find(i):
+    for r in roots:
+        p = os.path.join(r, i)
+        if os.path.isdir(p):
+            return p
+    return None
 
 def load(i):
-    with open(os.path.join(root, i, "project.json"), encoding="utf-8-sig") as f:
+    p = find(i)
+    if p is None:
+        raise IOError(i)
+    with open(os.path.join(p, "project.json"), encoding="utf-8-sig") as f:
         return json.load(f)
+
+def bg(i):
+    """What to hand --bg for id `i`.
+
+    An id in the USER's Workshop tree stays an id, which is exactly what the
+    engine has always been given — no existing install changes behaviour.
+    Something found only in a system root has to become a path, because the
+    engine's own id lookup searches Steam and nowhere else.
+    """
+    return i if os.path.isdir(os.path.join(roots[0], i)) else (find(i) or i)
 
 try:
     j = load(wid)
 except Exception:
     # Unreadable project.json: hand the id over as-is and let the engine be the
     # judge, which is what happened before presets were understood at all.
-    sys.stdout.write(wid + "\0")
+    sys.stdout.write(bg(wid) + "\0")
     sys.exit(0)
 
 preset = j.get("preset")
@@ -182,7 +219,7 @@ if not j.get("type") and isinstance(preset, dict) and j.get("dependency") is not
         load(dep)
     except Exception:
         sys.exit(1)
-    args.append(dep)
+    args.append(bg(dep))
     for k, v in preset.items():
         if v is None or isinstance(v, (dict, list)):
             continue
@@ -191,19 +228,27 @@ if not j.get("type") and isinstance(preset, dict) and j.get("dependency") is not
         args.append("--set-property")
         args.append("%s=%s" % (k, v))
 else:
-    args.append(wid)
+    args.append(bg(wid))
 
 sys.stdout.write("\0".join(args) + "\0")
 PY
 }
 
 cmd_list() {
-    [ -d "$WORKSHOP" ] || die "no workshop content at $WORKSHOP"
-    for d in "$WORKSHOP"/*/; do
-        id="$(basename "$d")"
-        m="$(meta "$d")" || continue
-        printf '%-12s %-8s %s\n' "$id" "${m%%	*}" "${m##*	}"
+    local root d id m seen=()
+    for root in "${WP_ROOTS[@]}"; do
+        [ -d "$root" ] || continue
+        for d in "$root"/*/; do
+            [ -d "$d" ] || continue
+            id="$(basename "$d")"
+            # A user subscription shadows a shipped wallpaper of the same id.
+            case " ${seen[*]-} " in *" $id "*) continue ;; esac
+            m="$(meta "$d")" || continue
+            seen+=("$id")
+            printf '%-12s %-8s %s\n' "$id" "${m%%	*}" "${m##*	}"
+        done
     done
+    [ ${#seen[@]} -gt 0 ] || die "no wallpapers in ${WP_ROOTS[*]}"
 }
 
 outputs() {
@@ -301,7 +346,7 @@ live_entries() {
         if [ -n "$live" ] && ! printf '%s\n' "$live" | grep -qxF "$out"; then
             continue
         fi
-        [ -d "$WORKSHOP/$id" ] || { echo "synui-wpengine: skipping unknown id $id" >&2; continue; }
+        wp_dir "$id" >/dev/null || { echo "synui-wpengine: skipping unknown id $id" >&2; continue; }
         printf '%s %s\n' "$out" "$id"
     done < "$STATE"
 }
@@ -320,11 +365,28 @@ start_output() {
     bg="${args[0]}"
     [ ${#args[@]} -gt 1 ] && props=("${args[@]:1}")
 
+    # Steam's assets tree is read by SCENE wallpapers only; video and web
+    # render without it. Requiring it unconditionally is what used to stop a
+    # box with no Steam from showing a wallpaper it already had on disk.
+    # `wtype`, not `type`: a local named `type` shadows the shell builtin for
+    # the rest of the function.
+    local assets=() dir wtype
+    if [ -d "$ASSETS" ]; then
+        assets=(--assets-dir "$ASSETS")
+    else
+        dir="$(wp_dir "$id")" && wtype="$(meta "$dir")" && wtype="${wtype%%	*}"
+        if [ "${wtype:-}" = scene ]; then
+            echo "synui-wpengine: $id is a scene wallpaper and needs Wallpaper" \
+                 "Engine's assets at $ASSETS — skipping $out" >&2
+            return 1
+        fi
+    fi
+
     # __GL_THREADED_OPTIMIZATIONS=0 is the upstream-documented NVIDIA workaround.
     # 9>&- drops the lock fd: the engine outlives this script, and an inherited
     # fd 9 would hold take_lock's flock for the whole session (see take_lock).
     __GL_THREADED_OPTIMIZATIONS=0 \
-    setsid "$ENGINE" --assets-dir "$ASSETS" --layer background \
+    setsid "$ENGINE" "${assets[@]}" --layer background \
         --fps "${SYNUI_WPENGINE_FPS:-30}" --silent \
         --screen-root "$out" --bg "$bg" --scaling fill "${props[@]}" \
         >"$(logfile_for "$out")" 2>&1 </dev/null 9>&- &
@@ -363,7 +425,7 @@ start_from_state() {
 cmd_set() {
     local id="${1:-}" out="${2:-}"
     [ -n "$id" ] || die "usage: synui-wpengine set <workshop-id> [output|all]"
-    [ -d "$WORKSHOP/$id" ] || die "no such wallpaper: $id"
+    wp_dir "$id" >/dev/null || die "no such wallpaper: $id"
 
     take_lock
 
@@ -433,7 +495,7 @@ cmd_status() {
         [ -n "$out" ] || continue
         pids="$(pids_for_output "$out")"
         [ -n "$pids" ] || pids='-'
-        if m="$(meta "$WORKSHOP/$id")"; then
+        if m="$(meta "$(wp_dir "$id")")"; then
             printf '%-10s %-8s %-12s %-8s %s\n' \
                    "$out" "$(echo $pids)" "$id" "${m%%	*}" "${m##*	}"
         else

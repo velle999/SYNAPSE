@@ -1,0 +1,33 @@
+pkgname=synapse-wallpapers
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS' own Wallpaper Engine wallpapers"
+arch=('any')
+license=('GPL-3.0-or-later')
+depends=('bash')
+optdepends=('linux-wallpaperengine: play them as animated wallpapers')
+source=()
+sha256sums=()
+
+# The renders are derived and untracked, so they are NOT sources — build them
+# from the checkout. `makepkg -fd` on a fresh box installs nothing, so this
+# needs python-pillow, librsvg and ffmpeg present to run at all; they are
+# makedepends so the preflight that derives them picks them up.
+makedepends=('python-pillow' 'librsvg' 'ffmpeg' 'adwaita-fonts')
+
+build() {
+	cd "$startdir/dendrite-tux"
+	./make.py --wordmark purple
+	./make.py --wordmark purple --portrait
+	./make.py --wordmark rgb
+	./make.py --wordmark rgb --portrait
+	./make.py --single 60 --wordmark purple
+}
+
+package() {
+	# install.sh --system writes the same layout synui-wpengine searches after
+	# the user's Workshop tree. DESTDIR is honoured so this stays a normal
+	# staged install.
+	cd "$startdir/dendrite-tux"
+	DESTDIR="$pkgdir" ./install.sh --system
+}

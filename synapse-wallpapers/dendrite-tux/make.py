@@ -16,16 +16,18 @@ without a visible seam:
     starfield drift             FRAMES               (1 wrap per loop)
     Tux's bob                   FRAMES/3
     Tux's blink                 once, entirely inside the loop
+    the wordmark's hue sweep    FRAMES               (1 full cycle per loop)
 
 Drawing is done with PIL at 2x and downsampled (SS), because PIL has no
 antialiasing of its own. Anything that moves is a small pre-rendered sprite
 added into the frame rather than a full-canvas redraw, so a frame costs a few
 composites instead of a few hundred draw calls.
 
-Usage:  ./make.py [--portrait] [--frames N] [--out DIR] [--keep-frames]
+Usage:  ./make.py [--portrait] [--frames N] [--wordmark purple|rgb|none] [--out DIR]
 """
 
 import argparse
+import colorsys
 import math
 import os
 import shutil
@@ -33,7 +35,7 @@ import subprocess
 import sys
 import tempfile
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TUX_SVG = os.path.join(HERE, "assets", "tux.svg")
@@ -51,6 +53,16 @@ FPS = 30
 FRAMES = 300  # 10 s
 PULSE_CYCLE = 100  # frames; must divide FRAMES
 SS = 2  # supersampling factor for the static layers
+
+WORDMARK = "SYNAPSEOS"
+# Adwaita Sans is a variable font, so we can ask for a weight the OS ships no
+# static cut of; DejaVu Sans Bold is the fallback because it is on every Arch
+# box and this has to render on whatever machine builds the wallpaper.
+# (path, weight-axis value or None for a static face)
+WORDMARK_FONTS = [
+    ("/usr/share/fonts/Adwaita/AdwaitaSans-Regular.ttf", 760),
+    ("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", None),
+]
 
 # ---------------------------------------------------------------------------
 # The dendrite mark, in the source logo's own coordinate space
@@ -203,15 +215,19 @@ class Layout:
     def __init__(self, w, h):
         self.w, self.h = w, h
         if w >= h:
-            self.scale = 0.95 * h / 1080.0
-            self.cx, self.cy = w / 2.0, h * 0.44
-            self.tux_h = h * 0.50
-            self.tux_bottom = h * 0.96
+            self.scale = 0.93 * h / 1080.0
+            self.cx, self.cy = w / 2.0, h * 0.42
+            self.tux_h = h * 0.47
+            self.tux_bottom = h * 0.865
+            self.mark_h = h * 0.055
+            self.mark_cy = h * 0.915
         else:
-            self.scale = 1.13 * w / 1080.0
-            self.cx, self.cy = w / 2.0, h * 0.34
-            self.tux_h = h * 0.42
-            self.tux_bottom = h * 0.94
+            self.scale = 1.11 * w / 1080.0
+            self.cx, self.cy = w / 2.0, h * 0.325
+            self.tux_h = h * 0.39
+            self.tux_bottom = h * 0.855
+            self.mark_h = w * 0.052
+            self.mark_cy = h * 0.903
 
     def to_px(self, p, ss=1):
         return ((self.cx + p[0] * self.scale) * ss, (self.cy + p[1] * self.scale) * ss)
@@ -345,6 +361,113 @@ def make_tux(lay):
     return tux, rim, (int(lay.cx - wpx / 2), int(lay.tux_bottom - hpx))
 
 
+def _wordmark_font(px):
+    for path, weight in WORDMARK_FONTS:
+        if not os.path.exists(path):
+            continue
+        font = ImageFont.truetype(path, px)
+        if weight is not None:
+            try:
+                # axis order is (optical size, weight) — see the font's fvar
+                font.set_variation_by_axes([32, weight])
+            except Exception:
+                continue  # not the variable build we expected; try the next
+        return font
+    raise SystemExit("no usable font for the wordmark; install ttf-dejavu")
+
+
+def _wordmark_mask(text, px, track):
+    """`text` as a tight L mask, letter-spaced by `track` pixels."""
+    font = _wordmark_font(px)
+    scratch = Image.new("L", (px * (len(text) + 2) * 2, px * 3), 0)
+    d = ImageDraw.Draw(scratch)
+    x = px
+    for ch in text:
+        d.text((x, px // 2), ch, font=font, fill=255)
+        x += font.getlength(ch) + track
+    return scratch.crop(scratch.getbbox())
+
+
+def _rainbow(cycle, total, h):
+    """A hue ramp `total` px wide that repeats every `cycle` px.
+
+    The cycle is the width of the LETTERS, not of the padded canvas, so one
+    full spectrum spans the word exactly. Cropping a window out of this and
+    walking the offset from 0 to `cycle` over the loop gives a sweep that
+    closes on itself.
+    """
+    row = Image.new("RGB", (cycle, 1))
+    px = row.load()
+    for x in range(cycle):
+        r, g, b = colorsys.hsv_to_rgb(x / float(cycle), 0.72, 1.0)
+        px[x, 0] = (int(r * 255), int(g * 255), int(b * 255))
+    strip = row.resize((cycle, h), Image.NEAREST)
+    out = Image.new("RGB", (total, h))
+    for x in range(0, total, cycle):
+        out.paste(strip, (x, 0))
+    return out
+
+
+class Wordmark:
+    """The glowing SYNAPSEOS lockup under Tux.
+
+    "purple" keeps the OS palette and breathes with the mark. "rgb" runs a hue
+    sweep along the letters; the sweep advances exactly one cycle over the loop,
+    which is what keeps it seamless (see the note at the top of the file).
+
+    The glow is blurred on a PADDED canvas for the same reason Tux's rim is —
+    blurring at the mask's own size clips the falloff into a visible rectangle.
+    """
+
+    def __init__(self, lay, mode, frames):
+        self.mode, self.frames = mode, frames
+        px = int(lay.mark_h * SS)
+        mask = _wordmark_mask(WORDMARK, px, int(px * 0.20))
+
+        # Keep the lockup inside the region that survives `--scaling fill` on a
+        # rotated output (see Layout): never wider than 70% of the short side.
+        cap = 0.70 * min(lay.w, lay.h) * SS
+        if mask.width > cap:
+            k = cap / mask.width
+            mask = mask.resize((int(mask.width * k), int(mask.height * k)), Image.LANCZOS)
+        mask = mask.resize((mask.width // SS, mask.height // SS), Image.LANCZOS)
+        self.cycle = mask.width
+
+        self.pad = int(mask.height * 1.7)
+        padded = Image.new("L", (mask.width + 2 * self.pad, mask.height + 2 * self.pad), 0)
+        padded.paste(mask, (self.pad, self.pad))
+        self.mask = padded
+        self.rgbmask = Image.merge("RGB", (padded, padded, padded))
+        self.blur_near = max(3.0, mask.height * 0.30)
+        self.blur_far = max(9.0, mask.height * 0.85)
+
+        w, h = self.mask.size
+        self.cx, self.cy = lay.cx, lay.mark_cy
+
+        if mode == "rgb":
+            self.strip = _rainbow(self.cycle, w + self.cycle, h)
+        else:
+            self.core = ImageOps.colorize(self.mask, (0, 0, 0), SPARK)
+            self.aura = ImageChops.add(
+                glow(self.mask, self.blur_near, PURPLE, 0.95),
+                glow(self.mask, self.blur_far, PURPLE_DEEP, 0.60),
+            )
+
+    def draw(self, frame, f, breath):
+        if self.mode == "rgb":
+            w, h = self.mask.size
+            off = int((f / float(self.frames)) * self.cycle) % self.cycle
+            core = ImageChops.multiply(self.strip.crop((off, 0, off + w, h)), self.rgbmask)
+            aura = ImageChops.add(
+                scaled(core.filter(ImageFilter.GaussianBlur(self.blur_near)), 0.95),
+                scaled(core.filter(ImageFilter.GaussianBlur(self.blur_far)), 0.85),
+            )
+        else:
+            core, aura = self.core, self.aura
+        add_sprite(frame, aura, self.cx, self.cy, 0.55 + 0.45 * breath)
+        add_sprite(frame, core, self.cx, self.cy, 1.0)
+
+
 def make_pulse_sprite(radius, color, gain=1.0):
     n = int(radius * 2) | 1
     m = Image.new("L", (n * 4, n * 4), 0)
@@ -377,7 +500,7 @@ def pulse_state(f, phase):
     return t, fade
 
 
-def render(w, h, frames, outdir, title, only=None):
+def render(w, h, frames, outdir, title, wordmark="purple", only=None):
     """Draw `frames` frames into outdir.
 
     `only` renders just that one frame *without changing the loop*: `frames`
@@ -394,6 +517,7 @@ def render(w, h, frames, outdir, title, only=None):
     stars_far = make_stars(lay, 0xC0FFEE, 220, 1.5, 0.55)
     stars_near = make_stars(lay, 0xBEEF, 90, 2.6, 0.9)
     tux, rim, tux_at = make_tux(lay)
+    mark = Wordmark(lay, wordmark, frames) if wordmark != "none" else None
 
     unit = lay.scale * (h / 1080.0 if w >= h else w / 1080.0)
     spark = make_pulse_sprite(max(14, 26 * unit), SPARK, 1.5)
@@ -405,9 +529,11 @@ def render(w, h, frames, outdir, title, only=None):
         px = [lay.to_px(p) for p in pts]
         arbor_px.append((px, tip * lay.scale, bright, (i * 0.2379) % 1.0))
 
-    # Tux's eye patches, in his own image space, so the blink can cover them.
-    eyes = [(176 / 420.0, 140 / 520.0, 29 / 420.0, 36 / 520.0),
-            (224 / 420.0, 140 / 520.0, 29 / 420.0, 36 / 520.0)]
+    # Tux's eye whites, in his own image space, so the blink can cover them.
+    # These MUST track assets/tux.svg — the lids are drawn blind, and a stale
+    # copy here just paints two dark blobs next to his eyes.
+    eyes = [(178 / 420.0, 106 / 520.0, 31 / 420.0, 47 / 520.0),
+            (242 / 420.0, 106 / 520.0, 31 / 420.0, 47 / 520.0)]
     tw, th = tux.size
 
     os.makedirs(outdir, exist_ok=True)
@@ -461,7 +587,7 @@ def render(w, h, frames, outdir, title, only=None):
             for ex, ey, er, eb in eyes:
                 cx, cy = ex * tw, ey * th
                 rx, ry = er * tw, eb * th * blink
-                d.ellipse([cx - rx, cy - ry - ry * 0.1, cx + rx, cy + ry], fill=(35, 35, 45, 255))
+                d.ellipse([cx - rx, cy - ry - ry * 0.1, cx + rx, cy + ry], fill=(38, 38, 49, 255))
         else:
             him = tux
         frame.paste(him, (tx, ty), him)
@@ -469,6 +595,9 @@ def render(w, h, frames, outdir, title, only=None):
         # A little of the mark's glow spills back over him, so he sits IN the
         # scene instead of on top of it.
         frame = ImageChops.add(frame, scaled(aura, 0.13 * breath))
+
+        if mark is not None:
+            mark.draw(frame, f, breath)
 
         frame.save(os.path.join(outdir, "f%05d.png" % f))
         if f % 25 == 0:
@@ -497,17 +626,23 @@ def main():
     ap.add_argument("--frames", type=int, default=FRAMES)
     ap.add_argument("--out", default=os.path.join(HERE, "build"))
     ap.add_argument("--keep-frames", action="store_true")
+    ap.add_argument("--wordmark", choices=("purple", "rgb", "none"), default="purple",
+                    help="how to light the SYNAPSEOS lockup under Tux")
     ap.add_argument("--single", type=int, default=None, help="render ONE frame and stop")
     a = ap.parse_args()
 
     w, h = (1080, 1920) if a.portrait else (1920, 1080)
-    name = "synapse-dendrite-tux" + ("-portrait" if a.portrait else "")
+    # The wordmark treatment is part of the identity: purple and rgb are two
+    # wallpapers under two Workshop ids, not one wallpaper with a switch.
+    name = ("synapse-dendrite-tux"
+            + ("-rgb" if a.wordmark == "rgb" else "")
+            + ("-portrait" if a.portrait else ""))
     os.makedirs(a.out, exist_ok=True)
 
     if a.single is not None:
         tmp = os.path.join(a.out, "single")
         f = a.single % a.frames
-        render(w, h, a.frames, tmp, name, only=f)
+        render(w, h, a.frames, tmp, name, wordmark=a.wordmark, only=f)
         shutil.copy(os.path.join(tmp, "f%05d.png" % f), os.path.join(a.out, name + "-still.png"))
         shutil.rmtree(tmp)
         print("still ->", os.path.join(a.out, name + "-still.png"))
@@ -516,7 +651,7 @@ def main():
     framedir = os.path.join(a.out, "frames-" + name)
     if os.path.isdir(framedir):
         shutil.rmtree(framedir)
-    render(w, h, a.frames, framedir, name)
+    render(w, h, a.frames, framedir, name, wordmark=a.wordmark)
 
     mp4 = os.path.join(a.out, name + ".mp4")
     jpg = os.path.join(a.out, name + "-preview.jpg")
