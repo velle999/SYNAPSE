@@ -22,6 +22,12 @@
 #define SYNAPD_SOCKET_PATH    "/run/synapd/synapd.sock"
 #define SYNAPD_PID_FILE       "/run/synapd/synapd.pid"
 #define SYNAPD_DEFAULT_MODEL  "/var/lib/synapd/models/synapse-7b-q4_k_m.gguf"
+/* Retrieval embeddings. A SEPARATE model on purpose: a chat model's hidden
+ * states are not interchangeable with a purpose-built embedder's, and chibi's
+ * stored vectors were produced by this exact model via ollama. Serving them
+ * from anything else silently invalidates every vector already on disk. */
+#define SYNAPD_DEFAULT_EMBED_MODEL \
+        "/var/lib/synapd/models/nomic-embed-text-v1.5.f16.gguf"
 #define SYNAPD_CONTEXT_DIR    "/var/lib/synapd/context"
 #define SYNAPD_SYSFS_PATH     "/sys/kernel/synapse"        /* synapse_kmod sysfs */
 #define SYNAPD_SYSFS_STATUS   SYNAPD_SYSFS_PATH "/status"
@@ -48,6 +54,7 @@ typedef enum {
      * WAKE answers immediately and reloads on a thread. */
     SYN_MSG_SLEEP          = 0x09, /* release the model; replies when VRAM is freed */
     SYN_MSG_WAKE           = 0x0A, /* start a background reload; replies at once */
+    SYN_MSG_EMBED          = 0x0B, /* embed text; replies with float32[n_embd] */
     SYN_MSG_RESPONSE       = 0x80, /* response flag OR'd with request type */
     SYN_MSG_ERROR          = 0xFF,
 } syn_msg_type_t;
@@ -102,6 +109,7 @@ typedef struct {
     float       temperature;     /* 0 = greedy/deterministic */
     float       top_p;           /* nucleus cutoff, applied when sampling */
     int         top_k;           /* 0 = disabled */
+    const char *embed_model_path; /* NULL/missing = embeddings unavailable */
 } synapd_config_t;
 
 /* ── Inference state (opaque to most subsystems) ─────────── */

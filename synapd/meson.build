@@ -3,6 +3,9 @@ project('synapd', 'c', version: '0.1.0',
 
 cc = meson.get_compiler('c')
 dep_threads = dependency('threads')
+# libm: inference_embed() L2-normalises with sqrt(). Linked explicitly because
+# --no-undefined means an implicit libm from another dependency is not enough.
+dep_m       = meson.get_compiler('c').find_library('m', required: true)
 dep_systemd = dependency('libsystemd', required: false)
 
 # llama.cpp — prefer the installed synapse-llama package (/usr/lib), and only
@@ -50,7 +53,7 @@ if dep_llama.found()
   add_project_arguments('-DHAVE_LLAMA', language: 'c')
 endif
 
-deps = [dep_threads]
+deps = [dep_threads, dep_m]
 if dep_llama.found()
   deps += [dep_llama, dep_ggml, dep_ggml_base]
 endif

@@ -62,6 +62,7 @@ struct synapd_state g_state = {
         .temperature    = 0.8f,
         .top_p          = 0.95f,
         .top_k          = 40,
+        .embed_model_path = SYNAPD_DEFAULT_EMBED_MODEL,
     }
 };
 
@@ -219,6 +220,7 @@ int main(int argc, char *argv[]) {
 
     static struct option long_opts[] = {
         {"model",      required_argument, 0, 'm'},
+        {"embed-model", required_argument, 0, 'E'},
         {"socket",     required_argument, 0, 's'},
         {"threads",    required_argument, 0, 't'},
         {"gpu-layers", required_argument, 0, 'g'},
@@ -234,12 +236,13 @@ int main(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "m:s:t:g:c:T:P:K:dfvh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:E:s:t:g:c:T:P:K:dfvh", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'T': g_state.config.temperature    = (float)atof(optarg); break;
         case 'P': g_state.config.top_p          = (float)atof(optarg); break;
         case 'K': g_state.config.top_k          = atoi(optarg); break;
         case 'm': g_state.config.model_path     = optarg; break;
+        case 'E': g_state.config.embed_model_path = optarg; break;
         case 's': g_state.config.socket_path    = optarg; break;
         case 't': g_state.config.n_threads      = atoi(optarg); break;
         case 'g': g_state.config.n_gpu_layers   = atoi(optarg); break;

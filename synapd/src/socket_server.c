@@ -132,6 +132,43 @@ static int send_error(int fd, uint32_t req_id, const char *msg) {
 }
 
 /* ── Request handlers ─────────────────────────────────────── */
+/* Embeddings for retrieval (chibi's thoth store).
+ *
+ * Note what is NOT here: no model_sleeping / model_loading guard, and the
+ * dispatcher does not put this under model_rw. Those all protect the chat
+ * model, which SYN_MSG_SLEEP unloads to free VRAM for a game. The embedder is
+ * a separate resident model, so RAG keeps answering through a gaming session
+ * instead of going dark exactly when the desktop is busiest.
+ *
+ * Reply payload is raw little-endian float32[dim] -- the caller gets the
+ * dimension from the payload length. */
+static void handle_embed(work_item_t *w) {
+    char *text = (char *)w->payload;
+    if (!text || w->hdr.payload_len == 0) {
+        send_error(w->client_fd, w->hdr.request_id, "empty text");
+        return;
+    }
+    text[w->hdr.payload_len - 1] = '\0';
+
+    /* Any real embedder is far below this; it exists so a bad dim cannot
+     * overrun the buffer. */
+    enum { EMBED_MAX_DIM = 4096 };
+    float *vec = malloc(sizeof(float) * EMBED_MAX_DIM);
+    if (!vec) { send_error(w->client_fd, w->hdr.request_id, "oom"); return; }
+
+    int dim = inference_embed(w->state, text, vec, EMBED_MAX_DIM);
+    if (dim < 0) {
+        send_error(w->client_fd, w->hdr.request_id,
+                   "embeddings unavailable — no embedding model loaded");
+        free(vec);
+        return;
+    }
+
+    send_response(w->client_fd, w->hdr.request_id, SYN_MSG_EMBED,
+                  (const char *)vec, (size_t)dim * sizeof(float));
+    free(vec);
+}
+
 static void handle_query(work_item_t *w) {
     char *prompt = (char *)w->payload;
     if (!prompt || w->hdr.payload_len == 0) {
@@ -370,6 +407,10 @@ static void *worker_thread(void *arg) {
         /* Take the WRITE lock themselves, so they must not be nested here. */
         case SYN_MSG_SLEEP:         handle_sleep(w);         break;
         case SYN_MSG_WAKE:          handle_wake(w);          break;
+
+        /* Not under model_rw: the embedder is independent of the chat model
+         * and survives SLEEP, so an unload must not block or break it. */
+        case SYN_MSG_EMBED:         handle_embed(w);         break;
 
         case SYN_MSG_STATUS:        handle_status(w);        break;
         case SYN_MSG_CONTEXT_GET:   handle_context_get(w);   break;

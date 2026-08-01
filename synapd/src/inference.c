@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -40,6 +41,21 @@ struct synapd_inference {
     struct llama_context *ctx;
     struct llama_sampler *sampler;
     pthread_mutex_t       lock;       /* one inference at a time per ctx */
+
+    /* Retrieval embeddings. Deliberately a second model+context rather than a
+     * mode of the first: llama.cpp fixes cparams.embeddings at context
+     * creation, and pooled embedding decode wants every token flagged for
+     * output, which is the opposite of what generation does.
+     *
+     * Also deliberately NOT released by SYN_MSG_SLEEP. That path frees the
+     * 4.4G chat model so a game can have the VRAM; dragging the embedder out
+     * with it would kill chibi's memory the moment a game launched, to reclaim
+     * 274 MB. Its own lock, so an embed and a chat turn do not block each
+     * other. */
+    struct llama_model   *embed_model;
+    struct llama_context *embed_ctx;
+    pthread_mutex_t       embed_lock;
+    int                   embed_dim;
     char                  model_path[512];
     uint32_t              context_size;
     int                   n_threads;
@@ -217,6 +233,52 @@ int inference_init(synapd_state_t *s) {
         llama_sampler_chain_add(inf->sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
         syn_log(LOG_INFO, "inference: sampler temp=%.2f top_p=%.2f top_k=%d",
                 (double)inf->temperature, (double)inf->top_p, inf->top_k);
+    }
+
+    /* ── Embedding model (optional) ──────────────────────────────────────
+     * Absent or unreadable is NOT fatal: synapd's job is the chat model, and a
+     * box with no embedder should still answer queries. Embed requests then
+     * fail with a clear message instead of the daemon refusing to start. */
+    pthread_mutex_init(&inf->embed_lock, NULL);
+    if (s->config.embed_model_path && stat(s->config.embed_model_path, &st) == 0) {
+        struct llama_model_params eparams = llama_model_default_params();
+        eparams.n_gpu_layers = 99;   /* 274 MB -- always worth offloading whole */
+
+        inf->embed_model = llama_load_model_from_file(s->config.embed_model_path,
+                                                      eparams);
+        if (!inf->embed_model) {
+            syn_log(LOG_WARNING, "inference: embedding model failed to load (%s); "
+                    "embeddings disabled", s->config.embed_model_path);
+        } else {
+            struct llama_context_params ecp = llama_context_default_params();
+            ecp.embeddings = true;
+            ecp.n_ctx      = 2048;
+            /* Pooled embedding decode submits the whole sequence at once, so
+             * both batch sizes must cover it -- leave n_ubatch at the default
+             * 512 and a 600-token passage silently fails to decode. */
+            ecp.n_batch    = 2048;
+            ecp.n_ubatch   = 2048;
+            ecp.n_threads  = inf->n_threads;
+            /* pooling_type is left UNSPECIFIED on purpose so llama.cpp uses the
+             * value baked into the GGUF (nomic-bert.pooling_type = 1, MEAN).
+             * Hardcoding MEAN would silently produce wrong vectors for any
+             * other embedder someone points this at. */
+
+            inf->embed_ctx = llama_new_context_with_model(inf->embed_model, ecp);
+            if (!inf->embed_ctx) {
+                syn_log(LOG_WARNING, "inference: embedding context failed; "
+                        "embeddings disabled");
+                llama_free_model(inf->embed_model);
+                inf->embed_model = NULL;
+            } else {
+                inf->embed_dim = llama_model_n_embd(inf->embed_model);
+                syn_log(LOG_INFO, "inference: embeddings ready (%s, dim=%d)",
+                        s->config.embed_model_path, inf->embed_dim);
+            }
+        }
+    } else if (s->config.embed_model_path) {
+        syn_log(LOG_INFO, "inference: no embedding model at %s; embeddings disabled",
+                s->config.embed_model_path);
     }
 
     s->inference   = inf;
@@ -418,6 +480,95 @@ int inference_classify_syscall(synapd_state_t *s,
  * return a scheduling priority adjustment: -20..+19
  * encoded as a signed int in the output buffer string.
  */
+/*
+ * Embed one string into an L2-normalised vector.
+ *
+ * Retrieval compares vectors by cosine similarity, and the store chibi already
+ * has on disk was written by this same GGUF through ollama. Two things
+ * therefore have to match that pipeline exactly or every stored vector becomes
+ * noise:
+ *
+ *   - The text is embedded VERBATIM. nomic's "search_query: " / "search_document: "
+ *     task prefixes are the caller's job -- chibi already adds them in
+ *     thoth_rag.py before the call, exactly as it did when ollama was serving.
+ *     Adding them here too would double them.
+ *   - The result is L2-normalised, which is what llama.cpp's own server does.
+ *
+ * Returns the dimension, or -1.
+ */
+int inference_embed(synapd_state_t *s, const char *text, float *out, int out_cap) {
+    if (!s || !s->inference || !text || !out) return -1;
+    synapd_inference_t *inf = s->inference;
+
+    if (!inf->embed_ctx || !inf->embed_model) return -1;
+    if (out_cap < inf->embed_dim) return -1;
+
+    pthread_mutex_lock(&inf->embed_lock);
+
+    const struct llama_vocab *vocab = llama_model_get_vocab(inf->embed_model);
+
+    int n_tok = -llama_tokenize(vocab, text, (int32_t)strlen(text),
+                                NULL, 0, true /* add_special */, false);
+    if (n_tok <= 0) {
+        pthread_mutex_unlock(&inf->embed_lock);
+        return -1;
+    }
+
+    /* Truncate rather than fail: a passage longer than the context is a caller
+     * chunking badly, and a short vector beats no vector at retrieval time. */
+    int n_ctx_max = (int)llama_n_ctx(inf->embed_ctx);
+    if (n_tok > n_ctx_max) n_tok = n_ctx_max;
+
+    llama_token *toks = malloc((size_t)n_tok * sizeof(llama_token));
+    if (!toks) {
+        pthread_mutex_unlock(&inf->embed_lock);
+        return -1;
+    }
+    llama_tokenize(vocab, text, (int32_t)strlen(text), toks, n_tok, true, false);
+
+    /* Built by hand rather than llama_batch_get_one(): pooled embeddings need
+     * EVERY token flagged for output, where generation flags only the last.
+     * Get this wrong and llama_get_embeddings_seq() hands back NULL. */
+    struct llama_batch batch = llama_batch_init(n_tok, 0, 1);
+    for (int i = 0; i < n_tok; i++) {
+        batch.token[i]      = toks[i];
+        batch.pos[i]        = i;
+        batch.n_seq_id[i]   = 1;
+        batch.seq_id[i][0]  = 0;
+        batch.logits[i]     = 1;
+    }
+    batch.n_tokens = n_tok;
+
+    llama_memory_clear(llama_get_memory(inf->embed_ctx), true);
+
+    int rc = llama_decode(inf->embed_ctx, batch);
+    llama_batch_free(batch);
+    free(toks);
+
+    if (rc != 0) {
+        syn_log(LOG_WARNING, "inference: embed decode failed (rc=%d)", rc);
+        pthread_mutex_unlock(&inf->embed_lock);
+        return -1;
+    }
+
+    const float *emb = llama_get_embeddings_seq(inf->embed_ctx, 0);
+    if (!emb) {
+        syn_log(LOG_WARNING, "inference: no pooled embedding returned");
+        pthread_mutex_unlock(&inf->embed_lock);
+        return -1;
+    }
+
+    int dim = inf->embed_dim;
+    double sum = 0.0;
+    for (int i = 0; i < dim; i++) sum += (double)emb[i] * (double)emb[i];
+    double norm = sqrt(sum);
+    if (norm <= 0.0) norm = 1.0;   /* degenerate input; pass through unscaled */
+    for (int i = 0; i < dim; i++) out[i] = (float)((double)emb[i] / norm);
+
+    pthread_mutex_unlock(&inf->embed_lock);
+    return dim;
+}
+
 int inference_sched_hint(synapd_state_t *s,
                           const char *proc_intent,
                           int *out_priority_delta)
@@ -449,6 +600,14 @@ void inference_destroy(synapd_state_t *s) {
     if (inf->model)   llama_free_model(inf->model);
     pthread_mutex_unlock(&inf->lock);
     pthread_mutex_destroy(&inf->lock);
+
+    /* Separate lock and separate objects -- SLEEP never touches these, so
+     * shutdown is the only place they are freed. */
+    pthread_mutex_lock(&inf->embed_lock);
+    if (inf->embed_ctx)   llama_free(inf->embed_ctx);
+    if (inf->embed_model) llama_free_model(inf->embed_model);
+    pthread_mutex_unlock(&inf->embed_lock);
+    pthread_mutex_destroy(&inf->embed_lock);
 
     syn_log(LOG_INFO,
         "inference: shutdown — total in=%llu out=%llu tokens",
