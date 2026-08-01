@@ -79,6 +79,12 @@
  * live and writes welcome.state, which then overrides this line:
  *   welcome_at_startup = on|off (default on)
  *
+ * Screen recording (record.c, synui-record) — Super+Shift+R. Audio means the
+ * default sink's monitor (what you can hear), never the microphone; the control
+ * panel's Sound ▸ Record audio row toggles it live and writes record.state,
+ * which then overrides this line:
+ *   record_audio = on|off       (default off)
+ *
  * Keyboard (input.c):
  *   numlock = on|off            (default on — lock NumLock at attach so the
  *                                numpad types digits from login onwards,
@@ -619,6 +625,9 @@ void synui_config_load(syn_config_t *cfg)
     cfg->welcome_at_startup = 1;
     cfg->numlock            = 1;
 
+    /* Recording sound is opt-in, like every other capture on this desktop. */
+    cfg->record_audio       = 0;
+
     cfg->dock_enabled      = 1;
     cfg->dock_autohide     = 1;
     cfg->dock_height       = 64;
@@ -724,6 +733,7 @@ void synui_config_load(syn_config_t *cfg)
         power_state_load(cfg);
         welcome_state_load(cfg);
         launcher_state_load(cfg);
+        record_audio_state_load(cfg);
         deskicons_state_load(cfg);
         return;
     }
@@ -1109,6 +1119,8 @@ void synui_config_load(syn_config_t *cfg)
             cfg->welcome_at_startup = strcmp(val, "on") == 0;
         else if (strcmp(key, "numlock") == 0)
             cfg->numlock = strcmp(val, "on") == 0;
+        else if (strcmp(key, "record_audio") == 0)
+            cfg->record_audio = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_enabled") == 0)
             cfg->dock_enabled = strcmp(val, "on") == 0;
         else if (strcmp(key, "dock_autohide") == 0)
@@ -1192,5 +1204,6 @@ void synui_config_load(syn_config_t *cfg)
     power_state_load(cfg);
     welcome_state_load(cfg);
     launcher_state_load(cfg);
+    record_audio_state_load(cfg);
     deskicons_state_load(cfg);
 }

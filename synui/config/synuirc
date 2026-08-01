@@ -235,6 +235,16 @@ numlock      = on
 # overrides this line — delete that file to hand control back here.
 welcome_at_startup = on
 
+# ── Screen recording (Super+Shift+R) ───────────────────────
+# Whether a recording captures sound as well. On means the default sink's
+# MONITOR — the game, the video, the call: what you can hear, never the
+# microphone. (`synui-record --audio=mic` is the explicit way to the other one.)
+# Off by default, like every other capture here. The control panel's
+# Sound ▸ Record audio row toggles it and writes ~/.config/synui/record.state,
+# which from then on overrides this line — delete that file to hand control
+# back here.
+record_audio = off
+
 # ── Pointer / touchpad (libinput) ──────────────────────────
 # Unset options leave the device at its default.
 # tap            = on          # touchpad tap-to-click

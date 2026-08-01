@@ -876,11 +876,18 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * before recording anything. Only the compositor knows the focus. */
         syn_output_t *o = server_focused_output(s);
         const char *name = (o && o->wlr_output) ? o->wlr_output->name : NULL;
+        /* --audio only when the control panel's Sound ▸ Record audio row says
+         * so. The script turns that into the default sink's monitor — desktop
+         * sound, never the mic (wf-recorder's bare -a would be the mic, which
+         * is why synui-record resolves the device itself). Read here rather
+         * than baked into a second keybind: one bind starts and stops one
+         * recorder, and pkill would not know which of two started it. */
+        const char *aud = s->config.record_audio ? " --audio" : "";
         char cmd[256];
         if (name && *name)
-            snprintf(cmd, sizeof(cmd), "synui-record --output '%s'", name);
+            snprintf(cmd, sizeof(cmd), "synui-record --output '%s'%s", name, aud);
         else
-            snprintf(cmd, sizeof(cmd), "synui-record");
+            snprintf(cmd, sizeof(cmd), "synui-record%s", aud);
         synui_spawn(cmd);
     } else if (strcmp(action, "clipboard") == 0) {
         clipboard_toggle(s);

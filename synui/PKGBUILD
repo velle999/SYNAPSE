@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=232
+pkgrel=233
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -24,6 +24,10 @@ license=('GPL-2.0-or-later')
 #   still packaged (config/waybar/, and synui-apply-theme still generates its
 #   stylesheet), so a user who installs waybar themselves keeps a working bar;
 #   nothing in SynapseOS starts it.
+# libpulse: synui-record asks pactl which sink/source to record — wf-recorder's
+#   bare -a is the MICROPHONE (ffmpeg's pulse default source), so the desktop
+#   audio device has to be resolved and named explicitly. Always present via
+#   pipewire-pulse in practice; named here because a binary is exec'd.
 # wf-recorder: Super+Shift+R (synui-record). Recording means encoding, and
 #   ffmpeg is not something the compositor should grow — wf-recorder captures
 #   through wlr-screencopy, which synui already exports for grim.
@@ -47,7 +51,7 @@ depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'k
          # dbus: synui_run() execs dbus-update-activation-environment before the
          # autostarts, without which D-Bus-activated GUI services get no display.
          # Always present transitively, named here because we exec its binary.
-         'dbus' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder' 'unzip')
+         'dbus' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder' 'libpulse' 'unzip')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info')
 optdepends=('foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'

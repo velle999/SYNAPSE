@@ -60,8 +60,24 @@ dir="${XDG_VIDEOS_DIR:-$HOME/Videos}"
 mkdir -p "$dir" || { note "Cannot record" "Could not create $dir"; exit 1; }
 file="$dir/synui-$(date +%Y%m%d-%H%M%S).mp4"
 
-# -a records audio too; deliberately NOT default. A recorder that silently picks
-# up the microphone is a privacy problem, and someone who wants audio can say so.
+# --audio[=MODE] records sound as well; deliberately NOT default. A recorder that
+# silently picks up the microphone is a privacy problem, and someone who wants
+# audio can say so — the control panel's Sound ▸ Record audio row is how, and
+# synui passes --audio through when it is on.
+#
+# MODE is `system` (the default when --audio is bare), `mic`, or `none`:
+#
+#   system  the default sink's .monitor source — what you can HEAR. This is what
+#           people mean by "record the screen with audio": the game, the video,
+#           the call. It is also the safe default, because a monitor source
+#           carries nothing the screen is not already showing.
+#   mic     the default *input*. Explicit only.
+#
+# The distinction matters because wf-recorder's bare `-a` is NOT "record the
+# audio" — it hands ffmpeg's pulse demuxer no device, which resolves to the
+# default SOURCE, i.e. the microphone. So `-a` on a desktop records the room and
+# none of the sound the screen is making, which is the opposite of what anyone
+# asks for. Every path below therefore names a device explicitly.
 #
 # --output names the monitor to record. wf-recorder captures exactly one output,
 # and told none on a multi-monitor layout it does not pick one — it *prompts on
@@ -74,15 +90,66 @@ file="$dir/synui-$(date +%Y%m%d-%H%M%S).mp4"
 # So the compositor passes the focused monitor in, exactly as it does for
 # synui-screenshot (the `record` action in src/input.c) — only synui knows which
 # screen you are looking at.
-audio=""
+mode="none"
 out=""
 while [ $# -gt 0 ]; do
     case "$1" in
-    --audio)  audio="-a" ;;
-    --output) shift; out="${1:-}" ;;
+    --audio)     mode="system" ;;
+    --audio=*)   mode="${1#--audio=}" ;;
+    --no-audio)  mode="none" ;;
+    --output)    shift; out="${1:-}" ;;
     esac
     shift
 done
+
+# Resolve MODE to a real device name. pactl comes from libpulse and talks to
+# pipewire-pulse, which is what wf-recorder's capture goes through as well — so
+# a name pactl reports is a name ffmpeg can open.
+#
+# A device that cannot be resolved must NOT fail the recording: the video is the
+# thing being asked for, and losing a session's capture because a mic was
+# unplugged is a worse outcome than a silent file you were told about. So every
+# failure below degrades to video-only and *says so in the toast* — silently
+# dropping the audio someone deliberately turned on would be its own bug.
+audio=""
+audio_note=""
+case "$mode" in
+none) ;;
+system)
+    dev=$(pactl get-default-sink 2>/dev/null)
+    # A sink's monitor source is conventionally "<sink>.monitor", but confirm it
+    # against the source list rather than trusting the convention: a sink with
+    # monitors disabled has none, and ffmpeg would fail to open it at capture
+    # time — after the toast said "Recording".
+    [ -n "$dev" ] && dev="$dev.monitor"
+    if [ -z "$dev" ] || ! pactl list short sources 2>/dev/null \
+         | cut -f2 | grep -qx "$dev"; then
+        # Any monitor is better than none: on a box whose default sink is odd
+        # (a null sink, a fresh boot before wireplumber has chosen), the one
+        # monitor that exists is almost certainly the one making the sound.
+        dev=$(pactl list short sources 2>/dev/null | cut -f2 \
+              | grep '\.monitor$' | head -1)
+    fi
+    if [ -n "$dev" ]; then audio="-a$dev"
+    else audio_note="no output monitor to record"; fi
+    ;;
+mic)
+    dev=$(pactl get-default-source 2>/dev/null)
+    # On a box with no capture hardware the default source IS a monitor, and
+    # "record the mic" would then quietly record the desktop instead. Pick a
+    # real input if there is one; say nothing was found if there is not.
+    case "$dev" in
+    *.monitor|"")
+        dev=$(pactl list short sources 2>/dev/null | cut -f2 \
+              | grep -v '\.monitor$' | head -1) ;;
+    esac
+    if [ -n "$dev" ]; then audio="-a$dev"
+    else audio_note="no microphone found"; fi
+    ;;
+*)
+    audio_note="unknown audio mode '$mode'"
+    ;;
+esac
 
 # Run by hand from a terminal there is no compositor argument, so ask synui
 # directly rather than falling through to the prompt that cannot be answered.
@@ -90,7 +157,16 @@ done
     | tr '}' '\n' | grep '"focused":true' \
     | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | head -1)
 
-note "Recording" "Super+Shift+R again to stop"
+# Say what is being captured, not just that something is. "Recording" alone is
+# the same toast whether the sound is going in or being dropped, and audio you
+# thought you had is only discovered missing after the take.
+if [ -n "$audio_note" ]; then
+    note "Recording (no audio)" "$audio_note · Super+Shift+R again to stop"
+elif [ -n "$audio" ]; then
+    note "Recording with audio" "$mode · Super+Shift+R again to stop"
+else
+    note "Recording" "Super+Shift+R again to stop"
+fi
 
 # Detached: the keybind's own process must return immediately, or synui's
 # spawn() is left holding a child for the length of the recording.

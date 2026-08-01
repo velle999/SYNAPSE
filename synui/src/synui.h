@@ -686,6 +686,7 @@ typedef enum {
     CTL_ROW_CLOCK,         /* date & time */
     /* Sound */
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
+    CTL_ROW_RECORD_AUDIO,  /* Super+Shift+R captures desktop sound too */
     /* Network */
     CTL_ROW_NETWORK,
     CTL_ROW_BLUETOOTH,
@@ -1591,6 +1592,13 @@ typedef struct {
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
     /* launcher.c: the synui-drawn start-menu button. Default TEXT. */
     syn_launcher_style_t launcher_style;
+
+    /* record.c: does Super+Shift+R capture sound as well? On, the `record`
+     * action passes --audio to synui-record, which records the default sink's
+     * MONITOR — what you can hear, not the microphone. Off by default and
+     * persisted to record.state; see record.c for why this is a setting and
+     * not a second keybind. */
+    int   record_audio;         /* default 0 */
 #define DOCK_PIN_MAX 16
 #define GAME_EXCLUDE_MAX 16
     /* Runtime-mutable pinned set: seeded from synuirc `dock_pin`, then
@@ -4024,6 +4032,13 @@ void dock_output_destroy(syn_output_t *o);        /* destroy this output's dock 
  * bar watches, so it is the update signal and not merely persistence. */
 void launcher_toggle_style(syn_server_t *s);       /* flip text↔logo, persist */
 void launcher_state_load(syn_config_t *cfg);       /* lay launcher.state over synuirc */
+
+/* ── Recording audio setting (record.c) ──────────────────── */
+/* Whether Super+Shift+R records desktop sound as well. The capture itself is
+ * synui-record's; this is only the switch, and it persists like the launcher's
+ * so a reload cannot undo it. */
+void record_audio_toggle(syn_server_t *s);         /* flip on↔off, persist */
+void record_audio_state_load(syn_config_t *cfg);   /* lay record.state over synuirc */
 /* Re-merge pinned (config) + running (all workspaces') apps into
  * s->dock_entries, then re-render every output. Called on view map/unmap. */
 void dock_rebuild(syn_server_t *s);

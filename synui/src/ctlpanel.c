@@ -107,8 +107,11 @@ static const struct {
     { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL       },
     { CTL_ROW_CLOCK,      CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Date & time",      "clock"    },
 
-    /* Sound */
-    { CTL_ROW_SOUNDS, CTL_CAT_SOUND, CTL_KIND_PANEL, "Event sounds", "sounds" },
+    /* Sound. Recording audio lives here rather than under Display: what the
+     * row decides is which SOUND goes into the file — the screen it captures is
+     * settled by the focus, not by a setting. */
+    { CTL_ROW_SOUNDS,       CTL_CAT_SOUND, CTL_KIND_PANEL,  "Event sounds", "sounds" },
+    { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record audio", NULL     },
 
     /* Network. Two of the three hand off to something synui does not own —
      * nmtui in a terminal, cups in a browser — so they close the panel rather
@@ -328,6 +331,12 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         break;
     case CTL_ROW_SOUNDS:
         snprintf(buf, n, "%s", sounds_label(s));
+        break;
+    case CTL_ROW_RECORD_AUDIO:
+        /* Name the source, not just on/off: "on" alone is exactly the ambiguity
+         * this setting exists to remove — desktop sound, not the microphone. */
+        snprintf(buf, n, "%s",
+                 s->config.record_audio ? "desktop sound" : "off");
         break;
     case CTL_ROW_THEME:
         /* A jump-off, but showing the active theme here saves opening the panel
@@ -855,6 +864,19 @@ static void ctlpanel_activate(syn_server_t *s)
         dock_wake(s);         /* pin or release the bar on the next frame */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock auto-hide %s", s->config.dock_autohide ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_RECORD_AUDIO:
+        /* Takes effect on the NEXT Super+Shift+R: the flag is read where the
+         * action spawns synui-record, and wf-recorder cannot grow a track
+         * mid-take. Say so, so a flip during a recording is not mistaken for
+         * one that applied to it. */
+        record_audio_toggle(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 s->config.record_audio
+                     ? "recordings capture desktop sound"
+                     : "recordings are silent");
         ctlpanel_repaint(s);
         return;
 
