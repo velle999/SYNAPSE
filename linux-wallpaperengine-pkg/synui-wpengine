@@ -271,7 +271,12 @@ pid_is_ours_for() {
     local pid="$1" out="$2"
     [ -n "$pid" ] || return 1
     [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$COMM" ] || return 1
-    tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null |
+    # 2>/dev/null BEFORE the input redirection, not after. Redirections are
+    # applied left to right, so with the usual ordering the shell tries to open
+    # /proc/<pid>/cmdline first and prints "No such file or directory" on the
+    # still-live stderr when the engine exited between the comm check above and
+    # this line -- which is exactly what a stale pidfile looks like on restore.
+    tr '\0' '\n' 2>/dev/null < "/proc/$pid/cmdline" |
         grep -A1 -x -e '--screen-root' | grep -qxF -e "$out"
 }
 
@@ -382,11 +387,30 @@ start_output() {
         fi
     fi
 
+    # THE WALLPAPER MUST NOT TAKE THE MOUSE, or the desktop stops responding.
+    #
+    # The engine's input region is empty only while mouse support is off. With
+    # it on -- which is the default, there is only a --disable-mouse flag --
+    # WaylandOutputViewport.cpp does
+    #
+    #     wl_region_add (region, 0, 0, INT32_MAX, INT32_MAX);
+    #
+    # and claims the whole surface. synui reads "clicked the desktop" as a click
+    # that hit no view and no surface at all (input.c, the deskmenu_open path),
+    # so a wallpaper holding a full-surface input region silently swallows every
+    # desktop right-click on every output it covers. The menu never opens and
+    # nothing logs a reason.
+    #
+    # Set SYNUI_WPENGINE_MOUSE=1 to hand the mouse back for a wallpaper that
+    # reacts to the cursor, knowing the desktop menu goes with it.
+    local mouse=(--disable-mouse)
+    [ "${SYNUI_WPENGINE_MOUSE:-0}" = 1 ] && mouse=()
+
     # __GL_THREADED_OPTIMIZATIONS=0 is the upstream-documented NVIDIA workaround.
     # 9>&- drops the lock fd: the engine outlives this script, and an inherited
     # fd 9 would hold take_lock's flock for the whole session (see take_lock).
     __GL_THREADED_OPTIMIZATIONS=0 \
-    setsid "$ENGINE" "${assets[@]}" --layer background \
+    setsid "$ENGINE" "${assets[@]}" --layer background "${mouse[@]}" \
         --fps "${SYNUI_WPENGINE_FPS:-30}" --silent \
         --screen-root "$out" --bg "$bg" --scaling fill "${props[@]}" \
         >"$(logfile_for "$out")" 2>&1 </dev/null 9>&- &
