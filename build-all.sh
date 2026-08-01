@@ -29,8 +29,9 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 # tar — the tarball regeneration below is what stops makepkg silently packaging
 # the last build's source.
 ONLY=("$@")
-KNOWN=(synapse-llama synapd synsh synnet synguard synui synapse_kmod
-       syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris)
+KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
+       syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
+       vibe samsung-m2020)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -177,6 +178,12 @@ sudo touch /etc/synsh/synshrc
 # archiso/build.sh staged.
 build_script_pkg synapse-llama
 
+# scenefx BEFORE synui, which links it. It was left out of this script for a
+# long time, which meant an installed system could never pick up a scenefx fix:
+# syn-update reported it as unsupported for exactly that reason, and "on the ISO
+# but frozen forever" is the bug that tool exists to prevent.
+build_script_pkg scenefx0.5
+
 # Build C components
 build_component synapd
 build_component synsh
@@ -201,6 +208,13 @@ build_script_pkg syn-firstboot
 # commit from each app's own git repo, so these need network at build time.
 build_script_pkg nexus-chat
 build_script_pkg tepris
+
+# Also shipped on the ISO, and updatable now that they have rules here. vibe
+# goes through build_component so its tarball is regenerated from the tree by
+# vibe/mktarball.sh -- as a committed artefact it could ship stale code while
+# reporting a successful build.
+build_component vibe
+build_script_pkg samsung-m2020
 
 echo ""
 echo "=== All components built! ==="

@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=234
+pkgrel=235
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -289,6 +289,14 @@ package() {
         "$pkgdir/usr/bin/synui-sound"
     install -Dm755 systemd/synui-bar.sh \
         "$pkgdir/usr/bin/synui-bar"
+
+    # The Wallpaper Engine control script. It used to ship inside
+    # linux-wallpaperengine, which syn-update can never rebuild on an installed
+    # system (a ~1.3 GB CEF blob and ~6 GB of scratch), so every fix to a plain
+    # shell script had to be copied into place by hand. It is a synui control
+    # script by name and by job, and synui IS updatable.
+    install -Dm755 systemd/synui-wpengine.sh \
+        "$pkgdir/usr/bin/synui-wpengine"
 
     # synuirc files already in the wild — including the one syn-install wrote for
     # every existing install — say `autostart = synui-waybar`. Without this the

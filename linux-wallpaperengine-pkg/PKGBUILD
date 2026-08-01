@@ -1,8 +1,8 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
-pkgrel=11
-pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers, with the synui-wpengine control script"
+pkgrel=12
+pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
 license=('GPL-3.0-or-later')
@@ -38,10 +38,10 @@ optdepends=('steam: to subscribe to Workshop wallpapers'
 # Pinned upstream commit — bump alongside pkgver/pkgrel when rolling the app.
 _commit=b016d7d1fdcf4e5fd2f9c9fa420a8aaa07fee02d
 
-source=("git+$url.git#commit=$_commit"
-        "synui-wpengine")
-sha256sums=('SKIP'
-            'SKIP')
+# The synui-wpengine control script moved to the synui package: this one cannot
+# be rebuilt on an installed system, so a shell-script fix here was unshippable.
+source=("git+$url.git#commit=$_commit")
+sha256sums=('SKIP')
 
 # CEF is a ~1.3 GB unstripped blob fetched by cmake at configure time (it lands
 # in build/cef/, NOT in SRCDEST), so a clean build needs the network and about
@@ -168,7 +168,6 @@ exec "$_libdir/linux-wallpaperengine" "\$@"
 EOF
     chmod 755 "$pkgdir/usr/bin/linux-wallpaperengine"
 
-    install -Dm755 "$srcdir/synui-wpengine" "$pkgdir/usr/bin/synui-wpengine"
 
     install -Dm644 "$srcdir/$pkgname/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

@@ -60,9 +60,9 @@ LOCAL_REPO=/var/cache/synapseos
 # syn-update is in this list on purpose: an updater that cannot update itself
 # can never ship its own fix, and would have to be repaired by reinstalling the
 # OS — the exact dead end this tool exists to remove.
-COMPONENTS=(synapd synsh synnet synguard synui synapse_kmod
+COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
-            nexus-chat tepris)
+            nexus-chat tepris vibe samsung-m2020)
 
 # On the ISO but NOT updatable this way, with the reason. Reported rather than
 # skipped in silence: a component quietly frozen forever is exactly the bug
@@ -70,11 +70,8 @@ COMPONENTS=(synapd synsh synnet synguard synui synapse_kmod
 # than not covering them, because nothing would say so.
 declare -A UNSUPPORTED=(
     [synapse-llama]="packaged from a tree that archiso/build.sh --llama-only stages; there is no staging tree on an installed system"
-    [linux-wallpaperengine]="cmake fetches a ~1.3 GB CEF blob and needs ~6 GB of scratch to build"
+    [linux-wallpaperengine]="cmake fetches a ~1.3 GB CEF blob and needs ~6 GB of scratch to build; its synui-wpengine control script now lives in synui, which IS updatable"
     [chibi]="371 MB of bundled voice models; rebuild cost is all download, no source change"
-    [scenefx0.5]="build-all.sh has no rule for it"
-    [vibe]="build-all.sh has no rule for it"
-    [samsung-m2020]="build-all.sh has no rule for it"
     [shelly-bin]="PKGBUILD downloads a pinned upstream release binary"
 )
 
