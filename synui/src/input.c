@@ -2089,8 +2089,37 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH) {
         /* An armed grab that never crossed the slop was a click, not a drag:
          * nothing moved, so there is no drop to resolve and no snap to apply. */
-        if (s->cursor_mode == SYNUI_CURSOR_MOVE && !s->grab_armed)
-            snap_drag_end(s, s->grabbed_view);
+        syn_view_t *gv = s->grabbed_view;
+        bool was_drag = !s->grab_armed;
+        if (s->cursor_mode == SYNUI_CURSOR_MOVE && was_drag)
+            snap_drag_end(s, gv);
+
+        /*
+         * Tell an X11 client where it ended up. An X client only learns its
+         * root position from the ConfigureNotify we send it, and
+         * process_cursor_move deliberately does not send one — it moves the
+         * scene node directly, so a drag costs no X round-trip per motion
+         * event. That leaves the X server holding the window's *pre-drag*
+         * position for the whole move, and nothing ever corrected it
+         * afterwards: view_resize() is the only place synui configures an X11
+         * window, and a plain move never calls it.
+         *
+         * Steam's menus are override-redirect windows that Steam positions in
+         * ROOT coordinates, computed from where it believes its own window is
+         * — so after dragging Steam out of the maximized state its menus kept
+         * opening over the position it was dragged from (velle, 2026-08-02,
+         * screenshot synapse-20260802-154700.png). Re-assert the final
+         * geometry once, here. It is idempotent, so a drop that snap_drag_end
+         * already placed simply re-sends the same box.
+         *
+         * A RESIZE needs nothing: process_cursor_resize goes through
+         * view_resize on every motion, which configures position and size
+         * together.
+         */
+        if (gv && was_drag && s->cursor_mode == SYNUI_CURSOR_MOVE &&
+            gv->is_xwayland && gv->mapped)
+            view_resize(gv, gv->x, gv->y, gv->w, gv->h);
+
         s->grab_armed   = false;
         s->cursor_mode  = SYNUI_CURSOR_PASSTHROUGH;
         s->grabbed_view = NULL;
