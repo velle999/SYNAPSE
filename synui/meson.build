@@ -507,6 +507,17 @@ test('geom_layout', geom_layout,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The case geom_layout cannot cover, because it seeds windows.conf on purpose:
+# an app the desk has NEVER seen, opening on a floating desktop, where
+# layout_apply is a no-op and there is no remembered box to fall back on. Same
+# client, three opens.
+float_first_open = find_program('tests/float_first_open.sh')
+test('float_first_open', float_first_open,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # What Alt+Tab can reach (input.c alttab_candidates) and, more importantly, WHEN
 # it acts on it (alttab_reveal, at commit only). Three windows across three
 # desktops with one minimized, so every case is live at once; same client again.

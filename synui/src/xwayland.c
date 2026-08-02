@@ -202,10 +202,19 @@ static void xw_map(struct wl_listener *listener, void *data)
     if (view->floating) {
         layout_float_place(s, view);   /* consults the remembered box itself */
         wlr_scene_node_raise_to_top(view_node(view));
+    } else if (view->workspace && view->workspace->layout == LAYOUT_FLOATING) {
+        /* Same hole the xdg map path had: layout_apply above is a no-op for
+         * LAYOUT_FLOATING, and an ordinary X11 toplevel is not view->floating
+         * (only a modal or a child is, just above), so an app with nothing in
+         * windows.conf was never placed at all and stayed at 0,0 sized 0x0.
+         * layout_float_place still prefers the remembered box. Not raised: an
+         * unsolicited window on a floating desktop does not outrank the one the
+         * user is looking at, and focus_view below handles the stacking. */
+        layout_float_place(s, view);
     } else {
         /* A no-op on a tiling or AI desktop, where the layout owns the
-         * placement; on floating and monocle it reopens the window maximized
-         * if that is how it was left. */
+         * placement; on monocle it reopens the window maximized if that is how
+         * it was left. */
         layout_restore_geometry(s, view);
     }
     focus_view(s, view, xs->surface);

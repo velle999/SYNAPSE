@@ -676,8 +676,24 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
      * or monocle desktop; on tiling and AI this returns without reading the
      * table and the layout_apply above stands. After layout_apply, which would
      * otherwise tile straight over the restored box, and after mapped = 1,
-     * which view_apply_maximized requires. */
-    layout_restore_geometry(view->server, view);
+     * which view_apply_maximized requires.
+     *
+     * On a FLOATING desktop go through layout_float_place, which consults the
+     * same table first and only centres the window when the app has nothing
+     * saved. Nothing else would have placed it: layout_apply is a no-op for
+     * LAYOUT_FLOATING ("the user positions windows"), and a freshly-mapped xdg
+     * view is never view->floating — that flag is only ever set by Super+F, a
+     * snap, or maximize. So the FIRST window of an app never seen before came
+     * up at the calloc'd 0,0 with size 0x0: no chrome, and on a multi-monitor
+     * layout whose origin is dead space (velle's is), drawn where no output
+     * covers — invisible, with `qs -n --no-duplicate` then making every later
+     * click on the menu entry a silent success. That is how SynapseOS Updates
+     * failed to appear (velle, 2026-08-02). Every app in windows.conf was fine,
+     * which is why only new ones showed it. */
+    if (view->workspace && view->workspace->layout == LAYOUT_FLOATING)
+        layout_float_place(view->server, view);
+    else
+        layout_restore_geometry(view->server, view);
 
     /* A client that asked to be maximized before it ever mapped (Firefox does,
      * restoring its session) only had the request held by wlroots — see
