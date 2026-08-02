@@ -336,6 +336,21 @@ if x11.found()
     dependencies : [x11],
     build_by_default : true)
   smoke_args += [x11_remap_test]
+
+  # An override-redirect window that moves itself AFTER mapping — a Steam menu
+  # correcting its own placement. Its test photographs the screen either side of
+  # the move, so it needs grim and python3+PIL as well as X11 (it skips without
+  # any of them).
+  x11_or_move_test = executable('x11_or_move_test',
+    'tests/x11_or_move_test.c',
+    dependencies : [x11],
+    build_by_default : true)
+
+  x11_or_move = find_program('tests/x11_or_move.sh')
+  test('x11_or_move', x11_or_move,
+       args    : [synui_exe.full_path(), x11_or_move_test.full_path()],
+       depends : [synui_exe, x11_or_move_test],
+       timeout : 120)
 endif
 
 # security-context client bindings, for the test below. Client-side this time:

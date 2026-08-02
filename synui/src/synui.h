@@ -1879,6 +1879,10 @@ struct syn_view {
     struct wl_listener request_configure;
     struct wl_listener request_activate;
     struct wl_listener request_minimize;   /* ICCCM iconify; xdg-shell has no equivalent */
+    /* The X server telling us a window MOVED. Only an override-redirect window
+     * (a menu) acts on it — it places itself, and it may correct that placement
+     * after mapping. See xw_set_geometry(). */
+    struct wl_listener set_geometry;
 };
 
 /* ── Layer-shell surface (panels, bars, wallpaper, launchers) ── */

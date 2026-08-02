@@ -450,6 +450,7 @@ static void xw_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&view->request_fullscreen.link);
     wl_list_remove(&view->request_activate.link);
     wl_list_remove(&view->request_minimize.link);
+    wl_list_remove(&view->set_geometry.link);
     free(view);
 }
 
@@ -513,6 +514,45 @@ static void xw_request_minimize(struct wl_listener *listener, void *data)
     view_apply_minimized(view->server, view, event->minimize);
 }
 
+/*
+ * The X server telling us a window has moved or resized.
+ *
+ * This matters for exactly one kind of window: an override-redirect one. A menu
+ * places ITSELF, in root coordinates, and xw_map() reads that position once —
+ * but a client is free to move it again, and Steam always does. It maps its
+ * menu at the position it believes its own toplevel is at, then corrects that a
+ * millisecond later from the real geometry:
+ *
+ *   16:31:35.658 configure 0x4000c6 or=1  1258,1170        <- Steam's first guess
+ *   16:31:35.660 configure 0x4000c6 or=1  1764,1444        <- Steam's correction
+ *
+ * synui listened for neither, so the menu stayed drawn wherever the first guess
+ * put it. After a maximize/un-maximize that guess is a whole window-move stale
+ * — 1258,1170 is where the menu belonged when Steam was maximized at 1082,1136,
+ * and 1764,1444 is the same point on the restored window at 1587,1410, the
+ * identical (505,274) delta — so every menu opened at the window's PREVIOUS
+ * position while the X server held the right one all along (velle, 2026-08-02,
+ * screenshots synapse-20260802-1619{36,48}.png).
+ *
+ * A managed toplevel is skipped on purpose: synui owns its geometry, this
+ * signal fires as the echo of our own view_resize(), and honouring it would let
+ * the layout be overwritten by its own configure.
+ */
+static void xw_set_geometry(struct wl_listener *listener, void *data)
+{
+    (void)data;
+    syn_view_t *view = wl_container_of(listener, view, set_geometry);
+    struct wlr_xwayland_surface *xs = view->xsurface;
+
+    if (!view->override_redirect || !view->mapped || !view->scene_tree) return;
+    if (xs->x == view->x && xs->y == view->y &&
+        xs->width == view->w && xs->height == view->h) return;
+
+    view->x = xs->x; view->y = xs->y;
+    view->w = xs->width; view->h = xs->height;
+    wlr_scene_node_set_position(&view->scene_tree->node, xs->x, xs->y);
+}
+
 static void server_new_xwayland_surface(struct wl_listener *listener, void *data)
 {
     syn_server_t *s = wl_container_of(listener, s, new_xwayland_surface);
@@ -543,6 +583,8 @@ static void server_new_xwayland_surface(struct wl_listener *listener, void *data
     wl_signal_add(&xs->events.request_activate, &view->request_activate);
     view->request_minimize.notify = xw_request_minimize;
     wl_signal_add(&xs->events.request_minimize, &view->request_minimize);
+    view->set_geometry.notify = xw_set_geometry;
+    wl_signal_add(&xs->events.set_geometry, &view->set_geometry);
 }
 
 /* ── X11 primary output ──────────────────────────────────────
