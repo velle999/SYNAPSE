@@ -10,7 +10,7 @@ url="https://github.com/velle999/chibi-llm"
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=e1bd9c0d88255a473058f66b74a5e0b6f447f21d
+_commit=0a4e68924f0fa868d8aa53b3a1768b3295ac5515
 
 # Runtime deps.
 #

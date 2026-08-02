@@ -1,0 +1,19 @@
+[Unit]
+Description=Restrict chibi's dream-sync port to the paired peer
+Documentation=file:///etc/nftables.d/chibi-dreamsync.nft
+# chibi is a session app started long after multi-user.target, so ordering the
+# table ahead of the boot target is enough to have it loaded before the port is
+# ever bound. There is deliberately no ordering cycle here of the kind
+# synapd-bridge-guard.service has to work around: nothing in sockets.target
+# depends on this unit, because nothing socket-activates dream sync.
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f /etc/nftables.d/chibi-dreamsync.nft
+ExecStop=/usr/bin/nft destroy table inet chibi_dreamsync_guard
+
+[Install]
+WantedBy=multi-user.target

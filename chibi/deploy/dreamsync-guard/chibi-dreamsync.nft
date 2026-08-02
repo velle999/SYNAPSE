@@ -1,0 +1,47 @@
+#!/usr/bin/nft -f
+#
+# Restrict chibi's dream-journal sync port (tcp/8077) to loopback and the
+# paired peer.
+#
+# Dream sync is peer-to-peer: each chibi runs a small HTTP server exposing its
+# own dream entries, and each pulls the other's every few minutes. Serving
+# means binding 0.0.0.0:8077, which puts the journal on the LAN.
+#
+# ── THIS IS THE SECOND CONTROL, NOT THE FIRST ────────────────────────────────
+# The real one is dream_sync_token, checked as an X-Sync-Token header. Read the
+# auth predicate before trusting it:
+#
+#     return not token or self.headers.get("X-Sync-Token") == token
+#
+# An EMPTY token authenticates everyone. So a config that never sets one -- the
+# committed default is the literal string "change-this-shared-secret", and a
+# blank is worse -- serves the journal to anyone who asks. Set a real token on
+# both machines; this file only narrows who may ask.
+#
+# ── AND IT IS BEST-EFFORT, WHICH synapd-bridge.socket IS NOT ─────────────────
+# That socket has Requires= on its guard, so a failed guard means the port
+# never opens. Nothing equivalent is possible here: chibi is a session
+# application that binds the port itself, so if this table fails to load, chibi
+# still listens and is simply unfenced. Do not read the presence of this file
+# as a guarantee -- check the table is actually loaded:
+#
+#     sudo nft list table inet chibi_dreamsync_guard
+#
+# ── SITE-SPECIFIC ────────────────────────────────────────────────────────────
+# The peer below is this network's Raspberry Pi. Anyone reusing this file MUST
+# change it -- an allowlist naming someone else's host is an allowlist of one
+# arbitrary machine on yours.
+#
+# Its own table, so it cannot disturb synguard's `inet synnet`, the
+# synapd-bridge guard, or /etc/nftables.conf. Chain policy is accept and every
+# drop is qualified by `tcp dport 8077`, so nothing else can be caught by it.
+destroy table inet chibi_dreamsync_guard
+table inet chibi_dreamsync_guard {
+    chain input {
+        type filter hook input priority filter; policy accept;
+        iif lo accept
+        tcp dport 8077 ip saddr 192.168.40.248 counter accept   # chibi @ raspberrypi.lan
+        tcp dport 8077 counter drop                             # everyone else; also IPv6,
+                                                                # which cannot match ip saddr
+    }
+}
