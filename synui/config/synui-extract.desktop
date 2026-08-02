@@ -1,0 +1,42 @@
+# Dolphin (KIO 6) right-click service menu for archives.
+#
+# Mimetypes verified against /usr/share/mime, not assumed: a .rar is
+# application/vnd.rar (x-rar and x-rar-compressed are aliases still emitted by
+# some magic databases) and a .zip is application/zip (x-zip, x-zip-compressed).
+# Listing the aliases too avoids a menu that silently never appears -- the same
+# trap x-cd-image set for the disc-image menu. Check any addition with
+#     xdg-mime query filetype FILE
+#
+# KIO 6 wants the new-style format (Type=Application with Actions=), not the
+# KF5 Type=Service / ServiceTypes=KonqPopupMenu/Plugin one, and reads it from
+# $XDG_DATA_DIRS/kio/servicemenus/. Installed executable: KIO ignores
+# service-menu desktop files without the exec bit. Dolphin caches these per
+# process, so restart it to see a change.
+#
+# %F, not %f: the actions handle a whole selection in one run, which also means
+# "Extract To…" asks for the folder once rather than once per archive.
+[Desktop Entry]
+Type=Application
+Name=Extract
+Icon=application-x-archive
+MimeType=application/vnd.rar;application/x-rar;application/x-rar-compressed;application/x-7z-compressed;application/zip;application/x-zip;application/x-zip-compressed;application/x-tar;application/gzip;application/x-bzip2;application/x-xz;application/zstd;application/vnd.comicbook-rar;application/vnd.comicbook+zip;
+Actions=synuiExtractHere;synuiExtractSubdir;synuiExtractTo;
+X-KDE-Priority=TopLevel
+
+# Unpacks into the current folder when the archive has a single top-level
+# entry, and into a folder of its own when it does not -- decided by reading
+# the archive, so a tarbomb cannot strew itself across the directory.
+[Desktop Action synuiExtractHere]
+Name=Extract Here
+Icon=archive-extract
+Exec=synui-extract here %F
+
+[Desktop Action synuiExtractSubdir]
+Name=Extract to Subfolder
+Icon=folder-new
+Exec=synui-extract subdir %F
+
+[Desktop Action synuiExtractTo]
+Name=Extract To…
+Icon=document-open-folder
+Exec=synui-extract ask %F

@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=235
+pkgrel=236
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -51,7 +51,11 @@ depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'k
          # dbus: synui_run() execs dbus-update-activation-environment before the
          # autostarts, without which D-Bus-activated GUI services get no display.
          # Always present transitively, named here because we exec its binary.
-         'dbus' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder' 'libpulse' 'unzip')
+         'dbus' 'librsvg' 'fontconfig' 'ttf-dejavu' 'ttf-nerd-fonts-symbols-mono' 'libinput' 'libglvnd' 'swaylock' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info' 'xdg-utils' 'pipewire' 'rtkit' 'python' 'xdg-desktop-portal' 'xdg-desktop-portal-wlr' 'xdg-desktop-portal-gtk' 'slurp' 'grim' 'wl-clipboard' 'udisks2' 'zenity' 'bluez' 'libnotify' 'quickshell' 'wtype' 'wf-recorder' 'libpulse' 'unzip'
+         # Archive extraction for the Dolphin service menu. 7zip reads zip and 7z
+         # (and rar), unrar is kept because 7-Zip's rar support does not cover
+         # every variant; the menu offers rar, so a fallback is not enough.
+         '7zip' 'unrar')
 makedepends=('meson' 'ninja' 'wayland-protocols' 'pkg-config' 'cairo' 'librsvg' 'libjpeg-turbo' 'giflib' 'curl' 'libdisplay-info')
 optdepends=('foot: CPU-rendered rescue terminal — the `term` keybind falls back to it, and it works where kitty needs OpenGL (a VM on llvmpipe)'
             'xorg-xcursorgen: build cursor themes from source (synui-cursor build)'
@@ -388,6 +392,13 @@ package() {
         "$pkgdir/usr/bin/synui-iso-write"
     install -Dm755 config/synui-iso-mount.desktop \
         "$pkgdir/usr/share/kio/servicemenus/synui-iso-mount.desktop"
+
+    # Right-click a .rar/.7z/.zip in Dolphin -> Extract Here / to Subfolder /
+    # To…. Executable or KIO 6 skips it. See config/synui-extract.desktop.
+    install -Dm755 systemd/synui-extract.sh \
+        "$pkgdir/usr/bin/synui-extract"
+    install -Dm755 config/synui-extract.desktop \
+        "$pkgdir/usr/share/kio/servicemenus/synui-extract.desktop"
 
     # Right-click an .exe/.msi in Dolphin -> Run with Wine. Executable or KIO 6
     # skips it. wine itself is an optdepend (SynapseOS installs it via
