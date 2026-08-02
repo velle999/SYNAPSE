@@ -599,6 +599,9 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "layout_cycle") == 0) {
         ws->layout = (ws->layout + 1) % 4;
         wlr_log(WLR_INFO, "synui: layout → %s", layout_label(ws->layout));
+        /* Before the reflow, not after: the choice is the thing worth keeping,
+         * and it survives even if placing the windows goes wrong. */
+        layout_state_save(s);
 
         /* Choosing a layout that places windows means "place these windows".
          * Without this the tiler inherits whatever the session floated —
@@ -643,6 +646,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         if (ws->layout == LAYOUT_FLOATING) {
             ws->layout = LAYOUT_TILING;
             switched = 1;
+            layout_state_save(s);   /* same rule as layout_cycle: it's a choice */
         }
         int taken = layout_reclaim(s, ws);
         layout_apply(s, ws);

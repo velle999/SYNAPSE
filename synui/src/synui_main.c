@@ -1850,6 +1850,11 @@ int synui_init(syn_server_t *s)
         strncpy(s->workspaces[i].name, ws_names[i], WORKSPACE_NAME_LEN - 1);
         wl_list_init(&s->workspaces[i].windows);
     }
+    /* …and then whatever was last chosen per desktop (layouts.state), over the
+     * tiling default seeded above. Here rather than with the other
+     * *_state_loads further down because the seed loop is what it overrides,
+     * and nothing is mapped yet either way — no layout_apply is owed. */
+    layout_state_load(s);
 
     /* Wire up listeners */
     s->new_output.notify = server_new_output;

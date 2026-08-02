@@ -3198,6 +3198,11 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
  * control panel's Layout row, the AI overlay. Deliberately NOT ipc.c's
  * layout_name(), which is the wire value synctl and the tests parse. */
 const char *layout_label(syn_layout_t l);
+/* Each desktop's chosen layout, remembered across restarts in
+ * ~/.config/synui/layouts.state. _save on every change to ws->layout; _load
+ * once at startup, over the LAYOUT_TILING the workspaces are seeded with. */
+void layout_state_save(syn_server_t *s);
+void layout_state_load(syn_server_t *s);
 void view_resize(syn_view_t *view, int x, int y, int w, int h);
 void layout_float_place(syn_server_t *s, syn_view_t *view);
 

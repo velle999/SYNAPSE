@@ -26,6 +26,7 @@
  */
 
 #define _GNU_SOURCE
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,6 +125,100 @@ const char *layout_label(syn_layout_t l)
     case LAYOUT_AI:       return "AI";
     }
     return "unknown";
+}
+
+/* ── Persisted layout choice ─────────────────────────────── */
+/*
+ * The layout is a per-desktop *setting*, not session scratch. Every desktop
+ * used to start at LAYOUT_TILING no matter what was chosen last, so a desk
+ * left on floating came back tiling on the next login and had to be cycled
+ * round again — every restart, by hand.
+ *
+ * Written on every change (there are only two places that assign ws->layout:
+ * layout_cycle, and the retile that switches a floating desktop), so a crash
+ * or a kill -9 keeps the choice; read once at startup, over the default.
+ *
+ * master_factor is deliberately NOT in this file: it is per-desktop too, but
+ * it already has a synuirc default (`master_factor`) that a state file would
+ * start shadowing for every desktop the moment anyone touched Super+H once.
+ * If it is ever added here, it needs a "never set" marker, not a value.
+ */
+static bool layout_state_path(char *buf, size_t n)
+{
+    return syn_config_path(buf, n, "layouts.state");
+}
+
+/* The spelling on disk is the lowercase `synctl` wire vocabulary, not
+ * layout_label()'s "AI". A state file is a format: it must not change spelling
+ * because a toast was restyled, which is exactly the trap layout_label's
+ * comment above warns about. Third audience, third switch, on purpose. */
+static const char *layout_key(syn_layout_t l)
+{
+    switch (l) {
+    case LAYOUT_TILING:   return "tiling";
+    case LAYOUT_FLOATING: return "floating";
+    case LAYOUT_MONOCLE:  return "monocle";
+    case LAYOUT_AI:       return "ai";
+    }
+    return "tiling";
+}
+
+void layout_state_save(syn_server_t *s)
+{
+    char path[256];
+    if (!layout_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
+
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: layout: cannot write '%s': %s",
+                path, strerror(errno));
+        return;
+    }
+    /* Every desktop, every time — the file is nine lines and one desktop's
+     * layout is not independent of the others as far as the user is concerned
+     * ("my desks are how I left them" or they are not). */
+    for (int i = 0; i < WORKSPACE_MAX; i++)
+        fprintf(f, "desktop%d=%s\n", i + 1, layout_key(s->workspaces[i].layout));
+    fclose(f);
+}
+
+/* Applied over the LAYOUT_TILING seeded in server init. An absent file is not
+ * an error — it means "never changed one", and every desktop keeps the
+ * default. So does a line with a value this build doesn't know. */
+void layout_state_load(syn_server_t *s)
+{
+    char path[256];
+    if (!layout_state_path(path, sizeof(path))) return;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        const char *key = line;
+        const char *val = eq + 1;
+        if (strncmp(key, "desktop", 7) != 0) continue;
+
+        /* 1-based on disk, the way the toast, the control panel and Super+1-9
+         * all count desktops. */
+        int idx = atoi(key + 7) - 1;
+        if (idx < 0 || idx >= WORKSPACE_MAX) continue;
+
+        syn_layout_t l;
+        if      (strcmp(val, "tiling")   == 0) l = LAYOUT_TILING;
+        else if (strcmp(val, "floating") == 0) l = LAYOUT_FLOATING;
+        else if (strcmp(val, "monocle")  == 0) l = LAYOUT_MONOCLE;
+        else if (strcmp(val, "ai")       == 0) l = LAYOUT_AI;
+        else continue;
+
+        s->workspaces[idx].layout = l;
+    }
+    fclose(f);
 }
 
 /* ── TILING layout (master-stack) ────────────────────────── */

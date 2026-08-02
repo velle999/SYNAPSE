@@ -542,6 +542,16 @@ test('monocle_focus', monocle_focus,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# Whether the layout you chose is still there next login (layout_state_save /
+# _load, layout.c): two desktops changed, the compositor restarted on the same
+# XDG_CONFIG_HOME, then a junk state file. No client — a desktop's layout is a
+# property of the desktop, so this one needs no windows at all.
+layout_persist = find_program('tests/layout_persist.sh')
+test('layout_persist', layout_persist,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 120)
+
 alttab_scope = find_program('tests/alttab_scope.sh')
 test('alttab_scope', alttab_scope,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),
