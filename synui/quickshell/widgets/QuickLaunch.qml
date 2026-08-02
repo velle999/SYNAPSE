@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 import ".."
 
 /*
@@ -14,31 +13,27 @@ import ".."
  * (`synctl dispatch menu`, `… wallpaper`) instead of reimplementing it; two
  * wallpaper pickers that disagree would be worse than none.
  *
- * This is the one widget that takes pointer input, which has a consequence
- * worth knowing: while it is on, clicks in this strip go to it and not to the
- * desktop underneath, so the desktop right-click menu is unreachable there.
- * That is unavoidable for anything clickable and is why it is off by default.
+ * `interactive`, and the price of it: while this is on, clicks in the strip go
+ * to it and not to the desktop underneath, so the desktop right-click menu is
+ * unreachable there. Unavoidable for anything meant to be clicked, and why it
+ * is off by default. The reporting widgets avoid it by taking nothing but their
+ * grip — see WidgetFrame.
  */
-PanelWindow {
+WidgetFrame {
     id: root
 
-    required property var modelData
-    screen: modelData
+    widgetId: "launcher"
+    shown: WidgetState.launcher
+    label: "LAUNCH"
+    accent: Theme.cyan
+    interactive: true
 
-    visible: WidgetState.launcher && modelData.name === WidgetState.primaryOutput
+    homeEdgeH: "left"; homeEdgeV: "top"
+    homeMarginX: 20
+    homeMarginY: Theme.barHeight + 60
 
-    WlrLayershell.layer: WlrLayer.Bottom
-    anchors { left: true; top: true }
-    margins { left: 20; top: Theme.barHeight + 60 }
-
-    implicitWidth: 210
-    implicitHeight: col.implicitHeight
-
-    exclusiveZone: 0
-    // Not focusable: these are pointer targets. Taking keyboard focus would
-    // pull keys away from the focused window for a widget that needs none.
-    focusable: false
-    color: "transparent"
+    cardWidth: 224
+    bodyHeight: col.implicitHeight
 
     // Rows dispatch to synui's own panels where one exists, and spawn only
     // where it does not. `synctl dispatch <action>` runs the exact keybind
@@ -54,46 +49,57 @@ PanelWindow {
     Column {
         id: col
         width: parent.width
-        spacing: 6
+        spacing: 4
 
         Repeater {
             model: root.entries
 
-            delegate: Rectangle {
+            delegate: Item {
                 id: row
                 required property var modelData
+                required property int index
 
                 width: parent.width
-                height: 38
-                radius: 6
-                color: mouse.containsMouse ? Theme.activeBg : Theme.popupBg
-                border.color: mouse.containsMouse ? Theme.magenta : Theme.hoverBg
-                border.width: 1
-                Behavior on color { ColorAnimation { duration: Theme.animFast } }
+                height: 36
 
                 // The nudge on hover is the whole character of this widget in
                 // the rice it came from; keep it small enough to read as
                 // feedback rather than motion.
-                x: mouse.containsMouse ? 8 : 0
+                x: mouse.containsMouse ? 7 : 0
                 Behavior on x { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutQuad } }
 
                 Rectangle {
-                    id: chip
-                    anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    width: 22; height: 22; radius: 4
-                    color: Theme.hoverBg
-                    Text {
-                        anchors.centerIn: parent
-                        text: row.modelData.name.charAt(0).toUpperCase()
-                        color: Theme.cyan
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                    }
+                    anchors.fill: parent
+                    color: root.accent
+                    opacity: mouse.containsMouse ? 0.13 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: Theme.animFast } }
+                }
+
+                // The row's own left edge, lit only under the pointer. A whole
+                // border around every row would turn the strip into a stack of
+                // boxes; one lit edge says "this one" and nothing else.
+                Rectangle {
+                    anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                    width: 2
+                    color: mouse.containsMouse ? root.accent : Theme.fg
+                    opacity: mouse.containsMouse ? 1.0 : 0.13
+                    Behavior on opacity { NumberAnimation { duration: Theme.animFast } }
+                }
+
+                Text {
+                    id: num
+                    anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
+                    text: String(row.index + 1).padStart(2, "0")
+                    color: mouse.containsMouse ? root.accent : Theme.fgDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    font.letterSpacing: 1
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
                 }
 
                 Column {
                     anchors {
-                        left: chip.right; leftMargin: 9
+                        left: num.right; leftMargin: 11
                         right: parent.right; rightMargin: 8
                         verticalCenter: parent.verticalCenter
                     }

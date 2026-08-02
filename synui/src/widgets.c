@@ -178,6 +178,26 @@ static void widgets_set_all(syn_server_t *s, int on)
              "all widgets %s", on ? "on" : "off");
 }
 
+/*
+ * Every widget back to its designed corner.
+ *
+ * Widgets are dragged by the grip in their top-right corner, and a widget can
+ * be dropped somewhere its grip is hard to get back to — under a permanently
+ * fullscreen window, say. Double-clicking a grip sends that one home, which is
+ * no use for the case where the grip is what you cannot reach; this is the way
+ * out that does not need the pointer to find anything.
+ *
+ * Spawned like every other change here rather than done in-process: positions
+ * live in widgets.pos, written by the bar, and the panel has never been an
+ * author of the files it toggles.
+ */
+static void widgets_home(syn_server_t *s)
+{
+    synui_spawn("synui-widgets home");
+    snprintf(s->widgets.status, sizeof(s->widgets.status),
+             "every widget back in its designed corner");
+}
+
 static void widgets_activate(syn_server_t *s)
 {
     if (s->widgets.selected == WIDGET_ROW_ALL) {
@@ -322,6 +342,12 @@ int widgets_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
         /* From any row: the group toggle Super+Shift+A used to be on its own.
          * Having it here is what keeps "hide it all" a single key. */
         widgets_set_all(s, !widgets_any_on(s));
+        synui_render_widgets(s);
+        return 1;
+    case XKB_KEY_r:
+        /* Positions, not toggles — the one key here that does not change what
+         * is on. From any row, because it acts on all of them. */
+        widgets_home(s);
         synui_render_widgets(s);
         return 1;
     default:

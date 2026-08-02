@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 import ".."
 
 /*
@@ -18,59 +17,61 @@ import ".."
  * double space; the tooltip's first line is the long date, which is nicer here
  * than the ISO one and costs nothing since it is already in the payload.
  */
-PanelWindow {
+WidgetFrame {
     id: root
 
-    required property var modelData
-    screen: modelData
+    widgetId: "clock"
+    shown: WidgetState.clock
+    label: "CLOCK"
+    accent: Theme.cyan
 
-    visible: WidgetState.clock && modelData.name === WidgetState.primaryOutput
-
-    WlrLayershell.layer: WlrLayer.Bottom
-    anchors { bottom: true; right: true }
+    homeEdgeH: "right"; homeEdgeV: "bottom"
+    homeMarginX: 22
     // Clear of the visualiser when both are on — it is 110 tall at the bottom.
-    margins { bottom: WidgetState.visualizer ? 124 : 24; right: 22 }
-    Behavior on margins.bottom { NumberAnimation { duration: Theme.animNormal } }
+    // Only while this is at its home corner; a clock somebody has placed
+    // deliberately does not get shuffled by another widget appearing.
+    homeMarginY: WidgetState.visualizer ? 124 : 24
 
-    implicitWidth: box.implicitWidth + 34
-    implicitHeight: box.implicitHeight + 20
-
-    exclusiveZone: 0
-    focusable: false
-    mask: Region {}
-    color: "transparent"
+    // Both strings are intrinsically sized — neither is wrapped or given a
+    // width — so measuring the card from them is not the loop it looks like.
+    cardWidth: Math.max(180, time.implicitWidth + 22, date.implicitWidth + 22)
+    bodyHeight: time.implicitHeight + date.implicitHeight + 2
 
     property string timeText: "--:--:--"
     property string dateText: ""
 
-    Rectangle {
-        anchors.fill: parent
-        radius: 8
-        color: Theme.popupBg
-        border.color: Theme.magenta
-        border.width: 1
+    // The glow is a second copy of the same string behind the first, scaled a
+    // hair up and mostly transparent. A text layer with a real blur on it would
+    // mean the clock — the thing on this desktop most meant to be read from
+    // across the room — is resampled from a texture every second.
+    Text {
+        anchors { right: parent.right; top: parent.top }
+        text: root.timeText
+        color: root.accent
+        opacity: 0.35
+        scale: 1.03
+        transformOrigin: Item.Right
+        font.family: Theme.fontFamily
+        font.pixelSize: 42
+    }
 
-        Column {
-            id: box
-            anchors.centerIn: parent
-            spacing: 2
+    Text {
+        id: time
+        anchors { right: parent.right; top: parent.top }
+        text: root.timeText
+        color: root.accent
+        font.family: Theme.fontFamily
+        font.pixelSize: 42
+    }
 
-            Text {
-                anchors.right: parent.right
-                text: root.timeText
-                color: Theme.cyan
-                font.family: Theme.fontFamily
-                font.pixelSize: 40
-            }
-
-            Text {
-                anchors.right: parent.right
-                text: root.dateText
-                color: Theme.fgDim
-                font.family: Theme.fontFamily
-                font.pixelSize: 12
-            }
-        }
+    Text {
+        id: date
+        anchors { right: parent.right; top: time.bottom; topMargin: 2 }
+        text: root.dateText
+        color: Theme.fgDim
+        font.family: Theme.fontFamily
+        font.pixelSize: 12
+        font.letterSpacing: 0.8
     }
 
     Process {

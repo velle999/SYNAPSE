@@ -1882,7 +1882,7 @@ void synui_render_widgets(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
     cairo_move_to(cr, 18, 50);
-    cairo_show_text(cr, "each one on its own \xc2\xb7 Space is still all-or-nothing");
+    cairo_show_text(cr, "each one on its own \xc2\xb7 drag by the grip \xc2\xb7 Space is all-or-nothing");
 
     cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
     cairo_set_line_width(cr, 1);
@@ -1945,7 +1945,7 @@ void synui_render_widgets(syn_server_t *s)
     cairo_move_to(cr, 18, ph - 34);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on");
     cairo_move_to(cr, 18, ph - 16);
-    cairo_show_text(cr, "Space all on/off \xc2\xb7 Esc close");
+    cairo_show_text(cr, "Space all on/off \xc2\xb7 R reset positions \xc2\xb7 Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->widgets_ui.text_buf, s->widgets_ui.tree, buf);

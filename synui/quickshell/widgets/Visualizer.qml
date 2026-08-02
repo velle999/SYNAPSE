@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 import ".."
 
 /*
@@ -20,39 +19,44 @@ import ".."
  *
  * COST, stated plainly: this repaints at 60fps for as long as it is on, silence
  * included (cava emits zeros, not nothing). That is why it is opt-in and why it
- * is the one widget not recommended on by default.
+ * is the one widget not recommended on by default. It is also why it carries no
+ * chrome: a panel, a shadow and a scanline field behind sixty-per-second
+ * geometry is the one place on this desktop where that would actually cost
+ * something.
+ *
+ * It spans the screen, so it drags vertically and no further — there is nowhere
+ * sideways for a full-width strip to go.
  */
-PanelWindow {
+WidgetFrame {
     id: root
 
-    required property var modelData
-    screen: modelData
-
-    visible: WidgetState.visualizer
-             && WidgetState.haveCava
-             && modelData.name === WidgetState.primaryOutput
+    widgetId: "visualizer"
+    shown: WidgetState.visualizer && WidgetState.haveCava
+    accent: Theme.magenta
 
     // Bottom, not Background: it should sit above the wallpaper but let windows
     // cover it, which is what Bottom means. On Background a maximised window
     // would still be over it, but so would nothing else — and the wallpaper
     // picker draws there.
-    WlrLayershell.layer: WlrLayer.Bottom
+    fillWidth: true
+    chrome: false
+    dragX: false
 
-    anchors { bottom: true; left: true; right: true }
-    implicitHeight: 110
+    homeEdgeV: "bottom"
+    homeMarginX: 0
+    homeMarginY: 0
 
-    // Decoration must never reserve space or eat a click. Without the empty
-    // mask this is a full-width invisible strip that swallows every click along
-    // the bottom of the screen.
-    exclusiveZone: 0
-    focusable: false
-    mask: Region {}
-    color: "transparent"
+    bodyHeight: 110
 
     property var levels: []
+    // Peak hold, decayed on every frame cava sends rather than by a timer of
+    // its own: the caps are only interesting while something is playing, and
+    // that is exactly when frames are arriving.
+    property var peaks: []
     readonly property int barCount: 48
 
     Row {
+        id: strip
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: parent.height
         spacing: 2
@@ -60,30 +64,46 @@ PanelWindow {
         Repeater {
             model: root.barCount
 
-            delegate: Rectangle {
+            delegate: Item {
+                id: bar
                 required property int index
 
                 readonly property real level:
                     index < root.levels.length ? root.levels[index] / 100 : 0
+                readonly property real peak:
+                    index < root.peaks.length ? root.peaks[index] / 100 : 0
 
-                width: (root.width - (root.barCount - 1) * 2) / root.barCount
-                height: Math.max(2, root.height * level)
+                width: (strip.width - (root.barCount - 1) * strip.spacing) / root.barCount
+                height: parent.height
                 anchors.bottom: parent.bottom
-                radius: 2
-                opacity: 0.75
 
-                // Bars take the accent at the top of their travel and the glyph
-                // colour at rest, so the whole thing moves through the theme
-                // rather than sitting on one flat colour.
-                color: Qt.rgba(
-                    Theme.magenta.r * level + Theme.cyan.r * (1 - level),
-                    Theme.magenta.g * level + Theme.cyan.g * (1 - level),
-                    Theme.magenta.b * level + Theme.cyan.b * (1 - level),
-                    1)
+                // Cyan at rest and magenta at the top of its travel, as a
+                // gradient up the bar rather than one flat colour for the whole
+                // thing — so the spectrum reads as a spectrum even when every
+                // band happens to be at the same height.
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    height: Math.max(2, bar.height * bar.level)
+                    opacity: 0.55 + 0.45 * bar.level
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Theme.magenta }
+                        GradientStop { position: 1.0; color: Theme.cyan }
+                    }
+                    // Short, or the bars lag the music and it looks wrong
+                    // rather than smooth. cava already does its own smoothing.
+                    Behavior on height { NumberAnimation { duration: 60 } }
+                }
 
-                // Short, or the bars lag the music and it looks wrong rather
-                // than smooth. cava already does its own smoothing.
-                Behavior on height { NumberAnimation { duration: 60 } }
+                // The cap is what makes a transient visible at all: the bar
+                // itself is back down before the eye has finished with it.
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right }
+                    y: bar.height - Math.max(2, bar.height * bar.peak) - 2
+                    height: 2
+                    color: Theme.fg
+                    opacity: bar.peak > 0.02 ? 0.5 : 0
+                    Behavior on y { NumberAnimation { duration: 90 } }
+                }
             }
         }
     }
@@ -117,7 +137,16 @@ PanelWindow {
                     const n = parseInt(p, 10)
                     out.push(isNaN(n) ? 0 : n)
                 }
-                if (out.length > 0) root.levels = out
+                if (out.length === 0) return
+
+                const prev = root.peaks
+                const held = []
+                for (let i = 0; i < out.length; i++) {
+                    const was = i < prev.length ? prev[i] : 0
+                    held.push(Math.max(out[i], was - 1.6))
+                }
+                root.levels = out
+                root.peaks = held
             }
         }
     }

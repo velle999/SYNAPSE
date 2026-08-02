@@ -1,12 +1,11 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 import Quickshell.Services.UPower
 import ".."
 
 /*
- * SYS://MONITOR — CPU, memory and battery as bars on the desktop.
+ * SYS://MONITOR — CPU, memory and battery as segmented meters on the desktop.
  *
  * Deliberately the same numbers the bar already shows. The bar is for a glance
  * down; this is for reading across the room, and the two disagreeing would be
@@ -16,26 +15,26 @@ import ".."
  * Slower than the bar's modules on purpose: 3s here against the bar's 2s and
  * 5s. A desktop widget nobody is looking at should not be the reason a core
  * wakes up.
+ *
+ * The meters are segments rather than a filled bar because a segment reads at a
+ * distance — which is the entire reason this widget exists — where the end of a
+ * smooth bar does not. Everything about being a widget (the panel, the shadow,
+ * the drag) is in WidgetFrame.
  */
-PanelWindow {
+WidgetFrame {
     id: root
 
-    required property var modelData
-    screen: modelData
+    widgetId: "sysmon"
+    shown: WidgetState.sysmon
+    label: "SYS://MONITOR"
+    accent: Theme.magenta
 
-    visible: WidgetState.sysmon && modelData.name === WidgetState.primaryOutput
+    homeEdgeH: "right"; homeEdgeV: "top"
+    homeMarginX: 18
+    homeMarginY: Theme.barHeight + 18
 
-    WlrLayershell.layer: WlrLayer.Bottom
-    anchors { top: true; right: true }
-    margins { top: Theme.barHeight + 18; right: 18 }
-
-    implicitWidth: 230
-    implicitHeight: col.implicitHeight + 24
-
-    exclusiveZone: 0
-    focusable: false
-    mask: Region {}
-    color: "transparent"
+    cardWidth: 248
+    bodyHeight: col.implicitHeight
 
     // ── Readings ─────────────────────────────────────────
     property int  cpu: 0
@@ -51,86 +50,106 @@ PanelWindow {
         batDev ? (batDev.isLaptopBattery && batDev.isPresent) : false
     readonly property int bat: batDev ? Math.round(batDev.percentage * 100) : 0
 
-    Rectangle {
-        anchors.fill: parent
-        radius: 8
-        color: Theme.popupBg
-        border.color: Theme.magenta
-        border.width: 1
+    Column {
+        id: col
+        width: parent.width
+        spacing: 8
 
-        Column {
-            id: col
-            anchors {
-                left: parent.left; right: parent.right
-                verticalCenter: parent.verticalCenter
-                leftMargin: 12; rightMargin: 12
-            }
-            spacing: 7
+        Repeater {
+            model: [
+                { key: "CPU", value: root.cpu, show: true },
+                { key: "MEM", value: root.mem, show: true },
+                { key: "BAT", value: root.bat, show: root.hasBattery }
+            ]
 
-            Text {
-                text: "SYS://MONITOR"
-                color: Theme.magenta
-                font.family: Theme.fontFamily
-                font.pixelSize: 11
-                font.letterSpacing: 1.5
-            }
+            delegate: Item {
+                id: row
+                required property var modelData
 
-            Repeater {
-                model: [
-                    { key: "CPU", value: root.cpu, show: true },
-                    { key: "MEM", value: root.mem, show: true },
-                    { key: "BAT", value: root.bat, show: root.hasBattery }
-                ]
+                readonly property int value: modelData.value
+                // Meaning, not style: yellow is warm, red is a machine in
+                // trouble. Same thresholds the filled bar used.
+                readonly property color tint: value >= 90 ? Theme.red
+                                            : value >= 70 ? Theme.yellow
+                                                          : Theme.cyan
 
-                delegate: Item {
-                    required property var modelData
-                    visible: modelData.show
-                    height: modelData.show ? 14 : 0
-                    width: col.width
+                visible: modelData.show
+                height: modelData.show ? 15 : 0
+                width: col.width
 
-                    Text {
-                        id: key
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: parent.modelData.key
-                        color: Theme.fg
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        width: 34
+                Text {
+                    id: key
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: row.modelData.key
+                    color: Theme.fgDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 10
+                    font.letterSpacing: 1.2
+                    width: 30
+                }
+
+                Row {
+                    id: meter
+                    anchors {
+                        left: key.right; right: pct.left
+                        rightMargin: 9
+                        verticalCenter: parent.verticalCenter
                     }
+                    height: 9
+                    spacing: 2
 
-                    Rectangle {
-                        anchors {
-                            left: key.right; right: pct.left
-                            rightMargin: 8
-                            verticalCenter: parent.verticalCenter
+                    readonly property int segments: 18
+                    // How many segments are lit. Rounded up so that any load at
+                    // all lights one — a meter reading empty on a machine doing
+                    // something is a broken meter.
+                    readonly property int lit:
+                        Math.min(segments, Math.ceil(segments * Math.max(0, Math.min(100, row.value)) / 100))
+
+                    Repeater {
+                        model: meter.segments
+                        delegate: Rectangle {
+                            required property int index
+                            readonly property bool on: index < meter.lit
+                            // The leading segment runs hot, so the eye finds the
+                            // end of the meter without reading the number.
+                            readonly property bool head: index === meter.lit - 1
+
+                            width: (meter.width - (meter.segments - 1) * meter.spacing) / meter.segments
+                            height: parent.height
+                            color: on ? (head ? Qt.lighter(row.tint, 1.5) : row.tint)
+                                      : Theme.fg
+                            opacity: on ? (head ? 1.0 : 0.85) : 0.08
+                            Behavior on opacity { NumberAnimation { duration: Theme.animNormal } }
+                            Behavior on color   { ColorAnimation  { duration: Theme.animNormal } }
                         }
-                        height: 5
-                        radius: 2.5
-                        color: Theme.hoverBg
-
-                        Rectangle {
-                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                            width: parent.width * Math.max(0, Math.min(1, parent.parent.modelData.value / 100))
-                            radius: 2.5
-                            color: parent.parent.modelData.value >= 90 ? Theme.red
-                                 : parent.parent.modelData.value >= 70 ? Theme.yellow
-                                                                       : Theme.cyan
-                            Behavior on width { NumberAnimation { duration: Theme.animNormal } }
-                        }
-                    }
-
-                    Text {
-                        id: pct
-                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                        text: parent.modelData.value + "%"
-                        color: Theme.fg
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        width: 34
-                        horizontalAlignment: Text.AlignRight
                     }
                 }
+
+                Text {
+                    id: pct
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    text: row.value + "%"
+                    color: row.tint
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    width: 36
+                    horizontalAlignment: Text.AlignRight
+                }
             }
+        }
+
+        // Both numbers were already being computed and neither was ever shown.
+        // A percentage says how full memory is; this says how much there is,
+        // which is the question anybody watching a build actually has.
+        Text {
+            width: col.width
+            horizontalAlignment: Text.AlignRight
+            text: root.memTotalGiB > 0
+                  ? root.memUsedGiB.toFixed(1) + " / " + root.memTotalGiB.toFixed(1) + " GiB"
+                  : ""
+            color: Theme.fgDim
+            font.family: Theme.fontFamily
+            font.pixelSize: 9
         }
     }
 

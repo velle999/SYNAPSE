@@ -20,12 +20,15 @@ set -u
 
 CONF_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE="$CONF_HOME/synui/widgets.state"
+# Where a dragged widget's corner is remembered. NOT written here — see `home`.
+POS="$CONF_HOME/synui/widgets.pos"
 
 WIDGETS="visualizer sysmon clock launcher postit"
 
 usage() {
     cat <<EOF
 usage: synui-widgets [<widget>|all] [on|off|toggle]
+       synui-widgets home
 
   widgets: $WIDGETS
 
@@ -36,6 +39,13 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
+  synui-widgets home                put every widget back in its designed
+                                    corner, undoing every drag
+
+Widgets are dragged by the grip in their top-right corner — on the reporting
+ones that grip is the only part that takes a click at all, so everything else
+still goes through to the desktop. Double-clicking a grip sends that one widget
+home; the command above sends all of them.
 
 The visualiser needs cava (an optdepend); without it that widget stays dark
 however this file is set.
@@ -76,6 +86,19 @@ flip() { [ "$1" = on ] && echo off || echo on; }
 
 case "${1:-}" in
     -h|--help|help) usage; exit 0 ;;
+    home)
+        # The ONE thing this script does to widgets.pos, and it is a removal.
+        #
+        # That file is written by the bar (quickshell WidgetLayout.qml), which
+        # is the only thing that knows where a pointer let go of a widget — the
+        # exact opposite of widgets.state, whose single writer is this script.
+        # Parsing and rewriting its JSON here would put a second author on a
+        # format neither of us owns. Deleting it is not that: it restores the
+        # documented default, which is what an absent file already means.
+        rm -f "$POS" || exit 1
+        echo "  positions  home"
+        exit 0
+        ;;
 esac
 
 load

@@ -6,6 +6,7 @@ singleton Theme 1.0 Theme.qml
 singleton Icons 1.0 Icons.qml
 singleton OsdState 1.0 OsdState.qml
 singleton WidgetState 1.0 WidgetState.qml
+singleton WidgetLayout 1.0 WidgetLayout.qml
 singleton BarConfig 1.0 BarConfig.qml
 singleton MenuState 1.0 MenuState.qml
 singleton LauncherStyle 1.0 LauncherStyle.qml

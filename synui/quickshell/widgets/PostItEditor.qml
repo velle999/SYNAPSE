@@ -71,12 +71,30 @@ PanelWindow {
         onPressed: root.commit()
     }
 
+    /*
+     * Where the note currently IS, which is no longer a constant — it can be
+     * dragged. Resolved the same way WidgetFrame resolves it, from the same
+     * store, so the editor follows the note without the note having to tell it.
+     */
+    readonly property string noteEdgeH: WidgetLayout.edgeH("postit", "left")
+    readonly property string noteEdgeV: WidgetLayout.edgeV("postit", "bottom")
+    readonly property int noteX: WidgetLayout.x("postit", 20)
+    readonly property int noteY: WidgetLayout.y("postit", WidgetState.visualizer ? 124 : 24)
+
     Rectangle {
         // Over the note rather than anywhere else: the point of writing is
         // seeing what you write, and a box that opens elsewhere means hunting
-        // for it. Same corner and the same visualiser clearance PostIt uses.
-        x: 20
-        y: parent.height - height - (WidgetState.visualizer ? 124 : 24)
+        // for it. Shares the note's corner and margins.
+        //
+        // The vertical needs the bar added back for a note anchored to the TOP.
+        // Widget margins are measured in the usable area; this surface sets
+        // ExclusionMode.Ignore and so covers the whole output, and the two
+        // differ by exactly the bar's exclusive zone. The bottom edge is common
+        // to both, which is why only one branch compensates.
+        x: root.noteEdgeH === "left" ? root.noteX
+                                     : parent.width - width - root.noteX
+        y: root.noteEdgeV === "top" ? root.noteY + Theme.barHeight
+                                    : parent.height - height - root.noteY
         width: 320
         height: 260
         radius: 8
