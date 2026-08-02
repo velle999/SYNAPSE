@@ -218,9 +218,9 @@ static const char *ai_backend_label(void)
  * quickshell watches it), so there is nothing in syn_server_t to read; the file
  * IS the state, and a missing file means nothing has been switched on yet.
  *
- * "partial" is a real answer, not a fudge: the four widgets toggle
- * independently from the CLI, so "on"/"off" alone would misreport a desktop
- * with only the clock up. */
+ * "partial" is a real answer, not a fudge: the widgets toggle independently
+ * from the CLI, so "on"/"off" alone would misreport a desktop with only the
+ * clock up. */
 static const char *widgets_label(void)
 {
     char path[256];

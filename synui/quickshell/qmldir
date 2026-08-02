@@ -9,6 +9,7 @@ singleton WidgetState 1.0 WidgetState.qml
 singleton BarConfig 1.0 BarConfig.qml
 singleton MenuState 1.0 MenuState.qml
 singleton LauncherStyle 1.0 LauncherStyle.qml
+singleton PostItState 1.0 PostItState.qml
 Bar 1.0 Bar.qml
 Osd 1.0 Osd.qml
 StartMenu 1.0 StartMenu.qml

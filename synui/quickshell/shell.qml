@@ -82,4 +82,15 @@ ShellRoot {
         model: Quickshell.screens
         delegate: QuickLaunch {}
     }
+    Variants {
+        model: Quickshell.screens
+        delegate: PostIt {}
+    }
+    // The post-it's editor is its own surface, mapped only while typing —
+    // mapping is the only moment layer.c hands a layer surface the keyboard.
+    // See PostItEditor.qml.
+    Variants {
+        model: Quickshell.screens
+        delegate: PostItEditor {}
+    }
 }

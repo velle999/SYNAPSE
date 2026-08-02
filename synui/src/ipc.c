@@ -235,6 +235,18 @@ static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
 {
     bputs(b, "[");
     int first = 1;
+    /* The EFFECTIVE primary, not the raw o->primary flag, which is set only by
+     * an explicit choice (the display panel's p key, persisted as primary=1 in
+     * outputs.conf). Nobody has made that choice on a fresh install, so the flag
+     * reported no primary at all while Xwayland demonstrably had one —
+     * xwayland_apply_primary() asks this same function, which falls back to the
+     * largest enabled output. Reporting the flag was therefore a lie by
+     * omission, and an expensive one: WidgetState.qml pins every desktop widget
+     * to the primary output's name, so on any desktop where p had never been
+     * pressed all of them stayed invisible with their toggles reading "on".
+     * `focused` below has always been answered by the function rather than a
+     * field for the same reason. */
+    syn_output_t *primary = server_primary_output(s);
     syn_output_t *o;
     wl_list_for_each(o, &s->outputs, link) {
         struct wlr_box box;
@@ -246,7 +258,7 @@ static void cmd_outputs(syn_server_t *s, ipc_buf_t *b)
         bprintf(b, ",\"at\":[%d,%d],\"size\":[%d,%d]",
                 box.x, box.y, box.width, box.height);
         bprintf(b, ",\"scale\":%.2f", (double)o->wlr_output->scale);
-        bprintf(b, ",\"primary\":%s", o->primary ? "true" : "false");
+        bprintf(b, ",\"primary\":%s", o == primary ? "true" : "false");
         bprintf(b, ",\"focused\":%s",
                 o == server_focused_output(s) ? "true" : "false");
         bputs(b, "}");

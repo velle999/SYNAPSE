@@ -1900,8 +1900,8 @@ void synui_render_widgets(syn_server_t *s)
             cairo_fill(cr);
         }
 
-        /* The master row is a summary of the four below it, so it is set apart
-         * by a rule rather than left to read as a fifth widget. */
+        /* The master row is a summary of the rows below it, so it is set apart
+         * by a rule rather than left to read as one more widget. */
         if (i == WIDGET_ROW_ALL + 1) {
             cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.45);
             cairo_move_to(cr, 18, ry - 22);

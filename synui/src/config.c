@@ -378,7 +378,7 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+g",         "game" },
         /* super+shift+a was left FREE when the theme manager moved to super+t,
          * explicitly for the next feature. This is it: the desktop widgets
-         * (visualiser, system monitor, clock, quick-launch).
+         * (visualiser, system monitor, clock, quick-launch, post-it note).
          *
          * A spawn rather than a native action, because synui does not own the
          * state — synui-widgets is the single writer of widgets.state and the

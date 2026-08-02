@@ -9,7 +9,7 @@ import Quickshell.Io
  *
  * Everything here is OFF by default. These are decoration: a fresh install, the
  * live ISO, and everyone upgrading gets exactly the desktop they had until they
- * ask for one. `synui-widgets` writes the file, synui's Super+Shift+D bind and
+ * ask for one. `synui-widgets` writes the file, synui's Super+Shift+A bind and
  * the control panel row both run that same command, and this watches the result
  * — so there is one writer and one format, however the toggle was reached.
  *
@@ -23,6 +23,7 @@ QtObject {
     property bool sysmon:     false
     property bool clock:      false
     property bool launcher:   false
+    property bool postit:     false
 
     // Desktop widgets live on ONE screen. A clock and a system monitor
     // duplicated onto three monitors is noise, not a rice — so they follow the
@@ -44,6 +45,7 @@ QtObject {
         root.sysmon     = false
         root.clock      = false
         root.launcher   = false
+        root.postit     = false
     }
 
     function parse(text) {
@@ -60,6 +62,7 @@ QtObject {
             case "sysmon":     root.sysmon     = on; break
             case "clock":      root.clock      = on; break
             case "launcher":   root.launcher   = on; break
+            case "postit":     root.postit     = on; break
             }
         }
     }

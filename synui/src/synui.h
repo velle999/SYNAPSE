@@ -456,7 +456,7 @@ typedef struct {
 
 /* ── Desktop widget manager (widgets.c) ──────────────────── */
 /*
- * The four quickshell desktop widgets, one row each, plus a master row that is
+ * The quickshell desktop widgets, one row each, plus a master row that is
  * the old group toggle. They were all-or-nothing from the desktop until now:
  * `synui-widgets <name> on` could always address one, but Super+Shift+A and the
  * control panel row both ran the group form, so the only way to have the clock
@@ -471,6 +471,7 @@ typedef enum {
     WIDGET_ROW_SYSMON,
     WIDGET_ROW_CLOCK,
     WIDGET_ROW_LAUNCHER,
+    WIDGET_ROW_POSTIT,
     WIDGET_ROW_COUNT,
 } syn_widget_row_t;
 
@@ -679,7 +680,7 @@ typedef enum {
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
-    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher */
+    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it */
     /* Display */
     CTL_ROW_DISPLAYS,
     CTL_ROW_NIGHTLIGHT,

@@ -183,7 +183,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`T` | Tile windows |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
-| `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch) |
+| `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch, post-it) |
 | `Super`+`Escape` | Menu |
 | `Super`+`Tab` | Cycle layout |
 | `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Most-recently-used window switch |
@@ -233,6 +233,7 @@ can be wrong.
 synui-cursor install ~/Downloads/some-theme.tar.gz   # then: synui-cursor set <name>
 synui-sound install ~/Downloads/some-sounds.tar.gz   # then: synui-sound all on
 synui-widgets sysmon on                              # desktop widgets, off by default
+synui-widgets postit on                              # a note on the desktop; click it to write
 ```
 
 Event sounds ship **silent** and the desktop widgets ship **off** — an upgrade

@@ -1,11 +1,12 @@
 /*
  * widgets.c — the Super+Shift+A panel for the desktop widgets.
  *
- * The four quickshell widgets (audio visualiser, system monitor, big clock,
- * quick launch) have always been individually switchable — `synui-widgets sysmon
- * on` has worked since they landed. What was missing was a way to reach that
- * from the desktop: Super+Shift+A and the control panel's row both ran the GROUP
- * form, so "the clock but not the visualiser" meant opening a terminal.
+ * The quickshell widgets (audio visualiser, system monitor, big clock, quick
+ * launch, post-it note) have always been individually switchable —
+ * `synui-widgets sysmon on` has worked since they landed. What was missing was
+ * a way to reach that from the desktop: Super+Shift+A and the control panel's
+ * row both ran the GROUP form, so "the clock but not the visualiser" meant
+ * opening a terminal.
  *
  * So this is a panel with one row per widget, and the old group toggle kept as
  * the master row — and, as in filters.c, on Space from ANY row, so the one-key
@@ -41,6 +42,7 @@ const char *widget_row_name(int row)
     case WIDGET_ROW_SYSMON:     return "sysmon";
     case WIDGET_ROW_CLOCK:      return "clock";
     case WIDGET_ROW_LAUNCHER:   return "launcher";
+    case WIDGET_ROW_POSTIT:     return "postit";
     default:                    return NULL;
     }
 }
@@ -53,6 +55,7 @@ const char *widget_row_label(int row)
     case WIDGET_ROW_SYSMON:     return "System monitor";
     case WIDGET_ROW_CLOCK:      return "Desktop clock";
     case WIDGET_ROW_LAUNCHER:   return "Quick launch";
+    case WIDGET_ROW_POSTIT:     return "Post-it note";
     default:                    return "?";
     }
 }

@@ -5,7 +5,7 @@
 # (quickshell WidgetState.qml, FileView watchChanges), so a change here repaints
 # the desktop immediately — there is no reload to trigger and no IPC involved.
 #
-# synui's Super+Shift+D bind and the control panel's Widgets row both run this
+# synui's Super+Shift+A bind and the control panel's Widgets row both run this
 # command rather than writing the file themselves, so however the toggle is
 # reached there is exactly one format and one place it can be wrong.
 #
@@ -21,7 +21,7 @@ set -u
 CONF_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE="$CONF_HOME/synui/widgets.state"
 
-WIDGETS="visualizer sysmon clock launcher"
+WIDGETS="visualizer sysmon clock launcher postit"
 
 usage() {
     cat <<EOF
@@ -32,6 +32,7 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
   synui-widgets                     show the current state
   synui-widgets sysmon on           turn one on
   synui-widgets visualizer toggle   flip one
+  synui-widgets postit on           a note on the desktop, click it to write
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
@@ -48,7 +49,7 @@ get() {
     [ "$val" = on ] && echo on || echo off
 }
 
-# Rewrite the whole file from the four current values. Written to a temp file
+# Rewrite the whole file from the current values. Written to a temp file
 # and renamed: the bar is watching this path, and a rename is atomic, so it can
 # never read a half-written file and redraw from it.
 put() {
