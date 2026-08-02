@@ -37,12 +37,35 @@ apply() {
         *)   usage ;;
     esac
     mkdir -p "$DROPIN_DIR"
+
+    # This drop-in owns the WHOLE ExecStart, so rewriting it from scratch threw
+    # away every other flag on the line. Anyone who had tuned --context or
+    # --temperature lost it silently the next time they toggled GPU/CPU, and
+    # nothing said so — the daemon just came back at its defaults.
+    #
+    # So: only the device changes. Everything else on an existing line is kept
+    # exactly as it was, and the full default line is written only when there is
+    # no drop-in yet.
+    local exec_line
+    exec_line=$(grep -m1 '^ExecStart=/usr/bin/synapd ' "$DROPIN" 2>/dev/null || true)
+    if [ -n "$exec_line" ]; then
+        if printf '%s' "$exec_line" | grep -q -- '--gpu-layers'; then
+            exec_line=$(printf '%s' "$exec_line" |
+                        sed -E "s/--gpu-layers[= ]-?[0-9]+/--gpu-layers $layers/")
+        else
+            exec_line="$exec_line --gpu-layers $layers"
+        fi
+    else
+        exec_line="ExecStart=/usr/bin/synapd --foreground --model $MODEL --socket $SOCK --threads 4 --context 4096 --gpu-layers $layers"
+    fi
+
     cat > "$DROPIN" <<EOF
-# Managed by synui-ai-backend — do not edit by hand.
-# Overrides synapd's inference device (GPU vs CPU); see synui welcome menu.
+# Managed by synui-ai-backend — the ExecStart device flag is rewritten on every
+# GPU/CPU toggle. Other flags on the line (--context, --temperature, --threads)
+# are PRESERVED across toggles, so tuning them here does stick.
 [Service]
 ExecStart=
-ExecStart=/usr/bin/synapd --foreground --model $MODEL --socket $SOCK --threads 4 --context 4096 --gpu-layers $layers
+$exec_line
 EOF
     mkdir -p "$(dirname "$STATE")"
     echo "$mode" > "$STATE"

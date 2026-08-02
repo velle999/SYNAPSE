@@ -40,17 +40,22 @@ WidgetFrame {
     property string timeText: "--:--:--"
     property string dateText: ""
 
-    // The glow is a second copy of the same string behind the first, scaled a
-    // hair up and mostly transparent. A text layer with a real blur on it would
-    // mean the clock — the thing on this desktop most meant to be read from
-    // across the room — is resampled from a texture every second.
+    // The glow is a second copy of the same string behind the first, offset a
+    // few pixels and mostly transparent. A text layer with a real blur on it
+    // would mean the clock — the thing on this desktop most meant to be read
+    // from across the room — is resampled from a texture every second.
+    //
+    // It is an offset and not a scale: scaling about the right edge moves each
+    // glyph by a fraction of its distance from that edge, so the hour got an
+    // 8px smear while the PM got none. Every glyph wants the same shadow.
     Text {
-        anchors { right: parent.right; top: parent.top }
+        anchors {
+            right: parent.right; rightMargin: 5
+            top: parent.top;     topMargin: -1
+        }
         text: root.timeText
         color: root.accent
         opacity: 0.35
-        scale: 1.03
-        transformOrigin: Item.Right
         font.family: Theme.fontFamily
         font.pixelSize: 42
     }
