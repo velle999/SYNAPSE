@@ -25,21 +25,13 @@ control protecting a LAN-facing port was unversioned, unreviewed, and one
 | `synapd-bridge.service` | `/etc/systemd/system/` |
 | `synapd-bridge-guard.service` | `/etc/systemd/system/` |
 | `synapd-bridge.nft` | `/etc/nftables.d/` |
-| `ollama-guard.service` | `/etc/systemd/system/` |
-| `ollama.nft` | `/etc/nftables.d/` |
-| `ollama.service.d-override.conf` | `/etc/systemd/system/ollama.service.d/override.conf` |
-
-The ollama files are here for the same reason and guard the same peer: the
-override sets `OLLAMA_HOST=0.0.0.0:11434`, and `ollama.nft` is what keeps that
-from being an unauthenticated model API open to the whole subnet.
 
 ## Install
 
 ```sh
-sudo $EDITOR synapd-bridge.nft ollama.nft   # set YOUR peer address in both
+sudo $EDITOR synapd-bridge.nft   # set YOUR peer address
 ./deploy.sh
-sudo systemctl enable synapd-bridge-guard.service synapd-bridge.socket \
-                      ollama-guard.service
+sudo systemctl enable synapd-bridge-guard.service synapd-bridge.socket
 ```
 
 `deploy.sh` installs every file, syntax-checks both rulesets with `nft -c`
@@ -102,7 +94,16 @@ Two general lessons, both already learned here the hard way once:
   guarantee the port ever opens. Those need separate verification, which is why
   `deploy.sh` ends by checking the ports and the tables, not the units.
 
-## The same bug, the other way round: ollama
+## The same bug, the other way round: ollama (removed)
+
+A matching `ollama-guard.service`, `ollama.nft` and `ollama.service.d`
+override used to live here, fencing `0.0.0.0:11434` for the same peer. They
+were removed once synapd learned to serve embeddings (`SYN_MSG_EMBED`) and
+chibi's Thoth stopped needing a second model server. Nothing on this box
+consumes ollama now, and an unused guard for an uninstalled service is a
+control nobody tests.
+
+The bug it caught is kept, because it is about `Wants=` and not about ollama:
 
 `ollama.service.d/override.conf` had `Wants=ollama-guard.service` where this
 socket has `Requires=`. `Wants=` orders but does not gate, so a guard that

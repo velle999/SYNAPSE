@@ -28,9 +28,6 @@ MAP=(
     "synapd-bridge.service:/etc/systemd/system/synapd-bridge.service"
     "synapd-bridge-guard.service:/etc/systemd/system/synapd-bridge-guard.service"
     "synapd-bridge.nft:/etc/nftables.d/synapd-bridge.nft"
-    "ollama-guard.service:/etc/systemd/system/ollama-guard.service"
-    "ollama.nft:/etc/nftables.d/ollama.nft"
-    "ollama.service.d-override.conf:/etc/systemd/system/ollama.service.d/override.conf"
 )
 
 # The peer address in the .nft files is this site's. Deploying to a different
@@ -65,11 +62,9 @@ install_all() {
     # A bad ruleset must be caught here, not by a guard unit failing at boot
     # and taking its port with it.
     sudo nft -c -f ./synapd-bridge.nft || { echo "synapd-bridge.nft is INVALID"; return 1; }
-    sudo nft -c -f ./ollama.nft        || { echo "ollama.nft is INVALID"; return 1; }
 
     sudo systemctl daemon-reload
-    sudo systemctl restart synapd-bridge-guard.service ollama-guard.service
-    sudo systemctl restart ollama.service
+    sudo systemctl restart synapd-bridge-guard.service
     sudo systemctl start synapd-bridge.socket
 
     # Check the PORTS, not the units. A guard can be active, its table loaded
@@ -78,12 +73,9 @@ install_all() {
     echo
     local rc=0
     ss -ltn | grep -q ':11435' || { echo "FAIL: 11435 is not listening"; rc=1; }
-    ss -ltn | grep -q ':11434' || { echo "FAIL: 11434 is not listening"; rc=1; }
     sudo nft list table inet synapd_bridge_guard >/dev/null 2>&1 || {
         echo "FAIL: synapd_bridge_guard table absent"; rc=1; }
-    sudo nft list table inet ollama_guard >/dev/null 2>&1 || {
-        echo "FAIL: ollama_guard table absent"; rc=1; }
-    [ $rc -eq 0 ] && echo "both ports listening, both guard tables loaded"
+    [ $rc -eq 0 ] && echo "11435 listening, guard table loaded"
     return $rc
 }
 
