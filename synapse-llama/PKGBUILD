@@ -40,9 +40,9 @@
 _backend="${SYNAPSE_LLAMA_BACKEND:-cpu}"
 
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 # The upstream llama.cpp commit build.sh pins. Keep in sync with LLAMA_REF.
-_llama_ref=b8272
+_llama_ref=b10241
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('MIT')

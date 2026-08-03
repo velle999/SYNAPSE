@@ -18,7 +18,7 @@ permissions:
 # pin the nearest tag at or below it. Bump this to move synapd to a
 # newer llama.cpp; the cache key follows it automatically.
 env:
-  LLAMA_REF: b8272
+  LLAMA_REF: b10241
 
 jobs:
   # ── Fast structural guards (no toolchain) ──────────────────

@@ -351,9 +351,9 @@ int inference_init(synapd_state_t *s) {
     struct llama_model_params mparams = llama_model_default_params();
     mparams.n_gpu_layers = inf->n_gpu_layers;
 
-    inf->model = llama_load_model_from_file(inf->model_path, mparams);
+    inf->model = llama_model_load_from_file(inf->model_path, mparams);
     if (!inf->model) {
-        syn_log(LOG_ERR, "inference: llama_load_model_from_file failed");
+        syn_log(LOG_ERR, "inference: llama_model_load_from_file failed");
         free(inf);
         return -1;
     }
@@ -363,10 +363,10 @@ int inference_init(synapd_state_t *s) {
     cparams.n_ctx     = inf->context_size;
     cparams.n_threads = inf->n_threads;
 
-    inf->ctx = llama_new_context_with_model(inf->model, cparams);
+    inf->ctx = llama_init_from_model(inf->model, cparams);
     if (!inf->ctx) {
-        syn_log(LOG_ERR, "inference: llama_new_context_with_model failed");
-        llama_free_model(inf->model);
+        syn_log(LOG_ERR, "inference: llama_init_from_model failed");
+        llama_model_free(inf->model);
         free(inf);
         return -1;
     }
@@ -467,7 +467,7 @@ int inference_init(synapd_state_t *s) {
         struct llama_model_params eparams = llama_model_default_params();
         eparams.n_gpu_layers = 99;   /* 274 MB -- always worth offloading whole */
 
-        inf->embed_model = llama_load_model_from_file(s->config.embed_model_path,
+        inf->embed_model = llama_model_load_from_file(s->config.embed_model_path,
                                                       eparams);
         if (!inf->embed_model) {
             syn_log(LOG_WARNING, "inference: embedding model failed to load (%s); "
@@ -487,11 +487,11 @@ int inference_init(synapd_state_t *s) {
              * Hardcoding MEAN would silently produce wrong vectors for any
              * other embedder someone points this at. */
 
-            inf->embed_ctx = llama_new_context_with_model(inf->embed_model, ecp);
+            inf->embed_ctx = llama_init_from_model(inf->embed_model, ecp);
             if (!inf->embed_ctx) {
                 syn_log(LOG_WARNING, "inference: embedding context failed; "
                         "embeddings disabled");
-                llama_free_model(inf->embed_model);
+                llama_model_free(inf->embed_model);
                 inf->embed_model = NULL;
             } else {
                 inf->embed_dim = llama_model_n_embd(inf->embed_model);
@@ -931,7 +931,7 @@ void inference_destroy(synapd_state_t *s) {
     pthread_mutex_lock(&inf->lock);
     if (inf->sampler) llama_sampler_free(inf->sampler);
     if (inf->ctx)     llama_free(inf->ctx);
-    if (inf->model)   llama_free_model(inf->model);
+    if (inf->model)   llama_model_free(inf->model);
     pthread_mutex_unlock(&inf->lock);
     pthread_mutex_destroy(&inf->lock);
 
@@ -939,7 +939,7 @@ void inference_destroy(synapd_state_t *s) {
      * shutdown is the only place they are freed. */
     pthread_mutex_lock(&inf->embed_lock);
     if (inf->embed_ctx)   llama_free(inf->embed_ctx);
-    if (inf->embed_model) llama_free_model(inf->embed_model);
+    if (inf->embed_model) llama_model_free(inf->embed_model);
     pthread_mutex_unlock(&inf->embed_lock);
     pthread_mutex_destroy(&inf->embed_lock);
 

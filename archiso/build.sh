@@ -67,7 +67,7 @@ WORK_DIR="${SCRIPT_DIR}/work"
 LOCAL_REPO="${SCRIPT_DIR}/airootfs/local-repo"
 LLAMA_DIR="${BUILD_DIR}/llama.cpp"
 # Keep in sync with LLAMA_REF in .github/workflows/build.yml
-LLAMA_REF="b8272"
+LLAMA_REF="b10241"
 MODEL_DIR="${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
 
 # Model to embed — filename must match what synapd.service and syn-model expect
@@ -115,8 +115,25 @@ have_vulkan_headers() {
     done
     return 1
 }
+# SPIRV-Headers is a THIRD package, and it became required at llama.cpp b10241:
+# ggml/src/ggml-vulkan/CMakeLists.txt now opens with
+# find_package(SPIRV-Headers CONFIG REQUIRED). At b8272 it did not, so a host
+# that built Vulkan fine before the bump fails after it — with the same shape of
+# error the two checks above already exist to prevent, and from a package that
+# (like vulkan-headers) ships no binary to probe for.
+#
+# Probed by its CMake config file, because that is literally what find_package
+# looks for: spirv-tools is installed on this box and does NOT satisfy it.
+have_spirv_headers() {
+    local d
+    for d in ${VULKAN_SDK:+"$VULKAN_SDK/share/cmake"} \
+             /usr/share/cmake /usr/lib/cmake /usr/local/share/cmake; do
+        [[ -e "$d/SPIRV-Headers/SPIRV-HeadersConfig.cmake" ]] && return 0
+    done
+    return 1
+}
 have_vulkan_toolchain() {
-    command -v glslc &>/dev/null && have_vulkan_headers
+    command -v glslc &>/dev/null && have_vulkan_headers && have_spirv_headers
 }
 
 # ── Argument parsing ──────────────────────────────────────────
@@ -243,6 +260,11 @@ declare -A TOOL_PKG=(
 # ships no binary the check has to look for what it actually puts on disk.
 declare -A FILE_PKG=(
     [/usr/include/vulkan/vulkan.h]="vulkan-headers"
+    # Required by ggml-vulkan from llama.cpp b10241 onward — see
+    # have_spirv_headers(). Keyed on the CMake config file rather than a header,
+    # because find_package(SPIRV-Headers CONFIG) resolves that and nothing else:
+    # spirv-tools is a different package and does not provide it.
+    [/usr/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake]="spirv-headers"
 )
 
 MISSING_PKGS=()
@@ -561,6 +583,12 @@ build_llama() {
         # box had shaderc and no headers, which sailed past a glslc-only gate.
         have_vulkan_headers \
             || err "Vulkan build needs the Vulkan headers — install 'vulkan-headers'."
+        # A third separate package, required from b10241 on. This box had shaderc
+        # AND vulkan-headers AND spirv-TOOLS, and still died in CMake with
+        # 'Could not find a package configuration file provided by
+        # "SPIRV-Headers"' — the two gates above both passed.
+        have_spirv_headers \
+            || err "Vulkan build needs the SPIR-V headers — install 'spirv-headers' (spirv-tools is a different package)."
     fi
 
     log "CMake configure (GPU: ${backend})..."
