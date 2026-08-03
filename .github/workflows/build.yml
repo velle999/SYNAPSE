@@ -120,9 +120,28 @@ jobs:
         run: |
           git clone --depth=1 --branch "$LLAMA_REF" \
             https://github.com/ggerganov/llama.cpp /tmp/llama
+          # CI needs the LIBRARIES ONLY — synapd/meson.build looks for
+          # libllama, libggml and libggml-base in llama-staging/usr/lib plus the
+          # headers, and links nothing else. Every binary llama.cpp can build is
+          # dead weight here, so the whole tools/ and app/ tree is off.
+          #
+          # Not merely a speed choice any more. At b10241 llama.cpp gained a
+          # unified `llama` binary (app/, option LLAMA_BUILD_APP, default ON for
+          # a standalone build) that links -lllama-cli-impl and
+          # -lllama-server-impl unconditionally. Those impl libs live under
+          # tools/ and are gated by LLAMA_BUILD_SERVER — so the old
+          # `-DLLAMA_BUILD_SERVER=OFF` alone deleted the libraries while leaving
+          # the target that links them, and the build died at 100% with
+          # "cannot find -lllama-server-impl". Turning APP and TOOLS off removes
+          # the dependency instead of just its target.
+          #
+          # LLAMA_BUILD_APP is the one that actually matters; TOOLS is off
+          # because nothing here needs llama-bench/quantize/tts either, and
+          # leaving it on is several minutes of CI per cache miss.
           cmake -S /tmp/llama -B /tmp/llama/build \
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=OFF -DLLAMA_BUILD_APP=OFF \
             -DLLAMA_BUILD_SERVER=OFF -DGGML_NATIVE=OFF
           cmake --build /tmp/llama/build -j"$(nproc)"
           DESTDIR="$PWD/llama-staging" cmake --install /tmp/llama/build

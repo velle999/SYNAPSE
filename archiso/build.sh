@@ -541,7 +541,20 @@ build_llama() {
         "-DCMAKE_INSTALL_PREFIX=/usr"
         "-DLLAMA_BUILD_TESTS=OFF"
         "-DLLAMA_BUILD_EXAMPLES=ON"
-        "-DLLAMA_SERVER=ON"
+        # LLAMA_BUILD_SERVER, not LLAMA_SERVER — the latter is not an option
+        # llama.cpp defines, so it was a no-op that CMake silently accepted and
+        # then listed under "Manually-specified variables were not used by the
+        # project". The server was built anyway because the option defaults to
+        # ON for a standalone build, so this asked for nothing and got what it
+        # wanted by luck. Behaviour is unchanged; the flag now actually means it.
+        #
+        # It has to stay ON: synapse-llama's package() installs llama-cli,
+        # llama-server and llama-bench, and it does so with a soft
+        # `[ -x ... ] &&` that skips them WITHOUT failing — so a build that
+        # quietly stopped producing them would ship a package missing its CLI
+        # tools and say nothing. (Checked at b10241: all three still exist; the
+        # new unified `llama` binary is in addition to them, not a replacement.)
+        "-DLLAMA_BUILD_SERVER=ON"
     )
 
     # EVERY backend toggle is stated explicitly on EVERY path, never left to
