@@ -182,6 +182,51 @@ static int gg_skip_value(gg_rd_t *r, uint32_t t, int nested)
     return gg_skip(r, (unsigned long long)fixed);
 }
 
+/*
+ * Read a string array into fixed slots, walking whatever will not fit.
+ *
+ * Used for exactly two keys — general.tags and general.languages — and never
+ * for tokenizer.ggml.tokens, which is the array this file goes out of its way
+ * NOT to keep. The distinction is the caller's: this will happily try to hold
+ * the first eight entries of a 131k-token vocabulary if asked, so it is only
+ * ever asked about keys whose length is a handful.
+ *
+ * A value too long for a slot comes back empty from gg_str() and is dropped
+ * rather than counted, so n_out is a count of things that are actually there.
+ * The reader stays positioned correctly either way, which is the only property
+ * that must hold: a desynchronised walk reads every field after this one out
+ * of the middle of some other value.
+ */
+static int gg_str_array(gg_rd_t *r, uint32_t t, char *slots, size_t stride,
+                        size_t slot_len, int max, int *n_out)
+{
+    *n_out = 0;
+    if (t != GGUF_T_ARRAY) return gg_skip_value(r, t, 0);
+
+    uint32_t et = gg_u32(r);
+    uint64_t n  = gg_u64(r);
+    if (r->bad || et >= GGUF_T__COUNT) { r->bad = 1; return 0; }
+
+    if (et != GGUF_T_STRING) {
+        /* The spec says these keys hold strings. A file that disagrees is not
+         * one to guess about — walk the array and leave the field empty. */
+        int fixed = gg_fixed_size[et];
+        if (fixed <= 0) { r->bad = 1; return 0; }
+        return gg_skip(r, n * (uint64_t)fixed);
+    }
+
+    for (uint64_t i = 0; i < n; i++) {
+        if (*n_out < max) {
+            char *dst = slots + (size_t)*n_out * stride;
+            if (!gg_str(r, dst, slot_len)) return 0;
+            if (dst[0]) (*n_out)++;
+        } else if (!gg_str(r, NULL, 0)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /* Read an integer value of any width into a long long. Returns 0 if the type
  * is not an integer, leaving the reader positioned after the value regardless —
  * a caller that guessed the type wrong must not desynchronise the walk. */
@@ -274,6 +319,417 @@ void gguf_params_str(long long n, char *buf, size_t len)
     snprintf(buf, len, "%lld", n);
 }
 
+/* ── Prose ──────────────────────────────────────────────────────────────
+ *
+ * Everything below turns the header into sentences. It is the answer to
+ * velle's "there's info but nothing that helps decide to use that an end user
+ * would understand": "Arch nomic-bert" is a true statement that tells a person
+ * nothing, and "an embedding model — it cannot hold a conversation" is the
+ * same fact in a form that stops them loading 261 MB for no reason.
+ *
+ * The rule throughout: say what the file says, and say nothing when it did
+ * not. A model with no tags gets a shorter bio, never an invented one.
+ */
+
+/* Case-insensitive equality, for tags a producer may have capitalised. */
+static int gg_ieq(const char *a, const char *b)
+{
+    for (; *a && *b; a++, b++) {
+        int ca = *a, cb = *b;
+        if (ca >= 'A' && ca <= 'Z') ca += 32;
+        if (cb >= 'A' && cb <= 'Z') cb += 32;
+        if (ca != cb) return 0;
+    }
+    return *a == *b;
+}
+
+/*
+ * A tag in the words a person would use, or NULL to drop it.
+ *
+ * Dropping is most of the job. The tags on a real file are a mix of what the
+ * model DOES ("coding") and what it IS made of ("llama", "minicpm5",
+ * "transformers", "text-generation") — and the second kind is either already
+ * on screen as Arch or true of every model in the list, so printing it fills
+ * the one line this has with words that cannot distinguish anything.
+ */
+const char *gguf_tag_english(const char *tag)
+{
+    if (!tag || !tag[0]) return NULL;
+
+    /* Hugging Face qualifies some of its tags: "license:apache-2.0",
+     * "base_model:mistralai/...", "region:us". None of them describe a skill,
+     * and the licence already has a row of its own. */
+    if (strchr(tag, ':')) return NULL;
+
+    static const struct { const char *tag, *english; } map[] = {
+        { "thinking",              "reasoning"              },
+        { "reasoning",             "reasoning"              },
+        { "chain-of-thought",      "reasoning"              },
+        { "cot",                   "reasoning"              },
+        { "code",                  "coding"                 },
+        { "coding",                "coding"                 },
+        { "code-generation",       "coding"                 },
+        { "instruct",              "following instructions" },
+        { "instruction-following", "following instructions" },
+        { "instruction-tuned",     "following instructions" },
+        { "chat",                  "conversation"           },
+        { "conversational",        "conversation"           },
+        { "math",                  "maths"                  },
+        { "mathematics",           "maths"                  },
+        { "roleplay",              "roleplay"               },
+        { "role-play",             "roleplay"               },
+        { "creative-writing",      "writing"                },
+        { "writing",               "writing"                },
+        { "storywriting",          "writing"                },
+        { "summarization",         "summarising"            },
+        { "translation",           "translation"            },
+        { "multilingual",          "many languages"         },
+        { "function-calling",      "tool use"               },
+        { "tool-use",              "tool use"               },
+        { "agent",                 "tool use"               },
+        { "rag",                   "searching documents"    },
+        { "retrieval",             "searching documents"    },
+        { "sentence-similarity",   "searching documents"    },
+        { "feature-extraction",    "searching documents"    },
+        { "medical",               "medicine"               },
+        { "biology",               "biology"                },
+        { "finance",               "finance"                },
+        { "legal",                 "law"                    },
+        { "science",               "science"                },
+        { "sql",                   "SQL"                    },
+        { "vision",                "images"                 },
+        { "multimodal",            "images"                 },
+        { "uncensored",            "unfiltered answers"     },
+        { "abliterated",           "unfiltered answers"     },
+        { "distill",               "a distilled model"      },
+        { "moe",                   "a mixture of experts"   },
+        { "long-context",          "long documents"         },
+    };
+
+    for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++)
+        if (gg_ieq(tag, map[i].tag)) return map[i].english;
+
+    return NULL;
+}
+
+const char *gguf_lang_english(const char *code)
+{
+    static const struct { const char *c, *name; } map[] = {
+        { "en", "English"    }, { "zh", "Chinese"    }, { "es", "Spanish"    },
+        { "fr", "French"     }, { "de", "German"     }, { "it", "Italian"    },
+        { "pt", "Portuguese" }, { "ru", "Russian"    }, { "ja", "Japanese"   },
+        { "ko", "Korean"     }, { "ar", "Arabic"     }, { "hi", "Hindi"      },
+        { "nl", "Dutch"      }, { "pl", "Polish"     }, { "tr", "Turkish"    },
+        { "vi", "Vietnamese" }, { "th", "Thai"       }, { "id", "Indonesian" },
+        { "sv", "Swedish"    }, { "cs", "Czech"      }, { "uk", "Ukrainian"  },
+        { "ro", "Romanian"   }, { "el", "Greek"      }, { "he", "Hebrew"     },
+        { "fa", "Persian"    }, { "bn", "Bengali"    }, { "ur", "Urdu"       },
+        { "ms", "Malay"      }, { "da", "Danish"     }, { "fi", "Finnish"    },
+        { "no", "Norwegian"  }, { "hu", "Hungarian"  }, { "bg", "Bulgarian"  },
+        { "hr", "Croatian"   }, { "sr", "Serbian"    }, { "sk", "Slovak"     },
+        { "ca", "Catalan"    }, { "ta", "Tamil"      }, { "te", "Telugu"     },
+        { "sw", "Swahili"    }, { "af", "Afrikaans"  }, { "et", "Estonian"   },
+    };
+
+    if (!code || !code[0]) return NULL;
+    for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++)
+        if (gg_ieq(code, map[i].c)) return map[i].name;
+
+    /* An unknown code is still worth showing — "speaks CY" is less use than
+     * "speaks Welsh" but far more use than pretending it speaks nothing. */
+    static char raw[16];
+    size_t i = 0;
+    for (; code[i] && i < sizeof(raw) - 1; i++)
+        raw[i] = (code[i] >= 'a' && code[i] <= 'z') ? (char)(code[i] - 32)
+                                                    : code[i];
+    raw[i] = '\0';
+    return raw;
+}
+
+void gguf_good_at(const syn_gguf_t *g, char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!g || !out || !len) return;
+
+    size_t o = 0;
+    for (int i = 0; i < g->n_tags; i++) {
+        const char *e = gguf_tag_english(g->tags[i]);
+        if (!e) continue;
+
+        /* The map folds synonyms together — "thinking" and "reasoning" both
+         * land on "reasoning" — so the same words arrive twice from files that
+         * carry both tags. Checked against what has been WRITTEN rather than
+         * against the tags, which is what makes the folding safe. */
+        int seen = 0;
+        for (size_t p = 0; p + strlen(e) <= o; p++)
+            if (memcmp(out + p, e, strlen(e)) == 0) { seen = 1; break; }
+        if (seen) continue;
+
+        int n = snprintf(out + o, len - o, "%s%s",
+                         o ? " \xc2\xb7 " : "", e);
+        if (n < 0 || (size_t)n >= len - o) { out[o] = '\0'; break; }
+        o += (size_t)n;
+    }
+}
+
+/* Named in full up to this many, then counted. Mistral Nemo lists nine, which
+ * is 567 pixels against a 464-pixel row — so the row was going to lose the tail
+ * either way, and losing it to "+3 more" says that it happened. */
+#define GG_LANGS_NAMED  6
+
+void gguf_langs_str(const syn_gguf_t *g, char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!g || !out || !len) return;
+
+    size_t o = 0;
+    int named = 0;
+    for (int i = 0; i < g->n_langs; i++) {
+        const char *e = gguf_lang_english(g->langs[i]);
+        if (!e) continue;
+
+        if (named == GG_LANGS_NAMED) {
+            snprintf(out + o, len - o, " +%d more", g->n_langs - i);
+            return;
+        }
+
+        int n = snprintf(out + o, len - o, "%s%s", o ? ", " : "", e);
+        if (n < 0 || (size_t)n >= len - o) {
+            /* Out of buffer with more to say — same honesty, different limit. */
+            snprintf(out + o, len - o, " +%d", g->n_langs - i);
+            return;
+        }
+        o += (size_t)n;
+        named++;
+    }
+}
+
+void gguf_based_on(const syn_gguf_t *g, char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!g || !out || !len) return;
+
+    if (g->base[0] && g->org[0])
+        snprintf(out, len, "%s by %s", g->base, g->org);
+    else if (g->base[0])
+        snprintf(out, len, "%s", g->base);
+    else if (g->org[0])
+        snprintf(out, len, "%s", g->org);
+}
+
+/*
+ * How many parameters this model has, in the least bad way available.
+ *
+ * general.parameter_count is the right answer and is absent from most real
+ * files — all four on this box omit it — so general.size_label ("12B") is
+ * parsed as the fallback. "8x7B" is read as the product, which is the total
+ * weight count rather than the active one; for choosing a size class, which is
+ * all this feeds, total is the figure that predicts the memory.
+ */
+static long long gg_param_est(const syn_gguf_t *g)
+{
+    if (g->params > 0) return g->params;
+    if (!g->size_label[0]) return -1;
+
+    const char *p = g->size_label;
+    char *e = NULL;
+    double v = strtod(p, &e);
+    if (e == p || v <= 0) return -1;
+
+    if (*e == 'x' || *e == 'X') {
+        const char *q = e + 1;
+        double v2 = strtod(q, &e);
+        if (e == q || v2 <= 0) return -1;
+        v *= v2;
+    }
+
+    if (*e == 'b' || *e == 'B') return (long long)(v * 1e9);
+    if (*e == 'm' || *e == 'M') return (long long)(v * 1e6);
+    return -1;
+}
+
+/*
+ * Failing both of those, the model's SHAPE.
+ *
+ * A dense transformer's weights are about 12·layers·width², which is the
+ * attention and feed-forward blocks; the embeddings add a few percent on top
+ * and are ignored. Checked against the two files here that state a count:
+ * Mistral 7B comes out at 6.4B against a real 7.24B, and MiniCPM5 1B at 0.85B
+ * against 1B — wrong by ten to fifteen percent, and both land in the right
+ * size class, which is the only thing this feeds.
+ *
+ * Deliberately NOT allowed anywhere a number is printed. "Params" stays a dash
+ * for a file that did not say, because a dash is honest and "6.4B" would be
+ * this arithmetic presented as something the file claimed. A mixture-of-experts
+ * model is under-counted by this — it has more weights than its dense shape
+ * implies — which is one more reason it only ever picks an adjective.
+ */
+static long long gg_param_shape(const syn_gguf_t *g)
+{
+    if (g->n_layers <= 0 || g->n_embd <= 0) return -1;
+    return 12LL * g->n_layers * g->n_embd * g->n_embd;
+}
+
+/* The size class, in the terms the choice is actually made in: how good is it
+ * going to be, and can this machine hold it. */
+static const char *gg_size_class(long long params)
+{
+    if (params <= 0)         return NULL;
+    if (params < 2500000000LL)  return "tiny";
+    if (params < 6000000000LL)  return "small";
+    if (params < 16000000000LL) return "mid-size";
+    if (params < 35000000000LL) return "large";
+    return "very large";
+}
+
+static const char *gg_size_note(long long params)
+{
+    if (params <= 0)         return NULL;
+    if (params < 2500000000LL)  return "very fast and light on memory, but it "
+                                       "gets things wrong more often";
+    if (params < 6000000000LL)  return "quick, and good enough for most "
+                                       "everyday questions";
+    if (params < 16000000000LL) return "the usual sweet spot on a desktop";
+    if (params < 35000000000LL) return "noticeably better answers, if the "
+                                       "machine can hold it";
+    return "the best answers here, and it needs the hardware to match";
+}
+
+/* What the quantisation cost. The code is already on screen as Quant; this is
+ * what the code MEANS, which is the part nobody memorises. Public because the
+ * download side of the picker asks you to choose one of these off a list, and
+ * that is the choice it exists to make. */
+const char *gguf_quant_english(const char *q)
+{
+    if (!q || !q[0]) return NULL;
+
+    if (strncmp(q, "F32", 3) == 0 || strncmp(q, "F16", 3) == 0 ||
+        strncmp(q, "BF16", 4) == 0)
+        return "uncompressed, so full quality and the biggest file";
+    if (strncmp(q, "Q8", 2) == 0)
+        return "barely compressed, so effectively full quality";
+    if (strncmp(q, "Q6", 2) == 0 || strncmp(q, "Q5", 2) == 0)
+        return "lightly compressed, very close to full quality";
+    if (strncmp(q, "Q4", 2) == 0 || strncmp(q, "IQ4", 3) == 0 ||
+        strncmp(q, "MXFP4", 5) == 0)
+        return "compressed — the usual balance of quality against size";
+    if (strncmp(q, "Q3", 2) == 0 || strncmp(q, "IQ3", 3) == 0)
+        return "heavily compressed, so the answers are rougher";
+    if (strncmp(q, "Q2", 2) == 0 || strncmp(q, "IQ2", 3) == 0 ||
+        strncmp(q, "IQ1", 3) == 0 || strncmp(q, "TQ", 2) == 0)
+        return "crushed to the smallest it goes, and it shows in the answers";
+    return NULL;
+}
+
+/* Tokens are not a unit anybody thinks in. Roughly three quarters of a word
+ * each, which is close enough for "can I paste this document into it". */
+static void gg_ctx_words(long long ctx, char *buf, size_t len)
+{
+    buf[0] = '\0';
+    if (ctx <= 0) return;
+
+    long long words = ctx * 3 / 4;
+    if (words >= 1000000LL)
+        snprintf(buf, len, "%.1f million words", (double)words / 1e6);
+    else if (words >= 1000LL)
+        snprintf(buf, len, "%lld thousand words", words / 1000);
+    else
+        snprintf(buf, len, "%lld words", words);
+}
+
+void gguf_bio(const syn_gguf_t *g, long long bytes, char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!g || !out || !len) return;
+
+    if (!g->ok) {
+        snprintf(out, len, "This file's header could not be read, so there is "
+                           "nothing here to go on.");
+        return;
+    }
+
+    /* The model's own words win. general.description is rare — none of the
+     * files on this box carry it — but a producer who bothered to write one
+     * has said something more specific than anything assembled from tags. */
+    if (g->description[0]) {
+        snprintf(out, len, "%s", g->description);
+        return;
+    }
+
+    size_t o = 0;
+    #define GG_SAY(...) do {                                        \
+        int n_ = snprintf(out + o, len - o, __VA_ARGS__);            \
+        if (n_ < 0 || (size_t)n_ >= len - o) { out[o] = '\0'; return; } \
+        o += (size_t)n_;                                             \
+    } while (0)
+
+    /* ── What it is ── */
+    if (g->is_embedding) {
+        /* Said first and said bluntly. Everything else about an embedding
+         * model is irrelevant to somebody looking for something to talk to. */
+        GG_SAY("An embedding model: it turns text into numbers so other "
+               "programs can search it. It cannot hold a conversation, and "
+               "loading it here will not give you one.");
+        return;
+    }
+
+    /* The size label is only quoted when the FILE stated a size. The shape
+     * estimate is good enough to choose the adjective and not good enough to
+     * print, so a file that named neither gets "A mid-size model" and no
+     * number — which is exactly as much as is actually known. */
+    long long stated = gg_param_est(g);
+    long long params = stated > 0 ? stated : gg_param_shape(g);
+    const char *cls  = gg_size_class(params);
+    const char *note = gg_size_note(params);
+
+    if (cls && g->size_label[0])
+        GG_SAY("A %s %s model", cls, g->size_label);
+    else if (cls)
+        GG_SAY("A %s model", cls);
+    else
+        GG_SAY("A model");
+
+    if (g->org[0]) GG_SAY(" from %s", g->org);
+
+    /* "Instruct", "Thinking" — the fine-tune is the difference between two
+     * files with the same base and the same size, and it is free text, so it
+     * is quoted into the sentence rather than read as a phrase. */
+    if (g->finetune[0]) GG_SAY(", the %s fine-tune", g->finetune);
+
+    if (note) GG_SAY(" — %s.", note);
+    else      GG_SAY(".");
+
+    /* ── What it costs ── */
+    const char *qn = gguf_quant_english(g->quant);
+    if (qn) GG_SAY(" %s: %s.", g->quant, qn);
+
+    if (bytes > 0) {
+        /* The weights plus the working memory around them. The multiplier is
+         * deliberately a rough one and the sentence says "about" — a precise
+         * figure here would be a false one, since the real cost moves with the
+         * context synapd actually opens.
+         *
+         * Below a gigabyte it is quoted in MB: "about 0.0 GB" is what a
+         * rounded figure does to a small model, and a zero is worse than no
+         * sentence at all. */
+        double mb = (double)bytes * 1.15 / (1024.0 * 1024.0);
+        if (mb >= 1024.0)
+            GG_SAY(" Expect it to use about %.1f GB of memory while it runs.",
+                   mb / 1024.0);
+        else
+            GG_SAY(" Expect it to use about %.0f MB of memory while it runs.",
+                   mb);
+    }
+
+    /* ── What it can take in ── */
+    char words[48];
+    gg_ctx_words(g->ctx, words, sizeof(words));
+    if (words[0])
+        GG_SAY(" It can keep about %s in view at once.", words);
+
+    #undef GG_SAY
+}
+
 int gguf_read(const char *path, syn_gguf_t *out)
 {
     if (!out) return 0;
@@ -343,6 +799,40 @@ int gguf_read(const char *path, syn_gguf_t *out)
             gg_str(&r, out->name, sizeof(out->name));
         } else if (strcmp(key, "general.size_label") == 0 && t == GGUF_T_STRING) {
             gg_str(&r, out->size_label, sizeof(out->size_label));
+        } else if (strcmp(key, "general.description") == 0 && t == GGUF_T_STRING) {
+            gg_str(&r, out->description, sizeof(out->description));
+        } else if (strcmp(key, "general.license") == 0 && t == GGUF_T_STRING) {
+            gg_str(&r, out->license, sizeof(out->license));
+        } else if (strcmp(key, "general.basename") == 0 && t == GGUF_T_STRING) {
+            gg_str(&r, out->basename, sizeof(out->basename));
+        } else if (strcmp(key, "general.finetune") == 0 && t == GGUF_T_STRING) {
+            gg_str(&r, out->finetune, sizeof(out->finetune));
+        } else if (strcmp(key, "general.organization") == 0 && t == GGUF_T_STRING) {
+            gg_str(&r, out->org, sizeof(out->org));
+        } else if (strcmp(key, "general.base_model.0.name") == 0 &&
+                   t == GGUF_T_STRING) {
+            gg_str(&r, out->base, sizeof(out->base));
+        } else if (strcmp(key, "general.base_model.0.organization") == 0 &&
+                   t == GGUF_T_STRING) {
+            /* Only as a fallback. general.organization is who made THIS file;
+             * the base model's is who made what it was built from, and the two
+             * differ on every fine-tune. Order in the header is not fixed, so
+             * the weaker source refuses to overwrite the stronger one rather
+             * than relying on arriving first. */
+            char tmp[sizeof(out->org)];
+            gg_str(&r, tmp, sizeof(tmp));
+            if (!out->org[0]) snprintf(out->org, sizeof(out->org), "%s", tmp);
+        } else if (strcmp(key, "general.tags") == 0) {
+            gg_str_array(&r, t, out->tags[0], sizeof(out->tags[0]),
+                         sizeof(out->tags[0]), SYN_GGUF_TAGS, &out->n_tags);
+        } else if (strcmp(key, "general.languages") == 0) {
+            gg_str_array(&r, t, out->langs[0], sizeof(out->langs[0]),
+                         sizeof(out->langs[0]), SYN_GGUF_LANGS, &out->n_langs);
+        } else if (dot && strcmp(suf, "pooling_type") == 0) {
+            /* Presence is the signal, not the value: only an embedding model
+             * pools its token vectors into one, and nothing else writes this. */
+            out->is_embedding = 1;
+            gg_skip_value(&r, t, 0);
         } else if (strcmp(key, "general.file_type") == 0) {
             if (gg_int_value(&r, t, &v)) {
                 const char *q = gg_ftype_name(v);

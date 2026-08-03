@@ -1992,6 +1992,66 @@ static void aimodel_fit(cairo_t *cr, const char *text, double max_w)
     }
 }
 
+/*
+ * Draw `text` wrapped to `w`, at most `max_lines` of them, and return the y
+ * just past the last line drawn.
+ *
+ * The pane's other text is all short enough to be one line and ellipsised by
+ * aimodel_fit when it is not. The bio is a paragraph, and a paragraph that
+ * ellipsises at the first line is a paragraph that was not worth assembling —
+ * hence a second text routine rather than a wider call to the first.
+ *
+ * Every line goes out through aimodel_fit, so a single word wider than the
+ * pane is cut with an ellipsis instead of running into the frame, and the
+ * UTF-8 sanitising that keeps cairo out of a permanent error state applies
+ * here too. When the text outruns max_lines the remainder is handed to the
+ * last line whole, so it ends in an ellipsis rather than stopping mid-sentence
+ * as though that were the end of it.
+ */
+static int aimodel_wrap(cairo_t *cr, const char *text, int x, int y,
+                        double w, int lh, int max_lines)
+{
+    char safe[768];
+    syn_utf8_copy(safe, sizeof(safe), text ? text : "");
+
+    const char *p = safe;
+    int drawn = 0;
+
+    while (*p && drawn < max_lines) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+
+        /* Take words until one does not fit; `end` trails the last that did.
+         * The first word of a line is taken unconditionally — otherwise a word
+         * wider than the pane makes no progress and this loops forever. */
+        const char *end = p, *scan = p;
+        for (;;) {
+            while (*scan && *scan != ' ') scan++;
+
+            char trial[768];
+            snprintf(trial, sizeof(trial), "%.*s", (int)(scan - p), p);
+            cairo_text_extents_t ext;
+            cairo_text_extents(cr, trial, &ext);
+            if (ext.x_advance > w && end > p) break;
+
+            end = scan;
+            while (*scan == ' ') scan++;
+            if (!*scan) break;
+        }
+
+        char line[768];
+        int last = (drawn == max_lines - 1);
+        snprintf(line, sizeof(line), "%.*s", (int)(end - p), p);
+
+        cairo_move_to(cr, x, y + drawn * lh);
+        aimodel_fit(cr, (last && *end) ? p : line, w);
+        drawn++;
+        p = end;
+    }
+
+    return y + drawn * lh;
+}
+
 /* "1.2M", "834K" — a download count is a rough sense of how used a model is,
  * not a figure anybody reads to the digit. */
 static void aimodel_count_str(long long n, char *out, size_t len)
@@ -2212,15 +2272,93 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
                 aimodel_fit(cr, g->err[0] ? g->err : "unreadable header", w);
             }
 
+            /*
+             * ── What this model is FOR ──────────────────────────────────
+             *
+             * Everything above this point is a measurement, and velle's
+             * complaint was that a pane full of them still does not tell you
+             * whether to pick the thing: "there's info but nothing that helps
+             * decide to use that an end user would understand". "Arch
+             * nomic-bert" is the sharpest example — a true statement that
+             * hides the fact that the file cannot hold a conversation at all.
+             *
+             * So the same header gets read a second way, in sentences. Nothing
+             * here is invented: it is general.tags, general.languages,
+             * general.license and the base model, which were being parsed past
+             * until now, plus the size and quantisation already on screen said
+             * in words rather than in codes.
+             */
+            int by = wy + 26;
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+            cairo_move_to(cr, x, by);
+            cairo_show_text(cr, "ABOUT");
+
+            /* The three facts that are lists rather than prose. Each is
+             * skipped when the file did not say — a row of dashes here would
+             * be four lines saying nothing, and the pane's whole problem was
+             * lines that say nothing. */
+            char good[160], langs[160], based[160];
+            gguf_good_at(g, good, sizeof(good));
+            gguf_langs_str(g, langs, sizeof(langs));
+            gguf_based_on(g, based, sizeof(based));
+
+            struct { const char *k, *v; } about[4] = {
+                { "Good at",  good              },
+                { "Speaks",   langs             },
+                { "License",  g ? g->license : "" },
+                { "Based on", based             },
+            };
+
+            /* The rows below are counted BEFORE the paragraph is drawn, and
+             * the paragraph gets what is left. Sized the other way round, a
+             * five-line bio on a model that also names four facts would push
+             * the last of them under the footer — and it is the facts that get
+             * dropped in that arrangement, which is backwards: they are the
+             * shortest and most specific things on the pane. */
+            int n_rows = 0;
+            for (int i = 0; i < 4; i++)
+                if (about[i].v && about[i].v[0]) n_rows++;
+
+            char bio[512];
+            gguf_bio(g, m->bytes, bio, sizeof(bio));
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, 0.74, 0.76, 0.86, 1.0);
+
+            int bio_top = by + 22;
+            int budget  = (body_bottom - 8 - n_rows * 19 - 10 - bio_top) / 17;
+            if (budget < 2) budget = 2;    /* never nothing; it ellipsises */
+            if (budget > 8) budget = 8;
+
+            int ly = aimodel_wrap(cr, bio, x, bio_top, w, 17, budget) + 10;
+
+            for (int i = 0; i < 4; i++) {
+                if (!about[i].v || !about[i].v[0]) continue;
+                if (ly > body_bottom - 8) break;   /* never into the footer */
+                cairo_set_font_size(cr, 11);
+                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                cairo_move_to(cr, x, ly);
+                cairo_show_text(cr, about[i].k);
+                cairo_set_font_size(cr, 12);
+                cairo_set_source_rgba(cr, 0.72, 0.74, 0.84, 1.0);
+                cairo_move_to(cr, x + 70, ly);
+                aimodel_fit(cr, about[i].v, w - 70);
+                ly += 19;
+            }
+
+            /* Anchored to the bottom of the pane rather than to the block
+             * above it, the way the repo side already does it: the block above
+             * is now a variable number of lines, and a footer that floated
+             * with it would sit in a different place for every model. */
             cairo_set_font_size(cr, 12);
             if (am->selected == am->loaded_idx) {
                 set_accent(cr, 1.0);
-                cairo_move_to(cr, x, wy + 24);
+                cairo_move_to(cr, x, body_bottom + 22);
                 cairo_show_text(cr, am->switching ? "loading \xe2\x80\xa6"
                                                   : "this is the model synapd is running");
             } else {
                 cairo_set_source_rgba(cr, 0.6, 0.6, 0.72, 1.0);
-                cairo_move_to(cr, x, wy + 24);
+                cairo_move_to(cr, x, body_bottom + 22);
                 cairo_show_text(cr, "[ Enter: load this model ]");
             }
         }
@@ -2247,13 +2385,22 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     aimodel_count_str(c->downloads, dls, sizeof(dls));
     aimodel_size_str(f ? f->bytes : -1, szbuf, sizeof(szbuf));
 
-    struct { const char *k, *v; } det[4];
+    /* The quantisation list below is the choice this pane exists to make, and
+     * "IQ3_XS" is not a thing anybody can choose on. The selected one gets a
+     * line saying what it costs — the same words the installed side uses, so
+     * the file reads the same before and after it is downloaded. */
+    char qual[96];
+    const char *qe = f ? gguf_quant_english(f->quant) : NULL;
+    snprintf(qual, sizeof(qual), "%s", qe ? qe : "\xe2\x80\x94");
+
+    struct { const char *k, *v; } det[5];
     det[0].k = "Params";   det[0].v = c->params[0] ? c->params : "\xe2\x80\x94";
     det[1].k = "Download"; det[1].v = f ? szbuf : "\xe2\x80\x94";
-    det[2].k = "License";  det[2].v = c->license[0] ? c->license : "\xe2\x80\x94";
-    det[3].k = "Pulls";    det[3].v = dls;
+    det[2].k = "Quality";  det[2].v = qual;
+    det[3].k = "License";  det[3].v = c->license[0] ? c->license : "\xe2\x80\x94";
+    det[4].k = "Pulls";    det[4].v = dls;
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         int ry = y + 46 + i * 20;
         cairo_set_font_size(cr, 12);
         cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
@@ -2265,7 +2412,8 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     }
 
     /* ── The quantisations ───────────────────────────────────────────── */
-    int fy = y + 142;
+    /* Moved down by the Quality row above it, which now ends at y + 126. */
+    int fy = y + 154;
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
     cairo_move_to(cr, x, fy);
