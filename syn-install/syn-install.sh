@@ -3013,12 +3013,29 @@ arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
 mkdir -p /mnt/var/lib/synapseos
 echo "firstboot completed by installer: $(date)" > /mnt/var/lib/synapseos/firstboot.done
 
-# tmpfiles for synapd
-cat > /mnt/etc/tmpfiles.d/synapd.conf << 'EOF'
-d /run/synapd 0755 root root -
-d /var/lib/synapd 0755 root root -
-d /var/lib/synapd/models 0755 root root -
-EOF
+# tmpfiles for synapd — NOT written here any more, and the stale copy is removed.
+#
+# synapd ships /usr/lib/tmpfiles.d/synapd.conf itself, and has since it gained an
+# unprivileged user. A file of the same name in /etc/tmpfiles.d SHADOWS it
+# completely (systemd takes the first match by basename, /etc before /usr/lib) —
+# so this block, written once at install time and never updated again, silently
+# reverted every later ownership change the package made.
+#
+# What it cost: the package declares
+#   d /var/lib/synapd 0750 synapd synapd
+# and this said `0755 root root`. synapd runs as uid 964, so it could not create
+# /var/lib/synapd/model.selected and logged "cannot record the model choice …
+# Permission denied" on every switch. The remembered-model feature (synapd
+# 0.1.0-28) has therefore never worked on ANY installed system — the daemon fell
+# back to its --model flag after every restart, which is the exact bug that
+# feature was written to fix.
+#
+# The removal is unconditional and idempotent: an upgraded box still carries the
+# old file, and nothing else would ever take it away — it is unowned, so pacman
+# will not, and `Z` in the package's own config cannot fix a directory whose
+# ownership the shadowing file keeps re-asserting.
+rm -f /mnt/etc/tmpfiles.d/synapd.conf
+arch-chroot /mnt systemd-tmpfiles --create /usr/lib/tmpfiles.d/synapd.conf 2>/dev/null || true
 
 # The encryption hook is what prompts for the passphrase at boot and opens the
 # root volume. WHICH hook depends on how the initramfs is built, and getting it

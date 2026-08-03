@@ -1,0 +1,56 @@
+# synapd.install — remove the /etc tmpfiles copy that shadows ours.
+#
+# syn-install used to write /etc/tmpfiles.d/synapd.conf at install time:
+#
+#     d /var/lib/synapd 0755 root root -
+#
+# systemd resolves tmpfiles.d by BASENAME, /etc before /usr/lib, so that file
+# completely shadowed the /usr/lib/tmpfiles.d/synapd.conf this package ships —
+# and ours says `0750 synapd synapd`, because synapd stopped running as root.
+#
+# The consequence was silent and total: /var/lib/synapd stayed root-owned, the
+# unprivileged daemon could not create /var/lib/synapd/model.selected, and every
+# model switch logged "cannot record the model choice … Permission denied" and
+# then forgot the choice on restart. The remembered-model feature shipped in
+# 0.1.0-28 and has never once worked on an installed system.
+#
+# pacman will not clean this up on its own: the file is UNOWNED, so no package
+# lists it. And the `Z` line in our own config cannot win, because the shadowing
+# file re-asserts root ownership on every boot. It has to be deleted.
+#
+# Removed only when it is unowned AND matches what the installer wrote, so a
+# deliberate local override — someone who really does want different ownership —
+# is left alone and merely warned about.
+_synapd_drop_shadow() {
+    local f=/etc/tmpfiles.d/synapd.conf
+    [ -e "$f" ] || return 0
+
+    if pacman -Qo "$f" >/dev/null 2>&1; then
+        return 0            # owned by something else; not ours to touch
+    fi
+
+    if grep -q '^d /var/lib/synapd 0755 root root' "$f" 2>/dev/null; then
+        rm -f "$f"
+        echo ":: removed the stale /etc/tmpfiles.d/synapd.conf — it shadowed this"
+        echo "   package's copy and kept /var/lib/synapd root-owned, so the daemon"
+        echo "   could not remember which model you picked."
+    else
+        echo ":: NOTE: /etc/tmpfiles.d/synapd.conf shadows this package's copy in"
+        echo "   /usr/lib/tmpfiles.d. It does not look like the installer's old"
+        echo "   version, so it has been left alone — but if /var/lib/synapd is not"
+        echo "   owned by the synapd user, model choices will not persist."
+    fi
+}
+
+post_install() {
+    _synapd_drop_shadow
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/synapd.conf >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+    _synapd_drop_shadow
+    # Re-applied on every upgrade, not just the one that removes the shadow: a
+    # box whose /var/lib/synapd was created root-owned needs the `Z` line to
+    # actually run once nothing is shadowing it any more.
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/synapd.conf >/dev/null 2>&1 || true
+}
