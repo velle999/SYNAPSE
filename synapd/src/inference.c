@@ -64,6 +64,13 @@ struct synapd_inference {
     float                 top_p;
     int                   top_k;
 
+    /* The model's OWN chat template, straight out of its GGUF metadata
+     * (tokenizer.chat_template). Owned by the model — do not free.
+     * NULL means the GGUF declares none, which selects the legacy fallback
+     * format in build_prompt(). */
+    const char           *chat_tmpl;
+    int                   tmpl_warned;  /* fallback warning is once, not per query */
+
     /* Stats */
     uint64_t total_tokens_in;
     uint64_t total_tokens_out;
@@ -281,6 +288,29 @@ int inference_init(synapd_state_t *s) {
                 s->config.embed_model_path);
     }
 
+    /* ── Chat template ───────────────────────────────────────────────────
+     * Ask the model what turn format it was trained on instead of assuming.
+     * synapd hardcoded a Zephyr-style <|system|>/<|user|>/<|assistant|>
+     * prompt for every model it ever loaded, while the models it actually
+     * ships (Mistral 7B Instruct, Mistral Nemo) want [INST] ... [/INST].
+     * Mistral answers anyway, which is exactly why it went unnoticed —
+     * the format was wrong on every query and nothing ever said so.
+     *
+     * NULL here is not an error: a GGUF with no tokenizer.chat_template
+     * falls back to the legacy format in build_prompt(). */
+    inf->chat_tmpl = llama_model_chat_template(inf->model, NULL);
+
+    char mname[128] = {0};
+    if (llama_model_meta_val_str(inf->model, "general.name",
+                                 mname, sizeof(mname)) <= 0)
+        snprintf(mname, sizeof(mname), "(unnamed)");
+
+    if (inf->chat_tmpl)
+        syn_log(LOG_INFO, "inference: chat template from GGUF — model \"%s\"", mname);
+    else
+        syn_log(LOG_WARNING, "inference: model \"%s\" declares NO chat template; "
+                "using legacy <|system|>/<|user|> format", mname);
+
     s->inference   = inf;
     s->model_loaded = 1;
 
@@ -288,6 +318,64 @@ int inference_init(synapd_state_t *s) {
              (long long)llama_model_n_params(inf->model));
 
     return 0;
+}
+
+/* ── Prompt construction ──────────────────────────────────── */
+
+/* The built-in persona, used when no caller supplied a system context. */
+#define SYNAPSE_PERSONA \
+    "You are Synapse, the AI core of SynapseOS. " \
+    "You assist with system administration, code, and OS-level tasks. " \
+    "Be concise and precise. Reference system context when relevant."
+
+/*
+ * Format one system+user exchange with the model's own chat template.
+ *
+ * Returns a malloc'd prompt, or NULL to mean "no usable template" — the
+ * caller then falls back to the legacy format rather than sending the model
+ * something half-applied.
+ *
+ * Note llama_chat_apply_template() is not a Jinja parser; it substring-matches
+ * a fixed list of known templates. Verified against both shipped models:
+ * Mistral Nemo's elaborate Jinja and Mistral 7B v0.2's both resolve to the
+ * [INST] family, and both fold the system role into the first user turn —
+ * which matters because v0.2's template rejects a system role outright.
+ */
+static char *apply_chat_template(synapd_inference_t *inf,
+                                 const char *system_ctx,
+                                 const char *user)
+{
+    if (!inf->chat_tmpl) return NULL;
+
+    struct llama_chat_message msg[2];
+    size_t n = 0;
+    if (system_ctx && *system_ctx) {
+        msg[n].role = "system"; msg[n].content = system_ctx; n++;
+    }
+    msg[n].role = "user"; msg[n].content = user; n++;
+
+    /* llama.cpp's own recommendation is 2x the message bytes; the markers it
+     * adds are small next to the content. A short prompt still gets headroom. */
+    size_t body = strlen(user) + (system_ctx ? strlen(system_ctx) : 0);
+    int32_t cap = (int32_t)(body * 2 + 256);
+    char *buf = malloc(cap);
+    if (!buf) return NULL;
+
+    int32_t r = llama_chat_apply_template(inf->chat_tmpl, msg, n, true, buf, cap);
+
+    /* Undersized: the return value is the exact size needed, so this retries
+     * once and cannot loop. Keep one spare byte for the NUL. */
+    if (r >= cap) {
+        char *nb = realloc(buf, (size_t)r + 1);
+        if (!nb) { free(buf); return NULL; }
+        buf = nb;
+        cap = r + 1;
+        r = llama_chat_apply_template(inf->chat_tmpl, msg, n, true, buf, cap);
+    }
+
+    if (r < 0 || r >= cap) { free(buf); return NULL; }
+    buf[r] = '\0';
+    return buf;
 }
 
 /* ── Core inference call ──────────────────────────────────── */
@@ -321,32 +409,47 @@ int inference_run(synapd_state_t *s,
 
     /* Build full prompt with optional system context */
     char *full_prompt = NULL;
-    int plen;
+    int plen = 0;
 
-    if (system_ctx && *system_ctx) {
-        plen = asprintf(&full_prompt,
-            "<|system|>\n%s\n<|user|>\n%s\n<|assistant|>\n",
-            system_ctx, prompt);
-    } else if (raw) {
+    if (raw && !(system_ctx && *system_ctx)) {
         /* Raw agentic client with no system_ctx: send the prompt VERBATIM so the
          * client owns the ENTIRE chat template — turn markers, tool results, and
-         * the trailing <|assistant|> generation cue. Wrapping it in one more
-         * <|user|> turn made the model leak template tokens and hallucinate extra
-         * turns, because it saw a half-applied template it tried to complete. */
+         * the trailing generation cue. Wrapping it in one more user turn made the
+         * model leak template tokens and hallucinate extra turns, because it saw
+         * a half-applied template it tried to complete.
+         *
+         * This stays byte-exact now that synapd applies templates itself: the
+         * whole point of the flag is that synapd must not second-guess a client
+         * that already formatted its own conversation. */
         plen = asprintf(&full_prompt, "%s", prompt);
     } else {
-        plen = asprintf(&full_prompt,
-            "<|system|>\nYou are Synapse, the AI core of SynapseOS. "
-            "You assist with system administration, code, and OS-level tasks. "
-            "Be concise and precise. Reference system context when relevant.\n"
-            "<|user|>\n%s\n<|assistant|>\n",
-            prompt);
+        const char *sys = (system_ctx && *system_ctx) ? system_ctx : SYNAPSE_PERSONA;
+
+        full_prompt = apply_chat_template(inf, sys, prompt);
+        if (full_prompt) {
+            plen = (int)strlen(full_prompt);
+        } else {
+            /* No usable template — legacy format, exactly as before, so a
+             * template-less GGUF behaves the way it always did. */
+            if (!inf->tmpl_warned) {
+                inf->tmpl_warned = 1;   /* under inf->lock */
+                syn_log(LOG_WARNING, "inference: no usable chat template; "
+                        "falling back to legacy <|system|>/<|user|> format");
+            }
+            plen = asprintf(&full_prompt,
+                "<|system|>\n%s\n<|user|>\n%s\n<|assistant|>\n", sys, prompt);
+        }
     }
 
     if (plen < 0 || !full_prompt) {
         pthread_mutex_unlock(&inf->lock);
         return -1;
     }
+
+    /* The opening bytes are the turn markers, which is the one thing you cannot
+     * infer from a reply: a mis-formatted prompt still produces fluent text.
+     * Truncated hard, and DEBUG-only, so a normal log never carries prompt text. */
+    syn_log(LOG_DEBUG, "inference: prompt %d bytes, opens: %.80s", plen, full_prompt);
 
     /* Tokenize */
     int n_prompt_tokens = -llama_tokenize(
