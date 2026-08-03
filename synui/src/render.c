@@ -2758,7 +2758,10 @@ void synui_render_aimodel(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         set_accent(cr, 0.9);
         cairo_move_to(cr, 18, ph - 52);
-        syn_show_text(cr, am->status);
+        /* Clipped now that this carries llama.cpp's own failure text, which is
+         * as long as llama felt like making it. It used to hold "loaded" and
+         * "already loaded", so running past the frame was not reachable. */
+        aimodel_fit(cr, am->status, pw - 36);
     }
 
     cairo_set_font_size(cr, 12);

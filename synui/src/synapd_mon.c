@@ -92,6 +92,14 @@ typedef struct {
     float         top_p;
     int           top_k;
 
+    /* The last switch that FAILED, added in synapd 0.1.0-29. A failed switch
+     * restores the previous model, so every field above goes back to exactly
+     * what it was and there is otherwise no trace at all — which is how the
+     * picker came to sit on "loading …" for a model that could never load.
+     * Empty against an older synapd, and empty once a switch succeeds. */
+    char          switch_file[128]; /* the file that would not load */
+    char          switch_err[192];  /* llama.cpp's reason, in its own words */
+
     int           activity_n;
     char          activity[OVERLAY_ACTIVITY_MAX][100];
 } synmon_snapshot_t;
@@ -260,6 +268,14 @@ static void parse_status(const char *s, synmon_snapshot_t *snap)
     if ((p = strstr(s, "temp=")))   snap->temperature = strtof(p + 5, NULL);
     if ((p = strstr(s, "top_p=")))  snap->top_p       = strtof(p + 6, NULL);
     if ((p = strstr(s, "top_k=")))  snap->top_k       = atoi(p + 6);
+
+    /* Failed-switch block (synapd >= 0.1.0-29), and the reason these are read
+     * with strstr like everything else: they are appended AFTER the detail
+     * block, so an older daemon simply never matches. */
+    if ((p = strstr(s, "switch_file=\"")))
+        copy_quoted(p + 13, snap->switch_file, sizeof(snap->switch_file));
+    if ((p = strstr(s, "switch_err=\"")))
+        copy_quoted(p + 12, snap->switch_err, sizeof(snap->switch_err));
 }
 
 /* CONTEXT_GET returns a header line then one line per recent event
@@ -325,7 +341,12 @@ static void *synmon_thread_fn(void *arg)
 
         synmon_snapshot_t snap;
         memset(&snap, 0, sizeof(snap));
-        char sbuf[512], cbuf[8192];
+        /* sbuf was 512 while synapd's status line was 256. The line grew to
+         * 640 with the model detail block and to 1024 with the failed-switch
+         * reason on the end — and because the new keys are APPENDED, a short
+         * buffer here does not lose a little of the value, it loses the whole
+         * field silently. Sized to synapd's own buffer; keep the two together. */
+        char sbuf[1024], cbuf[8192];
 
         if (synmon_request(fd, SYN_MSG_STATUS, sbuf, sizeof(sbuf)) == 0) {
             snap.online = 1;
@@ -389,6 +410,8 @@ static int synmon_readable(int fd, uint32_t mask, void *data)
      * values would leave the panel showing a model that is no longer loaded. */
     snprintf(ov->model_name, sizeof(ov->model_name), "%s", snap.model_name);
     snprintf(ov->model_file, sizeof(ov->model_file), "%s", snap.model_file);
+    snprintf(ov->switch_file, sizeof(ov->switch_file), "%s", snap.switch_file);
+    snprintf(ov->switch_err, sizeof(ov->switch_err), "%s", snap.switch_err);
     snprintf(ov->format,     sizeof(ov->format),     "%s", snap.format);
     snprintf(ov->profile,    sizeof(ov->profile),    "%s", snap.profile);
     ov->temperature = snap.temperature;

@@ -1384,20 +1384,76 @@ void aimodel_toggle(syn_server_t *s)
  * has to finish the same way, and a second copy of "is it done yet" is exactly
  * the kind of thing that would come to disagree.
  */
+/*
+ * How long a switch may sit unstarted before an unchanged daemon is read as a
+ * failure rather than as one about to begin.
+ *
+ * Only used when the "loading" state was never observed — the poll runs about
+ * once a second and a small model can load between two of them. Six seconds is
+ * far longer than synapd takes to accept a request and spawn the thread, and
+ * far shorter than any real load, so neither end of it is a close call.
+ */
+#define AIMODEL_SWITCH_GRACE 6.0
+
 static void aimodel_settle(syn_server_t *s)
 {
     syn_aimodel_t *am = &s->aimodel;
-    int valid_sel = (am->selected >= 0 && am->selected < am->count);
 
-    if (am->switching && valid_sel &&
-        strcmp(s->overlay.model, "loaded") == 0 &&
-        strcmp(s->overlay.model_file, am->models[am->selected].name) == 0) {
-        /* Both conditions matter. "loaded" alone is still true for the OLD
-         * model in the moment between the request being accepted and synapd
-         * taking the write lock, so waiting on the filename too is what stops
-         * the panel calling a switch done before it has begun. */
-        am->switching = 0;
-        snprintf(am->status, sizeof(am->status), "loaded");
+    if (am->switching) {
+        const char *state = s->overlay.model;
+        const char *file  = s->overlay.model_file;
+
+        /* Proof the daemon actually started. Once this is seen, a report of
+         * anything other than the requested file is a finished attempt. */
+        if (strcmp(state, "loading") == 0) am->switch_seen_loading = 1;
+
+        int settled = (strcmp(state, "loaded") == 0);
+        int arrived = settled && strcmp(file, am->switch_file) == 0;
+
+        if (arrived) {
+            /* Both conditions matter. "loaded" alone is still true for the OLD
+             * model in the moment between the request being accepted and
+             * synapd taking the write lock, so waiting on the filename too is
+             * what stops the panel calling a switch done before it has begun.
+             *
+             * Matched against switch_file rather than the row under the
+             * cursor: the cursor moves while several GB load, and a switch
+             * that finished must settle against what was ASKED FOR. */
+            am->switching = 0;
+            snprintf(am->status, sizeof(am->status), "loaded");
+        } else if ((settled || strcmp(state, "none") == 0) &&
+                   (am->switch_seen_loading ||
+                    aimodel_now() - am->switch_at > AIMODEL_SWITCH_GRACE)) {
+            /*
+             * It finished, and what came back is not what was asked for.
+             *
+             * synapd restores the previous model when a load fails, so the
+             * daemon ends up looking EXACTLY as it did before the request —
+             * which is why this branch did not exist and why the panel sat on
+             * "loading …" forever, refusing every later pick with "still
+             * loading · wait for it to finish". There was nothing to wait for.
+             *
+             * The reason comes from synapd, which now carries llama.cpp's own
+             * words. Against an older daemon that field is empty and the panel
+             * says only that it failed — still infinitely better than a
+             * spinner that never stops.
+             */
+            const char *why = s->overlay.switch_err;
+            int mine = (s->overlay.switch_file[0] == '\0') ||
+                       (strcmp(s->overlay.switch_file, am->switch_file) == 0);
+
+            am->switching = 0;
+            if (why[0] && mine)
+                snprintf(am->status, sizeof(am->status),
+                         "could not load \xc2\xb7 %s", why);
+            else
+                snprintf(am->status, sizeof(am->status),
+                         "could not load \xc2\xb7 synapd is still running %s",
+                         file[0] ? file : "nothing");
+
+            wlr_log(WLR_ERROR, "synui: switch to %s failed: %s",
+                    am->switch_file, why[0] ? why : "(no reason reported)");
+        }
     }
 
     aimodel_mark_loaded(s);
@@ -1479,6 +1535,15 @@ static int aimodel_load_selected(syn_server_t *s)
 
     am->switching  = 1;
     am->loaded_idx = am->selected;
+
+    /* What was asked for, and when — not the row index. The cursor moves while
+     * several GB load, so an index cannot say afterwards which file this was,
+     * and settling is now a three-way question (arrived / failed / not yet)
+     * rather than the one-way one it used to be. */
+    snprintf(am->switch_file, sizeof(am->switch_file), "%s", name);
+    am->switch_at           = aimodel_now();
+    am->switch_seen_loading = 0;
+
     snprintf(am->status, sizeof(am->status), "loading \xe2\x80\xa6");
     wlr_log(WLR_INFO, "synui: switching synapd to %s", name);
     return 1;

@@ -36,6 +36,87 @@
 /* Offload every layer. llama clamps this down to the model's real layer count. */
 #define GPU_LAYERS_ALL 999
 
+/* ── Why the last load failed ─────────────────────────────────────────────
+ *
+ * llama.cpp knows exactly why it refused a file — "unknown pre-tokenizer type:
+ * 'minicpm5'" is a complete diagnosis — and it says so to a log callback that
+ * nothing was reading. The daemon then reported the switch as a bare failure,
+ * and the picker reported it as nothing at all, so the only way to find out
+ * was `journalctl -u synapd`. That is a fine answer for whoever wrote the
+ * daemon and no answer at all for whoever is choosing a model.
+ *
+ * So the callback is installed, the last ERROR line is kept, and the switch
+ * puts it where the picker can read it. Everything still goes to stderr
+ * exactly as before — systemd captures that, and the full llama log is worth
+ * far more than the one line held here.
+ */
+static pthread_mutex_t g_llama_err_lock = PTHREAD_MUTEX_INITIALIZER;
+static char            g_llama_err[192];
+
+static void llama_log_capture(enum ggml_log_level level, const char *text,
+                              void *user) {
+    (void)user;
+
+    /* Unchanged routing first. llama emits partial lines (progress dots), so
+     * this must be a raw write and not a syn_log() line per fragment. */
+    if (text) fputs(text, stderr);
+
+    if (level != GGML_LOG_LEVEL_ERROR || !text) return;
+
+    /* Keep the FIRST error of a failed load, not the last. llama follows a
+     * real diagnosis with generic wrappers — "failed to load model" — and the
+     * wrapper would overwrite the sentence that actually says why. Cleared at
+     * the start of each load, so "first since then" is what this means. */
+    pthread_mutex_lock(&g_llama_err_lock);
+    if (!g_llama_err[0]) {
+        size_t n = strlen(text);
+        while (n > 0 && (text[n - 1] == '\n' || text[n - 1] == '\r')) n--;
+
+        /*
+         * llama prefixes its errors with the function that raised them:
+         * "llama_model_load: error loading model: unknown pre-tokenizer …".
+         * Nobody choosing a model needs the C symbol, so leading
+         * "<identifier>: " runs are stripped.
+         *
+         * Only an IDENTIFIER, and only from the front. Splitting on the last
+         * ": " would read better on this particular message and would eat the
+         * path out of the next one — "failed to open: /var/lib/…: No such
+         * file" would arrive as "No such file". A prefix that is a bare C
+         * symbol is never the content; anything with a space in it might be.
+         */
+        const char *msg = text;
+        for (;;) {
+            const char *p = msg;
+            while (p < text + n &&
+                   (*p == '_' || (*p >= 'a' && *p <= 'z') ||
+                    (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9')))
+                p++;
+            if (p == msg || p + 2 > text + n || p[0] != ':' || p[1] != ' ')
+                break;
+            msg = p + 2;
+        }
+
+        n -= (size_t)(msg - text);
+        if (n >= sizeof(g_llama_err)) n = sizeof(g_llama_err) - 1;
+        memcpy(g_llama_err, msg, n);
+        g_llama_err[n] = '\0';
+    }
+    pthread_mutex_unlock(&g_llama_err_lock);
+}
+
+void inference_error_reset(void) {
+    pthread_mutex_lock(&g_llama_err_lock);
+    g_llama_err[0] = '\0';
+    pthread_mutex_unlock(&g_llama_err_lock);
+}
+
+void inference_error_get(char *buf, size_t len) {
+    if (!buf || !len) return;
+    pthread_mutex_lock(&g_llama_err_lock);
+    snprintf(buf, len, "%s", g_llama_err);
+    pthread_mutex_unlock(&g_llama_err_lock);
+}
+
 /* ── Internal state ───────────────────────────────────────── */
 struct synapd_inference {
     struct llama_model   *model;
@@ -257,6 +338,14 @@ int inference_init(synapd_state_t *s) {
 
     syn_log(LOG_INFO, "inference: loading model %s (ctx=%u threads=%d gpu_layers=%d)",
              inf->model_path, inf->context_size, inf->n_threads, inf->n_gpu_layers);
+
+    /* Installed here rather than once at startup because this is the only
+     * place that cares, and setting it every load is idempotent. The reset
+     * immediately after is what makes "the first error" mean "the first error
+     * of THIS load" — a previous failure's reason must never be reported
+     * against a later file. */
+    llama_log_set(llama_log_capture, NULL);
+    inference_error_reset();
 
     /* llama.cpp model params */
     struct llama_model_params mparams = llama_model_default_params();

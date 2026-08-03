@@ -239,6 +239,23 @@ typedef struct synapd_state {
      * so a query during sleep can say so instead of "no model". */
     _Atomic int         model_sleeping;
 
+    /*
+     * The last switch that failed, and llama.cpp's reason for it.
+     *
+     * A failed switch restores the previous model, so every observable field
+     * goes back to what it was and the daemon looks exactly as it did before
+     * the request — which is why the picker sat on "loading …" forever. These
+     * two are the only trace, and they ride on STATUS so the caller learns the
+     * outcome from the same poll it was already watching.
+     *
+     * Written only by switch_thread() under the model write lock, read by
+     * handle_status() without one: they are fixed-size buffers that go from
+     * one complete string to another, and a status poll that catches the
+     * previous value is a poll one round trip early.
+     */
+    char                switch_file[128];   /* the file that would not load */
+    char                switch_err[192];    /* "unknown pre-tokenizer type…" */
+
 } synapd_state_t;
 
 /* ── Forward declarations ─────────────────────────────────── */

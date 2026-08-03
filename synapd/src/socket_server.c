@@ -273,9 +273,10 @@ static void handle_sched_hint(work_item_t *w) {
 }
 
 static void handle_status(work_item_t *w) {
-    /* Was 256 and full. The detail block adds a quoted model name and the
-     * resolved prompt format, either of which can be long. */
-    char buf[640];
+    /* Was 256 and full, then 640. The detail block adds a quoted model name
+     * and the resolved prompt format, either of which can be long, and the
+     * failure block on the end adds a filename plus llama's own sentence. */
+    char buf[1024];
     int n = snprintf(buf, sizeof(buf),
         "synapd/%s model=%s requests=%lu active=%lu ctx_used=%u ctx_window=%u",
         SYNAPD_VERSION,
@@ -294,6 +295,26 @@ static void handle_status(work_item_t *w) {
      * compatible while reordering the old ones would not be. */
     if (n > 0 && (size_t)n < sizeof(buf))
         inference_describe(w->state, buf + n, sizeof(buf) - (size_t)n);
+
+    /* Last, after the describe block, for the same append-only reason. Omitted
+     * entirely when nothing has failed, so a client that never looks for it is
+     * unaffected and one that does can tell "no failure" from "empty reason".
+     *
+     * The quotes matter: llama's messages contain spaces and its own quotes
+     * around the offending value ("unknown pre-tokenizer type: 'minicpm5'"),
+     * and synui's parser reads a quoted value to the closing double quote.
+     * Single quotes inside are therefore fine; a double quote is not, so any
+     * that appear are flattened rather than allowed to end the field early. */
+    n = (int)strlen(buf);
+    if (w->state->switch_err[0] && (size_t)n < sizeof(buf)) {
+        char safe[sizeof(w->state->switch_err)];
+        snprintf(safe, sizeof(safe), "%s", w->state->switch_err);
+        for (char *p = safe; *p; p++) if (*p == '"') *p = '\'';
+
+        snprintf(buf + n, sizeof(buf) - (size_t)n,
+                 " switch_file=\"%s\" switch_err=\"%s\"",
+                 w->state->switch_file, safe);
+    }
 
     send_response(w->client_fd, w->hdr.request_id,
                   SYN_MSG_STATUS, buf, strlen(buf) + 1);
@@ -408,8 +429,20 @@ static void *switch_thread(void *arg) {
 
     s->config.model_path = s->model_path_store;
     if (inference_init(s) < 0) {
-        syn_log(LOG_WARNING, "synapd: switching to %s FAILED — restoring %s",
-                s->model_path_store, previous);
+        /* Captured BEFORE the restore, which is itself a load and resets the
+         * reason. Without this ordering the reported error is whatever the
+         * successful restore had to say, i.e. nothing. */
+        char why[sizeof(s->switch_err)];
+        inference_error_get(why, sizeof(why));
+
+        const char *slash = strrchr(s->model_path_store, '/');
+        snprintf(s->switch_file, sizeof(s->switch_file), "%s",
+                 slash ? slash + 1 : s->model_path_store);
+        snprintf(s->switch_err, sizeof(s->switch_err), "%s",
+                 why[0] ? why : "the model could not be loaded");
+
+        syn_log(LOG_WARNING, "synapd: switching to %s FAILED — restoring %s (%s)",
+                s->model_path_store, previous, s->switch_err);
         snprintf(s->model_path_store, sizeof(s->model_path_store), "%s", previous);
         if (inference_init(s) < 0)
             syn_log(LOG_ERR, "synapd: could not reload %s either — no model loaded",
@@ -417,6 +450,12 @@ static void *switch_thread(void *arg) {
         else
             syn_log(LOG_INFO, "synapd: previous model restored");
     } else {
+        /* A switch that worked clears the last one that did not. The picker
+         * shows this field verbatim, and a stale reason attached to a model
+         * now happily running is worse than no reason at all. */
+        s->switch_err[0]  = '\0';
+        s->switch_file[0] = '\0';
+
         syn_log(LOG_INFO, "synapd: model switched to %s", s->model_path_store);
         /* Only on the success path, and only the bare name: the persisted
          * choice has to survive SYNAPD_MODEL_DIR moving, and a stored absolute

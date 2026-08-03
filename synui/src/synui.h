@@ -338,6 +338,14 @@ typedef struct {
     float         temperature;
     float         top_p;
     int           top_k;
+
+    /* The last switch that FAILED (synapd >= 0.1.0-29), and llama.cpp's own
+     * reason for it. A failed switch restores the previous model, so every
+     * field above returns to exactly what it was — these two are the only
+     * evidence that anything happened at all. Empty when the last switch
+     * worked, and against an older daemon. */
+    char          switch_file[128];
+    char          switch_err[192];
 } syn_overlay_t;
 
 /* ── AI context attached to a window ─────────────────────── */
@@ -587,6 +595,19 @@ typedef struct {
      * The list stays visible but refuses a second pick — synapd rejects one
      * anyway, and letting the key through would only produce an error toast. */
     int  switching;
+
+    /* What that switch asked for, and when it was asked.
+     *
+     * A failed load makes synapd restore the previous model, so the daemon
+     * ends up reporting exactly what it reported before the request — there is
+     * no state to compare against without remembering the question. Keeping
+     * the FILENAME rather than the row index matters because the cursor moves
+     * freely while several GB load. `switch_seen_loading` records that synapd
+     * was observed mid-load, which separates "it failed and restored" from
+     * "it has not started yet". */
+    char   switch_file[128];
+    double switch_at;
+    int    switch_seen_loading;
 
     char status[160];
     syn_hit_t hit;          /* panel rect + the model/catalogue rows */

@@ -369,6 +369,97 @@ int main(void)
         models_write();
     }
 
+    /*
+     * ── A switch that FAILS must end ────────────────────────────────────
+     *
+     * The case velle hit: a model downloaded through the picker that this
+     * build of llama.cpp cannot load. synapd restores the previous model, so
+     * every field it reports goes back to exactly what it said before the
+     * request — and settling only ever tested for SUCCESS, so `switching`
+     * stayed set forever. The row sat on "loading …" and refused every later
+     * pick with "still loading · wait for it to finish", with nothing to wait
+     * for. Two ways out, and both must work: synapd was seen mid-load, or
+     * enough time passed that an unchanged daemon can only mean it is over.
+     */
+    for (int variant = 0; variant < 2; variant++) {
+        const int via_loading = (variant == 0);
+
+        models_clear();
+        models_write();
+        syn_server_t *s = server_new();
+        daemon_says_loaded(s, "mistral.gguf");
+        open_on_model_row(s);
+
+        /* Pick something else and let the settle timer fire, exactly as the
+         * working cases above do. */
+        key(s, XKB_KEY_Right);
+        s->ctlpanel.model_commit_at = -1.0;
+        ctlpanel_tick(s);
+        CHECK(s->aimodel.switching == 1, "[%d] no switch in flight", variant);
+
+        const char *asked = last_reload;
+
+        if (via_loading) {
+            /* synapd takes the write lock. */
+            snprintf(s->overlay.model, sizeof(s->overlay.model), "loading");
+            aimodel_status_changed(s);
+            CHECK(s->aimodel.switching == 1,
+                  "[%d] gave up while synapd was still loading", variant);
+        } else {
+            /* Never observed mid-load — a small model can finish between two
+             * one-second polls. The clock is what ends it instead. */
+            s->aimodel.switch_at -= 60.0;
+        }
+
+        /* The load failed: synapd is back on the old model and says why. */
+        daemon_says_loaded(s, "mistral.gguf");
+        snprintf(s->overlay.switch_file, sizeof(s->overlay.switch_file),
+                 "%s", asked);
+        snprintf(s->overlay.switch_err, sizeof(s->overlay.switch_err),
+                 "unknown pre-tokenizer type: 'minicpm5'");
+        aimodel_status_changed(s);
+
+        CHECK(s->aimodel.switching == 0,
+              "[%d] a failed switch left the row stuck on 'loading'", variant);
+        CHECK(strstr(s->aimodel.status, "minicpm5") != NULL,
+              "[%d] the failure said '%s' — llama's reason never reached the "
+              "user", variant, s->aimodel.status);
+
+        /* And the row is usable again, which is the point of all of it. */
+        reload_count = 0;
+        key(s, XKB_KEY_Right);
+        s->ctlpanel.model_commit_at = -1.0;
+        ctlpanel_tick(s);
+        CHECK(reload_count == 1,
+              "[%d] the row refused the next pick after a failure", variant);
+
+        free(s);
+    }
+
+    /*
+     * The pre-lock window is NOT a failure. synapd answers the reload before
+     * it takes the write lock, so for a moment it still reports the old model
+     * as loaded — and reading that as "it failed" would report every switch as
+     * broken a fraction of a second before it worked.
+     */
+    {
+        models_clear();
+        models_write();
+        syn_server_t *s = server_new();
+        daemon_says_loaded(s, "mistral.gguf");
+        open_on_model_row(s);
+
+        key(s, XKB_KEY_Right);
+        s->ctlpanel.model_commit_at = -1.0;
+        ctlpanel_tick(s);
+
+        daemon_says_loaded(s, "mistral.gguf");   /* not started yet */
+        aimodel_status_changed(s);
+        CHECK(s->aimodel.switching == 1,
+              "called a switch failed before synapd had begun it");
+        free(s);
+    }
+
     models_clear();
     rmdir(AIMODEL_DIR);
 

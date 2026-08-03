@@ -37,4 +37,18 @@ int  inference_sched_hint(synapd_state_t *s,
  * safe against a concurrent SLEEP/WAKE.
  */
 void inference_describe(synapd_state_t *s, char *buf, size_t len);
+
+/*
+ * Why the last load failed, in llama.cpp's own words.
+ *
+ * "unknown pre-tokenizer type: 'minicpm5'" is the whole diagnosis of a model
+ * this build cannot run, and it used to exist only in the journal — the daemon
+ * reported a bare failure and the picker showed nothing, so a switch that
+ * could never work looked identical to one still in progress.
+ *
+ * Reset at the start of every load; empty when the last one succeeded or when
+ * llama said nothing. inference_error_get() always NUL-terminates.
+ */
+void inference_error_reset(void);
+void inference_error_get(char *buf, size_t len);
 #endif
