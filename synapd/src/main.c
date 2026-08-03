@@ -238,9 +238,14 @@ int main(int argc, char *argv[]) {
     int opt;
     while ((opt = getopt_long(argc, argv, "m:E:s:t:g:c:T:P:K:dfvh", long_opts, NULL)) != -1) {
         switch (opt) {
-        case 'T': g_state.config.temperature    = (float)atof(optarg); break;
-        case 'P': g_state.config.top_p          = (float)atof(optarg); break;
-        case 'K': g_state.config.top_k          = atoi(optarg); break;
+        /* The *_set flags are what let a per-model profile fill in a value
+         * without overriding one the operator asked for by name. */
+        case 'T': g_state.config.temperature    = (float)atof(optarg);
+                  g_state.config.temp_set       = 1; break;
+        case 'P': g_state.config.top_p          = (float)atof(optarg);
+                  g_state.config.top_p_set      = 1; break;
+        case 'K': g_state.config.top_k          = atoi(optarg);
+                  g_state.config.top_k_set      = 1; break;
         case 'm': g_state.config.model_path     = optarg; break;
         case 'E': g_state.config.embed_model_path = optarg; break;
         case 's': g_state.config.socket_path    = optarg; break;

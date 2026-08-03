@@ -25,6 +25,7 @@
 
 #include "synapd.h"
 #include "inference.h"
+#include "profile.h"
 #include "log.h"
 
 /* llama.cpp C API */
@@ -70,6 +71,13 @@ struct synapd_inference {
      * format in build_prompt(). */
     const char           *chat_tmpl;
     int                   tmpl_warned;  /* fallback warning is once, not per query */
+
+    /* Model identity, read once at load. Kept for SYN_MSG_STATUS: a client
+     * picking a model needs to see what synapd actually detected, not guess
+     * from the filename. */
+    char                  model_name[128];
+    char                  prof_name[PROFILE_MATCH_MAX];  /* "" = no profile matched */
+    char                  tmpl_probe[40];  /* rendered opening marker, e.g. "[INST]" */
 
     /* Stats */
     uint64_t total_tokens_in;
@@ -165,6 +173,65 @@ static int detect_gpu_layers(const char *model_path, off_t model_bytes) {
     return layers;
 }
 
+/* Read one GGUF metadata string from a loaded model. Leaves out[] empty (not
+ * unterminated) when the key is absent, so callers can test out[0]. */
+static void meta_str(struct llama_model *m, const char *key,
+                     char *out, size_t out_len)
+{
+    out[0] = '\0';
+    if (llama_model_meta_val_str(m, key, out, out_len) <= 0)
+        out[0] = '\0';
+}
+
+/*
+ * Work out how a prompt will actually open, by rendering the template around a
+ * marker and keeping whatever it puts in front.
+ *
+ * llama.cpp has no "which template did you match" call, so this is the honest
+ * way to answer it: apply the thing and look at what comes out. The result is
+ * derived from the template itself — "[INST]" for Mistral, "<|im_start|>user"
+ * for ChatML — never guessed from the model's name.
+ */
+static void template_probe(synapd_inference_t *inf) {
+    /* Control characters, so it cannot collide with real template markup. */
+    static const char MARK[] = "\x01SYNAPD\x01";
+
+    if (!inf->chat_tmpl) {
+        snprintf(inf->tmpl_probe, sizeof(inf->tmpl_probe), "legacy");
+        return;
+    }
+
+    struct llama_chat_message m[1] = { { "user", MARK } };
+    char buf[1024];
+    int32_t r = llama_chat_apply_template(inf->chat_tmpl, m, 1, true,
+                                          buf, sizeof(buf));
+    char *at = NULL;
+    if (r > 0 && r < (int32_t)sizeof(buf)) {
+        buf[r] = '\0';
+        at = strstr(buf, MARK);
+    }
+    if (!at) {
+        snprintf(inf->tmpl_probe, sizeof(inf->tmpl_probe), "unknown");
+        return;
+    }
+    *at = '\0';
+
+    /* One line, no padding — this goes in a status field. */
+    for (char *p = buf; *p; p++)
+        if (*p == '\n' || *p == '\r' || *p == '\t') *p = ' ';
+    char *start = buf;
+    while (*start == ' ') start++;
+    char *end = start + strlen(start);
+    while (end > start && end[-1] == ' ') end--;
+    *end = '\0';
+
+    /* Bounded explicitly: a template is free to open with something far longer
+     * than this field, and truncation here is cosmetic — it is a display hint,
+     * not the format itself. */
+    snprintf(inf->tmpl_probe, sizeof(inf->tmpl_probe), "%.*s",
+             (int)sizeof(inf->tmpl_probe) - 1, start);
+}
+
 /* ── Init ─────────────────────────────────────────────────── */
 int inference_init(synapd_state_t *s) {
     struct stat st;
@@ -213,6 +280,66 @@ int inference_init(synapd_state_t *s) {
         llama_free_model(inf->model);
         free(inf);
         return -1;
+    }
+
+    /* ── Model identity ──────────────────────────────────────────────────
+     * Read once, here, because everything below depends on knowing WHICH
+     * model this is: the chat template, the sampling profile, and what
+     * SYN_MSG_STATUS reports to a UI. */
+    char m_basename[64] = {0}, m_arch[64] = {0};
+    meta_str(inf->model, "general.name",         inf->model_name, sizeof(inf->model_name));
+    meta_str(inf->model, "general.basename",     m_basename,      sizeof(m_basename));
+    meta_str(inf->model, "general.architecture", m_arch,          sizeof(m_arch));
+    if (!inf->model_name[0])
+        snprintf(inf->model_name, sizeof(inf->model_name), "(unnamed)");
+
+    /* ── Chat template ───────────────────────────────────────────────────
+     * Ask the model what turn format it was trained on instead of assuming.
+     * synapd hardcoded a Zephyr-style <|system|>/<|user|>/<|assistant|>
+     * prompt for every model it ever loaded, while the models it actually
+     * ships (Mistral 7B Instruct, Mistral Nemo) want [INST] ... [/INST].
+     * Mistral answers anyway, which is exactly why it went unnoticed —
+     * the format was wrong on every query and nothing ever said so.
+     *
+     * NULL here is not an error: a GGUF with no tokenizer.chat_template
+     * falls back to the legacy format in inference_run(). */
+    inf->chat_tmpl = llama_model_chat_template(inf->model, NULL);
+    template_probe(inf);
+    if (inf->chat_tmpl)
+        syn_log(LOG_INFO, "inference: chat template from GGUF — model \"%s\", "
+                "prompts open with %s", inf->model_name, inf->tmpl_probe);
+    else
+        syn_log(LOG_WARNING, "inference: model \"%s\" declares NO chat template; "
+                "using legacy <|system|>/<|user|> format", inf->model_name);
+
+    /* ── Sampling profile ────────────────────────────────────────────────
+     * The template comes out of the GGUF; the sampler settings cannot,
+     * because no such key exists. Match the model against the shipped
+     * profiles instead, and let an explicit command-line flag win — a
+     * flag is someone saying what they want, a profile is only a default. */
+    synapd_profile_t prof;
+    if (profile_resolve(m_basename, inf->model_name, m_arch, &prof)) {
+        int pinned = 0;
+        if (prof.have_temperature) {
+            if (s->config.temp_set)  pinned = 1;
+            else                     inf->temperature = prof.temperature;
+        }
+        if (prof.have_top_p) {
+            if (s->config.top_p_set) pinned = 1;
+            else                     inf->top_p = prof.top_p;
+        }
+        if (prof.have_top_k) {
+            if (s->config.top_k_set) pinned = 1;
+            else                     inf->top_k = prof.top_k;
+        }
+
+        snprintf(inf->prof_name, sizeof(inf->prof_name), "%s", prof.matched);
+        syn_log(LOG_INFO, "inference: sampling profile [%s] from %s%s",
+                prof.matched, prof.source,
+                pinned ? " (some values pinned by command line)" : "");
+    } else {
+        syn_log(LOG_INFO, "inference: no sampling profile matched \"%s\" — "
+                "using built-in defaults", inf->model_name);
     }
 
     /*
@@ -287,29 +414,6 @@ int inference_init(synapd_state_t *s) {
         syn_log(LOG_INFO, "inference: no embedding model at %s; embeddings disabled",
                 s->config.embed_model_path);
     }
-
-    /* ── Chat template ───────────────────────────────────────────────────
-     * Ask the model what turn format it was trained on instead of assuming.
-     * synapd hardcoded a Zephyr-style <|system|>/<|user|>/<|assistant|>
-     * prompt for every model it ever loaded, while the models it actually
-     * ships (Mistral 7B Instruct, Mistral Nemo) want [INST] ... [/INST].
-     * Mistral answers anyway, which is exactly why it went unnoticed —
-     * the format was wrong on every query and nothing ever said so.
-     *
-     * NULL here is not an error: a GGUF with no tokenizer.chat_template
-     * falls back to the legacy format in build_prompt(). */
-    inf->chat_tmpl = llama_model_chat_template(inf->model, NULL);
-
-    char mname[128] = {0};
-    if (llama_model_meta_val_str(inf->model, "general.name",
-                                 mname, sizeof(mname)) <= 0)
-        snprintf(mname, sizeof(mname), "(unnamed)");
-
-    if (inf->chat_tmpl)
-        syn_log(LOG_INFO, "inference: chat template from GGUF — model \"%s\"", mname);
-    else
-        syn_log(LOG_WARNING, "inference: model \"%s\" declares NO chat template; "
-                "using legacy <|system|>/<|user|> format", mname);
 
     s->inference   = inf;
     s->model_loaded = 1;
@@ -690,6 +794,37 @@ int inference_sched_hint(synapd_state_t *s,
     if (*out_priority_delta < -20) *out_priority_delta = -20;
     if (*out_priority_delta >  19) *out_priority_delta =  19;
     return 0;
+}
+
+/* ── Status detail ────────────────────────────────────────── */
+void inference_describe(synapd_state_t *s, char *buf, size_t len) {
+    if (!s || !buf || len == 0) return;
+    buf[0] = '\0';
+
+    /*
+     * TRY the read lock rather than taking it.
+     *
+     * STATUS has always been answerable during a load — that is why it reports
+     * "loading" from an atomic instead of blocking. WAKE holds the WRITE lock
+     * for the entire reload of a 7 GB model, so a blocking read here would hang
+     * every status poll for the duration, and synui polls status on a timer.
+     * A busy lock means the model is in flux, and the model= field already says
+     * so; the detail is simply omitted until it settles.
+     */
+    if (pthread_rwlock_tryrdlock(&s->model_rw) != 0) return;
+
+    synapd_inference_t *inf = s->inference;
+    if (inf && inf->model) {
+        snprintf(buf, len,
+                 " model_name=\"%s\" format=\"%s\" profile=%s "
+                 "temp=%.2f top_p=%.2f top_k=%d",
+                 inf->model_name,
+                 inf->tmpl_probe,
+                 inf->prof_name[0] ? inf->prof_name : "none",
+                 (double)inf->temperature, (double)inf->top_p, inf->top_k);
+    }
+
+    pthread_rwlock_unlock(&s->model_rw);
 }
 
 /* ── Destroy ──────────────────────────────────────────────── */

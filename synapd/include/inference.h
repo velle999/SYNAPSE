@@ -23,4 +23,18 @@ int  inference_embed(synapd_state_t *s,
 int  inference_sched_hint(synapd_state_t *s,
                            const char *proc_intent,
                            int *out_priority_delta);
+
+/*
+ * Append what synapd DETECTED about the loaded model to a status line:
+ * identity, the prompt format it resolved, the sampling profile that matched,
+ * and the values actually in force.
+ *
+ * This is the half a model picker cannot work out for itself. A filename says
+ * nothing about whether the turn format was recognised or which profile won,
+ * and those are exactly the two things that quietly go wrong.
+ *
+ * Writes nothing if no model is loaded. Takes the model read lock, so it is
+ * safe against a concurrent SLEEP/WAKE.
+ */
+void inference_describe(synapd_state_t *s, char *buf, size_t len);
 #endif

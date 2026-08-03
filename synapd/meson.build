@@ -65,7 +65,7 @@ add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 executable('synapd',
   files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
-        'src/context.c','src/scheduler.c','src/log.c'),
+        'src/context.c','src/scheduler.c','src/log.c','src/profile.c'),
   include_directories: llama_inc,
   dependencies: deps,
   install: true)
@@ -76,6 +76,16 @@ wire_test = executable('wire_test',
   files('tests/wire_test.c','src/wire.c'),
   include_directories: include_directories('include'))
 test('wire', wire_test)
+
+# Sampling-profile matching. profile.c is pure too — it reads files and compares
+# strings — so this links it plus log.c for syn_log() and nothing else. The
+# longest-match rule is the part worth pinning down: it is what stops a new
+# [mistral] profile from quietly capturing Nemo.
+profile_test = executable('profile_test',
+  files('tests/profile_test.c','src/profile.c','src/log.c'),
+  include_directories: include_directories('include'),
+  dependencies: dep_systemd.found() ? [dep_systemd] : [])
+test('profile', profile_test)
 
 # The system-sleep hook. Links nothing but libc — no llama, no threads — so a
 # wedged or unbuilt model stack cannot stop it running, and it must run: it is
@@ -104,3 +114,8 @@ install_data('systemd/synapd.service',
   install_dir: '/usr/lib/systemd/system')
 install_data('config/synapd.conf',
   install_dir: '/etc/synapd')
+
+# Shipped sampling profiles. /usr, not /etc, precisely so an upgrade can replace
+# them — local changes belong in /etc/synapd/profiles.d, which wins ties.
+install_data('config/profiles.d/10-defaults.conf',
+  install_dir: '/usr/share/synapd/profiles.d')

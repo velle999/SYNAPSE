@@ -109,6 +109,13 @@ typedef struct {
     float       temperature;     /* 0 = greedy/deterministic */
     float       top_p;           /* nucleus cutoff, applied when sampling */
     int         top_k;           /* 0 = disabled */
+    /* Set when the value above came from an explicit command-line flag rather
+     * than the built-in default. A per-model profile fills in what the operator
+     * did NOT ask for; it must never override what they did. Without these,
+     * "-T 0.8" and "no flag at all" are indistinguishable. */
+    int         temp_set;
+    int         top_p_set;
+    int         top_k_set;
     const char *embed_model_path; /* NULL/missing = embeddings unavailable */
 } synapd_config_t;
 

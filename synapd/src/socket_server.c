@@ -272,8 +272,10 @@ static void handle_sched_hint(work_item_t *w) {
 }
 
 static void handle_status(work_item_t *w) {
-    char buf[256];
-    snprintf(buf, sizeof(buf),
+    /* Was 256 and full. The detail block adds a quoted model name and the
+     * resolved prompt format, either of which can be long. */
+    char buf[640];
+    int n = snprintf(buf, sizeof(buf),
         "synapd/%s model=%s requests=%lu active=%lu ctx_used=%u ctx_window=%u",
         SYNAPD_VERSION,
         w->state->model_loaded ? "loaded"
@@ -285,6 +287,13 @@ static void handle_status(work_item_t *w) {
         context_used_tokens(w->state),
         w->state->config.context_window
     );
+
+    /* Appended, never inserted: synui parses this line key-by-key with strstr
+     * and synsh prints it verbatim, so new keys on the end are backward
+     * compatible while reordering the old ones would not be. */
+    if (n > 0 && (size_t)n < sizeof(buf))
+        inference_describe(w->state, buf + n, sizeof(buf) - (size_t)n);
+
     send_response(w->client_fd, w->hdr.request_id,
                   SYN_MSG_STATUS, buf, strlen(buf) + 1);
 }
