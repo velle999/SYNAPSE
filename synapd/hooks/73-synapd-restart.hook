@@ -1,0 +1,31 @@
+# Restart synapd onto the binary that was just installed.
+#
+# Without this the upgrade is invisible: pacman replaces /usr/bin/synapd and the
+# OLD process carries on serving from memory, indefinitely, because nothing in a
+# desktop session ever restarts a system daemon. `systemctl status synapd` says
+# active (running) the whole time.
+#
+# That is not theoretical. synapd went 0.1.0-23 -> -27 on 2026-08-02 and the
+# 15:10 process was still up hours later, so the model switcher added in -26
+# answered "unknown msg type" to every request the control panel made. It read
+# exactly like a broken menu, and the daemon's journal said nothing at all,
+# because the code that would have logged the request was in the file on disk
+# rather than in the process.
+#
+# try-restart, not restart: on a first install the daemon is not running yet and
+# starting it here would fight synapd.socket's activation, which is what is meant
+# to bring it up on demand. Upgrade-only for the same reason.
+#
+# The /run/systemd/system guard is for pacstrap and the ISO build, where this
+# hook runs inside a chroot with no running systemd — there `systemctl` fails,
+# and a failing hook prints an alarming error over an install that is fine.
+
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = synapd
+
+[Action]
+Description = Restarting synapd onto the new binary...
+When = PostTransaction
+Exec = /bin/sh -c '[ -d /run/systemd/system ] || exit 0; exec /usr/bin/systemctl try-restart synapd.service'

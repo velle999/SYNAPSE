@@ -1,6 +1,6 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=27
+pkgrel=28
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -56,6 +56,12 @@ package() {
         "$pkgdir/usr/lib/systemd/system/synapd-kmod-perms.service"
     install -Dm644 systemd/synapd-kmod-perms.timer \
         "$pkgdir/usr/lib/systemd/system/synapd-kmod-perms.timer"
+
+    # Restarts the daemon on upgrade. A long-lived daemon does not pick up a new
+    # binary on its own, and nothing in a desktop session restarts one — the
+    # upgraded package sat on disk while the old process served from memory.
+    install -Dm644 hooks/73-synapd-restart.hook \
+        "$pkgdir/usr/share/libalpm/hooks/73-synapd-restart.hook"
 
     # Creates the unprivileged `synapd` user and owns its state dirs, so the
     # daemon that parses socket input is not root. The tmpfiles Z lines also

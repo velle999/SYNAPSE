@@ -2080,10 +2080,15 @@ static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
  * big the download is and how good the answers are, and the reason this panel
  * needed a second column at all.
  */
-static void aimodel_render_pane(cairo_t *cr, syn_aimodel_t *am,
+/* Takes the server, not just the panel state: the installed-model side reads
+ * each GGUF's header through aimodel_info(), which caches onto the entry and so
+ * needs the owning server rather than a copy of the list. */
+static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
                                 int px, int py, int pw, int ph,
                                 int x, int y, int w)
 {
+    syn_aimodel_t *am = &s->aimodel;
+
     hit_clear(&am->hit_files);
 
     const syn_aimodel_cat_t *c =
@@ -2113,34 +2118,109 @@ static void aimodel_render_pane(cairo_t *cr, syn_aimodel_t *am,
             cairo_move_to(cr, x, y);
             aimodel_fit(cr, m->name, w);
 
-            char sz[24];
+            /* Read out of the FILE, not out of its name. A downloaded GGUF can
+             * be called anything, and the quantisation in a filename is whoever
+             * uploaded it typing a claim — this is the header. */
+            const syn_gguf_t *g = aimodel_info(s, am->selected);
+
+            /* general.name under the filename, the way the repo pane puts the
+             * author under the repo. Skipped when it says nothing the filename
+             * did not: two lines of the same words waste the only space the
+             * pane has. */
+            int ry = y + 18;
+            if (g && g->ok && g->name[0] &&
+                strncasecmp(g->name, m->name, strlen(g->name)) != 0) {
+                cairo_set_font_size(cr, 11);
+                cairo_set_source_rgba(cr, 0.5, 0.55, 0.7, 1.0);
+                cairo_move_to(cr, x, ry);
+                aimodel_fit(cr, g->name, w);
+            }
+
+            char sz[24], params[24], ctx[24], arch[64];
             aimodel_size_str(m->bytes, sz, sizeof(sz));
 
-            struct { const char *k, *v; } rows[2];
-            char quant[24];
-            aimodel_quant_of(m->name, quant, sizeof(quant));
-            rows[0].k = "Size";  rows[0].v = sz;
-            rows[1].k = "Quant"; rows[1].v = quant[0] ? quant : "\xe2\x80\x94";
+            /* general.parameter_count is absent from most real files — all
+             * three on this box omit it — so general.size_label ("12B") is
+             * tried first and the count is the fallback, not the other way
+             * round. A dash beats a number that is not there. */
+            if (g && g->ok && g->size_label[0])
+                snprintf(params, sizeof(params), "%s", g->size_label);
+            else if (g && g->ok)
+                gguf_params_str(g->params, params, sizeof(params));
+            else
+                snprintf(params, sizeof(params), "\xe2\x80\x94");
 
-            for (int i = 0; i < 2; i++) {
+            if (g && g->ok && g->ctx >= 1000)
+                snprintf(ctx, sizeof(ctx), "%lldk", g->ctx / 1000);
+            else if (g && g->ok && g->ctx > 0)
+                snprintf(ctx, sizeof(ctx), "%lld", g->ctx);
+            else
+                snprintf(ctx, sizeof(ctx), "\xe2\x80\x94");
+
+            if (g && g->ok && g->arch[0] && g->n_layers > 0)
+                snprintf(arch, sizeof(arch), "%s \xc2\xb7 %d layers",
+                         g->arch, g->n_layers);
+            else if (g && g->ok && g->arch[0])
+                snprintf(arch, sizeof(arch), "%s", g->arch);
+            else
+                snprintf(arch, sizeof(arch), "\xe2\x80\x94");
+
+            /* The filename quantisation stays as the fallback: an older or
+             * hand-made GGUF can leave general.file_type out, and a guess
+             * labelled as one beats an empty row. */
+            char quant[24];
+            if (g && g->ok && g->quant[0])
+                snprintf(quant, sizeof(quant), "%s", g->quant);
+            else {
+                aimodel_quant_of(m->name, quant, sizeof(quant));
+                if (!quant[0]) snprintf(quant, sizeof(quant), "\xe2\x80\x94");
+            }
+
+            struct { const char *k, *v; } rows[5];
+            rows[0].k = "Size";    rows[0].v = sz;
+            rows[1].k = "Params";  rows[1].v = params;
+            rows[2].k = "Quant";   rows[2].v = quant;
+            rows[3].k = "Context"; rows[3].v = ctx;
+            rows[4].k = "Arch";    rows[4].v = arch;
+
+            for (int i = 0; i < 5; i++) {
+                int rry = y + 44 + i * 20;
                 cairo_set_font_size(cr, 12);
                 cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
-                cairo_move_to(cr, x, y + 30 + i * 20);
+                cairo_move_to(cr, x, rry);
                 cairo_show_text(cr, rows[i].k);
                 cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
-                cairo_move_to(cr, x + 70, y + 30 + i * 20);
-                cairo_show_text(cr, rows[i].v);
+                cairo_move_to(cr, x + 70, rry);
+                aimodel_fit(cr, rows[i].v, w - 70);
+            }
+
+            /* The one line here that is a WARNING rather than a fact. No chat
+             * template means synapd has to guess how to frame a turn, and a
+             * wrongly-framed prompt still answers fluently — the panel says so
+             * before you load it, which is the whole reason the daemon's
+             * format="legacy" was worth surfacing at all. */
+            int wy = y + 44 + 5 * 20 + 6;
+            cairo_set_font_size(cr, 11);
+            if (g && g->ok && !g->has_template) {
+                cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+                cairo_move_to(cr, x, wy);
+                aimodel_fit(cr, "no chat template \xc2\xb7 synapd will guess "
+                                "the turn format", w);
+            } else if (g && !g->ok) {
+                cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+                cairo_move_to(cr, x, wy);
+                aimodel_fit(cr, g->err[0] ? g->err : "unreadable header", w);
             }
 
             cairo_set_font_size(cr, 12);
             if (am->selected == am->loaded_idx) {
                 set_accent(cr, 1.0);
-                cairo_move_to(cr, x, y + 86);
+                cairo_move_to(cr, x, wy + 24);
                 cairo_show_text(cr, am->switching ? "loading \xe2\x80\xa6"
                                                   : "this is the model synapd is running");
             } else {
                 cairo_set_source_rgba(cr, 0.6, 0.6, 0.72, 1.0);
-                cairo_move_to(cr, x, y + 86);
+                cairo_move_to(cr, x, wy + 24);
                 cairo_show_text(cr, "[ Enter: load this model ]");
             }
         }
@@ -2523,7 +2603,7 @@ void synui_render_aimodel(syn_server_t *s)
     cairo_stroke(cr);
 
     int pane_w = pw - pane_x - pad;
-    aimodel_render_pane(cr, am, px, py, pw, ph, pane_x, 168, pane_w);
+    aimodel_render_pane(cr, s, px, py, pw, ph, pane_x, 168, pane_w);
 
     /* ── The footer ──────────────────────────────────────────────────── */
     if (am->status[0]) {

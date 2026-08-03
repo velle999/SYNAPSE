@@ -32,6 +32,18 @@
 #define SYNAPD_MODEL_DIR      "/var/lib/synapd/models"
 #endif
 #define SYNAPD_DEFAULT_MODEL  SYNAPD_MODEL_DIR "/synapse-7b-q4_k_m.gguf"
+/* The model last chosen at RUNTIME, as a bare filename — see
+ * synapd_selected_{save,load}(). Kept beside the models rather than under /etc
+ * because the daemon writes it as its own unprivileged user; a drop-in would
+ * need root, which is exactly the privilege synapd was given up.
+ *
+ * Compile-time overridable on the same terms as SYNAPD_MODEL_DIR above, and for
+ * the same reason: selected_test redirects both at a scratch directory, and a
+ * runtime override would be a way around the confinement rather than a way to
+ * exercise it. */
+#ifndef SYNAPD_SELECTED_FILE
+#define SYNAPD_SELECTED_FILE  "/var/lib/synapd/model.selected"
+#endif
 /* Retrieval embeddings. A SEPARATE model on purpose: a chat model's hidden
  * states are not interchangeable with a purpose-built embedder's, and chibi's
  * stored vectors were produced by this exact model via ollama. Serving them
@@ -178,6 +190,19 @@ typedef struct synapd_state {
      * config.model_path otherwise points at argv or a string literal, neither
      * of which can be rewritten, and a heap pointer would need an owner. */
     char                model_path_store[512];
+
+    /* What was loaded before the switch now in flight — the model to put back
+     * if the new one will not load.
+     *
+     * Captured by handle_reload() rather than read off config.model_path in
+     * switch_thread(), because by the time the thread runs, model_path_store
+     * already holds the NEW path, and after the first successful switch
+     * config.model_path POINTS AT model_path_store. The thread would then
+     * "restore" the very model that had just failed to load, and the log line
+     * would name it as the rescue. Two different models are the only case where
+     * that distinction shows, which is why it survived until the choice started
+     * being persisted. */
+    char                model_path_prev[512];
 
     /* Subsystems */
     synapd_inference_t *inference;

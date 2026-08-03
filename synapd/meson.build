@@ -65,7 +65,8 @@ add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 executable('synapd',
   files('src/main.c','src/inference.c','src/socket_server.c','src/wire.c',
-        'src/context.c','src/scheduler.c','src/log.c','src/profile.c'),
+        'src/context.c','src/scheduler.c','src/log.c','src/profile.c',
+        'src/selected.c'),
   include_directories: llama_inc,
   dependencies: deps,
   install: true)
@@ -86,6 +87,19 @@ profile_test = executable('profile_test',
   include_directories: include_directories('include'),
   dependencies: dep_systemd.found() ? [dep_systemd] : [])
 test('profile', profile_test)
+
+# The model-name boundary, and the choice that outlives the process. selected.c
+# is pure (stat, stdio, syn_log) so this links it plus log.c and nothing else —
+# no llama, no socket. SYNAPD_MODEL_DIR and SYNAPD_SELECTED_FILE are redirected
+# at a scratch tree the test builds, which is the only way to exercise a
+# confinement whose whole job is to refuse everything outside one directory.
+selected_test = executable('selected_test',
+  files('tests/selected_test.c','src/selected.c','src/log.c'),
+  include_directories: include_directories('include'),
+  c_args: ['-DSYNAPD_MODEL_DIR="' + meson.current_build_dir() + '/seltest/models"',
+           '-DSYNAPD_SELECTED_FILE="' + meson.current_build_dir() + '/seltest/model.selected"'],
+  dependencies: dep_systemd.found() ? [dep_systemd] : [])
+test('selected', selected_test)
 
 # The system-sleep hook. Links nothing but libc — no llama, no threads — so a
 # wedged or unbuilt model stack cannot stop it running, and it must run: it is

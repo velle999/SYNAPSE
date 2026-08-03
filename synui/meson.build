@@ -181,6 +181,7 @@ synui_exe = executable('synui',
     'src/game.c',
     'src/filters.c',
     'src/aimodel.c',
+    'src/gguf.c',
     'src/uifx.c',
   'src/widgets.c',
   'src/sound.c',
@@ -471,7 +472,8 @@ test('panel_pointer', panel_pointer_test)
 # AIMODEL_DIR is redirected at a directory of stub files the test writes, the
 # way lid_test redirects SYNUI_POWER_SUPPLY_DIR.
 ctlpanel_choice_test = executable('ctlpanel_choice_test',
-  ['tests/ctlpanel_choice_test.c', 'src/ctlpanel.c', 'src/aimodel.c', 'src/hit.c'],
+  ['tests/ctlpanel_choice_test.c', 'src/ctlpanel.c', 'src/aimodel.c', 'src/gguf.c',
+   'src/hit.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE',
@@ -486,12 +488,23 @@ test('ctlpanel_choice', ctlpanel_choice_test)
 # The refusals here are one half of a privilege boundary whose other half is
 # syn-model's tests/fetch_validate_test.sh; both are meant to hold alone.
 aimodel_catalog_test = executable('aimodel_catalog_test',
-  ['tests/aimodel_catalog_test.c', 'src/aimodel.c', 'src/hit.c'],
+  ['tests/aimodel_catalog_test.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('aimodel_catalog', aimodel_catalog_test)
+
+# The GGUF header reader, against a file the test writes. It links gguf.c ALONE
+# — no wlroots, no cairo, no compositor state — which is the property that lets
+# it also be pointed at a real multi-GB model on the box:
+#   ./build/gguf_test /var/lib/synapd/models/synapse.gguf
+# See the test's header for the three header shapes it pins.
+gguf_test = executable('gguf_test',
+  ['tests/gguf_test.c', 'src/gguf.c'],
+  include_directories : include_directories('src'),
+  build_by_default : false)
+test('gguf', gguf_test)
 
 edid_hdr_test = executable('edid_hdr_test',
   ['tests/edid_hdr_test.c', 'src/edid.c'],

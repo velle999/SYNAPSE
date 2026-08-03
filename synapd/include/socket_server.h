@@ -11,4 +11,7 @@ void socket_server_stop(synapd_state_t *s);
  * the daemon's whole attacker-facing input gate, so it is the thing most worth
  * a test). `recvd` is how many bytes were actually read into *hdr. */
 bool synapd_header_valid(const syn_msg_header_t *hdr, size_t recvd);
+
+/* The model-name boundary and the remembered choice live in selected.h — pure,
+ * and tested on their own by tests/selected_test.c. */
 #endif

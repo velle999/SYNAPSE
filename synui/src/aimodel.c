@@ -110,6 +110,12 @@ static void aimodel_scan(syn_server_t *s)
         if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) continue;
 
         syn_aimodel_entry_t *m = &am->models[am->count++];
+        /* Cleared before it is filled. The list is re-sorted on every scan, so
+         * slot i is a DIFFERENT model between one scan and the next — keeping
+         * the previous occupant's probed header here would describe a freshly
+         * downloaded file with the facts of whatever used to sort into its
+         * place, which is worse than showing nothing at all. */
+        memset(m, 0, sizeof(*m));
         /* Bounded explicitly. The length guard above already rules truncation
          * out; the precision is what lets the compiler see that. */
         snprintf(m->name, sizeof(m->name), "%.*s", (int)sizeof(m->name) - 1, n);
@@ -135,6 +141,39 @@ static void aimodel_scan(syn_server_t *s)
  * running a model from outside this directory because an ExecStart flag named
  * one, and marking a row anyway would be a lie about which file is live.
  */
+/*
+ * What model `idx` says about itself, read once and kept.
+ *
+ * Deliberately probed HERE rather than at scan time or in each of the handlers
+ * that can move the cursor. Scan time would read every header in the directory
+ * before the panel could open, for models the cursor may never reach; spreading
+ * it across the handlers means a new one can forget, and a row drawn from an
+ * unprobed entry is a row that quietly says "—" about a file that would have
+ * answered. One accessor, called by whoever needs the facts, cannot drift.
+ *
+ * The cost is a first read on the drawing path: 2 ms for a 7B, 13 ms for a
+ * 131k-vocab model, once per file per session. Everything after is a struct
+ * already in hand. Returns NULL only for an index that is not a model.
+ */
+const syn_gguf_t *aimodel_info(syn_server_t *s, int idx)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (idx < 0 || idx >= am->count) return NULL;
+
+    syn_aimodel_entry_t *m = &am->models[idx];
+    if (!m->probed) {
+        char path[512];
+        snprintf(path, sizeof(path), "%s/%s", AIMODEL_DIR, m->name);
+        /* Marked probed either way: a file that cannot be read will not start
+         * being readable between two frames, and retrying per render would put
+         * a failing open in the compositor's draw path forever. */
+        m->probed = 1;
+        if (!gguf_read(path, &m->info))
+            wlr_log(WLR_INFO, "synui: %s: %s", m->name, m->info.err);
+    }
+    return &m->info;
+}
+
 static void aimodel_mark_loaded(syn_server_t *s)
 {
     syn_aimodel_t *am = &s->aimodel;
@@ -1492,8 +1531,38 @@ void aimodel_row_value(syn_server_t *s, char *buf, size_t n)
     size_t len = strlen(name);
     if (len > 5 && strcmp(name + len - 5, ".gguf") == 0) len -= 5;
 
-    if (am->switching) snprintf(buf, n, "%.*s \xc2\xb7 loading", (int)len, name);
-    else               snprintf(buf, n, "%.*s", (int)len, name);
+    if (am->switching) {
+        snprintf(buf, n, "%.*s \xc2\xb7 loading", (int)len, name);
+        return;
+    }
+
+    /* The row is the menu velle actually uses, so it carries the two facts that
+     * decide a pick — how big the model is and how hard it was squashed —
+     * rather than making the picker the only place they exist. Both come from
+     * the file's own header; the size label is preferred over the parameter
+     * count for the same reason the pane prefers it (most files omit the
+     * count). Either can be missing, and the row simply gets shorter.
+     *
+     * Nothing else is added here: this is drawn right-aligned and unclipped,
+     * so a value that grows without limit walks into the row's label. */
+    const syn_gguf_t *g = aimodel_info(s, am->selected);
+    char tag[40] = {0};
+    if (g && g->ok) {
+        char pbuf[24] = {0};
+        if (g->size_label[0])
+            snprintf(pbuf, sizeof(pbuf), "%s", g->size_label);
+        else if (g->params > 0)
+            gguf_params_str(g->params, pbuf, sizeof(pbuf));
+
+        if (pbuf[0] && g->quant[0])
+            snprintf(tag, sizeof(tag), " \xc2\xb7 %s %s", pbuf, g->quant);
+        else if (pbuf[0])
+            snprintf(tag, sizeof(tag), " \xc2\xb7 %s", pbuf);
+        else if (g->quant[0])
+            snprintf(tag, sizeof(tag), " \xc2\xb7 %s", g->quant);
+    }
+
+    snprintf(buf, n, "%.*s%s", (int)len, name, tag);
 }
 
 int aimodel_row_cycle(syn_server_t *s, int dir)

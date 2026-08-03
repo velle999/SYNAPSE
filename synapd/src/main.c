@@ -35,6 +35,7 @@
 #include "synapd.h"
 #include "inference.h"
 #include "socket_server.h"
+#include "selected.h"
 #include "context.h"
 #include "scheduler.h"
 #include "log.h"
@@ -296,6 +297,30 @@ int main(int argc, char *argv[]) {
     if (socket_server_start(&g_state) < 0) {
         syn_log(LOG_ERR, "synapd: socket_server_start failed");
         return EXIT_FAILURE;
+    }
+
+    /* The model picked in the desktop wins over the one on the command line.
+     *
+     * It has to, to mean anything: synapd's ExecStart comes from a drop-in that
+     * always names a model, so an --model that outranked the saved choice would
+     * make every runtime switch last until the next restart and no longer. The
+     * daemon cannot write that drop-in — it deliberately runs as an
+     * unprivileged user — so the choice is kept in its own state directory
+     * instead, and applied here.
+     *
+     * Loud on purpose. An operator who edits ExecStart and gets a different
+     * model needs to be told where it came from and how to undo it, in the same
+     * line, rather than reading it as synapd ignoring its configuration. */
+    char remembered[256];
+    if (synapd_selected_load(remembered, sizeof(remembered))) {
+        snprintf(g_state.model_path_store, sizeof(g_state.model_path_store),
+                 "%s/%s", SYNAPD_MODEL_DIR, remembered);
+        if (strcmp(g_state.model_path_store, g_state.config.model_path) != 0)
+            syn_log(LOG_INFO,
+                    "synapd: loading %s — chosen in the desktop, overriding "
+                    "--model %s (delete %s to go back)",
+                    remembered, g_state.config.model_path, SYNAPD_SELECTED_FILE);
+        g_state.config.model_path = g_state.model_path_store;
     }
 
     atomic_store(&g_state.model_loading, 1);

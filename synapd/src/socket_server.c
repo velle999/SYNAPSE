@@ -39,6 +39,7 @@
 #include "socket_server.h"
 #include "inference.h"
 #include "context.h"
+#include "selected.h"
 #include "log.h"
 
 #define THREAD_POOL_SIZE   8
@@ -379,39 +380,6 @@ static void handle_wake(work_item_t *w) {
                   SYN_MSG_WAKE, msg, strlen(msg) + 1);
 }
 
-/* ── Model switching ──────────────────────────────────────── */
-/*
- * Turn a requested model name into a path that is safe to open.
- *
- * The name arrives over a socket, so it is untrusted input that decides which
- * file the daemon opens. The confinement is deliberately crude rather than
- * clever: any '/' at all is a rejection, so the request cannot describe a path
- * — only a name inside SYNAPD_MODEL_DIR. There is nothing to escape, no
- * traversal to filter for, and no realpath() race to lose.
- *
- * Returns 0 and fills out[] on success, -1 with a reason in *why otherwise.
- */
-static int reload_resolve(const char *name, char *out, size_t out_len,
-                          const char **why)
-{
-    if (!name || !*name)            { *why = "no model named";              return -1; }
-    if (strchr(name, '/'))          { *why = "model must be a bare filename, not a path"; return -1; }
-    if (name[0] == '.')             { *why = "model name may not start with a dot";       return -1; }
-    if (strlen(name) > 200)         { *why = "model name too long";         return -1; }
-
-    size_t n = strlen(name);
-    if (n < 6 || strcmp(name + n - 5, ".gguf") != 0) {
-        *why = "model must be a .gguf file";
-        return -1;
-    }
-
-    snprintf(out, out_len, "%s/%s", SYNAPD_MODEL_DIR, name);
-
-    struct stat st;
-    if (stat(out, &st) != 0)     { *why = "no such model in the models directory"; return -1; }
-    if (!S_ISREG(st.st_mode))    { *why = "model is not a regular file";           return -1; }
-    return 0;
-}
 
 /*
  * Swap the model on a detached thread.
@@ -430,7 +398,7 @@ static void *switch_thread(void *arg) {
     synapd_state_t *s = arg;
 
     char previous[sizeof(s->model_path_store)];
-    snprintf(previous, sizeof(previous), "%s", s->config.model_path);
+    snprintf(previous, sizeof(previous), "%s", s->model_path_prev);
 
     pthread_rwlock_wrlock(&s->model_rw);
     atomic_store(&s->model_loading, 1);
@@ -450,6 +418,12 @@ static void *switch_thread(void *arg) {
             syn_log(LOG_INFO, "synapd: previous model restored");
     } else {
         syn_log(LOG_INFO, "synapd: model switched to %s", s->model_path_store);
+        /* Only on the success path, and only the bare name: the persisted
+         * choice has to survive SYNAPD_MODEL_DIR moving, and a stored absolute
+         * path would quietly reintroduce the traversal question that
+         * synapd_model_resolve() exists to answer. */
+        const char *slash = strrchr(s->model_path_store, '/');
+        synapd_selected_save(slash ? slash + 1 : s->model_path_store);
     }
 
     atomic_store(&s->model_loading, 0);
@@ -485,7 +459,7 @@ static void handle_reload(work_item_t *w) {
     char resolved[sizeof(s->model_path_store)];
     if (name && *name) {
         const char *why = "invalid model";
-        if (reload_resolve(name, resolved, sizeof(resolved), &why) != 0) {
+        if (synapd_model_resolve(name, resolved, sizeof(resolved), &why) != 0) {
             syn_log(LOG_WARNING, "synapd: reload refused (%s): %s", why, name);
             send_error(w->client_fd, w->hdr.request_id, why);
             return;
@@ -495,6 +469,10 @@ static void handle_reload(work_item_t *w) {
         snprintf(resolved, sizeof(resolved), "%s", s->config.model_path);
     }
 
+    /* Before the overwrite, while config.model_path still names what is
+     * actually loaded. See model_path_prev's note in synapd.h. */
+    snprintf(s->model_path_prev, sizeof(s->model_path_prev), "%s",
+             s->config.model_path ? s->config.model_path : "");
     snprintf(s->model_path_store, sizeof(s->model_path_store), "%s", resolved);
 
     pthread_t tid;

@@ -14,6 +14,11 @@
 #include <sys/types.h>
 #include <time.h>
 
+/* The GGUF header reader. Named syn_gguf.h rather than gguf.h on purpose:
+ * llama.cpp installs its own /usr/include/gguf.h, and this tree is compiled
+ * with the llama include path in reach. */
+#include "syn_gguf.h"
+
 /* BTN_LEFT and friends. Every panel that takes a click has to name the button
  * it is answering, so the codes belong here rather than in fifteen separate
  * includes that would each have to be remembered. */
@@ -495,6 +500,16 @@ typedef struct {
 typedef struct {
     char name[128];       /* bare filename — what RELOAD wants */
     long long bytes;
+
+    /* What the file says about itself, read on demand and kept.
+     *
+     * Lazy because it is the only thing in the panel that touches the disk on
+     * the compositor thread: reading every model's header at scan time would
+     * put a directory's worth of them in front of the panel opening, for facts
+     * about models the cursor may never stop on. `probed` covers the failures
+     * too, so an unreadable file is read once and not retried on every frame. */
+    int        probed;
+    syn_gguf_t info;
 } syn_aimodel_entry_t;
 
 /* ── The download catalogue ──────────────────────────────── */
@@ -3786,6 +3801,13 @@ int  aimodel_row_commit(syn_server_t *s);
 /* The panel's own status line, so the row can show synapd's refusal verbatim
  * instead of a generic failure. Empty when there is nothing to say. */
 const char *aimodel_status_text(syn_server_t *s);
+
+/* What installed model `idx` says about itself — architecture, real
+ * quantisation, context length, whether it has a chat template. Read from the
+ * file's own header on first use and cached on the entry; see aimodel.c. NULL
+ * if `idx` is not an installed model. The returned struct's `ok` is 0 when the
+ * header could not be read, with the reason in `err`. */
+const syn_gguf_t *aimodel_info(syn_server_t *s, int idx);
 /* Ask synapd to load a different model. Bare filename, never a path — synapd
  * confines it to its own models directory. Returns 0 if accepted, -1 with
  * synapd's own refusal text in out[]. */
