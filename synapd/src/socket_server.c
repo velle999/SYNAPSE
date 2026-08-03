@@ -379,6 +379,138 @@ static void handle_wake(work_item_t *w) {
                   SYN_MSG_WAKE, msg, strlen(msg) + 1);
 }
 
+/* ── Model switching ──────────────────────────────────────── */
+/*
+ * Turn a requested model name into a path that is safe to open.
+ *
+ * The name arrives over a socket, so it is untrusted input that decides which
+ * file the daemon opens. The confinement is deliberately crude rather than
+ * clever: any '/' at all is a rejection, so the request cannot describe a path
+ * — only a name inside SYNAPD_MODEL_DIR. There is nothing to escape, no
+ * traversal to filter for, and no realpath() race to lose.
+ *
+ * Returns 0 and fills out[] on success, -1 with a reason in *why otherwise.
+ */
+static int reload_resolve(const char *name, char *out, size_t out_len,
+                          const char **why)
+{
+    if (!name || !*name)            { *why = "no model named";              return -1; }
+    if (strchr(name, '/'))          { *why = "model must be a bare filename, not a path"; return -1; }
+    if (name[0] == '.')             { *why = "model name may not start with a dot";       return -1; }
+    if (strlen(name) > 200)         { *why = "model name too long";         return -1; }
+
+    size_t n = strlen(name);
+    if (n < 6 || strcmp(name + n - 5, ".gguf") != 0) {
+        *why = "model must be a .gguf file";
+        return -1;
+    }
+
+    snprintf(out, out_len, "%s/%s", SYNAPD_MODEL_DIR, name);
+
+    struct stat st;
+    if (stat(out, &st) != 0)     { *why = "no such model in the models directory"; return -1; }
+    if (!S_ISREG(st.st_mode))    { *why = "model is not a regular file";           return -1; }
+    return 0;
+}
+
+/*
+ * Swap the model on a detached thread.
+ *
+ * Backgrounded for the same reason resume is: loading several GB takes tens of
+ * seconds, far longer than a client is willing to hold a socket open. The
+ * caller gets an immediate acknowledgement and watches SYN_MSG_STATUS, where
+ * model= reports "loading" and then the new model_name appears.
+ *
+ * If the new model fails to load, the OLD path is put back and reloaded. A
+ * mistyped or corrupt file should cost you a pause, not your AI: without this
+ * a single bad pick leaves the daemon running with no model at all until
+ * somebody restarts it by hand.
+ */
+static void *switch_thread(void *arg) {
+    synapd_state_t *s = arg;
+
+    char previous[sizeof(s->model_path_store)];
+    snprintf(previous, sizeof(previous), "%s", s->config.model_path);
+
+    pthread_rwlock_wrlock(&s->model_rw);
+    atomic_store(&s->model_loading, 1);
+
+    if (s->model_loaded)
+        inference_destroy(s);
+
+    s->config.model_path = s->model_path_store;
+    if (inference_init(s) < 0) {
+        syn_log(LOG_WARNING, "synapd: switching to %s FAILED — restoring %s",
+                s->model_path_store, previous);
+        snprintf(s->model_path_store, sizeof(s->model_path_store), "%s", previous);
+        if (inference_init(s) < 0)
+            syn_log(LOG_ERR, "synapd: could not reload %s either — no model loaded",
+                    previous);
+        else
+            syn_log(LOG_INFO, "synapd: previous model restored");
+    } else {
+        syn_log(LOG_INFO, "synapd: model switched to %s", s->model_path_store);
+    }
+
+    atomic_store(&s->model_loading, 0);
+    pthread_rwlock_unlock(&s->model_rw);
+    return NULL;
+}
+
+/*
+ * SYN_MSG_RELOAD — load a different model, or reload the current one.
+ *
+ * The opcode has been in the protocol since the beginning but was never
+ * dispatched: it fell through to "unknown msg type" while synapd_reload_config()
+ * logged "(stub)". Payload is a bare model filename, or empty to reload
+ * whatever is already configured.
+ */
+static void handle_reload(work_item_t *w) {
+    synapd_state_t *s = w->state;
+    char *name = (char *)w->payload;
+
+    /* Same zero-length guard as every other handler that indexes the payload. */
+    if (name && w->hdr.payload_len > 0)
+        name[w->hdr.payload_len - 1] = '\0';
+    else
+        name = NULL;
+
+    /* A switch while one is already running would overwrite model_path_store
+     * under the thread that is reading it. */
+    if (atomic_load(&s->model_loading)) {
+        send_error(w->client_fd, w->hdr.request_id, "a model is already loading");
+        return;
+    }
+
+    char resolved[sizeof(s->model_path_store)];
+    if (name && *name) {
+        const char *why = "invalid model";
+        if (reload_resolve(name, resolved, sizeof(resolved), &why) != 0) {
+            syn_log(LOG_WARNING, "synapd: reload refused (%s): %s", why, name);
+            send_error(w->client_fd, w->hdr.request_id, why);
+            return;
+        }
+    } else {
+        /* Empty payload — reload what is already configured. */
+        snprintf(resolved, sizeof(resolved), "%s", s->config.model_path);
+    }
+
+    snprintf(s->model_path_store, sizeof(s->model_path_store), "%s", resolved);
+
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, switch_thread, s) != 0) {
+        send_error(w->client_fd, w->hdr.request_id, "cannot spawn switch thread");
+        return;
+    }
+    pthread_detach(tid);
+
+    char msg[sizeof(resolved) + 16];
+    snprintf(msg, sizeof(msg), "loading %s", resolved);
+    syn_log(LOG_INFO, "synapd: reload requested — %s", resolved);
+    send_response(w->client_fd, w->hdr.request_id,
+                  SYN_MSG_RELOAD, msg, strlen(msg) + 1);
+}
+
 static void handle_context_get(work_item_t *w) {
     char *buf = malloc(8192);
     if (!buf) { send_error(w->client_fd, w->hdr.request_id, "oom"); return; }
@@ -416,6 +548,7 @@ static void *worker_thread(void *arg) {
         /* Take the WRITE lock themselves, so they must not be nested here. */
         case SYN_MSG_SLEEP:         handle_sleep(w);         break;
         case SYN_MSG_WAKE:          handle_wake(w);          break;
+        case SYN_MSG_RELOAD:        handle_reload(w);        break;
 
         /* Not under model_rw: the embedder is independent of the chat model
          * and survives SLEEP, so an unload must not block or break it. */

@@ -21,7 +21,17 @@
 /* ── Paths ────────────────────────────────────────────────── */
 #define SYNAPD_SOCKET_PATH    "/run/synapd/synapd.sock"
 #define SYNAPD_PID_FILE       "/run/synapd/synapd.pid"
-#define SYNAPD_DEFAULT_MODEL  "/var/lib/synapd/models/synapse-7b-q4_k_m.gguf"
+/* The ONLY directory a model may be loaded from. SYN_MSG_RELOAD takes a model
+ * name from a socket client, so this is the boundary that makes it safe: the
+ * request carries a bare filename and never a path. */
+/* Overridable only at COMPILE time, so the confinement can be exercised
+ * against a scratch directory. Never from the environment: anyone who can set
+ * the build flags already owns the binary, whereas a runtime override would be
+ * a way around the boundary itself. */
+#ifndef SYNAPD_MODEL_DIR
+#define SYNAPD_MODEL_DIR      "/var/lib/synapd/models"
+#endif
+#define SYNAPD_DEFAULT_MODEL  SYNAPD_MODEL_DIR "/synapse-7b-q4_k_m.gguf"
 /* Retrieval embeddings. A SEPARATE model on purpose: a chat model's hidden
  * states are not interchangeable with a purpose-built embedder's, and chibi's
  * stored vectors were produced by this exact model via ollama. Serving them
@@ -163,6 +173,11 @@ typedef struct synapd_state {
 
     /* Config */
     synapd_config_t     config;
+
+    /* Backing store for a model chosen at runtime by SYN_MSG_RELOAD.
+     * config.model_path otherwise points at argv or a string literal, neither
+     * of which can be rewritten, and a heap pointer would need an owner. */
+    char                model_path_store[512];
 
     /* Subsystems */
     synapd_inference_t *inference;

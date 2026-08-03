@@ -1,6 +1,6 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=25
+pkgrel=26
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
