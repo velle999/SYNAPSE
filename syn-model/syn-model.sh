@@ -395,6 +395,83 @@ fetch() {
     echo "✓ Downloaded $path ($(human "$size"))"
 }
 
+# ── Request-driven delete ─────────────────────────────────────
+#
+# The other half of the picker's privileged pair, and it exists for the same
+# reason `fetch` does: /var/lib/synapd/models is 0750 synapd:synapse, so synui
+# — running as the logged-in user — can LIST the directory and READ the models,
+# and cannot unlink inside it. Deleting needs write on the directory, which is
+# root's. syn-model-delete@TOKEN.service runs this, and a polkit rule lets the
+# `synapse` group start that unit.
+#
+# The caller is NOT trusted, exactly as in `fetch`, and for a sharper reason:
+# this one removes files. Everything the request carries is re-validated here.
+#
+#   - the destination is a BARE FILENAME ending .gguf, joined to $MODEL_DIR
+#     here, so no request can name a path out of the directory;
+#   - it must be a regular file, never a symlink — a symlink planted in the
+#     spool would otherwise make root unlink its target;
+#   - the request is read once and unlinked immediately, because the spool is
+#     group-writable and re-reading after validating is a window in which the
+#     contents could change.
+#
+# It does NOT refuse to delete the model synapd currently has open. That is the
+# user's call and the daemon holds it in memory regardless; what would actually
+# break is the NEXT start, so the remembered pick is cleared below instead.
+delete_request() {
+    local token="${1:-}"
+
+    [[ "$token" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] \
+        || die "invalid request token"
+
+    local req="$REQ_DIR/$token.delete"
+    [ -f "$req" ] || die "no such request: $token"
+
+    local file="" line key val
+    while IFS= read -r line; do
+        key="${line%%=*}"; val="${line#*=}"
+        case "$key" in
+            file) file="$val" ;;
+        esac
+    done < "$req"
+    rm -f "$req"
+
+    [[ "$file" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.gguf$ ]] \
+        || { progress_write "$token" failed 0 0 "refused: bad filename"
+             die "refused delete target: $file"; }
+
+    local path="$MODEL_DIR/$file"
+
+    # -L before -f: `[ -f ]` follows symlinks and would say yes to a link
+    # pointing at a real file elsewhere.
+    if [ -L "$path" ]; then
+        progress_write "$token" failed 0 0 "refused: that name is a symlink"
+        die "refused delete target (symlink): $path"
+    fi
+    if [ ! -f "$path" ]; then
+        progress_write "$token" failed 0 0 "no such model"
+        die "no such model: $path"
+    fi
+
+    rm -f -- "$path" || {
+        progress_write "$token" failed 0 0 "could not delete the file"
+        die "failed to delete: $path"
+    }
+
+    # The remembered pick must not name a file that is gone: synapd would try
+    # to load it on the next start, fail, and fall back to its --model flag
+    # while logging a confusing reason. Clearing it makes that fallback the
+    # deliberate path rather than an error path. Only when it named THIS file.
+    local selected="/var/lib/synapd/model.selected"
+    if [ -f "$selected" ] && [ "$(cat "$selected" 2>/dev/null)" = "$file" ]; then
+        rm -f "$selected" 2>/dev/null \
+            && echo "cleared the remembered model pick ($file)"
+    fi
+
+    progress_write "$token" done 0 0 "deleted $file"
+    echo "✓ Deleted $path"
+}
+
 remove() {
     if [ ! -f "$MODEL_PATH" ]; then
         echo "No model installed at $MODEL_PATH"
@@ -428,6 +505,7 @@ set -- "${ARGS[@]}"
 case "${1:-help}" in
     download) download "${2:-mistral-7b}" ;;
     fetch)    fetch "${2:-}" ;;
+    delete-request) delete_request "${2:-}" ;;
     list)     list_models ;;
     status)   status ;;
     remove)   remove ;;

@@ -35,8 +35,17 @@ polkit.addRule(function (action, subject) {
     var verb = action.lookup("verb");
     if (!unit || !verb) return;
 
-    /* Anchored at 0, so a unit merely CONTAINING the name does not match. */
-    if (unit.indexOf("syn-model-download@") !== 0) return;
+    /* Anchored at 0, so a unit merely CONTAINING the name does not match.
+     *
+     * The delete unit is granted on the same terms, and deliberately as a
+     * SEPARATE prefix rather than a "syn-model-" wildcard: a wildcard would
+     * silently grant every future syn-model unit as soon as it was added,
+     * which is how a narrow rule stops being narrow. Deleting is guarded the
+     * same way downloading is — syn-model re-validates the filename out of the
+     * request file, so a group member can ask for a deletion and cannot choose
+     * what root unlinks (see `syn-model delete-request`). */
+    if (unit.indexOf("syn-model-download@") !== 0 &&
+        unit.indexOf("syn-model-delete@") !== 0) return;
     if (unit.indexOf("/") !== -1) return;
 
     if (verb === "start" || verb === "stop")

@@ -1,0 +1,43 @@
+[Unit]
+# One queued model deletion. The instance name is the request token, and the
+# filename being deleted is in /run/syn-model/req/%i.delete, NOT in the unit
+# name — same rule as the download unit: arguments arrive through a file whose
+# contents syn-model re-validates as untrusted, because a unit instance name is
+# not a safe place to carry a caller's string.
+Description=Delete an installed AI model (%i)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/syn-model delete-request %i
+
+# Root only to unlink inside synapd's models directory, which is
+# 0750 synapd:synapse — the desktop can read it and cannot write it.
+#
+# ProtectSystem=strict makes the whole hierarchy read-only, so the writable
+# paths are named one at a time. model.selected is listed with a leading `-`
+# because it legitimately may not exist yet; without that, a box that has never
+# recorded a pick would fail the unit instead of doing the delete.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/synapd/models /run/syn-model -/var/lib/synapd/model.selected
+
+# Deleting a local file needs no network at all. The download unit cannot say
+# this; the whole point of separating the two units is that this one can.
+PrivateNetwork=yes
+
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+NoNewPrivileges=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# An unlink is immediate. If this has not finished in half a minute something
+# is wrong, and hanging forever would leave the picker saying "deleting …".
+TimeoutStartSec=30

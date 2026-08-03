@@ -1,6 +1,6 @@
 pkgname=syn-model
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="SynapseOS model manager — download and manage LLM models"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -11,15 +11,18 @@ depends=('curl' 'systemd' 'polkit')
 # directory in it is looked for in the build dir and reported missing.
 source=("syn-model.sh"
         "syn-model-download@.service"
+        "syn-model-delete@.service"
         "49-syn-model-download.rules"
         "syn-model-tmpfiles.conf")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-model.sh" "$pkgdir/usr/bin/syn-model"
 
     install -Dm644 "$srcdir/syn-model-download@.service" \
         "$pkgdir/usr/lib/systemd/system/syn-model-download@.service"
+    install -Dm644 "$srcdir/syn-model-delete@.service" \
+        "$pkgdir/usr/lib/systemd/system/syn-model-delete@.service"
     install -Dm644 "$srcdir/syn-model-tmpfiles.conf" \
         "$pkgdir/usr/lib/tmpfiles.d/syn-model.conf"
     install -Dm644 "$srcdir/49-syn-model-download.rules" \

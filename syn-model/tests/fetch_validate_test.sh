@@ -122,6 +122,80 @@ else
     ok "request file is unlinked once read"
 fi
 
+# ══ syn-model delete-request ══════════════════════════════════
+#
+# The same privilege boundary pointed the other way, and a sharper one: fetch
+# can be talked into WRITING somewhere, this can be talked into REMOVING
+# something. Every case is a way of asking root to unlink a file the desktop
+# was not entitled to name.
+echo
+echo "syn-model delete-request: refusals"
+
+del_case() {
+    local token="$1" file="$2"
+    printf 'file=%s\n' "$file" > "$SYN_MODEL_RUN_DIR/req/$token.delete"
+    out=$(timeout 20 bash "$SYN_MODEL" delete-request "$token" 2>&1); rc=$?
+}
+
+# A refusal must exit non-zero and leave the victim file untouched.
+expect_kept() {
+    local what="$1" victim="$2"
+    if [ "$rc" = 0 ]; then bad "$what — exited 0"; return; fi
+    if [ ! -e "$victim" ]; then bad "$what — DELETED the file"; return; fi
+    ok "$what"
+}
+
+# A real installed model to aim the bad requests at, plus something outside the
+# models directory that must survive every one of them.
+: > "$SYN_MODEL_DIR/keeper.gguf"
+mkdir -p "$TMP/outside"
+: > "$TMP/outside/precious.gguf"
+
+del_case d1 "../outside/precious.gguf"
+expect_kept "destination with .. path segments" "$TMP/outside/precious.gguf"
+
+del_case d2 "/etc/passwd"
+expect_kept "an absolute path" "/etc/passwd"
+
+del_case d3 "sub/dir/model.gguf"
+expect_kept "a name carrying a slash" "$SYN_MODEL_DIR/keeper.gguf"
+
+del_case d4 "keeper.txt"
+expect_kept "a file that is not a .gguf" "$SYN_MODEL_DIR/keeper.gguf"
+
+del_case d5 ".hidden.gguf"
+expect_kept "a dot-leading name" "$SYN_MODEL_DIR/keeper.gguf"
+
+del_case d6 "not-installed.gguf"
+if [ "$rc" = 0 ]; then bad "a model that is not there — exited 0"
+else ok "a model that is not there"; fi
+
+# A symlink in the models directory must not become a way to unlink its
+# target: `[ -f ]` follows links, so this is checked with -L first.
+ln -sf "$TMP/outside/precious.gguf" "$SYN_MODEL_DIR/link.gguf"
+del_case d7 "link.gguf"
+expect_kept "a symlink pointing out of the directory" "$TMP/outside/precious.gguf"
+
+# The token itself is half a path.
+del_case ../escape "keeper.gguf"
+expect_kept "token escaping the request directory" "$SYN_MODEL_DIR/keeper.gguf"
+
+# ── And the one that must WORK ────────────────────────────────
+# A boundary that refuses everything is not a boundary, it is a bug.
+del_case d8 "keeper.gguf"
+if [ "$rc" = 0 ] && [ ! -e "$SYN_MODEL_DIR/keeper.gguf" ]; then
+    ok "a legitimate delete removes the model"
+else
+    bad "a legitimate delete removes the model (rc=$rc, out=$out)"
+fi
+
+# Consumed like the fetch request, and for the same reason.
+if [ -e "$SYN_MODEL_RUN_DIR/req/d8.delete" ]; then
+    bad "delete request is unlinked once read"
+else
+    ok "delete request is unlinked once read"
+fi
+
 echo
 [ "$fail" = 0 ] && echo "PASS" || echo "FAIL"
 exit $fail

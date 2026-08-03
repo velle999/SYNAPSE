@@ -61,6 +61,86 @@ static const char SEARCH[] =
  "{\"_id\":\"4\",\"id\":\"../../etc/passwd\",\"downloads\":9},"
  "{\"_id\":\"5\",\"id\":\"Qwen/Qwen2-0.5B-Instruct-GGUF\",\"downloads\":500}]";
 
+/* Shaped on a real /api/models reply (unsloth/Qwen3-Coder-30B, 2026-08-03):
+ * the tag list mixes skills with plumbing, carries the licence, and names the
+ * base model twice — once plain and once "quantized:", which is the form that
+ * points back at this same repo. */
+static const char ABOUT[] =
+"[{\"_id\":\"1\",\"id\":\"unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\",\"likes\":854,"
+  "\"downloads\":4264415,\"tags\":[\"transformers\",\"gguf\",\"unsloth\",\"qwen3\","
+  "\"code\",\"conversational\",\"chat\",\"arxiv:2505.09388\","
+  "\"base_model:Qwen/Qwen3-Coder-30B-A3B-Instruct\","
+  "\"base_model:quantized:unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\","
+  "\"license:apache-2.0\",\"endpoints_compatible\",\"region:us\"],"
+  "\"pipeline_tag\":\"text-generation\"},"
+ "{\"_id\":\"2\",\"id\":\"someone/Plain-3B-GGUF\",\"downloads\":10,"
+  "\"tags\":[\"gguf\",\"region:us\"]}]";
+
+static void test_about(void)
+{
+    syn_aimodel_cat_t cat[4];
+    int n = aimodel_parse_search(ABOUT, sizeof(ABOUT) - 1, cat, 4);
+    CHECK(n == 2, "two repos parsed (got %d)", n);
+    if (n < 2) return;
+
+    CHECK(cat[0].n_tags == 13, "every tag kept (got %d)", cat[0].n_tags);
+
+    /* The plain base_model wins over the "quantized:" one, which names this
+     * repo itself and would be a sentence saying nothing. */
+    CHECK(strcmp(cat[0].base_model, "Qwen/Qwen3-Coder-30B-A3B-Instruct") == 0,
+          "plain base_model preferred over quantized: (got \"%s\")",
+          cat[0].base_model);
+
+    char good[160];
+    aimodel_cat_good_at(&cat[0], good, sizeof(good));
+    /* "code" -> coding; "conversational" and "chat" BOTH fold to conversation
+     * and must appear once. Plumbing tags contribute nothing. */
+    CHECK(strstr(good, "coding") != NULL, "coding (got \"%s\")", good);
+    CHECK(strstr(good, "conversation") != NULL, "conversation (got \"%s\")", good);
+    CHECK(strstr(good, "transformers") == NULL, "no plumbing tags (got \"%s\")", good);
+    {
+        const char *first = strstr(good, "conversation");
+        CHECK(first && strstr(first + 1, "conversation") == NULL,
+              "conversation said once, not twice (got \"%s\")", good);
+    }
+
+    char based[160];
+    aimodel_cat_based_on(&cat[0], based, sizeof(based));
+    CHECK(strcmp(based, "Qwen3 Coder 30B A3B Instruct by Qwen") == 0,
+          "base model reads as a sentence (got \"%s\")", based);
+
+    /* A repo with nothing to say says nothing, rather than a row of dashes. */
+    char good2[160], based2[160];
+    aimodel_cat_good_at(&cat[1], good2, sizeof(good2));
+    aimodel_cat_based_on(&cat[1], based2, sizeof(based2));
+    CHECK(good2[0] == '\0', "no skills invented (got \"%s\")", good2);
+    CHECK(based2[0] == '\0', "no base model invented (got \"%s\")", based2);
+
+    /* The bio moves with the SELECTED quantisation — that is the choice the
+     * pane exists to make, so the description must follow it. */
+    syn_aimodel_file_t f = { .bytes = 18LL * 1024 * 1024 * 1024 };
+    snprintf(f.quant, sizeof(f.quant), "%s", "Q4_K_M");
+    char bio[512];
+    aimodel_cat_bio(&cat[0], &f, bio, sizeof(bio));
+    CHECK(strstr(bio, "30B") != NULL, "size stated (got \"%s\")", bio);
+    CHECK(strstr(bio, "Unsloth") != NULL, "author capitalised (got \"%s\")", bio);
+    CHECK(strstr(bio, "Q4_K_M") != NULL, "quantisation named (got \"%s\")", bio);
+    CHECK(strstr(bio, "GB of memory") != NULL, "memory estimated (got \"%s\")", bio);
+
+    /* Before the tree lands there is no file, and the memory figure is not
+     * knowable — it must be absent rather than zero. */
+    char bio0[512];
+    aimodel_cat_bio(&cat[0], NULL, bio0, sizeof(bio0));
+    CHECK(strstr(bio0, "30B") != NULL, "still describes itself with no file");
+    CHECK(strstr(bio0, "GB of memory") == NULL,
+          "no memory figure without a file (got \"%s\")", bio0);
+
+    /* A buffer far too small must truncate cleanly, never run past its end. */
+    char tiny[24];
+    aimodel_cat_bio(&cat[0], &f, tiny, sizeof(tiny));
+    CHECK(strlen(tiny) < sizeof(tiny), "bio respects a tiny buffer");
+}
+
 static void test_search(void)
 {
     syn_aimodel_cat_t cat[8];
@@ -299,6 +379,7 @@ int main(int argc, char **argv)
     if (argc == 3) return dump(argv[1], argv[2]);
 
     printf("aimodel: the search listing\n");   test_search();
+    printf("aimodel: describing a repo\n");    test_about();
     printf("aimodel: the file tree\n");        test_tree();
     printf("aimodel: reading names\n");        test_names();
     printf("aimodel: refusals\n");             test_refusals();

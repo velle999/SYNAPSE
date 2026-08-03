@@ -526,6 +526,17 @@ typedef struct {
 #define AIMODEL_CAT_MAX    32   /* repos held from one search */
 #define AIMODEL_FILE_MAX   16   /* GGUF files shown for one repo */
 #define AIMODEL_QUERY_MAX  64   /* typed search text */
+/* Tags kept per repo. Hugging Face lists a dozen or so on a busy model, most
+ * of which gguf_tag_english() drops; this only has to be deep enough that the
+ * few describing a SKILL are not cut off by the noise ahead of them. */
+#define AIMODEL_TAG_MAX    24
+/* Sized by the LONGEST tag that carries meaning, not by the typical one. Skill
+ * tags are short ("coding"), but the base model arrives as
+ * "base_model:quantized:owner/Some-Model-30B-Instruct-GGUF" — 60-odd
+ * characters, and an entry that does not fit is dropped. At 40 this silently
+ * discarded every base_model tag, i.e. exactly the ones being read, and the
+ * pane simply showed no "Based on" line. Caught by the catalogue test. */
+#define AIMODEL_TAG_LEN    96
 
 typedef struct {
     char file[128];        /* path inside the repo, and the local filename */
@@ -550,6 +561,21 @@ typedef struct {
     char params[16];       /* "7B" — read out of the name, "" when unreadable */
     long long downloads;
     long long likes;
+
+    /* What the repo says it IS, so the AVAILABLE side can describe a model
+     * BEFORE it is several GB on the disk — which is the only time the
+     * description can still change your mind. The installed side reads this
+     * out of the GGUF header; there is no header to read until it is
+     * downloaded, so the same words are assembled from the repo's tags
+     * instead. Same vocabulary either way (gguf_tag_english), so a model does
+     * not change its description by being downloaded.
+     *
+     * `base_model` is the "base_model:owner/Name" tag with the qualified
+     * "base_model:quantized:..." form preferred away — that one names the repo
+     * this was quantised FROM, which is usually itself. */
+    char tags[AIMODEL_TAG_MAX][AIMODEL_TAG_LEN];
+    int  n_tags;
+    char base_model[96];
 
     syn_aimodel_file_t   files[AIMODEL_FILE_MAX];
     int                  n_files;
@@ -585,6 +611,14 @@ typedef struct {
     int  selected;
     int  count;
     syn_aimodel_entry_t models[AIMODEL_MAX];
+
+    /* The last scan could not open the directory, as opposed to opening it and
+     * finding nothing. Both leave count == 0, and the pane used to say "No
+     * models installed" to either — which is a confident false statement when
+     * the truth is that synui was not allowed to look. Worth a whole field
+     * because that lie cost a long hunt once already: the models were there,
+     * the daemon had one loaded, and the panel said the disk was empty. */
+    int  scan_err;
 
     /* Which entry is loaded right now, matched by filename against synapd's
      * reply, or -1 when nothing matches (no model, or one outside the
@@ -638,6 +672,25 @@ typedef struct {
 
     syn_aimodel_dl_t dl;
     struct wl_event_source *dl_timer;   /* polls the progress file */
+
+    /* ── Deleting an installed model ─────────────────────────
+     *
+     * Two steps on purpose. `del_armed` is the index the cursor was on when
+     * Delete was pressed; the key does nothing but arm, and only a second
+     * confirming key removes anything. An index rather than a flag because the
+     * cursor can move between the two presses, and a confirmation that follows
+     * the cursor would delete a model nobody pointed at.
+     *
+     * `del_token`/`del_file` are the request in flight. synui cannot unlink in
+     * synapd's models directory (0750 synapd:synapse — readable, not writable),
+     * so the work is done by syn-model-delete@TOKEN.service and this side only
+     * watches the directory for the file to go. `del_until` is the deadline
+     * that turns a silent polkit refusal into a reported failure rather than
+     * "deleting …" forever. */
+    int    del_armed;
+    char   del_token[72];
+    char   del_file[128];
+    double del_until;
 
     /* ── The fetch thread (news.c idiom) ─────────────────── */
 
@@ -3853,6 +3906,30 @@ int  aimodel_parse_search(const char *body, size_t len,
  * real one). Returns how many were filled. */
 int  aimodel_parse_tree(const char *body, size_t len,
                         syn_aimodel_file_t *out, int max);
+/* Deleting an installed model, in two presses. `arm` marks the row under the
+ * cursor and returns 1 when a confirmation is now showing; `confirm` queues the
+ * privileged delete (syn-model-delete@TOKEN.service — synui cannot unlink in
+ * synapd's models directory itself); `cancel` backs out and is safe to call
+ * when nothing is armed. All three refuse the model synapd currently has
+ * loaded, and leave the reason in the panel's status. */
+int  aimodel_delete_arm(syn_server_t *s);
+int  aimodel_delete_confirm(syn_server_t *s);
+void aimodel_delete_cancel(syn_server_t *s);
+/* Describe a repo that is NOT downloaded yet, in the same words the installed
+ * side uses on the file it will become — the installed description comes out of
+ * the GGUF header, which does not exist until several GB have been fetched, and
+ * that is after the decision rather than before it. Assembled from the repo's
+ * tags plus the SELECTED quantisation, so the text moves with that choice.
+ * `f` may be NULL (the file list has not landed); each writes "" rather than
+ * inventing a claim. Tested in tests/aimodel_catalog_test.c. */
+void aimodel_cat_bio(const syn_aimodel_cat_t *c, const syn_aimodel_file_t *f,
+                     char *out, size_t len);
+/* "reasoning · coding · conversation" — the repo's tags through the same
+ * gguf_tag_english() map the installed side uses. */
+void aimodel_cat_good_at(const syn_aimodel_cat_t *c, char *out, size_t len);
+/* "Qwen3 Coder 30B by Qwen" — the base_model: tag, shaped like
+ * gguf_based_on(). Empty when the repo named none or named only itself. */
+void aimodel_cat_based_on(const syn_aimodel_cat_t *c, char *out, size_t len);
 /* The quantisation read out of a GGUF filename ("…Q4_K_M.gguf" → "Q4_K_M"),
  * and the parameter count read out of a repo name ("Phi-3-mini" → "", but
  * "Mistral-7B-Instruct" → "7B"). Both write "" when there is nothing to read

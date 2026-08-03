@@ -2162,14 +2162,24 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
 
     if (!c) {
         if (am->count == 0) {
+            /* "Empty" and "could not look" are different facts and get
+             * different words. Telling someone to download a model when the
+             * directory is full of them, and the daemon has one loaded, sends
+             * them off to fix the wrong thing entirely. */
             cairo_set_font_size(cr, 13);
             cairo_set_source_rgba(cr, 0.6, 0.6, 0.7, 1.0);
             cairo_move_to(cr, x, y);
-            cairo_show_text(cr, "No models installed.");
+            cairo_show_text(cr, am->scan_err ? "Cannot read the model directory."
+                                             : "No models installed.");
             cairo_set_font_size(cr, 12);
             cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
             cairo_move_to(cr, x, y + 24);
-            cairo_show_text(cr, "Pick one from AVAILABLE below and press Enter.");
+            /* The footer already prints the path and strerror(); this says what
+             * it means, since a permission error here is a packaging fault and
+             * not something the user did wrong. */
+            cairo_show_text(cr, am->scan_err == EACCES
+                ? "A model may still be loaded \xc2\xb7 see the message below."
+                : "Pick one from AVAILABLE below and press Enter.");
         } else if (am->selected >= 0 && am->selected < am->count) {
             const syn_aimodel_entry_t *m = &am->models[am->selected];
 
@@ -2411,9 +2421,71 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
         aimodel_fit(cr, det[i].v, w - 70);
     }
 
+    /* ── About ───────────────────────────────────────────────────────── */
+    /*
+     * The same block the installed pane carries, on the side where it can
+     * still change the answer. Reading what a model is FOR only after several
+     * GB have landed is the wrong order, and it was the missing half of this
+     * pane: the rows above say how big and how compressed, which are the two
+     * questions you can only ask once you already know you want it.
+     *
+     * Nothing is invented. It is the repo's own tags and base_model, run
+     * through the same gguf_tag_english() the installed side uses, plus the
+     * selected file's size and quantisation said in words — so a model reads
+     * the same before and after it is downloaded.
+     */
+    int ay = y + 154;
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+    cairo_move_to(cr, x, ay);
+    cairo_show_text(cr, "ABOUT");
+
+    char cgood[160], cbased[160];
+    aimodel_cat_good_at(c, cgood, sizeof(cgood));
+    aimodel_cat_based_on(c, cbased, sizeof(cbased));
+
+    struct { const char *k, *v; } cabout[2] = {
+        { "Good at",  cgood  },
+        { "Based on", cbased },
+    };
+    int c_rows = 0;
+    for (int i = 0; i < 2; i++)
+        if (cabout[i].v[0]) c_rows++;
+
+    char cbio[512];
+    aimodel_cat_bio(c, f, cbio, sizeof(cbio));
+
+    /* This pane also owns the quantisation chooser, which is the thing being
+     * interacted with — so the prose is capped harder than the installed
+     * side's eight lines and the list keeps the rest. The floor of two is what
+     * stops a very tall ABOUT on a short screen from leaving no list at all;
+     * aimodel_wrap ellipsises rather than overflowing. */
+    int cbio_top = ay + 22;
+    int c_budget = (body_bottom - 120 - c_rows * 19 - cbio_top) / 17;
+    if (c_budget < 2) c_budget = 2;
+    if (c_budget > 4) c_budget = 4;
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.74, 0.76, 0.86, 1.0);
+    int cy = aimodel_wrap(cr, cbio, x, cbio_top, w, 17, c_budget) + 8;
+
+    for (int i = 0; i < 2; i++) {
+        if (!cabout[i].v[0]) continue;
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, x, cy);
+        cairo_show_text(cr, cabout[i].k);
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.72, 0.74, 0.84, 1.0);
+        cairo_move_to(cr, x + 70, cy);
+        aimodel_fit(cr, cabout[i].v, w - 70);
+        cy += 19;
+    }
+
     /* ── The quantisations ───────────────────────────────────────────── */
-    /* Moved down by the Quality row above it, which now ends at y + 126. */
-    int fy = y + 154;
+    /* Follows ABOUT, which is a variable number of lines — so this is measured
+     * from where that block actually ended rather than from a fixed offset. */
+    int fy = cy + 14;
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
     cairo_move_to(cr, x, fy);
@@ -2700,10 +2772,18 @@ void synui_render_aimodel(syn_server_t *s)
             cairo_move_to(cr, list_x + list_w - 46, ry);
             cairo_show_text(cr, sz);
 
-            /* Marked only for a switch this panel made: synapd reports the
-             * GGUF's INTERNAL name, which by design has nothing to do with the
-             * filename, so anything else would be a guess dressed as a fact. */
-            if (i == am->loaded_idx) {
+            /* The armed row says so on the row itself, not only in the status
+             * line at the bottom of the panel. The confirmation names a model
+             * and the eye is on the list, so the question has to be answerable
+             * without looking away from the thing it is about. Drawn ahead of
+             * the "loaded" tag and returning early: an armed row cannot be the
+             * loaded one (arming refuses it), so the two never compete. */
+            if (i == am->del_armed) {
+                cairo_set_font_size(cr, 10);
+                cairo_set_source_rgba(cr, 0.90, 0.45, 0.40, 1.0);
+                cairo_move_to(cr, list_x + list_w - 100, ry);
+                cairo_show_text(cr, "delete?");
+            } else if (i == am->loaded_idx) {
                 cairo_set_font_size(cr, 10);
                 if (am->switching) {
                     cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
@@ -2772,9 +2852,15 @@ void synui_render_aimodel(syn_server_t *s)
     else if (am->cat_sel >= 0)
         cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right quantisation \xc2\xb7 "
                             "Enter download \xc2\xb7 / search \xc2\xb7 Esc close");
+    else if (am->del_armed >= 0)
+        /* While a confirmation is up, the only three keys that matter are the
+         * three named here. Listing the usual set as well would bury the one
+         * that removes several gigabytes among five that do not. */
+        cairo_show_text(cr, "Delete again to confirm \xc2\xb7 Esc cancels \xc2\xb7 "
+                            "any move cancels");
     else
-        cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter load \xc2\xb7 / search \xc2\xb7 "
-                            "R rescan \xc2\xb7 Esc close");
+        cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter load \xc2\xb7 Del delete \xc2\xb7 "
+                            "/ search \xc2\xb7 R rescan \xc2\xb7 Esc close");
     cairo_move_to(cr, 18, ph - 14);
     if (am->cat_sel >= 0)
         cairo_show_text(cr, "downloads run as a system service \xe2\x80\x94 "

@@ -82,11 +82,13 @@ static void aimodel_scan(syn_server_t *s)
 {
     syn_aimodel_t *am = &s->aimodel;
     am->count = 0;
+    am->scan_err = 0;
 
     DIR *d = opendir(AIMODEL_DIR);
     if (!d) {
+        am->scan_err = errno;
         snprintf(am->status, sizeof(am->status),
-                 "cannot read %s", AIMODEL_DIR);
+                 "cannot read %s: %s", AIMODEL_DIR, strerror(errno));
         return;
     }
 
@@ -294,6 +296,41 @@ static int js_str(const char *obj, const char *end, const char *key,
     }
     out[0] = '\0';                                      /* never closed */
     return 0;
+}
+
+/*
+ * An array of strings ("tags": ["gguf", "coding", …]) into a fixed table.
+ *
+ * Stops at the closing bracket, so a truncated body yields the tags it did
+ * receive rather than nothing. Individual entries that do not fit `elem` are
+ * SKIPPED, not truncated: every consumer of these matches them against a table
+ * of exact words, and a tag cut in half is either no match (harmless) or the
+ * wrong match (not) — dropping it is the only outcome that cannot mislead.
+ * Unlike js_str's repo ids, one missing tag costs a word in a description.
+ */
+static int js_str_array(const char *obj, const char *end, const char *key,
+                        char (*out)[AIMODEL_TAG_LEN], int max)
+{
+    const char *v = js_value_of(obj, end, key);
+    if (!v || v >= end || *v != '[') return 0;
+
+    int n = 0;
+    for (const char *p = v + 1; p < end && n < max; ) {
+        if (*p == ']') break;
+        if (*p != '"') { p++; continue; }
+
+        const char *after = js_skip_string(p, end);
+        if (!after) break;
+
+        size_t raw = (size_t)(after - p) - 2;           /* inside the quotes */
+        if (raw > 0 && raw < AIMODEL_TAG_LEN) {
+            memcpy(out[n], p + 1, raw);
+            out[n][raw] = '\0';
+            n++;
+        }
+        p = after;
+    }
+    return n;
 }
 
 static long long js_num(const char *obj, const char *end, const char *key,
@@ -575,12 +612,165 @@ int aimodel_parse_search(const char *body, size_t len,
             c->license[o] = '\0';
         }
 
+        /* The tags are what let the AVAILABLE side say what a model is FOR
+         * before it has been downloaded. Read whole rather than scanned for,
+         * the way the licence above still is: the licence is one known prefix,
+         * while a description needs every tag to run past gguf_tag_english(). */
+        c->n_tags = js_str_array(obj, obj_end, "tags", c->tags, AIMODEL_TAG_MAX);
+
+        /* "base_model:Qwen/Qwen3-Coder-30B" — what this was built from.
+         * Hugging Face also emits "base_model:quantized:Owner/Name", which
+         * names the repo this was quantised from and is very often this same
+         * model; the plain form is preferred and the qualified one is only a
+         * fallback so a repo carrying ONLY the qualified tag still says
+         * something. Skipped entirely when it just restates this repo. */
+        for (int t = 0; t < c->n_tags; t++) {
+            const char *tg = c->tags[t];
+            if (strncmp(tg, "base_model:", 11) != 0) continue;
+            const char *val = tg + 11;
+            int qualified = (strncmp(val, "quantized:", 10) == 0);
+            if (qualified) val += 10;
+            if (!strchr(val, '/')) continue;
+            if (strcmp(val, c->id) == 0) continue;      /* itself; says nothing */
+            if (!c->base_model[0] || !qualified)
+                snprintf(c->base_model, sizeof(c->base_model), "%s", val);
+        }
+
         aimodel_params_of(c->name, c->params, sizeof(c->params));
         c->detail   = AIMODEL_DETAIL_NONE;
         c->sel_file = 0;
         n++;
     }
     return n;
+}
+
+/* ══ Describing a model that is NOT downloaded yet ═══════════════════════
+ *
+ * The INSTALLED side reads the GGUF header and says what the file is. That is
+ * the wrong side of the decision: by the time the header exists, several GB
+ * have already been fetched. The facts that change a mind belong on the
+ * AVAILABLE side, where the choice is actually made.
+ *
+ * There is no header to read there, so these assemble the same description out
+ * of what the repo listing carries — its tags, its name and the size and
+ * quantisation of the file you have selected. Everything goes through the SAME
+ * vocabulary the installed side uses (gguf_tag_english, gguf_quant_english),
+ * which is why gguf.h exports them. A model must not appear to change its
+ * description merely by being downloaded.
+ *
+ * The rule is gguf.c's rule: say what the repo said, and say nothing when it
+ * did not. Nothing here is inferred from a filename beyond the parameter count
+ * the list column already shows.
+ */
+
+void aimodel_cat_good_at(const syn_aimodel_cat_t *c, char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!c || !out || !len) return;
+
+    size_t o = 0;
+    for (int i = 0; i < c->n_tags; i++) {
+        const char *e = gguf_tag_english(c->tags[i]);
+        if (!e) continue;
+
+        /* Same de-duplication as gguf_good_at(), and for the same reason: the
+         * map folds synonyms together, so "chat" and "conversational" both
+         * arrive as "conversation". Checked against what has been WRITTEN,
+         * not against the tags. */
+        int seen = 0;
+        for (size_t p = 0; p + strlen(e) <= o; p++)
+            if (memcmp(out + p, e, strlen(e)) == 0) { seen = 1; break; }
+        if (seen) continue;
+
+        int n = snprintf(out + o, len - o, "%s%s", o ? " \xc2\xb7 " : "", e);
+        if (n < 0 || (size_t)n >= len - o) { out[o] = '\0'; break; }
+        o += (size_t)n;
+    }
+}
+
+/* "Qwen3 Coder 30B A3B Instruct by Qwen" — the base_model tag in the same
+ * shape gguf_based_on() writes, so the two sides read alike. */
+void aimodel_cat_based_on(const syn_aimodel_cat_t *c, char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!c || !out || !len || !c->base_model[0]) return;
+
+    const char *slash = strchr(c->base_model, '/');
+    if (!slash) return;
+
+    char owner[64], name[96];
+    snprintf(owner, sizeof(owner), "%.*s",
+             (int)(slash - c->base_model), c->base_model);
+    snprintf(name, sizeof(name), "%s", slash + 1);
+
+    /* Separators to spaces. A repo name is written for a URL, not for a
+     * sentence, and "Qwen3-Coder-30B" mid-prose reads as a part number. */
+    for (char *p = name; *p; p++) if (*p == '-' || *p == '_') *p = ' ';
+
+    /* "GGUF" is on every repo in this list by construction (the search filters
+     * on it), so it distinguishes nothing and only costs width. */
+    size_t nl = strlen(name);
+    if (nl > 5 && strcasecmp(name + nl - 5, " GGUF") == 0) name[nl - 5] = '\0';
+
+    if (owner[0] >= 'a' && owner[0] <= 'z') owner[0] = (char)(owner[0] - 32);
+
+    snprintf(out, len, "%s by %s", name, owner);
+}
+
+void aimodel_cat_bio(const syn_aimodel_cat_t *c, const syn_aimodel_file_t *f,
+                     char *out, size_t len)
+{
+    if (out && len) out[0] = '\0';
+    if (!c || !out || !len) return;
+
+    size_t o = 0;
+    #define AM_SAY(...) do {                                            \
+        int n_ = snprintf(out + o, len - o, __VA_ARGS__);               \
+        if (n_ < 0 || (size_t)n_ >= len - o) { out[o] = '\0'; return; } \
+        o += (size_t)n_;                                                \
+    } while (0)
+
+    /* ── What it is ── */
+    char owner[64];
+    snprintf(owner, sizeof(owner), "%s", c->author);
+    if (owner[0] >= 'a' && owner[0] <= 'z') owner[0] = (char)(owner[0] - 32);
+
+    if (c->params[0]) AM_SAY("A %s model", c->params);
+    else              AM_SAY("A model");
+
+    if (owner[0]) AM_SAY(" from %s", owner);
+    AM_SAY(".");
+
+    /* ── What it costs ── */
+    /* Both of these depend on WHICH quantisation is selected, which is the
+     * choice this pane exists to make — so the description moves as the
+     * selection does, rather than describing the repo in the abstract. */
+    if (f) {
+        const char *qn = gguf_quant_english(f->quant);
+        if (qn && f->quant[0]) AM_SAY(" %s: %s.", f->quant, qn);
+
+        if (f->bytes > 0) {
+            /* Same 1.15 multiplier and the same "about" hedge as gguf_bio() —
+             * this is the identical estimate, made before the download rather
+             * than after it, and it must not disagree with itself. */
+            double mb = (double)f->bytes * 1.15 / (1024.0 * 1024.0);
+            if (mb >= 1024.0)
+                AM_SAY(" Expect it to use about %.1f GB of memory while it runs.",
+                       mb / 1024.0);
+            else
+                AM_SAY(" Expect it to use about %.0f MB of memory while it runs.",
+                       mb);
+        }
+    } else if (c->detail == AIMODEL_DETAIL_BUSY ||
+               c->detail == AIMODEL_DETAIL_WANT) {
+        AM_SAY(" Reading the repository for its sizes \xe2\x80\xa6");
+    }
+
+    /* Deliberately no context-window sentence: the listing does not carry one,
+     * and the installed side's "keeps about N words in view" comes from the
+     * header. Guessing it here would be the one invented fact in the pane. */
+
+    #undef AM_SAY
 }
 
 int aimodel_parse_tree(const char *body, size_t len,
@@ -1104,6 +1294,212 @@ static int aimodel_start_download(syn_server_t *s)
 }
 
 /*
+ * ── Deleting an installed model ──────────────────────────────────────────
+ *
+ * The mirror of the download: synui can read /var/lib/synapd/models and cannot
+ * write it (0750 synapd:synapse), so root does the unlink via
+ * syn-model-delete@TOKEN.service and this side only asks. Same spool, same
+ * token rules, same "the request file is untrusted" contract on the far end —
+ * syn-model re-validates the filename before it removes anything.
+ *
+ * Two presses, never one. aimodel_delete_arm() only marks the row; this runs
+ * on the confirming press. A single-key delete of a file that took an hour to
+ * fetch is not an affordance, it is a trap.
+ */
+int aimodel_delete_arm(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    if (am->cat_sel >= 0) {
+        snprintf(am->status, sizeof(am->status),
+                 "that one is not downloaded \xc2\xb7 nothing to delete");
+        return 0;
+    }
+    if (am->selected < 0 || am->selected >= am->count) return 0;
+
+    if (am->del_token[0]) {
+        snprintf(am->status, sizeof(am->status), "a delete is already running");
+        return 0;
+    }
+    /* Refused here as well as being survivable: synapd holds the weights in
+     * memory, so deleting the running model does not break the session — but
+     * it is almost never what was meant, and the picker knows which one it is.
+     * The privileged half deliberately does NOT enforce this; it cannot know
+     * what is loaded, and it clears the remembered pick instead. */
+    if (am->selected == am->loaded_idx) {
+        snprintf(am->status, sizeof(am->status),
+                 "synapd is running this one \xc2\xb7 switch first");
+        return 0;
+    }
+
+    am->del_armed = am->selected;
+    snprintf(am->status, sizeof(am->status),
+             "delete %s? \xc2\xb7 Delete again confirms \xc2\xb7 Esc cancels",
+             am->models[am->selected].name);
+    return 1;
+}
+
+void aimodel_delete_cancel(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (am->del_armed < 0) return;
+    am->del_armed = -1;
+    am->status[0] = '\0';
+}
+
+int aimodel_delete_confirm(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    int idx = am->del_armed;
+    am->del_armed = -1;
+    if (idx < 0 || idx >= am->count) return 0;
+
+    /* Re-checked against the ROW ARMED, not the cursor. A rescan between the
+     * two presses can re-sort the list, and confirming by index alone would
+     * remove whatever sorted into that slot instead. */
+    const char *file = am->models[idx].name;
+    if (!aimodel_name_ok(file)) {
+        snprintf(am->status, sizeof(am->status), "refused: odd filename");
+        return 0;
+    }
+    if (idx == am->loaded_idx) {
+        snprintf(am->status, sizeof(am->status),
+                 "synapd is running this one \xc2\xb7 switch first");
+        return 0;
+    }
+
+    char token[72];
+    if (!aimodel_token_of(file, token, sizeof(token))) {
+        snprintf(am->status, sizeof(am->status), "refused: unusable filename");
+        return 0;
+    }
+
+    char req[256];
+    snprintf(req, sizeof(req), "%s/req/%s.delete", AIMODEL_RUN_DIR, token);
+
+    int fd = open(req, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0640);
+    if (fd < 0 && errno == EEXIST) {
+        /* Same reasoning as the download spool: a leftover request means a
+         * start that never happened (usually polkit), and it must not make
+         * retrying impossible until the next reboot. */
+        unlink(req);
+        fd = open(req, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0640);
+    }
+    if (fd < 0) {
+        if (errno == ENOENT)
+            snprintf(am->status, sizeof(am->status),
+                     "no spool \xc2\xb7 is syn-model installed?");
+        else
+            snprintf(am->status, sizeof(am->status),
+                     "cannot queue a delete: %s", strerror(errno));
+        wlr_log(WLR_ERROR, "synui: aimodel: open %s: %s", req, strerror(errno));
+        return 0;
+    }
+
+    char body[256];
+    int len = snprintf(body, sizeof(body), "file=%s\n", file);
+    ssize_t wrote = write(fd, body, (size_t)len);
+    close(fd);
+    if (wrote != len) {
+        unlink(req);
+        snprintf(am->status, sizeof(am->status), "cannot queue a delete");
+        return 0;
+    }
+
+    char unit[128];
+    snprintf(unit, sizeof(unit), "syn-model-delete@%s.service", token);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        unlink(req);
+        snprintf(am->status, sizeof(am->status), "cannot start the deleter");
+        return 0;
+    }
+    if (pid == 0) {
+        setsid();
+        synui_child_reset_signals();
+        execlp("systemctl", "systemctl", "start", "--no-block", unit,
+               (char *)NULL);
+        _exit(127);
+    }
+
+    snprintf(am->del_token, sizeof(am->del_token), "%s", token);
+    snprintf(am->del_file,  sizeof(am->del_file),  "%s", file);
+    am->del_until = aimodel_now() + 10.0;
+    snprintf(am->status, sizeof(am->status), "deleting %s \xe2\x80\xa6", file);
+
+    wlr_log(WLR_INFO, "synui: aimodel: queued delete of %s", file);
+    if (am->dl_timer) wl_event_source_timer_update(am->dl_timer, 300);
+    return 1;
+}
+
+/*
+ * Watch for the file to actually go.
+ *
+ * The directory is the source of truth, not the unit's exit status: synui does
+ * not wait on the child, and `systemctl start --no-block` returns before the
+ * unit runs. If the file is gone the delete happened, whoever did it.
+ *
+ * The deadline is what turns a silent polkit refusal — the failure this whole
+ * spool arrangement is most prone to — into a sentence instead of a status
+ * line stuck on "deleting …". The progress file carries the privileged half's
+ * own reason when it got far enough to write one.
+ */
+static void aimodel_poll_delete(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (!am->del_token[0]) return;
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s", AIMODEL_DIR, am->del_file);
+
+    if (access(path, F_OK) != 0) {
+        snprintf(am->status, sizeof(am->status), "deleted %s", am->del_file);
+        am->del_token[0] = '\0';
+        am->del_file[0]  = '\0';
+        am->del_until    = 0.0;
+
+        /* The list is rebuilt rather than patched: aimodel_scan re-sorts, and
+         * the cursor has to be put back inside a list that just got shorter. */
+        aimodel_scan(s);
+        aimodel_mark_loaded(s);
+        if (am->selected >= am->count) am->selected = am->count - 1;
+        if (am->selected < 0) am->selected = 0;
+        return;
+    }
+
+    if (aimodel_now() < am->del_until) return;
+
+    /* Still there and out of time. Prefer the privileged half's own words. */
+    char pp[256], buf[256] = {0};
+    snprintf(pp, sizeof(pp), "%s/%s.progress", AIMODEL_RUN_DIR, am->del_token);
+    int fd = open(pp, O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+        ssize_t r = read(fd, buf, sizeof(buf) - 1);
+        close(fd);
+        if (r > 0) buf[r] = '\0';
+    }
+    const char *msg = strstr(buf, "msg=");
+    if (msg) {
+        msg += 4;
+        size_t n = strcspn(msg, "\n");
+        snprintf(am->status, sizeof(am->status), "delete failed: %.*s",
+                 (int)n, msg);
+    } else {
+        snprintf(am->status, sizeof(am->status),
+                 "delete did not happen \xc2\xb7 check: systemctl status "
+                 "syn-model-delete@%s", am->del_token);
+    }
+    wlr_log(WLR_ERROR, "synui: aimodel: delete of %s did not complete",
+            am->del_file);
+
+    am->del_token[0] = '\0';
+    am->del_file[0]  = '\0';
+    am->del_until    = 0.0;
+}
+
+/*
  * Read the progress file the privileged half writes.
  *
  * Polled rather than watched: it is rewritten once a second by a mv, so an
@@ -1204,15 +1600,22 @@ static int aimodel_dl_tick(void *data)
         }
     }
 
+    /* A delete in flight is watched on the same tick — it is a stat of one
+     * path, and giving it a timer of its own would be a second thing to arm,
+     * disarm and tear down for work that finishes in milliseconds. */
+    aimodel_poll_delete(s);
+
     if (am->visible) synui_render_aimodel(s);
 
     /* Re-armed only while there is something to watch: the panel is open (the
      * debounce needs the tick) or a download is running, which outlives the
      * panel because closing it must not abandon a 4 GB fetch. A finished
      * download re-arms nothing — its result is already in am->dl for whenever
-     * the panel is opened again. */
-    if (am->visible || live)
-        wl_event_source_timer_update(am->dl_timer, live ? 400 : 200);
+     * the panel is opened again. A delete counts as live for the same reason a
+     * download does: its outcome must still be reported if the panel closed. */
+    if (am->visible || live || am->del_token[0])
+        wl_event_source_timer_update(am->dl_timer,
+                                     (live || am->del_token[0]) ? 400 : 200);
     return 0;
 }
 
@@ -1240,6 +1643,7 @@ void aimodel_init(syn_server_t *s)
 
     am->loaded_idx = -1;
     am->cat_sel    = -1;
+    am->del_armed  = -1;
     am->pipe[0] = am->pipe[1] = -1;
     atomic_store(&am->stop, 0);
     atomic_store(&am->want, 0);
@@ -1308,6 +1712,9 @@ void aimodel_show(syn_server_t *s)
     am->switching = 0;
     am->status[0] = '\0';
     am->loaded_idx = -1;
+    /* Never opens with a confirmation already on screen, whatever was armed
+     * when it was last closed. */
+    am->del_armed = -1;
 
     aimodel_scan(s);
     if (am->selected >= am->count) am->selected = 0;
@@ -1814,17 +2221,39 @@ int aimodel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     switch (sym) {
     case XKB_KEY_Escape:
+        /* Esc backs out of the armed delete before it closes the panel. With
+         * a confirmation on screen, Esc means "not that" — closing the whole
+         * picker instead would be answering a different question. */
+        if (am->del_armed >= 0) {
+            aimodel_delete_cancel(s);
+            synui_render_aimodel(s);
+            return 1;
+        }
         aimodel_hide(s);
+        return 1;
+
+    /* Delete arms, and a second Delete confirms. Nothing is removed by one
+     * keystroke: these files are gigabytes that took a long download each. */
+    case XKB_KEY_Delete:
+    case XKB_KEY_KP_Delete:
+        if (am->del_armed >= 0) aimodel_delete_confirm(s);
+        else                    aimodel_delete_arm(s);
+        synui_render_aimodel(s);
         return 1;
 
     case XKB_KEY_Up:
     case XKB_KEY_k:
+        /* Any move disarms. The confirmation names one model, so the moment
+         * the cursor leaves it the question on screen is no longer the one
+         * that would be answered. */
+        aimodel_delete_cancel(s);
         aimodel_move(s, -1);
         synui_render_aimodel(s);
         return 1;
 
     case XKB_KEY_Down:
     case XKB_KEY_j:
+        aimodel_delete_cancel(s);
         aimodel_move(s, +1);
         synui_render_aimodel(s);
         return 1;
@@ -1849,6 +2278,10 @@ int aimodel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
     case XKB_KEY_space:
+        /* Enter is "load", never "yes". Only Delete confirms a delete —
+         * otherwise the key you press to use a model would, one keystroke
+         * earlier in the wrong state, destroy it. */
+        aimodel_delete_cancel(s);
         aimodel_confirm(s);
         return 1;
 
