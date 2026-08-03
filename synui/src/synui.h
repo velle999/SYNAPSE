@@ -319,6 +319,19 @@ typedef struct {
     unsigned      ctx_window;       /* context window size (tokens) */
     char          activity[OVERLAY_ACTIVITY_MAX][100];  /* recent events */
     int           activity_n;
+
+    /* What synapd DETECTED about the loaded model (synapd >= 0.1.0-25).
+     * Empty against an older daemon — every consumer must test before use and
+     * draw a dash rather than invent a value. The AI model panel is the reason
+     * these exist: a filename cannot tell you whether the model's turn format
+     * was recognised or which sampling profile won, and those are the two
+     * things that fail silently. */
+    char          model_name[128];  /* general.name out of the GGUF */
+    char          format[40];       /* "[INST]", "<|im_start|>user", "legacy" */
+    char          profile[64];      /* matched sampling profile, or "none" */
+    float         temperature;
+    float         top_p;
+    int           top_k;
 } syn_overlay_t;
 
 /* ── AI context attached to a window ─────────────────────── */

@@ -76,6 +76,19 @@ typedef struct {
     unsigned long active;
     unsigned      ctx_used;
     unsigned      ctx_window;
+
+    /* What synapd DETECTED about the loaded model, added in synapd 0.1.0-25.
+     * A filename says nothing about whether the turn format was recognised or
+     * which sampling profile won, and those are the two things that go wrong
+     * quietly. Empty against an older synapd, which is why every field is
+     * tested before use rather than assumed present. */
+    char          model_name[128];  /* general.name from the GGUF */
+    char          format[40];       /* "[INST]", "<|im_start|>user", "legacy" */
+    char          profile[64];      /* matched profile, or "none" */
+    float         temperature;
+    float         top_p;
+    int           top_k;
+
     int           activity_n;
     char          activity[OVERLAY_ACTIVITY_MAX][100];
 } synmon_snapshot_t;
@@ -140,6 +153,19 @@ static int synmon_request(int fd, uint8_t type, char *out, size_t out_len)
     return 0;
 }
 
+/* Copy a "-delimited value, stopping at the closing quote or the buffer end.
+ * The model name is free text out of a GGUF, so it can contain spaces and a
+ * %s scan would take only its first word. */
+static void copy_quoted(const char *src, char *dst, size_t dst_len)
+{
+    size_t i = 0;
+    while (src[i] && src[i] != '"' && i + 1 < dst_len) {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
+}
+
 /* Pull the fields we care about out of the STATUS line. Tolerates missing
  * keys, so it still works against an older synapd without ctx_* fields. */
 static void parse_status(const char *s, synmon_snapshot_t *snap)
@@ -150,6 +176,21 @@ static void parse_status(const char *s, synmon_snapshot_t *snap)
     if ((p = strstr(s, "active=")))      snap->active     = strtoul(p + 7, NULL, 10);
     if ((p = strstr(s, "ctx_used=")))    snap->ctx_used   = (unsigned)strtoul(p + 9, NULL, 10);
     if ((p = strstr(s, "ctx_window=")))  snap->ctx_window = (unsigned)strtoul(p + 11, NULL, 10);
+
+    /* Detail block (synapd >= 0.1.0-25). Absent on an older daemon, and the
+     * panel draws "—" for whatever stayed empty rather than inventing a value.
+     *
+     * Note "model=" above cannot match "model_name=" — the character after
+     * "model" is '_', not '=' — so the order of these two does not matter. */
+    if ((p = strstr(s, "model_name=\"")))
+        copy_quoted(p + 12, snap->model_name, sizeof(snap->model_name));
+    if ((p = strstr(s, "format=\"")))
+        copy_quoted(p + 8, snap->format, sizeof(snap->format));
+    if ((p = strstr(s, "profile=")))
+        sscanf(p + 8, "%63s", snap->profile);
+    if ((p = strstr(s, "temp=")))   snap->temperature = strtof(p + 5, NULL);
+    if ((p = strstr(s, "top_p=")))  snap->top_p       = strtof(p + 6, NULL);
+    if ((p = strstr(s, "top_k=")))  snap->top_k       = atoi(p + 6);
 }
 
 /* CONTEXT_GET returns a header line then one line per recent event
@@ -273,6 +314,16 @@ static int synmon_readable(int fd, uint32_t mask, void *data)
     for (int i = 0; i < snap.activity_n; i++)
         snprintf(ov->activity[i], sizeof(ov->activity[i]), "%s",
                  snap.activity[i]);
+
+    /* Copied verbatim, empty included: an older synapd sends no detail block,
+     * and blanking is the honest result. Overwriting with the previous poll's
+     * values would leave the panel showing a model that is no longer loaded. */
+    snprintf(ov->model_name, sizeof(ov->model_name), "%s", snap.model_name);
+    snprintf(ov->format,     sizeof(ov->format),     "%s", snap.format);
+    snprintf(ov->profile,    sizeof(ov->profile),    "%s", snap.profile);
+    ov->temperature = snap.temperature;
+    ov->top_p       = snap.top_p;
+    ov->top_k       = snap.top_k;
 
     /* Redraw if the panel is up; scene damage schedules the frame. */
     if (ov->visible)
