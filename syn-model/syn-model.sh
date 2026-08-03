@@ -7,6 +7,25 @@ MODEL_DIR="/var/lib/synapd/models"
 MODEL_PATH="$MODEL_DIR/synapse.gguf"
 SYNAPD_SERVICE="synapd"
 
+# Where `fetch` reads its job from and reports back to. Created by tmpfiles.d
+# as root:synapse 0770 — the group synui's user is already in, because the
+# panel has to be able to drop a request and read the progress back.
+RUN_DIR="/run/syn-model"
+REQ_DIR="$RUN_DIR/req"
+
+# Redirectable so tests/fetch_validate_test.sh can drive `fetch` against a
+# scratch directory. Honoured ONLY when not root: the whole point of the
+# request validation is that root is handed untrusted input, and an
+# environment variable that moved root's destination directory would hand it
+# the one thing it refuses to take from the request. systemd starts the unit
+# with a clean environment regardless; this makes it not matter.
+if [ "$(id -u)" != 0 ]; then
+    MODEL_DIR="${SYN_MODEL_DIR:-$MODEL_DIR}"
+    MODEL_PATH="$MODEL_DIR/synapse.gguf"
+    RUN_DIR="${SYN_MODEL_RUN_DIR:-$RUN_DIR}"
+    REQ_DIR="$RUN_DIR/req"
+fi
+
 # Download robustness knobs
 RETRIES=3                              # download attempts before giving up
 MIN_MODEL_BYTES=$((10 * 1024 * 1024))  # 10MB floor — anything smaller is an
@@ -31,6 +50,9 @@ Usage:
   syn-model list                    List available models
   syn-model status                  Show current model status
   syn-model remove [-y]             Remove installed model
+  syn-model fetch TOKEN             Run a queued download request (root; the
+                                    control panel's downloader calls this
+                                    through syn-model-download@TOKEN.service)
   syn-model help                    This help
 
 Options:
@@ -222,6 +244,157 @@ download() {
     echo "✓ SynapseOS AI is ready. Run: synsh"
 }
 
+# ── Request-driven fetch ──────────────────────────────────────
+#
+# `syn-model fetch TOKEN` is the privileged half of the control panel's model
+# downloader. It is never run by hand: syn-model-download@TOKEN.service runs
+# it as root, and a polkit rule lets the `synapse` group start that unit.
+#
+# The caller is therefore NOT trusted, even though it had to be in the synapse
+# group to get here. Everything the request file carries is re-validated below,
+# because the alternative is a group member handing root an arbitrary URL and
+# an arbitrary path to write it to:
+#
+#   - the URL must be huggingface.co over https, with no whitespace, quotes or
+#     control characters — it is passed to curl as one argv element, never
+#     through a shell;
+#   - the destination is a BARE FILENAME ending .gguf and is joined to
+#     $MODEL_DIR here, so no request can name a path. This is the same rule
+#     synapd enforces on SYN_MSG_RELOAD, for the same reason;
+#   - an existing file is never overwritten. A model already on disk needs no
+#     download, and this is what stops a request replacing the model synapd is
+#     running with something else.
+#
+# The request is read once and unlinked immediately: the directory is group-
+# writable, so re-reading it after validating would be a window in which the
+# contents could change under us.
+
+# Atomic, because synui polls this file and a half-written line would read as
+# a finished download at 0%.
+progress_write() {
+    local token="$1" state="$2" got="$3" total="$4" msg="${5:-}"
+    local pct=0
+    [ -n "$total" ] && [ "$total" -gt 0 ] 2>/dev/null && pct=$(( got * 100 / total ))
+    local dest="$RUN_DIR/$token.progress"
+    printf 'state=%s\npct=%d\ngot=%d\ntotal=%d\nmsg=%s\n' \
+        "$state" "$pct" "${got:-0}" "${total:-0}" "$msg" > "$dest.tmp"
+    chmod 0640 "$dest.tmp" 2>/dev/null || true
+    chgrp synapse "$dest.tmp" 2>/dev/null || true
+    mv -f "$dest.tmp" "$dest"
+}
+
+# curl in the background so the shell can report how far along it is. Same
+# flags as fetch_once (resume, follow redirects, fail on HTTP error); the
+# progress bar is dropped because nothing is watching stdout here.
+fetch_with_progress() {
+    local url="$1" dest="$2" expected="$3" token="$4"
+    local pid rc=0 got
+
+    curl -fsSL -C - -o "$dest" "$url" &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        got=$(filesize "$dest")
+        progress_write "$token" running "$got" "$expected" ""
+        sleep 1
+    done
+    wait "$pid" || rc=$?
+    return $rc
+}
+
+fetch() {
+    local token="${1:-}"
+
+    # The token is half of two file paths below, so it is checked before it is
+    # ever interpolated — no dots-and-slashes, no leading dash.
+    [[ "$token" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] \
+        || die "invalid request token"
+
+    local req="$REQ_DIR/$token.request"
+    [ -f "$req" ] || die "no such request: $token"
+
+    local url="" file="" line key val
+    while IFS= read -r line; do
+        key="${line%%=*}"; val="${line#*=}"
+        case "$key" in
+            url)  url="$val"  ;;
+            file) file="$val" ;;
+        esac
+    done < "$req"
+    rm -f "$req"
+
+    [[ "$url" =~ ^https://huggingface\.co/[A-Za-z0-9._~:/?#@!$\&()*+,\;=%-]+$ ]] \
+        || { progress_write "$token" failed 0 0 "refused: not a huggingface.co https URL"
+             die "refused URL: $url"; }
+
+    [[ "$file" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.gguf$ ]] \
+        || { progress_write "$token" failed 0 0 "refused: bad destination filename"
+             die "refused destination: $file"; }
+
+    local path="$MODEL_DIR/$file"
+    if [ -e "$path" ]; then
+        progress_write "$token" failed 0 0 "already installed"
+        die "already installed: $path"
+    fi
+
+    mkdir -p "$MODEL_DIR"
+    local tmp="$path.part"
+    progress_write "$token" running 0 0 "starting"
+
+    local expected free have needed
+    expected=$(remote_size "$url")
+    if [ -n "$expected" ]; then
+        have=$(filesize "$tmp")
+        needed=$(( expected - have + expected / 20 ))
+        (( needed < 0 )) && needed=0
+        free=$(free_bytes "$MODEL_DIR")
+        if [ -n "$free" ] && [ "$needed" -gt "$free" ]; then
+            progress_write "$token" failed 0 "$expected" \
+                "not enough disk space: need $(human "$needed"), have $(human "$free")"
+            die "insufficient disk space in $MODEL_DIR"
+        fi
+    fi
+
+    # Same resume/validate/retry shape as download(), reporting to the progress
+    # file instead of a terminal.
+    local attempt rc v ok=0 before last_before=-1
+    for (( attempt = 1; attempt <= RETRIES; attempt++ )); do
+        before=$(filesize "$tmp")
+        if [ "$before" -gt 0 ] && [ "$before" = "$last_before" ]; then
+            rm -f "$tmp"; before=0
+        fi
+        last_before=$before
+
+        rc=0; fetch_with_progress "$url" "$tmp" "$expected" "$token" || rc=$?
+        v=0; validate_download "$tmp" "$expected" || v=$?
+
+        if [ "$v" = 0 ]; then ok=1; break; fi
+        if [ "$v" = 2 ]; then
+            rm -f "$tmp"
+            progress_write "$token" running 0 "$expected" \
+                "server sent something that is not a model — retrying"
+        else
+            progress_write "$token" running "$(filesize "$tmp")" "$expected" \
+                "interrupted (rc=$rc) — resuming"
+        fi
+        sleep 2
+    done
+
+    if [ "$ok" != 1 ]; then
+        progress_write "$token" failed "$(filesize "$tmp")" "$expected" \
+            "download failed after $RETRIES attempts"
+        die "download failed after $RETRIES attempts"
+    fi
+
+    mv "$tmp" "$path"
+    # synapd runs unprivileged and has to be able to read what root just wrote.
+    chown synapd:synapd "$path" 2>/dev/null || true
+    chmod 0644 "$path"
+
+    local size; size=$(filesize "$path")
+    progress_write "$token" done "$size" "$size" "$file"
+    echo "✓ Downloaded $path ($(human "$size"))"
+}
+
 remove() {
     if [ ! -f "$MODEL_PATH" ]; then
         echo "No model installed at $MODEL_PATH"
@@ -254,6 +427,7 @@ set -- "${ARGS[@]}"
 
 case "${1:-help}" in
     download) download "${2:-mistral-7b}" ;;
+    fetch)    fetch "${2:-}" ;;
     list)     list_models ;;
     status)   status ;;
     remove)   remove ;;

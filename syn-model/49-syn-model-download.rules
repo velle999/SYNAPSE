@@ -1,0 +1,44 @@
+/*
+ * 49-syn-model-download.rules — let the desktop start a model download.
+ *
+ * The control panel's model picker (synui, Super+C ▸ System ▸ AI model) runs
+ * as the logged-in user and cannot write to synapd's models directory. It
+ * queues a request in /run/syn-model/req/ and starts
+ * syn-model-download@TOKEN.service, which does the fetch as root.
+ *
+ * Without this rule that start is an interactive polkit authentication, and
+ * synui has no agent of its own to prompt with — the download would fail
+ * silently, which is exactly the failure mode a downloader must not have.
+ *
+ * What is being granted is narrow on purpose:
+ *
+ *   - only members of `synapse`, the group that already has synapd's socket;
+ *   - only from an active session at this machine's own seat, so an SSH
+ *     login as a synapse member cannot trigger downloads on the desktop;
+ *   - only start/stop, and only of syn-model-download@ instances. It is NOT
+ *     a general "manage units" grant.
+ *
+ * The unit still treats its request file as untrusted (see syn-model fetch):
+ * a group member can ask for a download, and cannot choose what root writes
+ * where.
+ *
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") return;
+    if (!subject.isInGroup("synapse")) return;
+    if (!subject.local || !subject.active) return;
+
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    if (!unit || !verb) return;
+
+    /* Anchored at 0, so a unit merely CONTAINING the name does not match. */
+    if (unit.indexOf("syn-model-download@") !== 0) return;
+    if (unit.indexOf("/") !== -1) return;
+
+    if (verb === "start" || verb === "stop")
+        return polkit.Result.YES;
+});

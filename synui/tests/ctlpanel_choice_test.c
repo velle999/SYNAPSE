@@ -67,6 +67,8 @@ static int  reload_refuse;           /* make synapd say no */
 void synui_render_ctlpanel(syn_server_t *s)  { (void)s; renders++; }
 void synui_render_aimodel(syn_server_t *s)   { (void)s; }
 void synmon_want_refresh(syn_server_t *s)    { (void)s; }
+/* aimodel.c forks the downloader; input.c owns the real one. */
+void synui_child_reset_signals(void)         { }
 
 void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {

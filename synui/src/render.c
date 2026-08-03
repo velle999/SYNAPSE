@@ -1962,6 +1962,313 @@ static void aimodel_size_str(long long bytes, char *out, size_t n)
     else          snprintf(out, n, "%lldM", bytes / (1024 * 1024));
 }
 
+/*
+ * Draw text at the current point, trimmed to fit with an ellipsis.
+ *
+ * Everything in the AVAILABLE section came off the network, so this goes
+ * through syn_show_text() rather than cairo_show_text(): an invalid UTF-8
+ * sequence puts the cairo context into a permanent error state, and an error
+ * state is a BLANK PANEL — a repo name is not something to hand cairo raw.
+ */
+static void aimodel_fit(cairo_t *cr, const char *text, double max_w)
+{
+    char safe[512];
+    syn_utf8_copy(safe, sizeof(safe), text ? text : "");
+
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, safe, &ext);
+    if (ext.x_advance <= max_w) { syn_show_text(cr, safe); return; }
+
+    /* Back off a character at a time, on UTF-8 boundaries, until the ellipsis
+     * fits too. */
+    size_t len = strlen(safe);
+    while (len > 0) {
+        do { len--; } while (len > 0 && ((unsigned char)safe[len] & 0xC0) == 0x80);
+
+        char trial[520];
+        snprintf(trial, sizeof(trial), "%.*s\xe2\x80\xa6", (int)len, safe);
+        cairo_text_extents(cr, trial, &ext);
+        if (ext.x_advance <= max_w) { syn_show_text(cr, trial); return; }
+    }
+}
+
+/* "1.2M", "834K" — a download count is a rough sense of how used a model is,
+ * not a figure anybody reads to the digit. */
+static void aimodel_count_str(long long n, char *out, size_t len)
+{
+    if      (n >= 1000000) snprintf(out, len, "%.1fM", (double)n / 1000000.0);
+    else if (n >= 1000)    snprintf(out, len, "%.0fK", (double)n / 1000.0);
+    else                   snprintf(out, len, "%lld", n);
+}
+
+/*
+ * A download in flight, drawn at the foot of the pane.
+ *
+ * Its own function because it is drawn from EVERY row, not only the one it
+ * was started from: while several gigabytes are moving, that is the thing
+ * most worth knowing, and hunting for the row you started it on to see how
+ * far it got would be a worse panel than the one that had no downloads.
+ */
+static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
+                              int x, int w, int ph)
+{
+    if (am->dl.state == AIMODEL_DL_IDLE) return;
+
+    int by = ph - 104;
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+    cairo_move_to(cr, x, by);
+    aimodel_fit(cr, am->dl.file, w - 60);
+
+    const char *state =
+        am->dl.state == AIMODEL_DL_DONE     ? "done"     :
+        am->dl.state == AIMODEL_DL_FAILED   ? "failed"   :
+        am->dl.state == AIMODEL_DL_STARTING ? "starting" : "";
+    if (state[0]) {
+        cairo_set_font_size(cr, 11);
+        if (am->dl.state == AIMODEL_DL_FAILED)
+            cairo_set_source_rgba(cr, 0.80, 0.45, 0.40, 1.0);
+        else
+            set_accent(cr, 1.0);
+        cairo_move_to(cr, x + w - 52, by);
+        cairo_show_text(cr, state);
+    }
+
+    /* The bar, and the byte counts under it — a percentage alone says nothing
+     * about whether a stalled download is 40 MB or 4 GB from finishing. */
+    int bw = w, bh = 6, bx = x, byy = by + 10;
+    cairo_set_source_rgba(cr, 0.25, 0.25, 0.34, 1.0);
+    cairo_rectangle(cr, bx, byy, bw, bh);
+    cairo_fill(cr);
+
+    int pct = am->dl.pct < 0 ? 0 : (am->dl.pct > 100 ? 100 : am->dl.pct);
+    if (am->dl.state == AIMODEL_DL_DONE) pct = 100;
+    if (pct > 0) {
+        if (am->dl.state == AIMODEL_DL_FAILED)
+            cairo_set_source_rgba(cr, 0.70, 0.35, 0.32, 1.0);
+        else
+            set_accent(cr, 1.0);
+        cairo_rectangle(cr, bx, byy, bw * pct / 100, bh);
+        cairo_fill(cr);
+    }
+
+    char got[24], tot[24], line[96];
+    aimodel_size_str(am->dl.got, got, sizeof(got));
+    aimodel_size_str(am->dl.total, tot, sizeof(tot));
+    if (am->dl.total > 0)
+        snprintf(line, sizeof(line), "%s of %s  \xc2\xb7  %d%%", got, tot, pct);
+    else
+        snprintf(line, sizeof(line), "%s", got);
+
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.5, 0.5, 0.62, 1.0);
+    cairo_move_to(cr, x, byy + 20);
+    cairo_show_text(cr, line);
+
+    if (am->dl.msg[0]) {
+        cairo_move_to(cr, x, byy + 36);
+        aimodel_fit(cr, am->dl.msg, w);
+    }
+}
+
+/*
+ * The right-hand pane: everything known about the row under the cursor.
+ *
+ * For an installed model that is the filename and whether it is the one
+ * running. For one that is not installed it is what the repo says about
+ * itself, plus the list of quantisations — the choice that decides both how
+ * big the download is and how good the answers are, and the reason this panel
+ * needed a second column at all.
+ */
+static void aimodel_render_pane(cairo_t *cr, syn_aimodel_t *am,
+                                int px, int py, int pw, int ph,
+                                int x, int y, int w)
+{
+    hit_clear(&am->hit_files);
+
+    const syn_aimodel_cat_t *c =
+        (am->cat_sel >= 0 && am->cat_sel < am->n_cat) ? &am->cat[am->cat_sel]
+                                                      : NULL;
+
+    /* The pane's body stops short of the progress block when one is drawn, so
+     * the quantisation list and the download never overlap. */
+    int dl_live = (am->dl.state != AIMODEL_DL_IDLE);
+    int body_bottom = ph - (dl_live ? 132 : 72);
+
+    if (!c) {
+        if (am->count == 0) {
+            cairo_set_font_size(cr, 13);
+            cairo_set_source_rgba(cr, 0.6, 0.6, 0.7, 1.0);
+            cairo_move_to(cr, x, y);
+            cairo_show_text(cr, "No models installed.");
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
+            cairo_move_to(cr, x, y + 24);
+            cairo_show_text(cr, "Pick one from AVAILABLE below and press Enter.");
+        } else if (am->selected >= 0 && am->selected < am->count) {
+            const syn_aimodel_entry_t *m = &am->models[am->selected];
+
+            cairo_set_font_size(cr, 15);
+            cairo_set_source_rgba(cr, 0.92, 0.92, 0.98, 1.0);
+            cairo_move_to(cr, x, y);
+            aimodel_fit(cr, m->name, w);
+
+            char sz[24];
+            aimodel_size_str(m->bytes, sz, sizeof(sz));
+
+            struct { const char *k, *v; } rows[2];
+            char quant[24];
+            aimodel_quant_of(m->name, quant, sizeof(quant));
+            rows[0].k = "Size";  rows[0].v = sz;
+            rows[1].k = "Quant"; rows[1].v = quant[0] ? quant : "\xe2\x80\x94";
+
+            for (int i = 0; i < 2; i++) {
+                cairo_set_font_size(cr, 12);
+                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                cairo_move_to(cr, x, y + 30 + i * 20);
+                cairo_show_text(cr, rows[i].k);
+                cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+                cairo_move_to(cr, x + 70, y + 30 + i * 20);
+                cairo_show_text(cr, rows[i].v);
+            }
+
+            cairo_set_font_size(cr, 12);
+            if (am->selected == am->loaded_idx) {
+                set_accent(cr, 1.0);
+                cairo_move_to(cr, x, y + 86);
+                cairo_show_text(cr, am->switching ? "loading \xe2\x80\xa6"
+                                                  : "this is the model synapd is running");
+            } else {
+                cairo_set_source_rgba(cr, 0.6, 0.6, 0.72, 1.0);
+                cairo_move_to(cr, x, y + 86);
+                cairo_show_text(cr, "[ Enter: load this model ]");
+            }
+        }
+        aimodel_render_dl(cr, am, x, w, ph);
+        return;
+    }
+
+    /* ── A repo ──────────────────────────────────────────────────────── */
+    cairo_set_font_size(cr, 15);
+    cairo_set_source_rgba(cr, 0.92, 0.92, 0.98, 1.0);
+    cairo_move_to(cr, x, y);
+    aimodel_fit(cr, c->name, w);
+
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.5, 0.55, 0.7, 1.0);
+    cairo_move_to(cr, x, y + 18);
+    aimodel_fit(cr, c->author, w);
+
+    const syn_aimodel_file_t *f =
+        (c->n_files > 0 && c->sel_file >= 0 && c->sel_file < c->n_files)
+            ? &c->files[c->sel_file] : NULL;
+
+    char dls[24], szbuf[24];
+    aimodel_count_str(c->downloads, dls, sizeof(dls));
+    aimodel_size_str(f ? f->bytes : -1, szbuf, sizeof(szbuf));
+
+    struct { const char *k, *v; } det[4];
+    det[0].k = "Params";   det[0].v = c->params[0] ? c->params : "\xe2\x80\x94";
+    det[1].k = "Download"; det[1].v = f ? szbuf : "\xe2\x80\x94";
+    det[2].k = "License";  det[2].v = c->license[0] ? c->license : "\xe2\x80\x94";
+    det[3].k = "Pulls";    det[3].v = dls;
+
+    for (int i = 0; i < 4; i++) {
+        int ry = y + 46 + i * 20;
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, x, ry);
+        cairo_show_text(cr, det[i].k);
+        cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+        cairo_move_to(cr, x + 70, ry);
+        aimodel_fit(cr, det[i].v, w - 70);
+    }
+
+    /* ── The quantisations ───────────────────────────────────────────── */
+    int fy = y + 142;
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+    cairo_move_to(cr, x, fy);
+    cairo_show_text(cr, "QUANTISATION");
+
+    if (c->detail == AIMODEL_DETAIL_BUSY || c->detail == AIMODEL_DETAIL_WANT) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        cairo_move_to(cr, x, fy + 24);
+        cairo_show_text(cr, "reading the repository \xe2\x80\xa6");
+    } else if (c->detail == AIMODEL_DETAIL_FAIL) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+        cairo_move_to(cr, x, fy + 24);
+        cairo_show_text(cr, "could not read the repository");
+    } else if (c->n_files == 0) {
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        cairo_move_to(cr, x, fy + 24);
+        cairo_show_text(cr, "no single-file GGUF here");
+    } else {
+        const int frow_h = 22;
+        int max_rows = (body_bottom - (fy + 12)) / frow_h;
+        if (max_rows < 1) max_rows = 1;
+        if (max_rows > c->n_files) max_rows = c->n_files;
+
+        /* Keep the selected quantisation on screen when a repo has more of
+         * them than the pane can show. */
+        int first = 0;
+        if (c->sel_file >= max_rows) first = c->sel_file - max_rows + 1;
+
+        hit_set_panel(&am->hit_files, px, py, pw, ph);
+        hit_set_rows(&am->hit_files, x, fy + 12 - 15, w, frow_h, max_rows);
+        hit_set_first(&am->hit_files, first);
+
+        for (int v = 0; v < max_rows; v++) {
+            int i  = first + v;
+            int ry = fy + 12 + v * frow_h + 15;
+            int sel = (i == c->sel_file);
+
+            if (sel) {
+                set_accent(cr, 0.30);
+                cairo_rectangle(cr, x - 6, ry - 15, w + 6, frow_h - 2);
+                cairo_fill(cr);
+            }
+
+            cairo_set_font_size(cr, 12);
+            cairo_set_source_rgba(cr, sel ? 0.95 : 0.72, sel ? 1.0 : 0.72,
+                                  sel ? 0.99 : 0.82, 1.0);
+            cairo_move_to(cr, x, ry);
+            cairo_show_text(cr, c->files[i].quant[0] ? c->files[i].quant
+                                                     : "\xe2\x80\x94");
+
+            char fsz[24];
+            aimodel_size_str(c->files[i].bytes, fsz, sizeof(fsz));
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.5, 0.5, 0.62, 1.0);
+            cairo_move_to(cr, x + 90, ry);
+            cairo_show_text(cr, fsz);
+
+            cairo_set_source_rgba(cr, 0.42, 0.42, 0.54, 1.0);
+            cairo_move_to(cr, x + 160, ry);
+            aimodel_fit(cr, c->files[i].file, w - 160);
+        }
+
+        if (c->n_files > max_rows) {
+            cairo_set_font_size(cr, 10);
+            cairo_set_source_rgba(cr, 0.4, 0.4, 0.5, 1.0);
+            char more[48];
+            snprintf(more, sizeof(more), "+%d more", c->n_files - max_rows);
+            cairo_move_to(cr, x + w - 60, fy);
+            cairo_show_text(cr, more);
+        }
+
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.6, 0.6, 0.72, 1.0);
+        cairo_move_to(cr, x, body_bottom + 22);
+        cairo_show_text(cr, "[ Enter: download ]");
+    }
+
+    aimodel_render_dl(cr, am, x, w, ph);
+}
+
 void synui_render_aimodel(syn_server_t *s)
 {
     syn_aimodel_t *am = &s->aimodel;
@@ -1975,13 +2282,17 @@ void synui_render_aimodel(syn_server_t *s)
     struct wlr_box ob;
     get_output_box(s, &ob);
 
-    /* The header block is fixed height and the list is not, so the frame is
-     * sized from the model count — a two-model box and a twelve-model box are
-     * both drawn tight rather than one padded to fit the other. */
-    const int row_h = 30, hdr = 152, pad = 18;
-    int rows = am->count > 0 ? am->count : 1;
-    int pw = 620;
-    int ph = hdr + rows * row_h + 86;
+    /* Two columns: the list of models on the left, and what is known about the
+     * one under the cursor on the right. The frame is a fixed size now rather
+     * than sized to the model count — the AVAILABLE section is a page of search
+     * results, so the list scrolls inside a constant box instead of the box
+     * growing to whatever Hugging Face returned. */
+    const int row_h = 26, pad = 18;
+    const int list_x = 12, list_w = 318;
+    const int pane_x = list_x + list_w + 18;
+    const int list_top = 200;                  /* first row's text baseline */
+    int pw = 900;
+    int ph = list_top + AIMODEL_ROWS * row_h + 74;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
     wlr_scene_node_set_position(&s->aimodel_ui.tree->node, px, py);
@@ -1989,9 +2300,21 @@ void synui_render_aimodel(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->aimodel_ui.tree->node);
 
     /* Row grid starts below the header, so a click lands on the model the
-     * highlight is under rather than counting from the top of the panel. */
+     * highlight is under rather than counting from the top of the panel. The
+     * grid counts SLOTS — the two section headings included — because that is
+     * what is drawn, and a grid that skipped them would select the row above
+     * the one pointed at from the AVAILABLE section down.
+     *
+     * Only the visible window is registered, offset by the scroll position, so
+     * a click below the last drawn row is chrome rather than a row off-screen. */
+    int slots   = aimodel_slots(am);
+    int visible = slots - am->scroll;
+    if (visible > AIMODEL_ROWS) visible = AIMODEL_ROWS;
+    if (visible < 0) visible = 0;
+
     hit_set_panel(&am->hit, px, py, pw, ph);
-    hit_set_rows(&am->hit, 12, hdr - 18, pw - 24, row_h, am->count);
+    hit_set_rows(&am->hit, list_x, list_top - 18, list_w, row_h, visible);
+    hit_set_first(&am->hit, am->scroll);
 
     float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
@@ -2079,67 +2402,154 @@ void synui_render_aimodel(syn_server_t *s)
     cairo_line_to(cr, pw - 18, 132);
     cairo_stroke(cr);
 
-    /* ── The list ────────────────────────────────────────────────────── */
-    if (am->count == 0) {
-        cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, 0.6, 0.6, 0.7, 1.0);
-        cairo_move_to(cr, pad + 8, hdr + 4);
-        cairo_show_text(cr, "no models found");
+    /* ── The search box ──────────────────────────────────────────────── */
+    cairo_set_font_size(cr, 12);
+    if (am->typing) {
+        set_accent(cr, 0.25);
+        cairo_rectangle(cr, list_x, 152, list_w, 24);
+        cairo_fill(cr);
+    }
+    cairo_set_source_rgba(cr, 0.5, 0.5, 0.62, 1.0);
+    cairo_move_to(cr, list_x + 8, 168);
+    cairo_show_text(cr, "/");
+
+    cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
+    cairo_move_to(cr, list_x + 22, 168);
+    if (am->query[0]) {
+        char q[AIMODEL_QUERY_MAX + 2];
+        snprintf(q, sizeof(q), "%s%s", am->query, am->typing ? "_" : "");
+        syn_show_text(cr, q);
+    } else {
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_show_text(cr, am->typing ? "_" : "search huggingface");
     }
 
-    for (int i = 0; i < am->count; i++) {
-        int sel = (i == am->selected);
-        int ry = hdr + i * row_h;
+    /* ── The list ────────────────────────────────────────────────────── */
+    for (int v = 0; v < visible; v++) {
+        int slot = am->scroll + v;
+        int ry   = list_top + v * row_h;
+        int sel  = (slot == aimodel_cursor_slot(am));
+
+        /* A section heading. */
+        if (aimodel_slot_is_head(am, slot)) {
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+            cairo_move_to(cr, list_x + 6, ry);
+            if (slot == 0) {
+                cairo_show_text(cr, am->count ? "INSTALLED" : "INSTALLED \xc2\xb7 none");
+            } else {
+                char head[128];
+                if (am->search_msg[0])
+                    snprintf(head, sizeof(head), "AVAILABLE \xc2\xb7 %s", am->search_msg);
+                else
+                    snprintf(head, sizeof(head), "AVAILABLE \xc2\xb7 %d", am->n_cat);
+                cairo_show_text(cr, head);
+            }
+            continue;
+        }
 
         if (sel) {
             set_accent(cr, 0.35);
-            cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
+            cairo_rectangle(cr, list_x, ry - 17, list_w, row_h - 3);
             cairo_fill(cr);
         }
 
-        cairo_set_font_size(cr, 13);
         cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
                               sel ? 0.99 : 0.86, 1.0);
-        cairo_move_to(cr, pad + 8, ry + 4);
-        cairo_show_text(cr, am->models[i].name);
 
-        char sz[24];
-        aimodel_size_str(am->models[i].bytes, sz, sizeof(sz));
-        cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
-        cairo_move_to(cr, pw - 170, ry + 4);
-        cairo_show_text(cr, sz);
+        if (slot <= am->count) {
+            /* An installed model: the filename, because that is what synapd
+             * is asked to load and what tells one download from another. */
+            int i = slot - 1;
+            cairo_set_font_size(cr, 12);
+            cairo_move_to(cr, list_x + 8, ry);
+            aimodel_fit(cr, am->models[i].name, list_w - 96);
 
-        /* Marked only for a switch this panel made: synapd reports the GGUF's
-         * INTERNAL name, which by design has nothing to do with the filename,
-         * so anything else would be a guess dressed as a fact. */
-        if (i == am->loaded_idx) {
+            char sz[24];
+            aimodel_size_str(am->models[i].bytes, sz, sizeof(sz));
             cairo_set_font_size(cr, 11);
-            if (am->switching) {
-                cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
-                cairo_move_to(cr, pw - 110, ry + 4);
-                cairo_show_text(cr, "loading \xe2\x80\xa6");
-            } else {
-                set_accent(cr, 1.0);
-                cairo_move_to(cr, pw - 110, ry + 4);
-                cairo_show_text(cr, "loaded");
+            cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
+            cairo_move_to(cr, list_x + list_w - 46, ry);
+            cairo_show_text(cr, sz);
+
+            /* Marked only for a switch this panel made: synapd reports the
+             * GGUF's INTERNAL name, which by design has nothing to do with the
+             * filename, so anything else would be a guess dressed as a fact. */
+            if (i == am->loaded_idx) {
+                cairo_set_font_size(cr, 10);
+                if (am->switching) {
+                    cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+                    cairo_move_to(cr, list_x + list_w - 100, ry);
+                    cairo_show_text(cr, "loading \xe2\x80\xa6");
+                } else {
+                    set_accent(cr, 1.0);
+                    cairo_move_to(cr, list_x + list_w - 92, ry);
+                    cairo_show_text(cr, "loaded");
+                }
             }
+        } else {
+            /* A repo that is not here yet. The repo NAME leads and the author
+             * follows in the pane, because the name is what distinguishes two
+             * rows and the author rarely does. */
+            const syn_aimodel_cat_t *c = &am->cat[slot - am->count - 2];
+            cairo_set_font_size(cr, 12);
+            cairo_move_to(cr, list_x + 8, ry);
+            aimodel_fit(cr, c->name, list_w - 52);
+
+            cairo_set_font_size(cr, 11);
+            cairo_set_source_rgba(cr, 0.45, 0.55, 0.75, 1.0);
+            cairo_move_to(cr, list_x + list_w - 36, ry);
+            cairo_show_text(cr, "\xe2\x86\x93");     /* ↓ — this one downloads */
         }
     }
 
+    /* The window is only part of the list: say so rather than letting the last
+     * drawn row look like the last row there is. */
+    if (slots > AIMODEL_ROWS) {
+        cairo_set_font_size(cr, 10);
+        cairo_set_source_rgba(cr, 0.4, 0.4, 0.5, 1.0);
+        char more[48];
+        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d",
+                 am->scroll + 1, am->scroll + visible, slots);
+        cairo_move_to(cr, list_x + 8, list_top + AIMODEL_ROWS * row_h + 4);
+        cairo_show_text(cr, more);
+    }
+
+    /* ── The info pane ───────────────────────────────────────────────── */
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, pane_x - 9, 148);
+    cairo_line_to(cr, pane_x - 9, ph - 62);
+    cairo_stroke(cr);
+
+    int pane_w = pw - pane_x - pad;
+    aimodel_render_pane(cr, am, px, py, pw, ph, pane_x, 168, pane_w);
+
+    /* ── The footer ──────────────────────────────────────────────────── */
     if (am->status[0]) {
         cairo_set_font_size(cr, 12);
         set_accent(cr, 0.9);
         cairo_move_to(cr, 18, ph - 52);
-        cairo_show_text(cr, am->status);
+        syn_show_text(cr, am->status);
     }
 
     cairo_set_font_size(cr, 12);
     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
     cairo_move_to(cr, 18, ph - 32);
-    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter load \xc2\xb7 R rescan \xc2\xb7 Esc close");
+    if (am->typing)
+        cairo_show_text(cr, "type to search \xc2\xb7 Enter search \xc2\xb7 Esc cancel");
+    else if (am->cat_sel >= 0)
+        cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right quantisation \xc2\xb7 "
+                            "Enter download \xc2\xb7 / search \xc2\xb7 Esc close");
+    else
+        cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter load \xc2\xb7 / search \xc2\xb7 "
+                            "R rescan \xc2\xb7 Esc close");
     cairo_move_to(cr, 18, ph - 14);
-    cairo_show_text(cr, "switching reloads the model \xe2\x80\x94 the AI pauses while it loads");
+    if (am->cat_sel >= 0)
+        cairo_show_text(cr, "downloads run as a system service \xe2\x80\x94 "
+                            "closing this panel does not cancel one");
+    else
+        cairo_show_text(cr, "switching reloads the model \xe2\x80\x94 the AI pauses while it loads");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->aimodel_ui.text_buf, s->aimodel_ui.tree, buf);

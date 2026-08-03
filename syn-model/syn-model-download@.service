@@ -1,0 +1,38 @@
+[Unit]
+# One queued model download. The instance name is the request token, and the
+# request itself — the URL and the destination filename — is in
+# /run/syn-model/req/%i.request, NOT in the unit name: a URL cannot be
+# expressed safely as a unit instance, and this way the arguments arrive
+# through a file whose contents syn-model re-validates as untrusted.
+Description=Download an AI model for synapd (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/syn-model fetch %i
+
+# Root for the network and for writing into synapd's models directory, and
+# nothing else. ProtectSystem=strict makes the whole hierarchy read-only, so
+# the two paths that must be writable are named explicitly — a download that
+# can only land in those two places cannot be talked into overwriting anything
+# by a malformed request.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/synapd/models /run/syn-model
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+NoNewPrivileges=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Several GB over a slow link is normal; the retry loop inside syn-model is
+# what gives up, not systemd.
+TimeoutStartSec=infinity

@@ -482,6 +482,13 @@ typedef struct {
  *
  * Switching is SYN_MSG_RELOAD, which synapd confines to its own models
  * directory; this panel never sends a path.
+ *
+ * The panel also lists models that are NOT here yet. Those come from a live
+ * Hugging Face query on a background thread — the news.c idiom, for the same
+ * reason: a DNS lookup or a TLS handshake on the event-loop thread would stall
+ * every client's frame callbacks, so the compositor never blocks on the
+ * network. Downloading is not synui's job either; it queues a request and
+ * starts a systemd unit that runs as root (see syn-model fetch).
  */
 #define AIMODEL_MAX  32   /* models listed; a plausible library, not a limit */
 
@@ -489,6 +496,66 @@ typedef struct {
     char name[128];       /* bare filename — what RELOAD wants */
     long long bytes;
 } syn_aimodel_entry_t;
+
+/* ── The download catalogue ──────────────────────────────── */
+
+#define AIMODEL_ROWS       14   /* list slots visible at once; the rest scroll */
+#define AIMODEL_CAT_MAX    32   /* repos held from one search */
+#define AIMODEL_FILE_MAX   16   /* GGUF files shown for one repo */
+#define AIMODEL_QUERY_MAX  64   /* typed search text */
+
+typedef struct {
+    char file[128];        /* path inside the repo, and the local filename */
+    char quant[16];        /* Q4_K_M etc., read out of the filename */
+    long long bytes;       /* -1 until the file listing lands */
+} syn_aimodel_file_t;
+
+/* What the detail pane knows about one repo. */
+typedef enum {
+    AIMODEL_DETAIL_NONE = 0,   /* not asked for yet */
+    AIMODEL_DETAIL_WANT,       /* the cursor settled here; the thread is next */
+    AIMODEL_DETAIL_BUSY,       /* being fetched */
+    AIMODEL_DETAIL_OK,
+    AIMODEL_DETAIL_FAIL,
+} syn_aimodel_detail_t;
+
+typedef struct {
+    char id[128];          /* "microsoft/Phi-3-mini-4k-instruct-gguf" */
+    char author[64];       /* the half before the slash */
+    char name[96];         /* the half after it */
+    char license[32];      /* from the license: tag, "" when the repo has none */
+    char params[16];       /* "7B" — read out of the name, "" when unreadable */
+    long long downloads;
+    long long likes;
+
+    syn_aimodel_file_t   files[AIMODEL_FILE_MAX];
+    int                  n_files;
+    int                  sel_file;
+    syn_aimodel_detail_t detail;
+} syn_aimodel_cat_t;
+
+/* A download in flight, as the progress file describes it. */
+typedef enum {
+    AIMODEL_DL_IDLE = 0,
+    AIMODEL_DL_STARTING,   /* the unit has been asked for, nothing reported yet */
+    AIMODEL_DL_RUNNING,
+    AIMODEL_DL_DONE,
+    AIMODEL_DL_FAILED,
+} syn_aimodel_dlstate_t;
+
+typedef struct {
+    syn_aimodel_dlstate_t state;
+    char token[72];        /* the request/progress file stem, and the unit
+                            * instance — sanitised at the point it is made */
+    char file[128];        /* destination filename */
+    char msg[128];         /* whatever the privileged half last reported */
+    long long got, total;
+    int  pct;
+    /* When the unit was asked for. `systemctl start` is fire-and-forget, so a
+     * refusal (no polkit rule installed) is silent — this is what turns that
+     * into a failure the panel can report instead of "starting…" forever. */
+    double started_at;
+} syn_aimodel_dl_t;
 
 typedef struct {
     int  visible;
@@ -507,7 +574,64 @@ typedef struct {
     int  switching;
 
     char status[160];
-    syn_hit_t hit;
+    syn_hit_t hit;          /* panel rect + the model/catalogue rows */
+    syn_hit_t hit_files;    /* same rect; rows = the detail pane's file list */
+
+    /* ── The AVAILABLE section ───────────────────────────── */
+
+    /* The cursor is one column over two sections: -1 means it is in INSTALLED
+     * at `selected`, and >= 0 means it is in AVAILABLE at cat[cat_sel].
+     * `selected` keeps its meaning either way, because the control-panel row
+     * reads it and must not follow the cursor into a model that is not here. */
+    int  cat_sel;
+    int  n_cat;
+    syn_aimodel_cat_t cat[AIMODEL_CAT_MAX];
+
+    /* The list column scrolls: three installed models and a full page of
+     * search results do not fit a panel sized to the screen. Counted in list
+     * SLOTS, section headings included, so it matches the hit grid exactly. */
+    int  scroll;
+
+    char query[AIMODEL_QUERY_MAX]; /* the search text, "" = the default listing */
+    int  typing;                   /* the search box has the keyboard */
+    char search_msg[96];           /* "searching…", "offline", "no matches" */
+
+    /* The detail fetch is debounced: arrowing down the list must not fire a
+     * request per keypress. Zero when nothing is pending. */
+    double detail_at;
+
+    syn_aimodel_dl_t dl;
+    struct wl_event_source *dl_timer;   /* polls the progress file */
+
+    /* ── The fetch thread (news.c idiom) ─────────────────── */
+
+    pthread_t       thread;
+    pthread_mutex_t lock;
+    pthread_cond_t  cv;
+    _Atomic int     stop;
+    _Atomic int     want;
+    int             running;
+    int             pipe[2];
+    struct wl_event_source *src;
+
+    /* Handed to the thread under the lock. The flags say what was asked for,
+     * rather than the contents of the buffers saying it: a query string that
+     * still holds the last search is not a request to run it again, and reading
+     * it as one made every cursor move re-fetch the whole listing. */
+    int  req_search;                   /* run a search for req_query */
+    char req_query[AIMODEL_QUERY_MAX];
+    char req_detail[128];              /* non-empty = fetch this repo's files */
+    int  searching;                    /* a search is out; do not queue another */
+
+    /* Handed back under the lock; the pipe is only the wake-up. */
+    int                have_search;    /* fetched[] is fresh, even if empty */
+    syn_aimodel_cat_t  fetched[AIMODEL_CAT_MAX];
+    int                n_fetched;
+    int                search_rc;      /* 0 ok, -1 the network said no */
+    char               det_id[128];
+    syn_aimodel_file_t det_files[AIMODEL_FILE_MAX];
+    int                n_det;
+    int                det_rc;
 } syn_aimodel_t;
 
 /* ── Desktop widget manager (widgets.c) ──────────────────── */
@@ -3625,6 +3749,11 @@ void filters_hide(syn_server_t *s);
 void filters_toggle(syn_server_t *s);
 
 /* AI model picker (aimodel.c). */
+/* The fetch thread and its pipe. Paired with aimodel_finish() at teardown,
+ * which joins the thread — a transfer in flight aborts within a poll interval
+ * rather than holding logout for a connect timeout, the news.c lesson. */
+void aimodel_init(syn_server_t *s);
+void aimodel_finish(syn_server_t *s);
 void aimodel_show(syn_server_t *s);
 void aimodel_hide(syn_server_t *s);
 void aimodel_toggle(syn_server_t *s);
@@ -3664,6 +3793,47 @@ int  synmon_send_reload(const char *model_name, char *out, size_t out_len);
 /* Called by synapd_mon.c when a poll lands, so the panel follows the daemon
  * rather than guessing when a switch finished. */
 void aimodel_status_changed(syn_server_t *s);
+
+/* ── The download catalogue ──────────────────────────────────
+ *
+ * Exposed for tests/aimodel_catalog_test.c. The parsers take a body and never
+ * touch the network, which is what makes them testable at all — and the
+ * validators below are a privilege boundary (a name off the network becomes a
+ * filename root writes), so they are pinned by name rather than left inline.
+ */
+/* Parse a Hugging Face /api/models listing. Returns how many entries were
+ * filled, never more than `max`. */
+int  aimodel_parse_search(const char *body, size_t len,
+                          syn_aimodel_cat_t *out, int max);
+/* Parse a /api/models/ID/tree listing into the repo's GGUF files, largest
+ * `size` per entry winning (an LFS entry reports both the pointer and the
+ * real one). Returns how many were filled. */
+int  aimodel_parse_tree(const char *body, size_t len,
+                        syn_aimodel_file_t *out, int max);
+/* The quantisation read out of a GGUF filename ("…Q4_K_M.gguf" → "Q4_K_M"),
+ * and the parameter count read out of a repo name ("Phi-3-mini" → "", but
+ * "Mistral-7B-Instruct" → "7B"). Both write "" when there is nothing to read
+ * rather than guessing. */
+void aimodel_quant_of(const char *filename, char *out, size_t n);
+void aimodel_params_of(const char *name, char *out, size_t n);
+/* Is this a filename synui may ask root to write into synapd's models
+ * directory? Bare, .gguf, no dot-leading, ASCII-safe. Returns 1 if so.
+ * syn-model re-checks the same rule; this is the half that stops a bad name
+ * being sent at all. */
+int  aimodel_name_ok(const char *file);
+/* Is this a URL synui may hand to the downloader? https, huggingface.co, no
+ * whitespace or control characters. Returns 1 if so. */
+int  aimodel_url_ok(const char *url);
+/* The list column's slot layout, shared with render.c so the drawn rows and
+ * the clickable rows cannot drift: slot 0 and slot count+1 are the INSTALLED
+ * and AVAILABLE headings, and everything between them is a row. */
+int  aimodel_slots(const syn_aimodel_t *am);
+int  aimodel_slot_is_head(const syn_aimodel_t *am, int slot);
+int  aimodel_cursor_slot(const syn_aimodel_t *am);
+/* The request token for a destination filename: the stem, reduced to the
+ * characters a systemd instance name and a path can both carry. Returns 1 on
+ * success, 0 if nothing usable survived. */
+int  aimodel_token_of(const char *file, char *out, size_t n);
 /* Modal key handling while the panel is open, as in power_key. */
 int  filters_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* …and the pointer, per the panel pointer contract at the top of this file. */

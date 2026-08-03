@@ -1,13 +1,27 @@
 pkgname=syn-model
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="SynapseOS model manager — download and manage LLM models"
 arch=('any')
 license=('GPL-2.0-or-later')
-depends=('curl' 'systemd')
-source=("syn-model.sh")
-sha256sums=('SKIP')
+# polkit: the rules.d file below is what lets synui's model picker start a
+#   download without an authentication agent it does not have.
+depends=('curl' 'systemd' 'polkit')
+# Flat, because makepkg resolves a local source by its BASENAME — a path with a
+# directory in it is looked for in the build dir and reported missing.
+source=("syn-model.sh"
+        "syn-model-download@.service"
+        "49-syn-model-download.rules"
+        "syn-model-tmpfiles.conf")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-model.sh" "$pkgdir/usr/bin/syn-model"
+
+    install -Dm644 "$srcdir/syn-model-download@.service" \
+        "$pkgdir/usr/lib/systemd/system/syn-model-download@.service"
+    install -Dm644 "$srcdir/syn-model-tmpfiles.conf" \
+        "$pkgdir/usr/lib/tmpfiles.d/syn-model.conf"
+    install -Dm644 "$srcdir/49-syn-model-download.rules" \
+        "$pkgdir/usr/share/polkit-1/rules.d/49-syn-model-download.rules"
 }

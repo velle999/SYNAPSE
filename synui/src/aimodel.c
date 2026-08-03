@@ -31,12 +31,22 @@
  */
 
 #define _GNU_SOURCE
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
 
+#include <curl/curl.h>
+#include <wayland-server-core.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -146,6 +156,1109 @@ static void aimodel_mark_loaded(syn_server_t *s)
     }
 }
 
+/* ══ The download catalogue ═══════════════════════════════════════════════
+ *
+ * Everything below this line is about models that are NOT on the disk yet.
+ *
+ * The list comes from Hugging Face, live, which means every string in it is
+ * attacker-controlled as far as this file is concerned: a repo name ends up in
+ * a URL, and a filename inside a repo ends up as a filename ROOT WRITES into
+ * synapd's models directory. So the parsers below copy nothing they have not
+ * bounded, and three validators — aimodel_url_ok, aimodel_name_ok,
+ * aimodel_token_of — sit between what the network said and what leaves this
+ * process. syn-model re-checks all of it on the privileged side; this half is
+ * what stops a bad request being sent at all, and the tests pin both.
+ */
+
+/* ── Minimal JSON scanning ───────────────────────────────────
+ *
+ * Hand-rolled, as news.c's XML is, and for the same reasons: the two endpoints
+ * need four fields between them, and a JSON library is a dependency the
+ * compositor does not otherwise want. The one rule that matters is that
+ * strings are skipped as strings — a repo description containing a brace must
+ * not move the depth counter, or a nested field would read as a top-level one.
+ */
+
+static const char *js_skip_string(const char *p, const char *end)
+{
+    if (p >= end || *p != '"') return NULL;
+    for (p++; p < end; p++) {
+        if (*p == '\\') { p++; continue; }
+        if (*p == '"')  return p + 1;
+    }
+    return NULL;
+}
+
+/* The value after `"key":` at depth 0 of the object at [obj,end). Nested
+ * objects are skipped whole, so "size" inside "lfs" is not this "size". */
+static const char *js_value_of(const char *obj, const char *end,
+                               const char *key)
+{
+    size_t klen = strlen(key);
+    int depth = 0;
+
+    for (const char *p = obj; p < end; ) {
+        if (*p == '"') {
+            const char *after = js_skip_string(p, end);
+            if (!after) return NULL;
+            if (depth == 1 && (size_t)(after - p) == klen + 2 &&
+                strncmp(p + 1, key, klen) == 0) {
+                while (after < end && (*after == ' ' || *after == ':')) after++;
+                return after < end ? after : NULL;
+            }
+            p = after;
+            continue;
+        }
+        if (*p == '{' || *p == '[') depth++;
+        else if (*p == '}' || *p == ']') depth--;
+        p++;
+    }
+    return NULL;
+}
+
+/*
+ * A string field, and 0 if it did not fit.
+ *
+ * Failing on overflow rather than truncating is the point. A repo id is
+ * checked for shape AFTER it is copied, so a 600-character id cut to fit the
+ * field would arrive as a well-formed id for a DIFFERENT repository — one that
+ * passes every validator and downloads something nobody chose. A value that
+ * does not fit is not this value, so the caller gets nothing and drops the
+ * entry.
+ */
+static int js_str(const char *obj, const char *end, const char *key,
+                  char *out, size_t n)
+{
+    out[0] = '\0';
+    const char *v = js_value_of(obj, end, key);
+    if (!v || v >= end || *v != '"') return 0;
+
+    size_t o = 0;
+    for (const char *p = v + 1; p < end; p++) {
+        if (*p == '"') { out[o] = '\0'; return out[0] ? 1 : 0; }
+        if (o + 1 >= n) { out[0] = '\0'; return 0; }    /* would not fit */
+        if (*p == '\\') {
+            p++;
+            if (p >= end) break;
+            /* Only the escapes these endpoints actually emit. A \u sequence is
+             * dropped rather than half-decoded: it can only appear in prose
+             * here, and a mangled byte in a repo id would be worse than a
+             * missing character. */
+            switch (*p) {
+            case 'n': case 't': case 'r': out[o++] = ' '; break;
+            case 'u': p += 4; break;
+            default:  out[o++] = *p; break;
+            }
+            continue;
+        }
+        out[o++] = *p;
+    }
+    out[0] = '\0';                                      /* never closed */
+    return 0;
+}
+
+static long long js_num(const char *obj, const char *end, const char *key,
+                        long long def)
+{
+    const char *v = js_value_of(obj, end, key);
+    if (!v || v >= end) return def;
+    if (!isdigit((unsigned char)*v) && *v != '-') return def;
+    return strtoll(v, NULL, 10);
+}
+
+/*
+ * The largest `"key":N` anywhere in the object, at any depth.
+ *
+ * Only for the file tree's size. An LFS entry carries both the real size and
+ * the pointer's 135 bytes, and which one is top-level has changed under us
+ * before — taking the larger is right in both shapes, where reading one
+ * position would silently list a 4 GB model as 135 bytes.
+ */
+static long long js_num_max(const char *obj, const char *end, const char *key)
+{
+    size_t klen = strlen(key);
+    long long best = -1;
+
+    for (const char *p = obj; p < end; ) {
+        if (*p == '"') {
+            const char *after = js_skip_string(p, end);
+            if (!after) break;
+            if ((size_t)(after - p) == klen + 2 &&
+                strncmp(p + 1, key, klen) == 0) {
+                const char *v = after;
+                while (v < end && (*v == ' ' || *v == ':')) v++;
+                if (v < end && isdigit((unsigned char)*v)) {
+                    long long n = strtoll(v, NULL, 10);
+                    if (n > best) best = n;
+                }
+            }
+            p = after;
+            continue;
+        }
+        p++;
+    }
+    return best;
+}
+
+/* The next `{...}` element of a JSON array, as a [start,end) pair. */
+static const char *js_next_object(const char *p, const char *end,
+                                  const char **obj_end)
+{
+    while (p < end && *p != '{') {
+        if (*p == '"') { p = js_skip_string(p, end); if (!p) return NULL; continue; }
+        p++;
+    }
+    if (p >= end) return NULL;
+
+    int depth = 0;
+    for (const char *q = p; q < end; ) {
+        if (*q == '"') { q = js_skip_string(q, end); if (!q) return NULL; continue; }
+        if (*q == '{') depth++;
+        else if (*q == '}') {
+            if (--depth == 0) { *obj_end = q + 1; return p; }
+        }
+        q++;
+    }
+    return NULL;
+}
+
+/* ── Reading a name ──────────────────────────────────────── */
+
+/*
+ * The quantisation, out of the filename.
+ *
+ * There is nowhere else to get it: a GGUF's quant is not in the API's metadata,
+ * only in what the uploader called the file. Q4_K_M, IQ3_XS, F16 and friends
+ * all start with an optional I, a Q or an F, then a digit — anchored at a token
+ * boundary so the "q4" in a repo called "seq4" is not one.
+ */
+void aimodel_quant_of(const char *filename, char *out, size_t n)
+{
+    out[0] = '\0';
+    if (!filename || n < 2) return;
+
+    for (const char *p = filename; *p; p++) {
+        if (p != filename) {
+            char prev = p[-1];
+            if (prev != '.' && prev != '-' && prev != '_') continue;
+        }
+        const char *q = p;
+        if (*q == 'I' || *q == 'i') q++;                 /* IQ3_XS */
+        if (*q == 'B' || *q == 'b') q++;                 /* BF16 */
+        if (*q != 'Q' && *q != 'q' && *q != 'F' && *q != 'f') continue;
+        if (!isdigit((unsigned char)q[1])) continue;
+
+        size_t o = 0;
+        for (const char *r = p; *r && o + 1 < n; r++) {
+            if (!isalnum((unsigned char)*r) && *r != '_') break;
+            out[o++] = (char)toupper((unsigned char)*r);
+        }
+        out[o] = '\0';
+        return;
+    }
+}
+
+/*
+ * The parameter count, out of the repo name: 7B, 0.5B, 8x7B.
+ *
+ * Bounded at 999 because the other thing that looks like this in a model name
+ * is a context length or a date, and "4096B" is not a parameter count.
+ *
+ * A mixture of experts is reported whole — "8x7B", not "7B" and not "56B".
+ * Eight experts of seven billion is neither of those numbers in memory or in
+ * quality, and picking one of them to print would be inventing a fact about
+ * how big the download is going to be.
+ */
+void aimodel_params_of(const char *name, char *out, size_t n)
+{
+    out[0] = '\0';
+    if (!name || n < 2) return;
+
+    for (const char *p = name; *p; p++) {
+        if (!isdigit((unsigned char)*p)) continue;
+        if (p != name && (isalnum((unsigned char)p[-1]) || p[-1] == '.')) continue;
+
+        /* An "8x" prefix belongs to the count that follows it. */
+        const char *start = p;
+        const char *q = p;
+        while (isdigit((unsigned char)*q)) q++;
+        if ((*q == 'x' || *q == 'X') && isdigit((unsigned char)q[1])) {
+            q++;
+            while (isdigit((unsigned char)*q)) q++;
+        }
+        if (*q == '.') { q++; while (isdigit((unsigned char)*q)) q++; }
+        if (*q != 'B' && *q != 'b') continue;
+        if (isalnum((unsigned char)q[1])) continue;      /* "7Bit" is not 7B */
+
+        /* The value checked is the one after any "x": 8x7B is a 7B expert. */
+        const char *num = strpbrk(start, "xX");
+        double v = strtod(num && num < q ? num + 1 : start, NULL);
+        if (v <= 0 || v > 999) continue;
+
+        size_t len = (size_t)(q - start) + 1;
+        if (len + 1 > n) return;
+        memcpy(out, start, len);
+        out[len - 1] = 'B';
+        out[len] = '\0';
+        return;
+    }
+}
+
+/* ── What may leave this process ─────────────────────────── */
+
+/*
+ * A repo id, as it came off the network and before it is put in a URL.
+ *
+ * Two path segments of an ordinary charset. Anything else — a space, a query
+ * separator, a second slash, a dot segment — is refused rather than escaped,
+ * because a repo id that needs escaping is not one HF issued.
+ */
+static int aimodel_repo_id_ok(const char *id)
+{
+    int slashes = 0;
+    size_t len = 0;
+
+    for (const char *p = id; *p; p++, len++) {
+        if (*p == '/') {
+            if (++slashes > 1) return 0;
+            if (p == id || p[1] == '\0' || p[1] == '/') return 0;
+            continue;
+        }
+        if (!isalnum((unsigned char)*p) &&
+            *p != '.' && *p != '_' && *p != '-') return 0;
+    }
+    if (slashes != 1 || len == 0 || len >= 128) return 0;
+    if (strstr(id, "..")) return 0;
+    return 1;
+}
+
+/* A path inside a repo: the same charset, plus the slashes of a subdirectory. */
+static int aimodel_repo_path_ok(const char *path)
+{
+    size_t len = strlen(path);
+    if (len == 0 || len >= 128) return 0;
+    if (path[0] == '/' || path[0] == '.') return 0;
+    if (strstr(path, "..")) return 0;
+
+    for (const char *p = path; *p; p++)
+        if (!isalnum((unsigned char)*p) &&
+            *p != '.' && *p != '_' && *p != '-' && *p != '/') return 0;
+    return 1;
+}
+
+int aimodel_name_ok(const char *file)
+{
+    if (!file) return 0;
+    size_t len = strlen(file);
+    if (len < 6 || len >= 121) return 0;              /* x.gguf … the field */
+    if (strcasecmp(file + len - 5, ".gguf") != 0) return 0;
+    if (!isalnum((unsigned char)file[0])) return 0;   /* no dot-leading, no dash */
+
+    for (const char *p = file; *p; p++)
+        if (!isalnum((unsigned char)*p) &&
+            *p != '.' && *p != '_' && *p != '-') return 0;
+    return 1;
+}
+
+int aimodel_url_ok(const char *url)
+{
+    static const char *prefix = "https://huggingface.co/";
+    if (!url) return 0;
+    if (strncmp(url, prefix, strlen(prefix)) != 0) return 0;
+    if (strlen(url) >= 512) return 0;
+
+    /* No whitespace and no control characters: this becomes one argv element
+     * for curl, and a space in it would become a second argument. */
+    for (const char *p = url; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c <= 0x20 || c == 0x7f || c == '"' || c == '\'' || c == '\\')
+            return 0;
+    }
+    return 1;
+}
+
+int aimodel_token_of(const char *file, char *out, size_t n)
+{
+    if (!file || n < 2) return 0;
+    out[0] = '\0';
+
+    size_t o = 0;
+    for (const char *p = file; *p && o + 1 < n && o < 63; p++) {
+        if (*p == '.') break;                          /* the stem only */
+        if (isalnum((unsigned char)*p) || *p == '_' || *p == '-')
+            out[o++] = *p;
+    }
+    out[o] = '\0';
+
+    /* A leading dash or dot would be an option to something downstream, and a
+     * token that reduced to nothing cannot name a file. */
+    if (o == 0 || !isalnum((unsigned char)out[0])) { out[0] = '\0'; return 0; }
+    return 1;
+}
+
+/* ── The two responses ───────────────────────────────────── */
+
+int aimodel_parse_search(const char *body, size_t len,
+                         syn_aimodel_cat_t *out, int max)
+{
+    const char *end = body + len;
+    const char *p = body, *obj, *obj_end;
+    int n = 0;
+
+    while (n < max && (obj = js_next_object(p, end, &obj_end))) {
+        p = obj_end;
+
+        syn_aimodel_cat_t *c = &out[n];
+        memset(c, 0, sizeof(*c));
+
+        if (!js_str(obj, obj_end, "id", c->id, sizeof(c->id))) continue;
+        if (!aimodel_repo_id_ok(c->id)) {
+            wlr_log(WLR_INFO, "synui: aimodel: skipping odd repo id");
+            continue;
+        }
+
+        const char *slash = strchr(c->id, '/');
+        snprintf(c->author, sizeof(c->author), "%.*s",
+                 (int)(slash - c->id), c->id);
+        snprintf(c->name, sizeof(c->name), "%s", slash + 1);
+
+        c->downloads = js_num(obj, obj_end, "downloads", 0);
+        c->likes     = js_num(obj, obj_end, "likes", 0);
+
+        /* The license is a tag, not a field: "license:apache-2.0". */
+        const char *lic = memmem(obj, (size_t)(obj_end - obj),
+                                 "\"license:", 9);
+        if (lic) {
+            lic += 9;
+            size_t o = 0;
+            while (lic < obj_end && *lic != '"' && o + 1 < sizeof(c->license))
+                c->license[o++] = *lic++;
+            c->license[o] = '\0';
+        }
+
+        aimodel_params_of(c->name, c->params, sizeof(c->params));
+        c->detail   = AIMODEL_DETAIL_NONE;
+        c->sel_file = 0;
+        n++;
+    }
+    return n;
+}
+
+int aimodel_parse_tree(const char *body, size_t len,
+                       syn_aimodel_file_t *out, int max)
+{
+    const char *end = body + len;
+    const char *p = body, *obj, *obj_end;
+    int n = 0;
+
+    while (n < max && (obj = js_next_object(p, end, &obj_end))) {
+        p = obj_end;
+
+        char type[16], path[192];
+        js_str(obj, obj_end, "type", type, sizeof(type));
+        if (type[0] && strcmp(type, "file") != 0) continue;
+        if (!js_str(obj, obj_end, "path", path, sizeof(path))) continue;
+
+        size_t plen = strlen(path);
+        if (plen < 6 || strcasecmp(path + plen - 5, ".gguf") != 0) continue;
+        if (!aimodel_repo_path_ok(path)) continue;
+
+        /* Skipped rather than truncated, for the reason aimodel_scan() skips
+         * an over-long filename: a shortened path is a path the repo does not
+         * have, so listing it would offer a download that 404s. */
+        if (plen >= sizeof(out[0].file)) continue;
+
+        /* A multi-part GGUF is not something this panel can install: synapd
+         * loads one file, and fetching part 1 of 3 would leave a model that
+         * cannot load. Listing them would be offering a download that breaks. */
+        if (strstr(path, "-00001-of-") || strstr(path, "-split-")) continue;
+
+        syn_aimodel_file_t *f = &out[n];
+        memset(f, 0, sizeof(*f));
+        /* Bounded explicitly. The length guard above already rules truncation
+         * out; the precision is what lets the compiler see that. */
+        snprintf(f->file, sizeof(f->file), "%.*s",
+                 (int)sizeof(f->file) - 1, path);
+        f->bytes = js_num_max(obj, obj_end, "size");
+        aimodel_quant_of(path, f->quant, sizeof(f->quant));
+        n++;
+    }
+    return n;
+}
+
+/* ── The fetch thread ────────────────────────────────────── */
+/* news.c's shape exactly: park on a condvar, do the network with the lock
+ * dropped, hand the result over under the lock, and write one byte to a pipe
+ * the event loop is watching. Only the main thread ever touches wlroots. */
+
+#define AIMODEL_UA           "synui/0.1 (SynapseOS model picker)"
+#define AIMODEL_CONNECT_SEC  8
+#define AIMODEL_XFER_SEC     25
+#define AIMODEL_MAX_BODY     (4u * 1024 * 1024)
+
+typedef struct { char *buf; size_t len, cap; } dlbuf_t;
+
+static size_t cat_write(void *ptr, size_t sz, size_t nm, void *ud)
+{
+    dlbuf_t *d = ud;
+    size_t add = sz * nm;
+
+    if (d->len + add + 1 > AIMODEL_MAX_BODY) return 0;   /* aborts the transfer */
+    if (d->len + add + 1 > d->cap) {
+        size_t cap = d->cap ? d->cap * 2 : 65536;
+        while (cap < d->len + add + 1) cap *= 2;
+        char *nb = realloc(d->buf, cap);
+        if (!nb) return 0;
+        d->buf = nb;
+        d->cap = cap;
+    }
+    memcpy(d->buf + d->len, ptr, add);
+    d->len += add;
+    d->buf[d->len] = '\0';
+    return add;
+}
+
+/* The stop flag as libcurl sees it, so logout does not wait out a connect
+ * timeout on a slow host — the AI thread's 15s hang, not repeated. */
+static int cat_progress(void *ud, curl_off_t dt, curl_off_t dn,
+                        curl_off_t ut, curl_off_t un)
+{
+    (void)dt; (void)dn; (void)ut; (void)un;
+    syn_aimodel_t *am = ud;
+    return atomic_load(&am->stop) ? 1 : 0;
+}
+
+static int cat_get(syn_aimodel_t *am, CURL *curl, const char *url, dlbuf_t *d)
+{
+    curl_easy_reset(curl);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, cat_write);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, d);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, AIMODEL_UA);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 4L);
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, (long)AIMODEL_CONNECT_SEC);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, (long)AIMODEL_XFER_SEC);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, cat_progress);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, am);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+
+    CURLcode rc = curl_easy_perform(curl);
+    long code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+
+    if (rc != CURLE_OK) {
+        if (!atomic_load(&am->stop))
+            wlr_log(WLR_INFO, "synui: aimodel: %s", curl_easy_strerror(rc));
+        return -1;
+    }
+    if (code != 200) {
+        wlr_log(WLR_INFO, "synui: aimodel: HTTP %ld", code);
+        return -1;
+    }
+    return 0;
+}
+
+/* Only what a search box may put in a URL. Everything else is dropped rather
+ * than percent-encoded: this is a model search, not a general query language,
+ * and dropping keeps the URL provably free of separators. */
+static void url_escape_query(const char *in, char *out, size_t n)
+{
+    size_t o = 0;
+    for (const char *p = in; *p && o + 4 < n; p++) {
+        if (isalnum((unsigned char)*p) || *p == '.' || *p == '_' || *p == '-') {
+            out[o++] = *p;
+        } else if (*p == ' ') {
+            memcpy(out + o, "%20", 3);
+            o += 3;
+        }
+    }
+    out[o] = '\0';
+}
+
+static void *aimodel_thread_fn(void *arg)
+{
+    syn_server_t *s = arg;
+    syn_aimodel_t *am = &s->aimodel;
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        wlr_log(WLR_ERROR, "synui: aimodel: curl init failed");
+        return NULL;
+    }
+
+    syn_aimodel_cat_t *got = calloc(AIMODEL_CAT_MAX, sizeof(*got));
+    syn_aimodel_file_t *gotf = calloc(AIMODEL_FILE_MAX, sizeof(*gotf));
+    if (!got || !gotf) {
+        free(got); free(gotf);
+        curl_easy_cleanup(curl);
+        wlr_log(WLR_ERROR, "synui: aimodel: out of memory");
+        return NULL;
+    }
+
+    while (!atomic_load(&am->stop)) {
+        pthread_mutex_lock(&am->lock);
+        while (!atomic_load(&am->stop) && !atomic_load(&am->want))
+            pthread_cond_wait(&am->cv, &am->lock);
+        if (atomic_load(&am->stop)) { pthread_mutex_unlock(&am->lock); break; }
+        atomic_store(&am->want, 0);
+
+        char query[AIMODEL_QUERY_MAX], detail[128];
+        snprintf(query, sizeof(query), "%s", am->req_query);
+        snprintf(detail, sizeof(detail), "%s", am->req_detail);
+        int do_search = am->req_search;
+        am->req_search    = 0;         /* consumed: taken once, not once per wake */
+        am->req_detail[0] = '\0';
+        pthread_mutex_unlock(&am->lock);
+
+        /* A search first, so a query typed while a detail was in flight lands
+         * on the list it was typed against. */
+        if (do_search) {
+            char url[512], esc[AIMODEL_QUERY_MAX * 3];
+            url_escape_query(query, esc, sizeof(esc));
+            /* pipeline_tag matters as much as the gguf filter: without it the
+             * most-downloaded GGUF repos are embedding, speech and OCR models,
+             * which synapd cannot hold a conversation with. Offering those as
+             * downloads would be offering several GB that cannot answer. */
+            snprintf(url, sizeof(url),
+                     "https://huggingface.co/api/models"
+                     "?filter=gguf&pipeline_tag=text-generation"
+                     "&sort=downloads&direction=-1&limit=%d%s%s",
+                     AIMODEL_CAT_MAX, esc[0] ? "&search=" : "", esc);
+
+            dlbuf_t d = {0};
+            int rc = cat_get(am, curl, url, &d);
+            int n = (rc == 0 && d.len) ?
+                    aimodel_parse_search(d.buf, d.len, got, AIMODEL_CAT_MAX) : 0;
+            free(d.buf);
+
+            if (atomic_load(&am->stop)) break;
+
+            pthread_mutex_lock(&am->lock);
+            memcpy(am->fetched, got, sizeof(*got) * (size_t)n);
+            am->n_fetched   = n;
+            am->search_rc   = rc;
+            am->have_search = 1;
+            pthread_mutex_unlock(&am->lock);
+        }
+
+        if (detail[0] && aimodel_repo_id_ok(detail) && !atomic_load(&am->stop)) {
+            char url[512];
+            snprintf(url, sizeof(url),
+                     "https://huggingface.co/api/models/%s/tree/main?recursive=1",
+                     detail);
+
+            dlbuf_t d = {0};
+            int rc = cat_get(am, curl, url, &d);
+            int n = (rc == 0 && d.len) ?
+                    aimodel_parse_tree(d.buf, d.len, gotf, AIMODEL_FILE_MAX) : 0;
+            free(d.buf);
+
+            if (atomic_load(&am->stop)) break;
+
+            pthread_mutex_lock(&am->lock);
+            snprintf(am->det_id, sizeof(am->det_id), "%s", detail);
+            memcpy(am->det_files, gotf, sizeof(*gotf) * (size_t)n);
+            am->n_det  = n;
+            am->det_rc = rc;
+            pthread_mutex_unlock(&am->lock);
+        }
+
+        char byte = 1;
+        if (write(am->pipe[1], &byte, 1) < 0 && errno != EAGAIN)
+            wlr_log(WLR_ERROR, "synui: aimodel: pipe write failed");
+    }
+
+    free(got);
+    free(gotf);
+    curl_easy_cleanup(curl);
+    return NULL;
+}
+
+/* Ask for the file list of whatever the cursor has settled on. */
+static void aimodel_request_detail(syn_server_t *s, const char *id)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (!am->running || !id || !*id) return;
+
+    pthread_mutex_lock(&am->lock);
+    snprintf(am->req_detail, sizeof(am->req_detail), "%s", id);
+    atomic_store(&am->want, 1);
+    pthread_cond_signal(&am->cv);
+    pthread_mutex_unlock(&am->lock);
+}
+
+static void aimodel_request_search(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (!am->running) return;
+
+    pthread_mutex_lock(&am->lock);
+    snprintf(am->req_query, sizeof(am->req_query), "%s", am->query);
+    am->req_search = 1;
+    am->searching  = 1;
+    atomic_store(&am->want, 1);
+    pthread_cond_signal(&am->cv);
+    pthread_mutex_unlock(&am->lock);
+
+    snprintf(am->search_msg, sizeof(am->search_msg), "searching \xe2\x80\xa6");
+}
+
+/* A fetch landed. */
+static int aimodel_readable(int fd, uint32_t mask, void *data)
+{
+    (void)mask;
+    syn_server_t *s = data;
+    syn_aimodel_t *am = &s->aimodel;
+
+    char drain[64];
+    while (read(fd, drain, sizeof(drain)) > 0)
+        ;   /* the pipe is only a wake-up; the results came via the lock */
+
+    pthread_mutex_lock(&am->lock);
+    /* A search that matched nothing is an ANSWER, and the old list must go —
+     * keying off "did anything come back" instead would leave the previous
+     * results on screen under a query they do not match. */
+    int got_search = am->have_search;
+    int n = am->n_fetched, rc = am->search_rc;
+    am->have_search = 0;
+    if (got_search) am->searching = 0;
+
+    if (got_search) {
+        /* The detail already fetched for a repo still in the new list is kept:
+         * re-searching the same text must not throw away file lists that are
+         * still true, and re-fetching them would be a request per repo. Taken
+         * BEFORE the new list overwrites it. */
+        syn_aimodel_cat_t prev[AIMODEL_CAT_MAX];
+        int n_prev = am->n_cat;
+        memcpy(prev, am->cat, sizeof(prev));
+
+        memcpy(am->cat, am->fetched, sizeof(*am->cat) * (size_t)n);
+        am->n_cat = n;
+
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n_prev; j++)
+                if (prev[j].detail == AIMODEL_DETAIL_OK &&
+                    strcmp(prev[j].id, am->cat[i].id) == 0) {
+                    memcpy(am->cat[i].files, prev[j].files, sizeof(prev[j].files));
+                    am->cat[i].n_files  = prev[j].n_files;
+                    am->cat[i].sel_file = prev[j].sel_file;
+                    am->cat[i].detail   = AIMODEL_DETAIL_OK;
+                    break;
+                }
+    }
+
+    /* The file list, folded into whichever row asked for it. */
+    if (am->det_id[0]) {
+        for (int i = 0; i < am->n_cat; i++) {
+            if (strcmp(am->cat[i].id, am->det_id) != 0) continue;
+            if (am->det_rc == 0 && am->n_det > 0) {
+                memcpy(am->cat[i].files, am->det_files,
+                       sizeof(*am->det_files) * (size_t)am->n_det);
+                am->cat[i].n_files  = am->n_det;
+                am->cat[i].sel_file = 0;
+                am->cat[i].detail   = AIMODEL_DETAIL_OK;
+            } else {
+                am->cat[i].n_files = 0;
+                am->cat[i].detail  = AIMODEL_DETAIL_FAIL;
+            }
+            break;
+        }
+        am->det_id[0] = '\0';
+    }
+    pthread_mutex_unlock(&am->lock);
+
+    /* Only a search answers for the search line. A file listing landing is not
+     * evidence about whether the query matched anything. */
+    if (got_search) {
+        if (rc != 0)
+            snprintf(am->search_msg, sizeof(am->search_msg),
+                     "cannot reach huggingface.co");
+        else if (n == 0)
+            snprintf(am->search_msg, sizeof(am->search_msg), "no models match");
+        else
+            am->search_msg[0] = '\0';
+    }
+
+    /* The list may have shrunk under the cursor. -1 puts it back in INSTALLED
+     * rather than on a row that is no longer there. */
+    if (am->cat_sel >= am->n_cat) am->cat_sel = am->n_cat ? am->n_cat - 1 : -1;
+    if (am->scroll > aimodel_slots(am) - AIMODEL_ROWS)
+        am->scroll = aimodel_slots(am) - AIMODEL_ROWS;
+    if (am->scroll < 0) am->scroll = 0;
+
+    if (am->visible) synui_render_aimodel(s);
+    return 0;
+}
+
+/* ── Starting a download ─────────────────────────────────── */
+
+#define AIMODEL_RUN_DIR  "/run/syn-model"
+
+static double aimodel_now(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+/* The repo entry the cursor is on, or NULL. */
+static syn_aimodel_cat_t *cat_current(syn_aimodel_t *am)
+{
+    if (am->cat_sel < 0 || am->cat_sel >= am->n_cat) return NULL;
+    return &am->cat[am->cat_sel];
+}
+
+static syn_aimodel_file_t *cat_current_file(syn_aimodel_t *am)
+{
+    syn_aimodel_cat_t *c = cat_current(am);
+    if (!c || c->n_files <= 0) return NULL;
+    if (c->sel_file < 0 || c->sel_file >= c->n_files) c->sel_file = 0;
+    return &c->files[c->sel_file];
+}
+
+/* The local filename for a file inside a repo: its basename, which is what
+ * synapd will be asked to load later. */
+static void aimodel_local_name(const char *repo_path, char *out, size_t n)
+{
+    const char *base = strrchr(repo_path, '/');
+    snprintf(out, n, "%s", base ? base + 1 : repo_path);
+}
+
+static int aimodel_already_have(syn_aimodel_t *am, const char *file)
+{
+    for (int i = 0; i < am->count; i++)
+        if (strcmp(am->models[i].name, file) == 0) return 1;
+    return 0;
+}
+
+/*
+ * Queue the request and start the unit that does the work.
+ *
+ * synui does not download anything itself: it runs as the user and cannot
+ * write to synapd's models directory, and a compositor that fetched several GB
+ * would be doing it on the thread that draws. The request goes into a
+ * group-writable spool and syn-model-download@TOKEN.service — root, network,
+ * and nothing else — picks it up. A polkit rule allows the start; without the
+ * rule the start is refused and the panel says so rather than appearing to
+ * work.
+ */
+static int aimodel_start_download(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    syn_aimodel_cat_t  *c = cat_current(am);
+    syn_aimodel_file_t *f = cat_current_file(am);
+    if (!c || !f) {
+        snprintf(am->status, sizeof(am->status),
+                 "no file to download \xc2\xb7 still reading the repo");
+        return 0;
+    }
+    if (am->dl.state == AIMODEL_DL_STARTING ||
+        am->dl.state == AIMODEL_DL_RUNNING) {
+        snprintf(am->status, sizeof(am->status),
+                 "a download is already running");
+        return 0;
+    }
+
+    char local[128];
+    aimodel_local_name(f->file, local, sizeof(local));
+
+    if (!aimodel_name_ok(local)) {
+        snprintf(am->status, sizeof(am->status),
+                 "refused: the repo names that file oddly");
+        wlr_log(WLR_ERROR, "synui: aimodel: refusing filename from %s", c->id);
+        return 0;
+    }
+    if (aimodel_already_have(am, local)) {
+        snprintf(am->status, sizeof(am->status), "already installed");
+        return 0;
+    }
+
+    char url[512];
+    snprintf(url, sizeof(url), "https://huggingface.co/%s/resolve/main/%s",
+             c->id, f->file);
+    if (!aimodel_url_ok(url)) {
+        snprintf(am->status, sizeof(am->status), "refused: bad download URL");
+        wlr_log(WLR_ERROR, "synui: aimodel: refusing URL for %s", c->id);
+        return 0;
+    }
+
+    char token[72];
+    if (!aimodel_token_of(local, token, sizeof(token))) {
+        snprintf(am->status, sizeof(am->status), "refused: unusable filename");
+        return 0;
+    }
+
+    /* Written and closed before the unit is started, so the request is always
+     * there by the time root looks for it. O_EXCL: a token already queued is a
+     * download already asked for. */
+    char req[256];
+    snprintf(req, sizeof(req), "%s/req/%s.request", AIMODEL_RUN_DIR, token);
+
+    int fd = open(req, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0640);
+    if (fd < 0 && errno == EEXIST) {
+        /* A request left over from a start that never happened — the usual
+         * cause is polkit refusing, which leaves the spool file with nothing
+         * coming to consume it. Since this process is not running a download,
+         * the leftover is stale by definition and retrying must not be
+         * impossible until the next reboot. */
+        unlink(req);
+        fd = open(req, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0640);
+    }
+    if (fd < 0) {
+        if (errno == ENOENT)
+            snprintf(am->status, sizeof(am->status),
+                     "no download spool \xc2\xb7 is syn-model installed?");
+        else
+            snprintf(am->status, sizeof(am->status),
+                     "cannot queue a download: %s", strerror(errno));
+        wlr_log(WLR_ERROR, "synui: aimodel: open %s: %s", req, strerror(errno));
+        return 0;
+    }
+
+    char body[768];
+    int len = snprintf(body, sizeof(body), "url=%s\nfile=%s\n", url, local);
+    ssize_t wrote = write(fd, body, (size_t)len);
+    close(fd);
+    if (wrote != len) {
+        unlink(req);
+        snprintf(am->status, sizeof(am->status), "cannot queue a download");
+        return 0;
+    }
+
+    char unit[128];
+    snprintf(unit, sizeof(unit), "syn-model-download@%s.service", token);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        unlink(req);
+        snprintf(am->status, sizeof(am->status), "cannot start the downloader");
+        return 0;
+    }
+    if (pid == 0) {
+        setsid();
+        synui_child_reset_signals();
+        /* No shell. The unit name is built from a token of [A-Za-z0-9._-]
+         * only, and it is one argv element regardless. */
+        execlp("systemctl", "systemctl", "start", "--no-block", unit,
+               (char *)NULL);
+        _exit(127);
+    }
+
+    memset(&am->dl, 0, sizeof(am->dl));
+    am->dl.state = AIMODEL_DL_STARTING;
+    snprintf(am->dl.token, sizeof(am->dl.token), "%s", token);
+    snprintf(am->dl.file, sizeof(am->dl.file), "%s", local);
+    snprintf(am->dl.msg, sizeof(am->dl.msg), "starting \xe2\x80\xa6");
+    am->dl.got = am->dl.total = 0;
+    am->dl.pct = 0;
+    am->dl.started_at = aimodel_now();
+
+    am->status[0] = '\0';
+    wlr_log(WLR_INFO, "synui: aimodel: queued %s from %s", local, c->id);
+
+    if (am->dl_timer) wl_event_source_timer_update(am->dl_timer, 400);
+    return 1;
+}
+
+/*
+ * Read the progress file the privileged half writes.
+ *
+ * Polled rather than watched: it is rewritten once a second by a mv, so an
+ * inotify watch would be re-arming on a new inode every second for a file this
+ * cheap to stat.
+ */
+static void aimodel_poll_download(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (!am->dl.token[0]) return;
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s.progress", AIMODEL_RUN_DIR, am->dl.token);
+
+    FILE *fp = fopen(path, "re");
+    if (!fp) {
+        /* Not there yet is normal for the first poll or two: the unit has to be
+         * activated before it can write anything. */
+        if (am->dl.state == AIMODEL_DL_STARTING) return;
+        return;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), fp)) {
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+
+        if (!strncmp(line, "state=", 6)) {
+            const char *v = line + 6;
+            if      (!strcmp(v, "running")) am->dl.state = AIMODEL_DL_RUNNING;
+            else if (!strcmp(v, "done"))    am->dl.state = AIMODEL_DL_DONE;
+            else if (!strcmp(v, "failed"))  am->dl.state = AIMODEL_DL_FAILED;
+        } else if (!strncmp(line, "pct=", 4)) {
+            am->dl.pct = atoi(line + 4);
+        } else if (!strncmp(line, "got=", 4)) {
+            am->dl.got = strtoll(line + 4, NULL, 10);
+        } else if (!strncmp(line, "total=", 6)) {
+            am->dl.total = strtoll(line + 6, NULL, 10);
+        } else if (!strncmp(line, "msg=", 4)) {
+            snprintf(am->dl.msg, sizeof(am->dl.msg), "%s", line + 4);
+        }
+    }
+    fclose(fp);
+
+    if (am->dl.state == AIMODEL_DL_DONE) {
+        /* The file is on the disk now — rescan so it appears under INSTALLED,
+         * where it can be loaded like any other. */
+        aimodel_scan(s);
+        aimodel_mark_loaded(s);
+        snprintf(am->status, sizeof(am->status),
+                 "downloaded %s \xc2\xb7 select it to load", am->dl.file);
+    } else if (am->dl.state == AIMODEL_DL_FAILED) {
+        snprintf(am->status, sizeof(am->status), "download failed: %s",
+                 am->dl.msg[0] ? am->dl.msg : "see journalctl -u syn-model-download@");
+    }
+}
+
+static int aimodel_dl_tick(void *data)
+{
+    syn_server_t *s = data;
+    syn_aimodel_t *am = &s->aimodel;
+    double t = aimodel_now();
+
+    int live = (am->dl.state == AIMODEL_DL_STARTING ||
+                am->dl.state == AIMODEL_DL_RUNNING);
+    if (live) aimodel_poll_download(s);
+
+    /*
+     * Nothing at all after the unit was asked for.
+     *
+     * `systemctl start` is spawned and not waited on, so a polkit refusal —
+     * the rule not installed, or the session not local and active — produces
+     * no error anywhere synui can see. Without this the panel would sit on
+     * "starting…" for the rest of the session and look like a slow download
+     * rather than one that never began.
+     */
+    if (am->dl.state == AIMODEL_DL_STARTING &&
+        t - am->dl.started_at > 15.0) {
+        am->dl.state = AIMODEL_DL_FAILED;
+        snprintf(am->dl.msg, sizeof(am->dl.msg), "the downloader never started");
+        snprintf(am->status, sizeof(am->status),
+                 "download did not start \xc2\xb7 check: systemctl status "
+                 "syn-model-download@%s", am->dl.token);
+        wlr_log(WLR_ERROR, "synui: aimodel: %s never reported progress",
+                am->dl.token);
+        live = 0;
+    }
+
+    /* The detail fetch is debounced here too, so arrowing through the list
+     * fires one request when the cursor stops rather than one per keypress —
+     * the same reason the control-panel row waits before loading a model. */
+    if (am->detail_at > 0.0 && t >= am->detail_at) {
+        am->detail_at = 0.0;
+        syn_aimodel_cat_t *c = cat_current(am);
+        if (c && c->detail == AIMODEL_DETAIL_WANT) {
+            c->detail = AIMODEL_DETAIL_BUSY;
+            aimodel_request_detail(s, c->id);
+        }
+    }
+
+    if (am->visible) synui_render_aimodel(s);
+
+    /* Re-armed only while there is something to watch: the panel is open (the
+     * debounce needs the tick) or a download is running, which outlives the
+     * panel because closing it must not abandon a 4 GB fetch. A finished
+     * download re-arms nothing — its result is already in am->dl for whenever
+     * the panel is opened again. */
+    if (am->visible || live)
+        wl_event_source_timer_update(am->dl_timer, live ? 400 : 200);
+    return 0;
+}
+
+/* Put the cursor on a catalogue row and arm its detail fetch. */
+static void aimodel_touch_detail(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    syn_aimodel_cat_t *c = cat_current(am);
+    if (!c) return;
+    if (c->detail == AIMODEL_DETAIL_OK || c->detail == AIMODEL_DETAIL_BUSY) return;
+
+    c->detail = AIMODEL_DETAIL_WANT;
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    am->detail_at = (double)now.tv_sec + now.tv_nsec / 1e9 + 0.35;
+    if (am->dl_timer) wl_event_source_timer_update(am->dl_timer, 200);
+}
+
+/* ── Lifecycle ───────────────────────────────────────────── */
+
+void aimodel_init(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    am->loaded_idx = -1;
+    am->cat_sel    = -1;
+    am->pipe[0] = am->pipe[1] = -1;
+    atomic_store(&am->stop, 0);
+    atomic_store(&am->want, 0);
+
+    /* news.c calls this too and libcurl counts its initialisations, so a second
+     * call is a no-op rather than a conflict. */
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+
+    if (pipe2(am->pipe, O_CLOEXEC) < 0) {
+        wlr_log(WLR_ERROR, "synui: aimodel: pipe() failed");
+        am->pipe[0] = am->pipe[1] = -1;
+        return;
+    }
+    fcntl(am->pipe[0], F_SETFL, O_NONBLOCK);
+    fcntl(am->pipe[1], F_SETFL, O_NONBLOCK);
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    am->src      = wl_event_loop_add_fd(loop, am->pipe[0], WL_EVENT_READABLE,
+                                        aimodel_readable, s);
+    am->dl_timer = wl_event_loop_add_timer(loop, aimodel_dl_tick, s);
+
+    pthread_mutex_init(&am->lock, NULL);
+    pthread_cond_init(&am->cv, NULL);
+
+    if (pthread_create(&am->thread, NULL, aimodel_thread_fn, s) != 0) {
+        wlr_log(WLR_ERROR, "synui: aimodel: thread failed");
+        if (am->src)      { wl_event_source_remove(am->src);      am->src = NULL; }
+        if (am->dl_timer) { wl_event_source_remove(am->dl_timer); am->dl_timer = NULL; }
+        close(am->pipe[0]); close(am->pipe[1]);
+        am->pipe[0] = am->pipe[1] = -1;
+        pthread_mutex_destroy(&am->lock);
+        pthread_cond_destroy(&am->cv);
+        return;
+    }
+    am->running = 1;
+}
+
+void aimodel_finish(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    if (am->running) {
+        atomic_store(&am->stop, 1);
+        pthread_mutex_lock(&am->lock);
+        pthread_cond_signal(&am->cv);      /* out of the idle wait… */
+        pthread_mutex_unlock(&am->lock);
+        pthread_join(am->thread, NULL);    /* …and cat_progress aborts a transfer */
+        am->running = 0;
+        pthread_mutex_destroy(&am->lock);
+        pthread_cond_destroy(&am->cv);
+    }
+
+    if (am->src)      { wl_event_source_remove(am->src);      am->src = NULL; }
+    if (am->dl_timer) { wl_event_source_remove(am->dl_timer); am->dl_timer = NULL; }
+    if (am->pipe[0] >= 0) { close(am->pipe[0]); close(am->pipe[1]); }
+    am->pipe[0] = am->pipe[1] = -1;
+}
+
 /* ── Panel ───────────────────────────────────────────────── */
 
 void aimodel_show(syn_server_t *s)
@@ -162,6 +1275,26 @@ void aimodel_show(syn_server_t *s)
     if (am->selected < 0)          am->selected = 0;
     aimodel_mark_loaded(s);
 
+    /* The cursor opens in INSTALLED — the panel's first job is still switching
+     * between the models that are here. */
+    am->cat_sel = -1;
+    am->typing  = 0;
+
+    /* One search per session unless something asks for another: the list is
+     * "the most downloaded GGUF repos", which does not change while a panel is
+     * open, and a request every time the panel opened would be traffic nobody
+     * asked for.
+     *
+     * An empty list IS asking for another, though — the usual reason for one is
+     * that the last attempt could not reach the network, and re-opening the
+     * panel after fixing that must not keep showing the failure. The in-flight
+     * flag is what stops that becoming a request per keypress. */
+    if (am->n_cat == 0 && !am->searching)
+        aimodel_request_search(s);
+
+    /* Drives the debounce and, if one is running, the download's progress. */
+    if (am->dl_timer) wl_event_source_timer_update(am->dl_timer, 200);
+
     /* The detail lines come from the status poller, which only runs while
      * something wants it. Ask for it, or the panel opens on stale numbers and
      * fills in a second later for no reason the user can see. */
@@ -172,7 +1305,17 @@ void aimodel_show(syn_server_t *s)
 
 void aimodel_hide(syn_server_t *s)
 {
-    s->aimodel.visible = 0;
+    syn_aimodel_t *am = &s->aimodel;
+    am->visible = 0;
+    am->typing  = 0;
+
+    /* A pending detail fetch dies with the panel; a DOWNLOAD does not. Closing
+     * the picker on a 4 GB fetch is ordinary, and the unit is not synui's child
+     * anyway — the tick keeps following it so reopening shows where it got to. */
+    am->detail_at = 0.0;
+    if (am->dl_timer &&
+        am->dl.state != AIMODEL_DL_STARTING && am->dl.state != AIMODEL_DL_RUNNING)
+        wl_event_source_timer_update(am->dl_timer, 0);   /* disarm */
 
     /* Release the poller unless something else still wants it — the overlay, or
      * the control panel, whose AI-model row follows the daemon the same way.
@@ -302,12 +1445,6 @@ static int aimodel_load_selected(syn_server_t *s)
     return 1;
 }
 
-static void aimodel_activate(syn_server_t *s)
-{
-    aimodel_load_selected(s);
-    synui_render_aimodel(s);
-}
-
 /* ── The control-panel row ───────────────────────────────── */
 
 void aimodel_row_sync(syn_server_t *s)
@@ -406,13 +1543,140 @@ const char *aimodel_status_text(syn_server_t *s)
     return s->aimodel.status;
 }
 
+/* ── The cursor ──────────────────────────────────────────── */
+/*
+ * One column, two sections, and the section headings are slots of their own.
+ *
+ *   slot 0                      INSTALLED
+ *   slot 1 … count              the models on the disk
+ *   slot count+1                AVAILABLE
+ *   slot count+2 … +n_cat       the search results
+ *
+ * Counting the headings as slots is what keeps the hit grid uniform: render.c
+ * draws one row per slot, so a click lands on the row it points at without a
+ * second layout calculation that could drift from the drawn one.
+ */
+
+int aimodel_slots(const syn_aimodel_t *am)
+{
+    return am->count + am->n_cat + 2;
+}
+
+int aimodel_slot_is_head(const syn_aimodel_t *am, int slot)
+{
+    return slot == 0 || slot == am->count + 1;
+}
+
+int aimodel_cursor_slot(const syn_aimodel_t *am)
+{
+    if (am->cat_sel >= 0) return am->count + 2 + am->cat_sel;
+    return am->count ? 1 + am->selected : 0;
+}
+
+/* Put the cursor on a slot, skipping the headings in the direction of travel.
+ * Returns 1 if it moved. */
+static int aimodel_cursor_to(syn_server_t *s, int slot, int dir)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    int n = aimodel_slots(am);
+
+    while (slot >= 0 && slot < n && aimodel_slot_is_head(am, slot))
+        slot += dir ? dir : 1;
+    if (slot < 0 || slot >= n) return 0;
+
+    if (slot <= am->count) {
+        am->selected = slot - 1;
+        am->cat_sel  = -1;
+    } else {
+        am->cat_sel = slot - am->count - 2;
+        aimodel_touch_detail(s);
+    }
+
+    /* Follow the cursor with the window, one row at a time. */
+    if (slot < am->scroll)                   am->scroll = slot;
+    if (slot >= am->scroll + AIMODEL_ROWS)   am->scroll = slot - AIMODEL_ROWS + 1;
+    if (am->scroll > n - AIMODEL_ROWS)       am->scroll = n - AIMODEL_ROWS;
+    if (am->scroll < 0)                      am->scroll = 0;
+    return 1;
+}
+
+static void aimodel_move(syn_server_t *s, int dir)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (am->count == 0 && am->n_cat == 0) return;
+    aimodel_cursor_to(s, aimodel_cursor_slot(am) + dir, dir);
+}
+
 /* ── Input ───────────────────────────────────────────────── */
+
+/* Enter, on whichever section the cursor is in: load what is here, fetch what
+ * is not. Two verbs on one key because they are the same intention — "use this
+ * model" — and the row says which one it will be. */
+static void aimodel_confirm(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    if (am->cat_sel >= 0) aimodel_start_download(s);
+    else                  aimodel_load_selected(s);
+
+    synui_render_aimodel(s);
+}
+
+/* The search box. The only panel here that takes text, so it is deliberately
+ * the smallest thing that works: printable ASCII in, Backspace out, Enter
+ * searches, Esc leaves the box without closing the panel. */
+static int aimodel_key_typing(syn_server_t *s, xkb_keysym_t sym)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    size_t len = strlen(am->query);
+
+    switch (sym) {
+    case XKB_KEY_Escape:
+        am->typing = 0;
+        am->query[0] = '\0';
+        aimodel_request_search(s);        /* back to the default listing */
+        synui_render_aimodel(s);
+        return 1;
+
+    case XKB_KEY_Return:
+    case XKB_KEY_KP_Enter:
+        am->typing = 0;
+        am->cat_sel = am->n_cat ? 0 : -1;
+        am->scroll  = 0;
+        aimodel_request_search(s);
+        synui_render_aimodel(s);
+        return 1;
+
+    case XKB_KEY_BackSpace:
+        if (len) am->query[len - 1] = '\0';
+        synui_render_aimodel(s);
+        return 1;
+
+    default:
+        break;
+    }
+
+    /* One byte at a time: the query is bound for a URL, and url_escape_query()
+     * keeps only what may appear in one — so anything wider than ASCII would be
+     * dropped there anyway, and is not accepted here. */
+    char buf[8];
+    int n = xkb_keysym_to_utf8(sym, buf, sizeof(buf));
+    if (n == 2 && (unsigned char)buf[0] >= 0x20 && (unsigned char)buf[0] < 0x7f &&
+        len + 1 < sizeof(am->query)) {
+        am->query[len]     = buf[0];
+        am->query[len + 1] = '\0';
+    }
+    synui_render_aimodel(s);
+    return 1;
+}
 
 int aimodel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     (void)mods;
     syn_aimodel_t *am = &s->aimodel;
     if (!am->visible) return 0;
+
+    if (am->typing) return aimodel_key_typing(s, sym);
 
     switch (sym) {
     case XKB_KEY_Escape:
@@ -421,27 +1685,52 @@ int aimodel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     case XKB_KEY_Up:
     case XKB_KEY_k:
-        if (am->count) am->selected = (am->selected - 1 + am->count) % am->count;
+        aimodel_move(s, -1);
         synui_render_aimodel(s);
         return 1;
 
     case XKB_KEY_Down:
     case XKB_KEY_j:
-        if (am->count) am->selected = (am->selected + 1) % am->count;
+        aimodel_move(s, +1);
         synui_render_aimodel(s);
         return 1;
+
+    /* On a catalogue row, Left/Right are the quantisation — the one choice
+     * inside a repo that changes what you get, and the info pane is showing
+     * the list they step through. On an installed row they do nothing, because
+     * there is nothing to step through. */
+    case XKB_KEY_Left:
+    case XKB_KEY_h:
+    case XKB_KEY_Right:
+    case XKB_KEY_l: {
+        syn_aimodel_cat_t *c = cat_current(am);
+        if (c && c->n_files > 0) {
+            int dir = (sym == XKB_KEY_Right || sym == XKB_KEY_l) ? 1 : -1;
+            c->sel_file = (c->sel_file + dir + c->n_files) % c->n_files;
+        }
+        synui_render_aimodel(s);
+        return 1;
+    }
 
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
     case XKB_KEY_space:
-        aimodel_activate(s);
+        aimodel_confirm(s);
+        return 1;
+
+    case XKB_KEY_slash:
+        am->typing   = 1;
+        am->query[0] = '\0';
+        synui_render_aimodel(s);
         return 1;
 
     case XKB_KEY_r:
         /* The directory is not watched — a model dropped in while the panel is
-         * open should not need a close and reopen to appear. */
+         * open should not need a close and reopen to appear. The search is
+         * refreshed with it, since this is the "show me what is true now" key. */
         aimodel_scan(s);
         if (am->selected >= am->count) am->selected = am->count ? am->count - 1 : 0;
+        aimodel_request_search(s);
         snprintf(am->status, sizeof(am->status), "rescanned");
         synui_render_aimodel(s);
         return 1;
@@ -460,9 +1749,22 @@ int aimodel_motion(syn_server_t *s, double lx, double ly)
     syn_aimodel_t *am = &s->aimodel;
     if (!am->visible) return 0;
 
-    int row = hit_row_at(&am->hit, lx, ly);
-    if (row >= 0 && row < am->count && row != am->selected) {
-        am->selected = row;
+    /* The info pane's file rows first: they overlap the list's row band, and a
+     * pointer over the right column is choosing a quantisation, not a repo. */
+    int frow = hit_index_at(&am->hit_files, lx, ly);
+    if (frow >= 0) {
+        syn_aimodel_cat_t *c = cat_current(am);
+        if (c && frow < c->n_files && frow != c->sel_file) {
+            c->sel_file = frow;
+            synui_render_aimodel(s);
+        }
+        return 1;
+    }
+
+    int slot = hit_index_at(&am->hit, lx, ly);
+    if (slot >= 0 && !aimodel_slot_is_head(am, slot) &&
+        slot != aimodel_cursor_slot(am)) {
+        aimodel_cursor_to(s, slot, 0);
         synui_render_aimodel(s);
     }
     return hit_in_panel(&am->hit, lx, ly);
@@ -474,13 +1776,11 @@ int aimodel_scroll(syn_server_t *s, double lx, double ly, double delta)
     syn_aimodel_t *am = &s->aimodel;
     if (!am->visible) return 0;
 
-    /* Moves the cursor, never loads: a wheel is how you look down a list, and
-     * a model swap is not something to trip into with a flick. */
-    if (am->count) {
-        int dir = delta > 0 ? 1 : -1;
-        am->selected = (am->selected + dir + am->count) % am->count;
-        synui_render_aimodel(s);
-    }
+    /* Moves the cursor, never loads and never downloads: a wheel is how you
+     * look down a list, and neither a model swap nor a 4 GB fetch is something
+     * to trip into with a flick. */
+    aimodel_move(s, delta > 0 ? 1 : -1);
+    synui_render_aimodel(s);
     return 1;
 }
 
@@ -497,11 +1797,18 @@ int aimodel_click(syn_server_t *s, double lx, double ly, uint32_t button,
         return 1;
     }
 
+    int on_file = hit_index_at(&am->hit_files, lx, ly) >= 0;
     aimodel_motion(s, lx, ly);            /* act on the row pointed at */
 
-    if (hit_row_at(&am->hit, lx, ly) < 0) return 1;   /* chrome */
     if (button != BTN_LEFT) return 1;
 
-    aimodel_activate(s);
+    /* A click in the info pane picks the quantisation and stops there: the
+     * download is the deliberate second act, on the row or on Enter. */
+    if (on_file) return 1;
+
+    int slot = hit_index_at(&am->hit, lx, ly);
+    if (slot < 0 || aimodel_slot_is_head(am, slot)) return 1;   /* chrome */
+
+    aimodel_confirm(s);
     return 1;
 }

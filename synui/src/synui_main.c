@@ -1964,6 +1964,7 @@ int synui_init(syn_server_t *s)
     /* News: loads the cached river off disk and parks a fetch thread on its
      * condvar. Nothing goes near the network until the panel is opened. */
     news_init(s);
+    aimodel_init(s);
 
     /* org.freedesktop.ScreenSaver — lets apps inhibit idle the standard way.
      * Best-effort; no session bus just means the feature stays off. */
@@ -2200,6 +2201,7 @@ void synui_destroy(syn_server_t *s)
     power_finish(s);
     taskmgr_finish(s);
     news_finish(s);
+    aimodel_finish(s);
     clipboard_finish(s);
     logind_finish(s);
     notif_finish(s);

@@ -473,12 +473,25 @@ test('panel_pointer', panel_pointer_test)
 ctlpanel_choice_test = executable('ctlpanel_choice_test',
   ['tests/ctlpanel_choice_test.c', 'src/ctlpanel.c', 'src/aimodel.c', 'src/hit.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE',
             '-DAIMODEL_DIR="' + meson.current_build_dir() +
             '/ctlpanel_choice_models"'],
   build_by_default : false)
 test('ctlpanel_choice', ctlpanel_choice_test)
+
+# The download catalogue: what synui believes a Hugging Face answer says, and
+# what it will agree to send on the strength of it. Pure functions only — the
+# fetch itself is a thread and a socket, and neither belongs in a unit test.
+# The refusals here are one half of a privilege boundary whose other half is
+# syn-model's tests/fetch_validate_test.sh; both are meant to hold alone.
+aimodel_catalog_test = executable('aimodel_catalog_test',
+  ['tests/aimodel_catalog_test.c', 'src/aimodel.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('aimodel_catalog', aimodel_catalog_test)
 
 edid_hdr_test = executable('edid_hdr_test',
   ['tests/edid_hdr_test.c', 'src/edid.c'],
