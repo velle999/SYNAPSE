@@ -114,8 +114,17 @@ def main():
     for r in range(H):
         row = "".join(glyph((c, r)) if inside((c, r)) else " " for c in range(W))
         rows.append(row.rstrip())
+
+    # Trim blank rows at BOTH ends. The apex lands partway into row 2, so the
+    # grid always has a couple of empty rows above it -- and a blank line at the
+    # top of this file is not padding, it displaces the whole mark downwards
+    # against the info column that fastfetch prints beside it. Leading blanks
+    # were the bug; trailing ones only made the block taller than the art.
+    while rows and not rows[0]:
+        rows.pop(0)
     while rows and not rows[-1]:
         rows.pop()
+
     print(ACCENT + "\n".join(rows) + RESET)
 
 

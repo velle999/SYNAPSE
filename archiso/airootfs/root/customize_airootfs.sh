@@ -155,8 +155,8 @@ cat > /home/syn/.config/fastfetch/config.jsonc << 'EOF'
     { "type": "memory", "key": "Memory" },
     { "type": "disk",   "key": "Disk" },
     "break",
-    { "type": "custom", "format": "  ⚡ synapd:  $(systemctl is-active synapd 2>/dev/null || echo offline)" },
-    { "type": "custom", "format": "  🛡 synguard: $(systemctl is-active synguard 2>/dev/null || echo offline)" }
+    { "type": "command", "key": "  ⚡ synapd",   "text": "systemctl is-active synapd 2>/dev/null || echo offline" },
+    { "type": "command", "key": "  🛡 synguard", "text": "systemctl is-active synguard 2>/dev/null || echo offline" }
   ]
 }
 EOF
