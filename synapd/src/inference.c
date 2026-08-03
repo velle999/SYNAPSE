@@ -815,10 +815,17 @@ void inference_describe(synapd_state_t *s, char *buf, size_t len) {
 
     synapd_inference_t *inf = s->inference;
     if (inf && inf->model) {
+        /* The FILENAME as well as the GGUF's internal name. They are unrelated
+         * on purpose — "synapse.gguf" holds "Mistral Nemo Instruct 2407" — so a
+         * picker listing a directory has nothing to match its rows against
+         * without this, and can only mark a model it switched to itself. */
+        const char *slash = strrchr(inf->model_path, '/');
+        const char *file  = slash ? slash + 1 : inf->model_path;
+
         snprintf(buf, len,
-                 " model_name=\"%s\" format=\"%s\" profile=%s "
+                 " model_name=\"%s\" model_file=\"%s\" format=\"%s\" profile=%s "
                  "temp=%.2f top_p=%.2f top_k=%d",
-                 inf->model_name,
+                 inf->model_name, file,
                  inf->tmpl_probe,
                  inf->prof_name[0] ? inf->prof_name : "none",
                  (double)inf->temperature, (double)inf->top_p, inf->top_k);

@@ -47,6 +47,8 @@
 #define SYN_PROTO_VER        1
 #define SYN_MSG_CONTEXT_GET  0x05
 #define SYN_MSG_STATUS       0x06
+#define SYN_MSG_RELOAD       0x07   /* load a different model */
+#define SYN_MSG_ERROR        0xFF   /* reply type carrying a refusal reason */
 
 /* Control requests never run inference, so a short timeout is right here. */
 #define SYNMON_TIMEOUT_SEC   2
@@ -83,6 +85,7 @@ typedef struct {
      * quietly. Empty against an older synapd, which is why every field is
      * tested before use rather than assumed present. */
     char          model_name[128];  /* general.name from the GGUF */
+    char          model_file[128];  /* the GGUF's filename, for matching a list */
     char          format[40];       /* "[INST]", "<|im_start|>user", "legacy" */
     char          profile[64];      /* matched profile, or "none" */
     float         temperature;
@@ -153,6 +156,70 @@ static int synmon_request(int fd, uint8_t type, char *out, size_t out_len)
     return 0;
 }
 
+/*
+ * Ask synapd to load a different model (SYN_MSG_RELOAD, 0x07).
+ *
+ * A bare filename, never a path: synapd refuses anything containing '/' and
+ * resolves the rest inside its own models directory. Sending a path would only
+ * produce a rejection, so the confinement is respected on this side too rather
+ * than tested against.
+ *
+ * Blocking, but only briefly — synapd acknowledges immediately and does the
+ * multi-second load on its own thread, so this returns as soon as the request
+ * is accepted. The caller learns the outcome from the next status poll, not
+ * from this reply.
+ *
+ * Returns 0 if the request was accepted; -1 otherwise, with synapd's reason in
+ * out[] when it gave one.
+ */
+int synmon_send_reload(const char *model_name, char *out, size_t out_len)
+{
+    if (out && out_len) out[0] = '\0';
+    if (!model_name || !*model_name) return -1;
+
+    int fd = synmon_connect();
+    if (fd < 0) {
+        snprintf(out, out_len, "synapd is not reachable");
+        return -1;
+    }
+
+    size_t plen = strlen(model_name) + 1;   /* NUL travels with the payload */
+    syn_hdr_t hdr = {
+        .magic       = SYN_MAGIC,
+        .version     = SYN_PROTO_VER,
+        .msg_type    = SYN_MSG_RELOAD,
+        .payload_len = (uint32_t)plen,
+        .client_pid  = (uint32_t)getpid(),
+    };
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    hdr.timestamp_ns = (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+
+    int ok = 0;
+    if (write(fd, &hdr, sizeof(hdr)) == (ssize_t)sizeof(hdr) &&
+        write(fd, model_name, plen) == (ssize_t)plen) {
+
+        syn_hdr_t rhdr;
+        if (recv(fd, &rhdr, sizeof(rhdr), MSG_WAITALL) == (ssize_t)sizeof(rhdr) &&
+            rhdr.magic == SYN_MAGIC && rhdr.payload_len <= (1u << 20)) {
+
+            uint32_t rlen = rhdr.payload_len < out_len ? rhdr.payload_len
+                                                       : (uint32_t)out_len - 1;
+            if (rlen && recv(fd, out, rlen, MSG_WAITALL) > 0)
+                out[rlen ? rlen - 1 : 0] = '\0';
+
+            /* SYN_MSG_ERROR carries the refusal text, which is worth showing
+             * verbatim — it names which rule the request broke. */
+            ok = (rhdr.msg_type != SYN_MSG_ERROR);
+        }
+    }
+
+    close(fd);
+    if (!ok && out && !out[0])
+        snprintf(out, out_len, "synapd refused the request");
+    return ok ? 0 : -1;
+}
+
 /* Copy a "-delimited value, stopping at the closing quote or the buffer end.
  * The model name is free text out of a GGUF, so it can contain spaces and a
  * %s scan would take only its first word. */
@@ -184,6 +251,8 @@ static void parse_status(const char *s, synmon_snapshot_t *snap)
      * "model" is '_', not '=' — so the order of these two does not matter. */
     if ((p = strstr(s, "model_name=\"")))
         copy_quoted(p + 12, snap->model_name, sizeof(snap->model_name));
+    if ((p = strstr(s, "model_file=\"")))
+        copy_quoted(p + 12, snap->model_file, sizeof(snap->model_file));
     if ((p = strstr(s, "format=\"")))
         copy_quoted(p + 8, snap->format, sizeof(snap->format));
     if ((p = strstr(s, "profile=")))
@@ -319,6 +388,7 @@ static int synmon_readable(int fd, uint32_t mask, void *data)
      * and blanking is the honest result. Overwriting with the previous poll's
      * values would leave the panel showing a model that is no longer loaded. */
     snprintf(ov->model_name, sizeof(ov->model_name), "%s", snap.model_name);
+    snprintf(ov->model_file, sizeof(ov->model_file), "%s", snap.model_file);
     snprintf(ov->format,     sizeof(ov->format),     "%s", snap.format);
     snprintf(ov->profile,    sizeof(ov->profile),    "%s", snap.profile);
     ov->temperature = snap.temperature;
@@ -328,6 +398,11 @@ static int synmon_readable(int fd, uint32_t mask, void *data)
     /* Redraw if the panel is up; scene damage schedules the frame. */
     if (ov->visible)
         synui_render_overlay(s);
+
+    /* The model picker follows the daemon rather than timing its own guess:
+     * a switch is finished when synapd says a model is loaded, not when some
+     * interval since the request has elapsed. */
+    aimodel_status_changed(s);
     return 0;
 }
 

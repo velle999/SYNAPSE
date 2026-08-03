@@ -327,6 +327,7 @@ typedef struct {
      * was recognised or which sampling profile won, and those are the two
      * things that fail silently. */
     char          model_name[128];  /* general.name out of the GGUF */
+    char          model_file[128];  /* the GGUF's FILENAME — unrelated to the above */
     char          format[40];       /* "[INST]", "<|im_start|>user", "legacy" */
     char          profile[64];      /* matched sampling profile, or "none" */
     float         temperature;
@@ -466,6 +467,48 @@ typedef struct {
     /* Pointer geometry, written by this panel's synui_render_*. */
     syn_hit_t hit;
 } syn_filters_t;
+
+/* ── AI model picker (aimodel.c) ─────────────────────────── */
+/*
+ * Pick which GGUF synapd runs, and show what it worked out about it.
+ *
+ * The three facts above the list are the point of the panel. A filename tells
+ * you nothing about whether the model's turn format was recognised or which
+ * sampling profile matched, and both fail SILENTLY — a wrongly-framed prompt
+ * still comes back fluent, which is how synapd spent its whole life speaking
+ * Zephyr to a Mistral without one line of evidence. They are read from
+ * SYN_MSG_STATUS rather than worked out here, so the panel reports what the
+ * daemon actually did rather than what synui would have predicted.
+ *
+ * Switching is SYN_MSG_RELOAD, which synapd confines to its own models
+ * directory; this panel never sends a path.
+ */
+#define AIMODEL_MAX  32   /* models listed; a plausible library, not a limit */
+
+typedef struct {
+    char name[128];       /* bare filename — what RELOAD wants */
+    long long bytes;
+} syn_aimodel_entry_t;
+
+typedef struct {
+    int  visible;
+    int  selected;
+    int  count;
+    syn_aimodel_entry_t models[AIMODEL_MAX];
+
+    /* Which entry is loaded right now, matched by filename against synapd's
+     * reply, or -1 when nothing matches (no model, or one outside the
+     * directory because it was set by an ExecStart flag). */
+    int  loaded_idx;
+
+    /* Set when a switch has been asked for and the daemon has not finished.
+     * The list stays visible but refuses a second pick — synapd rejects one
+     * anyway, and letting the key through would only produce an error toast. */
+    int  switching;
+
+    char status[160];
+    syn_hit_t hit;
+} syn_aimodel_t;
 
 /* ── Desktop widget manager (widgets.c) ──────────────────── */
 /*
@@ -712,6 +755,7 @@ typedef enum {
     /* System */
     CTL_ROW_TASKMGR,
     CTL_ROW_AI_BACKEND,
+    CTL_ROW_AI_MODEL,
     CTL_ROW_NEWS,
     CTL_ROW_CLIPBOARD,
     CTL_ROW_COUNT,
@@ -2484,6 +2528,16 @@ struct syn_server {
 
     syn_filters_t   filters;
 
+    /* AI model picker (control panel ▸ System ▸ AI model). */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } aimodel_ui;
+
+    syn_aimodel_t   aimodel;
+
     /* Desktop widget manager (Super+Shift+A) — one row per quickshell widget. */
     struct {
         struct wlr_scene_tree   *tree;
@@ -3548,6 +3602,23 @@ void synui_render_calendar(syn_server_t *s);
 void filters_show(syn_server_t *s);
 void filters_hide(syn_server_t *s);
 void filters_toggle(syn_server_t *s);
+
+/* AI model picker (aimodel.c). */
+void aimodel_show(syn_server_t *s);
+void aimodel_hide(syn_server_t *s);
+void aimodel_toggle(syn_server_t *s);
+int  aimodel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+int  aimodel_motion(syn_server_t *s, double lx, double ly);
+int  aimodel_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                   uint32_t time_msec);
+int  aimodel_scroll(syn_server_t *s, double lx, double ly, double delta);
+/* Ask synapd to load a different model. Bare filename, never a path — synapd
+ * confines it to its own models directory. Returns 0 if accepted, -1 with
+ * synapd's own refusal text in out[]. */
+int  synmon_send_reload(const char *model_name, char *out, size_t out_len);
+/* Called by synapd_mon.c when a poll lands, so the panel follows the daemon
+ * rather than guessing when a switch finished. */
+void aimodel_status_changed(syn_server_t *s);
 /* Modal key handling while the panel is open, as in power_key. */
 int  filters_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* …and the pointer, per the panel pointer contract at the top of this file. */
@@ -3564,6 +3635,7 @@ void filters_state_save(syn_server_t *s);
 const char *filters_row_label(int row);
 float filters_row_value(syn_server_t *s, int row, char *buf, size_t n);
 void synui_render_filters(syn_server_t *s);
+void synui_render_aimodel(syn_server_t *s);
 void synui_render_power(syn_server_t *s);
 
 /* ── Window-effect page of that panel (uifx.c) ───────────── */

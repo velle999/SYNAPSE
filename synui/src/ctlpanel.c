@@ -128,6 +128,7 @@ static const struct {
     /* System */
     { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr"   },
     { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL        },
+    { CTL_ROW_AI_MODEL,   CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "AI model",          "aimodel"   },
     { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
     { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Clipboard history", "clipboard" },
 };
@@ -399,6 +400,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "effects_toggle",    "CRT effects on/off" },
         { "power",             "Power saving panel" },
         { "taskmgr",           "Task manager" },
+        { "aimodel",           "AI model" },
         { "network",           "Network / Wi-Fi" },
         { "game",              "Game mode" },
         { "lock",              "Lock screen" },
@@ -696,6 +698,7 @@ static int ctl_child_is_up(syn_server_t *s, const char *action)
     if (strcmp(action, "bluetooth") == 0) return s->bt.visible;
     if (strcmp(action, "power") == 0)     return s->power.visible;
     if (strcmp(action, "taskmgr") == 0)   return s->taskmgr.visible;
+    if (strcmp(action, "aimodel") == 0)   return s->aimodel.visible;
     if (strcmp(action, "news") == 0)      return s->news.visible;
     if (strcmp(action, "clipboard") == 0) return s->clipboard.visible;
     return 0;

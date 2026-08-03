@@ -1951,6 +1951,200 @@ void synui_render_widgets(syn_server_t *s)
     set_scene_buffer(&s->widgets_ui.text_buf, s->widgets_ui.tree, buf);
 }
 
+/* ── AI model picker (aimodel.c) ─────────────────────────── */
+
+/* "7.0G" — a model's size is the thing you weigh against your VRAM, and bytes
+ * are unreadable at this scale. */
+static void aimodel_size_str(long long bytes, char *out, size_t n)
+{
+    double g = (double)bytes / (1024.0 * 1024.0 * 1024.0);
+    if (g >= 1.0) snprintf(out, n, "%.1fG", g);
+    else          snprintf(out, n, "%lldM", bytes / (1024 * 1024));
+}
+
+void synui_render_aimodel(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    if (!am->visible) {
+        wlr_scene_node_set_enabled(&s->aimodel_ui.tree->node, false);
+        hit_clear(&am->hit);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    /* The header block is fixed height and the list is not, so the frame is
+     * sized from the model count — a two-model box and a twelve-model box are
+     * both drawn tight rather than one padded to fit the other. */
+    const int row_h = 30, hdr = 152, pad = 18;
+    int rows = am->count > 0 ? am->count : 1;
+    int pw = 620;
+    int ph = hdr + rows * row_h + 86;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->aimodel_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->aimodel_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->aimodel_ui.tree->node);
+
+    /* Row grid starts below the header, so a click lands on the model the
+     * highlight is under rather than counting from the top of the panel. */
+    hit_set_panel(&am->hit, px, py, pw, ph);
+    hit_set_rows(&am->hit, 12, hdr - 18, pw - 24, row_h, am->count);
+
+    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->aimodel_ui.bg)
+        s->aimodel_ui.bg = wlr_scene_rect_create(s->aimodel_ui.tree,
+                                                 pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->aimodel_ui.bg, pw, ph);
+    if (!s->aimodel_ui.accent)
+        s->aimodel_ui.accent = wlr_scene_rect_create(s->aimodel_ui.tree,
+                                                     pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->aimodel_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "AI MODEL");
+
+    /* ── What synapd detected ────────────────────────────────────────────
+     * The reason this panel exists. Every line is what the DAEMON reported,
+     * never what synui would work out from the filename — the bug worth
+     * catching is precisely the two disagreeing. A dash means synapd did not
+     * say, which an older daemon never will. */
+    const syn_overlay_t *ov = &s->overlay;
+    int online = ov->mon_online;
+
+    struct { const char *k; const char *v; } det[3];
+    det[0].k = "Loaded";
+    det[0].v = !online              ? "synapd not responding"
+             : ov->model_name[0]    ? ov->model_name
+             : "\xe2\x80\x94";
+    det[1].k = "Format";
+    det[1].v = ov->format[0] ? ov->format : "\xe2\x80\x94";
+    det[2].k = "Profile";
+    det[2].v = ov->profile[0] ? ov->profile : "\xe2\x80\x94";
+
+    for (int i = 0; i < 3; i++) {
+        int ry = 56 + i * 20;
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        cairo_move_to(cr, pad, ry);
+        cairo_show_text(cr, det[i].k);
+
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+        cairo_move_to(cr, pad + 76, ry);
+        cairo_show_text(cr, det[i].v);
+    }
+
+    /* "legacy" is not a format the model asked for — it is synapd falling back
+     * because the GGUF declared none, and it is worth flagging rather than
+     * printing as though it were a detected answer. */
+    if (strcmp(ov->format, "legacy") == 0) {
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+        cairo_move_to(cr, pad + 76 + 60, 76);
+        cairo_show_text(cr, "GGUF declares no chat template");
+    }
+
+    char samp[96];
+    if (online && ov->top_k > 0)
+        snprintf(samp, sizeof(samp), "temp %.2f  \xc2\xb7  top_p %.2f  \xc2\xb7  top_k %d",
+                 (double)ov->temperature, (double)ov->top_p, ov->top_k);
+    else
+        snprintf(samp, sizeof(samp), "\xe2\x80\x94");
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    cairo_move_to(cr, pad, 116);
+    cairo_show_text(cr, "Sampling");
+    cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+    cairo_move_to(cr, pad + 76, 116);
+    cairo_show_text(cr, samp);
+
+    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 132);
+    cairo_line_to(cr, pw - 18, 132);
+    cairo_stroke(cr);
+
+    /* ── The list ────────────────────────────────────────────────────── */
+    if (am->count == 0) {
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, 0.6, 0.6, 0.7, 1.0);
+        cairo_move_to(cr, pad + 8, hdr + 4);
+        cairo_show_text(cr, "no models found");
+    }
+
+    for (int i = 0; i < am->count; i++) {
+        int sel = (i == am->selected);
+        int ry = hdr + i * row_h;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry - 18, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+
+        cairo_set_font_size(cr, 13);
+        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
+                              sel ? 0.99 : 0.86, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        cairo_show_text(cr, am->models[i].name);
+
+        char sz[24];
+        aimodel_size_str(am->models[i].bytes, sz, sizeof(sz));
+        cairo_set_font_size(cr, 12);
+        cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
+        cairo_move_to(cr, pw - 170, ry + 4);
+        cairo_show_text(cr, sz);
+
+        /* Marked only for a switch this panel made: synapd reports the GGUF's
+         * INTERNAL name, which by design has nothing to do with the filename,
+         * so anything else would be a guess dressed as a fact. */
+        if (i == am->loaded_idx) {
+            cairo_set_font_size(cr, 11);
+            if (am->switching) {
+                cairo_set_source_rgba(cr, 0.75, 0.55, 0.35, 1.0);
+                cairo_move_to(cr, pw - 110, ry + 4);
+                cairo_show_text(cr, "loading \xe2\x80\xa6");
+            } else {
+                set_accent(cr, 1.0);
+                cairo_move_to(cr, pw - 110, ry + 4);
+                cairo_show_text(cr, "loaded");
+            }
+        }
+    }
+
+    if (am->status[0]) {
+        cairo_set_font_size(cr, 12);
+        set_accent(cr, 0.9);
+        cairo_move_to(cr, 18, ph - 52);
+        cairo_show_text(cr, am->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    cairo_move_to(cr, 18, ph - 32);
+    cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter load \xc2\xb7 R rescan \xc2\xb7 Esc close");
+    cairo_move_to(cr, 18, ph - 14);
+    cairo_show_text(cr, "switching reloads the model \xe2\x80\x94 the AI pauses while it loads");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->aimodel_ui.text_buf, s->aimodel_ui.tree, buf);
+}
+
 /* ── Event sounds panel (sound.c) ────────────────────────── */
 
 void synui_render_sound(syn_server_t *s)
@@ -4785,6 +4979,7 @@ void synui_ui_init(syn_server_t *s)
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->news_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->aimodel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->widgets_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->sound_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->clock_ui.tree   = wlr_scene_tree_create(&s->scene->tree);

@@ -771,6 +771,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         power_toggle(s);
     } else if (strcmp(action, "taskmgr") == 0) {
         taskmgr_toggle(s);
+    } else if (strcmp(action, "aimodel") == 0) {
+        aimodel_toggle(s);
     } else if (strcmp(action, "news") == 0) {
         news_toggle(s);
     } else if (strcmp(action, "game") == 0) {
@@ -1259,6 +1261,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* CRT filter panel: same modal contract as the power panel. */
         for (int i = 0; i < nsyms; i++)
             if (filters_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* AI model picker: same modal contract. */
+        for (int i = 0; i < nsyms; i++)
+            if (aimodel_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -1881,6 +1889,7 @@ void pointer_rebase(syn_server_t *s)
     X(taskmgr,  taskmgr)  \
     X(news,     news)     \
     X(filters,  filters)  \
+    X(aimodel,  aimodel)  \
     X(widgets,  widgets)  \
     X(sound,    sound)    \
     X(clock,    clock)    \
