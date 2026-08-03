@@ -1,6 +1,6 @@
 pkgname=synapd
 pkgver=0.1.0
-pkgrel=30
+pkgrel=31
 pkgdesc="SynapseOS AI inference daemon — persistent llama.cpp backend"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -10,6 +10,25 @@ license=('GPL-2.0-or-later')
 # at a build dir in $HOME, so pacman had no idea the daemon needed them and
 # nothing stopped them being deleted or shadowed. synapse-llama-cuda `provides`
 # this, so a GPU box satisfies the dep without pulling the CPU build in.
+#
+# ORDER MATTERS, and getting it wrong produces a SEGFAULT, not a build error.
+#
+# synapd is compiled against the llama.h that is INSTALLED (see meson.build on
+# why system headers are preferred). llama.cpp adds fields to
+# llama_context_params and llama_model_params between releases, so a synapd
+# built against an OLD header and run against a NEW libllama passes a
+# short struct into llama_init_from_model() and the context constructor reads
+# off the end of it. That is what happened at the b8272 -> b10241 bump: synapd
+# was packaged BEFORE the new synapse-llama was installed, and the daemon
+# crash-looped on SIGSEGV inside llama_context::llama_context. Nothing warns —
+# the soname did not change, so it links and resolves perfectly.
+#
+# So: install synapse-llama FIRST, then build this. build-all.sh already does
+# that (build_script_pkg pacman -U's synapse-llama before build_component
+# synapd); a hand-run makepkg here is the path that can get it wrong. Wipe
+# build/ and src/synapd-0.1.0/ too — a stale meson cache pins the OLD library
+# by absolute path and fails with "libggml-base.so.0.9.7 ... missing".
+#
 depends=('glibc' 'systemd-libs' 'gcc-libs' 'libgomp' 'synapse-llama')
 makedepends=('meson' 'ninja' 'gcc' 'pkg-config')
 backup=('etc/synapd/synapd.conf')
