@@ -2895,6 +2895,16 @@ fi
 # already enabled when kitty started. So a kitty.conf written without it leaves
 # synui's transparency slider permanently inert for this user, and writing the
 # line later does not repair it — kitty has to be restarted. It ships on.
+# areofyl/fetch reads its logo only from ~/.config/fetch/logo.txt, so it gets a
+# copy in the new user's home. Sourced from the live ISO -- the same file that
+# landed in /mnt/usr/share/synapseos above -- so fetch and fastfetch cannot end
+# up showing two different marks. Guarded: an ISO built without the asset skips
+# it, and fetch then falls back to fastfetch's Arch logo as it always did.
+if [ -f /usr/share/synapseos/logo.txt ]; then
+    mkdir -p "/mnt/home/$NEW_USER/.config/fetch"
+    cp /usr/share/synapseos/logo.txt "/mnt/home/$NEW_USER/.config/fetch/logo.txt"
+fi
+
 mkdir -p "/mnt/home/$NEW_USER/.config/kitty"
 cat > "/mnt/home/$NEW_USER/.config/kitty/kitty.conf" << 'KITTYEOF'
 font_family              monospace

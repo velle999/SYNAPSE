@@ -1,7 +1,18 @@
-[38;5;51m   ███████╗██╗   ██╗███╗   ██╗
-   ██╔════╝╚██╗ ██╔╝████╗  ██║
-   ███████╗ ╚████╔╝ ██╔██╗ ██║
-   ╚════██║  ╚██╔╝  ██║╚██╗██║
-   ███████║   ██║   ██║ ╚████║
-   ╚══════╝   ╚═╝   ╚═╝  ╚═══╝
-[0m
+[38;5;51m
+
+                  oo
+                 soos
+                .soos.
+              `.:soos:.`
+             `.:+soos+:.`
+            `.:++soos++:.`
+           `.:+++soos+++:.`
+          `.:++++soos++++:.`
+         `.:+++ssooooss+++:.`
+        `.:++ssooooooooss++:.`
+       `.:+soooooossoooooos+:.`
+      `.ssooooooos++soooooooss.`
+     `ssooooooos++++++soooooooss`
+    `soooosooos++++++++sooosoooos`
+   `.soosssoos++++++++++soosssoos.`
+  `.:+s+++ss++++++++++++++ss+++s+:.`[0m

@@ -116,6 +116,18 @@ EOF
 
 # fastfetch — branded logo config. fastfetch isn't on the ISO (`syn info`
 # falls back), but syn-install copies this to installed systems.
+# areofyl/fetch reads its logo only from ~/.config/fetch/logo.txt -- it cannot
+# be pointed at a system path -- so the shared mark is COPIED rather than
+# referenced. Same file fastfetch renders below: one asset, two consumers, so a
+# change to the mark cannot land in one and miss the other.
+#
+# Without this file fetch falls back through ID_LIKE to fastfetch's ARCH logo,
+# which is a perfectly good logo and the wrong distro's.
+if [ -r /usr/share/synapseos/logo.txt ]; then
+    install -dm755 /home/syn/.config/fetch
+    install -m644 /usr/share/synapseos/logo.txt /home/syn/.config/fetch/logo.txt
+fi
+
 install -dm755 /home/syn/.config/fastfetch
 cat > /home/syn/.config/fastfetch/config.jsonc << 'EOF'
 {
