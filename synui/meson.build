@@ -463,6 +463,23 @@ panel_pointer_test = executable('panel_pointer_test',
   build_by_default : false)
 test('panel_pointer', panel_pointer_test)
 
+# The control panel's CHOICE row (System ▸ AI model). Driven by calling
+# ctlpanel_key() with keysyms for the same reason panel_pointer_test calls the
+# pointer handlers: nothing can synthesise input into a headless synui. What it
+# pins is mostly the NOT-loading — a row whose values are multi-gigabyte models
+# must not act on a keypress you were only passing through.
+# AIMODEL_DIR is redirected at a directory of stub files the test writes, the
+# way lid_test redirects SYNUI_POWER_SUPPLY_DIR.
+ctlpanel_choice_test = executable('ctlpanel_choice_test',
+  ['tests/ctlpanel_choice_test.c', 'src/ctlpanel.c', 'src/aimodel.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE',
+            '-DAIMODEL_DIR="' + meson.current_build_dir() +
+            '/ctlpanel_choice_models"'],
+  build_by_default : false)
+test('ctlpanel_choice', ctlpanel_choice_test)
+
 edid_hdr_test = executable('edid_hdr_test',
   ['tests/edid_hdr_test.c', 'src/edid.c'],
   include_directories : include_directories('src'),

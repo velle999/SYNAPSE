@@ -44,8 +44,13 @@
 
 /* Must match synapd's SYNAPD_MODEL_DIR. synapd is the one that enforces it —
  * this is only where the list is read from, so a mismatch shows an empty panel
- * rather than letting anything out of the directory. */
+ * rather than letting anything out of the directory.
+ *
+ * Overridable only so the test can point it at a directory of stub files, the
+ * way lid_test does with SYNUI_POWER_SUPPLY_DIR. Nothing in the build sets it. */
+#ifndef AIMODEL_DIR
 #define AIMODEL_DIR  "/var/lib/synapd/models"
+#endif
 
 /* ── Model list ──────────────────────────────────────────── */
 
@@ -160,7 +165,7 @@ void aimodel_show(syn_server_t *s)
     /* The detail lines come from the status poller, which only runs while
      * something wants it. Ask for it, or the panel opens on stale numbers and
      * fills in a second later for no reason the user can see. */
-    atomic_store(&s->synmon_want, 1);
+    synmon_want_refresh(s);
 
     synui_render_aimodel(s);
 }
@@ -169,11 +174,11 @@ void aimodel_hide(syn_server_t *s)
 {
     s->aimodel.visible = 0;
 
-    /* Release the poller unless the neural overlay still wants it. Leaving it
-     * armed would keep a socket round-trip running once a second for a panel
-     * nobody is looking at. */
-    if (!s->overlay.visible)
-        atomic_store(&s->synmon_want, 0);
+    /* Release the poller unless something else still wants it — the overlay, or
+     * the control panel, whose AI-model row follows the daemon the same way.
+     * Leaving it armed would keep a socket round-trip running once a second for
+     * a panel nobody is looking at. */
+    synmon_want_refresh(s);
 
     synui_render_aimodel(s);
     ctlpanel_child_closed(s, "aimodel");
@@ -186,18 +191,20 @@ void aimodel_toggle(syn_server_t *s)
 }
 
 /*
- * A status poll landed.
+ * Fold the newest status poll into the picker's state.
  *
  * This is how a switch finishes. synapd reports model=loading while the swap
- * runs and model=loaded when it is done, so the panel clears its own
+ * runs and model=loaded when it is done, so the switch clears its own
  * "switching" flag on the daemon's word rather than on a timer — a 12 GB model
  * on a cold cache takes as long as it takes.
+ *
+ * Shared by the panel and the control-panel row: a switch fired from the row
+ * has to finish the same way, and a second copy of "is it done yet" is exactly
+ * the kind of thing that would come to disagree.
  */
-void aimodel_status_changed(syn_server_t *s)
+static void aimodel_settle(syn_server_t *s)
 {
     syn_aimodel_t *am = &s->aimodel;
-    if (!am->visible) return;
-
     int valid_sel = (am->selected >= 0 && am->selected < am->count);
 
     if (am->switching && valid_sel &&
@@ -212,22 +219,61 @@ void aimodel_status_changed(syn_server_t *s)
     }
 
     aimodel_mark_loaded(s);
-    synui_render_aimodel(s);
+}
+
+/*
+ * A status poll landed.
+ *
+ * Two consumers now — the picker, and the control panel's AI-model row, which
+ * shows the same fact in one line. Neither is up most of the time, and the poll
+ * only runs while one of them is, so the early return is the common case.
+ */
+void aimodel_status_changed(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+    if (!am->visible && !s->ctlpanel.visible) return;
+
+    aimodel_settle(s);
+
+    if (am->visible) {
+        synui_render_aimodel(s);
+        return;
+    }
+
+    /* Row only. Follow the daemon: if synapd is running something else — the
+     * picker loaded it, a `synctl` did, or synapd restarted onto its default —
+     * the row says so rather than sitting on a stale pick.
+     *
+     * Not while a pick is settling or a switch is in flight: those ARE the
+     * user's cursor, and snapping it back to the model still resident would
+     * undo the choice being made a keypress at a time. */
+    if (!am->switching && s->ctlpanel.model_commit_at == 0.0 &&
+        am->loaded_idx >= 0)
+        am->selected = am->loaded_idx;
+
+    ctlpanel_refresh(s);
 }
 
 /* ── Activation ──────────────────────────────────────────── */
 
-static void aimodel_activate(syn_server_t *s)
+/*
+ * Ask synapd for whatever the cursor is on.
+ *
+ * Returns 1 if a request actually went out, 0 otherwise — refused, already
+ * loaded, or nothing to load. Either way am->status carries the reason, which
+ * is what both callers put on screen; neither renders here, because the panel
+ * and the control-panel row draw different things.
+ */
+static int aimodel_load_selected(syn_server_t *s)
 {
     syn_aimodel_t *am = &s->aimodel;
-    if (am->count == 0) return;
-    if (am->selected < 0 || am->selected >= am->count) return;
+    if (am->count == 0) return 0;
+    if (am->selected < 0 || am->selected >= am->count) return 0;
 
     if (am->switching) {
         snprintf(am->status, sizeof(am->status),
                  "still loading \xc2\xb7 wait for it to finish");
-        synui_render_aimodel(s);
-        return;
+        return 0;
     }
 
     const char *name = am->models[am->selected].name;
@@ -236,8 +282,7 @@ static void aimodel_activate(syn_server_t *s)
      * several GB to arrive back where it started. */
     if (am->loaded_idx == am->selected) {
         snprintf(am->status, sizeof(am->status), "already loaded");
-        synui_render_aimodel(s);
-        return;
+        return 0;
     }
 
     char reply[160] = {0};
@@ -247,15 +292,118 @@ static void aimodel_activate(syn_server_t *s)
         snprintf(am->status, sizeof(am->status), "%s",
                  reply[0] ? reply : "synapd refused the switch");
         wlr_log(WLR_ERROR, "synui: model switch to %s failed: %s", name, reply);
-        synui_render_aimodel(s);
-        return;
+        return 0;
     }
 
     am->switching  = 1;
     am->loaded_idx = am->selected;
     snprintf(am->status, sizeof(am->status), "loading \xe2\x80\xa6");
     wlr_log(WLR_INFO, "synui: switching synapd to %s", name);
+    return 1;
+}
+
+static void aimodel_activate(syn_server_t *s)
+{
+    aimodel_load_selected(s);
     synui_render_aimodel(s);
+}
+
+/* ── The control-panel row ───────────────────────────────── */
+
+void aimodel_row_sync(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    /* Not while the picker owns the state: it has its own cursor on screen and
+     * the control panel is only stepping aside for it. */
+    if (am->visible) return;
+
+    aimodel_scan(s);
+    aimodel_mark_loaded(s);
+
+    /* switching is deliberately NOT cleared here. A switch fired from the row
+     * outlives the panel — Esc while a 7 GB model loads is normal — and
+     * clearing it would let the row show a pick as settled, and a second
+     * request go out, while synapd is still holding the write lock. It clears
+     * when the daemon says so (aimodel_settle), or when the picker is opened,
+     * which is the escape hatch if synapd died mid-load and never will.
+     *
+     * Only the leftover text goes, since it describes a switch that has
+     * finished; a live "loading …" is still true. */
+    if (!am->switching) am->status[0] = '\0';
+
+    /* Start on the loaded model. -1 means synapd has not said yet (the poll is
+     * one round trip behind the panel opening) or is running something outside
+     * the directory — leave the cursor where it was; the next poll to land
+     * moves it, via aimodel_status_changed(). */
+    if (am->loaded_idx >= 0)      am->selected = am->loaded_idx;
+    else if (am->selected >= am->count) am->selected = 0;
+}
+
+void aimodel_row_value(syn_server_t *s, char *buf, size_t n)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    if (am->count == 0)                                  { snprintf(buf, n, "none"); return; }
+    if (am->selected < 0 || am->selected >= am->count)   { snprintf(buf, n, "none"); return; }
+
+    const char *name = am->models[am->selected].name;
+
+    /* Every entry ends in .gguf, so the suffix distinguishes nothing and the
+     * row has one line to spend. The picker shows the full filename — that is
+     * where you go when you need to know exactly which file. */
+    size_t len = strlen(name);
+    if (len > 5 && strcmp(name + len - 5, ".gguf") == 0) len -= 5;
+
+    if (am->switching) snprintf(buf, n, "%.*s \xc2\xb7 loading", (int)len, name);
+    else               snprintf(buf, n, "%.*s", (int)len, name);
+}
+
+int aimodel_row_cycle(syn_server_t *s, int dir)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    /* The directory is not watched, and the control panel may have been open
+     * since before a model was dropped in. An empty list is worth a second look
+     * before reporting it as one. */
+    if (am->count == 0) aimodel_scan(s);
+    if (am->count == 0) return 0;
+
+    /* Refused rather than queued: synapd rejects a second reload while the
+     * first is resident-loading anyway, and a queue would mean the row you let
+     * go of is not the model you end up with. */
+    if (am->switching) {
+        snprintf(am->status, sizeof(am->status),
+                 "still loading \xc2\xb7 wait for it to finish");
+        return 0;
+    }
+
+    /* Clamped before stepping: a rescan can shrink the list under a cursor that
+     * was valid when it was last set. */
+    if (am->selected < 0 || am->selected >= am->count) am->selected = 0;
+
+    am->selected = (am->selected + dir + am->count) % am->count;
+    am->status[0] = '\0';
+    return 1;
+}
+
+int aimodel_row_commit(syn_server_t *s)
+{
+    syn_aimodel_t *am = &s->aimodel;
+
+    /* Landing back on the model already loaded is the ordinary way out of a
+     * cycle you did not mean to start — say nothing rather than "already
+     * loaded", which would read as a failure. */
+    if (am->loaded_idx == am->selected) {
+        am->status[0] = '\0';
+        return 0;
+    }
+    return aimodel_load_selected(s);
+}
+
+const char *aimodel_status_text(syn_server_t *s)
+{
+    return s->aimodel.status;
 }
 
 /* ── Input ───────────────────────────────────────────────── */

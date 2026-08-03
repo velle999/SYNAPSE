@@ -768,6 +768,12 @@ typedef enum {
 typedef enum {
     CTL_KIND_TOGGLE = 0,   /* flips in place; the panel stays up */
     CTL_KIND_SLIDER,       /* toggle, plus Left/Right on a level */
+    /* Left/Right pick from a list drawn in the row itself, Enter opens the
+     * panel that owns the setting for the detail the row has no space for. The
+     * difference from SLIDER is that the choices are DISCRETE and come from
+     * somewhere outside this file, so the row cannot draw or commit one on its
+     * own — see ctlpanel_choice_* below. */
+    CTL_KIND_CHOICE,
     CTL_KIND_PANEL,        /* opens a synui panel; its Esc comes back here */
     CTL_KIND_LAUNCH,       /* spawns something external; the panel closes */
     CTL_KIND_ACTION,       /* fires and closes */
@@ -825,6 +831,16 @@ typedef struct {
      * shape (fire a helper, the value lands a moment later), so the row is a
      * field rather than a second copy of the machinery. */
     int    poll_row;
+    /* The AI-model row's settle timer: CLOCK_MONOTONIC deadline at which the
+     * model the cursor has landed on is actually asked for, 0 when nothing is
+     * pending.
+     *
+     * Left/Right cannot load on the keypress. The choices are multi-gigabyte
+     * GGUFs and cycling from the first to the third would load the second on
+     * the way past — a key repeat would load every model in the directory in
+     * turn. So the row moves instantly and the request waits for the cursor to
+     * stop, which is also what makes holding the key harmless. */
+    double model_commit_at;
     /* Pointer geometry, written by synui_render_ctlpanel(). Two grids because
      * the panel is two columns and a click has to know which one it landed in —
      * that is the same question Tab answers for the keyboard. Both carry the
@@ -3345,6 +3361,11 @@ void secfeed_dispatch(syn_server_t *s);  /* drain feed, colour windows (frame lo
 void synmon_start(syn_server_t *s);      /* poll synapd status/activity */
 void synmon_stop(syn_server_t *s);       /* join the thread, close the pipe */
 void synmon_set_active(syn_server_t *s, int on);  /* poll fast while overlay open */
+/* Recompute the poll from every panel that wants it — the overlay, the model
+ * picker and the control panel. Call this instead of synmon_set_active() from
+ * anything that shows or hides one of them: with three owners, "turn it off
+ * unless the other one is up" is no longer a rule that can be written locally. */
+void synmon_want_refresh(syn_server_t *s);
 
 /* ── config.c ────────────────────────────────────────────── */
 void synui_config_load(syn_config_t *cfg);
@@ -3612,6 +3633,30 @@ int  aimodel_motion(syn_server_t *s, double lx, double ly);
 int  aimodel_click(syn_server_t *s, double lx, double ly, uint32_t button,
                    uint32_t time_msec);
 int  aimodel_scroll(syn_server_t *s, double lx, double ly, double delta);
+/* ── The control-panel row (System ▸ AI model) ────────────
+ *
+ * The row drives the SAME list and the same cursor this panel does, out of
+ * s->aimodel, so the two can never disagree about which models exist or which
+ * one is loaded — and cycling the row leaves the panel opened on the model you
+ * were looking at. Everything that knows where the GGUFs live stays in
+ * aimodel.c; ctlpanel.c only asks.
+ */
+/* Read the directory and put the cursor on the loaded model. Called when the
+ * control panel opens, so the row starts on the truth rather than on whatever
+ * the picker was last left on. */
+void aimodel_row_sync(syn_server_t *s);
+/* The row's value text: the pick, with the .gguf stripped, or the state
+ * ("loading …", "none") when there is no name worth showing. */
+void aimodel_row_value(syn_server_t *s, char *buf, size_t n);
+/* Move the pick. Returns 0 and leaves a reason in the panel's status when
+ * there is nothing to move through or a switch is already in flight. */
+int  aimodel_row_cycle(syn_server_t *s, int dir);
+/* Ask synapd for whatever the pick has settled on. Returns 1 if a request went
+ * out (the row shows "loading …" until a status poll says otherwise). */
+int  aimodel_row_commit(syn_server_t *s);
+/* The panel's own status line, so the row can show synapd's refusal verbatim
+ * instead of a generic failure. Empty when there is nothing to say. */
+const char *aimodel_status_text(syn_server_t *s);
 /* Ask synapd to load a different model. Bare filename, never a path — synapd
  * confines it to its own models directory. Returns 0 if accepted, -1 with
  * synapd's own refusal text in out[]. */

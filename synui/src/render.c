@@ -2804,7 +2804,9 @@ void synui_render_ctlpanel(syn_server_t *s)
             cairo_move_to(cr, CTL_COL_RIGHT, ry);
             cairo_show_text(cr, ctlpanel_row_label(row));
 
-            char value[32];
+            /* Wide enough for a GGUF filename: the AI-model row's value is one,
+             * and a truncated model name is a name you cannot act on. */
+            char value[64];
             ctlpanel_row_value(s, row, value, sizeof(value));
 
             /* A row that opens something is marked as such, so the pane says
@@ -2822,14 +2824,41 @@ void synui_render_ctlpanel(syn_server_t *s)
                 vx -= 18;
             }
 
+            /* A choice row wears its chevrons around the value instead: they
+             * say the value itself is what Left/Right move through, where the
+             * single trailing one says the row leads somewhere else. It opens a
+             * panel too, but that is what Enter is for and the footer says so —
+             * both marks at once would read as two different affordances.
+             *
+             * "‹"/"›" (U+2039/203A) and not "◀"/"▶" or the arrows: the 13px
+             * face these panels draw with has no U+2192 and renders it as a
+             * garbage glyph. Checked, because it has cost a build round before. */
+            int choice = (kind == CTL_KIND_CHOICE && value[0]);
+            if (choice) {
+                cairo_set_font_size(cr, 13);
+                cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+                draw_right(cr, CTL_SETTING_V, ry, "\xe2\x80\xba");
+                vx -= 14;
+            }
+
             if (value[0]) {
                 /* "on" reads as live, everything else (off/n/a) as inert. */
-                if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0)
+                if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0 ||
+                    strcmp(value, "none") == 0)
                     cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
                 else
                     set_accent(cr, 1.0);
                 cairo_set_font_size(cr, 13);
                 draw_right(cr, vx, ry, value);
+
+                if (choice) {
+                    /* The opening chevron sits off the value's own width, so it
+                     * tracks a name that changes length as the row is cycled. */
+                    cairo_text_extents_t ext;
+                    cairo_text_extents(cr, value, &ext);
+                    cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+                    draw_right(cr, vx - ext.width - 6, ry, "\xe2\x80\xb9");
+                }
             }
         }
     }
@@ -2852,6 +2881,13 @@ void synui_render_ctlpanel(syn_server_t *s)
         hint = "Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 Esc close";
     else if (cp->cat == CTL_CAT_SHORTCUTS)
         hint = "Up/Down \xc2\xb7 PgUp/PgDn scroll \xc2\xb7 Left or Esc goes back";
+    else if (ctlpanel_selected_row(s) >= 0 &&
+             ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_CHOICE)
+        /* On a choice row Left/Right are the choice, so the usual hint would be
+         * naming a key that does something else entirely. Tab is the way out of
+         * the column here, and it is worth saying so on the one row where Left
+         * is not. */
+        hint = "Left/Right switch \xc2\xb7 Enter details \xc2\xb7 Tab column \xc2\xb7 Esc back";
     else
         hint = "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 Left or Esc back \xc2\xb7 Tab column";
 

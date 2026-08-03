@@ -1080,8 +1080,10 @@ void overlay_toggle(syn_server_t *s)
 {
     s->overlay.visible = !s->overlay.visible;
     /* Drive the synapd monitor: poll fast while the panel is on screen, idle
-     * when it's hidden. */
-    synmon_set_active(s, s->overlay.visible);
+     * when it's hidden — and only if nothing ELSE is watching the daemon.
+     * Closing the overlay used to stop the poll outright, which silently froze
+     * an open model picker on its last snapshot. */
+    synmon_want_refresh(s);
     if (s->overlay.visible)
         overlay_update(s);
     synui_render_overlay(s);

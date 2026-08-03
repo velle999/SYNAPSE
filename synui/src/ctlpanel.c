@@ -60,6 +60,16 @@
  * service restart, and the poll stops early the moment the value changes. */
 #define CTL_BACKEND_POLL_SECS  8.0
 
+/* How long the AI-model row waits after the last Left/Right before asking
+ * synapd for the model the cursor landed on.
+ *
+ * The choices are multi-gigabyte files, so "load what the key selected" cannot
+ * mean "load it on the keypress": stepping from the first entry to the third
+ * would load the second on the way past, and holding the key would work through
+ * the whole directory. Long enough to cross a row you did not want, short enough
+ * that a deliberate pick does not feel like it was ignored. */
+#define CTL_MODEL_SETTLE_SECS  0.7
+
 static double ctl_now_secs(void)
 {
     struct timespec ts;
@@ -128,7 +138,7 @@ static const struct {
     /* System */
     { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr"   },
     { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL        },
-    { CTL_ROW_AI_MODEL,   CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "AI model",          "aimodel"   },
+    { CTL_ROW_AI_MODEL,   CTL_CAT_SYSTEM, CTL_KIND_CHOICE, "AI model",          "aimodel"   },
     { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
     { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Clipboard history", "clipboard" },
 };
@@ -344,6 +354,12 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * just to read which one is on. */
         snprintf(buf, n, "%s", theme_name(s->config.theme));
         break;
+    case CTL_ROW_AI_MODEL:
+        /* The one row whose choices are not synui's: they are the GGUFs in
+         * synapd's models directory, so the list, the cursor and the loaded
+         * marker all live in aimodel.c and this only asks. */
+        aimodel_row_value(s, buf, n);
+        break;
     default:
         buf[0] = '\0';   /* jump-offs have no state of their own */
         break;
@@ -534,26 +550,65 @@ void ctlpanel_refresh(syn_server_t *s)
 }
 
 /*
+ * The AI-model row's settle timer has run down: ask synapd for the pick.
+ *
+ * Deliberately not the same machinery as the backend poll below. That one
+ * watches a file for a value to change; this one waits for the USER to stop,
+ * and what confirms it afterwards is a status poll from the daemon, not another
+ * look at the row.
+ */
+static void ctlpanel_model_commit(syn_server_t *s)
+{
+    s->ctlpanel.model_commit_at = 0.0;
+
+    if (aimodel_row_commit(s)) {
+        /* Said here rather than left to the row's own "· loading": a model
+         * swap stops the AI answering for as long as it takes, and that is
+         * worth a sentence the first time someone flips this row. */
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "loading \xc2\xb7 the AI pauses until it is up");
+    } else {
+        /* Refused, or already loaded. aimodel.c has written the reason —
+         * synapd's own words when it refused — and a blank one means there was
+         * nothing to report (the cursor came back to the loaded model). */
+        const char *why = aimodel_status_text(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status), "%s", why);
+    }
+    synui_render_ctlpanel(s);
+}
+
+/*
  * Called once per frame from output_frame. Returns 1 while it wants more frames.
  *
- * Only the AI-backend row needs this: every other value on the panel is state
- * synui itself owns and changes synchronously, so the keypress that changed it
- * also repaints. That one is read back from a file the synui-ai-backend helper
- * writes after restarting synapd, which lands whenever it lands — so the panel
- * has to look again rather than be told. Stops as soon as the label changes
- * (the common case, well under a second) or the deadline passes, so an idle
- * panel costs nothing.
+ * Two rows need it, and for different reasons. The AI-model row is waiting for
+ * the cursor to settle before it commits a pick. The AI-backend row is waiting
+ * for a value it does not own: it is read back from a file the synui-ai-backend
+ * helper writes after restarting synapd, which lands whenever it lands, so the
+ * panel has to look again rather than be told. Everything else on the panel is
+ * state synui owns and changes synchronously, so the keypress that changed it
+ * also repaints.
+ *
+ * Both stop the moment they are done, so an idle panel costs nothing.
  */
 int ctlpanel_tick(syn_server_t *s)
 {
-    if (s->ctlpanel.backend_poll_until == 0.0)
-        return 0;
-
-    /* Closing the panel abandons the poll: there is nothing left to repaint. */
+    /* Closing the panel abandons both: there is nothing left to repaint, and a
+     * pick the user walked away from is not one to act on. */
     if (!s->ctlpanel.visible) {
         s->ctlpanel.backend_poll_until = 0.0;
+        s->ctlpanel.model_commit_at    = 0.0;
         return 0;
     }
+
+    if (s->ctlpanel.model_commit_at != 0.0) {
+        if (ctl_now_secs() >= s->ctlpanel.model_commit_at)
+            ctlpanel_model_commit(s);
+        else
+            return 1;   /* still settling — keep the frames coming */
+    }
+
+    if (s->ctlpanel.backend_poll_until == 0.0)
+        return 0;
 
     /* Only the AI backend polls now: it is the one row whose value is set by a
      * helper this panel cannot wait on. The desktop-widget row used to, back
@@ -595,7 +650,14 @@ void ctlpanel_show(syn_server_t *s)
     s->ctlpanel.status[0] = '\0';
     s->ctlpanel.child[0]  = '\0';
     s->ctlpanel.backend_poll_until = 0.0;
+    s->ctlpanel.model_commit_at    = 0.0;
     s->ctlpanel.poll_row  = CTL_ROW_AI_BACKEND;
+    /* The AI-model row shows what synapd is running, which only arrives on a
+     * status poll — ask for one, and put the row's cursor on the loaded model
+     * so it opens on the truth rather than on the last thing the picker was
+     * left on. */
+    synmon_want_refresh(s);
+    aimodel_row_sync(s);
     wlr_log(WLR_INFO, "synui: control panel shown");
     synui_render_ctlpanel(s);
 }
@@ -607,6 +669,11 @@ void ctlpanel_hide(syn_server_t *s)
      * still be up, and it closing later must not resurrect a panel the user has
      * already put away. */
     s->ctlpanel.child[0] = '\0';
+    /* …and any pick still settling. Esc is how you back out of a cycle you did
+     * not mean to start, so it must not fire the load on the way out. A switch
+     * ALREADY sent keeps running: that one is synapd's now, not the panel's. */
+    s->ctlpanel.model_commit_at = 0.0;
+    synmon_want_refresh(s);
     synui_render_ctlpanel(s);
 }
 
@@ -663,6 +730,9 @@ void ctlpanel_show_cat(syn_server_t *s, const char *name)
 static void ctlpanel_conceal(syn_server_t *s)
 {
     s->ctlpanel.visible = 0;
+    /* The panel it is stepping aside for may want the synapd poll itself (the
+     * model picker does); refresh rather than assume either way. */
+    synmon_want_refresh(s);
     synui_render_ctlpanel(s);
 }
 
@@ -674,6 +744,12 @@ static void ctlpanel_resume(syn_server_t *s, int cat, int item)
     s->ctlpanel.cat     = cat;
     s->ctlpanel.item    = item;
     s->ctlpanel.focus   = CTL_FOCUS_ITEMS;
+    synmon_want_refresh(s);
+    /* Re-read the model list on the way back: the picker may have loaded one,
+     * and its R key may have found models that appeared while it was open. The
+     * row lands on whatever is LOADED, so browsing the picker without pressing
+     * Enter leaves the row where it was — a look is not a choice. */
+    aimodel_row_sync(s);
     synui_render_ctlpanel(s);
 }
 
@@ -751,9 +827,30 @@ static int ctlpanel_item_count(syn_server_t *s)
 /* Moving to another category resets the row cursor and the shortcuts scroll:
  * carrying row 4 into a category with two rows, or a scroll offset into a list
  * that is not the one it was measured against, are the two ways this drifts. */
+/*
+ * Moving off the AI-model row drops whatever pick was settling on it.
+ *
+ * The settle timer is the only thing on this panel that acts a moment after the
+ * key that armed it, so it is the only one that can fire at a row you have
+ * already left. Cycling to a model, thinking better of it and pressing Down
+ * must not load it from three rows away — leaving is how you say no.
+ *
+ * A switch already SENT is not affected: that one belongs to synapd now.
+ */
+static void ctlpanel_cancel_pending(syn_server_t *s)
+{
+    if (s->ctlpanel.model_commit_at == 0.0) return;
+    s->ctlpanel.model_commit_at = 0.0;
+    s->ctlpanel.status[0] = '\0';
+    /* Put the row back on the model that is actually loaded, so an abandoned
+     * cycle does not leave the panel naming one that never got asked for. */
+    aimodel_row_sync(s);
+}
+
 static void ctlpanel_set_cat(syn_server_t *s, int cat)
 {
     if (cat < 0 || cat >= CTL_CAT_COUNT || cat == s->ctlpanel.cat) return;
+    ctlpanel_cancel_pending(s);
     s->ctlpanel.cat    = cat;
     s->ctlpanel.item   = 0;
     s->ctlpanel.scroll = 0;
@@ -771,6 +868,7 @@ static void ctlpanel_move(syn_server_t *s, int dir)
 
     int next = s->ctlpanel.item + dir;
     if (next < 0 || next >= n) return;     /* stop at the ends, as before */
+    ctlpanel_cancel_pending(s);
     s->ctlpanel.item = next;
 }
 
@@ -796,6 +894,16 @@ static void ctlpanel_activate(syn_server_t *s)
      * is one table line rather than another case here. Only the in-place toggles
      * below need to know which row they are. */
     switch (ctlpanel_row_kind(row)) {
+    case CTL_KIND_CHOICE:
+        /* Enter is the way through to the panel that owns the setting, not a
+         * second way to commit the pick — Left/Right already did that. A pick
+         * still settling is dropped rather than fired on the way out: the panel
+         * being opened is where you go to see what a model IS before loading
+         * it, so loading it first would answer the question by doing the thing.
+         */
+        s->ctlpanel.model_commit_at = 0.0;
+        ctlpanel_open_child(s, ctl_row_action(row));
+        return;
     case CTL_KIND_PANEL:
         ctlpanel_open_child(s, ctl_row_action(row));
         return;
@@ -969,6 +1077,33 @@ static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
              "transparency %d%%", (int)(s->config.active_opacity * 100 + 0.5f));
 }
 
+/* Left/Right on a CHOICE row step through its options. Only the AI-model row is
+ * one, and it is the only setting on the panel whose options are not synui's to
+ * enumerate — so the move goes to the code that owns the list, and this arms the
+ * settle timer that turns "the cursor stopped here" into "load this". */
+static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
+{
+    if (row != CTL_ROW_AI_MODEL) return;
+
+    if (!aimodel_row_cycle(s, dir)) {
+        /* Nothing to cycle, or a switch already in flight. aimodel.c wrote why
+         * in its own status; an empty one means the directory is empty, which
+         * it does not consider worth a sentence but this row does. */
+        const char *why = aimodel_status_text(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status), "%s",
+                 why[0] ? why : "no models in /var/lib/synapd/models");
+        s->ctlpanel.model_commit_at = 0.0;
+        return;
+    }
+
+    s->ctlpanel.model_commit_at = ctl_now_secs() + CTL_MODEL_SETTLE_SECS;
+    /* Says what is about to happen, because it is about to happen on its own —
+     * a row that changed under the cursor and then loaded several GB with no
+     * warning is the one thing this affordance must not feel like. */
+    snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+             "loads when you stop \xc2\xb7 Esc cancels");
+}
+
 /* ── Pointer ─────────────────────────────────────────────────
  *
  * The panel a user is most likely to open first was the one with no pointer at
@@ -1012,6 +1147,10 @@ int ctlpanel_motion(syn_server_t *s, double lx, double ly)
     int i = hit_row_at(&cp->hit_items, lx, ly);
     if (i >= 0) {
         if (i == cp->item && cp->focus == CTL_FOCUS_ITEMS) return 1;
+        /* Same rule as the keys: the pointer leaving the row drops a pick that
+         * was settling on it. This sets cp->item directly rather than going
+         * through ctlpanel_move(), so it has to say so itself. */
+        if (i != cp->item) ctlpanel_cancel_pending(s);
         cp->item  = i;
         cp->focus = CTL_FOCUS_ITEMS;
         synui_render_ctlpanel(s);
@@ -1116,6 +1255,10 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
          * from anywhere would make Esc mean two different things depending on
          * where you happened to be. */
         if (in_items) {
+            /* Backing out of the row pane also drops a pick that was settling —
+             * Esc means "not that" everywhere else on this panel, and it would
+             * be a poor place to start meaning "load it anyway". */
+            ctlpanel_cancel_pending(s);
             s->ctlpanel.focus = CTL_FOCUS_CATS;
             synui_render_ctlpanel(s);
         } else {
@@ -1158,11 +1301,14 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     case XKB_KEY_Left:
     case XKB_KEY_h:
-        /* On a slider row Left/Right are the slider; everywhere else they are
-         * the column move, which is what makes the two panes feel like one menu
-         * and its submenu. */
+        /* On a slider row Left/Right are the slider, and on a choice row they
+         * are the choice; everywhere else they are the column move, which is
+         * what makes the two panes feel like one menu and its submenu. Tab
+         * still changes column from any of them, so neither is a dead end. */
         if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_SLIDER)
             ctlpanel_adjust_opacity(s, -1);
+        else if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_CHOICE)
+            ctlpanel_adjust_choice(s, row, -1);
         else
             s->ctlpanel.focus = CTL_FOCUS_CATS;
         synui_render_ctlpanel(s);
@@ -1171,6 +1317,8 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_l:
         if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_SLIDER)
             ctlpanel_adjust_opacity(s, +1);
+        else if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_CHOICE)
+            ctlpanel_adjust_choice(s, row, +1);
         else
             ctlpanel_focus_items(s);
         synui_render_ctlpanel(s);

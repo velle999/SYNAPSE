@@ -465,3 +465,29 @@ void synmon_set_active(syn_server_t *s, int on)
 {
     atomic_store(&s->synmon_want, on ? 1 : 0);
 }
+
+/*
+ * Recompute the poll from everything that wants it.
+ *
+ * The flag started with one owner (the neural overlay) and gained a second (the
+ * model picker), and each released it by naming the other: the picker's hide
+ * path reads "unless the overlay is still up". That rule is only true while
+ * there are exactly two, and closing the overlay still ran
+ * synmon_set_active(s, 0) with the picker open — a panel whose whole job is to
+ * follow the daemon, quietly no longer following it.
+ *
+ * The control-panel AI-model row is the third, so the question is answered in
+ * one place instead. Every owner sets its own visible flag and calls this.
+ *
+ * The control panel asks for the poll whenever it is OPEN, not only on the
+ * System category: the four places that touch ctlpanel.visible are then the
+ * whole story, where a per-category rule would have to be re-derived at every
+ * cursor move and left the poll running for good the first time one was
+ * missed. It is one status round-trip a second for as long as a modal panel is
+ * on screen — the same thing the overlay costs.
+ */
+void synmon_want_refresh(syn_server_t *s)
+{
+    int want = s->overlay.visible || s->aimodel.visible || s->ctlpanel.visible;
+    atomic_store(&s->synmon_want, want ? 1 : 0);
+}
