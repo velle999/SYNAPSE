@@ -36,6 +36,8 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
   synui-widgets sysmon on           turn one on
   synui-widgets visualizer toggle   flip one
   synui-widgets postit on           a note on the desktop, click it to write
+                                    (+ on the note adds another, × removes one;
+                                     each note is dragged and remembered alone)
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on

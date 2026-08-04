@@ -82,8 +82,22 @@ ShellRoot {
         model: Quickshell.screens
         delegate: QuickLaunch {}
     }
+    /*
+     * The notes. One window per NOTE per screen, which is why this model is
+     * built by hand instead of being Quickshell.screens like the others: the
+     * count is the user's, it changes while the desktop is up, and every note
+     * has to be a window of its own to be dragged and remembered on its own.
+     * Both halves are live bindings, so plugging in a monitor and pressing +
+     * arrive here by the same path.
+     */
     Variants {
-        model: Quickshell.screens
+        model: {
+            const out = []
+            for (const s of Quickshell.screens)
+                for (const id of PostItState.ids)
+                    out.push({ screen: s, noteId: id })
+            return out
+        }
         delegate: PostIt {}
     }
     // The post-it's editor is its own surface, mapped only while typing —

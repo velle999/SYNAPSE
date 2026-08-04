@@ -3,12 +3,19 @@ import Quickshell
 import ".."
 
 /*
- * The post-it note.
+ * A post-it note.
  *
  * A scrap of desktop you can write on. Every other widget here reports
  * something the machine already knows; this is the only one whose content comes
  * from the person sitting in front of it, which is why it is the only one with
- * a file of its own (PostItState).
+ * a store of its own (PostItState).
+ *
+ * There can be any number of them. `+` makes another, `×` throws one away, and
+ * each is a window of its own with its own entry in widgets.pos — so they are
+ * dragged, sent home and remembered one at a time, by exactly the machinery
+ * every other widget uses. That is the whole reason the model this is
+ * instantiated from is one entry per NOTE per screen rather than one per
+ * screen: nothing about being several had to be invented here.
  *
  * THE NOTE NEVER TAKES THE KEYBOARD. Typing happens in PostItEditor, a separate
  * surface that is mapped only while you are editing, and that split is what the
@@ -27,7 +34,13 @@ import ".."
 WidgetFrame {
     id: root
 
-    widgetId: "postit"
+    // The model entry is { screen, noteId }, not a screen. See WidgetFrame.
+    screenData: modelData.screen
+    readonly property string noteId: modelData.noteId
+
+    // Every note is its own widget as far as the layout is concerned, which is
+    // what gives each one a position that survives a restart.
+    widgetId: noteId
     shown: WidgetState.postit
     label: "NOTE"
     accent: Theme.yellow
@@ -35,14 +48,22 @@ WidgetFrame {
 
     // Bottom-left is the one corner nothing else claims: the quick-launch strip
     // is top-left, the system monitor top-right, the big clock bottom-right.
+    // Notes cascade up and to the right from there — see PostItState.
     homeEdgeH: "left"; homeEdgeV: "bottom"
-    homeMarginX: 20
-    // Clear of the visualiser when both are on, on the same terms and with the
-    // same number BigClock uses at the other end of that strip.
-    homeMarginY: WidgetState.visualizer ? 124 : 24
+    homeMarginX: PostItState.homeX(noteId)
+    homeMarginY: PostItState.homeY(noteId)
 
     cardWidth: 264
     bodyHeight: 168
+
+    readonly property string text: PostItState.textOf(noteId)
+    readonly property bool empty: text.trim() === ""
+
+    // Whether the pointer is anywhere on this card, the buttons included. The
+    // body's own MouseArea cannot answer that on its own: a button on top of it
+    // takes the hover with the click, and the footer hint would blink out just
+    // as you reached for the control it is describing.
+    readonly property bool touched: hover.containsMouse || plus.hovered || del.hovered
 
     // Ruled paper. The lines are pinned to the same 16px rhythm the note's text
     // is set on, so the writing sits on them rather than across them.
@@ -62,9 +83,8 @@ WidgetFrame {
         id: note
         anchors { top: parent.top; left: parent.left; right: parent.right; bottom: foot.top }
         anchors.bottomMargin: 4
-        text: PostItState.note.trim() !== "" ? PostItState.note
-                                             : "click to write something"
-        color: PostItState.note.trim() !== "" ? Theme.fg : Theme.fgDim
+        text: root.empty ? "click to write something" : root.text
+        color: root.empty ? Theme.fgDim : Theme.fg
         font.family: Theme.fontFamily
         font.pixelSize: 12
         lineHeight: 16
@@ -85,17 +105,116 @@ WidgetFrame {
 
     Text {
         id: foot
-        anchors { bottom: parent.bottom; left: parent.left }
-        text: hover.containsMouse ? "click to edit" : ""
+        anchors { bottom: parent.bottom; left: parent.left; right: tools.left }
+        anchors.rightMargin: 6
+        // Whatever the pointer is actually over. A + and a × on a note are not
+        // self-explanatory enough to leave unlabelled, and this is the only
+        // strip of the card that is not the note itself.
+        text: plus.hovered ? plus.hint
+            : del.hovered  ? del.hint
+            : hover.containsMouse ? "click to edit" : ""
         color: Theme.fgDim
         font.family: Theme.fontFamily
         font.pixelSize: 9
+        elide: Text.ElideRight
     }
 
+    // Declared BEFORE the buttons so that they are on top of it: this fills the
+    // whole body, and a control inside it has to win the press.
     MouseArea {
         id: hover
         anchors.fill: parent
         hoverEnabled: true
-        onClicked: PostItState.editing = true
+        onClicked: PostItState.editing = root.noteId
+    }
+
+    Row {
+        id: tools
+        anchors { bottom: parent.bottom; right: parent.right }
+        spacing: 4
+
+        NoteButton {
+            id: plus
+            glyph: "+"
+            tint: Theme.yellow
+            hint: "another note"
+            onActivated: PostItState.add()
+        }
+
+        NoteButton {
+            id: del
+            // The last note is not removable. It is the only thing on the
+            // desktop carrying the + that makes another one, and a widget you
+            // can delete yourself out of is one you can only get back from a
+            // terminal.
+            visible: PostItState.ids.length > 1
+            glyph: root.armed ? "!" : "×"
+            tint: root.armed ? Theme.red : Theme.fgDim
+            hint: root.armed ? "again to delete" : "delete this note"
+            onActivated: {
+                // Two presses, because this throws away something only the user
+                // could have written and there is no undo for a deleted file.
+                if (root.armed) PostItState.remove(root.noteId)
+                else            { root.armed = true; disarm.restart() }
+            }
+        }
+    }
+
+    // Armed by the first press on ×, and forgotten again shortly after. A
+    // delete that stayed armed would go off on a stray click minutes later.
+    property bool armed: false
+    Timer {
+        id: disarm
+        interval: 2600
+        onTriggered: root.armed = false
+    }
+    // Disarm on the way out too: coming back to a note that is still primed is
+    // the same surprise with a longer fuse.
+    onTouchedChanged: if (!root.touched) root.armed = false
+
+    /*
+     * The two controls on the card.
+     *
+     * Self-contained on purpose, as WidgetFrame's Chamfered is: an inline
+     * component is its own type and must not reach for ids in the file around
+     * it. Singletons are not ids, which is why Theme is fair game.
+     */
+    component NoteButton: Rectangle {
+        id: btn
+
+        property string glyph: ""
+        property string hint: ""
+        property color  tint: Theme.fgDim
+        readonly property alias hovered: ma.containsMouse
+        signal activated()
+
+        width: 15; height: 15
+        radius: 3
+        color: ma.containsMouse ? Qt.rgba(btn.tint.r, btn.tint.g, btn.tint.b, 0.20)
+                                : "transparent"
+        border.width: 1
+        border.color: Qt.rgba(btn.tint.r, btn.tint.g, btn.tint.b,
+                              ma.containsMouse ? 0.85 : 0.30)
+        Behavior on color        { ColorAnimation { duration: Theme.animFast } }
+        Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+
+        Text {
+            anchors.centerIn: parent
+            // The glyph sits a hair high in the box at this size.
+            anchors.verticalCenterOffset: -1
+            text: btn.glyph
+            color: btn.tint
+            opacity: ma.containsMouse ? 1.0 : 0.65
+            font.family: Theme.fontFamily
+            font.pixelSize: 12
+        }
+
+        MouseArea {
+            id: ma
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: btn.activated()
+        }
     }
 }

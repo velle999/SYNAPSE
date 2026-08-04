@@ -72,7 +72,13 @@ PanelWindow {
     default property alias content: body.data
 
     required property var modelData
-    screen: modelData
+
+    // Which screen this instance belongs to. Normally the model entry itself,
+    // because these are instantiated one per screen — PostIt overrides it,
+    // because its model has one entry per NOTE per screen and the screen is a
+    // field of it.
+    property var screenData: modelData
+    screen: screenData
 
     // ── What a widget declares ───────────────────────────
     property string widgetId: ""
@@ -135,7 +141,7 @@ PanelWindow {
     // card-sized.
     readonly property bool expanded: dragging && height > cardHeight + pad * 2 + 8
 
-    visible: shown && modelData.name === WidgetState.primaryOutput
+    visible: shown && screenData && screenData.name === WidgetState.primaryOutput
 
     WlrLayershell.layer: WlrLayer.Bottom
 
