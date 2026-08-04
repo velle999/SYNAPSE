@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=252
+pkgrel=253
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -277,6 +277,16 @@ package() {
     for _wid in quickshell/widgets/*.qml; do
         install -Dm644 "$_wid" \
             "$pkgdir/usr/share/synui/quickshell/widgets/${_wid##*/}"
+    done
+    # Artwork a widget draws, kept BESIDE the .qml that draws it rather than in
+    # /usr/share/synui with the compositor's own assets. That is what lets the
+    # QML say `source: "pizza.png"` and resolve it identically from the packaged
+    # tree and from a source tree run with `quickshell -p` — an absolute
+    # /usr/share path (as Launcher.qml still uses for the logo) is a file that
+    # silently does not exist in every rig.
+    for _art in quickshell/widgets/*.png; do
+        install -Dm644 "$_art" \
+            "$pkgdir/usr/share/synui/quickshell/widgets/${_art##*/}"
     done
 
     # The single writer of widgets.state. synui's Super+Shift+A bind and the

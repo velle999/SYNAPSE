@@ -11,7 +11,7 @@ import ".."
  * Before this existed each widget was its own PanelWindow with its own copy of
  * the anchors, the margins, the rounded rectangle and the magenta hairline, and
  * "make them draggable" would have meant five copies of the drag as well. The
- * five widgets now describe only what they are — a size, a home corner, a name,
+ * six widgets now describe only what they are — a size, a home corner, a name,
  * some content — and everything about being a widget is here.
  *
  *

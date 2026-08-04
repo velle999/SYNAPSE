@@ -741,6 +741,7 @@ typedef enum {
     WIDGET_ROW_CLOCK,
     WIDGET_ROW_LAUNCHER,
     WIDGET_ROW_POSTIT,
+    WIDGET_ROW_PIZZA,
     WIDGET_ROW_COUNT,
 } syn_widget_row_t;
 
@@ -949,7 +950,7 @@ typedef enum {
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
-    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it */
+    CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza */
     /* Display */
     CTL_ROW_DISPLAYS,
     CTL_ROW_NIGHTLIGHT,

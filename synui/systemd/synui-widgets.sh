@@ -23,7 +23,7 @@ STATE="$CONF_HOME/synui/widgets.state"
 # Where a dragged widget's corner is remembered. NOT written here — see `home`.
 POS="$CONF_HOME/synui/widgets.pos"
 
-WIDGETS="visualizer sysmon clock launcher postit"
+WIDGETS="visualizer sysmon clock launcher postit pizza"
 
 usage() {
     cat <<EOF
@@ -38,6 +38,10 @@ usage: synui-widgets [<widget>|all] [on|off|toggle]
   synui-widgets postit on           a note on the desktop, click it to write
                                     (+ on the note adds another, × removes one;
                                      each note is dragged and remembered alone)
+  synui-widgets pizza on            a slice of pizza on the desktop; click it
+                                    and it opens pizza near you. Put a URL in
+                                    ~/.config/synui/pizza.url to send it to your
+                                    own pizza place instead
   synui-widgets all off             turn everything off
   synui-widgets toggle              flip everything as a group:
                                     all off if any is on, else all on
