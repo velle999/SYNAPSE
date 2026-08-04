@@ -1,11 +1,18 @@
 /*
  * layout.c — SynapseOS window layout engine
  *
- * Implements three layout modes:
+ * Implements four layout modes:
  *
  *   TILING   — Master-stack tiling (dwm-style)
  *              First window is master (left, 60% width).
  *              Remaining windows stack right.
+ *
+ *   NIRI     — Scrollable tiling (niri-style). One endless horizontal
+ *              strip of columns per monitor, scrolled so the focused
+ *              column is on screen; a new window never shrinks the
+ *              others, it extends the strip. Windows stack vertically
+ *              inside a column (Super+, / Super+. to move them in and
+ *              out). See the section comment above layout_niri().
  *
  *   MONOCLE  — One window per output, filling that output's usable
  *              box; the rest of its windows are hidden. Which one is
@@ -123,6 +130,7 @@ const char *layout_label(syn_layout_t l)
     case LAYOUT_FLOATING: return "floating";
     case LAYOUT_MONOCLE:  return "monocle";
     case LAYOUT_AI:       return "AI";
+    case LAYOUT_NIRI:     return "niri";
     }
     return "unknown";
 }
@@ -159,6 +167,7 @@ static const char *layout_key(syn_layout_t l)
     case LAYOUT_FLOATING: return "floating";
     case LAYOUT_MONOCLE:  return "monocle";
     case LAYOUT_AI:       return "ai";
+    case LAYOUT_NIRI:     return "niri";
     }
     return "tiling";
 }
@@ -214,6 +223,7 @@ void layout_state_load(syn_server_t *s)
         else if (strcmp(val, "floating") == 0) l = LAYOUT_FLOATING;
         else if (strcmp(val, "monocle")  == 0) l = LAYOUT_MONOCLE;
         else if (strcmp(val, "ai")       == 0) l = LAYOUT_AI;
+        else if (strcmp(val, "niri")     == 0) l = LAYOUT_NIRI;
         else continue;
 
         s->workspaces[idx].layout = l;
@@ -313,6 +323,297 @@ void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
                        area.width, area.height);
         wlr_scene_node_set_enabled(view_node(v), v == top);
     }
+}
+
+/* ── NIRI layout (scrollable tiling) ─────────────────────── */
+/*
+ * The niri model, in this codebase's terms.
+ *
+ * Each (desktop, monitor) pair holds one endless horizontal STRIP of COLUMNS.
+ * A column is one or more windows stacked vertically, sharing a width; the
+ * strip is as wide as its columns need and is scrolled sideways so the focused
+ * column is on screen. Nothing is ever resized to make a new window fit —
+ * that is the whole point of the layout, and the difference between it and
+ * layout_tile above, where every extra window shrinks the stack.
+ *
+ * THE STRIP IS THE WORKSPACE LIST. There is no second data structure: the
+ * order is ws->windows read front to back (filtered to this output), and a
+ * window with col_join set belongs to the column of the window before it. That
+ * is worth a sentence because the alternative — a real column tree — would need
+ * every path that already touches the list (map, unmap, workspace_move_view,
+ * view_set_output, layout_move_in_stack, layout_reclaim) taught about it, and
+ * each one is a chance to leave a column holding a freed view. This way
+ * Super+Shift+J/K moves a window along the strip and in and out of columns for
+ * free, and a window that unmaps simply stops being iterated.
+ *
+ * WHAT IS DRAWN. A column is shown only if it fits ENTIRELY in the visible box.
+ * niri proper lets the columns either side peek in at the edges; synui cannot,
+ * because a window is placed by moving its scene node in *layout* coordinates
+ * and the compositor has no clip on the frame — the borders and titlebar are
+ * separate scene rects outside client_tree, so a half-off column would not be
+ * cropped at the monitor edge, it would be drawn across whatever monitor sits
+ * next to it. Hiding the partial column is the honest version of that, and the
+ * scroll rule below guarantees the focused one is never the hidden one.
+ */
+/* Default column width: half the screen, so two columns sit side by side.
+ * A fraction of the SLOT, not of the bare viewport — see niri_col_width(). */
+#define NIRI_COL_FRAC  0.50f
+#define NIRI_FRAC_MIN  0.10f
+#define NIRI_FRAC_MAX  1.00f
+
+/* Windows the strip is made of: the same test the other layouts tile by. */
+static bool niri_tileable(syn_view_t *v, syn_output_t *o)
+{
+    return v->mapped && !v->floating && !v->fullscreen && !v->minimized &&
+           v->output == o;
+}
+
+/* The next strip member after `v`, or the first one when v is NULL. */
+static syn_view_t *niri_next(syn_workspace_t *ws, syn_output_t *o, syn_view_t *v)
+{
+    struct wl_list *n = v ? v->link.next : ws->windows.next;
+    while (n != &ws->windows) {
+        syn_view_t *c = wl_container_of(n, c, link);
+        if (niri_tileable(c, o)) return c;
+        n = n->next;
+    }
+    return NULL;
+}
+
+/* A column's width in pixels, from its leader.
+ *
+ * The fraction is of the SLOT — the column plus the gap that follows it — not
+ * of the bare viewport, so that 1/n of the screen means n columns fit on it
+ * exactly. Taking the naive `viewport * f` instead costs a gap per column, and
+ * at the default 0.5 that is enough to push the second column a few pixels past
+ * the right edge, where the "fits entirely" rule hides it: a two-thirds-empty
+ * screen showing one window, on the layout whose entire point is showing
+ * several. layout_tile has the same subtraction on its master column for the
+ * same reason.
+ *
+ * Clamped to the viewport at the top end: a column wider than the screen could
+ * never fit entirely and so would be invisible at every scroll position. */
+static int niri_col_width(syn_view_t *lead, int viewport_w, int gap)
+{
+    float f = lead->col_frac;
+    if (f < NIRI_FRAC_MIN || f > NIRI_FRAC_MAX) f = NIRI_COL_FRAC;
+    int w = (int)((viewport_w + gap) * f) - gap;
+    if (w > viewport_w) w = viewport_w;
+    if (w < MIN_WIN)    w = MIN_WIN;
+    return w;
+}
+
+/* The window that leads `view`'s column — `view` itself unless it has joined
+ * one. Found by walking forward from the head of the strip rather than
+ * backwards from the view, because col_join is positional: it says "the one
+ * before me", which only the forward order can resolve. NULL if the view is not
+ * on a strip at all. */
+static syn_view_t *niri_column_lead(syn_workspace_t *ws, syn_view_t *view)
+{
+    syn_view_t *lead = NULL;
+    for (syn_view_t *v = niri_next(ws, view->output, NULL); v;
+         v = niri_next(ws, view->output, v)) {
+        if (!lead || !v->col_join) lead = v;
+        if (v == view) return lead;
+    }
+    return NULL;
+}
+
+/* Walk `ws`'s strip on `o` one column at a time. Both passes below use this so
+ * the measure and the placement cannot disagree about where a column starts or
+ * who is in it: on entry *lead is the column's first window, and on return
+ * *n_members is how many windows it holds and the value is the NEXT column's
+ * leader (NULL at the end of the strip). */
+static syn_view_t *niri_column_end(syn_workspace_t *ws, syn_output_t *o,
+                                   syn_view_t *lead, int *n_members)
+{
+    int n = 1;
+    syn_view_t *m = niri_next(ws, o, lead);
+    /* The first window of a strip is a leader whatever its flag says — it has
+     * nothing to its left to join. */
+    while (m && m->col_join) {
+        n++;
+        m = niri_next(ws, o, m);
+    }
+    *n_members = n;
+    return m;
+}
+
+void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
+{
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+
+    /* Same outer-gap clamp as layout_tile: a big gap on a small output must
+     * not hand negative sizes to scene rects and client configures. */
+    int gap = s->config.gap;
+    int x = area.x + gap;
+    int y = area.y + gap;
+    int W = area.width  - 2 * gap;
+    int H = area.height - 2 * gap;
+    if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
+    if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
+
+    /* ── Pass 1: measure the strip, and find the focused column ──
+     * Strip coordinates: 0 is the left-hand end, independent of where the
+     * monitor sits in the layout. */
+    int total = 0;
+    int focus_x = -1, focus_w = 0;
+    syn_view_t *lead = niri_next(ws, o, NULL);
+    int cx = 0;
+    while (lead) {
+        int members;
+        int cw   = niri_col_width(lead, W, gap);
+        syn_view_t *next = niri_column_end(ws, o, lead, &members);
+
+        /* Is the focus in this column? Scanning the members rather than
+         * testing the leader alone: focusing the second window of a column has
+         * to scroll that column on screen just the same. */
+        if (s->focused_view && s->focused_view->workspace == ws) {
+            syn_view_t *m = lead;
+            for (int i = 0; i < members && m; i++) {
+                if (m == s->focused_view) { focus_x = cx; focus_w = cw; break; }
+                m = niri_next(ws, o, m);
+            }
+        }
+
+        total = cx + cw;
+        cx   += cw + gap;
+        lead  = next;
+    }
+    if (total == 0) return;             /* nothing on this monitor's strip */
+
+    /* ── Scroll ──
+     * Least movement that puts the focused column fully on screen, then
+     * clamped to the strip so the end of it can't be scrolled past. Kept in
+     * this order: the focus adjustment can never breach the clamp (a column
+     * lies inside the strip by construction), but the clamp very much can
+     * breach the focus, e.g. when the strip just got shorter because a window
+     * closed. */
+    int scroll = o->strip_scroll[ws->index];
+    int maxs   = total - W;
+    if (maxs < 0) maxs = 0;
+    if (scroll > maxs) scroll = maxs;
+    if (scroll < 0)    scroll = 0;
+    if (focus_x >= 0) {
+        if (focus_x < scroll)
+            scroll = focus_x;                        /* off the left edge */
+        else if (focus_x + focus_w > scroll + W)
+            scroll = focus_x + focus_w - W;          /* off the right edge */
+    }
+    o->strip_scroll[ws->index] = scroll;
+
+    /* ── Pass 2: place ── */
+    lead = niri_next(ws, o, NULL);
+    cx   = 0;
+    while (lead) {
+        int members;
+        int cw   = niri_col_width(lead, W, gap);
+        syn_view_t *next = niri_column_end(ws, o, lead, &members);
+
+        int vx   = x + cx - scroll;
+        /* Whole column or nothing — see the header note on clipping. */
+        bool shown = (cx >= scroll) && (cx + cw <= scroll + W);
+
+        int slot_h = (H - (members - 1) * gap) / members;
+        if (slot_h < MIN_WIN) slot_h = MIN_WIN;
+
+        syn_view_t *m = lead;
+        for (int i = 0; i < members && m; i++) {
+            int my = y + i * (slot_h + gap);
+            /* Only configure a window whose box actually moved. focus_view()
+             * reflows a niri desktop on every focus change, and most of those
+             * do not move the strip at all — without the compare that would
+             * send every client on the monitor a configure per Alt+Tab press,
+             * per click, per Super+J. Same guard, same reason, as the monocle
+             * pass above. */
+            if (m->x != vx || m->y != my || m->w != cw || m->h != slot_h)
+                place_view(m, vx, my, cw, slot_h);
+            wlr_scene_node_set_enabled(view_node(m), shown);
+            m = niri_next(ws, o, m);
+        }
+
+        cx  += cw + gap;
+        lead = next;
+    }
+}
+
+/* ── Columns: consume / expel ────────────────────────────── */
+/*
+ * Super+, pulls the focused window into the column on its left; Super+. pushes
+ * it back out into a column of its own. niri's names for these are "consume"
+ * and "expel" and they are the only two column operations that cannot be
+ * expressed by moving along the strip, which Super+Shift+J/K already does.
+ *
+ * Joining adopts the target column's width, or the window would set the width
+ * of the column it just walked into — the column it LEFT is not the one being
+ * resized, and a wide window consumed into a narrow column would drag the
+ * narrow column's other windows out with it.
+ */
+void layout_column_join(syn_server_t *s, syn_view_t *view, int join)
+{
+    if (!view || !view->mapped) return;
+    syn_workspace_t *ws = view->workspace;
+    if (!ws || ws->layout != LAYOUT_NIRI) return;
+    if (!niri_tileable(view, view->output)) return;
+
+    if (!join) {
+        if (!view->col_join) return;         /* already a column of its own */
+        view->col_join = 0;
+    } else {
+        /* The window before this one on the SAME strip — the list may hold
+         * windows of other monitors between the two. Nothing to join if this
+         * is the leftmost window here. */
+        syn_view_t *prev = NULL, *v = niri_next(ws, view->output, NULL);
+        while (v && v != view) {
+            prev = v;
+            v = niri_next(ws, view->output, v);
+        }
+        if (!prev || view->col_join) return;
+        view->col_join = 1;
+        view->col_frac = prev->col_frac;
+    }
+    layout_apply(s, ws);
+}
+
+/* Where a freshly-mapped window goes in the strip.
+ *
+ * Every other layout wants a new window at the HEAD of the workspace list —
+ * that is the tiling master slot, and both map paths insert there. On a niri
+ * desktop the head is the far LEFT of the strip, so a new window would shove
+ * the whole desktop rightwards and scroll you back to the beginning of it. niri
+ * opens a window in its own column immediately right of the focused one, which
+ * is also the only placement that leaves the strip you were reading where it
+ * was.
+ *
+ * Called from both map paths BEFORE they focus the new view, so `focused_view`
+ * is still the window the user was actually in.
+ */
+void layout_strip_insert(syn_server_t *s, syn_view_t *view)
+{
+    if (!view || !view->workspace || view->workspace->layout != LAYOUT_NIRI)
+        return;
+
+    /* A new window is its own column even if it landed next to one; whatever
+     * the calloc left, the strip owns this flag now. */
+    view->col_join = 0;
+
+    syn_view_t *anchor = s->focused_view;
+    if (!anchor || anchor == view || anchor->workspace != view->workspace ||
+        !anchor->mapped)
+        return;
+
+    /* Past the END of the anchor's column, not just past the anchor: dropping
+     * the window between a leader and its stack would silently make it a member
+     * of that column (col_join is read positionally). */
+    syn_view_t *tail = anchor;
+    for (syn_view_t *n = niri_next(view->workspace, anchor->output, anchor);
+         n && n->col_join;
+         n = niri_next(view->workspace, anchor->output, n))
+        tail = n;
+
+    wl_list_remove(&view->link);
+    wl_list_insert(&tail->link, &view->link);
 }
 
 /* ── AI layout ───────────────────────────────────────────── */
@@ -531,6 +832,7 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
         switch (ws->layout) {
         case LAYOUT_TILING:   layout_tile(s, ws, o);     break;
         case LAYOUT_MONOCLE:  layout_monocle(s, ws, o);  break;
+        case LAYOUT_NIRI:     layout_niri(s, ws, o);     break;
         case LAYOUT_AI:
             if (o == focused) layout_request_ai(s, ws, o);
             else              layout_tile(s, ws, o);
@@ -779,9 +1081,10 @@ void view_set_output(syn_server_t *s, syn_view_t *view, syn_output_t *o)
  *
  * WHICH DESKTOP DECIDES. A layout that places windows itself owns their
  * geometry, and a remembered box is the user's answer to a question those
- * layouts do not ask. So a window *opening* on a tiling or AI desktop skips
- * this entirely: it goes wherever the layout puts it, which on tiling is the
- * whole usable box for the first window and a master/stack slot after that.
+ * layouts do not ask. So a window *opening* on a tiling, niri or AI desktop
+ * skips this entirely: it goes wherever the layout puts it — on tiling the
+ * whole usable box for the first window and a master/stack slot after that,
+ * on niri a fresh column beside the one you were in.
  *
  * That is not a refinement of the old rule, it replaces one. The entry carries
  * a floating flag (see geom_persist_save) and this function used to honour it
@@ -816,6 +1119,7 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
      * and not touching it keeps that visible in a trace. */
     bool layout_places_it = view->workspace &&
                             (view->workspace->layout == LAYOUT_TILING ||
+                             view->workspace->layout == LAYOUT_NIRI ||
                              view->workspace->layout == LAYOUT_AI);
     if (layout_places_it && !view->floating)
         return false;
@@ -834,7 +1138,7 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
      * tiles there), and not for a maximized entry: view_apply_maximized below
      * floats it for the duration anyway, and saved_floating has to stay 0 so
      * un-maximizing hands it back to the tiler. Only monocle reaches this now
-     * — tiling and AI returned above. */
+     * — tiling, niri and AI returned above. */
     bool refloated = false;
     if (saved_float && !saved_max && !view->floating && !on_floating_desk) {
         view->floating = 1;
@@ -1024,8 +1328,38 @@ void layout_move_in_stack(syn_server_t *s, syn_view_t *view, int dir)
 }
 
 /* ── Adjust the master column width ──────────────────────── */
+/* On a niri desktop there is no master, but the two keys still mean "make the
+ * column I am in wider/narrower" — so they act on the focused column instead of
+ * growing a slot that does not exist. Handled here rather than in a bind of its
+ * own so Super+H / Super+Shift+L keep one meaning across both tiling layouts. */
 void layout_adjust_master(syn_server_t *s, syn_workspace_t *ws, float delta)
 {
+    if (ws->layout == LAYOUT_NIRI) {
+        syn_view_t *f = s->focused_view;
+        if (!f || f->workspace != ws || !f->mapped || f->floating) return;
+
+        float cf = f->col_frac;
+        if (cf < NIRI_FRAC_MIN || cf > NIRI_FRAC_MAX) cf = NIRI_COL_FRAC;
+        cf += delta;
+        if (cf < NIRI_FRAC_MIN) cf = NIRI_FRAC_MIN;
+        if (cf > NIRI_FRAC_MAX) cf = NIRI_FRAC_MAX;
+
+        /* Every member of the column, not just the leader: col_frac is read
+         * off whichever window happens to lead, and that changes as soon as
+         * one is moved along the strip or closed. The focus may be halfway
+         * down a stacked column, so find its leader first. */
+        syn_view_t *lead = niri_column_lead(ws, f);
+        if (!lead) return;
+        lead->col_frac = cf;
+        for (syn_view_t *m = niri_next(ws, f->output, lead);
+             m && m->col_join;
+             m = niri_next(ws, f->output, m))
+            m->col_frac = cf;
+
+        layout_apply(s, ws);
+        return;
+    }
+
     float mf = ws->master_factor;
     if (mf < MASTER_MIN || mf > MASTER_MAX) mf = MASTER_FACTOR;
     mf += delta;

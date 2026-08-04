@@ -219,7 +219,19 @@ typedef enum {
     LAYOUT_FLOATING,
     LAYOUT_MONOCLE,
     LAYOUT_AI,
+    /* niri-style scrollable tiling: one endless horizontal strip of columns
+     * per (desktop, monitor), scrolled so the focused column is on screen.
+     * Appended rather than slotted next to LAYOUT_TILING on purpose — the
+     * ordinals are the Super+Tab cycle order, and inserting one would silently
+     * renumber the three below it. */
+    LAYOUT_NIRI,
 } syn_layout_t;
+
+/* How many layouts Super+Tab walks. NOT an enumerator: adding one to
+ * syn_layout_t would make every switch over it (layout_label, layout_key,
+ * ipc.c's layout_name, layout_apply's dispatch) grow a case for a value that
+ * is not a layout. */
+#define SYN_LAYOUT_COUNT  (LAYOUT_NIRI + 1)
 
 typedef enum {
     WIN_SECURE_NORMAL = 0,
@@ -946,7 +958,7 @@ typedef enum {
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch + level */
     CTL_ROW_TITLEBARS,
     /* Desktop */
-    CTL_ROW_LAYOUT,        /* tiling / floating / monocle / AI — of the ACTIVE desktop */
+    CTL_ROW_LAYOUT,        /* tiling / floating / monocle / AI / niri — of the ACTIVE desktop */
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
@@ -2133,6 +2145,25 @@ struct syn_view {
      * Dragging a snapped window releases it back to saved_geo. */
     syn_snap_zone_t snapped;
 
+    /* layout.c, LAYOUT_NIRI only. The strip is the workspace window list read
+     * in order; these two say how it breaks into columns and how wide they are.
+     *
+     *   col_join  1 = this window shares the column of the window BEFORE it in
+     *             the list, stacked under it. 0 = it opens a new column. So a
+     *             column is a run of list entries, which means Super+Shift+J/K
+     *             (layout_move_in_stack) moves windows along the strip and
+     *             between columns for free, with no second ordering to keep in
+     *             sync. The first window of an output's strip is always a
+     *             leader whatever this says.
+     *   col_frac  the column's width as a fraction of the usable width. Held on
+     *             EVERY member of the column, not just the leader, so the width
+     *             survives the leader being moved or closed. 0 = never set, use
+     *             NIRI_COL_FRAC.
+     *
+     * Both are ignored, and left alone, by every other layout. */
+    int    col_join;
+    float  col_frac;
+
     /* anim.c: the window's current opacity (1 = solid) and the fade in flight.
      * alpha is applied to every buffer under the frame *and* multiplied into
      * the border rects' colour, so a fading window fades whole. */
@@ -2277,6 +2308,18 @@ struct syn_output {
 
     struct wl_list           layer_surfaces;  /* syn_layer_surface_t::link */
     struct wlr_box           usable_area;     /* full box minus exclusive zones */
+
+    /* layout.c, LAYOUT_NIRI: how far this monitor's strip is scrolled, in
+     * strip pixels, for each desktop. Per (output, desktop) because the strip
+     * is: a desktop spans every monitor and each monitor holds its own run of
+     * columns, so one shared offset would drag the other screens about
+     * whenever you moved along this one.
+     *
+     * Session state, not a setting — it is derived from where the focus is,
+     * and layout_niri() re-clamps it against the real strip on every reflow,
+     * so a stale value can only ever cost one frame. calloc'd to 0 with the
+     * output, which is "showing the left-hand end". */
+    int                      strip_scroll[WORKSPACE_MAX];
 
     /* effects.c: offscreen swapchain the scene renders into when the GLES
      * post-process pass is active (NULL until first effects frame). */
@@ -3495,6 +3538,17 @@ void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
  * live on o. layout_apply() runs them for every output showing ws. */
 void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+/* Move the focused window between columns on a niri desktop: join = 1 pulls it
+ * into the column on its left (niri's "consume"), join = 0 pushes it back out
+ * into a column of its own ("expel"). Bound to Super+, and Super+. — a no-op,
+ * with no reflow, on every other layout. */
+void layout_column_join(syn_server_t *s, syn_view_t *view, int join);
+/* Both map paths call this, BEFORE they focus the new view: on a niri desktop
+ * it moves the freshly-inserted window from the head of the workspace list (the
+ * tiling master slot, and the far left of the strip) to just right of the
+ * focused column. No-op on every other layout. */
+void layout_strip_insert(syn_server_t *s, syn_view_t *view);
 /* A layout's name for a HUMAN ("AI", not "ai"): the Super+Tab toast, the
  * control panel's Layout row, the AI overlay. Deliberately NOT ipc.c's
  * layout_name(), which is the wire value synctl and the tests parse. */

@@ -395,6 +395,8 @@ static const char *action_desc(const char *action, const char *arg)
         { "retile",            "Tile this desktop" },
         { "master_shrink",     "Shrink master area" },
         { "master_grow",       "Grow master area" },
+        { "column_consume",    "niri: pull window into the left column" },
+        { "column_expel",      "niri: push window out to its own column" },
         { "focus_next",        "Focus next window" },
         { "focus_prev",        "Focus previous window" },
         { "alt_tab",           "Switch window (Alt+Tab)" },

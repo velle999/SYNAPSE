@@ -28,11 +28,14 @@
 #                 the same way tiling does, so the entry has to re-float it for
 #                 the box to survive.
 #   3. AI       — bypass, same as tiling.
-#   4. floating — restore: at 600x400. The feature still works where it most
+#   4. niri     — bypass, same as tiling: a scrollable-tiling desktop opens the
+#                 window in a column of its own and owns its geometry.
+#   5. floating — restore: at 600x400. The feature still works where it most
 #                 obviously belongs, which is what stops the fix being a revert.
 #
 # The order is not arbitrary — it is the cycle order (tiling → floating →
-# monocle → AI → …) walked so that the seed survives to the phases that need it.
+# monocle → AI → niri → …) walked so that the seed survives to the phases that
+# need it.
 # The table is live: the compositor holds it in memory and rewrites the whole
 # file when a window unmaps, so re-seeding the file between phases would do
 # nothing. Monocle re-floats the window, so closing it there writes floating=1
@@ -210,8 +213,33 @@ esac
        same window at $TILED_SIZE on the tiling desktop."
 close_window
 
-# ── 4. floating: the feature still works ─────────────────────────────────
-# Round the cycle back: AI → tiling → floating.
+# ── 4. niri: same as tiling ──────────────────────────────────────────────
+# A niri desktop places the window itself — a fresh column beside the focused
+# one — so the table has no say here either. Its own phase rather than a line in
+# the tiling one because it reaches the bypass through a different branch of
+# layout_restore_geometry's `layout_places_it`, and because the size it lands at
+# is NOT the tiling size (a default column is half the usable width), so a
+# bypass that quietly fell through to the tiler would still show up here.
+synctl dispatch layout_cycle >/dev/null
+[ "$(layout_now)" = "niri" ] || fail "layout_cycle did not reach niri, got $(layout_now)"
+
+open_window
+echo "niri:     $(win_size) $WIN"
+case "$WIN" in
+    *'"floating":true'*)
+        fail "the window opened FLOATING on a niri desktop — windows.conf
+       re-floated it out of the strip, and a floating window is in no column at
+       all, so it can never be scrolled to.
+       $WIN" ;;
+esac
+[ "$(win_size)" = "${SEED_W}x${SEED_H}" ] && fail "the window took its remembered
+       ${SEED_W}x${SEED_H} box on a niri desktop instead of a column of the
+       layout's own width.
+       $WIN"
+close_window
+
+# ── 5. floating: the feature still works ─────────────────────────────────
+# Round the cycle back: niri → tiling → floating.
 synctl dispatch layout_cycle >/dev/null
 synctl dispatch layout_cycle >/dev/null
 [ "$(layout_now)" = "floating" ] || fail "layout_cycle did not come back round to
@@ -226,7 +254,7 @@ echo "floating: $(win_size) $WIN"
        $WIN"
 close_window
 
-# ── 5. clean shutdown ────────────────────────────────────────────────────
+# ── 6. clean shutdown ────────────────────────────────────────────────────
 kill -TERM "$SYNUI_PID" 2>/dev/null
 i=0
 while kill -0 "$SYNUI_PID" 2>/dev/null; do

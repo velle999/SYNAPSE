@@ -670,6 +670,10 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
 {
     syn_view_t *view = wl_container_of(listener, view, map);
     view->mapped = 1;
+    /* Before focus_view, which is what makes this window the focused one: on a
+     * niri desktop the new window is placed relative to the column the user was
+     * in, and after the focus moves there is no such column to name. */
+    layout_strip_insert(view->server, view);
     focus_view(view->server, view, view->xdg_surface->surface);
     layout_apply(view->server, view->workspace);
     /* Reopen where this app was last closed (geom_persist.c) — on a floating

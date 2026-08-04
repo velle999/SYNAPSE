@@ -315,6 +315,14 @@ static void seed_default_binds(syn_config_t *cfg)
         { "alt+shift+tab",   "alt_tab_prev" },
         { "super+h",         "master_shrink" },
         { "super+shift+l",   "master_grow" },
+        /* niri (scrollable tiling) column moves, on the keys niri itself uses.
+         * Comma pulls the focused window into the column on its left, period
+         * pushes it back out into a column of its own. Both are no-ops on the
+         * other four layouts, which have no columns to move it between — the
+         * width keys above are shared instead, because "wider/narrower" means
+         * the same thing on a master slot and on a niri column. */
+        { "super+comma",     "column_consume" },
+        { "super+period",    "column_expel" },
         { "super+l",         "lock" },
         { "super+j",         "focus_next" },
         { "super+k",         "focus_prev" },

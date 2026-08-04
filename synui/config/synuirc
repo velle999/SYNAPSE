@@ -17,6 +17,27 @@ border_width    = 2
 gap             = 8
 master_factor   = 0.60
 
+# ── Layouts ────────────────────────────────────────────────
+# Each virtual desktop has its own layout, cycled with Super+Tab and remembered
+# across restarts in ~/.config/synui/layouts.state (so there is no setting for
+# it here — the last thing you chose on each desktop IS the setting):
+#   tiling    master + stack, dwm-style. master_factor above sets the split.
+#   floating  you place the windows.
+#   monocle   one window per monitor, filling it; the focused one is the one
+#             you see.
+#   AI        synapd suggests a layout from what is open and the desktop's
+#             intent; falls back to tiling with no synapd.
+#   niri      scrollable tiling. An endless horizontal strip of columns per
+#             monitor: a new window opens in its own column beside the one you
+#             are in and the strip scrolls to follow the focus, instead of
+#             every window getting narrower as more of them open. Windows
+#             stack vertically inside a column — Super+, pulls the focused
+#             window into the column on its left, Super+. pushes it back out.
+#             Super+H / Super+Shift+L set the focused COLUMN's width (half the
+#             screen by default, so two columns fit side by side); a column
+#             that does not fit entirely on the monitor is not drawn, so the
+#             strip always shows whole windows.
+
 # Theme: one named bundle of chrome colours, app colour scheme and default
 # translucency. Also pickable live with Super+T, which persists to theme.state —
 # and theme.state WINS over this line on the next start, by design (same as the
@@ -71,8 +92,8 @@ titlebar_height = 26
 # an entry written on a wider desk can't reopen a window off-screen.
 #
 # It is also only *replayed* on the desktops where you place windows yourself:
-# floating and monocle. A window opening on a tiling or AI desktop ignores the
-# table and goes where the layout puts it — otherwise every app that had ever
+# floating and monocle. A window opening on a tiling, niri or AI desktop ignores
+# the table and goes where the layout puts it — otherwise every app that had ever
 # been floated or edge-snapped reopened floating, and the tiler had nothing
 # left to tile. Super+F still reopens the remembered box on any desktop: that
 # is you asking for the window back, not the window merely opening.
@@ -259,7 +280,8 @@ record_audio = off
 # Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
 #          layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
 #          stack_next/prev,
-#          master_shrink/grow, float_toggle, maximize_toggle, ai_ask,
+#          master_shrink/grow, column_consume, column_expel,
+#          float_toggle, maximize_toggle, ai_ask,
 #          ws <1-9>, movews <1-9>
 # alt_tab = focus the last-used window (most-recently-used order); hold alt and
 # press tab again to keep going back. Bound to alt+tab / alt+shift+tab.
@@ -267,8 +289,8 @@ record_audio = off
 # un-snap, un-float — and tile it. Default super+shift+t ("t for tile"), and it
 # works from any layout: from a floating desktop it switches to tiling first,
 # since reclaiming there would do nothing you could see. Dialogs and fullscreen
-# windows are left alone. Selecting a tiling or AI layout now reclaims the same
-# way, so choosing the layout means "place these windows".
+# windows are left alone. Selecting a tiling, niri or AI layout now reclaims the
+# same way, so choosing the layout means "place these windows".
 #   Why you want it: dragging a window to move it, snapping it to an edge and
 #   maximizing all set the window "floating", every layout SKIPS floating
 #   windows, and until now only super+f could clear that, one window at a time.

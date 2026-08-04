@@ -197,6 +197,10 @@ static void xw_map(struct wl_listener *listener, void *data)
     if (xs->modal || xs->parent)
         view->floating = 1;
     wl_list_insert(&view->workspace->windows, &view->link);
+    /* On a niri desktop, move it out of the head slot and in beside the column
+     * the user is in. Before focus_view below, which would otherwise leave no
+     * record of which column that was. */
+    layout_strip_insert(s, view);
 
     layout_apply(s, view->workspace);
     if (view->floating) {

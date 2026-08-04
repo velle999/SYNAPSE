@@ -122,11 +122,18 @@ void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
      * Super+F, retile) happened to reflow the desktop. layout.c's own header
      * claimed "cycle with Alt+Tab" — this is what makes that true.
      *
-     * Gated on the one layout whose windows can be hidden. The others only
+     * Gated on the two layouts whose windows can be hidden. The others only
      * place geometry, so reflowing them on every focus change would be a
      * configure storm for no visible gain. Safe against recursion: layout_apply
-     * never calls back into focus_view. */
-    if (view->workspace && view->workspace->layout == LAYOUT_MONOCLE)
+     * never calls back into focus_view.
+     *
+     * niri is here for the same reason wearing a different hat: its strip is
+     * scrolled to wherever the focus is, and a column that is not fully on
+     * screen is not drawn at all (layout_niri). Without this, Alt+Tab or a
+     * click on the dock would move the keyboard to a window still parked off
+     * the side of the monitor. */
+    if (view->workspace && (view->workspace->layout == LAYOUT_MONOCLE ||
+                            view->workspace->layout == LAYOUT_NIRI))
         layout_apply(s, view->workspace);
 
     /* Toggle activated state (X11 clients need this to accept input) and
@@ -597,7 +604,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "close") == 0) {
         if (s->focused_view) view_close(s->focused_view);
     } else if (strcmp(action, "layout_cycle") == 0) {
-        ws->layout = (ws->layout + 1) % 4;
+        ws->layout = (ws->layout + 1) % SYN_LAYOUT_COUNT;
         wlr_log(WLR_INFO, "synui: layout → %s", layout_label(ws->layout));
         /* Before the reflow, not after: the choice is the thing worth keeping,
          * and it survives even if placing the windows goes wrong. */
@@ -608,10 +615,11 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * a drag, a snap, a maximize — and lays out an empty set, which reads
          * as a tiler that has stopped working (see layout_reclaim).
          *
-         * Only the two layouts that own their windows' geometry, the same pair
+         * Only the layouts that own their windows' geometry, the same set
          * layout_restore_geometry tests. Floating is where a window is meant to
          * be free, and monocle deliberately keeps honouring a saved float. */
-        if (ws->layout == LAYOUT_TILING || ws->layout == LAYOUT_AI)
+        if (ws->layout == LAYOUT_TILING || ws->layout == LAYOUT_NIRI ||
+            ws->layout == LAYOUT_AI)
             layout_reclaim(s, ws);
 
         layout_apply(s, ws);
@@ -668,6 +676,12 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         layout_adjust_master(s, ws, -0.05f);
     } else if (strcmp(action, "master_grow") == 0) {
         layout_adjust_master(s, ws, +0.05f);
+    } else if (strcmp(action, "column_consume") == 0) {
+        /* niri desktops only; layout_column_join returns without reflowing on
+         * every other layout, so the keys are dead rather than surprising. */
+        layout_column_join(s, s->focused_view, 1);
+    } else if (strcmp(action, "column_expel") == 0) {
+        layout_column_join(s, s->focused_view, 0);
     } else if (strcmp(action, "focus_next") == 0) {
         focus_next(s, 1);
     } else if (strcmp(action, "focus_prev") == 0) {

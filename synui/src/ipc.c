@@ -112,6 +112,7 @@ static const char *layout_name(syn_layout_t l)
     case LAYOUT_FLOATING: return "floating";
     case LAYOUT_MONOCLE:  return "monocle";
     case LAYOUT_AI:       return "ai";
+    case LAYOUT_NIRI:     return "niri";
     }
     return "unknown";
 }

@@ -9,7 +9,7 @@ compositor with AI-aware window management."*
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
 - xdg-shell toplevels (map/unmap/destroy/commit), keyboard focus
-- Tiling (master-stack) and monocle layouts; 9 workspaces
+- Tiling (master-stack), monocle and niri (scrollable-tiling) layouts; 9 workspaces
 - Keyboard bindings; basic pointer (focus / click / axis); clipboard selection
 - Cairo-rendered UI: welcome screen, AI command bar, neural overlay
 - Every compositor-drawn panel takes the pointer as well as the keyboard: hover
@@ -470,8 +470,11 @@ them. Reported as "Super+numbers is unresponsive".
 - [x] Layout is per (workspace, output): `layout_apply()` runs the workspace's
       layout once per output over just the windows that live on that output, so
       each monitor tiles its own share. Monocle is per-output (a 3-monitor
-      desktop shows three windows, one per screen). `layout` and `master_factor`
-      stay per-desktop — every monitor showing it tiles the same way.
+      desktop shows three windows, one per screen), and so is the niri strip —
+      each monitor scrolls its own run of columns, which is why the scroll
+      offset lives on `syn_output::strip_scroll[]` and not on the workspace.
+      `layout` and `master_factor` stay per-desktop — every monitor showing it
+      tiles the same way.
       AI layout is focused-output-only (one in-flight request; the others tile),
       with `server::ai_layout_output` routing the async reply to the right box.
 - [x] `Super+Shift+1..9` (`workspace_move_view`) sends a window to another
@@ -595,3 +598,58 @@ left to round *to*. The real path is **scenefx** (the `wlr_scene` fork SwayFX
 uses, which adds corner radius, blur and shadows). It is not packaged here and
 would mean migrating every `wlr_scene_*` call and pinning to a wlroots version.
 Left as an explicit decision rather than a silent gap.
+
+### Phase Q — niri-style scrollable tiling  *(done)*
+A fifth layout, on the Super+Tab cycle after AI and spelled `niri` everywhere
+the others are (`layout_label`, `layout_key`/`layouts.state`, `synctl`'s
+`layout_name`). What it is, and why it is built the way it is:
+
+- [x] **The strip.** Each (desktop, monitor) holds one endless horizontal strip
+      of columns, laid out in `layout_niri()`. A new window opens in a column of
+      its own beside the one you are in and the strip gets *longer* — nothing
+      already on screen is made narrower. That is the whole difference from
+      `layout_tile`, where every extra window costs the stack width, and the
+      reason `niri_strip.sh` asserts the columns' width does not change when a
+      third window opens.
+- [x] **The strip IS the workspace list.** No column tree: the order is
+      `ws->windows` filtered to the output, and `syn_view::col_join` says "I
+      share the column of the window before me". So `Super+Shift+J/K`
+      (`layout_move_in_stack`) moves a window along the strip and in and out of
+      columns for free, and every existing path that touches the list — map,
+      unmap, `workspace_move_view`, `view_set_output`, `layout_reclaim` — keeps
+      working with no second structure to leave holding a freed view.
+- [x] **Scroll follows focus.** `syn_output::strip_scroll[WORKSPACE_MAX]` (per
+      output: each monitor scrolls its own run of columns), moved the least
+      distance that puts the focused column fully on screen and re-clamped
+      against the real strip on every reflow, so a stale offset costs one frame
+      at most. `focus_view()` reflows a niri desktop for the same reason it
+      reflows a monocle one — Alt+Tab, `focus_next`, a dock click and a plain
+      click all funnel through it.
+- [x] **A partly-visible column is not drawn.** niri proper lets the neighbours
+      peek in at the screen edge; synui cannot, because a window is placed by
+      moving its scene node in *layout* coordinates and its borders and titlebar
+      are separate rects outside `client_tree` — there is nothing that crops a
+      frame at the monitor edge, so a half-off column would be painted across
+      the monitor next door. Hiding it is the honest version, and the scroll
+      rule guarantees the hidden one is never the focused one. A real fix is a
+      per-frame clip on the whole frame, which is the same gap that stops
+      geometry animation (Phase P).
+- [x] **Column width is a fraction of the SLOT**, column plus following gap
+      (`niri_col_width`), so 1/n of the screen means n columns fit exactly.
+      Taking the fraction of the bare viewport costs a gap per column, which at
+      the default 0.5 pushes the second column a few pixels off the edge — and
+      the rule above then hides it, leaving one window on a two-thirds-empty
+      screen. `layout_tile` subtracts the same gap from its master column.
+      `Super+H` / `Super+Shift+L` resize the focused *column* here rather than a
+      master slot that does not exist; the fraction is written to every member
+      of the column so it survives the leader moving or closing.
+- [x] **Columns stack**: `column_consume` (Super+,) pulls the focused window
+      into the column on its left, `column_expel` (Super+.) pushes it back out.
+      niri's own keys. Both are no-ops on the other four layouts.
+- [x] Selecting the layout reclaims the desktop the way tiling and AI do
+      (`layout_reclaim`), and `layout_restore_geometry` bypasses `windows.conf`
+      on it — the strip owns where a window goes, and a remembered box would put
+      windows back outside any column, where nothing can scroll to them.
+- [x] `niri_strip.sh` covers the three properties that make it niri and not
+      another way of drawing the tiler: columns that do not shrink, a strip that
+      scrolls to the focus, and consume/expel.

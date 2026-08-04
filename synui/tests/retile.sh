@@ -143,13 +143,13 @@ synctl dispatch retile >/dev/null
 echo "retile:   both windows back in the layout"
 
 # ── 5. selecting the tiling layout reclaims too ──────────────────────────
-# Four presses right round the cycle (tiling -> floating -> monocle -> AI ->
-# tiling). The window is floated first, so arriving back at tiling has something
-# to take back.
+# Five presses right round the cycle (tiling -> floating -> monocle -> AI ->
+# niri -> tiling). The window is floated first, so arriving back at tiling has
+# something to take back.
 synctl dispatch float_toggle >/dev/null
 [ "$(n_floating)" = 1 ] || fail "float_toggle did not float a window for phase 5"
-for _ in 1 2 3 4; do synctl dispatch layout_cycle >/dev/null; done
-[ "$(layout_now)" = tiling ] || fail "four layout_cycles did not come back to
+for _ in 1 2 3 4 5; do synctl dispatch layout_cycle >/dev/null; done
+[ "$(layout_now)" = tiling ] || fail "five layout_cycles did not come back to
        tiling, got $(layout_now)"
 [ "$(n_floating)" = 0 ] || fail "arriving back on the tiling layout left
        $(n_floating) window(s) floating. Choosing a layout that places windows

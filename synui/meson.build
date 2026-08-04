@@ -601,6 +601,17 @@ test('monocle_focus', monocle_focus,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The niri (scrollable tiling) strip: columns that do not shrink when another
+# window opens, a strip that scrolls to whatever has the focus, and the two
+# column moves (Super+, / Super+.). Three windows on one headless output, so
+# the strip is deliberately longer than the monitor. Same client again.
+niri_strip = find_program('tests/niri_strip.sh')
+test('niri_strip', niri_strip,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # Whether the layout you chose is still there next login (layout_state_save /
 # _load, layout.c): two desktops changed, the compositor restarted on the same
 # XDG_CONFIG_HOME, then a junk state file. No client — a desktop's layout is a

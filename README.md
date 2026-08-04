@@ -109,7 +109,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 |---|---|
 | **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. |
 | **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell. |
-| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling and monocle layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
+| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling, monocle and niri-style scrollable-tiling layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
