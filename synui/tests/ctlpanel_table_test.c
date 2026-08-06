@@ -220,6 +220,29 @@ static void test_no_category_overflows(void)
            total, CTL_CAT_COUNT - 1);
 }
 
+/* ── 2b. Every category has a name, and it is unique ─────────
+ *
+ * ctlpanel_cat_name() is a switch, so a category added to the enum without a
+ * case falls to the "?" default and draws a question mark in the sidebar —
+ * which is exactly how Windows and Input shipped in pkgrel 262. Worse, two
+ * unnamed categories both answer to "?", so ctlpanel_cat_from_name() (what
+ * synctl resolves against) silently hands out the first one for both.
+ */
+static void test_every_category_named(void)
+{
+    for (int c = 0; c < CTL_CAT_COUNT; c++) {
+        const char *name = ctlpanel_cat_name(c);
+
+        assert(name && *name);
+        if (strcmp(name, "?") == 0) printf("    category %d has no name\n", c);
+        assert(strcmp(name, "?") != 0);
+
+        /* Unique, and reachable by the name it draws. */
+        assert(ctlpanel_cat_from_name(name) == c);
+    }
+    printf("  every category named ..... ok (%d categories)\n", CTL_CAT_COUNT);
+}
+
 /* ── 3. The round trip, per row ──────────────────────────────
  *
  * The important one. For every row that names a config key: move it with the
@@ -411,6 +434,7 @@ int main(void)
     printf("ctlpanel_table_test\n");
     test_table_covers_every_row();
     test_no_category_overflows();
+    test_every_category_named();
     test_every_row_round_trips();
     test_search();
     test_apply_hooks();

@@ -714,7 +714,9 @@ const char *ctlpanel_cat_name(int cat)
 {
     switch (cat) {
     case CTL_CAT_APPEARANCE: return "Appearance";
+    case CTL_CAT_WINDOWS:    return "Windows";
     case CTL_CAT_DESKTOP:    return "Desktop";
+    case CTL_CAT_INPUT:      return "Input";
     case CTL_CAT_DISPLAY:    return "Display";
     case CTL_CAT_SOUND:      return "Sound";
     case CTL_CAT_NETWORK:    return "Network";
