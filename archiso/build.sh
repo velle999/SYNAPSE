@@ -187,6 +187,10 @@ PACKAGES=(
     tepris
     chibi
     vibe
+    # SYNAPSE Arsenal — the BlackArch category browser. Must be ON the ISO:
+    # syn-install now names it in SEL_APPS, and an app the installer asks
+    # for but the local repo does not carry fails the install at pacman.
+    syn-arsenal
     # Printer driver for the Xpress M2020W — an SPL printer too old for the
     # driverless IPP path cups otherwise relies on. Script/data package:
     # ships the vendor ULD rastertospl filter, its dlopen'd libscmssc.so, and
