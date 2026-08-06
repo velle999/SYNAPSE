@@ -95,6 +95,8 @@ void dock_state_save(syn_server_t *s)                { (void)s; }
 void dock_wake(syn_server_t *s)                      { (void)s; }
 void game_toggle(syn_server_t *s)                    { (void)s; }
 void launcher_toggle_style(syn_server_t *s)          { (void)s; }
+/* config.c is not linked here; CTL_APPLY_BINDS calls into it. */
+void synui_config_apply_launcher_binds(syn_config_t *c)     { (void)c; }
 void nightlight_toggle(syn_server_t *s)              { (void)s; }
 void record_audio_toggle(syn_server_t *s)            { (void)s; }
 void sound_state_refresh(syn_server_t *s)            { (void)s; }

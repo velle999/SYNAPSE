@@ -308,6 +308,13 @@ record_audio = off
 # -show drun`. Rebind it to any launcher you like, or to `cmdbar` to put the
 # command bar back where it was.
 #
+# super_space = launcher|cmdbar  (default launcher)
+#   Which of the two answers Super+Space; the other one gets Super+=. Control
+#   panel ▸ Desktop ▸ "Super+Space opens" flips it live and writes it here (well,
+#   to settings.state). It only ever swaps the two actions IT put on those keys:
+#   if you rebind either combo with a `bind =` line above, the setting stops
+#   touching them and says so in the log. Your bind wins.
+#
 # A bind on the same combo as a default replaces the default.
 # bind = super+w spawn rofi -show run
 # bind = super+shift+s spawn swaylock

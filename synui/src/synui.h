@@ -964,6 +964,7 @@ typedef enum {
     CTL_ROW_DOCK,
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
+    CTL_ROW_SUPER_SPACE,   /* which of launcher/command bar answers Super+Space */
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza */
     /* Display */
     CTL_ROW_DISPLAYS,
@@ -1113,6 +1114,7 @@ typedef enum {
     CTL_APPLY_NIGHTLIGHT,/* re-commit the gamma ramps                    */
     CTL_APPLY_CURSOR,    /* reload the cursor theme at the new size       */
     CTL_APPLY_DESKICONS, /* redraw the desktop icon grid                  */
+    CTL_APPLY_BINDS,     /* re-seat the launcher / command-bar key pair   */
 } syn_ctl_apply_t;
 
 /* What activating a row does. The distinction is not cosmetic: only CTL_KIND_PANEL
@@ -1720,6 +1722,17 @@ typedef enum {
     SYN_LAUNCHER_LOGO,       /* logo.svg emblem */
 } syn_launcher_style_t;
 
+/* Which of the two things Super+Space runs. The other one gets Super+=; they
+ * are always a pair, never both on one key and never both off, which is why
+ * this is one setting rather than two binds the user has to keep consistent.
+ *
+ * Stored as an int (not this enum) in syn_config_t, because the control panel's
+ * CTL_VAL_ENUM reads the field through an `int *`. */
+typedef enum {
+    SYN_SUPER_SPACE_LAUNCHER = 0,  /* rofi — the default, as on every other desktop */
+    SYN_SUPER_SPACE_CMDBAR,        /* the AI command bar, where it used to be */
+} syn_super_space_t;
+
 /* Dock right-click context-menu actions (dock.c / render.c). */
 typedef enum {
     SYN_DOCKACT_PIN = 0,   /* add app_id to the pinned set */
@@ -2064,6 +2077,12 @@ typedef struct {
     syn_dock_edge_t dock_edge;  /* which screen edge, default BOTTOM */
     /* launcher.c: the synui-drawn start-menu button. Default TEXT. */
     syn_launcher_style_t launcher_style;
+
+    /* config.c: which of the app launcher / AI command bar answers Super+Space,
+     * the other taking Super+=. A syn_super_space_t value, held as an int for
+     * the control panel's enum row. Applied by
+     * synui_config_apply_launcher_binds() at the end of every config load. */
+    int super_space;
 
     /* record.c: does Super+Shift+R capture sound as well? On, the `record`
      * action passes --audio to synui-record, which records the default sink's
@@ -3809,6 +3828,11 @@ void synmon_want_refresh(syn_server_t *s);
 
 /* ── config.c ────────────────────────────────────────────── */
 void synui_config_load(syn_config_t *cfg);
+/* Re-seat the launcher / command-bar pair on Super+Space and Super+= to match
+ * cfg->super_space. Called at the end of a config load, and by the control
+ * panel's row so the flip takes effect without a restart. A no-op if either key
+ * has been rebound in synuirc — see the definition. */
+void synui_config_apply_launcher_binds(syn_config_t *cfg);
 
 /* Resolve <config dir>/<name> into buf, where the config dir is
  * $XDG_CONFIG_HOME/synui (preferred) or ~/.config/synui. Every file synui

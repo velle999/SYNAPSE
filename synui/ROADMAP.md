@@ -698,3 +698,42 @@ else. The launcher moved onto it and the command bar moved off.
       — but its `action_desc()` lookup is a second table that a *new action*
       would still drift from. A `spawn` bind is exempt: it falls through to the
       command string, so the rofi row reads `rofi -show drun`.
+- [x] **The swap is a setting, not a fork in the config.** Control panel ▸
+      Desktop ▸ "Super+Space opens" flips the pair live; `super_space =
+      launcher|cmdbar` in synuirc is the same switch. One setting rather than two
+      binds because the two actions are always a *pair* — never both on one key,
+      never one of them homeless — and asking a user to keep two `bind =` lines
+      consistent is asking them to get it wrong.
+      `CTL_KIND_TOGGLE` + `CTL_VAL_ENUM` over two names: `ctl_adjust()` wraps
+      modulo `nnames`, so on a pair Enter *is* a toggle, and the row says which
+      one you get instead of a meaningless on/off.
+- [x] **It refuses to act on a key you rebound.** `synui_config_apply_launcher_binds()`
+      only ever exchanges the two actions it put there itself: if super+space or
+      super+equal holds anything else, someone said so deliberately in synuirc,
+      and overwriting that is the exact silent regression the setting exists to
+      save people from. The bind wins, the toggle no-ops, and the log says why.
+      It runs **dead last** in `synui_config_load()` — after the seed table,
+      after synuirc's `bind =` lines, after settings.state — because all three
+      write these combos and the setting has to have the last word.
+      `SYN_BIND_LAUNCHER` / `SYN_BIND_CMDBAR` spell the two actions **once**, so
+      the seed table, the swap and the "is this still ours?" test cannot drift
+      into disagreeing — a drift that would present as a toggle that quietly
+      stopped working rather than as a build error.
+      Pinned in `tests/settings_test.c` (`test_super_space_swap`), including both
+      directions and both halves of the rebound case.
+- [x] **rofi is themed by `synui-apply-theme.sh`**, so it tracks SYNAPSE/Dark/
+      XP/95 like everything else. It is the one themed surface that needs **no
+      reload signal** — no SIGUSR2 like waybar, no D-Bus nudge like Dolphin, no
+      "next restart" caveat like Firefox — because rofi is spawned fresh on every
+      keypress and re-reads the file each time it opens.
+      Same file split as kitty, for the same reason: the palette is generated
+      into `~/.config/rofi/synui.rasi` and the user-owned `config.rasi` only
+      gains an `@import` if it lacks one (appended, since rofi takes the LAST
+      definition of a property). The import is written bare rather than with
+      `$HOME` — rofi resolves it against its own config dir, so the file survives
+      being copied to another machine or user.
+      Colours are `#rrggbb`, not rasi `rgba()`: the popup alpha belongs to the
+      *window*, and putting it on the shared `*` block makes the text translucent
+      too, which reads as a rendering bug rather than as glass. The selected row
+      is accent-background plus `ink_for()`'s contrast pick — the only pairing
+      that holds across a neon magenta, XP's beige and 95's silver.

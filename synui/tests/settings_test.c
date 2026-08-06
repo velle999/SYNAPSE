@@ -331,6 +331,71 @@ static void test_round_trip(void)
            (unsigned)(sizeof(spread) / sizeof(spread[0])));
 }
 
+/* ── 6. super_space swaps the launcher pair, and only that pair ──────── */
+
+/* The bind table has no lookup helper outside config.c, so find by combo here. */
+static const syn_bind_t *bind_of(const syn_config_t *c, xkb_keysym_t sym)
+{
+    for (int i = 0; i < c->bind_count; i++)
+        if (c->binds[i].mods == WLR_MODIFIER_LOGO && c->binds[i].sym == sym)
+            return &c->binds[i];
+    return NULL;
+}
+
+static int holds(const syn_bind_t *b, const char *action, const char *arg)
+{
+    return b && strcmp(b->action, action) == 0 && strcmp(b->arg, arg) == 0;
+}
+
+static void test_super_space_swap(void)
+{
+    syn_config_t c;
+
+    /* Default: the launcher is on Space, the command bar on '='. */
+    write_synuirc("");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.super_space == SYN_SUPER_SPACE_LAUNCHER);
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
+
+    /* Flipped: they trade places, and NOTHING else moves — the swap must not
+     * quietly drop one of them or leave both on the same key. */
+    write_synuirc("super_space = cmdbar\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.super_space == SYN_SUPER_SPACE_CMDBAR);
+    assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn", "rofi -show drun"));
+
+    /* Back again, from the same load path. */
+    write_synuirc("super_space = launcher\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
+
+    /* THE ONE THAT MATTERS: a user bind on either key disarms the swap
+     * entirely. Asking for cmdbar-on-Space here must NOT clobber the explicit
+     * `bind =`, and must not half-apply by moving the other key either. */
+    write_synuirc("bind = super+space spawn my-launcher\n"
+                  "super_space = cmdbar\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "my-launcher"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
+
+    /* Same when it is the OTHER key that was rebound. */
+    write_synuirc("bind = super+equal term\n"
+                  "super_space = cmdbar\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "term", ""));
+
+    printf("  super_space swap ... ok\n");
+}
+
 int main(void)
 {
     rig_init();
@@ -341,6 +406,7 @@ int main(void)
     test_state_overrides();
     test_state_clear();
     test_round_trip();
+    test_super_space_swap();
 
     rig_cleanup();
     printf("settings_test: all ok\n");

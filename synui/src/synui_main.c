@@ -2365,6 +2365,8 @@ static void usage(const char *prog) {
         "  Super+Enter        Open terminal\n"
         "  Super+Space        Application launcher (rofi)\n"
         "  Super+=            Open AI command bar\n"
+        "                     (swap the two: Control panel \xe2\x96\xb8 Desktop \xe2\x96\xb8\n"
+        "                      Super+Space opens, or `super_space = cmdbar`)\n"
         "  Super+Backspace    Ask the AI about the focused window\n"
         "  Super+C            Control panel (every shortcut + the settings)\n"
         "  Super+A            Toggle neural overlay\n"

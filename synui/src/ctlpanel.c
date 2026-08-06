@@ -96,6 +96,9 @@ static double ctl_now_secs(void)
 static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Right" };
 static const char *const ctl_names_arrange[]   = { "Name", "Type", "Size", "Date" };
 static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blue" };
+/* Order matches syn_super_space_t, and the lower-cased spellings are what
+ * config.c's `super_space` case parses back out of settings.state. */
+static const char *const ctl_names_super_space[] = { "Launcher", "Cmdbar" };
 
 struct ctl_item {
     int             row;
@@ -302,6 +305,13 @@ static const struct ctl_item ctl_items[] = {
 
     { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL,
       .section = "Shell" },
+    /* Two names, so Enter flips it — CTL_VAL_ENUM wraps modulo nnames, which on
+     * a pair IS a toggle, and it says which one you get instead of "on/off".
+     * The other action always takes Super+=; they move as a pair. */
+    { CTL_ROW_SUPER_SPACE,   CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Super+Space opens", NULL,
+      .key = "super_space", .off = CFG(super_space), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_super_space), .apply = CTL_APPLY_BINDS,
+      .help = "Swap the app launcher and the AI command bar; the other gets Super+=" },
     { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Welcome menu at login", NULL,
       .key = "welcome_at_startup", .off = CFG(welcome_at_startup), .vtype = CTL_VAL_BOOL },
     { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Neural overlay at login", NULL,
@@ -603,6 +613,13 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
     case CTL_APPLY_DESKICONS:
         deskicons_reload(s);
         ctlpanel_repaint(s);
+        break;
+
+    /* No repaint: the bind table is not drawn anywhere except this panel's own
+     * Shortcuts category, which reads it live the next time it is opened. The
+     * keys change under the user's fingers immediately, which is the point. */
+    case CTL_APPLY_BINDS:
+        synui_config_apply_launcher_binds(&s->config);
         break;
     }
 }
