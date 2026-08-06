@@ -90,6 +90,19 @@ typedef struct {
      * dark panel chrome, so it is NOT the window border colour: Win95's navy
      * would vanish on a dark panel, so its accent is a legible periwinkle. */
     float panel_accent[4];
+    /* panel_bg / panel_ink: the SURFACE synui's own panels are drawn on and the
+     * colour their text is drawn in. Only the accent used to be theme data, so
+     * every panel — control panel, desktop menu, calendar, task manager, all 19
+     * of them — stayed the same near-black navy whatever theme was picked, with
+     * one themed accent laid over it. On a light theme that is not a theme at
+     * all: XP's beige desktop opened a black control panel.
+     *
+     * Alpha 0 means "derive from the base and text pair below", which every theme
+     * wants — the panel is the same surface as an app window, so a rice's panels
+     * are the rice's colours for free. SYNAPSE sets panel_bg explicitly because
+     * its historical panel navy is DARKER than its window face, and stock has to
+     * stay pixel-identical. See render_set_panel_surface(). */
+    float panel_bg[4], panel_ink[4];
     const char *scheme;              /* "dark" | "light" */
     int   accent_r, accent_g, accent_b;
     /* glyph_*: the colour the BAR's module glyphs (cpu/mem/net/audio/gamemode)
@@ -124,6 +137,11 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .tb_text_focus = { 0.90f, 0.90f, 0.95f, 1.0f },
         .active_opacity = 1.0f, .inactive_opacity = 0.92f,
         .panel_accent  = { 0.00f, 0.85f, 0.75f, 1.0f },  /* house neon cyan */
+        /* The historical panel navy, kept exactly. It is darker than this
+         * theme's window face (30,30,36), so deriving would lighten every
+         * panel on the one theme that must not change. */
+        .panel_bg      = { 0.06f, 0.06f, 0.12f, 1.0f },
+        .panel_ink     = { 0.95f, 0.95f, 1.00f, 1.0f },
         .scheme = "dark", .accent_r = 255, .accent_g = 41, .accent_b = 109,
         /* #05d9e8 — the launcher caret's teal, not the magenta accent. */
         .glyph_r = 0x05, .glyph_g = 0xd9, .glyph_b = 0xe8,
@@ -478,6 +496,31 @@ void theme_load_colors(syn_config_t *cfg, syn_theme_t theme)
      * (including the first one, before any theme_apply) uses the theme's colour.
      * Safe with no server — it only writes a static. */
     render_set_panel_accent(p->panel_accent);
+
+    /* And the surface the accent is drawn ON. Alpha 0 = derive from the app
+     * window pair, which is what every theme but SYNAPSE does: the panels are
+     * the same surface as a window, so a rice's panels come out in the rice's
+     * colours without a second set of numbers to keep in step. */
+    float pbg[4], pink[4];
+    if (p->panel_bg[3] > 0.0f) {
+        memcpy(pbg, p->panel_bg, sizeof(pbg));
+    } else {
+        pbg[0] = (float)p->base_r / 255.0f;
+        pbg[1] = (float)p->base_g / 255.0f;
+        pbg[2] = (float)p->base_b / 255.0f;
+        pbg[3] = 1.0f;
+    }
+    if (p->panel_ink[3] > 0.0f) {
+        memcpy(pink, p->panel_ink, sizeof(pink));
+    } else {
+        pink[0] = (float)p->text_r / 255.0f;
+        pink[1] = (float)p->text_g / 255.0f;
+        pink[2] = (float)p->text_b / 255.0f;
+        pink[3] = 1.0f;
+    }
+    memcpy(cfg->panel_bg,  pbg,  sizeof(cfg->panel_bg));
+    memcpy(cfg->panel_ink, pink, sizeof(cfg->panel_ink));
+    render_set_panel_surface(pbg, pink);
 }
 
 void theme_apply(syn_server_t *s, syn_theme_t theme, int save)

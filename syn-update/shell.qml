@@ -35,15 +35,69 @@ import Quickshell.Io
 ShellRoot {
     id: root
 
-    // ── palette (synui's dark chrome, cyan accent) ──────────
-    readonly property color cBg:      "#11151c"
-    readonly property color cPanel:   "#182029"
-    readonly property color cLine:    "#243040"
-    readonly property color cText:    "#dbe4ee"
-    readonly property color cDim:     "#8296ad"
-    readonly property color cAccent:  "#38bdf8"
-    readonly property color cOk:      "#5ee68a"
-    readonly property color cWarn:    "#f2b45c"
+    /* ── palette ────────────────────────────────────────────
+     * From ~/.config/synui/theme.json, which synui-apply-theme rewrites on every
+     * theme switch — the same file the bar reads. This window used to hard-code
+     * synui's dark chrome, so the updater was a slab of navy in the middle of a
+     * beige XP desktop or a Gruvbox one: the one window on the system that no
+     * theme could touch.
+     *
+     * Read here rather than by importing the bar's Theme singleton, because that
+     * singleton lives in synui's package and this is a different one — an import
+     * path across packages breaks the moment either is installed alone. The
+     * contract is the JSON, not the QML.
+     *
+     * Every colour falls back to the old hard-coded value, so a box that has
+     * never applied a theme (a fresh install, the live ISO) looks exactly as it
+     * did. NOTE the two shapes in that file: accent/bar/popup are [r,g,b]
+     * ARRAYS, fg is a "#rrggbb" STRING. Handing an array to a QML colour paints
+     * nothing at all, silently.
+     */
+    property var pal: ({})
+    readonly property bool palLight: pal.scheme === "light"
+
+    property FileView paletteFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/theme.json"
+        watchChanges: true
+        // Written as a temp file and renamed, so this never fires on a partial
+        // palette — and the window restyles live, without a relaunch.
+        onFileChanged: reload()
+        onLoaded: {
+            try { root.pal = JSON.parse(this.text()) }
+            catch (e) { root.pal = ({}) }   // half a palette is worse than none
+        }
+        onLoadFailed: root.pal = ({})
+    }
+
+    // [r,g,b] 0..255 → colour, or `fb` when the key is missing or malformed.
+    function rgbOf(key, fb) {
+        const c = root.pal[key]
+        return (c && c.length === 3) ? Qt.rgba(c[0] / 255, c[1] / 255, c[2] / 255, 1)
+                                     : fb
+    }
+    // t is a position from `a` toward `b`, and is allowed to go NEGATIVE — that
+    // is how the sunken pane is expressed: a step AWAY from the ink, which is
+    // darker than the surface on a dark theme and lighter on a light one, the
+    // same way a KDE view sinks under a dark window and lifts under a pale one.
+    function mix(a, b, t) {
+        function ch(x, y) { return Math.max(0, Math.min(1, x + (y - x) * t)) }
+        return Qt.rgba(ch(a.r, b.r), ch(a.g, b.g), ch(a.b, b.b), 1)
+    }
+
+    readonly property color cBg:      rgbOf("popup", "#11151c")
+    // The panel and the rules are positions between the surface and the ink, so
+    // they invert with the theme instead of staying a fixed dark slate.
+    readonly property color cPanel:   mix(cBg, cText, 0.06)
+    readonly property color cLine:    mix(cBg, cText, 0.18)
+    readonly property color cText:    root.pal.fg ? root.pal.fg : "#dbe4ee"
+    readonly property color cDim:     mix(cBg, cText, 0.58)
+    readonly property color cAccent:  rgbOf("accent", "#38bdf8")
+    // Success and warning carry meaning, so they are picked per scheme rather
+    // than derived — the dark pair is unreadable on a light surface.
+    readonly property color cOk:      palLight ? "#1a7f3d" : "#5ee68a"
+    readonly property color cWarn:    palLight ? "#8a5a00" : "#f2b45c"
+    // The log pane sits below the surface rather than at a fixed near-black.
+    readonly property color cSunken:  mix(cBg, cText, -0.03)
 
     property bool   busy:     false
     property string statusLine: "Checking for updates…"
@@ -338,7 +392,7 @@ ShellRoot {
                 Rectangle {
                     width: parent.width
                     height: 120
-                    color: "#0c1016"
+                    color: root.cSunken
                     radius: 8
                     border.color: root.cLine
 

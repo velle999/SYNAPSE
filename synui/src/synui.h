@@ -1729,6 +1729,13 @@ typedef struct {
      * render_set_panel_accent() so draw helpers need no server handle. */
     float panel_accent[4];
 
+    /* The surface those panels are drawn ON, and the ink on it. Same idea as
+     * panel_accent one layer down: the accent alone being theme data meant every
+     * panel kept SYNAPSE's near-black navy under a themed highlight, so a light
+     * theme opened black panels on a beige desktop. Derived from the theme's app
+     * window pair unless the preset names them (see theme.c). */
+    float panel_bg[4], panel_ink[4];
+
     /* Window translucency (theme.c / anim.c). `transparency` is the master
      * switch — off, everything is opaque and the opacities are ignored. When on,
      * the focused window sits at active_opacity and the rest at inactive_opacity.
@@ -4175,6 +4182,7 @@ void theme_preview_colors(syn_theme_t t, float caption[4], float accent[4]);
 /* Cache the panel accent render.c draws every synui panel with. Called from
  * theme_load_colors so a theme switch (or a synuirc `theme =`) reskins the UI. */
 void render_set_panel_accent(const float rgb[4]);
+void render_set_panel_surface(const float bg[4], const float ink[4]);
 
 /* Shared translucency controls behind the control-panel + theme-manager sliders.
  * set_opacity clamps the focused level to 0.50..1.00 and derives the unfocused

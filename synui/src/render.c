@@ -254,6 +254,65 @@ static inline void set_accent(cairo_t *cr, double a)
                           g_panel_accent[2], a);
 }
 
+/* ── Panel surface and ink ───────────────────────────────────
+ * The accent was theme data; the surface under it was not. Every panel in this
+ * file hard-coded the same near-black navy and a ladder of lavender greys for
+ * its text, so a theme switch recoloured the highlights and left the panel
+ * itself SYNAPSE-coloured — which on a light theme meant XP's beige desktop
+ * opening a black control panel with grey text. Both are theme data now
+ * (theme_load_colors pushes them here), and the greys are expressed as a
+ * POSITION between the two rather than as absolute colours, so the same ladder
+ * that reads as light-on-dark reads as dark-on-light without a second table.
+ *
+ * The initialisers are SYNAPSE's, so a render before any theme is applied looks
+ * exactly as it always did. Same threading argument as the accent: render runs
+ * on the main loop only, so a file-scope cache needs no lock. */
+static float g_panel_bg[3]  = { 0.06f, 0.06f, 0.12f };
+static float g_panel_ink[3] = { 0.95f, 0.95f, 1.00f };
+
+void render_set_panel_surface(const float bg[4], const float ink[4])
+{
+    for (int i = 0; i < 3; i++) {
+        g_panel_bg[i]  = bg[i];
+        g_panel_ink[i] = ink[i];
+    }
+}
+
+/* The ink ladder. `level` is how far from the surface toward the ink a colour
+ * sits: 1.0 is full-strength text, 0.28 is a hairline rule that should barely
+ * separate itself from the panel. The old absolute greys map onto it within a
+ * couple of hundredths, so stock is unchanged to the eye.
+ *
+ * Named rather than sprinkled as numbers because the whole point is that a
+ * heading is a heading on every theme — INK_LABEL has to stay dimmer than
+ * INK_BODY when the surface is beige, and a literal cannot promise that. */
+#define INK_STRONG 1.00   /* the brightest text a panel draws              */
+#define INK_TITLE  0.85   /* row titles, values, the thing you are reading */
+#define INK_BODY   0.81   /* ordinary body text                            */
+#define INK_MUTED  0.72   /* secondary text still meant to be read         */
+#define INK_LABEL  0.55   /* column headings, units, hints                 */
+#define INK_DIM    0.44   /* disabled rows, placeholders                   */
+#define INK_RULE   0.27   /* separators and hairlines                      */
+
+static inline void set_ink(cairo_t *cr, double level, double a)
+{
+    cairo_set_source_rgba(cr,
+        g_panel_bg[0] + (g_panel_ink[0] - g_panel_bg[0]) * level,
+        g_panel_bg[1] + (g_panel_ink[1] - g_panel_bg[1]) * level,
+        g_panel_bg[2] + (g_panel_ink[2] - g_panel_bg[2]) * level, a);
+}
+
+/* The panel surface itself, at the alpha the caller wants. Panels differ in how
+ * transparent they are (a menu is glassier than the lock screen), so the alpha
+ * stays with the panel and only the colour comes from here. */
+static inline void panel_bg_color(float out[4], float alpha)
+{
+    out[0] = g_panel_bg[0];
+    out[1] = g_panel_bg[1];
+    out[2] = g_panel_bg[2];
+    out[3] = alpha;
+}
+
 /* ── Welcome screen ──────────────────────────────────────── */
 
 /* Menu entries: input.c navigates with Up/Down and executes the entry's
@@ -321,11 +380,13 @@ void synui_render_welcome(syn_server_t *s)
     wlr_scene_node_set_position(&s->welcome_ui.tree->node, px, py);
 
     /* Background rect */
+    float color[4];
+    panel_bg_color(color, 0.92f);
     if (!s->welcome_ui.bg) {
-        float color[4] = { 0.08f, 0.08f, 0.14f, 0.92f };
         s->welcome_ui.bg = wlr_scene_rect_create(s->welcome_ui.tree,
                                                    pw, ph, color);
     }
+    wlr_scene_rect_set_color(s->welcome_ui.bg, color);
 
     /* Brand accent line at top */
     if (!s->welcome_ui.accent) {
@@ -365,7 +426,7 @@ void synui_render_welcome(syn_server_t *s)
     cairo_show_text(cr, "SYNAPSEOS");
 
     /* Separator, clear of the taller emblem */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 30, 96);
     cairo_line_to(cr, pw - 30, 96);
@@ -383,7 +444,7 @@ void synui_render_welcome(syn_server_t *s)
             cairo_show_text(cr, ">");
             cairo_set_source_rgba(cr, 0.92, 0.98, 0.97, 1.0);
         } else {
-            cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+            set_ink(cr, INK_MUTED, 1.0);
         }
         cairo_move_to(cr, 66, y);
         cairo_show_text(cr, synui_welcome_menu[i].label);
@@ -407,7 +468,7 @@ void synui_render_welcome(syn_server_t *s)
 
     /* Footer hints */
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 44, y + 16);
     cairo_show_text(cr, "Up/Down + Enter select");
     cairo_move_to(cr, 44, y + 34);
@@ -417,7 +478,7 @@ void synui_render_welcome(syn_server_t *s)
 
     /* Version */
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.35, 0.35, 0.45, 0.8);
+    set_ink(cr, 0.33, 0.8);
     cairo_move_to(cr, 190, ph - 16);
     cairo_show_text(cr, SYNUI_VERSION);
 
@@ -515,11 +576,13 @@ void synui_render_cmdbar(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->cmdbar_ui.tree->node);
 
     /* Background */
+    float color[4];
+    panel_bg_color(color, 0.95f);
     if (!s->cmdbar_ui.bg) {
-        float color[4] = { 0.06f, 0.06f, 0.12f, 0.95f };
         s->cmdbar_ui.bg = wlr_scene_rect_create(s->cmdbar_ui.tree,
                                                   bw, bh, color);
     }
+    wlr_scene_rect_set_color(s->cmdbar_ui.bg, color);
     /* Created once, but bw/bh move with the output — resize every pass. */
     wlr_scene_rect_set_size(s->cmdbar_ui.bg, bw, bh);
 
@@ -548,7 +611,7 @@ void synui_render_cmdbar(syn_server_t *s)
     cairo_show_text(cr, ">");
 
     /* Input text */
-    cairo_set_source_rgba(cr, 0.92, 0.92, 0.96, 1.0);
+    set_ink(cr, 0.97, 1.0);
     cairo_move_to(cr, 34, 30);
     if (s->cmdbar.input_len > 0)
         cairo_show_text(cr, s->cmdbar.input);
@@ -620,11 +683,13 @@ void synui_render_overlay(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->overlay_ui.tree->node);
 
     /* Background */
+    float color[4];
+    panel_bg_color(color, 0.88f);
     if (!s->overlay_ui.bg) {
-        float color[4] = { 0.05f, 0.05f, 0.10f, 0.88f };
         s->overlay_ui.bg = wlr_scene_rect_create(s->overlay_ui.tree,
                                                    pw, ph, color);
     }
+    wlr_scene_rect_set_color(s->overlay_ui.bg, color);
 
     /* Accent */
     if (!s->overlay_ui.accent) {
@@ -671,7 +736,7 @@ void synui_render_overlay(syn_server_t *s)
     cairo_show_text(cr, badge);
 
     /* Separator */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
+    set_ink(cr, INK_RULE, 0.4);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 14, 34);
     cairo_line_to(cr, pw - 14, 34);
@@ -684,7 +749,7 @@ void synui_render_overlay(syn_server_t *s)
     char stat[96];
     snprintf(stat, sizeof(stat), "req %lu    active %lu",
              ov->requests, ov->active);
-    cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
+    set_ink(cr, 0.89, 1.0);
     cairo_move_to(cr, 14, y);
     cairo_show_text(cr, stat);
     /* Highlight in-flight work in teal when there is any. */
@@ -701,7 +766,7 @@ void synui_render_overlay(syn_server_t *s)
         char cbuf[64];
         snprintf(cbuf, sizeof(cbuf), "ctx %u / %u tok",
                  ov->ctx_used, ov->ctx_window);
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 14, y);
         cairo_show_text(cr, cbuf);
 
@@ -709,7 +774,7 @@ void synui_render_overlay(syn_server_t *s)
         double frac = (double)ov->ctx_used / (double)ov->ctx_window;
         if (frac > 1.0) frac = 1.0;
         int bx = 14, bw = pw - 28, byy = y + 8, bh = 4;
-        cairo_set_source_rgba(cr, 0.25, 0.25, 0.32, 0.8);
+        set_ink(cr, 0.21, 0.8);
         cairo_rectangle(cr, bx, byy, bw, bh);
         cairo_fill(cr);
         set_accent(cr, 0.9);
@@ -725,7 +790,7 @@ void synui_render_overlay(syn_server_t *s)
     cairo_set_source_rgba(cr, 0.45, 0.60, 0.65, 0.9);
     cairo_move_to(cr, 14, y);
     cairo_show_text(cr, "live activity");
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
+    set_ink(cr, INK_RULE, 0.4);
     cairo_move_to(cr, 92, y - 4);
     cairo_line_to(cr, pw - 14, y - 4);
     cairo_stroke(cr);
@@ -733,7 +798,7 @@ void synui_render_overlay(syn_server_t *s)
 
     /* Recent synapd events (newest last). */
     if (ov->activity_n == 0) {
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.7);
+        set_ink(cr, INK_DIM, 0.7);
         cairo_move_to(cr, 14, y);
         cairo_show_text(cr, ov->mon_online ? "(idle — no recent events)"
                                            : "(synapd unavailable)");
@@ -827,7 +892,8 @@ void synui_render_dispcfg(syn_server_t *s)
 
     /* Background + accent; the panel height depends on the monitor count,
      * so resize them on every render (hotplug can change the count). */
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->dispcfg_ui.bg)
@@ -835,6 +901,7 @@ void synui_render_dispcfg(syn_server_t *s)
                                                  pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->dispcfg_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->dispcfg_ui.bg, bg_color);
     if (!s->dispcfg_ui.accent)
         s->dispcfg_ui.accent = wlr_scene_rect_create(s->dispcfg_ui.tree,
                                                      pw, 2, accent);
@@ -853,7 +920,7 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_show_text(cr, "DISPLAY SETTINGS");
 
     /* Separator */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 42);
     cairo_line_to(cr, pw - 18, 42);
@@ -869,7 +936,7 @@ void synui_render_dispcfg(syn_server_t *s)
         if (sel)
             set_accent(cr, 0.35);
         else
-            cairo_set_source_rgba(cr, 0.14, 0.14, 0.20, 1.0);
+            set_ink(cr, 0.09, 1.0);
         cairo_rectangle(cr, cx, cy, cell_w, cell_h);
         cairo_fill(cr);
 
@@ -882,19 +949,18 @@ void synui_render_dispcfg(syn_server_t *s)
         if (sel)
             set_accent(cr, 1.0);
         else
-            cairo_set_source_rgba(cr, 0.35, 0.35, 0.45, 0.8);
+            set_ink(cr, 0.33, 0.8);
         cairo_rectangle(cr, cx + 0.5, cy + 0.5, cell_w - 1, cell_h - 1);
         cairo_stroke(cr);
 
         char label[64];
         cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.75, sel ? 1.0 : 0.75,
-                              sel ? 0.99 : 0.85, 1.0);
+        set_ink(cr, sel ? INK_STRONG : 0.78, 1.0);
         cairo_move_to(cr, cx + 8, cy + 24);
         cairo_show_text(cr, o->wlr_output->name);
 
         cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         snprintf(label, sizeof(label), "(%d,%d)", o->grid_x, o->grid_y);
         cairo_move_to(cr, cx + 8, cy + 42);
         cairo_show_text(cr, label);
@@ -905,7 +971,7 @@ void synui_render_dispcfg(syn_server_t *s)
     cairo_set_font_size(cr, 14);
     int y = list_top;
     if (d->count == 0) {
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 40, y);
         cairo_show_text(cr, "no outputs connected");
         y += 28;
@@ -925,7 +991,7 @@ void synui_render_dispcfg(syn_server_t *s)
             cairo_show_text(cr, ">");
             cairo_set_source_rgba(cr, 0.92, 0.98, 0.97, 1.0);
         } else {
-            cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+            set_ink(cr, INK_MUTED, 1.0);
         }
         cairo_move_to(cr, 40, y);
         cairo_show_text(cr, wo->name);
@@ -938,7 +1004,7 @@ void synui_render_dispcfg(syn_server_t *s)
         cairo_move_to(cr, 310, y);
         cairo_show_text(cr, transform_name(wo->transform));
 
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         snprintf(col, sizeof(col), "grid(%d,%d)",
                  d->order[i]->grid_x, d->order[i]->grid_y);
         cairo_move_to(cr, 430, y);
@@ -963,9 +1029,9 @@ void synui_render_dispcfg(syn_server_t *s)
         syn_output_t *o = d->order[i];
         const char *depth;
         if (o->deep_color)             { set_accent(cr, 0.95); depth = "10-bit"; }
-        else if (o->deep_color_capable){ cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        else if (o->deep_color_capable){ set_ink(cr, INK_LABEL, 1.0);
                                          depth = "8-bit"; }
-        else                           { cairo_set_source_rgba(cr, 0.40, 0.40, 0.48, 1.0);
+        else                           { set_ink(cr, 0.38, 1.0);
                                          depth = "8-bit (only)"; }
         cairo_move_to(cr, 760, y);
         cairo_show_text(cr, depth);
@@ -1019,13 +1085,13 @@ void synui_render_dispcfg(syn_server_t *s)
         snprintf(line, sizeof(line),
                  "%s advertises no HDR transfer function in its EDID "
                  "(SDR panel)", selo->wlr_output->name);
-        cairo_set_source_rgba(cr, 0.40, 0.40, 0.48, 0.9);
+        set_ink(cr, 0.38, 0.9);
         cairo_move_to(cr, 18, ph - 62);
         cairo_show_text(cr, line);
     }
 
     /* Controls legend */
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 40);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right rotate \xc2\xb7 "
                         "p set primary (X11/game default)");
@@ -1081,7 +1147,8 @@ void synui_render_wppick(syn_server_t *s)
     /* More opaque than the 0.94 the sparser panels use: the browse list puts a
      * small-type path under every row, and at 0.94 whatever is behind the panel
      * (the welcome menu, or the wallpaper itself) reads straight through them. */
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.985f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->wppick_ui.bg)
@@ -1089,6 +1156,7 @@ void synui_render_wppick(syn_server_t *s)
                                                 pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->wppick_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->wppick_ui.bg, bg_color);
     if (!s->wppick_ui.accent)
         s->wppick_ui.accent = wlr_scene_rect_create(s->wppick_ui.tree,
                                                     pw, 2, accent);
@@ -1154,7 +1222,7 @@ void synui_render_wppick(syn_server_t *s)
     }
 
     /* Separator */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 42);
     cairo_line_to(cr, pw - 18, 42);
@@ -1186,8 +1254,7 @@ void synui_render_wppick(syn_server_t *s)
          * syn_show_text(). A row whose title cannot be drawn must still leave
          * the rows under it readable. */
         cairo_set_font_size(cr, 15);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, pad + 8, ry + 22);
         syn_show_text(cr, label);
 
@@ -1198,8 +1265,7 @@ void synui_render_wppick(syn_server_t *s)
         cairo_rectangle(cr, pad, ry + 26, list_w - 2 * pad - 8, 16);
         cairo_clip(cr);
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
-                              sel ? 0.85 : 0.60, 1.0);
+        set_ink(cr, sel ? INK_MUTED : 0.49, 1.0);
         cairo_move_to(cr, pad + 8, ry + 38);
         syn_show_text(cr, desc);
         cairo_restore(cr);
@@ -1219,7 +1285,7 @@ void synui_render_wppick(syn_server_t *s)
         const int bw = prev_im, bh = shown * row_h - 8;
 
         /* Frame, so an image with dark edges still reads as a pane. */
-        cairo_set_source_rgba(cr, 0.10, 0.10, 0.18, 1.0);
+        set_ink(cr, 0.04, 1.0);
         cairo_rectangle(cr, bx, by, bw, bh);
         cairo_fill(cr);
 
@@ -1250,7 +1316,7 @@ void synui_render_wppick(syn_server_t *s)
              * definition, would read as the same bug. */
             const char *why = ppath ? "Preview unavailable" : "No preview";
             cairo_set_font_size(cr, 12);
-            cairo_set_source_rgba(cr, 0.40, 0.40, 0.50, 1.0);
+            set_ink(cr, 0.38, 1.0);
             cairo_text_extents_t te;
             cairo_text_extents(cr, why, &te);
             cairo_move_to(cr, bx + (bw - te.width) / 2, by + bh / 2);
@@ -1258,7 +1324,7 @@ void synui_render_wppick(syn_server_t *s)
         }
 
         cairo_set_line_width(cr, 1);
-        cairo_set_source_rgba(cr, 0.30, 0.30, 0.40, 0.6);
+        set_ink(cr, INK_RULE, 0.6);
         cairo_rectangle(cr, bx + 0.5, by + 0.5, bw - 1, bh - 1);
         cairo_stroke(cr);
     }
@@ -1270,14 +1336,14 @@ void synui_render_wppick(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         cairo_text_extents_t te;
         cairo_text_extents(cr, pos, &te);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, right_edge - te.width, 30);
         cairo_show_text(cr, pos);
     }
 
     /* Controls legend */
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     cairo_show_text(cr, "Up/Down preview \xc2\xb7 Tab monitor \xc2\xb7 m scaling "
                         "\xc2\xb7 r rescan \xc2\xb7 Enter/Esc close");
@@ -1316,12 +1382,14 @@ void synui_render_power(syn_server_t *s)
     hit_set_panel(&p->hit, px, py, pw, ph);
     hit_set_rows(&p->hit, 12, top -16, pw - 24, row_h, POWER_ROW_COUNT);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->power_ui.bg)
         s->power_ui.bg = wlr_scene_rect_create(s->power_ui.tree,
                                                pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->power_ui.bg, bg_color);
     if (!s->power_ui.accent)
         s->power_ui.accent = wlr_scene_rect_create(s->power_ui.tree,
                                                    pw, 2, accent);
@@ -1357,7 +1425,7 @@ void synui_render_power(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         cairo_text_extents_t te;
         cairo_text_extents(cr, lid, &te);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, pw - 18 - te.width, 30);
         cairo_show_text(cr, lid);
     }
@@ -1375,7 +1443,7 @@ void synui_render_power(syn_server_t *s)
         cairo_show_text(cr, "disabled \xc2\xb7 no stage will fire");
     }
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 58);
     cairo_line_to(cr, pw - 18, 58);
@@ -1399,12 +1467,11 @@ void synui_render_power(syn_server_t *s)
                                    value, sizeof(value));
 
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, pad + 8, ry + 4);
         cairo_show_text(cr, name);
 
-        if (off) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        if (off) set_ink(cr, INK_DIM, 1.0);
         else     set_accent(cr, 1.0);
         cairo_move_to(cr, 330, ry + 4);
         cairo_show_text(cr, value);
@@ -1418,7 +1485,7 @@ void synui_render_power(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space toggle");
     cairo_move_to(cr, 18, ph - 16);
@@ -1516,7 +1583,8 @@ void synui_render_curpick(syn_server_t *s)
 
     /* Same near-opaque background as the wallpaper picker, and for the same
      * reason: every row carries a small-type path underneath it. */
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.985f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->curpick_ui.bg)
@@ -1524,6 +1592,7 @@ void synui_render_curpick(syn_server_t *s)
                                                  pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->curpick_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->curpick_ui.bg, bg_color);
     if (!s->curpick_ui.accent)
         s->curpick_ui.accent = wlr_scene_rect_create(s->curpick_ui.tree,
                                                      pw, 2, accent);
@@ -1559,7 +1628,7 @@ void synui_render_curpick(syn_server_t *s)
     }
 
     /* Separator */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 42);
     cairo_line_to(cr, pw - 18, 42);
@@ -1567,11 +1636,11 @@ void synui_render_curpick(syn_server_t *s)
 
     if (total == 0) {
         cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+        set_ink(cr, INK_MUTED, 1.0);
         cairo_move_to(cr, pad, top + 24);
         cairo_show_text(cr, "No cursor themes installed.");
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.50, 0.50, 0.60, 1.0);
+        set_ink(cr, 0.49, 1.0);
         cairo_move_to(cr, pad, top + 46);
         cairo_show_text(cr, "synui-cursor install <archive>   then press r");
     }
@@ -1604,16 +1673,14 @@ void synui_render_curpick(syn_server_t *s)
          * through news_utf8_trim, which is why neither of these calls
          * cairo_show_text directly. */
         cairo_set_font_size(cr, 15);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         draw_clipped(cr, pad + 8, ry + 22, pw - 2 * pad - 8, label);
 
         cairo_save(cr);
         cairo_rectangle(cr, pad, ry + 26, pw - 2 * pad - 8, 16);
         cairo_clip(cr);
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, sel ? 0.70 : 0.50, sel ? 0.80 : 0.50,
-                              sel ? 0.85 : 0.60, 1.0);
+        set_ink(cr, sel ? INK_MUTED : 0.49, 1.0);
         draw_clipped(cr, pad + 8, ry + 38, pw - 2 * pad - 8, desc);
         cairo_restore(cr);
     }
@@ -1624,13 +1691,13 @@ void synui_render_curpick(syn_server_t *s)
         cairo_set_font_size(cr, 12);
         cairo_text_extents_t te;
         cairo_text_extents(cr, pos, &te);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        set_ink(cr, INK_DIM, 0.9);
         cairo_move_to(cr, right_edge - te.width, 30);
         cairo_show_text(cr, pos);
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     cairo_show_text(cr,
         "Up/Down preview \xc2\xb7 -/+ size \xc2\xb7 r rescan \xc2\xb7 Enter apply \xc2\xb7 Esc cancel");
@@ -1646,12 +1713,12 @@ void synui_render_curpick(syn_server_t *s)
 static void draw_slider(cairo_t *cr, double x, double y, double w, double h,
                         double frac, int sel, int dimmed)
 {
-    cairo_set_source_rgba(cr, 0.16, 0.16, 0.24, 1.0);
+    set_ink(cr, 0.11, 1.0);
     cairo_rectangle(cr, x, y, w, h);
     cairo_fill(cr);
 
     if (frac > 0.0) {
-        if (dimmed)   cairo_set_source_rgba(cr, 0.35, 0.35, 0.44, 1.0);
+        if (dimmed)   set_ink(cr, 0.33, 1.0);
         else if (sel) cairo_set_source_rgba(cr, 0.00, 0.95, 0.85, 1.0);
         else          cairo_set_source_rgba(cr, 0.00, 0.62, 0.56, 1.0);
         cairo_rectangle(cr, x, y, w * frac, h);
@@ -1704,7 +1771,8 @@ void synui_render_filters(syn_server_t *s)
     hit_set_panel(&fl->hit, px, py, pw, ph);
     hit_set_rows(&fl->hit, 12, top -18, pw - 24, row_h, rows);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->filters_ui.bg)
@@ -1712,6 +1780,7 @@ void synui_render_filters(syn_server_t *s)
                                                  pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->filters_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->filters_ui.bg, bg_color);
     if (!s->filters_ui.accent)
         s->filters_ui.accent = wlr_scene_rect_create(s->filters_ui.tree,
                                                      pw, 2, accent);
@@ -1731,7 +1800,7 @@ void synui_render_filters(syn_server_t *s)
     /* The page you are NOT on, named at the top right, because a panel that
      * hides half of itself behind an unadvertised Tab has hidden it. */
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+    set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, pw - 210, 30);
     cairo_show_text(cr, uifx ? "Tab \xe2\x86\x92 CRT filters"
                              : "Tab \xe2\x86\x92 window effects");
@@ -1757,7 +1826,7 @@ void synui_render_filters(syn_server_t *s)
         cairo_show_text(cr, "filters off \xc2\xb7 Space to turn them on");
     }
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 58);
     cairo_line_to(cr, pw - 18, 58);
@@ -1784,8 +1853,7 @@ void synui_render_filters(syn_server_t *s)
                           : filters_row_value(s, i, value, sizeof(value));
 
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, pad + 8, ry + 4);
         cairo_show_text(cr, uifx ? uifx_row_label(i) : filters_row_label(i));
 
@@ -1794,14 +1862,14 @@ void synui_render_filters(syn_server_t *s)
              * accent-coloured "on" over a shadow the chrome has dropped would
              * be the panel contradicting the screen. */
             if (strcmp(value, "on") == 0 && !dimmed) set_accent(cr, 1.0);
-            else cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            else set_ink(cr, INK_DIM, 1.0);
             cairo_move_to(cr, 250, ry + 4);
             cairo_show_text(cr, value);
         } else {
             draw_slider(cr, 250, ry - 9, 220, 12, frac, sel, dimmed);
 
             cairo_set_font_size(cr, 12);
-            if (dimmed) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            if (dimmed) set_ink(cr, INK_DIM, 1.0);
             else        set_accent(cr, 1.0);
             cairo_move_to(cr, 484, ry + 4);
             cairo_show_text(cr, value);
@@ -1816,7 +1884,7 @@ void synui_render_filters(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 Space on/off");
     cairo_move_to(cr, 18, ph - 16);
@@ -1857,12 +1925,14 @@ void synui_render_widgets(syn_server_t *s)
     hit_set_panel(&w->hit, px, py, pw, ph);
     hit_set_rows(&w->hit, 12, top -18, pw - 24, row_h, WIDGET_ROW_COUNT);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->widgets_ui.bg)
         s->widgets_ui.bg = wlr_scene_rect_create(s->widgets_ui.tree,
                                                  pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->widgets_ui.bg, bg_color);
     if (!s->widgets_ui.accent)
         s->widgets_ui.accent = wlr_scene_rect_create(s->widgets_ui.tree,
                                                      pw, 2, accent);
@@ -1880,11 +1950,11 @@ void synui_render_widgets(syn_server_t *s)
     cairo_show_text(cr, "DESKTOP WIDGETS");
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+    set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, 18, 50);
     cairo_show_text(cr, "each one on its own \xc2\xb7 drag by the grip \xc2\xb7 Space is all-or-nothing");
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 58);
     cairo_line_to(cr, pw - 18, 58);
@@ -1903,21 +1973,20 @@ void synui_render_widgets(syn_server_t *s)
         /* The master row is a summary of the rows below it, so it is set apart
          * by a rule rather than left to read as one more widget. */
         if (i == WIDGET_ROW_ALL + 1) {
-            cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.45);
+            set_ink(cr, INK_RULE, 0.45);
             cairo_move_to(cr, 18, ry - 22);
             cairo_line_to(cr, pw - 18, ry - 22);
             cairo_stroke(cr);
         }
 
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, pad + 8, ry + 4);
         cairo_show_text(cr, widget_row_label(i));
 
         const char *val = widgets_row_value(s, i);
         if (strcmp(val, "off") == 0)
-            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            set_ink(cr, INK_DIM, 1.0);
         else
             set_accent(cr, 1.0);
         cairo_move_to(cr, 330, ry + 4);
@@ -1941,7 +2010,7 @@ void synui_render_widgets(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on");
     cairo_move_to(cr, 18, ph - 16);
@@ -2076,7 +2145,7 @@ static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
 
     int by = ph - 104;
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+    set_ink(cr, INK_TITLE, 1.0);
     cairo_move_to(cr, x, by);
     aimodel_fit(cr, am->dl.file, w - 60);
 
@@ -2097,7 +2166,7 @@ static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
     /* The bar, and the byte counts under it — a percentage alone says nothing
      * about whether a stalled download is 40 MB or 4 GB from finishing. */
     int bw = w, bh = 6, bx = x, byy = by + 10;
-    cairo_set_source_rgba(cr, 0.25, 0.25, 0.34, 1.0);
+    set_ink(cr, 0.21, 1.0);
     cairo_rectangle(cr, bx, byy, bw, bh);
     cairo_fill(cr);
 
@@ -2121,7 +2190,7 @@ static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
         snprintf(line, sizeof(line), "%s", got);
 
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.5, 0.5, 0.62, 1.0);
+    set_ink(cr, 0.49, 1.0);
     cairo_move_to(cr, x, byy + 20);
     cairo_show_text(cr, line);
 
@@ -2167,12 +2236,12 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
              * directory is full of them, and the daemon has one loaded, sends
              * them off to fix the wrong thing entirely. */
             cairo_set_font_size(cr, 13);
-            cairo_set_source_rgba(cr, 0.6, 0.6, 0.7, 1.0);
+            set_ink(cr, 0.61, 1.0);
             cairo_move_to(cr, x, y);
             cairo_show_text(cr, am->scan_err ? "Cannot read the model directory."
                                              : "No models installed.");
             cairo_set_font_size(cr, 12);
-            cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
+            set_ink(cr, 0.49, 1.0);
             cairo_move_to(cr, x, y + 24);
             /* The footer already prints the path and strerror(); this says what
              * it means, since a permission error here is a packaging fault and
@@ -2184,7 +2253,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             const syn_aimodel_entry_t *m = &am->models[am->selected];
 
             cairo_set_font_size(cr, 15);
-            cairo_set_source_rgba(cr, 0.92, 0.92, 0.98, 1.0);
+            set_ink(cr, 0.97, 1.0);
             cairo_move_to(cr, x, y);
             aimodel_fit(cr, m->name, w);
 
@@ -2256,10 +2325,10 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             for (int i = 0; i < 5; i++) {
                 int rry = y + 44 + i * 20;
                 cairo_set_font_size(cr, 12);
-                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                set_ink(cr, INK_DIM, 1.0);
                 cairo_move_to(cr, x, rry);
                 cairo_show_text(cr, rows[i].k);
-                cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+                set_ink(cr, INK_TITLE, 1.0);
                 cairo_move_to(cr, x + 70, rry);
                 aimodel_fit(cr, rows[i].v, w - 70);
             }
@@ -2300,7 +2369,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
              */
             int by = wy + 26;
             cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+            set_ink(cr, 0.40, 1.0);
             cairo_move_to(cr, x, by);
             cairo_show_text(cr, "ABOUT");
 
@@ -2346,7 +2415,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
                 if (!about[i].v || !about[i].v[0]) continue;
                 if (ly > body_bottom - 8) break;   /* never into the footer */
                 cairo_set_font_size(cr, 11);
-                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                set_ink(cr, INK_DIM, 1.0);
                 cairo_move_to(cr, x, ly);
                 cairo_show_text(cr, about[i].k);
                 cairo_set_font_size(cr, 12);
@@ -2367,7 +2436,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
                 cairo_show_text(cr, am->switching ? "loading \xe2\x80\xa6"
                                                   : "this is the model synapd is running");
             } else {
-                cairo_set_source_rgba(cr, 0.6, 0.6, 0.72, 1.0);
+                set_ink(cr, 0.61, 1.0);
                 cairo_move_to(cr, x, body_bottom + 22);
                 cairo_show_text(cr, "[ Enter: load this model ]");
             }
@@ -2378,7 +2447,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
 
     /* ── A repo ──────────────────────────────────────────────────────── */
     cairo_set_font_size(cr, 15);
-    cairo_set_source_rgba(cr, 0.92, 0.92, 0.98, 1.0);
+    set_ink(cr, 0.97, 1.0);
     cairo_move_to(cr, x, y);
     aimodel_fit(cr, c->name, w);
 
@@ -2413,10 +2482,10 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     for (int i = 0; i < 5; i++) {
         int ry = y + 46 + i * 20;
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, x, ry);
         cairo_show_text(cr, det[i].k);
-        cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+        set_ink(cr, INK_TITLE, 1.0);
         cairo_move_to(cr, x + 70, ry);
         aimodel_fit(cr, det[i].v, w - 70);
     }
@@ -2436,7 +2505,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
      */
     int ay = y + 154;
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+    set_ink(cr, 0.40, 1.0);
     cairo_move_to(cr, x, ay);
     cairo_show_text(cr, "ABOUT");
 
@@ -2472,7 +2541,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
     for (int i = 0; i < 2; i++) {
         if (!cabout[i].v[0]) continue;
         cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, x, cy);
         cairo_show_text(cr, cabout[i].k);
         cairo_set_font_size(cr, 12);
@@ -2487,13 +2556,13 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
      * from where that block actually ended rather than from a fixed offset. */
     int fy = cy + 14;
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+    set_ink(cr, 0.40, 1.0);
     cairo_move_to(cr, x, fy);
     cairo_show_text(cr, "QUANTISATION");
 
     if (c->detail == AIMODEL_DETAIL_BUSY || c->detail == AIMODEL_DETAIL_WANT) {
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, x, fy + 24);
         cairo_show_text(cr, "reading the repository \xe2\x80\xa6");
     } else if (c->detail == AIMODEL_DETAIL_FAIL) {
@@ -2503,7 +2572,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
         cairo_show_text(cr, "could not read the repository");
     } else if (c->n_files == 0) {
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, x, fy + 24);
         cairo_show_text(cr, "no single-file GGUF here");
     } else {
@@ -2533,8 +2602,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             }
 
             cairo_set_font_size(cr, 12);
-            cairo_set_source_rgba(cr, sel ? 0.95 : 0.72, sel ? 1.0 : 0.72,
-                                  sel ? 0.99 : 0.82, 1.0);
+            set_ink(cr, sel ? INK_STRONG : 0.74, 1.0);
             cairo_move_to(cr, x, ry);
             cairo_show_text(cr, c->files[i].quant[0] ? c->files[i].quant
                                                      : "\xe2\x80\x94");
@@ -2542,18 +2610,18 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
             char fsz[24];
             aimodel_size_str(c->files[i].bytes, fsz, sizeof(fsz));
             cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.5, 0.5, 0.62, 1.0);
+            set_ink(cr, 0.49, 1.0);
             cairo_move_to(cr, x + 90, ry);
             cairo_show_text(cr, fsz);
 
-            cairo_set_source_rgba(cr, 0.42, 0.42, 0.54, 1.0);
+            set_ink(cr, 0.40, 1.0);
             cairo_move_to(cr, x + 160, ry);
             aimodel_fit(cr, c->files[i].file, w - 160);
         }
 
         if (c->n_files > max_rows) {
             cairo_set_font_size(cr, 10);
-            cairo_set_source_rgba(cr, 0.4, 0.4, 0.5, 1.0);
+            set_ink(cr, 0.38, 1.0);
             char more[48];
             snprintf(more, sizeof(more), "+%d more", c->n_files - max_rows);
             cairo_move_to(cr, x + w - 60, fy);
@@ -2561,7 +2629,7 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
         }
 
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.6, 0.6, 0.72, 1.0);
+        set_ink(cr, 0.61, 1.0);
         cairo_move_to(cr, x, body_bottom + 22);
         cairo_show_text(cr, "[ Enter: download ]");
     }
@@ -2616,7 +2684,8 @@ void synui_render_aimodel(syn_server_t *s)
     hit_set_rows(&am->hit, list_x, list_top - 18, list_w, row_h, visible);
     hit_set_first(&am->hit, am->scroll);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->aimodel_ui.bg)
@@ -2624,6 +2693,7 @@ void synui_render_aimodel(syn_server_t *s)
                                                  pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->aimodel_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->aimodel_ui.bg, bg_color);
     if (!s->aimodel_ui.accent)
         s->aimodel_ui.accent = wlr_scene_rect_create(s->aimodel_ui.tree,
                                                      pw, 2, accent);
@@ -2661,12 +2731,12 @@ void synui_render_aimodel(syn_server_t *s)
     for (int i = 0; i < 3; i++) {
         int ry = 56 + i * 20;
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, pad, ry);
         cairo_show_text(cr, det[i].k);
 
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+        set_ink(cr, INK_TITLE, 1.0);
         cairo_move_to(cr, pad + 76, ry);
         cairo_show_text(cr, det[i].v);
     }
@@ -2689,14 +2759,14 @@ void synui_render_aimodel(syn_server_t *s)
         snprintf(samp, sizeof(samp), "\xe2\x80\x94");
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    set_ink(cr, INK_DIM, 1.0);
     cairo_move_to(cr, pad, 116);
     cairo_show_text(cr, "Sampling");
-    cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+    set_ink(cr, INK_TITLE, 1.0);
     cairo_move_to(cr, pad + 76, 116);
     cairo_show_text(cr, samp);
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 132);
     cairo_line_to(cr, pw - 18, 132);
@@ -2709,18 +2779,18 @@ void synui_render_aimodel(syn_server_t *s)
         cairo_rectangle(cr, list_x, 152, list_w, 24);
         cairo_fill(cr);
     }
-    cairo_set_source_rgba(cr, 0.5, 0.5, 0.62, 1.0);
+    set_ink(cr, 0.49, 1.0);
     cairo_move_to(cr, list_x + 8, 168);
     cairo_show_text(cr, "/");
 
-    cairo_set_source_rgba(cr, 0.85, 0.85, 0.92, 1.0);
+    set_ink(cr, 0.89, 1.0);
     cairo_move_to(cr, list_x + 22, 168);
     if (am->query[0]) {
         char q[AIMODEL_QUERY_MAX + 2];
         snprintf(q, sizeof(q), "%s%s", am->query, am->typing ? "_" : "");
         syn_show_text(cr, q);
     } else {
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        set_ink(cr, INK_DIM, 1.0);
         cairo_show_text(cr, am->typing ? "_" : "search huggingface");
     }
 
@@ -2733,7 +2803,7 @@ void synui_render_aimodel(syn_server_t *s)
         /* A section heading. */
         if (aimodel_slot_is_head(am, slot)) {
             cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.42, 0.42, 0.55, 1.0);
+            set_ink(cr, 0.40, 1.0);
             cairo_move_to(cr, list_x + 6, ry);
             if (slot == 0) {
                 cairo_show_text(cr, am->count ? "INSTALLED" : "INSTALLED \xc2\xb7 none");
@@ -2754,8 +2824,7 @@ void synui_render_aimodel(syn_server_t *s)
             cairo_fill(cr);
         }
 
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
 
         if (slot <= am->count) {
             /* An installed model: the filename, because that is what synapd
@@ -2768,7 +2837,7 @@ void synui_render_aimodel(syn_server_t *s)
             char sz[24];
             aimodel_size_str(am->models[i].bytes, sz, sizeof(sz));
             cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 1.0);
+            set_ink(cr, 0.49, 1.0);
             cairo_move_to(cr, list_x + list_w - 46, ry);
             cairo_show_text(cr, sz);
 
@@ -2815,7 +2884,7 @@ void synui_render_aimodel(syn_server_t *s)
      * drawn row look like the last row there is. */
     if (slots > AIMODEL_ROWS) {
         cairo_set_font_size(cr, 10);
-        cairo_set_source_rgba(cr, 0.4, 0.4, 0.5, 1.0);
+        set_ink(cr, 0.38, 1.0);
         char more[48];
         snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d",
                  am->scroll + 1, am->scroll + visible, slots);
@@ -2824,7 +2893,7 @@ void synui_render_aimodel(syn_server_t *s)
     }
 
     /* ── The info pane ───────────────────────────────────────────────── */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.4);
+    set_ink(cr, INK_RULE, 0.4);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, pane_x - 9, 148);
     cairo_line_to(cr, pane_x - 9, ph - 62);
@@ -2845,7 +2914,7 @@ void synui_render_aimodel(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 32);
     if (am->typing)
         cairo_show_text(cr, "type to search \xc2\xb7 Enter search \xc2\xb7 Esc cancel");
@@ -2905,12 +2974,14 @@ void synui_render_sound(syn_server_t *s)
     hit_set_panel(&snd->hit, px, py, pw, ph);
     hit_set_rows(&snd->hit, 12, top -16, pw - 24, row_h, SOUND_ROW_COUNT);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->sound_ui.bg)
         s->sound_ui.bg = wlr_scene_rect_create(s->sound_ui.tree,
                                                pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->sound_ui.bg, bg_color);
     if (!s->sound_ui.accent)
         s->sound_ui.accent = wlr_scene_rect_create(s->sound_ui.tree,
                                                    pw, 2, accent);
@@ -2932,16 +3003,16 @@ void synui_render_sound(syn_server_t *s)
      * for a setting that is fighting you. */
     cairo_set_font_size(cr, 12);
     if (!snd->enabled) {
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 18, 50);
         cairo_show_text(cr, "silent \xc2\xb7 Space turns event sounds on");
     } else {
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.68, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, 18, 50);
         cairo_show_text(cr, "t plays the selected sound without enabling it");
     }
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 58);
     cairo_line_to(cr, pw - 18, 58);
@@ -2961,7 +3032,7 @@ void synui_render_sound(syn_server_t *s)
         }
 
         if (i == SOUND_ROW_EVENT) {
-            cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.45);
+            set_ink(cr, INK_RULE, 0.45);
             cairo_move_to(cr, 18, ry - 20);
             cairo_line_to(cr, pw - 18, ry - 20);
             cairo_stroke(cr);
@@ -3003,8 +3074,7 @@ void synui_render_sound(syn_server_t *s)
         }
 
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, pad + 8, ry + 4);
         cairo_show_text(cr, label);
 
@@ -3012,20 +3082,20 @@ void synui_render_sound(syn_server_t *s)
             draw_slider(cr, 300, ry - 9, 180, 12, snd->volume / 100.0f,
                         sel, dimmed);
             cairo_set_font_size(cr, 12);
-            if (dimmed) cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            if (dimmed) set_ink(cr, INK_DIM, 1.0);
             else        set_accent(cr, 1.0);
             cairo_move_to(cr, 492, ry + 4);
             cairo_show_text(cr, value);
         } else {
             if ((is_event && dimmed) || !on)
-                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                set_ink(cr, INK_DIM, 1.0);
             else
                 set_accent(cr, 1.0);
             /* The theme is a name, not a state, so it is never greyed as "off" —
              * unless it is not a theme at all, which is worth shouting about. */
             if (i == SOUND_ROW_THEME) {
                 if (sound_theme_installed(snd->theme))
-                    cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+                    set_ink(cr, INK_BODY, 1.0);
                 else
                     cairo_set_source_rgba(cr, 0.85, 0.55, 0.35, 1.0);
             }
@@ -3045,7 +3115,7 @@ void synui_render_sound(syn_server_t *s)
             else if (picked)
                 cairo_set_source_rgba(cr, 0.72, 0.78, 0.92, 1.0);
             else
-                cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                set_ink(cr, INK_DIM, 1.0);
 
             cairo_move_to(cr, 350, ry + 4);
             cairo_show_text(cr, missing ? "not in this theme" : sample);
@@ -3060,7 +3130,7 @@ void synui_render_sound(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 34);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Enter toggle \xc2\xb7 Left/Right off/on \xc2\xb7 [ ] pick sound");
     cairo_move_to(cr, 18, ph - 16);
@@ -3099,11 +3169,13 @@ void synui_render_clock(syn_server_t *s)
     hit_set_panel(&c->hit, px, py, pw, ph);
     hit_set_rows(&c->hit, 12, top - 18, pw - 24, row_h, CLOCK_SETTING_ROWS);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->clock_ui.bg)
         s->clock_ui.bg = wlr_scene_rect_create(s->clock_ui.tree, pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->clock_ui.bg, bg_color);
     if (!s->clock_ui.accent)
         s->clock_ui.accent = wlr_scene_rect_create(s->clock_ui.tree, pw, 2, accent);
         else
@@ -3133,7 +3205,7 @@ void synui_render_clock(syn_server_t *s)
     snprintf(tzline, sizeof(tzline), "system zone \xc2\xb7 %s", c->tz);
     cairo_show_text(cr, tzline);
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, pad, 100);
     cairo_line_to(cr, pw - pad, 100);
@@ -3148,8 +3220,7 @@ void synui_render_clock(syn_server_t *s)
             cairo_fill(cr);
         }
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, pad + 8, ry + 4);
         cairo_show_text(cr, clock_row_label(i));
 
@@ -3187,7 +3258,7 @@ void synui_render_clock(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, pad, ph - 18);
     cairo_show_text(cr, "Up/Down select \xc2\xb7 Space toggle \xc2\xb7 c calendar \xc2\xb7 Esc close");
 
@@ -3234,11 +3305,13 @@ void synui_render_calendar(syn_server_t *s)
     hit_set_panel(&cal->hit, px, py, pw, ph);
     hit_set_rows(&cal->hit, grid_x, grid_y + 12, 7 * cell_w, cell_h, 6);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.96f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->cal_ui.bg)
         s->cal_ui.bg = wlr_scene_rect_create(s->cal_ui.tree, pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->cal_ui.bg, bg_color);
     if (!s->cal_ui.accent)
         s->cal_ui.accent = wlr_scene_rect_create(s->cal_ui.tree, pw, 2, accent);
         else
@@ -3311,7 +3384,7 @@ void synui_render_calendar(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 14, ph - 12);
     cairo_show_text(cr,
         "\xe2\x86\x90\xe2\x86\x92 day \xc2\xb7 PgUp/PgDn month \xc2\xb7 t today \xc2\xb7 Esc");
@@ -3373,12 +3446,14 @@ void synui_render_ctlpanel(syn_server_t *s)
                  CTL_ROW_H, CTL_CAT_COUNT);
     hit_set_panel(&cp->hit_items, px, py, pw, ph);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->ctlpanel_ui.bg)
         s->ctlpanel_ui.bg = wlr_scene_rect_create(s->ctlpanel_ui.tree,
                                                   pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->ctlpanel_ui.bg, bg_color);
     if (!s->ctlpanel_ui.accent)
         s->ctlpanel_ui.accent = wlr_scene_rect_create(s->ctlpanel_ui.tree,
                                                       pw, 2, accent);
@@ -3401,13 +3476,13 @@ void synui_render_ctlpanel(syn_server_t *s)
      * highlight in the sidebar, which is exactly the thing that goes quiet when
      * focus moves into the rows. */
     cairo_set_font_size(cr, 13);
-    cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+    set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, CTL_COL_RIGHT, 30);
     cairo_show_text(cr, "\xe2\x80\xba  ");
-    cairo_set_source_rgba(cr, 0.82, 0.82, 0.90, 1.0);
+    set_ink(cr, INK_TITLE, 1.0);
     cairo_show_text(cr, ctlpanel_cat_name(cp->cat));
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, 44);
     cairo_line_to(cr, pw - 18, 44);
@@ -3415,7 +3490,7 @@ void synui_render_ctlpanel(syn_server_t *s)
 
     /* Column headings */
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    set_ink(cr, INK_DIM, 1.0);
     cairo_move_to(cr, 18, 70);
     cairo_show_text(cr, "CATEGORIES");
     cairo_move_to(cr, CTL_COL_RIGHT, 70);
@@ -3423,7 +3498,7 @@ void synui_render_ctlpanel(syn_server_t *s)
                                                      : "SETTINGS");
 
     /* Divider between the columns */
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.35);
+    set_ink(cr, INK_RULE, 0.35);
     cairo_move_to(cr, CTL_SIDEBAR, 56);
     cairo_line_to(cr, CTL_SIDEBAR, ph - CTL_FOOTER + 8);
     cairo_stroke(cr);
@@ -3444,7 +3519,7 @@ void synui_render_ctlpanel(syn_server_t *s)
 
         cairo_set_font_size(cr, 14);
         if (sel) cairo_set_source_rgba(cr, 0.95, 1.0, 0.99, 1.0);
-        else     cairo_set_source_rgba(cr, 0.70, 0.70, 0.80, 1.0);
+        else     set_ink(cr, INK_MUTED, 1.0);
         cairo_move_to(cr, 18, ry);
         cairo_show_text(cr, ctlpanel_cat_name(i));
 
@@ -3479,7 +3554,7 @@ void synui_render_ctlpanel(syn_server_t *s)
              * combo in the default binds is "XF86MonBrightnessDown", which ran
              * straight into the description at 172. The pane is wide enough now
              * that there is no reason to keep the collision. */
-            cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+            set_ink(cr, INK_BODY, 1.0);
             draw_clipped(cr, CTL_COL_RIGHT + 200, ry,
                          CTL_SETTING_V - (CTL_COL_RIGHT + 200),
                          sc[first + i].desc);
@@ -3490,7 +3565,7 @@ void synui_render_ctlpanel(syn_server_t *s)
          * have. */
         if (n > CTL_SHORTCUT_ROWS) {
             cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+            set_ink(cr, INK_DIM, 0.9);
             char more[64];
             snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
                      first + 1,
@@ -3526,8 +3601,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             }
 
             cairo_set_font_size(cr, 14);
-            cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                                  sel ? 0.99 : 0.86, 1.0);
+            set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
             cairo_move_to(cr, CTL_COL_RIGHT, ry);
             cairo_show_text(cr, ctlpanel_row_label(row));
 
@@ -3546,7 +3620,7 @@ void synui_render_ctlpanel(syn_server_t *s)
 
             if (leads_away) {
                 cairo_set_font_size(cr, 13);
-                cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+                set_ink(cr, INK_LABEL, 1.0);
                 draw_right(cr, CTL_SETTING_V, ry, "\xe2\x80\xba");
                 vx -= 18;
             }
@@ -3563,7 +3637,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             int choice = (kind == CTL_KIND_CHOICE && value[0]);
             if (choice) {
                 cairo_set_font_size(cr, 13);
-                cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+                set_ink(cr, INK_LABEL, 1.0);
                 draw_right(cr, CTL_SETTING_V, ry, "\xe2\x80\xba");
                 vx -= 14;
             }
@@ -3572,7 +3646,7 @@ void synui_render_ctlpanel(syn_server_t *s)
                 /* "on" reads as live, everything else (off/n/a) as inert. */
                 if (strcmp(value, "off") == 0 || strcmp(value, "n/a") == 0 ||
                     strcmp(value, "none") == 0)
-                    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+                    set_ink(cr, INK_DIM, 1.0);
                 else
                     set_accent(cr, 1.0);
                 cairo_set_font_size(cr, 13);
@@ -3583,7 +3657,7 @@ void synui_render_ctlpanel(syn_server_t *s)
                      * tracks a name that changes length as the row is cycled. */
                     cairo_text_extents_t ext;
                     cairo_text_extents(cr, value, &ext);
-                    cairo_set_source_rgba(cr, 0.55, 0.55, 0.66, 1.0);
+                    set_ink(cr, INK_LABEL, 1.0);
                     draw_right(cr, vx - ext.width - 6, ry, "\xe2\x80\xb9");
                 }
             }
@@ -3619,7 +3693,7 @@ void synui_render_ctlpanel(syn_server_t *s)
         hint = "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 Left or Esc back \xc2\xb7 Tab column";
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 18);
     cairo_show_text(cr, hint);
 
@@ -3698,12 +3772,14 @@ void synui_render_thememgr(syn_server_t *s)
                  pw - 2 * (THM_PAD - 10), THM_ROW_H, rows);
     hit_set_first(&tm->hit, first);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->thememgr_ui.bg)
         s->thememgr_ui.bg = wlr_scene_rect_create(s->thememgr_ui.tree,
                                                   pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->thememgr_ui.bg, bg_color);
     if (!s->thememgr_ui.accent)
         s->thememgr_ui.accent = wlr_scene_rect_create(s->thememgr_ui.tree,
                                                       pw, 2, accent);
@@ -3720,7 +3796,7 @@ void synui_render_thememgr(syn_server_t *s)
     cairo_move_to(cr, THM_PAD, 34);
     cairo_show_text(cr, "THEME MANAGER");
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, THM_PAD, 50);
     cairo_line_to(cr, pw - THM_PAD, 50);
@@ -3751,7 +3827,7 @@ void synui_render_thememgr(syn_server_t *s)
         cairo_rectangle(cr, THM_PAD + THM_SWATCH / 2.0, ry - 24,
                         THM_SWATCH / 2.0, THM_SWATCH);
         cairo_fill(cr);
-        cairo_set_source_rgba(cr, 0.5, 0.5, 0.6, 0.8);
+        set_ink(cr, 0.49, 0.8);
         cairo_set_line_width(cr, 1);
         cairo_rectangle(cr, THM_PAD, ry - 24, THM_SWATCH, THM_SWATCH);
         cairo_stroke(cr);
@@ -3759,8 +3835,7 @@ void synui_render_thememgr(syn_server_t *s)
         double tx = THM_PAD + THM_SWATCH + 16;
 
         cairo_set_font_size(cr, 15);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.80, sel ? 1.0 : 0.80,
-                              sel ? 0.99 : 0.88, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_TITLE, 1.0);
         cairo_move_to(cr, tx, ry - 6);
         cairo_show_text(cr, theme_name((syn_theme_t)i));
 
@@ -3771,7 +3846,7 @@ void synui_render_thememgr(syn_server_t *s)
         }
 
         cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, tx, ry + 12);
         cairo_show_text(cr, thememgr_blurb((syn_theme_t)i));
     }
@@ -3780,7 +3855,7 @@ void synui_render_thememgr(syn_server_t *s)
      * whole list, and the themes off-screen may as well not exist. */
     if (rows < SYN_THEME_COUNT) {
         cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 0.9);
+        set_ink(cr, INK_LABEL, 0.9);
         if (first > 0)
             draw_right(cr, pw - THM_PAD, THM_TOP - 32, "\xe2\x96\xb2");
         if (first + rows < SYN_THEME_COUNT)
@@ -3804,11 +3879,11 @@ void synui_render_thememgr(syn_server_t *s)
                          (int)(s->config.active_opacity * 100 + 0.5f));
         else    snprintf(lbl, sizeof lbl, "Transparency  off");
         if (on) set_accent(cr, 0.95);
-        else    cairo_set_source_rgba(cr, 0.55, 0.55, 0.65, 0.9);
+        else    set_ink(cr, INK_LABEL, 0.9);
         cairo_move_to(cr, tx0, sy - 8);
         cairo_show_text(cr, lbl);
 
-        cairo_set_source_rgba(cr, 0.22, 0.22, 0.30, 0.95);
+        set_ink(cr, 0.18, 0.95);
         cairo_rectangle(cr, tx0, sy, tw, 6);
         cairo_fill(cr);
         if (on) {
@@ -3829,7 +3904,7 @@ void synui_render_thememgr(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, THM_PAD, ph - 14);
     cairo_show_text(cr,
         "Up/Down theme \xc2\xb7 \xe2\x86\x90/\xe2\x86\x92 opacity \xc2\xb7 T transparency \xc2\xb7 Enter apply \xc2\xb7 Esc");
@@ -3877,13 +3952,15 @@ void synui_render_clipboard(syn_server_t *s)
                  pw - 2 * (CLIP_PAD - 8), CLIP_ROW_H,
                  c->count < CLIP_ROWS ? c->count : CLIP_ROWS);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->clip_ui.bg)
         s->clip_ui.bg = wlr_scene_rect_create(s->clip_ui.tree, pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->clip_ui.bg, pw, ph);   /* height tracks the list */
+    wlr_scene_rect_set_color(s->clip_ui.bg, bg_color);
     if (!s->clip_ui.accent)
         s->clip_ui.accent = wlr_scene_rect_create(s->clip_ui.tree, pw, 2, accent);
         else
@@ -3899,7 +3976,7 @@ void synui_render_clipboard(syn_server_t *s)
     cairo_move_to(cr, CLIP_PAD, 30);
     cairo_show_text(cr, "CLIPBOARD");
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, CLIP_PAD, 44);
     cairo_line_to(cr, pw - CLIP_PAD, 44);
@@ -3912,7 +3989,7 @@ void synui_render_clipboard(syn_server_t *s)
 
     if (c->count == 0) {
         cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, CLIP_PAD, CLIP_TOP);
         cairo_show_text(cr, "Nothing copied yet");
     }
@@ -3942,13 +4019,12 @@ void synui_render_clipboard(syn_server_t *s)
         line[news_utf8_trim(line, strlen(line))] = '\0';
 
         cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         draw_clipped(cr, CLIP_PAD, ry, pw - 2 * CLIP_PAD - 40, line);
     }
 
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     if (c->count > CLIP_ROWS) {
         char more[64];
         snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d", first + 1,
@@ -3959,7 +4035,7 @@ void synui_render_clipboard(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, CLIP_PAD, ph - 14);
     cairo_show_text(cr, "Enter copy \xc2\xb7 Del clear all \xc2\xb7 Esc close");
 
@@ -4067,7 +4143,7 @@ void synui_render_notifs(syn_server_t *s)
         /* The card. Each toast paints its own background: they are separate
          * rounded slabs with gaps between them, which one backing rect for the
          * whole stack could not express. */
-        cairo_set_source_rgba(cr, 0.06, 0.06, 0.12, 0.96);
+        set_ink(cr, 0.00, 0.96);
         cairo_rectangle(cr, 0, y, box.width, h);
         cairo_fill(cr);
 
@@ -4085,12 +4161,12 @@ void synui_render_notifs(syn_server_t *s)
         }
 
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
+        set_ink(cr, INK_STRONG, 1.0);
         draw_clipped(cr, NOTIF_PAD, y + 40, box.width - 2 * NOTIF_PAD, t->summary);
 
         if (t->body[0]) {
             cairo_set_font_size(cr, 12);
-            cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+            set_ink(cr, INK_BODY, 1.0);
             draw_clipped(cr, NOTIF_PAD, y + 62, box.width - 2 * NOTIF_PAD, t->body);
         }
 
@@ -4148,13 +4224,15 @@ void synui_render_bt(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->bt_ui.tree->node);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.94f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->bt_ui.bg)
         s->bt_ui.bg = wlr_scene_rect_create(s->bt_ui.tree, pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->bt_ui.bg, pw, ph);   /* height tracks the list */
+    wlr_scene_rect_set_color(s->bt_ui.bg, bg_color);
     if (!s->bt_ui.accent)
         s->bt_ui.accent = wlr_scene_rect_create(s->bt_ui.tree, pw, 2, accent);
         else
@@ -4170,7 +4248,7 @@ void synui_render_bt(syn_server_t *s)
     cairo_move_to(cr, BT_PAD, 30);
     cairo_show_text(cr, "BLUETOOTH");
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, BT_PAD, 44);
     cairo_line_to(cr, pw - BT_PAD, 44);
@@ -4199,13 +4277,13 @@ void synui_render_bt(syn_server_t *s)
      * showing the device list underneath would invite acting on it. */
     if (b->ask_kind != BT_ASK_NONE) {
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, 0.95, 0.95, 1.0, 1.0);
+        set_ink(cr, INK_STRONG, 1.0);
         cairo_move_to(cr, BT_PAD, BT_TOP + 6);
         cairo_show_text(cr, b->ask_dev[0] ? b->ask_dev : "A device");
 
         char l2[128];
         cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, 0.78, 0.78, 0.86, 1.0);
+        set_ink(cr, INK_BODY, 1.0);
         cairo_move_to(cr, BT_PAD, BT_TOP + 32);
 
         if (b->ask_kind == BT_ASK_CONFIRM) {
@@ -4237,7 +4315,7 @@ void synui_render_bt(syn_server_t *s)
 
     if (shown == 0) {
         cairo_set_font_size(cr, 13);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+        set_ink(cr, INK_DIM, 1.0);
         cairo_move_to(cr, BT_PAD, BT_TOP);
         if (!b->powered) {
             cairo_show_text(cr, "Radio is off \xc2\xb7 press o");
@@ -4270,8 +4348,7 @@ void synui_render_bt(syn_server_t *s)
         char label[128];
         bt_dev_label(d, label, sizeof(label));
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.78, sel ? 1.0 : 0.78,
-                              sel ? 0.99 : 0.86, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
         draw_clipped(cr, BT_PAD, ry, 250, label);
 
         double rgb[3];
@@ -4284,7 +4361,7 @@ void synui_render_bt(syn_server_t *s)
         }
         if (d->trusted) {
             cairo_set_font_size(cr, 11);
-            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            set_ink(cr, INK_DIM, 1.0);
             cairo_move_to(cr, 372, ry);
             cairo_show_text(cr, "trusted");
         }
@@ -4294,13 +4371,13 @@ void synui_render_bt(syn_server_t *s)
         else if (d->has_rssi)     snprintf(right, sizeof(right), "%d dBm", d->rssi);
         if (right[0]) {
             cairo_set_font_size(cr, 12);
-            cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+            set_ink(cr, INK_DIM, 1.0);
             draw_right(cr, pw - BT_PAD, ry, right);
         }
     }
 
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     if (shown > BT_ROWS) {
         char more[64];
         snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d", first + 1,
@@ -4316,7 +4393,7 @@ void synui_render_bt(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, BT_PAD, ph - 14);
     cairo_show_text(cr, b->show_all
         ? "Enter connect \xc2\xb7 p pair \xc2\xb7 t trust \xc2\xb7 r forget \xc2\xb7 "
@@ -4347,7 +4424,7 @@ void synui_render_bt(syn_server_t *s)
 static void draw_bar(cairo_t *cr, double x, double y, double w, double h,
                      double frac, double r, double g, double b)
 {
-    cairo_set_source_rgba(cr, 0.16, 0.16, 0.22, 1.0);
+    set_ink(cr, 0.11, 1.0);
     cairo_rectangle(cr, x, y, w, h);
     cairo_fill(cr);
 
@@ -4447,7 +4524,8 @@ void synui_render_taskmgr(syn_server_t *s)
      * that alpha the wallpaper (the Matrix one animates) and the welcome
      * screen's menu text ghost straight through the rows and the small type
      * stops being readable. */
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.985f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->taskmgr_ui.bg)
@@ -4455,6 +4533,7 @@ void synui_render_taskmgr(syn_server_t *s)
                                                  pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->taskmgr_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->taskmgr_ui.bg, bg_color);
     if (!s->taskmgr_ui.accent)
         s->taskmgr_ui.accent = wlr_scene_rect_create(s->taskmgr_ui.tree,
                                                      pw, 2, accent);
@@ -4477,7 +4556,7 @@ void synui_render_taskmgr(syn_server_t *s)
     snprintf(sub, sizeof(sub), "%d procs \xc2\xb7 sort: %s%s",
              t->n, taskmgr_sort_label(t->sort), t->own_only ? " \xc2\xb7 mine" : "");
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    set_ink(cr, INK_DIM, 1.0);
     draw_right(cr, pw - 18, 30, sub);
 
     /* System overview */
@@ -4530,7 +4609,7 @@ void synui_render_taskmgr(syn_server_t *s)
         }
     }
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, 18, table_top - 26);
     cairo_line_to(cr, pw - 18, table_top - 26);
@@ -4538,7 +4617,7 @@ void synui_render_taskmgr(syn_server_t *s)
 
     /* Column headings */
     cairo_set_font_size(cr, 11);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    set_ink(cr, INK_DIM, 1.0);
     cairo_move_to(cr, TM_COL_PID, table_top - 8);
     cairo_show_text(cr, "PID");
     cairo_move_to(cr, TM_COL_NAME, table_top - 8);
@@ -4569,8 +4648,7 @@ void synui_render_taskmgr(syn_server_t *s)
         cairo_move_to(cr, TM_COL_PID, ry);
         cairo_show_text(cr, txt);
 
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.80, sel ? 1.00 : 0.84,
-                              sel ? 0.99 : 0.90, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_TITLE, 1.0);
         cairo_move_to(cr, TM_COL_NAME, ry);
         cairo_show_text(cr, p->name);
 
@@ -4628,7 +4706,7 @@ void synui_render_taskmgr(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     cairo_show_text(cr, "j/k move \xc2\xb7 c/m/g/p sort \xc2\xb7 u mine \xc2\xb7 "
                         "x term \xc2\xb7 X kill \xc2\xb7 r refresh \xc2\xb7 Esc close");
@@ -4719,13 +4797,15 @@ void synui_render_news(syn_server_t *s)
     /* As opaque as the task manager, and for the same reason: this is a dense
      * table of small type, and at 0.94 the (animated) wallpaper reads through
      * the headlines. */
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.985f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.985f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->news_ui.bg)
         s->news_ui.bg = wlr_scene_rect_create(s->news_ui.tree, pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->news_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->news_ui.bg, bg_color);
     if (!s->news_ui.accent)
         s->news_ui.accent = wlr_scene_rect_create(s->news_ui.tree, pw, 2, accent);
         else
@@ -4754,7 +4834,7 @@ void synui_render_news(syn_server_t *s)
              n->fetching ? "refreshing\xe2\x80\xa6"
                          : (n->updated ? age : "never fetched"));
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 1.0);
+    set_ink(cr, INK_DIM, 1.0);
     draw_right(cr, pw - 18, 30, sub);
 
     /* Search box, in place of the separator, while '/' is active. */
@@ -4769,7 +4849,7 @@ void synui_render_news(syn_server_t *s)
         cairo_move_to(cr, 18, 56);
         cairo_show_text(cr, q);
     } else {
-        cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+        set_ink(cr, INK_RULE, 0.5);
         cairo_set_line_width(cr, 1);
         cairo_move_to(cr, 18, 50);
         cairo_line_to(cr, pw - 18, 50);
@@ -4866,7 +4946,7 @@ void synui_render_news(syn_server_t *s)
         char pos[32];
         snprintf(pos, sizeof(pos), "%d/%d", n->selected + 1, n->n_view);
         cairo_set_font_size(cr, 11);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        set_ink(cr, INK_DIM, 0.9);
         draw_right(cr, pw - 18, ph - 44, pos);
     }
 
@@ -4878,7 +4958,7 @@ void synui_render_news(syn_server_t *s)
     }
 
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
     cairo_show_text(cr, n->searching
         ? "type to filter \xc2\xb7 Enter keep \xc2\xb7 Esc clear"
@@ -4920,12 +5000,14 @@ void synui_render_dockmenu(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->dockmenu_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->dockmenu_ui.tree->node);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.96f);
     if (!s->dockmenu_ui.bg)
         s->dockmenu_ui.bg = wlr_scene_rect_create(s->dockmenu_ui.tree,
                                                   pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->dockmenu_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->dockmenu_ui.bg, bg_color);
 
     cairo_t *cr;
     struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
@@ -4947,8 +5029,7 @@ void synui_render_dockmenu(syn_server_t *s)
             cairo_fill(cr);
         }
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.82, sel ? 1.0 : 0.82,
-                              sel ? 0.99 : 0.90, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_TITLE, 1.0);
         cairo_move_to(cr, 14, iy + 20);
         cairo_show_text(cr, dockact_label(s->dockmenu.actions[i]));
     }
@@ -4971,12 +5052,14 @@ void synui_render_deskmenu(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->deskmenu_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->deskmenu_ui.tree->node);
 
-    float bg_color[4] = { 0.06f, 0.06f, 0.12f, 0.96f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.96f);
     if (!s->deskmenu_ui.bg)
         s->deskmenu_ui.bg = wlr_scene_rect_create(s->deskmenu_ui.tree,
                                                   pw, ph, bg_color);
     else
         wlr_scene_rect_set_size(s->deskmenu_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->deskmenu_ui.bg, bg_color);
 
     cairo_t *cr;
     struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
@@ -5008,8 +5091,7 @@ void synui_render_deskmenu(syn_server_t *s)
             cairo_fill(cr);
         }
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, sel ? 0.95 : 0.82, sel ? 1.0 : 0.82,
-                              sel ? 0.99 : 0.90, 1.0);
+        set_ink(cr, sel ? INK_STRONG : INK_TITLE, 1.0);
         cairo_move_to(cr, 14, iy + 20);
         cairo_show_text(cr, deskact_label(s->deskmenu.actions[i]));
 
@@ -5119,7 +5201,7 @@ static void deskicon_draw_cell(cairo_t *cr, const syn_deskicon_t *ic,
     cairo_move_to(cr, cx + (SYN_DESKICON_W - ext.width) / 2.0 + 1,
                   cy + 74 + 1);
     cairo_show_text(cr, label);
-    cairo_set_source_rgba(cr, 0.94, 0.94, 0.98, 1.0);
+    set_ink(cr, INK_STRONG, 1.0);
     cairo_move_to(cr, cx + (SYN_DESKICON_W - ext.width) / 2.0, cy + 74);
     cairo_show_text(cr, label);
 }
@@ -5529,7 +5611,8 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
     wlr_scene_node_set_enabled(&s->alttab_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->alttab_ui.tree->node);
 
-    float bg_color[4] = { 0.05f, 0.05f, 0.10f, 0.93f };
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.93f);
     float accent[4] = { g_panel_accent[0], g_panel_accent[1],
                         g_panel_accent[2], 1.0f };
     if (!s->alttab_ui.bg) {
@@ -5541,6 +5624,7 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
          * window count between one press and the next. */
         wlr_scene_rect_set_size(s->alttab_ui.bg, pw, ph);
     }
+    wlr_scene_rect_set_color(s->alttab_ui.bg, bg_color);
     if (!s->alttab_ui.accent)
         s->alttab_ui.accent = wlr_scene_rect_create(s->alttab_ui.tree, pw, 2,
                                                     accent);
@@ -5564,11 +5648,11 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
         snprintf(count, sizeof(count), "%d\xe2\x80\x93%d of %d",
                  first + 1, first + shown, n);
         cairo_set_font_size(cr, 12);
-        cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+        set_ink(cr, INK_DIM, 0.9);
         draw_right(cr, pw - ATB_PAD, 30, count);
     }
 
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.4, 0.5);
+    set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
     cairo_move_to(cr, ATB_PAD, 38);
     cairo_line_to(cr, pw - ATB_PAD, 38);
@@ -5676,7 +5760,7 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
         }
 
         if (cur) cairo_set_source_rgba(cr, 0.97, 1.00, 1.00, 1.0);
-        else     cairo_set_source_rgba(cr, 0.74, 0.74, 0.82, 1.0);
+        else     set_ink(cr, 0.76, 1.0);
         double lx = tx + ATB_INSET + ATB_BADGE + 6;
         draw_clipped(cr, lx, ly, lr - lx, label);
     }
@@ -5713,7 +5797,7 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
     draw_clipped(cr, ATB_PAD, ph - 13,
                  pw - 2 * ATB_PAD - hext.width - 24, fbuf);
 
-    cairo_set_source_rgba(cr, 0.45, 0.45, 0.55, 0.9);
+    set_ink(cr, INK_DIM, 0.9);
     draw_right(cr, pw - ATB_PAD, ph - 13, hint);
 
     cairo_destroy(cr);
