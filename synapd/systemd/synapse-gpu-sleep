@@ -47,9 +47,82 @@
 
 set -u
 
-[ "${1:-}" = "pre" ] || exit 0
-
 log() { logger -t synapse-gpu-sleep "$@"; echo "synapse-gpu-sleep: $*" >&2; }
+
+# ── Connectors that do not come back ────────────────────────────────────────
+#
+# Separate failure from the freezer one above, same end state. On 2026-08-06
+# this box resumed CLEANLY — freeze 0.001s, nothing refusing, no modeset errors
+# anywhere in the window — and DP-3, the primary 2560x1440 144Hz panel, was
+# simply not there: `status=disconnected`, `enabled=enabled`, dpms On, empty
+# modes, and a ZERO-BYTE EDID. A zero-byte EDID is the tell that separates this
+# from the freezer bug: there is no sink answering on the AUX channel at all,
+# rather than a head scanning out a stale framebuffer. The other two outputs
+# came back fine, and the same panel misbehaves the same way on stock Arch, so
+# the monitor (a G-Sync module panel) is not re-enumerating after the source
+# drops the DP link.
+#
+# What we can do about it from here is ask the connector to probe again, at
+# resume, while the link is still settling. HONEST LIMIT: a forced probe run by
+# hand HOURS later found no sink, and only a reboot recovered that head. This
+# has not yet been shown to rescue a panel that is already fully wedged — the
+# bet is that a prompt retry catches the window where the sink is still coming
+# back, which a human at a terminal never can. It costs a few seconds of resume
+# on a machine that lost a display, and nothing at all on one that did not.
+#
+# A successful probe needs no further help: the sink appearing raises a hotplug
+# uevent and the compositor picks the output up on its own.
+STATE=/run/synapse-gpu-sleep.connected
+
+_record_connected() {
+    : > "$STATE" 2>/dev/null || return 0
+    local c
+    for c in /sys/class/drm/card*-*/status; do
+        [ -r "$c" ] || continue
+        [ "$(cat "$c" 2>/dev/null)" = connected ] || continue
+        dirname "$c" >> "$STATE"
+    done
+}
+
+_reprobe_missing() {
+    [ -r "$STATE" ] || return 0
+
+    local d missing="" tries
+    while read -r d; do
+        [ -n "$d" ] && [ -r "$d/status" ] || continue
+        [ "$(cat "$d/status" 2>/dev/null)" = connected ] && continue
+        missing="$missing $d"
+    done < "$STATE"
+    rm -f "$STATE"
+
+    [ -n "$missing" ] || return 0
+
+    for d in $missing; do
+        log "$(basename "$d") was connected before suspend and is not now — re-probing"
+        # Five attempts a second apart. Bounded deliberately: this runs inside
+        # systemd-sleep's post hook, which resume waits on.
+        for tries in 1 2 3 4 5; do
+            # Braced: a redirection that fails reports before `||` can catch
+            # it, so without this a non-writable connector spews one line per
+            # attempt into the resume log.
+            { echo detect > "$d/status"; } 2>/dev/null || true
+            sleep 1
+            if [ "$(cat "$d/status" 2>/dev/null)" = connected ]; then
+                log "$(basename "$d") came back after $tries probe(s)"
+                break
+            fi
+        done
+        if [ "$(cat "$d/status" 2>/dev/null)" != connected ]; then
+            log "$(basename "$d") still has no sink after 5 probes (EDID $(stat -c%s "$d/edid" 2>/dev/null || echo ?) bytes) — the panel is not re-enumerating; a power cycle of the monitor, or a reboot, is the only recovery"
+        fi
+    done
+}
+
+case "${1:-}" in
+    pre)  _record_connected ;;
+    post) _reprobe_missing; exit 0 ;;
+    *)    exit 0 ;;
+esac
 
 # /proc/PID/comm is truncated to 15 characters, so "Plex Transcoder" is exactly
 # at the limit and longer names must be matched by their truncation. pgrep -x

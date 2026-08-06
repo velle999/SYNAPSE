@@ -42,13 +42,60 @@ _synapd_drop_shadow() {
     fi
 }
 
+# ── NVIDIA sleep units ───────────────────────────────────────────────────────
+#
+# nvidia-utils ships nvidia-{suspend,resume,hibernate}.service disabled. They
+# are what run nvidia-sleep.sh, which does the VRAM save on suspend and the
+# restore on resume. The system-sleep hook nvidia-utils also ships implements
+# only `post` — there is no `pre` case in it — so with the units off, the
+# SUSPEND half of that pair never happens at all.
+#
+# Harmless while NVreg_PreserveVideoMemoryAllocations is unset. Set the param
+# with the units off and the driver is told to dump VRAM by machinery that never
+# runs, and the GPU resumes with lost framebuffers: velle's box, black and
+# unrecoverable, 2026-07-17; and again on 2026-08-06 with the primary display
+# dead after a resume, connector `disconnected` on a 0-byte EDID.
+#
+# It regressed because the 2026-07-17 fix was a live `systemctl enable` and
+# nothing else. The param lives in a hand-written /etc/modprobe.d file owned by
+# no package, so the 2026-07-31 reinstall restored the param from backup and not
+# the enable — recreating the bad combination on a box that had already been
+# fixed once. syn-install now enables these on new installs; this is the half
+# that reaches the ones already out there.
+#
+# Gated on the driver actually being present, so this is a no-op on AMD/Intel.
+# Never disables anything: if a unit is masked or the admin turned it off on
+# purpose, `systemctl enable` on a masked unit fails and we leave it be.
+_synapd_enable_nvidia_sleep() {
+    [ -e /usr/bin/nvidia-sleep.sh ] || return 0
+
+    local u missing=""
+    for u in nvidia-suspend nvidia-resume nvidia-hibernate; do
+        case "$(systemctl is-enabled "$u.service" 2>/dev/null)" in
+            enabled|masked|masked-runtime) ;;
+            *) missing="$missing $u.service" ;;
+        esac
+    done
+    [ -n "$missing" ] || return 0
+
+    # shellcheck disable=SC2086
+    if systemctl enable $missing >/dev/null 2>&1; then
+        echo ":: enabled NVIDIA sleep services:$missing"
+        echo "   Without them the VRAM save on suspend never runs, and a GPU"
+        echo "   with NVreg_PreserveVideoMemoryAllocations=1 can resume with"
+        echo "   lost framebuffers — a black screen only a reboot clears."
+    fi
+}
+
 post_install() {
     _synapd_drop_shadow
+    _synapd_enable_nvidia_sleep
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/synapd.conf >/dev/null 2>&1 || true
 }
 
 post_upgrade() {
     _synapd_drop_shadow
+    _synapd_enable_nvidia_sleep
     # Re-applied on every upgrade, not just the one that removes the shadow: a
     # box whose /var/lib/synapd was created root-owned needs the `Z` line to
     # actually run once nothing is shadowing it any more.

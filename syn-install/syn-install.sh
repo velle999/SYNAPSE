@@ -1996,6 +1996,36 @@ elif [ -n "$HAS_NVIDIA" ]; then
     GPU_KERNEL_PARAMS="nvidia_drm.modeset=1"
     success "NVIDIA driver installed ($NVIDIA_PKG, nouveau blacklisted)"
 
+    # ── The sleep units ───────────────────────────────────────
+    #
+    # nvidia-utils ships nvidia-{suspend,resume,hibernate}.service DISABLED and
+    # they are what run nvidia-sleep.sh, which performs the VRAM save on suspend
+    # and the restore on resume. The system-sleep hook the package also ships
+    # covers only `post` (resume) — there is no `pre` case in it — so with the
+    # units off, the suspend half of that pair simply never happens.
+    #
+    # That is only inert while NVreg_PreserveVideoMemoryAllocations is unset.
+    # Set the param with the units off and the driver is told to dump VRAM by a
+    # mechanism that never runs, so the GPU resumes with lost framebuffers: the
+    # unrecoverable black screen of 2026-07-17 on velle's box, and the state
+    # that box was found in again on 2026-08-06 with its primary display dead
+    # after a resume. Both times the param came from a hand-written
+    # /etc/modprobe.d file owned by no package — which is exactly the kind of
+    # thing that survives a reinstall in a backup while `systemctl enable` state
+    # does not. The 2026-07-31 reinstall restored the file and not the enable.
+    #
+    # So enable them here rather than leaving it to whoever sets the param
+    # later: they cost nothing when the param is unset (nvidia-sleep.sh checks
+    # it and returns), and they are impossible to discover as missing when it is
+    # set. `|| true` because a driver package that ever drops these units should
+    # not fail an install.
+    arch-chroot /mnt systemctl enable \
+        nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service \
+        2>/dev/null \
+        && success "NVIDIA sleep services enabled (VRAM save/restore)" \
+        || warn "Could not enable nvidia-{suspend,resume,hibernate} — suspend
+  may black-screen if NVreg_PreserveVideoMemoryAllocations is set later"
+
     # ── Put inference on the GPU ──────────────────────────────
     #
     # The driver alone does nothing for synapd. synapd depends on synapse-llama,
