@@ -52,3 +52,18 @@ effects = off
 # AI features
 ai_layout = on
 ai_ctx_decor = on
+
+# ── Lock screen (Super+L) ──────────────────────────────────
+# Offer the fingerprint reader beside the password. Both ways in are live at
+# once, so you can type your password over a reader that is still waiting, and
+# whichever answers first unlocks. A machine WITHOUT a reader pays nothing: the
+# helper is told there is no device and the lock stops asking.
+#
+# Needs the fprintd package (an optdepend) and at least one ENROLLED finger.
+# Enroll as yourself, not root — prints are stored per account:
+#   sudo pacman -S fprintd
+#   fprintd-enroll        # swipe until it says enroll-completed
+#   fprintd-list "$USER"  # confirm it took
+# On the live session that means enrolling every boot, since nothing persists;
+# on an installed system it is once. Your password always works regardless.
+lock_fingerprint = on
