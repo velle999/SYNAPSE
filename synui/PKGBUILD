@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=266
+pkgrel=267
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -47,7 +47,12 @@ license=('GPL-2.0-or-later')
 # curl: news.c fetches the RSS/Atom feeds with libcurl (on its own thread).
 # xdg-utils: the news panel opens a story with xdg-open — no shell in between,
 #   since those URLs come off the network. Without it, Enter does nothing.
-depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'kitty' 'cairo'
+# rofi: the Super+Space application launcher. A hard depend for the same reason
+#   kitty is one — it backs a DEFAULT bind, so without it the most-pressed key on
+#   the desktop silently does nothing. rofi 2.0.0 merged lbonn's Wayland port
+#   into mainline (it Provides/Replaces rofi-wayland), so this is layer-shell,
+#   not XWayland. The AI command bar it displaced moved to Super+=.
+depends=('wlroots0.20' 'scenefx0.5' 'wayland' 'libxkbcommon' 'pixman' 'seatd' 'kitty' 'rofi' 'cairo'
          # dbus: synui_run() execs dbus-update-activation-environment before the
          # autostarts, without which D-Bus-activated GUI services get no display.
          # Always present transitively, named here because we exec its binary.

@@ -292,7 +292,23 @@ static void seed_default_binds(syn_config_t *cfg)
 {
     static const struct { const char *combo, *action; } defaults[] = {
         { "super+return",    "term" },
-        { "super+space",     "cmdbar" },
+        /* Super+Space is the app launcher, because that is what Super+Space is
+         * on every other desktop and it was the one key here that did something
+         * else. rofi rather than a native panel: it reads the same .desktop
+         * roots the bar menu already curates, and it is the plain "start a
+         * program" key with nothing clever behind it.
+         *
+         * A spawn, not an action — synui does not manage rofi's lifetime. rofi
+         * itself single-instances, so a second press while it is up is a no-op
+         * rather than a second window; this is NOT a toggle and the key will
+         * not close it (Escape does). That is a real difference from every
+         * panel bind below, all of which toggle. */
+        { "super+space",     "spawn rofi -show drun" },
+        /* The AI command bar, displaced from Super+Space by rofi above. Super+=
+         * puts it next to Super+Backspace (ai_ask) — on a US layout `=` is the
+         * key immediately left of Backspace, so the two AI popups are physical
+         * neighbours. Still a toggle, unlike rofi. */
+        { "super+equal",     "cmdbar" },
         { "super+a",         "overlay" },
         { "super+d",         "displays" },
         { "super+escape",    "menu" },

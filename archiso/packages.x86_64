@@ -63,6 +63,19 @@ chibi
 vibe
 foot
 kitty
+# Application launcher on Super+Space. rofi 2.0.0 merged lbonn's Wayland port
+# into mainline, so this is the plain `rofi` package (it Provides/Replaces
+# rofi-wayland) talking layer-shell to synui — no XWayland, no AUR, no fork.
+#
+# It does NOT replace the cmdbar, which is native and carries the synsh intents
+# and output capture; that moved to Super+= (see seed_default_binds in
+# synui/src/config.c). rofi is the plain "launch an app" key.
+#
+# Two Wayland-backend limitations upstream documents in the 2.0.0 notes: it
+# cannot detect clicks outside its own surface, so clicking away does not
+# dismiss it (Escape does), and it flickers on startup because scale is
+# detected late.
+rofi
 firefox
 # File manager. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
 # /etc/xdg files KDE-outside-Plasma needs to actually work: menus/applications.menu

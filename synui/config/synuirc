@@ -298,7 +298,17 @@ record_audio = off
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
 # menu = the SYNAPSE OS welcome menu (default super+escape).
+# cmdbar = the AI command bar. Default super+equal, which sits next to
+# super+backspace (ai_ask) so the two AI popups are physical neighbours. It was
+# super+space until rofi took that key as the application launcher.
+#   Note the spelling: the combo is split on '+', so the key after the last '+'
+#   must be an XKB keysym NAME. `=` is `equal`. `bind = super+= cmdbar` does not
+#   work — it parses as an empty key and is dropped with a "bad key" log line.
+# The launcher itself is not an action, it is a spawn: `super+space spawn rofi
+# -show drun`. Rebind it to any launcher you like, or to `cmdbar` to put the
+# command bar back where it was.
+#
 # A bind on the same combo as a default replaces the default.
-# bind = super+w spawn wofi --show drun
+# bind = super+w spawn rofi -show run
 # bind = super+shift+s spawn swaylock
 # bind = super+e term

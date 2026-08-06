@@ -653,3 +653,48 @@ the others are (`layout_label`, `layout_key`/`layouts.state`, `synctl`'s
 - [x] `niri_strip.sh` covers the three properties that make it niri and not
       another way of drawing the tiler: columns that do not shrink, a strip that
       scrolls to the focus, and consume/expel.
+
+### Phase R — rofi is the launcher, Super+Space is the launcher key  *(done)*
+Super+Space opened the AI command bar, which meant the one key every other
+desktop reserves for "start a program" was the one key here that did something
+else. The launcher moved onto it and the command bar moved off.
+
+- [x] **`super+space` → `spawn rofi -show drun`.** rofi 2.0.0 merged lbonn's
+      Wayland port into mainline, so the plain `rofi` package (it
+      Provides/Replaces `rofi-wayland`) talks layer-shell to synui — no
+      XWayland, no fork, no AUR. It reads the same `.desktop` roots the bar menu
+      already curates, so the applications.menu and Wine-entry work it inherits
+      for free.
+      A **spawn, not an action**: synui does not own rofi's lifetime. rofi
+      single-instances, so a second press while it is up is a no-op rather than
+      a second window — this is *not* a toggle, unlike every panel bind, and the
+      key will not close it. Escape does. Upstream also documents two
+      Wayland-backend limits in the 2.0.0 notes: it cannot see clicks outside
+      its own surface (so clicking away does not dismiss it either), and it
+      flickers on startup because scale is detected late.
+- [x] **The AI command bar moved to `super+equal`**, putting it next to
+      `super+backspace` (`ai_ask`) — on a US layout `=` is the key immediately
+      left of Backspace, so the two AI popups are physical neighbours. It stays
+      a toggle. Nothing else about the cmdbar changed: it still carries the
+      synsh intents and the output capture, which is exactly why it was not
+      worth replacing with rofi rather than moving.
+- [x] **`rofi` is a hard `depends`**, for the same reason `kitty` is one: it
+      backs a *default* bind, and an optdepend would mean the most-pressed key
+      on the desktop silently does nothing on a fresh install. It is in the
+      ISO's `packages.x86_64` too, so the live image ships it.
+- [x] **`key_name()` learned `XKB_KEY_equal` → `=`** (`ctlpanel.c`). The
+      function exists so the shortcuts column reads like a keycap and not like a
+      config file; without the case the panel rendered `Super+equal`. Note the
+      asymmetry it is papering over: a bind combo is split on `+`, so `=` *has*
+      to be written `equal` in synuirc — `bind = super+= cmdbar` parses as an
+      empty key and is dropped with a "bad key" log line. Documented in the
+      shipped `synuirc` and in `--help`.
+- [x] **Two `--help` drifts fixed while in there.** The list claimed
+      `Super+Shift+T` was the calendar (it has been `retile` since 2026-07-31)
+      and that `Super+Shift+A` was "intentionally free" (the desktop widgets
+      took it). The comment above that list says to keep it in step with
+      `seed_default_binds()`; it was not. The control panel's column does not
+      have this failure mode — `ctlpanel_shortcuts()` walks the live bind table
+      — but its `action_desc()` lookup is a second table that a *new action*
+      would still drift from. A `spawn` bind is exempt: it falls through to the
+      command string, so the rofi row reads `rofi -show drun`.

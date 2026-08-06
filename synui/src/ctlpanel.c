@@ -1114,6 +1114,10 @@ static void key_name(xkb_keysym_t sym, char *out, size_t n)
     case XKB_KEY_Delete:    snprintf(out, n, "Del");       return;
     case XKB_KEY_BackSpace: snprintf(out, n, "Backspace"); return;
     case XKB_KEY_Tab:       snprintf(out, n, "Tab");       return;
+    /* The cmdbar's key. xkbcommon spells it "equal", which is how it has to be
+     * WRITTEN in a bind (the combo is split on '+', so a literal '=' cannot be
+     * the key name) — but the keycap says '='. */
+    case XKB_KEY_equal:     snprintf(out, n, "=");         return;
     default: break;
     }
     char raw[64] = {0};
