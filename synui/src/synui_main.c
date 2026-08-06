@@ -1502,6 +1502,31 @@ int synui_init(syn_server_t *s)
     setenv("SYNUI_RUNNING", "1", 1);
     setenv("XDG_SESSION_TYPE", "wayland", 1);
     setenv("XDG_CURRENT_DESKTOP", "SynapseOS", 1);
+    /* Qt chooses its platform theme plugin by matching XDG_CURRENT_DESKTOP against
+     * the desktops it knows, and neither "SynapseOS" nor "synui" is one of them —
+     * so Qt apps loaded NO platform theme and ran on Qt's built-in palette, Base
+     * #FFFFFF and Text #000000, whatever the desktop theme was.
+     *
+     * Most of a KDE app hides that, because Dolphin applies our generated colour
+     * scheme itself and repaints its chrome, sidebar and breadcrumb. The icon view
+     * does not follow: KStandardItemListWidget::textColor() reads
+     * styleOption().palette, which is still the untouched stock palette, so file
+     * NAMES were drawn in black on the theme's dark view on every dark theme — and
+     * no colour key could move them (setting every foreground in the scheme to
+     * pure red left them black). The palette has to be right before the app builds
+     * its views, and only a platform theme can do that.
+     *
+     * xdgdesktopportal is the one to name: its plugin is already a dependency by
+     * way of xdg-desktop-portal, and it follows org.freedesktop.appearance
+     * color-scheme — the same dark/light signal synui-apply-theme writes through
+     * gsettings — so Qt apps track a theme switch with no further plumbing.
+     * plasma-integration would give the theme's exact colours instead of a generic
+     * near-white, but it pulls xdg-desktop-portal-kde, and a second portal backend
+     * is what breaks ScreenCast on wlroots.
+     *
+     * Overwrite 0, unlike the lines around it: this is a default, not a policy, so
+     * a user who exports qt6ct or kde in their own environment keeps it. */
+    setenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal", 0);
     /* Force GTK/Firefox onto their Wayland backends rather than XWayland. Firefox
      * only honours the glass prefs (transparency, blur-behind) on its Wayland
      * surface — under XWayland the window is opaque no matter the CSS/prefs. Its

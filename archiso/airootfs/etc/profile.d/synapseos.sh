@@ -16,6 +16,31 @@ export XDG_SESSION_TYPE=wayland
 # back to GTK, which cannot ScreenCast on wlroots — no screen sharing at all.
 export XDG_CURRENT_DESKTOP=synui
 
+# Qt picks its platform theme plugin by matching XDG_CURRENT_DESKTOP against the
+# names it knows — and "synui" is not one of them, so it loaded NO theme at all
+# and every Qt app ran on Qt's built-in palette: Base #FFFFFF, Text #000000.
+#
+# That is invisible in most of a KDE app, because Dolphin applies our generated
+# colour scheme itself (KColorSchemeManager, via [UiSettings] in dolphinrc) and
+# that repaints the chrome, the sidebar and the breadcrumb. What it does NOT
+# reach is Dolphin's icon view: KStandardItemListWidget::textColor() reads
+# styleOption().palette, which is still the untouched stock palette — so file
+# names were drawn in #000000 on the theme's dark view, on EVERY dark theme, and
+# no colour key could move them. Setting every foreground in the scheme to pure
+# red left them black; that is how thoroughly detached they are.
+#
+# The palette therefore has to be right BEFORE the app builds its views, which
+# only a platform theme can do. xdgdesktopportal is the one to name: the plugin
+# is already installed, and it reads org.freedesktop.appearance color-scheme —
+# the same dark/light signal synui-apply-theme already writes via gsettings — so
+# Qt apps follow a theme switch with no extra plumbing. Qt's file dialogs go
+# through the portal as a result, which on wlroots is where they should go.
+#
+# plasma-integration would give the theme's exact colours instead of a generic
+# near-white, but it pulls xdg-desktop-portal-kde, and a second portal backend
+# is exactly what the ScreenCast note above warns about.
+export QT_QPA_PLATFORMTHEME=xdgdesktopportal
+
 # MangoHud's Vulkan implicit layer keys off MANGOHUD=1. It belongs here and not
 # in a launcher wrapper: a wrapper only ever covers the one launch path it wraps,
 # while the env var reaches Steam, Lutris, RetroArch and bare binaries alike. The

@@ -2900,6 +2900,10 @@ esac
 export XDG_SESSION_TYPE=wayland
 # Portal backend routing (synui-portals.conf); unset ⇒ no screen sharing.
 export XDG_CURRENT_DESKTOP=synui
+# Qt matches XDG_CURRENT_DESKTOP to choose a platform theme, and synui matches
+# nothing it knows, so it loaded none and Qt apps ran on the built-in light
+# palette — which drew Dolphin file names in black on every dark theme.
+export QT_QPA_PLATFORMTHEME=xdgdesktopportal
 export LIBSEAT_BACKEND=seatd
 # Pin cursor theme+size so Xwayland clients (Steam, games) match synui's own
 # 24px cursor; without XCURSOR_SIZE libXcursor auto-picks a much larger size.
@@ -2936,6 +2940,8 @@ if [ -f /sys/class/dmi/id/sys_vendor ] && \
 fi
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=synui
+# Qt loads no platform theme for an unknown desktop name; see the login script.
+export QT_QPA_PLATFORMTHEME=xdgdesktopportal
 export LIBSEAT_BACKEND=seatd
 export XCURSOR_THEME=Adwaita
 export XCURSOR_SIZE=24
@@ -2985,6 +2991,8 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         fi
         export XDG_SESSION_TYPE=wayland
         export XDG_CURRENT_DESKTOP=synui
+        # Qt loads no platform theme for an unknown desktop name; see above.
+        export QT_QPA_PLATFORMTHEME=xdgdesktopportal
         export LIBSEAT_BACKEND=seatd
         export XCURSOR_THEME=Adwaita
         export XCURSOR_SIZE=24

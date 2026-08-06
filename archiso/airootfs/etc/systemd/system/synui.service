@@ -24,6 +24,11 @@ StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
 Environment=XDG_CURRENT_DESKTOP=synui
+# Qt matches XDG_CURRENT_DESKTOP against the desktops it knows to pick a platform
+# theme; "synui" matches none, so it loaded none and Qt apps ran on the built-in
+# light palette (Text #000000) — which is what painted Dolphin's file names black
+# on every dark theme. See /etc/profile.d/synapseos.sh for the full account.
+Environment=QT_QPA_PLATFORMTHEME=xdgdesktopportal
 Environment=LIBSEAT_BACKEND=seatd
 ExecStartPre=/bin/sh -c 'mkdir -p /run/user/0 && chmod 700 /run/user/0'
 ExecStartPre=/bin/sh -c 'mkdir -p /run/synui && /usr/local/bin/synui-gfx-env > /run/synui/env'
