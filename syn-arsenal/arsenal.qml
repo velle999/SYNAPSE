@@ -16,9 +16,8 @@ import Quickshell.Io
  * TSV, not JSON, across that boundary — see arsenal-query for why. Parsing it
  * here is a split on tab and a split on newline.
  *
- * Colours follow ~/.config/synui/theme.json (the file synui-apply-theme writes)
- * with a full set of fallbacks, so this looks right on a fresh install that has
- * never applied a theme — the same contract Theme.qml keeps for the bar.
+ * Colours are fixed terminal green rather than themed — see the palette block
+ * below for what following ~/.config/synui/theme.json actually did to this app.
  *
  * SynapseOS Project — GPL-2.0-or-later
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -34,20 +33,33 @@ FloatingWindow {
                                     || "/usr/lib/syn-arsenal/arsenal-query"
 
     // ── Palette ─────────────────────────────────────────────────────────────
-    property var pal: ({})
-    readonly property color cBg:     pal.bg     ? pal.bg     : "#12141a"
-    readonly property color cPanel:  pal.panel  ? pal.panel  : "#1a1d26"
-    readonly property color cText:   pal.fg     ? pal.fg     : "#e6e9ef"
-    readonly property color cDim:    pal.dim    ? pal.dim    : "#8b93a7"
-    readonly property color cAccent: pal.accent ? pal.accent : "#4ec9b0"
-    readonly property color cWarn:   pal.warn   ? pal.warn   : "#e0af68"
-
-    FileView {
-        path: Quickshell.env("HOME") + "/.config/synui/theme.json"
-        watchChanges: true
-        onFileChanged: reload()
-        onLoaded: { try { root.pal = JSON.parse(this.text()) } catch (e) { root.pal = ({}) } }
-    }
+    // Fixed, not themed. This used to take its ink from ~/.config/synui/theme.json,
+    // but that file carries the DESKTOP's scheme, and Arsenal draws on its own
+    // dark surfaces regardless. Under a light theme theme.json says fg
+    // "#000000" — black text on this near-black background — while bg/panel,
+    // which it does not write at all, kept falling back to the dark defaults.
+    // The result was an app that looked permanently empty.
+    //
+    // The accent was worse, and was the reason clicking a category appeared to
+    // do nothing. theme.json writes accent/glyph/bar/popup as [r,g,b] ARRAYS
+    // (Theme.qml converts them in themed()) and only fg/clockFg as hex strings.
+    // This file read accent as a string, so a QML `color` was handed a JS array,
+    // failed to convert, and every accented thing — the selected-category
+    // highlight, the installed dot, the Install button and its border — painted
+    // as nothing. The click landed and the pane repainted; none of it was
+    // visible.
+    //
+    // Phosphor green on black is what a BlackArch browser should have looked
+    // like anyway, and it cannot be knocked out by a theme switch.
+    readonly property color cBg:     "#0a0e0a"
+    readonly property color cPanel:  "#111a11"
+    readonly property color cText:   "#33ff33"   // shell green — body text
+    readonly property color cDim:    "#3fae55"   // dimmed green — counts, descriptions
+    readonly property color cAccent: "#7dffb0"   // brighter mint — selection, buttons
+    // Amber, not green: the keyring warning carries MEANING, and a warning
+    // rendered in the body colour is not a warning. Same reason Theme.qml keeps
+    // its green/red status colours out of the themed set.
+    readonly property color cWarn:   "#e0af68"
 
     // ── State ───────────────────────────────────────────────────────────────
     property string repoState: "loading"   // loading|enabled|unsynced|disabled
@@ -216,7 +228,11 @@ FloatingWindow {
                     height: 30
                     color: catRow.current
                            ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.16)
-                           : (ma.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
+                           // Hover tints with the accent rather than plain white:
+                           // a grey wash on a phosphor palette reads as dust.
+                           : (ma.containsMouse
+                              ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.08)
+                              : "transparent")
 
                     Text {
                         anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
@@ -304,7 +320,9 @@ FloatingWindow {
                     width: ListView.view.width
                     height: 46
                     radius: 4
-                    color: rowMa.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent"
+                    color: rowMa.containsMouse
+                           ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.07)
+                           : "transparent"
 
                     MouseArea { id: rowMa; anchors.fill: parent; hoverEnabled: true }
 
