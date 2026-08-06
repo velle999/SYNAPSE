@@ -1499,8 +1499,13 @@ while :; do
     # ~1.5 GB before a single game), so it is opt-in the way the AI model is
     # rather than something a default Enter-through install pays for.
     WANT_STEAM=0          # steam + the 32-bit stack — see "Installing Steam"
+    # BlackArch is a REPOSITORY, not a package set: enabling it installs the
+    # keyring and nothing else, so the cost is a database sync rather than
+    # thousands of tools. That is why it defaults ON where Steam does not —
+    # SYNAPSE Arsenal is only useful if the repo it browses is there.
+    WANT_BLACKARCH=1      # [blackarch] repo + keyring — see "Enabling BlackArch"
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
-    SEL_APPS="chibi vibe"
+    SEL_APPS="chibi vibe syn-arsenal"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
@@ -1515,15 +1520,17 @@ while :; do
 
     case "$INSTALL_PRESET" in
         1)
-            SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
+            SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin syn-arsenal"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
+            WANT_BLACKARCH=1
             success "Full install selected"
             ;;
         3)
             SEL_APPS=""
             WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
             WANT_FILEMGR=0; WANT_WINE=0; WANT_PHONE=0; WANT_STEAM=0
+            WANT_BLACKARCH=0
             success "Minimal install selected"
             ;;
         4)
@@ -1551,6 +1558,7 @@ while :; do
             ask_opt want_tepris  0 "TEPRIS — block game"
             ask_opt want_m2020   0 "Samsung M2020 printer driver"
             ask_opt want_shelly  0 "Shelly — graphical package manager"
+            ask_opt want_arsenal 1 "SYNAPSE Arsenal — browse/install BlackArch security tooling"
             echo ""
             ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
             ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
@@ -1559,6 +1567,7 @@ while :; do
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
             ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) — enables [multilib] (~1.5 GB)"
+            ask_opt WANT_BLACKARCH  1 "BlackArch security repo — ~5000 tools browsable in SYNAPSE Arsenal"
 
             SEL_APPS=""
             [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
@@ -1567,6 +1576,7 @@ while :; do
             [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
             [ "$want_m2020"  = 1 ] && SEL_APPS="$SEL_APPS samsung-m2020"
             [ "$want_shelly" = 1 ] && SEL_APPS="$SEL_APPS shelly-bin"
+            [ "$want_arsenal" = 1 ] && SEL_APPS="$SEL_APPS syn-arsenal"
             SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
 
             # Core daemons, offered last and separately. Dropping one is allowed —
@@ -1619,6 +1629,7 @@ while :; do
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
     echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope, enables multilib)' || echo no)"
+    echo "    BlackArch: $([ "$WANT_BLACKARCH" = 1 ] && echo 'yes (repo + keyring only, no tools installed)' || echo no)"
     echo ""
     # ── Confirm the selection ─────────────────────────────
     #
@@ -2121,6 +2132,64 @@ if [ "$WANT_STEAM" = 1 ]; then
   not. Install later with:
   sudo pacman -S mangohud lib32-mangohud gamemode lib32-gamemode gamescope"
     fi
+fi
+
+# ── BlackArch ─────────────────────────────────────────────
+#
+# Adds the REPOSITORY and its keyring. No tools are installed: [blackarch]
+# carries ~5000 packages and pulling them in would dwarf the rest of the system
+# several times over. SYNAPSE Arsenal (syn-arsenal / `syn arsenal`) is the
+# front-end that turns the repo into something browsable by category.
+#
+# Upstream's strap.sh does the work because it owns the trust handling: it
+# verifies the keyring tarball's SIGNATURE against BlackArch's master key,
+# imports and locally signs it, then writes the repo section.
+#
+# We check the one thing that must not change before running it — that the
+# script still pins the master key fingerprint we expect. A pinned sha1 of
+# strap.sh would rot on every upstream edit and break installs that are fine;
+# a substituted script that swaps in someone else's key is the actual risk, and
+# the fingerprint is what catches it.
+#
+# Wholly non-fatal. This runs late, after a working desktop is already on disk,
+# and a missing security repo is not worth failing an install over — especially
+# as `sudo syn arsenal --enable-repo` does exactly this again, later, on demand.
+if [ "$WANT_BLACKARCH" = 1 ]; then
+    header
+    step "Enabling BlackArch"
+
+    BA_FPR="4345771566D76038C7FEB43863EC0ADBEA87E4E3"
+    ba_ok=0
+    echo "  Fetching the BlackArch bootstrap..."
+    if curl -fsS --proto '=https' --tlsv1.2 -o /mnt/tmp/strap.sh \
+            https://blackarch.org/strap.sh 2>/dev/null; then
+        if grep -qF "$BA_FPR" /mnt/tmp/strap.sh; then
+            chmod +x /mnt/tmp/strap.sh
+            echo "  Master key pinned as expected — running bootstrap..."
+            if arch-chroot /mnt /tmp/strap.sh >/dev/null 2>&1 \
+               && grep -q '^\[blackarch\]' /mnt/etc/pacman.conf; then
+                # Verify it is USABLE, not merely present: a configured repo
+                # that lists nothing is the failure this check exists for.
+                ba_count=$(arch-chroot /mnt pacman -Sl blackarch 2>/dev/null | wc -l)
+                if [ "${ba_count:-0}" -gt 0 ]; then
+                    # The keyring as a package, so key rotations arrive as an
+                    # upgrade rather than never.
+                    arch-chroot /mnt pacman -S --noconfirm --needed blackarch-keyring \
+                        >/dev/null 2>&1 \
+                        || warn "blackarch-keyring did not install — key rotations
+  will not reach this machine. Fix with 'sudo pacman -S blackarch-keyring'."
+                    ba_ok=1
+                    success "BlackArch enabled ($ba_count packages available)"
+                fi
+            fi
+        else
+            warn "The downloaded strap.sh does not pin BlackArch's expected master
+  key. Refusing to run it — the repository was NOT added."
+        fi
+    fi
+    rm -f /mnt/tmp/strap.sh
+    [ "$ba_ok" = 1 ] || warn "BlackArch was not enabled. The system is otherwise complete;
+  add it later with 'sudo syn arsenal --enable-repo'."
 fi
 
 # ── Configure system ──────────────────────────────────────

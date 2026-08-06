@@ -1,0 +1,44 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# SYNAPSE Arsenal — BlackArch category/app browser (GUI + TUI).
+#
+# The repository itself is NOT a dependency: the app is useful on a machine
+# where BlackArch is not enabled yet, because telling you it is missing and
+# handing you `syn arsenal --enable-repo` is most of what a first run is for.
+pkgname=syn-arsenal
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SYNAPSE Arsenal: browse and install BlackArch security tooling by category"
+arch=('any')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+# pacman drives every query and both mutations; curl fetches the bootstrap.
+depends=('pacman' 'bash' 'curl')
+# quickshell renders the GUI, polkit escalates the install. Neither is needed
+# for `syn arsenal`, which is the whole point of shipping the TUI alongside —
+# so they are optdepends and the launcher degrades to the terminal without them.
+optdepends=('quickshell: the graphical browser (syn-arsenal without --tui)'
+            'polkit: install/remove from the GUI without a terminal')
+source=('syn-arsenal.sh'
+        'arsenal-query.sh'
+        'arsenal-tui.sh'
+        'arsenal-enable-repo.sh'
+        'syn-arsenal.desktop'
+        'arsenal.qml')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+    cd "$srcdir"
+
+    install -Dm755 syn-arsenal.sh          "$pkgdir/usr/bin/syn-arsenal"
+
+    # Backend and the two non-GUI front-ends live under /usr/lib: they are
+    # implementation, not commands a user is meant to find on PATH. `syn
+    # arsenal` and syn-arsenal are the entry points.
+    install -Dm755 arsenal-query.sh        "$pkgdir/usr/lib/syn-arsenal/arsenal-query"
+    install -Dm755 arsenal-tui.sh          "$pkgdir/usr/lib/syn-arsenal/arsenal-tui"
+    install -Dm755 arsenal-enable-repo.sh  "$pkgdir/usr/lib/syn-arsenal/arsenal-enable-repo"
+
+    install -Dm644 arsenal.qml             "$pkgdir/usr/share/syn-arsenal/arsenal.qml"
+    install -Dm644 syn-arsenal.desktop     "$pkgdir/usr/share/applications/syn-arsenal.desktop"
+}

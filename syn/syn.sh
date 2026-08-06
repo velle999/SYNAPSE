@@ -12,6 +12,7 @@ Usage:
   syn model <cmd>         Model manager (download/list/status/remove)
   syn net <cmd>           Network policy (allow/block/status)
   syn guard <cmd>         Security monitor (status/mode/alerts)
+  syn arsenal             Browse/install BlackArch security tooling
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
   syn install             Install SynapseOS to disk
@@ -103,6 +104,9 @@ case "${1:-help}" in
     model)          shift; cmd_model "$@" ;;
     net)            shift; cmd_net "$@" ;;
     guard)          shift; cmd_guard "$@" ;;
+    # --tui rather than bare syn-arsenal: `syn` is the terminal entry point, so
+    # a subcommand typed in a shell must not fork a GUI window at the user.
+    arsenal)        shift; exec syn-arsenal --tui "$@" ;;
     install)        exec syn-install ;;
     update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SYNAPSE Arsenal
+GenericName=Security Tool Browser
+Comment=Browse and install BlackArch security tooling by category
+Exec=syn-arsenal
+Icon=security-high
+Terminal=false
+Categories=System;Security;PackageManager;
+Keywords=blackarch;security;pentest;forensics;packages;tools;
+StartupNotify=true

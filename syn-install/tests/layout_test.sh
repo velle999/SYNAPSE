@@ -506,7 +506,11 @@ check "answering no re-execs instead of looping" "yes" \
 # pass inherits the first one's appends and installs a set nobody picked — and
 # the first pass would still look perfect.
 sel_loop=$(grep -n '^while :; do' "$here/../syn-install.sh" | tail -1 | cut -d: -f1)
-sel_defaults=$(grep -n '^    SEL_APPS="chibi vibe"' "$here/../syn-install.sh" | cut -d: -f1)
+# Anchored on the ASSIGNMENT, not on the app list it happens to hold today:
+# pinning the literal "chibi vibe" made this check fail the moment an app was
+# added, which reads as "the loop invariant broke" when nothing of the sort
+# happened. The position of the assignment is the whole point of the test.
+sel_defaults=$(grep -n '^    SEL_APPS="' "$here/../syn-install.sh" | head -1 | cut -d: -f1)
 sel_confirm=$(grep -n 'Install this selection' "$here/../syn-install.sh" | cut -d: -f1)
 check "the selection defaults are re-initialised inside the loop" "yes" \
     "$([ -n "$sel_loop" ] && [ -n "$sel_defaults" ] && [ "$sel_loop" -lt "$sel_defaults" ] \
