@@ -13,7 +13,26 @@ Scope {
         Item {
             id: root
             required property var modelData
-            property int currentPopup: Config.SystemPopup.None
+
+            /*
+             * DERIVED, not assigned. Upstream held the launcher's open state
+             * here, one copy per screen, and every opener wrote into its own
+             * copy — which is fine under Hyprland, where the only openers were
+             * this bar's own button and a bind that named the monitor. It
+             * cannot answer `synui-bar ipc call menu toggle <output>`, which
+             * arrives at the shell rather than at any one screen's bar.
+             *
+             * LauncherState is the single owner now; this binding is just "is
+             * it open, and is it open HERE". `output === ""` counts as here so
+             * that a caller who named no monitor, and whose fallback probe has
+             * not answered yet, still gets a launcher somewhere rather than an
+             * invisible one everywhere.
+             */
+            readonly property int currentPopup: LauncherState.open
+                                                && (LauncherState.output === modelData.name
+                                                    || LauncherState.output === "")
+                                                ? Config.SystemPopup.AppLauncher
+                                                : Config.SystemPopup.None
 
             PanelWindow {
                 id: taskbar
@@ -71,38 +90,28 @@ Scope {
                     currentPopup: root.currentPopup
                 }
                 function closeAllPopups() {
-                    root.currentPopup = Config.SystemPopup.None;
+                    LauncherState.close();
                 }
                 TaskbarButton {
                     id: appLauncherButton
                     isToggled: root.currentPopup == Config.SystemPopup.AppLauncher ? true : false
                     iconFontValue: "\ue8b6"
                     anchors.centerIn: parent
-                    onClicked: {
-                        if (root.currentPopup == Config.SystemPopup.None) {
-                            //appLauncher.openAppLauncher();
-                            root.currentPopup = Config.SystemPopup.AppLauncher;
-                        } else {
-                            //taskbar.closeAllPopups();
-                            root.currentPopup = Config.SystemPopup.None;
-                        }
-                        root.currentPopup = Config.SystemPopup.AppLauncher;
-                    }
+                    // Upstream's body ended with an unconditional
+                    // `currentPopup = AppLauncher` after the if/else, so the
+                    // else branch was dead and the button could only ever open
+                    // \u2014 clicking it again did nothing. A toggle that names this
+                    // screen is what both branches were reaching for.
+                    onClicked: LauncherState.toggle(root.modelData.name)
                 }
-                Scope {
-                    id: appLauncherIpc
-                    property string screenName: taskbar.screen.name
-                    IpcHandler {
-                        target: "appLauncher_" + appLauncherIpc.screenName
-                        function toggleAppLauncher() {
-                            if (root.currentPopup == Config.SystemPopup.None) {
-                                root.currentPopup = Config.SystemPopup.AppLauncher;
-                            } else {
-                                root.currentPopup = Config.SystemPopup.None;
-                            }
-                        }
-                    }
-                }
+                /*
+                 * The per-screen `appLauncher_<name> toggleAppLauncher` handler
+                 * that stood here was Hyprland's half of a bind that no longer
+                 * exists \u2014 nothing in SYNAPSE ever called it. The Super tap's
+                 * target lives in shell.qml now, once for the whole shell, on
+                 * the same `menu` contract the SYNAPSE bar answers to. See
+                 * LauncherState.qml.
+                 */
 
                 /*=== ============================= ===*/
 
@@ -151,7 +160,7 @@ Scope {
                     height: Screen.height
                     visible: root.currentPopup != Config.SystemPopup.None ? true : false
                     onClicked: {
-                        root.currentPopup = Config.SystemPopup.None;
+                        LauncherState.close();
                     }
                 }
             }

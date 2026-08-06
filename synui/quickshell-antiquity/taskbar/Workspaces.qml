@@ -48,7 +48,9 @@ RowLayout {
                 if (modelData.id == SynWorkspaces.focusedId || mouse.hovered) {
                     return Config.colors.accent;
                 }
-                return Config.colors.text;
+                // textLight, not text: these numerals sit on the translucent
+                // bar, not on an accent chip. See taskbar/ClockWidget.qml.
+                return Config.colors.textLight;
             }
             background: Rectangle {
                 anchors.verticalCenter: parent.verticalCenter

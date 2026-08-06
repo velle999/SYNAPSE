@@ -19,6 +19,7 @@
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 import "taskbar" as Taskbar
 import "popups" as Popups
@@ -26,6 +27,29 @@ import "widgets" as Widgets
 
 Scope {
     id: root
+
+    /*
+     * The Super tap. synui runs `synui-bar ipc call menu toggle <output>` and
+     * has no idea which shell is up, so this is the same target and the same
+     * three functions the SYNAPSE bar's shell.qml exposes — that is what makes
+     * `bar_shell` a setting rather than a fork of the compositor.
+     *
+     * Once for the whole shell, not once per screen: the launcher is one
+     * logical thing and the call names its monitor. See LauncherState.qml.
+     */
+    IpcHandler {
+        target: "menu"
+
+        function toggle(output: string): void {
+            LauncherState.toggle(output);
+        }
+        function open(output: string): void {
+            LauncherState.show(output);
+        }
+        function close(): void {
+            LauncherState.close();
+        }
+    }
     FontLoader {
         id: iconFont
         source: "fonts/MaterialSymbolsSharp_Filled_36pt-Regular.ttf"

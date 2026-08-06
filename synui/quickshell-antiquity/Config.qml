@@ -7,6 +7,37 @@ Singleton {
     id: root
 
     /*
+     * WHERE THE THREE STATE FILES LIVE, and why they are not where upstream put
+     * them.
+     *
+     * Upstream wrote settings.json / widgets.json / favoriteapps.json with
+     * `Qt.resolvedUrl("./x.json")` — beside shell.qml. That works when the
+     * shell is a git checkout in the user's own ~/.config/quickshell, which is
+     * how linux-antiquity is installed. It CANNOT work here: SYNAPSE ships this
+     * tree as a package, so shell.qml sits in a root-owned
+     * /usr/share/synui/quickshell-antiquity and the files were never there to
+     * begin with. Every write failed silently and every read failed at startup,
+     * which is why the theme picker "didn't take" (it wrote currentTheme and
+     * then reloaded straight back off disk), why the weather unit snapped back
+     * to metric, and why a widget could be added but never survived a restart.
+     *
+     * A FileView will not create a file that does not exist — no `saved`, no
+     * `saveFailed`, nothing (see reference_quickshell_fileview_missing_path), so
+     * `onLoadFailed: writeAdapter()` below could never have bootstrapped them
+     * even on a writable path. synui-bar seeds all three with `{}` before
+     * starting quickshell for exactly that reason; the onLoadFailed handlers
+     * are kept for a hand-run `quickshell -p` on a source tree.
+     *
+     * ~/.config/synui/antiquity/ rather than ~/.config/quickshell/antiquity/:
+     * this is synui configuration that happens to be rendered by quickshell,
+     * it sits beside synuirc and settings.state where the rest of the desktop's
+     * state already is, and it must survive a user copying the packaged tree
+     * into ~/.config/quickshell to hack on it — which would otherwise silently
+     * fork their settings the moment they did.
+     */
+    readonly property string stateDir: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/synui/antiquity"
+
+    /*
      * The one font named by family rather than loaded from fonts/.
      *
      * Upstream shipped Apple's Monaco for the taskbar clock, which SYNAPSE
@@ -194,6 +225,55 @@ Singleton {
         }
     }
 
+    /*
+     * PICKING A THEME, and carrying it past this shell's own windows.
+     *
+     * `colors` above is a live binding on `settings.currentTheme`, so setting
+     * the name is all it takes to recolour every Antiquity surface — upstream's
+     * `Quickshell.reload(true)` after the assignment tore the whole shell down
+     * and built it again to achieve what the binding already did, and it did so
+     * while the settings write was still in flight.
+     *
+     * The rest of the desktop is the part that was missing. A theme picker that
+     * recolours the bar and leaves Dolphin, GTK apps, kitty and Firefox on the
+     * old palette has not really switched the theme, so this hands the same
+     * colours to `synui-apply-theme` — the one script that knows how to write
+     * kdeglobals, GTK settings.ini and the rest, and the same one synui's own
+     * theme.c spawns on Super+T. Best effort by design: it is absent on a box
+     * where synui is not installed (running this tree under another
+     * compositor), and Quickshell.execDetached on a missing binary is a no-op.
+     *
+     * SCHEME IS DERIVED, NOT LISTED. All five shipped themes are dark, so a
+     * hardcoded "dark" would be correct today and quietly wrong the moment
+     * somebody takes Config.qml's invitation to add a scheme of their own —
+     * they would get a light palette with dark app windows and no clue why.
+     * Rec. 601 luma of `base` against the usual midpoint answers it instead.
+     *
+     * NOT the compositor's own borders and titlebars: synui has no "set theme
+     * <name>" dispatch, only a `theme` action that opens its picker, and those
+     * are a different set of five presets anyway. Super+T still owns them.
+     */
+    function applyTheme(name: string): void {
+        if (themes[name] == null) {
+            console.warn("applyTheme: no such theme: " + name);
+            return;
+        }
+        settings.currentTheme = name;
+
+        const t = themes[name];
+        const accent = Qt.color(t.accent);
+        const base = Qt.color(t.base);
+        const text = Qt.color(t.textLight);
+        const c255 = c => [c.r, c.g, c.b].map(v => String(Math.round(v * 255)));
+        const luma = 0.299 * base.r + 0.587 * base.g + 0.114 * base.b;
+
+        Quickshell.execDetached(["synui-apply-theme", luma < 0.5 ? "dark" : "light"].concat(c255(accent))
+            // The glyph triple. synui-apply-theme defaults it to the accent
+            // when omitted, but the base/text pair is positional and cannot be
+            // reached without it, so it is passed explicitly.
+            .concat(c255(accent)).concat(c255(base)).concat(c255(text)));
+    }
+
     enum SystemPopup {
         Startmenu,
         ThemePicker,
@@ -272,7 +352,7 @@ Singleton {
     }
     property alias favoriteApps: favoriteAppsAdapter.apps
     FileView {
-        path: Qt.resolvedUrl("./favoriteapps.json")
+        path: root.stateDir + "/favoriteapps.json"
         // when changes are made on disk, reload the file's content
         watchChanges: true
         onFileChanged: reload()
@@ -292,6 +372,25 @@ Singleton {
         }
     }
     //Widgets
+    /*
+     * The widgets on one monitor, as a list.
+     *
+     * `Object.values(widgets[name])` is what both callers used to write inline,
+     * and it throws "Value is undefined and could not be converted to an
+     * object" for any monitor that has never had a widget put on it — which is
+     * every monitor on a fresh install, and every monitor at all while
+     * widgets.json was unreadable. A thrown binding leaves the model unset, so
+     * the desktop and the Widgets tab of the settings window both came up
+     * empty and stayed that way even after a widget was added.
+     *
+     * One function rather than a guard at each call site: the two callers are
+     * the desktop (WidgetScreen) and the editor for it (SettingsWindow), and
+     * they must not be able to disagree about what is on a screen.
+     */
+    function widgetsOn(monitorName: string): var {
+        const m = widgets[monitorName];
+        return m ? Object.values(m) : [];
+    }
     function addWidget(monitorName: string, widgetType: int, widgetName: string, x: int, y: int, enableBackground: bool) {
         let updated = Object.assign({}, widgets);
         if (!widgets[monitorName]) {
@@ -335,7 +434,7 @@ Singleton {
     }
     property alias widgets: widgetsAdapter.monitors
     FileView {
-        path: Qt.resolvedUrl("./widgets.json")
+        path: root.stateDir + "/widgets.json"
         // when changes are made on disk, reload the file's content
         watchChanges: true
         onFileChanged: reload()
@@ -358,7 +457,7 @@ Singleton {
     property bool openSettingsWindow: false
     property alias settings: settingsJsonAdapter.settings
     FileView {
-        path: Qt.resolvedUrl("./settings.json")
+        path: root.stateDir + "/settings.json"
         // when changes are made on disk, reload the file's content
         watchChanges: true
         onFileChanged: reload()

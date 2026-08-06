@@ -31,7 +31,7 @@ Scope {
 
                     Repeater {
                         anchors.fill: parent
-                        model: Object.values(Config.widgets[widgetScreen.screen.name])
+                        model: Config.widgetsOn(widgetScreen.screen.name)
 
                         delegate: Loader {
                             //anchors.fill: parent

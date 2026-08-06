@@ -39,8 +39,27 @@ PanelWindow {
         right: 0
     }
 
-    implicitWidth: 500
-    implicitHeight: 280
+    // Wider than the 500 upstream used, because that was the width of a panel
+    // whose left two thirds were empty and which now has a clock, a track title
+    // and a transport to fit side by side.
+    implicitWidth: 560
+
+    /*
+     * The HEIGHT follows the pane rather than being a number, because the pane
+     * grows and shrinks: the battery row, the now-playing block and the
+     * brightness stepper each appear only where they mean something, so a fixed
+     * height that suits a laptop playing music leaves a desktop looking at the
+     * empty box this panel was already accused of being.
+     *
+     * 74 is the chrome around it — the 40px title bar, the 6/12 margins on the
+     * body and the 8s inside it. The floor is what the three buttons and the
+     * volume slider in the right-hand strip need; below that the pane would be
+     * the shorter of the two and the strip would start clipping.
+     *
+     * No layout loop: a ColumnLayout's implicitHeight is the sum of its
+     * children's, which does not depend on the height it is given.
+     */
+    implicitHeight: Math.max(240, 74 + statusPane.implicitHeight)
     visible: popupState == Config.SidebarPopup.MainMenu ? true : false
     color: "transparent"
     SidebarPopupWindow {
@@ -116,6 +135,18 @@ PanelWindow {
                         color: Config.colors.shadow
                         border.width: 1
                         border.color: Config.colors.highlight
+                        clip: true
+
+                        // Upstream left this Rectangle empty — a bordered void
+                        // taking two thirds of a panel called "Control Panel".
+                        // See ControlPanelPane.qml for what belongs in it and
+                        // why it is a file of its own rather than another
+                        // hundred lines inline here.
+                        ControlPanelPane {
+                            id: statusPane
+                            anchors.fill: parent
+                            active: root.visible
+                        }
                     }
                     Rectangle {
                         Layout.fillHeight: true

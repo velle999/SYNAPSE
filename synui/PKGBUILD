@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=271
+pkgrel=272
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -509,4 +509,26 @@ package() {
     # option at it: `synui-game-run -- %command%`.
     install -Dm755 systemd/synui-game-run.sh \
         "$pkgdir/usr/bin/synui-game-run"
+
+    # ── The Antiquity wallpapers ─────────────────────────────────────────────
+    #
+    # The three that ship with diinki's linux-antiquity, under the same MIT
+    # grant as the QML. Provenance, the licence reasoning and what was
+    # re-encoded are all in quickshell-antiquity/WALLPAPERS.md — read that
+    # before adding a fourth.
+    #
+    # /usr/share/backgrounds FLAT, not a subdirectory of it: wppick_scan_dir()
+    # in src/wppick.c reads one directory and does not recurse, so a tidy
+    # backgrounds/antiquity/ would hide all three from the Super+W picker,
+    # which is the only reason to ship them. Hence the `antiquity-` prefix on
+    # the filenames — that list is flat and shared with SynapseOS's own
+    # artwork, so the name has to say where it came from.
+    #
+    # NOT under /usr/share/synui/quickshell-antiquity with the rest of the
+    # tree, even though the `find` above would have picked them up for free: a
+    # wallpaper is not a property of a bar, and both shells and the
+    # compositor's own picker should see them.
+    for _wp in data/wallpapers/*; do
+        install -Dm644 "$_wp" "$pkgdir/usr/share/backgrounds/${_wp##*/}"
+    done
 }

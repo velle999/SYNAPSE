@@ -187,14 +187,15 @@ PanelWindow {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
-                        Image {
-                            anchors.centerIn: parent
-                            width: 50
-                            height: 50
-                            asynchronous: true
-                            antialiasing: true
-                            source: parent.iconPath
-                        }
+                        /*
+                         * Upstream had an Image here sourcing `parent.iconPath`
+                         * — a property nothing declares. It logged "Unable to
+                         * assign [undefined] to QUrl" on every one of the five
+                         * swatches at startup and drew nothing, because the
+                         * swatch is built out of the Squares/Sun drawings and
+                         * the accent dot above; there is no icon to show. Gone
+                         * rather than given a path.
+                         */
                         MouseArea {
 
                             anchors.fill: buttonOutline
@@ -204,9 +205,7 @@ PanelWindow {
                                 cursorShape: Qt.PointingHandCursor
                             }
                             onReleased: {
-                                Config.settings.currentTheme = modelData;
-                                Quickshell.reload(true);
-                                console.log("Setting current theme to: " + modelData);
+                                Config.applyTheme(modelData);
                                 root.closeCallback();
                             }
                         }

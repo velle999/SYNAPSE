@@ -33,7 +33,11 @@ Button {
             verticalAlignment: Text.AlignVCenter
             font.pixelSize: root.isToggled ? 30 : 18
             text: root.isToggled ? root.toggledIconFontValue : root.iconFontValue
-            color: root.isToggled ? Config.colors.accent : Config.colors.outline
+            // The idle glyph was `outline` — the near-black used to draw a 1px
+            // edge, not to be read as a symbol. On the translucent bar it made
+            // the launcher button invisible until you had already opened it.
+            // See taskbar/ClockWidget.qml.
+            color: root.isToggled ? Config.colors.accent : Config.colors.textLight
         }
     }
     HoverHandler {

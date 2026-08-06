@@ -93,6 +93,42 @@ if [ ! -f "$SYNUI_BAR/shell.qml" ]; then
     SYNUI_BAR="/usr/share/synui/quickshell"
 fi
 
+# ── Antiquity's state files ──────────────────────────────────────────────────
+#
+# The Antiquity shell keeps its settings, its desktop widgets and its favourite
+# apps in three JSON files that a quickshell FileView reads and writes. A
+# FileView will NOT create a file that does not exist — it drops the write with
+# no `saved`, no `saveFailed` and no error — so something outside QML has to put
+# them there once, or every setting in that shell silently fails to persist.
+#
+# Upstream never needed this: linux-antiquity is installed by copying its tree
+# into ~/.config/quickshell, so the files sat beside shell.qml in a directory
+# the user owned, and the first write created them. SYNAPSE ships the tree as a
+# package under a root-owned /usr/share, so that path was not merely empty, it
+# was unwritable — see the header in quickshell-antiquity/Config.qml.
+#
+# Seeded HERE rather than from QML because this runs before quickshell does and
+# already knows which shell is starting. Doing it in Config.qml means racing the
+# FileView's own first load: the seed lands after the read has already failed,
+# and the reload needed to recover would clobber whatever the user changed in
+# between.
+#
+# `{}` and not the default settings object: an empty JSON object leaves every
+# JsonAdapter property at its declared default, so the shipped defaults stay in
+# one place (Config.qml) instead of being duplicated here in a form that would
+# drift. Existing files are never touched, so this is safe to re-run and cannot
+# revert anybody's settings.
+if [ "$SHELL_NAME" = antiquity ]; then
+    _antiq="$SYNUI_ETC/antiquity"
+    if mkdir -p "$_antiq" 2>/dev/null; then
+        for _f in settings widgets favoriteapps; do
+            [ -e "$_antiq/$_f.json" ] || printf '{}' > "$_antiq/$_f.json"
+        done
+    else
+        echo "synui-bar: cannot create $_antiq — Antiquity settings will not persist" >&2
+    fi
+fi
+
 # ── The icon theme ───────────────────────────────────────────────────────────
 #
 # Empty (the default) means "follow the system icon theme", which is what a
@@ -122,10 +158,13 @@ _icon_theme=$(conf_lookup bar_icon_theme)
 # request/response with no event stream, so it cannot tell the bar anything.
 # quickshell's IPC runs the other way. See quickshell/shell.qml's IpcHandler.
 #
-# NOTE the Antiquity tree has no IpcHandler: upstream never needed one, because
-# Hyprland could be told things directly. An `ipc` call against it therefore
-# fails, which is the honest outcome — the Super tap simply does not open a
-# start menu on that shell yet.
+# BOTH trees answer to the `menu` target, which is what makes the shell
+# swappable without the compositor knowing. Antiquity had no such handler when
+# it first shipped — upstream drove Hyprland directly and its only IpcHandler
+# was a per-screen `appLauncher_<name>`, which nothing here ever called — so the
+# Super tap did nothing on it. Its shell.qml now exposes the same
+# toggle/open/close(output) that quickshell/shell.qml does, opening the
+# Antiquity app launcher instead of the SYNAPSE start menu.
 if [ "${1-}" = "ipc" ]; then
     shift
     if [ -f "$CONF_HOME/quickshell/$SHELL_NAME/shell.qml" ]; then

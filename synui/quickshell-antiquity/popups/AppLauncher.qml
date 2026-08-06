@@ -20,7 +20,17 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     exclusionMode: ExclusionMode.Ignore //Ignore
     WlrLayershell.namespace: "diinki_celestialantiquity:bars"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    /*
+     * EXCLUSIVE, not OnDemand. OnDemand hands a layer surface the keyboard when
+     * it is clicked, which was enough upstream because the only way to open
+     * this was to click the taskbar button — the click that opened it was also
+     * the click that focused it. Summoned from the keyboard by the Super tap
+     * there is no click, so the search field came up unfocused and every
+     * keystroke went to whatever was behind it. The launcher is modal while it
+     * is up; Exclusive is what that means in layer-shell terms, and it is what
+     * the SYNAPSE bar's start menu uses (`focusable: true`) for the same reason.
+     */
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
     anchors {
         left: true
@@ -32,7 +42,22 @@ PanelWindow {
     color: Config.settings.appLauncherBackground ? Qt.rgba(glassColor.r, glassColor.g, glassColor.b, 0.3) : "transparent"
 
     visible: currentPopup == Config.SystemPopup.AppLauncher ? true : false
-    //visible: true
+
+    /*
+     * The window is built once and only hidden between uses, so
+     * `Component.onCompleted: forceActiveFocus()` in the search field fired
+     * exactly once — at startup, while the launcher was invisible — and never
+     * again. Re-focus and clear on every open instead, so that summoning it
+     * never resurrects the last search and the caret is always where you are
+     * about to type.
+     */
+    onVisibleChanged: {
+        if (visible) {
+            searchInput.text = "";
+            searchInput.forceActiveFocus();
+        }
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: {

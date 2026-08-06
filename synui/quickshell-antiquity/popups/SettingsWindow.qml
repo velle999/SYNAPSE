@@ -315,8 +315,12 @@ FloatingWindow {
                             ColumnLayout {
                                 anchors.fill: parent
                                 RowLayout {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
+                                    // Layout.fillWidth, not anchors: these four
+                                    // rows are children of a ColumnLayout, and
+                                    // anchoring an item a layout manages is
+                                    // undefined behaviour that Qt warns about
+                                    // on every one of them at startup.
+                                    Layout.fillWidth: true
 
                                     ColumnLayout {
                                         Text {
@@ -356,8 +360,12 @@ FloatingWindow {
                                     }
                                 }
                                 RowLayout {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
+                                    // Layout.fillWidth, not anchors: these four
+                                    // rows are children of a ColumnLayout, and
+                                    // anchoring an item a layout manages is
+                                    // undefined behaviour that Qt warns about
+                                    // on every one of them at startup.
+                                    Layout.fillWidth: true
 
                                     ColumnLayout {
                                         Text {
@@ -421,8 +429,12 @@ FloatingWindow {
                                     }
                                 }
                                 RowLayout {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
+                                    // Layout.fillWidth, not anchors: these four
+                                    // rows are children of a ColumnLayout, and
+                                    // anchoring an item a layout manages is
+                                    // undefined behaviour that Qt warns about
+                                    // on every one of them at startup.
+                                    Layout.fillWidth: true
 
                                     ColumnLayout {
                                         Text {
@@ -486,8 +498,12 @@ FloatingWindow {
                                     }
                                 }
                                 RowLayout {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
+                                    // Layout.fillWidth, not anchors: these four
+                                    // rows are children of a ColumnLayout, and
+                                    // anchoring an item a layout manages is
+                                    // undefined behaviour that Qt warns about
+                                    // on every one of them at startup.
+                                    Layout.fillWidth: true
 
                                     ColumnLayout {
                                         Text {
@@ -672,7 +688,7 @@ FloatingWindow {
                                 anchors.top: widgetBoxTitlebar.bottom
                                 height: parent.height
                                 width: parent.width
-                                model: Object.values(Config.widgets[modelData.name])
+                                model: Config.widgetsOn(modelData.name)
                                 cellWidth: 250
                                 cellHeight: 330
                                 bottomMargin: 50
