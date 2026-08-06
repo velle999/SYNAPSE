@@ -42,7 +42,14 @@ if grep -q '^\[blackarch\]' /etc/pacman.conf; then
     # key rotations from ever arriving.
     if ! pacman -Q blackarch-keyring >/dev/null 2>&1; then
         msg "Installing the missing blackarch-keyring package..."
-        pacman -S --noconfirm --needed blackarch-keyring \
+        # --overwrite, scoped to the three paths strap.sh wrote: it extracts
+        # the keyring tarball STRAIGHT into /usr/share/pacman/keyrings
+        # (install_keyring, a bare `tar xfz -C`), so those files are owned by
+        # no package and a plain -S dies with "exists in filesystem". Taking
+        # ownership is the point — an unowned keyring is exactly the one that
+        # never gets rotated.
+        pacman -S --noconfirm --needed \
+            --overwrite '/usr/share/pacman/keyrings/blackarch*' blackarch-keyring \
             || warn "could not install blackarch-keyring"
     fi
     exit 0
@@ -81,7 +88,8 @@ count=$(pacman -Sl blackarch 2>/dev/null | wc -l)
 [ "$count" -gt 0 ] || die "[blackarch] is configured but lists no packages"
 
 # The keyring as a PACKAGE, so future key rotations arrive as an upgrade.
-pacman -S --noconfirm --needed blackarch-keyring \
+pacman -S --noconfirm --needed \
+    --overwrite '/usr/share/pacman/keyrings/blackarch*' blackarch-keyring \
     || warn "blackarch-keyring did not install — key rotations will not reach this machine"
 
 msg "BlackArch enabled — $count packages available."

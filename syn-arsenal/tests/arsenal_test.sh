@@ -87,6 +87,19 @@ check "a strap.sh pinning a DIFFERENT key is refused" "1" \
 check "enable-repo requires root" "1" \
     "$("$root/arsenal-enable-repo.sh" >/dev/null 2>&1; echo $?)"
 
+# strap.sh untars the keyring straight into /usr/share/pacman/keyrings, leaving
+# three files owned by no package — so a plain `pacman -S blackarch-keyring`
+# afterwards dies with "exists in filesystem". Every site that installs the
+# keyring must scope an --overwrite over those paths, or enabling the repo and
+# then owning its keyring can never both succeed on the same machine.
+ka=$(grep -c -- "--overwrite '/usr/share/pacman/keyrings/blackarch\*'" "$root/arsenal-enable-repo.sh")
+check "every keyring install in enable-repo scopes --overwrite" "2" "$ka"
+# Counted against the INVOCATIONS, not against mentions of the package name:
+# comments and the `pacman -Q` presence check name it too, and counting those
+# made this assert 6 == 2 and fail for no real reason.
+ki=$(grep -c 'pacman -S --noconfirm --needed' "$root/arsenal-enable-repo.sh")
+check "no keyring install site was missed" "$ki" "$ka"
+
 # ── Launcher ────────────────────────────────────────────────────────────────
 echo
 echo "  syn-arsenal"

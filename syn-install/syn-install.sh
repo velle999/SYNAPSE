@@ -2174,8 +2174,13 @@ if [ "$WANT_BLACKARCH" = 1 ]; then
                 if [ "${ba_count:-0}" -gt 0 ]; then
                     # The keyring as a package, so key rotations arrive as an
                     # upgrade rather than never.
-                    arch-chroot /mnt pacman -S --noconfirm --needed blackarch-keyring \
-                        >/dev/null 2>&1 \
+                    # --overwrite, scoped: strap.sh extracts the keyring
+                    # tarball straight into /usr/share/pacman/keyrings, so those
+                    # files are owned by no package and a plain -S dies with
+                    # "exists in filesystem". Taking ownership is the point.
+                    arch-chroot /mnt pacman -S --noconfirm --needed \
+                        --overwrite '/usr/share/pacman/keyrings/blackarch*' \
+                        blackarch-keyring >/dev/null 2>&1 \
                         || warn "blackarch-keyring did not install — key rotations
   will not reach this machine. Fix with 'sudo pacman -S blackarch-keyring'."
                     ba_ok=1
