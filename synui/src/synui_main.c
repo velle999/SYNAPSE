@@ -2369,6 +2369,7 @@ static void usage(const char *prog) {
         "                      Super+Space opens, or `super_space = cmdbar`)\n"
         "  Super+Backspace    Ask the AI about the focused window\n"
         "  Super+C            Control panel (every shortcut + the settings)\n"
+        "  Super+/  Super+?   Keyboard shortcuts, searchable (Enter runs one)\n"
         "  Super+A            Toggle neural overlay\n"
         "  Super+D            Display settings (rotate/arrange monitors)\n"
         "  Super+Shift+D      Show/hide titlebars\n"
@@ -2423,7 +2424,9 @@ static void usage(const char *prog) {
         "repeat_rate/delay, tap, natural_scroll, left_handed, accel_speed,\n"
         "terminal, autostart, gap, border_width,\n"
         "border_color_norm/focus/ai/warn (#rrggbb),\n"
-        "effects on/off + effect_scanline/curvature/aberration/glitch (0..1, GLES2 only).\n"
+        "effects on/off + effect_scanline/curvature/aberration/glitch (0..1, GLES2 only),\n"
+        "bar_shell = synapse|antiquity (which QML bar synui-bar starts; read by\n"
+        "  synui-bar at LOGIN, not by the compositor) + bar_icon_theme.\n"
         "Send SIGHUP to reload the config at runtime (binds, keymap, libinput,\n"
         "gap/border; autostart entries only run at startup).\n",
         prog

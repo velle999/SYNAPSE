@@ -1,0 +1,125 @@
+// Generated from SVG file rain_lines.svg
+import QtQuick
+import QtQuick.VectorImage
+import QtQuick.VectorImage.Helpers
+import QtQuick.Shapes
+import QtQuick.Effects
+
+Item {
+    implicitWidth: 664
+    implicitHeight: 212
+    component AnimationsInfo : QtObject
+    {
+        property bool paused: false
+        property int loops: 1
+        signal restart()
+    }
+    property AnimationsInfo animations : AnimationsInfo {}
+    transform: [
+        Scale { xScale: width / 187.476; yScale: height / 59.9091 }
+    ]
+    objectName: "svg1"
+    id: _qt_node0
+    transformOrigin: Item.TopLeft
+    Item { // Structure node
+        objectName: "layer10"
+        id: _qt_node8
+        transformOrigin: Item.TopLeft
+        transform: TransformGroup {
+            id: _qt_node8_transform_base_group
+            Translate { x: -4.6512; y: -83.9314}
+        }
+        Shape {
+            objectName: "path166"
+            id: _qt_node9
+            transformOrigin: Item.TopLeft
+            opacity: 0.759661
+            preferredRendererType: Shape.CurveRenderer
+            asynchronous: true
+            ShapePath {
+                id: _qt_node9_stroke
+                objectName: "svg_stroke_path:path166"
+                strokeColor: "#ff000000"
+                strokeWidth: 0.499999
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                miterLimit: 4
+                fillColor: "transparent"
+                fillRule: ShapePath.WindingFill
+                pathHints: ShapePath.PathQuadratic
+                PathSvg { path: "M 152.664 126.472 Q 150.449 127.015 149.287 128.978 Q 148.125 130.941 148.715 133.144 Q 149.306 135.347 151.293 136.467 Q 153.28 137.586 155.471 136.949 Q 156.331 136.699 157.885 135.788 L 158.464 135.452 Q 161.736 133.6 164.814 133.379 Q 166.548 133.255 168.163 133.667 Q 169.87 134.103 171.186 135.078 Q 172.088 135.746 172.83 136.686 Q 173.529 137.572 174.046 138.649 Q 174.953 140.535 175.325 143.07 Q 175.582 144.813 175.673 148.339 Q 175.741 150.978 175.863 152.29 Q 176.233 156.256 178.562 163.897 L 179.979 168.754 Q 180.564 170.952 181.522 175.418 Q 183.622 185.209 185.779 189.708 Q 187.315 192.911 189.521 195.695 " }
+            }
+        }
+        Shape {
+            objectName: "path168"
+            id: _qt_node10
+            transformOrigin: Item.TopLeft
+            opacity: 0.759661
+            transform: TransformGroup {
+                id: _qt_node10_transform_base_group
+                Translate { x: -2.71279; y: -2.99342}
+            }
+            preferredRendererType: Shape.CurveRenderer
+            asynchronous: true
+            ShapePath {
+                id: _qt_node10_stroke
+                objectName: "svg_stroke_path:path168"
+                strokeColor: "#ff000000"
+                strokeWidth: 0.499999
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                miterLimit: 4
+                fillColor: "transparent"
+                fillRule: ShapePath.WindingFill
+                pathHints: ShapePath.PathQuadratic
+                PathSvg { path: "M 11.5995 145.929 L 9.9157 185.779 " }
+            }
+        }
+        Shape {
+            objectName: "path173"
+            id: _qt_node11
+            transformOrigin: Item.TopLeft
+            opacity: 0.759661
+            preferredRendererType: Shape.CurveRenderer
+            asynchronous: true
+            ShapePath {
+                id: _qt_node11_stroke
+                objectName: "svg_stroke_path:path173"
+                strokeColor: "#ff000000"
+                strokeWidth: 0.499999
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                miterLimit: 4
+                fillColor: "transparent"
+                fillRule: ShapePath.WindingFill
+                pathHints: ShapePath.PathQuadratic
+                PathSvg { path: "M 158.09 120.859 L 156.593 130.775 " }
+            }
+        }
+        Shape {
+            objectName: "path176"
+            id: _qt_node12
+            transformOrigin: Item.TopLeft
+            opacity: 0.759661
+            transform: TransformGroup {
+                id: _qt_node12_transform_base_group
+                Translate { x: -1.87089; y: 0.0935443}
+            }
+            preferredRendererType: Shape.CurveRenderer
+            asynchronous: true
+            ShapePath {
+                id: _qt_node12_stroke
+                objectName: "svg_stroke_path:path176"
+                strokeColor: "#ff000000"
+                strokeWidth: 0.499999
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                miterLimit: 4
+                fillColor: "transparent"
+                fillRule: ShapePath.WindingFill
+                pathHints: ShapePath.PathQuadratic
+                PathSvg { path: "M 16.0073 139.7 L 16.9333 150.548 " }
+            }
+        }
+    }
+}

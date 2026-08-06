@@ -249,6 +249,31 @@ repeat_delay = 600
 # only thing on screen. Off leaves it to whoever presses the key.
 numlock      = on
 
+# ── The bar (synui-bar) ────────────────────────────────────
+# TWO shells ship. `synapse` (the default) is SynapseOS's own bar; `antiquity`
+# is a port of diinki's linux-antiquity — a radial taskbar, a sidebar and a
+# different visual language entirely. See
+# /usr/share/synui/quickshell-antiquity/FONTS.md for what it bundles and why
+# three of upstream's fonts and its icon theme are not redistributable.
+#
+# Read by synui-bar at startup, NOT by the compositor: switching this takes
+# effect when the bar next starts, i.e. at the next login. Control panel ▸
+# Desktop ▸ Bar shell writes the same key.
+#
+# Note the Antiquity shell has no IpcHandler, so the Super tap does not open a
+# start menu on it — upstream had Hyprland to talk to and never needed one.
+# bar_shell = antiquity
+#
+# Pin the bar's icon theme. Empty (the default) means "follow the system icon
+# theme", so a theme switch carries the bar along with GTK and Qt — which is
+# almost always what you want. Set it only to pin something else; it is exported
+# to quickshell as QS_ICON_THEME and applies to whichever shell is running.
+# The Antiquity shell is the reason it exists: upstream hard-pinned
+# `buuf-nestort` with a static pragma, which SYNAPSE does not redistribute (no
+# licence in upstream's tree) and which would have overridden the theme anyway.
+# Install it yourself and name it here to get the upstream look.
+# bar_icon_theme = buuf-nestort
+
 # ── Welcome menu (Super+Escape) ────────────────────────────
 # Whether the menu greets you on login. Super+Escape opens it either way, so
 # turning this off never strands it. The menu's own "Show At Startup" row
@@ -302,8 +327,14 @@ record_audio = off
 #          layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
 #          stack_next/prev,
 #          master_shrink/grow, column_consume, column_expel,
-#          float_toggle, maximize_toggle, ai_ask,
+#          float_toggle, maximize_toggle, ai_ask, keys,
 #          ws <1-9>, movews <1-9>
+# keys = the shortcut palette (default super+slash, and super+shift+question so
+# Super+? works too — on a US layout that is the same physical key, and xkb
+# hands the compositor the shifted keysym, so the two need separate binds).
+# It lists every bind below, filtered as you type, and Enter runs the one you
+# land on. Generated from the live bind table, so anything you add here appears
+# in it with no second edit.
 # alt_tab = focus the last-used window (most-recently-used order); hold alt and
 # press tab again to keep going back. Bound to alt+tab / alt+shift+tab.
 # retile = put every window on this desktop back in the layout — un-maximize,

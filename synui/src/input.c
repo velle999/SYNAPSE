@@ -869,6 +869,9 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * dispatches — see ctlpanel_show_cat. */
         if (arg && *arg) ctlpanel_show_cat(s, arg);
         else             ctlpanel_toggle(s);
+    } else if (strcmp(action, "keys") == 0) {
+        /* Super+/ — the bind table as a searchable palette. See keys.c. */
+        keys_toggle(s);
     } else if (strcmp(action, "theme") == 0) {
         theme_toggle(s);
     } else if (strcmp(action, "bluetooth") == 0) {
@@ -1311,6 +1314,15 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Control panel: same modal contract again. */
         for (int i = 0; i < nsyms; i++)
             if (ctlpanel_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Shortcut palette: modal, and the most greedy of them — it is a search
+         * box, so it claims every printable key and bare Shift. Only Super and
+         * Alt fall through, which is what lets Super+/ close it. AFTER the
+         * control panel, since the control panel can be what opened it. */
+        for (int i = 0; i < nsyms; i++)
+            if (keys_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -1909,6 +1921,7 @@ void pointer_rebase(syn_server_t *s)
     X(clock,    clock)    \
     X(calendar, cal)      \
     X(ctlpanel, ctlpanel) \
+    X(keys,     keys)     \
     X(theme,    thememgr) \
     X(clipboard, clipboard)
 

@@ -1,0 +1,7 @@
+module Taskbar
+Bar 1.0 Bar.qml
+RadialTaskbar 1.0 RadialTaskbar.qml
+TaskbarButton 1.0 TaskbarButton.qml
+Workspaces 1.0 Workspaces.qml
+ClockWidget 1.0 ClockWidget.qml
+SysTray 1.0 SysTray.qml

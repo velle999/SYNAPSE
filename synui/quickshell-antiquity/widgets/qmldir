@@ -1,0 +1,5 @@
+module Widgets
+WidgetScreen 1.0 WidgetScreen.qml
+WeatherWidget 1.0 WeatherWidget.qml
+ClockWidget 1.0 ClockWidget.qml
+CPUTemperatureWidget 1.0 CPUTemperatureWidget.qml

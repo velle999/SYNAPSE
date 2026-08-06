@@ -1,0 +1,3 @@
+module Popups
+AppLauncher 1.0 AppLauncher.qml
+SettingsWindow 1.0 SettingsWindow.qml

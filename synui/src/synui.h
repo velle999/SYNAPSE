@@ -965,6 +965,7 @@ typedef enum {
     CTL_ROW_DOCK_AUTOHIDE, /* dock slides away when unhovered, or stays put */
     CTL_ROW_LAUNCHER,      /* start-button style: text ◢ SYNAPSE, or ◢ + emblem */
     CTL_ROW_SUPER_SPACE,   /* which of launcher/command bar answers Super+Space */
+    CTL_ROW_BAR_SHELL,     /* which QML tree synui-bar starts: SYNAPSE or Antiquity */
     CTL_ROW_WIDGETS,       /* desktop widgets: visualiser, sysmon, clock, launcher, post-it, pizza */
     /* Display */
     CTL_ROW_DISPLAYS,
@@ -1165,12 +1166,65 @@ enum {
 /* A shortcuts-column line. The nine workspace binds (and the nine move-to-
  * workspace binds) are collapsed into one row each — listed literally they are
  * 18 of ~40 rows and drown everything worth reading. */
+/* Sizes of one bind's action and argument. Declared here rather than down in
+ * the keybinding section because syn_ctl_shortcut_t below carries a copy of
+ * both, and a struct cannot use a macro defined after it. */
+#define SYN_BINDS_MAX        96
+#define SYN_BIND_ACTION_LEN  24
+#define SYN_BIND_ARG_LEN     104
+
 typedef struct {
     char combo[48];
     char desc[64];
+    /* The bind this line came from, so a list of shortcuts can also RUN one.
+     * The control panel's column ignores both — it is read-only — but the
+     * Super+/ palette (keys.c) presses Enter on them, and generating the two
+     * lists from one function is the whole reason the shortcuts column is not
+     * a hand-written table. Empty for the rows that are not a single bind:
+     * Super-tap, and the collapsed workspace pair. */
+    char action[SYN_BIND_ACTION_LEN];
+    char arg[SYN_BIND_ARG_LEN];
 } syn_ctl_shortcut_t;
 
 #define CTL_SHORTCUTS_MAX  SYN_BINDS_MAX
+
+/* ── The shortcut palette (keys.c, Super+/) ──────────────────
+ *
+ * The control panel's Shortcuts category already lists every bind, and that is
+ * where the list belongs — but it is a page you have to be *in* the control
+ * panel to reach, it does not filter, and it cannot run anything. This is the
+ * same list as a palette: one key from anywhere, type to narrow it, Enter to
+ * run what you landed on.
+ *
+ * It is not a second list. Both come out of ctlpanel_shortcuts(), for the
+ * reason that function exists at all — a hand-kept copy of the bind table is a
+ * copy that goes stale, and this project has shipped that bug before.
+ *
+ * The whole list is snapshotted into all[] on open rather than rebuilt per
+ * frame: the filter runs on every keystroke, and re-walking the bind table to
+ * re-derive strings that cannot have changed since the panel opened would be
+ * work done once per character typed. Reopening picks up a config reload. */
+#define KEYS_MAX        CTL_SHORTCUTS_MAX
+#define KEYS_ROWS       14    /* rows drawn at once; the rest scroll */
+#define KEYS_QUERY_MAX  48
+
+typedef struct {
+    int  visible;
+    int  selected;     /* index into view[], NOT into all[] */
+    int  scroll;       /* first view[] row drawn */
+    char query[KEYS_QUERY_MAX];
+    int  query_len;
+
+    syn_ctl_shortcut_t all[KEYS_MAX];
+    int  n;
+
+    /* Row -> all[] index, under the query. Rebuilt by keys_filter() on every
+     * edit, so the draw, the cursor and the pointer all walk one list. */
+    int  view[KEYS_MAX];
+    int  n_view;
+
+    syn_hit_t hit;
+} syn_keys_t;
 
 typedef struct {
     int  visible;
@@ -1637,10 +1691,9 @@ typedef struct {
     uint32_t  last_click_ms;
 } syn_news_t;
 
-/* ── Keybinding (table-driven; syntax in config.c) ───────── */
-#define SYN_BINDS_MAX        96
-#define SYN_BIND_ACTION_LEN  24
-#define SYN_BIND_ARG_LEN     104
+/* ── Keybinding (table-driven; syntax in config.c) ─────────
+ * The three size limits live up by syn_ctl_shortcut_t, which copies an
+ * action/arg out of this table and so needs them before this point. */
 
 typedef struct {
     uint32_t     mods;      /* WLR_MODIFIER_* mask (LOGO/SHIFT/CTRL/ALT) */
@@ -1733,6 +1786,25 @@ typedef enum {
     SYN_SUPER_SPACE_LAUNCHER = 0,  /* rofi — the default, as on every other desktop */
     SYN_SUPER_SPACE_CMDBAR,        /* the AI command bar, where it used to be */
 } syn_super_space_t;
+
+/* Which QML tree synui-bar starts (systemd/synui-bar.sh reads the resolved
+ * value out of settings.state, falling back to synuirc's `bar_shell`).
+ *
+ * synui does not launch the bar itself and never reads this — the key exists in
+ * the parser so that ONE file spells the setting and the control panel can
+ * write it through the same settings.state path as everything else. A row that
+ * wrote a private file would be the eighth per-subject state file settings.c
+ * exists to stop.
+ *
+ * Order matches syn_bar_shell_names[], and the lower-cased spellings are what
+ * config.c parses back out of settings.state. */
+typedef enum {
+    SYN_BAR_SHELL_SYNAPSE = 0,  /* quickshell/ — the shipped SYNAPSE bar */
+    SYN_BAR_SHELL_ANTIQUITY,    /* quickshell-antiquity/ — the diinki port */
+    SYN_BAR_SHELL_COUNT,        /* keep last */
+} syn_bar_shell_t;
+
+extern const char *const syn_bar_shell_names[SYN_BAR_SHELL_COUNT];
 
 /* Dock right-click context-menu actions (dock.c / render.c). */
 typedef enum {
@@ -2084,6 +2156,20 @@ typedef struct {
      * the control panel's enum row. Applied by
      * synui_config_apply_launcher_binds() at the end of every config load. */
     int super_space;
+
+    /* Which QML tree synui-bar starts. A syn_bar_shell_t held as an int, for
+     * the control panel's enum row. Read by systemd/synui-bar.sh, never by the
+     * compositor — see the enum's comment. */
+    int bar_shell;
+
+    /* Icon theme for the bar, exported to quickshell as QS_ICON_THEME. Empty
+     * (the default) means "follow the system theme", which is what a theme
+     * switch changes — so this is only for pinning something the rest of the
+     * desktop is not using. The Antiquity shell is the reason it exists:
+     * upstream hard-pinned buuf-nestort with a static pragma, which SYNAPSE
+     * cannot ship (see quickshell-antiquity/FONTS.md) and which would have
+     * overridden the theme anyway. */
+    char bar_icon_theme[64];
 
     /* record.c: does Super+Shift+R capture sound as well? On, the `record`
      * action passes --audio to synui-record, which records the default sink's
@@ -3090,6 +3176,18 @@ struct syn_server {
     } ctlpanel_ui;
 
     syn_ctlpanel_t  ctlpanel;
+
+    /* Shortcut palette (Super+/ and Super+?) — the bind table, filtered as you
+     * type. Its own tree so it can be raised over the control panel that may
+     * have opened it. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } keys_ui;
+
+    syn_keys_t      keys;
 
     /* Theme manager (Super+T) — its own scene subtree, like ctlpanel. */
     struct {
@@ -4385,6 +4483,21 @@ void ctlpanel_child_closed(syn_server_t *s, const char *action);
 /* The shortcuts column, rebuilt from the live bind table on every render.
  * Returns how many rows were written into out[] (at most max). */
 int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
+/* ── Shortcut palette (keys.c) ───────────────────────────────
+ * Super+/ (and Super+?): the same list ctlpanel_shortcuts() builds, filtered as
+ * you type, with Enter running the bind you land on. Same modal contract as
+ * every other panel, except that it claims bare Shift and every printable key —
+ * it is a search box, so `q` types a q rather than closing it. */
+void keys_show(syn_server_t *s);
+void keys_hide(syn_server_t *s);
+void keys_toggle(syn_server_t *s);
+int  keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+int  keys_motion(syn_server_t *s, double lx, double ly);
+int  keys_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                uint32_t time_msec);
+int  keys_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_keys(syn_server_t *s);
+
 /* How many shortcut rows the panel has room to draw — render.c owns the
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16

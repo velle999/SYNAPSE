@@ -737,3 +737,119 @@ else. The launcher moved onto it and the command bar moved off.
       too, which reads as a rendering bug rather than as glass. The selected row
       is accent-background plus `ink_for()`'s contrast pick — the only pairing
       that holds across a neon magenta, XP's beige and 95's silver.
+
+### Phase S — The shortcut palette (`Super+/`)  *(done)*
+
+- [x] **A searchable list of every keybinding, one key from anywhere.**
+      `src/keys.c` + `synui_render_keys()`. Super+/ opens it, you type, it
+      narrows, Enter runs the shortcut you land on.
+      The list already existed — Control panel ▸ Shortcuts — but as a page you
+      have to *be in the control panel* to reach, that does not filter and
+      cannot run anything. Fine as documentation, no use as the thing you reach
+      for when you know synui does something and cannot remember which key. That
+      column stays exactly as it was; this is the same data as a palette.
+- [x] **It is not a second list.** Both come out of `ctlpanel_shortcuts()`,
+      which walks the live bind table — the reason that function exists at all
+      is that a hand-maintained shortcut list drifts, and this project has
+      shipped that bug once already (the waybar start menu's stale entry list
+      mapped menu items to the wrong commands). A `bind =` line in synuirc shows
+      up in the palette with no second edit.
+      `syn_ctl_shortcut_t` grew `action`/`arg` to carry the bind itself, so the
+      palette can press Enter on a row. The control panel's column ignores both
+      — it is read-only — but generating the two from one function is the point.
+- [x] **Enter goes through `synui_binding_execute()`**, the same path a keypress
+      takes, so a row cannot do something subtly different from the key it
+      describes. The panel hides **first**: half these actions open a modal
+      panel, and running one with the palette still up leaves two stacked with
+      the wrong one swallowing the keys. Pinned in the test, from inside the
+      dispatch stub, because it is an *ordering* bug and asserting afterwards
+      would not see it.
+- [x] **Bound twice, on purpose.** `super+slash` and `super+shift+question`. On
+      a US layout Super+? *is* Super+Shift+/, and xkb hands the compositor the
+      shifted keysym (`question`, not `slash`) — so a single `super+slash` bind
+      is a key that mysteriously stops working the moment you hold Shift, which
+      is exactly what a hand reaching for "?" does.
+- [x] **Typing is the whole interaction**, which is why the navigation keys are
+      Up/Down and Ctrl+N/P rather than the j/k every other panel uses: j and k
+      have to type a j and a k. It claims bare Shift and every printable key
+      (`q` types a q rather than closing) but Super and Alt always fall
+      through — Super+/ is how you close it, and a search box that swallowed
+      Super+C would be a box you are stuck in.
+      Search is over **both** columns and words are ANDed order-independently,
+      so `super+w`, `wallpaper` and `float super` all find what you meant.
+      Backspace on an empty query deliberately does *not* close the panel, unlike
+      the control panel's search box: there the box is a mode over a list that is
+      still underneath, here the box *is* the panel.
+- [x] **The rows that cannot run are greyed, not hidden.** "Super+1–9" is nine
+      binds collapsed into one line and names no single one of them, so Enter
+      refuses rather than guessing a workspace. Super-tap is the opposite case —
+      not a bind at all, but it *does* have an action (`start_menu`), so it runs.
+- [x] **Discoverable without already knowing the key**: it is the second entry
+      of the welcome menu (Super+Escape), it lists *itself*, and `--help` and the
+      shipped `synuirc` both document it.
+- [x] **`tests/keys_test.c`** — 51 checks, driven by keysym the way
+      `ctlpanel_choice_test` is, for the reason `panel_pointer_test` gives at
+      length. `config.c` is deliberately **not** linked: the bind table is seeded
+      by hand, so "the palette lists whatever is in the table" is a real
+      assertion rather than a restatement of the defaults.
+
+### Phase T — The Antiquity shell  *(done)*
+
+- [x] **A second bar ships**: `quickshell-antiquity/`, a port of
+      [linux-antiquity](https://github.com/diinki/linux-antiquity) (MIT, ©
+      2026 diinki) — radial taskbar, sidebar, tarot-card power menu. Selected
+      with `bar_shell = antiquity` in synuirc or Control panel ▸ Desktop ▸ Bar
+      shell. The two trees are complete and independent: they disagree about
+      nearly every visual decision, and a shared base would be a third thing to
+      keep working.
+- [x] **`SynWorkspaces.qml` is the port's one real rewrite.** Upstream binds
+      `Quickshell.Hyprland`, which is a live model with change signals. synui has
+      no such thing — `synctl` is request/response with no event stream — so this
+      polls `synctl workspaces` on one 400ms timer and shares it. ONE poller, not
+      the three upstream could afford for free.
+      The semantic difference is why it is not a rename: Hyprland scopes a
+      workspace to a monitor and each bar filtered on `w.monitor.name`; synui's
+      desktops span every monitor at once, so the filter is **gone** rather than
+      reimplemented. Reintroducing it would mean inventing a partition the
+      compositor does not have. A click dispatches the same `ws` action the
+      Super+N bind runs, so click and keypress cannot drift.
+- [x] **The licence audit is in `quickshell-antiquity/FONTS.md`**, read out of
+      the fonts' own OpenType `name` tables rather than inferred from filenames.
+      Three of upstream's nine fonts could not ship — Monaco and Charcoal (Apple
+      / The Font Bureau, proprietary) and DOMINICA (Harold Lohner, donationware).
+      Charcoal is loaded upstream and never referenced, so dropping it changes no
+      pixels; the other two were rehomed onto `Config.fontMono` (DejaVu Sans
+      Mono, already a hard depend) and Recia. Boska/Recia/Quilon carry ITF's
+      credit clause, which FONTS.md discharges by name; `LICENSE.antiquity`
+      vendors upstream's MIT text, and `license=()` gained MIT and Apache-2.0.
+- [x] **The icon theme is deliberately NOT pinned.** Upstream hard-pins
+      `buuf-nestort` with a static `//@ pragma IconTheme`; SYNAPSE does not
+      redistribute it (7,552 loose files, no licence of any kind in upstream's
+      tree, and Buuf is Paul Davey's non-commercial artwork). A pragma would also
+      have overridden whatever `synui-apply-theme` just wrote for GTK/Qt and split
+      the desktop in two. `bar_icon_theme` in synuirc is the dynamic equivalent —
+      synui-bar exports it as `QS_ICON_THEME` — and empty, the default, means
+      "follow the system theme" so a theme switch carries the bar along.
+- [x] **The key is parsed by a compositor that never acts on it.** synui does not
+      start the bar; the session does, and `synui-bar` reads `bar_shell` itself
+      out of settings.state then synuirc, in synuirc's own `key = value` language.
+      It is declared in `config.c` anyway so the key has ONE spelling and the
+      control panel can persist it through settings.state like every other
+      setting — a row writing a private file would be the eighth per-subject
+      state file `settings.c` exists to stop. The row's help says it takes effect
+      at the next login, because `CTL_APPLY_NONE` is literally correct here and a
+      row that appears to do nothing reads as broken.
+- [x] **`mktarball.sh` is why this could not have shipped by accident.** Its
+      `contents=()` is the tarball's whole world, and a top-level directory
+      missing from it silently does not exist in the package — the tree sat in
+      the working copy for three days in exactly that state. Now listed.
+      The PKGBUILD copies it with `find`, not the per-directory globs the SYNAPSE
+      bar uses: this tree is five deep and mixes seven file types, so six globs
+      per directory is six chances to drop one, with the same symptom the globs
+      were written for (a package that installs cleanly and a shell that will not
+      start). Verified by diffing the source file list against the built package
+      — 98 files in, 98 files out.
+- [x] **Known gap: no `IpcHandler`.** Upstream never needed one, because Hyprland
+      could be told things directly. So the Super tap does not open a start menu
+      on this shell; `synui-bar ipc` against it fails rather than doing nothing
+      quietly. Documented in `synui-bar.sh` and in the shipped `synuirc`.

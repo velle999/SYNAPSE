@@ -99,6 +99,9 @@ static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blu
 /* Order matches syn_super_space_t, and the lower-cased spellings are what
  * config.c's `super_space` case parses back out of settings.state. */
 static const char *const ctl_names_super_space[] = { "Launcher", "Cmdbar" };
+/* Order matches syn_bar_shell_t. The lower-cased spellings are what config.c's
+ * `bar_shell` case parses back and what synui-bar.sh matches on. */
+static const char *const ctl_names_bar_shell[]   = { "SYNAPSE", "Antiquity" };
 
 struct ctl_item {
     int             row;
@@ -312,6 +315,15 @@ static const struct ctl_item ctl_items[] = {
       .key = "super_space", .off = CFG(super_space), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_super_space), .apply = CTL_APPLY_BINDS,
       .help = "Swap the app launcher and the AI command bar; the other gets Super+=" },
+    /* The bar is a SEPARATE PROCESS, and this is the one row on the panel whose
+     * value the compositor does not act on — synui-bar reads it at startup.
+     * CTL_APPLY_NONE is therefore literally right, and the help line has to say
+     * so, or the row reads as broken: you flip it, and nothing happens until the
+     * bar is restarted. */
+    { CTL_ROW_BAR_SHELL,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar shell",        NULL,
+      .key = "bar_shell", .off = CFG(bar_shell), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_bar_shell), .apply = CTL_APPLY_NONE,
+      .help = "Antiquity is the diinki port; takes effect at the next login" },
     { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Welcome menu at login", NULL,
       .key = "welcome_at_startup", .off = CFG(welcome_at_startup), .vtype = CTL_VAL_BOOL },
     { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Neural overlay at login", NULL,
@@ -1073,6 +1085,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "overlay",           "Neural overlay" },
         { "menu",              "Welcome menu" },
         { "control",           "Control panel" },
+        { "keys",              "Keyboard shortcuts (this list)" },
         { "bluetooth",         "Bluetooth" },
         { "printers",          "Printers" },
         { "night_light",       "Night light" },
@@ -1184,8 +1197,12 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
      * absence of a chord (see syn_server::super_armed), so it appears in no
      * bind table and would otherwise be the one feature this panel hid. */
     if (n < max) {
+        memset(&out[n], 0, sizeof(out[n]));
         snprintf(out[n].combo, sizeof(out[n].combo), "Super (tap)");
         snprintf(out[n].desc,  sizeof(out[n].desc),  "Start menu");
+        /* No bind, but there IS an action behind it — the palette can run this
+         * one even though no combo in the table produces it. */
+        snprintf(out[n].action, sizeof(out[n].action), "start_menu");
         n++;
     }
 
@@ -1198,18 +1215,26 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
         if (strcmp(b->action, "ws") == 0)     { saw_ws = 1;     continue; }
         if (strcmp(b->action, "movews") == 0) { saw_movews = 1; continue; }
 
+        memset(&out[n], 0, sizeof(out[n]));
         combo_str(b->mods, b->sym, out[n].combo, sizeof(out[n].combo));
         snprintf(out[n].desc, sizeof(out[n].desc), "%s",
                  action_desc(b->action, b->arg));
+        snprintf(out[n].action, sizeof(out[n].action), "%s", b->action);
+        snprintf(out[n].arg,    sizeof(out[n].arg),    "%s", b->arg);
         n++;
     }
 
+    /* The two collapsed rows carry no action: "Super+1–9" is nine binds, and
+     * running one of them would mean picking a workspace the row does not name.
+     * The palette greys them out rather than guessing. */
     if (saw_ws && n < max) {
+        memset(&out[n], 0, sizeof(out[n]));
         snprintf(out[n].combo, sizeof(out[n].combo), "Super+1\xe2\x80\x93""9");
         snprintf(out[n].desc,  sizeof(out[n].desc),  "Switch to workspace");
         n++;
     }
     if (saw_movews && n < max) {
+        memset(&out[n], 0, sizeof(out[n]));
         snprintf(out[n].combo, sizeof(out[n].combo), "Super+Shift+1\xe2\x80\x93""9");
         snprintf(out[n].desc,  sizeof(out[n].desc),  "Move window to workspace");
         n++;

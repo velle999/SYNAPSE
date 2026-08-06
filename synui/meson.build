@@ -188,6 +188,7 @@ synui_exe = executable('synui',
     'src/clock.c',
     'src/greeter.c',
     'src/ctlpanel.c',
+    'src/keys.c',
     'src/theme.c',
     'src/bt.c',
     'src/notif.c',
@@ -495,6 +496,20 @@ test('ctlpanel_table', ctlpanel_table_test)
 # the headless backend, and uinput would be picked up by the LIVE session — so
 # the handlers are called directly, exactly as input.c's chain calls them.
 # Stubs are lid_test's; see that file's header for why power.c links alone.
+# The shortcut palette (Super+/). Driven by keysym, like ctlpanel_choice_test
+# and for the same reason: nothing can synthesise input into a headless synui.
+# config.c is NOT linked — the bind table is seeded by hand, so "the palette
+# lists whatever is in the table" is a real assertion rather than a restatement
+# of the defaults.
+keys_test = executable('keys_test',
+  ['tests/keys_test.c', 'src/keys.c', 'src/ctlpanel.c', 'src/aimodel.c',
+   'src/gguf.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('keys', keys_test)
+
 panel_pointer_test = executable('panel_pointer_test',
   ['tests/panel_pointer_test.c', 'src/power.c', 'src/hit.c'],
   include_directories : include_directories('src'),

@@ -319,6 +319,9 @@ static inline void panel_bg_color(float out[4], float alpha)
  * bind action on Enter (welcome_menu_key). */
 const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Control Panel",    "Super+C",       "control"   },
+    /* Second, because "what are the keys" is the first question this menu
+     * exists to answer and the palette answers all of it. */
+    { "Keyboard Shortcuts", "Super+/",     "keys"      },
     { "Terminal",         "Super+Enter",   "term"      },
     { "AI Command Bar",   "Super+Space",   "cmdbar"    },
     { "Neural Overlay",   "Super+A",       "overlay"   },
@@ -3849,6 +3852,184 @@ void synui_render_ctlpanel(syn_server_t *s)
     set_scene_buffer(&s->ctlpanel_ui.text_buf, s->ctlpanel_ui.tree, buf);
 }
 
+/* ── Shortcut palette (keys.c) ───────────────────────────── */
+
+/* Narrower than the control panel and taller in the middle of the screen: it is
+ * one column of results with a box on top, not two panes. KEYS_ROWS (synui.h)
+ * is how many rows fit, and the height is derived from it, so keys.c's scroll
+ * clamp and this draw cannot disagree about how much room there is. */
+#define KEYS_W        700
+#define KEYS_ROW_H     26
+#define KEYS_TOP       96
+#define KEYS_FOOTER    52
+#define KEYS_COMBO_X   20
+#define KEYS_DESC_X   240   /* clears "XF86MonBrightnessDown", the widest combo */
+
+void synui_render_keys(syn_server_t *s)
+{
+    syn_keys_t *k = &s->keys;
+
+    if (!k->visible) {
+        wlr_scene_node_set_enabled(&s->keys_ui.tree->node, false);
+        hit_clear(&k->hit);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    int pw = KEYS_W;
+    int ph = KEYS_TOP + KEYS_ROWS * KEYS_ROW_H + KEYS_FOOTER;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->keys_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->keys_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->keys_ui.tree->node);
+
+    /* How many rows are actually on screen — the pointer grid must describe
+     * exactly those, or a click below a short result list lands on a row that
+     * was never drawn. */
+    int first = k->scroll;
+    int max_scroll = k->n_view - KEYS_ROWS;
+    if (max_scroll < 0) max_scroll = 0;
+    if (first > max_scroll) first = max_scroll;
+    if (first < 0) first = 0;
+
+    int drawn = k->n_view - first;
+    if (drawn > KEYS_ROWS) drawn = KEYS_ROWS;
+    if (drawn < 0) drawn = 0;
+
+    hit_set_panel(&k->hit, px, py, pw, ph);
+    hit_set_rows(&k->hit, 12, KEYS_TOP - 17, pw - 24, KEYS_ROW_H, drawn);
+    hit_set_first(&k->hit, first);
+
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->keys_ui.bg)
+        s->keys_ui.bg = wlr_scene_rect_create(s->keys_ui.tree, pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->keys_ui.bg, bg_color);
+    if (!s->keys_ui.accent)
+        s->keys_ui.accent = wlr_scene_rect_create(s->keys_ui.tree, pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->keys_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    cairo_show_text(cr, "KEYBOARD SHORTCUTS");
+
+    /* The count, right-aligned against the title. It is the only thing that
+     * says a filter is doing something when the query matches nearly all of
+     * them, and the only thing that says how long the list is when it does
+     * not. */
+    {
+        char count[48];
+        if (k->query_len > 0)
+            snprintf(count, sizeof(count), "%d of %d", k->n_view, k->n);
+        else
+            snprintf(count, sizeof(count), "%d", k->n);
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_LABEL, 1.0);
+        draw_right(cr, pw - 18, 30, count);
+    }
+
+    set_ink(cr, INK_RULE, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 44);
+    cairo_line_to(cr, pw - 18, 44);
+    cairo_stroke(cr);
+
+    /* ── The search box ──
+     * Always drawn, never a mode: the panel opens taking keys, so a box that
+     * appeared only once you had typed would be a box you had to discover by
+     * typing into what looked like a plain list. */
+    cairo_set_font_size(cr, 12);
+    set_ink(cr, INK_DIM, 1.0);
+    cairo_move_to(cr, 18, 70);
+    cairo_show_text(cr, "FIND  ");
+
+    cairo_set_font_size(cr, 13);
+    if (k->query_len > 0) {
+        set_accent(cr, 1.0);
+        char box[KEYS_QUERY_MAX + 2];
+        snprintf(box, sizeof(box), "%s_", k->query);
+        cairo_show_text(cr, box);
+    } else {
+        set_ink(cr, INK_DIM, 0.9);
+        cairo_show_text(cr, "_  type a key or what it does");
+    }
+
+    /* ── Results ── */
+    cairo_set_font_size(cr, 13);
+    for (int i = 0; i < drawn; i++) {
+        const syn_ctl_shortcut_t *sc = &k->all[k->view[first + i]];
+        int sel = (first + i == k->selected);
+        int ry  = KEYS_TOP + i * KEYS_ROW_H;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry - 17, pw - 24, KEYS_ROW_H - 4);
+            cairo_fill(cr);
+        }
+
+        cairo_set_font_size(cr, 13);
+        set_accent(cr, sel ? 1.0 : 0.95);
+        cairo_move_to(cr, KEYS_COMBO_X, ry);
+        cairo_show_text(cr, sc->combo);
+
+        /* A row with no action behind it is still worth listing — it is a real
+         * shortcut — but Enter will not run it, so it must not look like the
+         * rows that do. The two collapsed workspace lines are the whole set;
+         * see ctlpanel_shortcuts(). */
+        set_ink(cr, sc->action[0] ? (sel ? INK_STRONG : INK_BODY) : INK_DIM, 1.0);
+
+        /* A `spawn` bind's description IS its command line, straight out of the
+         * user's synuirc — data we did not write, and one invalid UTF-8 byte
+         * puts cairo into a permanent error state, which is a BLANK PANEL
+         * rather than one bad row. The combo column above is ours (xkb keysym
+         * names) and needs no laundering. */
+        char safe[sizeof(sc->desc)];
+        syn_utf8_copy(safe, sizeof(safe), sc->desc);
+        draw_clipped(cr, KEYS_DESC_X, ry, pw - 18 - KEYS_DESC_X, safe);
+    }
+
+    /* An empty result is a real answer and has to look like one, or it reads as
+     * the panel having broken. */
+    if (k->n_view == 0) {
+        cairo_set_font_size(cr, 13);
+        set_ink(cr, INK_DIM, 0.9);
+        cairo_move_to(cr, KEYS_COMBO_X, KEYS_TOP);
+        cairo_show_text(cr, "No shortcut matches that.");
+    }
+
+    /* Where in the list you are, when it does not fit. */
+    if (k->n_view > KEYS_ROWS) {
+        cairo_set_font_size(cr, 11);
+        set_ink(cr, INK_DIM, 0.9);
+        char more[64];
+        snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+                 first + 1, first + drawn, k->n_view);
+        cairo_move_to(cr, KEYS_COMBO_X, KEYS_TOP + KEYS_ROWS * KEYS_ROW_H + 6);
+        cairo_show_text(cr, more);
+    }
+
+    cairo_set_font_size(cr, 12);
+    set_ink(cr, INK_DIM, 0.9);
+    cairo_move_to(cr, 18, ph - 18);
+    cairo_show_text(cr,
+        "Type to filter \xc2\xb7 Up/Down or Ctrl+N/P \xc2\xb7 Enter runs it \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->keys_ui.text_buf, s->keys_ui.tree, buf);
+}
+
 /* ── Theme manager (theme.c) ─────────────────────────────── */
 
 #define THM_W        460
@@ -5980,6 +6161,8 @@ void synui_ui_init(syn_server_t *s)
     s->clock_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->cal_ui.tree     = wlr_scene_tree_create(&s->scene->tree);
     s->ctlpanel_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    /* After the control panel: the palette can be opened from on top of it. */
+    s->keys_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->thememgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->bt_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->notif_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
@@ -6013,6 +6196,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->clock_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->keys_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);

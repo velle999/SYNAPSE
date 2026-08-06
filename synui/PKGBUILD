@@ -1,9 +1,13 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=270
+pkgrel=271
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
-license=('GPL-2.0-or-later')
+# GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
+# of diinki's linux-antiquity whose LICENSE.antiquity ships inside that tree; the
+# fonts it carries are Apache-2.0 (Material Symbols) and ITF-credit-clause
+# (Boska/Recia/Quilon), both documented in quickshell-antiquity/FONTS.md.
+license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 # xdg-desktop-portal{,-wlr,-gtk}: screen sharing. Without the wlr backend, portal
 #   falls back to GTK, which cannot do ScreenCast on wlroots — so Firefox/OBS/
 #   Discord screen capture silently fails. slurp is xdpw's output chooser.
@@ -19,6 +23,12 @@ license=('GPL-2.0-or-later')
 #   the bar's SYNAPSE button uses to ask synui for the start menu. synui ships
 #   the bar's whole QML tree to /usr/share/synui/quickshell, so depending on the
 #   runtime keeps the config and the thing that reads it together.
+#   A SECOND shell ships alongside it: /usr/share/synui/quickshell-antiquity, a
+#   port of diinki's linux-antiquity. `bar_shell = antiquity` in synuirc (or
+#   Control panel ▸ Desktop ▸ Bar shell) picks it; synui-bar resolves the key.
+#   Both trees are complete and independent — there is no shared QML — because
+#   the two disagree about nearly every visual decision, and a common base would
+#   be a third thing to keep working.
 #   waybar was the bar until 2026-07-24 and is deliberately NOT a dependency any
 #   more — see systemd/synui-bar.sh for what moved and why. The waybar config is
 #   still packaged (config/waybar/, and synui-apply-theme still generates its
@@ -315,6 +325,27 @@ package() {
     for _art in quickshell/widgets/*.png; do
         install -Dm644 "$_art" \
             "$pkgdir/usr/share/synui/quickshell/widgets/${_art##*/}"
+    done
+
+    # ── The Antiquity shell ──────────────────────────────────────────────────
+    #
+    # A port of diinki's linux-antiquity (MIT), selectable with `bar_shell =
+    # antiquity` in synuirc or Control panel ▸ Desktop ▸ Bar shell. synui-bar
+    # resolves the key and starts this tree instead of quickshell/ above.
+    #
+    # Copied with `find`, NOT with the per-directory globs the SYNAPSE bar
+    # uses. That style is written out above because a hand-listed file silently
+    # disappears; the globs have the same failure one level up — this tree is
+    # five directories deep (smallicons/weatherWidget/), and mixes .qml, .js,
+    # qmldir, .svg, .png, .ttf and .md. Six globs per directory is six chances
+    # to forget one, and the symptom is the same as it has been twice before:
+    # a package that builds and installs cleanly and a shell that will not
+    # start, naming a file the user cannot see.
+    #
+    # -type f only: there is nothing else in the tree, and it keeps a stray
+    # symlink from being followed out of the source dir.
+    find quickshell-antiquity -type f | while read -r _f; do
+        install -Dm644 "$_f" "$pkgdir/usr/share/synui/${_f}"
     done
 
     # The single writer of widgets.state. synui's Super+Shift+A bind and the

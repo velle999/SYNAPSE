@@ -23,8 +23,11 @@
  * minimize_restore, decorations_toggle, ai_ask,
  * ws <1-9>, movews <1-9>, move_output [prev], wallpaper, wallpaper_reload,
  * cursor, cursor_reload,
- * filters, effects_toggle, power, lock, game, taskmgr, network, news.
+ * filters, effects_toggle, power, lock, game, taskmgr, network, news, keys.
  * A bind with the same combo as a default replaces it.
+ * "keys" (Super+/ or Super+?) is the shortcut palette: every bind below, filtered
+ * as you type, Enter to run the one you land on. It reads this table live, so a
+ * bind added here needs no second edit to show up in it.
  * "filters" (Super+E) opens the visual-effects panel — CRT filter strengths, and
  * Tab for the window effects (corners, shadow, blur, translucency), which are
  * the same keys as the lines further down this file; "effects_toggle" is the
@@ -200,6 +203,16 @@ static char *strip(char *s)
     return s;
 }
 
+/* The `bar_shell` spellings, in syn_bar_shell_t order. Lives here rather than
+ * next to a bar implementation because there is none in this process: synui
+ * parses this key and nothing else touches it. systemd/synui-bar.sh matches the
+ * same two words, and the control panel's row draws its own capitalised copy —
+ * three surfaces, but only this one and the shell script have to AGREE, and
+ * they agree on two literals that are also the synuirc spelling. */
+const char *const syn_bar_shell_names[SYN_BAR_SHELL_COUNT] = {
+    "synapse", "antiquity",
+};
+
 /* ── Keybindings ─────────────────────────────────────────── */
 static uint32_t parse_mod(const char *name)
 {
@@ -327,6 +340,17 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+d",         "displays" },
         { "super+escape",    "menu" },
         { "super+c",         "control" },
+        /* The shortcut palette. '/' is the find key in every pager, editor and
+         * panel this desktop already has (including the control panel's own
+         * search box), so it is the one key that needs no explaining.
+         *
+         * Bound TWICE on purpose. On a US layout Super+? is Super+Shift+/, and
+         * xkb hands the compositor the SHIFTED keysym — `question`, not
+         * `slash` — so a single "super+slash" bind is a key that mysteriously
+         * stops working the moment you hold Shift, which is exactly what a
+         * hand reaching for "?" does. Both spellings, one action. */
+        { "super+slash",          "keys" },
+        { "super+shift+question", "keys" },
         { "super+b",         "bluetooth" },
         { "super+shift+b",   "night_light" },   /* "blue light" */
         { "super+shift+r",   "record" },        /* start/stop screen recording */
@@ -751,6 +775,10 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->launcher_style    = SYN_LAUNCHER_TEXT;
     /* Super+Space is the app launcher, the way it is everywhere else. */
     cfg->super_space       = SYN_SUPER_SPACE_LAUNCHER;
+    /* The shipped bar, and the system icon theme. Both read by synui-bar, not
+     * by the compositor — see syn_bar_shell_t. */
+    cfg->bar_shell         = SYN_BAR_SHELL_SYNAPSE;
+    cfg->bar_icon_theme[0] = '\0';
 
     cfg->power_enabled = 1;
     cfg->power_dim     = 240;
@@ -1318,6 +1346,26 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if      (strcmp(val, "launcher") == 0) cfg->super_space = SYN_SUPER_SPACE_LAUNCHER;
         else if (strcmp(val, "cmdbar")   == 0) cfg->super_space = SYN_SUPER_SPACE_CMDBAR;
     }
+    /* Which QML tree synui-bar starts. The compositor never acts on this — it
+     * parses it so that the key has ONE spelling and the control panel's row
+     * can persist through settings.state like every other setting. */
+    else if (strcmp(key, "bar_shell") == 0) {
+        int found = 0;
+        for (int i = 0; i < SYN_BAR_SHELL_COUNT; i++)
+            if (strcmp(val, syn_bar_shell_names[i]) == 0) {
+                cfg->bar_shell = i;
+                found = 1;
+                break;
+            }
+        if (!found)
+            wlr_log(WLR_ERROR, "synui: bar_shell: unknown '%s'", val);
+    }
+    /* Empty means "follow the system icon theme", which is the default and what
+     * a theme switch changes. Not validated against the installed themes: the
+     * bar is a separate process that may start before the theme is unpacked,
+     * and refusing a name here would be refusing it in the wrong place. */
+    else if (strcmp(key, "bar_icon_theme") == 0)
+        snprintf(cfg->bar_icon_theme, sizeof(cfg->bar_icon_theme), "%s", val);
     else if (strcmp(key, "dock_edge") == 0) {
         if      (strcmp(val, "bottom") == 0) cfg->dock_edge = SYN_DOCK_EDGE_BOTTOM;
         else if (strcmp(val, "top")    == 0) cfg->dock_edge = SYN_DOCK_EDGE_TOP;

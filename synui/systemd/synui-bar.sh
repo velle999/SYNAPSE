@@ -29,15 +29,84 @@
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 # https://github.com/velle999/SYNAPSE
+#
+# ── Which shell ──────────────────────────────────────────────────────────────
+#
+# Two QML trees ship: quickshell/ (SYNAPSE's own bar) and quickshell-antiquity/
+# (a port of diinki's linux-antiquity). `bar_shell = synapse|antiquity` in
+# synuirc picks one, and Control panel ▸ Desktop ▸ Bar shell writes the same key
+# to settings.state.
+#
+# Read HERE rather than passed in by the compositor, because synui does not
+# start the bar — the session does, and `synui-bar ipc` is run by a compositor
+# that may have been launched before the setting was ever written. The key is
+# still declared in config.c so that synuirc has ONE spelling of it and the
+# control panel can persist it the way it persists everything else; the
+# compositor parses it and never acts on it.
+#
+# Both files are `key = value` in synuirc's language, so one reader does both.
+# settings.state wins, exactly as it does inside synui: it is the panel's half
+# of the config and holds only keys the user has actually changed.
 set -u
 
 CONF_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-SYNUI_BAR="/usr/share/synui/quickshell"
+SYNUI_ETC="$CONF_HOME/synui"
 
 command -v quickshell >/dev/null 2>&1 || {
     echo "synui-bar: quickshell is not installed" >&2
     exit 1
 }
+
+# Last `key = value` for $1 out of $2, or nothing. Last, not first, because
+# config_parse_kv() takes the last assignment too — a synuirc with the key
+# written twice must resolve here the way it resolves in the compositor.
+conf_get() {
+    [ -f "$2" ] || return 0
+    sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$2" |
+        sed 's/[[:space:]]*$//' | tail -n 1
+}
+
+conf_lookup() {
+    v=$(conf_get "$1" "$SYNUI_ETC/settings.state")
+    [ -n "$v" ] || v=$(conf_get "$1" "$SYNUI_ETC/synuirc")
+    [ -n "$v" ] || v=$(conf_get "$1" /etc/synui/synuirc)
+    printf '%s' "$v"
+}
+
+# An unknown name falls back to the shipped bar rather than failing to start:
+# a typo in synuirc must not be the difference between a desktop with a bar and
+# a desktop without one. config.c logs the same case as an error, which is
+# where a user will find out they mistyped it.
+case "$(conf_lookup bar_shell)" in
+    antiquity) SHELL_NAME=antiquity ;;
+    *)         SHELL_NAME=synapse ;;
+esac
+
+SYNUI_BAR="/usr/share/synui/quickshell"
+[ "$SHELL_NAME" = synapse ] || SYNUI_BAR="/usr/share/synui/quickshell-$SHELL_NAME"
+
+# The packaged Antiquity tree not being installed is worth saying out loud
+# rather than handing quickshell a path it will fail on with a QML error.
+if [ ! -f "$SYNUI_BAR/shell.qml" ]; then
+    echo "synui-bar: no shell.qml under $SYNUI_BAR — falling back to synapse" >&2
+    SHELL_NAME=synapse
+    SYNUI_BAR="/usr/share/synui/quickshell"
+fi
+
+# ── The icon theme ───────────────────────────────────────────────────────────
+#
+# Empty (the default) means "follow the system icon theme", which is what a
+# theme switch changes and what both shells want. `bar_icon_theme` pins one
+# instead. It is the dynamic equivalent of a `//@ pragma IconTheme` line, which
+# is static and would override the theme synui-apply-theme just wrote for
+# GTK/Qt — see the comment at the top of quickshell-antiquity/shell.qml, whose
+# upstream hard-pinned buuf-nestort this way.
+#
+# Exported unconditionally when set, for both shells: an icon theme is not an
+# Antiquity concept, and a setting that silently applied to one bar and not the
+# other would be the worse surprise.
+_icon_theme=$(conf_lookup bar_icon_theme)
+[ -z "$_icon_theme" ] || export QS_ICON_THEME="$_icon_theme"
 
 # `synui-bar ipc …` talks to the RUNNING bar instead of starting one.
 #
@@ -45,25 +114,32 @@ command -v quickshell >/dev/null 2>&1 || {
 # call has to name the same config the instance was started with, and that is
 # the user-tree-or-packaged-path decision made below — duplicating it in the
 # compositor would mean a box with a user tree silently failing to open its
-# start menu, with nothing on screen saying why.
+# start menu, with nothing on screen saying why. The shell selection above is
+# part of that same decision, which is why it runs before this branch.
 #
 # The compositor calls this for the Super tap: synui owns the keyboard and
 # dispatches keybinds before forwarding, but its own IPC (synctl) is
 # request/response with no event stream, so it cannot tell the bar anything.
 # quickshell's IPC runs the other way. See quickshell/shell.qml's IpcHandler.
+#
+# NOTE the Antiquity tree has no IpcHandler: upstream never needed one, because
+# Hyprland could be told things directly. An `ipc` call against it therefore
+# fails, which is the honest outcome — the Super tap simply does not open a
+# start menu on that shell yet.
 if [ "${1-}" = "ipc" ]; then
     shift
-    if [ -f "$CONF_HOME/quickshell/synapse/shell.qml" ]; then
-        exec quickshell -c synapse ipc "$@"
+    if [ -f "$CONF_HOME/quickshell/$SHELL_NAME/shell.qml" ]; then
+        exec quickshell -c "$SHELL_NAME" ipc "$@"
     fi
     exec quickshell -p "$SYNUI_BAR/shell.qml" ipc "$@"
 fi
 
-# A user tree wins. `-c synapse` is how quickshell finds a config by name, and
-# it searches the user's config dir — so this is the handover, not a duplicate
-# of the packaged path below.
-if [ -f "$CONF_HOME/quickshell/synapse/shell.qml" ]; then
-    exec quickshell -c synapse "$@"
+# A user tree wins. `-c <name>` is how quickshell finds a config by name, and it
+# searches the user's config dir — so this is the handover, not a duplicate of
+# the packaged path below. The name follows the selected shell, so copying
+# either packaged tree into ~/.config/quickshell/<name> works the same way.
+if [ -f "$CONF_HOME/quickshell/$SHELL_NAME/shell.qml" ]; then
+    exec quickshell -c "$SHELL_NAME" "$@"
 fi
 
 exec quickshell -p "$SYNUI_BAR/shell.qml" "$@"
