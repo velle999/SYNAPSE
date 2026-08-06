@@ -4598,7 +4598,7 @@ void wpengine_restore_soon(syn_server_t *s);
  * teardown is unfreezable — that aborted a suspend and wedged an output until
  * reboot. Blocking, bounded to ~2.3s so it fits inside logind's 5s
  * InhibitDelayMaxSec; call it BEFORE dropping the inhibitor. */
-void wpengine_stop_for_sleep(void);
+void wpengine_note_before_sleep(void);
 /* An output was destroyed: from here on, one coming back is a reason to
  * re-arm the engine. Called from output_destroy(). */
 void wpengine_output_lost(syn_server_t *s);

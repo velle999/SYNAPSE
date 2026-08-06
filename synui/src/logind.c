@@ -257,18 +257,18 @@ static int on_prepare_for_sleep(sd_bus_message *m, void *data, sd_bus_error *e)
             synui_lock(s);
         }
         /*
-         * Get the wallpaper engines down BEFORE releasing the delay, because
-         * this is the only moment we still have one. They hold a CUDA context,
-         * and an engine caught exiting inside nvidia_uvm's teardown cannot be
-         * frozen: on 2026-07-28 that cost 20 seconds, aborted the suspend
-         * half-done, and left DP-3 scanning out a frozen console with a 0-byte
-         * EDID until the machine was rebooted. Blocking and bounded to ~2.3s,
-         * which fits inside InhibitDelayMaxSec with room for the lock.
+         * This used to KILL the wallpaper engines here, bounded to ~2.3s so it
+         * fit inside InhibitDelayMaxSec, because one caught exiting inside
+         * nvidia_uvm's teardown aborted a suspend on 2026-07-28 and wedged DP-3
+         * until reboot. It now only reports them: nvidia-utils ships the
+         * no-freeze-session drop-in that the abort really needed, and killing a
+         * CUDA holder on the way into suspend is what puts one in teardown in
+         * the first place. Full reasoning at wpengine_note_before_sleep().
          *
-         * The resume path restarts them from the state file, so this costs
-         * nothing visible — see wpengine_restore_soon() below.
+         * Cheap and non-blocking, so it no longer matters that this is the last
+         * moment we hold the delay.
          */
-        wpengine_stop_for_sleep();
+        wpengine_note_before_sleep();
 
         /* Release the delay so the machine can actually sleep. The lock command
          * has been spawned; logind gives us InhibitDelayMaxSec (5s) and we do

@@ -20,27 +20,48 @@
 # for a day, its connector reading `disconnected` with a 0-byte EDID. Only a
 # reboot recovered it.
 #
-# The fix is not to prevent suspending; it is to make the GPU holders let go
-# while the system is still fully awake, so their teardown has no deadline.
+# THIS HOOK USED TO KILL THINGS. IT NO LONGER DOES — 2026-08-06.
 #
-# WHAT THIS STOPS
+# It SIGTERMed Plex Transcoder before every suspend, waited 3s, SIGKILLed, waited
+# 0.3s, and let the suspend proceed. Two things were wrong with that.
 #
-#   Plex Transcoder — the usual cause here, because the machine's sleep timer
-#   fires while a bedroom client is mid-stream. The stream is ending either way
-#   the moment the box suspends; Plex starts a new transcode when the client
-#   reconnects, so killing it costs a resume-time restart and nothing else.
+# 1. The driver handles it now. systemd 256 began freezing user sessions on
+#    sleep and it does not work with the NVIDIA drivers; systemd's guidance is
+#    that NVIDIA packagers ship a drop-in setting
+#    SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=false, and nvidia-utils does, in
+#    /usr/lib/systemd/system/systemd-suspend.service.d/10-nvidia-no-freeze-session.conf.
+#    That landed 2026-07-28 — the day BEFORE this hook was written, against a
+#    driver package that did not have it yet. Since it arrived: 6 suspends on
+#    this box, zero freeze failures, including one with both Plex Media Server
+#    and synapd holding CUDA contexts that froze in 0.001 seconds.
 #
-# synui stops linux-wallpaperengine itself, from its logind PrepareForSleep
-# handler, because it owns that process's lifecycle and restarts it on resume.
+# 2. Killing a CUDA holder immediately before suspend is HOW YOU CREATE the
+#    failure above. Read the 2026-07-28 stack again: the unfreezable task was
+#    caught EXITING inside uvm_va_space_mm_shutdown. A process that is not being
+#    killed is not in teardown. Bounding the wait at 3.3s and then suspending
+#    anyway means releasing the machine into sleep with a process possibly still
+#    in the driver — precisely the state the hook existed to avoid.
 #
-# WHAT THIS DOES NOT DO
+# The honest caveat, so nobody over-reads point 1: that drop-in governs
+# systemd's session-cgroup freeze, while the 2026-07-28 abort was the KERNEL PM
+# freezer ("Freezing user space processes failed"). Different mechanism. They
+# interact, and the evidence since is clean, but this is not a proof.
 #
-# It never fails the suspend. A hook that exits non-zero does not stop systemd
-# sleeping, so refusing here would buy nothing and cost a confusing log line —
-# if something still holds the GPU after we have asked, the only useful thing
-# left is to NAME it, which the last block does. That line is the difference
-# between diagnosing this from a kernel stack trace the next day and reading
-# who did it.
+# Nobody else does this. Plex runs across suspend on every other distro; that
+# observation from velle is what prompted the review.
+#
+# WHAT IS LEFT
+#
+# The report, which was always the more valuable half. It never fails the
+# suspend — a hook that exits non-zero does not stop systemd sleeping — so if
+# something holds the GPU the only useful thing to do is NAME it. That line is
+# the difference between diagnosing this from a kernel stack trace the next day
+# and reading who did it.
+#
+# IF SUSPEND REGRESSES: the kill is in git, one revert away (synapd 0.1.0-35).
+# But get the freeze failure in the journal FIRST — "Freezing user space
+# processes failed ... refusing to freeze" naming the task. Without that line
+# this hook is not the thing to change.
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
@@ -124,39 +145,17 @@ case "${1:-}" in
     *)    exit 0 ;;
 esac
 
-# /proc/PID/comm is truncated to 15 characters, so "Plex Transcoder" is exactly
-# at the limit and longer names must be matched by their truncation. pgrep -x
-# matches against that same truncated comm.
-TRANSCODER_COMM='Plex Transcoder'
-
-# ── Stop transcodes ─────────────────────────────────────────────────────────
-pids="$(pgrep -x "$TRANSCODER_COMM" 2>/dev/null || true)"
-if [ -n "$pids" ]; then
-    n=$(echo "$pids" | wc -l)
-    log "stopping $n Plex transcode(s) before suspend"
-    # shellcheck disable=SC2086
-    kill $pids 2>/dev/null || true
-
-    for _ in $(seq 30); do          # up to 3s
-        pgrep -x "$TRANSCODER_COMM" >/dev/null 2>&1 || break
-        sleep 0.1
-    done
-
-    pids="$(pgrep -x "$TRANSCODER_COMM" 2>/dev/null || true)"
-    if [ -n "$pids" ]; then
-        log "transcode(s) ignored SIGTERM for 3s — sending SIGKILL"
-        # shellcheck disable=SC2086
-        kill -9 $pids 2>/dev/null || true
-        sleep 0.3
-    fi
-fi
-
-# ── Report anyone still holding the GPU ─────────────────────────────────────
+# ── Report who holds the GPU ────────────────────────────────────────────────
 #
 # Not fatal, and deliberately not a kill list: synapd holds a context on
 # purpose and has its own hook (synapd-sleep-hook) that releases the model
-# first. This exists so that the NEXT time a suspend fails to freeze, the
-# journal already says which process was holding the driver, by name.
+# first, and Plex holds one for transcoding and is expected to. This exists so
+# that the NEXT time a suspend fails to freeze, the journal already says which
+# process was holding the driver, by name.
+#
+# /proc/PID/comm is truncated to 15 characters, so what lands here is
+# "Plex Media Serv" rather than "Plex Media Server". Do not go looking for the
+# untruncated name in this output.
 [ -e /dev/nvidia-uvm ] || exit 0
 
 holders=""

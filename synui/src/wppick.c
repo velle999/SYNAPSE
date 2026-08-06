@@ -219,7 +219,38 @@ void wpengine_restore_soon(syn_server_t *s)
 }
 
 /*
- * wpengine_stop_for_sleep — get the engines out of the way BEFORE the freezer.
+ * wpengine_note_before_sleep — say who holds the GPU. It used to KILL them.
+ *
+ * ── Why this stopped killing, 2026-08-06 ────────────────────────────────────
+ *
+ * The driver handles it now. systemd 256 began freezing user sessions on sleep,
+ * which does not work with the NVIDIA drivers; systemd's guidance is that
+ * NVIDIA packagers ship a drop-in setting SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=
+ * false, and nvidia-utils does, as of 610.43.03 dated 2026-07-28 — the day
+ * before this function was written, against a package that did not have it yet.
+ * Six suspends since, no freeze failures, including one with two CUDA holders
+ * open that froze in 0.001s.
+ *
+ * And killing a CUDA holder immediately before suspend is HOW YOU CREATE the
+ * failure below. The unfreezable task on 2026-07-28 was caught EXITING inside
+ * uvm_va_space_mm_shutdown; a process nobody is killing is not in teardown.
+ * Bounding the wait at 2.3s and then releasing the inhibitor anyway meant
+ * suspending with an engine possibly still inside the driver — the exact state
+ * this was written to prevent. It was a deadline dressed up as the absence of
+ * one.
+ *
+ * Caveat, so the paragraph above is not over-read: the drop-in governs
+ * systemd's session-cgroup freeze, and the abort below was the KERNEL PM
+ * freezer. Different mechanism; they interact; the evidence is not a proof.
+ *
+ * Nothing else needs doing on resume either way — wpengine_restore_soon() is
+ * armed from logind.c unconditionally, and the state file is untouched.
+ *
+ * IF SUSPEND REGRESSES, the signalling is one revert away — but get the
+ * "Freezing user space processes failed ... refusing to freeze" line naming the
+ * task first. Without it this is not the thing to change.
+ *
+ * ── The original hazard, kept because it is what to look for ────────────────
  *
  * linux-wallpaperengine holds a CUDA context (it decodes video wallpapers on
  * the GPU through an embedded mpv). Left running into a suspend it can be
@@ -233,18 +264,9 @@ void wpengine_restore_soon(syn_server_t *s)
  * console while its connector read `disconnected` with a 0-byte EDID. A reboot
  * was the only way back.
  *
- * So the engine must be fully DEAD before we release the sleep inhibitor, not
- * merely asked to go. Hence signals here rather than `synui-wpengine`: that
- * script takes a flock with `-w 30`, and logind only grants us
- * InhibitDelayMaxSec (5s) before suspending regardless. A helper that can block
- * for thirty seconds cannot be on this path.
- *
- * Nothing needs restoring here — the resume side already restarts the engines
- * from the state file (wpengine_restore_soon, armed from logind.c), and the
- * state file is deliberately untouched, unlike `synui-wpengine off`.
+ * That is what a genuine freeze failure looks like, and what to match against
+ * the journal before blaming anything here.
  */
-#define WPENGINE_TERM_WAIT_MS  2000
-#define WPENGINE_KILL_WAIT_MS   300
 
 /* Linux truncates comm to 15 chars, so the binary shows up shortened. The
  * helper script hardcodes the same string for the same reason. */
@@ -279,38 +301,18 @@ static int wpengine_signal_all(int sig)
     return hit;
 }
 
-void wpengine_stop_for_sleep(void)
+void wpengine_note_before_sleep(void)
 {
-    int n = wpengine_signal_all(SIGTERM);
+    int n = wpengine_signal_all(0);
     if (!n) return;   /* no Workshop wallpaper running — the common case */
 
-    wlr_log(WLR_INFO, "synui: wpengine: stopping %d engine(s) before suspend "
-            "(a CUDA context left running into the freezer once aborted the "
-            "suspend and wedged an output until reboot)", n);
-
-    for (int waited = 0; waited < WPENGINE_TERM_WAIT_MS; waited += 50) {
-        if (!wpengine_signal_all(0)) return;
-        usleep(50 * 1000);
-    }
-
-    /* Still there. A wallpaper is not worth losing the suspend over. */
-    n = wpengine_signal_all(SIGKILL);
-    wlr_log(WLR_ERROR, "synui: wpengine: %d engine(s) ignored SIGTERM for %dms "
-            "— sent SIGKILL", n, WPENGINE_TERM_WAIT_MS);
-
-    for (int waited = 0; waited < WPENGINE_KILL_WAIT_MS; waited += 50) {
-        if (!wpengine_signal_all(0)) return;
-        usleep(50 * 1000);
-    }
-
-    /*
-     * Unkillable means it is stuck in the driver already — exactly the state
-     * that breaks the suspend. Say so plainly: this line is the difference
-     * between diagnosing it from a kernel stack trace a day later and reading
-     * it here.
-     */
-    wlr_log(WLR_ERROR, "synui: wpengine: engine(s) STILL alive after SIGKILL "
-            "— stuck in the GPU driver; this suspend may fail to freeze");
+    /* The whole job now. If a suspend ever does fail to freeze again, this line
+     * is already in the journal saying how many engines were live when it
+     * started — which beats reconstructing it from a kernel stack trace. */
+    wlr_log(WLR_INFO, "synui: wpengine: %d engine(s) hold a CUDA context into "
+            "this suspend (not stopped: the driver's no-freeze-session drop-in "
+            "covers this, and killing them here is what puts one in nvidia_uvm "
+            "teardown at exactly the wrong moment)", n);
 }
 
 void wpengine_output_lost(syn_server_t *s)
