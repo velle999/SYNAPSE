@@ -116,6 +116,12 @@
  *   power_lock_cmd = swaylock -f -c 000000
  *   power_suspend_cmd = systemctl suspend
  *
+ * Native lock screen (lock.c):
+ *   lock_fingerprint = on|off   (default on — offer the fingerprint reader
+ *                                beside the password. A machine with no reader
+ *                                detects that by itself and shows nothing, so
+ *                                this is only for turning a working reader OFF)
+ *
  * Laptop lid (power.c) — what closing the lid does. Three cases, resolved
  * docked first, then mains, then battery, exactly as logind resolves its own
  * three. system|ignore|blank|lock|suspend, where `system` leaves the lid to
@@ -753,6 +759,9 @@ static void config_set_defaults(syn_config_t *cfg)
     /* Suspending this box would take down anything it serves over the
      * network, so idle-suspend is opt-in from the panel, never a default. */
     cfg->power_suspend = 0;
+    /* On by default because it costs a machine without a reader one fork per
+     * lock and nothing else — see the field's comment in synui.h. */
+    cfg->lock_fingerprint = 1;
     /* The pgrep guard keeps a second idle period from stacking another
      * swaylock on top of the one already covering the screen. */
     /* `-c 000000` alone drew a featureless black rectangle with no indicator
@@ -1246,6 +1255,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd), "%s", val);
     else if (strcmp(key, "power_suspend_cmd") == 0)
         snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
+    else if (strcmp(key, "lock_fingerprint") == 0)
+        cfg->lock_fingerprint = strcmp(val, "on") == 0;
     /* Driven off syn_lid_action_names so a new action only has to be added
      * to the enum and that table, as with wallpaper_mode above. */
     else if (strcmp(key, "lid_close_action") == 0) {

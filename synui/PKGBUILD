@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=268
+pkgrel=269
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 license=('GPL-2.0-or-later')
@@ -93,7 +93,15 @@ optdepends=('foot: CPU-rendered rescue terminal — the `term` keybind falls bac
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'
             'gamemode: CPU/GPU governor for synui-game-run (gamemoderun)'
-            'gamescope: nesting micro-compositor for synui-game-run --gamescope')
+            'gamescope: nesting micro-compositor for synui-game-run --gamescope'
+            # An optdepend and not a depend on purpose: this ships on desktops
+            # far more often than on laptops with a reader, and pulling in
+            # fprintd would start a D-Bus service on every one of them for a
+            # device that does not exist. Without it, pam_fprintd.so is missing,
+            # synui-lock-fprint reports "unavailable" and the lock screen looks
+            # exactly as it always has. Install it (and `fprintd-enroll`) to get
+            # the reader on the lock screen.
+            'fprintd: unlock the lock screen with a fingerprint (lock_fingerprint)')
 # /etc/MangoHud.conf is meant to be tuned in place — keep a user's edits across
 # upgrades instead of overwriting them.
 backup=('etc/MangoHud.conf')
@@ -190,6 +198,13 @@ package() {
     # it pam_start("synui-lock") fails and the screen can never be unlocked.
     install -Dm644 config/pam/synui-lock \
         "$pkgdir/etc/pam.d/synui-lock"
+
+    # And the fingerprint service (synui-lock-fprint), which is pam_fprintd
+    # alone. Installed even when fprintd is not: pam_start would otherwise fail
+    # for a missing FILE rather than a missing module, which reports the same
+    # "unavailable" but hides a genuine misinstall behind it.
+    install -Dm644 config/pam/synui-lock-fprint \
+        "$pkgdir/etc/pam.d/synui-lock-fprint"
 
     # Laptop lid policy: close = suspend (synui locks first via its before-sleep
     # inhibitor), ignored when docked to an external display. logind's own

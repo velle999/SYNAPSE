@@ -260,6 +260,18 @@ executable('synui-lock-auth',
   dependencies : [libpam],
   install : true)
 
+# synui-lock-fprint: the same trick for the fingerprint reader, and needed even
+# more — pam_fprintd does not return until a finger is presented or it times
+# out, so in-process it would freeze the desktop for the length of a swipe. Runs
+# for as long as the screen is locked. Links only libpam: fprintd is reached
+# through pam_fprintd.so, which is an optdepend, so a machine without it builds
+# and runs exactly the same and the helper reports "unavailable" at runtime.
+# On $PATH, like the password helper, because lock.c execlp's it by name.
+executable('synui-lock-fprint',
+  sources : ['src/synui-lock-fprint.c'],
+  dependencies : [libpam],
+  install : true)
+
 # synui-idle-inhibit: standalone helper that holds a real Wayland idle inhibitor
 # on demand (fed by the synui-media-inhibit script). Installed under libdir/synui
 # alongside synui-idle-wrapper.

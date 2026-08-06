@@ -477,10 +477,19 @@ static void dock_render_output(syn_output_t *o)
     cairo_begin(cr);
 
     rounded_rect(cr, 0, 0, bar_w, bar_h, 16);
-    /* The fill stays the panel dark that every compositor-drawn panel uses
-     * (render.c draws its backgrounds with the same values); it is the OUTLINE
-     * that carries the theme. */
-    cairo_set_source_rgba(cr, 0.06, 0.06, 0.12, 0.80);
+    /* Body: the theme's panel surface, the same one render.c fills every other
+     * compositor-drawn panel with. This was a literal 0.06/0.06/0.12 — frozen
+     * here back when only the ACCENT was theme data, so the dock kept SYNAPSE's
+     * near-black navy under a Gruvbox or XP desktop exactly as the panels did
+     * before panel_bg existed. Stock is unaffected: SYNAPSE's panel_bg IS
+     * 0.06/0.06/0.12 (theme.c), which is why the literal went unnoticed.
+     *
+     * The 0.80 alpha stays a literal and does NOT come from panel_bg[3] — the
+     * dock floats over the wallpaper and wants to be translucent, while the
+     * panels it borrows the colour from are opaque surfaces. */
+    cairo_set_source_rgba(cr, s->config.panel_bg[0],
+                          s->config.panel_bg[1],
+                          s->config.panel_bg[2], 0.80);
     cairo_fill_preserve(cr);
     /* Themed outline. This used to be a literal 0.00/0.85/0.75 — which is the
      * DEFAULT panel accent, frozen here before the accent became theme data. So
@@ -549,7 +558,15 @@ static void dock_render_output(syn_output_t *o)
                 dx = ix + icon / 2.0;
                 dy = iy + icon + 6;
             }
-            cairo_set_source_rgba(cr, 0.92, 0.92, 0.96, 0.9);
+            /* panel_ink, not a white literal: now that the body follows the
+             * theme, a light theme (XP's beige, 95's silver) draws a near-white
+             * dot on a near-white bar and the "app is running" mark disappears.
+             * The ink is by definition the colour that reads on that surface.
+             * Costs stock a hair — SYNAPSE's ink is 0.95/0.95/1.00 against the
+             * old 0.92/0.92/0.96 — which is below noticing on a 2.5px dot. */
+            cairo_set_source_rgba(cr, s->config.panel_ink[0],
+                                  s->config.panel_ink[1],
+                                  s->config.panel_ink[2], 0.9);
             cairo_arc(cr, dx, dy, 2.5, 0, 2 * M_PI);
             cairo_fill(cr);
         }

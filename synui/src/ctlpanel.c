@@ -383,6 +383,12 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power",
       .section = "Power", .help = "Idle timeouts for dim, blank, lock and suspend" },
     { CTL_ROW_LOCK,  CTL_CAT_POWER, CTL_KIND_ACTION, "Lock screen",  "lock"  },
+    /* No .apply: nothing to re-run, because the reader is started by the NEXT
+     * lock. Turning it off while a lock screen is up is not a case that exists —
+     * the panel is behind the lock. */
+    { CTL_ROW_LOCK_FPRINT, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Unlock with fingerprint", NULL,
+      .key = "lock_fingerprint", .off = CFG(lock_fingerprint), .vtype = CTL_VAL_BOOL,
+      .help = "Needs fprintd and an enrolled finger; your password always works too" },
 
     { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL,
       .section = "Game mode",

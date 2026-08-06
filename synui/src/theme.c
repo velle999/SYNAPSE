@@ -429,11 +429,12 @@ void transparency_set_opacity(syn_server_t *s, float active)
     s->config.inactive_opacity = inactive_from_active(active);
     anim_apply_alpha_all(s);
     glass_push(s);
-    /* No dock_relayout() here on purpose: the dock's cached buffer is filled with
-     * a fixed panel dark (0.06/0.06/0.12/0.80) and outlined in panel_accent, and
-     * an opacity change touches neither. Rebuilding it on every tick of the
-     * opacity slider would be pure work. The theme switch that DOES change its
-     * outline rebuilds it in theme_apply(). */
+    /* No dock_relayout() here on purpose: the dock's cached buffer is filled
+     * from panel_bg and outlined in panel_accent, and an opacity change touches
+     * neither (the dock's own 0.80 is a literal in dock.c, not the window
+     * opacity slider). Rebuilding it on every tick of that slider would be pure
+     * work. The theme switch that DOES change its colours rebuilds it in
+     * theme_apply(). */
     theme_repaint(s);
     theme_state_save(s);
 }
@@ -545,12 +546,12 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
             }
     }
 
-    /* The dock draws its outline from panel_accent into a CACHED cairo buffer,
-     * rebuilt only when its contents or geometry change — none of which a theme
-     * switch touches. theme_repaint() below only damages and schedules a frame,
-     * so without this the dock keeps the PREVIOUS theme's outline until an app
-     * happens to open or close. Exactly the titlebar cache problem handled a few
-     * lines up, one buffer over.
+    /* The dock draws its body from panel_bg and its outline from panel_accent
+     * into a CACHED cairo buffer, rebuilt only when its contents or geometry
+     * change — none of which a theme switch touches. theme_repaint() below only
+     * damages and schedules a frame, so without this the dock keeps the PREVIOUS
+     * theme's colours until an app happens to open or close. Exactly the
+     * titlebar cache problem handled a few lines up, one buffer over.
      *
      * (This call was written for pkgrel 158 but landed in
      * transparency_set_opacity(), where the dock's appearance does not depend on

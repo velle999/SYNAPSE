@@ -981,6 +981,7 @@ typedef enum {
     CTL_ROW_POWER,
     CTL_ROW_GAME,
     CTL_ROW_LOCK,
+    CTL_ROW_LOCK_FPRINT,
     /* System */
     CTL_ROW_TASKMGR,
     CTL_ROW_AI_BACKEND,
@@ -2112,6 +2113,14 @@ typedef struct {
      * would have truncated it mid-flag, silently. */
     char  power_lock_cmd[512];
 
+    /* Offer the fingerprint reader on the native lock screen (lock.c), by way
+     * of the synui-lock-fprint helper. Default 1, and safe to leave on: the
+     * helper answers "unavailable" in milliseconds on a machine with no reader,
+     * no fprintd, or no enrolled prints, and the lock then stops asking and
+     * shows nothing. So this switch is not "do I have a reader" — that is
+     * detected — it is "I have one and would rather the lock ignored it". */
+    int   lock_fingerprint;     /* default 1 */
+
     /* Laptop lid (syn_lid_action_t). Three settings, chosen between at the
      * moment the lid shuts: docked first, then mains power, then the plain
      * on-battery case. All three default to what the matching systemd setting
@@ -2667,6 +2676,32 @@ struct syn_server {
         pid_t                    auth_pid;
         int                      auth_fd;   /* result-pipe read end, -1 when idle */
         struct wl_event_source  *auth_src;
+
+        /* Fingerprint (synui-lock-fprint), running ALONGSIDE the password —
+         * not instead of it. The helper sits blocked waiting for a finger for
+         * as long as the screen is locked, so it is started at lock time and
+         * killed at unlock, while the password path forks per attempt. Both can
+         * be in flight at once; whichever answers first wins.
+         *
+         * fp_state is the whole retry policy. SYN_FP_UNAVAIL is terminal for
+         * this lock: it means the machine cannot do this at all, and re-forking
+         * against that answers the same way forever. */
+        enum {
+            SYN_FP_IDLE = 0,    /* not running; may be started */
+            SYN_FP_RUNNING,     /* helper is waiting for a finger */
+            SYN_FP_UNAVAIL,     /* no reader/fprintd/enrolled prints — give up */
+        } fp_state;
+        pid_t                    fp_pid;
+        int                      fp_fd;     /* status-pipe read end, -1 when idle */
+        struct wl_event_source  *fp_src;
+        int                      fp_fails;  /* consecutive F verdicts this lock */
+        uint32_t                 fp_retry_ms;  /* earliest restart, monotonic ms */
+        char                     fp_msg[128];  /* last M line, drawn under the clock */
+        /* The helper writes whole lines, but a pipe read can still split one:
+         * partial bytes park here until the newline arrives. */
+        char                     fp_rx[256];
+        int                      fp_rxlen;
+
         struct {
             struct wlr_output       *output;
             struct wlr_scene_buffer *buf;

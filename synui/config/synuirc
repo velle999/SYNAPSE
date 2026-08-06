@@ -256,6 +256,23 @@ numlock      = on
 # overrides this line — delete that file to hand control back here.
 welcome_at_startup = on
 
+# ── Lock screen (Super+L) ──────────────────────────────────
+# Offer the fingerprint reader beside the password. On, the lock starts asking
+# for a finger the moment it appears; both ways in are live at once, so you can
+# type your password over a reader that is still waiting, and whichever answers
+# first unlocks.
+#
+# Leaving this on costs a machine WITHOUT a reader nothing: the helper asks
+# fprintd for a device, is told there is none, and the lock stops asking and
+# draws nothing. So it is not a "do I have one" switch — that is detected — it
+# is for turning a reader that works OFF.
+#
+# Needs the fprintd package (an optdepend) and at least one enrolled finger:
+#   pacman -S fprintd  &&  fprintd-enroll
+# Your password always works regardless — five rejected swipes retire the
+# reader for that lock rather than locking you out.
+lock_fingerprint = on
+
 # ── Screen recording (Super+Shift+R) ───────────────────────
 # Whether a recording captures sound as well. On means the default sink's
 # MONITOR — the game, the video, the call: what you can hear, never the

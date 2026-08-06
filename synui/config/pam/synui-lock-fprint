@@ -1,0 +1,28 @@
+#
+# PAM configuration for synui's lock-screen fingerprint reader
+# (synui-lock-fprint).
+#
+# pam_fprintd ALONE, deliberately. This is not the lock's auth stack — that is
+# synui-lock, which includes login and runs in the other helper. This service
+# exists so a swipe can be waited on in a separate process without the password
+# stack behind it: if the finger does not match, the helper must FAIL, not fall
+# through to a password prompt it has no password to answer.
+#
+# 'required' rather than 'sufficient' for the same reason. There is nothing
+# after it to be sufficient over, and 'sufficient' on a lone module that fails
+# leaves the stack with no successful module and PAM_AUTH_ERR anyway — but it
+# reads as though a fallback exists. It does not.
+#
+# account is pam_permit because the real account check runs in the password
+# service (synui-lock includes login, so faillock and expiry are enforced
+# there); the helper calls pam_acct_mgmt against THIS service, and pam_fprintd
+# supplies no account module, so an empty account stack would fail every
+# successful swipe with PAM_PERM_DENIED.
+#
+# Missing pam_fprintd.so (the fprintd package is an optdepend, not a depend)
+# makes pam_authenticate return PAM_MODULE_UNKNOWN, which the helper reports as
+# "unavailable" and synui then stops asking. A machine with no reader loses
+# nothing and shows nothing.
+#
+auth    required pam_fprintd.so
+account required pam_permit.so

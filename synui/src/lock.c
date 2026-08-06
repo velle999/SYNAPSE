@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -223,6 +224,21 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
             cairo_fill(cr);
         }
     }
+
+    /* The fingerprint reader gets its OWN row, below the password one, because
+     * both are live at once — "Place your finger on the reader" has to be able
+     * to sit under the dots being typed, not replace them. Empty (so nothing is
+     * drawn) whenever the reader has nothing to say, which on a machine without
+     * one is always. Dimmer than the password row: it is the second way in. */
+    if (s->nlock.fp_msg[0]) {
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
+                               CAIRO_FONT_WEIGHT_NORMAL);
+        cairo_set_font_size(cr, 15);
+        cairo_text_extents(cr, s->nlock.fp_msg, &te);
+        cairo_set_source_rgba(cr, 0.55, 0.68, 0.76, a);
+        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 312);
+        cairo_show_text(cr, s->nlock.fp_msg);
+    }
 }
 
 /* Render every pane. Panels are created lazily here so synui_lock() need only
@@ -348,6 +364,10 @@ static int lock_clock_cb(void *data)
     return 0;
 }
 
+/* Defined in the fingerprint section below; called from here because a failed
+ * swipe is re-armed by user activity. */
+static void lock_fprint_start(syn_server_t *s);
+
 /* Snap to full brightness and reschedule the fade. Called on every key and on
  * pointer motion while locked. */
 void lock_notify_activity(syn_server_t *s)
@@ -360,6 +380,15 @@ void lock_notify_activity(syn_server_t *s)
     }
     if (s->nlock.t_fade)
         wl_event_source_timer_update(s->nlock.t_fade, LOCK_HOLD_MS);
+
+    /* A finger that did not match leaves the reader idle. Re-arm it on
+     * activity — someone walking up and moving the mouse is exactly when the
+     * next swipe is coming — but never before fp_retry_ms, so a held-down key
+     * cannot fork a helper per repeat. SYN_FP_UNAVAIL is not IDLE, so a machine
+     * with no reader never re-forks at all. */
+    if (s->nlock.fp_state == SYN_FP_IDLE &&
+        (int32_t)(lock_now_ms() - s->nlock.fp_retry_ms) >= 0)
+        lock_fprint_start(s);
 }
 
 /* ── Authentication ──────────────────────────────────────── */
@@ -462,6 +491,246 @@ static void lock_auth_start(syn_server_t *s)
     s->nlock.auth_src = wl_event_loop_add_fd(loop, rp[0], WL_EVENT_READABLE,
                                              lock_auth_readable, s);
     lock_render(s);                          /* show "Checking…" */
+}
+
+/* ── Fingerprint ─────────────────────────────────────────── */
+
+/* The fingerprint path is the password path's opposite in shape: one helper
+ * that lives for the whole lock (it sits blocked inside pam_fprintd waiting for
+ * a finger) rather than one fork per attempt, talking a line protocol the whole
+ * time instead of answering once. See src/synui-lock-fprint.c for the protocol
+ * and for why "no reader on this machine" is the case it is built around.
+ *
+ * Both paths run at once and neither knows about the other: a finger and a
+ * password are two ways to answer the same screen, and whichever lands first
+ * calls synui_unlock().
+ */
+
+/* Wait this long after a rejected finger before re-forking. Long enough that a
+ * burst of keystrokes cannot turn into a burst of forks, short enough that a
+ * second swipe feels immediate. */
+#define LOCK_FP_RETRY_MS   3000
+/* Consecutive rejections after which the lock stops offering the reader for the
+ * rest of this lock. A reader that cannot match the enrolled finger — a wet
+ * fingertip, a bad enrollment — must not become an endless fork loop behind a
+ * password prompt that works fine. */
+#define LOCK_FP_MAX_FAILS  5
+
+/* Drop a partial UTF-8 sequence off the end of a truncated string.
+ *
+ * fp_msg is filled with snprintf, which truncates by BYTES, and pam_fprintd's
+ * messages are TRANSLATED — a German or Japanese "place your finger on the
+ * reader" runs well past the buffer and gets cut wherever byte 127 lands, quite
+ * possibly mid-codepoint. cairo_show_text() on invalid UTF-8 does not skip the
+ * bad glyph: it puts the cairo_t into a permanent error state, and every draw
+ * call after it silently does nothing. That would take the CLOCK down, on a
+ * locked screen, because a status line was one byte too long. */
+static void lock_utf8_trim_partial(char *str)
+{
+    size_t len = strlen(str);
+    size_t i = len;
+
+    /* Step back over the trailing continuation bytes to the lead byte. */
+    while (i > 0 && ((unsigned char)str[i - 1] & 0xC0) == 0x80) i--;
+    if (i == 0) { str[0] = 0; return; }   /* continuations with no lead: garbage */
+    i--;                                  /* i is now that lead byte */
+
+    unsigned char c = (unsigned char)str[i];
+    size_t need;
+    if      ((c & 0x80) == 0x00) need = 1;
+    else if ((c & 0xE0) == 0xC0) need = 2;
+    else if ((c & 0xF0) == 0xE0) need = 3;
+    else if ((c & 0xF8) == 0xF0) need = 4;
+    else { str[i] = 0; return; }          /* not a lead byte at all */
+
+    if (len - i < need) str[i] = 0;       /* sequence was cut short — drop it */
+}
+
+static void lock_fprint_stop(syn_server_t *s)
+{
+    if (s->nlock.fp_src) {
+        wl_event_source_remove(s->nlock.fp_src);
+        s->nlock.fp_src = NULL;
+    }
+    if (s->nlock.fp_fd >= 0) {
+        close(s->nlock.fp_fd);
+        s->nlock.fp_fd = -1;
+    }
+    /* Closing the pipe does NOT reach this child: it is blocked in PAM waiting
+     * for a finger, not reading anything, so it never sees the EOF. It has to
+     * be signalled, or an unlock leaves it holding fprintd's claim on the
+     * device and the next lock finds the reader busy. Reaped by the global
+     * SIGCHLD handler, like every other child in this tree. */
+    if (s->nlock.fp_pid > 0) {
+        kill(s->nlock.fp_pid, SIGTERM);
+        s->nlock.fp_pid = 0;
+    }
+    s->nlock.fp_rxlen = 0;
+    if (s->nlock.fp_state == SYN_FP_RUNNING)
+        s->nlock.fp_state = SYN_FP_IDLE;
+}
+
+/* Give up on the reader for the rest of this lock. */
+static void lock_fprint_disable(syn_server_t *s, const char *why)
+{
+    lock_fprint_stop(s);
+    s->nlock.fp_state = SYN_FP_UNAVAIL;
+    wlr_log(WLR_INFO, "synui: lock: fingerprint off for this lock (%s)", why);
+}
+
+/* Handle one protocol line. Returns 1 if it was a verdict — the caller must
+ * then stop touching the fd, which this has closed (and, for 'A', stop touching
+ * the lock at all: it is gone). */
+static int lock_fprint_line(syn_server_t *s, const char *line)
+{
+    switch (line[0]) {
+    case 'M':
+        snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg), "%s", line + 1);
+        lock_utf8_trim_partial(s->nlock.fp_msg);
+        /* The reader asking for a finger is worth waking the screen for — a
+         * prompt nobody can read because the panel faded out is no prompt. */
+        lock_notify_activity(s);
+        lock_render(s);
+        return 0;
+
+    case 'A':
+        wlr_log(WLR_INFO, "synui: lock: authenticated (fingerprint)");
+        lock_fprint_stop(s);
+        synui_unlock(s);
+        return 1;
+
+    case 'U':
+        /* The common case, and the quiet one: no reader, no fprintd, or no
+         * enrolled prints. Clear the message — there is nothing to tell the
+         * user about a feature this machine does not have. */
+        s->nlock.fp_msg[0] = 0;
+        lock_fprint_disable(s, "unavailable");
+        lock_render(s);
+        return 1;
+
+    case 'F':
+    default:
+        s->nlock.fp_fails++;
+        lock_fprint_stop(s);
+        if (s->nlock.fp_fails >= LOCK_FP_MAX_FAILS) {
+            snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg),
+                     "Fingerprint disabled \xe2\x80\x94 use your password");
+            lock_fprint_disable(s, "too many failed swipes");
+        } else {
+            /* Keep whatever the helper last said — "Swipe was too short" beats
+             * anything written here — but never leave the row blank, or a
+             * rejected finger looks like a reader that did nothing. */
+            if (s->nlock.fp_msg[0] == 0)
+                snprintf(s->nlock.fp_msg, sizeof(s->nlock.fp_msg),
+                         "Fingerprint not recognised");
+            s->nlock.fp_retry_ms = lock_now_ms() + LOCK_FP_RETRY_MS;
+        }
+        lock_render(s);
+        return 1;
+    }
+}
+
+static int lock_fprint_readable(int fd, uint32_t mask, void *data)
+{
+    (void)mask;
+    syn_server_t *s = data;
+
+    char buf[256];
+    ssize_t n = read(fd, buf, sizeof(buf));
+    if (n < 0) {
+        if (errno == EINTR || errno == EAGAIN) return 0;
+        n = 0;                       /* a broken pipe reads as EOF here */
+    }
+    if (n == 0) {
+        /* EOF with no verdict: the helper was killed, crashed, or could not be
+         * exec'd at all. Counted as a failure rather than ignored, so a helper
+         * that dies the moment it starts hits LOCK_FP_MAX_FAILS and stops
+         * instead of being re-forked on every keystroke forever. */
+        s->nlock.fp_fails++;
+        lock_fprint_stop(s);
+        if (s->nlock.fp_fails >= LOCK_FP_MAX_FAILS)
+            lock_fprint_disable(s, "helper kept exiting without a verdict");
+        else
+            s->nlock.fp_retry_ms = lock_now_ms() + LOCK_FP_RETRY_MS;
+        return 0;
+    }
+
+    for (ssize_t i = 0; i < n; i++) {
+        if (buf[i] != '\n') {
+            /* An over-long line keeps its head and drops the rest; the newline
+             * still terminates it, so the stream stays in sync. */
+            if (s->nlock.fp_rxlen < (int)sizeof(s->nlock.fp_rx) - 1)
+                s->nlock.fp_rx[s->nlock.fp_rxlen++] = buf[i];
+            continue;
+        }
+        s->nlock.fp_rx[s->nlock.fp_rxlen] = 0;
+        s->nlock.fp_rxlen = 0;
+        if (s->nlock.fp_rx[0] && lock_fprint_line(s, s->nlock.fp_rx))
+            return 0;                /* verdict: fd is closed, `s` may be unlocked */
+    }
+    return 0;
+}
+
+static void lock_fprint_start(syn_server_t *s)
+{
+    if (!s->nlock.active) return;
+    if (!s->config.lock_fingerprint) return;
+    if (s->nlock.fp_state != SYN_FP_IDLE || s->nlock.fp_pid > 0) return;
+    /* Never in the greeter. There is no session to unlock there — greetd owns
+     * authentication and starts one — and the greeter process runs as the
+     * unprivileged `greeter` user, so pam_fprintd would be matching fingers
+     * against THAT account rather than the one being logged into. */
+    if (s->greeter) return;
+
+    int rp[2];                               /* status pipe, child → parent */
+    if (pipe2(rp, O_CLOEXEC) < 0) return;
+
+    /* Block SIGCHLD across the fork, as everywhere else in this tree: the
+     * global reap_children() must not reap this child before its fd is wired
+     * up. See reference-inherited-signal-dispositions. */
+    sigset_t chld, prev;
+    sigemptyset(&chld);
+    sigaddset(&chld, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &chld, &prev);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        sigprocmask(SIG_SETMASK, &prev, NULL);
+        close(rp[0]); close(rp[1]);
+        return;
+    }
+    if (pid == 0) {
+        /* Child: status on stdout, nothing on stdin — this helper reads no
+         * input at all, by design. dup2 clears the O_CLOEXEC on the new fd. */
+        dup2(rp[1], STDOUT_FILENO);
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > 2) close(devnull);
+        }
+        /* Unlike the password helper, this child can sit blocked for the entire
+         * length of the lock, and it is not reading its pipe — so if synui dies
+         * it would never notice, and would keep the reader claimed until
+         * fprintd timed it out. Have the kernel signal it instead. */
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+        synui_child_reset_signals();
+        execlp("synui-lock-fprint", "synui-lock-fprint", (char *)NULL);
+        _exit(127);
+    }
+
+    /* Parent. */
+    close(rp[1]);
+    sigprocmask(SIG_SETMASK, &prev, NULL);
+
+    s->nlock.fp_pid   = pid;
+    s->nlock.fp_fd    = rp[0];
+    s->nlock.fp_state = SYN_FP_RUNNING;
+    s->nlock.fp_rxlen = 0;
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    s->nlock.fp_src = wl_event_loop_add_fd(loop, rp[0], WL_EVENT_READABLE,
+                                           lock_fprint_readable, s);
 }
 
 /* ── Keyboard ────────────────────────────────────────────── */
@@ -595,6 +864,18 @@ void synui_lock(syn_server_t *s)
     s->nlock.auth_fd = -1;
     s->nlock.last_input_ms = lock_now_ms();
 
+    /* Fingerprint state is per-lock: an "unavailable" or a run of failed
+     * swipes must not carry over into the next lock, since the reason may have
+     * been a reader that was asleep or a finger that was wet. */
+    s->nlock.fp_state    = SYN_FP_IDLE;
+    s->nlock.fp_pid      = 0;
+    s->nlock.fp_fd       = -1;
+    s->nlock.fp_src      = NULL;
+    s->nlock.fp_fails    = 0;
+    s->nlock.fp_retry_ms = lock_now_ms();
+    s->nlock.fp_msg[0]   = 0;
+    s->nlock.fp_rxlen    = 0;
+
     /* Take keyboard focus away from every window first. */
     wlr_seat_keyboard_notify_clear_focus(s->seat);
 
@@ -627,6 +908,11 @@ void synui_lock(syn_server_t *s)
     lock_render(s);
     wlr_log(WLR_INFO, "synui: session locked (native)");
     sound_play(s, SOUND_EVT_LOCK);
+
+    /* Offer the reader from the moment the screen locks, so a finger works
+     * without touching a key first. On a machine with none this costs one fork
+     * that answers 'U' straight away and is never repeated. */
+    lock_fprint_start(s);
 }
 
 void synui_unlock(syn_server_t *s)
@@ -638,6 +924,11 @@ void synui_unlock(syn_server_t *s)
     sound_play(s, SOUND_EVT_UNLOCK);
 
     lock_auth_cleanup(s);
+    /* Signals the helper as well as dropping its fd — it is blocked waiting for
+     * a finger and would otherwise hold the reader claimed past the unlock. */
+    lock_fprint_stop(s);
+    s->nlock.fp_state  = SYN_FP_IDLE;
+    s->nlock.fp_msg[0] = 0;
     if (s->nlock.t_clock) { wl_event_source_remove(s->nlock.t_clock); s->nlock.t_clock = NULL; }
     if (s->nlock.t_fade)  { wl_event_source_remove(s->nlock.t_fade);  s->nlock.t_fade  = NULL; }
 
