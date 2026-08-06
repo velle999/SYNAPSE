@@ -3479,8 +3479,27 @@ void synui_render_ctlpanel(syn_server_t *s)
     set_ink(cr, INK_LABEL, 1.0);
     cairo_move_to(cr, CTL_COL_RIGHT, 30);
     cairo_show_text(cr, "\xe2\x80\xba  ");
-    set_ink(cr, INK_TITLE, 1.0);
-    cairo_show_text(cr, ctlpanel_cat_name(cp->cat));
+    if (cp->searching) {
+        /* The breadcrumb is where you are, and while searching you are not in a
+         * category — saying "Appearance" over a list of rows from six of them
+         * would be the panel's only outright lie. */
+        set_ink(cr, INK_TITLE, 1.0);
+        cairo_show_text(cr, "Search");
+    } else {
+        set_ink(cr, INK_TITLE, 1.0);
+        cairo_show_text(cr, ctlpanel_cat_name(cp->cat));
+
+        /* …and which section of it, when the cursor is in one. This is where a
+         * section's name lives; the pane only rules between them. */
+        int selrow = ctlpanel_selected_row(s);
+        const char *sect = selrow >= 0 ? ctlpanel_row_section(selrow) : NULL;
+        if (sect) {
+            set_ink(cr, INK_LABEL, 1.0);
+            cairo_show_text(cr, "  \xe2\x80\xba  ");
+            set_ink(cr, INK_TITLE, 1.0);
+            cairo_show_text(cr, sect);
+        }
+    }
 
     set_ink(cr, INK_RULE, 0.5);
     cairo_set_line_width(cr, 1);
@@ -3494,8 +3513,19 @@ void synui_render_ctlpanel(syn_server_t *s)
     cairo_move_to(cr, 18, 70);
     cairo_show_text(cr, "CATEGORIES");
     cairo_move_to(cr, CTL_COL_RIGHT, 70);
-    cairo_show_text(cr, cp->cat == CTL_CAT_SHORTCUTS ? "KEYBOARD SHORTCUTS"
-                                                     : "SETTINGS");
+    if (cp->searching) {
+        /* The box IS the column heading while it is open: it sits exactly where
+         * "SETTINGS" would, so nothing moves down the pane when you open it. */
+        cairo_show_text(cr, "FIND  ");
+        set_accent(cr, 1.0);
+        cairo_set_font_size(cr, 13);
+        char box[80];
+        snprintf(box, sizeof(box), "%s_", cp->search);
+        cairo_show_text(cr, box);
+    } else {
+        cairo_show_text(cr, cp->cat == CTL_CAT_SHORTCUTS ? "KEYBOARD SHORTCUTS"
+                                                         : "SETTINGS");
+    }
 
     /* Divider between the columns */
     set_ink(cr, INK_RULE, 0.35);
@@ -3577,20 +3607,53 @@ void synui_render_ctlpanel(syn_server_t *s)
         }
     } else {
         int rows[CTL_CAT_ITEMS_MAX];
-        int nrows = ctlpanel_cat_items(cp->cat, rows, CTL_CAT_ITEMS_MAX);
+        int nrows = ctlpanel_visible_rows(s, rows, CTL_CAT_ITEMS_MAX);
         int cur   = ctlpanel_selected_row(s);
+
+        /* The window into a category that no longer fits. Clamped here as well
+         * as in ctlpanel.c because this is the one place that knows how many
+         * rows were actually drawn, and the pointer grid below has to describe
+         * exactly those. */
+        int first = cp->row_scroll;
+        if (first > nrows - CTL_ROW_ROWS) first = nrows - CTL_ROW_ROWS;
+        if (first < 0) first = 0;
+
+        int drawn = nrows - first;
+        if (drawn > CTL_ROW_ROWS) drawn = CTL_ROW_ROWS;
 
         /* The pane's rows are clickable; the shortcuts list above is not (it is
          * a read-only view of the bind table), so it leaves the grid empty and
          * only the wheel does anything over it. */
         hit_set_rows(&cp->hit_items, CTL_COL_RIGHT - 12, CTL_TOP - 16,
                      (CTL_SETTING_V + 12) - (CTL_COL_RIGHT - 12),
-                     CTL_ROW_H, nrows);
+                     CTL_ROW_H, drawn);
 
-        for (int i = 0; i < nrows; i++) {
+        for (int i = 0; i < drawn; i++) {
             int ry  = CTL_TOP + i * CTL_ROW_H;
-            int row = rows[i];
+            int row = rows[first + i];
             int sel = (row == cur);
+
+            /* A rule above the row that opens a section.
+             *
+             * The section's NAME is in the breadcrumb rather than here: the row
+             * pitch is 26px and the highlight takes 22 of them, so there is no
+             * line to set a heading on without either growing every row or
+             * spending a whole row on text. A rule costs the 2px that are
+             * actually free and still does the one job that matters at forty
+             * rows — saying where one group of settings ends and the next
+             * begins. Not drawn on the very first drawn row: a rule hard
+             * against the column heading reads as a border, not a divider.
+             *
+             * Suppressed while searching, where results come from every
+             * category and the groupings they were pulled out of no longer
+             * describe what is on screen. */
+            if (!cp->searching && i > 0 && ctlpanel_row_starts_section(row)) {
+                set_ink(cr, INK_RULE, 0.30);
+                cairo_set_line_width(cr, 1);
+                cairo_move_to(cr, CTL_COL_RIGHT - 12, ry - 19);
+                cairo_line_to(cr, CTL_SETTING_V + 12, ry - 19);
+                cairo_stroke(cr);
+            }
 
             if (sel) {
                 set_accent(cr, cats_focused ? 0.14 : 0.35);
@@ -3604,6 +3667,32 @@ void synui_render_ctlpanel(syn_server_t *s)
             set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
             cairo_move_to(cr, CTL_COL_RIGHT, ry);
             cairo_show_text(cr, ctlpanel_row_label(row));
+
+            /* In a search result, say which category the row came from. Without
+             * it the results are a flat list of names with no way to tell a
+             * "Blur" in Windows from one somewhere else — and no way to learn
+             * where a setting lives for next time, which is how a search
+             * teaches the menu rather than replacing it. */
+            if (cp->searching) {
+                int rcat = ctlpanel_row_cat(row);
+                if (rcat >= 0) {
+                    cairo_set_font_size(cr, 11);
+                    set_ink(cr, INK_DIM, 0.8);
+                    cairo_show_text(cr, "   ");
+                    cairo_show_text(cr, ctlpanel_cat_name(rcat));
+                }
+            }
+
+            /* A dot on any row that is no longer at its default. The panel now
+             * has a hundred rows and settings.state only records the ones that
+             * were changed, so this is the only way to see at a glance what
+             * this desktop has actually been made to differ on — and what the
+             * Delete key would have something to undo on. */
+            if (!ctlpanel_row_is_default(s, row)) {
+                set_accent(cr, 0.85);
+                cairo_arc(cr, CTL_COL_RIGHT - 7, ry - 4, 2.0, 0, 2 * 3.14159265);
+                cairo_fill(cr);
+            }
 
             /* Wide enough for a GGUF filename: the AI-model row's value is one,
              * and a truncated model name is a name you cannot act on. */
@@ -3660,11 +3749,61 @@ void synui_render_ctlpanel(syn_server_t *s)
                     set_ink(cr, INK_LABEL, 1.0);
                     draw_right(cr, vx - ext.width - 6, ry, "\xe2\x80\xb9");
                 }
+
+                /* A value row wears chevrons too, for the same reason the
+                 * choice row does: they are what say the number itself is what
+                 * Left/Right move. Drawn only on the SELECTED row — a hundred
+                 * rows each carrying a pair is noise, and the affordance only
+                 * matters where the keys would land. */
+                if (kind == CTL_KIND_VALUE && sel) {
+                    cairo_text_extents_t ext;
+                    cairo_text_extents(cr, value, &ext);
+                    set_ink(cr, INK_LABEL, 1.0);
+                    draw_right(cr, vx + 12, ry, "\xe2\x80\xba");
+                    draw_right(cr, vx - ext.width - 6, ry, "\xe2\x80\xb9");
+                }
             }
+        }
+
+        /* Where in the category you are, when it does not fit. The shortcuts
+         * list has said this since it was written; a forty-row Windows needs it
+         * for exactly the same reason — a setting you cannot see is one you do
+         * not know you have. */
+        if (nrows > CTL_ROW_ROWS) {
+            cairo_set_font_size(cr, 11);
+            set_ink(cr, INK_DIM, 0.9);
+            char more[80];
+            snprintf(more, sizeof(more), "%d\xe2\x80\x93%d of %d \xc2\xb7 PgUp/PgDn",
+                     first + 1, first + drawn, nrows);
+            cairo_move_to(cr, CTL_COL_RIGHT, CTL_TOP + CTL_ROW_ROWS * CTL_ROW_H + 6);
+            cairo_show_text(cr, more);
+        } else if (cp->searching && nrows == 0) {
+            /* An empty result is a real answer and has to look like one, or it
+             * reads as the panel having broken. */
+            cairo_set_font_size(cr, 13);
+            set_ink(cr, INK_DIM, 0.9);
+            cairo_move_to(cr, CTL_COL_RIGHT, CTL_TOP);
+            cairo_show_text(cr, "No setting matches that.");
         }
     }
 
     /* ── Footer ── */
+    /* The selected row's one-line explanation, above the status line. Most of
+     * these settings are named in two or three words and several of them are
+     * genuinely obscure — "Blur halo", "Crop client shadows" — so the sentence
+     * is what makes the row safe to touch without reading the source. */
+    {
+        int selrow = ctlpanel_selected_row(s);
+        const char *help = (selrow >= 0 && cp->focus == CTL_FOCUS_ITEMS)
+                         ? ctlpanel_row_help(selrow) : NULL;
+        if (help && !cp->status[0]) {
+            cairo_set_font_size(cr, 12);
+            set_ink(cr, INK_LABEL, 0.95);
+            cairo_move_to(cr, 18, ph - 38);
+            cairo_show_text(cr, help);
+        }
+    }
+
     if (cp->status[0]) {
         cairo_set_font_size(cr, 12);
         set_accent(cr, 0.9);
@@ -3678,10 +3817,19 @@ void synui_render_ctlpanel(syn_server_t *s)
      * the panels use has no U+2192, and a missing glyph in a key hint is a hint
      * that reads as a typo. "›" (U+203A), used above, it does have. */
     const char *hint;
-    if (cats_focused)
-        hint = "Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 Esc close";
+    if (cp->searching)
+        hint = "Type to filter \xc2\xb7 Up/Down select \xc2\xb7 Del reset \xc2\xb7 Esc back";
+    else if (cats_focused)
+        hint = "Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 / find \xc2\xb7 Esc close";
     else if (cp->cat == CTL_CAT_SHORTCUTS)
         hint = "Up/Down \xc2\xb7 PgUp/PgDn scroll \xc2\xb7 Left or Esc goes back";
+    else if (ctlpanel_selected_row(s) >= 0 &&
+             ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_VALUE)
+        /* Left/Right are the value here, so the usual "Left goes back" would be
+         * naming a key that does something else entirely. Tab is the way out,
+         * and Del is the way back to the default — worth saying on exactly the
+         * rows where there is a default to go back to. */
+        hint = "Left/Right adjust \xc2\xb7 Del default \xc2\xb7 / find \xc2\xb7 Tab column \xc2\xb7 Esc back";
     else if (ctlpanel_selected_row(s) >= 0 &&
              ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_CHOICE)
         /* On a choice row Left/Right are the choice, so the usual hint would be
@@ -3690,7 +3838,7 @@ void synui_render_ctlpanel(syn_server_t *s)
          * is not. */
         hint = "Left/Right switch \xc2\xb7 Enter details \xc2\xb7 Tab column \xc2\xb7 Esc back";
     else
-        hint = "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 Left or Esc back \xc2\xb7 Tab column";
+        hint = "Up/Down select \xc2\xb7 Enter activate \xc2\xb7 / find \xc2\xb7 Left or Esc back";
 
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);

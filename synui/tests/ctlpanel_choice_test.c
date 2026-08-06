@@ -109,6 +109,35 @@ bool syn_config_path(char *buf, size_t n, const char *leaf)
     return false;   /* no config dir under test: widgets_label() reads "off" */
 }
 
+/* ── The table-driven rows' machinery ────────────────────────
+ *
+ * This test is about the AI-model CHOICE row and nothing else, but ctlpanel.c
+ * now also carries the generic value path — apply hooks, the defaults snapshot
+ * and settings.state — so those symbols have to resolve for it to link. None of
+ * them is exercised here; the round trip they implement is what
+ * ctlpanel_table_test covers, with config.c and settings.c linked for real.
+ */
+void uifx_apply(syn_server_t *s)              { (void)s; }
+void input_reload_config(syn_server_t *s)     { (void)s; }
+void deco_refresh_all(syn_server_t *s)        { (void)s; }
+void nightlight_apply(syn_server_t *s)        { (void)s; }
+void cursor_reload(syn_server_t *s)           { (void)s; }
+void deskicons_reload(syn_server_t *s)        { (void)s; }
+void layout_apply(syn_server_t *s, syn_workspace_t *ws) { (void)s; (void)ws; }
+
+void settings_state_set(const char *k, const char *v) { (void)k; (void)v; }
+void settings_state_clear(const char *k)              { (void)k; }
+int  settings_state_has(const char *k)                { (void)k; return 0; }
+
+/* Zeroed, not the real defaults: nothing here reads a value out of it, and
+ * building one would mean linking config.c, whose syn_config_path would fight
+ * the stub above. */
+const syn_config_t *synui_config_defaults(void)
+{
+    static syn_config_t def;
+    return &def;
+}
+
 /* ── The model directory ─────────────────────────────────── */
 
 static const char *const models[] = {

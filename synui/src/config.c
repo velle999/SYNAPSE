@@ -482,9 +482,18 @@ void syn_config_ensure_dir(void)
         wlr_log(WLR_ERROR, "synui: mkdir %s failed: %s", dir, strerror(errno));
 }
 
-void synui_config_load(syn_config_t *cfg)
+/*
+ * Every setting's out-of-the-box value, in one place.
+ *
+ * Split out of synui_config_load() so it can be run against a scratch config as
+ * well as the live one. The control panel keeps such a scratch copy and diffs
+ * against it: that is what lets any row say whether it is still at its default
+ * and offer to go back to it, without each row having to name its own default a
+ * second time. A default written twice is a default that will disagree with
+ * itself eventually.
+ */
+static void config_set_defaults(syn_config_t *cfg)
 {
-    /* Defaults */
     strncpy(cfg->terminal, "kitty", sizeof(cfg->terminal) - 1);
     cfg->night_light = 0;
     cfg->night_light_temp = 4000;
@@ -719,6 +728,28 @@ void synui_config_load(syn_config_t *cfg)
 
     cfg->bind_count = 0;
     seed_default_binds(cfg);
+}
+
+/*
+ * The defaults as a value, built once.
+ *
+ * The panel needs something to compare the live config against, and the only
+ * honest source for that is the same code that seeded it. Built on first ask
+ * rather than at startup because most sessions never open the panel.
+ */
+void config_parse_kv(syn_config_t *cfg, const char *key, char *val);
+
+const syn_config_t *synui_config_defaults(void)
+{
+    static syn_config_t def;
+    static int built = 0;
+    if (!built) { memset(&def, 0, sizeof(def)); config_set_defaults(&def); built = 1; }
+    return &def;
+}
+
+void synui_config_load(syn_config_t *cfg)
+{
+    config_set_defaults(cfg);
 
     /* SYNUI_CONFIG overrides everything (used by the test harness for a
      * hermetic run), then user config, then system-wide. */
@@ -743,6 +774,7 @@ void synui_config_load(syn_config_t *cfg)
         launcher_state_load(cfg);
         record_audio_state_load(cfg);
         deskicons_state_load(cfg);
+        settings_state_load(cfg);
         return;
     }
 
@@ -774,431 +806,7 @@ void synui_config_load(syn_config_t *cfg)
             val = strip(val);
         }
 
-        if (strcmp(key, "terminal") == 0)
-            strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
-        else if (strcmp(key, "autostart") == 0 && cfg->autostart_count < SYN_AUTOSTART_MAX)
-            strncpy(cfg->autostart[cfg->autostart_count++], val, 127);
-        else if (strcmp(key, "border_width") == 0) {
-            cfg->border_width = atoi(val);
-            if (cfg->border_width < 0)  cfg->border_width = 0;
-            if (cfg->border_width > 32) cfg->border_width = 32;
-        }
-        else if (strcmp(key, "gap") == 0) {
-            cfg->gap = atoi(val);
-            if (cfg->gap < 0)   cfg->gap = 0;
-            if (cfg->gap > 128) cfg->gap = 128;
-        }
-        else if (strcmp(key, "master_factor") == 0)
-            cfg->master_factor = strtof(val, NULL);
-        else if (strcmp(key, "animation_ms") == 0) {
-            /* 0 = off. Cap it: a multi-second fade is a broken desktop, not a
-             * preference. */
-            int ms = atoi(val);
-            if (ms < 0)   ms = 0;
-            if (ms > 1000) ms = 1000;
-            cfg->animation_ms = ms;
-        }
-        else if (strcmp(key, "titlebar_height") == 0) {
-            /* 0 disables the titlebar entirely; clamp the rest to something a
-             * button glyph can actually be drawn in. */
-            int th = atoi(val);
-            if (th < 0)  th = 0;
-            if (th > 64) th = 64;
-            if (th > 0 && th < 14) th = 14;
-            cfg->titlebar_height = th;
-        }
-        else if (strcmp(key, "remember_geometry") == 0)
-            cfg->remember_geometry = strcmp(val, "on") == 0 ||
-                                     strcmp(val, "1") == 0;
-        else if (strcmp(key, "desktop_icons") == 0)
-            cfg->desktop_icons = strcmp(val, "on") == 0 ||
-                                 strcmp(val, "1") == 0;
-        else if (strcmp(key, "desktop_icon_arrange") == 0) {
-            /* An unreadable value keeps the default rather than picking a mode
-             * the user did not ask for; deskicons.state may override this. */
-            syn_arrange_t mode;
-            if (syn_arrange_parse(val, &mode))
-                cfg->desktop_icon_arrange = mode;
-            else
-                wlr_log(WLR_ERROR, "synui: config: desktop_icon_arrange '%s' is "
-                        "not name|type|size|date", val);
-        }
-        else if (strcmp(key, "titlebar_color") == 0)
-            parse_hex_color(val, cfg->titlebar_color);
-        else if (strcmp(key, "titlebar_color_focus") == 0)
-            parse_hex_color(val, cfg->titlebar_color_focus);
-        else if (strcmp(key, "titlebar_text") == 0)
-            parse_hex_color(val, cfg->titlebar_text);
-        else if (strcmp(key, "titlebar_text_focus") == 0)
-            parse_hex_color(val, cfg->titlebar_text_focus);
-        else if (strcmp(key, "ai_layout") == 0)
-            cfg->ai_layout = strcmp(val, "on") == 0;
-        else if (strcmp(key, "ai_ctx_decor") == 0)
-            cfg->ai_ctx_decor = strcmp(val, "on") == 0;
-        else if (strcmp(key, "start_overlay") == 0)
-            cfg->start_overlay = strcmp(val, "on") == 0;
-        else if (strcmp(key, "snap") == 0)
-            cfg->snap = strcmp(val, "on") == 0;
-        else if (strcmp(key, "alt_tab_preview") == 0)
-            cfg->alt_tab_preview = strcmp(val, "on") == 0;
-        else if (strcmp(key, "alt_tab_all_desktops") == 0)
-            cfg->alt_tab_all_desktops = strcmp(val, "on") == 0;
-        else if (strcmp(key, "alt_tab_minimized") == 0)
-            cfg->alt_tab_minimized = strcmp(val, "on") == 0;
-        else if (strcmp(key, "theme") == 0) {
-            /* Seeds the chrome colours from the preset; an explicit
-             * border_color_* / titlebar_* line placed AFTER this still wins,
-             * because it parses later and overwrites the field. */
-            for (int t = 0; t < SYN_THEME_COUNT; t++)
-                if (strcmp(val, syn_theme_names[t]) == 0) {
-                    theme_load_colors(cfg, (syn_theme_t)t);
-                    break;
-                }
-        }
-        else if (strcmp(key, "transparency") == 0)
-            cfg->transparency = strcmp(val, "on") == 0;
-        else if (strcmp(key, "active_opacity") == 0)
-            cfg->active_opacity = (float)atof(val);
-        else if (strcmp(key, "inactive_opacity") == 0)
-            cfg->inactive_opacity = (float)atof(val);
-        else if (strcmp(key, "foot_alpha") == 0) {
-            cfg->foot_alpha = (float)atof(val);
-            if (cfg->foot_alpha < 0.0f) cfg->foot_alpha = 0.0f;
-            if (cfg->foot_alpha > 1.0f) cfg->foot_alpha = 1.0f;
-        }
-        else if (strcmp(key, "corner_radius") == 0) {
-            cfg->corner_radius = atoi(val);
-            if (cfg->corner_radius < 0)  cfg->corner_radius = 0;
-            if (cfg->corner_radius > 48) cfg->corner_radius = 48;
-        }
-        else if (strcmp(key, "blur") == 0)
-            cfg->blur = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
-        else if (strcmp(key, "glass_halo") == 0) {
-            cfg->glass_halo = atoi(val);
-            if (cfg->glass_halo < 0)  cfg->glass_halo = 0;
-            if (cfg->glass_halo > 64) cfg->glass_halo = 64;
-        }
-        else if (strcmp(key, "clip_csd_margin") == 0)
-            cfg->clip_csd_margin = strcmp(val, "on") == 0 ||
-                                   strcmp(val, "1")  == 0;
-        else if (strcmp(key, "blur_passes") == 0) {
-            cfg->blur_passes = atoi(val);
-            if (cfg->blur_passes < 1) cfg->blur_passes = 1;
-            if (cfg->blur_passes > 5) cfg->blur_passes = 5;
-        }
-        else if (strcmp(key, "blur_radius") == 0) {
-            cfg->blur_radius = atoi(val);
-            if (cfg->blur_radius < 1)  cfg->blur_radius = 1;
-            if (cfg->blur_radius > 20) cfg->blur_radius = 20;
-        }
-        else if (strcmp(key, "blur_noise") == 0)
-            cfg->blur_noise = (float)atof(val);
-        else if (strcmp(key, "blur_brightness") == 0)
-            cfg->blur_brightness = (float)atof(val);
-        else if (strcmp(key, "blur_contrast") == 0)
-            cfg->blur_contrast = (float)atof(val);
-        else if (strcmp(key, "blur_saturation") == 0)
-            cfg->blur_saturation = (float)atof(val);
-        else if (strcmp(key, "shadow") == 0)
-            cfg->shadow = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
-        else if (strcmp(key, "shadow_blur_sigma") == 0) {
-            cfg->shadow_blur_sigma = (float)atof(val);
-            if (cfg->shadow_blur_sigma < 0.0f)  cfg->shadow_blur_sigma = 0.0f;
-            if (cfg->shadow_blur_sigma > 80.0f) cfg->shadow_blur_sigma = 80.0f;
-        }
-        else if (strcmp(key, "shadow_spread") == 0) {
-            cfg->shadow_spread = (float)atof(val);
-            if (cfg->shadow_spread < 0.0f)  cfg->shadow_spread = 0.0f;
-            if (cfg->shadow_spread > 64.0f) cfg->shadow_spread = 64.0f;
-        }
-        else if (strcmp(key, "shadow_offset_x") == 0)
-            cfg->shadow_offset_x = atoi(val);
-        else if (strcmp(key, "shadow_offset_y") == 0)
-            cfg->shadow_offset_y = atoi(val);
-        else if (strcmp(key, "shadow_color") == 0) {
-            /* RGB only; parse_hex_color forces alpha to 1, so keep the alpha the
-             * separate shadow_opacity key (or the default) already set. */
-            float rgb[4];
-            if (parse_hex_color(val, rgb)) {
-                cfg->shadow_color[0] = rgb[0];
-                cfg->shadow_color[1] = rgb[1];
-                cfg->shadow_color[2] = rgb[2];
-            }
-        }
-        else if (strcmp(key, "shadow_opacity") == 0)
-            cfg->shadow_color[3] = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "border_color_norm") == 0)
-            parse_hex_color(val, cfg->border_color_norm);
-        else if (strcmp(key, "border_color_focus") == 0)
-            parse_hex_color(val, cfg->border_color_focus);
-        else if (strcmp(key, "border_color_ai") == 0)
-            parse_hex_color(val, cfg->border_color_ai);
-        else if (strcmp(key, "border_color_warn") == 0)
-            parse_hex_color(val, cfg->border_color_warn);
-        else if (strcmp(key, "effects") == 0)
-            cfg->effects = strcmp(val, "on") == 0;
-        else if (strcmp(key, "effect_scanline") == 0)
-            cfg->effect_scanline = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "effect_curvature") == 0)
-            cfg->effect_curvature = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "effect_aberration") == 0)
-            cfg->effect_aberration = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "effect_glitch") == 0)
-            cfg->effect_glitch = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "effect_phosphor") == 0) {
-            if      (strcmp(val, "off")   == 0) cfg->effect_phosphor = SYN_PHOSPHOR_OFF;
-            else if (strcmp(val, "green") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_GREEN;
-            else if (strcmp(val, "amber") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_AMBER;
-            else if (strcmp(val, "white") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_WHITE;
-            else wlr_log(WLR_ERROR, "synui: effect_phosphor: unknown '%s'", val);
-        }
-        else if (strcmp(key, "effect_mono") == 0)
-            cfg->effect_mono = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "effect_bloom") == 0)
-            cfg->effect_bloom = clamp01(strtof(val, NULL));
-        else if (strcmp(key, "xkb_rules") == 0)
-            strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
-        else if (strcmp(key, "xkb_model") == 0)
-            strncpy(cfg->xkb_model, val, sizeof(cfg->xkb_model) - 1);
-        else if (strcmp(key, "night_light") == 0)
-            cfg->night_light = strcmp(val, "on") == 0;
-        else if (strcmp(key, "night_light_temp") == 0) {
-            int k = atoi(val);
-            /* Below ~1000K the ramp is essentially red-only and the screen is
-             * unusable; above 6500K it is colder than daylight, which is not
-             * what a night light is for. Clamp rather than obey. */
-            if (k < 1000) k = 1000;
-            if (k > 6500) k = 6500;
-            cfg->night_light_temp = k;
-        }
-        else if (strcmp(key, "cursor_theme") == 0)
-            strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);
-        else if (strcmp(key, "cursor_size") == 0) {
-            int px = atoi(val);
-            /* Clamped, not obeyed: 0 makes wlroots fall back in ways that are
-             * hard to explain afterwards, and a mistyped 2400 leaves a pointer
-             * covering a third of the screen with no visible way to undo it. */
-            if (px < 8)   px = 8;
-            if (px > 256) px = 256;
-            cfg->cursor_size = px;
-        }
-        else if (strcmp(key, "xkb_layout") == 0)
-            strncpy(cfg->xkb_layout, val, sizeof(cfg->xkb_layout) - 1);
-        else if (strcmp(key, "xkb_variant") == 0)
-            strncpy(cfg->xkb_variant, val, sizeof(cfg->xkb_variant) - 1);
-        else if (strcmp(key, "xkb_options") == 0)
-            strncpy(cfg->xkb_options, val, sizeof(cfg->xkb_options) - 1);
-        else if (strcmp(key, "repeat_rate") == 0)
-            cfg->repeat_rate = atoi(val);
-        else if (strcmp(key, "repeat_delay") == 0)
-            cfg->repeat_delay = atoi(val);
-        else if (strcmp(key, "tap") == 0)
-            cfg->tap_to_click = strcmp(val, "on") == 0;
-        else if (strcmp(key, "natural_scroll") == 0)
-            cfg->natural_scroll = strcmp(val, "on") == 0;
-        else if (strcmp(key, "left_handed") == 0)
-            cfg->left_handed = strcmp(val, "on") == 0;
-        else if (strcmp(key, "accel_speed") == 0) {
-            cfg->accel_speed = strtof(val, NULL);
-            if (cfg->accel_speed < -1.0f) cfg->accel_speed = -1.0f;
-            if (cfg->accel_speed >  1.0f) cfg->accel_speed =  1.0f;
-            cfg->accel_speed_set = 1;
-        }
-        else if (strcmp(key, "wallpaper") == 0) {
-            /* Built-in keywords select a bundled wallpaper; anything else is
-             * a file path for the static wallpaper.c backend.
-             *   matrix  → animated GLES2 kanji rain (matrix.c)
-             *   default → the bundled Synapse image (/usr/share/synui)
-             *   none    → solid bg_color
-             * (see also the live wppick.c picker / wallpaper.state). */
-            if (strcmp(val, "matrix") == 0) {
-                cfg->wallpaper_src = SYN_WP_SRC_MATRIX;
-            } else if (strcmp(val, "default") == 0) {
-                cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
-                strncpy(cfg->wallpaper, SYNUI_DATADIR "/wallpaper.png",
-                        sizeof(cfg->wallpaper) - 1);
-            } else if (strcmp(val, "none") == 0) {
-                cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
-                cfg->wallpaper[0] = '\0';
-            } else {
-                cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
-                strncpy(cfg->wallpaper, val, sizeof(cfg->wallpaper) - 1);
-            }
-        }
-        else if (strcmp(key, "wallpaper_output") == 0 ||
-                 strcmp(key, "wallpaper_output_mode") == 0) {
-            /* value = "<connector> <token>" — a per-monitor override of the two
-             * keys above, e.g. "wallpaper_output = DP-1 matrix". The token
-             * vocabulary is identical to `wallpaper`, so there is one thing to
-             * learn rather than two; _mode takes a wallpaper_mode name instead.
-             * Lines are read in order, and an override inherits whatever the
-             * global keys hold when it is first named. */
-            char *sp = val;
-            while (*sp && !isspace(*sp)) sp++;
-            if (!*sp) {
-                wlr_log(WLR_ERROR, "synui: %s '%s': expected "
-                        "'<output> <value>'", key, val);
-            } else {
-                *sp++ = '\0';
-                while (isspace(*sp)) sp++;
-                if (!*sp) {
-                    wlr_log(WLR_ERROR, "synui: %s '%s': missing value", key, val);
-                } else if (strcmp(key, "wallpaper_output") == 0) {
-                    wallpaper_output_apply(cfg, val, sp, -1);
-                } else {
-                    int m = wallpaper_mode_from_name(sp);
-                    if (m < 0)
-                        wlr_log(WLR_ERROR, "synui: wallpaper_output_mode: "
-                                "unknown '%s'", sp);
-                    else
-                        wallpaper_output_apply(cfg, val, NULL, m);
-                }
-            }
-        }
-        else if (strcmp(key, "wallpaper_mode") == 0) {
-            /* Driven off syn_wallpaper_mode_names so a new mode only has to be
-             * added to the enum and that table — this parser and the Super+W
-             * picker both pick it up for free, instead of drifting apart. */
-            int found = -1;
-            for (int m = 0; m < SYN_WALLPAPER_MODE_COUNT; m++)
-                if (strcmp(val, syn_wallpaper_mode_names[m]) == 0) { found = m; break; }
-            if (found >= 0) cfg->wallpaper_mode = (syn_wallpaper_mode_t)found;
-            else wlr_log(WLR_ERROR, "synui: wallpaper_mode: unknown '%s'", val);
-        }
-        else if (strcmp(key, "power_enabled") == 0)
-            cfg->power_enabled = strcmp(val, "on") == 0;
-        else if (strcmp(key, "power_dim_timeout") == 0)
-            cfg->power_dim = atoi(val) < 0 ? 0 : atoi(val);
-        else if (strcmp(key, "power_blank_timeout") == 0)
-            cfg->power_blank = atoi(val) < 0 ? 0 : atoi(val);
-        else if (strcmp(key, "power_lock_timeout") == 0)
-            cfg->power_lock = atoi(val) < 0 ? 0 : atoi(val);
-        else if (strcmp(key, "power_suspend_timeout") == 0)
-            cfg->power_suspend = atoi(val) < 0 ? 0 : atoi(val);
-        else if (strcmp(key, "power_lock_cmd") == 0)
-            snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd), "%s", val);
-        else if (strcmp(key, "power_suspend_cmd") == 0)
-            snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
-        /* Driven off syn_lid_action_names so a new action only has to be added
-         * to the enum and that table, as with wallpaper_mode above. */
-        else if (strcmp(key, "lid_close_action") == 0) {
-            int a = lid_action_from_name(val);
-            if (a >= 0) cfg->lid_close_action = a;
-            else wlr_log(WLR_ERROR, "synui: lid_close_action: unknown '%s'", val);
-        }
-        else if (strcmp(key, "lid_close_ac_action") == 0) {
-            int a = lid_action_from_name(val);
-            if (a >= 0) cfg->lid_close_ac_action = a;
-            else wlr_log(WLR_ERROR, "synui: lid_close_ac_action: unknown '%s'", val);
-        }
-        else if (strcmp(key, "lid_close_docked_action") == 0) {
-            int a = lid_action_from_name(val);
-            if (a >= 0) cfg->lid_close_docked_action = a;
-            else wlr_log(WLR_ERROR,
-                         "synui: lid_close_docked_action: unknown '%s'", val);
-        }
-        else if (strcmp(key, "network_cmd") == 0)
-            snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
-        else if (strcmp(key, "news_refresh") == 0) {
-            int m = atoi(val);
-            cfg->news_refresh_min = m < 1 ? 1 : m;   /* never hammer a feed */
-        } else if (strcmp(key, "news_source") == 0) {
-            /* news_source = TAG|https://example.org/feed.xml
-             * Repeatable. The first one replaces the built-in list rather than
-             * adding to it: a user listing their own feeds means "these", not
-             * "these as well as your eight". */
-            char *bar = strchr(val, '|');
-            if (!bar) {
-                wlr_log(WLR_ERROR, "synui: config: news_source needs TAG|URL: %s",
-                        val);
-            } else if (cfg->news_sources_n >= NEWS_SOURCES_MAX) {
-                wlr_log(WLR_ERROR, "synui: config: too many news_source lines "
-                                   "(max %d)", NEWS_SOURCES_MAX);
-            } else {
-                *bar = '\0';
-                syn_news_source_t *src = &cfg->news_sources[cfg->news_sources_n++];
-                snprintf(src->name, sizeof(src->name), "%s", strip(val));
-                snprintf(src->url,  sizeof(src->url),  "%s", strip(bar + 1));
-            }
-        }
-        else if (strcmp(key, "cat") == 0)
-            cfg->cat_start = strcmp(val, "on") == 0;
-        else if (strcmp(key, "welcome_at_startup") == 0)
-            cfg->welcome_at_startup = strcmp(val, "on") == 0;
-        else if (strcmp(key, "numlock") == 0)
-            cfg->numlock = strcmp(val, "on") == 0;
-        else if (strcmp(key, "record_audio") == 0)
-            cfg->record_audio = strcmp(val, "on") == 0;
-        else if (strcmp(key, "dock_enabled") == 0)
-            cfg->dock_enabled = strcmp(val, "on") == 0;
-        else if (strcmp(key, "dock_autohide") == 0)
-            cfg->dock_autohide = strcmp(val, "on") == 0;
-        else if (strcmp(key, "dock_edge") == 0) {
-            if      (strcmp(val, "bottom") == 0) cfg->dock_edge = SYN_DOCK_EDGE_BOTTOM;
-            else if (strcmp(val, "top")    == 0) cfg->dock_edge = SYN_DOCK_EDGE_TOP;
-            else if (strcmp(val, "left")   == 0) cfg->dock_edge = SYN_DOCK_EDGE_LEFT;
-            else if (strcmp(val, "right")  == 0) cfg->dock_edge = SYN_DOCK_EDGE_RIGHT;
-            else wlr_log(WLR_ERROR, "synui: dock_edge: unknown '%s'", val);
-        }
-        else if (strcmp(key, "launcher_style") == 0) {
-            if      (strcmp(val, "text") == 0) cfg->launcher_style = SYN_LAUNCHER_TEXT;
-            else if (strcmp(val, "logo") == 0) cfg->launcher_style = SYN_LAUNCHER_LOGO;
-            else wlr_log(WLR_ERROR, "synui: launcher_style: unknown '%s'", val);
-        }
-        else if (strcmp(key, "dock_height") == 0) {
-            cfg->dock_height = atoi(val);
-            if (cfg->dock_height < 32)  cfg->dock_height = 32;
-            if (cfg->dock_height > 200) cfg->dock_height = 200;
-        }
-        else if (strcmp(key, "dock_hover_margin") == 0) {
-            cfg->dock_hover_margin = atoi(val);
-            if (cfg->dock_hover_margin < 1)  cfg->dock_hover_margin = 1;
-            if (cfg->dock_hover_margin > 32) cfg->dock_hover_margin = 32;
-        }
-        else if (strcmp(key, "dock_pin") == 0) {
-            /* space-separated app_ids/.desktop basenames */
-            char buf[512];
-            snprintf(buf, sizeof(buf), "%s", val);
-            char *save = NULL;
-            cfg->dock_pin_count = 0;
-            for (char *tok = strtok_r(buf, " \t", &save);
-                 tok && cfg->dock_pin_count < DOCK_PIN_MAX;
-                 tok = strtok_r(NULL, " \t", &save))
-                snprintf(cfg->dock_pin[cfg->dock_pin_count++], 128, "%s", tok);
-        }
-        else if (strcmp(key, "game_mode") == 0)
-            cfg->game_mode = strcmp(val, "on") == 0;
-        else if (strcmp(key, "game_suspend_ai") == 0)
-            cfg->game_suspend_ai = strcmp(val, "on") == 0;
-        else if (strcmp(key, "game_inhibit_idle") == 0)
-            cfg->game_inhibit_idle = strcmp(val, "on") == 0;
-        else if (strcmp(key, "game_ai_stop_cmd") == 0)
-            snprintf(cfg->game_ai_stop_cmd, sizeof(cfg->game_ai_stop_cmd), "%s", val);
-        else if (strcmp(key, "game_ai_start_cmd") == 0)
-            snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd), "%s", val);
-        else if (strcmp(key, "game_exclude") == 0) {
-            /* space-separated app_ids that are NOT games. Replaces the built-in
-             * list rather than adding to it, so a user can widen or narrow it. */
-            char buf[512];
-            snprintf(buf, sizeof(buf), "%s", val);
-            char *save = NULL;
-            cfg->game_exclude_count = 0;
-            for (char *tok = strtok_r(buf, " \t", &save);
-                 tok && cfg->game_exclude_count < GAME_EXCLUDE_MAX;
-                 tok = strtok_r(NULL, " \t", &save))
-                snprintf(cfg->game_exclude[cfg->game_exclude_count++],
-                         sizeof(cfg->game_exclude[0]), "%s", tok);
-        }
-        else if (strcmp(key, "bind") == 0) {
-            /* value = "<combo> <action> [arg]" — split on first whitespace */
-            char *sp = val;
-            while (*sp && !isspace(*sp)) sp++;
-            if (*sp) { *sp++ = '\0'; while (isspace(*sp)) sp++; }
-            if (*sp)
-                config_bind(cfg, val, sp);
-            else
-                wlr_log(WLR_ERROR, "synui: bind '%s': missing action", val);
-        }
+        config_parse_kv(cfg, key, val);
     }
 
     fclose(f);
@@ -1214,4 +822,451 @@ void synui_config_load(syn_config_t *cfg)
     launcher_state_load(cfg);
     record_audio_state_load(cfg);
     deskicons_state_load(cfg);
+
+    /* Last, because it is the most recent explicit intent of the lot: every one
+     * of these is something the user changed by hand in a panel, and
+     * settings.state is the one that can carry ANY key. Same precedent as the
+     * others — delete the file to hand control back to synuirc. */
+    settings_state_load(cfg);
+}
+
+/*
+ * One `key = value`, applied to cfg. The whole of synuirc's vocabulary.
+ *
+ * Extracted from the read loop so that settings.state — which the control panel
+ * writes, and which is read back through this same function — cannot understand
+ * a different language than synuirc does. A panel that wrote a key its own
+ * parser accepted and this one did not would produce a setting that survived
+ * the save and vanished at the next login: the worst way for a settings panel
+ * to be wrong, because it looks like it worked.
+ *
+ * `val` is mutable: the bind case splits it in place.
+ */
+void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
+{
+    if (strcmp(key, "terminal") == 0)
+        strncpy(cfg->terminal, val, sizeof(cfg->terminal) - 1);
+    else if (strcmp(key, "autostart") == 0 && cfg->autostart_count < SYN_AUTOSTART_MAX)
+        strncpy(cfg->autostart[cfg->autostart_count++], val, 127);
+    else if (strcmp(key, "border_width") == 0) {
+        cfg->border_width = atoi(val);
+        if (cfg->border_width < 0)  cfg->border_width = 0;
+        if (cfg->border_width > 32) cfg->border_width = 32;
+    }
+    else if (strcmp(key, "gap") == 0) {
+        cfg->gap = atoi(val);
+        if (cfg->gap < 0)   cfg->gap = 0;
+        if (cfg->gap > 128) cfg->gap = 128;
+    }
+    else if (strcmp(key, "master_factor") == 0)
+        cfg->master_factor = strtof(val, NULL);
+    else if (strcmp(key, "animation_ms") == 0) {
+        /* 0 = off. Cap it: a multi-second fade is a broken desktop, not a
+         * preference. */
+        int ms = atoi(val);
+        if (ms < 0)   ms = 0;
+        if (ms > 1000) ms = 1000;
+        cfg->animation_ms = ms;
+    }
+    else if (strcmp(key, "titlebar_height") == 0) {
+        /* 0 disables the titlebar entirely; clamp the rest to something a
+         * button glyph can actually be drawn in. */
+        int th = atoi(val);
+        if (th < 0)  th = 0;
+        if (th > 64) th = 64;
+        if (th > 0 && th < 14) th = 14;
+        cfg->titlebar_height = th;
+    }
+    else if (strcmp(key, "remember_geometry") == 0)
+        cfg->remember_geometry = strcmp(val, "on") == 0 ||
+                                 strcmp(val, "1") == 0;
+    else if (strcmp(key, "desktop_icons") == 0)
+        cfg->desktop_icons = strcmp(val, "on") == 0 ||
+                             strcmp(val, "1") == 0;
+    else if (strcmp(key, "desktop_icon_arrange") == 0) {
+        /* An unreadable value keeps the default rather than picking a mode
+         * the user did not ask for; deskicons.state may override this. */
+        syn_arrange_t mode;
+        if (syn_arrange_parse(val, &mode))
+            cfg->desktop_icon_arrange = mode;
+        else
+            wlr_log(WLR_ERROR, "synui: config: desktop_icon_arrange '%s' is "
+                    "not name|type|size|date", val);
+    }
+    else if (strcmp(key, "titlebar_color") == 0)
+        parse_hex_color(val, cfg->titlebar_color);
+    else if (strcmp(key, "titlebar_color_focus") == 0)
+        parse_hex_color(val, cfg->titlebar_color_focus);
+    else if (strcmp(key, "titlebar_text") == 0)
+        parse_hex_color(val, cfg->titlebar_text);
+    else if (strcmp(key, "titlebar_text_focus") == 0)
+        parse_hex_color(val, cfg->titlebar_text_focus);
+    else if (strcmp(key, "ai_layout") == 0)
+        cfg->ai_layout = strcmp(val, "on") == 0;
+    else if (strcmp(key, "ai_ctx_decor") == 0)
+        cfg->ai_ctx_decor = strcmp(val, "on") == 0;
+    else if (strcmp(key, "start_overlay") == 0)
+        cfg->start_overlay = strcmp(val, "on") == 0;
+    else if (strcmp(key, "snap") == 0)
+        cfg->snap = strcmp(val, "on") == 0;
+    else if (strcmp(key, "alt_tab_preview") == 0)
+        cfg->alt_tab_preview = strcmp(val, "on") == 0;
+    else if (strcmp(key, "alt_tab_all_desktops") == 0)
+        cfg->alt_tab_all_desktops = strcmp(val, "on") == 0;
+    else if (strcmp(key, "alt_tab_minimized") == 0)
+        cfg->alt_tab_minimized = strcmp(val, "on") == 0;
+    else if (strcmp(key, "theme") == 0) {
+        /* Seeds the chrome colours from the preset; an explicit
+         * border_color_* / titlebar_* line placed AFTER this still wins,
+         * because it parses later and overwrites the field. */
+        for (int t = 0; t < SYN_THEME_COUNT; t++)
+            if (strcmp(val, syn_theme_names[t]) == 0) {
+                theme_load_colors(cfg, (syn_theme_t)t);
+                break;
+            }
+    }
+    else if (strcmp(key, "transparency") == 0)
+        cfg->transparency = strcmp(val, "on") == 0;
+    else if (strcmp(key, "active_opacity") == 0)
+        cfg->active_opacity = (float)atof(val);
+    else if (strcmp(key, "inactive_opacity") == 0)
+        cfg->inactive_opacity = (float)atof(val);
+    else if (strcmp(key, "foot_alpha") == 0) {
+        cfg->foot_alpha = (float)atof(val);
+        if (cfg->foot_alpha < 0.0f) cfg->foot_alpha = 0.0f;
+        if (cfg->foot_alpha > 1.0f) cfg->foot_alpha = 1.0f;
+    }
+    else if (strcmp(key, "corner_radius") == 0) {
+        cfg->corner_radius = atoi(val);
+        if (cfg->corner_radius < 0)  cfg->corner_radius = 0;
+        if (cfg->corner_radius > 48) cfg->corner_radius = 48;
+    }
+    else if (strcmp(key, "blur") == 0)
+        cfg->blur = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
+    else if (strcmp(key, "glass_halo") == 0) {
+        cfg->glass_halo = atoi(val);
+        if (cfg->glass_halo < 0)  cfg->glass_halo = 0;
+        if (cfg->glass_halo > 64) cfg->glass_halo = 64;
+    }
+    else if (strcmp(key, "clip_csd_margin") == 0)
+        cfg->clip_csd_margin = strcmp(val, "on") == 0 ||
+                               strcmp(val, "1")  == 0;
+    else if (strcmp(key, "blur_passes") == 0) {
+        cfg->blur_passes = atoi(val);
+        if (cfg->blur_passes < 1) cfg->blur_passes = 1;
+        if (cfg->blur_passes > 5) cfg->blur_passes = 5;
+    }
+    else if (strcmp(key, "blur_radius") == 0) {
+        cfg->blur_radius = atoi(val);
+        if (cfg->blur_radius < 1)  cfg->blur_radius = 1;
+        if (cfg->blur_radius > 20) cfg->blur_radius = 20;
+    }
+    else if (strcmp(key, "blur_noise") == 0)
+        cfg->blur_noise = (float)atof(val);
+    else if (strcmp(key, "blur_brightness") == 0)
+        cfg->blur_brightness = (float)atof(val);
+    else if (strcmp(key, "blur_contrast") == 0)
+        cfg->blur_contrast = (float)atof(val);
+    else if (strcmp(key, "blur_saturation") == 0)
+        cfg->blur_saturation = (float)atof(val);
+    else if (strcmp(key, "shadow") == 0)
+        cfg->shadow = strcmp(val, "on") == 0 || strcmp(val, "1") == 0;
+    else if (strcmp(key, "shadow_blur_sigma") == 0) {
+        cfg->shadow_blur_sigma = (float)atof(val);
+        if (cfg->shadow_blur_sigma < 0.0f)  cfg->shadow_blur_sigma = 0.0f;
+        if (cfg->shadow_blur_sigma > 80.0f) cfg->shadow_blur_sigma = 80.0f;
+    }
+    else if (strcmp(key, "shadow_spread") == 0) {
+        cfg->shadow_spread = (float)atof(val);
+        if (cfg->shadow_spread < 0.0f)  cfg->shadow_spread = 0.0f;
+        if (cfg->shadow_spread > 64.0f) cfg->shadow_spread = 64.0f;
+    }
+    else if (strcmp(key, "shadow_offset_x") == 0)
+        cfg->shadow_offset_x = atoi(val);
+    else if (strcmp(key, "shadow_offset_y") == 0)
+        cfg->shadow_offset_y = atoi(val);
+    else if (strcmp(key, "shadow_color") == 0) {
+        /* RGB only; parse_hex_color forces alpha to 1, so keep the alpha the
+         * separate shadow_opacity key (or the default) already set. */
+        float rgb[4];
+        if (parse_hex_color(val, rgb)) {
+            cfg->shadow_color[0] = rgb[0];
+            cfg->shadow_color[1] = rgb[1];
+            cfg->shadow_color[2] = rgb[2];
+        }
+    }
+    else if (strcmp(key, "shadow_opacity") == 0)
+        cfg->shadow_color[3] = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "border_color_norm") == 0)
+        parse_hex_color(val, cfg->border_color_norm);
+    else if (strcmp(key, "border_color_focus") == 0)
+        parse_hex_color(val, cfg->border_color_focus);
+    else if (strcmp(key, "border_color_ai") == 0)
+        parse_hex_color(val, cfg->border_color_ai);
+    else if (strcmp(key, "border_color_warn") == 0)
+        parse_hex_color(val, cfg->border_color_warn);
+    else if (strcmp(key, "effects") == 0)
+        cfg->effects = strcmp(val, "on") == 0;
+    else if (strcmp(key, "effect_scanline") == 0)
+        cfg->effect_scanline = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_curvature") == 0)
+        cfg->effect_curvature = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_aberration") == 0)
+        cfg->effect_aberration = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_glitch") == 0)
+        cfg->effect_glitch = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_phosphor") == 0) {
+        if      (strcmp(val, "off")   == 0) cfg->effect_phosphor = SYN_PHOSPHOR_OFF;
+        else if (strcmp(val, "green") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_GREEN;
+        else if (strcmp(val, "amber") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_AMBER;
+        else if (strcmp(val, "white") == 0) cfg->effect_phosphor = SYN_PHOSPHOR_WHITE;
+        else wlr_log(WLR_ERROR, "synui: effect_phosphor: unknown '%s'", val);
+    }
+    else if (strcmp(key, "effect_mono") == 0)
+        cfg->effect_mono = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "effect_bloom") == 0)
+        cfg->effect_bloom = clamp01(strtof(val, NULL));
+    else if (strcmp(key, "xkb_rules") == 0)
+        strncpy(cfg->xkb_rules, val, sizeof(cfg->xkb_rules) - 1);
+    else if (strcmp(key, "xkb_model") == 0)
+        strncpy(cfg->xkb_model, val, sizeof(cfg->xkb_model) - 1);
+    else if (strcmp(key, "night_light") == 0)
+        cfg->night_light = strcmp(val, "on") == 0;
+    else if (strcmp(key, "night_light_temp") == 0) {
+        int k = atoi(val);
+        /* Below ~1000K the ramp is essentially red-only and the screen is
+         * unusable; above 6500K it is colder than daylight, which is not
+         * what a night light is for. Clamp rather than obey. */
+        if (k < 1000) k = 1000;
+        if (k > 6500) k = 6500;
+        cfg->night_light_temp = k;
+    }
+    else if (strcmp(key, "cursor_theme") == 0)
+        strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);
+    else if (strcmp(key, "cursor_size") == 0) {
+        int px = atoi(val);
+        /* Clamped, not obeyed: 0 makes wlroots fall back in ways that are
+         * hard to explain afterwards, and a mistyped 2400 leaves a pointer
+         * covering a third of the screen with no visible way to undo it. */
+        if (px < 8)   px = 8;
+        if (px > 256) px = 256;
+        cfg->cursor_size = px;
+    }
+    else if (strcmp(key, "xkb_layout") == 0)
+        strncpy(cfg->xkb_layout, val, sizeof(cfg->xkb_layout) - 1);
+    else if (strcmp(key, "xkb_variant") == 0)
+        strncpy(cfg->xkb_variant, val, sizeof(cfg->xkb_variant) - 1);
+    else if (strcmp(key, "xkb_options") == 0)
+        strncpy(cfg->xkb_options, val, sizeof(cfg->xkb_options) - 1);
+    else if (strcmp(key, "repeat_rate") == 0)
+        cfg->repeat_rate = atoi(val);
+    else if (strcmp(key, "repeat_delay") == 0)
+        cfg->repeat_delay = atoi(val);
+    else if (strcmp(key, "tap") == 0)
+        cfg->tap_to_click = strcmp(val, "on") == 0;
+    else if (strcmp(key, "natural_scroll") == 0)
+        cfg->natural_scroll = strcmp(val, "on") == 0;
+    else if (strcmp(key, "left_handed") == 0)
+        cfg->left_handed = strcmp(val, "on") == 0;
+    else if (strcmp(key, "accel_speed") == 0) {
+        cfg->accel_speed = strtof(val, NULL);
+        if (cfg->accel_speed < -1.0f) cfg->accel_speed = -1.0f;
+        if (cfg->accel_speed >  1.0f) cfg->accel_speed =  1.0f;
+        cfg->accel_speed_set = 1;
+    }
+    else if (strcmp(key, "wallpaper") == 0) {
+        /* Built-in keywords select a bundled wallpaper; anything else is
+         * a file path for the static wallpaper.c backend.
+         *   matrix  → animated GLES2 kanji rain (matrix.c)
+         *   default → the bundled Synapse image (/usr/share/synui)
+         *   none    → solid bg_color
+         * (see also the live wppick.c picker / wallpaper.state). */
+        if (strcmp(val, "matrix") == 0) {
+            cfg->wallpaper_src = SYN_WP_SRC_MATRIX;
+        } else if (strcmp(val, "default") == 0) {
+            cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+            strncpy(cfg->wallpaper, SYNUI_DATADIR "/wallpaper.png",
+                    sizeof(cfg->wallpaper) - 1);
+        } else if (strcmp(val, "none") == 0) {
+            cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+            cfg->wallpaper[0] = '\0';
+        } else {
+            cfg->wallpaper_src = SYN_WP_SRC_IMAGE;
+            strncpy(cfg->wallpaper, val, sizeof(cfg->wallpaper) - 1);
+        }
+    }
+    else if (strcmp(key, "wallpaper_output") == 0 ||
+             strcmp(key, "wallpaper_output_mode") == 0) {
+        /* value = "<connector> <token>" — a per-monitor override of the two
+         * keys above, e.g. "wallpaper_output = DP-1 matrix". The token
+         * vocabulary is identical to `wallpaper`, so there is one thing to
+         * learn rather than two; _mode takes a wallpaper_mode name instead.
+         * Lines are read in order, and an override inherits whatever the
+         * global keys hold when it is first named. */
+        char *sp = val;
+        while (*sp && !isspace(*sp)) sp++;
+        if (!*sp) {
+            wlr_log(WLR_ERROR, "synui: %s '%s': expected "
+                    "'<output> <value>'", key, val);
+        } else {
+            *sp++ = '\0';
+            while (isspace(*sp)) sp++;
+            if (!*sp) {
+                wlr_log(WLR_ERROR, "synui: %s '%s': missing value", key, val);
+            } else if (strcmp(key, "wallpaper_output") == 0) {
+                wallpaper_output_apply(cfg, val, sp, -1);
+            } else {
+                int m = wallpaper_mode_from_name(sp);
+                if (m < 0)
+                    wlr_log(WLR_ERROR, "synui: wallpaper_output_mode: "
+                            "unknown '%s'", sp);
+                else
+                    wallpaper_output_apply(cfg, val, NULL, m);
+            }
+        }
+    }
+    else if (strcmp(key, "wallpaper_mode") == 0) {
+        /* Driven off syn_wallpaper_mode_names so a new mode only has to be
+         * added to the enum and that table — this parser and the Super+W
+         * picker both pick it up for free, instead of drifting apart. */
+        int found = -1;
+        for (int m = 0; m < SYN_WALLPAPER_MODE_COUNT; m++)
+            if (strcmp(val, syn_wallpaper_mode_names[m]) == 0) { found = m; break; }
+        if (found >= 0) cfg->wallpaper_mode = (syn_wallpaper_mode_t)found;
+        else wlr_log(WLR_ERROR, "synui: wallpaper_mode: unknown '%s'", val);
+    }
+    else if (strcmp(key, "power_enabled") == 0)
+        cfg->power_enabled = strcmp(val, "on") == 0;
+    else if (strcmp(key, "power_dim_timeout") == 0)
+        cfg->power_dim = atoi(val) < 0 ? 0 : atoi(val);
+    else if (strcmp(key, "power_blank_timeout") == 0)
+        cfg->power_blank = atoi(val) < 0 ? 0 : atoi(val);
+    else if (strcmp(key, "power_lock_timeout") == 0)
+        cfg->power_lock = atoi(val) < 0 ? 0 : atoi(val);
+    else if (strcmp(key, "power_suspend_timeout") == 0)
+        cfg->power_suspend = atoi(val) < 0 ? 0 : atoi(val);
+    else if (strcmp(key, "power_lock_cmd") == 0)
+        snprintf(cfg->power_lock_cmd, sizeof(cfg->power_lock_cmd), "%s", val);
+    else if (strcmp(key, "power_suspend_cmd") == 0)
+        snprintf(cfg->power_suspend_cmd, sizeof(cfg->power_suspend_cmd), "%s", val);
+    /* Driven off syn_lid_action_names so a new action only has to be added
+     * to the enum and that table, as with wallpaper_mode above. */
+    else if (strcmp(key, "lid_close_action") == 0) {
+        int a = lid_action_from_name(val);
+        if (a >= 0) cfg->lid_close_action = a;
+        else wlr_log(WLR_ERROR, "synui: lid_close_action: unknown '%s'", val);
+    }
+    else if (strcmp(key, "lid_close_ac_action") == 0) {
+        int a = lid_action_from_name(val);
+        if (a >= 0) cfg->lid_close_ac_action = a;
+        else wlr_log(WLR_ERROR, "synui: lid_close_ac_action: unknown '%s'", val);
+    }
+    else if (strcmp(key, "lid_close_docked_action") == 0) {
+        int a = lid_action_from_name(val);
+        if (a >= 0) cfg->lid_close_docked_action = a;
+        else wlr_log(WLR_ERROR,
+                     "synui: lid_close_docked_action: unknown '%s'", val);
+    }
+    else if (strcmp(key, "network_cmd") == 0)
+        snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
+    else if (strcmp(key, "news_refresh") == 0) {
+        int m = atoi(val);
+        cfg->news_refresh_min = m < 1 ? 1 : m;   /* never hammer a feed */
+    } else if (strcmp(key, "news_source") == 0) {
+        /* news_source = TAG|https://example.org/feed.xml
+         * Repeatable. The first one replaces the built-in list rather than
+         * adding to it: a user listing their own feeds means "these", not
+         * "these as well as your eight". */
+        char *bar = strchr(val, '|');
+        if (!bar) {
+            wlr_log(WLR_ERROR, "synui: config: news_source needs TAG|URL: %s",
+                    val);
+        } else if (cfg->news_sources_n >= NEWS_SOURCES_MAX) {
+            wlr_log(WLR_ERROR, "synui: config: too many news_source lines "
+                               "(max %d)", NEWS_SOURCES_MAX);
+        } else {
+            *bar = '\0';
+            syn_news_source_t *src = &cfg->news_sources[cfg->news_sources_n++];
+            snprintf(src->name, sizeof(src->name), "%s", strip(val));
+            snprintf(src->url,  sizeof(src->url),  "%s", strip(bar + 1));
+        }
+    }
+    else if (strcmp(key, "cat") == 0)
+        cfg->cat_start = strcmp(val, "on") == 0;
+    else if (strcmp(key, "welcome_at_startup") == 0)
+        cfg->welcome_at_startup = strcmp(val, "on") == 0;
+    else if (strcmp(key, "numlock") == 0)
+        cfg->numlock = strcmp(val, "on") == 0;
+    else if (strcmp(key, "record_audio") == 0)
+        cfg->record_audio = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_enabled") == 0)
+        cfg->dock_enabled = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_autohide") == 0)
+        cfg->dock_autohide = strcmp(val, "on") == 0;
+    else if (strcmp(key, "dock_edge") == 0) {
+        if      (strcmp(val, "bottom") == 0) cfg->dock_edge = SYN_DOCK_EDGE_BOTTOM;
+        else if (strcmp(val, "top")    == 0) cfg->dock_edge = SYN_DOCK_EDGE_TOP;
+        else if (strcmp(val, "left")   == 0) cfg->dock_edge = SYN_DOCK_EDGE_LEFT;
+        else if (strcmp(val, "right")  == 0) cfg->dock_edge = SYN_DOCK_EDGE_RIGHT;
+        else wlr_log(WLR_ERROR, "synui: dock_edge: unknown '%s'", val);
+    }
+    else if (strcmp(key, "launcher_style") == 0) {
+        if      (strcmp(val, "text") == 0) cfg->launcher_style = SYN_LAUNCHER_TEXT;
+        else if (strcmp(val, "logo") == 0) cfg->launcher_style = SYN_LAUNCHER_LOGO;
+        else wlr_log(WLR_ERROR, "synui: launcher_style: unknown '%s'", val);
+    }
+    else if (strcmp(key, "dock_height") == 0) {
+        cfg->dock_height = atoi(val);
+        if (cfg->dock_height < 32)  cfg->dock_height = 32;
+        if (cfg->dock_height > 200) cfg->dock_height = 200;
+    }
+    else if (strcmp(key, "dock_hover_margin") == 0) {
+        cfg->dock_hover_margin = atoi(val);
+        if (cfg->dock_hover_margin < 1)  cfg->dock_hover_margin = 1;
+        if (cfg->dock_hover_margin > 32) cfg->dock_hover_margin = 32;
+    }
+    else if (strcmp(key, "dock_pin") == 0) {
+        /* space-separated app_ids/.desktop basenames */
+        char buf[512];
+        snprintf(buf, sizeof(buf), "%s", val);
+        char *save = NULL;
+        cfg->dock_pin_count = 0;
+        for (char *tok = strtok_r(buf, " \t", &save);
+             tok && cfg->dock_pin_count < DOCK_PIN_MAX;
+             tok = strtok_r(NULL, " \t", &save))
+            snprintf(cfg->dock_pin[cfg->dock_pin_count++], 128, "%s", tok);
+    }
+    else if (strcmp(key, "game_mode") == 0)
+        cfg->game_mode = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_suspend_ai") == 0)
+        cfg->game_suspend_ai = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_inhibit_idle") == 0)
+        cfg->game_inhibit_idle = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_ai_stop_cmd") == 0)
+        snprintf(cfg->game_ai_stop_cmd, sizeof(cfg->game_ai_stop_cmd), "%s", val);
+    else if (strcmp(key, "game_ai_start_cmd") == 0)
+        snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd), "%s", val);
+    else if (strcmp(key, "game_exclude") == 0) {
+        /* space-separated app_ids that are NOT games. Replaces the built-in
+         * list rather than adding to it, so a user can widen or narrow it. */
+        char buf[512];
+        snprintf(buf, sizeof(buf), "%s", val);
+        char *save = NULL;
+        cfg->game_exclude_count = 0;
+        for (char *tok = strtok_r(buf, " \t", &save);
+             tok && cfg->game_exclude_count < GAME_EXCLUDE_MAX;
+             tok = strtok_r(NULL, " \t", &save))
+            snprintf(cfg->game_exclude[cfg->game_exclude_count++],
+                     sizeof(cfg->game_exclude[0]), "%s", tok);
+    }
+    else if (strcmp(key, "bind") == 0) {
+        /* value = "<combo> <action> [arg]" — split on first whitespace */
+        char *sp = val;
+        while (*sp && !isspace(*sp)) sp++;
+        if (*sp) { *sp++ = '\0'; while (isspace(*sp)) sp++; }
+        if (*sp)
+            config_bind(cfg, val, sp);
+        else
+            wlr_log(WLR_ERROR, "synui: bind '%s': missing action", val);
+    }
 }

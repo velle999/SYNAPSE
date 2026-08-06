@@ -935,7 +935,9 @@ typedef struct {
  */
 typedef enum {
     CTL_CAT_APPEARANCE = 0,
+    CTL_CAT_WINDOWS,       /* borders, titlebars, shadows, blur, snapping */
     CTL_CAT_DESKTOP,       /* the shell furniture: dock, start button, widgets */
+    CTL_CAT_INPUT,         /* keyboard + pointer */
     CTL_CAT_DISPLAY,
     CTL_CAT_SOUND,
     CTL_CAT_NETWORK,
@@ -984,8 +986,134 @@ typedef enum {
     CTL_ROW_AI_MODEL,
     CTL_ROW_NEWS,
     CTL_ROW_CLIPBOARD,
+
+    /* ── The config-backed rows ──────────────────────────────
+     *
+     * Everything above predates the item table carrying a setting's VALUE: each
+     * one is either a jump-off to the panel that owns it, or a toggle with a
+     * hand-written case in ctlpanel_activate(). That was fine for thirty rows
+     * and does not go to a hundred — synuirc has ~106 keys and the panel reached
+     * about a quarter of them, so most of what synui can do was configurable
+     * only by editing a file and logging out.
+     *
+     * These rows name a synuirc key, an offset into syn_config_t and a range,
+     * and the panel reads, writes, clamps, persists and resets them generically.
+     * Adding a setting is a line in ctl_items[] and nothing else — no case in a
+     * switch, no persistence code, no render change.
+     */
+    CTL_ROW_BORDER_WIDTH,
+    CTL_ROW_CORNER_RADIUS,
+    CTL_ROW_GAP,
+    CTL_ROW_TITLEBAR_HEIGHT,
+    CTL_ROW_ANIMATION_MS,
+    CTL_ROW_MASTER_FACTOR,
+    CTL_ROW_SNAP,
+    CTL_ROW_REMEMBER_GEOMETRY,
+    CTL_ROW_CLIP_CSD_MARGIN,
+    CTL_ROW_GLASS_HALO,
+    CTL_ROW_FOOT_ALPHA,
+    CTL_ROW_INACTIVE_OPACITY,
+
+    CTL_ROW_SHADOW,
+    CTL_ROW_SHADOW_SIGMA,
+    CTL_ROW_SHADOW_SPREAD,
+    CTL_ROW_SHADOW_OFFSET_X,
+    CTL_ROW_SHADOW_OFFSET_Y,
+
+    CTL_ROW_BLUR,
+    CTL_ROW_BLUR_PASSES,
+    CTL_ROW_BLUR_RADIUS,
+    CTL_ROW_BLUR_NOISE,
+    CTL_ROW_BLUR_BRIGHTNESS,
+    CTL_ROW_BLUR_CONTRAST,
+    CTL_ROW_BLUR_SATURATION,
+
+    CTL_ROW_ALT_TAB_PREVIEW,
+    CTL_ROW_ALT_TAB_ALL_DESKTOPS,
+    CTL_ROW_ALT_TAB_MINIMIZED,
+
+    CTL_ROW_REPEAT_RATE,
+    CTL_ROW_REPEAT_DELAY,
+    CTL_ROW_NUMLOCK,
+    CTL_ROW_TAP_TO_CLICK,
+    CTL_ROW_NATURAL_SCROLL,
+    CTL_ROW_LEFT_HANDED,
+    CTL_ROW_ACCEL_SPEED,
+    CTL_ROW_CURSOR_SIZE,
+
+    CTL_ROW_NIGHTLIGHT_TEMP,
+    CTL_ROW_DOCK_HEIGHT,
+    CTL_ROW_DOCK_EDGE,
+    CTL_ROW_DOCK_HOVER_MARGIN,
+    CTL_ROW_DESKTOP_ICONS,
+    CTL_ROW_DESKTOP_ICON_ARRANGE,
+    CTL_ROW_CAT_START,
+    CTL_ROW_WELCOME_AT_STARTUP,
+    CTL_ROW_START_OVERLAY,
+
+    CTL_ROW_EFFECT_SCANLINE,
+    CTL_ROW_EFFECT_CURVATURE,
+    CTL_ROW_EFFECT_ABERRATION,
+    CTL_ROW_EFFECT_GLITCH,
+    CTL_ROW_EFFECT_PHOSPHOR,
+    CTL_ROW_EFFECT_MONO,
+    CTL_ROW_EFFECT_BLOOM,
+
+    CTL_ROW_GAME_MODE,
+    CTL_ROW_GAME_SUSPEND_AI,
+    CTL_ROW_GAME_INHIBIT_IDLE,
+
+    CTL_ROW_AI_LAYOUT,
+    CTL_ROW_AI_CTX_DECOR,
+    CTL_ROW_NEWS_REFRESH,
+
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
+
+/* What KIND of value a row carries, for the rows that carry one directly.
+ *
+ * CTL_VAL_NONE covers everything that predates this: jump-offs with no value,
+ * and the handful of toggles whose state lives somewhere other than a plain
+ * syn_config_t field (game mode is the compositor's, the AI backend is a file
+ * synapd writes, the layout is per-desktop). Those keep their bespoke cases.
+ * Everything else is read and written through the offset. */
+typedef enum {
+    CTL_VAL_NONE = 0,
+    CTL_VAL_BOOL,    /* int, shown on/off                                  */
+    /* Same setting, one byte wide. Two fields in syn_config_t are `bool`
+     * rather than `int` (remember_geometry, desktop_icons), and reading one
+     * through an int* would pick up three neighbouring bytes and report a
+     * nonsense value — silently, and only for those two rows. Naming the width
+     * is cheaper than converting the fields and auditing every reader. */
+    CTL_VAL_BOOL8,
+    CTL_VAL_INT,     /* int in [min,max], stepped by `step`                */
+    CTL_VAL_FLOAT,   /* float in [min,max]                                 */
+    CTL_VAL_ENUM,    /* int index into `names`                             */
+    CTL_VAL_TRI,     /* int -1/0/1: "device default" / off / on (libinput) */
+} syn_ctl_val_t;
+
+/* What has to happen after a value changes for the screen to agree with it.
+ *
+ * A setting is not applied by being stored: most of these are read once, when
+ * a window is framed or the blur data is pushed or a device is configured. The
+ * table names which of those to re-run, so a new row does not have to know how
+ * the compositor is wired — and so that a row which needs a relayout cannot
+ * silently ship without one, which is the failure that makes a settings panel
+ * feel broken ("I changed it and nothing happened"). */
+typedef enum {
+    CTL_APPLY_NONE = 0,  /* read at point of use; the store IS the change */
+    CTL_APPLY_REPAINT,   /* damage every output                          */
+    CTL_APPLY_RELAYOUT,  /* re-tile every workspace, then repaint        */
+    CTL_APPLY_DECO,      /* re-frame every view (borders, titlebars)     */
+    CTL_APPLY_GLASS,     /* re-push opacity/radius/blur to every buffer  */
+    CTL_APPLY_SHADOW,    /* rebuild every view's shadow node             */
+    CTL_APPLY_BLURDATA,  /* wlr_scene_set_blur_data + repaint            */
+    CTL_APPLY_INPUT,     /* re-apply libinput/xkb settings to every device */
+    CTL_APPLY_DOCK,      /* dock_rebuild + dock_relayout                  */
+    CTL_APPLY_NIGHTLIGHT,/* re-commit the gamma ramps                    */
+    CTL_APPLY_CURSOR,    /* reload the cursor theme at the new size       */
+    CTL_APPLY_DESKICONS, /* redraw the desktop icon grid                  */
+} syn_ctl_apply_t;
 
 /* What activating a row does. The distinction is not cosmetic: only CTL_KIND_PANEL
  * rows arm the return-to-the-control-panel path, because only they open something
@@ -993,6 +1121,14 @@ typedef enum {
  * does not own, and an ACTION row (lock) means the panel should be gone. */
 typedef enum {
     CTL_KIND_TOGGLE = 0,   /* flips in place; the panel stays up */
+    /* A number or a named option, driven entirely by Left/Right and described
+     * by the item table's vtype/range. Distinct from CTL_KIND_SLIDER, which is
+     * the Transparency row's bespoke "master switch plus a level" — and from
+     * CTL_KIND_CHOICE, whose options are not synui's to enumerate (the AI model
+     * list is whatever GGUFs are on disk). Enter on one of these does nothing,
+     * because there is nothing an Enter would mean that Left/Right did not
+     * already say; the reset key is what it has instead. */
+    CTL_KIND_VALUE,
     CTL_KIND_SLIDER,       /* toggle, plus Left/Right on a level */
     /* Left/Right pick from a list drawn in the row itself, Enter opens the
      * panel that owns the setting for the detail the row has no space for. The
@@ -1012,8 +1148,16 @@ enum {
     CTL_FOCUS_ITEMS,
 };
 
-/* Longest category, so the panel body can be sized without walking the table. */
-#define CTL_CAT_ITEMS_MAX  8
+/* Upper bound on rows in one category, so callers can size a stack array
+ * without walking the table. It was 8, which was the longest category back when
+ * the panel had thirty rows in total; the config-backed rows took Windows past
+ * forty on their own. Deliberately generous — going over it silently truncates
+ * a category, which is the one failure mode that looks like a missing feature
+ * rather than a bug.
+ *
+ * It also bounds the SEARCH result list, which draws from every category at
+ * once, so it must be at least as large as the whole table. */
+#define CTL_CAT_ITEMS_MAX  CTL_ROW_COUNT
 
 /* A shortcuts-column line. The nine workspace binds (and the nine move-to-
  * workspace binds) are collapsed into one row each — listed literally they are
@@ -1031,7 +1175,28 @@ typedef struct {
     int  item;         /* index *within* that category, not a syn_ctl_row_t */
     int  focus;        /* CTL_FOCUS_CATS / CTL_FOCUS_ITEMS */
     int  scroll;       /* first shortcuts row drawn */
+    /* First SETTINGS row drawn. Separate from `scroll` above because the two
+     * lists are different lengths and are scrolled by different keys; sharing
+     * one offset carried a shortcuts position into a category with six rows and
+     * drew an empty pane. Reset whenever the category changes. */
+    int  row_scroll;
     char status[96];
+
+    /* ── Search ──────────────────────────────────────────────
+     *
+     * A hundred settings across nine categories is the point at which knowing
+     * the setting exists stops being the same as being able to find it — which
+     * is the complaint every deep settings panel eventually earns. Typing
+     * filters every row in every category down to what matches, so a name is
+     * enough; you do not also have to guess which category we filed it under.
+     *
+     * Opened with '/' or by typing any letter in the row pane. While it is open
+     * the pane shows results instead of a category, each labelled with the
+     * category it came from — the label is what makes it a search rather than a
+     * second, flatter menu you now have to learn. */
+    int  searching;         /* the box is open and taking keys */
+    char search[48];
+    int  search_len;
     /* The bind action of the panel this one opened, empty when none is out.
      * Set only for CTL_KIND_PANEL rows and only once the panel is confirmed up,
      * because it is what every panel's hide path checks to decide whether its
@@ -4164,6 +4329,34 @@ int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
 /* How many shortcut rows the panel has room to draw — render.c owns the
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */
 #define CTL_SHORTCUT_ROWS  16
+/* And how many SETTINGS rows. The same number, for the same reason: the pane is
+ * the same pane. Categories are now longer than this, so the pane scrolls. */
+#define CTL_ROW_ROWS       CTL_SHORTCUT_ROWS
+
+/* The rows the pane should draw right now, in order, and how many there are.
+ * Either the selected category's rows or — while the search box is open — the
+ * matches from every category. render.c asks this one question instead of
+ * knowing about search at all, so the pointer grid, the cursor and the draw all
+ * walk the same list. Returns the count written into out[]. */
+int  ctlpanel_visible_rows(syn_server_t *s, int *out, int max);
+/* The section a row is IN (walking back to whichever row opened it), and
+ * whether this row is the one that opens it. Sections are what keep a
+ * forty-row category readable: the pane rules above each one, and the
+ * breadcrumb names the one the cursor is in. */
+const char *ctlpanel_row_section(int row);
+int  ctlpanel_row_starts_section(int row);
+/* One line explaining the selected row, drawn in the footer. NULL when the row
+ * has none. */
+const char *ctlpanel_row_help(int row);
+/* Which category a row belongs to — needed only by the search results, where
+ * rows from everywhere are mixed and each has to say where it came from. */
+int  ctlpanel_row_cat(int row);
+/* The synuirc key a row drives, or NULL for a jump-off or a toggle whose state
+ * is not a config field. The line between the table-driven rows and the rest. */
+const char *ctlpanel_row_key(int row);
+/* Is this row still at its compiled-in default? Drives the "modified" marker
+ * and tells the reset key whether there is anything to undo. */
+int  ctlpanel_row_is_default(syn_server_t *s, int row);
 void synui_render_ctlpanel(syn_server_t *s);
 
 /* ── Theme manager (theme.c) ─────────────────────────────── */
@@ -4532,6 +4725,28 @@ void launcher_state_load(syn_config_t *cfg);       /* lay launcher.state over sy
  * so a reload cannot undo it. */
 void record_audio_toggle(syn_server_t *s);         /* flip on↔off, persist */
 void record_audio_state_load(syn_config_t *cfg);   /* lay record.state over synuirc */
+
+/* ── settings.state (settings.c) ─────────────────────────────
+ *
+ * The control panel's persistence, and the general case of the seven
+ * per-subject `.state` files above: `key = value` in synuirc's own syntax,
+ * applied after synuirc so it overrides it, and read back through the very
+ * parser synuirc uses (config_parse_kv). Only keys the user has changed are
+ * stored, so an untouched setting still tracks the default.
+ */
+void settings_state_load(syn_config_t *cfg);            /* lay it over synuirc */
+void settings_state_set(const char *key, const char *val);  /* set + rewrite   */
+void settings_state_clear(const char *key);             /* forget = use default */
+int  settings_state_has(const char *key);               /* is it overridden?   */
+
+/* One `key = value` out of synuirc, applied to cfg. Exposed so settings.state
+ * is read by the same code — see settings.c. `val` is mutable: the bind case
+ * splits it in place. */
+void config_parse_kv(syn_config_t *cfg, const char *key, char *val);
+
+/* The defaults as a value, for "is this row still at its default?" and for the
+ * reset that puts it back. Built by the same code that seeds a real config. */
+const syn_config_t *synui_config_defaults(void);
 /* Re-merge pinned (config) + running (all workspaces') apps into
  * s->dock_entries, then re-render every output. Called on view map/unmap. */
 void dock_rebuild(syn_server_t *s);

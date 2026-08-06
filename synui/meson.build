@@ -204,6 +204,7 @@ synui_exe = executable('synui',
     'src/secfeed.c',
     'src/synapd_mon.c',
     'src/config.c',
+    'src/settings.c',
     'src/render.c',
     'src/effects.c',
     'src/wallpaper.c',
@@ -450,6 +451,32 @@ hit_test = executable('hit_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('hit', hit_test)
+
+# The config parser and settings.state. config.c's key chain was lifted whole
+# out of synui_config_load() into config_parse_kv() so the control panel's
+# persistence could read it back through the very same code; this is the guard
+# on that move, and on the two staying in step afterwards. Links config.c and
+# settings.c with the seven older state loaders stubbed — no compositor.
+settings_test = executable('settings_test',
+  ['tests/settings_test.c', 'src/config.c', 'src/settings.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('settings', settings_test)
+
+# The control panel's item table against the config parser. Every row that names
+# a synuirc key is adjusted, persisted, reloaded from disk and reset — so a
+# mistyped key or a copied offset fails here rather than as "that setting
+# doesn't stick" months later. Links ctlpanel.c with config.c and settings.c.
+ctlpanel_table_test = executable('ctlpanel_table_test',
+  ['tests/ctlpanel_table_test.c', 'src/ctlpanel.c', 'src/config.c',
+   'src/settings.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('ctlpanel_table', ctlpanel_table_test)
 
 # The panel pointer contract, on a real panel. There is no way to synthesise a
 # click into a headless synui — no virtual-pointer protocol, no input devices on

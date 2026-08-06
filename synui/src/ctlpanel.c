@@ -88,34 +88,273 @@ static double ctl_now_secs(void)
  * the drawn order the same means one read of this table tells you what the
  * panel looks like.
  */
-static const struct {
+/* Enum row option names. Kept next to the table rather than shared with the
+ * config parser's own name tables: these are what the PANEL shows, and a value
+ * a user reads in a menu ("Bottom") is not always what the config file spells
+ * ("bottom"). ctl_enum_write() lowercases on the way out, which is what keeps
+ * the two in step without needing two tables that can drift. */
+static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Right" };
+static const char *const ctl_names_arrange[]   = { "Name", "Type", "Size", "Date" };
+static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blue" };
+
+struct ctl_item {
     int             row;
     syn_ctl_cat_t   cat;
     syn_ctl_kind_t  kind;
     const char     *label;
     const char     *action;
-} ctl_items[] = {
+
+    /* ── The data-driven half ────────────────────────────────
+     *
+     * A row that names `key` and `off` needs no code anywhere: the value is
+     * read from the offset, adjusted within [min,max], written to
+     * settings.state under `key`, reset from the defaults snapshot, and applied
+     * by re-running whatever `apply` names. Rows that leave these zeroed are
+     * the old bespoke ones, and they still go through the switches below.
+     *
+     * `key` must be the synuirc spelling exactly. It is what gets written to
+     * settings.state and read back by config_parse_kv(), so a typo here is a
+     * setting that works all session and is gone at the next login.
+     */
+    const char     *section;   /* heading this row opens; NULL continues */
+    const char     *key;       /* synuirc key, and the settings.state key */
+    size_t          off;       /* offsetof(syn_config_t, field) */
+    syn_ctl_val_t   vtype;
+    float           vmin, vmax, vstep;
+    const char     *unit;      /* "px", "ms", "%" — drawn after the number */
+    const char *const *names;  /* CTL_VAL_ENUM options */
+    int             nnames;
+    syn_ctl_apply_t apply;
+    const char     *help;      /* one line, drawn in the footer */
+};
+
+/* Shorthands. The table is wide enough that spelling every field per row would
+ * bury the two things worth reading — the label and the range. */
+#define CFG(field)  offsetof(syn_config_t, field)
+/* Both designators at once, so an option list and its length cannot be given
+ * separately and disagree. */
+#define NAMES(a)    .names = (a), .nnames = (int)(sizeof(a) / sizeof((a)[0]))
+
+static const struct ctl_item ctl_items[] = {
     /* Appearance */
-    { CTL_ROW_THEME,        CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Theme",            "theme"     },
+    { CTL_ROW_THEME,        CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Theme",            "theme",
+      .section = "Look", .help = "Colour preset for window chrome and synui's own panels" },
     { CTL_ROW_WALLPAPER,    CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Wallpaper",        "wallpaper" },
     { CTL_ROW_CURSOR,       CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Cursor theme",     "cursor"    },
-    { CTL_ROW_EFFECTS,      CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "CRT effects",      NULL        },
-    { CTL_ROW_FILTERS,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "CRT filters",      "filters"   },
-    { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL        },
-    { CTL_ROW_TITLEBARS,    CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "Titlebars",        NULL        },
+    { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL,
+      .help = "Focused-window opacity. Left/Right adjust; Enter switches it off" },
+    { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
+      .key = "inactive_opacity", .off = CFG(inactive_opacity), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.30f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
+      .help = "How far windows you are not using fade back" },
+    { CTL_ROW_FOOT_ALPHA,   CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Terminal glass", NULL,
+      .key = "foot_alpha", .off = CFG(foot_alpha), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.02f, .apply = CTL_APPLY_GLASS,
+      .help = "foot draws its own background alpha, so it needs its own level" },
+
+    { CTL_ROW_EFFECTS,      CTL_CAT_APPEARANCE, CTL_KIND_TOGGLE, "CRT effects",      NULL,
+      .section = "CRT effects",
+      .help = "The GLES post-process pass. Off on renderers that have none" },
+    { CTL_ROW_FILTERS,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "All filters",      "filters"   },
+    { CTL_ROW_EFFECT_SCANLINE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Scanlines", NULL,
+      .key = "effect_scanline", .off = CFG(effect_scanline), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+    { CTL_ROW_EFFECT_CURVATURE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Screen curve", NULL,
+      .key = "effect_curvature", .off = CFG(effect_curvature), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+    { CTL_ROW_EFFECT_ABERRATION, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Chromatic aberration", NULL,
+      .key = "effect_aberration", .off = CFG(effect_aberration), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+    { CTL_ROW_EFFECT_GLITCH, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glitch on alert", NULL,
+      .key = "effect_glitch", .off = CFG(effect_glitch), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+    { CTL_ROW_EFFECT_PHOSPHOR, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor tint", NULL,
+      .key = "effect_phosphor", .off = CFG(effect_phosphor), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_phosphor), .apply = CTL_APPLY_REPAINT,
+      .help = "Off leaves the picture in colour; the blend below is what applies it" },
+    { CTL_ROW_EFFECT_MONO, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor blend", NULL,
+      .key = "effect_mono", .off = CFG(effect_mono), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT,
+      .help = "Blend toward the phosphor tint. Bloom only bites once this is up" },
+    { CTL_ROW_EFFECT_BLOOM, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor glow", NULL,
+      .key = "effect_bloom", .off = CFG(effect_bloom), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+
+    /* ── Windows ─────────────────────────────────────────────
+     *
+     * Everything about how a window is FRAMED. Split out of Appearance because
+     * Appearance was where the theme lives and these are not about colour: a
+     * border width and a shadow sigma belong with snapping and tiling, not with
+     * a wallpaper picker. */
+    { CTL_ROW_TITLEBARS,      CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Titlebars", NULL,
+      .section = "Frame", .help = "Server-side titlebars, on every window at once" },
+    { CTL_ROW_TITLEBAR_HEIGHT, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Titlebar height", NULL,
+      .key = "titlebar_height", .off = CFG(titlebar_height), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 64, .vstep = 2, .unit = "px", .apply = CTL_APPLY_DECO,
+      .help = "0 removes the titlebar; below 14 there is no room for a button" },
+    { CTL_ROW_BORDER_WIDTH,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Border width", NULL,
+      .key = "border_width", .off = CFG(border_width), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DECO },
+    { CTL_ROW_CORNER_RADIUS,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Corner radius", NULL,
+      .key = "corner_radius", .off = CFG(corner_radius), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 48, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS,
+      .help = "Forced square while maximized, so nothing pokes past the output" },
+    { CTL_ROW_GAP,            CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Tiling gap", NULL,
+      .key = "gap", .off = CFG(gap), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 128, .vstep = 2, .unit = "px", .apply = CTL_APPLY_RELAYOUT },
+    { CTL_ROW_MASTER_FACTOR,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Master area", NULL,
+      .key = "master_factor", .off = CFG(master_factor), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.1f, .vmax = 0.9f, .vstep = 0.05f, .apply = CTL_APPLY_RELAYOUT,
+      .help = "Share of the screen the master window takes when tiling" },
+    { CTL_ROW_ANIMATION_MS,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Animation length", NULL,
+      .key = "animation_ms", .off = CFG(animation_ms), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,
+      .help = "0 turns fades off — every one jumps straight to its end state" },
+    { CTL_ROW_CLIP_CSD_MARGIN, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Crop client shadows", NULL,
+      .key = "clip_csd_margin", .off = CFG(clip_csd_margin), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_DECO,
+      .help = "Hides the invisible margin apps like Firefox draw their own shadow in" },
+
+    { CTL_ROW_SHADOW,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Drop shadow", NULL,
+      .section = "Shadow", .key = "shadow", .off = CFG(shadow), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_SHADOW },
+    { CTL_ROW_SHADOW_SIGMA,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow softness", NULL,
+      .key = "shadow_blur_sigma", .off = CFG(shadow_blur_sigma), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 80.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW },
+    { CTL_ROW_SHADOW_SPREAD,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow spread", NULL,
+      .key = "shadow_spread", .off = CFG(shadow_spread), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 64.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW,
+      .help = "Solid shadow before the falloff starts — what gives it weight" },
+    { CTL_ROW_SHADOW_OFFSET_X, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow offset X", NULL,
+      .key = "shadow_offset_x", .off = CFG(shadow_offset_x), .vtype = CTL_VAL_INT,
+      .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW },
+    { CTL_ROW_SHADOW_OFFSET_Y, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow offset Y", NULL,
+      .key = "shadow_offset_y", .off = CFG(shadow_offset_y), .vtype = CTL_VAL_INT,
+      .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW },
+
+    { CTL_ROW_BLUR,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Backdrop blur", NULL,
+      .section = "Blur", .key = "blur", .off = CFG(blur), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_BLURDATA,
+      .help = "Frosts what is behind a translucent window. Opaque ones cost nothing" },
+    { CTL_ROW_BLUR_PASSES,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur passes", NULL,
+      .key = "blur_passes", .off = CFG(blur_passes), .vtype = CTL_VAL_INT,
+      .vmin = 1, .vmax = 5, .vstep = 1, .apply = CTL_APPLY_BLURDATA },
+    { CTL_ROW_BLUR_RADIUS,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur radius", NULL,
+      .key = "blur_radius", .off = CFG(blur_radius), .vtype = CTL_VAL_INT,
+      .vmin = 1, .vmax = 20, .vstep = 1, .unit = "px", .apply = CTL_APPLY_BLURDATA },
+    { CTL_ROW_BLUR_NOISE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur noise", NULL,
+      .key = "blur_noise", .off = CFG(blur_noise), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.01f, .apply = CTL_APPLY_BLURDATA },
+    { CTL_ROW_BLUR_BRIGHTNESS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur brightness", NULL,
+      .key = "blur_brightness", .off = CFG(blur_brightness), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
+    { CTL_ROW_BLUR_CONTRAST,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur contrast", NULL,
+      .key = "blur_contrast", .off = CFG(blur_contrast), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
+    { CTL_ROW_BLUR_SATURATION, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur saturation", NULL,
+      .key = "blur_saturation", .off = CFG(blur_saturation), .vtype = CTL_VAL_FLOAT,
+      .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
+    { CTL_ROW_GLASS_HALO,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur halo", NULL,
+      .key = "glass_halo", .off = CFG(glass_halo), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS,
+      .help = "How far the blur reaches past the window. 0 keeps it inside the frame" },
+
+    { CTL_ROW_SNAP,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Edge snapping", NULL,
+      .section = "Behaviour", .key = "snap", .off = CFG(snap), .vtype = CTL_VAL_BOOL,
+      .help = "Drag a window to an edge to fill that half or quarter" },
+    { CTL_ROW_REMEMBER_GEOMETRY, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Remember window size", NULL,
+      .key = "remember_geometry", .off = CFG(remember_geometry), .vtype = CTL_VAL_BOOL8,
+      .help = "Reopen each app where and how big it was when it closed" },
+    { CTL_ROW_ALT_TAB_PREVIEW, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab previews", NULL,
+      .key = "alt_tab_preview", .off = CFG(alt_tab_preview), .vtype = CTL_VAL_BOOL,
+      .help = "The thumbnail grid. Off, Alt+Tab still cycles — silently" },
+    { CTL_ROW_ALT_TAB_ALL_DESKTOPS, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab across desktops", NULL,
+      .key = "alt_tab_all_desktops", .off = CFG(alt_tab_all_desktops), .vtype = CTL_VAL_BOOL },
+    { CTL_ROW_ALT_TAB_MINIMIZED, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab reaches minimized", NULL,
+      .key = "alt_tab_minimized", .off = CFG(alt_tab_minimized), .vtype = CTL_VAL_BOOL },
 
     /* Desktop. Layout leads: it is the one row here that changes where your
      * windows go rather than what the shell furniture looks like. */
-    { CTL_ROW_LAYOUT,        CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Layout",           NULL      },
-    { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock",             NULL      },
-    { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock auto-hide",   NULL      },
-    { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL      },
+    { CTL_ROW_LAYOUT,        CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Layout",           NULL,
+      .section = "Desktop",
+      .help = "Of the desktop you are on — layout is per-desktop, not global" },
     { CTL_ROW_WIDGETS,       CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Desktop widgets",  "widgets" },
+    { CTL_ROW_DESKTOP_ICONS, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Desktop icons", NULL,
+      .key = "desktop_icons", .off = CFG(desktop_icons), .vtype = CTL_VAL_BOOL8,
+      .apply = CTL_APPLY_DESKICONS, .help = "Draw ~/Desktop on the wallpaper" },
+    { CTL_ROW_DESKTOP_ICON_ARRANGE, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Icon order", NULL,
+      .key = "desktop_icon_arrange", .off = CFG(desktop_icon_arrange), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_arrange), .apply = CTL_APPLY_DESKICONS },
+
+    { CTL_ROW_DOCK,          CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock",             NULL,
+      .section = "Dock" },
+    { CTL_ROW_DOCK_AUTOHIDE, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Dock auto-hide",   NULL      },
+    { CTL_ROW_DOCK_EDGE,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock edge", NULL,
+      .key = "dock_edge", .off = CFG(dock_edge), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_dock_edge), .apply = CTL_APPLY_DOCK },
+    { CTL_ROW_DOCK_HEIGHT,   CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock size", NULL,
+      .key = "dock_height", .off = CFG(dock_height), .vtype = CTL_VAL_INT,
+      .vmin = 32, .vmax = 200, .vstep = 4, .unit = "px", .apply = CTL_APPLY_DOCK },
+    { CTL_ROW_DOCK_HOVER_MARGIN, CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Dock reveal strip", NULL,
+      .key = "dock_hover_margin", .off = CFG(dock_hover_margin), .vtype = CTL_VAL_INT,
+      .vmin = 1, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DOCK,
+      .help = "How close to the edge the pointer must get to bring it back" },
+
+    { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL,
+      .section = "Shell" },
+    { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Welcome menu at login", NULL,
+      .key = "welcome_at_startup", .off = CFG(welcome_at_startup), .vtype = CTL_VAL_BOOL },
+    { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Neural overlay at login", NULL,
+      .key = "start_overlay", .off = CFG(start_overlay), .vtype = CTL_VAL_BOOL },
+    { CTL_ROW_CAT_START,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Desktop cat at login", NULL,
+      .key = "cat", .off = CFG(cat_start), .vtype = CTL_VAL_BOOL,
+      .help = "Super+Shift+C toggles it any time; this is only the login state" },
+
+    /* ── Input ───────────────────────────────────────────────
+     *
+     * Nothing here was reachable from the panel at all: keyboard repeat, tap to
+     * click and pointer acceleration were synuirc-only, which meant a laptop
+     * with tapping off had no way to turn it on without a text editor and a
+     * logout. */
+    { CTL_ROW_REPEAT_RATE,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Key repeat rate", NULL,
+      .section = "Keyboard", .key = "repeat_rate", .off = CFG(repeat_rate),
+      .vtype = CTL_VAL_INT, .vmin = 1, .vmax = 100, .vstep = 1, .unit = "/s",
+      .apply = CTL_APPLY_INPUT },
+    { CTL_ROW_REPEAT_DELAY, CTL_CAT_INPUT, CTL_KIND_VALUE, "Key repeat delay", NULL,
+      .key = "repeat_delay", .off = CFG(repeat_delay), .vtype = CTL_VAL_INT,
+      .vmin = 100, .vmax = 2000, .vstep = 25, .unit = "ms", .apply = CTL_APPLY_INPUT },
+    { CTL_ROW_NUMLOCK,      CTL_CAT_INPUT, CTL_KIND_TOGGLE, "NumLock on at login", NULL,
+      .key = "numlock", .off = CFG(numlock), .vtype = CTL_VAL_BOOL,
+      .apply = CTL_APPLY_INPUT,
+      .help = "A fresh xkb state has it off, which leaves the numpad on arrows" },
+
+    { CTL_ROW_TAP_TO_CLICK, CTL_CAT_INPUT, CTL_KIND_VALUE, "Tap to click", NULL,
+      .section = "Pointer", .key = "tap", .off = CFG(tap_to_click),
+      .vtype = CTL_VAL_TRI, .apply = CTL_APPLY_INPUT },
+    { CTL_ROW_NATURAL_SCROLL, CTL_CAT_INPUT, CTL_KIND_VALUE, "Natural scrolling", NULL,
+      .key = "natural_scroll", .off = CFG(natural_scroll), .vtype = CTL_VAL_TRI,
+      .apply = CTL_APPLY_INPUT },
+    { CTL_ROW_LEFT_HANDED,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Left-handed buttons", NULL,
+      .key = "left_handed", .off = CFG(left_handed), .vtype = CTL_VAL_TRI,
+      .apply = CTL_APPLY_INPUT },
+    { CTL_ROW_ACCEL_SPEED,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Pointer speed", NULL,
+      .key = "accel_speed", .off = CFG(accel_speed), .vtype = CTL_VAL_FLOAT,
+      .vmin = -1.0f, .vmax = 1.0f, .vstep = 0.1f, .apply = CTL_APPLY_INPUT },
+    { CTL_ROW_CURSOR_SIZE,  CTL_CAT_INPUT, CTL_KIND_VALUE, "Cursor size", NULL,
+      .key = "cursor_size", .off = CFG(cursor_size), .vtype = CTL_VAL_INT,
+      .vmin = 8, .vmax = 256, .vstep = 4, .unit = "px", .apply = CTL_APPLY_CURSOR },
 
     /* Display */
-    { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Display settings", "displays" },
-    { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL       },
+    { CTL_ROW_DISPLAYS,   CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Display settings", "displays",
+      .section = "Screens" },
     { CTL_ROW_CLOCK,      CTL_CAT_DISPLAY, CTL_KIND_PANEL,  "Date & time",      "clock"    },
+    { CTL_ROW_NIGHTLIGHT, CTL_CAT_DISPLAY, CTL_KIND_TOGGLE, "Night light",      NULL,
+      .section = "Night light" },
+    { CTL_ROW_NIGHTLIGHT_TEMP, CTL_CAT_DISPLAY, CTL_KIND_VALUE, "Colour temperature", NULL,
+      .key = "night_light_temp", .off = CFG(night_light_temp), .vtype = CTL_VAL_INT,
+      .vmin = 1000, .vmax = 6500, .vstep = 100, .unit = "K",
+      .apply = CTL_APPLY_NIGHTLIGHT,
+      .help = "6500K is daylight — the identity ramp. Lower is warmer" },
 
     /* Sound. Recording audio lives here rather than under Display: what the
      * row decides is which SOUND goes into the file — the screen it captures is
@@ -131,16 +370,41 @@ static const struct {
     { CTL_ROW_PRINTERS,  CTL_CAT_NETWORK, CTL_KIND_LAUNCH, "Printers",        "printers"  },
 
     /* Power */
-    { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power" },
-    { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL    },
+    { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power",
+      .section = "Power", .help = "Idle timeouts for dim, blank, lock and suspend" },
     { CTL_ROW_LOCK,  CTL_CAT_POWER, CTL_KIND_ACTION, "Lock screen",  "lock"  },
 
+    { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL,
+      .section = "Game mode",
+      .help = "Right now: is a game running. The rows below are the policy" },
+    { CTL_ROW_GAME_MODE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Detect games", NULL,
+      .key = "game_mode", .off = CFG(game_mode), .vtype = CTL_VAL_BOOL,
+      .help = "Treat a fullscreen X11 window as a game unless it is excluded" },
+    { CTL_ROW_GAME_SUSPEND_AI, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Stop the AI while gaming", NULL,
+      .key = "game_suspend_ai", .off = CFG(game_suspend_ai), .vtype = CTL_VAL_BOOL },
+    { CTL_ROW_GAME_INHIBIT_IDLE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Hold off idle while gaming", NULL,
+      .key = "game_inhibit_idle", .off = CFG(game_inhibit_idle), .vtype = CTL_VAL_BOOL,
+      .help = "A gamepad is not input as far as the idle timer is concerned" },
+
     /* System */
-    { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr"   },
-    { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL        },
+    { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL,
+      .section = "AI", .help = "Which device synapd runs inference on" },
     { CTL_ROW_AI_MODEL,   CTL_CAT_SYSTEM, CTL_KIND_CHOICE, "AI model",          "aimodel"   },
-    { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
+    { CTL_ROW_AI_LAYOUT,  CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI window placement", NULL,
+      .key = "ai_layout", .off = CFG(ai_layout), .vtype = CTL_VAL_BOOL,
+      .help = "Let the AI layout decide where a new window goes" },
+    { CTL_ROW_AI_CTX_DECOR, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI context in borders", NULL,
+      .key = "ai_ctx_decor", .off = CFG(ai_ctx_decor), .vtype = CTL_VAL_BOOL,
+      .help = "Tint a window's border when the AI is holding context for it" },
+
+    { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr",
+      .section = "Tools" },
     { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Clipboard history", "clipboard" },
+    { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
+    { CTL_ROW_NEWS_REFRESH, CTL_CAT_SYSTEM, CTL_KIND_VALUE, "News refresh", NULL,
+      .key = "news_refresh", .off = CFG(news_refresh_min), .vtype = CTL_VAL_INT,
+      .vmin = 1, .vmax = 240, .vstep = 5, .unit = "min",
+      .help = "How often a feed may be re-fetched at most" },
 };
 
 #define CTL_ITEM_COUNT ((int)(sizeof(ctl_items) / sizeof(ctl_items[0])))
@@ -150,6 +414,300 @@ static int ctl_item_index(int row)
     for (int i = 0; i < CTL_ITEM_COUNT; i++)
         if (ctl_items[i].row == row) return i;
     return -1;
+}
+
+static const struct ctl_item *ctl_item(int row)
+{
+    int i = ctl_item_index(row);
+    return i < 0 ? NULL : &ctl_items[i];
+}
+
+/* Defined with the rest of the panel plumbing further down; the apply
+ * dispatcher below needs it first. */
+static void ctlpanel_repaint(syn_server_t *s);
+
+/* ── The generic value path ──────────────────────────────────
+ *
+ * Everything below works off `off` and `vtype`, so a row that fills those in
+ * needs no code of its own to be read, adjusted, drawn, persisted or reset.
+ *
+ * The one thing worth being careful about is WIDTH. syn_config_t holds these as
+ * int, float and bool, and reading a one-byte bool through an int* picks up
+ * three neighbouring fields and reports a number in the millions — quietly, and
+ * only for the two rows that are bool. Hence CTL_VAL_BOOL8, and hence every
+ * access going through these four functions rather than a cast at each site.
+ */
+
+static void *ctl_field(syn_server_t *s, const struct ctl_item *it)
+{
+    return (char *)&s->config + it->off;
+}
+
+static const void *ctl_field_of(const syn_config_t *cfg, const struct ctl_item *it)
+{
+    return (const char *)cfg + it->off;
+}
+
+/* The row's value as a float, whatever it is stored as. */
+static float ctl_get(const syn_config_t *cfg, const struct ctl_item *it)
+{
+    const void *p = ctl_field_of(cfg, it);
+    switch (it->vtype) {
+    case CTL_VAL_FLOAT:  return *(const float *)p;
+    case CTL_VAL_BOOL8:  return *(const bool *)p ? 1.0f : 0.0f;
+    case CTL_VAL_BOOL:
+    case CTL_VAL_INT:
+    case CTL_VAL_ENUM:
+    case CTL_VAL_TRI:    return (float)*(const int *)p;
+    default:             return 0.0f;
+    }
+}
+
+static void ctl_put(syn_server_t *s, const struct ctl_item *it, float v)
+{
+    void *p = ctl_field(s, it);
+    switch (it->vtype) {
+    case CTL_VAL_FLOAT:  *(float *)p = v;                     break;
+    case CTL_VAL_BOOL8:  *(bool *)p  = (v != 0.0f);           break;
+    case CTL_VAL_BOOL:   *(int *)p   = (v != 0.0f);           break;
+    case CTL_VAL_TRI:
+    case CTL_VAL_ENUM:
+    case CTL_VAL_INT:    *(int *)p   = (int)(v < 0 ? v - 0.5f : v + 0.5f); break;
+    default: break;
+    }
+
+    /* accel_speed is the one field with a companion flag: libinput's default
+     * acceleration and an explicitly-set 0.0 are different states, so input.c
+     * only applies the value when accel_speed_set says someone asked for it.
+     * Setting the speed IS asking. Without this the row would move and the
+     * pointer would not, which is the exact failure the apply enum exists to
+     * prevent — it just happens one level lower down than the rest. */
+    if (it->off == offsetof(syn_config_t, accel_speed))
+        s->config.accel_speed_set = 1;
+}
+
+/* What the row shows, and what goes into settings.state. One function for both,
+ * so the file cannot say something the panel does not — except for the ENUM
+ * case, where the panel shows "Bottom" and the config spells it "bottom". */
+static void ctl_format(const struct ctl_item *it, float v, int for_config,
+                       char *buf, size_t n)
+{
+    switch (it->vtype) {
+    case CTL_VAL_BOOL:
+    case CTL_VAL_BOOL8:
+        snprintf(buf, n, "%s", v != 0.0f ? "on" : "off");
+        break;
+
+    case CTL_VAL_TRI:
+        /* -1 is not "off": it means synui has no opinion and libinput's own
+         * default for that device stands. A tri-state drawn as a checkbox is
+         * the classic way to lose that distinction, so it is named. */
+        if (v < 0)       snprintf(buf, n, "%s", for_config ? "default" : "device default");
+        else if (v == 0) snprintf(buf, n, "off");
+        else             snprintf(buf, n, "on");
+        break;
+
+    case CTL_VAL_ENUM: {
+        int i = (int)v;
+        if (!it->names || i < 0 || i >= it->nnames) { snprintf(buf, n, "?"); break; }
+        snprintf(buf, n, "%s", it->names[i]);
+        /* The config file spells its option names in lower case. Rather than
+         * keep a second table that can drift from the first, fold the case on
+         * the way out — every option name in this panel is ASCII. */
+        if (for_config)
+            for (char *c = buf; *c; c++)
+                if (*c >= 'A' && *c <= 'Z') *c = (char)(*c - 'A' + 'a');
+        break;
+    }
+
+    case CTL_VAL_INT:
+        if (!for_config && it->unit) snprintf(buf, n, "%d %s", (int)v, it->unit);
+        else                          snprintf(buf, n, "%d", (int)v);
+        break;
+
+    case CTL_VAL_FLOAT:
+        /* Two decimals is enough for every float here (opacities, blur weights,
+         * a shadow sigma) and reads better than the six %g would give. */
+        if (!for_config && it->unit) snprintf(buf, n, "%.2f %s", v, it->unit);
+        else                          snprintf(buf, n, "%.2f", v);
+        break;
+
+    default:
+        buf[0] = '\0';
+        break;
+    }
+}
+
+/* Re-run whatever the change needs for the screen to agree with it. */
+static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
+{
+    switch (what) {
+    case CTL_APPLY_NONE:
+        break;
+    case CTL_APPLY_REPAINT:
+        ctlpanel_repaint(s);
+        break;
+    case CTL_APPLY_RELAYOUT:
+        for (int w = 0; w < WORKSPACE_MAX; w++)
+            layout_apply(s, &s->workspaces[w]);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_DECO:
+        /* The heavy one: it re-runs view_resize on every window, which sends a
+         * configure to every client. Only for the settings that genuinely
+         * change a window's METRICS (border width, titlebar height) — the
+         * render-only ones below go through uifx_apply instead, which is the
+         * distinction that keeps a held-down arrow key from becoming a
+         * configure storm. */
+        deco_refresh_all(s);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_GLASS:
+    case CTL_APPLY_SHADOW:
+    case CTL_APPLY_BLURDATA:
+        /* One hook for all three: uifx_apply() pushes the global blur data,
+         * re-walks every buffer for opacity and corner radius, and rebuilds
+         * each frame's shadow and halo nodes. The filters panel already drives
+         * its rows through it, so these rows and that panel cannot end up
+         * applying the same settings two different ways. */
+        uifx_apply(s);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_INPUT:
+        /* The same call SIGHUP makes: keymap and repeat to every keyboard,
+         * libinput options to every tracked pointer. */
+        input_reload_config(s);
+        break;
+
+    case CTL_APPLY_DOCK:
+        dock_rebuild(s);
+        dock_relayout(s);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_NIGHTLIGHT:
+        /* Re-commits the gamma ramps at the new temperature. A no-op while the
+         * night light is off, which is correct: the temperature is dormant
+         * then, and the row says so. */
+        nightlight_apply(s);
+        ctlpanel_repaint(s);
+        break;
+
+    case CTL_APPLY_CURSOR:
+        cursor_reload(s);
+        break;
+
+    case CTL_APPLY_DESKICONS:
+        deskicons_reload(s);
+        ctlpanel_repaint(s);
+        break;
+    }
+}
+
+/*
+ * Store the change so it is still there next login.
+ *
+ * A row at its default drops out of settings.state rather than being written as
+ * its default. Storing it would pin the setting to today's value for good: a
+ * later synui that improved the default would never reach a desktop whose owner
+ * had once nudged that row and put it back. Absent means "follow the default",
+ * which is the only version of that with a future in it.
+ */
+static void ctl_persist(syn_server_t *s, const struct ctl_item *it)
+{
+    if (!it->key) return;
+
+    char val[64];
+    ctl_format(it, ctl_get(&s->config, it), 1, val, sizeof(val));
+
+    if (ctlpanel_row_is_default(s, it->row)) settings_state_clear(it->key);
+    else                                     settings_state_set(it->key, val);
+}
+
+int ctlpanel_row_is_default(syn_server_t *s, int row)
+{
+    const struct ctl_item *it = ctl_item(row);
+    if (!it || it->vtype == CTL_VAL_NONE) return 1;   /* nothing to compare */
+
+    float now = ctl_get(&s->config, it);
+    float def = ctl_get(synui_config_defaults(), it);
+
+    /* Floats are compared with a tolerance a good deal finer than the smallest
+     * step any row uses, so stepping away and back reads as "default" again
+     * rather than leaving a row permanently marked by accumulated error. */
+    if (it->vtype == CTL_VAL_FLOAT) {
+        float d = now - def;
+        return (d < 0 ? -d : d) < 0.0005f;
+    }
+    return (int)now == (int)def;
+}
+
+/* Left/Right on a table-driven row. Returns 1 if the value actually moved. */
+static int ctl_adjust(syn_server_t *s, const struct ctl_item *it, int dir)
+{
+    float v = ctl_get(&s->config, it);
+
+    switch (it->vtype) {
+    case CTL_VAL_BOOL:
+    case CTL_VAL_BOOL8:
+        v = (v != 0.0f) ? 0.0f : 1.0f;
+        break;
+
+    case CTL_VAL_TRI:
+        /* Cycles device-default → off → on and wraps, so both directions can
+         * reach every state without the row having an end to get stuck at. */
+        v = (float)(((int)v + 1 + dir + 3) % 3 - 1);
+        break;
+
+    case CTL_VAL_ENUM:
+        if (it->nnames <= 0) return 0;
+        v = (float)(((int)v + dir + it->nnames) % it->nnames);
+        break;
+
+    case CTL_VAL_INT:
+    case CTL_VAL_FLOAT: {
+        float step = it->vstep > 0 ? it->vstep : 1.0f;
+        v += dir * step;
+        if (v < it->vmin) v = it->vmin;
+        if (v > it->vmax) v = it->vmax;
+        break;
+    }
+
+    default:
+        return 0;
+    }
+
+    float before = ctl_get(&s->config, it);
+    ctl_put(s, it, v);
+    if (ctl_get(&s->config, it) == before) return 0;   /* already at the end */
+
+    ctl_apply(s, it->apply);
+    ctl_persist(s, it);
+    return 1;
+}
+
+/*
+ * Put a row back to the value synui ships with.
+ *
+ * Note this resets to the COMPILED default, not to whatever synuirc says — and
+ * then drops the key from settings.state, at which point synuirc's line (if
+ * there is one) takes over again at the next load. The two can therefore
+ * disagree for the rest of the session, which is the honest outcome: synuirc is
+ * parsed at startup and this panel cannot re-run it without discarding
+ * everything else the session has changed.
+ */
+static int ctl_reset(syn_server_t *s, const struct ctl_item *it)
+{
+    if (!it || it->vtype == CTL_VAL_NONE) return 0;
+    if (ctlpanel_row_is_default(s, it->row)) return 0;
+
+    ctl_put(s, it, ctl_get(synui_config_defaults(), it));
+    ctl_apply(s, it->apply);
+    if (it->key) settings_state_clear(it->key);
+    return 1;
 }
 
 const char *ctlpanel_cat_name(int cat)
@@ -172,6 +730,46 @@ int ctlpanel_cat_items(int cat, int *out, int max)
     int n = 0;
     for (int i = 0; i < CTL_ITEM_COUNT && n < max; i++)
         if ((int)ctl_items[i].cat == cat) out[n++] = ctl_items[i].row;
+    return n;
+}
+
+/* ── Search ──────────────────────────────────────────────────
+ *
+ * Case-insensitive substring, over the label, the section and the synuirc key.
+ *
+ * The key is in there deliberately. Someone who knows the setting as
+ * `alt_tab_minimized` because they read it in synuirc should not have to guess
+ * that the panel calls it "Alt+Tab reaches minimized" — and this is the panel
+ * that just made every synuirc key reachable, so the file's vocabulary is
+ * exactly what a user arrives holding.
+ */
+static int ctl_matches(const struct ctl_item *it, const char *needle)
+{
+    if (!needle || !*needle) return 1;
+
+    const char *fields[3] = { it->label, it->section, it->key };
+    for (int f = 0; f < 3; f++) {
+        if (!fields[f]) continue;
+        if (strcasestr(fields[f], needle)) return 1;
+    }
+    return 0;
+}
+
+int ctlpanel_visible_rows(syn_server_t *s, int *out, int max)
+{
+    /* Not searching: the selected category, exactly as before. */
+    if (!s->ctlpanel.searching)
+        return ctlpanel_cat_items(s->ctlpanel.cat, out, max);
+
+    /* Searching: every category at once, in table order, so results stay
+     * grouped the way the panel is rather than by how well they scored. A
+     * relevance sort would move a row under the cursor as you typed. */
+    int n = 0;
+    for (int i = 0; i < CTL_ITEM_COUNT && n < max; i++) {
+        if (ctl_items[i].cat == CTL_CAT_SHORTCUTS) continue;   /* not settings */
+        if (ctl_matches(&ctl_items[i], s->ctlpanel.search))
+            out[n++] = ctl_items[i].row;
+    }
     return n;
 }
 
@@ -199,7 +797,7 @@ const char *ctlpanel_row_label(int row)
 int ctlpanel_selected_row(syn_server_t *s)
 {
     int rows[CTL_CAT_ITEMS_MAX];
-    int n = ctlpanel_cat_items(s->ctlpanel.cat, rows, CTL_CAT_ITEMS_MAX);
+    int n = ctlpanel_visible_rows(s, rows, CTL_CAT_ITEMS_MAX);
     if (n == 0) return -1;
 
     int i = s->ctlpanel.item;
@@ -360,10 +958,73 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * marker all live in aimodel.c and this only asks. */
         aimodel_row_value(s, buf, n);
         break;
-    default:
-        buf[0] = '\0';   /* jump-offs have no state of their own */
+    default: {
+        /* The table-driven rows, which is now most of them: read the field the
+         * item names and format it by its type. A row with no `off` at all —
+         * every jump-off — formats to nothing, which is what leaves the value
+         * column empty for it. */
+        const struct ctl_item *it = ctl_item(row);
+        if (it && it->vtype != CTL_VAL_NONE) ctl_format(it, ctl_get(&s->config, it), 0, buf, n);
+        else                                 buf[0] = '\0';
         break;
     }
+    }
+}
+
+/*
+ * The section a row is IN — not the one it starts.
+ *
+ * Only the first row of a section carries the name in the table, which is what
+ * makes adding a row to an existing section a one-line change. Everything that
+ * wants to say where a row lives (the breadcrumb, the search results) has to
+ * walk back to find it, so that walk lives here rather than in each caller.
+ */
+const char *ctlpanel_row_section(int row)
+{
+    int i = ctl_item_index(row);
+    if (i < 0) return NULL;
+
+    syn_ctl_cat_t cat = ctl_items[i].cat;
+    for (; i >= 0; i--) {
+        if (ctl_items[i].cat != cat) break;   /* ran off the top of the category */
+        if (ctl_items[i].section) return ctl_items[i].section;
+    }
+    return NULL;
+}
+
+/* Does this row OPEN a section? What the pane draws its dividing rule above. */
+int ctlpanel_row_starts_section(int row)
+{
+    const struct ctl_item *it = ctl_item(row);
+    return it && it->section ? 1 : 0;
+}
+
+const char *ctlpanel_row_help(int row)
+{
+    const struct ctl_item *it = ctl_item(row);
+    return it ? it->help : NULL;
+}
+
+int ctlpanel_row_cat(int row)
+{
+    const struct ctl_item *it = ctl_item(row);
+    return it ? (int)it->cat : -1;
+}
+
+/*
+ * The synuirc key a row drives, or NULL for the rows that drive none.
+ *
+ * That NULL is the honest dividing line through this panel: a row with a key is
+ * table-driven — read, adjusted, persisted and reset generically — and a row
+ * without one is either a jump-off to another panel or a toggle whose state is
+ * not a syn_config_t field at all (the AI backend is a file synapd writes, the
+ * layout belongs to the desktop you are on). Callers that want to act on "the
+ * settings, generically" have to be able to ask which is which.
+ */
+const char *ctlpanel_row_key(int row)
+{
+    const struct ctl_item *it = ctl_item(row);
+    return (it && it->vtype != CTL_VAL_NONE) ? it->key : NULL;
 }
 
 /* ── Shortcuts column ────────────────────────────────────── */
@@ -644,12 +1305,16 @@ int ctlpanel_tick(syn_server_t *s)
 
 void ctlpanel_show(syn_server_t *s)
 {
-    s->ctlpanel.visible   = 1;
-    s->ctlpanel.cat       = CTL_CAT_APPEARANCE;
-    s->ctlpanel.item      = 0;
-    s->ctlpanel.focus     = CTL_FOCUS_CATS;
-    s->ctlpanel.scroll    = 0;
-    s->ctlpanel.status[0] = '\0';
+    s->ctlpanel.visible    = 1;
+    s->ctlpanel.cat        = CTL_CAT_APPEARANCE;
+    s->ctlpanel.item       = 0;
+    s->ctlpanel.focus      = CTL_FOCUS_CATS;
+    s->ctlpanel.scroll     = 0;
+    s->ctlpanel.row_scroll = 0;
+    s->ctlpanel.searching  = 0;
+    s->ctlpanel.search[0]  = '\0';
+    s->ctlpanel.search_len = 0;
+    s->ctlpanel.status[0]  = '\0';
     s->ctlpanel.child[0]  = '\0';
     s->ctlpanel.backend_poll_until = 0.0;
     s->ctlpanel.model_commit_at    = 0.0;
@@ -823,7 +1488,29 @@ void ctlpanel_child_closed(syn_server_t *s, const char *action)
 static int ctlpanel_item_count(syn_server_t *s)
 {
     int rows[CTL_CAT_ITEMS_MAX];
-    return ctlpanel_cat_items(s->ctlpanel.cat, rows, CTL_CAT_ITEMS_MAX);
+    return ctlpanel_visible_rows(s, rows, CTL_CAT_ITEMS_MAX);
+}
+
+/*
+ * Keep the cursor inside the drawn window.
+ *
+ * Categories used to fit on screen whole, so there was nothing to scroll and
+ * the cursor was always visible by construction. Windows has forty rows now.
+ * Called after anything that moves the cursor or changes the list under it.
+ */
+static void ctlpanel_scroll_to_cursor(syn_server_t *s)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+    int n = ctlpanel_item_count(s);
+
+    int max_scroll = n - CTL_ROW_ROWS;
+    if (max_scroll < 0) max_scroll = 0;
+
+    if (cp->item < cp->row_scroll)                    cp->row_scroll = cp->item;
+    if (cp->item > cp->row_scroll + CTL_ROW_ROWS - 1) cp->row_scroll = cp->item - CTL_ROW_ROWS + 1;
+
+    if (cp->row_scroll > max_scroll) cp->row_scroll = max_scroll;
+    if (cp->row_scroll < 0)          cp->row_scroll = 0;
 }
 
 /* Moving to another category resets the row cursor and the shortcuts scroll:
@@ -853,9 +1540,16 @@ static void ctlpanel_set_cat(syn_server_t *s, int cat)
 {
     if (cat < 0 || cat >= CTL_CAT_COUNT || cat == s->ctlpanel.cat) return;
     ctlpanel_cancel_pending(s);
-    s->ctlpanel.cat    = cat;
-    s->ctlpanel.item   = 0;
-    s->ctlpanel.scroll = 0;
+    s->ctlpanel.cat        = cat;
+    s->ctlpanel.item       = 0;
+    s->ctlpanel.scroll     = 0;
+    s->ctlpanel.row_scroll = 0;
+    /* Moving to a category is the other way of saying "not that search". The
+     * results list spans every category, so leaving it open while the sidebar
+     * moved would show a highlighted category whose rows are not on screen. */
+    s->ctlpanel.searching  = 0;
+    s->ctlpanel.search[0]  = '\0';
+    s->ctlpanel.search_len = 0;
 }
 
 static void ctlpanel_move(syn_server_t *s, int dir)
@@ -872,6 +1566,7 @@ static void ctlpanel_move(syn_server_t *s, int dir)
     if (next < 0 || next >= n) return;     /* stop at the ends, as before */
     ctlpanel_cancel_pending(s);
     s->ctlpanel.item = next;
+    ctlpanel_scroll_to_cursor(s);
 }
 
 /* Enter the row pane. Refused for a category with nothing in the pane at all, so
@@ -914,8 +1609,39 @@ static void ctlpanel_activate(syn_server_t *s)
         ctlpanel_hide(s);
         synui_binding_execute(s, ctl_row_action(row), NULL);
         return;
+    case CTL_KIND_VALUE: {
+        /* Enter on a number steps it forward, the same as Right. Not "nothing":
+         * every other row on the panel does something on Enter, and a row that
+         * ignored the key people press first would read as broken. Left/Right
+         * remain the way to move it in both directions. */
+        const struct ctl_item *it = ctl_item(row);
+        if (it && ctl_adjust(s, it, +1)) {
+            char v[64];
+            ctlpanel_row_value(s, row, v, sizeof(v));
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "%s: %s", it->label, v);
+        }
+        return;
+    }
     default:
         break;
+    }
+
+    /* A table-driven TOGGLE: flip it generically. Checked before the bespoke
+     * switch below so that a row which names a config field never needs a case
+     * there — the switch is now only for the toggles whose state is NOT a plain
+     * syn_config_t field (game mode, the AI backend, the per-desktop layout). */
+    {
+        const struct ctl_item *it = ctl_item(row);
+        if (it && it->vtype != CTL_VAL_NONE) {
+            if (ctl_adjust(s, it, +1)) {
+                char v[64];
+                ctlpanel_row_value(s, row, v, sizeof(v));
+                snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                         "%s: %s", it->label, v);
+            }
+            return;
+        }
     }
 
     switch (row) {
@@ -1083,6 +1809,38 @@ static void ctlpanel_adjust_opacity(syn_server_t *s, int dir)
  * one, and it is the only setting on the panel whose options are not synui's to
  * enumerate — so the move goes to the code that owns the list, and this arms the
  * settle timer that turns "the cursor stopped here" into "load this". */
+/*
+ * Left/Right on a table-driven row, and the status line that goes with it.
+ *
+ * The value is echoed into the footer rather than left to the row's own text
+ * because the row may be off the top or bottom of a scrolled pane by the time
+ * a key repeat has been held — and because "Border width: 7 px" says which
+ * setting moved, which a number changing somewhere in a list of forty does not.
+ */
+static int ctlpanel_adjust_value(syn_server_t *s, int row, int dir)
+{
+    const struct ctl_item *it = ctl_item(row);
+    if (!it || it->vtype == CTL_VAL_NONE) return 0;
+
+    if (!ctl_adjust(s, it, dir)) {
+        /* Already at the end of the range. Say so once rather than leaving the
+         * previous message up, which reads as the key having done something. */
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "%s is at its %s", it->label, dir < 0 ? "minimum" : "maximum");
+        return 1;
+    }
+
+    char v[64];
+    ctlpanel_row_value(s, row, v, sizeof(v));
+    if (ctlpanel_row_is_default(s, row))
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "%s: %s \xc2\xb7 default", it->label, v);
+    else
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "%s: %s", it->label, v);
+    return 1;
+}
+
 static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
 {
     if (row != CTL_ROW_AI_MODEL) return;
@@ -1146,8 +1904,14 @@ int ctlpanel_motion(syn_server_t *s, double lx, double ly)
         return 1;
     }
 
+    /* The grid is the DRAWN rows, so its index is an offset into the visible
+     * window, not into the category. Adding the scroll is what makes a click
+     * land on the row under the pointer once a long category has been scrolled
+     * — without it every click acts on the row that many places above. */
     int i = hit_row_at(&cp->hit_items, lx, ly);
     if (i >= 0) {
+        i += cp->row_scroll;
+        if (i >= ctlpanel_item_count(s)) return 1;   /* past the last row */
         if (i == cp->item && cp->focus == CTL_FOCUS_ITEMS) return 1;
         /* Same rule as the keys: the pointer leaving the row drops a pick that
          * was settling on it. This sets cp->item directly rather than going
@@ -1222,7 +1986,19 @@ int ctlpanel_scroll(syn_server_t *s, double lx, double ly, double delta)
         ctlpanel_scroll_by(s, dir * 3);
     } else if (over_rows) {
         cp->focus = CTL_FOCUS_ITEMS;
-        ctlpanel_move(s, dir);
+        /* Over a category too long to fit, the wheel SCROLLS rather than moving
+         * the selection: dragging the cursor down forty rows to read the bottom
+         * of Windows is not what a wheel means anywhere else. The selection
+         * still follows the pointer, because motion events land on the rows the
+         * scroll brought under it. */
+        if (ctlpanel_item_count(s) > CTL_ROW_ROWS) {
+            int max_scroll = ctlpanel_item_count(s) - CTL_ROW_ROWS;
+            cp->row_scroll += dir * 3;
+            if (cp->row_scroll > max_scroll) cp->row_scroll = max_scroll;
+            if (cp->row_scroll < 0)          cp->row_scroll = 0;
+        } else {
+            ctlpanel_move(s, dir);
+        }
     } else if (cp->focus == CTL_FOCUS_ITEMS && ctlpanel_item_count(s) == 0) {
         ctlpanel_scroll_by(s, dir * 3);
     } else {
@@ -1233,15 +2009,116 @@ int ctlpanel_scroll(syn_server_t *s, double lx, double ly, double delta)
     return 1;
 }
 
+/* Drop the search and go back to showing a category. */
+static void ctlpanel_search_close(syn_server_t *s)
+{
+    s->ctlpanel.searching  = 0;
+    s->ctlpanel.search[0]  = '\0';
+    s->ctlpanel.search_len = 0;
+    s->ctlpanel.item       = 0;
+    s->ctlpanel.row_scroll = 0;
+}
+
+/*
+ * Typing, while the search box is open.
+ *
+ * Runs BEFORE the modifier check below, which is why Shift+letter reaches it:
+ * that check exists so Super+C can close the panel it opened, and it would
+ * otherwise send every capital letter to the global bind table mid-word.
+ *
+ * Returns 1 if the key was consumed.
+ */
+static int ctlpanel_search_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+    if (!cp->searching) return 0;
+
+    /* Super and Ctrl still belong to the compositor even mid-search: those are
+     * how you leave, and a search box that swallowed Super+C would trap you in
+     * the panel. Shift is ours (capitals); Alt is nobody's here. */
+    if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL)) return 0;
+
+    if (sym == XKB_KEY_BackSpace) {
+        if (cp->search_len > 0) cp->search[--cp->search_len] = '\0';
+        else                    ctlpanel_search_close(s);
+        cp->item = 0;
+        cp->row_scroll = 0;
+        synui_render_ctlpanel(s);
+        return 1;
+    }
+
+    /* Printable ASCII only. The labels and keys being searched are ASCII, so
+     * anything wider cannot match anything and would only make the box lie
+     * about what it is filtering on. */
+    if (sym >= 0x20 && sym <= 0x7e) {
+        if (cp->search_len < (int)sizeof(cp->search) - 1) {
+            cp->search[cp->search_len++] = (char)sym;
+            cp->search[cp->search_len]   = '\0';
+        }
+        /* Any edit puts the cursor back at the top of the results: it indexes
+         * a list that just changed under it, and leaving it at row 9 of a list
+         * that now has two entries is how a cursor ends up off screen. */
+        cp->item = 0;
+        cp->row_scroll = 0;
+        synui_render_ctlpanel(s);
+        return 1;
+    }
+
+    return 0;   /* arrows, Tab, Enter, Esc: the normal handler below */
+}
+
 int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->ctlpanel.visible) return 0;
+
+    if (ctlpanel_search_key(s, sym, mods)) return 1;
 
     /* Modified combos (Super+…) still reach the global bind table, so Super+C
      * closes the panel it opened and Super+P still opens the power panel. */
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
                 WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
         return 0;
+
+    /* '/' opens the search box, from either column.
+     *
+     * Only '/', not "any letter". The row pane has had vim keys since it was
+     * written — h/j/k/l move, q closes — and quietly turning those into text
+     * entry would break the navigation of every user who has them in their
+     * fingers, to save one keystroke. */
+    if (sym == XKB_KEY_slash && !s->ctlpanel.searching) {
+        s->ctlpanel.searching  = 1;
+        s->ctlpanel.search[0]  = '\0';
+        s->ctlpanel.search_len = 0;
+        s->ctlpanel.item       = 0;
+        s->ctlpanel.row_scroll = 0;
+        s->ctlpanel.focus      = CTL_FOCUS_ITEMS;
+        ctlpanel_cancel_pending(s);
+        synui_render_ctlpanel(s);
+        return 1;
+    }
+
+    /* Delete puts the selected row back to what synui ships with. Only ever a
+     * row's own value: there is no "reset everything" here on purpose, because
+     * a single keystroke that discards a desktop's entire configuration is not
+     * an affordance, it is a trap. */
+    if (sym == XKB_KEY_Delete && s->ctlpanel.focus == CTL_FOCUS_ITEMS) {
+        int r = ctlpanel_selected_row(s);
+        const struct ctl_item *it = r >= 0 ? ctl_item(r) : NULL;
+        if (!it || it->vtype == CTL_VAL_NONE) {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "nothing to reset on this row");
+        } else if (ctl_reset(s, it)) {
+            char v[64];
+            ctlpanel_row_value(s, r, v, sizeof(v));
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "%s reset to %s", it->label, v);
+        } else {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "%s is already at its default", it->label);
+        }
+        synui_render_ctlpanel(s);
+        return 1;
+    }
 
     int row = ctlpanel_selected_row(s);
     int in_items = (s->ctlpanel.focus == CTL_FOCUS_ITEMS);
@@ -1256,7 +2133,14 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
          * list, and only from the category list to the desktop. Closing outright
          * from anywhere would make Esc mean two different things depending on
          * where you happened to be. */
-        if (in_items) {
+        /* One more level to back out of than there used to be: a search is the
+         * innermost thing you can be inside, so Esc leaves it first and only
+         * then starts walking back out of the columns. */
+        if (s->ctlpanel.searching) {
+            ctlpanel_cancel_pending(s);
+            ctlpanel_search_close(s);
+            synui_render_ctlpanel(s);
+        } else if (in_items) {
             /* Backing out of the row pane also drops a pick that was settling —
              * Esc means "not that" everywhere else on this panel, and it would
              * be a poor place to start meaning "load it anyway". */
@@ -1311,6 +2195,8 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             ctlpanel_adjust_opacity(s, -1);
         else if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_CHOICE)
             ctlpanel_adjust_choice(s, row, -1);
+        else if (in_items && row >= 0 && ctlpanel_adjust_value(s, row, -1))
+            ; /* a table-driven row: Left is its decrement, not a column move */
         else
             s->ctlpanel.focus = CTL_FOCUS_CATS;
         synui_render_ctlpanel(s);
@@ -1321,17 +2207,39 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             ctlpanel_adjust_opacity(s, +1);
         else if (in_items && row >= 0 && ctlpanel_row_kind(row) == CTL_KIND_CHOICE)
             ctlpanel_adjust_choice(s, row, +1);
+        else if (in_items && row >= 0 && ctlpanel_adjust_value(s, row, +1))
+            ;
         else
             ctlpanel_focus_items(s);
         synui_render_ctlpanel(s);
         return 1;
 
-    case XKB_KEY_Prior:     /* Page Up — always the shortcuts scroll */
-        ctlpanel_scroll_by(s, -CTL_SHORTCUT_ROWS / 2);
+    /* Page keys move by half a screen. Which list they move depends on which one
+     * is under you: the shortcuts pane has no rows and scrolls, everything else
+     * has a cursor and pages it (which drags the scroll along behind it). Before
+     * the categories got long enough to scroll, these only ever meant the
+     * shortcuts list, and in a forty-row category that read as a dead key. */
+    case XKB_KEY_Prior:     /* Page Up */
+        if (list_only) ctlpanel_scroll_by(s, -CTL_SHORTCUT_ROWS / 2);
+        else for (int i = 0; i < CTL_ROW_ROWS / 2; i++) ctlpanel_move(s, -1);
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_Next:      /* Page Down */
-        ctlpanel_scroll_by(s, +CTL_SHORTCUT_ROWS / 2);
+        if (list_only) ctlpanel_scroll_by(s, +CTL_SHORTCUT_ROWS / 2);
+        else for (int i = 0; i < CTL_ROW_ROWS / 2; i++) ctlpanel_move(s, +1);
+        synui_render_ctlpanel(s);
+        return 1;
+
+    /* Home/End, which a hundred-row category is the first thing here to need. */
+    case XKB_KEY_Home:
+        if (in_items) { s->ctlpanel.item = 0; ctlpanel_scroll_to_cursor(s); }
+        synui_render_ctlpanel(s);
+        return 1;
+    case XKB_KEY_End:
+        if (in_items) {
+            int n = ctlpanel_item_count(s);
+            if (n > 0) { s->ctlpanel.item = n - 1; ctlpanel_scroll_to_cursor(s); }
+        }
         synui_render_ctlpanel(s);
         return 1;
 
