@@ -1987,6 +1987,24 @@ typedef struct {
      * window pair unless the preset names them (see theme.c). */
     float panel_bg[4], panel_ink[4];
 
+    /* A palette handed in from OUTSIDE the preset table
+     * (`synctl dispatch theme <accent> <base> <ink>`), which is how the bar's
+     * own theme picker carries its palette onto the compositor's surfaces.
+     * There is no sixth preset to add for it: the bar's palettes are the bar's,
+     * they can be edited by hand in its Config.qml, and a preset table that has
+     * to be kept in step with a QML file in another process is a preset table
+     * that will be wrong. So the three colours ARE the theme, and theme.c
+     * derives the rest of the chrome from them.
+     *
+     * `theme_custom` set means these override whatever `theme` names — which is
+     * still tracked, because the two are not exclusive: only the colours here
+     * are pushed, and everything a preset owns that these do not say (the warn
+     * border, the chrome style, the opacity levels) keeps coming from it.
+     * Picking a preset in the theme manager clears the flag. Persisted to
+     * theme.state so it survives the login the bar does not re-apply on. */
+    int   theme_custom;
+    float theme_custom_accent[4], theme_custom_base[4], theme_custom_ink[4];
+
     /* Window translucency (theme.c / anim.c). `transparency` is the master
      * switch — off, everything is opaque and the opacities are ignored. When on,
      * the focused window sits at active_opacity and the rest at inactive_opacity.
@@ -4541,6 +4559,18 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save);
  * what config.c calls for a synuirc `theme =` line at parse time. */
 void theme_load_colors(syn_config_t *cfg, syn_theme_t theme);
 void theme_state_load(syn_server_t *s);   /* lay theme.state over the config default */
+/* `synctl dispatch theme <arg>` — a preset token ("dark"), or three #rrggbb
+ * colours (accent, panel surface, ink) to apply as a custom palette. Returns 0
+ * and logs when the argument is neither. Bare `theme` opens the picker instead;
+ * this is only reached with an argument. */
+int  theme_dispatch(syn_server_t *s, const char *arg);
+/* Apply a palette that is not in the preset table: the three colours, plus the
+ * window chrome derived from them. Does NOT touch the opacity levels (they are
+ * the user's slider, not a colour) and does NOT spawn synui-apply-theme — the
+ * caller pushing a palette in already owns the app side, and two writers of
+ * kdeglobals with slightly different numbers is a race with no winner. */
+void theme_apply_custom(syn_server_t *s, const float accent[4],
+                        const float base[4], const float ink[4], int save);
 const char *theme_name(syn_theme_t t);    /* display label, e.g. "Windows XP" */
 /* Two-tone swatch for the picker: the caption colour and the focus accent. */
 void theme_preview_colors(syn_theme_t t, float caption[4], float accent[4]);

@@ -27,7 +27,9 @@
  */
 
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -358,6 +360,63 @@ void theme_preview_colors(syn_theme_t t, float caption[4], float accent[4])
     memcpy(accent,  theme_presets[t].border_focus, sizeof(float) * 4);
 }
 
+/* ── Colour maths, for palettes that are not presets ─────── */
+/* A preset is a designer's dozen colours. A palette pushed in from the bar is
+ * three, and the other nine have to be derived — so these are the tools that
+ * derive them, and the contrast checks that stop the derivation producing a
+ * caption whose text cannot be read. Nothing here is used by the presets. */
+
+static int q255(float v)
+{
+    int q = (int)(v * 255.0f + 0.5f);
+    return q < 0 ? 0 : (q > 255 ? 255 : q);
+}
+
+static void col_mix(float out[4], const float a[4], const float b[4], float t)
+{
+    for (int i = 0; i < 3; i++) out[i] = a[i] + (b[i] - a[i]) * t;
+    out[3] = 1.0f;
+}
+
+/* WCAG relative luminance — the sRGB transfer curve undone, not a naive 601
+ * weighting. It matters here: the whole point of these helpers is to answer
+ * "can this be read", and 601 luma over-rates dark colours enough to pass a
+ * pairing that measures under 2:1 in practice. */
+static float col_lum(const float c[4])
+{
+    float l[3];
+    for (int i = 0; i < 3; i++) {
+        float v = c[i] < 0.0f ? 0.0f : (c[i] > 1.0f ? 1.0f : c[i]);
+        l[i] = v <= 0.04045f ? v / 12.92f : powf((v + 0.055f) / 1.055f, 2.4f);
+    }
+    return 0.2126f * l[0] + 0.7152f * l[1] + 0.0722f * l[2];
+}
+
+static float col_contrast(const float a[4], const float b[4])
+{
+    float la = col_lum(a), lb = col_lum(b);
+    float hi = la > lb ? la : lb, lo = la > lb ? lb : la;
+    return (hi + 0.05f) / (lo + 0.05f);
+}
+
+/* The ink to write on `bg`: the one that was asked for when it can be read, and
+ * otherwise near-white or near-black, whichever side of the background it is on.
+ * The bar hands over one ink for its own surfaces, and synui's captions are not
+ * those surfaces — a caption tinted toward the accent can land close enough to
+ * the ink to erase it. Not pure #fff/#000: a caption is a small surface and the
+ * full-range pair reads as harsh next to everything else on screen. */
+static void col_ink_for(float out[4], const float bg[4], const float want[4])
+{
+    if (col_contrast(bg, want) >= 4.5f) {
+        memcpy(out, want, sizeof(float) * 4);
+        out[3] = 1.0f;
+        return;
+    }
+    int dark_bg = col_lum(bg) < 0.18f;
+    out[0] = out[1] = out[2] = dark_bg ? 0.94f : 0.08f;
+    out[3] = 1.0f;
+}
+
 /* ── Applying a theme ────────────────────────────────────── */
 
 static void theme_repaint(syn_server_t *s)
@@ -382,6 +441,19 @@ static void theme_state_save(syn_server_t *s)
         return;
     }
     fprintf(f, "theme=%s\n", syn_theme_names[s->config.theme]);
+    /* The custom palette, when one is in force. Written as the three colours it
+     * was given rather than the dozen derived from them: the derivation is code
+     * and may improve, and a state file full of results would pin every future
+     * session to today's version of it. Absent = following the preset above. */
+    if (s->config.theme_custom) {
+        const float *a = s->config.theme_custom_accent;
+        const float *b = s->config.theme_custom_base;
+        const float *i = s->config.theme_custom_ink;
+        fprintf(f, "custom=%02x%02x%02x,%02x%02x%02x,%02x%02x%02x\n",
+                q255(a[0]), q255(a[1]), q255(a[2]),
+                q255(b[0]), q255(b[1]), q255(b[2]),
+                q255(i[0]), q255(i[1]), q255(i[2]));
+    }
     /* Translucency lives here too so the sliders survive a restart, same file as
      * the theme name they sit beside in the appearance panels. */
     fprintf(f, "transparency=%s\n", s->config.transparency ? "on" : "off");
@@ -529,6 +601,11 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
     if (theme < 0 || theme >= SYN_THEME_COUNT) return;
     const syn_theme_preset_t *p = &theme_presets[theme];
 
+    /* Picking a preset is how a custom palette is got rid of. There is no other
+     * way out of one — the bar can push a palette but has no "revert", and a
+     * user staring at colours they want gone will go to the theme manager. */
+    s->config.theme_custom = 0;
+
     theme_load_colors(&s->config, theme);
 
     /* Re-tint every window's chrome (the titlebar buffer is redrawn with the new
@@ -578,12 +655,211 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
             syn_theme_names[theme], p->scheme);
 }
 
+/* ── A palette from outside the preset table ─────────────── */
+/*
+ * WHY THIS EXISTS AT ALL.
+ *
+ * The bar ships its own theme picker with its own palettes (see
+ * quickshell-antiquity/Config.qml). Picking one there recoloured the bar, and
+ * — since 272 — Dolphin, GTK, kitty and Firefox through synui-apply-theme. It
+ * could not touch the surfaces synui draws ITSELF: the control panel, the
+ * desktop menu, the wallpaper picker, the task manager, the window borders. So
+ * "apply theme" left a desktop in two halves, and the half that did not move
+ * was the compositor's.
+ *
+ * The fix is not a sixth preset per bar palette. Those palettes live in a QML
+ * file the user is explicitly invited to add to, and a C table that has to be
+ * kept in step with it would be wrong the first time anybody accepted the
+ * invitation. So the colours travel instead of the name, and the chrome a
+ * preset would have specified is DERIVED here.
+ *
+ * Three colours, because three is what the bar can honestly supply: an accent,
+ * the surface its own panels are drawn on, and the ink it writes on that
+ * surface. Everything else — the caption pair, the inactive border, the frame
+ * face — is a function of those, with a contrast check on each pairing so a
+ * palette drawn for a bar cannot produce a titlebar whose text is not there.
+ * (That is the 273 failure mode exactly, one process over: a colour that was
+ * correct on the surface it was chosen for, reused on a surface nobody
+ * measured it against.)
+ *
+ * What is NOT derived, and keeps coming from the preset in cfg->theme:
+ *   - the WARN border. Red means the same thing whatever the palette is; a
+ *     "themed" warning colour is a warning colour that has stopped working.
+ *   - the chrome STYLE. A palette says nothing about bevels, and forcing FLAT
+ *     would silently undo a deliberate Win95 pick. Derived colours are fed to
+ *     the gradient ends and the face, so LUNA and BEVEL keep drawing whatever
+ *     they draw, in the new colours.
+ *   - the opacity levels. Those are the user's slider (theme.state persists
+ *     them separately) and a colour push has no business moving it.
+ */
+void theme_apply_custom(syn_server_t *s, const float accent[4],
+                        const float base[4], const float ink[4], int save)
+{
+    syn_config_t *cfg = &s->config;
+
+    cfg->theme_custom = 1;
+    memcpy(cfg->theme_custom_accent, accent, sizeof(float) * 4);
+    memcpy(cfg->theme_custom_base,   base,   sizeof(float) * 4);
+    memcpy(cfg->theme_custom_ink,    ink,    sizeof(float) * 4);
+
+    /* Panels: the three colours as given, which is the whole point — these are
+     * the surfaces the bar's palette was actually drawn for.
+     *
+     * The accent is checked against the surface anyway. It is the one pairing
+     * the bar can get wrong without noticing, because in the bar the accent is
+     * mostly drawn on its own glass rather than on `base`; here it carries every
+     * selection fill and every header in nineteen panels. Under 3:1 it is pulled
+     * toward the ink until it separates. */
+    float acc[4];
+    memcpy(acc, accent, sizeof(acc));
+    for (int i = 0; i < 4 && col_contrast(acc, base) < 3.0f; i++)
+        col_mix(acc, acc, ink, 0.25f);
+
+    memcpy(cfg->panel_accent, acc, sizeof(cfg->panel_accent));
+    memcpy(cfg->panel_bg, base, sizeof(cfg->panel_bg));
+    cfg->panel_bg[3] = 1.0f;
+    col_ink_for(cfg->panel_ink, base, ink);
+    render_set_panel_accent(cfg->panel_accent);
+    render_set_panel_surface(cfg->panel_bg, cfg->panel_ink);
+
+    /* Borders. Focus IS the accent (as given, not the panel-corrected one — a
+     * border is drawn on the wallpaper, not on the panel surface, so the
+     * correction above is about a different background). The inactive border is
+     * the surface lifted a little toward the ink, which is what every preset's
+     * pair amounts to; the AI border stays distinguishable by being the accent
+     * lightened rather than a second hue nobody chose. */
+    memcpy(cfg->border_color_focus, accent, sizeof(cfg->border_color_focus));
+    cfg->border_color_focus[3] = 1.0f;
+    col_mix(cfg->border_color_norm, base, ink, 0.20f);
+    {
+        const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        col_mix(cfg->border_color_ai, accent, white, 0.40f);
+    }
+
+    /* Captions. The inactive one is the panel surface, so an unfocused window
+     * and an open panel are the same material; the focused one is that surface
+     * pulled a third of the way to the accent, which reads as "lit" on a dark
+     * palette and as "tinted" on a light one without either needing a branch.
+     * Both texts are then measured against the caption they land on. */
+    memcpy(cfg->titlebar_color, base, sizeof(cfg->titlebar_color));
+    cfg->titlebar_color[3] = 1.0f;
+    col_mix(cfg->titlebar_color_focus, base, accent, 0.32f);
+
+    col_ink_for(cfg->titlebar_text_focus, cfg->titlebar_color_focus, ink);
+    /* The inactive caption's text is deliberately quieter than the focused
+     * one's — that difference is half of what tells the two apart at a glance —
+     * but only down to 3:1, which is where "quiet" becomes "gone". */
+    {
+        float dim[4];
+        col_ink_for(dim, cfg->titlebar_color, ink);
+        col_mix(cfg->titlebar_text, dim, cfg->titlebar_color, 0.35f);
+        if (col_contrast(cfg->titlebar_text, cfg->titlebar_color) < 3.0f)
+            memcpy(cfg->titlebar_text, dim, sizeof(cfg->titlebar_text));
+    }
+
+    /* The gradient ends and the 3D face. A flat theme wants them equal to the
+     * captions (deco.c always draws top → bottom); LUNA and BEVEL want a real
+     * second colour, so give them one derived the same way rather than leaving
+     * a Win95 frame in the previous palette's silver. */
+    memcpy(cfg->titlebar_grad, cfg->titlebar_color, sizeof(cfg->titlebar_grad));
+    if (cfg->chrome == SYN_CHROME_FLAT) {
+        memcpy(cfg->titlebar_grad_focus, cfg->titlebar_color_focus,
+               sizeof(cfg->titlebar_grad_focus));
+    } else {
+        col_mix(cfg->titlebar_grad_focus, cfg->titlebar_color_focus, base, 0.45f);
+    }
+    memcpy(cfg->chrome_face, cfg->border_color_norm, sizeof(cfg->chrome_face));
+
+    /* The same re-decorate/rebuild work a preset switch does, and for the same
+     * reasons — the titlebar and the dock are both CACHED buffers that nothing
+     * here would otherwise invalidate. See theme_apply(). */
+    for (int w = 0; w < WORKSPACE_MAX; w++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[w].windows, link)
+            if (v->mapped) {
+                view_invalidate_titlebar(v);
+                anim_apply_alpha(v);
+            }
+    }
+    dock_relayout(s);
+    theme_repaint(s);
+
+    if (save) theme_state_save(s);
+    wlr_log(WLR_INFO,
+            "synui: custom palette applied: accent #%02x%02x%02x "
+            "surface #%02x%02x%02x ink #%02x%02x%02x",
+            q255(accent[0]), q255(accent[1]), q255(accent[2]),
+            q255(base[0]), q255(base[1]), q255(base[2]),
+            q255(ink[0]), q255(ink[1]), q255(ink[2]));
+}
+
+/* "#rrggbb" or "rrggbb" → RGBA. Nothing shorter: a 3-digit form would have to
+ * be guessed at, and this is only ever fed by a program. */
+static int theme_parse_hex(const char *s, float out[4])
+{
+    if (!s) return 0;
+    if (*s == '#') s++;
+    for (int i = 0; i < 6; i++)
+        if (!isxdigit((unsigned char)s[i])) return 0;
+    if (s[6] != '\0') return 0;
+
+    unsigned v = (unsigned)strtoul(s, NULL, 16);
+    out[0] = (float)((v >> 16) & 0xff) / 255.0f;
+    out[1] = (float)((v >>  8) & 0xff) / 255.0f;
+    out[2] = (float)( v        & 0xff) / 255.0f;
+    out[3] = 1.0f;
+    return 1;
+}
+
+/* `synctl dispatch theme <arg>`: a preset token, or three colours.
+ *
+ * Both spellings on one action rather than a second action name, for the reason
+ * `wallpaper` takes an optional path — the bind action and the scriptable one
+ * are the same idea, and splitting them means two entries in the bind table for
+ * one concept, one of which can be bound to a key that then does something no
+ * key should. Bare still opens the picker; input.c only calls this with an arg. */
+int theme_dispatch(syn_server_t *s, const char *arg)
+{
+    char buf[128];
+    if (!arg || !*arg || strlen(arg) >= sizeof(buf)) {
+        wlr_log(WLR_ERROR, "synui: theme: bad argument");
+        return 0;
+    }
+    snprintf(buf, sizeof(buf), "%s", arg);
+
+    for (int t = 0; t < SYN_THEME_COUNT; t++) {
+        if (strcmp(buf, syn_theme_names[t]) == 0) {
+            theme_apply(s, (syn_theme_t)t, 1);
+            return 1;
+        }
+    }
+
+    float col[3][4];
+    int n = 0;
+    for (char *tok = strtok(buf, " \t"); tok && n < 3; tok = strtok(NULL, " \t"))
+        if (!theme_parse_hex(tok, col[n++])) {
+            wlr_log(WLR_ERROR, "synui: theme: '%s' is neither a theme name nor "
+                               "#rrggbb", arg);
+            return 0;
+        }
+    if (n != 3) {
+        wlr_log(WLR_ERROR, "synui: theme: needs 3 colours "
+                           "(accent, surface, ink), got %d", n);
+        return 0;
+    }
+
+    theme_apply_custom(s, col[0], col[1], col[2], 1);
+    return 1;
+}
+
 /* Lay theme.state over whatever synuirc left in cfg->theme, then apply it. Called
  * once at startup (save=0 — it is re-applying what it just read, not a new pick). */
 void theme_state_load(syn_server_t *s)
 {
     int   have_tr = 0, tr = 0, have_op = 0, have_fa = 0;
     float op = 0.0f, fa = 0.0f;
+    int   have_custom = 0;
+    float cust[3][4];
 
     char path[256];
     if (syn_config_path(path, sizeof(path), "theme.state")) {
@@ -602,6 +878,19 @@ void theme_state_load(syn_server_t *s)
                     op = (float)atof(line + 15); have_op = 1;
                 } else if (strncmp(line, "foot_alpha=", 11) == 0) {
                     fa = (float)atof(line + 11); have_fa = 1;
+                } else if (strncmp(line, "custom=", 7) == 0) {
+                    /* Three comma-separated rrggbb. All or nothing: a half-read
+                     * palette would be applied as two of the user's colours and
+                     * one uninitialised one. */
+                    char *p = line + 7;
+                    int n = 0;
+                    for (char *tok = strtok(p, ","); tok && n < 3;
+                         tok = strtok(NULL, ","))
+                        if (!theme_parse_hex(tok, cust[n++])) { n = -1; break; }
+                    have_custom = (n == 3);
+                    if (!have_custom)
+                        wlr_log(WLR_ERROR, "synui: theme.state: unreadable "
+                                           "custom palette, ignoring it");
                 }
             }
             fclose(f);
@@ -612,6 +901,14 @@ void theme_state_load(syn_server_t *s)
      * lay the persisted translucency back over them, so a user's slider position
      * wins over the theme's default rather than being clobbered every boot. */
     theme_apply(s, s->config.theme, 0);
+    /* Then the pushed palette over the top of it, if the last session was
+     * running one. This is the leg that makes the bar's picker stick: the bar
+     * only pushes when a theme is PICKED, so without this every login came up
+     * on the preset's colours while the bar came up on its own — the desktop
+     * back in two halves, and only until the next pick, which is the hardest
+     * kind of bug to be told about. save=0, same reason as the apply above. */
+    if (have_custom)
+        theme_apply_custom(s, cust[0], cust[1], cust[2], 0);
     if (have_op && op >= 0.50f && op <= 1.00f) {
         s->config.active_opacity   = op;
         s->config.inactive_opacity = inactive_from_active(op);
@@ -631,6 +928,14 @@ void theme_show(syn_server_t *s)
     s->thememgr.visible   = 1;
     s->thememgr.selected  = s->config.theme;   /* start on the current theme */
     s->thememgr.status[0] = '\0';
+    /* With a pushed palette in force NO row is marked active (see render.c), so
+     * say why — otherwise the panel reads as a list of ten themes none of which
+     * is on, and the way back to one is not obvious from a list that appears to
+     * have nothing selected. */
+    if (s->config.theme_custom)
+        snprintf(s->thememgr.status, sizeof(s->thememgr.status),
+                 "A palette from the bar is in force \xc2\xb7 "
+                 "Enter on a theme replaces it");
     wlr_log(WLR_INFO, "synui: theme manager shown");
     synui_render_thememgr(s);
 }

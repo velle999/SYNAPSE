@@ -4134,7 +4134,12 @@ void synui_render_thememgr(syn_server_t *s)
     for (int i = first; i < first + rows; i++) {
         int ry = THM_TOP + (i - first) * THM_ROW_H;
         int sel    = (i == tm->selected);
-        int active = (i == s->config.theme);
+        /* No row is active while a palette pushed in from the bar is in force:
+         * cfg->theme still names the preset underneath it, but the colours on
+         * screen are not that preset's, and marking it "active" would be the
+         * panel telling a plain lie about what you are looking at. The status
+         * line (theme_show) says what IS in force. */
+        int active = (i == s->config.theme && !s->config.theme_custom);
 
         if (sel) {
             set_accent(cr, 0.35);

@@ -309,9 +309,25 @@ Singleton {
      * wallpaper is most of the bar's colour and picking one without the other
      * is what made the bar illegible in the first place — see `barText` above.
      *
-     * NOT the compositor's own borders and titlebars: synui has no "set theme
-     * <name>" dispatch, only a `theme` action that opens its picker, and those
-     * are a different set of five presets anyway. Super+T still owns them.
+     * AND the compositor's own surfaces — the control panel, the desktop menu,
+     * the wallpaper picker, the task manager, the window borders. Those are
+     * drawn by synui itself, in C, and until now nothing here could reach them:
+     * applying a palette recoloured this shell and every toolkit app, and left
+     * the desktop underneath on whatever Super+T last picked. Half a theme.
+     *
+     * `synctl dispatch theme <accent> <surface> <ink>` is the leg that closes
+     * it. Three colours and not a name, because synui's presets are a table in
+     * C and these palettes are a table in QML that Config.qml explicitly invites
+     * you to add to — the moment anyone accepts that invitation, a name would
+     * refer to nothing. The compositor derives its captions, borders and frame
+     * face from the three, with a contrast check on each pairing.
+     *
+     * `panelInk` and not `text` or `textLight` picked once: synui's panels are
+     * drawn ON `base`, and which of the two inks can be read on it flips per
+     * palette — hades has a light `text` (#eaeaea) because it was drawn for a
+     * dark bar, the other four have #121212 because theirs read pale. That is
+     * the same mistake 273 spent a release fixing one surface over; a hardcoded
+     * pick here would be it again, in a control panel this time.
      */
     function applyTheme(name: string): void {
         if (themes[name] == null) {
@@ -333,7 +349,33 @@ Singleton {
             // reached without it, so it is passed explicitly.
             .concat(c255(accent)).concat(c255(base)).concat(c255(text)));
 
+        Quickshell.execDetached(["synctl", "dispatch", "theme", t.accent, t.base, panelInk(t)]);
+
         applyWallpaper(name);
+    }
+
+    /*
+     * Which of a palette's two inks can actually be read on its `base`.
+     *
+     * WCAG relative luminance rather than a 601 luma average, because the whole
+     * question is legibility and 601 flatters dark colours: helios's `text`
+     * (#121212) on its `base` (#181818) is a 1.03 contrast ratio — a blank
+     * surface — and a luma comparison alone rates it as merely "close".
+     *
+     * Ties go to `text`, since that is what upstream's own panels use and it is
+     * right for four of the five shipped palettes.
+     */
+    function panelInk(t): string {
+        const lum = hex => {
+            const c = Qt.color(hex);
+            const lin = v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+        };
+        const ratio = (a, b) => {
+            const la = lum(a), lb = lum(b);
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+        };
+        return ratio(t.text, t.base) >= ratio(t.textLight, t.base) ? t.text : t.textLight;
     }
 
     /*
@@ -379,12 +421,21 @@ Singleton {
      * Driven from the FileView's `loaded`, not Component.onCompleted: the
      * singleton completes before the file has been read, so the flag would
      * still be at its default `false` and the seed would fire on every start.
+     *
+     * The whole of applyTheme(), not just the wallpaper it was written for. The
+     * same argument now covers the compositor's own panels and the toolkits:
+     * with nothing but the wallpaper seeded, a fresh `bar_shell = antiquity`
+     * came up as an Antiquity bar on an Antiquity wallpaper, in front of a
+     * SYNAPSE-neon control panel and SYNAPSE-neon window borders — and stayed
+     * that way until the user happened to pick the theme they were already
+     * running. Still once ever, and still nothing a later Super+W or Super+T
+     * cannot override.
      */
     function seedWallpaperOnce(): void {
         if (settings.wallpaperSeeded)
             return;
         settings.wallpaperSeeded = true;
-        applyWallpaper(settings.currentTheme);
+        applyTheme(settings.currentTheme);
     }
 
     enum SystemPopup {

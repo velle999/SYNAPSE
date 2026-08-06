@@ -882,7 +882,14 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         /* Super+/ — the bind table as a searchable palette. See keys.c. */
         keys_toggle(s);
     } else if (strcmp(action, "theme") == 0) {
-        theme_toggle(s);
+        /* Bare (Super+T, the control panel row) opens the picker. With an
+         * argument it applies one outright — either a preset token ("dark") or
+         * three #rrggbb colours (accent, panel surface, ink), which is what the
+         * Antiquity bar's theme picker dispatches so its palette reaches the
+         * surfaces synui draws itself. Same shape as `wallpaper` above, and for
+         * the same reason: one concept, one bindable name. */
+        if (arg && *arg) theme_dispatch(s, arg);
+        else             theme_toggle(s);
     } else if (strcmp(action, "bluetooth") == 0) {
         bt_toggle(s);
     } else if (strcmp(action, "printers") == 0) {
