@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # synui-apply-theme — push the desktop theme's light/dark scheme out to the
-# toolkits synui does not draw: GTK apps, Dolphin (Qt/KDE) and Firefox.
+# toolkits synui does not draw: GTK apps, Dolphin (Qt/KDE), kitty and Firefox.
 #
 # synui recolours its OWN chrome (borders, titlebars) directly; it cannot reach
 # into someone else's toolkit, so theme.c fires this after every theme change.
@@ -75,6 +75,24 @@ done
 prefer_dark=0; color_scheme=default
 if [ "$scheme" = dark ]; then prefer_dark=1; color_scheme=prefer-dark; fi
 
+# Black or white ink for a background, whichever carries better. Top level and
+# not inside the KDE block below, because kitty needs it too and a box with no
+# kwriteconfig must still get a readable terminal selection. The KDE selection
+# foreground used to be a hardcoded 255,255,255, which is right for 95's navy
+# and wrong for any theme whose accent is pale — white on bubblegum pink is a
+# selected filename you cannot read. WCAG relative luminance.
+ink_for() {  # ink_for <r> <g> <b> → "r,g,b"
+    awk -v r="$1" -v g="$2" -v b="$3" '
+        function ch(v) { v /= 255; return (v <= 0.03928) ? v / 12.92 : ((v + 0.055) / 1.055) ^ 2.4 }
+        BEGIN {
+            l  = 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+            cw = 1.05 / (l + 0.05)      # contrast against white
+            cb = (l + 0.05) / 0.05      # contrast against black
+            print (cb > cw) ? "0,0,0" : "255,255,255"
+        }'
+}
+rgb_hex() { printf '#%02x%02x%02x' "$1" "$2" "$3"; }
+
 # ── GTK 3 / GTK 4 settings.ini ──────────────────────────────────────────────
 # Set two keys under [Settings] without clobbering the rest of the file. awk
 # rewrites the section in place (or appends it), so an existing gtk-theme-name a
@@ -140,6 +158,7 @@ if [ -n "$kw" ]; then
         done
         printf '%s' "$o"
     }
+
     if [ -n "$br" ] && [ -n "$bg_" ] && [ -n "$bb" ]; then
         name=SynapseTheme
         wb="$br,$bg_,$bb"
@@ -155,19 +174,102 @@ if [ -n "$kw" ]; then
     if [ -n "$tr" ] && [ -n "$tg" ] && [ -n "$tb" ]; then
         wf="$tr,$tg,$tb"; vf="$wf"; bf="$wf"
     fi
+    sel="$ar,$ag,$ab"
+    selfg=$(ink_for "$ar" "$ag" "$ab")
+
     set_col() { "$kw" --file kdeglobals --group "$1" --key "$2" "$3" 2>/dev/null; }
     set_col General ColorScheme "$name"
     "$kw" --file kdeglobals --group KDE --key widgetStyle "$qt_style" 2>/dev/null
-    set_col "Colors:Window"    BackgroundNormal "$wb"
-    set_col "Colors:Window"    ForegroundNormal "$wf"
-    set_col "Colors:View"      BackgroundNormal "$vb"
-    set_col "Colors:View"      ForegroundNormal "$vf"
-    set_col "Colors:Button"    BackgroundNormal "$btn"
-    set_col "Colors:Button"    ForegroundNormal "$bf"
-    set_col "Colors:Selection" BackgroundNormal "$ar,$ag,$ab"
-    set_col "Colors:Selection" ForegroundNormal "255,255,255"
-    set_col "Colors:Tooltip"   BackgroundNormal "$vb"
-    set_col "Colors:Tooltip"   ForegroundNormal "$vf"
+
+    # The ICON theme is a separate setting from the colours and was never being
+    # answered, so a dark desktop got Dolphin's toolbar in icons drawn for a
+    # light one — dark glyphs on a dark bar, the one part of the window that
+    # stayed obviously untouched by a theme switch. Both halves of Breeze ship
+    # separately, so this only claims one that is actually on disk.
+    for it in "$HOME/.local/share/icons" /usr/share/icons; do
+        if [ "$scheme" = dark ] && [ -d "$it/breeze-dark" ]; then
+            "$kw" --file kdeglobals --group Icons --key Theme breeze-dark 2>/dev/null; break
+        elif [ "$scheme" = light ] && [ -d "$it/breeze" ]; then
+            "$kw" --file kdeglobals --group Icons --key Theme breeze 2>/dev/null; break
+        fi
+    done
+
+    # Header is what KDE 6 paints Dolphin's toolbar and column headings with. It
+    # is a distinct group from Window, so leaving it out did not fall back to the
+    # window colour — it fell back to BREEZE's, which is why the file list could
+    # be Gruvbox brown under a toolbar that was still Breeze grey.
+    for grp in "Colors:Window" "Colors:View" "Colors:Button" \
+               "Colors:Selection" "Colors:Tooltip" "Colors:Header"; do
+        case "$grp" in
+            "Colors:View")      b=$vb;  f=$vf  ;;
+            "Colors:Button")    b=$btn; f=$bf  ;;
+            "Colors:Selection") b=$sel; f=$selfg ;;
+            "Colors:Tooltip")   b=$vb;  f=$vf  ;;
+            *)                  b=$wb;  f=$wf  ;;   # Window and Header
+        esac
+        set_col "$grp" BackgroundNormal "$b"
+        set_col "$grp" ForegroundNormal "$f"
+        # Focus and hover are drawn from these, per group. Unset, KDE uses its
+        # own blue no matter what the desktop accent is — the highlight you get
+        # arrowing through a file list.
+        set_col "$grp" DecorationFocus "$sel"
+        set_col "$grp" DecorationHover "$sel"
+    done
+
+    # ── The scheme as a real FILE ───────────────────────────────────────────
+    # kdeglobals is what KColorScheme actually reads, so the groups above are
+    # what colours Dolphin — but [General] ColorScheme was naming "SynapseTheme"
+    # with no such scheme existing anywhere on disk. A dangling name is not
+    # cosmetic: it is the handle KDE's own appearance settings resolve to decide
+    # which scheme is SELECTED, so the desktop's theme showed up nowhere in
+    # System Settings and any KDE app that re-derives the palette from the
+    # scheme name rather than from kdeglobals found nothing to load and fell
+    # back to Breeze. Writing the file makes the name real, and makes the light
+    # and dark variants a thing KDE can actually see it switch between.
+    cs="$HOME/.local/share/color-schemes"
+    if mkdir -p "$cs" 2>/dev/null; then
+        cat > "$cs/$name.colors.tmp" <<COLORS
+[General]
+Name=$name
+ColorScheme=$name
+
+[Colors:Window]
+BackgroundNormal=$wb
+ForegroundNormal=$wf
+DecorationFocus=$sel
+DecorationHover=$sel
+
+[Colors:View]
+BackgroundNormal=$vb
+ForegroundNormal=$vf
+DecorationFocus=$sel
+DecorationHover=$sel
+
+[Colors:Button]
+BackgroundNormal=$btn
+ForegroundNormal=$bf
+DecorationFocus=$sel
+DecorationHover=$sel
+
+[Colors:Selection]
+BackgroundNormal=$sel
+ForegroundNormal=$selfg
+DecorationFocus=$sel
+DecorationHover=$sel
+
+[Colors:Tooltip]
+BackgroundNormal=$vb
+ForegroundNormal=$vf
+
+[Colors:Header]
+BackgroundNormal=$wb
+ForegroundNormal=$wf
+COLORS
+        # Renamed into place for the same reason theme.json is: a KDE app that
+        # happens to read while this is being written must not see half a scheme.
+        mv -f "$cs/$name.colors.tmp" "$cs/$name.colors" 2>/dev/null \
+            || rm -f "$cs/$name.colors.tmp"
+    fi
 
     # kwriteconfig only writes the file; a Dolphin that is already open reads
     # kdeglobals once at launch and never again, so without this it repaints only
@@ -264,6 +366,121 @@ cat > "$qs.tmp" <<JSON
 }
 JSON
 mv -f "$qs.tmp" "$qs" 2>/dev/null || rm -f "$qs.tmp"
+
+# ── kitty (the default terminal) ─────────────────────────────────────────────
+# Colours only. synui-glass owns background_opacity and dynamic_background_opacity
+# in kitty.conf and rewrites that file with an awk that reprints every line it
+# does not recognise, so the include added here survives an opacity change — and
+# the two never write the same key.
+#
+# The palette goes in a SEPARATE file rather than into kitty.conf, because
+# kitty.conf is a file the user is expected to own and this one is regenerated
+# on every theme switch. The include is appended rather than prepended so the
+# theme actually lands: kitty takes the last value for a key, and a theme that
+# loses to a stale line the user forgot they wrote is a theme switch that
+# silently does nothing.
+#
+# The ANSI SIXTEEN are curated per scheme rather than derived from the accent.
+# They carry MEANING — git prints errors in color1 and additions in color2 — so
+# a Gruvbox desktop must not repaint red as brown. Same reason the clock's
+# yellow and the keyring warning are not themed. What IS themed is everything
+# that describes the terminal rather than its contents: surface, ink, cursor,
+# selection, tab bar, links.
+if command -v kitty >/dev/null 2>&1; then
+    kdir="$HOME/.config/kitty"
+    kcol="$kdir/synui-colors.conf"
+    kconf="$kdir/kitty.conf"
+    if mkdir -p "$kdir" 2>/dev/null; then
+        IFS=, read -r kbr kbg kbb <<<"$bar_base"
+        k_bg=$(rgb_hex "$kbr" "$kbg" "$kbb")
+        k_accent=$(rgb_hex "$ar" "$ag" "$ab")
+        IFS=, read -r kir kig kib <<<"$(ink_for "$ar" "$ag" "$ab")"
+        k_on_accent=$(rgb_hex "$kir" "$kig" "$kib")
+
+        if [ "$scheme" = dark ]; then
+            ansi="color0  #21222c
+color8  #6272a4
+color1  #ff5555
+color9  #ff6e6e
+color2  #50fa7b
+color10 #69ff94
+color3  #f1fa8c
+color11 #ffffa5
+color4  #6272ff
+color12 #8b9bff
+color5  #ff79c6
+color13 #ff92df
+color6  #8be9fd
+color14 #a4ffff
+color7  #f8f8f2
+color15 #ffffff"
+        else
+            # The light set is not the dark one lightened: every one of these has
+            # to read as TEXT on a pale surface, so they are darkened instead.
+            # color7 ("white") is conventionally a light grey, which on a light
+            # background is invisible — here 7 and 15 run dark, and the BRIGHT
+            # half stays more vivid than the normal half rather than lighter,
+            # because lighter is the wrong direction on a pale surface.
+            #
+            # Measured against #C0C0C0, the darkest light base any shipped theme
+            # uses (95's silver; XP's beige is paler and only gains contrast).
+            # The normal half clears 4.5:1 there and the bright half 3.5:1. The
+            # first draft of this palette was a set of mid-tones that looked
+            # right and put color3 at 2.71:1 on silver — yellow on grey, exactly
+            # the pairing that fails.
+            ansi="color0  #21222c
+color8  #55555f
+color1  #9a1717
+color9  #b91c1c
+color2  #0f5b2b
+color10 #126d34
+color3  #704405
+color11 #865206
+color4  #1942b8
+color12 #1d4ed8
+color5  #84178f
+color13 #9f1bac
+color6  #0a566a
+color14 #0c6780
+color7  #3f3f46
+color15 #18181b"
+        fi
+
+        cat > "$kcol.tmp" <<KITTYCOL
+# Generated by synui-apply-theme — do not edit; a theme switch overwrites it.
+# Included from kitty.conf. Opacity is NOT here: synui-glass owns that.
+background            $k_bg
+foreground            $fg
+cursor                $k_accent
+cursor_text_color     $k_on_accent
+selection_background  $k_accent
+selection_foreground  $k_on_accent
+url_color             $k_accent
+active_tab_background   $k_accent
+active_tab_foreground   $k_on_accent
+inactive_tab_background $k_bg
+inactive_tab_foreground $fg
+active_border_color     $k_accent
+inactive_border_color   $k_bg
+
+$ansi
+KITTYCOL
+        mv -f "$kcol.tmp" "$kcol" 2>/dev/null || rm -f "$kcol.tmp"
+
+        # kitty ships no default kitty.conf — it runs on built-in defaults — so
+        # this creates the file when it is absent for the same reason
+        # synui-glass does, or the palette would be written and never read.
+        [ -e "$kconf" ] || printf '# Created by synui-apply-theme.\n' > "$kconf"
+        if [ -f "$kconf" ] && ! grep -q '^[[:space:]]*include[[:space:]]\+synui-colors\.conf' "$kconf"; then
+            printf '\n# Desktop theme colours, regenerated by synui-apply-theme.\ninclude synui-colors.conf\n' >> "$kconf"
+        fi
+
+        # kitty re-reads its config on SIGUSR1, so a running terminal recolours
+        # in place — the equivalent of waybar's SIGUSR2 and Dolphin's D-Bus
+        # nudge. Unlike opacity, colours have no "must be set at startup" caveat.
+        pkill -USR1 -x kitty 2>/dev/null
+    fi
+fi
 
 # ── Firefox ──────────────────────────────────────────────────────────────────
 # The dark/light half of Firefox rides on the gsettings above. The *tint* of the
