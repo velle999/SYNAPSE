@@ -177,8 +177,29 @@ if [ -n "$kw" ]; then
     sel="$ar,$ag,$ab"
     selfg=$(ink_for "$ar" "$ag" "$ab")
 
+    # Blend two "r,g,b" triples. Every derived role below is a blend of a colour
+    # the theme gave us with another one it gave us, so nothing here can drift
+    # away from the palette the way a hardcoded grey does.
+    mix() {  # mix <"r,g,b"> <"r,g,b"> <percent of the first> → "r,g,b"
+        awk -v a="$1" -v b="$2" -v p="$3" 'BEGIN {
+            split(a, x, ","); split(b, y, ",")
+            printf "%d,%d,%d", (x[1]*p + y[1]*(100-p)) / 100,
+                               (x[2]*p + y[2]*(100-p)) / 100,
+                               (x[3]*p + y[3]*(100-p)) / 100
+        }'
+    }
+
+    # The three semantic foregrounds carry MEANING — a failed operation, a
+    # warning, a success — so like kitty's ANSI sixteen they are curated per
+    # scheme rather than derived from an accent that might be any hue at all.
+    # Breeze's values, lightened for dark so they clear their background.
+    if [ "$scheme" = dark ]; then
+        neg="237,102,109"; neu="246,180,89"; pos="119,209,138"
+    else
+        neg="191,3,3";     neu="176,128,0";  pos="0,110,40"
+    fi
+
     set_col() { "$kw" --file kdeglobals --group "$1" --key "$2" "$3" 2>/dev/null; }
-    set_col General ColorScheme "$name"
     "$kw" --file kdeglobals --group KDE --key widgetStyle "$qt_style" 2>/dev/null
 
     # The ICON theme is a separate setting from the colours and was never being
@@ -194,6 +215,32 @@ if [ -n "$kw" ]; then
         fi
     done
 
+    # ── The scheme as a real FILE ───────────────────────────────────────────
+    # kdeglobals is what KColorScheme actually reads, so the groups below are
+    # what colours Dolphin — but [General] ColorScheme was naming "SynapseTheme"
+    # with no such scheme existing anywhere on disk. A dangling name is not
+    # cosmetic: it is the handle KDE's own appearance settings resolve to decide
+    # which scheme is SELECTED, so the desktop's theme showed up nowhere in
+    # System Settings and any KDE app that re-derives the palette from the
+    # scheme name rather than from kdeglobals found nothing to load and fell
+    # back to Breeze. Writing the file makes the name real, and makes the light
+    # and dark variants a thing KDE can actually see it switch between.
+    #
+    # It is emitted from the SAME loop that writes kdeglobals, one group at a
+    # time, because these are two encodings of one palette: a scheme file that
+    # has drifted from kdeglobals is a "reset to the theme" in System Settings
+    # that visibly changes the colours. cs= empty means no writable directory,
+    # and every append below is then skipped.
+    cs="$HOME/.local/share/color-schemes"
+    mkdir -p "$cs" 2>/dev/null || cs=
+    csf=
+    if [ -n "$cs" ]; then
+        csf="$cs/$name.colors.tmp"
+        printf '[General]\nName=%s\nColorScheme=%s\n' "$name" "$name" > "$csf" \
+            || csf=
+    fi
+    emit() { [ -n "$csf" ] && printf '%s=%s\n' "$1" "$2" >> "$csf"; return 0; }
+
     # Header is what KDE 6 paints Dolphin's toolbar and column headings with. It
     # is a distinct group from Window, so leaving it out did not fall back to the
     # window colour — it fell back to BREEZE's, which is why the file list could
@@ -207,74 +254,94 @@ if [ -n "$kw" ]; then
             "Colors:Tooltip")   b=$vb;  f=$vf  ;;
             *)                  b=$wb;  f=$wf  ;;   # Window and Header
         esac
-        set_col "$grp" BackgroundNormal "$b"
-        set_col "$grp" ForegroundNormal "$f"
+        # Both encodings of the same role, so they cannot disagree.
+        put() { set_col "$grp" "$1" "$2"; emit "$1" "$2"; }
+
+        [ -n "$csf" ] && printf '\n[%s]\n' "$grp" >> "$csf"
+
+        put BackgroundNormal "$b"
+        put ForegroundNormal "$f"
         # Focus and hover are drawn from these, per group. Unset, KDE uses its
         # own blue no matter what the desktop accent is — the highlight you get
         # arrowing through a file list.
-        set_col "$grp" DecorationFocus "$sel"
-        set_col "$grp" DecorationHover "$sel"
+        put DecorationFocus "$sel"
+        put DecorationHover "$sel"
+
+        # ── The rest of the roles ───────────────────────────────────────────
+        # Normal was the only pair being written, and KColorScheme does NOT fall
+        # back to it for the others — an unset role takes Breeze's LIGHT default.
+        # On a dark theme that is text you cannot read: BackgroundAlternate is a
+        # near-white stripe on every other row of Dolphin's list, under
+        # foreground text still drawn in the theme's near-white. Inactive text
+        # (the status line's item count, disabled entries, the Places headings)
+        # came out mid-grey on near-black for the same reason. That is the "hard
+        # to see text on dark themes" — not ForegroundNormal, which was already
+        # the theme's own near-white.
+        put BackgroundAlternate "$(mix "$b" "$f" 94)"
+        put ForegroundInactive  "$(mix "$f" "$b" 62)"
+        put ForegroundActive    "$sel"
+        put ForegroundLink      "$sel"
+        put ForegroundVisited   "$(mix "$sel" "$b" 70)"
+        put ForegroundNegative  "$neg"
+        put ForegroundNeutral   "$neu"
+        put ForegroundPositive  "$pos"
     done
 
-    # ── The scheme as a real FILE ───────────────────────────────────────────
-    # kdeglobals is what KColorScheme actually reads, so the groups above are
-    # what colours Dolphin — but [General] ColorScheme was naming "SynapseTheme"
-    # with no such scheme existing anywhere on disk. A dangling name is not
-    # cosmetic: it is the handle KDE's own appearance settings resolve to decide
-    # which scheme is SELECTED, so the desktop's theme showed up nowhere in
-    # System Settings and any KDE app that re-derives the palette from the
-    # scheme name rather than from kdeglobals found nothing to load and fell
-    # back to Breeze. Writing the file makes the name real, and makes the light
-    # and dark variants a thing KDE can actually see it switch between.
-    cs="$HOME/.local/share/color-schemes"
-    if mkdir -p "$cs" 2>/dev/null; then
-        cat > "$cs/$name.colors.tmp" <<COLORS
-[General]
-Name=$name
-ColorScheme=$name
-
-[Colors:Window]
-BackgroundNormal=$wb
-ForegroundNormal=$wf
-DecorationFocus=$sel
-DecorationHover=$sel
-
-[Colors:View]
-BackgroundNormal=$vb
-ForegroundNormal=$vf
-DecorationFocus=$sel
-DecorationHover=$sel
-
-[Colors:Button]
-BackgroundNormal=$btn
-ForegroundNormal=$bf
-DecorationFocus=$sel
-DecorationHover=$sel
-
-[Colors:Selection]
-BackgroundNormal=$sel
-ForegroundNormal=$selfg
-DecorationFocus=$sel
-DecorationHover=$sel
-
-[Colors:Tooltip]
-BackgroundNormal=$vb
-ForegroundNormal=$vf
-
-[Colors:Header]
-BackgroundNormal=$wb
-ForegroundNormal=$wf
-COLORS
-        # Renamed into place for the same reason theme.json is: a KDE app that
-        # happens to read while this is being written must not see half a scheme.
-        mv -f "$cs/$name.colors.tmp" "$cs/$name.colors" 2>/dev/null \
-            || rm -f "$cs/$name.colors.tmp"
+    # Renamed into place for the same reason theme.json is: a KDE app that
+    # happens to read while this is being written must not see half a scheme.
+    if [ -n "$csf" ]; then
+        mv -f "$csf" "$cs/$name.colors" 2>/dev/null || rm -f "$csf"
     fi
 
-    # kwriteconfig only writes the file; a Dolphin that is already open reads
-    # kdeglobals once at launch and never again, so without this it repaints only
-    # on next start. Nudge every running KDE app to re-read: PaletteChanged(0) for
-    # the colours, StyleChanged(2) for the widget style. Best effort.
+    # ── Make a RUNNING app re-read ──────────────────────────────────────────
+    # kwriteconfig only writes the file; an already-open Dolphin reads kdeglobals
+    # at launch and never again, so without a nudge it repaints on next start.
+    #
+    # The nudge used to be a dbus-send of org.kde.KGlobalSettings.notifyChange,
+    # which is a KDE 4/KF5 interface: KGlobalSettings was REMOVED in KF6 and the
+    # string does not appear anywhere in the KF6 libraries Dolphin links
+    # (libKF6ColorScheme, libKF6ConfigWidgets, libKF6ConfigCore) — it was a
+    # signal into an empty room. What KF6 listens on is KConfigWatcher, and the
+    # way to raise it from a script is kwriteconfig's own --notify.
+    #
+    # ColorScheme is written LAST so that everything a listener would re-read is
+    # already on disk — colour keys, widget style, and the scheme file — before
+    # anything is told to look. An app that re-reads on the signal therefore
+    # cannot catch a half-applied palette.
+    set_col General ColorScheme "$name"
+
+    # --notify raises it through KConfig itself, but only for keys this write
+    # actually DIRTIED: re-applying the theme you are already on changes no
+    # value, so on its own this is silent exactly when a re-apply is what you
+    # asked for. It is still worth doing for the first switch of a session.
+    "$kw" --file kdeglobals --group General --key ColorScheme --notify "$name" \
+        2>/dev/null
+
+    # So also emit the signal directly, which does not care whether anything was
+    # dirty. This is the KF6 contract KConfigWatcher connects to: interface
+    # org.kde.kconfig.notify, signal ConfigChanged, object path "/" + the config
+    # file's name, argument a{sas} — group → the keys that changed. (Verified
+    # against libKF6ConfigCore; the strings are QStringLiteral, so they are
+    # UTF-16 in the binary and a plain `strings` will not show them.) dbus-send
+    # cannot build a nested container, hence gdbus, which ships with glib2.
+    if command -v gdbus >/dev/null 2>&1; then
+        gdbus emit --session --object-path /kdeglobals \
+            --signal org.kde.kconfig.notify.ConfigChanged \
+            "@a{sas} {'General': ['ColorScheme'],
+                      'Colors:Window': ['BackgroundNormal', 'ForegroundNormal'],
+                      'Colors:View': ['BackgroundNormal', 'ForegroundNormal'],
+                      'Colors:Button': ['BackgroundNormal', 'ForegroundNormal'],
+                      'Colors:Selection': ['BackgroundNormal', 'ForegroundNormal'],
+                      'Colors:Tooltip': ['BackgroundNormal', 'ForegroundNormal'],
+                      'Colors:Header': ['BackgroundNormal', 'ForegroundNormal'],
+                      'Icons': ['Theme'],
+                      'KDE': ['widgetStyle']}" 2>/dev/null
+    fi
+
+    # And the KDE 4 / KF5 interface, for anything still built against it.
+    # KGlobalSettings was REMOVED in KF6 — the string appears nowhere in the KF6
+    # libraries Dolphin links — so on this desktop it is a signal into an empty
+    # room, kept only because it costs nothing and an old app may still be there.
     if command -v dbus-send >/dev/null 2>&1; then
         for t in 0 2; do
             dbus-send --session --type=signal /KGlobalSettings \

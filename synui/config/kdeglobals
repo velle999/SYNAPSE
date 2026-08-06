@@ -37,40 +37,91 @@ ColorScheme=SynapseTheme
 [KDE]
 widgetStyle=Fusion
 
+# Header is a distinct group from Window — left out, Dolphin's toolbar and
+# column headings fall back to Breeze rather than to the window colour. And
+# Normal is not a fallback for the other roles either: an unset
+# BackgroundAlternate is a near-white Breeze stripe on every other row of a
+# dark file list, under text still drawn in the theme's near-white.
 [Colors:Window]
 BackgroundNormal=30,30,36
 ForegroundNormal=235,235,242
 DecorationFocus=255,41,109
 DecorationHover=255,41,109
+BackgroundAlternate=42,42,48
+ForegroundInactive=157,157,163
+ForegroundActive=255,41,109
+ForegroundLink=255,41,109
+ForegroundVisited=187,37,87
+ForegroundNegative=237,102,109
+ForegroundNeutral=246,180,89
+ForegroundPositive=119,209,138
 
 [Colors:View]
 BackgroundNormal=24,24,29
 ForegroundNormal=235,235,242
 DecorationFocus=255,41,109
 DecorationHover=255,41,109
+BackgroundAlternate=36,36,41
+ForegroundInactive=154,154,161
+ForegroundActive=255,41,109
+ForegroundLink=255,41,109
+ForegroundVisited=185,35,85
+ForegroundNegative=237,102,109
+ForegroundNeutral=246,180,89
+ForegroundPositive=119,209,138
 
 [Colors:Button]
 BackgroundNormal=37,37,45
 ForegroundNormal=235,235,242
 DecorationFocus=255,41,109
 DecorationHover=255,41,109
+BackgroundAlternate=48,48,56
+ForegroundInactive=159,159,167
+ForegroundActive=255,41,109
+ForegroundLink=255,41,109
+ForegroundVisited=189,39,89
+ForegroundNegative=237,102,109
+ForegroundNeutral=246,180,89
+ForegroundPositive=119,209,138
 
 [Colors:Selection]
 BackgroundNormal=255,41,109
 ForegroundNormal=0,0,0
 DecorationFocus=255,41,109
 DecorationHover=255,41,109
+BackgroundAlternate=239,38,102
+ForegroundInactive=96,15,41
+ForegroundActive=255,41,109
+ForegroundLink=255,41,109
+ForegroundVisited=255,41,109
+ForegroundNegative=237,102,109
+ForegroundNeutral=246,180,89
+ForegroundPositive=119,209,138
 
 [Colors:Tooltip]
 BackgroundNormal=24,24,29
 ForegroundNormal=235,235,242
 DecorationFocus=255,41,109
 DecorationHover=255,41,109
+BackgroundAlternate=36,36,41
+ForegroundInactive=154,154,161
+ForegroundActive=255,41,109
+ForegroundLink=255,41,109
+ForegroundVisited=185,35,85
+ForegroundNegative=237,102,109
+ForegroundNeutral=246,180,89
+ForegroundPositive=119,209,138
 
-# Header is a distinct group from Window — left out, Dolphin's toolbar and
-# column headings fall back to Breeze rather than to the window colour.
 [Colors:Header]
 BackgroundNormal=30,30,36
 ForegroundNormal=235,235,242
 DecorationFocus=255,41,109
 DecorationHover=255,41,109
+BackgroundAlternate=42,42,48
+ForegroundInactive=157,157,163
+ForegroundActive=255,41,109
+ForegroundLink=255,41,109
+ForegroundVisited=187,37,87
+ForegroundNegative=237,102,109
+ForegroundNeutral=246,180,89
+ForegroundPositive=119,209,138
