@@ -20,7 +20,7 @@ Button {
         width: parent.width
         height: parent.height
         border.width: 0
-        border.color: root.isToggled ? Config.colors.accent : Config.colors.outline
+        border.color: root.isToggled ? Config.colors.accent : Config.barOutline
         color: "transparent"
         opacity: mouse.hovered ? 0.4 : 1
         radius: 0
@@ -33,11 +33,12 @@ Button {
             verticalAlignment: Text.AlignVCenter
             font.pixelSize: root.isToggled ? 30 : 18
             text: root.isToggled ? root.toggledIconFontValue : root.iconFontValue
-            // The idle glyph was `outline` — the near-black used to draw a 1px
-            // edge, not to be read as a symbol. On the translucent bar it made
-            // the launcher button invisible until you had already opened it.
-            // See taskbar/ClockWidget.qml.
-            color: root.isToggled ? Config.colors.accent : Config.colors.textLight
+            // The idle glyph is drawn with `outline` — a colour meant for a 1px
+            // edge, not to be read as a symbol — so it gets the bar's ink like
+            // every other glyph up here. barText, not textLight: on the pale
+            // wallpapers this shell ships, light ink is the invisible one.
+            // See `barText` in Config.qml.
+            color: root.isToggled ? Config.colors.accent : Config.barText
         }
     }
     HoverHandler {

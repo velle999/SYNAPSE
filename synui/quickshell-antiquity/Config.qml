@@ -67,7 +67,7 @@ Singleton {
             "textLight": "#d0daed",
             "outline": "#121212",
             "outlineGradientFade": "#161616",
-            "defaultWallpaperPath": "",
+            "defaultWallpaperPath": "/usr/share/backgrounds/antiquity-carnation-collage.jpg",
             "danger": "#fc5870",
             "warning": "#fcd37b",
             "cbodyBackground": "#fccf8a",
@@ -101,6 +101,7 @@ Singleton {
             "text": "#121212",
             "textLight": "#b6aae2",
             "outline": "#121212",
+            "defaultWallpaperPath": "/usr/share/backgrounds/antiquity-georges-riom-collage.jpg",
             "danger": "#fc5870",
             "warning": "#fcd37b",
             "cbodyBackground": "#d2dddc",
@@ -134,6 +135,7 @@ Singleton {
             "text": "#121212",
             "textLight": "#d0daed",
             "outline": "#141612",
+            "defaultWallpaperPath": "/usr/share/backgrounds/antiquity-georges-riom-collage.jpg",
             "danger": "#fc5870",
             "warning": "#fcd37b",
             "cbodyBackground": "#f2efb3",
@@ -167,6 +169,12 @@ Singleton {
             "text": "#121212",
             "textLight": "#d0daed",
             "outline": "#0c0b0c",
+            "defaultWallpaperPath": "/usr/share/backgrounds/antiquity-the-blackboard.png",
+            // The one palette whose taskbar needs light ink — see `barText`
+            // below. Its glassTintColor is a DARK purple, unlike the other
+            // four, so `text` (#121212) lands at 1.10 contrast on the bar.
+            "barText": "#d0daed",
+            "barOutline": "#8f86a8",
             "danger": "#eda1a6",
             "warning": "#fcd37b",
             "cbodyBackground": "#f9997f",
@@ -200,6 +208,7 @@ Singleton {
             "text": "#eaeaea",
             "textLight": "#f7f8f9",
             "outline": "#e3e7e8",
+            "defaultWallpaperPath": "/usr/share/backgrounds/antiquity-the-blackboard.png",
             "danger": "#aa3a3a",
             "warning": "#c6c479",
             "cbodyBackground": "#181818",
@@ -226,6 +235,52 @@ Singleton {
     }
 
     /*
+     * THE TASKBAR'S INK — and why it is not simply `text` or simply `textLight`.
+     *
+     * The taskbar is `glassTintColor` at 0.2 alpha (Bar.qml), which means it is
+     * EIGHTY PERCENT WALLPAPER. Its legibility is therefore not a property of
+     * the palette at all; it is a property of the palette paired with whatever
+     * is on the desktop behind it. Measured over the three wallpapers that ship
+     * (WCAG ratio against the composited strip, sampled where the bar sits):
+     *
+     *              carnation   georges-riom   blackboard
+     *   `text`       6.1–9.2      4.4–7.0       1.1–1.8
+     *   `textLight`  1.0–2.2      1.4–3.0       5.5–12.2
+     *
+     * Neither is right. Whichever one is hardcoded, the other two-thirds of the
+     * shipped wallpapers get illegible text — and 1.03 (eris on carnation) is
+     * not "hard to read", it is a blank strip.
+     *
+     * So the pairing is what gets fixed, not the colour: `defaultWallpaperPath`
+     * above — a field upstream declared and left empty in every palette — now
+     * names the wallpaper each palette was drawn against, and applyTheme() puts
+     * it on screen. Every palette then sits on a known background and upstream's
+     * own `text`/`outline` are correct again, which is what these two fall back
+     * to.
+     *
+     * `eros` is the exception and the reason a fallback exists at all: its
+     * glassTintColor is #3c2d66, a DARK purple, so its bar reads dark on any
+     * wallpaper and dark ink cannot work. It overrides both keys. `hades` needs
+     * no override for the opposite reason — its `text` is already #eaeaea,
+     * because that palette was drawn for a dark bar to begin with.
+     *
+     * NOT a luma calculation. The number that decides this is the luma of the
+     * composited strip, and QML cannot sample the wallpaper; deriving it from
+     * `glassTintColor` alone would be deriving it from the 20% and ignoring the
+     * 80%. Two declared keys are honest about that, and a palette added by hand
+     * gets upstream's default rather than a wrong guess.
+     *
+     * The residual hole, accepted deliberately: Super+W can still put a pale
+     * wallpaper under `hades`, or a dark one under `helios`, and nothing here
+     * notices. Closing that means the bar owning its own background — a much
+     * higher tint alpha — which is a different look from the one upstream drew.
+     */
+    readonly property color barText: colors.barText !== undefined ? colors.barText
+                                                                  : colors.text
+    readonly property color barOutline: colors.barOutline !== undefined ? colors.barOutline
+                                                                        : colors.outline
+
+    /*
      * PICKING A THEME, and carrying it past this shell's own windows.
      *
      * `colors` above is a live binding on `settings.currentTheme`, so setting
@@ -248,6 +303,11 @@ Singleton {
      * somebody takes Config.qml's invitation to add a scheme of their own —
      * they would get a light palette with dark app windows and no clue why.
      * Rec. 601 luma of `base` against the usual midpoint answers it instead.
+     *
+     * It also sets the palette's wallpaper (applyWallpaper below). That is not
+     * decoration: this shell's taskbar is 20% tint over the desktop, so the
+     * wallpaper is most of the bar's colour and picking one without the other
+     * is what made the bar illegible in the first place — see `barText` above.
      *
      * NOT the compositor's own borders and titlebars: synui has no "set theme
      * <name>" dispatch, only a `theme` action that opens its picker, and those
@@ -272,6 +332,59 @@ Singleton {
             // when omitted, but the base/text pair is positional and cannot be
             // reached without it, so it is passed explicitly.
             .concat(c255(accent)).concat(c255(base)).concat(c255(text)));
+
+        applyWallpaper(name);
+    }
+
+    /*
+     * Put a palette's own wallpaper on the desktop.
+     *
+     * Not a nicety — see the `barText` note above. The taskbar is 80% wallpaper,
+     * so a palette and the picture behind it are ONE choice, and this is the leg
+     * that makes `defaultWallpaperPath` mean something instead of sitting empty
+     * the way upstream left it.
+     *
+     * `synctl dispatch wallpaper <path>` rather than writing wallpaper.state and
+     * hoping: synui owns that file, holds the decoded buffer per output, and has
+     * to stop linux-wallpaperengine if a Workshop wallpaper is up — none of
+     * which a JSON write from out here would do. The compositor refuses a path
+     * it cannot read and leaves the current wallpaper alone, so a box without
+     * the wallpapers installed loses the picture, not the desktop.
+     *
+     * An empty path is a palette that declines to bring one. That is the honest
+     * default for a hand-added scheme: whatever is on screen stays.
+     */
+    function applyWallpaper(name: string): void {
+        const wp = themes[name] != null ? themes[name].defaultWallpaperPath : "";
+        if (!wp)
+            return;
+        Quickshell.execDetached(["synctl", "dispatch", "wallpaper", wp]);
+    }
+
+    /*
+     * The FIRST Antiquity login, which the theme picker cannot reach.
+     *
+     * A fresh install has never opened the picker, so applyTheme() has never
+     * run: `currentTheme` is the declared default (helios) and the wallpaper is
+     * still SYNAPSE's own dark one. That is precisely the bad pairing — helios's
+     * dark ink on a bar composited over a dark picture — and it would be the
+     * out-of-the-box look for everyone who switches `bar_shell` and nothing
+     * else. So the pairing is established once, here, rather than waiting for
+     * the user to go and pick the theme they already have.
+     *
+     * Once EVER, tracked in settings.json. Doing it at every startup would
+     * silently revert a wallpaper chosen with Super+W on the next login, which
+     * is the sort of thing that reads as the picker being broken.
+     *
+     * Driven from the FileView's `loaded`, not Component.onCompleted: the
+     * singleton completes before the file has been read, so the flag would
+     * still be at its default `false` and the seed would fire on every start.
+     */
+    function seedWallpaperOnce(): void {
+        if (settings.wallpaperSeeded)
+            return;
+        settings.wallpaperSeeded = true;
+        applyWallpaper(settings.currentTheme);
     }
 
     enum SystemPopup {
@@ -333,21 +446,31 @@ Singleton {
         onTriggered: Config.fetchWeatherData()
     }
 
+    /*
+     * A tidy-up, NOT a bug fix — recorded as such because it looks like one.
+     *
+     * Upstream's un-favourite branch was `delete favoriteApps[appName]; return;`
+     * — an in-place mutation of a JsonAdapter `property var` with no assignment
+     * after it, which by the usual QML rules notifies nobody and never reaches
+     * disk. It was A/B tested headless against this version anyway, and the two
+     * are indistinguishable: the binding re-evaluates and favoriteapps.json ends
+     * up correct either way. Quickshell's adapter tracks more than a plain
+     * property does. Do not "re-fix" this expecting a behaviour change.
+     *
+     * What is kept is the shape: one copy, both branches, one assignment at the
+     * end, and no leading `updated[appName] = {}` placeholder write. It does not
+     * lean on that adapter behaviour, which is the only reason to prefer it.
+     */
     function toggleFavoriteApp(appName: string, exec: list<string>, iconPath: string) {
-        let updated = Object.assign({}, favoriteApps);
-        if (favoriteApps[appName] != null) {
-            delete favoriteApps[appName];
-            return;
-        }
-        if (!favoriteApps[appName]) {
-            updated[appName] = {};
-            favoriteApps = updated;
-        }
-        updated[appName] = {
-            "name": appName,
-            "execCommand": exec,
-            "icon": iconPath
-        };
+        const updated = Object.assign({}, favoriteApps);
+        if (updated[appName] != null)
+            delete updated[appName];
+        else
+            updated[appName] = {
+                "name": appName,
+                "execCommand": exec,
+                "icon": iconPath
+            };
         favoriteApps = updated;
     }
     property alias favoriteApps: favoriteAppsAdapter.apps
@@ -470,12 +593,21 @@ Singleton {
             }
         }
 
+        // Establish the theme/wallpaper pairing on a first-ever start. Here and
+        // not in Component.onCompleted, which runs before this file is read —
+        // see seedWallpaperOnce().
+        onLoaded: root.seedWallpaperOnce()
+
         JsonAdapter {
             id: settingsJsonAdapter
             property JsonObject settings: JsonObject {
                 property string version: "0.1"
                 property bool militaryTimeClockFormat: true
                 property string currentTheme: "helios"
+                // Set once, the first time this shell ever starts, so the theme
+                // brings its wallpaper without stamping on a Super+W choice on
+                // every subsequent login. See seedWallpaperOnce().
+                property bool wallpaperSeeded: false
                 property int defaultWindowRadius: 12
                 property bool appLauncherBackground: true
                 property JsonObject openWeatherMap: JsonObject {

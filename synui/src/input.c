@@ -753,7 +753,16 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "displays") == 0) {
         dispcfg_toggle(s);
     } else if (strcmp(action, "wallpaper") == 0) {
-        wppick_toggle(s);
+        /* Bare (Super+W, the control panel row) opens the picker. With a path
+         * it sets that wallpaper outright, which is what the Antiquity theme
+         * picker dispatches so a palette can bring its own wallpaper — its bar
+         * is 80% wallpaper by construction, so the two are one choice.
+         *
+         * The arg is a path and nothing else: no "default"/"matrix"/"none"
+         * tokens. Those are picker rows, and a second parser for them here is
+         * a copy of wppick's row table that would drift out of step with it. */
+        if (arg && *arg) wppick_set_path(s, arg);
+        else             wppick_toggle(s);
     } else if (strcmp(action, "cursor") == 0) {
         curpick_toggle(s);
     } else if (strcmp(action, "cursor_reload") == 0) {

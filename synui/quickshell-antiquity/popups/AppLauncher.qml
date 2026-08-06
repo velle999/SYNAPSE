@@ -270,7 +270,20 @@ PanelWindow {
                                         Text {
                                             anchors.fill: parent
                                             font.family: iconFont.name
-                                            color: Config.favoriteApps[modelData.name] != null || favoritesHovered.hovered ? Config.colors.accent : Config.colors.text
+                                            // THE ONLY WAY TO ADD A FAVOURITE is
+                                            // this star, and its un-favourited
+                                            // state was `text` — #121212 in four
+                                            // of the five palettes, on an
+                                            // appLauncherBackground of #252525.
+                                            // 1.3 contrast: the control was there
+                                            // and invisible, so Favorite Apps
+                                            // looked like a menu that was simply
+                                            // broken and empty. Unlike the taskbar
+                                            // (see Config.qml `barText`) this
+                                            // background is a solid dark panel and
+                                            // no wallpaper shows through it, so
+                                            // light ink is right unconditionally.
+                                            color: Config.favoriteApps[modelData.name] != null || favoritesHovered.hovered ? Config.colors.accent : Config.colors.textLight
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             font.weight: 700

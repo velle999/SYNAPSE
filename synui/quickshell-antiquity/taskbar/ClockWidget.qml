@@ -2,25 +2,21 @@ import QtQuick
 import ".."
 
 /*
- * `textLight`, not `text` — the one-line change that makes the bar readable.
+ * `Config.barText`, not `Config.colors.text` and not `textLight` — the taskbar
+ * is 80% wallpaper, so its ink is chosen per palette against the wallpaper that
+ * palette brings with it. The full reasoning, with the measured contrast
+ * ratios, is on `barText` in Config.qml.
  *
- * In every palette, `text` is the colour for glyphs drawn ON an accent fill:
- * the "T" on a theme swatch, a numeral on a gold chip. Four of the five themes
- * set it to near-black (#121212) for exactly that job. The taskbar is not an
- * accent fill — it is `glassTintColor` at 20% over the wallpaper — so painting
- * its clock, its workspace numerals and its launcher glyph with `text` put
- * near-black on a translucent strip. Upstream got away with it because
- * linux-antiquity ships pale botanical wallpapers and the strip reads light;
- * over SynapseOS's dark default the whole bar was very nearly invisible, and on
- * `eros` (glass tint #3c2d66) it disappeared outright.
- *
- * `textLight` is light in all five palettes and is what the rest of the shell
- * already uses for text on dark chrome. `accent` still marks the active
- * desktop and hover, so nothing about the highlight changes.
+ * For four of the five palettes barText IS `text`, which is what upstream had
+ * here. 0.1.0-272 changed this line to `textLight` on the strength of one
+ * palette (`eros`, whose glass tint is dark) and one wallpaper (SYNAPSE's dark
+ * default, which is what the headless rig showed) — and that broke the two pale
+ * botanical wallpapers this shell actually ships with, where light ink lands
+ * between 1.0 and 2.2 contrast. `eros` now carries its own override instead.
  */
 Text {
     text: Time.time
-    color: Config.colors.textLight
+    color: Config.barText
     font.pixelSize: 11
     font.family: Config.fontMono
     horizontalAlignment: Text.AlignHCenter

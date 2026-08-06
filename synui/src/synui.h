@@ -4753,6 +4753,9 @@ const char *wppick_scope_output(syn_server_t *s);
 const char *wppick_scope_label(syn_server_t *s);
 void wppick_hide(syn_server_t *s);
 void wppick_toggle(syn_server_t *s);
+/* Set the wallpaper to a path with no picker: `dispatch wallpaper <path>`.
+ * Global scope only, and persisted — see the comment on the definition. */
+void wppick_set_path(syn_server_t *s, const char *path);
 int  wppick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* …and the pointer, per the panel pointer contract at the top of this file. */
 int  wppick_motion(syn_server_t *s, double lx, double ly);

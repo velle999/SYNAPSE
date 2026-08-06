@@ -57,7 +57,10 @@ Scope {
                     border.width: 1
                     bottomLeftRadius: 6
                     bottomRightRadius: 6
-                    border.color: Config.colors.outline
+                    // barOutline: this 1px edge is on the translucent strip,
+                    // so it follows the bar's ink rather than the palette's
+                    // panel outline. See `barText` in Config.qml.
+                    border.color: Config.barOutline
                 }
 
                 /*=== ===================================== ===*/

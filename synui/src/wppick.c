@@ -41,6 +41,7 @@
 
 #define _GNU_SOURCE
 #include <dirent.h>
+#include <errno.h>
 #include <signal.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -479,6 +480,66 @@ static void wppick_apply(syn_server_t *s, int idx, bool commit)
      * or abandoned with Esc — used to persist here on every keypress, so the
      * last row the highlight happened to cross became the saved wallpaper. */
     if (commit) wallpaper_state_save(s);
+}
+
+/*
+ * Set the wallpaper to an explicit path, without opening the picker.
+ *
+ * What `synctl dispatch wallpaper /path/to.jpg` runs, and the reason the
+ * `wallpaper` action now looks at its argument at all. The caller that needs it
+ * is the Antiquity shell's theme picker: each of its palettes names the
+ * wallpaper it was drawn against, and a palette that cannot actually put that
+ * wallpaper on screen is only half a theme — its taskbar is glassTintColor at
+ * 20% over whatever is behind it, so the wallpaper IS most of the bar's colour
+ * and the two cannot be chosen independently.
+ *
+ * Deliberately global-scope only. The picker can target one monitor; a theme
+ * cannot sensibly say "and only on DP-1", and inventing a scope argument here
+ * would be a second, half-implemented copy of a UI that already exists.
+ *
+ * Everything below is wppick_apply's own committed-pick path for a browsed
+ * image, in the same order and for the same reasons — the engine has to be
+ * stopped before anything is painted under it, and the per-output overrides
+ * have to go or a monitor with its own picture ignores the change.
+ */
+void wppick_set_path(syn_server_t *s, const char *path)
+{
+    if (!path || !*path) return;
+
+    /* Refuse a path that is not there, rather than "setting" it. wallpaper.c
+     * treats an undecodable image as no wallpaper and paints bg_color, so
+     * without this check a theme picker on a box where the wallpapers were
+     * never installed would answer "apply theme" with a blank desktop — and
+     * persist that, since wallpaper.state overrides synuirc. */
+    if (access(path, R_OK) != 0) {
+        wlr_log(WLR_ERROR, "synui: wallpaper '%s': %s — leaving the current "
+                "one alone", path, strerror(errno));
+        return;
+    }
+
+    syn_wallpaper_src_t was = s->config.wallpaper_src;
+    char live_we[24];
+    wppick_active_we(live_we, sizeof(live_we), NULL);
+    if (live_we[0] || was == SYN_WP_SRC_WPENGINE)
+        synui_spawn("synui-wpengine off");
+
+    wallpaper_output_clear(&s->config, NULL);
+
+    s->config.wallpaper_src = SYN_WP_SRC_IMAGE;
+    snprintf(s->config.wallpaper, sizeof(s->config.wallpaper), "%s", path);
+
+    wallpaper_reload(s);
+
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        wlr_output_schedule_frame(o->wlr_output);
+
+    /* Persisted, unlike a preview: this arrives only from a deliberate act
+     * (picking a theme), so it is exactly the "most recent explicit intent"
+     * that wallpaper.state is for. */
+    wallpaper_state_save(s);
+
+    wlr_log(WLR_INFO, "synui: wallpaper set to '%s'", path);
 }
 
 /* Does the current scope have a Workshop wallpaper on screen right now?
