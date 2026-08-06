@@ -3087,6 +3087,25 @@ effects           = off
 # effect_curvature  = 0.25
 # effect_aberration = 0.40
 # effect_glitch     = 0.60
+
+# ── Lock screen (Super+L) ──────────────────────────────────
+# Offer the fingerprint reader beside the password. Both ways in are live at
+# once, so you can type your password over a reader that is still waiting, and
+# whichever answers first unlocks.
+#
+# On costs a machine WITHOUT a reader nothing: the helper is told there is no
+# device, the lock stops asking and draws nothing. So this is not a "do I have
+# one" switch — that is detected — it is for turning a working reader OFF.
+#
+# Needs the fprintd package (an optdepend) and at least one ENROLLED finger.
+# Run the enroll as yourself, not root — prints are stored per account:
+#   sudo pacman -S fprintd
+#   fprintd-enroll        # swipe until it says enroll-completed
+#   fprintd-list "$USER"  # confirm it took
+# Your password always works regardless — five rejected swipes retire the
+# reader for that lock rather than locking you out.
+lock_fingerprint = on
+
 ai_layout       = on
 ai_ctx_decor    = on
 start_overlay   = off

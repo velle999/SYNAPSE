@@ -223,6 +223,36 @@ startup for exactly that reason.
 Screenshots land in `~/Pictures/Screenshots` *and* on the clipboard, so you can
 paste one straight into a chat without opening the file.
 
+### Fingerprint unlock
+
+The lock screen (`Super`+`L`) takes a fingerprint beside the password. Both are
+live at once — type over a reader that is still waiting, and whichever answers
+first unlocks. Nothing ships enabled on the hardware side, so a reader needs two
+things: the `fprintd` package (an optdepend, not a dependency — it would start a
+D-Bus service on every desktop that has no reader) and at least one **enrolled**
+finger.
+
+```bash
+sudo pacman -S fprintd     # the reader daemon
+fprintd-enroll             # as YOUR user, not root — swipe until it says "enroll-completed"
+fprintd-list "$USER"       # confirm the print is there
+```
+
+`fprintd-enroll -f right-index-finger` picks a specific finger; run it once per
+finger you want. Enroll as the user you log in as — prints are stored per
+account, and one enrolled as root will never unlock your session.
+
+Then lock with `Super`+`L`: a row under the clock relays the reader's own
+prompts ("Place your finger on the reader"). If it says nothing at all, the
+helper found no reader, no `fprintd`, or no enrolled print, and the lock quietly
+stops asking for the rest of that lock — your password still works, as it does
+in every other case. Five rejected swipes retire the reader for that lock too;
+that is a bound on guessing, not a lockout.
+
+Turn it off in **Control panel ▸ Power ▸ Unlock with fingerprint**, or with
+`lock_fingerprint = off` in `synuirc`. It is on by default and costs a machine
+without a reader one extra fork per lock and no visible change.
+
 ### Making it yours
 
 Themes, cursors and sounds all have a panel *and* a command-line tool, and both

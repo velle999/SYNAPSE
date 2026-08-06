@@ -388,7 +388,14 @@ static const struct ctl_item ctl_items[] = {
      * the panel is behind the lock. */
     { CTL_ROW_LOCK_FPRINT, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Unlock with fingerprint", NULL,
       .key = "lock_fingerprint", .off = CFG(lock_fingerprint), .vtype = CTL_VAL_BOOL,
-      .help = "Needs fprintd and an enrolled finger; your password always works too" },
+      /* Names the command rather than the requirement. "Needs an enrolled
+       * finger" left the one thing you have to DO off the only screen that
+       * mentions the feature: the packaged synuirc that carries the enroll
+       * line is a repo reference nothing installs, and an existing
+       * ~/.config/synui/synuirc never gains it on upgrade. The footer draws
+       * with cairo_show_text and does not clip, so this stays inside the
+       * ~70 chars the other help lines hold to. */
+      .help = "Install fprintd, run fprintd-enroll; your password always works too" },
 
     { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL,
       .section = "Game mode",

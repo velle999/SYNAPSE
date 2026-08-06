@@ -267,8 +267,12 @@ welcome_at_startup = on
 # draws nothing. So it is not a "do I have one" switch — that is detected — it
 # is for turning a reader that works OFF.
 #
-# Needs the fprintd package (an optdepend) and at least one enrolled finger:
-#   pacman -S fprintd  &&  fprintd-enroll
+# Needs the fprintd package (an optdepend) and at least one ENROLLED finger.
+# Run the enroll as yourself, not root — prints are stored per account, so one
+# enrolled as root will never unlock your session:
+#   sudo pacman -S fprintd
+#   fprintd-enroll        # swipe until it says enroll-completed
+#   fprintd-list "$USER"  # confirm it took
 # Your password always works regardless — five rejected swipes retire the
 # reader for that lock rather than locking you out.
 lock_fingerprint = on
