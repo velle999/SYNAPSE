@@ -1494,12 +1494,17 @@ while :; do
     WANT_FILEMGR=1        # dolphin — synui's Files button and desktop menu launch it
     WANT_WINE=1           # wine + wine-mono
     WANT_PHONE=1          # kdeconnect — pair a phone with the desktop
+    # Steam is Full-only, not Standard. It is the only item here that needs a
+    # whole second architecture on the disk ([multilib] plus the lib32 tree,
+    # ~1.5 GB before a single game), so it is opt-in the way the AI model is
+    # rather than something a default Enter-through install pays for.
+    WANT_STEAM=0          # steam + the 32-bit stack — see "Installing Steam"
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
     SEL_APPS="chibi vibe"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
-    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine, phone"
+    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine, phone, Steam"
     echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, phone, Chibi + Vibe  (default)"
     echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine/phone"
     echo "    $(bold '4)') Custom    — pick each item individually"
@@ -1512,13 +1517,13 @@ while :; do
         1)
             SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
-            WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1
+            WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             success "Full install selected"
             ;;
         3)
             SEL_APPS=""
             WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
-            WANT_FILEMGR=0; WANT_WINE=0; WANT_PHONE=0
+            WANT_FILEMGR=0; WANT_WINE=0; WANT_PHONE=0; WANT_STEAM=0
             success "Minimal install selected"
             ;;
         4)
@@ -1553,6 +1558,7 @@ while :; do
             ask_opt WANT_FILEMGR    1 "File manager (Dolphin) — the desktop's Files button opens it"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
+            ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) — enables [multilib] (~1.5 GB)"
 
             SEL_APPS=""
             [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
@@ -1612,6 +1618,7 @@ while :; do
     echo "    Files    : $([ "$WANT_FILEMGR" = 1 ] && echo 'yes (Dolphin)' || echo no)"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
+    echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope, enables multilib)' || echo no)"
     echo ""
     # ── Confirm the selection ─────────────────────────────
     #
@@ -1650,6 +1657,39 @@ cat >> /mnt/etc/pacman.conf << REPOEOF
 SigLevel = Optional TrustAll
 Server = file:///var/cache/synapseos
 REPOEOF
+
+# ── [multilib], only when Steam was asked for ─────────────
+#
+# steam is a multilib package and half its dependency tree is lib32-*, so
+# without this repo it is not "not installed", it is uninstallable — pacman
+# cannot even resolve the name. This is why Steam was never an option here.
+#
+# Enabled conditionally rather than always: turning on a second architecture
+# is a permanent property of the installed system, and a Minimal install has
+# no use for it. Everything below is idempotent, so a re-run is harmless.
+#
+# Uncommenting the stock block is preferred over appending a new section so
+# the file stays the canonical pacman.conf. The anchor is safe: '^#\[multilib\]'
+# requires the literal ']', so it cannot match '#[multilib-testing]' above it.
+# The result is verified rather than trusted — a silently-unenabled repo would
+# surface much later as a confusing "target not found: steam".
+if [ "$WANT_STEAM" = 1 ]; then
+    if ! grep -q '^\[multilib\]' /mnt/etc/pacman.conf; then
+        sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /mnt/etc/pacman.conf
+    fi
+    # Fallback for a pacman.conf that never carried the commented block.
+    if ! grep -q '^\[multilib\]' /mnt/etc/pacman.conf; then
+        printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /mnt/etc/pacman.conf
+    fi
+    if grep -q '^\[multilib\]' /mnt/etc/pacman.conf; then
+        echo "  Enabling [multilib] (32-bit repo, needed by Steam)..."
+        arch-chroot /mnt pacman -Sy --noconfirm 2>&1 \
+            || warn "Could not sync the multilib database — Steam may fail to install"
+    else
+        warn "Could not enable [multilib]; Steam will be skipped."
+        WANT_STEAM=0
+    fi
+fi
 
 # synapse-llama carries libllama/libggml and is pulled in automatically as a
 # dependency of synapd — do NOT copy those libraries in by hand.
@@ -1887,7 +1927,22 @@ step "Configuring Video Driver"
 # provides neither, so the renderer autocreate fails and the session dies
 # — the driver has to be installed here, before mkinitcpio and grub run.
 # Detect display controllers from sysfs; the live ISO may not ship lspci.
+#
+# When Steam was asked for, each branch below also installs the 32-bit half of
+# whatever driver it picked, in the SAME pacman transaction as the 64-bit half.
+# Two reasons it is here and not in the Steam step:
+#
+#   - nvidia-utils and lib32-nvidia-utils must be the same version. Installed
+#     together they are resolved as one transaction and cannot mismatch; done
+#     as a later separate -S they can land either side of an upstream bump.
+#   - steam depends on the VIRTUAL packages lib32-vulkan-driver and lib32-libgl,
+#     which have several providers. Under --noconfirm pacman takes the first
+#     provider rather than asking, so an NVIDIA box could silently get
+#     lib32-vulkan-radeon and no working Vulkan. Naming the concrete driver
+#     here satisfies the virtual dep up front, so no provider choice is ever
+#     made on the user's behalf.
 GPU_KERNEL_PARAMS=""
+LIB32_PKGS=""
 HAS_NVIDIA="" NVIDIA_DEVID=0 HAS_AMD="" HAS_INTEL=""
 for dev in /sys/bus/pci/devices/*; do
     case "$(cat "$dev/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
@@ -1901,7 +1956,8 @@ done
 if grep -qiE 'VirtualBox|VMware|QEMU|KVM|Xen|innotek' \
         /sys/class/dmi/id/sys_vendor 2>/dev/null; then
     echo "  Virtual machine — installing mesa (synui uses pixman here)..."
-    arch-chroot /mnt pacman -S --noconfirm --needed mesa 2>&1 \
+    [ "$WANT_STEAM" = 1 ] && LIB32_PKGS="lib32-mesa lib32-vulkan-icd-loader"
+    arch-chroot /mnt pacman -S --noconfirm --needed mesa $LIB32_PKGS 2>&1 \
         || warn "mesa failed to install"
 elif [ -n "$HAS_NVIDIA" ]; then
     # nvidia-open supports Turing and newer (PCI device id >= 0x1e00);
@@ -1909,8 +1965,14 @@ elif [ -n "$HAS_NVIDIA" ]; then
     NVIDIA_PKG="nvidia-dkms"
     [ "$NVIDIA_DEVID" -ge $((0x1e00)) ] && NVIDIA_PKG="nvidia-open-dkms"
     echo "  NVIDIA GPU detected — installing $NVIDIA_PKG (builds the module, takes a while)..."
+    # lib32-nvidia-utils provides both lib32-libgl and lib32-vulkan-driver, so
+    # it alone satisfies steam's 32-bit graphics deps on this card. lib32-mesa
+    # rides along to mirror the 64-bit `mesa` on the same line — libglvnd
+    # dispatches between them, and a game falling back to llvmpipe beats one
+    # that will not start.
+    [ "$WANT_STEAM" = 1 ] && LIB32_PKGS="lib32-nvidia-utils lib32-mesa lib32-vulkan-icd-loader"
     arch-chroot /mnt pacman -S --noconfirm --needed \
-        "$NVIDIA_PKG" nvidia-utils egl-wayland mesa 2>&1 \
+        "$NVIDIA_PKG" nvidia-utils egl-wayland mesa $LIB32_PKGS 2>&1 \
         || die "NVIDIA driver install failed — the system would boot on
   nouveau and synui's renderer would never start"
 
@@ -1966,8 +2028,14 @@ else
     GPU_PKGS="mesa"
     [ -n "$HAS_AMD" ]   && GPU_PKGS="$GPU_PKGS vulkan-radeon"
     [ -n "$HAS_INTEL" ] && GPU_PKGS="$GPU_PKGS vulkan-intel"
-    echo "  Installing video stack: $GPU_PKGS..."
-    arch-chroot /mnt pacman -S --noconfirm --needed $GPU_PKGS 2>&1 \
+    if [ "$WANT_STEAM" = 1 ]; then
+        # Mirror the 64-bit choice exactly — same ICD, 32-bit half.
+        LIB32_PKGS="lib32-mesa lib32-vulkan-icd-loader"
+        [ -n "$HAS_AMD" ]   && LIB32_PKGS="$LIB32_PKGS lib32-vulkan-radeon"
+        [ -n "$HAS_INTEL" ] && LIB32_PKGS="$LIB32_PKGS lib32-vulkan-intel"
+    fi
+    echo "  Installing video stack: $GPU_PKGS $LIB32_PKGS..."
+    arch-chroot /mnt pacman -S --noconfirm --needed $GPU_PKGS $LIB32_PKGS 2>&1 \
         || warn "Video driver install failed — synui may fall back to software rendering"
     success "Video drivers installed"
 
@@ -1992,6 +2060,66 @@ else
   despite the AMD/Intel GPU. (Build the ISO on a host with 'shaderc' +
   vulkan-headers for synapse-llama-vulkan to exist.)"
         fi
+    fi
+fi
+
+# ── Steam ─────────────────────────────────────────────────
+#
+# The native multilib package, not Flatpak: it uses the system's own driver
+# stack (the lib32 half installed with the 64-bit driver just above), so
+# Proton sees the same Vulkan ICD synui does, and syn-update keeps it current
+# with everything else instead of it being a second update mechanism.
+#
+# Deliberately AFTER the video driver step. steam's 32-bit graphics deps are
+# already satisfied by the concrete lib32 driver installed there, so pacman
+# never reaches a provider choice for lib32-vulkan-driver / lib32-libgl — see
+# the comment on LIB32_PKGS. The other virtual dep, ttf-font, is satisfied by
+# the ttf-dejavu that pacstrap installed.
+#
+# steam-devices (udev rules for controllers) is a hard dependency and arrives
+# on its own; it is not named here so there is one place pacman is deciding.
+#
+# Non-fatal: a machine that boots to a working desktop without Steam is a far
+# better outcome than a died-at-98% install, and the recovery is one command.
+if [ "$WANT_STEAM" = 1 ]; then
+    step "Installing Steam and the game stack"
+    echo "  Installing steam and the 32-bit runtime libraries..."
+    if arch-chroot /mnt pacman -S --noconfirm --needed steam 2>&1; then
+        success "Steam installed (native multilib package)"
+    else
+        warn "steam failed to install. The system is otherwise complete —
+  install it later with 'sudo pacman -S steam' ([multilib] is already
+  enabled in /etc/pacman.conf)."
+    fi
+
+    # ── The layers synui-game-run wraps a game in ─────────────
+    #
+    # synui ships /usr/bin/synui-game-run, which builds a stack of
+    # gamemoderun -> mangohud -> game (and gamescope on request). Every layer is
+    # an optdepend of synui and the wrapper drops whichever is missing, so none
+    # of this was ever an install error — it just silently did nothing. The
+    # result was a documented Super+G / overlay feature that could not work on
+    # any SynapseOS install, because these packages reached the LIVE ISO at
+    # most (gamescope) or were never packaged anywhere at all (mangohud,
+    # gamemode). Installing Steam without them ships the launcher and none of
+    # what it launches through.
+    #
+    # The lib32 halves matter as much as the 64-bit ones: a 32-bit game gets no
+    # overlay from mangohud alone, which is the same "installed but does
+    # nothing" failure one architecture down.
+    #
+    # Separate transaction from steam above so a failure here is reported as
+    # itself — folded into one -S, a missing gamescope would read as "Steam
+    # failed to install".
+    echo "  Installing the game stack (overlay, governor, micro-compositor)..."
+    if arch-chroot /mnt pacman -S --noconfirm --needed \
+            mangohud lib32-mangohud gamemode lib32-gamemode gamescope 2>&1; then
+        success "Game stack installed (mangohud, gamemode, gamescope)"
+    else
+        warn "The game stack failed to install. Steam still works; the FPS
+  overlay, the CPU/GPU governor and 'synui-game-run --gamescope' will
+  not. Install later with:
+  sudo pacman -S mangohud lib32-mangohud gamemode lib32-gamemode gamescope"
     fi
 fi
 

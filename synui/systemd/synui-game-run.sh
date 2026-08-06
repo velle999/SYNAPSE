@@ -40,12 +40,8 @@ done
 # Written once, never clobbered — a user who tunes it keeps their version. The
 # defaults are the metrics worth seeing at a glance: FPS + frametime graph, GPU
 # and CPU load/temp. Positioned top-left so it does not sit under a crosshair.
-ensure_config() {
-    local d="$HOME/.config/MangoHud" f
-    f="$d/MangoHud.conf"
-    [ -f "$f" ] && return 0
-    mkdir -p "$d" 2>/dev/null || return 0
-    cat > "$f" <<'EOF'
+mangohud_default() {
+    cat <<'EOF'
 # SynapseOS default MangoHud overlay (synui-game-run). Edit freely — it is only
 # written when absent. See `man mangohud` for every option.
 #
@@ -70,6 +66,37 @@ font_size=20
 background_alpha=0.4
 toggle_hud=Shift_R+F12
 EOF
+}
+
+ensure_config() {
+    local d="$HOME/.config/MangoHud" f
+    f="$d/MangoHud.conf"
+    mkdir -p "$d" 2>/dev/null || return 0
+
+    if [ ! -f "$f" ]; then
+        mangohud_default > "$f"
+        return 0
+    fi
+
+    # ── Heal a config from a synui-game-run older than the no_display default ──
+    #
+    # This file SHADOWS /etc/MangoHud.conf entirely (documented MangoHud
+    # behaviour), so a copy written before no_display was added takes the
+    # system default's "hidden until Shift_R+F12" away and gives no way to get
+    # it back — and because the early return above skipped any existing file,
+    # it could never self-heal. The overlay came up covering the game on every
+    # launch instead of on request.
+    #
+    # Strictly guarded, because silently rewriting a config someone tuned is
+    # worse than the bug: heal ONLY when the file still carries our header AND
+    # every setting in it is byte-identical to today's default apart from the
+    # missing no_display. Change one value and this leaves it alone forever.
+    if grep -q 'SynapseOS default MangoHud overlay' "$f" \
+       && ! grep -qx 'no_display' "$f" \
+       && diff -q <(mangohud_default | grep -vE '^[[:space:]]*(#|$)' | grep -vx 'no_display') \
+                  <(grep -vE '^[[:space:]]*(#|$)' "$f") >/dev/null 2>&1; then
+        mangohud_default > "$f"
+    fi
 }
 ensure_config
 
