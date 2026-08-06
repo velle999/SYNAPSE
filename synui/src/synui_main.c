@@ -1516,17 +1516,40 @@ int synui_init(syn_server_t *s)
      * pure red left them black). The palette has to be right before the app builds
      * its views, and only a platform theme can do that.
      *
-     * xdgdesktopportal is the one to name: its plugin is already a dependency by
-     * way of xdg-desktop-portal, and it follows org.freedesktop.appearance
-     * color-scheme — the same dark/light signal synui-apply-theme writes through
-     * gsettings — so Qt apps track a theme switch with no further plumbing.
-     * plasma-integration would give the theme's exact colours instead of a generic
-     * near-white, but it pulls xdg-desktop-portal-kde, and a second portal backend
-     * is what breaks ScreenCast on wlroots.
+     * Two plugins can do the job and they are not equivalent:
+     *
+     *   - `kde` (plasma-integration) reads kdeglobals directly, so a Qt app gets
+     *     the theme's EXACT colours, and gets them before it builds its views —
+     *     which is the only thing that fixes Dolphin's icon-view filenames,
+     *     because KStandardItemListWidget::textColor() reads the palette the app
+     *     started with and no late-applied colour scheme reaches it.
+     *   - `xdgdesktopportal` follows org.freedesktop.appearance color-scheme,
+     *     which is one bit. It tracks dark↔light for free but cannot carry a
+     *     theme change between two dark themes, and pays out generic near-white
+     *     rather than the theme's ink.
+     *
+     * So: prefer kde when its plugin is actually on disk, and fall back to the
+     * portal when it is not. Named by FILE rather than assumed, because naming a
+     * platform theme whose plugin is absent is not a graceful degradation — Qt
+     * loads no platform theme at all and every app comes up on the stock LIGHT
+     * palette, which is precisely the bug 261 fixed. An unconditional "kde" here
+     * would put every box without plasma-integration back into it.
+     *
+     * plasma-integration hard-depends on xdg-desktop-portal-kde, i.e. a second
+     * portal backend, and a second backend taking ScreenCast is what breaks
+     * screen sharing on wlroots. That is already handled a layer up:
+     * synui-portals.conf sets default=gtk and pins
+     * org.freedesktop.impl.portal.ScreenCast (and Screenshot) to wlr, so the kde
+     * backend can be installed without anything routing to it. If that file ever
+     * stops being installed, this preference is the thing that turns into a
+     * screen-sharing bug.
      *
      * Overwrite 0, unlike the lines around it: this is a default, not a policy, so
      * a user who exports qt6ct or kde in their own environment keeps it. */
-    setenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal", 0);
+    setenv("QT_QPA_PLATFORMTHEME",
+           access("/usr/lib/qt6/plugins/platformthemes/KDEPlasmaPlatformTheme6.so",
+                  F_OK) == 0 ? "kde" : "xdgdesktopportal",
+           0);
     /* Force GTK/Firefox onto their Wayland backends rather than XWayland. Firefox
      * only honours the glass prefs (transparency, blur-behind) on its Wayland
      * surface — under XWayland the window is opaque no matter the CSS/prefs. Its
