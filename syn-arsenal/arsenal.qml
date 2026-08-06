@@ -16,8 +16,9 @@ import Quickshell.Io
  * TSV, not JSON, across that boundary — see arsenal-query for why. Parsing it
  * here is a split on tab and a split on newline.
  *
- * Colours are fixed terminal green rather than themed — see the palette block
- * below for what following ~/.config/synui/theme.json actually did to this app.
+ * Colours follow ~/.config/synui/theme.json (the file synui-apply-theme writes),
+ * SURFACES included — see the palette block below for why taking only the ink
+ * from it is what made this window unreadable.
  *
  * SynapseOS Project — GPL-2.0-or-later
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -33,33 +34,115 @@ FloatingWindow {
                                     || "/usr/lib/syn-arsenal/arsenal-query"
 
     // ── Palette ─────────────────────────────────────────────────────────────
-    // Fixed, not themed. This used to take its ink from ~/.config/synui/theme.json,
-    // but that file carries the DESKTOP's scheme, and Arsenal draws on its own
-    // dark surfaces regardless. Under a light theme theme.json says fg
-    // "#000000" — black text on this near-black background — while bg/panel,
-    // which it does not write at all, kept falling back to the dark defaults.
-    // The result was an app that looked permanently empty.
+    // Themed, but the SURFACES are themed too, and that is the whole point.
     //
-    // The accent was worse, and was the reason clicking a category appeared to
-    // do nothing. theme.json writes accent/glyph/bar/popup as [r,g,b] ARRAYS
-    // (Theme.qml converts them in themed()) and only fg/clockFg as hex strings.
-    // This file read accent as a string, so a QML `color` was handed a JS array,
-    // failed to convert, and every accented thing — the selected-category
-    // highlight, the installed dot, the Install button and its border — painted
-    // as nothing. The click landed and the pane repainted; none of it was
-    // visible.
+    // This file used to take only its ink from theme.json while drawing on its
+    // own hardcoded dark surfaces. theme.json carries the DESKTOP's scheme, so
+    // under a light theme it handed over fg "#000000" — black text on a
+    // near-black background — and the window looked permanently empty. Ink and
+    // surface have to come from the same place or they can disagree.
     //
-    // Phosphor green on black is what a BlackArch browser should have looked
-    // like anyway, and it cannot be knocked out by a theme switch.
-    readonly property color cBg:     "#0a0e0a"
-    readonly property color cPanel:  "#111a11"
-    readonly property color cText:   "#33ff33"   // shell green — body text
-    readonly property color cDim:    "#3fae55"   // dimmed green — counts, descriptions
-    readonly property color cAccent: "#7dffb0"   // brighter mint — selection, buttons
-    // Amber, not green: the keyring warning carries MEANING, and a warning
-    // rendered in the body colour is not a warning. Same reason Theme.qml keeps
-    // its green/red status colours out of the themed set.
-    readonly property color cWarn:   "#e0af68"
+    // theme.json does not write a bg/panel key at all: Theme.qml builds its
+    // surfaces from "bar" and "popup". So do we, and the second surface is
+    // derived from the first rather than invented, which keeps the two panes
+    // distinguishable under any theme instead of only under the dark default.
+    property var p: ({})
+    readonly property bool isLight: p.scheme === "light"
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/theme.json"
+        watchChanges: true
+        // synui-apply-theme writes a temp file and renames it, so this fires
+        // once, on a complete palette — never on a half-written one.
+        onFileChanged: reload()
+        onLoaded: { try { root.p = JSON.parse(this.text()) } catch (e) { root.p = ({}) } }
+        onLoadFailed: root.p = ({})
+    }
+
+    // theme.json writes accent/glyph/bar/popup as [r,g,b] ARRAYS and only
+    // fg/clockFg as hex strings. Reading an array key as a string was the
+    // second bug here: a QML `color` handed a JS array fails to convert, so the
+    // selected-category highlight, the installed dot, and the Install button
+    // with its border all painted as nothing — a click landed, the pane
+    // repainted, and none of it was visible. Same converter as Theme.qml.
+    function themed(key, r, g, b, a) {
+        const c = root.p[key]
+        return (c && c.length === 3) ? Qt.rgba(c[0] / 255, c[1] / 255, c[2] / 255, a)
+                                     : Qt.rgba(r / 255, g / 255, b / 255, a)
+    }
+    function pick(dark, light) { return root.isLight ? light : dark }
+
+    // WCAG relative luminance. QML colour channels are already 0..1.
+    function lum(c) {
+        function ch(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+    }
+    function contrast(a, b) {
+        const la = lum(a), lb = lum(b)
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+    }
+
+    // Push a colour away from the surface it sits on until it carries, keeping
+    // its hue — the hue is the part the user chose. Iterative rather than one
+    // fixed multiplier because Qt.lighter scales the HSV VALUE: a near-black
+    // accent times any single constant is still near-black. Qt drops saturation
+    // once value saturates, so this converges toward white on a dark surface,
+    // and the loop bound catches pure black, where scaling can never move.
+    function readable(c, on, want) {
+        if (contrast(c, on) >= want) return c
+        const up = lum(on) <= 0.18
+        let out = c
+        for (let i = 0; i < 16; i++) {
+            out = up ? Qt.lighter(out, 1.25) : Qt.darker(out, 1.25)
+            if (contrast(out, on) >= want) return out
+        }
+        return up ? "#ffffff" : "#000000"
+    }
+
+    // ── Surfaces ────────────────────────────────────────────────────────────
+    // "bar" goes to the CHROME (header, category pane, search bar), because
+    // that is what the key means on the desktop — it is the colour of the strip
+    // synui draws. The content area then steps off it in whichever direction
+    // the scheme leaves room: lighter on light, darker on dark. Taking "bar"
+    // for the window background instead would paint a full-window slab of
+    // win95 silver and leave the chrome nowhere to go.
+    readonly property color cPanel: themed("bar", 11, 11, 20, 1.0)
+    readonly property color cBg: isLight ? Qt.lighter(cPanel, 1.15) : Qt.darker(cPanel, 1.4)
+
+    // ── Ink ─────────────────────────────────────────────────────────────────
+    readonly property color cInk: p.fg ? Qt.color(p.fg) : pick("#e6e9ef", "#12141a")
+    // The guard that makes the original bug unrepresentable. A theme whose fg
+    // does not carry against our background gets a computed ink instead, so
+    // this window can never again render text it cannot show. 4.5:1 is the WCAG
+    // AA threshold for body text.
+    readonly property color cText: contrast(cInk, cBg) >= 4.5
+                                   ? cInk
+                                   : (lum(cBg) > 0.18 ? "#12141a" : "#e6e9ef")
+
+    // Deliberately below body contrast — descriptions and counts are secondary
+    // and should read as such — but still above the 3:1 floor on both schemes.
+    readonly property color cDim: pick("#8b93a7", "#4a5568")
+
+    readonly property color cAccentRaw: themed("accent", 78, 201, 176, 1.0)
+    // The accent is drawn as TEXT — the title, the Install label — and not just
+    // as a wash, so it has to carry. Measured against cPanel because that is
+    // the harder of the two surfaces either way: on a light scheme cBg is the
+    // lighter one, on a dark scheme it is the darker one, so whichever
+    // direction the accent needs to go, the chrome is what it has to clear.
+    //
+    // 4.5 and not 3.0: the title is 18px bold, which is just under the 18.66px
+    // WCAG counts as large text, so it is held to the body-text threshold. The
+    // washes derived from this colour are alpha-blended and do not care that it
+    // may have been pushed a shade further than they needed.
+    readonly property color cAccent: readable(cAccentRaw, cPanel, 4.5)
+
+    // Not themed, because this carries MEANING rather than style: a keyring
+    // warning rendered in the accent the user picked is not a warning. Only the
+    // scheme switches it, since a pastel amber on a silver panel lands around
+    // 2:1 and the warning is the one line here you cannot afford to lose — the
+    // same reason Theme.qml keeps its green/red status colours out of the
+    // themed set. The light value is burnt rather than bright for that reason.
+    readonly property color cWarn: pick("#e0af68", "#5c3a00")
 
     // ── State ───────────────────────────────────────────────────────────────
     property string repoState: "loading"   // loading|enabled|unsynced|disabled

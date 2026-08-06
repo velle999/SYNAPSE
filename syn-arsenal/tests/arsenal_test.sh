@@ -100,6 +100,33 @@ check "every keyring install in enable-repo scopes --overwrite" "2" "$ka"
 ki=$(grep -c 'pacman -S --noconfirm --needed' "$root/arsenal-enable-repo.sh")
 check "no keyring install site was missed" "$ki" "$ka"
 
+# ── Palette ─────────────────────────────────────────────────────────────────
+#
+# The GUI once rendered black text on a near-black background and an accent that
+# painted as nothing, which together made the window look empty and made a
+# category click look like it had not registered. Neither is visible to any test
+# that does not open a window, so both are pinned structurally here.
+echo
+echo "  arsenal.qml palette"
+QML="$root/arsenal.qml"
+
+# theme.json writes accent/glyph/bar/popup as [r,g,b] ARRAYS and only fg/clockFg
+# as hex strings. Handing a QML `color` an array fails to convert and the colour
+# paints as nothing, so every array key must go through themed().
+check "no array palette key is read as a colour directly" "0" \
+    "$(grep -cE '(^|[^a-zA-Z])p\.(accent|glyph|bar|popup)([^a-zA-Z]|$)' "$QML")"
+check "the array keys go through themed()" "2" \
+    "$(grep -cE 'themed\("(bar|accent)"' "$QML")"
+
+# Ink and surface must come from the same place. Taking fg from the theme while
+# hardcoding the background is exactly what produced black-on-black.
+check "surfaces are themed, not hardcoded" "1" \
+    "$(grep -c 'cPanel: themed("bar"' "$QML")"
+check "the ink is contrast-guarded against the background" "1" \
+    "$(grep -c 'contrast(cInk, cBg) >= 4.5' "$QML")"
+check "the accent is contrast-guarded against the chrome" "1" \
+    "$(grep -c 'readable(cAccentRaw, cPanel, 4.5)' "$QML")"
+
 # ── Launcher ────────────────────────────────────────────────────────────────
 echo
 echo "  syn-arsenal"
