@@ -11,6 +11,66 @@
 # .desktop id, what System Settings writes) first, TerminalApplication (a bare
 # executable, the legacy key) second. A per-user ~/.config/kdeglobals still
 # overrides this, so changing the terminal later works as normal.
+#
+# The colours below are the SYNAPSE preset's, the theme a fresh install boots
+# into. synui-apply-theme writes the same groups into the per-user kdeglobals on
+# every theme switch — but only from the first synui session onward, and only
+# for the user who ran it. Until then a Qt app has nothing to read but
+# KColorScheme's built-in Breeze palette, so a brand-new install's Dolphin came
+# up grey under a neon desktop and the scheme had to be picked by hand in System
+# Settings. A system-wide default is what makes the theme true ON INSTALL; the
+# per-user file still wins the moment synui writes one, so switching themes
+# works exactly as before.
+#
+# Deliberately NOT set here: [Icons] Theme. The helper sets it per-user only
+# after checking the theme is on disk, and breeze-icons is not a dependency —
+# naming a missing icon theme system-wide would fall every Qt app back to
+# hicolor, which is worse than the wrong shade of glyph.
 [General]
 TerminalApplication=kitty
 TerminalService=kitty.desktop
+ColorScheme=SynapseTheme
+
+# Fusion, not Breeze: it ships with qt6-base so it is always loadable, and it
+# follows QPalette properly. synui-apply-theme upgrades this to Breeze per-user
+# when the style plugin is actually installed.
+[KDE]
+widgetStyle=Fusion
+
+[Colors:Window]
+BackgroundNormal=30,30,36
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:View]
+BackgroundNormal=24,24,29
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:Button]
+BackgroundNormal=37,37,45
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:Selection]
+BackgroundNormal=255,41,109
+ForegroundNormal=0,0,0
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:Tooltip]
+BackgroundNormal=24,24,29
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+# Header is a distinct group from Window — left out, Dolphin's toolbar and
+# column headings fall back to Breeze rather than to the window colour.
+[Colors:Header]
+BackgroundNormal=30,30,36
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109

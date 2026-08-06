@@ -1,0 +1,49 @@
+# The desktop theme as a KDE colour scheme, system-wide.
+#
+# synui-apply-theme regenerates this file per-user under
+# ~/.local/share/color-schemes/ on every theme switch, and that copy shadows
+# this one (XDG_DATA_DIRS puts ~/.local/share first). This is the copy that
+# exists BEFORE the first synui session ever runs the helper: without it a fresh
+# install's [General] ColorScheme=SynapseTheme names a scheme that is nowhere on
+# disk, so System Settings shows no scheme selected and anything re-deriving the
+# palette from the scheme name rather than from kdeglobals falls back to Breeze.
+#
+# The values are the SYNAPSE preset's — the theme a fresh install boots into —
+# and must stay in step with theme_presets[SYN_THEME_SYNAPSE] in src/theme.c and
+# with config/kdeglobals. View sinks below the window and buttons lift above it,
+# the same 82%/125% shades the helper derives.
+[General]
+Name=SynapseTheme
+ColorScheme=SynapseTheme
+
+[Colors:Window]
+BackgroundNormal=30,30,36
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:View]
+BackgroundNormal=24,24,29
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:Button]
+BackgroundNormal=37,37,45
+ForegroundNormal=235,235,242
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:Selection]
+BackgroundNormal=255,41,109
+ForegroundNormal=0,0,0
+DecorationFocus=255,41,109
+DecorationHover=255,41,109
+
+[Colors:Tooltip]
+BackgroundNormal=24,24,29
+ForegroundNormal=235,235,242
+
+[Colors:Header]
+BackgroundNormal=30,30,36
+ForegroundNormal=235,235,242
