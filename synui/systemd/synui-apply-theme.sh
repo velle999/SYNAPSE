@@ -215,6 +215,18 @@ if [ -n "$kw" ]; then
         fi
     done
 
+    # ── The accent, as KDE's own key ────────────────────────────────────────
+    # Plasma 6 tints from [General] AccentColor: the folder icons in Dolphin's
+    # view, and the accent-following bits of widget chrome. Nothing on a
+    # SynapseOS box was writing it — not this script, not /etc/xdg/kdeglobals —
+    # so those followed whatever was last cached rather than the desktop accent,
+    # and a switch that recoloured every window left the folders behind.
+    #
+    # DecorationFocus already carries the same colour per group, but that is the
+    # colour scheme's channel and this is the accent's; KDE reads them from
+    # different places and only this one reaches the icon tinting.
+    set_col General AccentColor "$sel"
+
     # ── The scheme as a real FILE ───────────────────────────────────────────
     # kdeglobals is what KColorScheme actually reads, so the groups below are
     # what colours Dolphin — but [General] ColorScheme was naming "SynapseTheme"
@@ -359,12 +371,35 @@ if [ -n "$kw" ]; then
                        'KDE': [[$(ay widgetStyle)]]}" 2>/dev/null
     fi
 
-    # And the KDE 4 / KF5 interface, for anything still built against it.
-    # KGlobalSettings was REMOVED in KF6 — the string appears nowhere in the KF6
-    # libraries Dolphin links — so on this desktop it is a signal into an empty
-    # room, kept only because it costs nothing and an old app may still be there.
+    # ── The KGlobalSettings signal, which is NOT the dead one ───────────────
+    # This was documented here as a KDE 4/KF5 leftover firing into an empty
+    # room, on the evidence that KGlobalSettings was removed in KF6 and the
+    # string appears nowhere in the KF6 libraries Dolphin links. That evidence
+    # was about the wrong binary. Since QT_QPA_PLATFORMTHEME=kde, the listener
+    # is not Dolphin — it is plasma-integration's KHintsSettings, in
+    # KDEPlasmaPlatformTheme6.so, which connects to exactly this interface and
+    # path with a slotNotifyChange(int, int) and does NOT use KConfigWatcher.
+    # So of the two signals this script sends, THIS is the one that repaints a
+    # running Qt app; the gdbus ConfigChanged above is for KConfigWatcher users.
+    # Verified by emitting each in isolation against a live Qt app: a kdeglobals
+    # colour edit plus type 0 alone flips the palette within a second.
+    #
+    # The types are KGlobalSettings::ChangeType. slotNotifyChange switches on
+    # 0..6 and treats anything above that as unknown:
+    #
+    #   0  PaletteChanged  → re-reads the colour groups, rebuilds the palette
+    #   2  StyleChanged    → re-reads KDE/widgetStyle
+    #   4  IconChanged     → re-reads Icons/Theme and the icon size hints
+    #
+    # 4 is here because this script WRITES Icons/Theme on every switch (breeze
+    # ↔ breeze-dark, above) and used to tell nobody, so a running Dolphin kept
+    # the previous theme's icons — mauve Catppuccin folders sitting on a
+    # Windows-95 grey window, the one part of a theme switch that visibly did
+    # not move. The second argument is the KIconLoader group; group 2
+    # (MainToolbar) is the one branch that only refreshes SIZES, so 0 is what
+    # reaches the theme name.
     if command -v dbus-send >/dev/null 2>&1; then
-        for t in 0 2; do
+        for t in 0 2 4; do
             dbus-send --session --type=signal /KGlobalSettings \
                 org.kde.KGlobalSettings.notifyChange int32:$t int32:0 2>/dev/null
         done

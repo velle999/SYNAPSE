@@ -2110,7 +2110,16 @@ int synui_run(syn_server_t *s)
      * fire-and-forget — this is one short D-Bus round trip, and the race it
      * closes is the whole point of running it here.
      *
-     * All three variables are set unconditionally by synui_init(), so naming
+     * QT_QPA_PLATFORMTHEME rides along for a related but distinct reason: the
+     * activated unit inherits the user manager's environment, so without it a
+     * D-Bus-activated Qt app loads NO platform theme and comes up on Qt's stock
+     * LIGHT palette — no kdeglobals colours, and no live theme switching either.
+     * Dolphin is the case that matters, because it ships
+     * org.kde.dolphin.FileManager1.service: opened from the dock it is our child
+     * and themed, opened as a file manager by another app it was activated and
+     * white. Two routes to the same binary that did not look the same.
+     *
+     * All four variables are set unconditionally by synui_init(), so naming
      * them bare (read from our own environment) can't hit the unset case.
      *
      * NOT done when nested: a nested synui shares the session bus with the
@@ -2134,6 +2143,7 @@ int synui_run(syn_server_t *s)
             execlp("dbus-update-activation-environment",
                    "dbus-update-activation-environment", "--systemd",
                    "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+                   "QT_QPA_PLATFORMTHEME",
                    (char *)NULL);
             _exit(127);
         }
