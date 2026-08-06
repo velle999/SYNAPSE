@@ -320,22 +320,43 @@ if [ -n "$kw" ]; then
     # So also emit the signal directly, which does not care whether anything was
     # dirty. This is the KF6 contract KConfigWatcher connects to: interface
     # org.kde.kconfig.notify, signal ConfigChanged, object path "/" + the config
-    # file's name, argument a{sas} — group → the keys that changed. (Verified
-    # against libKF6ConfigCore; the strings are QStringLiteral, so they are
-    # UTF-16 in the binary and a plain `strings` will not show them.) dbus-send
-    # cannot build a nested container, hence gdbus, which ships with glib2.
+    # file's name, group → the keys that changed. dbus-send cannot build a nested
+    # container, hence gdbus, which ships with glib2.
+    #
+    # ── The argument type is a{saay}, and getting it wrong is NOT cosmetic ────
+    # The slot takes QHash<QString, QByteArrayList>, so each key name is a BYTE
+    # ARRAY (`ay`) and the value is an array of them (`aay`) — the whole argument
+    # is a{saay}, not a{sas}. This was emitted as a{sas} for one pkgrel and the
+    # result was that every KDE app open during a theme switch was killed by the
+    # OOM killer: QtDBus demarshalls whatever arrives into the type the slot
+    # declares, so an `as` fed to a QByteArrayList reader is read as garbage
+    # element lengths, and it allocates against them until the box runs out of
+    # memory (~28 GB, in about twenty seconds). A wrong D-Bus signature does not
+    # bounce — it is demarshalled as nonsense. Confirmed against the type in
+    # libKF6ConfigCore and by capturing kwriteconfig6 --notify's OWN signal on
+    # the bus; that capture is what this has to match, byte for byte.
+    #
+    # `ay` also has to be built numerically. GVariant's bytestring literal
+    # (b'ColorScheme') is NUL-TERMINATED, and KConfig's own signal is not — a
+    # key arriving as "ColorScheme\0" simply matches nothing, which is a silent
+    # no-op rather than a crash, so it looks exactly like the signal working.
+    ay() {  # ay <name> → "0x43,0x6f,…" — the name as bare bytes, no terminator
+        printf '%s' "$1" | od -An -tx1 -v |
+            awk '{ for (i = 1; i <= NF; i++) printf "%s0x%s", (n++ ? "," : ""), $i }'
+    }
     if command -v gdbus >/dev/null 2>&1; then
+        bgfg="[[$(ay BackgroundNormal)],[$(ay ForegroundNormal)]]"
         gdbus emit --session --object-path /kdeglobals \
             --signal org.kde.kconfig.notify.ConfigChanged \
-            "@a{sas} {'General': ['ColorScheme'],
-                      'Colors:Window': ['BackgroundNormal', 'ForegroundNormal'],
-                      'Colors:View': ['BackgroundNormal', 'ForegroundNormal'],
-                      'Colors:Button': ['BackgroundNormal', 'ForegroundNormal'],
-                      'Colors:Selection': ['BackgroundNormal', 'ForegroundNormal'],
-                      'Colors:Tooltip': ['BackgroundNormal', 'ForegroundNormal'],
-                      'Colors:Header': ['BackgroundNormal', 'ForegroundNormal'],
-                      'Icons': ['Theme'],
-                      'KDE': ['widgetStyle']}" 2>/dev/null
+            "@a{saay} {'General': [[$(ay ColorScheme)]],
+                       'Colors:Window': $bgfg,
+                       'Colors:View': $bgfg,
+                       'Colors:Button': $bgfg,
+                       'Colors:Selection': $bgfg,
+                       'Colors:Tooltip': $bgfg,
+                       'Colors:Header': $bgfg,
+                       'Icons': [[$(ay Theme)]],
+                       'KDE': [[$(ay widgetStyle)]]}" 2>/dev/null
     fi
 
     # And the KDE 4 / KF5 interface, for anything still built against it.
