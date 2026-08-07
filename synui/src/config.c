@@ -759,6 +759,7 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->cursor_size     = 24;
 
     cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
+    cfg->cat_breed         = CAT_BREED_NEON;   /* the house cat */
 
     cfg->welcome_at_startup = 1;
     cfg->numlock            = 1;
@@ -1329,6 +1330,16 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "cat") == 0)
         cfg->cat_start = strcmp(val, "on") == 0;
+    else if (strcmp(key, "cat_breed") == 0) {
+        /* Matched against cat_breed_names[] rather than a second list here:
+         * one spelling of "russian-blue" in the tree, and adding a coat to
+         * cat_draw.c is all it takes to make it settable. */
+        int found = -1;
+        for (int i = 0; i < CAT_BREED_COUNT; i++)
+            if (strcmp(val, cat_breed_names[i]) == 0) { found = i; break; }
+        if (found >= 0) cfg->cat_breed = found;
+        else wlr_log(WLR_ERROR, "synui: cat_breed: unknown '%s'", val);
+    }
     else if (strcmp(key, "welcome_at_startup") == 0)
         cfg->welcome_at_startup = strcmp(val, "on") == 0;
     else if (strcmp(key, "numlock") == 0)

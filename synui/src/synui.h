@@ -1051,6 +1051,7 @@ typedef enum {
     CTL_ROW_DESKTOP_ICONS,
     CTL_ROW_DESKTOP_ICON_ARRANGE,
     CTL_ROW_CAT_START,
+    CTL_ROW_CAT_BREED,
     CTL_ROW_WELCOME_AT_STARTUP,
     CTL_ROW_START_OVERLAY,
 
@@ -2142,6 +2143,7 @@ typedef struct {
     /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
      * Off by default — Super+Shift+C toggles it at runtime. */
     int   cat_start;
+    int   cat_breed;   /* cat_breed_t — which coat the desktop cat wears */
 
     /* Show the welcome menu on login. The menu's own "Show At Startup" row
      * toggles this and writes welcome.state, which then overrides the synuirc
@@ -4173,6 +4175,29 @@ void game_toggle(syn_server_t *s);
 
 enum { CAT_WALK, CAT_SIT, CAT_SLEEP };
 
+/* Coats. NEON is the house cat — the neon-on-slate original — and is FIRST so
+ * that it is what a zeroed config and an unrecognised `cat_breed =` both land
+ * on. Every other entry only changes colours and adds markings; the anatomy,
+ * the walk cycle and the poses are one drawing for all of them.
+ *
+ * Order is display order in the control panel and must match cat_breed_names[]
+ * in cat_draw.c and ctl_names_cat_breed[] in ctlpanel.c. */
+typedef enum {
+    CAT_BREED_NEON,          /* slate coat, cyan rim — the original */
+    CAT_BREED_TABBY,
+    CAT_BREED_GINGER,        /* marmalade, tabby-striped */
+    CAT_BREED_TUXEDO,
+    CAT_BREED_SIAMESE,
+    CAT_BREED_CALICO,
+    CAT_BREED_TORTIE,
+    CAT_BREED_RUSSIAN_BLUE,
+    CAT_BREED_BLACK,
+    CAT_BREED_COUNT
+} cat_breed_t;
+
+/* Lower-case tokens for synuirc's `cat_breed =`, indexed by cat_breed_t. */
+extern const char *const cat_breed_names[CAT_BREED_COUNT];
+
 /* Everything cat_paint needs. Kept free of syn_server_t so the drawing can be
  * rendered to a PNG by tests/cat_render_test.c — "it doesn't look like a cat"
  * is the one bug here that no assertion will ever catch. */
@@ -4181,6 +4206,7 @@ typedef struct {
     double phase;      /* walk cycle */
     double now;        /* drives tail sway, ear twitch, z's */
     bool   blinking;
+    int    breed;      /* cat_breed_t; out of range falls back to NEON */
 } cat_pose_t;
 
 void cat_paint(cairo_t *cr, const cat_pose_t *pose);   /* faces right */

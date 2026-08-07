@@ -165,6 +165,7 @@ static void cat_render(syn_server_t *s, double now)
         .phase    = s->cat.phase,
         .now      = now,
         .blinking = s->cat.blink_until > now,
+        .breed    = s->config.cat_breed,
     };
     cat_paint(cr, &pose);
     cairo_destroy(cr);

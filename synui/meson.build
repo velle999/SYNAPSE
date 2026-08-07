@@ -472,7 +472,9 @@ test('hit', hit_test)
 # on that move, and on the two staying in step afterwards. Links config.c and
 # settings.c with the seven older state loaders stubbed — no compositor.
 settings_test = executable('settings_test',
-  ['tests/settings_test.c', 'src/config.c', 'src/settings.c'],
+  # cat_draw.c comes along for cat_breed_names[]: config.c resolves `cat_breed =`
+  # against the coat table's own spellings rather than keeping a second list.
+  ['tests/settings_test.c', 'src/config.c', 'src/settings.c', 'src/cat_draw.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
@@ -485,7 +487,8 @@ test('settings', settings_test)
 # doesn't stick" months later. Links ctlpanel.c with config.c and settings.c.
 ctlpanel_table_test = executable('ctlpanel_table_test',
   ['tests/ctlpanel_table_test.c', 'src/ctlpanel.c', 'src/config.c',
-   'src/settings.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c'],
+   'src/settings.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c',
+   'src/cat_draw.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE'],

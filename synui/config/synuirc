@@ -274,6 +274,27 @@ numlock      = on
 # Install it yourself and name it here to get the upstream look.
 # bar_icon_theme = buuf-nestort
 
+# ── Desktop cat (Super+Shift+C) ────────────────────────────
+# A small cat that wanders across the monitors on top of everything, sits, and
+# occasionally naps. `cat` is only the LOGIN state; Super+Shift+C toggles it any
+# time either way.
+#
+# `cat_breed` is the coat. It changes colours and markings only — every breed
+# shares one drawing, one gait and one set of poses, so picking a different one
+# can never make the cat behave differently. Unknown names log and fall back to
+# `neon`, which is the original slate-and-cyan cat.
+#   neon          slate coat, cyan rim, glowing eyes   (stock)
+#   tabby         brown mackerel, green eyes
+#   ginger        marmalade, same stripes, amber eyes
+#   tuxedo        black with a white bib, gold eyes
+#   siamese       cream with seal points, blue eyes
+#   calico        white with ginger and black patches
+#   tortie        dark coat, ginger patches
+#   russian-blue  blue-grey, unmarked, green eyes
+#   black         near-black, gold eyes
+# cat       = off
+# cat_breed = neon
+
 # ── Welcome menu (Super+Escape) ────────────────────────────
 # Whether the menu greets you on login. Super+Escape opens it either way, so
 # turning this off never strands it. The menu's own "Show At Startup" row

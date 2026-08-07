@@ -96,6 +96,13 @@ static double ctl_now_secs(void)
 static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Right" };
 static const char *const ctl_names_arrange[]   = { "Name", "Type", "Size", "Date" };
 static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blue" };
+/* Order matches cat_breed_t in synui.h; the lower-cased spellings synuirc takes
+ * live in cat_breed_names[] beside the coats themselves, so a new breed needs
+ * its display name added HERE and nowhere else. */
+static const char *const ctl_names_cat_breed[] = {
+    "Neon", "Tabby", "Ginger", "Tuxedo", "Siamese",
+    "Calico", "Tortie", "Russian Blue", "Black",
+};
 /* Order matches syn_super_space_t, and the lower-cased spellings are what
  * config.c's `super_space` case parses back out of settings.state. */
 static const char *const ctl_names_super_space[] = { "Launcher", "Cmdbar" };
@@ -331,6 +338,10 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_CAT_START,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Desktop cat at login", NULL,
       .key = "cat", .off = CFG(cat_start), .vtype = CTL_VAL_BOOL,
       .help = "Super+Shift+C toggles it any time; this is only the login state" },
+    { CTL_ROW_CAT_BREED,     CTL_CAT_DESKTOP, CTL_KIND_VALUE, "Desktop cat breed", NULL,
+      .key = "cat_breed", .off = CFG(cat_breed), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_cat_breed), .apply = CTL_APPLY_NONE,
+      .help = "Coat and markings only; every breed walks the same" },
 
     /* ── Input ───────────────────────────────────────────────
      *
