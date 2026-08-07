@@ -192,6 +192,7 @@ const char *layout_label(syn_layout_t l)
     case LAYOUT_AI:       return "AI";
     case LAYOUT_NIRI:     return "niri";
     case LAYOUT_SPIRAL:   return "spiral";
+    case LAYOUT_CASCADE:  return "cascade";
     }
     return "unknown";
 }
@@ -230,6 +231,7 @@ static const char *layout_key(syn_layout_t l)
     case LAYOUT_AI:       return "ai";
     case LAYOUT_NIRI:     return "niri";
     case LAYOUT_SPIRAL:   return "spiral";
+    case LAYOUT_CASCADE:  return "cascade";
     }
     return "tiling";
 }
@@ -287,6 +289,7 @@ void layout_state_load(syn_server_t *s)
         else if (strcmp(val, "ai")       == 0) l = LAYOUT_AI;
         else if (strcmp(val, "niri")     == 0) l = LAYOUT_NIRI;
         else if (strcmp(val, "spiral")   == 0) l = LAYOUT_SPIRAL;
+        else if (strcmp(val, "cascade")  == 0) l = LAYOUT_CASCADE;
         else continue;
 
         s->workspaces[idx].layout = l;
@@ -471,6 +474,128 @@ void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
             rh  = rest;
             break;
         }
+        i++;
+    }
+}
+
+/* ── CASCADE layout ──────────────────────────────────────── */
+/*
+ * Windows overlapping, each offset down-and-right from the one behind it, so
+ * every titlebar stays reachable and the front one is whole. A hand of cards.
+ *
+ *   ┌──────────┐        ┌────────┐     ┌────────┐
+ *   │ 1        │        │ 1      │     │ 4      │
+ *   │ ┌──────────┐      │ ┌────────┐   │ ┌────────┐
+ *   │ │ 2        │      │ │ 2      │   │ │ 5      │
+ *   └─│ ┌──────────┐    └─│ ┌────────┐ └─│ ┌────────┐
+ *     │ │ 3        │      │ │ 3      │   │ │ 6      │
+ *     └─│          │      └─│        │   └─│        │
+ *       └──────────┘        └────────┘     └────────┘
+ *        three windows          six windows, two piles
+ *
+ * THE SPLIT IS THE WHOLE FEATURE. A plain cascade is fine for four windows and
+ * useless for fourteen: the offsets accumulate, so the last window is a sliver
+ * in the bottom-right corner and everything before it is a stack of titlebars.
+ * Every cascade ever shipped has this problem. Past `cascade_stack_max` the
+ * pile splits and deals a second one beside it, and the split is BALANCED —
+ * twelve windows at a max of five is three piles of four, not 5+5+2.
+ *
+ * Why a window COUNT rather than something derived from the geometry: the limit
+ * is not "when does it stop fitting", it is "when does it stop being readable".
+ * A 1440p screen has room for eighteen 30px offsets and nobody can use a pile
+ * of eighteen windows. Five is about a hand of cards.
+ *
+ * The step comes from the titlebar height, so what peeks out from behind each
+ * window is exactly the thing that says which window it is. With titlebars off
+ * there is nothing to reveal, so it falls back to a fixed CASCADE_STEP_MIN
+ * fringe rather than to the border width, which would stack the windows
+ * essentially on top of each other.
+ *
+ * Windows are UNIFORM within a run of the desktop — every card the same size,
+ * including the ones in a short last pile. A pile of two whose cards were
+ * bigger than the pile of five beside it would read as two arrangements.
+ */
+void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
+{
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+
+    /* Same outer-gap clamp as layout_tile: a big gap on a small output must not
+     * drive the working area negative. */
+    int gap = s->config.gap;
+    int x = area.x + gap;
+    int y = area.y + gap;
+    int W = area.width  - 2 * gap;
+    int H = area.height - 2 * gap;
+    if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
+    if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
+
+    int n = count_windows(ws, o);
+    if (n == 0) return;
+
+    /* What peeks out from behind each card. The titlebar, when there is one. */
+    int step = s->config.titlebar_height + s->config.border_width;
+    if (step < CASCADE_STEP_MIN) step = CASCADE_STEP_MIN;
+
+    int per_max = s->config.cascade_stack_max;
+    if (per_max < CASCADE_STACK_MIN) per_max = CASCADE_STACK_MIN;
+    if (per_max > CASCADE_STACK_MAX) per_max = CASCADE_STACK_MAX;
+
+    /* Balance the split. `stacks` from the cap, then `per` back out of
+     * `stacks` — the round trip is what turns 12-at-5 into 4+4+4 instead of
+     * 5+5+2, and a lopsided last pile is the thing that makes an arrangement
+     * look like it ran out rather than like it finished. */
+    int stacks = (n + per_max - 1) / per_max;
+    if (stacks < 1) stacks = 1;
+    int per = (n + stacks - 1) / stacks;
+    if (per < 1) per = 1;
+
+    /* A pile can also be capped by the SCREEN rather than by the count, and it
+     * has to be: on a 1024x768 VM (the ISO's default) five 40px steps eat more
+     * than half the height, and the cards come out shorter than they are wide.
+     * Shrink the pile until each card keeps at least half the working box, then
+     * re-derive the stacks — never the other way round, or the last pile is
+     * lopsided again. */
+    int per_fit = 1 + (H / 2) / step;
+    if (per_fit < 1) per_fit = 1;
+    if (per > per_fit) {
+        per    = per_fit;
+        stacks = (n + per - 1) / per;
+        per    = (n + stacks - 1) / stacks;
+    }
+
+    int col_w = (W - (stacks - 1) * gap) / stacks;
+    if (col_w < MIN_WIN) col_w = MIN_WIN;
+
+    int win_w = col_w - (per - 1) * step;
+    int win_h = H     - (per - 1) * step;
+    if (win_w < MIN_WIN) win_w = MIN_WIN;
+    if (win_h < MIN_WIN) win_h = MIN_WIN;
+
+    int i = 0;
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->mapped || v->floating || v->fullscreen || v->minimized) continue;
+        if (v->output != o) continue;
+
+        int stack = i / per;      /* which pile */
+        int depth = i % per;      /* how far into it — 0 is the back card */
+
+        place_view(v,
+                   x + stack * (col_w + gap) + depth * step,
+                   y + depth * step,
+                   win_w, win_h);
+
+        /* Stacking order IS the arrangement here — this is the one layout whose
+         * windows overlap, so a card placed lower-right but drawn behind the
+         * one above it would hide the very thing the offset exposes. Raising in
+         * list order leaves each pile's front card on top.
+         *
+         * This does NOT fight focus. layout_apply() is not run on focus changes
+         * (only monocle asks for that), so a window raised by focus_view stays
+         * raised — which is exactly the card-pulled-out-of-the-pile behaviour
+         * you want, since its titlebar has not moved. */
+        wlr_scene_node_raise_to_top(view_node(v));
         i++;
     }
 }
@@ -1252,6 +1377,7 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
         switch (ws->layout) {
         case LAYOUT_TILING:   layout_tile(s, ws, o);     break;
         case LAYOUT_SPIRAL:   layout_spiral(s, ws, o);   break;
+        case LAYOUT_CASCADE:  layout_cascade(s, ws, o);  break;
         case LAYOUT_MONOCLE:  layout_monocle(s, ws, o);  break;
         case LAYOUT_NIRI:     layout_niri(s, ws, o);     break;
         case LAYOUT_AI:
@@ -1548,6 +1674,7 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
                             (view->workspace->layout == LAYOUT_TILING ||
                              view->workspace->layout == LAYOUT_SPIRAL ||
                              view->workspace->layout == LAYOUT_NIRI ||
+                             view->workspace->layout == LAYOUT_CASCADE ||
                              view->workspace->layout == LAYOUT_AI);
     if (layout_places_it && !view->floating)
         return false;

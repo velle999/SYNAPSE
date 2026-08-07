@@ -164,9 +164,16 @@ static void test_parse_shapes(void)
     assert(strcmp(c.terminal, "kitty -e tmux") == 0);
 
     /* A bind — the one case that splits `val` in place, which is why
-     * config_parse_kv takes a mutable pointer. */
+     * config_parse_kv takes a mutable pointer.
+     *
+     * The combo has to be one NOTHING ships a default for, or this asserts the
+     * wrong thing: config_bind_set replaces by chord, so a bind on a defaulted
+     * combo leaves bind_count where it was and the append assertion fails for a
+     * reason that has nothing to do with parsing. This was super+shift+y until
+     * the cascade layout took that key for retile (2026-08-07). Ctrl+Alt+F12 is
+     * not a chord this project is ever going to want. */
     int before = c.bind_count;
-    snprintf(v, sizeof(v), "super+shift+y term");
+    snprintf(v, sizeof(v), "ctrl+alt+f12 term");
     config_parse_kv(&c, "bind", v);
     assert(c.bind_count == before + 1);
 

@@ -693,8 +693,9 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * Only the layouts that own their windows' geometry, the same set
          * layout_restore_geometry tests. Floating is where a window is meant to
          * be free, and monocle deliberately keeps honouring a saved float. */
-        if (ws->layout == LAYOUT_TILING || ws->layout == LAYOUT_SPIRAL ||
-            ws->layout == LAYOUT_NIRI   || ws->layout == LAYOUT_AI)
+        if (ws->layout == LAYOUT_TILING  || ws->layout == LAYOUT_SPIRAL ||
+            ws->layout == LAYOUT_NIRI    || ws->layout == LAYOUT_AI     ||
+            ws->layout == LAYOUT_CASCADE)
             layout_reclaim(s, ws);
 
         layout_apply(s, ws);
@@ -745,6 +746,34 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                      ws->index + 1);
         s->layout_notif_id = notif_post(s, "synui",
                                         switched ? "tiling" : "Re-tiled", rbody,
+                                        NOTIF_URGENCY_LOW, 1500,
+                                        s->layout_notif_id);
+    } else if (strcmp(action, "cascade") == 0) {
+        /* "Deal this desktop out." Same shape as `retile` above — switch, then
+         * reclaim, then say what happened — and split out rather than folded
+         * into it with an argument, because the two answer different questions
+         * and a user reading a bind list should see both.
+         *
+         * Unlike retile, this switches from ANY layout, not only from floating.
+         * Cascading is a destination in a way that tiling is not: reaching it by
+         * cycling walks the desk through up to six other arrangements. */
+        int switched = 0;
+        if (ws->layout != LAYOUT_CASCADE) {
+            ws->layout = LAYOUT_CASCADE;
+            switched = 1;
+            layout_state_save(s);   /* same rule as layout_cycle: it's a choice */
+        }
+        int taken = layout_reclaim(s, ws);
+        layout_apply(s, ws);
+
+        char cbody[96];
+        if (taken)
+            snprintf(cbody, sizeof(cbody), "%d window%s back in the layout",
+                     taken, taken == 1 ? "" : "s");
+        else
+            snprintf(cbody, sizeof(cbody), "Desktop %d", ws->index + 1);
+        s->layout_notif_id = notif_post(s, "synui",
+                                        switched ? "cascade" : "Re-dealt", cbody,
                                         NOTIF_URGENCY_LOW, 1500,
                                         s->layout_notif_id);
     } else if (strcmp(action, "float_arrange") == 0) {

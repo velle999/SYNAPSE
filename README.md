@@ -185,7 +185,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`W` / `Super`+`Shift`+`W` | Wallpaper picker (`Tab` scopes it to one monitor) / reload the wallpaper |
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
-| `Super`+`Shift`+`T` | Tile windows |
+| `Super`+`Shift`+`T` | Cascade this desktop — overlapping windows offset so every titlebar stays reachable, dealt into several piles once one would run off the screen |
+| `Super`+`Shift`+`Y` | Tile windows (drags hand-placed windows back into the layout) |
 | `Super`+`Shift`+`G` | Arrange the floating desktop — puts every window you have dragged back into the inset grid ("G for grid") |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
 | `Super`+`Shift`+`X` | Crop an image ("X for cut") — opens on your recent images from Pictures, Wallpapers and Downloads |

@@ -114,6 +114,7 @@ static const char *layout_name(syn_layout_t l)
     case LAYOUT_AI:       return "ai";
     case LAYOUT_NIRI:     return "niri";
     case LAYOUT_SPIRAL:   return "spiral";
+    case LAYOUT_CASCADE:  return "cascade";
     }
     return "unknown";
 }

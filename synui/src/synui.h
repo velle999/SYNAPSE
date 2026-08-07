@@ -254,13 +254,27 @@ typedef enum {
      * Appended for the same reason LAYOUT_NIRI was: the ordinals ARE the
      * Super+Tab cycle order and layouts.state is written against them. */
     LAYOUT_SPIRAL,
+    /* Cascade: overlapping windows offset down-and-right so every titlebar
+     * stays reachable, and the pile SPLITS INTO SEVERAL once one would run off
+     * the screen — a few hands of cards dealt side by side rather than one
+     * fifty-two-card slide off the desk.
+     *
+     * The only layout here whose windows overlap on purpose. That is what it is
+     * for: a master-stack column of eight windows is eight letterbox strips,
+     * and a grid of eight is eight postage stamps, but eight cascaded windows
+     * are eight windows you can actually read one at a time, with the other
+     * seven one click away.
+     *
+     * Appended for the same reason NIRI and SPIRAL were: the ordinals ARE the
+     * Super+Tab cycle order and layouts.state is written against them. */
+    LAYOUT_CASCADE,
 } syn_layout_t;
 
 /* How many layouts Super+Tab walks. NOT an enumerator: adding one to
  * syn_layout_t would make every switch over it (layout_label, layout_key,
  * ipc.c's layout_name, layout_apply's dispatch) grow a case for a value that
  * is not a layout. */
-#define SYN_LAYOUT_COUNT  (LAYOUT_SPIRAL + 1)
+#define SYN_LAYOUT_COUNT  (LAYOUT_CASCADE + 1)
 
 typedef enum {
     WIN_SECURE_NORMAL = 0,
@@ -1219,6 +1233,7 @@ typedef enum {
     CTL_ROW_TITLEBAR_HEIGHT,
     CTL_ROW_ANIMATION_MS,
     CTL_ROW_MASTER_FACTOR,
+    CTL_ROW_CASCADE_STACK, /* windows per pile in LAYOUT_CASCADE */
     CTL_ROW_FOCUS_MODE,
     CTL_ROW_FOCUS_DELAY,
     CTL_ROW_SNAP,
@@ -2236,6 +2251,8 @@ typedef struct {
     int   float_inset;
     int   float_gap;
     float master_factor;
+    /* LAYOUT_CASCADE: windows per pile before a second pile starts beside it. */
+    int   cascade_stack_max;
     int   ai_layout;
     int   ai_ctx_decor;
     int   start_overlay;
@@ -4394,6 +4411,17 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+/* How many windows one cascade pile may hold before the arrangement starts a
+ * second pile beside it. See layout_cascade() for why this is a count rather
+ * than something derived from the geometry. */
+#define CASCADE_STACK_MAX_DEF  5
+#define CASCADE_STACK_MIN      2
+#define CASCADE_STACK_MAX      12
+/* The smallest useful diagonal offset between two cards in a pile, for a
+ * desktop whose titlebars are off — without it the step would be the border
+ * width and the pile would be a single window with a two-pixel fringe. */
+#define CASCADE_STEP_MIN       24
 /* The floating desktop's own tiler: an inset grid that deliberately leaves the
  * wallpaper showing (float_inset / float_gap). Skips any window the user has
  * placed by hand (view->hand_placed), so a drag is permanent. */

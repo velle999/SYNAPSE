@@ -239,13 +239,14 @@ esac
 close_window
 
 # ── 5. floating: the feature still works ─────────────────────────────────
-# Round the cycle back: niri → spiral → tiling → floating.
+# Round the cycle back: niri → spiral → cascade → tiling → floating.
+synctl dispatch layout_cycle >/dev/null
 synctl dispatch layout_cycle >/dev/null
 synctl dispatch layout_cycle >/dev/null
 synctl dispatch layout_cycle >/dev/null
 [ "$(layout_now)" = "floating" ] || fail "layout_cycle did not come back round to
        floating, got $(layout_now). The cycle order is the syn_layout_t order:
-       tiling, floating, monocle, AI, niri, spiral."
+       tiling, floating, monocle, AI, niri, spiral, cascade."
 
 open_window
 echo "floating: $(win_size) $WIN"

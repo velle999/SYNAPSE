@@ -812,6 +812,12 @@ test('layout_persist', layout_persist,
      depends : [synui_exe, synctl_exe],
      timeout : 120)
 
+notif_sh = find_program('tests/notif.sh')
+test('notif', notif_sh,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 120)
+
 overview_sh = find_program('tests/overview.sh')
 test('overview', overview_sh,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

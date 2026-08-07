@@ -25,7 +25,8 @@
  * helper writes (Super+/, then F2 — see binds.state in keys.c): moving a
  * shortcut is a `bind` for the new chord and an `unbind` for the old one.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
- * layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
+ * layout_cycle, retile, cascade, overview, about, focus_next/prev, alt_tab,
+ * alt_tab_prev,
  * stack_next/prev, master_shrink/grow,
  * float_toggle, fullscreen_toggle, maximize_toggle, minimize_toggle,
  * minimize_restore, decorations_toggle, ai_ask,
@@ -100,6 +101,12 @@
  *   numlock = on|off            (default on — lock NumLock at attach so the
  *                                numpad types digits from login onwards,
  *                                including on the swaylock screen)
+ *
+ * Cascade layout (layout.c, Super+Shift+T) — overlapping windows offset so
+ * every titlebar stays reachable, splitting into several piles once one would
+ * run off the screen. The limit is readability, not geometry: a 1440p screen
+ * has room for eighteen offsets and nobody can use a pile of eighteen:
+ *   cascade_stack_max = 5       (2-12; windows per pile before a second starts)
  *
  * Dock (dock.c):
  *   dock_enabled = on|off       (default on)
@@ -560,15 +567,21 @@ static void seed_default_binds(syn_config_t *cfg)
          * guessable super+shift+a. That freed super+shift+a, which stayed
          * unbound until the desktop widgets claimed it below. */
         { "super+t",         "theme" },
-        /* T for tile. This was the calendar until 2026-07-31, and the calendar
-         * lost nothing by it: clicking the bar clock opens it (quickshell's
-         * modules/Clock.qml runs `synctl dispatch calendar`), which is how
-         * everyone reaches it anyway, and the clock panel's own "c" key still
-         * does. Deliberately NOT rehomed onto super+shift+d — that is
-         * decorations_toggle, and a duplicate here would silently take the
-         * titlebar toggle out. Nothing is bound to `calendar` now; bind it back
-         * with a `bind =` line if you want a key for it. */
-        { "super+shift+t",   "retile" },
+        /* Cascade: deal the desktop out as overlapping cards, splitting into
+         * several piles once one would run off the screen. Velle asked for this
+         * key specifically (2026-08-07).
+         *
+         * It DISPLACES retile, which moves to super+shift+y below rather than
+         * losing its key — retile is the only gesture that drags hand-placed
+         * windows back into a layout, and dropping it to make room would be
+         * exactly the silent regression this project keeps catching. Y because
+         * it is next to T and nothing else wanted it. */
+        { "super+shift+t",   "cascade" },
+        /* T was retile's from 2026-07-31 (it took the key off the calendar,
+         * which lost nothing by it — the bar clock opens the calendar, which is
+         * how everyone reaches it anyway). Nothing is bound to `calendar` now;
+         * bind it back with a `bind =` line if you want a key for it. */
+        { "super+shift+y",   "retile" },
         /* G for grid: tidy the floating desktop, putting every window you have
          * dragged back into the arrangement. Super+G is game mode and
          * super+shift+g was free — and the pairing is not a coincidence worth
@@ -790,6 +803,7 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->float_inset = FLOAT_INSET_DEFAULT;
     cfg->float_gap   = FLOAT_GAP_DEFAULT;
     cfg->master_factor = 0.60f;
+    cfg->cascade_stack_max = CASCADE_STACK_MAX_DEF;
     cfg->titlebar_height = TITLEBAR_HEIGHT_DEF;
     cfg->remember_geometry = true;
     cfg->desktop_icons     = false;   /* opt-in; the menu flips it live, and
@@ -1545,6 +1559,12 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if (a >= 0) cfg->lid_close_docked_action = a;
         else wlr_log(WLR_ERROR,
                      "synui: lid_close_docked_action: unknown '%s'", val);
+    }
+    else if (strcmp(key, "cascade_stack_max") == 0) {
+        int m = atoi(val);
+        if (m < CASCADE_STACK_MIN) m = CASCADE_STACK_MIN;
+        if (m > CASCADE_STACK_MAX) m = CASCADE_STACK_MAX;
+        cfg->cascade_stack_max = m;
     }
     else if (strcmp(key, "network_cmd") == 0)
         snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);

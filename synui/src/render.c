@@ -5336,28 +5336,196 @@ void synui_render_clipboard(syn_server_t *s)
 
 /* ── Notification toasts (notif.c) ───────────────────────── */
 
-#define NOTIF_W       360
+/* 420, up from 360. A notification is somebody else's sentence and we do not
+ * get to choose how long it is; the extra 60px is roughly eight more characters
+ * per line, which is the difference between "Download complete — synapse-0.2…"
+ * and the filename. */
+#define NOTIF_W       420
 #define NOTIF_GAP       8
 #define NOTIF_MARGIN   12
 #define NOTIF_PAD      12
 
-/* A toast is two lines, or three when it has a body. Fixed heights rather than
- * measured ones: the text is clipped to one line each anyway, so there is
- * nothing to measure, and a stack whose cards jump height as text arrives reads
- * as jitter. */
-static int notif_height(const syn_notif_t *t) { return t->body[0] ? 82 : 58; }
+/* ── How tall a toast is ─────────────────────────────────────
+ *
+ * MEASURED, not fixed. It used to be `body[0] ? 82 : 58`, with the summary and
+ * the body each drawn through draw_clipped() — which ellipsizes. So every
+ * notification longer than about forty characters was cut off at the card's
+ * right edge with a "…", and that is nearly all of them: a download finishing,
+ * a KDE Connect message, a synguard verdict, anything with a filename in it.
+ * The card had the room; nothing ever asked for it.
+ *
+ * So the body wraps, the summary wraps to two lines, and the card grows to fit
+ * what it is holding. Capped — NOTIF_SUM_LINES / NOTIF_BODY_LINES — because a
+ * notification is a toast and not a document, and a client that sends four
+ * paragraphs must not be able to paint over the whole screen. Past the cap it
+ * still ellipsizes, but on the LAST line rather than the first.
+ */
+#define NOTIF_SUM_LINES    2
+#define NOTIF_BODY_LINES   4
+#define NOTIF_LINE_SUM    19   /* leading, 14px face */
+#define NOTIF_LINE_BODY   16   /* leading, 12px face */
+#define NOTIF_TOP         20   /* baseline of the app-name line */
+#define NOTIF_BOT         12   /* padding under the last line */
+#define NOTIF_LINE_MAX    (NOTIF_SUM_LINES + NOTIF_BODY_LINES)
+
+/* One toast's text, laid out. Rebuilt on every render — the font can change
+ * under us (the UI font picker), and a cached wrap would be a card sized for a
+ * face it is no longer drawn in. */
+typedef struct {
+    char lines[NOTIF_LINE_MAX][NOTIF_BODY_MAX];
+    int  n_sum;     /* first n_sum entries are summary lines */
+    int  n_body;
+    int  height;
+} notif_layout_t;
+
+/* Greedy word wrap into `out`, at most `max_lines`. Returns the count.
+ *
+ * Breaks on spaces, and falls back to breaking mid-word for a "word" that has
+ * no space in it and does not fit — a URL, or a 90-character filename, which is
+ * exactly the kind of string notifications carry. Without that fallback such a
+ * line would consume the whole budget and still overflow.
+ *
+ * The last line ellipsizes if there is more text than lines, so a truncation is
+ * still visible as one; it just happens after four lines rather than before the
+ * end of the first.
+ */
+static int notif_wrap(cairo_t *cr, const char *text, double max_w,
+                      char out[][NOTIF_BODY_MAX], int max_lines)
+{
+    if (!text || !text[0] || max_lines <= 0) return 0;
+
+    int n = 0;
+    const char *p = text;
+
+    while (*p && n < max_lines) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+
+        /* Longest prefix that fits. `last_space` is where we would rather
+         * break; `len` is how much fits at all. */
+        size_t len = 0, last_space = 0, fit = 0;
+        char probe[NOTIF_BODY_MAX];
+
+        while (p[len] && len < sizeof(probe) - 1) {
+            size_t take = len + 1;
+            /* Never measure a string cut mid-character: cairo refuses invalid
+             * UTF-8 by poisoning the whole context, which would blank every
+             * card under this one. */
+            take = news_utf8_trim(p, take);
+            if (take == 0 || take <= fit) { len++; continue; }
+
+            memcpy(probe, p, take);
+            probe[take] = '\0';
+
+            cairo_text_extents_t ext;
+            syn_text_extents(cr, probe, &ext);
+            if (ext.width > max_w) break;
+
+            fit = take;
+            if (p[take] == ' ' || p[take] == '\0') last_space = take;
+            len = take;
+        }
+
+        if (fit == 0) break;                 /* not even one character fits */
+
+        size_t cut = last_space ? last_space : fit;
+        bool more  = p[cut] != '\0';
+
+        /* The last line we are allowed to draw, with text still to come: put
+         * the ellipsis on and stop.
+         *
+         * The ellipsis is three bytes plus a NUL, so `cut` has to leave room
+         * for four — the inner loop above only guaranteed room for cut+1. A
+         * notification body is whatever a client felt like sending, so this is
+         * a real bound and not a formality. draw_clipped() has the same -4. */
+        if (more && n == max_lines - 1) {
+            if (cut > sizeof(probe) - 4) cut = sizeof(probe) - 4;
+            while (cut > 0) {
+                cut = news_utf8_trim(p, cut);
+                if (cut == 0) break;
+                memcpy(probe, p, cut);
+                memcpy(probe + cut, "\xe2\x80\xa6", 4);
+                cairo_text_extents_t ext;
+                syn_text_extents(cr, probe, &ext);
+                if (ext.width <= max_w) break;
+                cut--;
+            }
+            if (cut == 0) break;
+            snprintf(out[n], NOTIF_BODY_MAX, "%.*s\xe2\x80\xa6", (int)cut, p);
+            n++;
+            break;
+        }
+
+        snprintf(out[n], NOTIF_BODY_MAX, "%.*s", (int)cut, p);
+        n++;
+        p += cut;
+    }
+    return n;
+}
+
+/* Lay one toast out and record how tall it came to. */
+static void notif_layout(cairo_t *cr, const syn_notif_t *t, notif_layout_t *out)
+{
+    double max_w = NOTIF_W - 2 * NOTIF_PAD;
+
+    memset(out, 0, sizeof(*out));
+
+    cairo_set_font_size(cr, 14);
+    out->n_sum = notif_wrap(cr, t->summary, max_w, out->lines, NOTIF_SUM_LINES);
+
+    cairo_set_font_size(cr, 12);
+    out->n_body = notif_wrap(cr, t->body, max_w,
+                             out->lines + out->n_sum,
+                             NOTIF_BODY_LINES);
+
+    /* app line + summary lines + body lines + bottom padding. A toast with no
+     * summary at all (legal, if unhelpful) still gets one line's worth so the
+     * card is not a sliver. */
+    int lines_h = (out->n_sum ? out->n_sum : 1) * NOTIF_LINE_SUM
+                  + out->n_body * NOTIF_LINE_BODY;
+    out->height = NOTIF_TOP + 6 + lines_h + NOTIF_BOT;
+}
+
+/* Lay out every toast on screen. Shared by the renderer, the stack box and the
+ * hit test, so a card cannot be drawn one height and clicked at another. */
+static void notif_layout_all(syn_server_t *s, notif_layout_t *out)
+{
+    /* A 1x1 scratch surface, purely to measure through: syn_text_extents needs
+     * a cairo_t, and the real buffer cannot be created until the heights it is
+     * sized from are known. */
+    cairo_t *cr = NULL;
+    struct wlr_buffer *buf = create_cairo_buf(1, 1, &cr);
+    if (!buf) {
+        /* Measuring failed. Fall back to the old fixed heights rather than
+         * dropping the notification: a toast nobody can read still beats a
+         * toast nobody sees. */
+        for (int i = 0; i < s->notifs.count; i++) {
+            memset(&out[i], 0, sizeof(out[i]));
+            out[i].height = s->notifs.items[i].body[0] ? 82 : 58;
+        }
+        return;
+    }
+    cairo_begin(cr);
+
+    for (int i = 0; i < s->notifs.count; i++)
+        notif_layout(cr, &s->notifs.items[i], &out[i]);
+
+    cairo_destroy(cr);
+    wlr_buffer_drop(buf);
+}
 
 /* Top-right of the *usable* box — the full output box would put the first toast
  * underneath waybar, which owns an exclusive zone at the top. Toasts follow the
  * focused output, so they appear on the screen you are looking at. */
-static void notif_stack_box(syn_server_t *s, struct wlr_box *out)
+static void notif_stack_box(syn_server_t *s, const notif_layout_t *lay,
+                            struct wlr_box *out)
 {
     struct wlr_box ub;
     server_usable_box(s, &ub);
 
     int h = 0;
     for (int i = 0; i < s->notifs.count; i++) {
-        h += notif_height(&s->notifs.items[i]);
+        h += lay[i].height;
         if (i) h += NOTIF_GAP;
     }
 
@@ -5374,13 +5542,21 @@ int synui_notif_hit(syn_server_t *s, double lx, double ly, struct wlr_box *stack
 {
     if (!s->notifs.count) return -1;
 
-    notif_stack_box(s, stack);
+    /* Re-laid rather than read from the last render, so this cannot be a stale
+     * answer — the cards are now variable height, and a hit test measuring
+     * anything other than what is on screen would eat clicks near a boundary.
+     * It costs one 1x1 surface and a few text measurements, on a pointer event
+     * that only happens over a toast. */
+    notif_layout_t lay[NOTIF_MAX];
+    notif_layout_all(s, lay);
+
+    notif_stack_box(s, lay, stack);
     if (lx < stack->x || lx >= stack->x + stack->width) return -1;
     if (ly < stack->y || ly >= stack->y + stack->height) return -1;
 
     int y = stack->y;
     for (int i = 0; i < s->notifs.count; i++) {
-        int h = notif_height(&s->notifs.items[i]);
+        int h = lay[i].height;
         if (ly >= y && ly < y + h) return i;
         y += h + NOTIF_GAP;
     }
@@ -5409,8 +5585,11 @@ void synui_render_notifs(syn_server_t *s)
         return;
     }
 
+    notif_layout_t lay[NOTIF_MAX];
+    notif_layout_all(s, lay);
+
     struct wlr_box box;
-    notif_stack_box(s, &box);
+    notif_stack_box(s, lay, &box);
     if (box.height <= 0) {
         wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->clip_ui.tree->node, false);
@@ -5429,7 +5608,8 @@ void synui_render_notifs(syn_server_t *s)
     int y = 0;
     for (int i = 0; i < n->count; i++) {
         const syn_notif_t *t = &n->items[i];
-        int h = notif_height(t);
+        const notif_layout_t *L = &lay[i];
+        int h = L->height;
 
         /* The card. Each toast paints its own background: they are separate
          * rounded slabs with gaps between them, which one backing rect for the
@@ -5444,21 +5624,34 @@ void synui_render_notifs(syn_server_t *s)
         cairo_rectangle(cr, 0, y, 3, h);      /* urgency stripe down the left */
         cairo_fill(cr);
 
-        /* App name, dim: it is context, not the message. */
+        /* App name, dim: it is context, not the message. Still one clipped
+         * line — an app name that does not fit in 400px is not an app name. */
         if (t->app[0]) {
             cairo_set_font_size(cr, 11);
             cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 0.9);
-            draw_clipped(cr, NOTIF_PAD, y + 20, box.width - 2 * NOTIF_PAD, t->app);
+            draw_clipped(cr, NOTIF_PAD, y + NOTIF_TOP,
+                         box.width - 2 * NOTIF_PAD, t->app);
         }
+
+        /* The wrapped lines, summary first. Both runs come out of the same
+         * array in draw order, so the only thing that changes between them is
+         * the face and the leading. */
+        double ty = y + NOTIF_TOP + 6;
 
         cairo_set_font_size(cr, 14);
         set_ink(cr, INK_STRONG, 1.0);
-        draw_clipped(cr, NOTIF_PAD, y + 40, box.width - 2 * NOTIF_PAD, t->summary);
+        for (int k = 0; k < L->n_sum; k++) {
+            ty += NOTIF_LINE_SUM;
+            cairo_move_to(cr, NOTIF_PAD, ty);
+            syn_show_text(cr, L->lines[k]);
+        }
 
-        if (t->body[0]) {
-            cairo_set_font_size(cr, 12);
-            set_ink(cr, INK_BODY, 1.0);
-            draw_clipped(cr, NOTIF_PAD, y + 62, box.width - 2 * NOTIF_PAD, t->body);
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_BODY, 1.0);
+        for (int k = 0; k < L->n_body; k++) {
+            ty += NOTIF_LINE_BODY;
+            cairo_move_to(cr, NOTIF_PAD, ty);
+            syn_show_text(cr, L->lines[L->n_sum + k]);
         }
 
         y += h + NOTIF_GAP;
