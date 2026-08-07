@@ -55,6 +55,11 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             text: "◢"
             color: Theme.cyan
+            // NOT the picked font, for the same reason Theme.iconFamily isn't:
+            // U+25E2 is a geometric symbol, and a picked face that lacks it
+            // hands the caret to whatever Qt substitutes — a different weight
+            // and advance from one font choice to the next. The wordmark below
+            // follows the picker; the caret is a mark, not text.
             font.family: "monospace"
             font.pixelSize: 13           // LAUNCHER_FONT
             Behavior on color { ColorAnimation { duration: Theme.animFast } }
@@ -82,7 +87,16 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             text: "SYNAPSE"
             color: Theme.cyan
-            font.family: "monospace"
+            // Follows the font picker, like every other string on the bar. It
+            // was hardcoded to "monospace" back when the compositor drew this
+            // button in cairo and the bar could not have known what the picker
+            // chose; keeping it meant one word in the old face after a font
+            // switch — the same "looks broken" that Theme.uiFont exists to fix.
+            //
+            // implicitWidth is content.implicitWidth + 24, so a wider or
+            // narrower face just moves Workspaces along; nothing mirrors this
+            // width any more (see the header).
+            font.family: Theme.fontFamily
             font.pixelSize: 13
             Behavior on color { ColorAnimation { duration: Theme.animFast } }
         }
