@@ -2146,7 +2146,7 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
         dock_drag_motion(s, s->cursor->x, s->cursor->y);
         return;
     }
-    /* Same for a desktop icon being dragged to a new cell. */
+    /* Same for the crop rectangle being dragged out. */
     if (s->crop.dragging) {
         /* The crop rectangle, fed the same way the desktop-icon drag is: the
          * panel's _click starts it and the release below ends it. */
@@ -2250,11 +2250,20 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
      * and taking this branch then would eat the release that ends the grab — a
      * window welded to the cursor, with no way to put it down. Those releases
      * belong to the three branches below; this one only claims a button that
-     * genuinely has nowhere else to go. */
+     * genuinely has nowhere else to go.
+     *
+     * crop.dragging is not a hypothetical the way the other two are: the
+     * cropper IS a panel, so panel_pointer_active() is true for the whole of
+     * every crop drag and this branch swallowed the mouse-up unconditionally.
+     * crop_drag_end() never ran, dragging stayed set, and the rectangle went on
+     * following the pointer after the button was released — and because
+     * process_pointer_motion() returns early while it is set, no corner could
+     * be grabbed afterwards either. */
     if (panel_pointer_active(s) &&
         state == WL_POINTER_BUTTON_STATE_RELEASED &&
         s->cursor_mode == SYNUI_CURSOR_PASSTHROUGH &&
-        !s->dock_drag.active && !s->deskicon_drag.active) {
+        !s->dock_drag.active && !s->deskicon_drag.active &&
+        !s->crop.dragging) {
         if (seat_button_is_down(s->seat, button))
             wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
         return;
@@ -2267,13 +2276,14 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
         return;
     }
 
-    /* A desktop-icon drag is the same story: PASSTHROUGH throughout, so its
-     * release has to be caught here or the drop would never be committed. */
+    /* The crop rectangle is the same story: PASSTHROUGH throughout, so its
+     * release has to be caught here or the drag would never end. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->crop.dragging) {
         crop_drag_end(s, s->cursor->x, s->cursor->y);
         return;
     }
 
+    /* And a desktop-icon drag, or the drop would never be committed. */
     if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->deskicon_drag.active) {
         deskicon_drag_end(s, s->cursor->x, s->cursor->y);
         return;
