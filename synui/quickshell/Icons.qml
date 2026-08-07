@@ -55,6 +55,13 @@ QtObject {
     readonly property string brightnessLow:  "\uF186"
     readonly property string brightnessHigh: "\uF185"
 
+    // -- Screen recording --
+    // fa-circle and fa-stop, from the same fa block as the media glyphs below,
+    // so the recording pill sits in the same visual family as the rest of the
+    // bar rather than importing a second icon style for one module.
+    readonly property string record:     "\uF111"
+    readonly property string recordStop: "\uF04D"
+
     // -- Media (MPRIS) --
     readonly property string mediaPlay:  "\uF04B"
     readonly property string mediaPause: "\uF04C"

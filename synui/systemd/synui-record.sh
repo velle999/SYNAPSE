@@ -21,6 +21,30 @@ set -u
 
 note() { command -v notify-send >/dev/null 2>&1 && notify-send -a synui "$@" || true; }
 
+# ── What was asked for ──────────────────────────────────────────────────────
+# Parsed BEFORE anything is signalled, because `--stop` must never be able to
+# START a recording.
+#
+# Super+Shift+R is a toggle and stays one: with no on-screen state, a key that
+# only starts is a key that leaves recorders running. The bar's recording pill
+# is the opposite case — it is drawn from a poll that can be a couple of seconds
+# stale, so a pill still on screen after the keybind has already stopped the
+# take would, on a toggle, begin a *second* recording. A stop button that starts
+# recording is the one thing it must not do, so it gets a verb of its own.
+mode="none"
+out=""
+action="toggle"
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --audio)     mode="system" ;;
+    --audio=*)   mode="${1#--audio=}" ;;
+    --no-audio)  mode="none" ;;
+    --output)    shift; out="${1:-}" ;;
+    --stop)      action="stop" ;;
+    esac
+    shift
+done
+
 # Already recording? Stop, and let wf-recorder finalise the file. SIGKILL would
 # leave an unplayable container — the whole recording lost with nothing to show.
 #
@@ -49,6 +73,14 @@ if pkill -TERM -x wf-recorder 2>/dev/null; then
     done
     note "Recording stopped" "Saved to ~/Videos"
     exit 0
+fi
+
+# Nothing was running. A toggle carries on and starts one; --stop stops here —
+# this is the stale-pill race above, and the honest answer to it is to say so
+# rather than to quietly begin a take nobody asked for.
+if [ "$action" = stop ]; then
+    note "Not recording" "There was no recording to stop"
+    exit 1
 fi
 
 command -v wf-recorder >/dev/null 2>&1 || {
@@ -90,17 +122,14 @@ file="$dir/synui-$(date +%Y%m%d-%H%M%S).mp4"
 # So the compositor passes the focused monitor in, exactly as it does for
 # synui-screenshot (the `record` action in src/input.c) — only synui knows which
 # screen you are looking at.
-mode="none"
-out=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-    --audio)     mode="system" ;;
-    --audio=*)   mode="${1#--audio=}" ;;
-    --no-audio)  mode="none" ;;
-    --output)    shift; out="${1:-}" ;;
-    esac
-    shift
-done
+#
+# Both flags are read by the argument loop at the top of the file, which has to
+# run before the stop path; the modes themselves are resolved here.
+#
+# Whatever ends up on wf-recorder's command line is also what the bar's
+# recording pill reports — synui-record-status reads `-o`, `-f` and `-a` back
+# out of /proc/PID/cmdline rather than being told separately, so there is no
+# second copy of this to drift.
 
 # Resolve MODE to a real device name. pactl comes from libpulse and talks to
 # pipewire-pulse, which is what wf-recorder's capture goes through as well — so

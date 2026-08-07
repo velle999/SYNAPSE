@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=278
+pkgrel=279
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -439,6 +439,12 @@ package() {
     # Screen recording: Super+Shift+R starts, and pressing it again stops.
     install -Dm755 systemd/synui-record.sh \
         "$pkgdir/usr/bin/synui-record"
+
+    # …and the bar's recording pill polls this to know a take is running. The
+    # pill is the only on-screen sign that Super+Shift+R is still recording, so
+    # without this installed the indicator is permanently invisible.
+    install -Dm755 systemd/synui-record-status.sh \
+        "$pkgdir/usr/bin/synui-record-status"
 
     # synui-cursor: install/switch X cursor themes. The Super+Shift+P picker
     # shells out to this on Enter, so it is not optional — without it the panel

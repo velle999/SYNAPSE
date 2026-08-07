@@ -185,6 +185,12 @@ PanelWindow {
                     }
                     spacing: Theme.moduleGap
 
+                    // First, nearest the centre, and on EVERY monitor: it is
+                    // an alert, not a readout, and it is invisible unless
+                    // something is actually being captured. No BarConfig key
+                    // for the same reason GameMode has none — see Recording.qml.
+                    Recording {}
+
                     Tray      { anchors.verticalCenter: parent.verticalCenter
                                 visible: BarConfig.get(bar.outName, "tray") }
                     Media     { barVisible: BarConfig.get(bar.outName, "media") }

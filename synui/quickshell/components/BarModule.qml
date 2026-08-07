@@ -42,6 +42,13 @@ Rectangle {
     property string tooltipText: ""
     property bool   active: false            // draws the magenta wash
 
+    // Read-only for modules that need to change what they SAY on hover, not
+    // just how they look — the recording pill swaps its blinking dot for a stop
+    // square, so the click target announces what the click will do. Exposed
+    // here rather than each such module laying its own MouseArea over this one:
+    // a second hoverEnabled area on top would starve the wash and the tooltip.
+    readonly property alias hovered: mouse.containsMouse
+
     signal clicked(var mouse)
     signal rightClicked(var mouse)
     signal middleClicked(var mouse)
