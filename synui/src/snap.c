@@ -96,10 +96,15 @@ syn_snap_zone_t snap_zone_at(syn_server_t *s, double lx, double ly,
     int dt = (int)ly - full.y;
     int db = (full.y + full.height) - (int)ly;
 
-    bool at_left  = dl <= SNAP_EDGE;
-    bool at_right = dr <= SNAP_EDGE;
-    bool at_top   = dt <= SNAP_EDGE;
-    bool at_bot   = db <= SNAP_EDGE;
+    /* SNAP_EDGE is now only the fallback: the width of the armed band is
+     * `snap_zone` in synuirc, because the right number depends on the panel
+     * and on how fast the pointer is set, not on the compositor. */
+    int edge = s->config.snap_zone > 0 ? s->config.snap_zone : SNAP_EDGE;
+
+    bool at_left  = dl <= edge;
+    bool at_right = dr <= edge;
+    bool at_top   = dt <= edge;
+    bool at_bot   = db <= edge;
 
     int corner_v = clampi(full.height / SNAP_CORNER_FRAC,
                           SNAP_CORNER_MIN, SNAP_CORNER_MAX);

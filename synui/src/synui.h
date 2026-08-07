@@ -1010,7 +1010,10 @@ typedef enum {
     CTL_ROW_TITLEBAR_HEIGHT,
     CTL_ROW_ANIMATION_MS,
     CTL_ROW_MASTER_FACTOR,
+    CTL_ROW_FOCUS_MODE,
+    CTL_ROW_FOCUS_DELAY,
     CTL_ROW_SNAP,
+    CTL_ROW_SNAP_ZONE,
     CTL_ROW_REMEMBER_GEOMETRY,
     CTL_ROW_CLIP_CSD_MARGIN,
     CTL_ROW_GLASS_HALO,
@@ -1474,6 +1477,23 @@ typedef enum {
 /* Names for the panel, the config parser and power.state, indexed by
  * syn_lid_action_t. Defined in power.c; keep in step with the enum above. */
 extern const char *const syn_lid_action_names[SYN_LID_ACTION_COUNT];
+
+/* Which window the keyboard follows. See syn_config_t.focus_mode.
+ *
+ * SYN_FOCUS_CLICK is the default and is what synui did before this existed;
+ * the two pointer modes differ only over the desktop, which is the whole
+ * distinction between KWin's "follows mouse" and "strictly under mouse". */
+typedef enum {
+    SYN_FOCUS_CLICK = 0,   /* only a click moves focus                        */
+    SYN_FOCUS_SLOPPY,      /* pointer moves it; the desktop keeps the last    */
+    SYN_FOCUS_STRICT,      /* pointer moves it; the desktop takes it away     */
+    SYN_FOCUS_MODE_COUNT,  /* keep last — the panel steps on it               */
+} syn_focus_mode_t;
+
+/* Indexed by syn_focus_mode_t. Defined in config.c, beside the parser that
+ * reads them; keep in step with the enum above. Note these double as the
+ * control panel's display names, folded to lower case on the way to disk. */
+extern const char *const syn_focus_mode_names[SYN_FOCUS_MODE_COUNT];
 /* syn_lid_action_t for an action name, or -1 if it is not one. */
 int lid_action_from_name(const char *name);
 
@@ -1906,6 +1926,41 @@ typedef struct {
     /* Drag a window against a screen edge to snap it to that half/quarter
      * (snap.c). Off means a drag is only ever a move. */
     int   snap;
+
+    /* How wide the armed band along each screen edge is, in px. Was a fixed 28
+     * (SNAP_EDGE). Worth a knob because the right number is a property of the
+     * desk, not of the compositor: on a 4K panel 28px is a sliver you have to
+     * aim at, and with a mouse set fast it is a band you cross without ever
+     * being inside it for a frame. */
+    int   snap_zone;
+
+    /* ── Window behaviour ────────────────────────────────────────────────
+     *
+     * focus_mode. Click-to-focus is what synui has always done and stays the
+     * default. The two pointer modes differ only in what happens over the
+     * DESKTOP: "sloppy" keeps the last window focused, "strict" drops focus to
+     * nothing — which is the distinction KWin draws between Focus Follows
+     * Mouse and Focus Strictly Under Mouse, and the reason both exist.
+     *
+     * Deliberately does not touch the click path: clicking still focuses under
+     * every mode, so a pointer mode is additive and cannot leave a window
+     * unreachable if the pointer logic is wrong. */
+    int   focus_mode;              /* syn_focus_mode_t */
+
+    /* How long the pointer must rest on a window before focus follows, in ms.
+     * 0 is immediate. Nonzero exists because focus that follows an in-flight
+     * pointer steals keystrokes as you cross a window on the way somewhere
+     * else — the keypress lands wherever the pointer happened to be. */
+    int   focus_delay_ms;
+
+    /* NOT HERE YET, on purpose. KWin's other two window-behaviour staples —
+     * focus-stealing prevention and "raise on click" — both want a change
+     * inside focus_view(), which raises unconditionally and is called by
+     * Alt+Tab, the dock, workspace switches and the layout as well as by a
+     * click. Gating it there would change all of those, so the setting would
+     * not mean what its label says. They need the raise separated from the
+     * focus first; a row that does not do what it claims is worse than no
+     * row. */
 
     /* The grid of window thumbnails Alt+Tab puts on screen while Alt is held
      * (render.c synui_render_alttab). Off leaves the cycle itself untouched —
@@ -3018,6 +3073,13 @@ struct syn_server {
     syn_cmdbar_t    cmdbar;
     syn_overlay_t   overlay;
     syn_config_t    config;
+
+    /* focus_mode's delay timer (input.c). Deliberately holds no view pointer:
+     * it re-queries what is under the cursor when it fires, so a window that
+     * unmapped while the timer was pending cannot be a dangling pointer here.
+     * Re-armed on every motion, so it expires once the pointer has been STILL
+     * for focus_delay_ms, which is the behaviour the setting describes. */
+    struct wl_event_source *focus_follow_timer;
 
     /* Interactive move/resize grab state (Super + mouse drag). */
     syn_cursor_mode_t cursor_mode;      /* PASSTHROUGH / MOVE / RESIZE */

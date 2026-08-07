@@ -284,6 +284,15 @@ static void config_bind(syn_config_t *cfg, const char *combo,
     snprintf(b->arg, sizeof(b->arg), "%s", sp);
 }
 
+/* Indexed by syn_focus_mode_t. These spellings are the synuirc vocabulary, so
+ * they are a FORMAT: renaming one silently turns an existing config line into
+ * an unknown word. Lives here rather than beside the focus code in input.c
+ * because the parser below is the thing that must have it — and because the
+ * panel's own table test links config.c without linking the compositor. */
+const char *const syn_focus_mode_names[SYN_FOCUS_MODE_COUNT] = {
+    "click", "sloppy", "strict",
+};
+
 static float clamp01(float v)
 {
     if (v < 0.0f) return 0.0f;
@@ -637,6 +646,12 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->ai_ctx_decor = 1;
     cfg->start_overlay = 0;
     cfg->snap = 1;
+    cfg->snap_zone = 28;              /* the old fixed SNAP_EDGE */
+
+    /* Every window-behaviour default is what synui did before the setting
+     * existed, so an upgrade changes nothing until someone opens the panel. */
+    cfg->focus_mode     = SYN_FOCUS_CLICK;
+    cfg->focus_delay_ms = 0;
     cfg->alt_tab_preview = 1;
     cfg->alt_tab_all_desktops = 1;
     cfg->alt_tab_minimized    = 1;
@@ -1044,6 +1059,27 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->start_overlay = strcmp(val, "on") == 0;
     else if (strcmp(key, "snap") == 0)
         cfg->snap = strcmp(val, "on") == 0;
+    else if (strcmp(key, "snap_zone") == 0) {
+        cfg->snap_zone = atoi(val);
+        if (cfg->snap_zone < 2)   cfg->snap_zone = 2;
+        if (cfg->snap_zone > 200) cfg->snap_zone = 200;
+    }
+    /* Spelled, not numbered: a focus policy written as `focus_mode = 1` in a
+     * config file is unreadable and silently means something else the day the
+     * enum grows a member. An unknown word leaves the default alone rather
+     * than falling through to click — a typo should not change behaviour. */
+    else if (strcmp(key, "focus_mode") == 0) {
+        for (int i = 0; i < SYN_FOCUS_MODE_COUNT; i++)
+            if (strcmp(val, syn_focus_mode_names[i]) == 0) {
+                cfg->focus_mode = i;
+                break;
+            }
+    }
+    else if (strcmp(key, "focus_delay_ms") == 0) {
+        cfg->focus_delay_ms = atoi(val);
+        if (cfg->focus_delay_ms < 0)    cfg->focus_delay_ms = 0;
+        if (cfg->focus_delay_ms > 3000) cfg->focus_delay_ms = 3000;
+    }
     else if (strcmp(key, "alt_tab_preview") == 0)
         cfg->alt_tab_preview = strcmp(val, "on") == 0;
     else if (strcmp(key, "alt_tab_all_desktops") == 0)

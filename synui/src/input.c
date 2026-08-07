@@ -81,6 +81,81 @@ static inline void notify_activity(syn_server_t *s)
 }
 
 /* ── Focus ───────────────────────────────────────────────── */
+/*
+ * Focus follows the pointer, when focus_mode says so.
+ *
+ * THE CLICK PATH IS NOT TOUCHED. Clicking a window focuses it under every
+ * mode, exactly as before, so a pointer mode can only ever ADD a way to focus
+ * something. That is deliberate: a bug in the logic below leaves the desktop
+ * usable rather than leaving a window that cannot be reached.
+ *
+ * Everything that owns the pointer is refused first, and each for its own
+ * reason rather than as a blanket "are we busy":
+ *
+ *   - a held button is an implicit grab (see pointer_update_focus): moving
+ *     keyboard focus mid-drag is how a text selection ends up typing into the
+ *     window you dragged across.
+ *   - an interactive move/resize is a grab we started ourselves.
+ *   - a lock screen must never hand focus to anything behind it.
+ *   - a layer-shell surface with keyboard interactivity (the launcher, a
+ *     panel) has asked for the keyboard; the pointer does not outrank that.
+ */
+static int focus_follow_fire(void *data);
+
+static void focus_follow_pointer(syn_server_t *s, uint32_t time_msec)
+{
+    (void)time_msec;
+    if (!s || s->config.focus_mode == SYN_FOCUS_CLICK) return;
+    if (s->locked) return;
+    if (s->seat->pointer_state.button_count > 0) return;
+    if (s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH || s->grabbed_view) return;
+
+    if (s->config.focus_delay_ms <= 0) {
+        focus_follow_fire(s);
+        return;
+    }
+
+    if (!s->focus_follow_timer) {
+        struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+        s->focus_follow_timer = wl_event_loop_add_timer(loop, focus_follow_fire, s);
+        if (!s->focus_follow_timer) {          /* no timer: behave as 0 delay */
+            focus_follow_fire(s);
+            return;
+        }
+    }
+    /* Re-arming pushes it out, so it only expires once the pointer stops. */
+    wl_event_source_timer_update(s->focus_follow_timer, s->config.focus_delay_ms);
+}
+
+/* Re-queries what is under the cursor rather than trusting anything recorded
+ * when the timer was armed — see the note on focus_follow_timer. */
+static int focus_follow_fire(void *data)
+{
+    syn_server_t *s = data;
+    if (!s || s->config.focus_mode == SYN_FOCUS_CLICK) return 0;
+    if (s->locked || s->seat->pointer_state.button_count > 0) return 0;
+    if (s->cursor_mode != SYNUI_CURSOR_PASSTHROUGH || s->grabbed_view) return 0;
+
+    double sx, sy;
+    struct wlr_surface *surface = NULL;
+    syn_view_t *view = view_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
+
+    if (!view) {
+        /* Over the desktop, our own chrome, or a layer surface. THIS is the
+         * only difference between the two pointer modes: sloppy leaves the
+         * last window focused so the keyboard still goes somewhere useful
+         * while the pointer is parked on the wallpaper; strict takes focus
+         * away, which is what "strictly under mouse" means. */
+        if (s->config.focus_mode == SYN_FOCUS_STRICT && s->focused_view)
+            focus_view(s, NULL, NULL);
+        return 0;
+    }
+    if (view == s->focused_view) return 0;
+
+    focus_view(s, view, view_surface(view));
+    return 0;
+}
+
 void focus_view(syn_server_t *s, syn_view_t *view, struct wlr_surface *surface)
 {
     if (!s) return;
@@ -2052,6 +2127,11 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     deco_hover_update(s, s->cursor->x, s->cursor->y, time_msec);
 
     pointer_update_focus(s, time_msec);
+
+    /* Last, and after pointer focus: keyboard focus following the pointer is
+     * an addition to what the motion path already did, never a replacement
+     * for part of it. A no-op unless focus_mode says otherwise. */
+    focus_follow_pointer(s, time_msec);
 }
 
 static void server_cursor_motion(struct wl_listener *listener, void *data)

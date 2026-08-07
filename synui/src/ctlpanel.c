@@ -96,6 +96,12 @@ static double ctl_now_secs(void)
 static const char *const ctl_names_dock_edge[] = { "Bottom", "Top", "Left", "Right" };
 static const char *const ctl_names_arrange[]   = { "Name", "Type", "Size", "Date" };
 static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blue" };
+/* Order matches syn_focus_mode_t, and these ARE the synuirc spellings — the
+ * panel writes an enum as its display name folded to lower case (ctl_format),
+ * precisely so there is no second table to drift. So they have to be single
+ * words that read as config values, which is why the row leans on its help
+ * line to say what "sloppy" means rather than spelling it in the value. */
+static const char *const ctl_names_focus_mode[] = { "Click", "Sloppy", "Strict" };
 /* Order matches cat_breed_t in synui.h; the lower-cased spellings synuirc takes
  * live in cat_breed_names[] beside the coats themselves, so a new breed needs
  * its display name added HERE and nowhere else. */
@@ -272,9 +278,28 @@ static const struct ctl_item ctl_items[] = {
       .vmin = 0, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS,
       .help = "How far the blur reaches past the window. 0 keeps it inside the frame" },
 
+    /* Window behaviour, which is what KDE calls this and what most people come
+     * looking for. Focus leads: it is the one row here that changes what the
+     * keyboard does rather than what the mouse can do. */
+    { CTL_ROW_FOCUS_MODE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Focus follows", NULL,
+      .section = "Behaviour", .key = "focus_mode", .off = CFG(focus_mode),
+      .vtype = CTL_VAL_ENUM, NAMES(ctl_names_focus_mode),
+      .help = "Click: only a click focuses. Sloppy and Strict follow the "
+              "pointer; over the desktop, Strict drops focus, Sloppy keeps it" },
+    { CTL_ROW_FOCUS_DELAY,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Focus delay", NULL,
+      .key = "focus_delay_ms", .off = CFG(focus_delay_ms), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 1000, .vstep = 25, .unit = "ms",
+      .help = "How long the pointer rests before focus follows it. 0 is "
+              "instant, which also focuses windows you only crossed over" },
+
     { CTL_ROW_SNAP,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Edge snapping", NULL,
-      .section = "Behaviour", .key = "snap", .off = CFG(snap), .vtype = CTL_VAL_BOOL,
+      .key = "snap", .off = CFG(snap), .vtype = CTL_VAL_BOOL,
       .help = "Drag a window to an edge to fill that half or quarter" },
+    { CTL_ROW_SNAP_ZONE,      CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Snap zone", NULL,
+      .key = "snap_zone", .off = CFG(snap_zone), .vtype = CTL_VAL_INT,
+      .vmin = 2, .vmax = 200, .vstep = 2, .unit = "px",
+      .help = "How close to the edge a drag arms the snap. Raise it on a "
+              "high-DPI panel, or if a fast pointer crosses the band" },
     { CTL_ROW_REMEMBER_GEOMETRY, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Remember window size", NULL,
       .key = "remember_geometry", .off = CFG(remember_geometry), .vtype = CTL_VAL_BOOL8,
       .help = "Reopen each app where and how big it was when it closed" },
