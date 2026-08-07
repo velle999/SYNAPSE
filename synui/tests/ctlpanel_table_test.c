@@ -83,7 +83,11 @@ const char *layout_label(syn_layout_t l)      { (void)l; return "stack"; }
 const char *theme_name(syn_theme_t t)         { (void)t; return "synapse"; }
 syn_workspace_t *server_active_workspace(syn_server_t *s) { (void)s; return NULL; }
 
-/* The seven older state files and the name helpers config.c reaches for. */
+/* The eight older state files and the name helpers config.c reaches for.
+ * binds.state's loader lives in keys.c (its owner, the rebind helper), which is
+ * not linked here — the bind primitives it calls back into ARE, and they are
+ * what the round-trip test below exercises. */
+void binds_state_load(syn_config_t *c)        { (void)c; }
 void wallpaper_state_load(syn_config_t *c)    { (void)c; }
 void cursor_state_load(syn_config_t *c)       { (void)c; }
 void dock_state_load(syn_config_t *c)         { (void)c; }
@@ -422,6 +426,104 @@ static void test_apply_hooks(void)
     printf("  apply hooks .............. ok\n");
 }
 
+/*
+ * The bind primitives the rebind helper is built on.
+ *
+ * The load-bearing property is that syn_bind_format_combo() writes a combo
+ * syn_bind_parse_combo() reads back to the SAME chord. binds.state is generated
+ * by the first and consumed — via config_parse_kv, via synuirc's own grammar —
+ * by the second, so a disagreement between them is a shortcut that works for
+ * the rest of the session and is silently gone at the next login. That is the
+ * failure that is hardest to attribute, because the file on disk looks right.
+ *
+ * The chords here are chosen to cover what actually trips a formatter: every
+ * modifier at once, a bare function key with no modifier at all, a key xkb
+ * spells in mixed case ("Escape", "Print"), and the two whose synuirc spelling
+ * is not what the keycap says ("equal", "space").
+ */
+static void test_bind_combo_round_trip(void)
+{
+    static const struct { uint32_t mods; xkb_keysym_t sym; const char *want; } cases[] = {
+        { WLR_MODIFIER_LOGO, XKB_KEY_w, "super+w" },
+        { WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT, XKB_KEY_q, "super+shift+q" },
+        { WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_Delete, "ctrl+alt+delete" },
+        { WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_SHIFT,
+          XKB_KEY_k, "super+ctrl+alt+shift+k" },
+        { 0, XKB_KEY_Print, "print" },
+        { 0, XKB_KEY_XF86AudioMute, "xf86audiomute" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_equal, "super+equal" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_space, "super+space" },
+        { WLR_MODIFIER_LOGO, XKB_KEY_Escape, "super+escape" },
+    };
+
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        char out[64];
+        syn_bind_format_combo(cases[i].mods, cases[i].sym, out, sizeof(out));
+        if (strcmp(out, cases[i].want) != 0) {
+            printf("    formatted '%s', expected '%s'\n", out, cases[i].want);
+            assert(0);
+        }
+
+        uint32_t mods = 0xffffffffu;
+        xkb_keysym_t sym = XKB_KEY_NoSymbol;
+        if (!syn_bind_parse_combo(out, &mods, &sym)) {
+            printf("    '%s' formatted but did not parse back\n", out);
+            assert(0);
+        }
+        if (mods != cases[i].mods || sym != cases[i].sym) {
+            printf("    '%s' round-tripped to a different chord\n", out);
+            assert(0);
+        }
+    }
+
+    /* A combo with no key part at all is a config line to reject, not a bind on
+     * NoSymbol — which would match a keypress that never happens and sit in the
+     * table looking like it worked. */
+    assert(!syn_bind_parse_combo("super+shift", NULL, NULL));
+    assert(!syn_bind_parse_combo("super+notakey", NULL, NULL));
+
+    printf("  bind combo round-trip .... ok\n");
+}
+
+/*
+ * Moving a shortcut is TWO operations, and this is the one that is easy to
+ * forget. Binding the new chord leaves the old one bound as well — the defaults
+ * are seeded before any file is read — so without the unbind the shortcut
+ * answers to both keys, which reads as a rebind that only half applied.
+ */
+static void test_bind_move(void)
+{
+    syn_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+
+    config_bind_set(&cfg, WLR_MODIFIER_LOGO, XKB_KEY_w, "wallpaper", "");
+    config_bind_set(&cfg, WLR_MODIFIER_LOGO, XKB_KEY_p, "power", "");
+    assert(cfg.bind_count == 2);
+
+    /* Same chord again replaces rather than appends: a synuirc line overriding
+     * a default must not leave the default underneath, where handle_keybinding
+     * takes the first match and would still find it. */
+    config_bind_set(&cfg, WLR_MODIFIER_LOGO, XKB_KEY_w, "news", "");
+    assert(cfg.bind_count == 2);
+    assert(strcmp(cfg.binds[0].action, "news") == 0);
+
+    /* The move. */
+    config_bind_set(&cfg, WLR_MODIFIER_LOGO, XKB_KEY_y, "news", "");
+    assert(config_unbind_combo(&cfg, WLR_MODIFIER_LOGO, XKB_KEY_w));
+    assert(cfg.bind_count == 2);
+
+    /* Order survives the removal: the shortcuts column and the palette list in
+     * table order, so an unbind that swapped the last entry into the hole would
+     * reshuffle the list under whoever was reading it. */
+    assert(strcmp(cfg.binds[0].action, "power") == 0);
+    assert(strcmp(cfg.binds[1].action, "news") == 0);
+
+    /* And the old chord is genuinely gone. */
+    assert(!config_unbind_combo(&cfg, WLR_MODIFIER_LOGO, XKB_KEY_w));
+
+    printf("  bind move ................ ok\n");
+}
+
 int main(void)
 {
     /* Unbuffered: every failure here prints WHICH row and why, immediately
@@ -438,6 +540,8 @@ int main(void)
     test_every_row_round_trips();
     test_search();
     test_apply_hooks();
+    test_bind_combo_round_trip();
+    test_bind_move();
 
     rig_cleanup();
     printf("ctlpanel_table_test: all ok\n");

@@ -93,8 +93,10 @@ Row {
                 menu: item.modelData.menu
                 anchor {
                     item: item
-                    edges: Edges.Bottom
-                    gravity: Edges.Bottom
+                    // Away from the edge the bar is on, so a bottom bar's tray
+                    // menus grow upward instead of off the screen.
+                    edges:   BarConfig.atBottom ? Edges.Top : Edges.Bottom
+                    gravity: BarConfig.atBottom ? Edges.Top : Edges.Bottom
                 }
             }
         }

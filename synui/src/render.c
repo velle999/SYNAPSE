@@ -4863,24 +4863,48 @@ void synui_render_keys(syn_server_t *s)
     cairo_line_to(cr, pw - 18, 44);
     cairo_stroke(cr);
 
-    /* ── The search box ──
-     * Always drawn, never a mode: the panel opens taking keys, so a box that
-     * appeared only once you had typed would be a box you had to discover by
-     * typing into what looked like a plain list. */
-    cairo_set_font_size(cr, 12);
-    set_ink(cr, INK_DIM, 1.0);
-    cairo_move_to(cr, 18, 70);
-    syn_show_text(cr, "FIND  ");
+    /* ── The search box, or the capture prompt ──
+     *
+     * The box is always drawn and is never a mode: the panel opens taking keys,
+     * so a box that appeared only once you had typed would be a box you had to
+     * discover by typing into what looked like a plain list.
+     *
+     * A capture REPLACES it, and has to: while one is armed every key is the
+     * answer, so a search box still sitting there would be inviting the one
+     * thing that cannot happen. The prompt names the shortcut being rebound —
+     * the row is highlighted, but the highlight is also what "selected" looks
+     * like, and this is the line that says the panel is waiting for you. */
+    if (k->capturing) {
+        const syn_ctl_shortcut_t *sc = &k->all[k->capture_all];
 
-    cairo_set_font_size(cr, 13);
-    if (k->query_len > 0) {
+        cairo_set_font_size(cr, 12);
         set_accent(cr, 1.0);
-        char box[KEYS_QUERY_MAX + 2];
-        snprintf(box, sizeof(box), "%s_", k->query);
-        syn_show_text(cr, box);
+        cairo_move_to(cr, 18, 70);
+        syn_show_text(cr, "PRESS THE NEW KEY  ");
+
+        cairo_set_font_size(cr, 13);
+        set_ink(cr, INK_STRONG, 1.0);
+        char safe[sizeof(sc->desc)];
+        syn_utf8_copy(safe, sizeof(safe), sc->desc);
+        char prompt[sizeof(safe) + 32];
+        snprintf(prompt, sizeof(prompt), "for %s  \xc2\xb7  Esc cancels", safe);
+        syn_show_text(cr, prompt);
     } else {
-        set_ink(cr, INK_DIM, 0.9);
-        syn_show_text(cr, "_  type a key or what it does");
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_DIM, 1.0);
+        cairo_move_to(cr, 18, 70);
+        syn_show_text(cr, "FIND  ");
+
+        cairo_set_font_size(cr, 13);
+        if (k->query_len > 0) {
+            set_accent(cr, 1.0);
+            char box[KEYS_QUERY_MAX + 2];
+            snprintf(box, sizeof(box), "%s_", k->query);
+            syn_show_text(cr, box);
+        } else {
+            set_ink(cr, INK_DIM, 0.9);
+            syn_show_text(cr, "_  type a key or what it does");
+        }
     }
 
     /* ── Results ── */
@@ -4926,8 +4950,19 @@ void synui_render_keys(syn_server_t *s)
         syn_show_text(cr, "No shortcut matches that.");
     }
 
-    /* Where in the list you are, when it does not fit. */
-    if (k->n_view > KEYS_ROWS) {
+    /* The last rebind's outcome, where the scroll position would go. It WINS
+     * that slot: "Super+Y is already Night light" is the answer to something you
+     * just did, and "1-14 of 47" is not — and stacking the two would need a row
+     * of height the panel does not have. */
+    if (k->status[0]) {
+        cairo_set_font_size(cr, 11);
+        set_accent(cr, 1.0);
+        char safe[sizeof(k->status)];
+        syn_utf8_copy(safe, sizeof(safe), k->status);
+        cairo_move_to(cr, KEYS_COMBO_X, KEYS_TOP + KEYS_ROWS * KEYS_ROW_H + 6);
+        syn_show_text(cr, safe);
+    } else if (k->n_view > KEYS_ROWS) {
+        /* Where in the list you are, when it does not fit. */
         cairo_set_font_size(cr, 11);
         set_ink(cr, INK_DIM, 0.9);
         char more[64];
@@ -4937,11 +4972,16 @@ void synui_render_keys(syn_server_t *s)
         syn_show_text(cr, more);
     }
 
+    /* Per-mode, like the control panel's: while a capture is armed the only two
+     * keys that mean anything are "the new one" and Esc, and a footer still
+     * offering Enter and Ctrl+N would be listing keys that are about to be
+     * swallowed as the answer. */
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 18);
-    syn_show_text(cr,
-        "Type to filter \xc2\xb7 Up/Down or Ctrl+N/P \xc2\xb7 Enter runs it \xc2\xb7 Esc close");
+    syn_show_text(cr, k->capturing
+        ? "Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels"
+        : "Type to filter \xc2\xb7 Enter runs it \xc2\xb7 F2 rebinds \xc2\xb7 Ctrl+Shift+R resets \xc2\xb7 Esc close");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->keys_ui.text_buf, s->keys_ui.tree, buf);
@@ -7072,6 +7112,298 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
     wlr_scene_node_raise_to_top(&s->alttab_ui.thumb_tree->node);
 }
 
+/* ── Mission control (overview.c) ───────────────────────────
+ *
+ * The overview shares its thumbnail source with the switcher above —
+ * alttab_tile_source() is the one place that knows which surface actually holds
+ * a window's picture, including the Firefox subsurface case — and nothing else.
+ * Everything below is the difference between a fixed grid in the middle of the
+ * screen and a layout over the whole output.
+ *
+ * Sizes and positions come from overview_layout() / overview_ws_layout() rather
+ * than being computed here, because overview.c's hit test calls the same two.
+ * A renderer with its own idea of where a tile goes is a panel where what you
+ * click is not what you see.
+ */
+
+/* Release a tile's client buffer and take it off screen — the same contract as
+ * alttab_tile_clear(): a client buffer still locked after the overview is gone
+ * is one the client cannot put back into its own rotation. */
+static void overview_tile_clear(syn_server_t *s, int i)
+{
+    struct wlr_scene_buffer *node = s->overview_ui.thumb[i];
+    if (!node) return;
+    wlr_scene_buffer_set_buffer(node, NULL);
+    wlr_scene_node_set_enabled(&node->node, false);
+}
+
+static void overview_hide_scene(syn_server_t *s)
+{
+    if (!s->overview_ui.tree) return;
+    for (int i = 0; i < OVERVIEW_MAX; i++)
+        overview_tile_clear(s, i);
+    wlr_scene_node_set_enabled(&s->overview_ui.tree->node, false);
+}
+
+void synui_render_overview(syn_server_t *s)
+{
+    if (!s->overview_ui.tree) return;
+    if (!s->overview.visible) {
+        overview_hide_scene(s);
+        return;
+    }
+
+    struct wlr_box ob;
+    overview_output_box(s, &ob);
+
+    syn_view_t *views[OVERVIEW_MAX];
+    struct wlr_box tiles[OVERVIEW_MAX], ws[WORKSPACE_MAX];
+    int n = overview_candidates(s, views, OVERVIEW_MAX);
+    overview_layout(&ob, n, tiles);
+    overview_ws_layout(&ob, ws);
+
+    /* Windows can close while the overview is up, so the selection is clamped
+     * HERE rather than at each mover: this runs on every repaint, and it is the
+     * only point every path goes through. */
+    if (s->overview.selected >= n) s->overview.selected = n - 1;
+    if (s->overview.selected < 0)  s->overview.selected = 0;
+    int sel = s->overview.selected;
+
+    wlr_scene_node_set_position(&s->overview_ui.tree->node, ob.x, ob.y);
+    wlr_scene_node_set_enabled(&s->overview_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->overview_ui.tree->node);
+
+    /* A near-opaque scene-rect dim under everything, not a cairo fill: it
+     * covers the whole output, and painting that many pixels through cairo on
+     * every hover would be a repaint of the screen per pointer motion. */
+    /* 0.97, not the 0.90 this started at. The residual is multiplied by what
+     * is UNDER it, and what is under it is windows — a white browser page at
+     * 10% still reads as a bright slab behind the tiles, so the overview looked
+     * like it had been drawn over a desktop rather than instead of one.
+     * Measured against a white client: 0.90 leaves ~26/255, 0.97 leaves ~8. */
+    float dim[4] = { 0.03f, 0.03f, 0.06f, 0.97f };
+    if (!s->overview_ui.bg)
+        s->overview_ui.bg = wlr_scene_rect_create(s->overview_ui.tree,
+                                                  ob.width, ob.height, dim);
+    else
+        wlr_scene_rect_set_size(s->overview_ui.bg, ob.width, ob.height);
+    wlr_scene_rect_set_color(s->overview_ui.bg, dim);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(ob.width, ob.height, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    /* Everything below is drawn in TREE-LOCAL coordinates — the tree sits at
+     * the output's origin — while the layout works in layout space, because
+     * that is what the pointer arrives in. One subtraction, done once. */
+    const int ox = ob.x, oy = ob.y;
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, OVERVIEW_MARGIN, OVERVIEW_MARGIN + 4);
+    syn_show_text(cr, "MISSION CONTROL");
+
+    {
+        char head[96];
+        snprintf(head, sizeof(head), "Desktop %d \xc2\xb7 %d window%s",
+                 s->active_workspace + 1, n, n == 1 ? "" : "s");
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_DIM, 0.9);
+        draw_right(cr, ob.width - OVERVIEW_MARGIN, OVERVIEW_MARGIN + 4, head);
+    }
+
+    /* ── Tiles ── */
+    for (int i = 0; i < n; i++) {
+        syn_view_t *v = views[i];
+        int tx = tiles[i].x - ox, ty = tiles[i].y - oy;
+        int tw = tiles[i].width, th = tiles[i].height;
+        bool cur = (i == sel);
+
+        /* Something opaque under the thumbnail, for the same reason the
+         * switcher needs one: a client buffer with an alpha channel — any GTK
+         * window with rounded corners — would otherwise show the dim through
+         * its own corners. */
+        cairo_set_source_rgba(cr, 0.10, 0.10, 0.16, cur ? 0.96 : 0.72);
+        cairo_rectangle(cr, tx, ty, tw, th);
+        cairo_fill(cr);
+
+        if (cur) {
+            /* Raw, not the panel-corrected accent: this lands on the tile
+             * plate, which is a fixed near-black whatever the theme is. */
+            set_accent_raw(cr, 0.18);
+            cairo_rectangle(cr, tx, ty, tw, th);
+            cairo_fill(cr);
+            set_accent_raw(cr, 1.0);
+            cairo_set_line_width(cr, 2);
+            cairo_rectangle(cr, tx + 1, ty + 1, tw - 2, th - 2);
+            cairo_stroke(cr);
+        }
+
+        int aw = tw - 2 * ATB_INSET;
+        int ah = th - 2 * ATB_INSET - OVERVIEW_LABEL_H;
+        if (aw < 1) aw = 1;
+        if (ah < 1) ah = 1;
+
+        atb_source_t src;
+        if (alttab_tile_source(v, &src)) {
+            /* Fit, not fill — cropping hides the part of the window that would
+             * have said which one it is. Unlike the switcher, a thumbnail here
+             * is NOT capped at 1:1: the cells are big enough that a small
+             * window blown up is still the right answer, since the alternative
+             * is a postage stamp adrift in a tile. */
+            double sc = (double)aw / src.lw;
+            if ((double)ah / src.lh < sc) sc = (double)ah / src.lh;
+            int dw = (int)(src.lw * sc + 0.5);
+            int dh = (int)(src.lh * sc + 0.5);
+            if (dw < 1) dw = 1;
+            if (dh < 1) dh = 1;
+
+            struct wlr_scene_buffer **node = &s->overview_ui.thumb[i];
+            if (!*node)
+                *node = wlr_scene_buffer_create(s->overview_ui.thumb_tree,
+                                                src.buf);
+            else
+                wlr_scene_buffer_set_buffer(*node, src.buf);
+
+            if (*node) {
+                /* No wlr_buffer_drop(): the surface owns this buffer and the
+                 * scene takes its own lock. Dropping here would free something
+                 * the client is still drawing into. */
+                wlr_scene_buffer_set_source_box(*node, &src.src);
+                wlr_scene_buffer_set_dest_size(*node, dw, dh);
+                wlr_scene_buffer_set_transform(*node, src.transform);
+                /* A minimized window is faded even when selected: it is on the
+                 * desk but not on the screen, and the tile is the only place
+                 * that difference can be shown. */
+                float op = cur ? 1.0f : 0.80f;
+                if (v->minimized) op *= 0.55f;
+                wlr_scene_buffer_set_opacity(*node, op);
+                wlr_scene_node_set_position(&(*node)->node,
+                                            tx + ATB_INSET + (aw - dw) / 2,
+                                            ty + ATB_INSET + (ah - dh) / 2);
+                wlr_scene_node_set_enabled(&(*node)->node, true);
+            }
+        } else {
+            overview_tile_clear(s, i);
+            alttab_draw_icon(cr, view_app_id(v), tx + tw / 2.0,
+                             ty + (th - OVERVIEW_LABEL_H) / 2.0, 72);
+        }
+
+        /* ── Label row ── */
+        double lry = ty + th - OVERVIEW_LABEL_H / 2.0 + 4;
+        alttab_draw_icon(cr, view_app_id(v),
+                         tx + ATB_INSET + ATB_BADGE / 2.0,
+                         ty + th - OVERVIEW_LABEL_H / 2.0, ATB_BADGE);
+
+        const char *title = view_title(v);
+        if (!title || !title[0]) title = view_app_id(v);
+        if (!title || !title[0]) title = "(untitled)";
+
+        /* A title is whatever bytes the client felt like sending, and one
+         * invalid UTF-8 byte puts cairo into a permanent error state — which
+         * here would blank every tile drawn after this one. */
+        char label[192];
+        syn_utf8_copy(label, sizeof(label), title);
+        if (!label[0]) snprintf(label, sizeof(label), "(untitled)");
+
+        cairo_set_font_size(cr, 12);
+        double lr = tx + tw - ATB_INSET;
+
+        /* MIN goes in the label row rather than over the thumbnail: the
+         * thumbnails are scene buffers in a tree raised above this cairo layer,
+         * so anything drawn in the tile area is behind the client's picture. */
+        if (v->minimized) {
+            cairo_text_extents_t wext;
+            syn_text_extents(cr, "MIN", &wext);
+            cairo_set_source_rgba(cr, 0.55, 0.58, 0.70, 1.0);
+            draw_right(cr, lr, lry, "MIN");
+            lr -= wext.width + 8;
+        }
+
+        /* Fixed light ink, not the panel ladder: the label sits on the tile
+         * plate, which is near-black on every theme — set_ink() would resolve
+         * to a dark grey on a light theme and put the titles black-on-black. */
+        if (cur) cairo_set_source_rgba(cr, 0.97, 1.00, 1.00, 1.0);
+        else     cairo_set_source_rgba(cr, 0.74, 0.74, 0.79, 1.0);
+        double lx = tx + ATB_INSET + ATB_BADGE + 6;
+        draw_clipped(cr, lx, lry, lr - lx, label);
+    }
+
+    /* Tiles the grid is not using still hold a client buffer from the last
+     * layout — a window that closed, or a desktop with fewer windows on it. */
+    for (int i = n; i < OVERVIEW_MAX; i++)
+        overview_tile_clear(s, i);
+
+    /* An empty desktop is a real answer and has to look like one, or it reads
+     * as the overview having failed to open. */
+    if (n == 0) {
+        cairo_set_font_size(cr, 14);
+        set_ink(cr, INK_DIM, 0.9);
+        const char *msg = "Nothing open on this desktop.";
+        cairo_text_extents_t e;
+        syn_text_extents(cr, msg, &e);
+        cairo_move_to(cr, (ob.width - e.width) / 2.0, ob.height / 2.0);
+        syn_show_text(cr, msg);
+    }
+
+    /* ── The desktop strip ── */
+    for (int i = 0; i < WORKSPACE_MAX; i++) {
+        int wx = ws[i].x - ox, wy = ws[i].y - oy;
+        int ww = ws[i].width,  wh = ws[i].height;
+        bool active = (i == s->active_workspace);
+
+        /* Occupied desktops read differently from empty ones — that is what
+         * makes the strip a map rather than nine identical buttons. */
+        bool used = !wl_list_empty(&s->workspaces[i].windows);
+
+        cairo_set_source_rgba(cr, 0.12, 0.12, 0.18, active ? 0.95 : 0.70);
+        cairo_rectangle(cr, wx, wy, ww, wh);
+        cairo_fill(cr);
+
+        if (active) {
+            set_accent_raw(cr, 0.22);
+            cairo_rectangle(cr, wx, wy, ww, wh);
+            cairo_fill(cr);
+            set_accent_raw(cr, 1.0);
+            cairo_set_line_width(cr, 2);
+            cairo_rectangle(cr, wx + 1, wy + 1, ww - 2, wh - 2);
+            cairo_stroke(cr);
+        }
+
+        char pill[24];
+        snprintf(pill, sizeof(pill), "%d", i + 1);
+        cairo_set_font_size(cr, 14);
+        cairo_text_extents_t pe;
+        syn_text_extents(cr, pill, &pe);
+        if (active)    cairo_set_source_rgba(cr, 0.97, 1.00, 1.00, 1.0);
+        else if (used) cairo_set_source_rgba(cr, 0.74, 0.74, 0.79, 1.0);
+        else           cairo_set_source_rgba(cr, 0.42, 0.43, 0.50, 1.0);
+        cairo_move_to(cr, wx + (ww - pe.width) / 2.0, wy + wh / 2.0 + 5);
+        syn_show_text(cr, pill);
+    }
+
+    /* ABOVE the strip, in the margin the tile area already leaves for it — not
+     * at `ob.height - 12`, which is inside the strip and drew the hint straight
+     * through desktop 1's pill. */
+    cairo_set_font_size(cr, 12);
+    set_ink(cr, INK_DIM, 0.9);
+    cairo_move_to(cr, OVERVIEW_MARGIN, ob.height - OVERVIEW_STRIP_H - 14);
+    syn_show_text(cr,
+        "Arrows or click pick a window \xc2\xb7 Enter opens it \xc2\xb7 "
+        /* The literal has to BREAK after the en dash: "\x939" is a three-digit
+         * hex escape, not "\x93" followed by a 9, so the unsplit form is a
+         * compile error rather than a stray glyph. */
+        "Del closes it \xc2\xb7 1\xe2\x80\x93" "9 switch desktop \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->overview_ui.text_buf, s->overview_ui.tree, buf);
+
+    /* Above the cairo layer, which set_scene_buffer may have just created as a
+     * later sibling of the thumbnail tree. */
+    wlr_scene_node_raise_to_top(&s->overview_ui.thumb_tree->node);
+}
+
 /* ── Initialize all UI scene trees ───────────────────────── */
 
 void synui_ui_init(syn_server_t *s)
@@ -7111,6 +7443,14 @@ void synui_ui_init(syn_server_t *s)
      * have to be a later sibling than the cairo layer to sit on top of it, and
      * the cairo layer's node is itself created lazily on the first render. */
     s->alttab_ui.thumb_tree = wlr_scene_tree_create(s->alttab_ui.tree);
+    /* Mission control. After the switcher, and for the same reason the palette
+     * is after the control panel: it is full-screen, so anything under it would
+     * be covered rather than merely behind it. Its thumbnail tree is created
+     * here too, not lazily — the buffers have to be a later sibling than the
+     * cairo layer to sit on top of it, and that layer's node is itself created
+     * on the first render. */
+    s->overview_ui.tree = wlr_scene_tree_create(&s->scene->tree);
+    s->overview_ui.thumb_tree = wlr_scene_tree_create(s->overview_ui.tree);
     s->dockmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->deskmenu_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->cmdbar_ui.tree  = wlr_scene_tree_create(&s->scene->tree);
@@ -7136,6 +7476,7 @@ void synui_ui_init(syn_server_t *s)
     wlr_scene_node_set_enabled(&s->cal_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->keys_ui.tree->node, false);
+    wlr_scene_node_set_enabled(&s->overview_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->thememgr_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->bt_ui.tree->node, false);
     wlr_scene_node_set_enabled(&s->notif_ui.tree->node, false);

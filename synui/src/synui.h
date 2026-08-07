@@ -1282,6 +1282,10 @@ typedef enum {
     CTL_ROW_AI_LAYOUT,
     CTL_ROW_AI_CTX_DECOR,
     CTL_ROW_NEWS_REFRESH,
+    CTL_ROW_ABOUT,         /* System ▸ About OS — fetch, in a terminal */
+    CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */
+    CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
+    CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
 
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
@@ -1397,6 +1401,18 @@ typedef struct {
      * Super-tap, and the collapsed workspace pair. */
     char action[SYN_BIND_ACTION_LEN];
     char arg[SYN_BIND_ARG_LEN];
+    /* The chord itself, for the rebind helper — which has to find this line's
+     * entry in the bind table, and cannot do it by action: `spawn` appears
+     * three times over and `move_output` twice.
+     *
+     * `rebindable` is NOT "sym != NoSymbol". The rows that are not a single
+     * bind divide into two kinds and both must be refused: Super-tap has an
+     * action but no chord at all (it is defined by the ABSENCE of one), and the
+     * two collapsed workspace rows stand for nine binds each — rebinding
+     * "Super+1–9" would mean picking one of the nine the row does not name. */
+    int          rebindable;
+    uint32_t     mods;
+    xkb_keysym_t sym;
 } syn_ctl_shortcut_t;
 
 #define CTL_SHORTCUTS_MAX  SYN_BINDS_MAX
@@ -1435,6 +1451,32 @@ typedef struct {
      * edit, so the draw, the cursor and the pointer all walk one list. */
     int  view[KEYS_MAX];
     int  n_view;
+
+    /* ── Rebinding ───────────────────────────────────────────
+     *
+     * F2 (or Ctrl+R) on a row arms `capturing`, and the NEXT chord becomes that
+     * shortcut's key. This lives in the palette rather than in a panel of its
+     * own because the palette is already the list — "find the shortcut, then
+     * change it" is one journey, and a separate rebind window would be a second
+     * list of shortcuts, which is the bug ctlpanel_shortcuts() exists to
+     * prevent.
+     *
+     * `capture_all` indexes all[], not view[]: the query can be edited while a
+     * capture is armed only by cancelling it first, but all[] indices survive a
+     * re-filter and view[] indices do not, and the difference costs nothing.
+     *
+     * The shortcut being rebound is remembered as its OWN chord rather than as
+     * a pointer: the moment a new bind lands, the table is rewritten and any
+     * pointer into it is stale. */
+    int          capturing;
+    int          capture_all;
+    uint32_t     capture_mods;   /* the chord the row had when F2 was pressed */
+    xkb_keysym_t capture_sym;
+
+    /* One line under the list: what the last rebind did, or why it was refused.
+     * Cleared on the next keystroke that is not part of a capture, so it does
+     * not sit there describing something two searches ago. */
+    char status[96];
 
     syn_hit_t hit;
 } syn_keys_t;
@@ -1585,6 +1627,46 @@ typedef struct {
     /* Pointer geometry, written by this panel's synui_render_*. */
     syn_hit_t hit;
 } syn_clipboard_t;
+
+/* ── Mission control / overview (overview.c) ─────────────────
+ *
+ * Every window on the desktop, scaled down, laid out so none of them overlap,
+ * with the virtual desktops along the bottom. GNOME's Activities and macOS's
+ * Mission Control, and the point is the same: the desk you cannot see because
+ * of the windows on it.
+ *
+ * NOT a second Alt+Tab, and the difference is what it is FOR. The switcher
+ * answers "the window I was just in" and is built around that: MRU order, one
+ * fixed-size grid in the middle of the screen, up while a key is held. This
+ * answers "where did I put it", so it is spatial rather than temporal — stable
+ * order, tiles over the whole output at whatever size they fit, and it stays up
+ * until you pick something. They share their thumbnail machinery (render.c's
+ * alttab_tile_source) and nothing else.
+ *
+ * ── It stores no view pointers, and that is load-bearing ──
+ *
+ * The candidate list and the tile layout are both recomputed from live state on
+ * every render AND on every pointer event — overview_candidates() and
+ * overview_layout() are pure functions of the workspace and the output box. So
+ * there is nothing here for a closing window to dangle, and no fifth place to
+ * remember on view destroy. It is the same trade the switcher makes: a window
+ * that closes between the frame and the click shifts what the click lands on by
+ * one, and the alternative is a snapshot that has to be invalidated from four
+ * different places.
+ *
+ * `selected` is an index into that recomputed list for the same reason.
+ */
+#define OVERVIEW_MAX      48   /* tiles; past this the desk is not the problem */
+#define OVERVIEW_GAP      18   /* between tiles */
+#define OVERVIEW_MARGIN   48   /* from the output's edges */
+#define OVERVIEW_LABEL_H  24   /* title strip under each tile */
+#define OVERVIEW_STRIP_H  64   /* the virtual-desktop pills along the bottom */
+#define OVERVIEW_HEAD_H   44   /* the heading along the top */
+
+typedef struct {
+    int visible;
+    int selected;      /* index into the list overview_candidates() rebuilds */
+} syn_overview_t;
 
 /* ── Bluetooth panel (bt.c) ──────────────────────────────── */
 /* Native BlueZ client: synui talks org.bluez over sd-bus itself rather than
@@ -2036,6 +2118,29 @@ typedef enum {
 
 extern const char *const syn_bar_shell_names[SYN_BAR_SHELL_COUNT];
 
+/* Which screen edge the bar sits on. The dock has had this since it learned to
+ * be dragged to an edge; the bar was nailed to the top, which on a desktop
+ * whose dock is also at the top means both furniture stacked in one corner and
+ * nothing along the bottom.
+ *
+ * TOP and BOTTOM only, where the dock has four. That is a real difference, not
+ * an unfinished job: the dock is an icon strip and rotates into a column
+ * unchanged, while the bar is a horizontal row — start button, desktop pills, a
+ * centred clock, a tray — that has no vertical form. A left/right bar would be
+ * a different bar, not this one turned on its side.
+ *
+ * Like bar_shell, the COMPOSITOR NEVER ACTS ON THIS. quickshell owns the bar;
+ * the key lives in this parser so that one file spells the setting and the
+ * control panel can persist it through settings.state like everything else.
+ * BarConfig.qml reads it back out. Order matches syn_bar_edge_names[]. */
+typedef enum {
+    SYN_BAR_EDGE_TOP = 0,
+    SYN_BAR_EDGE_BOTTOM,
+    SYN_BAR_EDGE_COUNT,     /* keep last */
+} syn_bar_edge_t;
+
+extern const char *const syn_bar_edge_names[SYN_BAR_EDGE_COUNT];
+
 /* Dock right-click context-menu actions (dock.c / render.c). */
 typedef enum {
     SYN_DOCKACT_PIN = 0,   /* add app_id to the pinned set */
@@ -2455,6 +2560,11 @@ typedef struct {
      * compositor — see the enum's comment. */
     int bar_shell;
 
+    /* Which screen edge the bar sits on. A syn_bar_edge_t held as an int, for
+     * the control panel's enum row. Read by quickshell's BarConfig.qml, never
+     * by the compositor — see the enum's comment. */
+    int bar_edge;
+
     /* Icon theme for the bar, exported to quickshell as QS_ICON_THEME. Empty
      * (the default) means "follow the system theme", which is what a theme
      * switch changes — so this is only for pinning something the rest of the
@@ -2515,6 +2625,18 @@ typedef struct {
      * has no text entry to type a passphrase into, so there is nothing native
      * to point this at yet. Overridable for non-NetworkManager setups. */
     char  network_cmd[192];
+
+    /* "About OS" — the control panel's System ▸ About OS row. areofyl/fetch in
+     * a terminal, spinning the SynapseOS mark next to the system info.
+     *
+     * A command rather than a native panel, and that is the point: everything
+     * the row wants to show — kernel, packages, uptime, GPU, theme, wallpaper,
+     * cursor — fetch already gathers, and a compositor-drawn About box would be
+     * a second implementation of all of it that could disagree with `syn info`
+     * about what machine this is. Overridable like network_cmd for anyone who
+     * wants fastfetch, neofetch, or a terminal that is not the default. */
+    char  about_cmd[192];
+
     char  power_suspend_cmd[192];
 
     /* Game mode (game.c). A fullscreen XWayland client is taken to be a game
@@ -3571,6 +3693,20 @@ struct syn_server {
     syn_clipboard_t  clipboard;
     struct wl_listener clipboard_set_selection;
 
+    /* Mission control (overview.c). Two trees for the same reason the switcher
+     * has two: the thumbnails are scene buffers and the frame around them is a
+     * cairo layer, and the buffers have to stay above it whichever order the
+     * two get rebuilt in. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;      /* the dim over the whole output */
+        struct wlr_scene_buffer *text_buf;
+        struct wlr_scene_tree   *thumb_tree;
+        struct wlr_scene_buffer *thumb[OVERVIEW_MAX];
+    } overview_ui;
+
+    syn_overview_t   overview;
+
     /* Super-tap: Super pressed and released with nothing in between opens the
      * start menu, the way it does on every other desktop. Armed on the Super
      * press and disarmed by *any* intervening key or pointer button, so Super
@@ -4380,6 +4516,23 @@ void synui_config_load(syn_config_t *cfg);
  * has been rebound in synuirc — see the definition. */
 void synui_config_apply_launcher_binds(syn_config_t *cfg);
 
+/* ── Binds, as data ──────────────────────────────────────────
+ *
+ * The four calls the rebind helper (keys.c) needs, and the reason they are here
+ * rather than static in config.c: a shortcut the user moves has to be written
+ * out in synuirc's language and read back by synuirc's parser, so the formatter
+ * and the parser must be the same pair the config file goes through. Two
+ * spellings of a chord is a shortcut that works all session and is gone at the
+ * next login — see syn_bind_format_combo's comment for how the two differ from
+ * the ones the PANEL draws.
+ */
+bool syn_bind_parse_combo(const char *combo, uint32_t *mods, xkb_keysym_t *sym);
+void syn_bind_format_combo(uint32_t mods, xkb_keysym_t sym, char *out, size_t n);
+void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
+                     const char *action, const char *arg);
+bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym);
+bool config_unbind(syn_config_t *cfg, const char *combo);
+
 /* Resolve <config dir>/<name> into buf, where the config dir is
  * $XDG_CONFIG_HOME/synui (preferred) or ~/.config/synui. Every file synui
  * reads or writes under its config dir MUST go through this — synuirc,
@@ -4944,11 +5097,22 @@ void ctlpanel_child_closed(syn_server_t *s, const char *action);
 /* The shortcuts column, rebuilt from the live bind table on every render.
  * Returns how many rows were written into out[] (at most max). */
 int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
-/* ── Shortcut palette (keys.c) ───────────────────────────────
+/* What a bind action does, in words — the same table the shortcuts column
+ * labels its rows from. Exposed for the rebind helper, which has to name the
+ * shortcut a chord is already taken by. */
+const char *ctlpanel_action_desc(const char *action, const char *arg);
+/* ── Shortcut palette + rebind helper (keys.c) ───────────────
  * Super+/ (and Super+?): the same list ctlpanel_shortcuts() builds, filtered as
  * you type, with Enter running the bind you land on. Same modal contract as
  * every other panel, except that it claims bare Shift and every printable key —
- * it is a search box, so `q` types a q rather than closing it. */
+ * it is a search box, so `q` types a q rather than closing it.
+ *
+ * F2 (or Ctrl+R) on a row rebinds it: the next chord becomes that shortcut's
+ * key, applied live and persisted to binds.state as a diff against the config
+ * as loaded. Ctrl+Shift+R puts every shortcut back. It lives here rather than in
+ * a panel of its own because a rebind window would be a second list of
+ * shortcuts, and a hand-kept second list is the bug ctlpanel_shortcuts() was
+ * written to make impossible. */
 void keys_show(syn_server_t *s);
 void keys_hide(syn_server_t *s);
 void keys_toggle(syn_server_t *s);
@@ -4958,6 +5122,44 @@ int  keys_click(syn_server_t *s, double lx, double ly, uint32_t button,
                 uint32_t time_msec);
 int  keys_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_keys(syn_server_t *s);
+
+/* ── Mission control / overview (overview.c) ─────────────────
+ * Super+X: every window on this desktop laid out so none of them overlap, with
+ * the virtual desktops along the bottom. See syn_overview_t for what makes it a
+ * different thing from the Alt+Tab switcher rather than a bigger one.
+ *
+ * The two functions below the panel API are what makes "what you click is what
+ * you see" true by construction: both the renderer and the hit test call them,
+ * so a tile cannot be drawn in one place and clicked in another. */
+void overview_show(syn_server_t *s);
+void overview_hide(syn_server_t *s);
+void overview_toggle(syn_server_t *s);
+int  overview_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+int  overview_motion(syn_server_t *s, double lx, double ly);
+int  overview_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                    uint32_t time_msec);
+int  overview_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_overview(syn_server_t *s);
+
+/* Every window on the desktop the overview is showing, in a STABLE order —
+ * stacking order, not most-recently-used. A grid that reshuffled itself as you
+ * looked at windows would defeat the one thing it is for, which is remembering
+ * where you left something. Returns how many were written. */
+int  overview_candidates(syn_server_t *s, syn_view_t **out, int max);
+/* Where those tiles go, in LAYOUT coordinates. `ob` is the output box the
+ * overview is drawn on. Pure — same inputs, same boxes. */
+void overview_layout(const struct wlr_box *ob, int n, struct wlr_box *out);
+/* The desktop pills along the bottom, likewise. Always WORKSPACE_MAX of them:
+ * the strip is how you reach an EMPTY desktop, so hiding the empty ones would
+ * hide the only thing there is to go to. */
+void overview_ws_layout(const struct wlr_box *ob, struct wlr_box *out);
+/* The output the overview is on — the one with the focus, like every other
+ * full-screen thing synui draws. */
+void overview_output_box(syn_server_t *s, struct wlr_box *ob);
+/* Snapshot the bind table as the baseline, then lay binds.state over it. Called
+ * from synui_config_load() after synuirc and the other state files, because the
+ * diff the helper writes is measured against exactly that. */
+void binds_state_load(syn_config_t *cfg);
 
 /* How many shortcut rows the panel has room to draw — render.c owns the
  * geometry, ctlpanel.c owns the scroll clamp, so they have to agree. */

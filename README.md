@@ -175,7 +175,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 |---|---|
 | `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) |
 | `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
-| `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable |
+| `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable; `F2` on a row moves it to another key |
 | `Super`+`Return` | Open a terminal |
 | `Super`+`Space` | App launcher (rofi, `-show drun`) |
 | `Super`+`=` | Command bar — synsh intents and output capture |
@@ -193,6 +193,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch, post-it) |
 | `Super`+`Escape` | Menu |
 | `Super`+`Tab` | Cycle layout |
+| `Super`+`X` | Mission control — every window on this desktop at once, and the desktops along the bottom ("X for Exposé") |
 | `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Most-recently-used window switch |
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |

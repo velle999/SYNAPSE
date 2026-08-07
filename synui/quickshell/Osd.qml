@@ -25,10 +25,16 @@ PanelWindow {
              && (OsdState.output === modelData.name
                  || (OsdState.output === "" && modelData.name === Quickshell.screens[0].name))
 
-    // Anchored top only: with neither left nor right set, layer-shell centres
-    // the surface horizontally, which is exactly what is wanted.
-    anchors.top: true
-    margins.top: Theme.barHeight + 10
+    // One vertical anchor only: with neither left nor right set, layer-shell
+    // centres the surface horizontally, which is exactly what is wanted.
+    //
+    // It rides the SAME edge as the bar and sits just clear of it. Pinned to the
+    // top on a bottom-bar desktop it would be the one piece of chrome left up
+    // there, floating against nothing.
+    anchors.top:    !BarConfig.atBottom
+    anchors.bottom:  BarConfig.atBottom
+    margins.top:    Theme.barHeight + 10
+    margins.bottom: Theme.barHeight + 10
 
     implicitWidth: 300
     implicitHeight: 54

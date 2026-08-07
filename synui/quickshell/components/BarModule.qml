@@ -145,7 +145,7 @@ Rectangle {
         anchor {
             window: root.QsWindow.window
             rect.x: root.mapToItem(null, 0, 0).x + root.width / 2 - tip.width / 2
-            rect.y: Theme.barHeight + 4
+            rect.y: BarConfig.popupY(tip.implicitHeight) + 2
         }
 
         Rectangle {

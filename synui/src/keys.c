@@ -33,8 +33,12 @@
 
 #define _GNU_SOURCE
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+
+#include <wlr/util/log.h>
 
 #include "synui.h"
 
@@ -158,6 +162,366 @@ static void keys_activate(syn_server_t *s)
     synui_binding_execute(s, action, arg);
 }
 
+/* ── Rebinding ───────────────────────────────────────────────
+ *
+ * F2 on the selected row arms a capture; the next chord becomes that shortcut's
+ * key. The palette is the right home for it because the palette is already the
+ * list: "find the shortcut, then change it" is one journey, and a rebind window
+ * of its own would be a SECOND list of shortcuts — the exact thing
+ * ctlpanel_shortcuts() exists to make impossible.
+ *
+ * The change is applied to the live table immediately (so the new key works
+ * before you have let go of it) and persisted as a DIFF against the config as
+ * it was loaded, in binds.state. A diff rather than a dump of the whole table:
+ * dumping would freeze the bind set, so a shortcut added in a future synui
+ * would never reach anyone who had ever rebound a key — the trap settings.c's
+ * header describes, in its most annoying form.
+ */
+
+/* The bind table as synuirc and the defaults left it, snapshotted at the end of
+ * every config load. Everything binds.state writes is measured against this.
+ *
+ * A file-scope copy rather than a field on syn_config_t because it is not
+ * configuration — it is the baseline the configuration is compared to, and
+ * putting it in the struct would mean every scratch config the control panel
+ * makes carried a second bind table it never reads. */
+static syn_bind_t g_base_binds[SYN_BINDS_MAX];
+static int        g_base_count;
+
+static int binds_state_path(char *buf, size_t n)
+{
+    return syn_config_path(buf, n, "binds.state") ? 1 : 0;
+}
+
+/* Is this exact chord→action mapping in the baseline? */
+static bool base_holds(const syn_bind_t *b)
+{
+    for (int i = 0; i < g_base_count; i++)
+        if (g_base_binds[i].mods == b->mods && g_base_binds[i].sym == b->sym &&
+            strcmp(g_base_binds[i].action, b->action) == 0 &&
+            strcmp(g_base_binds[i].arg,    b->arg)    == 0)
+            return true;
+    return false;
+}
+
+/* Is this chord bound to anything at all in the live table? */
+static bool live_holds_combo(const syn_config_t *cfg, uint32_t mods,
+                             xkb_keysym_t sym)
+{
+    for (int i = 0; i < cfg->bind_count; i++)
+        if (cfg->binds[i].mods == mods && cfg->binds[i].sym == sym)
+            return true;
+    return false;
+}
+
+/*
+ * Rewrite binds.state as the difference between the live table and the
+ * baseline. Called after every accepted rebind; writes nothing but the
+ * difference, so a user who has moved one key has a one-line file.
+ *
+ * Two kinds of line, and both are needed for a MOVE:
+ *
+ *   unbind = <combo>   a baseline chord that is now bound to nothing. Without
+ *                      it the old key keeps working, because the defaults are
+ *                      seeded before any file is read — so the shortcut would
+ *                      answer to both keys and the rebind would look like it
+ *                      half-applied.
+ *   bind = <combo> …   a chord the baseline does not have, or has pointing
+ *                      somewhere else.
+ *
+ * A chord that is bound in both, to different actions, needs only the `bind`
+ * line: config_bind_set() replaces by chord.
+ *
+ * Through a temp file and rename(), like settings.state: truncating the real
+ * one and dying mid-write would lose every rebind the user has ever made.
+ */
+static void binds_state_save(syn_server_t *s)
+{
+    char path[256];
+    if (!binds_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
+
+    char tmp[288];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+
+    FILE *f = fopen(tmp, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: binds: cannot write '%s': %s",
+                tmp, strerror(errno));
+        return;
+    }
+
+    fprintf(f,
+        "# synui binds.state — written by the rebind helper (Super+/, then F2).\n"
+        "# synuirc's own language, read back by the same parser, and applied\n"
+        "# AFTER synuirc so it wins. Only the difference from the defaults and\n"
+        "# your synuirc is here, so a shortcut added by a future synui still\n"
+        "# arrives. DELETE THIS FILE to hand every key back.\n");
+
+    int changed = 0;
+
+    for (int i = 0; i < g_base_count; i++) {
+        if (live_holds_combo(&s->config, g_base_binds[i].mods,
+                             g_base_binds[i].sym))
+            continue;
+        char combo[64];
+        syn_bind_format_combo(g_base_binds[i].mods, g_base_binds[i].sym,
+                              combo, sizeof(combo));
+        fprintf(f, "unbind = %s\n", combo);
+        changed++;
+    }
+
+    for (int i = 0; i < s->config.bind_count; i++) {
+        const syn_bind_t *b = &s->config.binds[i];
+        if (base_holds(b)) continue;
+        char combo[64];
+        syn_bind_format_combo(b->mods, b->sym, combo, sizeof(combo));
+        fprintf(f, "bind = %s %s%s%s\n", combo, b->action,
+                b->arg[0] ? " " : "", b->arg);
+        changed++;
+    }
+
+    fclose(f);
+
+    /* An empty diff means every key is back where it started, and the right
+     * thing to leave behind is NO FILE — not a file full of comments that
+     * overrides nothing but looks like it might. That also makes "reset it all"
+     * and "delete binds.state" the same operation. */
+    if (changed == 0) {
+        unlink(tmp);
+        unlink(path);
+        return;
+    }
+
+    if (rename(tmp, path) != 0) {
+        wlr_log(WLR_ERROR, "synui: binds: cannot rename '%s': %s",
+                path, strerror(errno));
+        unlink(tmp);
+    }
+}
+
+/*
+ * Snapshot the baseline, then lay binds.state over it.
+ *
+ * Called from synui_config_load() after synuirc and the other state files, so
+ * the table it snapshots is exactly "the defaults plus every file the user
+ * wrote by hand" — which is what the diff above has to be measured against for
+ * it to stay a diff.
+ */
+void binds_state_load(syn_config_t *cfg)
+{
+    g_base_count = cfg->bind_count;
+    memcpy(g_base_binds, cfg->binds,
+           (size_t)g_base_count * sizeof(g_base_binds[0]));
+
+    char path[256];
+    if (!binds_state_path(path, sizeof(path))) return;
+    FILE *f = fopen(path, "r");
+    if (!f) return;   /* nothing rebound — the baseline stands */
+
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        p[strcspn(p, "\r\n")] = '\0';
+        if (!*p || *p == '#') continue;
+
+        char *eq = strchr(p, '=');
+        if (!eq) continue;
+        *eq = '\0';
+
+        char *key = p;
+        char *end = eq - 1;
+        while (end >= key && (*end == ' ' || *end == '\t')) *end-- = '\0';
+        char *val = eq + 1;
+        while (*val == ' ' || *val == '\t') val++;
+
+        /* Only the two keys this file is allowed to carry. It is generated, so
+         * anything else in it is corruption or a hand edit that meant to be in
+         * synuirc — and applying an arbitrary key from here would make a
+         * generated file a second place settings can hide. */
+        if (strcmp(key, "bind") != 0 && strcmp(key, "unbind") != 0) {
+            wlr_log(WLR_ERROR, "synui: binds.state: ignoring '%s'", key);
+            continue;
+        }
+        config_parse_kv(cfg, key, val);
+    }
+    fclose(f);
+}
+
+/* Refuse a chord that would make the keyboard unusable.
+ *
+ * A bare printable key IS a legal bind — `print` is one, and the volume knob's
+ * three XF86 keysyms are three more — but a bare letter or digit is not: bound
+ * to `close`, `q` would close the focused window every time it was typed into
+ * anything that is not taking the key itself, and the way back would be a text
+ * editor. Modifiers make it deliberate; a key that produces no text is
+ * deliberate by construction.
+ *
+ * Deliberately does NOT refuse chords that shadow a client's own shortcuts.
+ * Super+C is the control panel and there is no way to know what the focused
+ * window wanted it for; taking keys from applications is what a compositor
+ * keybind IS. */
+static bool combo_is_bindable(uint32_t mods, xkb_keysym_t sym)
+{
+    if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT))
+        return true;
+    /* Shift alone is not enough: shift+a is how a capital A is typed. */
+    return !(sym >= 0x20 && sym <= 0x7e);
+}
+
+/* True for the keys that are only ever half of a chord. Held down waiting for
+ * the other half, they arrive as presses of their own, and taking the first one
+ * as the answer would make every capture come out as "Super". */
+static bool sym_is_modifier(xkb_keysym_t sym)
+{
+    switch (sym) {
+    case XKB_KEY_Super_L:   case XKB_KEY_Super_R:
+    case XKB_KEY_Control_L: case XKB_KEY_Control_R:
+    case XKB_KEY_Alt_L:     case XKB_KEY_Alt_R:
+    case XKB_KEY_Shift_L:   case XKB_KEY_Shift_R:
+    case XKB_KEY_Meta_L:    case XKB_KEY_Meta_R:
+    case XKB_KEY_Hyper_L:   case XKB_KEY_Hyper_R:
+    case XKB_KEY_ISO_Level3_Shift:
+    case XKB_KEY_Caps_Lock: case XKB_KEY_Num_Lock:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void keys_capture_cancel(syn_server_t *s)
+{
+    s->keys.capturing = 0;
+}
+
+/* Arm a capture on the selected row, or explain why the row cannot take one. */
+static void keys_capture_begin(syn_server_t *s)
+{
+    syn_keys_t *k = &s->keys;
+    const syn_ctl_shortcut_t *sc = keys_selected(s);
+    if (!sc) return;
+
+    if (!sc->rebindable) {
+        /* The two shapes that are not one bind, told apart by whether the row
+         * has an action: Super-tap has one and no chord, the collapsed
+         * workspace rows have a chord range and no action. */
+        snprintf(k->status, sizeof(k->status), "%s",
+                 sc->action[0]
+                     ? "Super-tap is not a bind — it is the absence of one"
+                     : "That row stands for nine binds; rebind them in synuirc");
+        synui_render_keys(s);
+        return;
+    }
+
+    k->capturing    = 1;
+    k->capture_all  = k->view[k->selected];
+    k->capture_mods = sc->mods;
+    k->capture_sym  = sc->sym;
+    k->status[0]    = '\0';
+    synui_render_keys(s);
+}
+
+/* The captured chord lands here. Applies it to the live table, persists the
+ * diff, and rebuilds the list so the row redraws with its new key. */
+static void keys_capture_finish(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
+{
+    syn_keys_t *k = &s->keys;
+    syn_ctl_shortcut_t *sc = &k->all[k->capture_all];
+
+    /* xkb reports the shifted symbol; the bind table stores the unshifted one
+     * with SHIFT in the mask, which is how synuirc spells it and how
+     * handle_keybinding matches. Without this, Super+Shift+/ would be stored as
+     * `question` and never match the `slash` the keyboard actually sends. */
+    sym = xkb_keysym_to_lower(sym);
+
+    k->capturing = 0;
+
+    if (!combo_is_bindable(mods, sym)) {
+        snprintf(k->status, sizeof(k->status),
+                 "Needs Super, Ctrl or Alt — a bare letter would type it");
+        goto done;
+    }
+
+    if (mods == sc->mods && sym == sc->sym) {
+        snprintf(k->status, sizeof(k->status), "Unchanged");
+        goto done;
+    }
+
+    /* Already taken. Refuse rather than steal it: handle_keybinding takes the
+     * FIRST match, so a silent overwrite would not even look like a conflict —
+     * it would look like the other feature quietly going dead, which is the bug
+     * seed_default_binds() shouts about duplicates to prevent. */
+    for (int i = 0; i < s->config.bind_count; i++) {
+        const syn_bind_t *b = &s->config.binds[i];
+        if (b->mods != mods || b->sym != sym) continue;
+        char combo[64];
+        syn_bind_format_combo(mods, sym, combo, sizeof(combo));
+        snprintf(k->status, sizeof(k->status), "%s is already %s",
+                 combo, ctlpanel_action_desc(b->action, b->arg));
+        goto done;
+    }
+
+    /* Both halves, in this order. The new bind first so a failure to add it
+     * (a full table) leaves the old key working rather than leaving the
+     * shortcut unreachable. */
+    config_bind_set(&s->config, mods, sym, sc->action, sc->arg);
+    if (!live_holds_combo(&s->config, mods, sym)) {
+        snprintf(k->status, sizeof(k->status), "Bind table is full");
+        goto done;
+    }
+    config_unbind_combo(&s->config, sc->mods, sc->sym);
+
+    binds_state_save(s);
+
+    {
+        char combo[64];
+        syn_bind_format_combo(mods, sym, combo, sizeof(combo));
+        wlr_log(WLR_INFO, "synui: rebound %s -> %s", sc->desc, combo);
+    }
+
+    /* Re-snapshot: the row the cursor is on has a new combo string, and every
+     * other row is unchanged, so rebuilding from the live table is both the
+     * simplest way to redraw it and the only one that cannot disagree with what
+     * was actually bound. The query and the cursor survive it. */
+    {
+        int sel = k->selected, scroll = k->scroll;
+        k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+        keys_filter(s);
+        k->selected = sel < k->n_view ? sel : (k->n_view ? k->n_view - 1 : 0);
+        k->scroll   = scroll;
+        keys_scroll_to_selection(s);
+    }
+
+    {
+        char combo[64];
+        syn_bind_format_combo(mods, sym, combo, sizeof(combo));
+        snprintf(k->status, sizeof(k->status), "Rebound to %s", combo);
+    }
+
+done:
+    synui_render_keys(s);
+}
+
+/* Put every shortcut back: delete binds.state and reload. Reload rather than
+ * un-applying the diff by hand — synui_config_reload() is the one path that
+ * knows how to re-seat everything a config change touches, and a second
+ * implementation of "go back to the defaults" would be free to miss a step. */
+static void keys_reset_all(syn_server_t *s)
+{
+    char path[256];
+    if (binds_state_path(path, sizeof(path)))
+        unlink(path);
+
+    synui_config_reload(s);
+
+    syn_keys_t *k = &s->keys;
+    k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+    keys_filter(s);
+    snprintf(k->status, sizeof(k->status), "Every shortcut back to default");
+    synui_render_keys(s);
+}
+
 /* ── Panel ───────────────────────────────────────────────── */
 
 void keys_show(syn_server_t *s)
@@ -171,13 +535,19 @@ void keys_show(syn_server_t *s)
     k->query[0]  = '\0';
     k->query_len = 0;
     k->visible   = 1;
+    /* An armed capture must not survive a close: the panel comes back with the
+     * cursor on a different row, and the next key pressed would land on
+     * whatever that is. */
+    k->capturing = 0;
+    k->status[0] = '\0';
     keys_filter(s);
     synui_render_keys(s);
 }
 
 void keys_hide(syn_server_t *s)
 {
-    s->keys.visible = 0;
+    s->keys.visible   = 0;
+    s->keys.capturing = 0;
     synui_render_keys(s);
     ctlpanel_child_closed(s, "keys");
 }
@@ -199,6 +569,13 @@ int keys_motion(syn_server_t *s, double lx, double ly)
     syn_keys_t *k = &s->keys;
     if (!k->visible) return 0;
 
+    /* A capture is armed against ONE row. Letting the pointer move the cursor
+     * while it is would leave the highlight on a shortcut the next chord is not
+     * going to touch — and the panel would have said "press the new key for
+     * this one" about a row that is no longer under it. Still swallowed, so the
+     * pointer does not fall through to the desktop. */
+    if (k->capturing) return 1;
+
     int idx = hit_index_at(&k->hit, lx, ly);
     if (idx < 0 || idx >= k->n_view || idx == k->selected) return 1;
     k->selected = idx;
@@ -212,6 +589,16 @@ int keys_click(syn_server_t *s, double lx, double ly, uint32_t button,
     (void)time_msec;   /* only the pickers need it, for their double click */
     syn_keys_t *k = &s->keys;
     if (!k->visible) return 0;
+
+    /* A click while armed cancels the capture rather than running the row: the
+     * panel is asking for a key, and the honest answer to a mouse button is
+     * "that is not one". Clicking away still closes, below. */
+    if (k->capturing && hit_in_panel(&k->hit, lx, ly)) {
+        keys_capture_cancel(s);
+        snprintf(k->status, sizeof(k->status), "Rebind cancelled");
+        synui_render_keys(s);
+        return 1;
+    }
 
     if (!hit_in_panel(&k->hit, lx, ly)) {
         keys_hide(s);
@@ -253,6 +640,36 @@ int keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     syn_keys_t *k = &s->keys;
     if (!k->visible) return 0;
 
+    /* ── Capture mode ────────────────────────────────────────
+     *
+     * FIRST, and above the Super/Alt passthrough below. While a capture is
+     * armed EVERY chord is the answer, including the compositor's own: moving a
+     * shortcut onto Super+K has to be possible, and letting Super through here
+     * would run whatever Super+K currently does instead of capturing it.
+     *
+     * That is also why Esc is the only escape: with every other key taken as
+     * input, an armed capture that could not be cancelled would be a trap. */
+    if (k->capturing) {
+        /* A held modifier arrives as a press of its own while you reach for the
+         * other half of the chord. Ignore them, or every capture comes out as
+         * "Super". */
+        if (sym_is_modifier(sym)) return 1;
+
+        if (sym == XKB_KEY_Escape) {
+            keys_capture_cancel(s);
+            snprintf(k->status, sizeof(k->status), "Rebind cancelled");
+            synui_render_keys(s);
+            return 1;
+        }
+        keys_capture_finish(s, sym, mods);
+        return 1;
+    }
+
+    /* The last rebind's outcome is about the key you just pressed, so the next
+     * one retires it. Cleared before dispatching, not after: the handlers below
+     * are what set the next message. */
+    k->status[0] = '\0';
+
     /* Super and Alt combos belong to the compositor, always. */
     if (mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_ALT))
         return 0;
@@ -265,6 +682,17 @@ int keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
             keys_move(s, +1); synui_render_keys(s); return 1;
         case XKB_KEY_p: case XKB_KEY_P:
             keys_move(s, -1); synui_render_keys(s); return 1;
+        /* R for rebind, and Ctrl+Shift+R to put everything back. The pair is
+         * here as well as on F2 because F2 is a long reach from a search box
+         * and half the keyboards this runs on need Fn to get to it.
+         *
+         * Shift is tested on the SYMBOL, not the mask: xkb reports Ctrl+Shift+r
+         * as XKB_KEY_R, and matching on WLR_MODIFIER_SHIFT alone would make
+         * every Ctrl+R a reset on a keyboard with caps lock on. */
+        case XKB_KEY_r:
+            keys_capture_begin(s); return 1;
+        case XKB_KEY_R:
+            keys_reset_all(s); return 1;
         default:
             return 0;
         }
@@ -307,6 +735,12 @@ int keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     case XKB_KEY_Return:
     case XKB_KEY_KP_Enter:
         keys_activate(s);
+        return 1;
+
+    /* The rebind key everything else in the world uses for "rename this".
+     * Cannot be a letter: the box types letters. */
+    case XKB_KEY_F2:
+        keys_capture_begin(s);
         return 1;
 
     /* Tab would be the obvious "next row" — it is also a shortcut the list

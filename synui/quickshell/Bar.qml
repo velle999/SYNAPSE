@@ -59,7 +59,14 @@ PanelWindow {
         onTriggered: bar.revealed = bar.wantsReveal
     }
 
-    anchors { top: true; left: true; right: true }
+    // Which edge, global (BarConfig.edge). Left and right are always anchored:
+    // the bar spans the monitor either way, only the vertical side changes.
+    anchors {
+        top:    !BarConfig.atBottom
+        bottom:  BarConfig.atBottom
+        left: true
+        right: true
+    }
     implicitHeight: Theme.barHeight
 
     // Reserve the strip so maximized windows stop below it — but an auto-hiding
@@ -95,11 +102,22 @@ PanelWindow {
     // still visibly on screen stops taking clicks on the way out (they land in
     // the window behind it), and the pointer, now outside the region, cannot
     // catch it on the way back either — so it looks like the bar ignored you.
+    //
+    // On a bottom bar the content slides DOWN (content.y goes positive), so the
+    // strip that stays live is the one at the bottom of the window, and the
+    // arithmetic mirrors: on top, `barHeight + content.y` is how much is still
+    // on screen with content.y negative; at the bottom it is
+    // `barHeight - content.y`, and the region has to start where that begins
+    // rather than at y=0.
+    readonly property int liveHeight:
+        Math.max(Theme.barEdgeStrip,
+                 Theme.barHeight + (BarConfig.atBottom ? -content.y : content.y))
+
     mask: Region {
         x: 0
-        y: 0
+        y: BarConfig.atBottom ? Theme.barHeight - bar.liveHeight : 0
         width: bar.width
-        height: Math.max(Theme.barEdgeStrip, Theme.barHeight + content.y)
+        height: bar.liveHeight
     }
 
     // The hover item is the content's PARENT, not its sibling.
@@ -125,7 +143,12 @@ PanelWindow {
             id: content
             width: bar.width
             height: Theme.barHeight
-            y: bar.revealed ? 0 : -Theme.barHeight
+            // Hides off the edge it lives on: up from the top, down from the
+            // bottom. Sliding a bottom bar upwards would take it across the
+            // desktop instead of off it.
+            y: bar.revealed ? 0
+                            : (BarConfig.atBottom ? Theme.barHeight
+                                                  : -Theme.barHeight)
             Behavior on y {
                 NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic }
             }
@@ -146,8 +169,16 @@ PanelWindow {
                 }
 
                 // The accent underline the waybar CSS drew with border-bottom.
+                // It marks the edge FACING THE DESKTOP, so on a bottom bar it
+                // is an overline — anchored to the bottom there it would be
+                // drawn along the screen edge, where half of it is off-screen
+                // and the rest reads as a stray line rather than a rule.
                 Rectangle {
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    anchors {
+                        left: parent.left; right: parent.right
+                        top:    BarConfig.atBottom ? parent.top    : undefined
+                        bottom: BarConfig.atBottom ? undefined     : parent.bottom
+                    }
                     height: Theme.accentHeight
                     color: Theme.magenta
                 }

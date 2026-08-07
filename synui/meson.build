@@ -195,6 +195,7 @@ synui_exe = executable('synui',
     'src/greeter.c',
     'src/ctlpanel.c',
     'src/keys.c',
+    'src/overview.c',
     'src/theme.c',
     'src/bt.c',
     'src/notif.c',
@@ -581,6 +582,17 @@ test('panel_contrast', panel_contrast_test)
 # config.c is NOT linked — the bind table is seeded by hand, so "the palette
 # lists whatever is in the table" is a real assertion rather than a restatement
 # of the defaults.
+# The mission-control grid. Links overview.c alone — the layout is pure
+# arithmetic over an output box, and it is what both the renderer and the hit
+# test read, so "what you click is what you see" rests entirely on it.
+overview_layout_test = executable('overview_layout_test',
+  ['tests/overview_layout_test.c', 'src/overview.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('overview_layout', overview_layout_test)
+
 keys_test = executable('keys_test',
   ['tests/keys_test.c', 'src/keys.c', 'src/ctlpanel.c', 'src/aimodel.c',
    'src/gguf.c', 'src/hit.c'],
@@ -798,6 +810,13 @@ layout_persist = find_program('tests/layout_persist.sh')
 test('layout_persist', layout_persist,
      args    : [synui_exe.full_path(), synctl_exe.full_path()],
      depends : [synui_exe, synctl_exe],
+     timeout : 120)
+
+overview_sh = find_program('tests/overview.sh')
+test('overview', overview_sh,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
 alttab_scope = find_program('tests/alttab_scope.sh')

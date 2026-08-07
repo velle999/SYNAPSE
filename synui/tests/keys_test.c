@@ -38,6 +38,7 @@
  */
 
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,6 +127,78 @@ bool syn_config_path(char *buf, size_t n, const char *leaf)
 void settings_state_set(const char *k, const char *v) { (void)k; (void)v; }
 void settings_state_clear(const char *k)              { (void)k; }
 int  settings_state_has(const char *k)                { (void)k; return 0; }
+
+/* ── The bind primitives, RECORDED rather than stubbed ───────
+ *
+ * config.c stays unlinked (see the rig note below), so these stand in for it —
+ * but the rebind tests are about WHICH calls keys.c makes and in what order, so
+ * a no-op would make every one of them vacuous. They keep a little table
+ * instead, which is enough for keys.c's own logic (find the chord, refuse a
+ * conflict, bind the new one, unbind the old) to be a real assertion.
+ *
+ * The formatter is the real one's contract in miniature: lower case, modifiers
+ * in synuirc's order. keys.c only ever puts its output in front of the user, so
+ * this does not have to be xkb-exact — the round trip that DOES have to be
+ * exact is asserted against the real pair in ctlpanel_table_test.
+ */
+static int  binds_set, binds_unbound;
+static char last_bound[64], last_unbound[64];
+
+void syn_bind_format_combo(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
+{
+    char key[32];
+    if (xkb_keysym_get_name(sym, key, sizeof(key)) <= 0)
+        snprintf(key, sizeof(key), "?");
+    for (char *p = key; *p; p++) *p = (char)tolower((unsigned char)*p);
+    snprintf(out, n, "%s%s%s%s%s",
+             (mods & WLR_MODIFIER_LOGO)  ? "super+" : "",
+             (mods & WLR_MODIFIER_CTRL)  ? "ctrl+"  : "",
+             (mods & WLR_MODIFIER_ALT)   ? "alt+"   : "",
+             (mods & WLR_MODIFIER_SHIFT) ? "shift+" : "", key);
+}
+
+void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
+                     const char *action, const char *arg)
+{
+    for (int i = 0; i < cfg->bind_count; i++) {
+        if (cfg->binds[i].mods != mods || cfg->binds[i].sym != sym) continue;
+        snprintf(cfg->binds[i].action, sizeof(cfg->binds[i].action), "%s", action);
+        snprintf(cfg->binds[i].arg, sizeof(cfg->binds[i].arg), "%s", arg ? arg : "");
+        binds_set++;
+        return;
+    }
+    syn_bind_t *b = &cfg->binds[cfg->bind_count++];
+    b->mods = mods; b->sym = sym;
+    snprintf(b->action, sizeof(b->action), "%s", action);
+    snprintf(b->arg, sizeof(b->arg), "%s", arg ? arg : "");
+    binds_set++;
+    syn_bind_format_combo(mods, sym, last_bound, sizeof(last_bound));
+}
+
+bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym)
+{
+    for (int i = 0; i < cfg->bind_count; i++) {
+        if (cfg->binds[i].mods != mods || cfg->binds[i].sym != sym) continue;
+        memmove(&cfg->binds[i], &cfg->binds[i + 1],
+                (size_t)(cfg->bind_count - i - 1) * sizeof(cfg->binds[0]));
+        cfg->bind_count--;
+        binds_unbound++;
+        syn_bind_format_combo(mods, sym, last_unbound, sizeof(last_unbound));
+        return true;
+    }
+    return false;
+}
+
+bool syn_bind_parse_combo(const char *c, uint32_t *m, xkb_keysym_t *s)
+{ (void)c; (void)m; (void)s; return false; }
+void syn_config_ensure_dir(void) { }
+void config_parse_kv(syn_config_t *c, const char *k, char *v)
+{ (void)c; (void)k; (void)v; }
+
+/* Reset-all reloads rather than un-applying its own diff, so this is the whole
+ * of it as far as keys.c is concerned. */
+static int reloads;
+void synui_config_reload(syn_server_t *s) { (void)s; reloads++; }
 
 const syn_config_t *synui_config_defaults(void)
 {
@@ -425,12 +498,145 @@ static void test_modal_contract(void)
           "and the pointer handlers fall through when it is shut");
 }
 
+/* ── Rebinding ───────────────────────────────────────────── */
+
+/* Move the cursor onto the row whose description is `desc`. */
+static int select_desc(const char *desc)
+{
+    syn_keys_t *k = &g_s.keys;
+    for (int i = 0; i < k->n_view; i++)
+        if (strcmp(k->all[k->view[i]].desc, desc) == 0) { k->selected = i; return 1; }
+    return 0;
+}
+
+static void test_rebind(void)
+{
+    printf("keys: rebinding a shortcut\n");
+
+    rig_init();
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+
+    CHECK(select_desc("Wallpaper picker"), "found the row to rebind");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.keys.capturing, "F2 arms a capture");
+
+    /* While armed, the compositor's OWN chords are captured rather than
+     * dispatched — moving a shortcut onto Super+Y has to be possible, and
+     * letting Super through would run whatever Super+Y already does. */
+    CHECK(keys_key(&g_s, XKB_KEY_Super_L, WLR_MODIFIER_LOGO) == 1 &&
+          g_s.keys.capturing,
+          "a held modifier is not the answer — it is half of one");
+
+    keys_key(&g_s, XKB_KEY_y, WLR_MODIFIER_LOGO);
+    CHECK(!g_s.keys.capturing, "the chord ends the capture");
+    CHECK(binds_set == 1 && strcmp(last_bound, "super+y") == 0,
+          "the new chord is bound (got '%s')", last_bound);
+    CHECK(binds_unbound == 1 && strcmp(last_unbound, "super+w") == 0,
+          "…and the OLD one is taken away, or it answers to both (got '%s')",
+          last_unbound);
+    CHECK(dispatches == 0, "capturing Super+Y did not RUN anything");
+
+    /* The list is rebuilt from the table, so the row now shows its new key.
+     * Nothing else moved. */
+    CHECK(view_has("Wallpaper picker"), "the shortcut is still listed");
+    CHECK(g_s.keys.n == 8, "and the list is the same length (got %d)", g_s.keys.n);
+
+    keys_hide(&g_s);
+}
+
+static void test_rebind_refusals(void)
+{
+    printf("keys: the rebinds that are refused\n");
+
+    rig_init();
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+
+    /* Esc is the way out. With every key taken as input, a capture that could
+     * not be cancelled would be a trap. */
+    CHECK(select_desc("Float window"), "found a row");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_Escape, 0);
+    CHECK(!g_s.keys.capturing && binds_set == 0, "Esc cancels and binds nothing");
+
+    /* A bare letter. Bound to `close`, `q` would close the focused window every
+     * time it was typed anywhere that did not claim the key first, and the way
+     * back would be a text editor. */
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_q, 0);
+    CHECK(!g_s.keys.capturing && binds_set == 0,
+          "a bare letter is refused — it would type itself");
+    CHECK(g_s.keys.status[0], "…and the panel says why");
+
+    /* A chord already in use. Refused rather than stolen: handle_keybinding
+     * takes the FIRST match, so an overwrite would not look like a conflict, it
+     * would look like the other feature quietly going dead. */
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_c, WLR_MODIFIER_LOGO);
+    CHECK(!g_s.keys.capturing && binds_set == 0 && binds_unbound == 0,
+          "a chord that is already taken is refused");
+    CHECK(strstr(g_s.keys.status, "Control panel") != NULL,
+          "…naming what has it (got '%s')", g_s.keys.status);
+
+    /* Its own current key is a no-op rather than an unbind-then-rebind, which
+     * would briefly leave the shortcut unreachable for no reason. */
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_f, WLR_MODIFIER_LOGO);
+    CHECK(!g_s.keys.capturing && binds_set == 0 && binds_unbound == 0,
+          "rebinding a shortcut to the key it already has changes nothing");
+
+    /* The two row shapes that are not one bind. Super-tap is defined by the
+     * ABSENCE of a chord; "Super+1–9" stands for nine of them and names none. */
+    CHECK(select_desc("Start menu"), "found the Super-tap row");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(!g_s.keys.capturing, "Super-tap cannot be rebound — it is not a bind");
+
+    CHECK(select_desc("Switch to workspace"), "found the collapsed row");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(!g_s.keys.capturing,
+          "nor can a row that stands for nine binds and names none");
+
+    keys_hide(&g_s);
+}
+
+static void test_rebind_reset(void)
+{
+    printf("keys: putting every shortcut back\n");
+
+    rig_init();
+    keys_show(&g_s);
+    reloads = 0;
+
+    /* Ctrl+Shift+R, told apart from Ctrl+R by the SYMBOL rather than the mask:
+     * xkb reports the shifted letter, and matching on WLR_MODIFIER_SHIFT would
+     * make every Ctrl+R a reset with caps lock on.
+     *
+     * Off the top row first — the palette opens on Super-tap, which is the one
+     * row that refuses a capture. */
+    CHECK(select_desc("Wallpaper picker"), "found a rebindable row");
+    keys_key(&g_s, XKB_KEY_r, WLR_MODIFIER_CTRL);
+    CHECK(g_s.keys.capturing, "Ctrl+R arms a capture, like F2");
+    keys_key(&g_s, XKB_KEY_Escape, 0);
+    CHECK(!g_s.keys.capturing && g_s.keys.visible,
+          "Esc out of a capture cancels it WITHOUT closing the palette");
+
+    keys_key(&g_s, XKB_KEY_R, WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT);
+    CHECK(reloads == 1, "Ctrl+Shift+R reloads the config rather than resetting by hand");
+    CHECK(!g_s.keys.capturing, "and does not leave a capture armed");
+
+    keys_hide(&g_s);
+}
+
 int main(void)
 {
     test_list_is_the_bind_table();
     test_search();
     test_enter_runs_it();
     test_cursor();
+    test_rebind();
+    test_rebind_refusals();
+    test_rebind_reset();
     test_modal_contract();
 
     printf("%s: %d checked, %d failed\n",

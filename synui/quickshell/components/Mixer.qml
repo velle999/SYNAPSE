@@ -134,7 +134,7 @@ PopupWindow {
                 ? Math.max(4, Math.min(mixer.anchorX - mixer.implicitWidth / 2,
                                        mixer.barWindow.width - mixer.implicitWidth - 4))
                 : 4
-        rect.y: Theme.barHeight + 2
+        rect.y: BarConfig.popupY(mixer.implicitHeight)
     }
 
     // A BACKSTOP for the grab above, not the mechanism — same as BarMenu. It is

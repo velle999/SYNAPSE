@@ -1000,8 +1000,21 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         if (arg && *arg) ctlpanel_show_cat(s, arg);
         else             ctlpanel_toggle(s);
     } else if (strcmp(action, "keys") == 0) {
-        /* Super+/ — the bind table as a searchable palette. See keys.c. */
+        /* Super+/ — the bind table as a searchable palette, and the rebind
+         * editor (F2 on a row). See keys.c. */
         keys_toggle(s);
+    } else if (strcmp(action, "overview") == 0) {
+        /* Super+X — mission control. X for eXposé, which is what this feature
+         * was called before it was called Mission Control, and the letter was
+         * free where every word in "overview", "mission" and "windows" was
+         * already taken twice over.
+         *
+         * Deliberately NOT super+tab, which is the key GNOME and Windows use
+         * for their task view: that is layout_cycle here, and silently moving
+         * a shortcut somebody has in their fingers to make room for a new
+         * feature is exactly the kind of change that should be asked about
+         * rather than shipped. Both are one F2 away in the palette. */
+        overview_toggle(s);
     } else if (strcmp(action, "theme") == 0) {
         /* Bare (Super+T, the control panel row) opens the picker. With an
          * argument it applies one outright — either a preset token ("dark") or
@@ -1020,6 +1033,16 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * socket-activates the daemon rather than refusing the connection. The
          * control panel's Printers row and the start menu both land here. */
         synui_spawn("xdg-open http://localhost:631/");
+    } else if (strcmp(action, "about") == 0) {
+        /* "About OS" — areofyl/fetch in a terminal (about_cmd). Not a native
+         * panel: everything an About box would show, fetch already gathers, and
+         * a compositor-drawn one would be a second source of truth about the
+         * machine that could disagree with `syn info`.
+         *
+         * It reports the desktop's own theme, wallpaper and cursor, which is
+         * why those three are worth the row at all — they are the part of an
+         * About box that is about THIS desktop rather than about the hardware. */
+        spawn(s->config.about_cmd);
     } else if (strcmp(action, "clock") == 0) {
         /* "Date & Time" — the compositor's clock/time settings panel. */
         clock_toggle(s);
@@ -1486,6 +1509,15 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
          * control panel, since the control panel can be what opened it. */
         for (int i = 0; i < nsyms; i++)
             if (keys_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Mission control: same modal contract, and after the palette for the
+         * same reason the palette is after the control panel — this one is
+         * full-screen, so anything it did not let through would be a panel
+         * COVERED rather than merely behind it. */
+        for (int i = 0; i < nsyms; i++)
+            if (overview_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -2103,6 +2135,7 @@ void pointer_rebase(syn_server_t *s)
     X(calendar, cal)      \
     X(ctlpanel, ctlpanel) \
     X(keys,     keys)     \
+    X(overview, overview) \
     X(theme,    thememgr) \
     X(clipboard, clipboard)
 

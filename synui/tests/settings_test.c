@@ -43,6 +43,7 @@
  * few name-to-enum helpers. None of them is what is under test, and pulling in
  * the files that define them would drag in the compositor. They are no-ops.
  */
+void binds_state_load(syn_config_t *c)        { (void)c; }
 void wallpaper_state_load(syn_config_t *c)    { (void)c; }
 void cursor_state_load(syn_config_t *c)       { (void)c; }
 void dock_state_load(syn_config_t *c)         { (void)c; }

@@ -96,12 +96,18 @@ PanelWindow {
     Rectangle {
         id: panel
 
-        // Hangs below the bar. Deliberately NOT tied to the bar's auto-hide
-        // slide: the menu is summoned by a keystroke at least as often as by a
-        // click, and a menu that sits at a different height depending on where
-        // the pointer happens to be reads as a bug.
+        // Hangs off the bar, on whichever edge that is. Deliberately NOT tied to
+        // the bar's auto-hide slide: the menu is summoned by a keystroke at
+        // least as often as by a click, and a menu that sits at a different
+        // height depending on where the pointer happens to be reads as a bug.
+        //
+        // The surface is full-screen with ExclusionMode.Ignore, so `y` is
+        // measured from the true screen edge and a bottom bar's menu is
+        // "screen height, less the bar, less my own height".
         x: 0
-        y: Theme.barHeight
+        y: BarConfig.atBottom
+           ? root.screen.height - Theme.barHeight - panel.height
+           : Theme.barHeight
 
         width: 340
 

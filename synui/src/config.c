@@ -16,6 +16,14 @@
  * the keypad never sends a digit keysym (KP_1 with NumLock on, KP_End with it
  * off or with Shift held), so input.c maps them back. Bind "super+kp_1"
  * explicitly to give the keypad key its own action.
+ *
+ * …and to take one away:
+ *   unbind = <mod>+<key>
+ * The defaults are seeded before any file is read, so re-pointing a key
+ * elsewhere leaves the shipped bind live on its old combo; this is how a
+ * default is REMOVED rather than replaced. It is also half of what the rebind
+ * helper writes (Super+/, then F2 — see binds.state in keys.c): moving a
+ * shortcut is a `bind` for the new chord and an `unbind` for the old one.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
  * stack_next/prev, master_shrink/grow,
@@ -101,6 +109,15 @@
  *   dock_height = 64            (px)
  *   dock_hover_margin = 4       (px trigger strip at the bottom edge)
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
+ *   dock_edge = bottom|top|left|right   (left/right draw a vertical column)
+ *
+ * The bar (quickshell) — a SEPARATE PROCESS, so the compositor parses these two
+ * and acts on neither. They live here so each setting has one spelling and the
+ * control panel can persist it through settings.state like every other row:
+ *   bar_shell = synapse|antiquity   (which QML tree synui-bar starts; next login)
+ *   bar_edge  = top|bottom          (BarConfig.qml watches this — it moves live)
+ * Only two edges where the dock has four: the bar is a horizontal row (start
+ * button, desktop pills, centred clock, tray) and has no vertical form.
  *
  * Launcher (launcher.c) — the "◢ SYNAPSE" start-menu button, top-left:
  *   launcher_style = text|logo  (default; logo = ◢ caret + the dendrite emblem)
@@ -139,6 +156,11 @@
  * Network (Super+I / welcome menu) — nmtui in a terminal. synui has no text
  * entry to type a passphrase into, so there is nothing native to point at yet:
  *   network_cmd = foot -e nmtui
+ *
+ * About OS (control panel ▸ System ▸ About OS) — areofyl/fetch in a terminal,
+ * which already gathers everything an About box would show, including the
+ * theme, wallpaper and cursor synui itself set:
+ *   about_cmd = kitty -e fetch --infinite
  *
  * News (news.c, Super+R) — RSS/Atom feeds. With no news_source lines the
  * built-in list is used (Hacker News, Lobsters, Arch news, Arch security,
@@ -213,6 +235,15 @@ const char *const syn_bar_shell_names[SYN_BAR_SHELL_COUNT] = {
     "synapse", "antiquity",
 };
 
+/* The `bar_edge` spellings, in syn_bar_edge_t order — and deliberately the same
+ * two words `dock_edge` uses, so "put it at the bottom" is spelled one way for
+ * both pieces of furniture. Here for the same reason as bar_shell above: the
+ * compositor parses the key and never acts on it; quickshell's BarConfig.qml is
+ * what reads it back. */
+const char *const syn_bar_edge_names[SYN_BAR_EDGE_COUNT] = {
+    "top", "bottom",
+};
+
 /* ── Keybindings ─────────────────────────────────────────── */
 static uint32_t parse_mod(const char *name)
 {
@@ -228,10 +259,16 @@ static uint32_t parse_mod(const char *name)
     return 0;
 }
 
-/* Register "<mod>+…+<key>" → "<action> [arg]". Same-combo binds replace the
- * earlier entry so user config overrides the seeded defaults. */
-static void config_bind(syn_config_t *cfg, const char *combo,
-                        const char *action_and_arg)
+/* "<mod>+…+<key>" → a (mods, sym) pair, or 0 if the key part is not a keysym.
+ *
+ * Public because the rebind helper has to go BOTH ways and the two directions
+ * have to agree exactly: it writes a combo into binds.state with
+ * syn_bind_format_combo() below and the next login reads it back through here.
+ * A formatter that spelled a key differently from what this accepts would be a
+ * shortcut that silently vanished at the next login — the failure that is
+ * hardest to attribute, because the file looks right. */
+bool syn_bind_parse_combo(const char *combo, uint32_t *mods_out,
+                          xkb_keysym_t *sym_out)
 {
     uint32_t mods = 0;
     xkb_keysym_t sym = XKB_KEY_NoSymbol;
@@ -245,25 +282,81 @@ static void config_bind(syn_config_t *cfg, const char *combo,
         if (m) { mods |= m; continue; }
         sym = xkb_keysym_from_name(tok, XKB_KEYSYM_CASE_INSENSITIVE);
     }
-    if (sym == XKB_KEY_NoSymbol) {
-        wlr_log(WLR_ERROR, "synui: bind: bad key in '%s'", combo);
-        return;
-    }
-    sym = xkb_keysym_to_lower(sym);
+    if (sym == XKB_KEY_NoSymbol) return false;
 
-    /* Split the action from its argument on the first whitespace. */
-    char action[SYN_BIND_ACTION_LEN] = {0};
-    const char *sp = action_and_arg;
-    while (*sp && !isspace(*sp)) sp++;
-    size_t alen = (size_t)(sp - action_and_arg);
-    if (alen == 0 || alen >= sizeof(action)) {
-        wlr_log(WLR_ERROR, "synui: bind %s: bad action '%s'",
-                combo, action_and_arg);
-        return;
-    }
-    memcpy(action, action_and_arg, alen);
-    while (isspace(*sp)) sp++;
+    if (mods_out) *mods_out = mods;
+    if (sym_out)  *sym_out  = xkb_keysym_to_lower(sym);
+    return true;
+}
 
+/* The reverse: a combo in the spelling synuirc takes and syn_bind_parse_combo()
+ * reads back. Lower case throughout, and the modifiers in the order the shipped
+ * binds are written, so a hand-written config and a generated binds.state line
+ * for the same chord come out as the same bytes.
+ *
+ * NOT the same as ctlpanel.c's combo_str(), and that is the point: that one
+ * spells keycaps for a human ("Super+Shift+Q", "Esc", "="), this one spells
+ * xkb ("super+shift+q", "escape", "equal"). Mixing them up gives a file that
+ * reads perfectly and parses to nothing. */
+void syn_bind_format_combo(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
+{
+    char key[64] = {0};
+    if (xkb_keysym_get_name(sym, key, sizeof(key)) <= 0)
+        snprintf(key, sizeof(key), "NoSymbol");
+
+    snprintf(out, n, "%s%s%s%s%s",
+             (mods & WLR_MODIFIER_LOGO)  ? "super+" : "",
+             (mods & WLR_MODIFIER_CTRL)  ? "ctrl+"  : "",
+             (mods & WLR_MODIFIER_ALT)   ? "alt+"   : "",
+             (mods & WLR_MODIFIER_SHIFT) ? "shift+" : "",
+             key);
+
+    /* xkb spells most keys lower case already, but not all of them ("Escape",
+     * "Print", "XF86AudioMute"). parse_mod and xkb_keysym_from_name are both
+     * case-insensitive, so folding here costs nothing and makes the file
+     * uniform — which matters because these lines sit next to hand-written
+     * ones in the same language. */
+    for (char *p = out; *p; p++)
+        *p = (char)tolower((unsigned char)*p);
+}
+
+/* Take a combo out of the table. Returns false if nothing was bound to it,
+ * which is what lets `unbind` report a line that does nothing rather than
+ * succeeding silently.
+ *
+ * Order-preserving (memmove, not swap-with-last): the bind table's order is
+ * what the shortcuts column and the palette list in, so removing one entry must
+ * not reshuffle the rest under the reader. */
+bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym)
+{
+    for (int i = 0; i < cfg->bind_count; i++) {
+        if (cfg->binds[i].mods != mods || cfg->binds[i].sym != sym) continue;
+        memmove(&cfg->binds[i], &cfg->binds[i + 1],
+                (size_t)(cfg->bind_count - i - 1) * sizeof(cfg->binds[0]));
+        cfg->bind_count--;
+        return true;
+    }
+    return false;
+}
+
+bool config_unbind(syn_config_t *cfg, const char *combo)
+{
+    uint32_t mods; xkb_keysym_t sym;
+    if (!syn_bind_parse_combo(combo, &mods, &sym)) {
+        wlr_log(WLR_ERROR, "synui: unbind: bad key in '%s'", combo);
+        return false;
+    }
+    return config_unbind_combo(cfg, mods, sym);
+}
+
+/* Register a (mods, sym) chord → "<action> [arg]", replacing whatever held that
+ * chord. The string form below funnels into this; the rebind helper calls it
+ * directly, because it already has the chord as a keypress and turning it into
+ * text just to parse it back would be one more place for the two spellings to
+ * disagree. */
+void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
+                     const char *action, const char *arg)
+{
     syn_bind_t *b = NULL;
     for (int i = 0; i < cfg->bind_count; i++) {
         if (cfg->binds[i].mods == mods && cfg->binds[i].sym == sym) {
@@ -281,7 +374,36 @@ static void config_bind(syn_config_t *cfg, const char *combo,
     b->mods = mods;
     b->sym  = sym;
     snprintf(b->action, sizeof(b->action), "%s", action);
-    snprintf(b->arg, sizeof(b->arg), "%s", sp);
+    snprintf(b->arg, sizeof(b->arg), "%s", arg ? arg : "");
+}
+
+/* Register "<mod>+…+<key>" → "<action> [arg]". Same-combo binds replace the
+ * earlier entry so user config overrides the seeded defaults. */
+static void config_bind(syn_config_t *cfg, const char *combo,
+                        const char *action_and_arg)
+{
+    uint32_t mods = 0;
+    xkb_keysym_t sym = XKB_KEY_NoSymbol;
+
+    if (!syn_bind_parse_combo(combo, &mods, &sym)) {
+        wlr_log(WLR_ERROR, "synui: bind: bad key in '%s'", combo);
+        return;
+    }
+
+    /* Split the action from its argument on the first whitespace. */
+    char action[SYN_BIND_ACTION_LEN] = {0};
+    const char *sp = action_and_arg;
+    while (*sp && !isspace(*sp)) sp++;
+    size_t alen = (size_t)(sp - action_and_arg);
+    if (alen == 0 || alen >= sizeof(action)) {
+        wlr_log(WLR_ERROR, "synui: bind %s: bad action '%s'",
+                combo, action_and_arg);
+        return;
+    }
+    memcpy(action, action_and_arg, alen);
+    while (isspace(*sp)) sp++;
+
+    config_bind_set(cfg, mods, sym, action, sp);
 }
 
 /* Indexed by syn_focus_mode_t. These spellings are the synuirc vocabulary, so
@@ -422,6 +544,16 @@ static void seed_default_binds(syn_config_t *cfg)
          * existed — crop_open() needs a path and a keybind has none to give, so
          * a bare `crop` used to do nothing but close. */
         { "super+shift+x",   "crop" },
+        /* Mission control. X for eXposé — the name this feature had before it
+         * was Mission Control, and the only letter left that stands for
+         * anything: every word in "overview" and "windows" was gone twice over,
+         * and super+x was the free half of the pair super+shift+x already used.
+         *
+         * NOT super+tab, which is what GNOME and Windows put their task view
+         * on. That is layout_cycle here, and taking a key out from under a
+         * feature somebody already has in their fingers is a change to ask
+         * about, not to ship. Super+/ then F2 moves either one. */
+        { "super+x",         "overview" },
         /* Themes, not the task manager. The task manager had two binds and needs
          * one — ctrl+alt+delete below is the one everybody already reaches for,
          * so super+t goes to the theme manager, which had only the far less
@@ -827,6 +959,7 @@ static void config_set_defaults(syn_config_t *cfg)
     /* The shipped bar, and the system icon theme. Both read by synui-bar, not
      * by the compositor — see syn_bar_shell_t. */
     cfg->bar_shell         = SYN_BAR_SHELL_SYNAPSE;
+    cfg->bar_edge          = SYN_BAR_EDGE_TOP;
     cfg->bar_icon_theme[0] = '\0';
 
     cfg->power_enabled = 1;
@@ -879,6 +1012,13 @@ static void config_set_defaults(syn_config_t *cfg)
      * help does not list it, so this form stays valid across either terminal. */
     snprintf(cfg->network_cmd, sizeof(cfg->network_cmd),
              "kitty -e nmtui");
+
+    /* About OS. `--infinite` because the default is 2000 frames: an About box
+     * that closes itself after a couple of minutes would look like a crash. It
+     * exits on any keypress, so it is not a window that has to be hunted for a
+     * close button. */
+    snprintf(cfg->about_cmd, sizeof(cfg->about_cmd),
+             "kitty -e fetch --infinite");
 
     /* News (news.c). No sources here: an empty list means "use the built-in
      * ones" (news.c owns that table), and the first `news_source =` line in
@@ -954,6 +1094,7 @@ void synui_config_load(syn_config_t *cfg)
         record_audio_state_load(cfg);
         deskicons_state_load(cfg);
         settings_state_load(cfg);
+        binds_state_load(cfg);
         synui_config_apply_launcher_binds(cfg);
         return;
     }
@@ -1008,6 +1149,13 @@ void synui_config_load(syn_config_t *cfg)
      * settings.state is the one that can carry ANY key. Same precedent as the
      * others — delete the file to hand control back to synuirc. */
     settings_state_load(cfg);
+
+    /* After settings.state and everything above it, because it MEASURES ITSELF
+     * against them: binds.state holds only the difference between the bind
+     * table as every other source left it and the table after the rebind
+     * helper's edits. Snapshotting the baseline any earlier would record a
+     * synuirc `bind =` line as a user rebind and write it back out forever. */
+    binds_state_load(cfg);
 
     /* Dead last, after every writer of the bind table has had its say. */
     synui_config_apply_launcher_binds(cfg);
@@ -1400,6 +1548,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "network_cmd") == 0)
         snprintf(cfg->network_cmd, sizeof(cfg->network_cmd), "%s", val);
+    else if (strcmp(key, "about_cmd") == 0)
+        snprintf(cfg->about_cmd, sizeof(cfg->about_cmd), "%s", val);
     else if (strcmp(key, "news_refresh") == 0) {
         int m = atoi(val);
         cfg->news_refresh_min = m < 1 ? 1 : m;   /* never hammer a feed */
@@ -1464,6 +1614,19 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             }
         if (!found)
             wlr_log(WLR_ERROR, "synui: bar_shell: unknown '%s'", val);
+    }
+    /* Same deal as bar_shell: parsed here so the key has one spelling, acted on
+     * by quickshell. */
+    else if (strcmp(key, "bar_edge") == 0) {
+        int found = 0;
+        for (int i = 0; i < SYN_BAR_EDGE_COUNT; i++)
+            if (strcmp(val, syn_bar_edge_names[i]) == 0) {
+                cfg->bar_edge = i;
+                found = 1;
+                break;
+            }
+        if (!found)
+            wlr_log(WLR_ERROR, "synui: bar_edge: unknown '%s'", val);
     }
     /* Empty means "follow the system icon theme", which is the default and what
      * a theme switch changes. Not validated against the installed themes: the
@@ -1536,5 +1699,20 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             config_bind(cfg, val, sp);
         else
             wlr_log(WLR_ERROR, "synui: bind '%s': missing action", val);
+    }
+    /* The counterpart `bind` never had: TAKE A COMBO AWAY.
+     *
+     * Without it a shipped default could only ever be replaced, not removed —
+     * seed_default_binds() runs before any file is read, so every default is
+     * live by the time synuirc gets a say, and re-pointing super+w at something
+     * else was the only way to stop it opening the wallpaper picker.
+     *
+     * The rebind helper is what needed this. Moving a shortcut from super+w to
+     * super+y is two operations, not one: bind the new combo, and unbind the old
+     * one — otherwise the shortcut answers to BOTH, and the old key looks like a
+     * rebind that silently did not take. */
+    else if (strcmp(key, "unbind") == 0) {
+        if (!config_unbind(cfg, val))
+            wlr_log(WLR_ERROR, "synui: unbind '%s': not bound", val);
     }
 }

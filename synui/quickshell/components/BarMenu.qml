@@ -67,7 +67,9 @@ PopupWindow {
     anchor {
         window: menu.barWindow
         rect.x: Math.max(4, menu.anchorX - menu.implicitWidth / 2)
-        rect.y: Theme.barHeight + 2
+        // Below a top bar, above a bottom one. BarConfig owns the arithmetic
+        // so the four popup sites cannot drift apart.
+        rect.y: BarConfig.popupY(menu.implicitHeight)
     }
 
     Timer {

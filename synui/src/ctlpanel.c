@@ -115,6 +115,10 @@ static const char *const ctl_names_super_space[] = { "Launcher", "Cmdbar" };
 /* Order matches syn_bar_shell_t. The lower-cased spellings are what config.c's
  * `bar_shell` case parses back and what synui-bar.sh matches on. */
 static const char *const ctl_names_bar_shell[]   = { "SYNAPSE", "Antiquity" };
+/* Order matches syn_bar_edge_t. Same two words as the first two dock edges
+ * above, and folded to lower case they ARE the synuirc spellings — which is
+ * what lets "put it at the bottom" mean one thing across both. */
+static const char *const ctl_names_bar_edge[]    = { "Top", "Bottom" };
 
 struct ctl_item {
     int             row;
@@ -318,6 +322,8 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_LAYOUT,        CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Layout",           NULL,
       .section = "Desktop",
       .help = "Of the desktop you are on — layout is per-desktop, not global" },
+    { CTL_ROW_OVERVIEW,      CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Mission control",  "overview",
+      .help = "Every window on this desktop at once, and the desktops themselves" },
     { CTL_ROW_WIDGETS,       CTL_CAT_DESKTOP, CTL_KIND_PANEL,  "Desktop widgets",  "widgets" },
     { CTL_ROW_DESKTOP_ICONS, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Desktop icons", NULL,
       .key = "desktop_icons", .off = CFG(desktop_icons), .vtype = CTL_VAL_BOOL8,
@@ -358,6 +364,15 @@ static const struct ctl_item ctl_items[] = {
       .key = "bar_shell", .off = CFG(bar_shell), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_shell), .apply = CTL_APPLY_NONE,
       .help = "Antiquity is the diinki port; takes effect at the next login" },
+    /* The bar's answer to Dock edge above, and the one row on this panel whose
+     * value neither the compositor NOR a restart applies: the bar watches
+     * settings.state itself, so it moves while you are looking at it. Two
+     * options rather than the dock's four — the bar is a horizontal row and has
+     * no vertical form (see syn_bar_edge_t). */
+    { CTL_ROW_BAR_EDGE,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar edge",         NULL,
+      .key = "bar_edge", .off = CFG(bar_edge), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_NONE,
+      .help = "Which edge the bar sits on. The bar picks this up live" },
     { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Welcome menu at login", NULL,
       .key = "welcome_at_startup", .off = CFG(welcome_at_startup), .vtype = CTL_VAL_BOOL },
     { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Neural overlay at login", NULL,
@@ -383,6 +398,13 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_REPEAT_DELAY, CTL_CAT_INPUT, CTL_KIND_VALUE, "Key repeat delay", NULL,
       .key = "repeat_delay", .off = CFG(repeat_delay), .vtype = CTL_VAL_INT,
       .vmin = 100, .vmax = 2000, .vstep = 25, .unit = "ms", .apply = CTL_APPLY_INPUT },
+    /* The palette, which is also the rebind editor — the reason there is a row
+     * here at all. As documentation it was already reachable (the Shortcuts
+     * category below), but nothing on this panel led to the place where a
+     * shortcut can be CHANGED, and Super+/ is only discoverable once you have
+     * read the list it opens. */
+    { CTL_ROW_KEYBINDS,     CTL_CAT_INPUT, CTL_KIND_PANEL, "Keyboard shortcuts", "keys",
+      .help = "The whole list, searchable. F2 on a row moves it to another key" },
     { CTL_ROW_NUMLOCK,      CTL_CAT_INPUT, CTL_KIND_TOGGLE, "NumLock on at login", NULL,
       .key = "numlock", .off = CFG(numlock), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_INPUT,
@@ -480,6 +502,14 @@ static const struct ctl_item ctl_items[] = {
       .key = "news_refresh", .off = CFG(news_refresh_min), .vtype = CTL_VAL_INT,
       .vmin = 1, .vmax = 240, .vstep = 5, .unit = "min",
       .help = "How often a feed may be re-fetched at most" },
+
+    /* CTL_KIND_LAUNCH, like Network and Printers: it hands off to a terminal
+     * synui does not own, so the panel closes rather than arming a return to
+     * itself. There is nothing to come back to — the About box is the window,
+     * and it closes on a keypress. */
+    { CTL_ROW_ABOUT, CTL_CAT_SYSTEM, CTL_KIND_LAUNCH, "About OS", "about",
+      .section = "About",
+      .help = "The mark, the machine, and what this desktop is currently set to" },
 };
 
 #define CTL_ITEM_COUNT ((int)(sizeof(ctl_items) / sizeof(ctl_items[0])))
@@ -1128,6 +1158,9 @@ static const char *action_desc(const char *action, const char *arg)
         { "keys",              "Keyboard shortcuts (this list)" },
         { "bluetooth",         "Bluetooth" },
         { "printers",          "Printers" },
+        { "about",             "About OS" },
+        { "overview",          "Mission control (all windows)" },
+        { "keybinds",          "Rebind a shortcut" },
         { "night_light",       "Night light" },
         { "record",            "Record screen" },
         { "clipboard",         "Clipboard history" },
@@ -1184,6 +1217,16 @@ static const char *action_desc(const char *action, const char *arg)
             return tbl[i].desc;
         }
     return action;
+}
+
+/* The same table, for callers outside this file. The rebind helper needs it to
+ * name the shortcut a chord is ALREADY taken by, and deriving that from the
+ * shortcut list would mean searching a list of strings for the row that happens
+ * to hold the same action — with the answer depending on which of the three
+ * `spawn` rows it found first. */
+const char *ctlpanel_action_desc(const char *action, const char *arg)
+{
+    return action_desc(action, arg);
 }
 
 /* xkbcommon spells keys for machines ("Return", "space", "e"). Spell them the
@@ -1262,6 +1305,10 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
                  action_desc(b->action, b->arg));
         snprintf(out[n].action, sizeof(out[n].action), "%s", b->action);
         snprintf(out[n].arg,    sizeof(out[n].arg),    "%s", b->arg);
+        /* One bind, one chord — the only shape the rebind helper can move. */
+        out[n].rebindable = 1;
+        out[n].mods       = b->mods;
+        out[n].sym        = b->sym;
         n++;
     }
 
@@ -1549,6 +1596,8 @@ static int ctl_child_is_up(syn_server_t *s, const char *action)
     if (strcmp(action, "aimodel") == 0)   return s->aimodel.visible;
     if (strcmp(action, "news") == 0)      return s->news.visible;
     if (strcmp(action, "clipboard") == 0) return s->clipboard.visible;
+    if (strcmp(action, "keys") == 0)      return s->keys.visible;
+    if (strcmp(action, "overview") == 0)  return s->overview.visible;
     return 0;
 }
 
