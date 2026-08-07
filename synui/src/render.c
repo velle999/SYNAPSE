@@ -303,8 +303,28 @@ void render_set_panel_surface(const float bg[4], const float ink[4])
 #define INK_DIM    0.44   /* disabled rows, placeholders                   */
 #define INK_RULE   0.27   /* separators and hairlines                      */
 
+/* Below this a level is a rule, a wash or a fill — something drawn, not
+ * something read — and it is left exactly where the caller put it. At or above
+ * it the level is TEXT and takes the floor below. */
+#define INK_TEXT      0.30
+/* What secondary text has to clear on a pale panel. Not the 4.5 body-text
+ * target: this band is hints, units, disabled rows and column headings, and on
+ * silver there is not enough room under black to give five distinct rungs AND
+ * body-text contrast. 4.0 keeps them all legible; the rungs above 0.55 are
+ * already clear of it and keep their spacing. */
+#define INK_TEXT_MIN  4.0
+
+/* The smallest level that clears INK_TEXT_MIN on the current surface. Zero on a
+ * dark one, which makes the clamp in set_ink() a no-op — see the recompute. */
+static double g_ink_floor = 0.0;
+
 static inline void set_ink(cairo_t *cr, double level, double a)
 {
+    /* Monotonic, so clamping the level preserves the ladder's order: two rungs
+     * that were distinct stay distinct unless both were under the floor, and on
+     * a silver surface two illegible greys are worth less than one legible one. */
+    if (level >= INK_TEXT && level < g_ink_floor) level = g_ink_floor;
+
     cairo_set_source_rgba(cr,
         g_panel_bg[0] + (g_panel_ink[0] - g_panel_bg[0]) * level,
         g_panel_bg[1] + (g_panel_ink[1] - g_panel_bg[1]) * level,
@@ -376,12 +396,25 @@ static float g_stat[STAT_COUNT][3] = {
 };
 
 /* Both setters call this, because either one can invalidate the pair. */
+/* The ink ladder is a position between the surface and the ink, and that is what
+ * makes it flip with the theme — but a POSITION is not a contrast. The mapping
+ * is sRGB-linear, so the same rung buys far less separation travelling toward
+ * black from silver than it does toward white from near-black: level 0.44 is
+ * 4.06:1 on SYNAPSE and 2.89:1 on 95's #C0C0C0, which is grey text on a grey
+ * background, and 95 has the least headroom of any theme (black on silver tops
+ * out at 11.54:1 where SYNAPSE reaches 17.07:1).
+ *
+ * So on a PALE surface the lower half of the ladder gets a floor. Solved once
+ * here rather than in each of the ~190 set_ink() calls, most of which pass a
+ * bare number rather than a named rung and would have had to be revisited one
+ * by one. Dark surfaces set the floor to zero and keep every value they had. */
 static void panel_legibility_recompute(void)
 {
     double lum = syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
     syn_contrast_fix(g_panel_accent, g_panel_accent_ink, lum);
     for (int i = 0; i < STAT_COUNT; i++)
         syn_contrast_fix(stat_dark[i], g_stat[i], lum);
+    g_ink_floor = syn_ink_floor(g_panel_bg, g_panel_ink, INK_TEXT_MIN);
 }
 
 /* cairo_set_source_rgba with the active panel accent at alpha `a`, corrected for

@@ -77,3 +77,28 @@ void syn_contrast_fix(const float in[3], float out[3], double surface_lum)
     out[1] = (float)(in[1] * (1.0 - hi));
     out[2] = (float)(in[2] * (1.0 - hi));
 }
+
+/* Windows 95 is the theme with the least room to work in: black on its #C0C0C0
+ * silver tops out at 11.54:1 where SYNAPSE's near-white on near-black reaches
+ * 17.07:1, and the ladder's sRGB-linear mapping spends that smaller budget
+ * unevenly — level 0.44 is 4.06:1 on SYNAPSE and 2.89:1 on 95. That is what
+ * "secondary text is grey on a grey background" measures as. */
+double syn_ink_floor(const float bg[3], const float ink[3], double target)
+{
+    double lum = syn_rel_luminance(bg[0], bg[1], bg[2]);
+    if (lum <= SURFACE_PALE) return 0.0;
+
+    /* Monotonic in the position, so bisect it. If even the theme's own ink
+     * cannot reach the target this converges on 1.0 — the best the palette has,
+     * which is the honest answer rather than a colour outside the theme. */
+    double lo = 0.0, hi = 1.0;
+    for (int it = 0; it < 12; it++) {
+        double t = (lo + hi) / 2.0;
+        double r = bg[0] + (ink[0] - bg[0]) * t;
+        double g = bg[1] + (ink[1] - bg[1]) * t;
+        double b = bg[2] + (ink[2] - bg[2]) * t;
+        if (syn_contrast(r, g, b, lum) >= target) hi = t;
+        else                                      lo = t;
+    }
+    return hi;
+}

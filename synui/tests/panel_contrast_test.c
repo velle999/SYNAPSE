@@ -41,23 +41,35 @@
  * (SYNAPSE does); panel_accent is the preset's own field. */
 static const struct {
     const char *name;
-    float bg[3];
-    float accent[3];
-    int   pale;             /* what the theme's `scheme` says it is */
+    float bg[3];            /* panel_bg: base_*, or the explicit field         */
+    float ink[3];           /* panel_ink: text_*, or the explicit field        */
+    float accent[3];        /* panel_accent                                    */
+    int   pale;             /* what the theme's `scheme` says it is            */
 } themes[] = {
-    { "synapse",    { 0.060f, 0.060f, 0.120f }, { 0.00f,  0.85f,  0.75f  }, 0 },
-    { "dark",       { 0.118f, 0.118f, 0.141f }, { 0.24f,  0.49f,  1.00f  }, 0 },
-    { "winxp",      { 0.925f, 0.914f, 0.847f }, { 0.36f,  0.62f,  1.00f  }, 1 },
-    { "win95",      { 0.753f, 0.753f, 0.753f }, { 0.45f,  0.60f,  0.95f  }, 1 },
-    { "catppuccin", { 0.118f, 0.118f, 0.180f }, { 0.796f, 0.651f, 0.969f }, 0 },
-    { "gruvbox",    { 0.157f, 0.157f, 0.157f }, { 0.996f, 0.502f, 0.098f }, 0 },
-    { "tokyonight", { 0.141f, 0.157f, 0.231f }, { 0.733f, 0.604f, 0.969f }, 0 },
-    { "nord",       { 0.180f, 0.204f, 0.251f }, { 0.533f, 0.753f, 0.816f }, 0 },
-    { "dracula",    { 0.157f, 0.165f, 0.212f }, { 1.000f, 0.475f, 0.776f }, 0 },
+    { "synapse",    { 0.060f, 0.060f, 0.120f }, { 0.950f, 0.950f, 1.000f },
+                    { 0.00f,  0.85f,  0.75f  }, 0 },
+    { "dark",       { 0.118f, 0.118f, 0.141f }, { 0.922f, 0.922f, 0.949f },
+                    { 0.24f,  0.49f,  1.00f  }, 0 },
+    { "winxp",      { 0.925f, 0.914f, 0.847f }, { 0.000f, 0.000f, 0.000f },
+                    { 0.36f,  0.62f,  1.00f  }, 1 },
+    { "win95",      { 0.753f, 0.753f, 0.753f }, { 0.000f, 0.000f, 0.000f },
+                    { 0.45f,  0.60f,  0.95f  }, 1 },
+    { "catppuccin", { 0.118f, 0.118f, 0.180f }, { 0.804f, 0.839f, 0.957f },
+                    { 0.796f, 0.651f, 0.969f }, 0 },
+    { "gruvbox",    { 0.157f, 0.157f, 0.157f }, { 0.922f, 0.859f, 0.698f },
+                    { 0.996f, 0.502f, 0.098f }, 0 },
+    { "tokyonight", { 0.141f, 0.157f, 0.231f }, { 0.753f, 0.792f, 0.961f },
+                    { 0.733f, 0.604f, 0.969f }, 0 },
+    { "nord",       { 0.180f, 0.204f, 0.251f }, { 0.847f, 0.871f, 0.914f },
+                    { 0.533f, 0.753f, 0.816f }, 0 },
+    { "dracula",    { 0.157f, 0.165f, 0.212f }, { 0.973f, 0.973f, 0.949f },
+                    { 1.000f, 0.475f, 0.776f }, 0 },
     /* Bubblegum is the third PALE theme and the one nobody remembers: #FFE9F2
      * is a near-white pink, and its accent still carries the comment "on dark
-     * chrome" from when every panel was one. It was as unreadable as XP. */
-    { "bubblegum",  { 1.000f, 0.914f, 0.949f }, { 1.000f, 0.518f, 0.741f }, 1 },
+     * chrome" from when every panel was one. It was as unreadable as XP — and
+     * its #3D1A2A ink gives it the least headroom of the three. */
+    { "bubblegum",  { 1.000f, 0.914f, 0.949f }, { 0.239f, 0.102f, 0.165f },
+                    { 1.000f, 0.518f, 0.741f }, 1 },
 };
 
 /* render.c's stat_dark[] — the status colours a panel draws with. */
@@ -146,19 +158,58 @@ int main(void)
     }
     printf("  7 dark themes untouched\n");
 
-    /* The ink ladder handles text by construction, but the SURFACE the ladder
-     * runs between still has to be a real pair. A theme whose base and text are
-     * both pale gives every rung the same washed-out colour, which is how a
-     * "light theme" turns into an unreadable one; assert the pair is separated
-     * at all. */
+    /* ── The ink ladder ──────────────────────────────────────
+     * Text is drawn as a POSITION between the surface and the ink, which is
+     * what makes it flip with the theme — but a position is not a contrast.
+     * The mapping is sRGB-linear, so the same rung buys far less separation
+     * travelling toward black from silver than toward white from near-black:
+     * 0.44 is 4.06:1 on SYNAPSE and 2.89:1 on 95's #C0C0C0. That is what
+     * "Windows 95 secondary text is grey on a grey background" measures as.
+     *
+     * Every level render.c actually passes is listed, bare numbers included —
+     * most set_ink() calls do not use a named rung, and a floor that only
+     * covered INK_* would have missed the majority of them. */
+    static const double used_levels[] = {
+        1.00, 0.97, 0.89, 0.85, 0.81, 0.76, 0.72, 0.61,
+        0.55, 0.49, 0.44, 0.40, 0.38, 0.33,     /* text */
+        0.27, 0.21, 0.18, 0.11, 0.09, 0.04, 0.00, /* rules, washes, fills */
+    };
+    const double INK_TEXT = 0.30, INK_TEXT_MIN = 4.0;
+
+    printf("ink ladder — text levels on a pale panel\n");
     for (size_t t = 0; t < sizeof themes / sizeof *themes; t++) {
-        double lum = syn_rel_luminance(themes[t].bg[0], themes[t].bg[1],
-                                       themes[t].bg[2]);
-        double ink = themes[t].pale ? 0.0 : 1.0;   /* black on light, white on dark */
-        double c   = (fmax(lum, ink) + 0.05) / (fmin(lum, ink) + 0.05);
-        if (c < 7.0) {
-            printf("  FAIL %s: surface/ink pair only %.2f:1\n",
-                   themes[t].name, c);
+        const float *bg = themes[t].bg, *ink = themes[t].ink;
+
+        double floor = syn_ink_floor(bg, ink, INK_TEXT_MIN);
+        double lum   = syn_rel_luminance(bg[0], bg[1], bg[2]);
+
+        if (!themes[t].pale) {
+            /* Same claim as above, and the same reason: a dark theme's ladder
+             * is its own design. A non-zero floor here would silently rewrite
+             * every panel on seven themes. */
+            if (floor != 0.0) {
+                printf("  FAIL %s: dark theme got an ink floor of %.3f\n",
+                       themes[t].name, floor);
+                ok = 0;
+            }
+            continue;
+        }
+
+        double worst = 99.0;
+        for (size_t i = 0; i < sizeof used_levels / sizeof *used_levels; i++) {
+            double lv = used_levels[i];
+            if (lv < INK_TEXT) continue;               /* not text; left alone */
+            if (lv < floor)    lv = floor;             /* what set_ink() does */
+            double c = syn_contrast(bg[0] + (ink[0] - bg[0]) * lv,
+                                    bg[1] + (ink[1] - bg[1]) * lv,
+                                    bg[2] + (ink[2] - bg[2]) * lv, lum);
+            if (c < worst) worst = c;
+        }
+        printf("  %-10s floor=%.3f  worst text level %5.2f:1\n",
+               themes[t].name, floor, worst);
+        if (worst < INK_TEXT_MIN - 0.01) {
+            printf("  FAIL %s: secondary text still at %.2f:1\n",
+                   themes[t].name, worst);
             ok = 0;
         }
     }
