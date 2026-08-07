@@ -207,6 +207,7 @@ synui_exe = executable('synui',
     'src/config.c',
     'src/settings.c',
     'src/render.c',
+    'src/contrast.c',
     'src/effects.c',
     'src/wallpaper.c',
     'src/matrix.c',
@@ -490,6 +491,19 @@ ctlpanel_table_test = executable('ctlpanel_table_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('ctlpanel_table', ctlpanel_table_test)
+
+# Panel legibility, against every shipped theme. Two claims that pull opposite
+# ways: on a PALE surface every accent and status colour clears 4.5:1, and on a
+# DARK one nothing moves at all — several rice reds are already under target on
+# their own backgrounds because that is the palette their author shipped, and
+# "correcting" those would repaint seven working themes to fix three. Pure
+# arithmetic, so it links contrast.c alone and needs no compositor.
+panel_contrast_test = executable('panel_contrast_test',
+  ['tests/panel_contrast_test.c', 'src/contrast.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cc.find_library('m', required : false)],
+  build_by_default : false)
+test('panel_contrast', panel_contrast_test)
 
 # The panel pointer contract, on a real panel. There is no way to synthesise a
 # click into a headless synui — no virtual-pointer protocol, no input devices on

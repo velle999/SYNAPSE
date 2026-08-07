@@ -1,0 +1,169 @@
+/*
+ * panel_contrast_test.c — the panel legibility correction, against every
+ * shipped theme's actual surface and accent.
+ *
+ * synui's panels take the theme's own surface, so the accents and status
+ * colours in render.c — all of which were chosen against the near-black panel
+ * synui used to draw everywhere — land on beige under XP and on silver under
+ * 95. The correction in contrast.c exists for that, and it has to satisfy TWO
+ * claims at once, pulling in opposite directions:
+ *
+ *   1. On a PALE surface every one of those colours clears 4.5:1. This is the
+ *      reported bug: the task manager's meter readings measured 1.04:1 on
+ *      #ECE9D8 — the numbers were being drawn, in beige, on beige.
+ *
+ *   2. On a DARK surface nothing moves. AT ALL. This is the harder claim and
+ *      the reason the file is a test rather than a printf: several rice reds
+ *      are already under 4.5:1 on their own backgrounds (Gruvbox 3.89:1,
+ *      Catppuccin 4.33:1) because that is the palette their authors shipped.
+ *      A correction that "fixes" those repaints four working dark themes to
+ *      settle a complaint about two light ones. The first draft of
+ *      syn_contrast_fix() did precisely that, and this test is what caught it
+ *      before it shipped.
+ *
+ * The surfaces and accents below are transcribed from theme_presets[] in
+ * theme.c. They are duplicated deliberately: if someone edits a preset, this
+ * test should keep asserting the OLD contract until they come here and say the
+ * new colour is what they meant.
+ *
+ * SynapseOS Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ * https://github.com/velle999/SYNAPSE
+ */
+
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+
+#include "contrast.h"
+
+/* panel_bg is theme.c's base_* pair unless a preset sets panel_bg explicitly
+ * (SYNAPSE does); panel_accent is the preset's own field. */
+static const struct {
+    const char *name;
+    float bg[3];
+    float accent[3];
+    int   pale;             /* what the theme's `scheme` says it is */
+} themes[] = {
+    { "synapse",    { 0.060f, 0.060f, 0.120f }, { 0.00f,  0.85f,  0.75f  }, 0 },
+    { "dark",       { 0.118f, 0.118f, 0.141f }, { 0.24f,  0.49f,  1.00f  }, 0 },
+    { "winxp",      { 0.925f, 0.914f, 0.847f }, { 0.36f,  0.62f,  1.00f  }, 1 },
+    { "win95",      { 0.753f, 0.753f, 0.753f }, { 0.45f,  0.60f,  0.95f  }, 1 },
+    { "catppuccin", { 0.118f, 0.118f, 0.180f }, { 0.796f, 0.651f, 0.969f }, 0 },
+    { "gruvbox",    { 0.157f, 0.157f, 0.157f }, { 0.996f, 0.502f, 0.098f }, 0 },
+    { "tokyonight", { 0.141f, 0.157f, 0.231f }, { 0.733f, 0.604f, 0.969f }, 0 },
+    { "nord",       { 0.180f, 0.204f, 0.251f }, { 0.533f, 0.753f, 0.816f }, 0 },
+    { "dracula",    { 0.157f, 0.165f, 0.212f }, { 1.000f, 0.475f, 0.776f }, 0 },
+    /* Bubblegum is the third PALE theme and the one nobody remembers: #FFE9F2
+     * is a near-white pink, and its accent still carries the comment "on dark
+     * chrome" from when every panel was one. It was as unreadable as XP. */
+    { "bubblegum",  { 1.000f, 0.914f, 0.949f }, { 1.000f, 0.518f, 0.741f }, 1 },
+};
+
+/* render.c's stat_dark[] — the status colours a panel draws with. */
+static const struct { const char *name; float rgb[3]; } stats[] = {
+    { "nominal", { 0.00f, 0.85f, 0.75f } },
+    { "warn",    { 0.95f, 0.75f, 0.25f } },
+    { "crit",    { 0.90f, 0.30f, 0.35f } },
+    { "good",    { 0.45f, 0.80f, 0.55f } },
+};
+
+static int same(const float a[3], const float b[3])
+{
+    for (int i = 0; i < 3; i++)
+        if (fabsf(a[i] - b[i]) > 1e-6f) return 0;
+    return 1;
+}
+
+/* One colour, against one theme. Returns 0 on failure. */
+static int check(const char *theme, const char *what, const float in[3],
+                 double lum, int pale)
+{
+    float out[3];
+    syn_contrast_fix(in, out, lum);
+
+    double before = syn_contrast(in[0], in[1], in[2], lum);
+    double after  = syn_contrast(out[0], out[1], out[2], lum);
+
+    if (!pale) {
+        /* Claim 2. Not "close enough" — identical. */
+        if (!same(in, out)) {
+            printf("  FAIL %s/%s: dark theme was repainted "
+                   "(%.2f:1 -> %.2f:1)\n", theme, what, before, after);
+            return 0;
+        }
+        return 1;
+    }
+
+    /* Claim 1. The bisection converges from below, so allow the last step's
+     * worth of slack rather than demanding the target exactly. */
+    if (after < CONTRAST_TARGET - 0.01) {
+        printf("  FAIL %s/%s: %.2f:1 after correction, want %.2f:1\n",
+               theme, what, after, CONTRAST_TARGET);
+        return 0;
+    }
+    printf("  %-10s %-8s %5.2f:1 -> %5.2f:1  #%02x%02x%02x\n",
+           theme, what, before, after,
+           (int)(out[0] * 255 + 0.5f), (int)(out[1] * 255 + 0.5f),
+           (int)(out[2] * 255 + 0.5f));
+    return 1;
+}
+
+int main(void)
+{
+    int ok = 1;
+
+    printf("pale surfaces — every colour must clear %.1f:1\n", CONTRAST_TARGET);
+    for (size_t t = 0; t < sizeof themes / sizeof *themes; t++) {
+        double lum = syn_rel_luminance(themes[t].bg[0], themes[t].bg[1],
+                                       themes[t].bg[2]);
+
+        /* The theme's own scheme and the measured luminance have to agree, or
+         * the correction fires on the wrong themes and every other assertion
+         * here is checking the wrong branch. */
+        int measured_pale = lum > SURFACE_PALE;
+        if (measured_pale != themes[t].pale) {
+            printf("  FAIL %s: scheme says %s, surface measures %.3f\n",
+                   themes[t].name, themes[t].pale ? "light" : "dark", lum);
+            ok = 0;
+            continue;
+        }
+        if (!themes[t].pale) continue;
+
+        ok &= check(themes[t].name, "accent", themes[t].accent, lum, 1);
+        for (size_t i = 0; i < sizeof stats / sizeof *stats; i++)
+            ok &= check(themes[t].name, stats[i].name, stats[i].rgb, lum, 1);
+    }
+
+    printf("dark surfaces — nothing may move\n");
+    for (size_t t = 0; t < sizeof themes / sizeof *themes; t++) {
+        if (themes[t].pale) continue;
+        double lum = syn_rel_luminance(themes[t].bg[0], themes[t].bg[1],
+                                       themes[t].bg[2]);
+        ok &= check(themes[t].name, "accent", themes[t].accent, lum, 0);
+        for (size_t i = 0; i < sizeof stats / sizeof *stats; i++)
+            ok &= check(themes[t].name, stats[i].name, stats[i].rgb, lum, 0);
+    }
+    printf("  7 dark themes untouched\n");
+
+    /* The ink ladder handles text by construction, but the SURFACE the ladder
+     * runs between still has to be a real pair. A theme whose base and text are
+     * both pale gives every rung the same washed-out colour, which is how a
+     * "light theme" turns into an unreadable one; assert the pair is separated
+     * at all. */
+    for (size_t t = 0; t < sizeof themes / sizeof *themes; t++) {
+        double lum = syn_rel_luminance(themes[t].bg[0], themes[t].bg[1],
+                                       themes[t].bg[2]);
+        double ink = themes[t].pale ? 0.0 : 1.0;   /* black on light, white on dark */
+        double c   = (fmax(lum, ink) + 0.05) / (fmin(lum, ink) + 0.05);
+        if (c < 7.0) {
+            printf("  FAIL %s: surface/ink pair only %.2f:1\n",
+                   themes[t].name, c);
+            ok = 0;
+        }
+    }
+
+    printf("%s\n", ok ? "PASS" : "FAILED");
+    assert(ok);
+    return ok ? 0 : 1;
+}

@@ -29,6 +29,7 @@
 #include <wlr/interfaces/wlr_buffer.h>
 #include <scenefx/types/wlr_scene.h>
 
+#include "contrast.h"
 #include "synui.h"
 
 /* DRM_FORMAT_ARGB8888 — same bit layout as CAIRO_FORMAT_ARGB32 on LE */
@@ -240,15 +241,22 @@ out:
  * any theme is applied looks exactly as it always did. */
 static float g_panel_accent[3] = { 0.00f, 0.85f, 0.75f };
 
+static void panel_legibility_recompute(void);
+
 void render_set_panel_accent(const float rgb[4])
 {
     g_panel_accent[0] = rgb[0];
     g_panel_accent[1] = rgb[1];
     g_panel_accent[2] = rgb[2];
+    panel_legibility_recompute();
 }
 
-/* cairo_set_source_rgba with the active panel accent at alpha `a`. */
-static inline void set_accent(cairo_t *cr, double a)
+/* The accent as the theme states it, drawn on whatever surface the caller has.
+ * Only for the two things that are NOT drawn on the panel surface — the desktop
+ * icon field (which sits on the wallpaper) and the Alt+Tab card (which brings
+ * its own near-black plate). Everything else wants set_accent(), which adapts to
+ * the panel it is drawn on; see g_panel_accent_ink below. */
+static inline void set_accent_raw(cairo_t *cr, double a)
 {
     cairo_set_source_rgba(cr, g_panel_accent[0], g_panel_accent[1],
                           g_panel_accent[2], a);
@@ -276,6 +284,7 @@ void render_set_panel_surface(const float bg[4], const float ink[4])
         g_panel_bg[i]  = bg[i];
         g_panel_ink[i] = ink[i];
     }
+    panel_legibility_recompute();
 }
 
 /* The ink ladder. `level` is how far from the surface toward the ink a colour
@@ -311,6 +320,81 @@ static inline void panel_bg_color(float out[4], float alpha)
     out[1] = g_panel_bg[1];
     out[2] = g_panel_bg[2];
     out[3] = alpha;
+}
+
+/* ── Legibility on a PALE panel ──────────────────────────────
+ * The ink ladder above solved text: it is a position between the surface and the
+ * ink, so it flips with the theme for free. Two kinds of colour cannot be
+ * expressed that way, because their whole job is to be a specific hue:
+ *
+ *   - the accent (headers, selections, the rule under a title), and
+ *   - status colours (a meter that goes amber then red, a green VRAM figure).
+ *
+ * Both were absolute, and both were chosen against the near-black panel synui
+ * used to draw everywhere. Once panels took the theme's own surface, the two
+ * light themes got pale panels with colours picked for a dark one — measured on
+ * XP's #ECE9D8, the task manager's meter VALUES came out at 1.04:1, i.e. beige
+ * text on beige, and the accent at 2.21:1. Nothing was "hard to read"; it was
+ * not there.
+ *
+ * The fix is not a per-theme table — a rice defines its own accent, and a table
+ * cannot cover one that does not exist yet. contrast.c measures and corrects;
+ * this block is only the panel-side cache of what it returns. */
+
+/* The accent as it should be drawn ON THE PANEL SURFACE. Recomputed whenever
+ * either half of the pair changes, so no draw path pays for it. */
+static float g_panel_accent_ink[3] = { 0.00f, 0.85f, 0.75f };
+
+/* Status colours. They carry meaning — amber is "getting hot", red is "pegged" —
+ * so they are curated rather than derived from the accent, the same argument
+ * that keeps kitty's ANSI sixteen out of the theme. The dark set is the literal
+ * values these call sites used before, so no dark theme moves by a bit; the pale
+ * set is what those hues become when they have to read as text on paper. */
+typedef enum {
+    STAT_NOMINAL,   /* under load: the teal meter fill                        */
+    STAT_WARN,      /* amber                                                  */
+    STAT_CRIT,      /* red                                                    */
+    STAT_GOOD,      /* green — a figure that is good news (VRAM in use)       */
+    STAT_COUNT
+} syn_stat_t;
+
+static const float stat_dark[STAT_COUNT][3] = {
+    [STAT_NOMINAL] = { 0.00f, 0.85f, 0.75f },
+    [STAT_WARN]    = { 0.95f, 0.75f, 0.25f },
+    [STAT_CRIT]    = { 0.90f, 0.30f, 0.35f },
+    [STAT_GOOD]    = { 0.45f, 0.80f, 0.55f },
+};
+/* Initialised to the dark set, not left zeroed: a render can happen before any
+ * theme is applied (the greeter draws before theme_load_colors runs) and an
+ * uninitialised status colour is black, which on the near-black default panel is
+ * the same invisibility this whole block exists to remove. */
+static float g_stat[STAT_COUNT][3] = {
+    [STAT_NOMINAL] = { 0.00f, 0.85f, 0.75f },
+    [STAT_WARN]    = { 0.95f, 0.75f, 0.25f },
+    [STAT_CRIT]    = { 0.90f, 0.30f, 0.35f },
+    [STAT_GOOD]    = { 0.45f, 0.80f, 0.55f },
+};
+
+/* Both setters call this, because either one can invalidate the pair. */
+static void panel_legibility_recompute(void)
+{
+    double lum = syn_rel_luminance(g_panel_bg[0], g_panel_bg[1], g_panel_bg[2]);
+    syn_contrast_fix(g_panel_accent, g_panel_accent_ink, lum);
+    for (int i = 0; i < STAT_COUNT; i++)
+        syn_contrast_fix(stat_dark[i], g_stat[i], lum);
+}
+
+/* cairo_set_source_rgba with the active panel accent at alpha `a`, corrected for
+ * the surface it is landing on. */
+static inline void set_accent(cairo_t *cr, double a)
+{
+    cairo_set_source_rgba(cr, g_panel_accent_ink[0], g_panel_accent_ink[1],
+                          g_panel_accent_ink[2], a);
+}
+
+static inline void set_status(cairo_t *cr, syn_stat_t k, double a)
+{
+    cairo_set_source_rgba(cr, g_stat[k][0], g_stat[k][1], g_stat[k][2], a);
 }
 
 /* ── Welcome screen ──────────────────────────────────────── */
@@ -4753,10 +4837,20 @@ void synui_render_bt(syn_server_t *s)
 #define TM_COL_VRAM 560   /* right edge */
 #define TM_COL_WIN  580
 
+/* Hot values go amber then red: the point of a resource panel is that a
+ * saturated bar catches the eye without being read. Which is only true if the
+ * bar is visible against the panel — see the status table. */
+static syn_stat_t bar_stat(double frac)
+{
+    if (frac >= 0.90) return STAT_CRIT;
+    if (frac >= 0.70) return STAT_WARN;
+    return STAT_NOMINAL;
+}
+
 /* A meter. frac < 0 means "this back end can't report the value" — draw the
  * trough only, so an unknown reads as unknown rather than as zero. */
 static void draw_bar(cairo_t *cr, double x, double y, double w, double h,
-                     double frac, double r, double g, double b)
+                     double frac)
 {
     set_ink(cr, 0.11, 1.0);
     cairo_rectangle(cr, x, y, w, h);
@@ -4765,18 +4859,9 @@ static void draw_bar(cairo_t *cr, double x, double y, double w, double h,
     if (frac < 0) return;
     if (frac > 1.0) frac = 1.0;
 
-    cairo_set_source_rgba(cr, r, g, b, 1.0);
+    set_status(cr, bar_stat(frac), 1.0);
     cairo_rectangle(cr, x, y, w * frac, h);
     cairo_fill(cr);
-}
-
-/* Hot values go amber then red: the point of a resource panel is that a
- * saturated bar catches the eye without being read. */
-static void bar_color(double frac, double *r, double *g, double *b)
-{
-    if (frac >= 0.90)      { *r = 0.90; *g = 0.30; *b = 0.35; }
-    else if (frac >= 0.70) { *r = 0.95; *g = 0.75; *b = 0.25; }
-    else                   { *r = 0.00; *g = 0.85; *b = 0.75; }
 }
 
 /* KiB → the largest unit that keeps the number under four digits. */
@@ -4805,15 +4890,16 @@ static double draw_meter(cairo_t *cr, double y, const char *label,
                          double frac, const char *value)
 {
     cairo_set_font_size(cr, 12);
-    cairo_set_source_rgba(cr, 0.62, 0.66, 0.72, 1.0);
+    set_ink(cr, INK_MUTED, 1.0);
     cairo_move_to(cr, 18, y);
     cairo_show_text(cr, label);
 
-    double r, g, b;
-    bar_color(frac < 0 ? 0 : frac, &r, &g, &b);
-    draw_bar(cr, 76, y - 9, 200, 10, frac, r, g, b);
+    draw_bar(cr, 76, y - 9, 200, 10, frac);
 
-    cairo_set_source_rgba(cr, 0.86, 0.90, 0.94, 1.0);
+    /* The reading itself — the thing the panel exists to show. It was a fixed
+     * near-white (0.86,0.90,0.94), which is 1.04:1 on XP's beige panel: the
+     * numbers were being drawn, in beige, on beige. */
+    set_ink(cr, INK_STRONG, 1.0);
     cairo_move_to(cr, 292, y);
     cairo_show_text(cr, value);
 
@@ -4978,7 +5064,7 @@ void synui_render_taskmgr(syn_server_t *s)
 
         char txt[48];
         snprintf(txt, sizeof(txt), "%d", (int)p->pid);
-        cairo_set_source_rgba(cr, 0.50, 0.54, 0.62, 1.0);
+        set_ink(cr, INK_LABEL, 1.0);
         cairo_move_to(cr, TM_COL_PID, ry);
         cairo_show_text(cr, txt);
 
@@ -4989,21 +5075,24 @@ void synui_render_taskmgr(syn_server_t *s)
         /* Colour the CPU figure by load so a runaway process is visible in
          * peripheral vision even when the table is sorted by something else. */
         double load = p->cpu / 100.0;
-        if (load >= 0.9)      cairo_set_source_rgba(cr, 0.90, 0.30, 0.35, 1.0);
-        else if (load >= 0.3) cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
-        else                  cairo_set_source_rgba(cr, 0.62, 0.66, 0.72, 1.0);
+        /* A busy process keeps its warning hue on every theme; an idle one is
+         * ordinary secondary text, so it rides the ink ladder rather than a
+         * fixed grey that only ever suited a dark panel. */
+        if (load >= 0.9)      set_status(cr, STAT_CRIT, 1.0);
+        else if (load >= 0.3) set_status(cr, STAT_WARN, 1.0);
+        else                  set_ink(cr, INK_MUTED, 1.0);
         snprintf(txt, sizeof(txt), "%.1f", p->cpu);
         draw_right(cr, TM_COL_CPU, ry, txt);
 
-        cairo_set_source_rgba(cr, 0.62, 0.66, 0.72, 1.0);
+        set_ink(cr, INK_MUTED, 1.0);
         fmt_kb(p->rss_kb, txt, sizeof(txt));
         draw_right(cr, TM_COL_MEM, ry, txt);
 
         if (p->vram_kb) {
-            cairo_set_source_rgba(cr, 0.45, 0.80, 0.55, 1.0);
+            set_status(cr, STAT_GOOD, 1.0);
             fmt_kb(p->vram_kb, txt, sizeof(txt));
         } else {
-            cairo_set_source_rgba(cr, 0.32, 0.34, 0.42, 1.0);
+            set_ink(cr, INK_DIM, 1.0);
             snprintf(txt, sizeof(txt), "\xe2\x80\x93");   /* en dash */
         }
         draw_right(cr, TM_COL_VRAM, ry, txt);
@@ -5469,7 +5558,7 @@ static void deskicon_draw_cell(cairo_t *cr, const syn_deskicon_t *ic,
     double cx = ic->x - area->x, cy = ic->y - area->y;
 
     if (sel) {
-        set_accent(cr, 0.30);
+        set_accent_raw(cr, 0.30);
         cairo_rectangle(cr, cx + 2, cy + 2,
                         SYN_DESKICON_W - 4, SYN_DESKICON_H - 4);
         cairo_fill(cr);
@@ -5490,7 +5579,7 @@ static void deskicon_draw_cell(cairo_t *cr, const syn_deskicon_t *ic,
     } else {
         /* No themed icon: a folder gets a tab, a file a dog-ear. Enough
          * to tell them apart at a glance without shipping artwork. */
-        set_accent(cr, 0.75);
+        set_accent_raw(cr, 0.75);
         cairo_set_line_width(cr, 2);
         if (ic->is_dir) {
             cairo_rectangle(cr, ix + 4, iy + 14, 40, 26);
@@ -6007,11 +6096,15 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
         cairo_rectangle(cr, tx, ty, ATB_TILE_W, th);
         cairo_fill(cr);
 
+        /* Raw, not the panel-corrected accent: these land on the tile plate
+         * above, which is a fixed near-black whatever the theme is — the
+         * correction is for the panel surface and would darken the highlight
+         * into the plate on a light theme. */
         if (cur) {
-            set_accent(cr, 0.20);
+            set_accent_raw(cr, 0.20);
             cairo_rectangle(cr, tx, ty, ATB_TILE_W, th);
             cairo_fill(cr);
-            set_accent(cr, 1.0);
+            set_accent_raw(cr, 1.0);
             cairo_set_line_width(cr, 2);
             cairo_rectangle(cr, tx + 1, ty + 1, ATB_TILE_W - 2, th - 2);
             cairo_stroke(cr);
@@ -6093,8 +6186,12 @@ void synui_render_alttab(syn_server_t *s, syn_view_t **cands, int n, int sel)
             lr -= wext.width + 8;
         }
 
+        /* The label sits ON THE TILE PLATE, not on the card, so it takes a fixed
+         * light ink rather than the panel ladder. set_ink(0.76) resolved to this
+         * same grey on every dark theme — and to a dark grey on a light one,
+         * which put the window titles black-on-black under XP and 95. */
         if (cur) cairo_set_source_rgba(cr, 0.97, 1.00, 1.00, 1.0);
-        else     set_ink(cr, 0.76, 1.0);
+        else     cairo_set_source_rgba(cr, 0.74, 0.74, 0.79, 1.0);
         double lx = tx + ATB_INSET + ATB_BADGE + 6;
         draw_clipped(cr, lx, ly, lr - lx, label);
     }
