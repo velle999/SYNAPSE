@@ -40,31 +40,30 @@ WidgetFrame {
     property string timeText: "--:--:--"
     property string dateText: ""
 
-    // The glow is a second copy of the same string behind the first, offset a
-    // few pixels and mostly transparent. A text layer with a real blur on it
-    // would mean the clock — the thing on this desktop most meant to be read
-    // from across the room — is resampled from a texture every second.
+    // The shadow is Qt's own text outline, NOT a second copy of the string
+    // behind the first.
     //
-    // It is an offset and not a scale: scaling about the right edge moves each
-    // glyph by a fraction of its distance from that edge, so the hour got an
-    // 8px smear while the PM got none. Every glyph wants the same shadow.
-    Text {
-        anchors {
-            right: parent.right; rightMargin: 5
-            top: parent.top;     topMargin: -1
-        }
-        text: root.timeText
-        color: root.accent
-        opacity: 0.35
-        font.family: Theme.fontFamily
-        font.pixelSize: 42
-    }
-
+    // It was that: another Text at the same size, 35% opaque, anchored 5px left
+    // and 1px up. At 42px a 5px horizontal offset is about one stroke width, so
+    // the ghost landed BESIDE each stroke rather than under it — every digit
+    // came with a detached smear on its left and a visible gap between the two.
+    // velle, 2026-08-07: "it shouldn't have space between the shadow and the
+    // number on top."
+    //
+    // An outline cannot gap: Qt draws it around the glyph's own path, so there
+    // is no offset to get wrong and nothing to keep in step when the font or the
+    // size changes. It is also one Text item instead of two, on the widget most
+    // meant to be read from across the room and redrawn every second.
+    //
+    // Same trick, same colour as the Pizza widget's destination label — whose
+    // comment already claimed this is what the clock did.
     Text {
         id: time
         anchors { right: parent.right; top: parent.top }
         text: root.timeText
         color: root.accent
+        style: Text.Outline
+        styleColor: Qt.rgba(0, 0, 0, 0.55)
         font.family: Theme.fontFamily
         font.pixelSize: 42
     }
