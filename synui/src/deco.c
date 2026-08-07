@@ -338,11 +338,11 @@ static void titlebar_render(syn_view_t *view)
         if (cfg->chrome == SYN_CHROME_LUNA) {
             cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
             cairo_move_to(cr, text_x + 1, ty + 1);
-            cairo_show_text(cr, title);
+            syn_show_text(cr, title);
         }
         cairo_set_source_rgba(cr, fg[0], fg[1], fg[2], fg[3]);
         cairo_move_to(cr, text_x, ty);
-        cairo_show_text(cr, title);
+        syn_show_text(cr, title);
         cairo_restore(cr);
     }
 

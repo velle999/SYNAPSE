@@ -2287,6 +2287,13 @@ void synui_destroy(syn_server_t *s)
     ime_destroy(s);
 
     wlr_scene_node_destroy(&s->scene->tree.node);
+
+    /* The fallback font faces, after the scene is gone so nothing can still be
+     * mid-draw with one of them selected. Every entry holds a cairo font face
+     * and the FcPattern it was built from, both of which LeakSanitizer counts
+     * against the ASan smoke run. */
+    syn_text_shutdown();
+
     wlr_xcursor_manager_destroy(s->cursor_mgr);
     wlr_cursor_destroy(s->cursor);
     wlr_output_layout_destroy(s->output_layout);

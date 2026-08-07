@@ -1,0 +1,50 @@
+# Dolphin (KIO 6) right-click service menu for images: Set as Wallpaper.
+#
+# WHY THIS EXISTS WHEN "Set as Wallpaper" WAS ALREADY THERE
+#
+# It was there and it did not work. The entry came from plasma-workspace's
+# /usr/lib/qt6/plugins/kf6/kfileitemaction/wallpaperfileitemaction.so, which
+# makes a session-bus call to PLASMASHELL — a process that does not exist on
+# SynapseOS. The failure surfaces as the plugin's own error string with its
+# placeholder unfilled:
+#
+#     plasma name is not activatable i18n_argument_missing
+#
+# which says nothing about wallpapers to anyone reading it. The plugin is
+# switched off in config/kservicemenurc so there is one entry rather than two,
+# and this is the one that works. Turning it off is not enough on its own —
+# with no replacement the obvious way to set a wallpaper from a file manager
+# would simply be missing.
+#
+# %f, not %F: one wallpaper. A selection of twelve images would otherwise
+# dispatch twelve times and the desktop would end up on whichever one the
+# compositor happened to handle last, which is not a choice anyone made.
+#
+# Mimetypes are what wppick_is_image() accepts — PNG through cairo and JPEG
+# through imgdec.c — and nothing else. wallpaper.c treats an image it cannot
+# decode as NO wallpaper and paints the background colour, so an entry offered
+# for a GIF would blank the desktop and persist that, which is the exact failure
+# wppick_set_path()'s readability check exists to prevent.
+#
+# KIO 6 wants the new-style format (Type=Application with Actions=), not the
+# KF5 Type=Service / ServiceTypes=KonqPopupMenu/Plugin one, and reads it from
+# $XDG_DATA_DIRS/kio/servicemenus/. Installed executable: KIO ignores
+# service-menu desktop files without the exec bit. Dolphin caches these per
+# process, so restart it to see a change.
+[Desktop Entry]
+Type=Application
+Name=Set as Wallpaper
+Icon=preferences-desktop-wallpaper
+MimeType=image/png;image/jpeg;image/jpg;image/pjpeg;
+Actions=synuiSetWallpaper;
+X-KDE-Priority=TopLevel
+
+# `synctl dispatch wallpaper <path>` is the same entry point the theme picker
+# uses, so this shares its behaviour: global scope, any per-output override
+# cleared, a running Wallpaper Engine scene switched off, and the choice
+# persisted to wallpaper.state. An unreadable path is refused there rather than
+# blanking the desktop.
+[Desktop Action synuiSetWallpaper]
+Name=Set as Wallpaper
+Icon=preferences-desktop-wallpaper
+Exec=synctl dispatch wallpaper %f

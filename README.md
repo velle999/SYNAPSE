@@ -210,6 +210,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`B` | Night light (blue-light filter) |
 | `Super`+`I` | Network / Wi-Fi |
 | `Super`+`V` | Clipboard history |
+| `Super`+`semicolon` | Emoji picker — type to search, `Tab` for categories, `Enter` inserts |
 | `Super`+`R` | News (Hacker News, Arch, LWN, Phoronix, …) |
 | `Super`+`Shift`+`R` | Start/stop screen recording |
 | `Super`+`Shift`+`C` | Cat mode |

@@ -168,6 +168,83 @@ static void test_calendar_band(void)
           "past the last column claimed a row");
 }
 
+/* hit_set_grid(): several cells per row, indexed left-to-right then down.
+ *
+ * Worth its own case because hit_index_at() grew column arithmetic to serve it,
+ * and that function is on the click path of EVERY panel in the tree — so the
+ * list cases above are as much a part of this feature's coverage as the grid
+ * ones here. The emoji picker is the caller. */
+static void test_grid(void)
+{
+    const int px = 100, py = 50;
+    const int gx = 20, gy = 60, cw = 48, ch = 44, cols = 10, rows = 6;
+
+    syn_hit_t g;
+    hit_set_panel(&g, px, py, 560, 400);
+    hit_set_grid(&g, gx, gy, cw, ch, cols, rows);
+
+    const int x0 = px + gx, y0 = py + gy;
+
+    /* The first cell, and its neighbours in each direction. */
+    CHECK(hit_index_at(&g, x0 + 2, y0 + 2) == 0, "cell 0,0 should be index 0");
+    CHECK(hit_index_at(&g, x0 + cw + 2, y0 + 2) == 1, "cell 0,1 should be index 1");
+    CHECK(hit_index_at(&g, x0 + 2, y0 + ch + 2) == cols,
+          "the first cell of row 1 should be index cols");
+    CHECK(hit_index_at(&g, x0 + 3 * cw + 2, y0 + 2 * ch + 2) == 2 * cols + 3,
+          "row 2 column 3 should be index 2*cols+3");
+
+    /* The last drawn cell, and one past it in each direction. */
+    CHECK(hit_index_at(&g, x0 + (cols - 1) * cw + 2, y0 + (rows - 1) * ch + 2)
+              == rows * cols - 1,
+          "the bottom-right cell should be the last index");
+    CHECK(hit_index_at(&g, x0 + cols * cw + 2, y0 + 2) == -1,
+          "past the last COLUMN claimed a cell");
+    CHECK(hit_index_at(&g, x0 + 2, y0 + rows * ch + 2) == -1,
+          "past the last ROW claimed a cell");
+    CHECK(hit_index_at(&g, x0 - 2, y0 + 2) == -1,
+          "left of the grid claimed a cell");
+
+    /* Columns report themselves. */
+    CHECK(hit_col_at(&g, x0 + 2, y0 + 2) == 0, "column 0 should be column 0");
+    CHECK(hit_col_at(&g, x0 + 4 * cw + 2, y0 + 2) == 4, "column 4 should be column 4");
+
+    /* first counts in CELLS for a grid, so a page scrolled by whole rows
+     * offsets by (top_row * cols) and the same arithmetic serves both shapes.
+     * This is the part a list-shaped assumption gets wrong. */
+    hit_set_first(&g, 3 * cols);
+    CHECK(hit_index_at(&g, x0 + 2, y0 + 2) == 3 * cols,
+          "a scrolled grid should offset by whole rows of cells");
+    CHECK(hit_index_at(&g, x0 + 2 * cw + 2, y0 + ch + 2) == 4 * cols + 2,
+          "scroll offset should compose with the row/column arithmetic");
+
+    /* And hit_set_grid() resets the offset, as hit_set_rows() does. */
+    hit_set_grid(&g, gx, gy, cw, ch, cols, rows);
+    CHECK(hit_index_at(&g, x0 + 2, y0 + 2) == 0,
+          "hit_set_grid should have reset the scroll offset");
+}
+
+/* A list must keep answering exactly as it did before columns existed. The
+ * calendar case above already leans on this, but it reads the band by hand;
+ * this asserts the plain path every other panel takes. */
+static void test_list_unaffected_by_cols(void)
+{
+    syn_hit_t g;
+    hit_set_panel(&g, 0, 0, 400, 400);
+    hit_set_rows(&g, 10, 20, 380, 30, 5);
+
+    CHECK(g.cols == 1, "hit_set_rows should leave exactly one column");
+    CHECK(hit_index_at(&g, 200, 20 + 2 * 30 + 2) == 2,
+          "a plain list should still index by row alone");
+    CHECK(hit_col_at(&g, 200, 20 + 2) == 0, "a list should always be column 0");
+    /* The row spans [row_x, row_x + row_w) = [10, 390), so 389 is the last
+     * pixel of it and 390 is already past — the same half-open convention the
+     * grid uses per column. */
+    CHECK(hit_index_at(&g, 389, 20 + 2) == 0,
+          "the right-hand end of a full-width row is still that row");
+    CHECK(hit_index_at(&g, 390, 20 + 2) == -1,
+          "one pixel past the row's width is not that row");
+}
+
 int main(void)
 {
     test_cleared();
@@ -175,6 +252,8 @@ int main(void)
     test_power_rows();
     test_scrolled_index();
     test_calendar_band();
+    test_grid();
+    test_list_unaffected_by_cols();
 
     if (failures) {
         fprintf(stderr, "hit_test: %d failure(s)\n", failures);

@@ -364,6 +364,13 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+b",   "night_light" },   /* "blue light" */
         { "super+shift+r",   "record" },        /* start/stop screen recording */
         { "super+v",         "clipboard" },     /* clipboard history */
+        /* The emoji picker, on the free half of the convention every other
+         * desktop uses. Windows offers Win+. and Win+; for the same panel and
+         * GNOME's IBus picker is Ctrl+.; here super+period is already
+         * column_expel (niri's own key, and a tiling bind is not something to
+         * move for this), so the semicolon spelling is the one that is free.
+         * Nothing else on this layout wants it. */
+        { "super+semicolon", "emoji" },
         /* Brightness keys. No modifier: they are dedicated keys on every
          * laptop, and nothing else claims them. */
         { "xf86monbrightnessup",   "brightness_up" },
@@ -772,6 +779,13 @@ static void config_set_defaults(syn_config_t *cfg)
      * 24 matches the size the compositor was previously hardcoded to. */
     cfg->cursor_theme[0] = '\0';
     cfg->cursor_size     = 24;
+
+    /* Empty font = "monospace", the fontconfig alias every panel drew in before
+     * the picker existed — so an untouched system looks exactly as it did.
+     * text.c is reset too, or a config RELOAD would leave the previous
+     * session's font applied with nothing in the config naming it. */
+    cfg->ui_font[0] = '\0';
+    syn_text_set_ui_font(NULL);
 
     cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
     cfg->cat_breed         = CAT_BREED_NEON;   /* the house cat */
@@ -1214,6 +1228,13 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "cursor_theme") == 0)
         strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);
+    else if (strcmp(key, "ui_font") == 0) {
+        strncpy(cfg->ui_font, val, sizeof(cfg->ui_font) - 1);
+        /* Push it straight into text.c: it holds the copy every draw path
+         * reads, has no server handle, and a font parsed but not applied is a
+         * setting that silently does nothing until the picker is opened. */
+        syn_text_set_ui_font(cfg->ui_font);
+    }
     else if (strcmp(key, "cursor_size") == 0) {
         int px = atoi(val);
         /* Clamped, not obeyed: 0 makes wlroots fall back in ways that are

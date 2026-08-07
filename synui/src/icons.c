@@ -407,9 +407,9 @@ void icon_draw_monogram(cairo_t *cr, const char *app_id,
     cairo_set_font_size(cr, size * 0.5);
     cairo_text_extents_t ext;
     char label[2] = { letter, '\0' };
-    cairo_text_extents(cr, label, &ext);
+    syn_text_extents(cr, label, &ext);
     cairo_move_to(cr, x + size / 2.0 - ext.width / 2.0 - ext.x_bearing,
                       y + size / 2.0 - ext.height / 2.0 - ext.y_bearing);
-    cairo_show_text(cr, label);
+    syn_show_text(cr, label);
     cairo_restore(cr);
 }

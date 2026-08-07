@@ -1,0 +1,22 @@
+# kservicemenurc — which file-manager context-menu entries Dolphin offers.
+#
+# System-wide defaults. KConfig merges this under the user's own
+# ~/.config/kservicemenurc, so anything switched off here can be switched back
+# on in Dolphin ▸ Settings ▸ Context Menu without editing a file.
+#
+# KIO reads the [Show] group for BOTH kinds of entry — the .desktop files in
+# kio/servicemenus/ (keyed by file name) and the KFileItemAction PLUGINS in
+# qt6/plugins/kf6/kfileitemaction/ (keyed by plugin id, i.e. the .so's base
+# name). That second half is the only way to suppress a plugin: it is compiled
+# code shipped by another package, with no desktop file to edit or override.
+[Show]
+# plasma-workspace's "Set as Wallpaper". It asks PLASMASHELL over the session
+# bus to do the work, and there is no plasmashell here — the action fails with
+# the plugin's own untranslated error text ("… is not activatable
+# i18n_argument_missing"), which reads as a bug in the file manager rather than
+# as "this desktop is not Plasma".
+#
+# config/synui-set-wallpaper.desktop replaces it with an entry of the same name
+# that dispatches to synui. Both switched on would mean two identical-looking
+# "Set as Wallpaper" items, one of which errors.
+wallpaperfileitemaction=false

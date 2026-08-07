@@ -840,6 +840,22 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         else             wppick_toggle(s);
     } else if (strcmp(action, "cursor") == 0) {
         curpick_toggle(s);
+    } else if (strcmp(action, "crop") == 0) {
+        /* The only action that REQUIRES its argument. Without one there is
+         * nothing to crop, so a bare `crop` can only close an open panel. */
+        if (arg && *arg) crop_open(s, arg);
+        else             crop_toggle(s);
+    } else if (strcmp(action, "equalizer") == 0) {
+        eq_toggle(s);
+    } else if (strcmp(action, "emoji") == 0) {
+        emoji_toggle(s);
+    } else if (strcmp(action, "font") == 0) {
+        /* No default keybind: this is a settings panel reached from Control
+         * panel ▸ Appearance ▸ UI font, and the bind table is already dense
+         * enough that claiming a letter for a font picker would displace
+         * something used far more often. The action exists so a user CAN bind
+         * it, and so the control-panel row has something to fire. */
+        fontpick_toggle(s);
     } else if (strcmp(action, "cursor_reload") == 0) {
         /* What synui-cursor(1) dispatches after writing cursor.state, so a
          * theme installed from a terminal takes effect without a re-login. */
@@ -1343,6 +1359,32 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Cursor theme picker: same modal contract as the wallpaper one. */
         for (int i = 0; i < nsyms; i++)
             if (curpick_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Image cropper: modal and full-screen. */
+        for (int i = 0; i < nsyms; i++)
+            if (crop_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Equalizer: same modal contract. */
+        for (int i = 0; i < nsyms; i++)
+            if (eq_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Emoji picker. BEFORE the font picker only because the list is
+         * walked in the order panels were added; no two are ever open at
+         * once, so the order carries no meaning beyond that. */
+        for (int i = 0; i < nsyms; i++)
+            if (emoji_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* UI font picker: same modal contract again. */
+        for (int i = 0; i < nsyms; i++)
+            if (fontpick_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -2002,6 +2044,10 @@ void pointer_rebase(syn_server_t *s)
     X(dispcfg,  dispcfg)  \
     X(wppick,   wppick)   \
     X(curpick,  curpick)  \
+    X(fontpick, fontpick) \
+    X(emoji,    emoji)    \
+    X(eq,       eq)       \
+    X(crop,     crop)     \
     X(power,    power)    \
     X(taskmgr,  taskmgr)  \
     X(news,     news)     \
@@ -2099,6 +2145,13 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
         return;
     }
     /* Same for a desktop icon being dragged to a new cell. */
+    if (s->crop.dragging) {
+        /* The crop rectangle, fed the same way the desktop-icon drag is: the
+         * panel's _click starts it and the release below ends it. */
+        crop_drag_motion(s, s->cursor->x, s->cursor->y);
+        return;
+    }
+
     if (s->deskicon_drag.active) {
         deskicon_drag_motion(s, s->cursor->x, s->cursor->y);
         return;
@@ -2214,6 +2267,11 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
 
     /* A desktop-icon drag is the same story: PASSTHROUGH throughout, so its
      * release has to be caught here or the drop would never be committed. */
+    if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->crop.dragging) {
+        crop_drag_end(s, s->cursor->x, s->cursor->y);
+        return;
+    }
+
     if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->deskicon_drag.active) {
         deskicon_drag_end(s, s->cursor->x, s->cursor->y);
         return;

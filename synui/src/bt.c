@@ -249,7 +249,7 @@ static void bt_sort_keep_selection(syn_bt_t *b)
 
 /* Copy a display string, dropping anything cairo would choke on. A device name
  * is attacker-controlled text straight off the air — any phone in range picks
- * it — and cairo_show_text() poisons its whole context on invalid UTF-8, which
+ * it — and syn_show_text() poisons its whole context on invalid UTF-8, which
  * silently blanks every row drawn after it. So a name that is not clean UTF-8 is
  * not shown at all; the address still identifies the device. */
 static void bt_copy_text(char *dst, size_t n, const char *src)

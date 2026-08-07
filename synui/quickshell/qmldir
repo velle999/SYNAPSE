@@ -11,6 +11,7 @@ singleton BarConfig 1.0 BarConfig.qml
 singleton MenuState 1.0 MenuState.qml
 singleton LauncherStyle 1.0 LauncherStyle.qml
 singleton PostItState 1.0 PostItState.qml
+singleton EqState 1.0 EqState.qml
 Bar 1.0 Bar.qml
 PostItFile 1.0 PostItFile.qml
 Osd 1.0 Osd.qml

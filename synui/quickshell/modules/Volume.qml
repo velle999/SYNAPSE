@@ -38,9 +38,19 @@ BarModule {
     iconColor: muted ? Theme.fgDim : Theme.cyan
     text: muted ? "muted" : (volume + "%")
     textColor: muted ? Theme.fgDim : Theme.fg
-    tooltipText: (sink && sink.description ? sink.description : "Audio")
-                 + "\n" + (muted ? "muted" : volume + "%")
-                 + "\nClick to mute · scroll to adjust · right-click for mixer"
+    // The equalizer line only appears when there is something to explain. With
+    // it on, the device named above is "SynapseOS Equalizer" — a sink nobody
+    // plugged in — and the tooltip is where that stops being a mystery. It is
+    // also where a chain that says it is on but is not gets noticed, since the
+    // mixer has to be opened to see the row itself.
+    tooltipText: {
+        let s = (sink && sink.description ? sink.description : "Audio")
+        s += "\n" + (muted ? "muted" : volume + "%")
+        if (EqState.enabled)
+            s += "\nEqualizer: " + EqState.status
+                 + (EqState.warning ? "" : "  ·  " + EqState.preset)
+        return s + "\nClick to mute · scroll to adjust · right-click for mixer"
+    }
 
     onClicked: if (audio) audio.muted = !audio.muted
 

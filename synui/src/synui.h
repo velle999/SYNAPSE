@@ -131,8 +131,12 @@ typedef enum {
 typedef struct {
     int x, y, w, h;      /* panel rect; w == 0 means "not on screen" */
     int row_x, row_y;    /* top-left of row 0's hit box */
-    int row_w, row_h;    /* one row's hit box; row_h is also the pitch */
+    int row_w, row_h;    /* one cell's hit box; both are also the pitch */
     int rows;            /* rows currently drawn — the hit-testable window */
+    /* Cells per row. 1 for every list, which is what hit_set_rows() sets and
+     * what a zeroed struct is read as. Grids (the emoji picker) set it with
+     * hit_set_grid() and then row_w is one CELL rather than the full width. */
+    int cols;
     /* List index of the first DRAWN row, for the panels whose list scrolls.
      * Several of them (the theme manager) derive it from the selection on every
      * render and keep no scroll position at all, so the only place that knows
@@ -149,6 +153,11 @@ void hit_set_panel(syn_hit_t *g, int x, int y, int w, int h);
  * Must follow hit_set_panel(). `n` is the number of rows actually drawn, not
  * the number that exist: a scrolling list only hit-tests its visible window. */
 void hit_set_rows(syn_hit_t *g, int lx, int ly, int w, int h, int n);
+/* The same, for a panel whose items sit in a GRID (the emoji picker). cell_w
+ * and cell_h are the pitch as well as the size, so a gutter goes inside the
+ * cell. Follows hit_set_panel(), like hit_set_rows(). */
+void hit_set_grid(syn_hit_t *g, int lx, int ly,
+                  int cell_w, int cell_h, int cols, int rows);
 /* Record which list index the first drawn row is, for a scrolling list. Follows
  * hit_set_rows(); leaving it out means "the window starts at 0". */
 void hit_set_first(syn_hit_t *g, int first);
@@ -159,6 +168,9 @@ int  hit_in_panel(const syn_hit_t *g, double lx, double ly);
  * panel's chrome and for anywhere outside it. Callers holding a scrolled list
  * add their own first-row offset. */
 int  hit_row_at(const syn_hit_t *g, double lx, double ly);
+/* Column under (lx,ly), or -1 off the grid. Always 0 on a list, so only the
+ * grid panels have any reason to ask. */
+int  hit_col_at(const syn_hit_t *g, double lx, double ly);
 /* The same test in LIST coordinates: hit_row_at() plus the scroll offset above,
  * so a panel with a scrolling list never has to add it back on itself and get it
  * wrong on the one path that forgot. -1 for a miss, as ever. */
@@ -384,6 +396,145 @@ extern const int                 synui_welcome_menu_len;
 /* ── Cursor theme picker (cursor.c) ──────────────────────── */
 #define CURPICK_MAX  64   /* installed cursor themes the scan will list */
 #define CURPICK_ROWS 10   /* rows visible at once; the rest scroll */
+
+/* Font families the picker will list. Generous next to CURPICK_MAX because
+ * fonts are not installed one at a time: a single noto-fonts package brings
+ * hundreds of families, and the dev box carries 521 before any of them are
+ * filtered for Latin coverage. Overflowing this truncates the list rather than
+ * breaking anything, but the truncation is alphabetical and therefore silent,
+ * so it is set well above what a normal install reaches. */
+#define FONTPICK_MAX  512
+#define FONTPICK_ROWS 12   /* rows visible at once; the rest scroll */
+
+/* One family name, as fontconfig spells it. A struct rather than a bare char
+ * array so a style/coverage field can be added later without touching every
+ * user of the list. */
+struct syn_font_family {
+    char name[96];
+};
+
+/* ── The image cropper (crop.c) ──────────────────────────────
+ *
+ * The one panel that takes an argument: it operates on a file rather than
+ * configuring something. The selection is held in IMAGE PIXELS — see crop.c
+ * for why storing it in screen coordinates loses precision and breaks on a
+ * different-sized output. */
+typedef struct {
+    int visible;
+
+    cairo_surface_t *img;          /* decoded source; freed on hide */
+    int              img_w, img_h;
+    char             path[512];    /* what was opened */
+
+    /* The source, already scaled to the size it is drawn at.
+     *
+     * NOT an optimisation — the panel is unusable without it. Every pointer
+     * motion during a drag redraws this panel, and redrawing it used to mean
+     * resampling the whole source image: measured at 122 ms per frame for a
+     * 6000x4000 photo fitted to 1080p, against 0.29 ms to blit a copy that is
+     * already the right size. At even 60 motion events a second that asks for
+     * seven seconds of CPU per second of dragging on the thread that also runs
+     * the Wayland event loop, so the drag did not lag — the whole desktop
+     * stopped until the pointer did.
+     *
+     * Keyed on the scale it was built at, so a move to a differently-sized
+     * output rebuilds it rather than drawing the old fit. NULL when the image
+     * is drawn at 1:1 (crop_fit never scales up), where the source is already
+     * the right thing to paint and a second copy would be pure memory. */
+    cairo_surface_t *scaled;
+    double           scaled_at;    /* the crop_fit() scale `scaled` was built for */
+
+    /* The drag's two corners, in image pixels and NOT normalised — a drag up
+     * and to the left leaves bx < ax. crop_selection() sorts them. */
+    int ax, ay, bx, by;
+    int dragging;                  /* a press is in flight; input.c feeds it */
+
+    char status[64];               /* an error to show without closing */
+} syn_crop_panel_t;
+
+/* ── The equalizer panel (eq.c; the DSP is synui-eq(1)) ────── */
+
+/* Bands the panel will hold. The REAL count comes from eq.state's `freqs=`
+ * line, which synui-eq writes from its own table — this is only the ceiling on
+ * the arrays. Raising the script's band count past this truncates the panel
+ * rather than overrunning it. */
+#define EQ_BANDS 16
+
+typedef struct {
+    int visible;
+    int selected;
+    int scroll;
+
+    /* The optimistic cache. See eq.c's header for why it exists and why the
+     * mtime is not cleared after this panel's own writes. */
+    int  enabled;
+    int  preamp;
+    char preset[24];
+    int  gain[EQ_BANDS];
+    int  freq[EQ_BANDS];
+    int  freq_count;
+    long mtime;        /* eq.state's mtime when it was last read */
+
+    syn_hit_t hit;
+} syn_eq_panel_t;
+
+/* ── The emoji picker (emoji.c + the generated emoji_data.c) ── */
+
+#define EMOJI_COLS        12    /* cells across the grid */
+#define EMOJI_ROWS         7    /* rows visible at once; the rest scroll */
+#define EMOJI_RECENT_MAX  24    /* remembered in ~/.config/synui/emoji.recent */
+#define EMOJI_SEARCH_MAX  32    /* typed search text */
+/* Ceiling on one filtered view. Above the table's own size, so "All" with an
+ * empty search is never truncated; it exists so the index array is a fixed
+ * allocation in the server struct rather than a malloc on every keystroke. */
+#define EMOJI_FILT_MAX  2048
+
+/* Tab indices. Recents and All are not blocks, so they sit in front of the
+ * generated category list rather than inside it. */
+enum {
+    EMOJI_CAT_RECENT = 0,
+    EMOJI_CAT_ALL,
+    EMOJI_CAT_FIRST_BLOCK,   /* …then one per entry in syn_emoji_cats[] */
+};
+
+/* One row of the generated table. `name` is the canonical Unicode name, already
+ * lowercased so the search is a plain strstr. */
+struct syn_emoji {
+    const char *ch;
+    const char *name;
+    const char *cat;
+};
+
+extern const struct syn_emoji syn_emoji_table[];
+extern const int              syn_emoji_count;
+extern const char *const      syn_emoji_cats[];
+extern const int              syn_emoji_cat_count;
+
+/* The picker's live state. A named type rather than an anonymous struct inside
+ * syn_server_t (as the other panels use) because emoji.c passes it around as
+ * one thing — the key handler alone touches eight of these fields. */
+typedef struct {
+    int visible;
+    int cat;         /* EMOJI_CAT_*; >= EMOJI_CAT_FIRST_BLOCK indexes the blocks */
+    int selected;    /* index into the CURRENT view, not into the table */
+    int scroll;      /* first visible ROW of the grid */
+
+    char search[EMOJI_SEARCH_MAX];
+    int  search_len;
+
+    /* Indices into syn_emoji_table[] matching the search + category. Rebuilt on
+     * every edit; see emoji_rebuild() for why it holds indices, not copies. */
+    int filt[EMOJI_FILT_MAX];
+    int filt_count;
+
+    /* Most recently used, newest first. Stored as the CHARACTERS rather than
+     * table indices so ~/.config/synui/emoji.recent stays readable and survives
+     * the generated table being regenerated against a newer Unicode. */
+    char recent[EMOJI_RECENT_MAX][16];
+    int  recent_count;
+
+    syn_hit_t hit;
+} syn_emoji_panel_t;
 
 /* One installed cursor theme. The name is a directory name, which means it
  * comes from whatever archive it was unpacked from — treat it as untrusted
@@ -955,6 +1106,7 @@ typedef enum {
     CTL_ROW_THEME = 0,
     CTL_ROW_WALLPAPER,
     CTL_ROW_CURSOR,        /* cursor theme picker (curpick.c) */
+    CTL_ROW_UI_FONT,       /* UI font picker (fontpick.c) */
     CTL_ROW_EFFECTS,       /* CRT post-process master switch */
     CTL_ROW_FILTERS,       /* …and the per-filter strengths behind it */
     CTL_ROW_TRANSPARENCY,  /* window translucency master switch + level */
@@ -973,6 +1125,7 @@ typedef enum {
     CTL_ROW_CLOCK,         /* date & time */
     /* Sound */
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
+    CTL_ROW_EQUALIZER,     /* 10-band system equalizer (eq.c) */
     CTL_ROW_RECORD_AUDIO,  /* Super+Shift+R captures desktop sound too */
     /* Network */
     CTL_ROW_NETWORK,
@@ -2194,6 +2347,12 @@ typedef struct {
      * pointer several times the size of synui's own. */
     char                  cursor_theme[64];
     int                   cursor_size;
+
+    /* UI font family every compositor-drawn panel renders in (fontpick.c).
+     * Empty = "monospace", the fontconfig alias synui always drew with. Held
+     * here as well as in text.c because text.c has no server handle — this is
+     * the copy the config file and settings.state round-trip through. */
+    char                  ui_font[96];
 
     /* cat.c: start with the kitty already wandering (synuirc `cat = on`).
      * Off by default — Super+Shift+C toggles it at runtime. */
@@ -3484,6 +3643,61 @@ struct syn_server {
         uint32_t  last_click_ms;
     } curpick;
 
+    /* Emoji picker (emoji.c) — Super+;. A GRID rather than a list, so it is the
+     * one panel using hit_set_grid(); otherwise the same modal shape. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } emoji_ui;
+    syn_emoji_panel_t emoji;
+
+    /* Equalizer panel (eq.c) — Control panel ▸ Sound ▸ Equalizer. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } eq_ui;
+    syn_eq_panel_t eq;
+
+    /* Image cropper (crop.c). Full-screen, so it has no rows and no hit rect —
+     * the whole output is the target and the mapping is crop_fit(). */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_buffer *text_buf;
+    } crop_ui;
+    syn_crop_panel_t crop;
+
+    /* UI font picker (fontpick.c). Same modal shape as curpick above. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } fontpick_ui;
+    struct {
+        int visible;
+        int selected;
+        int scroll;
+
+        struct syn_font_family fonts[FONTPICK_MAX];
+        int count;
+
+        /* What was active when the panel opened, so Esc can undo the live
+         * preview. Load-bearing here in a way it is not for the cursor: the
+         * preview redraws the PANEL ITSELF in the candidate font, so a family
+         * with no digits leaves every panel on the desktop unreadable. */
+        char restore_font[96];
+
+        /* Pointer geometry + double-click state, exactly as in wppick. */
+        syn_hit_t hit;
+        int       last_click_row;
+        uint32_t  last_click_ms;
+    } fontpick;
+
     /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
      * (non-GLES2 renderer) or never initialized. */
     struct syn_matrix *matrix;
@@ -4082,13 +4296,37 @@ void set_scene_buffer(struct wlr_scene_buffer **node,
                        struct wlr_scene_tree *parent, struct wlr_buffer *buf);
 void cairo_begin(cairo_t *cr);   /* clear to transparent + set default font */
 
+/* ── text.c ──────────────────────────────────────────────────
+ *
+ * Text with per-glyph font fallback. Nothing on a draw path should call
+ * cairo_show_text() or cairo_text_extents() directly: the toy font API resolves
+ * to ONE face with no fallback, so a character that face lacks draws nothing at
+ * all. See the header of text.c for how a face gets chosen and when a colour
+ * font is asked for.
+ */
+
 /* Copy a UTF-8 string into a fixed buffer, dropping invalid bytes and never
  * truncating mid-character. Anything drawn from data we did not write (a Steam
  * Workshop title, a window title, a filename) must go through this. */
 void syn_utf8_copy(char *dst, size_t n, const char *src);
-/* cairo_show_text() that cannot silently blank the rest of a panel — see the
- * comment on the definition in render.c. */
+
+/* cairo_show_text() that cannot silently blank the rest of a panel, and that
+ * falls back to a font which can draw what the active face cannot. */
 void syn_show_text(cairo_t *cr, const char *text);
+
+/* cairo_text_extents() measured through the SAME fallback syn_show_text draws
+ * with. Anything that centres, elides or right-aligns must use this, or it
+ * measures a string that is not the one being painted. Only x_advance is
+ * fallback-aware; see the definition. */
+void syn_text_extents(cairo_t *cr, const char *text, cairo_text_extents_t *ext);
+
+/* The family every compositor-drawn panel renders in — what the font picker
+ * sets. Defaults to "monospace", the fontconfig alias synui always drew with. */
+void        syn_text_set_ui_font(const char *family);
+const char *syn_text_ui_font(void);
+
+/* Drop the cached fallback faces. Called from synui_destroy(); safe any time. */
+void syn_text_shutdown(void);
 
 /* ── wallpaper.c ─────────────────────────────────────────── */
 void wallpaper_init(syn_server_t *s);             /* create wallpaper_tree, decode initial config */
@@ -4931,6 +5169,120 @@ int  curpick_click(syn_server_t *s, double lx, double ly, uint32_t button,
                  uint32_t time_msec);
 int  curpick_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_curpick(syn_server_t *s);
+
+/* ── fontpick.c (UI font picker) ─────────────────────────────
+ *
+ * The other half of text.c: that made the compositor able to draw characters
+ * its font lacks, this makes the font itself a choice. Same modal shape as
+ * curpick above — the preview redraws the panel in the candidate font, so Esc
+ * restoring is load-bearing rather than a nicety. */
+
+/* Rescan fontconfig into s->fontpick.fonts[]. */
+void fontpick_scan(syn_server_t *s);
+
+void fontpick_show(syn_server_t *s);
+void fontpick_hide(syn_server_t *s);
+void fontpick_toggle(syn_server_t *s);
+int  fontpick_total(syn_server_t *s);
+/* One row's family name; fontpick.c owns the text, render.c draws it — in that
+ * family's own face, which is the whole point of the list. */
+void fontpick_row(syn_server_t *s, int row, const char **label);
+int  fontpick_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  fontpick_motion(syn_server_t *s, double lx, double ly);
+int  fontpick_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                    uint32_t time_msec);
+int  fontpick_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_fontpick(syn_server_t *s);
+
+/* ── emoji.c (emoji picker) ──────────────────────────────────
+ *
+ * A GRID, and the only panel that is one — everything else here is a list. It
+ * exists because text.c can now resolve a colour font per glyph; before that a
+ * compositor-drawn emoji grid was a grid of question marks. */
+
+void emoji_show(syn_server_t *s);
+void emoji_hide(syn_server_t *s);
+void emoji_toggle(syn_server_t *s);
+
+/* How many cells the CURRENT view has — the recents row and a filtered slice of
+ * the table are different arrays, and only emoji.c knows which is showing. */
+int  emoji_total(syn_server_t *s);
+/* The character at a view index, and its Unicode name. NULL / "" past the end. */
+const char *emoji_at(syn_server_t *s, int i);
+const char *emoji_name_at(syn_server_t *s, int i);
+/* Tab labels: "Recent", "All", then one per generated block. */
+const char *emoji_cat_label(int cat);
+int  emoji_cat_total(void);
+
+int  emoji_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  emoji_motion(syn_server_t *s, double lx, double ly);
+int  emoji_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  emoji_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_emoji(syn_server_t *s);
+
+/* ── eq.c (equalizer panel) ──────────────────────────────────
+ *
+ * The panel only. synui-eq(1) owns the PipeWire filter chain, eq.state and
+ * every decision about what an equalizer is; this reads that state and asks the
+ * script to change it. Never runs it synchronously — see eq.c's header. */
+
+void eq_show(syn_server_t *s);
+void eq_hide(syn_server_t *s);
+void eq_toggle(syn_server_t *s);
+
+/* Re-read eq.state if its mtime moved. Cheap, and a no-op otherwise. */
+void eq_state_refresh(syn_server_t *s);
+
+/* Rows: on/off, preset, preamp, then one per band the script declared. */
+int  eq_total_rows(syn_server_t *s);
+void eq_row(syn_server_t *s, int row, char *label, size_t ln,
+            char *value, size_t vn);
+/* 0..1 position of a slider row's value, or -1 when the row is not a slider. */
+double eq_row_frac(syn_server_t *s, int row);
+
+int  eq_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file. */
+int  eq_motion(syn_server_t *s, double lx, double ly);
+int  eq_click(syn_server_t *s, double lx, double ly, uint32_t button,
+              uint32_t time_msec);
+int  eq_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_eq(syn_server_t *s);
+
+/* ── crop.c (image cropper) ──────────────────────────────────
+ *
+ * `synctl dispatch crop <path>`, or Dolphin's right-click ▸ Crop Image. Writes
+ * a NEW file beside the original and never touches the input. */
+
+void crop_open(syn_server_t *s, const char *path);
+void crop_hide(syn_server_t *s);
+void crop_toggle(syn_server_t *s);   /* can only close; opening needs a path */
+
+/* Where the image lands on the output, shared by the render and the pointer so
+ * the drawn image and the clickable image cannot drift apart. */
+void crop_fit(syn_server_t *s, struct wlr_box *ob,
+              double *scale, double *ox, double *oy);
+/* The source at `scale`, ready to blit — the cache described on the struct.
+ * Returns s->crop.img itself at 1:1, and NULL only if there is no image, so the
+ * caller paints whatever comes back rather than choosing between two surfaces.
+ * Rebuilds when the scale changes; the render is the only caller. */
+cairo_surface_t *crop_scaled(syn_server_t *s, double scale);
+/* The drag's two corners as a normalised rect, in image pixels. */
+void crop_selection(syn_server_t *s, int *x, int *y, int *w, int *h);
+int  crop_has_selection(syn_server_t *s);
+
+int  crop_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* Press / release, per the desktop-icon drag pattern rather than the plain
+ * click contract: a rectangle needs all three. */
+int  crop_motion(syn_server_t *s, double lx, double ly);
+int  crop_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                uint32_t time_msec);
+int  crop_scroll(syn_server_t *s, double lx, double ly, double delta);
+void crop_drag_motion(syn_server_t *s, double lx, double ly);
+void crop_drag_end(syn_server_t *s, double lx, double ly);
+void synui_render_crop(syn_server_t *s);
 
 /* ── icons.c ─────────────────────────────────────────────── */
 /* Resolved .desktop info for one app_id, cached after first lookup. Matching

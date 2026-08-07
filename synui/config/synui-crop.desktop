@@ -1,0 +1,41 @@
+# Dolphin (KIO 6) right-click service menu for images: Crop Image.
+#
+# Hands the file to the compositor's own cropper (src/crop.c) via synctl. There
+# is no separate crop application here and there does not need to be: synui
+# already decodes these formats for the wallpaper picker and already draws
+# full-screen panels, and a shell version cannot work — slurp returns SCREEN
+# coordinates and nothing on SynapseOS displays the image to map them back to
+# image pixels. See the header of src/crop.c.
+#
+# %f, not %F: the cropper takes ONE image. A selection of twelve photos would
+# otherwise open twelve full-screen panels stacked on top of each other, and
+# there is no meaningful "crop all of these to the same rectangle" without a
+# batch UI that does not exist.
+#
+# Mimetypes are the ones crop.c can actually decode — PNG through cairo and
+# JPEG through imgdec.c — plus the aliases the magic database still emits.
+# Deliberately NOT listing image/gif or image/webp: the picker's thumbnailer
+# reads GIFs but the cropper does not, and a menu entry that opens a "Cannot
+# open that image" toast is worse than no entry. Check any addition with
+#     xdg-mime query filetype FILE
+#
+# KIO 6 wants the new-style format (Type=Application with Actions=), not the
+# KF5 Type=Service / ServiceTypes=KonqPopupMenu/Plugin one, and reads it from
+# $XDG_DATA_DIRS/kio/servicemenus/. Installed executable: KIO ignores
+# service-menu desktop files without the exec bit. Dolphin caches these per
+# process, so restart it to see a change.
+[Desktop Entry]
+Type=Application
+Name=Crop Image
+Icon=transform-crop
+MimeType=image/png;image/jpeg;image/jpg;image/pjpeg;
+Actions=synuiCropImage;
+X-KDE-Priority=TopLevel
+
+# Opens the image full-screen with the whole picture selected; drag out the
+# rectangle and press Enter. Always writes a NEW file beside the original
+# (<stem>-crop.png) — cropping has no undo, so it never writes in place.
+[Desktop Action synuiCropImage]
+Name=Crop Image
+Icon=transform-crop
+Exec=synctl dispatch crop %f

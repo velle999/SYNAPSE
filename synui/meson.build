@@ -17,6 +17,12 @@ xkbcommon = dependency('xkbcommon')
 pixman    = dependency('pixman-1')
 threads   = dependency('threads')
 cairo     = dependency('cairo')
+# text.c asks fontconfig which installed font can draw a character the UI font
+# cannot, then loads it through cairo-ft. Without this every panel is limited to
+# the single face the toy font API resolves to, which is how CJK and emoji used
+# to come out as question marks. Already a synui depends= (and cairo links it
+# anyway), so this adds no package to the ISO.
+fontconfig = dependency('fontconfig')
 rsvg      = dependency('librsvg-2.0')  # icons.c rasterizes SVG-only app icons
 libinput  = dependency('libinput')
 # sound.c watches udev so a device being plugged in can make a noise. Already
@@ -207,6 +213,7 @@ synui_exe = executable('synui',
     'src/config.c',
     'src/settings.c',
     'src/render.c',
+    'src/text.c',
     'src/contrast.c',
     'src/effects.c',
     'src/wallpaper.c',
@@ -215,6 +222,11 @@ synui_exe = executable('synui',
     'src/wppick.c',
     'src/wpthumb.c',
     'src/cursor.c',
+    'src/fontpick.c',
+    'src/emoji.c',
+    'src/emoji_data.c',
+    'src/eq.c',
+    'src/crop.c',
     'src/icons.c',
     'src/dock.c',
     'src/launcher.c',
@@ -238,7 +250,7 @@ synui_exe = executable('synui',
   # order decides resolution. scenefx must win so the surface/xdg/layer/subsurface
   # /drag/output-layout helpers build scenefx-native (type-3) buffer nodes that can
   # carry blur/corners/shadow. wlroots-first gives a mixed tree and dead clicks.
-  dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, rsvg,
+  dependencies : [scenefx, wlroots, wayland, xkbcommon, pixman, threads, cairo, fontconfig, rsvg,
                   libinput, libudev, libjpeg, giflib, libcurl, libdisplay_info,
                   xcb, xcb_icccm, xcb_ewmh, xcb_randr,
                   egl, glesv2, libsystemd, libm],
@@ -411,12 +423,14 @@ test('smoke',
 # the poses differ); the actual question, "does that read as a cat", is answered
 # by looking at the PNG it writes.
 cat_render_test = executable('cat_render_test',
-  ['tests/cat_render_test.c', 'src/cat_draw.c'],
+  # text.c comes along wherever cat_draw.c goes: it draws its label through
+  # syn_show_text() now, like everything else that puts text on screen.
+  ['tests/cat_render_test.c', 'src/cat_draw.c', 'src/text.c'],
   include_directories : include_directories('src'),
   # scenefx too: synui.h includes <scenefx/types/wlr_scene.h> since the glass
   # migration, so this target stopped compiling without the header path even
   # though it draws nothing scenefx-y itself.
-  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman],
   c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
   build_by_default : false)
 test('cat_render', cat_render_test, args : [meson.current_build_dir() / 'cat.png'])
@@ -474,9 +488,10 @@ test('hit', hit_test)
 settings_test = executable('settings_test',
   # cat_draw.c comes along for cat_breed_names[]: config.c resolves `cat_breed =`
   # against the coat table's own spellings rather than keeping a second list.
-  ['tests/settings_test.c', 'src/config.c', 'src/settings.c', 'src/cat_draw.c'],
+  ['tests/settings_test.c', 'src/config.c', 'src/settings.c', 'src/cat_draw.c',
+   'src/text.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('settings', settings_test)
@@ -488,12 +503,56 @@ test('settings', settings_test)
 ctlpanel_table_test = executable('ctlpanel_table_test',
   ['tests/ctlpanel_table_test.c', 'src/ctlpanel.c', 'src/config.c',
    'src/settings.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c',
-   'src/cat_draw.c'],
+   'src/cat_draw.c', 'src/text.c'],
   include_directories : include_directories('src'),
-  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('ctlpanel_table', ctlpanel_table_test)
+
+# Per-glyph font fallback. Links text.c alone — it needs cairo and fontconfig
+# and nothing else, which is the point of it being its own file: the fallback
+# is testable without a compositor, an output or a scene graph.
+#
+# The load-bearing assertion is that syn_text_extents() measures the string
+# syn_show_text() paints; every panel lays out by measuring first, so the two
+# disagreeing is a layout bug in exactly the cases the fallback exists for.
+# Coverage assertions SKIP rather than fail where the box has no font for a
+# script — see the test's header.
+text_fallback_test = executable('text_fallback_test',
+  ['tests/text_fallback_test.c', 'src/text.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],   # synui.h pulls wlroots headers in
+  build_by_default : false)
+test('text_fallback', text_fallback_test,
+  args : [meson.current_build_dir() / 'text_fallback.png'])
+
+# The emoji picker's logic, driven through emoji_key() the way input.c calls it
+# — nothing can synthesise input into a headless synui. text.c comes along for
+# syn_utf8_copy() (the recents file is on disk and can be edited by hand), hit.c
+# for the grid geometry. Writes only into its own mkdtemp scratch home.
+emoji_test = executable('emoji_test',
+  ['tests/emoji_test.c', 'src/emoji.c', 'src/emoji_data.c', 'src/text.c',
+   'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('emoji', emoji_test)
+
+# The cropper's geometry and its output rules. Two things here can destroy
+# something — the image/screen coordinate mapping (get it wrong and the tool
+# writes a different rectangle from the one you dragged, silently) and the
+# never-overwrite rule (cropping has no undo). text.c comes along for
+# syn_utf8_copy(); the compositor half is stubbed, as in hit_test.
+crop_test = executable('crop_test',
+  ['tests/crop_test.c', 'src/crop.c', 'src/text.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('crop', crop_test)
 
 # Panel legibility, against every shipped theme. Two claims that pull opposite
 # ways: on a PALE surface every accent and status colour clears 4.5:1, and on a

@@ -206,7 +206,7 @@ static const char *tag_text(const char *p, const char *end, const char *tag,
 /* The length of a prefix of `len` bytes that does not end inside a UTF-8
  * sequence — i.e. where it is safe to cut.
  *
- * This matters more than it looks. cairo_show_text() puts the *whole cairo
+ * This matters more than it looks. syn_show_text() puts the *whole cairo
  * context* into a permanent error state when handed invalid UTF-8, and every
  * later drawing call on it silently becomes a no-op — so a single headline cut
  * through a '—' takes out every row below it, the status line and the footer

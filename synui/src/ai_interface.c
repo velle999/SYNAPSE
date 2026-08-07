@@ -516,7 +516,7 @@ typedef struct {
 
 /* Copy `n` bytes of arbitrary child output into `dst` as text cairo will
  * accept. Two hazards, both of which have cost this project a panel before:
- * cairo_show_text() puts its *entire context* into a permanent error state when
+ * syn_show_text() puts its *entire context* into a permanent error state when
  * handed invalid UTF-8 (so one bad byte in `ls` output would blank every row
  * under it), and control bytes render as boxes or move the pen. Anything not a
  * well-formed, non-overlong, non-surrogate scalar is dropped, whole sequences

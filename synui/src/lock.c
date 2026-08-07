@@ -77,9 +77,9 @@ static double lock_field_label(cairo_t *cr, double x, double y,
     if (focused) cairo_set_source_rgba(cr, 0.45, 0.90, 0.85, a);   /* accent cyan */
     else         cairo_set_source_rgba(cr, 0.38, 0.50, 0.55, a);   /* dim */
     cairo_move_to(cr, x, y);
-    cairo_show_text(cr, lab);
+    syn_show_text(cr, lab);
     cairo_text_extents_t te;
-    cairo_text_extents(cr, lab, &te);
+    syn_text_extents(cr, lab, &te);
     return te.x_advance;
 }
 
@@ -102,11 +102,11 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     if (editing_user) cairo_set_source_rgba(cr, 0.90, 0.98, 1.0, a);
     else              cairo_set_source_rgba(cr, 0.60, 0.68, 0.75, a);
     cairo_move_to(cr, lx + adv, y_user);
-    cairo_show_text(cr, s->greetd.user);
+    syn_show_text(cr, s->greetd.user);
     if (editing_user) {              /* a caret marks the focused, editable field */
-        cairo_text_extents(cr, s->greetd.user, &te);
+        syn_text_extents(cr, s->greetd.user, &te);
         cairo_move_to(cr, lx + adv + te.x_advance + 1, y_user);
-        cairo_show_text(cr, "_");
+        syn_show_text(cr, "_");
     }
 
     /* ── pass row ── */
@@ -123,7 +123,7 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     } else if (!editing_user) {       /* focused and empty: show the caret here */
         cairo_set_source_rgba(cr, 0.75, 0.85, 0.92, a);
         cairo_move_to(cr, lx + adv, y_pass);
-        cairo_show_text(cr, "_");
+        syn_show_text(cr, "_");
     }
 
     /* ── status line ── */
@@ -133,10 +133,10 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     else if (s->nlock.busy)  { msg = "Checking\xe2\x80\xa6"; mr = 0.45; mg = 0.9; mb = 0.85; }
     if (msg) {
         cairo_set_font_size(cr, 16);
-        cairo_text_extents(cr, msg, &te);
+        syn_text_extents(cr, msg, &te);
         cairo_set_source_rgba(cr, mr, mg, mb, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 332);
-        cairo_show_text(cr, msg);
+        syn_show_text(cr, msg);
     }
 }
 
@@ -164,29 +164,29 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
                            CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 120);
     cairo_text_extents_t te;
-    cairo_text_extents(cr, hhmm, &te);
+    syn_text_extents(cr, hhmm, &te);
     /* A soft cyan glow, then the glyphs — the SYNAPSE accent. */
     cairo_set_source_rgba(cr, 0.02, 0.85, 0.75, 0.18 * a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing + 2, 150 + 2);
-    cairo_show_text(cr, hhmm);
+    syn_show_text(cr, hhmm);
     cairo_set_source_rgba(cr, 0.85, 0.98, 1.0, a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 150);
-    cairo_show_text(cr, hhmm);
+    syn_show_text(cr, hhmm);
 
     /* AM/PM, small, trailing the clock. */
     cairo_set_font_size(cr, 30);
     cairo_set_source_rgba(cr, 0.45, 0.9, 0.85, a);
     cairo_move_to(cr, cx + te.width / 2 + 12, 150);
-    cairo_show_text(cr, ampm);
+    syn_show_text(cr, ampm);
 
     /* Date. */
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
                            CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 24);
-    cairo_text_extents(cr, date, &te);
+    syn_text_extents(cr, date, &te);
     cairo_set_source_rgba(cr, 0.62, 0.72, 0.80, a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 205);
-    cairo_show_text(cr, date);
+    syn_show_text(cr, date);
 
     /* The greeter draws a two-field (user + pass) block here instead of the
      * lock's single anonymous password row. */
@@ -200,17 +200,17 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     if (s->nlock.failed) {
         const char *msg = "Wrong password";
         cairo_set_font_size(cr, 18);
-        cairo_text_extents(cr, msg, &te);
+        syn_text_extents(cr, msg, &te);
         cairo_set_source_rgba(cr, 1.0, 0.36, 0.42, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 275);
-        cairo_show_text(cr, msg);
+        syn_show_text(cr, msg);
     } else if (s->nlock.busy) {
         const char *msg = "Checking\xe2\x80\xa6";
         cairo_set_font_size(cr, 18);
-        cairo_text_extents(cr, msg, &te);
+        syn_text_extents(cr, msg, &te);
         cairo_set_source_rgba(cr, 0.45, 0.9, 0.85, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 275);
-        cairo_show_text(cr, msg);
+        syn_show_text(cr, msg);
     } else if (s->nlock.pw_len > 0) {
         /* A dot per character, capped so a held key cannot draw off-panel. */
         int dots = s->nlock.pw_len;
@@ -234,10 +234,10 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
                                CAIRO_FONT_WEIGHT_NORMAL);
         cairo_set_font_size(cr, 15);
-        cairo_text_extents(cr, s->nlock.fp_msg, &te);
+        syn_text_extents(cr, s->nlock.fp_msg, &te);
         cairo_set_source_rgba(cr, 0.55, 0.68, 0.76, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 312);
-        cairo_show_text(cr, s->nlock.fp_msg);
+        syn_show_text(cr, s->nlock.fp_msg);
     }
 }
 
@@ -521,7 +521,7 @@ static void lock_auth_start(syn_server_t *s)
  * fp_msg is filled with snprintf, which truncates by BYTES, and pam_fprintd's
  * messages are TRANSLATED — a German or Japanese "place your finger on the
  * reader" runs well past the buffer and gets cut wherever byte 127 lands, quite
- * possibly mid-codepoint. cairo_show_text() on invalid UTF-8 does not skip the
+ * possibly mid-codepoint. syn_show_text() on invalid UTF-8 does not skip the
  * bad glyph: it puts the cairo_t into a permanent error state, and every draw
  * call after it silently does nothing. That would take the CLOCK down, on a
  * locked screen, because a status line was one byte too long. */

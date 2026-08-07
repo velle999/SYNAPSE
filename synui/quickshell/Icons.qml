@@ -33,6 +33,11 @@ QtObject {
     readonly property string mic:      "\uF130"
     readonly property string micMuted: "\uF131"
 
+    // The equalizer row in the mixer. Sliders rather than a bar chart: the
+    // panel it opens is ten sliders, and the glyph should look like the thing
+    // it leads to.
+    readonly property string equalizer: "\uF1DE"
+
     // -- Bluetooth --
     readonly property string btOff:       "\uF293"
     readonly property string btOn:        "\uF293"

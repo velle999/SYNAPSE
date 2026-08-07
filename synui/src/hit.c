@@ -47,6 +47,28 @@ void hit_set_rows(syn_hit_t *g, int lx, int ly, int w, int h, int n)
     g->row_w = w;
     g->row_h = h;
     g->rows  = n < 0 ? 0 : n;
+    g->cols  = 1;     /* a list is a grid one cell wide */
+    g->first = 0;
+}
+
+/* A grid of cells rather than a stack of full-width rows — the emoji picker,
+ * where a list of 1779 single characters would be absurd.
+ *
+ * Deliberately the same struct and the same hit_index_at(): a grid IS a list
+ * whose rows hold several cells, and the alternative was a second geometry
+ * shape with its own scroll offset, which is precisely the drift this file was
+ * written to stop. `cell_w` is the pitch as well as the width, as row_h always
+ * was, so a gutter belongs inside the cell rather than between cells.
+ */
+void hit_set_grid(syn_hit_t *g, int lx, int ly,
+                  int cell_w, int cell_h, int cols, int rows)
+{
+    g->row_x = g->x + lx;
+    g->row_y = g->y + ly;
+    g->row_w = cell_w;
+    g->row_h = cell_h;
+    g->cols  = cols < 1 ? 1 : cols;
+    g->rows  = rows < 0 ? 0 : rows;
     g->first = 0;
 }
 
@@ -67,15 +89,40 @@ int hit_row_at(const syn_hit_t *g, double lx, double ly)
     if (g->rows <= 0 || g->row_h <= 0) return -1;
     if (!hit_in_panel(g, lx, ly)) return -1;
 
-    if (lx < g->row_x || lx >= g->row_x + g->row_w) return -1;
+    /* cols is 0 in a struct written before hit_set_rows/_grid ran, and on the
+     * panels that record a rect and no grid at all. Treat that as a list, which
+     * is what every caller of this function meant before grids existed. */
+    int cols = g->cols > 0 ? g->cols : 1;
+
+    if (lx < g->row_x || lx >= g->row_x + g->row_w * cols) return -1;
     if (ly < g->row_y) return -1;
 
     int i = (int)((ly - g->row_y) / g->row_h);
     return (i >= 0 && i < g->rows) ? i : -1;
 }
 
+/* Which column the cursor is in, or -1 off the grid. A list always answers 0,
+ * so callers that predate grids need not ask. */
+int hit_col_at(const syn_hit_t *g, double lx, double ly)
+{
+    if (hit_row_at(g, lx, ly) < 0) return -1;
+    if (g->row_w <= 0) return -1;
+
+    int cols = g->cols > 0 ? g->cols : 1;
+    int c = (int)((lx - g->row_x) / g->row_w);
+    return (c >= 0 && c < cols) ? c : -1;
+}
+
 int hit_index_at(const syn_hit_t *g, double lx, double ly)
 {
     int row = hit_row_at(g, lx, ly);
-    return row < 0 ? -1 : row + g->first;
+    if (row < 0) return -1;
+
+    int col = hit_col_at(g, lx, ly);
+    if (col < 0) return -1;
+
+    int cols = g->cols > 0 ? g->cols : 1;
+    /* first counts in CELLS, not rows, so a grid scrolled by whole rows passes
+     * (top_row * cols) and this arithmetic stays the same for both shapes. */
+    return g->first + row * cols + col;
 }

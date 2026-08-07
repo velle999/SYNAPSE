@@ -376,7 +376,7 @@ void cat_paint(cairo_t *cr, const cat_pose_t *p)
             cairo_set_font_size(cr, 7.0 + i * 2.0);
             cairo_set_source_rgba(cr, R, G, B, a);
             cairo_move_to(cr, hx + 8.0 + i * 4.0, zy);
-            cairo_show_text(cr, "z");
+            syn_show_text(cr, "z");
         }
     }
 }

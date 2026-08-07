@@ -129,7 +129,7 @@ static void notif_arm_timer(syn_server_t *s)
 /* ── Text ────────────────────────────────────────────────── */
 
 /* Notification text is arbitrary — it comes from any app on the box, and its
- * content from the network as often as not. cairo_show_text() poisons its whole
+ * content from the network as often as not. syn_show_text() poisons its whole
  * context on invalid UTF-8, and every later draw call silently becomes a no-op:
  * one bad body would blank every toast under it. So text is cut only on a
  * character boundary (news_utf8_trim is the codebase's one true cutter), and

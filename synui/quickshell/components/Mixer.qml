@@ -110,6 +110,11 @@ PopupWindow {
         mixer.anchorX = x
         mixer.visible = true
         closeTimer.stop()
+        // The equalizer's state file may not have existed when the bar started —
+        // it is created by the first `synui-eq on` — and a watch cannot have
+        // been placed on a path that was not there. Ask on open, so a mixer
+        // never shows an equalizer that was switched on some other way as off.
+        EqState.refresh()
     }
 
     anchor {
@@ -252,6 +257,43 @@ PopupWindow {
                         // count stuck above zero and the panel unable to close.
                         Component.onDestruction: if (held) mixer.holds -= 1
                     }
+                }
+
+                // ── Equalizer ────────────────────────────
+                // Under Output because that is what it is: switching it on
+                // inserts a filter-chain sink and makes it the default, so the
+                // device list above grows a "SynapseOS Equalizer" row and the
+                // radio moves to it. Putting the switch anywhere else would
+                // leave that as an unexplained device appearing on its own.
+                //
+                // The row is a LINK, not an editor — the ten bands live in
+                // synui's own panel, and the button opens that rather than this
+                // popup growing a second copy of synui-eq's preset table.
+                MixerHeading { width: col.width; text: "Equalizer" }
+
+                MixerEqRow {
+                    width: col.width
+
+                    on: EqState.enabled
+                    status: EqState.status
+                    preset: EqState.preset
+                    preamp: EqState.preamp
+                    warning: EqState.warning
+
+                    onToggleRequested: EqState.toggle()
+                    // Closed first. The panel it opens is compositor-drawn and
+                    // modal, and leaving an xdg_popup with a keyboard grab on
+                    // screen underneath it means two things believe they own
+                    // Escape.
+                    onOpenRequested: {
+                        mixer.visible = false
+                        EqState.openPanel()
+                    }
+
+                    // The panel-wide MouseArea loses hover to this row's own
+                    // hover-enabled children, which fires its `exited` and arms
+                    // the dismissal timer. Same fix the Done button carries.
+                    onHoveredChanged: if (hovered) closeTimer.stop()
                 }
 
                 // ── Input devices ────────────────────────

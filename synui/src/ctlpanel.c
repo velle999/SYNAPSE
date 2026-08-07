@@ -160,6 +160,8 @@ static const struct ctl_item ctl_items[] = {
       .section = "Look", .help = "Colour preset for window chrome and synui's own panels" },
     { CTL_ROW_WALLPAPER,    CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Wallpaper",        "wallpaper" },
     { CTL_ROW_CURSOR,       CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "Cursor theme",     "cursor"    },
+    { CTL_ROW_UI_FONT,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "UI font",          "font",
+      .help = "The family every synui panel draws in. Previews live; Esc puts it back" },
     { CTL_ROW_TRANSPARENCY, CTL_CAT_APPEARANCE, CTL_KIND_SLIDER, "Transparency",     NULL,
       .help = "Focused-window opacity. Left/Right adjust; Enter switches it off" },
     { CTL_ROW_INACTIVE_OPACITY, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Unfocused opacity", NULL,
@@ -418,6 +420,8 @@ static const struct ctl_item ctl_items[] = {
      * row decides is which SOUND goes into the file — the screen it captures is
      * settled by the focus, not by a setting. */
     { CTL_ROW_SOUNDS,       CTL_CAT_SOUND, CTL_KIND_PANEL,  "Event sounds", "sounds" },
+    { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  "Equalizer", "equalizer",
+      .help = "10-band system equalizer. Adds an output device while it is on" },
     { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record audio", NULL     },
 
     /* Network. Two of the three hand off to something synui does not own —
@@ -1530,6 +1534,9 @@ static int ctl_child_is_up(syn_server_t *s, const char *action)
     if (strcmp(action, "theme") == 0)     return s->thememgr.visible;
     if (strcmp(action, "wallpaper") == 0) return s->wppick.visible;
     if (strcmp(action, "cursor") == 0)    return s->curpick.visible;
+    if (strcmp(action, "font") == 0)      return s->fontpick.visible;
+    if (strcmp(action, "emoji") == 0)     return s->emoji.visible;
+    if (strcmp(action, "equalizer") == 0) return s->eq.visible;
     if (strcmp(action, "filters") == 0)   return s->filters.visible;
     if (strcmp(action, "widgets") == 0)   return s->widgets.visible;
     if (strcmp(action, "displays") == 0)  return s->dispcfg.visible;

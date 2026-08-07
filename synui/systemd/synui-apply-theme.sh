@@ -707,4 +707,17 @@ if command -v synui-firefox-glass >/dev/null 2>&1; then
     synui-firefox-glass "$scheme" ${br:+"$br" "$bg_" "$bb"} 2>/dev/null
 fi
 
+# ── The UI font outranks the theme ───────────────────────────────────────────
+# LAST, and that is the whole point. This script regenerates whole files —
+# rofi's synui.rasi, kitty's synui-colors.conf — so anything else written into
+# them is gone at the next theme switch. The font therefore lives in its own
+# files, and is re-asserted here so the ordering is a guarantee rather than a
+# race: the theme writes, then the font goes back on top, every time.
+#
+# A no-op (exit 0, silently) on a box where no font has ever been picked, which
+# is most of them. See synui-apply-font.
+if command -v synui-apply-font >/dev/null 2>&1; then
+    synui-apply-font --reapply 2>/dev/null
+fi
+
 exit 0
