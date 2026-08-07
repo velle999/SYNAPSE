@@ -1,23 +1,16 @@
 <div align="center">
 
-```
-                  oo
-                 soos
-                .soos.
-              `.:soos:.`
-             `.:+soos+:.`
-            `.:++soos++:.`
-           `.:+++soos+++:.`
-          `.:++++soos++++:.`
-         `.:+++ssooooss+++:.`
-        `.:++ssooooooooss++:.`
-       `.:+soooooossoooooos+:.`
-      `.ssooooooos++soooooooss.`
-     `ssooooooos++++++soooooooss`
-    `soooosooos++++++++sooosoooos`
-   `.soosssoos++++++++++soosssoos.`
-  `.:+s+++ss++++++++++++++ss+++s+:.`
-```
+<!-- The dendrite mark, straight from the vector source rather than a raster
+     copy of it, so this cannot drift from what synui and the boot splash draw.
+     Every stroke is #a78bfa on transparency -- no background rect -- so it
+     reads on GitHub's light and dark themes alike.
+
+     Not the ASCII mark that /etc/issue and the installers print: GitHub cannot
+     centre a code block. align="center" is inherited by the heading and the
+     badges below but not by <pre>, which is why the art sat left of everything
+     under it. An <img> is inline, so it centres, and it does not scroll
+     sideways on a phone. -->
+<img src="synui/data/logo.svg" alt="SynapseOS" width="170">
 
 # SynapseOS
 
