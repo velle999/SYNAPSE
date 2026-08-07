@@ -367,6 +367,12 @@ static void output_frame(struct wl_listener *listener, void *data)
     if (anim_tick(output->server, now_s))
         wlr_output_schedule_frame(output->wlr_output);
 
+    /* Slide the niri strip toward its scroll target; keep frames coming while
+     * it is still moving. Same timebase as the fades above, so a desktop switch
+     * — which starts both — settles as one animation. */
+    if (layout_scroll_tick(output->server, now_s))
+        wlr_output_schedule_frame(output->wlr_output);
+
     /* Control panel: waiting on the AI-backend helper to land (see
      * ctlpanel_tick). Idle unless a switch is actually in flight. */
     if (ctlpanel_tick(output->server))
@@ -683,17 +689,24 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
      * which view_apply_maximized requires.
      *
      * On a FLOATING desktop go through layout_float_place, which consults the
-     * same table first and only centres the window when the app has nothing
-     * saved. Nothing else would have placed it: layout_apply is a no-op for
-     * LAYOUT_FLOATING ("the user positions windows"), and a freshly-mapped xdg
-     * view is never view->floating — that flag is only ever set by Super+F, a
-     * snap, or maximize. So the FIRST window of an app never seen before came
-     * up at the calloc'd 0,0 with size 0x0: no chrome, and on a multi-monitor
-     * layout whose origin is dead space (velle's is), drawn where no output
-     * covers — invisible, with `qs -n --no-duplicate` then making every later
-     * click on the menu entry a silent success. That is how SynapseOS Updates
-     * failed to appear (velle, 2026-08-02). Every app in windows.conf was fine,
-     * which is why only new ones showed it. */
+     * same table first and hands the window to layout_float_arrange when the
+     * app has nothing saved. This used to be the ONLY thing that placed such a
+     * window — layout_apply was a bare no-op for LAYOUT_FLOATING ("the user
+     * positions windows"), and a freshly-mapped xdg view is never
+     * view->floating (that flag is only ever set by Super+F, a snap, or
+     * maximize). So the FIRST window of an app never seen before came up at the
+     * calloc'd 0,0 with size 0x0: no chrome, and on a multi-monitor layout
+     * whose origin is dead space (velle's is), drawn where no output covers —
+     * invisible, with `qs -n --no-duplicate` then making every later click on
+     * the menu entry a silent success. That is how SynapseOS Updates failed to
+     * appear (velle, 2026-08-02). Every app in windows.conf was fine, which is
+     * why only new ones showed it.
+     *
+     * The floating desktop now has a tiler of its own, so layout_apply above
+     * has already given this window a cell and the call below is what keeps a
+     * REMEMBERED box winning over that cell (layout_restore_geometry marks it
+     * hand_placed). Belt and braces on the 0x0 bug rather than a replacement
+     * for the fix: both paths now place the window. */
     if (view->workspace && view->workspace->layout == LAYOUT_FLOATING)
         layout_float_place(view->server, view);
     else

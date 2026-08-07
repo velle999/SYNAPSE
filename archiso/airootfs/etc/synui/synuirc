@@ -36,6 +36,15 @@ border_width = 2
 gap = 8
 master_factor = 0.60
 
+# The floating desktop's own tiler: windows you have not placed yourself are
+# arranged into a grid that deliberately does NOT fill the screen. float_inset
+# is the percentage of the screen kept clear at each edge and float_gap the
+# space between the tiles, so the wallpaper shows through — that is the point
+# of the layout, not a gap in it. Separate from `gap` above, which wants to be
+# a hairline. Super+Shift+G re-arranges after you have dragged things about.
+float_inset = 8
+float_gap = 24
+
 # The SYNAPSE wallpaper, from /usr/share/synui (shipped by synui). The live
 # session has no home directory to put one in and nothing autostarts a
 # wallpaper daemon, so without this the ISO booted onto a flat colour and

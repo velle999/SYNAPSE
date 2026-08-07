@@ -9,7 +9,8 @@ compositor with AI-aware window management."*
 Working:
 - wlroots backend/scene init, VM detection → pixman fallback
 - xdg-shell toplevels (map/unmap/destroy/commit), keyboard focus
-- Tiling (master-stack), monocle and niri (scrollable-tiling) layouts; 9 workspaces
+- Tiling (master-stack), spiral (fibonacci), monocle, floating (inset grid) and
+  niri (scrollable-tiling, animated) layouts; 9 workspaces
 - Keyboard bindings; basic pointer (focus / click / axis); clipboard selection
 - Cairo-rendered UI: welcome screen, AI command bar, neural overlay
 - Every compositor-drawn panel takes the pointer as well as the keyboard: hover

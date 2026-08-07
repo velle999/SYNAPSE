@@ -757,6 +757,39 @@ test('niri_strip', niri_strip,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The niri SLIDE (layout_scroll_tick): that the strip is observed part-way to
+# its new scroll offset rather than teleporting, that it arrives, and that
+# animation_ms = 0 still lands in one step. niri_strip.sh runs with the
+# animation off precisely so it can measure geometry; this is the other half.
+niri_slide = find_program('tests/niri_slide.sh')
+test('niri_slide', niri_slide,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
+# The fibonacci layout (layout_spiral): five windows laid out by BOTH tilers,
+# asserting the spiral's smallest window beats master-stack's — the claim the
+# layout exists to make — plus the no-overlap invariant its remainder
+# arithmetic is the sharp end of.
+spiral_layout = find_program('tests/spiral_layout.sh')
+test('spiral_layout', spiral_layout,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
+# The floating desktop's own tiler (layout_float_arrange): that untouched
+# windows are arranged into an inset grid, that the grid leaves the wallpaper
+# showing rather than filling the screen, that a window the user has placed is
+# left alone forever after, and that Super+Shift+G takes it back.
+float_arrange = find_program('tests/float_arrange.sh')
+test('float_arrange', float_arrange,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # Whether the layout you chose is still there next login (layout_state_save /
 # _load, layout.c): two desktops changed, the compositor restarted on the same
 # XDG_CONFIG_HOME, then a junk state file. No client — a desktop's layout is a

@@ -437,6 +437,14 @@ static void seed_default_binds(syn_config_t *cfg)
          * titlebar toggle out. Nothing is bound to `calendar` now; bind it back
          * with a `bind =` line if you want a key for it. */
         { "super+shift+t",   "retile" },
+        /* G for grid: tidy the floating desktop, putting every window you have
+         * dragged back into the arrangement. Super+G is game mode and
+         * super+shift+g was free — and the pairing is not a coincidence worth
+         * apologising for, since the two are the only keys that rearrange the
+         * whole desk at once. Deliberately not folded into `retile`: that
+         * switches a floating desktop to tiling, which is the last thing
+         * somebody tidying a floating desktop wants. */
+        { "super+shift+g",   "float_arrange" },
         { "super+i",         "network" },
         /* Not super+n: that is minimize, and has been since before there was
          * anything to read. R for RSS — the panel is a feed reader. */
@@ -647,6 +655,8 @@ static void config_set_defaults(syn_config_t *cfg)
     strncpy(cfg->autostart[0], "kitty", sizeof(cfg->autostart[0]) - 1);
     cfg->border_width = BORDER_WIDTH_DEFAULT;
     cfg->gap = GAP_DEFAULT;
+    cfg->float_inset = FLOAT_INSET_DEFAULT;
+    cfg->float_gap   = FLOAT_GAP_DEFAULT;
     cfg->master_factor = 0.60f;
     cfg->titlebar_height = TITLEBAR_HEIGHT_DEF;
     cfg->remember_geometry = true;
@@ -1030,6 +1040,24 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->gap = atoi(val);
         if (cfg->gap < 0)   cfg->gap = 0;
         if (cfg->gap > 128) cfg->gap = 128;
+    }
+    /* The floating desktop's aesthetic tiler. Deliberately its own two knobs
+     * rather than a multiple of `gap`: tiling wants a hairline between windows
+     * and this wants a margin you can see, so tuning one must not drag the
+     * other with it. */
+    else if (strcmp(key, "float_inset") == 0) {
+        /* Percent of the usable box kept clear at each edge. Capped well short
+         * of 50 — past FLOAT_INSET_MAX the margin is bigger than the windows,
+         * which is not a look, it is a mistake. */
+        int pc = atoi(val);
+        if (pc < 0) pc = 0;
+        if (pc > FLOAT_INSET_MAX) pc = FLOAT_INSET_MAX;
+        cfg->float_inset = pc;
+    }
+    else if (strcmp(key, "float_gap") == 0) {
+        cfg->float_gap = atoi(val);
+        if (cfg->float_gap < 0)   cfg->float_gap = 0;
+        if (cfg->float_gap > 256) cfg->float_gap = 256;
     }
     else if (strcmp(key, "master_factor") == 0)
         cfg->master_factor = strtof(val, NULL);

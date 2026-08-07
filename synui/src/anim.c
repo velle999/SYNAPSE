@@ -37,12 +37,19 @@
 #include "kde_blur.h"
 
 /* Ease-out cubic: fast at the start, settling at the end. Movement that decays
- * reads as physical; a linear fade reads as a slideshow. */
-static float ease_out(float t)
+ * reads as physical; a linear fade reads as a slideshow.
+ *
+ * Public (anim_ease_out) because the niri strip slide in layout.c has to decay
+ * on the SAME curve. A strip that glides linearly next to windows that fade on
+ * a cubic does not read as one animation system, it reads as two — and the two
+ * routinely run in the same frame, since switching desktop cross-fades AND
+ * re-scrolls every strip on it. */
+float anim_ease_out(float t)
 {
     float u = 1.0f - t;
     return 1.0f - u * u * u;
 }
+#define ease_out(t) anim_ease_out(t)
 
 static double now_secs(void)
 {

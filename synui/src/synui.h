@@ -68,6 +68,15 @@
  * s->config so a SIGHUP reload can change them at runtime. */
 #define BORDER_WIDTH_DEFAULT 2
 #define GAP_DEFAULT          8
+/* The floating desktop's own tiler (layout_float_arrange). Its whole point is
+ * that it does NOT fill the screen — the inset is a percentage of the usable
+ * box kept clear at all four edges, so the wallpaper reads as part of the
+ * composition instead of being something the windows have covered up. Separate
+ * from `gap` on purpose: tiling wants a hairline between windows, this wants a
+ * margin you can see. */
+#define FLOAT_INSET_DEFAULT  8    /* % of the usable box, per edge */
+#define FLOAT_GAP_DEFAULT    24   /* px between floating tiles */
+#define FLOAT_INSET_MAX      40   /* beyond this the tiles are smaller than the margin */
 
 /* ── synapd IPC ──────────────────────────────────────────── */
 #define SYNAPD_SOCKET       "/run/synapd/synapd.sock"
@@ -237,13 +246,21 @@ typedef enum {
      * ordinals are the Super+Tab cycle order, and inserting one would silently
      * renumber the three below it. */
     LAYOUT_NIRI,
+    /* Fibonacci spiral tiling. The first window takes the left half, the next
+     * the top of what is left, the next the right of what is left after that —
+     * winding inward clockwise, so no window is ever the letterbox strip a
+     * master-stack column becomes once five of them are open. It buys that
+     * shape with area: its smallest window is smaller, not bigger.
+     * Appended for the same reason LAYOUT_NIRI was: the ordinals ARE the
+     * Super+Tab cycle order and layouts.state is written against them. */
+    LAYOUT_SPIRAL,
 } syn_layout_t;
 
 /* How many layouts Super+Tab walks. NOT an enumerator: adding one to
  * syn_layout_t would make every switch over it (layout_label, layout_key,
  * ipc.c's layout_name, layout_apply's dispatch) grow a case for a value that
  * is not a layout. */
-#define SYN_LAYOUT_COUNT  (LAYOUT_NIRI + 1)
+#define SYN_LAYOUT_COUNT  (LAYOUT_SPIRAL + 1)
 
 typedef enum {
     WIN_SECURE_NORMAL = 0,
@@ -2110,6 +2127,9 @@ typedef struct {
     int   autostart_count;
     int   border_width;
     int   gap;
+    /* The floating desktop's aesthetic tiler; see FLOAT_INSET_DEFAULT. */
+    int   float_inset;
+    int   float_gap;
     float master_factor;
     int   ai_layout;
     int   ai_ctx_decor;
@@ -2723,6 +2743,22 @@ struct syn_view {
     int    col_join;
     float  col_frac;
 
+    /* layout.c, LAYOUT_FLOATING only. "The user has placed this one himself."
+     *
+     * The floating desktop arranges its windows into an inset grid
+     * (layout_float_arrange), which is only welcome for windows nobody has an
+     * opinion about yet. The moment a window is dragged or resized by hand it
+     * stops being the tiler's business — otherwise the next window to open
+     * would yank it back into a cell and the arrangement would be fighting the
+     * user rather than helping. Set at the one choke point every hand grab
+     * passes through (grab_release_constraints, so a titlebar drag, a border
+     * pull, Super+drag and a CSD client's own xdg_toplevel.move all count) and
+     * cleared wholesale by the `float_arrange` action and layout_reclaim,
+     * which are the two ways of saying "forget that, do it again".
+     *
+     * Ignored, and left alone, by every other layout. */
+    int    hand_placed;
+
     /* anim.c: the window's current opacity (1 = solid) and the fade in flight.
      * alpha is applied to every buffer under the frame *and* multiplied into
      * the border rects' colour, so a fading window fades whole. */
@@ -2879,6 +2915,27 @@ struct syn_output {
      * so a stale value can only ever cost one frame. calloc'd to 0 with the
      * output, which is "showing the left-hand end". */
     int                      strip_scroll[WORKSPACE_MAX];
+
+    /* The niri slide (layout_scroll_tick). strip_scroll above is where the
+     * strip is drawn RIGHT NOW; these three are the glide that is carrying it
+     * somewhere else.
+     *
+     *   strip_target  where layout_niri decided the strip belongs. Reflows
+     *                 compare against this rather than strip_scroll, or a
+     *                 reflow mid-slide would re-derive the target from the
+     *                 half-way position and the strip would creep.
+     *   strip_from    strip_scroll when the slide started, so the easing has a
+     *                 fixed origin — reading it live would ease the remaining
+     *                 distance every frame and never actually arrive.
+     *   strip_t0      CLOCK_MONOTONIC seconds at the start of the slide.
+     *
+     * Session state like strip_scroll, and worth exactly as much: a slide that
+     * is interrupted is simply restarted from wherever the strip had got to.
+     * animation_ms == 0 skips the whole mechanism (strip_scroll = target). */
+    int                      strip_target[WORKSPACE_MAX];
+    int                      strip_from[WORKSPACE_MAX];
+    double                   strip_t0[WORKSPACE_MAX];
+    int                      strip_sliding[WORKSPACE_MAX];
 
     /* effects.c: offscreen swapchain the scene renders into when the GLES
      * post-process pass is active (NULL until first effects frame). */
@@ -4200,6 +4257,25 @@ void workspace_focus_first(syn_server_t *s, syn_workspace_t *ws);
 void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_monocle(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
 void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+/* The floating desktop's own tiler: an inset grid that deliberately leaves the
+ * wallpaper showing (float_inset / float_gap). Skips any window the user has
+ * placed by hand (view->hand_placed), so a drag is permanent. */
+void layout_float_arrange(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
+/* "Forget who I moved, lay the whole desktop out again" — clears hand_placed
+ * across ws and reflows. Bound to Super+Shift+G; returns how many windows it
+ * freed. (layout_reclaim clears the same flag on the windows IT takes back, but
+ * only those — this is the unconditional version.) */
+int layout_float_release_all(syn_server_t *s, syn_workspace_t *ws);
+/* Advance the niri strip slide for every output showing the active desktop.
+ * Returns true while any strip is still moving, so output_frame keeps pumping
+ * frames — same contract as anim_tick/dock_tick. */
+bool layout_scroll_tick(syn_server_t *s, double now);
+/* Move a window's frame WITHOUT re-sizing it, and without configuring the
+ * client. The scroll slide and interactive drags both need this: a client is
+ * never told its own position (xdg cannot be, and X11 gets one configure when
+ * the movement settles), so a position-only animation costs no round trips. */
+void view_move(syn_view_t *view, int x, int y);
 /* Move the focused window between columns on a niri desktop: join = 1 pulls it
  * into the column on its left (niri's "consume"), join = 0 pushes it back out
  * into a column of its own ("expel"). Bound to Super+, and Super+. — a no-op,
@@ -5361,6 +5437,10 @@ void ipc_destroy(syn_server_t *s);
 
 /* ── anim.c ──────────────────────────────────────────────── */
 bool anim_tick(syn_server_t *s, double now);
+/* Ease-out cubic, the curve every synui animation decays on. Shared so the
+ * niri strip slide (layout.c) and the fades (anim.c) settle identically —
+ * two easings on one desktop read as two different desktops. */
+float anim_ease_out(float t);
 void anim_fade_in(syn_view_t *view);
 void anim_fade_out_and_hide(syn_view_t *view);
 void anim_reset(syn_view_t *view);

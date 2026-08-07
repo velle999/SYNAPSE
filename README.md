@@ -112,7 +112,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 |---|---|
 | **`synapd`** | Local LLM inference daemon (llama.cpp). Owns the model; serves every other component over a Unix socket. |
 | **`synsh`** | AI-native shell. Type naturally, or use it as a normal shell. |
-| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling, monocle and niri-style scrollable-tiling layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
+| **`synui`** | Wayland compositor on wlroots 0.20, rendering through scenefx 0.5 — tiling, spiral, monocle, floating and niri-style scrollable-tiling layouts, per-output workspaces, XWayland, layer-shell, glass/blur/shadows. See [`synui/ROADMAP.md`](synui/ROADMAP.md). |
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
@@ -186,6 +186,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`E` | Visual effects — CRT filter strengths, and (`Tab`) window effects: corners, shadow, blur, translucency |
 | `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
 | `Super`+`Shift`+`T` | Tile windows |
+| `Super`+`Shift`+`G` | Arrange the floating desktop — puts every window you have dragged back into the inset grid ("G for grid") |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
 | `Super`+`Shift`+`X` | Crop an image ("X for cut") — opens on your recent images from Pictures, Wallpapers and Downloads |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
@@ -197,7 +198,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
 | `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |
 | `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area (also a niri column's width) |
-| `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other four layouts |
+| `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other five layouts |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
 | `Super`+`Shift`+`N` | Restore a minimized window |
 | `Super`+`Shift`+`F` | Fullscreen (forces it — for games that only do "borderless") |

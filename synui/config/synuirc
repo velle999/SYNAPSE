@@ -17,14 +17,42 @@ border_width    = 2
 gap             = 8
 master_factor   = 0.60
 
+# The floating desktop's own tiler (see "Layouts" below). Windows you have not
+# placed yourself are arranged into a grid that deliberately does NOT fill the
+# screen: float_inset is the percentage of the screen kept clear at each edge,
+# and float_gap the space between the tiles. Both exist separately from `gap`
+# above because a tiler wants a hairline between windows and this wants a margin
+# you can see — the wallpaper showing through is the point of the layout, not a
+# gap in it.
+#
+# float_inset is clamped to 40; past that the margin is bigger than the windows.
+# Set it to 0 for an ordinary edge-to-edge grid.
+float_inset     = 8
+float_gap       = 24
+
 # ── Layouts ────────────────────────────────────────────────
 # Each virtual desktop has its own layout, cycled with Super+Tab and remembered
 # across restarts in ~/.config/synui/layouts.state (so there is no setting for
 # it here — the last thing you chose on each desktop IS the setting):
 #   tiling    master + stack, dwm-style. master_factor above sets the split.
-#   floating  you place the windows.
+#   floating  you place the windows — and the ones you haven't placed get
+#             arranged for you, into an inset grid that leaves the wallpaper
+#             showing (float_inset / float_gap above). Dragging or resizing a
+#             window takes it out of that arrangement PERMANENTLY, so floating
+#             still means floating; Super+Shift+G forgets every such window and
+#             lays the desktop out again.
 #   monocle   one window per monitor, filling it; the focused one is the one
 #             you see.
+#   spiral    fibonacci tiling. Each window takes half of what is left, the cut
+#             alternating vertical/horizontal and the side rotating clockwise,
+#             so the windows wind inward. Same as tiling at two or three
+#             windows; past that it trades area for SHAPE. Master-stack's slots
+#             get shorter without getting narrower (2.9:1 at five windows,
+#             6.2:1 at nine); the spiral's stay between about 1:1 and 2:1
+#             forever, but its smallest window is smaller than master-stack's,
+#             not bigger. Pick it when you want windows you can use, not when
+#             you want the fifth one to be roomy. No master, so master_factor
+#             does not apply — Super+H / Super+Shift+L do nothing here.
 #   AI        synapd suggests a layout from what is open and the desktop's
 #             intent; falls back to tiling with no synapd.
 #   niri      scrollable tiling. An endless horizontal strip of columns per
@@ -36,7 +64,12 @@ master_factor   = 0.60
 #             Super+H / Super+Shift+L set the focused COLUMN's width (half the
 #             screen by default, so two columns fit side by side); a column
 #             that does not fit entirely on the monitor is not drawn, so the
-#             strip always shows whole windows.
+#             strip always shows whole windows once it has settled. It SLIDES
+#             to each new scroll position rather than jumping (animation_ms
+#             below sets how long, 0 turns it off), and while it is moving the
+#             columns are allowed to peek in at the edges the way niri's do —
+#             except where the overhang would spill onto the monitor next door,
+#             which synui cannot crop.
 
 # Theme: one named bundle of chrome colours, app colour scheme and default
 # translucency. Also pickable live with Super+T, which persists to theme.state —
@@ -66,9 +99,9 @@ master_factor   = 0.60
 # border_color_warn  = #ff3524
 
 # ── Animations ─────────────────────────────────────────────
-# Window fade duration in ms: windows fade in when they open, and switching
-# desktop cross-fades instead of snapping. 0 disables animations entirely.
-# Capped at 1000.
+# Window fade duration in ms: windows fade in when they open, switching desktop
+# cross-fades instead of snapping, and the niri strip slides to its new scroll
+# position instead of jumping. 0 disables animations entirely. Capped at 1000.
 animation_ms = 140
 
 # ── Titlebar ───────────────────────────────────────────────

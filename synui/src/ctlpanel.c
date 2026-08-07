@@ -1139,6 +1139,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "quit",              "Quit synui" },
         { "layout_cycle",      "Cycle layout" },
         { "retile",            "Tile this desktop" },
+        { "float_arrange",     "Arrange floating windows" },
         { "master_shrink",     "Shrink master area" },
         { "master_grow",       "Grow master area" },
         { "column_consume",    "niri: pull window into the left column" },

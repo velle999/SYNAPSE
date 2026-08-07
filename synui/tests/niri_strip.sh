@@ -60,9 +60,20 @@ CLIENT_PIDS=
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
 export SYNUI_WINDOWS="$TMP/windows.conf"
-# Empty, so the column width under test is the SHIPPED default. A synuirc that
-# set gap or border_width would be testing this rig's arithmetic, not synui's.
-: > "$SYNUI_CONFIG"
+# Only animation_ms, so the column width under test is the SHIPPED default. A
+# synuirc that set gap or border_width would be testing this rig's arithmetic,
+# not synui's — animation_ms sets neither.
+#
+# It is here because every assertion below is about where the strip SETTLES,
+# and since the niri slide landed there is a whole animation between the action
+# and the settled state. Mid-slide the rules are deliberately different: the
+# strip is part-way to its target and columns are allowed to peek in at the
+# edges (niri_place), so "all three columns are on screen" and "the focused one
+# is not fully on screen" are both briefly TRUE and neither says anything about
+# the layout. Turning the animation off makes every reflow land in one step, so
+# this test measures geometry instead of racing a clock. The slide itself is
+# niri_slide.sh's business.
+printf 'animation_ms = 0\n' > "$SYNUI_CONFIG"
 : > "$SYNUI_WINDOWS"
 
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1

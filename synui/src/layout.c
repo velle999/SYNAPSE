@@ -1,24 +1,39 @@
 /*
  * layout.c — SynapseOS window layout engine
  *
- * Implements four layout modes:
+ * Implements six layout modes:
  *
  *   TILING   — Master-stack tiling (dwm-style)
  *              First window is master (left, 60% width).
  *              Remaining windows stack right.
+ *
+ *   SPIRAL   — Fibonacci spiral tiling. Each window takes half of what
+ *              is left, the split alternating vertical/horizontal and
+ *              the side rotating clockwise, so the windows wind inward.
+ *              It trades AREA for SHAPE against TILING: the smallest
+ *              window ends up smaller, but nothing ever becomes the
+ *              letterbox strip a master-stack column degenerates into.
+ *              See the section comment above layout_spiral().
  *
  *   NIRI     — Scrollable tiling (niri-style). One endless horizontal
  *              strip of columns per monitor, scrolled so the focused
  *              column is on screen; a new window never shrinks the
  *              others, it extends the strip. Windows stack vertically
  *              inside a column (Super+, / Super+. to move them in and
- *              out). See the section comment above layout_niri().
+ *              out). The strip SLIDES to its new scroll position rather
+ *              than jumping — see layout_scroll_tick(), and the section
+ *              comment above layout_niri().
  *
  *   MONOCLE  — One window per output, filling that output's usable
  *              box; the rest of its windows are hidden. Which one is
  *              whichever has focus, so Alt+Tab and Super+J/K change it
  *              (focus_view reflows the desktop for exactly this).
  *              Floating windows are exempt and stay on top.
+ *
+ *   FLOATING — You place the windows; the compositor places the ones
+ *              you haven't. An inset grid that deliberately does not
+ *              fill the screen (layout_float_arrange), skipped for any
+ *              window that has been dragged or resized by hand.
  *
  *   AI       — Ask synapd to suggest positions based on
  *              workspace intent + running apps. If AI is
@@ -37,8 +52,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "synui.h"
+
+/* Same clock the fades run on (anim.c). The strip slide and a cross-fade
+ * routinely start in the same frame — a desktop switch does both — so they have
+ * to be measured against one timebase or they visibly finish apart. */
+static double now_secs(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
 
 /* border width and gap come from s->config (synuirc `border_width`/`gap`,
  * live-reloadable via SIGHUP) */
@@ -114,6 +140,40 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
 }
 #define place_view(v, x, y, w, h) view_resize((v), (x), (y), (w), (h))
 
+/* ── Move without resizing ───────────────────────────────── */
+/*
+ * The same frame move view_resize does, minus the configure.
+ *
+ * A client is never told where it is — xdg-shell has no concept of a window
+ * position at all, and an X11 client only needs one when it has stopped moving
+ * (menus place themselves from the last configure, which is what
+ * project_synui_x11_move_stale_root_position is about). So a movement that
+ * changes only x/y can be driven at frame rate for free, and that is the whole
+ * reason the niri strip can slide: layout_scroll_tick calls this per frame and
+ * layout_apply sends the one authoritative configure when the slide settles.
+ *
+ * process_cursor_move has always done exactly this inline for interactive
+ * drags, for exactly this reason. This is that, named, so the slide and the
+ * drag cannot drift apart — in particular so both keep remembering to move the
+ * client subtree with the frame (a decorated window's surface sits at a content
+ * offset INSIDE the frame node, and forgetting it leaves the titlebar behind).
+ */
+void view_move(syn_view_t *view, int x, int y)
+{
+    if (view->x == x && view->y == y) return;
+    view->x = x;
+    view->y = y;
+
+    struct wlr_box c;
+    view_content_box(view, &c);
+
+    wlr_scene_node_set_position(view_node(view), x, y);
+    if (view->frame)
+        wlr_scene_node_set_position(&view->scene_tree->node, c.x - x, c.y - y);
+
+    view_update_decorations(view);
+}
+
 /* What a layout is called when a HUMAN reads it — the Super+Tab toast, the
  * control panel's Layout row, the AI overlay's context line. All three used to
  * spell the list out for themselves, and the control panel was about to be the
@@ -131,6 +191,7 @@ const char *layout_label(syn_layout_t l)
     case LAYOUT_MONOCLE:  return "monocle";
     case LAYOUT_AI:       return "AI";
     case LAYOUT_NIRI:     return "niri";
+    case LAYOUT_SPIRAL:   return "spiral";
     }
     return "unknown";
 }
@@ -168,6 +229,7 @@ static const char *layout_key(syn_layout_t l)
     case LAYOUT_MONOCLE:  return "monocle";
     case LAYOUT_AI:       return "ai";
     case LAYOUT_NIRI:     return "niri";
+    case LAYOUT_SPIRAL:   return "spiral";
     }
     return "tiling";
 }
@@ -224,6 +286,7 @@ void layout_state_load(syn_server_t *s)
         else if (strcmp(val, "monocle")  == 0) l = LAYOUT_MONOCLE;
         else if (strcmp(val, "ai")       == 0) l = LAYOUT_AI;
         else if (strcmp(val, "niri")     == 0) l = LAYOUT_NIRI;
+        else if (strcmp(val, "spiral")   == 0) l = LAYOUT_SPIRAL;
         else continue;
 
         s->workspaces[idx].layout = l;
@@ -276,6 +339,137 @@ void layout_tile(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
             if (slot_h < MIN_WIN) slot_h = MIN_WIN;
             int vy = y + (i - 1) * (slot_h + gap);
             place_view(v, stack_x, vy, stack_w, slot_h);
+        }
+        i++;
+    }
+}
+
+/* ── SPIRAL layout (fibonacci) ───────────────────────────── */
+/*
+ * Each window takes half of whatever box is left, and the half it takes rotates
+ * clockwise: left, top, right, bottom, left again. The last window gets the
+ * whole remainder, so nothing is ever left over.
+ *
+ *   ┌───────┬───────┐   ┌───────┬───────┐   ┌───────┬───────┐
+ *   │       │       │   │       │   2   │   │       │   2   │
+ *   │   1   │   2   │   │   1   ├───────┤   │   1   ├───┬───┤
+ *   │       │       │   │       │   3   │   │       │ 4 │ 3 │
+ *   └───────┴───────┘   └───────┴───────┘   └───────┴───┴───┘
+ *      two windows         three windows        four windows
+ *
+ * Why have this as well as layout_tile: they only differ once the desktop is
+ * busy, and the difference is one of SHAPE.
+ *
+ * Master-stack puts every window after the first into one column, so each new
+ * window makes that column's windows shorter without making them any narrower.
+ * On a 1280x720 screen its stack slot goes 502x170 at five windows, 502x134 at
+ * six, 502x81 at nine — 2.9:1, then 3.7:1, then 6.2:1. A letterbox is not a
+ * shape an application is designed to draw in. The spiral halves an ever
+ * smaller box instead and alternates the direction of the cut, so every window
+ * stays between about 1:1 and 2:1 however many are open.
+ *
+ * That is a TRADE and it is worth stating plainly, because the obvious guess is
+ * the wrong way round: the spiral's SMALLEST window is smaller than
+ * master-stack's, not bigger — 52700 px² against 85340 at five windows, because
+ * halving compounds where dividing a column does not. What it buys is that
+ * nothing ever becomes a strip. Pick the layout for the shape, not the area;
+ * spiral_layout.sh asserts exactly this, and asserting the area would fail.
+ *
+ * ORDER IS THE WORKSPACE LIST, like every other layout here, so Super+Shift+J/K
+ * (layout_move_in_stack) rotates windows through the spiral with no second
+ * ordering to keep in sync, and master_factor is deliberately not consulted —
+ * there is no master.
+ *
+ * THE DEGENERATE CASE. Halving cannot continue forever: past about eight
+ * windows on a 1080p monitor a half is below MIN_WIN, and a spiral that kept
+ * dividing would hand out boxes smaller than a window can be, which the clamp
+ * would then quietly overlap on top of each other. So the moment a split would
+ * leave either side under MIN_WIN, the remaining windows are stacked evenly in
+ * what is left and the spiral stops. That is a visible, describable layout
+ * ("the tail ends up as a stack") rather than a pile.
+ */
+void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
+{
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+
+    /* Same outer-gap clamp as layout_tile: a big gap on a small output must not
+     * hand negative sizes to scene rects and client configures. */
+    int gap = s->config.gap;
+    int x = area.x + gap;
+    int y = area.y + gap;
+    int W = area.width  - 2 * gap;
+    int H = area.height - 2 * gap;
+    if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
+    if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
+
+    int n = count_windows(ws, o);
+    if (n == 0) return;
+
+    /* The box still to be divided. */
+    int rx = x, ry = y, rw = W, rh = H;
+
+    int i = 0;
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->mapped || v->floating || v->fullscreen || v->minimized) continue;
+        if (v->output != o) continue;
+
+        int left = n - i;              /* this window included */
+        if (left == 1) {               /* last one takes the remainder */
+            place_view(v, rx, ry, rw, rh);
+            break;
+        }
+
+        /* Which way this window's cut runs. Even steps split the box side by
+         * side, odd steps split it top and bottom; the step number mod 4 says
+         * which of the two halves this window gets, and that is what makes it
+         * wind rather than march. */
+        bool vertical = (i % 2) == 0;
+        int  half = vertical ? (rw - gap) / 2 : (rh - gap) / 2;
+        int  rest = (vertical ? rw : rh) - half - gap;
+
+        /* Out of room to keep halving: stack everything left over, evenly, in
+         * the box we still have. Bounded by MIN_WIN like every other slot here,
+         * so a desktop with more windows than pixels overlaps at the floor
+         * instead of going negative. */
+        if (half < MIN_WIN || rest < MIN_WIN) {
+            int slot_h = (rh - (left - 1) * gap) / left;
+            if (slot_h < MIN_WIN) slot_h = MIN_WIN;
+            int k = 0;
+            bool reached = false;
+            syn_view_t *m;
+            wl_list_for_each(m, &ws->windows, link) {
+                if (!m->mapped || m->floating || m->fullscreen || m->minimized)
+                    continue;
+                if (m->output != o) continue;
+                if (m == v) reached = true;
+                if (!reached) continue;    /* already placed, back up the spiral */
+                place_view(m, rx, ry + k * (slot_h + gap), rw, slot_h);
+                k++;
+            }
+            break;
+        }
+
+        switch (i % 4) {
+        case 0:   /* left half; the remainder is to the right */
+            place_view(v, rx, ry, half, rh);
+            rx += half + gap;
+            rw  = rest;
+            break;
+        case 1:   /* top half; the remainder is below */
+            place_view(v, rx, ry, rw, half);
+            ry += half + gap;
+            rh  = rest;
+            break;
+        case 2:   /* right half; the remainder is to the left */
+            place_view(v, rx + rw - half, ry, half, rh);
+            rw  = rest;
+            break;
+        default:  /* bottom half; the remainder is above */
+            place_view(v, rx, ry + rh - half, rw, half);
+            rh  = rest;
+            break;
         }
         i++;
     }
@@ -439,20 +633,192 @@ static syn_view_t *niri_column_end(syn_workspace_t *ws, syn_output_t *o,
     return m;
 }
 
-void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
+/* The box the strip is laid out in: the usable box less the outer gap, with the
+ * same clamp layout_tile applies (a big gap on a small output must not hand
+ * negative sizes to scene rects and client configures).
+ *
+ * Factored out because THREE passes need to agree on it exactly — the measure,
+ * the placement, and the per-frame slide. Two of those run in different
+ * functions at different times, and a viewport computed twice is a viewport
+ * that can be computed differently once. */
+static void niri_viewport(syn_server_t *s, syn_output_t *o,
+                          struct wlr_box *vp, int *gap_out)
 {
     struct wlr_box area;
     output_usable_box_of(s, o, &area);
 
-    /* Same outer-gap clamp as layout_tile: a big gap on a small output must
-     * not hand negative sizes to scene rects and client configures. */
     int gap = s->config.gap;
-    int x = area.x + gap;
-    int y = area.y + gap;
-    int W = area.width  - 2 * gap;
-    int H = area.height - 2 * gap;
-    if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
-    if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
+    vp->x      = area.x + gap;
+    vp->y      = area.y + gap;
+    vp->width  = area.width  - 2 * gap;
+    vp->height = area.height - 2 * gap;
+    if (vp->width < MIN_WIN) {
+        vp->x = area.x;
+        vp->width = area.width > MIN_WIN ? area.width : MIN_WIN;
+    }
+    if (vp->height < MIN_WIN) {
+        vp->y = area.y;
+        vp->height = area.height > MIN_WIN ? area.height : MIN_WIN;
+    }
+    *gap_out = gap;
+}
+
+/*
+ * Would drawing a column at `vx` spill onto ANOTHER MONITOR?
+ *
+ * This is the question the layout's header note is really about. A window is
+ * placed by moving its scene node in *layout* coordinates and there is no clip
+ * on the frame — the borders and titlebar are separate scene rects outside
+ * client_tree — so a column hanging off this monitor's edge is not cropped
+ * there. It is simply drawn at those coordinates, and if a monitor happens to
+ * occupy them, that is where it appears.
+ *
+ * But "hangs off the edge" and "lands on another monitor" are not the same
+ * thing, and the difference is worth a function: an overhang into empty layout
+ * space is drawn nowhere and costs nothing. On a single-monitor desk NOTHING
+ * can bleed, and on a row of them only the inward edges can. That is what lets
+ * the slide below show columns peeking in at the edges — niri's actual look —
+ * wherever it is safe to, instead of banning it everywhere because of a case
+ * that may not exist on this desk at all.
+ *
+ * Probes just outside whichever edge is crossed, at the monitor's vertical
+ * midpoint: a strip only ever overhangs left or right.
+ */
+static bool niri_column_bleeds(syn_server_t *s, syn_output_t *o, int vx, int cw)
+{
+    struct wlr_box ob;
+    output_box_of(s, o, &ob);
+
+    if (vx >= ob.x && vx + cw <= ob.x + ob.width)
+        return false;                       /* wholly on this monitor */
+
+    double my = ob.y + ob.height / 2.0;
+
+    if (vx < ob.x) {
+        struct wlr_output *n =
+            wlr_output_layout_output_at(s->output_layout, ob.x - 1, my);
+        if (n && n->data && n->data != o) return true;
+    }
+    if (vx + cw > ob.x + ob.width) {
+        struct wlr_output *n =
+            wlr_output_layout_output_at(s->output_layout,
+                                        ob.x + ob.width, my);
+        if (n && n->data && n->data != o) return true;
+    }
+    return false;
+}
+
+/*
+ * Place the strip at scroll offset `scroll`. Shared by the reflow and the slide.
+ *
+ * move_only is the whole reason the slide is affordable. During a slide nothing
+ * about a window changes except its x, so the frames in between are driven with
+ * view_move — a scene-node move, no client configure. Sizing every window on
+ * every frame instead would be exactly the resize storm anim.c's header refuses
+ * to ship, and at 60fps across a full strip it is a lot of round trips to spend
+ * on pixels that are about to move again.
+ *
+ * layout_scroll_tick runs the FULL pass (move_only false) the moment the slide
+ * settles, so no client is left believing a size or an X11 root position that
+ * the compositor has since changed.
+ */
+static void niri_place(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o,
+                       struct wlr_box vp, int gap, int scroll, bool move_only,
+                       bool sliding)
+{
+    syn_view_t *lead = niri_next(ws, o, NULL);
+    int cx = 0;
+    while (lead) {
+        int members;
+        int cw   = niri_col_width(lead, vp.width, gap);
+        syn_view_t *next = niri_column_end(ws, o, lead, &members);
+
+        int vx = vp.x + cx - scroll;
+
+        /*
+         * AT REST: whole column or nothing — the header note on clipping, and
+         * the rule this layout has always had.
+         *
+         * MID-SLIDE: a column may peek in at the edge, wherever that cannot
+         * spill onto a neighbouring monitor (niri_column_bleeds). Without this
+         * the slide would be pointless on its most important frame: the column
+         * you just focused does not "fit entirely" until the strip has finished
+         * moving, so the strict rule keeps it hidden for the whole animation
+         * and then pops it into existence at the end — which is the jump the
+         * slide exists to replace, with a delay added.
+         *
+         * The at-rest rule is deliberately left untouched rather than folded
+         * into this one. Every column the strip settles on is fully on screen,
+         * on every desk, exactly as before; the peeking is a property of the
+         * animation, and it ends when the animation does.
+         */
+        bool shown;
+        if (sliding) {
+            bool intersects = (vx + cw > vp.x) && (vx < vp.x + vp.width);
+            shown = intersects && !niri_column_bleeds(s, o, vx, cw);
+        } else {
+            shown = (cx >= scroll) && (cx + cw <= scroll + vp.width);
+        }
+
+        int slot_h = (vp.height - (members - 1) * gap) / members;
+        if (slot_h < MIN_WIN) slot_h = MIN_WIN;
+
+        syn_view_t *m = lead;
+        for (int i = 0; i < members && m; i++) {
+            int my = vp.y + i * (slot_h + gap);
+            if (move_only) {
+                view_move(m, vx, my);
+            } else if (m->x != vx || m->y != my ||
+                       m->w != cw || m->h != slot_h) {
+                /* Only configure a window whose box actually moved. focus_view()
+                 * reflows a niri desktop on every focus change, and most of those
+                 * do not move the strip at all — without the compare that would
+                 * send every client on the monitor a configure per Alt+Tab press,
+                 * per click, per Super+J. Same guard, same reason, as the monocle
+                 * pass above. */
+                place_view(m, vx, my, cw, slot_h);
+            }
+            wlr_scene_node_set_enabled(view_node(m), shown);
+            m = niri_next(ws, o, m);
+        }
+
+        cx  += cw + gap;
+        lead = next;
+    }
+}
+
+/*
+ * Point this monitor's strip at `target` and answer where it should be DRAWN
+ * this frame.
+ *
+ * With animations off that is the target itself and nothing else happens. With
+ * them on, a target that has changed starts a slide from wherever the strip has
+ * actually got to — interrupting a slide in flight is just a new slide from the
+ * current position, which is what makes holding Super+J down feel continuous
+ * rather than like a series of jumps.
+ */
+static int niri_scroll_to(syn_server_t *s, syn_output_t *o, int idx, int target)
+{
+    if (target != o->strip_target[idx]) {
+        o->strip_target[idx]  = target;
+        o->strip_from[idx]    = o->strip_scroll[idx];
+        o->strip_t0[idx]      = now_secs();
+        o->strip_sliding[idx] = 1;
+    }
+
+    if (s->config.animation_ms <= 0) {
+        o->strip_sliding[idx] = 0;
+        o->strip_scroll[idx]  = target;
+    }
+    return o->strip_scroll[idx];
+}
+
+void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
+{
+    struct wlr_box vp;
+    int gap;
+    niri_viewport(s, o, &vp, &gap);
+    int W = vp.width;
 
     /* ── Pass 1: measure the strip, and find the focused column ──
      * Strip coordinates: 0 is the left-hand end, independent of where the
@@ -489,53 +855,107 @@ void layout_niri(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
      * this order: the focus adjustment can never breach the clamp (a column
      * lies inside the strip by construction), but the clamp very much can
      * breach the focus, e.g. when the strip just got shorter because a window
-     * closed. */
-    int scroll = o->strip_scroll[ws->index];
+     * closed.
+     *
+     * Measured from the last TARGET, not from where the strip currently sits.
+     * Mid-slide those are different numbers, and re-deriving from the drawn
+     * position would make every reflow during a slide move the goalposts a
+     * fraction of the remaining distance — the strip would converge on
+     * something that is not a column edge, and never quite stop. Reflows during
+     * a slide are not rare: focus_view() reflows a niri desktop on every focus
+     * change, which is what started the slide in the first place. */
+    int idx    = ws->index;
+    int target = o->strip_target[idx];
     int maxs   = total - W;
     if (maxs < 0) maxs = 0;
-    if (scroll > maxs) scroll = maxs;
-    if (scroll < 0)    scroll = 0;
+    if (target > maxs) target = maxs;
+    if (target < 0)    target = 0;
     if (focus_x >= 0) {
-        if (focus_x < scroll)
-            scroll = focus_x;                        /* off the left edge */
-        else if (focus_x + focus_w > scroll + W)
-            scroll = focus_x + focus_w - W;          /* off the right edge */
+        if (focus_x < target)
+            target = focus_x;                        /* off the left edge */
+        else if (focus_x + focus_w > target + W)
+            target = focus_x + focus_w - W;          /* off the right edge */
     }
-    o->strip_scroll[ws->index] = scroll;
+    int scroll = niri_scroll_to(s, o, idx, target);
 
     /* ── Pass 2: place ── */
-    lead = niri_next(ws, o, NULL);
-    cx   = 0;
-    while (lead) {
-        int members;
-        int cw   = niri_col_width(lead, W, gap);
-        syn_view_t *next = niri_column_end(ws, o, lead, &members);
+    niri_place(s, ws, o, vp, gap, scroll, false, o->strip_sliding[idx]);
+}
 
-        int vx   = x + cx - scroll;
-        /* Whole column or nothing — see the header note on clipping. */
-        bool shown = (cx >= scroll) && (cx + cw <= scroll + W);
+/* ── The niri slide ──────────────────────────────────────── */
+/*
+ * niri's signature is not that the strip scrolls, it is that you can SEE it
+ * scroll — the columns glide and you keep your bearings on a workspace wider
+ * than the monitor. Landing each column instantly, which is what synui did
+ * until now, throws that away: the screen just contains different windows.
+ *
+ * This is the one geometry animation wlr_scene can actually carry, and the
+ * reason is worth stating because anim.c's header rules geometry animation out
+ * in general. It rules out animating SIZE: a size tween re-configures the client
+ * every frame and Hyprland only escapes that by animating a snapshot, which
+ * needs render control wlr_scene does not expose. A scroll changes no window's
+ * size at all — every column keeps its width and height for the whole slide and
+ * only x moves — so it is driven entirely by moving scene nodes (view_move),
+ * costing zero client round trips. anim.c's "position-only animation would work,
+ * but a tiling reflow almost always changes size too" is exactly right, and this
+ * is the case it names as the exception rather than the rule.
+ *
+ * Only the ACTIVE desktop is ticked. A hidden workspace's nodes are disabled, so
+ * sliding it would be arithmetic nobody can see, and layout_apply reflows it
+ * from scratch when it next becomes visible anyway.
+ */
+bool layout_scroll_tick(syn_server_t *s, double now)
+{
+    if (!s) return false;
 
-        int slot_h = (H - (members - 1) * gap) / members;
-        if (slot_h < MIN_WIN) slot_h = MIN_WIN;
+    syn_workspace_t *ws = &s->workspaces[s->active_workspace];
+    if (ws->layout != LAYOUT_NIRI) return false;
 
-        syn_view_t *m = lead;
-        for (int i = 0; i < members && m; i++) {
-            int my = y + i * (slot_h + gap);
-            /* Only configure a window whose box actually moved. focus_view()
-             * reflows a niri desktop on every focus change, and most of those
-             * do not move the strip at all — without the compare that would
-             * send every client on the monitor a configure per Alt+Tab press,
-             * per click, per Super+J. Same guard, same reason, as the monocle
-             * pass above. */
-            if (m->x != vx || m->y != my || m->w != cw || m->h != slot_h)
-                place_view(m, vx, my, cw, slot_h);
-            wlr_scene_node_set_enabled(view_node(m), shown);
-            m = niri_next(ws, o, m);
+    /* Animations off: niri_scroll_to already snapped every strip to its target
+     * and cleared the flag, so there is nothing in flight to advance. */
+    double dur = s->config.animation_ms / 1000.0;
+    if (dur <= 0.0) return false;
+
+    int idx = ws->index;
+    bool running = false;
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link) {
+        if (!o->strip_sliding[idx]) continue;
+
+        float t = (float)((now - o->strip_t0[idx]) / dur);
+        if (t < 0.0f) t = 0.0f;
+
+        int from = o->strip_from[idx];
+        int to   = o->strip_target[idx];
+
+        if (t >= 1.0f) {
+            o->strip_scroll[idx]  = to;
+            o->strip_sliding[idx] = 0;
+            /* The authoritative pass. Everything above moved scene nodes only,
+             * so the clients have not been told anything for the length of the
+             * slide; this is where they are, once, told the truth — and it is
+             * what keeps an X11 client's idea of its root position from going
+             * stale, which is what makes its menus open in the wrong place. */
+            layout_niri(s, ws, o);
+            /* That reflow re-measures the strip, and it may have found a NEW
+             * target — a window closed while the slide was running, or the
+             * focus moved on the last frame — in which case niri_scroll_to has
+             * just started another slide. Report it, or this tick returns false
+             * for an output that is still moving, nothing schedules the next
+             * frame, and the strip stops wherever it happened to be. */
+            if (o->strip_sliding[idx]) running = true;
+            continue;
         }
 
-        cx  += cw + gap;
-        lead = next;
+        o->strip_scroll[idx] = from + (int)((to - from) * anim_ease_out(t));
+
+        struct wlr_box vp;
+        int gap;
+        niri_viewport(s, o, &vp, &gap);
+        niri_place(s, ws, o, vp, gap, o->strip_scroll[idx], true, true);
+        running = true;
     }
+    return running;
 }
 
 /* ── Columns: consume / expel ────────────────────────────── */
@@ -831,13 +1251,20 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
     wl_list_for_each(o, &s->outputs, link) {
         switch (ws->layout) {
         case LAYOUT_TILING:   layout_tile(s, ws, o);     break;
+        case LAYOUT_SPIRAL:   layout_spiral(s, ws, o);   break;
         case LAYOUT_MONOCLE:  layout_monocle(s, ws, o);  break;
         case LAYOUT_NIRI:     layout_niri(s, ws, o);     break;
         case LAYOUT_AI:
             if (o == focused) layout_request_ai(s, ws, o);
             else              layout_tile(s, ws, o);
             break;
-        case LAYOUT_FLOATING: /* no-op: user positions windows */ break;
+        case LAYOUT_FLOATING:
+            /* The user positions windows — and the compositor positions the
+             * ones he hasn't. Every window he HAS touched carries hand_placed
+             * and this pass steps over it, so "floating" still means floating.
+             * See layout_float_arrange. */
+            layout_float_arrange(s, ws, o);
+            break;
         }
     }
 }
@@ -1119,6 +1546,7 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
      * and not touching it keeps that visible in a trace. */
     bool layout_places_it = view->workspace &&
                             (view->workspace->layout == LAYOUT_TILING ||
+                             view->workspace->layout == LAYOUT_SPIRAL ||
                              view->workspace->layout == LAYOUT_NIRI ||
                              view->workspace->layout == LAYOUT_AI);
     if (layout_places_it && !view->floating)
@@ -1180,6 +1608,15 @@ bool layout_restore_geometry(syn_server_t *s, syn_view_t *view)
         if (sy < area.y) sy = area.y;
 
         view_resize(view, sx, sy, sw, sh);
+
+        /* This box is the USER's, not a default: geom_persist only ever records
+         * a window that was free when it closed, which is to say one he had
+         * placed himself. So it counts as a hand placement, and the floating
+         * desktop's arranger must step over it — otherwise the first reflow
+         * after the window opened would sweep it into a grid cell and
+         * `remember_geometry` would silently stop meaning anything on the one
+         * layout it was written for. */
+        view->hand_placed = 1;
     }
 
     /* The caller tiled this view before handing it here (both map paths run
@@ -1254,6 +1691,12 @@ int layout_reclaim(syn_server_t *s, syn_workspace_t *ws)
         v->snapped        = SYN_SNAP_NONE;
         v->floating       = 0;
         v->saved_floating = 0;
+        /* And forget that the user ever placed it. On a floating desktop that
+         * flag is the whole reason a window is not in the grid, so leaving it
+         * set would make "hand everything back to the layout" reclaim windows
+         * into a layout that has been told to skip them — the same shape of bug
+         * as saved_floating above, one field along. */
+        v->hand_placed    = 0;
         taken++;
     }
 
@@ -1276,6 +1719,22 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
     /* Where this app was last left wins over the centred default. */
     if (layout_restore_geometry(s, view))
         return;
+
+    /* On a floating desktop, with nothing remembered and nothing the user has
+     * said about this window, the ARRANGER owns it — centring it here would
+     * drop it squarely on top of whatever is already in the middle of the
+     * screen, which is the pile layout_float_arrange exists to stop. Both map
+     * paths call layout_apply immediately before this, so the window is already
+     * in its cell; the reflow is here for the other callers (Super+F, leaving
+     * fullscreen) that reach a floating desktop without one.
+     *
+     * A hand_placed window never gets here — layout_restore_geometry set the
+     * flag on its way to returning true. */
+    if (view->workspace && view->workspace->layout == LAYOUT_FLOATING &&
+        !view->hand_placed) {
+        layout_apply(s, view->workspace);
+        return;
+    }
 
     int w = view->w, h = view->h;
     /* The frame has to hold the client plus its chrome. */
@@ -1303,6 +1762,144 @@ void layout_float_place(syn_server_t *s, syn_view_t *view)
     int x = area.x + (area.width  - w) / 2;
     int y = area.y + (area.height - h) / 2;
     view_resize(view, x, y, w, h);
+}
+
+/* ── FLOATING layout: the aesthetic tiler ────────────────── */
+/*
+ * A floating desktop used to place nothing at all — layout_apply's FLOATING
+ * case was a bare no-op — so windows landed wherever layout_float_place had
+ * centred them and the third one opened squarely on top of the second. "You
+ * place the windows" is the right rule for windows you have an opinion about;
+ * it is a poor one for the three terminals you just opened and have not
+ * touched.
+ *
+ * So: the windows nobody has moved get arranged into a grid, and the grid is
+ * deliberately INSET. This is the difference between this and layout_tile, and
+ * it is the whole point of the mode — `float_inset` keeps a percentage of the
+ * usable box clear at all four edges and `float_gap` is wider than a tiling gap
+ * has any reason to be, so the wallpaper reads as part of the composition
+ * rather than as the thing the windows failed to cover. A floating desktop
+ * should look like windows resting on a desk, not like a tiler with rounded
+ * corners.
+ *
+ * WHAT IT WILL NOT TOUCH:
+ *  - a window the user has dragged or resized (hand_placed) — that is the
+ *    contract that keeps floating actually floating. Set once, at
+ *    grab_release_constraints, and only ever cleared deliberately;
+ *  - maximized, fullscreen and minimized windows, which are already claimed by
+ *    something louder;
+ *  - dialogs — an X11 modal/transient, or an xdg toplevel with a parent. Same
+ *    exclusion, for the same reason, as layout_reclaim: gridding a file picker
+ *    in beside the window that opened it is not tidiness.
+ *
+ * The last row is centred when it holds fewer windows than the row above. That
+ * is one line of arithmetic and it is most of what separates "arranged" from
+ * "left-aligned with a hole in it".
+ */
+static bool float_arrangeable(syn_view_t *v, syn_output_t *o)
+{
+    if (!v->mapped || v->output != o) return false;
+    if (v->fullscreen || v->minimized || v->maximized) return false;
+    if (v->hand_placed) return false;
+    if (v->override_redirect) return false;
+
+    if (v->is_xwayland) {
+        if (v->xsurface->parent || v->xsurface->modal) return false;
+    } else if (v->xdg_surface->toplevel->parent) {
+        return false;
+    }
+    return true;
+}
+
+void layout_float_arrange(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
+{
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+
+    int n = 0;
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link)
+        if (float_arrangeable(v, o)) n++;
+    if (n == 0) return;
+
+    /* The inset, as pixels. Clamped so a large percentage on a small monitor
+     * cannot eat the whole box — at that point the setting has stopped being a
+     * margin and the windows still have to go somewhere. */
+    int inset = s->config.float_inset;
+    if (inset < 0) inset = 0;
+    if (inset > FLOAT_INSET_MAX) inset = FLOAT_INSET_MAX;
+    int ix = area.width  * inset / 100;
+    int iy = area.height * inset / 100;
+
+    int x = area.x + ix;
+    int y = area.y + iy;
+    int W = area.width  - 2 * ix;
+    int H = area.height - 2 * iy;
+    if (W < MIN_WIN) { x = area.x; W = area.width  > MIN_WIN ? area.width  : MIN_WIN; }
+    if (H < MIN_WIN) { y = area.y; H = area.height > MIN_WIN ? area.height : MIN_WIN; }
+
+    int gap = s->config.float_gap;
+    if (gap < 0) gap = 0;
+
+    /* Squarest grid that holds them: cols = ceil(sqrt(n)). Integer-only, so no
+     * libm and no rounding to argue about — walk up until cols² covers n. */
+    int cols = 1;
+    while (cols * cols < n) cols++;
+    int rows = (n + cols - 1) / cols;
+
+    int cell_w = (W - (cols - 1) * gap) / cols;
+    int cell_h = (H - (rows - 1) * gap) / rows;
+    if (cell_w < MIN_WIN) cell_w = MIN_WIN;
+    if (cell_h < MIN_WIN) cell_h = MIN_WIN;
+
+    /* How many sit in the final row, so it can be centred rather than left
+     * hanging. A full last row centres to zero offset, so there is no special
+     * case to write. */
+    int last_row_n = n - (rows - 1) * cols;
+    if (last_row_n <= 0) last_row_n = cols;
+
+    int i = 0;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!float_arrangeable(v, o)) continue;
+
+        int r = i / cols;
+        int c = i % cols;
+        int in_row = (r == rows - 1) ? last_row_n : cols;
+        int row_w  = in_row * cell_w + (in_row - 1) * gap;
+
+        int vx = x + (W - row_w) / 2 + c * (cell_w + gap);
+        int vy = y + r * (cell_h + gap);
+
+        /* Only configure a window whose box actually moved. layout_apply runs
+         * from a lot of paths — every map, every unmap, every workspace switch,
+         * every maximize — and on a settled desktop this pass must cost a
+         * compare per window, not a configure per window. Same guard, same
+         * reason, as the monocle and niri passes above. */
+        if (v->x != vx || v->y != vy || v->w != cell_w || v->h != cell_h)
+            place_view(v, vx, vy, cell_w, cell_h);
+        i++;
+    }
+}
+
+/* "Forget who I moved." Clears hand_placed across the desktop so the next
+ * arrange takes every window back, and reflows. Bound to Super+Shift+G, and
+ * called by layout_reclaim — which is already the "hand everything back to the
+ * layout" verb, and would otherwise reclaim a floating desktop's windows into a
+ * grid it had been told to skip them in. */
+int layout_float_release_all(syn_server_t *s, syn_workspace_t *ws)
+{
+    if (!ws) return 0;
+
+    int freed = 0;
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->hand_placed) continue;
+        v->hand_placed = 0;
+        freed++;
+    }
+
+    layout_apply(s, ws);
+    return freed;
 }
 
 /* ── Move focused view within the tiling stack ───────────── */

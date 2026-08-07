@@ -693,8 +693,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * Only the layouts that own their windows' geometry, the same set
          * layout_restore_geometry tests. Floating is where a window is meant to
          * be free, and monocle deliberately keeps honouring a saved float. */
-        if (ws->layout == LAYOUT_TILING || ws->layout == LAYOUT_NIRI ||
-            ws->layout == LAYOUT_AI)
+        if (ws->layout == LAYOUT_TILING || ws->layout == LAYOUT_SPIRAL ||
+            ws->layout == LAYOUT_NIRI   || ws->layout == LAYOUT_AI)
             layout_reclaim(s, ws);
 
         layout_apply(s, ws);
@@ -745,6 +745,34 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
                      ws->index + 1);
         s->layout_notif_id = notif_post(s, "synui",
                                         switched ? "tiling" : "Re-tiled", rbody,
+                                        NOTIF_URGENCY_LOW, 1500,
+                                        s->layout_notif_id);
+    } else if (strcmp(action, "float_arrange") == 0) {
+        /* "Tidy this desk." Clears every hand placement on the desktop and lays
+         * the floating windows back out into the inset grid.
+         *
+         * The counterpart to `retile`, and deliberately NOT the same key: retile
+         * switches a floating desktop TO tiling, which is the opposite of what
+         * someone who likes floating wants. This one keeps you on the layout you
+         * chose and only undoes the dragging.
+         *
+         * Works from any layout — on the other five hand_placed is a field
+         * nothing reads, so the clear is harmless and the reflow is the one they
+         * would have done anyway. Saying so is better than a key that reports
+         * "not on this layout": the desktop still ends up tidy. */
+        int freed = layout_float_release_all(s, ws);
+
+        char fbody[96];
+        if (ws->layout != LAYOUT_FLOATING)
+            snprintf(fbody, sizeof(fbody), "Desktop %d is on %s — re-laid out",
+                     ws->index + 1, layout_label(ws->layout));
+        else if (freed)
+            snprintf(fbody, sizeof(fbody), "%d hand-placed window%s back in the grid",
+                     freed, freed == 1 ? "" : "s");
+        else
+            snprintf(fbody, sizeof(fbody), "Desktop %d — nothing was out of place",
+                     ws->index + 1);
+        s->layout_notif_id = notif_post(s, "synui", "Arranged", fbody,
                                         NOTIF_URGENCY_LOW, 1500,
                                         s->layout_notif_id);
     } else if (strcmp(action, "master_shrink") == 0) {
@@ -1691,6 +1719,20 @@ static void grab_release_constraints(syn_server_t *s, syn_view_t *view,
      * not how you un-snap it. */
     if (view->snapped && mode == SYNUI_CURSOR_MOVE)
         snap_release_view(s, view, 1);
+
+    /* The user has now placed this window himself, and on a floating desktop
+     * that is permanent: layout_float_arrange steps over a hand_placed window
+     * forever after, so opening a fifth terminal cannot yank the four you
+     * arranged back into a grid. This is the one choke point every hand grab
+     * passes through — a titlebar drag, a border pull, Super+drag, and a CSD
+     * client's own xdg_toplevel.move/.resize (view_begin_interactive) — which
+     * is exactly why the flag is set here and nowhere else.
+     *
+     * Set for a RESIZE as much as a move: "I chose this window's size" is the
+     * same statement about the same window. Harmless on the other five layouts,
+     * which never read it. Cleared by Super+Shift+G (float_arrange) and by
+     * layout_reclaim. */
+    view->hand_placed = 1;
 
     if (!view->floating) {
         view->floating = 1;

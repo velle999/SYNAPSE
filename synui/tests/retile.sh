@@ -143,14 +143,21 @@ synctl dispatch retile >/dev/null
 echo "retile:   both windows back in the layout"
 
 # ── 5. selecting the tiling layout reclaims too ──────────────────────────
-# Five presses right round the cycle (tiling -> floating -> monocle -> AI ->
-# niri -> tiling). The window is floated first, so arriving back at tiling has
-# something to take back.
+# Six presses right round the cycle (tiling -> floating -> monocle -> AI ->
+# niri -> spiral -> tiling). The window is floated first, so arriving back at
+# tiling has something to take back.
+#
+# The count is spelled out rather than derived on purpose: it is also the
+# assertion that nothing has been SLOTTED INTO the middle of syn_layout_t, which
+# would silently renumber layouts.state and give every desktop back the wrong
+# layout on the next login. A new layout appended to the end costs one number
+# here; a new layout inserted anywhere else should cost a failing test.
 synctl dispatch float_toggle >/dev/null
 [ "$(n_floating)" = 1 ] || fail "float_toggle did not float a window for phase 5"
-for _ in 1 2 3 4 5; do synctl dispatch layout_cycle >/dev/null; done
-[ "$(layout_now)" = tiling ] || fail "five layout_cycles did not come back to
-       tiling, got $(layout_now)"
+for _ in 1 2 3 4 5 6; do synctl dispatch layout_cycle >/dev/null; done
+[ "$(layout_now)" = tiling ] || fail "six layout_cycles did not come back to
+       tiling, got $(layout_now). The cycle order is the syn_layout_t order:
+       tiling, floating, monocle, AI, niri, spiral."
 [ "$(n_floating)" = 0 ] || fail "arriving back on the tiling layout left
        $(n_floating) window(s) floating. Choosing a layout that places windows
        has to mean 'place these windows', or the tiler lays out an empty set."
