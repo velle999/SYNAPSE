@@ -40,7 +40,12 @@ WidgetFrame {
     // action, so these can never drift from what the keyboard does.
     readonly property var entries: [
         { name: "terminal",     sub: "kitty",             exec: ["kitty"] },
-        { name: "app launcher", sub: "all applications",  exec: ["synctl", "dispatch", "menu"] },
+        // rofi, the same launcher Super+Space runs. Spawned rather than
+        // dispatched precisely because of the rule above: dispatch is for
+        // things synui DRAWS, and rofi is an external program. This row used
+        // to run `synctl dispatch menu`, which opens synui's own menu panel —
+        // a different thing from the app launcher the row is labelled as.
+        { name: "app launcher", sub: "rofi",              exec: ["rofi", "-show", "drun"] },
         { name: "files",        sub: "file manager",      exec: ["synui-open-folder"] },
         { name: "browser",      sub: "firefox",           exec: ["firefox"] },
         { name: "select wall",  sub: "wallpaper library", exec: ["synctl", "dispatch", "wallpaper"] }

@@ -42,7 +42,40 @@ if [ -n "${SYNUI_FILE_MANAGER:-}" ]; then
     exec $SYNUI_FILE_MANAGER "$dir"
 fi
 
-if [ -n "$(xdg-mime query default inode/directory 2>/dev/null)" ]; then
+# A REGISTERED HANDLER IS NOT NECESSARILY A FILE MANAGER.
+#
+# kitty ships kitty-open.desktop with `inode/directory` in its MimeType list.
+# Nothing else claims that type on a fresh install, so it becomes the default
+# by walkover — and then the bar's Files button, the desktop menu and the ISO
+# mounter all opened a TERMINAL at $HOME, on a system with dolphin installed.
+# It is not a broken association either: kitty really can display a directory,
+# so nothing anywhere reports a problem.
+#
+# So the handler is resolved and its Exec inspected: if the program it runs is
+# a terminal emulator, it is not what "open the folder" means and we move on to
+# the list below. Only terminals are rejected — a user who genuinely set some
+# unusual file manager as their default still gets it, which is the whole point
+# of asking xdg-mime first.
+handler_is_terminal() {
+    local desktop=$1 d f exec_line prog
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" \
+             $(printf '%s\n' "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" | tr ':' ' '); do
+        f="$d/applications/$desktop"
+        [ -r "$f" ] || continue
+        exec_line=$(sed -n 's/^Exec=//p' "$f" | head -1)
+        prog=$(basename "${exec_line%% *}")
+        case "$prog" in
+            kitty|foot|foot-client|alacritty|wezterm|konsole|gnome-terminal|kgx| \
+            xterm|urxvt|rxvt|st|terminator|tilix|xfce4-terminal|ghostty|contour)
+                return 0 ;;
+        esac
+        return 1
+    done
+    return 1
+}
+
+_handler=$(xdg-mime query default inode/directory 2>/dev/null)
+if [ -n "$_handler" ] && ! handler_is_terminal "$_handler"; then
     xdg-open "$dir" 2>/dev/null && exit 0
 fi
 

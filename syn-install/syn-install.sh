@@ -3405,6 +3405,36 @@ if [ -f /usr/share/synapseos/logo.txt ]; then
     cp /usr/share/synapseos/logo.txt "/mnt/home/$NEW_USER/.config/fetch/logo.txt"
 fi
 
+# Default applications — and one association that has to be claimed rather than
+# left to chance.
+#
+# kitty ships kitty-open.desktop with `inode/directory` among its MimeTypes. On
+# a fresh install nothing else claims that type, so kitty wins by walkover and
+# becomes the system answer to "open this folder" — which is how the bar's
+# Files button, the desktop right-click entry and the ISO mounter all came to
+# open a TERMINAL at $HOME on a machine with a file manager installed. Nothing
+# reports it as an error, because kitty genuinely can display a directory.
+#
+# synui-open-folder now refuses a terminal handler on its own, so this is the
+# belt to that braces: it fixes the association for everything ELSE that asks
+# xdg-open the same question — Firefox's "Open Containing Folder", an archive
+# tool's "show in folder", any app at all.
+#
+# Only written when a file manager was actually installed, and only the one
+# line: a mimeapps.list that claims types no installed app can open is worse
+# than none.
+if [ "$WANT_FILEMGR" = 1 ]; then
+    mkdir -p "/mnt/home/$NEW_USER/.config"
+    _mimeapps="/mnt/home/$NEW_USER/.config/mimeapps.list"
+    if [ ! -e "$_mimeapps" ]; then
+        cat > "$_mimeapps" << 'MIMEEOF'
+[Default Applications]
+inode/directory=org.kde.dolphin.desktop
+MIMEEOF
+        echo "  Folders open in Dolphin (not kitty, which claims inode/directory)"
+    fi
+fi
+
 mkdir -p "/mnt/home/$NEW_USER/.config/kitty"
 cat > "/mnt/home/$NEW_USER/.config/kitty/kitty.conf" << 'KITTYEOF'
 font_family              monospace

@@ -624,6 +624,12 @@ if command -v rofi >/dev/null 2>&1; then
     rdir="$HOME/.config/rofi"
     rtheme="$rdir/synui.rasi"
     rconf="$rdir/config.rasi"
+    # Resolved here rather than inlined in the heredoc so the fallback is
+    # visible: the packaged path first, then the ISO's copy. Both are the same
+    # drawing; only synui's is the transparent variant, which is the one that
+    # belongs on a coloured surface.
+    SYNUI_LOGO=/usr/share/synui/logo.svg
+    [ -r "$SYNUI_LOGO" ] || SYNUI_LOGO=/usr/share/synapseos/logo.svg
     if mkdir -p "$rdir" 2>/dev/null; then
         IFS=, read -r rbr rbg rbb <<<"$menu_base"
         r_bg=$(rgb_hex "$rbr" "$rbg" "$rbb")
@@ -649,12 +655,21 @@ window {
     border:           2px;
     border-color:     $r_accent;
     border-radius:    8px;
-    width:            40%;
+    /* Absolute, not a percentage. This was 40%, which is a reasonable launcher
+       on a 1080p laptop and a 1376px slab on a 3440-wide monitor — the wider
+       the desk, the more wrong a percentage gets, because the list is one
+       column of short strings and none of that width is used. */
+    width:            520px;
     padding:          0;
 }
 mainbox  { padding: 8px; spacing: 8px; }
-inputbar { spacing: 8px; padding: 6px 8px; border: 0 0 2px 0; border-color: $r_accent; }
-prompt   { text-color: $r_accent; }
+inputbar { spacing: 8px; padding: 6px 8px; border: 0 0 2px 0; border-color: $r_accent; children: [ icon-logo, prompt, entry ]; }
+/* The dendrite mark, the same file synui composites onto its own panels. A
+   widget named icon-* is an icon widget; a missing file draws nothing rather
+   than failing the theme, so this is safe on a box where synui's data is not
+   installed. Transparent variant on purpose — it sits on the themed surface. */
+icon-logo { expand: false; filename: "$SYNUI_LOGO"; size: 20; vertical-align: 0.5; }
+prompt   { text-color: $r_accent; vertical-align: 0.5; }
 entry    { placeholder: "Search"; placeholder-color: $fg; }
 listview { lines: 10; scrollbar: false; spacing: 2px; }
 element  { padding: 6px 8px; border-radius: 6px; }
