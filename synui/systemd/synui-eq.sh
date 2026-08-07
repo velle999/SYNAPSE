@@ -41,8 +41,17 @@
 # `pipewire -c <conf>` runs a second, ordinary PipeWire client that hosts the
 # filter chain. The alternative — a drop-in under ~/.config/pipewire/ — is read
 # by the DAEMON, so every gain change would mean restarting the audio server
-# and every application's stream with it. This way a change is a restart of one
-# small process that owns nothing but the filter.
+# and every application's stream with it. This way the only process that could
+# ever need restarting owns nothing but the filter.
+#
+# In practice it does not need restarting either: a running chain is retuned in
+# place through its Props parameters (see chain_tune), so a preset or a gain
+# change never stops the audio. The restart path is only for a cold start.
+#
+# Being a standalone `pipewire -c` config rather than a drop-in has one sharp
+# consequence, and it is the reason this never worked at all until 2026-08-07:
+# context.modules REPLACES the defaults here instead of merging into them, so
+# the config has to load the protocol and node modules itself. See conf_write.
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
@@ -142,6 +151,14 @@ clamp() {
 
 # ── The filter chain ────────────────────────────────────────────────────────
 
+# dB -> the linear node's plain multiplier. awk because the shell has no
+# floating point. Shared by conf_write (cold start) and chain_tune (live), which
+# must agree to the digit or a retune would move the preamp by a rounding error
+# every time a band was touched.
+preamp_mult() {
+    awk -v d="$preamp" 'BEGIN { printf "%.6f", 10 ^ (d / 20) }'
+}
+
 conf_write() {
     mkdir -p "$STATE_DIR"
 
@@ -197,14 +214,25 @@ conf_write() {
         echo "      filter.graph = {"
         echo "        nodes = ["
         # A `linear` node, NOT a shelf at 0 Hz. Both would work, but linear is
-        # what a gain stage actually is, and its Gain is a plain multiplier —
+        # what a gain stage actually is, and its Mult is a plain multiplier —
         # so the value here is 10^(dB/20), converted with awk because the shell
         # has no floating point. A shelf would also make the preamp interact
         # with band 1, which is a lowshelf at the same end of the spectrum.
-        local mult
-        mult=$(awk -v d="$preamp" 'BEGIN { printf "%.6f", 10 ^ (d / 20) }')
+        #
+        # "Mult"/"Add", NOT "Gain"/"Offset". The linear builtin's control ports
+        # are Control, Mult and Add — this said Gain/Offset, which matches no
+        # port, so THE PREAMP NEVER APPLIED. filter-chain does say so:
+        #
+        #   [W] parse_control() control 'Gain' can not be set:
+        #       No such file or directory
+        #
+        # at WARN, which log.level = 0 above hides. The bands were unaffected
+        # (bq_* really does call its port Gain), so the graph looked fine and
+        # only the preamp silently did nothing. If a control ever stops taking,
+        # raise log.level and read the `using port N ('Name') as control` lines —
+        # those are the names that exist.
         echo "          { type = builtin name = preamp label = linear"
-        echo "            control = { \"Gain\" = $mult \"Offset\" = 0.0 } }"
+        echo "            control = { \"Mult\" = $(preamp_mult) \"Add\" = 0.0 } }"
         for ((i = 0; i < NBANDS; i++)); do
             # First and last are shelves so the extremes actually move the ends
             # of the spectrum; a peaking filter at 31 Hz with Q=1 barely touches
@@ -244,6 +272,49 @@ conf_write() {
 
 chain_running() {
     pgrep -f "pipewire -c $CONF" >/dev/null 2>&1
+}
+
+# ── Retuning WITHOUT a restart ──────────────────────────────────────────────
+#
+# filter-chain publishes every graph control on the sink node as a Props
+# parameter named "<node>:<control>" — "band1:Gain", "preamp:Mult" — and they
+# are writable while the chain runs. So a gain change is one set-param, not a
+# restart, and the audio never stops.
+#
+# This is what eq_reapply used to do the hard way. Restarting meant pkill'ing
+# the chain WHILE IT WAS THE DEFAULT SINK — the exact thing eq_off's comment
+# warns about — so every preset, band and preamp change cost an audible dropout
+# while wireplumber reassigned the default, plus a second one when the new chain
+# came up and the default was pushed back. Every stream in the session was moved
+# twice for a one-decibel change.
+#
+# The node id, not the name: set-param takes an object id. Resolved by walking
+# `pw-cli ls Node` for our node.name, since the id is assigned at runtime and
+# changes on every cold start.
+chain_node_id() {
+    pw-cli ls Node 2>/dev/null | awk -v want="$NODE_NAME" '
+        /^[[:space:]]*id [0-9]+,/ { id = $2; sub(",", "", id) }
+        $0 ~ "node.name = \"" want "\"" { print id; exit }'
+}
+
+# Push the whole curve at the running chain. All of it in ONE set-param rather
+# than one per control: eleven calls would be eleven round trips and eleven
+# separate graph updates, and a preset that arrived a band at a time would be
+# audible as a sweep.
+#
+# Returns non-zero if the chain could not be retuned, which is the caller's cue
+# to fall back to a cold start rather than leave the audio on a stale curve.
+chain_tune() {
+    local id params i
+    id=$(chain_node_id)
+    [[ -n $id ]] || return 1
+
+    params="\"preamp:Mult\" $(preamp_mult)"
+    for ((i = 0; i < NBANDS; i++)); do
+        params+=" \"band$((i+1)):Gain\" ${gains[i]}.0"
+    done
+
+    pw-cli set-param "$id" Props "{ params = [ $params ] }" >/dev/null 2>&1 || return 1
 }
 
 chain_stop() {
@@ -333,9 +404,20 @@ eq_off() {
 eq_reapply() {
     state_save
     [[ $enabled == on ]] || return 0
+
+    # The chain is already up: retune it in place. No restart, no dropout, and
+    # the default sink is never disturbed — so nothing has to be re-asserted and
+    # no stream is moved. conf_write still runs, because the conf is what the
+    # NEXT cold start reads and it would otherwise hold the previous curve.
+    if chain_running && chain_tune; then
+        conf_write
+        return 0
+    fi
+
+    # Not running, or the live path failed — build it from scratch.
     chain_start || return 1
-    # The sink is recreated, so the default has to be re-asserted and the
-    # streams moved back across.
+    # The sink is new, so the default has to be asserted and the streams moved
+    # across. Only on this path: the retune above leaves both alone.
     pactl set-default-sink "$NODE_NAME" 2>/dev/null || true
     local id
     while read -r id _; do
