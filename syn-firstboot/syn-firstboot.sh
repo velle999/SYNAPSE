@@ -53,16 +53,24 @@ red()   { printf '\033[1;31m%s\033[0m' "$*"; }
 bold()  { printf '\033[1m%s\033[0m' "$*"; }
 line()  { printf '%*s\n' "$COLS" '' | tr ' ' '-'; }
 
+# The dendrite mark — see the note in syn-install.sh; same art, same reasons,
+# including the single quotes (the backticks would otherwise run as commands).
+# Regenerate with `python3 archiso/mkasciilogo.py --compact --plain`.
 header() {
     clear
-    cyan "
-  ███████╗██╗   ██╗███╗   ██╗
-  ██╔════╝╚██╗ ██╔╝████╗  ██║
-  ███████╗ ╚████╔╝ ██╔██╗ ██║
-  ╚════██║  ╚██╔╝  ██║╚██╗██║
-  ███████║   ██║   ██║ ╚████║
-  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝
-"
+    cyan '
+             oo
+            `oo`
+           `:oo:`
+          `:+oo+:`
+         .:++oo++:.
+        .:+++oo+++:.
+       .++ssooooss++.
+     `.+soooossoooos+.`
+    `ssooooos++soooooss`
+   `oooooos++++++soooooo`
+  `:ssssos++++++++sossss:`
+'
     echo "  $(bold 'SynapseOS 0.1.0') — Where the kernel thinks."
     line
     echo ""

@@ -9,8 +9,23 @@ The geometry is the dendrite mark from synui/data/logo.svg -- the containing
 triangle, the soma at (0,-48), and the five branches -- so the console mark and
 the vector mark are the same drawing.
 
-TWO CONSUMERS, AND THE SECOND ONE DICTATES THE STYLE
-----------------------------------------------------
+TWO SIZES
+---------
+  - the default 38x19 mark, which is what logo.txt holds.
+  - `--compact` (28x13), for the places that print the mark ABOVE a screenful
+    of their own text and cannot spend sixteen rows on it: the syn-install and
+    syn-firstboot headers. Those two paste it in literally -- they are single
+    self-contained scripts with no data files of their own, and the header has
+    to draw before any filesystem is mounted -- so after changing the geometry,
+    re-run with --compact and paste the result into both headers.
+
+The glyph thresholds are in CELLS, so they scale with the grid: at 28x13 with
+the 38x19 thresholds the branch falloff swallows the triangle and the mark
+comes out a featureless blob. SCALE below is what keeps the two the same
+drawing rather than the same code.
+
+TWO CONSUMERS OF logo.txt, AND THE SECOND ONE DICTATES THE STYLE
+----------------------------------------------------------------
   - fastfetch prints this verbatim (logo.type = file-raw).
   - areofyl/fetch copies it to ~/.config/fetch/logo.txt and does NOT print it.
     It turns the art into a HEIGHT MAP -- char_weight_utf8() maps each glyph to
@@ -40,9 +55,11 @@ that ignored this all failed, and each failed differently:
 So: filled, low, narrow. Not line art, and not the top of the ramp.
 """
 
+import argparse
 import math
 
 W, H = 38, 19
+COMPACT = (28, 13)
 
 # Straight out of synui/data/logo.svg.
 TRIANGLE = [(0, -464), (400, 272), (-400, 272)]
@@ -59,9 +76,17 @@ def cell(x, y):
     return ((x - X0) / (X1 - X0) * (W - 1), (y - Y0) / (Y1 - Y0) * (H - 1))
 
 
-T = [cell(*p) for p in TRIANGLE]
-S = cell(*SOMA)
-ENDS = [cell(*e) for e in BRANCHES]
+def resize(w, h):
+    """Lay the drawing out on a w x h grid. Must run before glyph()."""
+    global W, H, SCALE, T, S, ENDS
+    W, H = w, h
+    SCALE = w / 38.0        # thresholds below are tuned at 38 wide
+    T = [cell(*p) for p in TRIANGLE]
+    S = cell(*SOMA)
+    ENDS = [cell(*e) for e in BRANCHES]
+
+
+resize(W, H)
 
 
 def _side(p, a, b):
@@ -96,20 +121,31 @@ def branch_dist(p):
 
 def glyph(p):
     bd, ed = branch_dist(p), edge_dist(p)
-    if bd < 0.9:
+    if bd < 0.9 * SCALE:
         return "o"          # the dendrite itself, the raised part
-    if bd < 1.6:
+    if bd < 1.6 * SCALE:
         return "s"          # its shoulder, so the arms are not a hard step
-    if ed < 0.6:
+    if ed < 0.6 * SCALE:
         return "`"          # ...and the triangle tapers out to its edges
-    if ed < 1.1:
+    if ed < 1.1 * SCALE:
         return "."
-    if ed < 1.7:
+    if ed < 1.7 * SCALE:
         return ":"
     return "+"
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--compact", action="store_true",
+                    help="the %dx%d header mark instead of the %dx%d one"
+                         % (COMPACT + (W, H)))
+    ap.add_argument("--plain", action="store_true",
+                    help="omit the ANSI accent (for files that must stay 7-bit)")
+    args = ap.parse_args()
+
+    if args.compact:
+        resize(*COMPACT)
+
     rows = []
     for r in range(H):
         row = "".join(glyph((c, r)) if inside((c, r)) else " " for c in range(W))
@@ -125,7 +161,8 @@ def main():
     while rows and not rows[-1]:
         rows.pop()
 
-    print(ACCENT + "\n".join(rows) + RESET)
+    art = "\n".join(rows)
+    print(art if args.plain else ACCENT + art + RESET)
 
 
 if __name__ == "__main__":

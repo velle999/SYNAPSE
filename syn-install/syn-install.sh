@@ -13,16 +13,30 @@ yellow(){ printf '\033[1;33m%s\033[0m' "$*"; }
 bold()  { printf '\033[1m%s\033[0m' "$*"; }
 line()  { printf '%*s\n' "$COLS" '' | tr ' ' '─'; }
 
+# The dendrite mark, the same drawing as synui/data/logo.svg and the fastfetch
+# mark in /usr/share/synapseos/logo.txt. Regenerate with
+# `python3 archiso/mkasciilogo.py --compact --plain` and paste; it is pasted
+# rather than read from /usr/share because the header draws on a live ISO, an
+# installed system, and a bare `bash syn-install.sh`, and it must not go blank
+# on any of them.
+#
+# SINGLE-quoted on purpose: the art contains backticks, and inside "..." those
+# open a command substitution.
 header() {
     clear
-    cyan "
-  ███████╗██╗   ██╗███╗   ██╗
-  ██╔════╝╚██╗ ██╔╝████╗  ██║
-  ███████╗ ╚████╔╝ ██╔██╗ ██║
-  ╚════██║  ╚██╔╝  ██║╚██╗██║
-  ███████║   ██║   ██║ ╚████║
-  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝
-"
+    cyan '
+             oo
+            `oo`
+           `:oo:`
+          `:+oo+:`
+         .:++oo++:.
+        .:+++oo+++:.
+       .++ssooooss++.
+     `.+soooossoooos+.`
+    `ssooooos++soooooss`
+   `oooooos++++++soooooo`
+  `:ssssos++++++++sossss:`
+'
     echo "  $(bold "SynapseOS Installer $VERSION")"
     line
     echo ""
@@ -2620,6 +2634,23 @@ if [ -f /etc/os-release ]; then
     cp /etc/os-release /mnt/etc/os-release
     echo "  os-release: copied from live system"
 fi
+
+# issue and motd — the same reasoning as os-release, and they were the two the
+# block above forgot. Without this the installed system keeps the STOCK Arch
+# `\S{PRETTY_NAME} \r (\l)` issue and an empty motd forever: the branded pair
+# only ever existed in the ISO's airootfs, so the boot banner had no path onto
+# a disk and nobody had seen it on an installed system.
+#
+# Note that on tty1 it still will not show, and that part is deliberate:
+# synui.service declares Conflicts=getty@tty1.service, so no getty runs there.
+# The banner is for tty2-tty6 and any serial console; motd shows on every
+# console and SSH login.
+for _id in issue motd; do
+    if [ -f "/etc/$_id" ]; then
+        cp "/etc/$_id" "/mnt/etc/$_id"
+        echo "  $_id: copied from live system"
+    fi
+done
 
 # Branded fastfetch logo, if shipped on the live ISO.
 if [ -f /usr/share/synapseos/logo.txt ]; then

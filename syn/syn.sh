@@ -63,18 +63,29 @@ cmd_info() {
     local cpu=$(grep "model name" /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | xargs)
     local model_path="/var/lib/synapd/models/synapse.gguf"
     local ai_status=$([ -f "$model_path" ] && echo "loaded" || echo "no model")
-    cat << INFO
+    # The dendrite mark, laid out the way fastfetch lays out the full-size one
+    # in /usr/share/synapseos/logo.txt. Regenerate with
+    # `python3 archiso/mkasciilogo.py --compact --plain`.
+    #
+    # printf with a SINGLE-quoted format, not a heredoc: the art is built from
+    # backticks, and an unquoted heredoc runs those as commands. The values go
+    # through %s instead, in the order they appear.
+    printf '
+             oo
+            `oo`
+           `:oo:`
+          `:+oo+:`           OS:      SynapseOS %s
+         .:++oo++:.          Kernel:  %s
+        .:+++oo+++:.         Uptime:  %s
+       .++ssooooss++.        Memory:  %s
+     `.+soooossoooos+.`      CPU:     %s
+    `ssooooos++soooooss`     AI:      %s
+   `oooooos++++++soooooo`    Shell:   synsh %s
+  `:ssssos++++++++sossss:`
 
-  ███████╗██╗   ██╗███╗   ██╗
-  ██╔════╝╚██╗ ██╔╝████╗  ██║     OS:      SynapseOS $VERSION
-  ███████╗ ╚████╔╝ ██╔██╗ ██║     Kernel:  $kernel
-  ╚════██║  ╚██╔╝  ██║╚██╗██║     Uptime:  $uptime
-  ███████║   ██║   ██║ ╚████║     Memory:  $mem
-  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝     CPU:     $cpu
-                                   AI:      $ai_status
-  Where the kernel thinks.         Shell:   synsh $VERSION
+  Where the kernel thinks.
 
-INFO
+' "$VERSION" "$kernel" "$uptime" "$mem" "$cpu" "$ai_status" "$VERSION"
 }
 
 cmd_model() {
