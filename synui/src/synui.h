@@ -4422,6 +4422,14 @@ void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o);
  * desktop whose titlebars are off — without it the step would be the border
  * width and the pile would be a single window with a two-pixel fringe. */
 #define CASCADE_STEP_MIN       24
+/* How big one card is allowed to get, as a percentage of the working box. This
+ * is what makes cascade a deck of cards rather than a tiler with an offset: a
+ * pile is capped at a third of the width and half the height, so six windows
+ * come out as six small cards across the whole screen instead of two
+ * half-screen slabs with the right third of the desktop empty. The two numbers
+ * are also the grid: 33% wide is three pile columns, 50% tall is two rows. */
+#define CASCADE_CARD_W_PCT     33
+#define CASCADE_CARD_H_PCT     50
 /* The floating desktop's own tiler: an inset grid that deliberately leaves the
  * wallpaper showing (float_inset / float_gap). Skips any window the user has
  * placed by hand (view->hand_placed), so a drag is permanent. */

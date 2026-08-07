@@ -235,7 +235,7 @@ static const struct ctl_item ctl_items[] = {
       .key = "cascade_stack_max", .off = CFG(cascade_stack_max), .vtype = CTL_VAL_INT,
       .vmin = CASCADE_STACK_MIN, .vmax = CASCADE_STACK_MAX, .vstep = 1,
       .apply = CTL_APPLY_RELAYOUT,
-      .help = "Windows per pile before the cascade deals a second one beside it" },
+      .help = "How deep a cascade pile may get once the grid of piles is full" },
     { CTL_ROW_ANIMATION_MS,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Animation length", NULL,
       .key = "animation_ms", .off = CFG(animation_ms), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,

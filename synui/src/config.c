@@ -102,10 +102,12 @@
  *                                numpad types digits from login onwards,
  *                                including on the swaylock screen)
  *
- * Cascade layout (layout.c, Super+Shift+T) — overlapping windows offset so
- * every titlebar stays reachable, splitting into several piles once one would
- * run off the screen. The limit is readability, not geometry: a 1440p screen
- * has room for eighteen offsets and nobody can use a pile of eighteen:
+ * Cascade layout (layout.c, Super+Shift+Y) — small overlapping cards, offset so
+ * every titlebar stays reachable, dealt into a grid of piles. A card is capped
+ * at a third of the screen wide and half of it tall, so the piles fill the desk
+ * before any of them grows deep. This is how deep one may then get, and the
+ * limit is readability, not geometry: a 1440p screen has room for eighteen
+ * offsets and nobody can use a pile of eighteen:
  *   cascade_stack_max = 5       (2-12; windows per pile before a second starts)
  *
  * Dock (dock.c):
@@ -567,28 +569,32 @@ static void seed_default_binds(syn_config_t *cfg)
          * guessable super+shift+a. That freed super+shift+a, which stayed
          * unbound until the desktop widgets claimed it below. */
         { "super+t",         "theme" },
-        /* Cascade: deal the desktop out as overlapping cards, splitting into
-         * several piles once one would run off the screen. Velle asked for this
-         * key specifically (2026-08-07).
+        /* T for TILE. This key has moved twice in a week and this is where it
+         * settles: velle asked for it back on 2026-08-07, having had cascade on
+         * it for one afternoon. T is the letter of the thing everybody reaches
+         * for, and the thing everybody reaches for is "put these windows in a
+         * grid" — so retile keeps it and cascade takes the neighbouring key,
+         * not the other way round.
          *
-         * It DISPLACES retile, which moves to super+shift+y below rather than
-         * losing its key — retile is the only gesture that drags hand-placed
-         * windows back into a layout, and dropping it to make room would be
-         * exactly the silent regression this project keeps catching. Y because
-         * it is next to T and nothing else wanted it. */
-        { "super+shift+t",   "cascade" },
-        /* T was retile's from 2026-07-31 (it took the key off the calendar,
-         * which lost nothing by it — the bar clock opens the calendar, which is
-         * how everyone reaches it anyway). Nothing is bound to `calendar` now;
-         * bind it back with a `bind =` line if you want a key for it. */
-        { "super+shift+y",   "retile" },
-        /* G for grid: tidy the floating desktop, putting every window you have
-         * dragged back into the arrangement. Super+G is game mode and
-         * super+shift+g was free — and the pairing is not a coincidence worth
-         * apologising for, since the two are the only keys that rearrange the
-         * whole desk at once. Deliberately not folded into `retile`: that
-         * switches a floating desktop to tiling, which is the last thing
-         * somebody tidying a floating desktop wants. */
+         * It took T off the calendar on 2026-07-31, which lost nothing by it:
+         * the bar clock opens the calendar, which is how everyone reaches it
+         * anyway. Nothing is bound to `calendar` now; bind it back with a
+         * `bind =` line if you want a key for it. */
+        { "super+shift+t",   "retile" },
+        /* Cascade: deal the desktop out as overlapping cards, splitting into
+         * several piles once one would run off the screen. Y because it is next
+         * to T — the two keys that rearrange the whole desk sit under the same
+         * finger — and because nothing else wanted it. */
+        { "super+shift+y",   "cascade" },
+        /* G for grid: tidy a FLOATING desktop without leaving it. Super+G is
+         * game mode and super+shift+g was free.
+         *
+         * The difference from retile, which is the only reason this key exists:
+         * retile ends with the desktop on the TILING layout. This one keeps
+         * whatever layout you chose and only undoes the dragging, so somebody
+         * who likes floating windows can tidy them and still have floating
+         * windows afterwards. On any other layout it is the same gesture as
+         * retile minus the switch. */
         { "super+shift+g",   "float_arrange" },
         { "super+i",         "network" },
         /* Not super+n: that is minimize, and has been since before there was

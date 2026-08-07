@@ -70,6 +70,14 @@ float_gap       = 24
 #             columns are allowed to peek in at the edges the way niri's do —
 #             except where the overhang would spill onto the monitor next door,
 #             which synui cannot crop.
+#   cascade   overlapping cards, each offset down-and-right from the one behind
+#             it so every titlebar stays reachable. The cards are SMALL — a
+#             third of the screen wide and half of it tall at most — and the
+#             piles are dealt into a grid, so six windows are six cards spread
+#             over the desk rather than two half-screen slabs. Windows fill the
+#             grid before any pile grows deep, and cascade_stack_max above caps
+#             how deep one may get before another pile is dealt instead.
+#             Super+Shift+Y goes straight there from any layout.
 
 # Theme: one named bundle of chrome colours, app colour scheme and default
 # translucency. Also pickable live with Super+T, which persists to theme.state —
@@ -392,9 +400,10 @@ record_audio = off
 # alt_tab = focus the last-used window (most-recently-used order); hold alt and
 # press tab again to keep going back. Bound to alt+tab / alt+shift+tab.
 # retile = put every window on this desktop back in the layout — un-maximize,
-# un-snap, un-float — and tile it. Default super+shift+t ("t for tile"), and it
-# works from any layout: from a floating desktop it switches to tiling first,
-# since reclaiming there would do nothing you could see. Dialogs and fullscreen
+# un-snap, un-float — and tile it. Default super+shift+t ("t for tile"). It
+# switches to the tiling layout from WHEREVER you are: the key is called tile,
+# so a press on a cascade or monocle desktop leaves you tiled, not on the same
+# arrangement being told the windows were already fine. Dialogs and fullscreen
 # windows are left alone. Selecting a tiling, niri or AI layout now reclaims the
 # same way, so choosing the layout means "place these windows".
 #   Why you want it: dragging a window to move it, snapping it to an edge and

@@ -791,6 +791,18 @@ test('spiral_layout', spiral_layout,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The cascade (layout_cascade): that its cards stay SMALL — a third of the
+# screen wide, half of it tall — that the piles are dealt into a grid that
+# reaches the far edges rather than leaving a third of the desk bare, and that
+# past the grid's slots the piles deepen again instead of the cards growing.
+# The first two are the 2026-08-07 screenshot; the third is the layout's point.
+cascade_grid = find_program('tests/cascade_grid.sh')
+test('cascade_grid', cascade_grid,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # The floating desktop's own tiler (layout_float_arrange): that untouched
 # windows are arranged into an inset grid, that the grid leaves the wallpaper
 # showing rather than filling the screen, that a window the user has placed is

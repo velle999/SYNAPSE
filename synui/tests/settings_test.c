@@ -170,8 +170,8 @@ static void test_parse_shapes(void)
      * wrong thing: config_bind_set replaces by chord, so a bind on a defaulted
      * combo leaves bind_count where it was and the append assertion fails for a
      * reason that has nothing to do with parsing. This was super+shift+y until
-     * the cascade layout took that key for retile (2026-08-07). Ctrl+Alt+F12 is
-     * not a chord this project is ever going to want. */
+     * the cascade layout took that key (2026-08-07). Ctrl+Alt+F12 is not a
+     * chord this project is ever going to want. */
     int before = c.bind_count;
     snprintf(v, sizeof(v), "ctrl+alt+f12 term");
     config_parse_kv(&c, "bind", v);

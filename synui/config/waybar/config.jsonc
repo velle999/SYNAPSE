@@ -68,7 +68,9 @@
         "tooltip": true,
         // Click the bar clock to pop synui's compositor-drawn calendar. The
         // clock/time SETTINGS panel lives at Settings > Date & Time in the
-        // start menu; this is just the month grid (also Super+Shift+T).
+        // start menu; this is just the month grid. It has no keybind of its
+        // own any more — Super+Shift+T was the calendar's until 2026-07-31 and
+        // is `retile` now — so this click is how you reach it.
         "on-click": "synctl dispatch calendar"
     },
     // Battery. waybar hides this module entirely on a machine with no

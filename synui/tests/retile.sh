@@ -175,7 +175,28 @@ synctl dispatch retile >/dev/null
 [ "$(n_floating)" = 0 ] || fail "retile from floating left $(n_floating) floating"
 echo "cross:    retile from floating switched to tiling and reclaimed"
 
-# ── 7. clean shutdown ────────────────────────────────────────────────────
+# ── 7. retile from a PLACING layout still tiles ──────────────────────────
+# velle, 2026-08-07, with a screenshot of a cascaded desktop: Super+Shift+T said
+# "every window was already tiled" and left the cards exactly where they were.
+# It was true of the window flags — nothing was floating, so there was nothing
+# to reclaim — and a lie about the screen, which was still cascaded.
+#
+# The old rule was "switch only from FLOATING, since the other five place
+# windows already". This is the assertion that the rule is gone: the key is
+# called tile, so from ANY layout it ends with the desktop tiled. A future
+# change that makes retile "smart" about the layout it is already on has to
+# fail here.
+synctl dispatch cascade >/dev/null
+[ "$(layout_now)" = cascade ] || fail "dispatch cascade left the layout at
+       $(layout_now) — the rest of this phase has nothing to switch away from."
+synctl dispatch retile >/dev/null
+[ "$(layout_now)" = tiling ] || fail "retile from a CASCADE desktop left the
+       layout at $(layout_now). Cascade places windows, so nothing was floating
+       and the old retile reported 'every window was already tiled' while the
+       screen went on showing overlapping cards. Tiling is a destination."
+echo "cascade:  retile from cascade switched to tiling"
+
+# ── 8. clean shutdown ────────────────────────────────────────────────────
 for p in $CLIENT_PIDS; do kill -TERM "$p" 2>/dev/null; done
 CLIENT_PIDS=
 

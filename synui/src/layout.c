@@ -483,27 +483,44 @@ void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
  * Windows overlapping, each offset down-and-right from the one behind it, so
  * every titlebar stays reachable and the front one is whole. A hand of cards.
  *
- *   ┌──────────┐        ┌────────┐     ┌────────┐
- *   │ 1        │        │ 1      │     │ 4      │
- *   │ ┌──────────┐      │ ┌────────┐   │ ┌────────┐
- *   │ │ 2        │      │ │ 2      │   │ │ 5      │
- *   └─│ ┌──────────┐    └─│ ┌────────┐ └─│ ┌────────┐
- *     │ │ 3        │      │ │ 3      │   │ │ 6      │
- *     └─│          │      └─│        │   └─│        │
- *       └──────────┘        └────────┘     └────────┘
- *        three windows          six windows, two piles
+ *   ┌────────┐   ┌────────┐   ┌────────┐        ┌────────┐   ┌────────┐
+ *   │ 1      │   │ 3      │   │ 5      │        │ 1      │   │ 3      │
+ *   │ ┌────────┐ │ ┌────────┐ │ ┌────────┐      │ ┌────────┐ │ ┌────────┐
+ *   └─│ 2      │ └─│ 4      │ └─│ 6      │      └─│ 2      │ └─│ 4      │
+ *     └────────┘   └────────┘   └────────┘        └────────┘   └────────┘
+ *   ┌────────┐   ┌────────┐                    six windows, four piles, and
+ *   │ 7      │   │ 9      │                    the short last row centred
+ *   │ ┌────────┐ │ ┌────────┐
+ *   └─│ 8      │ └─│ 10     │
+ *     └────────┘   └────────┘
+ *        ten windows, five piles in a 3x2 grid
  *
- * THE SPLIT IS THE WHOLE FEATURE. A plain cascade is fine for four windows and
- * useless for fourteen: the offsets accumulate, so the last window is a sliver
- * in the bottom-right corner and everything before it is a stack of titlebars.
- * Every cascade ever shipped has this problem. Past `cascade_stack_max` the
- * pile splits and deals a second one beside it, and the split is BALANCED —
- * twelve windows at a max of five is three piles of four, not 5+5+2.
+ * CARDS ARE SMALL AND THE PILES ARE A GRID. This is the correction of
+ * 2026-08-07 (velle, with a screenshot): the first cut dealt one ROW of piles
+ * across the screen, so six windows came out as two half-screen slabs with the
+ * whole right third of the desktop empty. A cascade of two enormous cards is
+ * not a cascade. A card is now capped at CASCADE_CARD_W_PCT x CASCADE_CARD_H_PCT
+ * of the working box — a third wide, half tall — and those same two numbers are
+ * the grid the piles are dealt into: three columns, two rows, six pile slots on
+ * a normal screen.
  *
- * Why a window COUNT rather than something derived from the geometry: the limit
- * is not "when does it stop fitting", it is "when does it stop being readable".
- * A 1440p screen has room for eighteen 30px offsets and nobody can use a pile
- * of eighteen windows. Five is about a hand of cards.
+ * Windows fill the SLOTS before they deepen a pile. Six windows on six slots is
+ * six single cards; twelve is six piles of two; and only once every slot is a
+ * full pile does the grid grow another row and the cards shrink. That ordering
+ * is the whole difference between "small tiles spread over the desk" and "two
+ * tall stacks", and it is what was asked for.
+ *
+ * THE SPLIT IS STILL THE WHOLE FEATURE at the deep end. A plain cascade is fine
+ * for four windows and useless for fourteen: the offsets accumulate, so the last
+ * window is a sliver in the bottom-right corner and everything before it is a
+ * stack of titlebars. Past `cascade_stack_max` a pile refuses to grow and the
+ * arrangement deals another one instead, and the split is BALANCED — twelve
+ * windows at a max of five is three piles of four, not 5+5+2.
+ *
+ * Why a window COUNT for that cap rather than something derived from the
+ * geometry: the limit is not "when does it stop fitting", it is "when does it
+ * stop being readable". A 1440p screen has room for eighteen 30px offsets and
+ * nobody can use a pile of eighteen windows. Five is about a hand of cards.
  *
  * The step comes from the titlebar height, so what peeks out from behind each
  * window is exactly the thing that says which window it is. With titlebars off
@@ -511,7 +528,7 @@ void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
  * fringe rather than to the border width, which would stack the windows
  * essentially on top of each other.
  *
- * Windows are UNIFORM within a run of the desktop — every card the same size,
+ * Windows are UNIFORM across the whole desktop — every card the same size,
  * including the ones in a short last pile. A pile of two whose cards were
  * bigger than the pile of five beside it would read as two arrangements.
  */
@@ -541,36 +558,82 @@ void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
     if (per_max < CASCADE_STACK_MIN) per_max = CASCADE_STACK_MIN;
     if (per_max > CASCADE_STACK_MAX) per_max = CASCADE_STACK_MAX;
 
-    /* Balance the split. `stacks` from the cap, then `per` back out of
-     * `stacks` — the round trip is what turns 12-at-5 into 4+4+4 instead of
-     * 5+5+2, and a lopsided last pile is the thing that makes an arrangement
-     * look like it ran out rather than like it finished. */
-    int stacks = (n + per_max - 1) / per_max;
+    /* THE PILE SLOTS. A card gets a third of the width and half the height at
+     * most, so the screen holds three pile columns and two rows — six slots on
+     * anything normal, fewer on a small output, never fewer than one. */
+    int slot_w = W * CASCADE_CARD_W_PCT / 100;
+    int slot_h = H * CASCADE_CARD_H_PCT / 100;
+    if (slot_w < MIN_WIN) slot_w = MIN_WIN;
+    if (slot_h < MIN_WIN) slot_h = MIN_WIN;
+
+    int cols_fit = W / slot_w;  if (cols_fit < 1) cols_fit = 1;
+    int rows_fit = H / slot_h;  if (rows_fit < 1) rows_fit = 1;
+    int slots    = cols_fit * rows_fit;
+
+    /* Fill the slots BEFORE deepening a pile: one card each until the desk is
+     * full, and only then start stacking. Six windows on six slots is six
+     * cards, not two towers — which is the whole complaint this answers.
+     *
+     * `per_max` still sets the floor on how many piles there must be, so a desk
+     * of forty windows gets eight piles of five rather than six piles of seven.
+     * Then `per` comes back out of the pile count and the pile count back out of
+     * `per`: that round trip is what turns 12-at-5 into 4+4+4 instead of 5+5+2,
+     * and a lopsided last pile is what makes an arrangement look like it ran out
+     * rather than like it finished. */
+    int stacks = n < slots ? n : slots;
+    int need   = (n + per_max - 1) / per_max;
+    if (stacks < need) stacks = need;
     if (stacks < 1) stacks = 1;
     int per = (n + stacks - 1) / stacks;
     if (per < 1) per = 1;
+    stacks = (n + per - 1) / per;
 
     /* A pile can also be capped by the SCREEN rather than by the count, and it
      * has to be: on a 1024x768 VM (the ISO's default) five 40px steps eat more
-     * than half the height, and the cards come out shorter than they are wide.
-     * Shrink the pile until each card keeps at least half the working box, then
-     * re-derive the stacks — never the other way round, or the last pile is
+     * than half a slot, and the cards come out shorter than they are wide.
+     * Shrink the pile until each card keeps at least half its slot, then
+     * re-derive the pile count — never the other way round, or the last pile is
      * lopsided again. */
-    int per_fit = 1 + (H / 2) / step;
+    int per_fit = 1 + (slot_h / 2) / step;
     if (per_fit < 1) per_fit = 1;
     if (per > per_fit) {
         per    = per_fit;
         stacks = (n + per - 1) / per;
         per    = (n + stacks - 1) / stacks;
+        stacks = (n + per - 1) / per;
     }
 
-    int col_w = (W - (stacks - 1) * gap) / stacks;
-    if (col_w < MIN_WIN) col_w = MIN_WIN;
+    /* Deal the piles into a grid rather than a single row. Columns first, up to
+     * what fits; the rows follow, and past the last row the cells (and so the
+     * cards) simply get smaller — a desk of thirty windows should look crowded,
+     * not overflow the screen. */
+    int cols = stacks < cols_fit ? stacks : cols_fit;
+    if (cols < 1) cols = 1;
+    int rows = (stacks + cols - 1) / cols;
 
-    int win_w = col_w - (per - 1) * step;
-    int win_h = H     - (per - 1) * step;
+    int cell_w = (W - (cols - 1) * gap) / cols;
+    int cell_h = (H - (rows - 1) * gap) / rows;
+    if (cell_w < MIN_WIN) cell_w = MIN_WIN;
+    if (cell_h < MIN_WIN) cell_h = MIN_WIN;
+
+    /* The pile occupies its cell, but never grows past the card cap — two
+     * windows on a wide screen get two small cards, not two half-screen slabs.
+     * What is left over is spread as a margin, so the piles sit centred in
+     * their cells instead of hugging the top-left of each one. */
+    int pile_w = cell_w < slot_w ? cell_w : slot_w;
+    int pile_h = cell_h < slot_h ? cell_h : slot_h;
+
+    int win_w = pile_w - (per - 1) * step;
+    int win_h = pile_h - (per - 1) * step;
     if (win_w < MIN_WIN) win_w = MIN_WIN;
     if (win_h < MIN_WIN) win_h = MIN_WIN;
+
+    /* How many piles sit in the final row, so it can be centred rather than
+     * left hanging. A full last row centres to zero offset, so there is no
+     * special case to write — the same line, for the same reason, as
+     * layout_float_arrange. */
+    int last_row_n = stacks - (rows - 1) * cols;
+    if (last_row_n <= 0) last_row_n = cols;
 
     int i = 0;
     syn_view_t *v;
@@ -581,9 +644,16 @@ void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
         int stack = i / per;      /* which pile */
         int depth = i % per;      /* how far into it — 0 is the back card */
 
+        int r      = stack / cols;
+        int c      = stack % cols;
+        int in_row = (r == rows - 1) ? last_row_n : cols;
+        int row_w  = in_row * cell_w + (in_row - 1) * gap;
+
         place_view(v,
-                   x + stack * (col_w + gap) + depth * step,
-                   y + depth * step,
+                   x + (W - row_w) / 2 + c * (cell_w + gap)
+                     + (cell_w - pile_w) / 2 + depth * step,
+                   y + r * (cell_h + gap)
+                     + (cell_h - pile_h) / 2 + depth * step,
                    win_w, win_h);
 
         /* Stacking order IS the arrangement here — this is the one layout whose

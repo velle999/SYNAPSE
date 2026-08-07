@@ -716,18 +716,25 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * open the row would sit there showing the layout we just left. */
         ctlpanel_refresh(s);
     } else if (strcmp(action, "retile") == 0) {
-        /* "Tile this desktop, now." Works from every layout, not just tiling —
-         * that is the point of having it as well as the reclaim on layout
-         * selection: reaching tiling by cycling costs up to four presses and
-         * walks the desktop through three layouts on the way.
+        /* "TILE THIS DESKTOP, NOW." The key is called tile, so it tiles — it
+         * switches from ANY layout, exactly like `cascade` below, and it always
+         * re-lays the desktop out.
          *
-         * From a FLOATING desktop it also switches to tiling. Reclaiming there
-         * alone is a no-op you can see — nothing tiles on a floating desktop —
-         * and a key called "tile" that visibly does nothing is the bug this is
-         * fixing, one level up. The other three place windows already, so they
-         * are left as they are and only the reclaim runs. */
+         * It used to switch only from FLOATING, on the reasoning that the other
+         * five place windows already so there was nothing to do but reclaim.
+         * That reasoning is wrong from the keyboard: on a cascade or a monocle
+         * desktop the key changed nothing you could see and then said "every
+         * window was already tiled" — a report that is true of the window flags
+         * and a lie about the screen, which is still showing overlapping cards.
+         * (velle, 2026-08-07, with a screenshot of exactly that.) Tiling is a
+         * destination, not a modifier on the layout you happen to be in.
+         *
+         * The reclaim is still what does the work: it hands back every window
+         * that had been dragged, snapped, floated or maximized out of the flow.
+         * layout_apply then runs unconditionally — a re-tile with nothing to
+         * reclaim is not a no-op, it is the re-tile. */
         int switched = 0;
-        if (ws->layout == LAYOUT_FLOATING) {
+        if (ws->layout != LAYOUT_TILING) {
             ws->layout = LAYOUT_TILING;
             switched = 1;
             layout_state_save(s);   /* same rule as layout_cycle: it's a choice */
@@ -735,28 +742,28 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         int taken = layout_reclaim(s, ws);
         layout_apply(s, ws);
 
-        /* Always says something, including "nothing to do". Silence is what
-         * made this state confusing in the first place. */
+        /* Always says something, and never says "nothing happened": the windows
+         * were just laid out again whether or not any of them had to be taken
+         * back first. Silence, and then a report of a no-op, is what made this
+         * key confusing twice over. */
         char rbody[96];
         if (taken)
-            snprintf(rbody, sizeof(rbody), "%d window%s back in the layout",
-                     taken, taken == 1 ? "" : "s");
+            snprintf(rbody, sizeof(rbody), "Desktop %d — %d window%s back in the layout",
+                     ws->index + 1, taken, taken == 1 ? "" : "s");
         else
-            snprintf(rbody, sizeof(rbody), "Desktop %d — every window was already tiled",
+            snprintf(rbody, sizeof(rbody), "Desktop %d — laid out again",
                      ws->index + 1);
         s->layout_notif_id = notif_post(s, "synui",
                                         switched ? "tiling" : "Re-tiled", rbody,
                                         NOTIF_URGENCY_LOW, 1500,
                                         s->layout_notif_id);
     } else if (strcmp(action, "cascade") == 0) {
-        /* "Deal this desktop out." Same shape as `retile` above — switch, then
-         * reclaim, then say what happened — and split out rather than folded
-         * into it with an argument, because the two answer different questions
-         * and a user reading a bind list should see both.
-         *
-         * Unlike retile, this switches from ANY layout, not only from floating.
-         * Cascading is a destination in a way that tiling is not: reaching it by
-         * cycling walks the desk through up to six other arrangements. */
+        /* "Deal this desktop out." Same shape as `retile` above — switch from
+         * whatever layout you are on, reclaim, re-lay out, say what happened —
+         * and split out rather than folded into it with an argument, because
+         * the two answer different questions and a user reading a bind list
+         * should see both. Reaching either one by cycling walks the desk
+         * through up to six other arrangements on the way. */
         int switched = 0;
         if (ws->layout != LAYOUT_CASCADE) {
             ws->layout = LAYOUT_CASCADE;
@@ -768,10 +775,11 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 
         char cbody[96];
         if (taken)
-            snprintf(cbody, sizeof(cbody), "%d window%s back in the layout",
-                     taken, taken == 1 ? "" : "s");
+            snprintf(cbody, sizeof(cbody), "Desktop %d — %d window%s back in the layout",
+                     ws->index + 1, taken, taken == 1 ? "" : "s");
         else
-            snprintf(cbody, sizeof(cbody), "Desktop %d", ws->index + 1);
+            snprintf(cbody, sizeof(cbody), "Desktop %d — dealt out again",
+                     ws->index + 1);
         s->layout_notif_id = notif_post(s, "synui",
                                         switched ? "cascade" : "Re-dealt", cbody,
                                         NOTIF_URGENCY_LOW, 1500,
