@@ -841,8 +841,10 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "cursor") == 0) {
         curpick_toggle(s);
     } else if (strcmp(action, "crop") == 0) {
-        /* The only action that REQUIRES its argument. Without one there is
-         * nothing to crop, so a bare `crop` can only close an open panel. */
+        /* The one action that TAKES an argument. It no longer requires one:
+         * without a path the panel opens on its recent-images list, which is
+         * what makes it bindable (super+shift+x) rather than reachable only
+         * from a file manager that already knows the filename. */
         if (arg && *arg) crop_open(s, arg);
         else             crop_toggle(s);
     } else if (strcmp(action, "equalizer") == 0) {

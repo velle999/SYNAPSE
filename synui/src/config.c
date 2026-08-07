@@ -413,6 +413,15 @@ static void seed_default_binds(syn_config_t *cfg)
          * the control panel and super+shift+c is cat mode — C was gone twice
          * over before this feature existed. */
         { "super+shift+p",   "cursor" },
+        /* The image cropper, opening on its recent-images list. X for "cut",
+         * for the same reason the cursor picker is on P: C was already gone
+         * twice over, and a crop bound to some third letter of "crop" would be
+         * less guessable than the scissors key. Both X spellings were free.
+         *
+         * This is the one panel that could not be bound at all until the list
+         * existed — crop_open() needs a path and a keybind has none to give, so
+         * a bare `crop` used to do nothing but close. */
+        { "super+shift+x",   "crop" },
         /* Themes, not the task manager. The task manager had two binds and needs
          * one — ctrl+alt+delete below is the one everybody already reaches for,
          * so super+t goes to the theme manager, which had only the far less

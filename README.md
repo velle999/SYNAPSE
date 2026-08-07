@@ -187,6 +187,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`T` | Theme manager (SYNAPSE / Dark / XP / 95, plus six riced palettes) |
 | `Super`+`Shift`+`T` | Tile windows |
 | `Super`+`Shift`+`P` | Cursor theme picker ("P for pointer") |
+| `Super`+`Shift`+`X` | Crop an image ("X for cut") — opens on your recent images from Pictures, Wallpapers and Downloads |
 | `Super`+`S` | Event sounds — all silent until you turn them on |
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch, post-it) |
 | `Super`+`Escape` | Menu |

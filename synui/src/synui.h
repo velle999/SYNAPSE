@@ -418,7 +418,22 @@ struct syn_font_family {
  * The one panel that takes an argument: it operates on a file rather than
  * configuring something. The selection is held in IMAGE PIXELS — see crop.c
  * for why storing it in screen coordinates loses precision and breaks on a
- * different-sized output. */
+ * different-sized output.
+ *
+ * It has TWO faces, `picking` says which: the recent-images list it opens on
+ * when it was given no file, and the cropper proper once one is chosen. */
+
+/* How many recent images the picker will hold, and how many rows it draws.
+ * The cap is on the NEWEST that many, not the first that many found — see
+ * crop_recent_add(). */
+#define CROP_RECENT_MAX  80
+#define CROP_RECENT_ROWS 10
+
+typedef struct {
+    char   path[256];
+    time_t mtime;                  /* what the list is sorted by, newest first */
+} syn_crop_recent_t;
+
 typedef struct {
     int visible;
 
@@ -444,12 +459,36 @@ typedef struct {
     cairo_surface_t *scaled;
     double           scaled_at;    /* the crop_fit() scale `scaled` was built for */
 
-    /* The drag's two corners, in image pixels and NOT normalised — a drag up
-     * and to the left leaves bx < ax. crop_selection() sorts them. */
+    /* The selection's two corners, in image pixels and NOT normalised — a drag
+     * up and to the left leaves bx < ax. crop_selection() sorts them.
+     *
+     * INVARIANT: `b` is the ACTIVE corner and `a` is the one diagonally
+     * opposite. Everything that adjusts the selection — the drag, the arrows, a
+     * grabbed handle — moves `b`, so there is one piece of code that knows how
+     * to move a corner and three callers of it. Changing WHICH corner is active
+     * is then not a mode the movers consult but a rewrite of a/b that leaves the
+     * rectangle on screen identical (crop_set_active). */
     int ax, ay, bx, by;
     int dragging;                  /* a press is in flight; input.c feeds it */
 
+    /* Which corner `b` currently IS: 0 TL, 1 TR, 2 BL, 3 BR (bit 0 = right,
+     * bit 1 = bottom). DERIVED from a/b by crop_active_sync() and never
+     * authoritative — nudge the active corner past its opposite and the
+     * rectangle flips, so the corner that was the bottom-right becomes the
+     * bottom-left. Stored only so the render can highlight it without
+     * recomputing the comparison. */
+    int active;
+
     char status[64];               /* an error to show without closing */
+
+    /* ── The recent-images list ──────────────────────────────
+     * Populated by crop_recent_scan() when the panel is opened with no file.
+     * `sel` is a list index, `scroll` the first drawn row. */
+    int picking;
+    int from_pick;                 /* opened FROM the list — Backspace goes back */
+    syn_crop_recent_t recent[CROP_RECENT_MAX];
+    int recent_count, recent_sel, recent_scroll;
+    syn_hit_t hit;                 /* rows, while picking; blank otherwise */
 } syn_crop_panel_t;
 
 /* ── The equalizer panel (eq.c; the DSP is synui-eq(1)) ────── */
@@ -3662,8 +3701,10 @@ struct syn_server {
     } eq_ui;
     syn_eq_panel_t eq;
 
-    /* Image cropper (crop.c). Full-screen, so it has no rows and no hit rect —
-     * the whole output is the target and the mapping is crop_fit(). */
+    /* Image cropper (crop.c). Full-screen while cropping, so there the whole
+     * output is the target and the mapping is crop_fit() rather than a hit
+     * rect; the recent-images list it opens on is an ordinary centred panel
+     * with rows, and that one does use s->crop.hit. */
     struct {
         struct wlr_scene_tree   *tree;
         struct wlr_scene_rect   *bg;
@@ -5253,12 +5294,20 @@ void synui_render_eq(syn_server_t *s);
 
 /* ── crop.c (image cropper) ──────────────────────────────────
  *
- * `synctl dispatch crop <path>`, or Dolphin's right-click ▸ Crop Image. Writes
- * a NEW file beside the original and never touches the input. */
+ * `synctl dispatch crop <path>`, Dolphin's right-click ▸ Crop Image, or the
+ * `crop` bind with no argument — which opens the recent-images list instead.
+ * Writes a NEW file beside the original and never touches the input. */
 
-void crop_open(syn_server_t *s, const char *path);
+void crop_open(syn_server_t *s, const char *path);   /* NULL/"" → the list */
 void crop_hide(syn_server_t *s);
-void crop_toggle(syn_server_t *s);   /* can only close; opening needs a path */
+void crop_toggle(syn_server_t *s);   /* closes, or opens the recent list */
+
+/* The recent-images list: rebuild it, and read a row for the render. `when` is
+ * a relative age ("2h ago"), `dir` the containing directory. All three point at
+ * storage owned by crop.c and are valid until the next call. */
+void crop_recent_scan(syn_server_t *s);
+void crop_recent_row(syn_server_t *s, int i,
+                     const char **name, const char **dir, const char **when);
 
 /* Where the image lands on the output, shared by the render and the pointer so
  * the drawn image and the clickable image cannot drift apart. */

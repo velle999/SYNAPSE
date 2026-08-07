@@ -2306,9 +2306,158 @@ void synui_render_eq(syn_server_t *s)
  * The mapping from image pixels to screen comes from crop_fit(), the same call
  * the pointer uses — see crop.c. Nothing here recomputes it.
  */
+/* The recent-images list the cropper opens on when it was given no file.
+ *
+ * An ordinary centred rows panel, drawn into the SAME scene nodes as the
+ * cropper below — one tree, one background rect, one text buffer. Both set the
+ * position and the background size on every pass, so switching faces is a
+ * redraw rather than a second set of nodes to keep in step. */
+static void render_crop_pick(syn_server_t *s)
+{
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 46, top = 62, pad = 18;
+    int total = s->crop.recent_count;
+    int shown = total < CROP_RECENT_ROWS ? total : CROP_RECENT_ROWS;
+    if (shown < 1) shown = 1;
+
+    int pw = 620;
+    int ph = top + shown * row_h + 52;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->crop_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->crop_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->crop_ui.tree->node);
+
+    hit_set_panel(&s->crop.hit, px, py, pw, ph);
+    hit_set_rows(&s->crop.hit, 12, top, pw - 24, row_h, shown);
+    hit_set_first(&s->crop.hit, s->crop.recent_scroll);
+
+    /* Near-opaque, like the other pickers: every row carries a small-type path
+     * underneath it and the desktop showing through makes that unreadable. */
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.985f);
+    if (!s->crop_ui.bg)
+        s->crop_ui.bg = wlr_scene_rect_create(s->crop_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->crop_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->crop_ui.bg, bg_color);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    syn_show_text(cr, "CROP \xe2\x80\x94 RECENT IMAGES");
+
+    {
+        char count[48];
+        snprintf(count, sizeof(count), "%d image%s", total, total == 1 ? "" : "s");
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, count, &te);
+        set_ink(cr, INK_DIM, 0.9);
+        cairo_move_to(cr, pw - 18 - te.x_advance, 30);
+        syn_show_text(cr, count);
+    }
+
+    set_ink(cr, INK_RULE, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 44);
+    cairo_line_to(cr, pw - 18, 44);
+    cairo_stroke(cr);
+
+    if (total == 0) {
+        cairo_set_font_size(cr, 13);
+        set_ink(cr, INK_MUTED, 1.0);
+        cairo_move_to(cr, pad, top + 24);
+        syn_show_text(cr, "No images in Pictures, Wallpapers or Downloads.");
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, 0.49, 1.0);
+        cairo_move_to(cr, pad, top + 46);
+        syn_show_text(cr, "Press r to rescan, or crop a file directly: "
+                          "synctl dispatch crop <path>");
+    }
+
+    for (int r = 0; r < shown && total > 0; r++) {
+        int i = s->crop.recent_scroll + r;
+        if (i >= total) break;
+
+        int sel = (i == s->crop.recent_sel);
+        int ry = top + r * row_h;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry, pw - 24, row_h - 8);
+            cairo_fill(cr);
+            cairo_set_line_width(cr, 2);
+            set_accent(cr, 1.0);
+            cairo_rectangle(cr, 12.5, ry + 0.5, pw - 25, row_h - 9);
+            cairo_stroke(cr);
+        }
+
+        const char *name, *dir, *when;
+        crop_recent_row(s, i, &name, &dir, &when);
+
+        /* The age is drawn first so the filename knows how much room is left.
+         * It is ASCII from crop_ago() and needs no trimming; the other two are
+         * arbitrary filesystem bytes and go through draw_clipped, which runs
+         * them past news_utf8_trim — cairo_show_text poisons its context on
+         * invalid UTF-8 and every later draw silently no-ops, so one badly
+         * named file would blank the panel from that row down. */
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, when, &te);
+        set_ink(cr, INK_DIM, 0.9);
+        cairo_move_to(cr, pw - pad - te.x_advance, ry + 20);
+        syn_show_text(cr, when);
+
+        double text_w = pw - pad * 2 - te.x_advance - 14;
+
+        cairo_set_font_size(cr, 13);
+        set_ink(cr, sel ? INK_STRONG : INK_MUTED, 1.0);
+        draw_clipped(cr, pad, ry + 20, text_w, name);
+
+        cairo_set_font_size(cr, 11);
+        set_ink(cr, 0.49, 1.0);
+        draw_clipped(cr, pad, ry + 36, text_w, dir);
+    }
+
+    cairo_set_font_size(cr, 12);
+    if (s->crop.status[0]) {
+        set_status(cr, STAT_CRIT, 1.0);
+        cairo_move_to(cr, pad, ph - 18);
+        syn_show_text(cr, s->crop.status);
+    } else {
+        set_ink(cr, INK_DIM, 0.9);
+        cairo_move_to(cr, pad, ph - 18);
+        syn_show_text(cr, "Enter crop \xc2\xb7 r rescan \xc2\xb7 Esc close");
+    }
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->crop_ui.text_buf, s->crop_ui.tree, buf);
+}
+
 void synui_render_crop(syn_server_t *s)
 {
-    if (!s->crop.visible || !s->crop.img) {
+    if (!s->crop.visible) {
+        wlr_scene_node_set_enabled(&s->crop_ui.tree->node, false);
+        hit_clear(&s->crop.hit);
+        return;
+    }
+
+    if (s->crop.picking) { render_crop_pick(s); return; }
+
+    /* The cropper proper is full-screen and maps the whole output through
+     * crop_fit(), so it has no rows — and must not leave the list's behind, or
+     * a click on the picture would land on a row that is no longer drawn. */
+    hit_clear(&s->crop.hit);
+
+    if (!s->crop.img) {
         wlr_scene_node_set_enabled(&s->crop_ui.tree->node, false);
         return;
     }
@@ -2388,16 +2537,32 @@ void synui_render_crop(syn_server_t *s)
 
     {
         const double hl = 14.0;   /* handle arm length */
-        cairo_set_line_width(cr, 3.0);
-        const double cx[4] = { rx, rx + rw, rx, rx + rw };
-        const double cy[4] = { ry, ry, ry + rh, ry + rh };
+        /* Indexed by the corner numbering in crop.c: bit 0 is right, bit 1 is
+         * bottom. Kept in that order rather than a prettier clockwise one so
+         * s->crop.active indexes this directly and the highlight cannot end up
+         * on a different corner from the one the arrows move. */
+        const double cx[4] = { rx, rx + rw, rx,      rx + rw };
+        const double cy[4] = { ry, ry,      ry + rh, ry + rh };
         const double dx[4] = {  1, -1,  1, -1 };
         const double dy[4] = {  1,  1, -1, -1 };
+
         for (int i = 0; i < 4; i++) {
+            /* The active corner — the one the arrows drive and Tab moves — is
+             * drawn heavier with a filled cap. Without a mark for it the
+             * keyboard is a guess: press Left and find out which edge moved. */
+            int on = (i == s->crop.active);
+            cairo_set_line_width(cr, on ? 4.5 : 3.0);
+            set_accent(cr, on ? 1.0 : 0.75);
+
             cairo_move_to(cr, cx[i] + dx[i] * hl, cy[i]);
             cairo_line_to(cr, cx[i], cy[i]);
             cairo_line_to(cr, cx[i], cy[i] + dy[i] * hl);
             cairo_stroke(cr);
+
+            if (on) {
+                cairo_rectangle(cr, cx[i] - 3.5, cy[i] - 3.5, 7, 7);
+                cairo_fill(cr);
+            }
         }
     }
 
@@ -2436,10 +2601,25 @@ void synui_render_crop(syn_server_t *s)
         syn_show_text(cr, s->crop.status);
     } else {
         set_ink(cr, INK_DIM, 0.9);
-        cairo_move_to(cr, 24, ph - 22);
+        /* Two lines: the hints outgrew one the moment the corners became
+         * selectable, and a single line elided in the middle of "Shift x 25"
+         * teaches nothing. Gestures on top, keys underneath. */
+        cairo_move_to(cr, 24, ph - 40);
         syn_show_text(cr,
-            "Drag to select \xc2\xb7 Arrows adjust (Shift \xc3\x97 25) \xc2\xb7 "
-            "a all \xc2\xb7 Enter save a copy \xc2\xb7 Esc cancel");
+            "Drag to select \xc2\xb7 drag a corner to adjust it \xc2\xb7 "
+            "Tab picks the corner the arrows move");
+
+        /* Esc means different things depending on how you got here, and saying
+         * "cancel" when it goes back to the list is a small lie the footer is
+         * well placed to avoid. */
+        char keys[200];
+        snprintf(keys, sizeof(keys),
+            "Arrows resize \xc2\xb7 Ctrl+Arrows move \xc2\xb7 Shift \xc3\x97 25 \xc2\xb7 "
+            "a all \xc2\xb7 Enter save a copy \xc2\xb7 Esc %s",
+            s->crop.from_pick ? "back to the list" : "cancel");
+
+        cairo_move_to(cr, 24, ph - 22);
+        syn_show_text(cr, keys);
     }
 
     cairo_destroy(cr);

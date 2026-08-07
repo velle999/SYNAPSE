@@ -546,8 +546,12 @@ test('emoji', emoji_test)
 # writes a different rectangle from the one you dragged, silently) and the
 # never-overwrite rule (cropping has no undo). text.c comes along for
 # syn_utf8_copy(); the compositor half is stubbed, as in hit_test.
+# hit.c since the recent-images list is a rows panel and hit-tests like every
+# other one. Real rather than stubbed: it is pure arithmetic over a struct with
+# no compositor behind it (that is what hit_test asserts), so linking it keeps
+# the picker's click path honest instead of testing a stub of it.
 crop_test = executable('crop_test',
-  ['tests/crop_test.c', 'src/crop.c', 'src/text.c'],
+  ['tests/crop_test.c', 'src/crop.c', 'src/text.c', 'src/hit.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],

@@ -27,6 +27,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <utime.h>
 
 #include <cairo/cairo.h>
 
@@ -310,6 +311,243 @@ static void test_shell_injection(void)
           "SHELL INJECTION: the filename executed a command");
 }
 
+/* ── The keyboard reaches all four edges ──────────────────────
+ *
+ * THE BUG THIS PINS DOWN
+ *
+ * crop_nudge() moves the ACTIVE corner, which is `b`, and the panel opens with
+ * the whole image selected — a at the top-left, b at the bottom-right. So b sat
+ * against its clamps on both axes from the first frame: Right and Down were
+ * silent no-ops, and only Left and Up moved anything. The keyboard could bring
+ * the right and bottom edges in and could not touch the other two at all,
+ * which presents as "the arrows only go up and left".
+ *
+ * Driven through crop_key() rather than the statics, because the fix lives in
+ * which corner is active and that is only reachable through the key handler —
+ * testing crop_nudge() directly would assert the half that was never broken.
+ */
+static void test_keyboard_reaches_every_edge(void)
+{
+    syn_server_t *s = server_with_image(1000, 800);
+
+    /* As crop_open() leaves it. */
+    s->crop.ax = 0;   s->crop.ay = 0;
+    s->crop.bx = 1000; s->crop.by = 800;
+    s->crop.active = 3;                    /* bottom-right */
+
+    int x, y, w, h;
+
+    /* The half that always worked: pull the right and bottom edges in. */
+    crop_key(s, XKB_KEY_Left, 0);
+    crop_key(s, XKB_KEY_Up, 0);
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(x == 0 && y == 0 && w == 999 && h == 799,
+          "Left/Up on the far corner should shrink from the right and bottom, "
+          "got %d,%d %dx%d", x, y, w, h);
+
+    /* Tab moves which corner the next arrow drives, and must NOT move the
+     * rectangle while it does. */
+    crop_key(s, XKB_KEY_Tab, 0);
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(x == 0 && y == 0 && w == 999 && h == 799,
+          "Tab must not move the selection, got %d,%d %dx%d", x, y, w, h);
+    CHECK(s->crop.active == 2,
+          "Tab is CLOCKWISE: bottom-right leads to bottom-left, got %d",
+          s->crop.active);
+
+    /* One more lands on the top-left — the corner the arrows could never reach
+     * before, because it was always `a` and only `b` ever moved. Right and Down
+     * now bring the LEFT and TOP edges in. */
+    crop_key(s, XKB_KEY_Tab, 0);
+    CHECK(s->crop.active == 0, "expected the top-left corner, got %d", s->crop.active);
+
+    crop_key(s, XKB_KEY_Right, 0);
+    crop_key(s, XKB_KEY_Down, 0);
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(x == 1 && y == 1 && w == 998 && h == 798,
+          "the top-left corner should move in from the left and top, "
+          "got %d,%d %dx%d", x, y, w, h);
+
+    /* Shift is still the coarse step, on whichever corner is active. */
+    crop_key(s, XKB_KEY_Right, WLR_MODIFIER_SHIFT);
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(x == 26, "Shift+Right should step 25, left edge at %d", x);
+
+    cairo_surface_destroy(s->crop.img);
+}
+
+/* Ctrl+Arrows slide the selection without resizing it, and stop AT the border
+ * rather than deforming against it. */
+static void test_ctrl_arrows_move(void)
+{
+    syn_server_t *s = server_with_image(1000, 800);
+
+    s->crop.ax = 100; s->crop.ay = 100;
+    s->crop.bx = 300; s->crop.by = 300;
+    s->crop.active = 3;
+
+    int x, y, w, h;
+
+    crop_key(s, XKB_KEY_Right, WLR_MODIFIER_CTRL);
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(x == 101 && y == 100 && w == 200 && h == 200,
+          "Ctrl+Right should slide the box, got %d,%d %dx%d", x, y, w, h);
+
+    /* Drive it hard into the right edge. The size must survive: clamping the
+     * two corners independently would let the trailing edge keep coming after
+     * the leading one stopped, quietly turning a move into a resize. */
+    for (int i = 0; i < 60; i++)
+        crop_key(s, XKB_KEY_Right, WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT);
+
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(w == 200 && h == 200,
+          "a move into the border must not resize: got %dx%d", w, h);
+    CHECK(x + w == 1000, "it should come to rest against the edge, right at %d", x + w);
+
+    /* And the same on the way back. */
+    for (int i = 0; i < 60; i++)
+        crop_key(s, XKB_KEY_Up, WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT);
+
+    crop_selection(s, &x, &y, &w, &h);
+    CHECK(w == 200 && h == 200 && y == 0,
+          "moving into the top edge gave %d,%d %dx%d", x, y, w, h);
+
+    cairo_surface_destroy(s->crop.img);
+}
+
+/* Tab tracks the rectangle FLIPPING. Push the active corner past its opposite
+ * and it becomes a different corner of the picture; if `active` did not follow,
+ * the render would highlight one corner while the arrows moved another. */
+static void test_active_follows_a_flip(void)
+{
+    syn_server_t *s = server_with_image(1000, 800);
+
+    s->crop.ax = 500; s->crop.ay = 400;   /* a: the fixed corner */
+    s->crop.bx = 700; s->crop.by = 600;   /* b: bottom-right of the pair */
+    s->crop.active = 3;
+
+    /* Walk b left past a. It is now to a's LEFT, so it is the bottom-LEFT
+     * corner — bit 0 (right) clear, bit 1 (bottom) still set. */
+    for (int i = 0; i < 12; i++)
+        crop_key(s, XKB_KEY_Left, WLR_MODIFIER_SHIFT);
+
+    CHECK(s->crop.bx < s->crop.ax, "b should have crossed a, %d vs %d",
+          s->crop.bx, s->crop.ax);
+    CHECK(s->crop.active == 2,
+          "after the flip the active corner should be bottom-left (2), got %d",
+          s->crop.active);
+
+    cairo_surface_destroy(s->crop.img);
+}
+
+/* ── The recent-images list ──────────────────────────────────
+ *
+ * Sorted newest first, deduped, and holding the NEWEST n rather than the first
+ * n found — that last one is what stops a full Downloads folder from hiding
+ * Pictures entirely, and it is invisible until the cap is actually reached.
+ */
+static void touch_image(const char *dir, const char *name, time_t when)
+{
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s", dir, name);
+
+    FILE *f = fopen(path, "w");
+    if (!f) { CHECK(0, "could not create %s", path); return; }
+    fputc('x', f);
+    fclose(f);
+
+    struct utimbuf ut = { .actime = when, .modtime = when };
+    if (utime(path, &ut) != 0) CHECK(0, "could not set mtime on %s", path);
+}
+
+static void test_recent_list(void)
+{
+    static syn_server_t s;
+    memset(&s, 0, sizeof(s));
+
+    char home[300];
+    snprintf(home, sizeof(home), "%s/home", scratch);
+
+    char pics[400], dl[400];
+    snprintf(pics, sizeof(pics), "%s/Pictures", home);
+    snprintf(dl,   sizeof(dl),   "%s/Downloads", home);
+
+    char cmd[1200];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s' '%s'", pics, dl);
+    if (system(cmd) != 0) { CHECK(0, "could not build the scratch home"); return; }
+
+    const time_t base = 1700000000;
+    touch_image(pics, "old.png",    base);
+    touch_image(pics, "middle.jpg", base + 500);
+    touch_image(dl,   "newest.png", base + 900);
+    /* Not an image, and a dotfile: neither belongs in the list. */
+    touch_image(pics, "notes.txt",  base + 999);
+    touch_image(pics, ".hidden.png", base + 999);
+
+    const char *old_home = getenv("HOME");
+    char saved[512];
+    snprintf(saved, sizeof(saved), "%s", old_home ? old_home : "");
+    setenv("HOME", home, 1);
+
+    crop_recent_scan(&s);
+
+    CHECK(s.crop.recent_count == 3,
+          "expected 3 images, got %d", s.crop.recent_count);
+
+    if (s.crop.recent_count == 3) {
+        /* Newest first, across directories — the sort is on mtime, not on the
+         * order the directories were scanned in. */
+        CHECK(strstr(s.crop.recent[0].path, "newest.png") != NULL,
+              "row 0 should be the newest, got %s", s.crop.recent[0].path);
+        CHECK(strstr(s.crop.recent[1].path, "middle.jpg") != NULL,
+              "row 1 should be middle.jpg, got %s", s.crop.recent[1].path);
+        CHECK(strstr(s.crop.recent[2].path, "old.png") != NULL,
+              "row 2 should be old.png, got %s", s.crop.recent[2].path);
+    }
+
+    /* The cap keeps the newest, not the first found. Fill well past it with
+     * files OLDER than the three above, which must all survive. */
+    for (int i = 0; i < CROP_RECENT_MAX + 20; i++) {
+        char name[64];
+        snprintf(name, sizeof(name), "filler-%03d.png", i);
+        touch_image(dl, name, base - 10000 - i);
+    }
+
+    crop_recent_scan(&s);
+    CHECK(s.crop.recent_count == CROP_RECENT_MAX,
+          "the list should fill to its cap, got %d", s.crop.recent_count);
+    CHECK(strstr(s.crop.recent[0].path, "newest.png") != NULL,
+          "the newest file must survive a full list, got %s", s.crop.recent[0].path);
+
+    /* Sorted, strictly. */
+    for (int i = 1; i < s.crop.recent_count; i++)
+        if (s.crop.recent[i].mtime > s.crop.recent[i - 1].mtime) {
+            CHECK(0, "row %d is newer than the row above it", i);
+            break;
+        }
+
+    /* An unwritable directory is skipped whole: every row has to be a row whose
+     * crop can be written beside it, and crop_write never writes anywhere else.
+     * (Skipped for root, who can write to it regardless.) */
+    if (geteuid() != 0) {
+        snprintf(cmd, sizeof(cmd), "chmod 500 '%s'", dl);
+        if (system(cmd) == 0) {
+            crop_recent_scan(&s);
+            for (int i = 0; i < s.crop.recent_count; i++)
+                if (strstr(s.crop.recent[i].path, "/Downloads/")) {
+                    CHECK(0, "a read-only directory must not be listed: %s",
+                          s.crop.recent[i].path);
+                    break;
+                }
+            snprintf(cmd, sizeof(cmd), "chmod 700 '%s'", dl);
+            if (system(cmd) != 0) { /* cleanup is best effort */ }
+        }
+    }
+
+    if (saved[0]) setenv("HOME", saved, 1);
+    else          unsetenv("HOME");
+}
+
 int main(void)
 {
     char tmpl[] = "/tmp/synui-crop-test-XXXXXX";
@@ -323,6 +561,10 @@ int main(void)
     test_never_overwrites();
     test_refuses_tiny();
     test_shell_injection();
+    test_keyboard_reaches_every_edge();
+    test_ctrl_arrows_move();
+    test_active_follows_a_flip();
+    test_recent_list();
 
     /* Tidy up whatever landed in the scratch dir. */
     char cmd[400];

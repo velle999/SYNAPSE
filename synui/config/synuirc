@@ -368,6 +368,16 @@ record_audio = off
 #   maximizing all set the window "floating", every layout SKIPS floating
 #   windows, and until now only super+f could clear that, one window at a time.
 #   A tiling desktop could end up with nothing left to tile.
+# crop = the image cropper (default super+shift+x, "x for cut"). With a path —
+# `bind = super+shift+x crop /path/to/pic.png`, or Dolphin's right-click ▸ Crop
+# Image — it opens that file. WITHOUT one it opens a list of your recent images
+# from ~/Pictures, its Screenshots and Wallpapers subdirectories, ~/Downloads
+# and ~/.local/share/wallpapers, newest first. Only directories you can WRITE to
+# are listed: the crop is always written beside the original as <name>-crop.png
+# and never in place, so a row in a read-only directory could only ever fail.
+#   In the cropper: drag to select, drag a corner handle to adjust that corner,
+#   Tab picks which corner the arrows move, Ctrl+Arrows slide the whole
+#   selection, Shift makes any of those step 25px, and Enter writes the copy.
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
 # menu = the SYNAPSE OS welcome menu (default super+escape).
