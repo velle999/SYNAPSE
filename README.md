@@ -384,7 +384,8 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 
 | Command | What it does |
 |---|---|
-| `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard …`, `syn shell`, `syn ui`, `syn install` |
+| `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard/nix …`, `syn shell`, `syn ui`, `syn install` |
+| `syn nix` | The optional Nix layer — `apply`, `build`, `update`, `facts`, `edit`, `rollback`, `init`. See [Declarative user environment](#declarative-user-environment-nix) |
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
@@ -420,6 +421,70 @@ with `sudo -n`:
 Anything else still prompts for a password (`%wheel ALL=(ALL:ALL) ALL`). When
 `synui` instead runs as root via `synui.service`, the `sudo -n` re-exec is a
 no-op — the helpers already have the privilege they need.
+
+---
+
+## Declarative user environment (Nix)
+
+Optional, off by default, and opt-in at install time (`Full`, or answer yes in
+`Custom`). It adds **Nix + Home Manager** *beside* pacman, not underneath it:
+pacman keeps owning the system — compositor, daemons, drivers, the SynapseOS
+core — and Nix owns a declarative **user** environment on top.
+
+The configurator is `/etc/synapseos/nix`, owned by your account:
+
+| File | |
+|---|---|
+| `flake.nix` | inputs, pinned by `flake.lock`. nixpkgs-unstable + the matching home-manager branch |
+| `home.nix` | **yours** — packages and dotfiles. `syn nix edit` opens it |
+| `facts.nix` | **generated** — what this machine actually is |
+
+`facts.nix` is the bridge. Nix on a foreign distro cannot see what pacman did,
+so `syn-nix-facts` probes the installed system and hands the result to the
+expressions as `facts`:
+
+```nix
+{ system = "x86_64-linux"; gpu = "nvidia"; allowUnfree = true;
+  username = "syn"; desktop = "synui";
+  want = { steam = true; blackarch = true; wine = true; /* … */ }; }
+```
+
+so `home.nix` reacts to the box instead of being hand-edited per box:
+
+```nix
+home.packages = with pkgs; [ ripgrep ]
+  ++ lib.optionals facts.want.steam    [ protontricks ]
+  ++ lib.optionals facts.want.blackarch [ nmap ];
+```
+
+The same probe runs at install time (against `/mnt`) and any time afterwards
+via `syn nix facts` — one implementation, so the two cannot drift. Add Steam
+with pacman a month later, re-run it, and the facts follow.
+
+```
+syn nix apply     build the config and activate it
+syn nix build     build it without activating
+syn nix update    bump flake.lock
+syn nix facts     re-derive facts.nix from this machine
+syn nix status    daemon, store size, whether the flake is set up
+```
+
+**The installer builds nothing.** Setting up the config is seconds; realising
+it is a multi-gigabyte fetch from `cache.nixos.org`, and the nix daemon is not
+running in the installer's chroot anyway. So a fresh install leaves the layer
+ready and the first `syn nix apply` — as your user, after a reboot — is what
+downloads.
+
+Two things worth knowing:
+
+- **Do not manage `synuirc` from `home.nix`.** Home Manager materialises
+  managed files as read-only symlinks into `/nix/store`, but `synui` and
+  `synctl` write that file live on every settings change. Declaring it does not
+  make it win — it makes the control panel silently revert. Declare packages;
+  leave live state to whatever owns it.
+- **`/etc/synapseos/nix` is deliberately not a git repo.** Flakes inside a git
+  repo copy only tracked files, so a freshly generated `facts.nix` would be
+  invisible to evaluation, and nothing in the error would point at git.
 
 ---
 

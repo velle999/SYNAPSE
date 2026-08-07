@@ -1518,6 +1518,13 @@ while :; do
     # thousands of tools. That is why it defaults ON where Steam does not —
     # SYNAPSE Arsenal is only useful if the repo it browses is there.
     WANT_BLACKARCH=1      # [blackarch] repo + keyring — see "Enabling BlackArch"
+    # Nix is a SECOND package manager, and that is the whole reason it is
+    # opt-in rather than Standard. Nothing on the system needs it: pacman owns
+    # the compositor, the daemons and the drivers, and `syn nix` is a front end
+    # for a layer the user chose to add on top. It also brings a /nix store on
+    # the root filesystem that grows with every generation kept, which is not a
+    # cost an Enter-through install should quietly take on.
+    WANT_NIX=0            # nix + Home Manager — see "Configuring Nix"
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
     SEL_APPS="chibi vibe syn-arsenal"
 
@@ -1537,14 +1544,14 @@ while :; do
             SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin syn-arsenal"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
-            WANT_BLACKARCH=1
+            WANT_BLACKARCH=1; WANT_NIX=1
             success "Full install selected"
             ;;
         3)
             SEL_APPS=""
             WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
             WANT_FILEMGR=0; WANT_WINE=0; WANT_PHONE=0; WANT_STEAM=0
-            WANT_BLACKARCH=0
+            WANT_BLACKARCH=0; WANT_NIX=0
             success "Minimal install selected"
             ;;
         4)
@@ -1582,6 +1589,7 @@ while :; do
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
             ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) — enables [multilib] (~1.5 GB)"
             ask_opt WANT_BLACKARCH  1 "BlackArch security repo — ~5000 tools browsable in SYNAPSE Arsenal"
+            ask_opt WANT_NIX        0 "Nix + Home Manager — a declarative user environment beside pacman ('syn nix')"
 
             SEL_APPS=""
             [ "$want_chibi"  = 1 ] && SEL_APPS="$SEL_APPS chibi"
@@ -1644,6 +1652,7 @@ while :; do
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
     echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope, enables multilib)' || echo no)"
     echo "    BlackArch: $([ "$WANT_BLACKARCH" = 1 ] && echo 'yes (repo + keyring only, no tools installed)' || echo no)"
+    echo "    Nix      : $([ "$WANT_NIX" = 1 ] && echo 'yes (nix + Home Manager config, nothing built until "syn nix apply")' || echo no)"
     echo ""
     # ── Confirm the selection ─────────────────────────────
     #
@@ -3308,6 +3317,55 @@ if [ -f /home/syn/.config/fastfetch/config.jsonc ]; then
 fi
 
 arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
+
+# ── Nix ───────────────────────────────────────────────────
+#
+# The optional second layer: pacman keeps the system, Nix + Home Manager give
+# the USER a declarative environment. The configurator is /etc/synapseos/nix —
+# flake.nix, an editable home.nix, and a generated facts.nix describing this
+# machine so the expressions branch on the install instead of being hand-edited
+# per box.
+#
+# LAST among the optional groups, and it has to be. facts.nix is PROBED, not
+# passed in: syn-nix-facts looks at what is actually on the disk. Run any
+# earlier and it would record a machine without Steam, without the model,
+# without whichever desktop the DE step had not written yet.
+#
+# NOTHING IS BUILT HERE. Setting up the config is seconds; realising it is a
+# multi-gigabyte download from cache.nixos.org, and the nix daemon is not
+# running in the chroot to do it. So the installer leaves a machine that is
+# ready and tells the user the one command. An installer that hung for twenty
+# minutes on a substituter would be a worse installer.
+if [ "$WANT_NIX" = 1 ]; then
+    step "Configuring Nix"
+
+    if arch-chroot /mnt pacman -S --noconfirm --needed nix 2>&1 | tail -2; then
+        # `syn nix init` is the ONLY implementation of this setup, and the
+        # installer calls it rather than repeating the eight steps it does —
+        # the copy that lives in two places is the copy that drifts. It works
+        # in here because arch-chroot bind-mounts /sys and /proc, which is
+        # what the GPU probe reads.
+        #
+        # Needs the syn package, which the core set installs above. It can be
+        # declined ("Customise the core daemons too?"), so this is checked
+        # rather than assumed.
+        if [ -x /mnt/usr/bin/syn ]; then
+            arch-chroot /mnt syn nix init 2>&1 | sed 's/^/  /'
+            success "Nix configured — /etc/synapseos/nix"
+            echo "  Nothing is built yet. As $NEW_USER, after the first boot:"
+            echo "      syn nix apply"
+            echo "  That is the download — a few hundred MB before any packages"
+            echo "  you add to home.nix. 'syn nix edit' opens it."
+        else
+            warn "nix installed, but the 'syn' package is not on the target, so
+  the configurator was not set up. Nix itself works; the
+  /etc/synapseos/nix layer needs 'syn'."
+        fi
+    else
+        warn "nix failed to install — the declarative layer is not available.
+  Install it later with 'sudo pacman -S nix && sudo syn nix init'."
+    fi
+fi
 
 # ── Mark firstboot done ──────────────────────────────────
 mkdir -p /mnt/var/lib/synapseos

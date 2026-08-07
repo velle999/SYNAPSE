@@ -12,6 +12,8 @@ Usage:
   syn model <cmd>         Model manager (download/list/status/remove)
   syn net <cmd>           Network policy (allow/block/status)
   syn guard <cmd>         Security monitor (status/mode/alerts)
+  syn nix <cmd>           Declarative user environment via Nix + Home Manager
+                          (status/apply/build/update/facts/edit/rollback/init)
   syn arsenal             Browse/install BlackArch security tooling
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
@@ -109,12 +111,187 @@ cmd_guard() {
     esac
 }
 
+# ── Nix ───────────────────────────────────────────────────
+#
+# SynapseOS is Arch: pacman owns the system, and Nix is the optional second
+# layer for a declarative USER environment (Home Manager). The configurator
+# lives at /etc/synapseos/nix — flake.nix + home.nix + a generated facts.nix
+# describing this machine, so the expressions branch on the install instead of
+# being hand-edited per box.
+#
+# `init` is deliberately the ONLY implementation of "set this up", and
+# syn-install reaches it through `arch-chroot /mnt syn nix init` rather than
+# repeating any of it. Every other way of doing this ends as two copies of the
+# same eight steps, agreeing until one of them is changed.
+NIXDIR="/etc/synapseos/nix"
+NIXTPL="/usr/share/syn/nix"
+NIXATTR="homeConfigurations.synapse.activationPackage"
+
+# nix-command and flakes are written into /etc/nix/nix.conf by `init`, but
+# pass them on every call anyway: a box where nix was installed by hand has
+# neither, and the failure is a usage message about an experimental feature
+# rather than anything naming SynapseOS.
+NIXFEAT=(--extra-experimental-features "nix-command flakes")
+
+cmd_nix() {
+    local sub="${1:-status}"; shift 2>/dev/null || true
+
+    if ! command -v nix >/dev/null 2>&1; then
+        echo "  Nix is not installed."
+        echo "    sudo pacman -S nix && sudo syn nix init"
+        return 1
+    fi
+
+    case "$sub" in
+        init)
+            [ "$(id -u)" = 0 ] || { echo "  syn nix init must run as root."; return 1; }
+
+            mkdir -p "$NIXDIR" /nix/store /nix/var/nix
+
+            # Templates are copied, never overwritten: home.nix is the user's
+            # file the moment they edit it, and an upgrade that reset it would
+            # throw away the whole reason this directory exists. facts.nix is
+            # the opposite — generated, always replaced.
+            local f
+            for f in flake.nix home.nix; do
+                if [ -f "$NIXDIR/$f" ]; then
+                    echo "  $f: kept (already present)"
+                elif [ -f "$NIXTPL/$f" ]; then
+                    cp "$NIXTPL/$f" "$NIXDIR/$f"
+                    echo "  $f: installed"
+                else
+                    echo "  $f: MISSING from $NIXTPL — syn is installed incompletely"
+                    return 1
+                fi
+            done
+
+            /usr/lib/syn/syn-nix-facts / > "$NIXDIR/facts.nix" \
+                && echo "  facts.nix: generated"
+
+            # /etc/nix/nix.conf is a pacman BACKUP file shipping
+            # `build-users-group = nixbld`. Appending keeps that and keeps the
+            # user's own edits; overwriting it would break every build with an
+            # error about build users that names nothing we did.
+            if ! grep -q '^experimental-features' /etc/nix/nix.conf 2>/dev/null; then
+                printf '\n# SynapseOS: the flake in %s needs both.\nexperimental-features = nix-command flakes\n' \
+                    "$NIXDIR" >> /etc/nix/nix.conf
+                echo "  nix.conf: enabled nix-command + flakes"
+            fi
+
+            # No group to join. Arch's nix package leaves
+            # /nix/var/nix/daemon-socket at 0755 root root and the socket
+            # itself world-writable, so any user can reach the daemon — the
+            # `nix-users` group the older guides talk about is not a thing
+            # this package creates.
+            systemctl enable nix-daemon.socket 2>/dev/null \
+                && echo "  nix-daemon.socket: enabled" \
+                || echo "  nix-daemon.socket: enable failed (chroot?) — check after boot"
+
+            # The configurator is the user's to edit, so it is theirs to own.
+            # Unusual for /etc, and the alternative is worse: a config file you
+            # need sudo to change is one people edit as root and then wonder
+            # why the build cannot write flake.lock beside it.
+            local owner
+            owner=$(awk -F: '$3 >= 1000 && $3 < 65534 { print $1; exit }' /etc/passwd)
+            [ -n "$owner" ] && chown -R "$owner:$owner" "$NIXDIR" \
+                && echo "  $NIXDIR: owned by $owner"
+
+            echo ""
+            echo "  Ready. As $owner, after a reboot:  syn nix apply"
+            ;;
+
+        apply)
+            [ "$(id -u)" = 0 ] && { echo "  Run syn nix apply as your user, not root —
+  it builds a HOME environment, and root's is not the one you log in to."; return 1; }
+            [ -f "$NIXDIR/flake.nix" ] || { echo "  Not set up. Run: sudo syn nix init"; return 1; }
+
+            # Build the activation package straight out of the flake and run
+            # it, rather than `nix run home-manager -- switch`. That form
+            # resolves home-manager through the flake registry, which fetches a
+            # SECOND nixpkgs unrelated to the one in flake.lock — a gigabyte to
+            # do what the lock already pinned, and the two can disagree.
+            local out
+            out=$(nix "${NIXFEAT[@]}" build --no-link --print-out-paths \
+                      "$NIXDIR#$NIXATTR" "$@") || return 1
+            "$out/activate"
+            ;;
+
+        build)
+            # Same build, no activation — the dry run before a switch.
+            nix "${NIXFEAT[@]}" build --no-link --print-out-paths \
+                "$NIXDIR#$NIXATTR" "$@"
+            ;;
+
+        update)
+            # Bumps flake.lock. Nothing takes effect until `syn nix apply`.
+            nix "${NIXFEAT[@]}" flake update --flake "$NIXDIR" "$@"
+            ;;
+
+        facts)
+            /usr/lib/syn/syn-nix-facts / > "$NIXDIR/facts.nix" \
+                && echo "  facts.nix regenerated from this machine:" \
+                && sed -n '/^{/,$p' "$NIXDIR/facts.nix"
+            ;;
+
+        edit)   "${EDITOR:-nano}" "$NIXDIR/home.nix" ;;
+
+        rollback)
+            # home-manager's own generation list is the source of truth, and
+            # programs.home-manager.enable in the shipped home.nix puts the
+            # command in the profile. Before the first apply it is absent.
+            if command -v home-manager >/dev/null 2>&1; then
+                home-manager generations | head -10
+                echo ""
+                echo "  Activate one with:  /nix/store/<hash>-home-manager-generation/activate"
+            else
+                echo "  home-manager is not in your profile yet — run 'syn nix apply' first."
+            fi
+            ;;
+
+        status)
+            echo ""
+            echo "  +- Nix ---------------------------------------------+"
+            echo ""
+            printf "  %-12s %s\n" "nix" "$(nix --version 2>/dev/null || echo 'not installed')"
+            printf "  %-12s %s\n" "daemon" "$(systemctl is-active nix-daemon.socket 2>/dev/null)"
+            printf "  %-12s %s\n" "config" \
+                "$([ -f "$NIXDIR/flake.nix" ] && echo "$NIXDIR" || echo 'not set up — sudo syn nix init')"
+            printf "  %-12s %s\n" "locked" \
+                "$([ -f "$NIXDIR/flake.lock" ] && echo yes || echo 'no — first apply writes it')"
+            if [ -d /nix/store ]; then
+                printf "  %-12s %s\n" "store" "$(du -sh /nix/store 2>/dev/null | cut -f1)"
+            fi
+            if command -v home-manager >/dev/null 2>&1; then
+                printf "  %-12s %s\n" "generation" \
+                    "$(home-manager generations 2>/dev/null | head -1)"
+            fi
+            echo ""
+            echo "  +----------------------------------------------------+"
+            echo ""
+            ;;
+
+        *)
+            echo "Usage: syn nix [status|apply|build|update|facts|edit|rollback|init]"
+            echo ""
+            echo "  status    daemon, store size, whether the flake is set up (default)"
+            echo "  apply     build $NIXDIR and activate it"
+            echo "  build     build it without activating"
+            echo "  update    bump flake.lock to current nixpkgs/home-manager"
+            echo "  facts     re-derive facts.nix from this machine"
+            echo "  edit      open home.nix in \$EDITOR"
+            echo "  rollback  list home-manager generations"
+            echo "  init      first-time setup (root; syn-install runs this for you)"
+            ;;
+    esac
+}
+
 case "${1:-help}" in
     status)         cmd_status ;;
     info)           cmd_info ;;
     model)          shift; cmd_model "$@" ;;
     net)            shift; cmd_net "$@" ;;
     guard)          shift; cmd_guard "$@" ;;
+    nix)            shift; cmd_nix "$@" ;;
     # --tui rather than bare syn-arsenal: `syn` is the terminal entry point, so
     # a subcommand typed in a shell must not fork a GUI window at the user.
     arsenal)        shift; exec syn-arsenal --tui "$@" ;;

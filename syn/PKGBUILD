@@ -1,13 +1,40 @@
 pkgname=syn
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
 depends=('bash' 'systemd')
-source=("syn.sh")
-sha256sums=('SKIP')
+# nix is NOT a depend and not an optdepend that pulls anything: `syn nix` is a
+# front end for a package manager the user opted into at install time, and on a
+# box that declined it the subcommand says so and exits. Making it a dependency
+# would put a second package manager on every SynapseOS install.
+optdepends=('nix: declarative user environment via `syn nix` (Home Manager)')
+# Flat, and it has to be: makepkg resolves a local source to its BASENAME in
+# $srcdir, so a "nix/flake.nix" entry is looked up as "flake.nix" beside the
+# PKGBUILD and the build dies with "not found in the build directory and is
+# not a URL". The nix- prefix is what a subdirectory would otherwise carry;
+# package() installs them under their real names.
+source=("syn.sh"
+        "syn-nix-facts.sh"
+        "nix-flake.nix"
+        "nix-home.nix")
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn.sh" "$pkgdir/usr/bin/syn"
+
+    # Not in /usr/bin: it takes a ROOT argument and writes a Nix expression to
+    # stdout, which is a thing `syn nix` and syn-install call, not a thing to
+    # find by tab-completing.
+    install -Dm755 "$srcdir/syn-nix-facts.sh" "$pkgdir/usr/lib/syn/syn-nix-facts"
+
+    # Templates, not config. `syn nix init` copies these into
+    # /etc/synapseos/nix once and never overwrites them again — home.nix
+    # belongs to the user the moment they edit it.
+    install -Dm644 "$srcdir/nix-flake.nix" "$pkgdir/usr/share/syn/nix/flake.nix"
+    install -Dm644 "$srcdir/nix-home.nix"  "$pkgdir/usr/share/syn/nix/home.nix"
 }
