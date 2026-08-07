@@ -188,10 +188,22 @@ titlebar_height = 26
 # snap = on
 
 # ── Alt+Tab switcher ───────────────────────────────────────
-# Alt+Tab walks windows in the order you last used them, and puts a grid of live
+# WHICH switcher Alt+Tab is. Two of them ship:
+#   overview   mission control — every window on the desktop, tiled over the
+#              whole screen at a size you can actually see, with the virtual
+#              desktops along the bottom. THE DEFAULT since 2026-08-07; it used
+#              to have Super+X of its own, and gave that key up for this one.
+#   switcher   the most-recently-used thumbnail strip described below.
+# The gesture is the same either way: hold Alt, tap Tab to walk, let go to pick.
+# Alt+Shift+Tab walks back. Mission control is still on the `overview` action,
+# so `bind = super+x overview` puts its old key back whichever style you pick.
+# alt_tab_style = overview
+#
+# ── the strip (alt_tab_style = switcher) ──
+# It walks windows in the order you last used them, and puts a grid of live
 # window thumbnails on screen while you hold Alt — the tile it outlines is the
-# window you land on when you let go. Alt+Shift+Tab walks back. More than
-# eighteen windows pages the grid; the cycle still reaches all of them.
+# window you land on when you let go. More than eighteen windows pages the grid;
+# the cycle still reaches all of them.
 #
 # Off keeps the cycle exactly as it is and loses only the picture of it.
 # alt_tab_preview = on
@@ -397,8 +409,12 @@ record_audio = off
 # It lists every bind below, filtered as you type, and Enter runs the one you
 # land on. Generated from the live bind table, so anything you add here appears
 # in it with no second edit.
-# alt_tab = focus the last-used window (most-recently-used order); hold alt and
-# press tab again to keep going back. Bound to alt+tab / alt+shift+tab.
+# alt_tab = the switcher, in whichever style alt_tab_style names above —
+# mission control by default, the MRU strip with `alt_tab_style = switcher`.
+# Hold alt and press tab again to keep walking. Bound to alt+tab/alt+shift+tab.
+# overview = mission control on its own, for a key of its own. UNBOUND by
+# default since it became what alt+tab does; `bind = super+x overview` was where
+# it used to live.
 # retile = put every window on this desktop back in the layout — un-maximize,
 # un-snap, un-float — and tile it. Default super+shift+t ("t for tile"). It
 # switches to the tiling layout from WHEREVER you are: the key is called tile,

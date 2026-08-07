@@ -28,6 +28,12 @@
 # exposed as a dispatch so the cycle is drivable end to end. Steps go through
 # the ordinary `alt_tab` action, so only the release is stood in for.
 #
+# EVERY PHASE HERE SEEDS `alt_tab_style = switcher`. Since 2026-08-07 Alt+Tab
+# opens mission control by default, so the `alt_tab` action would open a panel
+# rather than step the MRU list and this file would be testing the wrong
+# switcher. The strip is still shipped, still reachable from one synuirc line,
+# and its behaviour is still owed these assertions.
+#
 # Usage: alttab_scope.sh /path/to/synui /path/to/stubborn_client /path/to/synctl
 # Skips (77) without a DRM render node, for the same reason smoke.sh does.
 
@@ -65,7 +71,9 @@ CLIENT_PIDS=
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
 export SYNUI_WINDOWS="$TMP/windows.conf"
-: > "$SYNUI_CONFIG"
+# The MRU strip, not mission control — see the header. This is the file's one
+# non-default setting and every later rewrite of $SYNUI_CONFIG has to keep it.
+printf 'alt_tab_style = switcher\n' > "$SYNUI_CONFIG"
 : > "$SYNUI_WINDOWS"
 
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
@@ -195,6 +203,7 @@ echo "min:      restored a minimized window, and only at commit"
 # with only the (now restored) window A on it, there is nothing to switch to at
 # all, so the cycle must not move us off desktop 1.
 cat > "$SYNUI_CONFIG" <<EOF
+alt_tab_style = switcher
 alt_tab_all_desktops = off
 EOF
 # SIGHUP, not a dispatch: synui_config_reload() is wired to the signal and there

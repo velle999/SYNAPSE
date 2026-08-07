@@ -1258,6 +1258,7 @@ typedef enum {
     CTL_ROW_BLUR_CONTRAST,
     CTL_ROW_BLUR_SATURATION,
 
+    CTL_ROW_ALT_TAB_STYLE,
     CTL_ROW_ALT_TAB_PREVIEW,
     CTL_ROW_ALT_TAB_ALL_DESKTOPS,
     CTL_ROW_ALT_TAB_MINIMIZED,
@@ -1650,12 +1651,14 @@ typedef struct {
  * Mission Control, and the point is the same: the desk you cannot see because
  * of the windows on it.
  *
- * NOT a second Alt+Tab, and the difference is what it is FOR. The switcher
- * answers "the window I was just in" and is built around that: MRU order, one
- * fixed-size grid in the middle of the screen, up while a key is held. This
- * answers "where did I put it", so it is spatial rather than temporal — stable
- * order, tiles over the whole output at whatever size they fit, and it stays up
- * until you pick something. They share their thumbnail machinery (render.c's
+ * ON ALT+TAB since 2026-08-07 (`alt_tab_style`), and still not the switcher.
+ * The strip answers "the window I was just in" and is built around that: MRU
+ * order, one fixed-size grid in the middle of the screen, up while a key is
+ * held. This answers "where did I put it", so it is spatial rather than
+ * temporal — stable order, tiles over the whole output at whatever size they
+ * fit, and it stays up until you pick something. Sharing the key did not make
+ * them the same panel: overview_alt_step moves a selection through the stable
+ * grid, it does not reorder it. They share their thumbnail machinery (render.c's
  * alttab_tile_source) and nothing else.
  *
  * ── It stores no view pointers, and that is load-bearing ──
@@ -1681,6 +1684,12 @@ typedef struct {
 typedef struct {
     int visible;
     int selected;      /* index into the list overview_candidates() rebuilds */
+    /* Opened by Alt+Tab with Alt still held (alt_tab_overview). While this is
+     * set the overview is behaving as a switcher: Tab walks the tiles and
+     * LETTING GO OF ALT activates the one under the cursor of the selection.
+     * Cleared the moment it is opened any other way, or committed, so a plain
+     * mission control never closes itself on a stray modifier. */
+    int alt_held;
 } syn_overview_t;
 
 /* ── Bluetooth panel (bt.c) ──────────────────────────────── */
@@ -2313,6 +2322,18 @@ typedef struct {
      * that is in the list at all has to be reachable from it. */
     int   alt_tab_all_desktops;
     int   alt_tab_minimized;
+
+    /* WHICH SWITCHER Alt+Tab is. On (the default, velle 2026-08-07) the key
+     * opens mission control — the whole desk, spatially, at a size you can
+     * actually see — and tapping Tab with Alt still down walks the tiles;
+     * letting go activates the one you landed on, so the gesture is the one
+     * every switcher has. Off restores the MRU thumbnail strip (alttab_step),
+     * which answers "the window I was just in" instead of "where did I put it".
+     *
+     * This is a style toggle, not a feature switch: both paths end on a focused
+     * window and both are reachable from the keyboard. Mission control lost its
+     * own key (super+x) when it took this one — it is not worth two. */
+    int   alt_tab_overview;
 
     /* Border colors (RGBA 0..1) by window role; defaults COLOR_BORDER_*. */
     float border_color_norm[4];
@@ -5170,6 +5191,14 @@ void synui_render_keys(syn_server_t *s);
 void overview_show(syn_server_t *s);
 void overview_hide(syn_server_t *s);
 void overview_toggle(syn_server_t *s);
+/* Mission control AS THE SWITCHER (config.alt_tab_overview). The first press
+ * opens it on the focused window and steps one tile; every press after that
+ * walks the grid, which is what Alt+Tab does everywhere else. */
+void overview_alt_step(syn_server_t *s, int dir);
+/* Alt let go: activate what the walk landed on. A no-op unless the overview is
+ * up AND was opened by overview_alt_step, so a mission control opened from the
+ * control panel stays up when a modifier happens to be released over it. */
+void overview_alt_commit(syn_server_t *s);
 int  overview_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 int  overview_motion(syn_server_t *s, double lx, double ly);
 int  overview_click(syn_server_t *s, double lx, double ly, uint32_t button,

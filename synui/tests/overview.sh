@@ -169,7 +169,74 @@ settle
 alive "switching back to a desktop with windows on it:"
 echo "strip:    desktop switched under the panel, both directions"
 
-# ── 5. close it, and check the buffers went back ─────────────────────────
+# ── 5. Alt+Tab IS this panel now ─────────────────────────────────────────
+# velle, 2026-08-07: "take mission control off super x and make the alt tab
+# default". `alt_tab_style` defaults to `overview`, so the switcher gesture runs
+# through here — and the gesture has to be the one every desktop has, or the
+# default is a trap: a press moves the selection off the window you are in, and
+# LETTING GO commits to it.
+#
+# Alt release is a modifiers event no headless synui can be given (same seam as
+# alttab_scope.sh), so `alt_tab_commit` stands in for it. Both switchers are on
+# that action and each is a no-op unless its own cycle is up.
+#
+# The wrap is the sharp end. The focused window is the most recently opened,
+# which is the LAST tile — so a step that clamped instead of wrapping would
+# leave the commonest press there is doing nothing at all. The assertion is that
+# focus MOVED, and it fails on a clamp.
+synctl dispatch overview >/dev/null   # down, so the gesture opens it itself
+settle
+BEFORE=$(clients | grep -c '"focused":true')
+[ "$BEFORE" = 1 ] || fail "expected exactly one focused window before the
+       gesture, got $BEFORE"
+WAS=$(clients | grep -n '"focused":true' | cut -d: -f1)
+
+synctl dispatch alt_tab >/dev/null
+settle
+alive "Alt+Tab opening mission control:"
+# Mid-gesture nothing has been picked yet — the same contract the MRU strip
+# has, and for the same reason: tabbing past a window must not focus it.
+NOW=$(clients | grep -n '"focused":true' | cut -d: -f1)
+[ "$NOW" = "$WAS" ] || fail "stepping the overview moved the FOCUS mid-gesture
+       (window $WAS -> $NOW). The pick belongs in overview_alt_commit, at the
+       release."
+
+synctl dispatch alt_tab_commit >/dev/null
+settle
+alive "committing the Alt+Tab pick:"
+AFTER=$(clients | grep -n '"focused":true' | cut -d: -f1)
+[ "$AFTER" != "$WAS" ] || fail "Alt+Tab then release left the focus on the same
+       window (#$WAS of $(count_windows)). The selection starts on the window you
+       are in and steps ONE — and it has to WRAP, because the window you are in
+       is usually the last tile. A clamp fails exactly here."
+[ "$(clients | grep -c '"focused":true')" = 1 ] || fail "the commit left
+       $(clients | grep -c '"focused":true') focused windows"
+echo "alt_tab:  opened mission control, picked on release, focus moved"
+
+# ── 5b. and it WRAPS off the end ─────────────────────────────────────────
+# The commit above landed on the tile after the one we were on, which on this
+# desk is the LAST one — so this press is the case the wrap exists for, and the
+# one a clamp cannot pass: from the last tile there is nowhere to step but
+# round to the first, and a clamped step would leave the focus exactly where it
+# is and the key looking broken.
+LAST=$(clients | grep -n '"focused":true' | cut -d: -f1)
+[ "$LAST" = "$(count_windows)" ] || fail "this phase assumes the previous commit
+       left the focus on the LAST tile (it is on #$LAST of $(count_windows)) —
+       without that there is no wrap to test here."
+
+synctl dispatch alt_tab >/dev/null
+settle
+synctl dispatch alt_tab_commit >/dev/null
+settle
+alive "wrapping off the end of the tiles:"
+WRAPPED=$(clients | grep -n '"focused":true' | cut -d: -f1)
+[ "$WRAPPED" = 1 ] || fail "stepping off the LAST tile left the focus on
+       #$WRAPPED, not back round on #1. overview_alt_step has to wrap where the
+       arrow keys clamp — the window you are in is usually the last tile, so a
+       clamp makes the most ordinary Alt+Tab there is do nothing."
+echo "wrap:     stepped off the last tile and came round to the first"
+
+# ── 6. close it, and check the buffers went back ─────────────────────────
 synctl dispatch overview >/dev/null
 settle
 alive "closing mission control:"
@@ -182,7 +249,7 @@ open_window 3
 alive "a new window after mission control closed:"
 echo "release:  clients still draw after the tiles let go"
 
-# ── 6. clean shutdown ────────────────────────────────────────────────────
+# ── 7. clean shutdown ────────────────────────────────────────────────────
 for p in $CLIENT_PIDS; do kill -TERM "$p" 2>/dev/null; done
 CLIENT_PIDS=
 

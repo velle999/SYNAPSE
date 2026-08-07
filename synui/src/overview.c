@@ -1,22 +1,27 @@
 /*
- * overview.c — mission control (Super+X).
+ * overview.c — mission control (Alt+Tab).
  *
  * Every window on the desktop, scaled down and laid out so none of them
  * overlap, with the virtual desktops as pills along the bottom. GNOME calls it
  * Activities, macOS calls it Mission Control, and both are answering the same
  * question: what is on this desk, given that the windows are covering it.
  *
- * ── Why this is not a bigger Alt+Tab ─────────────────────────────────────────
+ * ── It IS Alt+Tab now, and it is still not the switcher ──────────────────────
  *
- * The switcher answers "the window I was just in", and everything about it
- * follows from that: most-recently-used order, one fixed-size grid in the
- * middle of the screen, up only while a key is held. This answers "where did I
- * put it", which is a SPATIAL question — so the order is stable (stacking
- * order, never MRU), the tiles take the whole output at whatever size they fit,
- * and it stays up until you choose something. A grid that reshuffled itself as
- * you looked at windows would defeat the one thing it is for.
+ * Since 2026-08-07 this is what Alt+Tab opens (`alt_tab_style = overview`, the
+ * default) and it gave up its own key, Super+X, to be that. What it is did not
+ * change with the key: the MRU strip answers "the window I was just in", and
+ * everything about it follows from that — most-recently-used order, one
+ * fixed-size grid in the middle of the screen, up only while a key is held.
+ * This answers "where did I put it", which is a SPATIAL question, so the order
+ * is stable (stacking order, never MRU), the tiles take the whole output at
+ * whatever size they fit, and it stays up until you choose something. A grid
+ * that reshuffled itself as you looked at windows would defeat the one thing it
+ * is for — which is why the switcher gesture (overview_alt_step) moves a
+ * SELECTION through a stable grid rather than reordering the grid.
  *
- * They share the thumbnail machinery in render.c and nothing else.
+ * They share the thumbnail machinery in render.c and nothing else, and the
+ * strip is one synuirc line away for anyone who wants it back.
  *
  * ── Nothing here holds a view pointer ────────────────────────────────────────
  *
@@ -310,13 +315,15 @@ void overview_show(syn_server_t *s)
     for (int i = 0; i < n; i++)
         if (views[i] == s->focused_view) { s->overview.selected = i; break; }
 
-    s->overview.visible = 1;
+    s->overview.visible  = 1;
+    s->overview.alt_held = 0;   /* set by overview_alt_step, and only by it */
     synui_render_overview(s);
 }
 
 void overview_hide(syn_server_t *s)
 {
-    s->overview.visible = 0;
+    s->overview.visible  = 0;
+    s->overview.alt_held = 0;
     synui_render_overview(s);
     ctlpanel_child_closed(s, "overview");
 }
@@ -325,6 +332,58 @@ void overview_toggle(syn_server_t *s)
 {
     if (s->overview.visible) overview_hide(s);
     else                     overview_show(s);
+}
+
+/* ── Mission control as the switcher ─────────────────────────
+ *
+ * `alt_tab_overview` (on by default since 2026-08-07) points Alt+Tab here
+ * instead of at the MRU thumbnail strip. velle asked for it as "make the alt
+ * tab default ... but make mission control default", and mission control gave
+ * up super+x for it — one gesture, not two keys.
+ *
+ * The gesture has to be the one every switcher has, or the setting is a trap:
+ * press Alt+Tab and it opens ON the focused window and steps one tile, so a
+ * tap-and-release lands on the next window rather than on the one you were
+ * already in. Tab again with Alt still down walks on. Letting Alt go commits.
+ *
+ * Why the step is here rather than in overview_show(): opening the overview any
+ * OTHER way (the control panel, a rebound key) should leave the cursor on the
+ * window you are in, which is what makes one arrow press mean "the one next to
+ * this". Only the switcher gesture pre-steps.
+ *
+ * overview_key() already lets Alt-modified keys fall through to the bind table
+ * rather than eating them, which is what routes the second and third Tab back
+ * here instead of into the panel's own Tab handling.
+ */
+void overview_alt_step(syn_server_t *s, int dir)
+{
+    if (!s->overview.visible)
+        overview_show(s);
+    s->overview.alt_held = 1;
+
+    /* IT WRAPS, and overview_move() does not. That is the whole difference
+     * between a switcher and a grid you are arrowing around in, and it is not a
+     * detail: the focused window is usually the one most recently opened, which
+     * is usually the LAST tile — so a step that clamped would make the most
+     * ordinary press there is (Alt+Tab, to get to the other window) do nothing
+     * at all. The arrow keys keep clamping, because "off the end of the grid"
+     * is a place a spatial pick should stop. */
+    syn_view_t *views[OVERVIEW_MAX];
+    int n = overview_candidates(s, views, OVERVIEW_MAX);
+    if (n <= 0) { s->overview.selected = 0; synui_render_overview(s); return; }
+
+    int t = (s->overview.selected + dir) % n;
+    if (t < 0) t += n;
+    s->overview.selected = t;
+
+    synui_render_overview(s);
+}
+
+void overview_alt_commit(syn_server_t *s)
+{
+    if (!s->overview.visible || !s->overview.alt_held) return;
+    s->overview.alt_held = 0;
+    overview_activate(s, s->overview.selected);
 }
 
 /* ── Keys ────────────────────────────────────────────────────

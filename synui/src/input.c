@@ -304,9 +304,16 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
      * because fcitx5 happened to be grabbing the keyboard would freeze the MRU
      * order for every later focus change, which is a far stranger bug than any
      * it could save. */
-    if (kb->server->alttab.active &&
-        !(wlr_keyboard_get_modifiers(kb->wlr_keyboard) & WLR_MODIFIER_ALT))
-        alttab_finish(kb->server);
+    if (!(wlr_keyboard_get_modifiers(kb->wlr_keyboard) & WLR_MODIFIER_ALT)) {
+        if (kb->server->alttab.active)
+            alttab_finish(kb->server);
+        /* The same release, for the other switcher: with `alt_tab_style` on
+         * mission control the cycle is a walk across the overview's tiles, and
+         * letting go has to pick the one it landed on. A no-op unless the
+         * overview was opened by that gesture, so a mission control opened from
+         * the control panel is not dismissed by a passing Alt. */
+        overview_alt_commit(kb->server);
+    }
 
     /* While the IME holds the keyboard, modifiers go to it, not the client. */
     if (ime_handle_modifiers(kb->server, kb->wlr_keyboard))
@@ -827,9 +834,16 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "focus_prev") == 0) {
         focus_next(s, -1);
     } else if (strcmp(action, "alt_tab") == 0) {
-        alttab_step(s, 1);
+        /* Two switchers behind one key, picked by `alt_tab_style` — mission
+         * control by default. See config.alt_tab_overview: the overview is
+         * the whole desk at a size you can see, the strip is MRU order. The
+         * gesture is identical either way (hold Alt, tap Tab, let go), which
+         * is what lets the setting be a preference rather than a relearn. */
+        if (s->config.alt_tab_overview) overview_alt_step(s, 1);
+        else                            alttab_step(s, 1);
     } else if (strcmp(action, "alt_tab_prev") == 0) {
-        alttab_step(s, -1);
+        if (s->config.alt_tab_overview) overview_alt_step(s, -1);
+        else                            alttab_step(s, -1);
     } else if (strcmp(action, "alt_tab_commit") == 0) {
         /* What letting go of Alt does. Bound to no key — a real cycle ends on a
          * modifier release, which only keyboard_handle_modifiers can see.
@@ -839,8 +853,13 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * and a modifier release cannot be synthesised into a headless synui:
          * the headless backend has no input devices, and uinput would be
          * delivered to the live session instead. Same seam as
-         * SYNUI_POWER_SUPPLY_DIR in the lid tests. */
+         * SYNUI_POWER_SUPPLY_DIR in the lid tests.
+         *
+         * Both switchers, unconditionally rather than by `alt_tab_style`:
+         * each is a no-op unless its own cycle is up, and the style can be
+         * changed by a SIGHUP reload in the middle of one. */
         alttab_finish(s);
+        overview_alt_commit(s);
     } else if (strcmp(action, "stack_next") == 0) {
         if (s->focused_view) layout_move_in_stack(s, s->focused_view, 1);
     } else if (strcmp(action, "stack_prev") == 0) {

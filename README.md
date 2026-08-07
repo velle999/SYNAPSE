@@ -194,8 +194,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`A` | Desktop widgets (visualiser, sysmon, clock, quick-launch, post-it) |
 | `Super`+`Escape` | Menu |
 | `Super`+`Tab` | Cycle layout |
-| `Super`+`X` | Mission control — every window on this desktop at once, and the desktops along the bottom ("X for Exposé") |
-| `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Most-recently-used window switch |
+| `Alt`+`Tab` / `Alt`+`Shift`+`Tab` | Switch window. By default this is **mission control** — every window on this desktop at once, and the desktops along the bottom; hold `Alt`, tap `Tab` to walk the tiles, let go to pick. `alt_tab_style = switcher` (or Control panel ▸ Windows ▸ *Alt+Tab is mission control*) puts the most-recently-used thumbnail strip back |
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
 | `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |

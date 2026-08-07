@@ -74,10 +74,17 @@
  * Drag a window to the top edge to maximize it, to a side for that half, into a
  * corner for that quarter; dragging it off again restores its old size.
  *
- * Alt+Tab switcher (render.c, input.c):
+ * Alt+Tab switcher (render.c, input.c, overview.c):
+ *   alt_tab_style        = overview|switcher   (default overview)
  *   alt_tab_preview      = on|off   (default on)
  *   alt_tab_all_desktops = on|off   (default on)
  *   alt_tab_minimized    = on|off   (default on)
+ * `alt_tab_style` picks WHICH switcher the key is. `overview` (the default)
+ * opens mission control — the whole desk, tiled at a size you can see — and
+ * `switcher` is the MRU thumbnail strip. The gesture is the same either way:
+ * hold Alt, tap Tab to walk, let go to pick. The three toggles below describe
+ * the strip; on `overview` only alt_tab_all_desktops is not the overview's own
+ * (it always shows the desktop you are on, with the rest along the bottom).
  * The grid of window thumbnails Alt+Tab shows while Alt is held. Off keeps the
  * cycle and loses only the picture of it. The other two say what the cycle can
  * reach: windows on other virtual desktops, and minimized ones. Landing on
@@ -509,9 +516,15 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+q",         "close" },
         { "super+shift+q",   "quit" },
         { "super+tab",       "layout_cycle" },
-        /* Alt+Tab is most-recently-used order (alt_tab), not the stacking-order
-         * walk that super+j/k do — "the window I was just in" is the whole
-         * reason the key exists. */
+        /* THE switcher key, and it opens MISSION CONTROL by default —
+         * `alt_tab_style = switcher` in synuirc (or the control panel row) puts
+         * the MRU thumbnail strip back. Either way the gesture is the one every
+         * desktop has: hold Alt, tap Tab to walk, let go to pick.
+         *
+         * Not the stacking-order walk that super+j/k do. Mission control had
+         * super+x of its own until 2026-08-07 and gave it up for this — velle
+         * asked for the overview to BE Alt+Tab, and a feature on the key
+         * everybody already presses does not also need a letter. */
         { "alt+tab",         "alt_tab" },
         { "alt+shift+tab",   "alt_tab_prev" },
         { "super+h",         "master_shrink" },
@@ -553,16 +566,16 @@ static void seed_default_binds(syn_config_t *cfg)
          * existed — crop_open() needs a path and a keybind has none to give, so
          * a bare `crop` used to do nothing but close. */
         { "super+shift+x",   "crop" },
-        /* Mission control. X for eXposé — the name this feature had before it
-         * was Mission Control, and the only letter left that stands for
-         * anything: every word in "overview" and "windows" was gone twice over,
-         * and super+x was the free half of the pair super+shift+x already used.
+        /* SUPER+X IS FREE. Mission control had it — X for eXposé — until
+         * 2026-08-07, when velle moved the overview onto Alt+Tab: "take mission
+         * control off super x and make the alt tab default". A feature reached
+         * by the key everybody already presses does not need a second one, and
+         * an unbound chord is worth more than a duplicate.
          *
-         * NOT super+tab, which is what GNOME and Windows put their task view
-         * on. That is layout_cycle here, and taking a key out from under a
-         * feature somebody already has in their fingers is a change to ask
-         * about, not to ship. Super+/ then F2 moves either one. */
-        { "super+x",         "overview" },
+         * The `overview` action is still there and still dispatchable — bind it
+         * to anything with a `bind = <chord> overview` line, or Super+/ then F2
+         * on the row. The control panel's Desktop ▸ Mission control row opens it
+         * too. */
         /* Themes, not the task manager. The task manager had two binds and needs
          * one — ctrl+alt+delete below is the one everybody already reaches for,
          * so super+t goes to the theme manager, which had only the far less
@@ -833,6 +846,11 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->alt_tab_preview = 1;
     cfg->alt_tab_all_desktops = 1;
     cfg->alt_tab_minimized    = 1;
+    /* Mission control IS the switcher by default (velle, 2026-08-07). It is the
+     * one default here that changes an existing desktop's behaviour on upgrade,
+     * which is why it is one line in synuirc and one row in the control panel
+     * to put back. */
+    cfg->alt_tab_overview     = 1;
 
     /* Theme + transparency. SYNAPSE's colours ARE the border/titlebar defaults
      * set just above, so leaving theme = SYNAPSE changes nothing; a `theme =`
@@ -1305,6 +1323,13 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->alt_tab_all_desktops = strcmp(val, "on") == 0;
     else if (strcmp(key, "alt_tab_minimized") == 0)
         cfg->alt_tab_minimized = strcmp(val, "on") == 0;
+    /* Spelled as the two things it picks between rather than on|off, because
+     * "alt_tab_style = off" would not say which switcher you got. The control
+     * panel's row is a toggle over the same field. */
+    else if (strcmp(key, "alt_tab_style") == 0)
+        cfg->alt_tab_overview = (strcmp(val, "overview") == 0 ||
+                                 strcmp(val, "mission") == 0 ||
+                                 strcmp(val, "on") == 0);
     else if (strcmp(key, "theme") == 0) {
         /* Seeds the chrome colours from the preset; an explicit
          * border_color_* / titlebar_* line placed AFTER this still wins,

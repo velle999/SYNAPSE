@@ -314,6 +314,10 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_REMEMBER_GEOMETRY, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Remember window size", NULL,
       .key = "remember_geometry", .off = CFG(remember_geometry), .vtype = CTL_VAL_BOOL8,
       .help = "Reopen each app where and how big it was when it closed" },
+    { CTL_ROW_ALT_TAB_STYLE, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab is mission control", NULL,
+      .key = "alt_tab_style", .off = CFG(alt_tab_overview), .vtype = CTL_VAL_BOOL,
+      .help = "On, Alt+Tab opens the whole desk. Off, the MRU thumbnail strip "
+              "— and the three rows below describe that strip" },
     { CTL_ROW_ALT_TAB_PREVIEW, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Alt+Tab previews", NULL,
       .key = "alt_tab_preview", .off = CFG(alt_tab_preview), .vtype = CTL_VAL_BOOL,
       .help = "The thumbnail grid. Off, Alt+Tab still cycles — silently" },
@@ -1164,7 +1168,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "bluetooth",         "Bluetooth" },
         { "printers",          "Printers" },
         { "about",             "About OS" },
-        { "overview",          "Mission control (all windows)" },
+        { "overview",          "Mission control (all windows)" },   /* unbound: Alt+Tab */
         { "keybinds",          "Rebind a shortcut" },
         { "night_light",       "Night light" },
         { "record",            "Record screen" },
