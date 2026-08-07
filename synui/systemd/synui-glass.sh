@@ -19,6 +19,33 @@ a=${1:-1.0}
 # Clamp to the valid range and normalise to two decimals.
 a=$(awk -v x="$a" 'BEGIN{ if(x<0)x=0; if(x>1)x=1; printf "%.2f", x }')
 
+# ── The glass floor on a LIGHT scheme ────────────────────────────────────────
+# Alpha is not symmetric between light and dark terminals, and the difference is
+# large enough to be a bug rather than a taste.
+#
+# A dark terminal composited over a wallpaper stays dark almost everywhere: the
+# wallpaper can only lighten it toward the text, and its text is light, so the
+# separation survives. A LIGHT terminal is the opposite — the wallpaper drags the
+# surface DOWN toward the text, and its text is dark. Measured on the live box:
+# 95's #C0C0C0 at the shipped 0.70 over a dark wallpaper renders as **#878787**,
+# a mid grey, and every dark colour on it collapses. Even the ANSI set that is
+# documented as clearing 4.5:1 against solid silver falls to ~3.2:1 there.
+#
+# So on a light scheme the terminal alpha gets a floor. 0.90 is where a
+# foreground held at 4.5:1 against the solid surface still clears ~3.5:1 after
+# compositing over a BLACK wallpaper, which is the worst case there is.
+#
+# This is a floor, not an override: a light scheme asking for 0.95 keeps 0.95,
+# and every dark scheme keeps whatever the slider says, 0.70 included. To drop
+# it, delete this block — the setting the user chose is still in theme.state and
+# will apply again immediately.
+scheme=dark
+tj="$HOME/.config/synui/theme.json"
+[ -r "$tj" ] && grep -q '"scheme"[[:space:]]*:[[:space:]]*"light"' "$tj" && scheme=light
+if [ "$scheme" = light ]; then
+    a=$(awk -v x="$a" 'BEGIN{ if(x<0.90)x=0.90; printf "%.2f", x }')
+fi
+
 # ── kitty ────────────────────────────────────────────────────────────────────
 #
 # kitty.conf is flat `key value`, NOT foot's INI sections, so there is no
