@@ -1,6 +1,6 @@
 pkgname=syn
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -18,8 +18,12 @@ optdepends=('nix: declarative user environment via `syn nix` (Home Manager)')
 source=("syn.sh"
         "syn-nix-facts.sh"
         "nix-flake.nix"
-        "nix-home.nix")
+        "nix-home.nix"
+        "nix-render.nix"
+        "nix-profile-example.nix")
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP')
@@ -37,4 +41,11 @@ package() {
     # belongs to the user the moment they edit it.
     install -Dm644 "$srcdir/nix-flake.nix" "$pkgdir/usr/share/syn/nix/flake.nix"
     install -Dm644 "$srcdir/nix-home.nix"  "$pkgdir/usr/share/syn/nix/home.nix"
+
+    # The install-profile half: render.nix turns a profile into the key=value
+    # lines `syn-install --config` reads, and syn-install looks for it at this
+    # exact path. Not templates — these are never copied anywhere.
+    install -Dm644 "$srcdir/nix-render.nix" "$pkgdir/usr/share/syn/nix/render.nix"
+    install -Dm644 "$srcdir/nix-profile-example.nix" \
+                   "$pkgdir/usr/share/syn/nix/profile-example.nix"
 }

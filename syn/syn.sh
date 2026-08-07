@@ -235,6 +235,20 @@ cmd_nix() {
 
         edit)   "${EDITOR:-nano}" "$NIXDIR/home.nix" ;;
 
+        profile)
+            # Renders an INSTALL profile, which has nothing to do with
+            # $NIXDIR — it is for feeding syn-install on some other machine.
+            # Here because this is where a nix evaluator is known to exist:
+            # the live ISO may have none, which is exactly why pre-rendering
+            # to key=value is worth having.
+            local f="${1:-}"
+            [ -n "$f" ] || { echo "Usage: syn nix profile <profile.nix>"; return 1; }
+            [ -f "$f" ] || { echo "  not found: $f"; return 1; }
+            [ -f "$NIXTPL/render.nix" ] || { echo "  $NIXTPL/render.nix is missing"; return 1; }
+            nix-instantiate --eval --strict --raw \
+                --argstr profile "$(readlink -f "$f")" "$NIXTPL/render.nix"
+            ;;
+
         rollback)
             # home-manager's own generation list is the source of truth, and
             # programs.home-manager.enable in the shipped home.nix puts the
@@ -271,7 +285,7 @@ cmd_nix() {
             ;;
 
         *)
-            echo "Usage: syn nix [status|apply|build|update|facts|edit|rollback|init]"
+            echo "Usage: syn nix [status|apply|build|update|facts|edit|rollback|profile|init]"
             echo ""
             echo "  status    daemon, store size, whether the flake is set up (default)"
             echo "  apply     build $NIXDIR and activate it"
@@ -280,6 +294,8 @@ cmd_nix() {
             echo "  facts     re-derive facts.nix from this machine"
             echo "  edit      open home.nix in \$EDITOR"
             echo "  rollback  list home-manager generations"
+            echo "  profile   render an install profile to key=value for"
+            echo "            'syn-install --config' (unrelated to the above)"
             echo "  init      first-time setup (root; syn-install runs this for you)"
             ;;
     esac

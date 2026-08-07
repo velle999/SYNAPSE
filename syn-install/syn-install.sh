@@ -548,6 +548,156 @@ swap_llama_backend() {   # swap_llama_backend <pkg> <so-name>
     return 0
 }
 
+# ── Answer files (--config) ───────────────────────────────
+#
+# An install profile: every question this script asks, answered up front, so an
+# install is reproducible instead of re-typed. Anything the file does NOT answer
+# is still asked, which is what makes a partial profile useful — pin the disk
+# layout and the package set, decide the hostname at the machine.
+#
+# TWO RULES SHAPE THE WHOLE THING.
+#
+# 1. Keys are SEMANTIC, never menu positions. A file saying `filesystem=2` is
+#    unreadable, and it silently means something else the day a menu grows an
+#    entry. So the config says `filesystem=btrfs` and `answer` maps that onto
+#    the number the existing `case` already handles — not one case statement in
+#    this script was rewritten for this.
+#
+# 2. A KEY THAT DOES NOTHING MUST SAY SO. That is how preseeding usually fails:
+#    `bootlaoder=limine` is not an error, it is silence, and you find out when
+#    the machine boots the wrong thing. Every consumed key is recorded, and
+#    config_report_unused() at the end names the ones that were never read.
+declare -A ANSWERS=()        # key -> value, from the config file
+declare -A ANSWERS_USED=()   # key -> 1 once some answer() has consumed it
+CONFIG_FILE=""
+
+# Render a .nix profile to key=value lines. Needs nix, which the installed
+# system has only if WANT_NIX was taken and the live ISO has only if it ships
+# it — so this fails with an instruction, not a stack trace.
+# NOTHING HERE MAY CALL die(). This runs inside $( ), where `exit` leaves only
+# the subshell — the message would be captured as config text and parsed as
+# answers, which is how the first cut of this reported "not a key=value line"
+# quoting its own error. Failures go to stderr and come back as a status.
+config_render_nix() {
+    local f=$1 render=/usr/share/syn/nix/render.nix
+    # Packaged path first; then the checkout, so `bash syn-install.sh --config
+    # x.nix` works straight out of the repo. BASH_SOURCE, not $0: the test seam
+    # sources this file, and $0 is then the shell.
+    [ -f "$render" ] ||
+        render="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../syn/nix-render.nix"
+
+    if ! command -v nix-instantiate >/dev/null 2>&1; then
+        fail "$f is a Nix profile, but nix is not installed here." >&2
+        echo "  Render it on a machine that has nix and pass the result:" >&2
+        echo "      syn nix profile $f > install.conf" >&2
+        echo "      syn-install --config install.conf" >&2
+        return 1
+    fi
+    if [ ! -f "$render" ]; then
+        fail "render.nix is missing — the 'syn' package is not installed here." >&2
+        return 1
+    fi
+    nix-instantiate --eval --strict --raw \
+        --argstr profile "$(readlink -f "$f")" "$render" || return 1
+}
+
+config_load() {
+    local f=$1 body line key val
+    [ -f "$f" ] || die "config file not found: $f"
+
+    # Passwords legitimately live in these files, so a world-readable one is
+    # worth a word. Not fatal: an unattended install off a read-only ISO has
+    # nowhere better to put it, and refusing would just push people to
+    # chmod and forget.
+    case "$f" in
+        *.nix) body=$(config_render_nix "$f") ||
+                   die "$f did not render — see above, or run 'syn nix profile $f'." ;;
+        *)     body=$(cat "$f") ;;
+    esac
+    if [ -n "$(find "$f" -perm /0044 2>/dev/null)" ] &&
+       grep -qE '^[[:space:]]*(password|luks_passphrase)[[:space:]]*=' <<<"$body"; then
+        warn "$f holds a password and is readable by other users. chmod 600 it."
+    fi
+
+    while IFS= read -r line; do
+        line="${line%%#*}"                       # trailing comments
+        line="${line#"${line%%[![:space:]]*}"}"  # leading space
+        [ -n "$line" ] || continue
+        case "$line" in *=*) ;; *) die "config: not a key=value line: $line" ;; esac
+        key="${line%%=*}"; val="${line#*=}"
+        key="${key//[[:space:]]/}"
+        val="${val#"${val%%[![:space:]]*}"}"     # leading space only — a
+        val="${val%"${val##*[![:space:]]}"}"     # trailing space too
+        # Quotes are optional and stripped, so a value with spaces (a full
+        # name) can be written either way.
+        case "$val" in
+            \"*\") val="${val:1:${#val}-2}" ;;
+            \'*\') val="${val:1:${#val}-2}" ;;
+        esac
+        ANSWERS[$key]="$val"
+    done <<<"$body"
+
+    CONFIG_FILE="$f"
+}
+
+# answer <key> <var> [-s] [--ack] [-m sym=raw,sym=raw]
+#
+# Drop-in for `read -r <var>`: uses the config when it has the key, asks
+# otherwise. Keeps printing what it chose, so an unattended transcript reads
+# like an attended one and a wrong answer is visible in the log.
+answer() {
+    local __key=$1 __var=$2; shift 2
+    local __secret=0 __ack=0 __map="" __v __pair
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -s)    __secret=1 ;;
+            --ack) __ack=1 ;;
+            -m)    __map="$2"; shift ;;
+        esac
+        shift
+    done
+
+    if [ -n "${ANSWERS[$__key]+set}" ]; then
+        __v="${ANSWERS[$__key]}"
+        ANSWERS_USED[$__key]=1
+        # Symbolic -> whatever the case statement below expects. An answer
+        # that is not in the map passes through untouched, so a raw menu
+        # number still works and a free-text key needs no map at all.
+        if [ -n "$__map" ]; then
+            local __pairs; IFS=, read -ra __pairs <<<"$__map"
+            for __pair in "${__pairs[@]}"; do
+                if [ "${__pair%%=*}" = "${__v,,}" ]; then __v="${__pair#*=}"; break; fi
+            done
+        fi
+        printf -v "$__var" '%s' "$__v"
+        if [ "$__secret" = 1 ]; then echo "******** (--config)"; else echo "$__v  (--config)"; fi
+        return 0
+    fi
+
+    # A bare acknowledgement — "press ENTER to continue". It carries no
+    # information, so once a profile has been supplied there is nobody there to
+    # press it. Destructive confirmations are NOT this: they take a real key.
+    if [ "$__ack" = 1 ] && [ -n "$CONFIG_FILE" ]; then
+        echo "(--config)"
+        printf -v "$__var" '%s' ""
+        return 0
+    fi
+
+    if [ "$__secret" = 1 ]; then read -rs "$__var"; else read -r "$__var"; fi
+}
+
+config_report_unused() {
+    [ -n "$CONFIG_FILE" ] || return 0
+    local k unused=""
+    for k in "${!ANSWERS[@]}"; do
+        [ -n "${ANSWERS_USED[$k]+set}" ] || unused="$unused $k"
+    done
+    [ -n "$unused" ] || return 0
+    warn "These keys in $CONFIG_FILE were never used:$unused
+  Either they are misspelled, or they answer a question this install never
+  reached (partition keys on an 'erase' install, for instance)."
+}
+
 # Test seam: sourcing this script with SYN_INSTALL_SOURCE_ONLY=1 defines the
 # pure decision functions above and stops HERE, before the root check, the
 # EXIT trap and the first blocking prompt. tests/layout_test.sh asserts the
@@ -557,7 +707,38 @@ if [ "${SYN_INSTALL_SOURCE_ONLY:-}" = "1" ]; then
     return 0 2>/dev/null || exit 0
 fi
 
+# ── Arguments ─────────────────────────────────────────────
+#
+# Below the test seam on purpose: sourcing this script hands it the TEST's
+# argv, and a test runner's flags are not install options.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config)  [ $# -ge 2 ] || die "--config needs a file"; _CONFIG_ARG="$2"; shift ;;
+        --config=*) _CONFIG_ARG="${1#*=}" ;;
+        -h|--help)
+            cat << USAGE
+syn-install $VERSION — install SynapseOS to disk
+
+  syn-install                    ask every question (the normal way)
+  syn-install --config FILE      answer them from an install profile
+
+FILE is either key=value lines, or a .nix profile evaluated through
+/usr/share/syn/nix/render.nix (needs nix). Questions the profile leaves
+out are still asked at the machine, so a partial profile is useful.
+
+  syn nix profile FILE.nix       render a Nix profile to key=value
+  /usr/share/syn/nix/profile-example.nix   every key, documented
+
+USAGE
+            exit 0 ;;
+        *) die "unknown option: $1 (try --help)" ;;
+    esac
+    shift
+done
+
 [ "$(id -u)" = "0" ] || die "syn-install must be run as root"
+
+[ -n "${_CONFIG_ARG:-}" ] && config_load "$_CONFIG_ARG"
 
 # Best-effort unmount of the target area on any unexpected exit.
 trap cleanup EXIT
@@ -575,7 +756,7 @@ echo ""
 warn "ALL DATA ON THE TARGET DISK WILL BE ERASED"
 echo ""
 prompt "Press ENTER to continue or Ctrl+C to abort..."
-read -r
+answer press_enter_start _ack --ack
 
 # ── Network pre-flight (before anything destructive) ──────
 header
@@ -603,7 +784,7 @@ else
             echo ""
             echo "  No connection — but this machine has Wi-Fi."
             prompt "Open the Wi-Fi picker (nmtui)? [Y/n]:"
-            read -r wifi_ans
+            answer wifi_picker wifi_ans -m yes=y,no=n,true=y,false=n
             case "${wifi_ans:-y}" in
                 [Nn]*) die "No network connection. SynapseOS downloads the base
   system during install, so a connection is required." ;;
@@ -641,8 +822,12 @@ lsblk -d -o NAME,SIZE,TYPE,MODEL | grep disk | while read -r line; do
 done
 echo ""
 prompt "Target disk (e.g. sda, vda, nvme0n1):"
-read -r DISK
-DISK="/dev/$DISK"
+answer disk DISK
+# Typed answers are bare names, because that is what the prompt asks for. A
+# config file is written away from the machine and naturally says /dev/vda, so
+# take either rather than building /dev//dev/vda and failing the check below
+# with a path nobody wrote.
+case "$DISK" in /dev/*) ;; *) DISK="/dev/$DISK" ;; esac
 
 [ -b "$DISK" ] || die "Disk $DISK not found"
 
@@ -710,7 +895,7 @@ if [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] \
     echo "    3) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
     echo ""
     prompt "Install mode [1-3]:"
-    read -r _mode
+    answer install_mode _mode -m alongside=1,erase=2,manual=3
     case "${_mode:-1}" in
         1) INSTALL_MODE="alongside" ;;
         3) INSTALL_MODE="manual" ;;
@@ -734,7 +919,7 @@ else
     echo "    2) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
     echo ""
     prompt "Install mode [1/2]:"
-    read -r _mode
+    answer install_mode _mode -m erase=1,manual=2
     case "${_mode:-1}" in
         2) INSTALL_MODE="manual" ;;
         *) INSTALL_MODE="erase" ;;
@@ -779,7 +964,7 @@ if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo "  gone — no password reset, no support call, nothing."
     echo ""
     prompt "Encrypt the disk? [y/N]:"
-    read -r _enc
+    answer encrypt _enc -m yes=y,no=n,true=y,false=n
     case "${_enc,,}" in
         y|yes) ENCRYPT="yes" ;;
         *)     ENCRYPT="no" ;;
@@ -810,7 +995,7 @@ if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo "                    unusual enough that fewer rescue tools know it."
     echo ""
     prompt "Filesystem [1-4, default 1]:"
-    read -r _fs
+    answer filesystem _fs -m ext4=1,btrfs=2,xfs=3,f2fs=4
     case "${_fs:-1}" in
         2) ROOT_FS="btrfs" ;;
         3) ROOT_FS="xfs" ;;
@@ -846,7 +1031,7 @@ if { [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; } && [ "$B
     echo "                          larger when snapshots are enabled."
     echo ""
     prompt "Bootloader [1-3, default 1]:"
-    read -r _bl
+    answer bootloader _bl -m grub=1,systemd-boot=2,limine=3
     case "${_bl:-1}" in
         2) BOOTLOADER="systemd-boot" ;;
         3) BOOTLOADER="limine" ;;
@@ -882,7 +1067,7 @@ if fs_supports_snapshots "$ROOT_FS"; then
         echo "  anything that changes, so a disk near full stays near full."
         echo ""
         prompt "Enable snapshots? [Y/n]:"
-        read -r _sn
+        answer snapshots _sn -m yes=y,no=n,true=y,false=n
         case "${_sn,,}" in
             n|no) SNAPSHOTS="no" ;;
             *)    SNAPSHOTS="yes" ;;
@@ -955,7 +1140,7 @@ echo "    Encryption    : $ENCRYPT"
 echo "    Snapshots     : $SNAPSHOTS"
 echo ""
 prompt "Are these correct? [Y/n]:"
-read -r _plan_ok || true
+answer disk_plan_ok _plan_ok -m yes=y,no=n,true=y,false=n || true
 case "${_plan_ok,,}" in
     n|no)
         echo ""
@@ -974,9 +1159,9 @@ if [ "$ENCRYPT" = "yes" ]; then
     # disk to nothing.
     while :; do
         prompt "Encryption passphrase:"
-        read -rs LUKS_PASS; echo ""
+        answer luks_passphrase LUKS_PASS -s; echo ""
         prompt "Repeat passphrase:"
-        read -rs LUKS_PASS2; echo ""
+        answer luks_passphrase LUKS_PASS2 -s; echo ""
         if [ -z "$LUKS_PASS" ]; then
             warn "Empty passphrase — that would leave the disk unprotected."
             continue
@@ -989,7 +1174,7 @@ if [ "$ENCRYPT" = "yes" ]; then
             warn "Passphrase is under 8 characters. A short one is worth little
   against an attacker who has the disk in hand."
             prompt "Use it anyway? [y/N]:"
-            read -r _short
+            answer short_passphrase_ok _short -m yes=y,no=n,true=y,false=n
             case "${_short,,}" in y|yes) ;; *) continue ;; esac
         fi
         break
@@ -1101,7 +1286,7 @@ if [ "$INSTALL_MODE" = "alongside" ]; then
     echo ""
     warn "This adds one partition in the free space. Back up anything irreplaceable first."
     prompt "Type 'yes' to install alongside:"
-    read -r confirm
+    answer confirm_alongside confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
     # Snapshot the partition list so we can identify the one parted creates — its
@@ -1164,16 +1349,32 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     echo ""
     _ed="${_editors%% *}"
     prompt "Editor to run [$_ed]:"
-    read -r _ed_pick || true
+    answer partition_editor _ed_pick || true
     case " $_editors " in
         *" ${_ed_pick:-$_ed} "*) _ed="${_ed_pick:-$_ed}" ;;
-        *) [ -z "$_ed_pick" ] || warn "$_ed_pick is not available here — using $_ed" ;;
+        # skip/none are handled below and are not editor names, so they must
+        # not be reported as an editor this machine happens not to have.
+        *) case "${_ed_pick:-}" in ""|skip|none) ;;
+               *) warn "$_ed_pick is not available here — using $_ed" ;;
+           esac ;;
     esac
 
     echo ""
-    echo "  Starting $_ed on $DISK — write your changes before quitting."
-    sleep 1
-    "$_ed" "$DISK" || warn "$_ed exited non-zero — check the table below before continuing"
+    # `partition_editor=skip` is the one answer that is not an editor name. The
+    # ADVANCED path exists to use partitions that already exist, and a profile
+    # that names part_root/part_efi is describing a disk somebody already laid
+    # out — so launching a full-screen editor at it would hang the install on a
+    # program waiting for a keystroke nobody is there to press.
+    case "${_ed_pick:-}" in
+        skip|none)
+            echo "  Skipping the partition editor (--config)."
+            ;;
+        *)
+            echo "  Starting $_ed on $DISK — write your changes before quitting."
+            sleep 1
+            "$_ed" "$DISK" || warn "$_ed exited non-zero — check the table below before continuing"
+            ;;
+    esac
 
     partprobe "$DISK" 2>/dev/null || true
     sleep 2
@@ -1189,7 +1390,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     # should cost a retry, not a re-run of the whole installer.
     while :; do
         prompt "Root partition (e.g. ${DISK}2):"
-        read -r PART_ROOT || true
+        answer part_root PART_ROOT || true
         [ -n "${PART_ROOT:-}" ] || continue
         case "$PART_ROOT" in /dev/*) ;; *) PART_ROOT="/dev/$PART_ROOT" ;; esac
         _why="$(part_usable "$PART_ROOT" "the root filesystem" "$MIN_DISK_BYTES")" && break
@@ -1200,7 +1401,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     if [ "$BOOT_MODE" = "uefi" ]; then
         while :; do
             prompt "EFI System Partition (e.g. ${DISK}1):"
-            read -r PART_EFI || true
+            answer part_efi PART_EFI || true
             [ -n "${PART_EFI:-}" ] || continue
             case "$PART_EFI" in /dev/*) ;; *) PART_EFI="/dev/$PART_EFI" ;; esac
             _why="$(part_usable "$PART_EFI" "the EFI partition" $((256 * 1024 * 1024)))" || { warn "$_why"; continue; }
@@ -1212,7 +1413,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
             if [ "$(blkid -s TYPE -o value "$PART_EFI" 2>/dev/null)" = "vfat" ]; then
                 echo "    $PART_EFI is already FAT — it may hold another OS's bootloader."
                 prompt "Format it? Everything on it is lost [y/N]:"
-                read -r _fmt || true
+                answer format_esp _fmt -m yes=y,no=n,true=y,false=n || true
                 case "${_fmt,,}" in y|yes) FORMAT_ESP="yes" ;; *) FORMAT_ESP="no" ;; esac
             fi
             break
@@ -1223,7 +1424,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     if [ "$SEPARATE_BOOT" = "yes" ]; then
         while :; do
             prompt "Separate /boot partition:"
-            read -r PART_BOOT || true
+            answer part_boot PART_BOOT || true
             [ -n "${PART_BOOT:-}" ] || continue
             case "$PART_BOOT" in /dev/*) ;; *) PART_BOOT="/dev/$PART_BOOT" ;; esac
             _why="$(part_usable "$PART_BOOT" "/boot" $((512 * 1024 * 1024)))" || { warn "$_why"; continue; }
@@ -1242,7 +1443,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     while :; do
         echo ""
         prompt "Swap partition (blank for none):"
-        read -r _sw || true
+        answer part_swap _sw || true
         [ -n "${_sw:-}" ] || break
         case "$_sw" in /dev/*) ;; *) _sw="/dev/$_sw" ;; esac
         _why="$(part_usable "$_sw" "swap" $((128 * 1024 * 1024)))" || { warn "$_why"; continue; }
@@ -1257,7 +1458,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
         if [ "$(blkid -s TYPE -o value "$PART_SWAP" 2>/dev/null)" = "swap" ]; then
             echo "    $PART_SWAP is already swap — another system may resume from it."
             prompt "Re-make it? Its UUID changes, breaking that system's fstab [y/N]:"
-            read -r _mk || true
+            answer remake_swap _mk -m yes=y,no=n,true=y,false=n || true
             case "${_mk,,}" in y|yes) FORMAT_SWAP="yes" ;; *) FORMAT_SWAP="no" ;; esac
         fi
         break
@@ -1286,7 +1487,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
     echo "  Everything else on $DISK is left untouched."
     echo ""
     prompt "Type 'yes' to format these:"
-    read -r confirm
+    answer confirm_format confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
     if [ -n "$PART_EFI" ] && [ "$FORMAT_ESP" = "yes" ]; then
@@ -1326,7 +1527,7 @@ elif [ "$INSTALL_MODE" = "manual" ]; then
 elif [ "$BOOT_MODE" = "uefi" ]; then
     warn "This will ERASE all data on $DISK"
     prompt "Type 'yes' to confirm:"
-    read -r confirm
+    answer confirm_erase confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
     echo "  Creating GPT partition table..."
@@ -1373,7 +1574,7 @@ else
     # BIOS/MBR whole-disk. Alongside is UEFI-only, so BIOS is always an erase.
     warn "This will ERASE all data on $DISK"
     prompt "Type 'yes' to confirm:"
-    read -r confirm
+    answer confirm_erase confirm -m yes=yes,true=yes
     [ "$confirm" = "yes" ] || die "Aborted"
 
     echo "  Creating MBR partition table..."
@@ -1536,7 +1737,7 @@ while :; do
     echo "    $(bold '4)') Custom    — pick each item individually"
     echo ""
     prompt "Choice [1-4, default=2]:"
-    read -r install_preset || true
+    answer preset install_preset -m full=1,standard=2,minimal=3,custom=4 || true
     INSTALL_PRESET="${install_preset:-2}"
 
     case "$INSTALL_PRESET" in
@@ -1565,7 +1766,7 @@ while :; do
                 local __var=$1 __def=$2 __desc=$3 __hint __ans
                 if [ "$__def" = 1 ]; then __hint="[Y/n]"; else __hint="[y/N]"; fi
                 prompt "$__desc $__hint:"
-                read -r __ans || true
+                answer "${__var,,}" __ans -m yes=y,no=n,true=y,false=n || true
                 case "${__ans,,}" in
                     y|yes) printf -v "$__var" '%s' 1 ;;
                     n|no)  printf -v "$__var" '%s' 0 ;;
@@ -1606,7 +1807,7 @@ while :; do
             # extra question rather than in the same list as a block game.
             echo ""
             prompt "Customise the core daemons too? Removing any means this is no longer SynapseOS [y/N]:"
-            read -r core_custom || true
+            answer customise_core core_custom -m yes=y,no=n,true=y,false=n || true
             if [ "${core_custom,,}" = y ] || [ "${core_custom,,}" = yes ]; then
                 warn "The core daemons are what SynapseOS is. Deselecting them produces
   an Arch system with some SynapseOS parts, and the AI, security and
@@ -1659,7 +1860,7 @@ while :; do
     # Same rule as the disk plan: read it back, then ask. Nothing is installed
     # until Step 4b below, so "no" costs only the questions again.
     prompt "Install this selection? [Y/n]:"
-    read -r _sel_ok || true
+    answer selection_ok _sel_ok -m yes=y,no=n,true=y,false=n || true
     case "${_sel_ok,,}" in
         n|no)
             echo ""
@@ -1828,17 +2029,17 @@ step "Step 5 — Create User Account"
 echo "  Create a user account for the installed system."
 echo ""
 prompt "Username [default: syn]:"
-read -r NEW_USER || true
+answer username NEW_USER || true
 NEW_USER="${NEW_USER:-syn}"
 
 prompt "Full name (optional):"
-read -r NEW_FULLNAME || true
+answer fullname NEW_FULLNAME || true
 
 while true; do
     prompt "Password:"
-    read -rs NEW_PASS; echo
+    answer password NEW_PASS -s; echo
     prompt "Confirm password:"
-    read -rs NEW_PASS2; echo
+    answer password NEW_PASS2 -s; echo
     if [ "$NEW_PASS" = "$NEW_PASS2" ] && [ -n "$NEW_PASS" ]; then
         break
     fi
@@ -1859,7 +2060,7 @@ echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
 echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
 echo ""
 prompt "Choice [1-4, default=1]:"
-read -r de_choice || true
+answer desktop de_choice -m synui=1,kde=2,gnome=3,tty=4 || true
 DE_CHOICE="${de_choice:-1}"
 
 case "$DE_CHOICE" in
@@ -2071,7 +2272,7 @@ elif [ -n "$HAS_NVIDIA" ]; then
         echo "  synapd can run inference on this GPU instead of the CPU."
         echo "  This downloads the CUDA runtime (~4.7 GiB installed)."
         prompt "Enable GPU inference? [Y/n]:"
-        read -r gpu_ans
+        answer gpu_inference gpu_ans -m yes=y,no=n,true=y,false=n
         case "${gpu_ans:-y}" in
             [Nn]*)
                 warn "Keeping CPU inference. Switch later with:
@@ -2423,20 +2624,20 @@ echo ""
 # is wrong the first time anyone adds a language.
 _n_locales=$(echo "$LOCALE_ROWS" | grep -c '|')
 prompt "Language [1-${_n_locales}, default=1]:"
-read -r lang_choice
+answer language lang_choice -m other=0
 lang_choice="${lang_choice:-1}"
 
 LOCALE="en_US.UTF-8"; KEYMAP="us"; XKB_LAYOUT="us"; LANG_FONTS=""
 if [ "$lang_choice" = "0" ]; then
-    prompt "Locale (e.g. sv_SE.UTF-8):"; read -r LOCALE
+    prompt "Locale (e.g. sv_SE.UTF-8):"; answer locale LOCALE
     # Asked separately, and the examples differ on purpose: Swedish is
     # 'sv-latin1' to loadkeys and 'se' to XKB. One question answering both is
     # what broke four of the rows above, and typing a console keymap into
     # xkb_layout mostly produces a layout that does not exist — which synui
     # silently replaces with US.
-    prompt "Console keymap (e.g. sv-latin1):"; read -r KEYMAP
+    prompt "Console keymap (e.g. sv-latin1):"; answer keymap KEYMAP
     KEYMAP="${KEYMAP:-us}"
-    prompt "Desktop keyboard layout (e.g. se) [$KEYMAP]:"; read -r XKB_LAYOUT
+    prompt "Desktop keyboard layout (e.g. se) [$KEYMAP]:"; answer xkb_layout XKB_LAYOUT
     LOCALE="${LOCALE:-en_US.UTF-8}"; XKB_LAYOUT="${XKB_LAYOUT:-$KEYMAP}"
     # No idea what script that is, so cover as much as possible rather than
     # hand someone a system that cannot draw their own alphabet.
@@ -2568,13 +2769,13 @@ _n_tz=$(echo "$TZ_ROWS" | grep -c '|')
 TZ_CHOICE=""
 while [ -z "$TZ_CHOICE" ]; do
     prompt "Timezone [1-${_n_tz}, a name, or an abbreviation like CST; blank=UTC]:"
-    read -r tz_input
+    answer timezone tz_input -m other=0
     tz_input="${tz_input:-UTC}"
 
     case "$tz_input" in
         0)
             prompt "tzdata name (Region/City):"
-            read -r tz_input
+            answer timezone_name tz_input
             ;;
     esac
 
@@ -3921,7 +4122,11 @@ if [ "$ENCRYPT" = "yes" ]; then
     echo ""
 fi
 
+# Last thing before the reboot, so a misspelled key is on screen next to the
+# summary rather than scrolled off behind twenty minutes of pacstrap.
+config_report_unused
+
 prompt "Remove installation media and press ENTER to reboot..."
-read -r
+answer press_enter_reboot _ack --ack
 umount -R /mnt 2>/dev/null || true
 reboot

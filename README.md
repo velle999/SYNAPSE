@@ -469,6 +469,63 @@ syn nix facts     re-derive facts.nix from this machine
 syn nix status    daemon, store size, whether the flake is set up
 ```
 
+### Installing from a profile
+
+Separate from the above, and worth not confusing with it: `facts.nix`
+*describes* a machine that exists, while an **install profile** *prescribes*
+one that does not yet.
+
+```
+syn-install --config profile.nix      # or a plain key=value file
+```
+
+Every question the installer asks has a key. **Whatever the profile leaves out
+is still asked at the machine**, so pinning just the disk layout and the
+package set is a perfectly good profile — this is not all-or-nothing.
+
+```nix
+{
+  disk = "vda";
+  install_mode = "erase";
+  confirm_erase = true;
+  filesystem = "btrfs";
+  bootloader = "limine";
+  snapshots  = true;
+  preset = "custom";
+  want = { steam = false; blackarch = true; nix = true; };
+  username = "syn";
+  desktop  = "synui";
+  timezone = "America/Chicago";
+}
+```
+
+`/usr/share/syn/nix/profile-example.nix` documents every key. Two properties
+are deliberate:
+
+- **Keys are semantic, never menu positions.** `filesystem = "btrfs"`, not
+  `filesystem = 2` — a number means whatever that row is on the day you
+  install, and menus grow entries. The mapping happens inside `answer`, so no
+  decision table in the installer was rewritten for any of this.
+- **A key that answers nothing is reported by name** at the end of the run.
+  `bootlaoder = "limine"` is not a syntax error, it is silence, and silence is
+  how preseeding usually fails — you find out when the machine boots the wrong
+  loader.
+
+The destructive confirmations (`confirm_erase`, `confirm_alongside`,
+`confirm_format`) are each their own key on purpose: an unattended install that
+erases a disk should have said so in writing. Leave them out and the installer
+stops and asks, which is the right answer for a profile that was not meant to
+run unattended.
+
+The ISO ships `nix` so `--config profile.nix` evaluates in place. On a medium
+without it, render first — the installer says as much rather than failing
+obscurely:
+
+```
+syn nix profile profile.nix > install.conf
+syn-install --config install.conf
+```
+
 **The installer builds nothing.** Setting up the config is seconds; realising
 it is a multi-gigabyte fetch from `cache.nixos.org`, and the nix daemon is not
 running in the installer's chroot anyway. So a fresh install leaves the layer

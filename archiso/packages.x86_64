@@ -180,3 +180,13 @@ inotify-tools
 limine
 limine-snapper-sync
 zram-generator
+
+# nix — ONLY so `syn-install --config profile.nix` can evaluate a Nix install
+# profile on the install medium itself. Nothing on the ISO uses Nix otherwise,
+# and the installed system gets it only if WANT_NIX was taken.
+#
+# Without this line the .nix path still works, it just has to be rendered
+# somewhere else first (`syn nix profile p.nix > install.conf`) — so if the
+# ~30 MB is not worth it, deleting this line costs only that convenience and
+# the installer already says so when nix is missing.
+nix
