@@ -182,8 +182,10 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 |---|---|
 | `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) |
 | `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
+| `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable |
 | `Super`+`Return` | Open a terminal |
-| `Super`+`Space` | Command bar |
+| `Super`+`Space` | App launcher (rofi, `-show drun`) |
+| `Super`+`=` | Command bar — synsh intents and output capture |
 | `Super`+`Backspace` | Ask the AI |
 | `Super`+`A` | Neural activity overlay |
 | `Super`+`D` | Display settings |
@@ -200,7 +202,8 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Q` / `Super`+`Shift`+`Q` | Close window / quit compositor |
 | `Super`+`J` / `Super`+`K` | Focus next / previous |
 | `Super`+`Shift`+`J` / `Super`+`Shift`+`K` | Move window down / up the stack |
-| `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area |
+| `Super`+`H` / `Super`+`Shift`+`L` | Shrink / grow master area (also a niri column's width) |
+| `Super`+`,` / `Super`+`.` | niri layout: pull the window into the column on its left / push it back out into its own column. No-ops on the other four layouts |
 | `Super`+`F` / `Super`+`M` / `Super`+`N` | Float / maximize / minimize |
 | `Super`+`Shift`+`N` | Restore a minimized window |
 | `Super`+`Shift`+`F` | Fullscreen (forces it — for games that only do "borderless") |
@@ -225,10 +228,23 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
-Rebind anything with a `bind = <combo>, <action>` line in `synuirc`. Note that
-a duplicate combo is not a conflict you will notice — the first match wins, so
-the older binding silently goes dead. synui logs `DUPLICATE default bind` at
-startup for exactly that reason.
+`Super`+`Space` and `Super`+`=` swap with one line — `super_space = cmdbar`
+puts the command bar back on Space and moves rofi to `=`. A `bind =` of your
+own on either key wins over the swap, which then becomes a logged no-op rather
+than fighting your config file.
+
+Rebind anything with a `bind = <combo> <action> [arg]` line in `synuirc` —
+**whitespace between the combo and the action, no comma**:
+
+```
+bind = super+shift+e spawn wofi --show drun
+bind = super+ctrl+3 movews 3
+```
+
+A bind on a digit also answers to that digit on the numpad. A duplicate combo
+is not a conflict you will notice — the first match wins, so the older binding
+silently goes dead; synui logs `DUPLICATE default bind` at startup for exactly
+that reason.
 
 Screenshots land in `~/Pictures/Screenshots` *and* on the clipboard, so you can
 paste one straight into a chat without opening the file.

@@ -676,6 +676,17 @@ test('monocle_focus', monocle_focus,
 # window opens, a strip that scrolls to whatever has the focus, and the two
 # column moves (Super+, / Super+.). Three windows on one headless output, so
 # the strip is deliberately longer than the monitor. Same client again.
+# Every default bind has a row in the README's hotkey table. Pure text — no
+# compositor, no output, no client — so it runs anywhere and costs nothing.
+# It exists because the table went stale in a way only a human reading two
+# files side by side could see: Super+Space moved to rofi and the command bar
+# moved to Super+=, and the README described neither.
+readme_binds = find_program('tests/readme_binds.sh')
+test('readme_binds', readme_binds,
+     args    : [meson.current_source_dir() / 'src/config.c',
+                meson.current_source_dir() / '../README.md'],
+     timeout : 30)
+
 niri_strip = find_program('tests/niri_strip.sh')
 test('niri_strip', niri_strip,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),
