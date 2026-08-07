@@ -1,0 +1,137 @@
+From 1de93edf715a9524715a9494e6ff001d4aabde55 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Mon, 3 Aug 2026 13:53:56 -0500
+Subject: [PATCH 1/2] Host: fall back to the board when DMI holds a placeholder
+
+On a self-built desktop there is no OEM to fill product_name in, so the board
+ships with the vendor's placeholder still in it and Host reads:
+
+    Host: System Product Name
+
+which is what the DMI genuinely says and tells you nothing. This box is an
+ASUS ROG STRIX B550-F, and that name is sitting right there in board_name.
+
+gather_host() now checks product_name against the strings boards actually ship
+-- "System Product Name", "To Be Filled By O.E.M.", "Default string" and the
+rest -- and falls back to board_name, then product_family. Each is tested in
+turn because a board can carry a placeholder in one field and a real name in
+the next. Matching is whole-string and case-insensitive, so a real product that
+merely CONTAINS one of those words is not thrown away.
+
+If every field is a placeholder the row is omitted rather than printed, which
+is what an unknown value already does everywhere else in this file.
+
+    before:  Host: System Product Name
+    after:   Host: ROG STRIX B550-F GAMING WIFI II
+
+Also factors the sysfs read out into read_dmi_line(), which trims the trailing
+newline these files always carry and the trailing spaces some boards pad with.
+Both helpers are guarded #ifndef __APPLE__ since the Apple path uses sysctl.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ fetch.c | 79 +++++++++++++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 71 insertions(+), 8 deletions(-)
+
+diff --git a/fetch.c b/fetch.c
+index 0d637a8..f80ce4f 100644
+--- a/fetch.c
++++ b/fetch.c
+@@ -1367,6 +1367,45 @@ static void gather_os(void) {
+ #endif
+ }
+ 
++#ifndef __APPLE__
++// Read one DMI/device-tree value, trimming the trailing newline the sysfs
++// files always carry.
++static void read_dmi_line(FILE *fp, char *out, size_t n) {
++  out[0] = '\0';
++  if (!fgets(out, (int)n, fp))
++    return;
++  int len = strlen(out);
++  while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r'))
++    len--;
++  out[len] = '\0';
++  // Some boards pad the field with spaces rather than leaving it empty.
++  while (len > 0 && out[len - 1] == ' ')
++    out[--len] = '\0';
++}
++
++// Is this DMI value the vendor's "nobody filled this in" text rather than a
++// machine name? These are the strings boards actually ship with — they are
++// not guesses, and each is matched whole so a real product that merely
++// CONTAINS one of these words is not thrown away.
++static int is_dmi_placeholder(const char *s) {
++  if (!s || !s[0])
++    return 1;
++  static const char *junk[] = {
++      "System Product Name", "System Name",   "System manufacturer",
++      "To Be Filled By O.E.M.", "To be filled by O.E.M.",
++      "Default string",      "Not Applicable", "Not Specified",
++      "Undefined",           "INVALID",        "None",
++      "OEM",                 "Product Name",   "All Series",
++      "Type1ProductConfigId", "empty",         "Unknown",
++      "N/A",                 "Chassis Manufacture",
++  };
++  for (size_t i = 0; i < sizeof(junk) / sizeof(junk[0]); i++)
++    if (strcasecmp(s, junk[i]) == 0)
++      return 1;
++  return 0;
++}
++#endif
++
+ static void gather_host(void) {
+ #ifdef __APPLE__
+   char model[128] = "";
+@@ -1379,16 +1418,40 @@ static void gather_host(void) {
+   if (!fp)
+     fp = fopen("/sys/class/dmi/id/product_name", "r");
+   if (fp) {
+-    if (fgets(model, sizeof(model), fp)) {
+-      int len = strlen(model);
+-      while (len > 0 && (model[len - 1] == '\n' || model[len - 1] == '\r' ||
+-                         model[len - 1] == '\0'))
+-        len--;
+-      model[len] = '\0';
+-    }
++    read_dmi_line(fp, model, sizeof(model));
+     fclose(fp);
+   }
+-  if (model[0])
++
++  // A self-built desktop has no OEM to fill product_name in, so the board
++  // ships with the vendor's placeholder still in it and Host reads
++  // "System Product Name" or "To Be Filled By O.E.M." — true, and useless.
++  // The motherboard model is the real identity of such a machine, so fall
++  // back to it, then to the product family. Each is checked in turn because a
++  // board can carry a placeholder in one field and a real name in the next.
++  if (is_dmi_placeholder(model)) {
++    static const char *fallbacks[] = {
++        "/sys/class/dmi/id/board_name",
++        "/sys/class/dmi/id/product_family",
++    };
++    for (size_t i = 0; i < sizeof(fallbacks) / sizeof(fallbacks[0]); i++) {
++      char alt[128] = "";
++      FILE *af = fopen(fallbacks[i], "r");
++      if (!af)
++        continue;
++      read_dmi_line(af, alt, sizeof(alt));
++      fclose(af);
++      if (!is_dmi_placeholder(alt)) {
++        strncpy(model, alt, sizeof(model) - 1);
++        model[sizeof(model) - 1] = '\0';
++        break;
++      }
++    }
++  }
++
++  // Still a placeholder means every field is one. Printing it would be worse
++  // than the field being absent, which is what an unknown value already does
++  // everywhere else here.
++  if (model[0] && !is_dmi_placeholder(model))
+     add_info("Host", "%s", model);
+ #endif
+ }
+-- 
+2.55.0
+

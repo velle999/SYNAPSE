@@ -1,0 +1,93 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# areofyl/fetch — the spinning-logo system info tool. SynapseOS uses it as
+# "About OS" (the control panel's System ▸ About OS row, and `syn about`), which
+# is why it is packaged rather than left as the hand-built /usr/local/bin/fetch
+# it was until now: an unowned binary in /usr/local cannot reach the ISO, does
+# not upgrade, and is invisible to `pacman -Qo`.
+#
+# It shares its logo asset with fastfetch. fetch reads its logo ONLY from
+# ~/.config/fetch/logo.txt — it cannot be pointed at a system path — so the
+# SynapseOS mark is COPIED there per user by customize_airootfs.sh (the live
+# ISO) and by syn-install (an installed system), from the same
+# /usr/share/synapseos/logo.txt fastfetch renders directly. One asset, two
+# consumers; see archiso/mkasciilogo.py for why the character ramp in it is
+# geometry rather than decoration.
+#
+# ── The patches ──────────────────────────────────────────────────────────────
+# Built from a PINNED UPSTREAM COMMIT plus two local patches, rather than from a
+# fork. Both are meant to go upstream — neither is SynapseOS-specific:
+#
+#   0001  Host reads the BOARD when the DMI product name is a vendor
+#         placeholder, so a self-built desktop says "ROG STRIX B550-F GAMING
+#         WIFI II" instead of "System Product Name".
+#   0002  Theme and Cursor ask the COMPOSITOR rather than GTK's settings.ini,
+#         which on a session whose compositor is not a desktop environment is
+#         either absent or a generic light/dark stand-in; and a new Wallpaper
+#         field probes the files the common setters write. The one
+#         SynapseOS-shaped thing in it is a single row in a table of compositor
+#         state files.
+#
+# These lived only as commits in the checkout at ~/fetch (branch
+# synapse-desktop-fields) and reached the running system as a hand-built binary
+# in /usr/local/bin. That is what this package ends.
+#
+# Rolling upstream: rebase that branch onto the new origin/main, regenerate with
+# `git format-patch <upstream>..HEAD -o SYNAPSE/fetch/`, and bump _commit to
+# match. A patch that stops applying FAILS the build — it does not silently ship
+# an unpatched fetch. (It has already happened once: _commit was first pinned to
+# a local-only SHA, and the build died at "unable to read tree" rather than
+# quietly falling back to main.)
+pkgname=fetch
+pkgver=2.2.1
+pkgrel=1
+pkgdesc="Animated 3D system info — spins the SynapseOS mark as a lit relief"
+arch=('x86_64')
+url="https://github.com/areofyl/fetch"
+license=('ISC')
+depends=('glibc')
+makedepends=('git' 'gcc' 'make')
+# fastfetch is what `syn info` prefers and what renders the same logo flat; not
+# a dependency in either direction, just the sibling.
+optdepends=('fastfetch: the same mark, rendered flat and immediately')
+
+# Upstream main at the time of packaging: "sanitize bin input in
+# get_cmd_version before popen".
+_commit=d0a1f3a33071b139a43b8577381cad1534f27d0f
+
+source=("git+$url.git#commit=$_commit"
+        "0001-Host-fall-back-to-the-board-when-DMI-holds-a-placeho.patch"
+        "0002-Read-the-desktop-s-own-theme-cursor-and-wallpaper.patch")
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP')
+
+prepare() {
+    cd "$pkgname"
+    # `git apply`, deliberately NOT `git am`. These are format-patch output and
+    # `git am` would be the natural reader, but it commits — and so demands a
+    # committer identity, which the ISO's unprivileged `synbuild` user does not
+    # have and must not be given (git identity on this machine is per-repo; see
+    # archiso/build.sh). `git apply` only touches the working tree, needs no
+    # config at all, and still fails loudly on a patch that no longer applies.
+    local p
+    for p in "$srcdir"/0*.patch; do
+        git apply -v "$p"
+    done
+}
+
+build() {
+    cd "$pkgname"
+    # PREFIX matters: upstream's Makefile defaults to /usr/local, which is
+    # exactly where the unowned binary this package replaces lives. Installing
+    # there again would leave pacman's copy shadowed by whatever is already on
+    # the box, since /usr/local/bin precedes /usr/bin on the default PATH.
+    make PREFIX=/usr
+}
+
+package() {
+    cd "$pkgname"
+    make PREFIX=/usr DESTDIR="$pkgdir" install
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

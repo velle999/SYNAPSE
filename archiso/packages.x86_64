@@ -61,6 +61,17 @@ nexus-chat
 tepris
 chibi
 vibe
+# "About OS" — areofyl/fetch, which spins the SynapseOS mark as a lit 3D relief
+# with the system info beside it. Reached from the control panel's
+# System ▸ About OS row and from `syn about`; both run it in a terminal.
+#
+# It reads its logo ONLY from ~/.config/fetch/logo.txt (no system path), so the
+# mark is COPIED there per user by customize_airootfs.sh here and by
+# syn-install on an installed system — from the same
+# /usr/share/synapseos/logo.txt that fastfetch renders flat. Without that file
+# fetch falls through ID_LIKE to fastfetch's Arch logo, which is a perfectly
+# good logo and the wrong distro's.
+fetch
 foot
 kitty
 # Application launcher on Super+Space. rofi 2.0.0 merged lbonn's Wayland port

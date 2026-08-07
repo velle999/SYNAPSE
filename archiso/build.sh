@@ -187,6 +187,11 @@ PACKAGES=(
     tepris
     chibi
     vibe
+    # areofyl/fetch — "About OS". Git-sourced from a pinned upstream commit
+    # with two local patches applied in prepare(), so it needs network like
+    # nexus-chat does. Order does not matter: nothing depends on it, it reaches
+    # the ISO because packages.x86_64 names it.
+    fetch
     # SYNAPSE Arsenal — the BlackArch category browser. Must be ON the ISO:
     # syn-install now names it in SEL_APPS, and an app the installer asks
     # for but the local repo does not carry fails the install at pacman.

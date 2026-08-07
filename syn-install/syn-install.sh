@@ -1726,7 +1726,13 @@ while :; do
     # the root filesystem that grows with every generation kept, which is not a
     # cost an Enter-through install should quietly take on.
     WANT_NIX=0            # nix + Home Manager — see "Configuring Nix"
-    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update"
+    # `fetch` is core, not an app, and that is a decision rather than an
+    # oversight: the control panel's System ▸ About OS row runs it, so on a
+    # Minimal install — the one preset that clears SEL_APPS entirely — an
+    # optional fetch would leave a settings row that opens a terminal and
+    # reports command not found. It is 90 KB and depends on nothing but glibc,
+    # which is the whole reason it can be unconditional.
+    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update fetch"
     SEL_APPS="chibi vibe syn-arsenal"
 
     echo "  What should be installed alongside the SynapseOS core?"

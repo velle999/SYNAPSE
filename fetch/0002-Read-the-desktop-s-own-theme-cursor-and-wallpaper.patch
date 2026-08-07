@@ -1,0 +1,320 @@
+From a1ef15d0a347dab0138b996b4a9ec22a50d60cc6 Mon Sep 17 00:00:00 2001
+From: Velle Sinclair <brncomputerhelp@gmail.com>
+Date: Fri, 7 Aug 2026 17:01:59 -0500
+Subject: [PATCH 2/2] Read the desktop's own theme, cursor and wallpaper
+
+Three fields that could only ever describe a full desktop environment now
+describe a bare Wayland compositor too.
+
+Theme and Cursor both came out of ~/.config/gtk-3.0/settings.ini, which is
+the wrong place to ask on a session whose compositor is not GTK's. Such a
+compositor either does not write settings.ini at all (so the fields were
+simply absent), or writes a generic light/dark stand-in into it AFTER the
+user picked something -- so "Adwaita-dark" was reported on a desktop that
+is actually on "dracula".
+
+  - Theme consults a small table of compositor state files first, and says
+    which one it read (`dracula [synui]`), falling back to GTK unchanged.
+  - Cursor prefers XCURSOR_THEME/XCURSOR_SIZE. Those are what
+    libwayland-cursor and every toolkit's Wayland backend actually load the
+    pointer from, so where they are set they are the truth and the GTK keys
+    are at best a copy of it.
+
+Wallpaper is new, and off nothing: there is no standard for it, so it probes
+the files the common setters write (hyprpaper, nitrogen, swww, synui) most
+specific first and stops at the first hit. Plain file reads only -- a setter
+that is not installed costs one failed fopen(), not a subprocess. Prints the
+basename, because these are absolute paths several directories deep and the
+info block shares its width with the logo.
+
+Fields that find nothing still print nothing, so a desktop none of this
+matches looks exactly as it did.
+---
+ README.md |   1 +
+ fetch.c   | 201 +++++++++++++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 193 insertions(+), 9 deletions(-)
+
+diff --git a/README.md b/README.md
+index bab2fcf..8df34c1 100644
+--- a/README.md
++++ b/README.md
+@@ -204,6 +204,7 @@ theme
+ icons
+ font
+ cursor
++wallpaper
+ terminal
+ cpu
+ gpu
+diff --git a/fetch.c b/fetch.c
+index f80ce4f..d6871f9 100644
+--- a/fetch.c
++++ b/fetch.c
+@@ -859,6 +859,7 @@ enum {
+   F_ICONS,
+   F_FONT,
+   F_CURSOR,
++  F_WALLPAPER,
+   F_TERMINAL,
+   F_CPU,
+   F_GPU,
+@@ -914,6 +915,7 @@ static const struct {
+                  {"icons", F_ICONS},
+                  {"font", F_FONT},
+                  {"cursor", F_CURSOR},
++                 {"wallpaper", F_WALLPAPER},
+                  {"terminal", F_TERMINAL},
+                  {"cpu", F_CPU},
+                  {"gpu", F_GPU},
+@@ -929,10 +931,10 @@ static const struct {
+ static void config_defaults(void) {
+   // Default order
+   int defaults[] = {
+-      F_OS,     F_HOST,  F_KERNEL, F_UPTIME,  F_PACKAGES, F_SHELL,    F_DISPLAY,
+-      F_WM,     F_THEME, F_ICONS,  F_FONT,    F_CURSOR,   F_TERMINAL, F_CPU,
+-      F_GPU,    F_MEMORY, F_SWAP,  F_DISK,    F_IP,       F_BATTERY,  F_LOCALE,
+-      F_COLORS};
++      F_OS,     F_HOST,   F_KERNEL,    F_UPTIME,   F_PACKAGES, F_SHELL,
++      F_DISPLAY, F_WM,    F_THEME,     F_ICONS,    F_FONT,     F_CURSOR,
++      F_WALLPAPER, F_TERMINAL, F_CPU,  F_GPU,      F_MEMORY,   F_SWAP,
++      F_DISK,   F_IP,     F_BATTERY,   F_LOCALE,   F_COLORS};
+   field_count = sizeof(defaults) / sizeof(defaults[0]);
+   for (int i = 0; i < field_count; i++) {
+     field_order[i] = defaults[i];
+@@ -2977,6 +2979,76 @@ static void read_gtk_setting(const char *key, char *out, int maxlen) {
+   fclose(fp);
+ }
+ 
++// Read `key<sep>value` out of a plain config file, the way read_gtk_setting
++// does for GTK's settings.ini but with the separator and the path given.
++//
++// Wayland compositors that are not a full desktop environment tend to keep
++// their own state in a file like this rather than in GTK's settings.ini or in
++// gsettings, so the toolkit config only ever knows the light/dark theme the
++// compositor pushed OUT to it -- never which compositor theme is actually
++// selected. Same for the cursor and the wallpaper. This is how those get read
++// at the source.
++//
++// `path` is relative to $HOME. Leading whitespace and whitespace around the
++// separator are skipped; a '#' comment line is not a key. Returns 1 on a hit.
++static int read_home_setting(const char *path, const char *key, char sep,
++                             char *out, int maxlen) {
++  const char *home = getenv("HOME");
++  if (!home)
++    return 0;
++  char full[512];
++  snprintf(full, sizeof(full), "%s/%s", home, path);
++  FILE *fp = fopen(full, "r");
++  if (!fp)
++    return 0;
++
++  int found = 0;
++  char buf[512];
++  int keylen = strlen(key);
++  while (fgets(buf, sizeof(buf), fp)) {
++    char *p = buf;
++    while (*p == ' ' || *p == '\t')
++      p++;
++    if (*p == '#' || strncmp(p, key, keylen) != 0)
++      continue;
++    p += keylen;
++    while (*p == ' ' || *p == '\t')
++      p++;
++    if (*p != sep)
++      continue;
++    p++;
++    while (*p == ' ' || *p == '\t')
++      p++;
++    int len = strlen(p);
++    while (len > 0 && (p[len - 1] == '\n' || p[len - 1] == '\r' ||
++                       p[len - 1] == ' ' || p[len - 1] == '\t'))
++      p[--len] = '\0';
++    if (len > 0 && len < maxlen) {
++      memcpy(out, p, len + 1);
++      found = 1;
++    }
++    break;
++  }
++  fclose(fp);
++  return found;
++}
++
++// Compositor-native theme state, tried before the GTK settings.
++//
++// The value here is the name of the theme the user actually picked; the GTK
++// theme is whatever generic light/dark stand-in the compositor pushed out to
++// the toolkit afterwards, so on these desktops it is the less informative of
++// the two ("Adwaita-dark" where the desktop is on "dracula").
++static const struct {
++  const char *path; // relative to $HOME
++  const char *key;
++  char sep;
++  const char *tag; // what to credit in the value
++} desktop_theme_sources[] = {
++    {".config/synui/theme.state", "theme", '=', "synui"},
++    {NULL, NULL, 0, NULL},
++};
++
+ static void gather_theme(void) {
+ #ifdef __APPLE__
+   char style[64] = "";
+@@ -2994,6 +3066,14 @@ static void gather_theme(void) {
+     add_info("Theme", "Light");
+ #else
+   char theme[64] = "";
++  for (int i = 0; desktop_theme_sources[i].path; i++) {
++    if (read_home_setting(desktop_theme_sources[i].path,
++                          desktop_theme_sources[i].key,
++                          desktop_theme_sources[i].sep, theme, sizeof(theme))) {
++      add_info("Theme", "%s [%s]", theme, desktop_theme_sources[i].tag);
++      return;
++    }
++  }
+   read_gtk_setting("gtk-theme-name", theme, sizeof(theme));
+   if (theme[0])
+     add_info("Theme", "%s [GTK3]", theme);
+@@ -3035,10 +3115,26 @@ static void gather_font(void) {
+ static void gather_cursor(void) {
+ #ifndef __APPLE__
+   char cursor[64] = "";
+-  read_gtk_setting("gtk-cursor-theme-name", cursor, sizeof(cursor));
++  char size[16] = "";
++
++  // XCURSOR_THEME/XCURSOR_SIZE first. These are what libwayland-cursor and
++  // every toolkit's Wayland backend actually load the pointer from, so on a
++  // session that sets them they are the truth and gtk-cursor-theme-name is at
++  // best a copy -- and usually absent, since a compositor that is not a full
++  // desktop environment has no reason to write GTK's settings.ini at all.
++  const char *env_theme = getenv("XCURSOR_THEME");
++  const char *env_size = getenv("XCURSOR_SIZE");
++  if (env_theme && env_theme[0]) {
++    snprintf(cursor, sizeof(cursor), "%s", env_theme);
++    if (env_size && env_size[0])
++      snprintf(size, sizeof(size), "%s", env_size);
++  } else {
++    read_gtk_setting("gtk-cursor-theme-name", cursor, sizeof(cursor));
++    if (cursor[0])
++      read_gtk_setting("gtk-cursor-theme-size", size, sizeof(size));
++  }
++
+   if (cursor[0]) {
+-    char size[16] = "";
+-    read_gtk_setting("gtk-cursor-theme-size", size, sizeof(size));
+     if (size[0])
+       add_info("Cursor", "%s (%spx)", cursor, size);
+     else
+@@ -3047,6 +3143,92 @@ static void gather_cursor(void) {
+ #endif
+ }
+ 
++// --- Wallpaper ---
++//
++// There is no standard for this. Each wallpaper setter records its own choice
++// in its own file, so the only thing to do is probe the ones that exist, most
++// specific first, and stop at the first hit. Every probe is a plain file read
++// -- nothing here shells out, so a desktop that is not running costs one
++// failed fopen().
++
++// The `key sep value` files. hyprpaper writes `wallpaper = <output>,<path>`,
++// which needs the output name stripped afterwards; the rest are plain paths.
++static const struct {
++  const char *path;
++  const char *key;
++  char sep;
++} wallpaper_kv_sources[] = {
++    {".config/hypr/hyprpaper.conf", "wallpaper", '='},
++    {".config/nitrogen/bg-saved.cfg", "file", '='},
++    {".config/gtk-3.0/settings.ini", "gtk-wallpaper", '='},
++    {NULL, NULL, 0},
++};
++
++// Files whose ENTIRE first line is the path. synui's picker writes the chosen
++// image on line 1 and its scaling mode on line 2.
++static const char *const wallpaper_line_sources[] = {
++    ".config/synui/wallpaper.state",
++    ".cache/swww/wallpaper",
++    NULL,
++};
++
++// A file:// URI, a quoted value or a `<output>,<path>` pair, reduced to the
++// path itself. Edits in place.
++static void wallpaper_unwrap(char *s) {
++  // hyprpaper's leading output name, up to the first comma. A comma cannot
++  // appear before the path in any of the other formats.
++  char *comma = strchr(s, ',');
++  if (comma && strncmp(s, "file://", 7) != 0)
++    memmove(s, comma + 1, strlen(comma + 1) + 1);
++
++  int len = strlen(s);
++  if (len >= 2 && (s[0] == '\'' || s[0] == '"') && s[len - 1] == s[0]) {
++    s[len - 1] = '\0';
++    memmove(s, s + 1, len - 1);
++  }
++  if (strncmp(s, "file://", 7) == 0)
++    memmove(s, s + 7, strlen(s + 7) + 1);
++}
++
++static void gather_wallpaper(void) {
++#ifndef __APPLE__
++  char wp[512] = "";
++
++  for (int i = 0; !wp[0] && wallpaper_kv_sources[i].path; i++)
++    read_home_setting(wallpaper_kv_sources[i].path, wallpaper_kv_sources[i].key,
++                      wallpaper_kv_sources[i].sep, wp, sizeof(wp));
++
++  for (int i = 0; !wp[0] && wallpaper_line_sources[i]; i++) {
++    const char *home = getenv("HOME");
++    if (!home)
++      break;
++    char full[512];
++    snprintf(full, sizeof(full), "%s/%s", home, wallpaper_line_sources[i]);
++    FILE *fp = fopen(full, "r");
++    if (!fp)
++      continue;
++    if (fgets(wp, sizeof(wp), fp)) {
++      int len = strlen(wp);
++      while (len > 0 && (wp[len - 1] == '\n' || wp[len - 1] == '\r'))
++        wp[--len] = '\0';
++    }
++    fclose(fp);
++  }
++
++  if (!wp[0])
++    return;
++  wallpaper_unwrap(wp);
++  if (!wp[0])
++    return;
++
++  // The basename only. These are absolute paths several directories deep, and
++  // a line that runs off the terminal would push the logo off with it -- the
++  // info block and the spinning logo share the width.
++  const char *base = strrchr(wp, '/');
++  add_info("Wallpaper", "%s", base ? base + 1 : wp);
++#endif
++}
++
+ // Render buffers, one entry per sub-cell: z-buffer (0 = empty), luminance, color
+ #define SUB_H (MAX_HEIGHT * MAX_SUB_ROWS)
+ #define SUB_W (ANIM_WIDTH * MAX_SUB_COLS)
+@@ -3507,8 +3689,8 @@ int main(int argc, char **argv) {
+           "  Comment out or remove fields to hide them.\n"
+           "  Available fields:\n"
+           "    os, host, kernel, uptime, packages, shell, display, wm,\n"
+-          "    theme, icons, font, cursor, terminal, cpu, gpu, memory, swap,\n"
+-          "    disk, ip, battery, locale, colors\n\n"
++          "    theme, icons, font, cursor, wallpaper, terminal, cpu, gpu,\n"
++          "    memory, swap, disk, ip, battery, locale, colors\n\n"
+           "  Extra disks:\n"
+           "    disk=/home               Show additional mount point\n"
+           "    disk=/data               (repeat for multiple mounts)\n\n"
+@@ -3700,6 +3882,7 @@ int main(int argc, char **argv) {
+       [F_ICONS] = gather_icons,
+       [F_FONT] = gather_font,
+       [F_CURSOR] = gather_cursor,
++      [F_WALLPAPER] = gather_wallpaper,
+       [F_TERMINAL] = gather_terminal,
+       [F_CPU] = gather_cpu,
+       [F_GPU] = gather_gpu,
+-- 
+2.55.0
+
