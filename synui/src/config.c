@@ -1037,6 +1037,12 @@ static void config_set_defaults(syn_config_t *cfg)
      * -x, never -f: the -f form matches against whole command lines, which
      * includes the argv of whatever launched this, and a `pkill -f` has taken
      * out more than it meant to in this tree before. */
+    /* The close button, not click-off. The switch exists because click-off is
+     * wrong for a panel you AIM at, and the calculator is the case that
+     * prompted it — a near-miss on a keypad key should not bin what you typed.
+     * Set `panel_close = clickoff` to have the old behaviour back on all three.
+     * Esc closes every panel whichever way this is set. */
+    cfg->panel_close       = SYN_PANEL_CLOSE_BUTTON;
     cfg->bar_enabled       = 1;
     snprintf(cfg->bar_stop_cmd,  sizeof(cfg->bar_stop_cmd),
              "pkill -x quickshell ; pkill -x waybar");
@@ -1753,6 +1759,14 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
      * memory of which way the switch is set, so that the row comes up saying
      * what the desktop actually looks like. The two commands are what the row
      * runs; see the fields' comment in synui.h. */
+    /* clickoff|button — how the calculator, control panel and task manager are
+     * dismissed. The spellings are syn_panel_close_t's display names folded to
+     * lower case, which is what the control panel's enum row writes back. */
+    else if (strcmp(key, "panel_close") == 0) {
+        if      (strcmp(val, "clickoff") == 0) cfg->panel_close = SYN_PANEL_CLOSE_CLICKOFF;
+        else if (strcmp(val, "button")   == 0) cfg->panel_close = SYN_PANEL_CLOSE_BUTTON;
+        else wlr_log(WLR_ERROR, "synui: panel_close: unknown '%s'", val);
+    }
     else if (strcmp(key, "bar_enabled") == 0)
         cfg->bar_enabled = strcmp(val, "on") == 0;
     else if (strcmp(key, "bar_stop_cmd") == 0)

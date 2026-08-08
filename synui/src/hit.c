@@ -38,6 +38,10 @@ void hit_set_panel(syn_hit_t *g, int x, int y, int w, int h)
      * click-off-to-close needs. Clear the grid so it reports no rows rather
      * than whatever the last panel to use this struct had. */
     g->row_x = g->row_y = g->row_w = g->row_h = g->rows = 0;
+    /* Same for the close button. Cleared here rather than by the panels means
+     * one that stops drawing it — the setting was changed, or it never had one
+     * — stops answering for it on the next render without saying so. */
+    g->close_x = g->close_y = g->close_w = g->close_h = 0;
 }
 
 void hit_set_rows(syn_hit_t *g, int lx, int ly, int w, int h, int n)
@@ -75,6 +79,30 @@ void hit_set_grid(syn_hit_t *g, int lx, int ly,
 void hit_set_first(syn_hit_t *g, int first)
 {
     g->first = first < 0 ? 0 : first;
+}
+
+/* ── The corner close button ─────────────────────────────────
+ *
+ * Panel-local, like hit_set_rows(): render.c works in the panel's own
+ * coordinates and this is the one place that adds the origin back on.
+ *
+ * Only meaningful after hit_set_panel(), which zeroes it — a panel that stops
+ * drawing the button (because the setting changed) therefore stops answering
+ * for it on the very next render, with no explicit clear anywhere.
+ */
+void hit_set_close(syn_hit_t *g, int lx, int ly, int w, int h)
+{
+    g->close_x = g->x + lx;
+    g->close_y = g->y + ly;
+    g->close_w = w < 0 ? 0 : w;
+    g->close_h = h < 0 ? 0 : h;
+}
+
+int hit_in_close(const syn_hit_t *g, double lx, double ly)
+{
+    if (g->close_w <= 0 || g->close_h <= 0) return 0;
+    return lx >= g->close_x && lx < g->close_x + g->close_w &&
+           ly >= g->close_y && ly < g->close_y + g->close_h;
 }
 
 int hit_in_panel(const syn_hit_t *g, double lx, double ly)

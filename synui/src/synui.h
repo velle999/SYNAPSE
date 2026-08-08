@@ -153,6 +153,14 @@ typedef struct {
      * recorded here rather than recomputed by the hit test. 0 for the panels
      * that draw their whole list. */
     int first;
+    /* The corner close button, when the panel draws one (see syn_panel_close_t).
+     * Zero width means there is none — the panel does not offer one, or
+     * `panel_close` is set to click-off. In here with the rest of the geometry
+     * for this file's whole reason: render.c writes it, the panel reads it, and
+     * a second copy elsewhere is how the drawn button and the clickable button
+     * drift apart. hit_set_panel() clears it, so a stale rect can never be read
+     * back from the panel that used this struct last. */
+    int close_x, close_y, close_w, close_h;
 } syn_hit_t;
 
 /* Record the panel rect. Call once px/py/pw/ph are known. */
@@ -170,6 +178,12 @@ void hit_set_grid(syn_hit_t *g, int lx, int ly,
 /* Record which list index the first drawn row is, for a scrolling list. Follows
  * hit_set_rows(); leaving it out means "the window starts at 0". */
 void hit_set_first(syn_hit_t *g, int first);
+/* Record the corner close button, in PANEL-LOCAL coordinates as hit_set_rows()
+ * takes them. Call it AFTER hit_set_panel(), which clears the rect. */
+void hit_set_close(syn_hit_t *g, int lx, int ly, int w, int h);
+/* Is the cursor on it? False whenever there is no button, so a panel can ask
+ * unconditionally instead of testing the config first. */
+int  hit_in_close(const syn_hit_t *g, double lx, double ly);
 /* Blank the rect. A hidden panel must hit-test as nothing at all. */
 void hit_clear(syn_hit_t *g);
 int  hit_in_panel(const syn_hit_t *g, double lx, double ly);
@@ -184,6 +198,36 @@ int  hit_col_at(const syn_hit_t *g, double lx, double ly);
  * so a panel with a scrolling list never has to add it back on itself and get it
  * wrong on the one path that forgot. -1 for a miss, as ever. */
 int  hit_index_at(const syn_hit_t *g, double lx, double ly);
+
+/* ── How a panel is dismissed ────────────────────────────────
+ *
+ * Every compositor-drawn panel closes when you click off it, and for a list of
+ * rows that is right: the panel is a menu, and clicking away from a menu means
+ * you are done with it.
+ *
+ * It is wrong for a panel you AIM at. The calculator is thirty small keys, so a
+ * near-miss on "7" is a click on the desktop — which throws away the expression
+ * you were half way through typing, with no undo. velle: "the calc is click off
+ * to close, that's probably problematic for using."
+ *
+ * So it is a choice, and it applies to the three panels you work IN rather than
+ * pick from: the calculator, the control panel and the task manager. Esc closes
+ * every panel either way, so there is always a way out even if a button fails
+ * to draw.
+ *
+ * Deliberately either/or rather than both. A panel with a close button that
+ * ALSO vanishes on a near-miss has not fixed anything.
+ */
+typedef enum {
+    /* Click anywhere off the panel to close it. What every panel did before
+     * this setting existed, and still the right default for a menu. */
+    SYN_PANEL_CLOSE_CLICKOFF = 0,
+    /* A close button in the top-right corner. Clicking off does nothing but is
+     * still swallowed — these panels are modal, and letting a near-miss through
+     * to the window underneath is how you act on something you cannot see. */
+    SYN_PANEL_CLOSE_BUTTON,
+    SYN_PANEL_CLOSE_COUNT,
+} syn_panel_close_t;
 
 /* ── The panel pointer contract ──────────────────────────────
  *
@@ -1378,6 +1422,7 @@ typedef enum {
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
     CTL_ROW_BAR,           /* Desktop ▸ Bar — is there one at all */
+    CTL_ROW_PANEL_CLOSE,   /* Windows ▸ Panel close — click off, or a button */
 
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
@@ -2727,6 +2772,11 @@ typedef struct {
      * is the shipped bar; a waybar desktop wants
      *     bar_start_cmd = synui-waybar
      * in synuirc, or the switch turns the bar off and cannot put it back. */
+    /* How the calculator, control panel and task manager are dismissed. A
+     * syn_panel_close_t held as an int, for the control panel's enum row.
+     * See the enum for why only those three. */
+    int  panel_close;
+
     int  bar_enabled;           /* default 1 */
     char bar_stop_cmd[192];
     char bar_start_cmd[192];

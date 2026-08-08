@@ -115,6 +115,11 @@ static const char *const ctl_names_super_space[] = { "Launcher", "Cmdbar" };
 /* Order matches syn_bar_shell_t. The lower-cased spellings are what config.c's
  * `bar_shell` case parses back and what synui-bar.sh matches on. */
 static const char *const ctl_names_bar_shell[]   = { "SYNAPSE", "Antiquity" };
+/* Order matches syn_panel_close_t. Folded to lower case these ARE the synuirc
+ * spellings, which is what lets the row and `panel_close = clickoff` mean the
+ * same thing. Single words for the reason the whole enum table is: ctl_format
+ * lower-cases the display name and writes THAT. */
+static const char *const ctl_names_panel_close[] = { "Clickoff", "Button" };
 /* Order matches syn_bar_edge_t. Same two words as the first two dock edges
  * above, and folded to lower case they ARE the synuirc spellings — which is
  * what lets "put it at the bottom" mean one thing across both. */
@@ -211,6 +216,11 @@ static const struct ctl_item ctl_items[] = {
      * Appearance was where the theme lives and these are not about colour: a
      * border width and a shadow sigma belong with snapping and tiling, not with
      * a wallpaper picker. */
+    { CTL_ROW_PANEL_CLOSE,    CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Panel close", NULL,
+      .key = "panel_close", .off = CFG(panel_close), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
+      .help = "Calculator, control panel and task manager: click off to close, "
+              "or a corner button. Esc closes them either way" },
     { CTL_ROW_TITLEBARS,      CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Titlebars", NULL,
       .section = "Frame", .help = "Server-side titlebars, on every window at once" },
     { CTL_ROW_TITLEBAR_HEIGHT, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Titlebar height", NULL,
@@ -2283,8 +2293,13 @@ int ctlpanel_click(syn_server_t *s, double lx, double ly, uint32_t button,
     syn_ctlpanel_t *cp = &s->ctlpanel;
     if (!cp->visible) return 0;
 
-    if (!hit_in_panel(&cp->hit, lx, ly)) {
+    if (hit_in_close(&cp->hit, lx, ly)) {
         ctlpanel_hide(s);
+        return 1;
+    }
+
+    if (!hit_in_panel(&cp->hit, lx, ly)) {
+        if (s->config.panel_close == SYN_PANEL_CLOSE_CLICKOFF) ctlpanel_hide(s);
         return 1;
     }
 

@@ -574,17 +574,27 @@ int taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
     syn_taskmgr_t *t = &s->taskmgr;
     if (!t->visible) return 0;
 
-    if (!hit_in_panel(&t->hit, lx, ly)) {
+    /* Both ways out of the panel, answered together: they agree about a pending
+     * kill and differ only in whether they close. */
+    int on_close  = hit_in_close(&t->hit, lx, ly);
+    int off_panel = !hit_in_panel(&t->hit, lx, ly);
+
+    if (on_close || off_panel) {
         /* A pending kill has to be answered, not clicked away — the same reason
          * the Bluetooth panel refuses to close under a pairing prompt. Cancel
-         * it, which is the safe reading of "the user looked somewhere else". */
+         * it, which is the safe reading of "the user looked somewhere else".
+         * The close button is no different: it must not shut the panel over the
+         * top of a question it never answered. */
         if (t->confirm != TM_CONFIRM_NONE) {
             t->confirm = TM_CONFIRM_NONE;
             snprintf(t->status, sizeof(t->status), "cancelled");
             synui_render_taskmgr(s);
             return 1;
         }
-        taskmgr_hide(s);
+        /* The button always closes. Clicking off only closes when that is what
+         * `panel_close` says; otherwise it is swallowed and nothing happens. */
+        if (on_close || s->config.panel_close == SYN_PANEL_CLOSE_CLICKOFF)
+            taskmgr_hide(s);
         return 1;
     }
     return taskmgr_motion(s, lx, ly);

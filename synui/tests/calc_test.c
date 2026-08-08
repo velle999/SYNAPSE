@@ -492,13 +492,25 @@ static void test_copy(void)
 #define PANEL_W  (CALC_PAD * 2 + CALC_COLS * CELL_W)
 #define PANEL_H  (KEYPAD_TOP + CALC_ROWS * CELL_H + 50)
 
+/* render.c's PANEL_CLOSE_SZ / PANEL_CLOSE_INSET. */
+#define CLOSE_SZ    20
+#define CLOSE_INSET 10
+
 static void panel_place(void)
 {
     hit_set_panel(&srv->calc.hit, PANEL_X, PANEL_Y, PANEL_W, PANEL_H);
     hit_set_grid(&srv->calc.hit, CALC_PAD, KEYPAD_TOP, CELL_W, CELL_H,
                  CALC_COLS, CALC_ROWS);
     hit_set_first(&srv->calc.hit, 0);
+    /* Only when the panel would be drawing one, exactly as render.c does — so
+     * hit_in_close answers false in click-off mode without anyone clearing it. */
+    if (srv->config.panel_close == SYN_PANEL_CLOSE_BUTTON)
+        hit_set_close(&srv->calc.hit, PANEL_W - CLOSE_INSET - CLOSE_SZ,
+                      CLOSE_INSET, CLOSE_SZ, CLOSE_SZ);
 }
+
+static double close_x(void) { return PANEL_X + PANEL_W - CLOSE_INSET - CLOSE_SZ / 2.0; }
+static double close_y(void) { return PANEL_Y + CLOSE_INSET + CLOSE_SZ / 2.0; }
 
 /* A point in the middle of keypad cell `i`. */
 static double key_x(int i)
@@ -655,6 +667,84 @@ static void test_scroll(void)
 
 /* ── Main ────────────────────────────────────────────────── */
 
+/*
+ * The dismissal switch (syn_panel_close_t).
+ *
+ * The calculator is the panel this setting exists for: a keypad is thirty small
+ * targets, and in click-off mode a near-miss lands on the desktop and bins the
+ * expression. So the two modes are pinned in opposite directions — click-off
+ * must still close, and button mode must NOT — because a setting that silently
+ * does nothing looks exactly like one that works.
+ */
+static void test_close_button(void)
+{
+    /* Click-off mode: unchanged, and still swallowed. */
+    panel_reset();
+    srv->config.panel_close = SYN_PANEL_CLOSE_CLICKOFF;
+    calc_show(srv);
+    panel_place();
+    CHECK(!hit_in_close(&srv->calc.hit, close_x(), close_y()),
+          "click-off mode recorded a close button");
+    CHECK(calc_click(srv, PANEL_X - 40, PANEL_Y - 40, BTN_LEFT, 0) == 1,
+          "a click off the panel was not taken");
+    CHECK(!srv->calc.visible, "click-off mode did not close on a click off");
+
+    /* Button mode: a click off is swallowed and changes NOTHING — the line you
+     * were typing survives, which is the entire point. */
+    panel_reset();
+    srv->config.panel_close = SYN_PANEL_CLOSE_BUTTON;
+    calc_show(srv);
+    panel_place();
+    type("12+3");
+
+    CHECK(calc_click(srv, PANEL_X - 40, PANEL_Y - 40, BTN_LEFT, 0) == 1,
+          "button mode did not swallow a click off the panel");
+    CHECK(srv->calc.visible, "button mode closed on a click off the panel");
+    CHECK(strcmp(srv->calc.entry, "12+3") == 0,
+          "a click off the panel disturbed the line ('%s')", srv->calc.entry);
+
+    /* …on every side, since "click off does nothing" that only holds below the
+     * panel is not the setting doing its job. */
+    const struct { const char *where; double x, y; } outside[] = {
+        { "above",  PANEL_X + 100,     PANEL_Y - 1       },
+        { "below",  PANEL_X + 100,     PANEL_Y + PANEL_H },
+        { "left",   PANEL_X - 1,       PANEL_Y + 100     },
+        { "right",  PANEL_X + PANEL_W, PANEL_Y + 100     },
+    };
+    for (size_t i = 0; i < sizeof(outside) / sizeof(outside[0]); i++) {
+        CHECK(calc_click(srv, outside[i].x, outside[i].y, BTN_LEFT, 0) == 1,
+              "a click %s was not taken", outside[i].where);
+        CHECK(srv->calc.visible, "a click %s closed the panel in button mode",
+              outside[i].where);
+    }
+
+    /* The button itself closes. */
+    CHECK(hit_in_close(&srv->calc.hit, close_x(), close_y()),
+          "the close button was not recorded in button mode");
+    CHECK(calc_click(srv, close_x(), close_y(), BTN_LEFT, 0) == 1,
+          "the close button did not take the click");
+    CHECK(!srv->calc.visible, "the close button did not close the panel");
+
+    /* Esc still closes in button mode — the guaranteed way out if the button
+     * ever fails to draw. */
+    panel_reset();
+    srv->config.panel_close = SYN_PANEL_CLOSE_BUTTON;
+    calc_show(srv);
+    panel_place();
+    calc_key(srv, XKB_KEY_Escape, 0);
+    CHECK(!srv->calc.visible, "Escape did not close the panel in button mode");
+
+    /* The button is chrome, not a key: it must not sit on a keypad cell. */
+    panel_reset();
+    srv->config.panel_close = SYN_PANEL_CLOSE_BUTTON;
+    calc_show(srv);
+    panel_place();
+    CHECK(hit_index_at(&srv->calc.hit, close_x(), close_y()) < 0,
+          "the close button overlaps a keypad key");
+
+    srv->config.panel_close = SYN_PANEL_CLOSE_CLICKOFF;   /* leave it as found */
+}
+
 int main(void)
 {
     char tmpl[] = "/tmp/calc_test.XXXXXX";
@@ -679,6 +769,7 @@ int main(void)
     test_copy();
 
     test_pointer();
+    test_close_button();
     test_click_off_closes();
     test_scroll();
 

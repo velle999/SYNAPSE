@@ -2169,6 +2169,63 @@ void synui_render_emoji(syn_server_t *s)
 }
 
 
+/* ── The corner close button ─────────────────────────────────
+ *
+ * One drawing for all three panels that offer one (see syn_panel_close_t), for
+ * the panel pointer contract's reason: three hand-drawn X's in three render
+ * functions is three chances for the drawn button and the clickable rect to
+ * disagree, and only one of them is visible.
+ *
+ * STROKED, not typed. A "✕" or "⨯" would be at the mercy of whatever family
+ * fontpick last applied — a font without it draws a missing-glyph box, and a
+ * close button that looks like a box is worse than no close button. Two cairo
+ * lines are the same two lines in every theme, at every UI font. Same argument
+ * as the calculator's ASCII keypad labels.
+ *
+ * Returns the width the header must give up on its right-hand edge, so the
+ * things that draw right-aligned into the title row (the calculator's `ans`,
+ * the task manager's summary) move over instead of drawing underneath it. 0
+ * when there is no button, which is what keeps click-off mode pixel-identical
+ * to what it was before this existed.
+ */
+#define PANEL_CLOSE_SZ   20
+#define PANEL_CLOSE_INSET 10
+
+static int panel_close_draw(syn_server_t *s, cairo_t *cr, syn_hit_t *hit, int pw)
+{
+    if (s->config.panel_close != SYN_PANEL_CLOSE_BUTTON) return 0;
+
+    const int bx = pw - PANEL_CLOSE_INSET - PANEL_CLOSE_SZ;
+    const int by = PANEL_CLOSE_INSET;
+
+    /* hit_set_panel() cleared this, so the button is recorded only on the
+     * renders that actually draw it. */
+    hit_set_close(hit, bx, by, PANEL_CLOSE_SZ, PANEL_CLOSE_SZ);
+
+    /* A face, so it reads as a button rather than as a decoration someone drew
+     * in the corner. Faint: it is chrome, and the panel's content is what the
+     * eye should land on first. */
+    set_ink(cr, INK_RULE, 0.55);
+    cairo_rectangle(cr, bx, by, PANEL_CLOSE_SZ, PANEL_CLOSE_SZ);
+    cairo_fill(cr);
+
+    const double cx = bx + PANEL_CLOSE_SZ / 2.0;
+    const double cy = by + PANEL_CLOSE_SZ / 2.0;
+    const double r  = PANEL_CLOSE_SZ * 0.26;
+
+    cairo_set_line_width(cr, 2);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    set_ink(cr, INK_TITLE, 1.0);
+    cairo_move_to(cr, cx - r, cy - r);
+    cairo_line_to(cr, cx + r, cy + r);
+    cairo_move_to(cr, cx + r, cy - r);
+    cairo_line_to(cr, cx - r, cy + r);
+    cairo_stroke(cr);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);   /* shared cr: put it back */
+
+    return PANEL_CLOSE_SZ + PANEL_CLOSE_INSET;
+}
+
 /* ── The calculator ──────────────────────────────────────────
  *
  * The one panel that is neither a list nor purely a grid: a tape, an expression
@@ -2253,6 +2310,11 @@ void synui_render_calc(syn_server_t *s)
     cairo_move_to(cr, 18, y_title);
     syn_show_text(cr, "CALCULATOR");
 
+    /* The corner button, and how much room it leaves the title row. This is the
+     * panel the switch exists for: a keypad is thirty small targets, and a
+     * near-miss used to close it and bin the expression. */
+    int close_pad = panel_close_draw(s, cr, &s->calc.hit, pw);
+
     /* What `ans` currently holds, named in the corner. Without it the identifier
      * is a promise the panel never shows you the value of, and "what does ans
      * mean right now" is the question you have the moment you type it. */
@@ -2263,7 +2325,7 @@ void synui_render_calc(syn_server_t *s)
         cairo_text_extents_t te;
         syn_text_extents(cr, label, &te);
         cairo_set_source_rgba(cr, 0.75, 0.55, 0.95, 1.0);
-        cairo_move_to(cr, pw - 18 - te.x_advance, y_title);
+        cairo_move_to(cr, pw - 18 - close_pad - te.x_advance, y_title);
         syn_show_text(cr, label);
     }
 
@@ -4691,6 +4753,11 @@ void synui_render_ctlpanel(syn_server_t *s)
     cairo_move_to(cr, 18, 30);
     syn_show_text(cr, "CONTROL PANEL");
 
+    /* The corner button. Its width is discarded here and nowhere else: this
+     * title row draws a breadcrumb from the LEFT and nothing right-aligned, so
+     * there is no header content to move out of the way. */
+    (void)panel_close_draw(s, cr, &cp->hit, pw);
+
     /* Breadcrumb. Which category you are in is otherwise only visible as a
      * highlight in the sidebar, which is exactly the thing that goes quiet when
      * focus moves into the rows. */
@@ -6364,12 +6431,15 @@ void synui_render_taskmgr(syn_server_t *s)
     cairo_move_to(cr, 18, 30);
     syn_show_text(cr, "TASK MANAGER");
 
+    /* The corner button, and the room it takes from the summary beside it. */
+    int close_pad = panel_close_draw(s, cr, &t->hit, pw);
+
     char sub[96];
     snprintf(sub, sizeof(sub), "%d procs \xc2\xb7 sort: %s%s",
              t->n, taskmgr_sort_label(t->sort), t->own_only ? " \xc2\xb7 mine" : "");
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 1.0);
-    draw_right(cr, pw - 18, 30, sub);
+    draw_right(cr, pw - 18 - close_pad, 30, sub);
 
     /* System overview */
     double y = sys_top;

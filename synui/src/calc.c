@@ -796,8 +796,19 @@ int calc_click(syn_server_t *s, double lx, double ly, uint32_t button,
     (void)time_msec;
     if (!s->calc.visible) return 0;
 
-    if (!hit_in_panel(&s->calc.hit, lx, ly)) {
+    /* The corner button, when the panel is drawing one. Checked before the
+     * keypad because it sits in the chrome, well above the keys. */
+    if (hit_in_close(&s->calc.hit, lx, ly)) {
         calc_hide(s);
+        return 1;
+    }
+
+    if (!hit_in_panel(&s->calc.hit, lx, ly)) {
+        /* Off the panel. In button mode this does NOT close it — that is the
+         * whole point of the setting, and it is the calculator that asked for
+         * it: a near-miss on a keypad key used to bin the expression. Still
+         * swallowed, because the panel is modal either way. */
+        if (s->config.panel_close == SYN_PANEL_CLOSE_CLICKOFF) calc_hide(s);
         return 1;
     }
     if (button != BTN_LEFT) return 1;

@@ -302,6 +302,28 @@ repeat_delay = 600
 # only thing on screen. Off leaves it to whoever presses the key.
 numlock      = on
 
+# ── How a panel is dismissed ───────────────────────────────
+# panel_close = clickoff|button   (default button)
+#
+# Applies to the three panels you work IN rather than pick from: the
+# CALCULATOR, the CONTROL PANEL and the TASK MANAGER. Everything else (the
+# pickers, the menus) always closes on a click off, because that is what
+# clicking away from a menu means.
+#
+#   clickoff  every panel closes when you click anywhere off it. What synui
+#             did before this setting existed.
+#   button    a close button in the panel's top-right corner. Clicking off
+#             does nothing — it is still swallowed, since these panels are
+#             modal and a near-miss must not reach the window underneath.
+#
+# The default is `button` because click-off is wrong for a panel you AIM at:
+# the calculator is thirty small keys, and a near-miss on one of them used to
+# close the panel and throw away the expression you were half way through.
+#
+# Esc closes all three whichever way this is set, so there is always a way out
+# even if the button fails to draw. Control panel ▸ Windows ▸ Panel close.
+# panel_close = clickoff
+
 # ── The bar (synui-bar) ────────────────────────────────────
 # Is there a bar at all. Control panel ▸ Desktop ▸ Bar flips this and, unlike
 # every other row on that panel, also has to go and DO something: the bar is a
