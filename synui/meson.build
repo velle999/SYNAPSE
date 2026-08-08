@@ -776,6 +776,16 @@ test('readme_binds', readme_binds,
                 meson.current_source_dir() / '../README.md'],
      timeout : 30)
 
+# What synui-record hands wf-recorder. Source-only: recording needs a seat and
+# an output, so this asserts the command line rather than the capture. The
+# constant-rate flag in particular has no visible symptom when it goes missing
+# — the recording still works, it just becomes unusable to every editor.
+record_args = find_program('tests/record_args.sh')
+test('record_args', record_args,
+     args    : [meson.current_source_dir() / 'systemd/synui-record.sh',
+                meson.current_source_dir() / 'systemd/synui-record-status.sh'],
+     timeout : 30)
+
 niri_strip = find_program('tests/niri_strip.sh')
 test('niri_strip', niri_strip,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

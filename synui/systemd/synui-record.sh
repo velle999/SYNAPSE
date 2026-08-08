@@ -34,6 +34,7 @@ note() { command -v notify-send >/dev/null 2>&1 && notify-send -a synui "$@" || 
 mode="none"
 out=""
 action="toggle"
+edit=0
 while [ $# -gt 0 ]; do
     case "$1" in
     --audio)     mode="system" ;;
@@ -41,6 +42,7 @@ while [ $# -gt 0 ]; do
     --no-audio)  mode="none" ;;
     --output)    shift; out="${1:-}" ;;
     --stop)      action="stop" ;;
+    --edit)      edit=1 ;;
     esac
     shift
 done
@@ -90,7 +92,54 @@ command -v wf-recorder >/dev/null 2>&1 || {
 
 dir="${XDG_VIDEOS_DIR:-$HOME/Videos}"
 mkdir -p "$dir" || { note "Cannot record" "Could not create $dir"; exit 1; }
-file="$dir/synui-$(date +%Y%m%d-%H%M%S).mp4"
+
+# CONSTANT frame rate, always.
+#
+# wf-recorder's default is damage-driven: a frame per compositor repaint, only
+# when something changed. That is a variable-rate file, and it declares its
+# r_frame_rate as the 90 kHz TIMEBASE rather than a rate, with three
+# consequences that all looked like separate bugs:
+#
+#   - the capture stamps itself H.264 level 6.2, a level meant for 8K, because
+#     the encoder reads that 90000 as the frame rate;
+#   - every editor has to conform it on import, since no timeline runs at the
+#     67.2 fps such a capture averages; and
+#   - conforming DROPS frames, wherever the source happened to be dense. A real
+#     313-frame capture became 226 frames on the way to DNxHR, silently.
+#
+# -r fixes all three at the source, and it is FREE: measured on a real capture,
+# constant 60 came out at 192 KB against 212 KB variable. Duplicated static
+# frames cost x264 almost nothing and a steady GOP wins it back. The same
+# capture then transcodes 281 frames to 281 -- nothing dropped at all.
+#
+# SYNUI_RECORD_FPS overrides for a high-refresh capture. 60 is the default
+# because it is a standard timeline rate and every player and NLE takes it.
+fps="${SYNUI_RECORD_FPS:-60}"
+
+if [ "$edit" = 1 ]; then
+    # --edit: record a MEZZANINE instead, for going straight into an editor.
+    #
+    # Free DaVinci Resolve on Linux decodes neither H.264 nor AAC, so the normal
+    # mp4 imports as media offline no matter what is installed -- that is a
+    # licensing limit inside Resolve, not a missing system codec. DNxHR and PCM
+    # are what it does read.
+    #
+    # This is opt-in and stays that way: DNxHR LB runs about 1.1 GB/min at
+    # 1440p60 against roughly 200 KB for the whole H.264 take. What it buys is
+    # the generation -- the default path encodes H.264 and then transcodes that
+    # to DNxHR, so the mezzanine is built from already-compressed frames, which
+    # fine text and UI edges show. Recording it directly skips that entirely.
+    #
+    # LB rather than SQ: it is the proxy/offline profile, a third of the size,
+    # and a screen capture is flat synthetic imagery that gains little from SQ.
+    # `syn resolve transcode --profile dnxhr_hq` re-does it heavier if a grade
+    # ever needs it.
+    file="$dir/synui-$(date +%Y%m%d-%H%M%S).mov"
+    codec=(-c dnxhd -p profile=dnxhr_lb -x yuv422p -C pcm_s16le)
+else
+    file="$dir/synui-$(date +%Y%m%d-%H%M%S).mp4"
+    codec=()
+fi
 
 # --audio[=MODE] records sound as well; deliberately NOT default. A recorder that
 # silently picks up the microphone is a privacy problem, and someone who wants
@@ -189,7 +238,13 @@ esac
 # Say what is being captured, not just that something is. "Recording" alone is
 # the same toast whether the sound is going in or being dropped, and audio you
 # thought you had is only discovered missing after the take.
-if [ -n "$audio_note" ]; then
+#
+# --edit gets its own line with the RATE said out loud. At 1.1 GB/min a take
+# left running fills a disk in under an hour, and the one moment anybody is
+# looking at this toast is the moment they could still stop it.
+if [ "$edit" = 1 ]; then
+    note "Recording for editing" "DNxHR · ~1 GB/min · Super+Shift+R again to stop"
+elif [ -n "$audio_note" ]; then
     note "Recording (no audio)" "$audio_note · Super+Shift+R again to stop"
 elif [ -n "$audio" ]; then
     note "Recording with audio" "$mode · Super+Shift+R again to stop"
@@ -214,6 +269,8 @@ fi
 set --
 [ -n "$audio" ] && set -- "$audio"
 [ -n "$out" ]   && set -- "$@" -o "$out"
+set -- "$@" -r "$fps"
+[ ${#codec[@]} -gt 0 ] && set -- "$@" "${codec[@]}"
 
 log=$(mktemp 2>/dev/null) || log=/dev/null
 setsid wf-recorder "$@" -f "$file" </dev/null >"$log" 2>&1 &
