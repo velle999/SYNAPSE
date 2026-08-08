@@ -196,11 +196,10 @@ PACKAGES=(
     # syn-install now names it in SEL_APPS, and an app the installer asks
     # for but the local repo does not carry fails the install at pacman.
     syn-arsenal
-    # Printer driver for the Xpress M2020W — an SPL printer too old for the
-    # driverless IPP path cups otherwise relies on. Script/data package:
-    # ships the vendor ULD rastertospl filter, its dlopen'd libscmssc.so, and
-    # the rastertospl PPD. See samsung-m2020/PKGBUILD for the two traps.
-    samsung-m2020
+    # samsung-m2020 is deliberately NOT built here. Its EULA forbids
+    # redistribution, so the driver cannot ride the ISO or sit in the local
+    # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
+    # still exists and still builds; it just fetches from Samsung now.
     # Shelly — GTK4/libalpm package manager (dir 'shelly' builds pkg
     # 'shelly-bin'). Prebuilt-binary PKGBUILD: makepkg downloads the pinned
     # release tarball at build time, so this needs network like pacstrap does.

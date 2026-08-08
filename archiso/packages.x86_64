@@ -153,9 +153,15 @@ ghostscript
 nss-mdns
 # The driverless-IPP story above covers any printer since ~2015. The Xpress
 # M2020W predates it: an SPL device cups cannot drive without Samsung's ULD
-# rastertospl filter. samsung-m2020 (built from samsung-m2020/PKGBUILD) ships
-# it so the live ISO — not just installed disks — can print to one.
-samsung-m2020
+# rastertospl filter.
+#
+# samsung-m2020 is NOT here any more, and deliberately. Samsung's EULA licenses
+# the ULD binaries "strictly for the personal use" and states that "No other
+# use, copying or distribution of the SOFTWARE PRODUCT is permitted" — an ISO
+# carrying them is distribution, whatever the build machine downloaded. It is
+# now an on-demand install instead: `syn printer samsung` fetches the driver
+# from Samsung onto the machine that will print with it, which is the thing the
+# licence actually describes. Same reason the AUR ships a recipe, not the files.
 
 # Shelly — a GTK4 + libalpm package manager (CLI `shelly`, GUI `shelly-ui`), a
 # friendlier front-end to pacman/AUR/Flatpak. Built from shelly/PKGBUILD as

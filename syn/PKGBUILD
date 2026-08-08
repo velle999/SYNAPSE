@@ -1,6 +1,6 @@
 pkgname=syn
 pkgver=0.1.0
-pkgrel=8
+pkgrel=9
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -24,12 +24,14 @@ optdepends=('nix: declarative user environment via `syn nix` (Home Manager)'
 source=("syn.sh"
         "syn-nix-facts.sh"
         "syn-resolve.sh"
+        "syn-printer.sh"
         "syn-resolve.hook"
         "nix-flake.nix"
         "nix-home.nix"
         "nix-render.nix"
         "nix-profile-example.nix")
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -50,6 +52,7 @@ package() {
     # A hook that went through `syn` would depend on PATH inside a pacman
     # transaction, which is not somewhere to have opinions about PATH.
     install -Dm755 "$srcdir/syn-resolve.sh" "$pkgdir/usr/lib/syn/syn-resolve"
+    install -Dm755 "$srcdir/syn-printer.sh" "$pkgdir/usr/lib/syn/syn-printer"
 
     # Flat in the source array because makepkg resolves a local source to its
     # BASENAME (see the note above); it gets its real, ordered name here.

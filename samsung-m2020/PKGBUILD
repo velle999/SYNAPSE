@@ -24,12 +24,28 @@
 # default path — no cache entry, no ldconfig, no post-install action needed.
 # It is package-owned and uniquely named, so it shadows nothing.
 #
-# Files come pre-built from Samsung's ULD tarball (uld_V1.00.39_01.17), the
-# same source the AUR samsung-unified-driver package uses. arch=x86_64 only —
-# these are the vendor's proprietary x86_64 ELF binaries, not compiled here.
+# WHY THIS DOWNLOADS INSTEAD OF SHIPPING THE FILES (changed 2026-08-08):
+# these four files used to be committed to this repository and built into every
+# ISO. Samsung's EULA — uld/noarch/license/eula.txt, installed by this package —
+# grants a licence "strictly for the personal use" and says in the same
+# paragraph: "No other use, copying or distribution of the SOFTWARE PRODUCT is
+# permitted." There is no redistribution carve-out anywhere in it.
+#
+# That is exactly why the AUR samsung-unified-driver package fetches the tarball
+# from Samsung at build time rather than hosting it: the AUR distributes a
+# RECIPE, not the payload. This now does the same, and samsung-m2020 is no
+# longer on the ISO — `syn printer samsung` installs it on demand, on the
+# machine that will print with it, which is what the licence describes.
+#
+# Verified before the switch: all four extracted files are byte-identical to
+# what this package used to ship, so the change is provenance only. The tarball
+# Samsung serves hashes to the same sha512 the AUR pins.
+#
+# arch=x86_64 only — these are the vendor's proprietary x86_64 ELF binaries,
+# not compiled here.
 pkgname=samsung-m2020
 pkgver=1.00.39.1
-pkgrel=2
+pkgrel=3
 pkgdesc="Samsung Xpress M2020/M2020W SPL printer driver (ULD rastertospl + PPD)"
 arch=('x86_64')
 url="https://www.bchemnet.com/suldr/"
@@ -38,25 +54,30 @@ license=('custom:Samsung')
 # debug symbols — gdb-add-index just warns) or emit an empty -debug package.
 options=('!strip' '!debug')
 depends=('cups' 'ghostscript' 'libcups')
-source=(
-    'rastertospl'
-    'pstosecps'
-    'libscmssc.so'
-    'Samsung_M2020_Series.ppd'
-)
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+# pkgver keeps its trailing .1 (it has shipped as 1.00.39.1 and must not go
+# backwards); the tarball's own version is separate.
+_uldver=1.00.39
+source=("http://downloadcenter.samsung.com/content/DR/201704/20170407143829533/uld_V${_uldver}_01.17.tar.gz")
+sha512sums=('fccda77af20b31c9b46117b013d0c40333adc87679057c2b1e513d9bae97fc7267eca74030bc039feec50edee8e4cdfebe8761c77d653646f7ea4ac102c2643f')
 
 package() {
+    local _u="$srcdir/uld"
+
     # CUPS filters — invoked by the PPD's cupsFilter line.
-    install -Dm755 "$srcdir/rastertospl" "$pkgdir/usr/lib/cups/filter/rastertospl"
-    install -Dm755 "$srcdir/pstosecps"   "$pkgdir/usr/lib/cups/filter/pstosecps"
+    install -Dm755 "$_u/x86_64/rastertospl" "$pkgdir/usr/lib/cups/filter/rastertospl"
+    install -Dm755 "$_u/x86_64/pstosecps"   "$pkgdir/usr/lib/cups/filter/pstosecps"
 
     # The dlopen()'d Smart CMS engine. Goes in /usr/lib (default loader path)
     # so it resolves with no ldconfig run — see THE THIRD TRAP above.
-    install -Dm755 "$srcdir/libscmssc.so" "$pkgdir/usr/lib/libscmssc.so"
+    install -Dm755 "$_u/x86_64/libscmssc.so" "$pkgdir/usr/lib/libscmssc.so"
 
     # The PPD that references rastertospl (NOT the splix rastertoqpdl one).
     # Dropped into the model dir so `lpadmin -m` / the CUPS web UI can pick it.
-    install -Dm644 "$srcdir/Samsung_M2020_Series.ppd" \
+    install -Dm644 "$_u/noarch/share/ppd/Samsung_M2020_Series.ppd" \
         "$pkgdir/usr/share/cups/model/Samsung_M2020_Series.ppd"
+
+    # The EULA these binaries are licensed under. It travels with them now,
+    # which it never did while they were vendored.
+    install -Dm644 "$_u/noarch/license/eula.txt" \
+        "$pkgdir/usr/share/licenses/$pkgname/EULA"
 }

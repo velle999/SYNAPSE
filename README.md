@@ -722,7 +722,17 @@ SPDX identifiers, per component:
 | `fetch` (the "About OS" tool) | `ISC`, upstream — packaged from [areofyl/fetch](https://github.com/areofyl/fetch) at a pinned commit, plus two local patches meant for upstream |
 | `limine-snapper-sync` | `GPL-3.0`, upstream ([Zesko](https://gitlab.com/Zesko/limine-snapper-sync)) |
 | GraalVM CE (linked into `limine-snapper-sync`) | `GPL-2.0-WITH-Classpath-exception-2.0`, © Oracle — it is a `native-image` build, so GraalVM's runtime is statically linked into the shipped binary rather than merely used to compile it |
-| `samsung-m2020` | `custom:Samsung` — Samsung's proprietary Unified Linux Driver binaries (`rastertospl`, `libscmssc.so`, the PPD), from the same ULD release the AUR `samsung-unified-driver` package uses |
+| `samsung-m2020` (**not shipped** — see below) | `custom:Samsung` — the PKGBUILD is here, the driver is not |
+
+**The Samsung printer driver is not shipped at all.** Samsung's EULA licenses
+the Unified Linux Driver binaries "strictly for the personal use" and states
+that "No other use, copying or distribution of the SOFTWARE PRODUCT is
+permitted", with no redistribution carve-out. So SynapseOS carries the recipe
+and not the payload, exactly as the AUR does — `syn printer samsung` downloads
+the driver from Samsung onto the machine that will print with it, and installs
+the EULA alongside it. The Xpress M2020/M2020W needs this because it is an SPL
+device that predates driverless IPP; almost any printer made since roughly 2015
+needs no driver at all.
 
 **Wallpaper Engine's own content is not redistributed.** `linux-wallpaperengine`
 is an independent renderer; the wallpapers, and Wallpaper Engine's `assets/`

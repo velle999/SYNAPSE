@@ -42,6 +42,14 @@ syn-firstboot/src/
 syn-update/src/
 syn-install/src/
 syn-arsenal/src/
+# samsung-m2020 now DOWNLOADS Samsung's ULD tarball instead of vendoring it, so
+# src/ holds the extracted proprietary driver — every vendor PPD and binary in
+# the release, not just the four files this packages. Committing it is the exact
+# thing the switch away from vendoring was for, and `git add -A` in this
+# directory WILL sweep it in: the extraction dir is `uld/`, so the generic
+# src/*-0.1.0/ rule above does not match it.
+samsung-m2020/src/
+samsung-m2020/uld_*.tar.gz
 # makepkg srcdir + downloaded upstream tarball for the scenefx packages. The
 # canonical source is upstream's tagged release (pinned in each PKGBUILD) plus
 # the six ported wlroots scene TUs sitting next to it; everything under src/ is

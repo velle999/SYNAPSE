@@ -18,6 +18,8 @@ Usage:
   syn resolve <cmd>       DaVinci Resolve support: OpenCL runtime, launch
                           environment, AUR build, DNxHR transcode
                           (doctor/setup/install/transcode)
+  syn printer <vendor>    Printer drivers that cannot ship with the OS —
+                          currently Samsung ULD (M2020/M2020W)
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
   syn install             Install SynapseOS to disk
@@ -318,6 +320,7 @@ case "${1:-help}" in
     # nix block again, and the pacman hook execs it directly — a hook that had
     # to go through `syn` would break if PATH were ever not what it expects.
     resolve)        shift; exec /usr/lib/syn/syn-resolve "$@" ;;
+    printer)        shift; exec /usr/lib/syn/syn-printer "$@" ;;
     install)        exec syn-install ;;
     update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;
