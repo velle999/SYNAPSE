@@ -421,8 +421,14 @@ extern const int                 synui_welcome_menu_len;
 
 /* ── Wallpaper picker (wppick.c) ─────────────────────────── */
 #define WPPICK_FOUND_MAX 64   /* images the browse scan will list */
-#define WPPICK_WE_MAX   256   /* Steam Workshop wallpapers the scan will list */
+#define WPPICK_WE_MAX   256   /* Wallpaper Engine wallpapers the scan will list */
 #define WPPICK_ROWS      10   /* rows visible at once; the rest scroll */
+/* Where synapse-wallpapers installs OURS — the second root the picker scans and
+ * the second one synui-wpengine's wp_dir() resolves an id against. Both honour
+ * $SYNUI_WPENGINE_SYSROOT over it. Keep the two in step: the picker hands the
+ * engine a bare id, so a root only one of them knows about is a row that cannot
+ * be applied, or a wallpaper that cannot be chosen. */
+#define WPPICK_WE_SYSROOT "/usr/share/synapse/wallpapers/431960"
 
 /* ── Cursor theme picker (cursor.c) ──────────────────────── */
 #define CURPICK_MAX  64   /* installed cursor themes the scan will list */

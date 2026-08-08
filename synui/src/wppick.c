@@ -844,27 +844,25 @@ static bool wp_project_meta(const char *path, const char *root,
     return true;
 }
 
-/* Wallpaper Engine is Steam AppID 431960; its subscriptions land in the usual
- * workshop content tree, one numbered directory per wallpaper. */
-static void wppick_scan_workshop(syn_server_t *s)
+/* Is `id` already listed? Roots are walked most-specific first, so an id that
+ * is taken came from a root that outranks the one being scanned now. */
+static bool wppick_we_has_id(syn_server_t *s, const char *id)
 {
-    s->wppick.we_count = 0;
+    for (int i = 0; i < s->wppick.we_count; i++)
+        if (strcmp(s->wppick.we[i].id, id) == 0) return true;
+    return false;
+}
 
-    const char *home = getenv("HOME");
-    if (!home || !*home) return;
-
-    char root[256];
-    if (snprintf(root, sizeof(root),
-                 "%s/.local/share/Steam/steamapps/workshop/content/431960",
-                 home) >= (int)sizeof(root))
-        return;
-
+/* One Wallpaper Engine content root: a directory of numbered wallpaper dirs. */
+static void wppick_scan_we_root(syn_server_t *s, const char *root)
+{
     DIR *d = opendir(root);
-    if (!d) return;   /* Wallpaper Engine not installed — no rows, no error */
+    if (!d) return;   /* No such root — no rows, no error */
 
     struct dirent *e;
     while ((e = readdir(d)) && s->wppick.we_count < WPPICK_WE_MAX) {
         if (e->d_name[0] == '.') continue;
+        if (wppick_we_has_id(s, e->d_name)) continue;
 
         char proj[512];
         if (snprintf(proj, sizeof(proj), "%s/%s/project.json", root, e->d_name)
@@ -918,8 +916,49 @@ static void wppick_scan_workshop(syn_server_t *s)
                      "%s", e->d_name);
     }
     closedir(d);
+}
 
-    wlr_log(WLR_INFO, "synui: wppick: %d Workshop wallpaper(s) found",
+/*
+ * Every Wallpaper Engine wallpaper this machine has, from every root.
+ *
+ * Wallpaper Engine is Steam AppID 431960 and subscriptions land in the usual
+ * Workshop content tree — but that is not the only place a wallpaper lives any
+ * more. The `synapse-wallpapers` package installs ours into a SYSTEM tree, and
+ * a video wallpaper needs no Steam and no assets directory to play, so an ISO
+ * with no Steam on it still ships four working wallpapers.
+ *
+ * Scanning only the Workshop tree is what made them invisible: `opendir` on a
+ * machine with no Steam fails, this returned, and the picker showed no
+ * Wallpaper Engine rows at all — silently, since "no Workshop tree" is the
+ * normal state of a box without Wallpaper Engine and never was an error. The
+ * wallpapers were installed, the engine would have played them, and there was
+ * no way to choose one. synui-wpengine's wp_dir() learned about the system
+ * tree when the package landed; this did not.
+ *
+ * SAME ROOTS, SAME ORDER as that function, because the two have to agree about
+ * what an id means: the picker hands the engine a BARE id (see the `set` in
+ * wppick_apply), and the engine resolves it against these roots in this order.
+ * A user's own subscription therefore shadows a system wallpaper of the same
+ * id in both places rather than in only one of them.
+ */
+static void wppick_scan_workshop(syn_server_t *s)
+{
+    s->wppick.we_count = 0;
+
+    const char *home = getenv("HOME");
+    char workshop[256];
+    if (home && *home &&
+        snprintf(workshop, sizeof(workshop),
+                 "%s/.local/share/Steam/steamapps/workshop/content/431960",
+                 home) < (int)sizeof(workshop))
+        wppick_scan_we_root(s, workshop);
+
+    /* Overridable by the same variable synui-wpengine honours, so a test rig
+     * can point both halves at one scratch tree. */
+    const char *sysroot = getenv("SYNUI_WPENGINE_SYSROOT");
+    wppick_scan_we_root(s, (sysroot && *sysroot) ? sysroot : WPPICK_WE_SYSROOT);
+
+    wlr_log(WLR_INFO, "synui: wppick: %d Wallpaper Engine wallpaper(s) found",
             s->wppick.we_count);
 }
 
