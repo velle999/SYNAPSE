@@ -154,21 +154,41 @@ static void clip_read_finish(struct clip_read *r)
     free(r);
 }
 
+/* Land what has been read and stop.
+ *
+ * `buf` is allocated by the read loop before every read, so it is non-NULL by
+ * the time any caller here is reachable; the guard is for the one path that is
+ * not (a hangup seen before a single read). clip_history_add ignores an empty
+ * string, so a client that advertised the type and then wrote nothing costs an
+ * entry rather than a bad entry. */
+static void clip_commit(struct clip_read *r)
+{
+    if (r->buf) {
+        r->buf[r->len] = '\0';
+        clip_history_add(r->server, r->buf);
+        if (r->server->clipboard.visible) synui_render_clipboard(r->server);
+    }
+    clip_read_finish(r);
+}
+
 static int clip_read_cb(int fd, uint32_t mask, void *data)
 {
     struct clip_read *r = data;
 
-    if (mask & (WL_EVENT_ERROR | WL_EVENT_HANGUP)) {
-        /* Hangup with data already read is the normal end: the client wrote and
-         * closed. Only treat it as the end, not as a failure. */
-        if (r->len) {
-            r->buf[r->len] = '\0';
-            clip_history_add(r->server, r->buf);
-            if (r->server->clipboard.visible) synui_render_clipboard(r->server);
-        }
-        clip_read_finish(r);
-        return 0;
-    }
+    /* A real error is the only thing worth giving up on WITHOUT draining first.
+     *
+     * HANGUP is emphatically not, and taking it for one is what made this whole
+     * file a no-op. The client's write and its close reach us together, so the
+     * kernel reports EPOLLIN|EPOLLHUP in a SINGLE event and libwayland hands
+     * both bits over at once — a hangup is almost never a separate wakeup that
+     * arrives after the data. Returning here on HANGUP therefore threw the
+     * selection away UNREAD whenever it came in one piece, which is every
+     * selection small enough to fit the pipe: the history stayed empty for
+     * every client and every copy, while the selection itself (wlroots, not
+     * this file) worked perfectly and hid it.
+     *
+     * Drain first. The EOF branch below is what ends a transfer. */
+    if (mask & WL_EVENT_ERROR) { clip_read_finish(r); return 0; }
 
     for (;;) {
         /* Cap it. A client is free to offer a 900MB "text/plain" selection, and
@@ -187,15 +207,15 @@ static int clip_read_cb(int fd, uint32_t mask, void *data)
 
         ssize_t n = read(fd, r->buf + r->len, space > 4096 ? 4096 : space);
         if (n > 0) { r->len += (size_t)n; continue; }
-        if (n == 0) {                       /* EOF: the client is done */
-            r->buf[r->len] = '\0';
-            clip_history_add(r->server, r->buf);
-            if (r->server->clipboard.visible) synui_render_clipboard(r->server);
-            clip_read_finish(r);
+        if (n == 0) { clip_commit(r); return 0; }   /* EOF: the client is done */
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            /* More later — unless the writer is already gone, in which case
+             * nothing more is coming and waiting for an EOF that cannot arrive
+             * would strand the read in the loop forever. */
+            if (mask & WL_EVENT_HANGUP) clip_commit(r);
             return 0;
         }
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;  /* more later */
-        if (errno == EINTR) continue;
         clip_read_finish(r);                /* a real error */
         return 0;
     }

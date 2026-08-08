@@ -573,6 +573,26 @@ calc_test = executable('calc_test',
   build_by_default : false)
 test('calc', calc_test)
 
+# The clipboard history CAPTURES. Not the panel, not the keys — that a copy
+# reaches items[0] at all, which is what pkgrel 311 shipped not doing while
+# looking entirely healthy from outside (the selection is wlroots' job and went
+# on working, so only the panel was ever empty).
+#
+# Drives the real wl_event_loop against a real pipe, because the bug WAS the
+# event loop: a client writes and closes together, so READABLE and HANGUP land
+# in one event, and the old code returned on HANGUP without reading. A test that
+# stubbed the transfer would have passed against the broken code.
+#
+# hit.c for the panel's row geometry, as in calc_test. No display, no backend —
+# wlr_seat_create needs neither.
+clip_test = executable('clip_test',
+  ['tests/clip_test.c', 'src/clipboard.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('clip', clip_test)
+
 # The cropper's geometry and its output rules. Two things here can destroy
 # something — the image/screen coordinate mapping (get it wrong and the tool
 # writes a different rectangle from the one you dragged, silently) and the
