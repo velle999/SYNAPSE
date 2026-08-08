@@ -710,7 +710,7 @@ SPDX identifiers, per component:
 | Scope | License |
 |---|---|
 | `synapse_kmod` (kernel module) | `GPL-2.0-only` — it links the kernel |
-| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-firstboot`, `vibe` | `GPL-2.0-or-later` |
+| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `vibe`, `chibi` | `GPL-2.0-or-later` |
 | `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
 | `shelly` | `GPL-3.0-only` |
 | `synui/quickshell-antiquity/` and its three wallpapers | `MIT`, © 2026 [diinki](https://github.com/diinki) — a port of [linux-antiquity](https://github.com/diinki/linux-antiquity); notice kept as `LICENSE.antiquity` |
@@ -719,6 +719,9 @@ SPDX identifiers, per component:
 | `linux-wallpaperengine` | `GPL-3.0-or-later`, upstream — packaged from [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine) at a pinned commit |
 | CEF / Chromium (bundled with `linux-wallpaperengine`) | `BSD-3-Clause`, © The Chromium Embedded Framework Authors and © The Chromium Authors — the renderer links `libcef.so` for web wallpapers, so it and its `.pak` data ship with the package |
 | `synapse-wallpapers` | `GPL-3.0-or-later` |
+| `fetch` (the "About OS" tool) | `ISC`, upstream — packaged from [areofyl/fetch](https://github.com/areofyl/fetch) at a pinned commit, plus two local patches meant for upstream |
+| `limine-snapper-sync` | `GPL-3.0`, upstream ([Zesko](https://gitlab.com/Zesko/limine-snapper-sync)) |
+| `samsung-m2020` | `custom:Samsung` — Samsung's proprietary Unified Linux Driver binaries (`rastertospl`, `libscmssc.so`, the PPD), from the same ULD release the AUR `samsung-unified-driver` package uses |
 
 **Wallpaper Engine's own content is not redistributed.** `linux-wallpaperengine`
 is an independent renderer; the wallpapers, and Wallpaper Engine's `assets/`
