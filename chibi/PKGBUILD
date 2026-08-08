@@ -1,16 +1,21 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=chibi
 pkgver=0.1.0
-pkgrel=12
+pkgrel=13
 pkgdesc="Chibi — voice-interactive AI companion, with a sentinel aspect over synguard's security feed"
 arch=('x86_64')   # binary wheels (ctranslate2, onnxruntime, opencv) are arch-specific
 url="https://github.com/velle999/chibi-llm"
-# chibi-llm ships no LICENSE file, so there is nothing to install and nothing
-# to truthfully claim here. Add one upstream and set this properly.
+# GPL-2.0-or-later is chibi's own code; MIT and Apache-2.0 are the vendored
+# Python deps in /usr/lib/chibi/pydeps, which keep their own terms and ship
+# their own licence files under <pkg>.dist-info/licenses/ (pip preserves them).
+#
+# Upstream had NO LICENSE file until 4ccc3cb, so this field asserted a licence
+# with nothing behind it and anyone receiving a binary got no terms at all.
+# Fixed at the source rather than by inventing one here.
 license=('GPL-2.0-or-later' 'MIT' 'Apache-2.0')
 
 # Pinned upstream commit — bump alongside pkgrel when rolling the app.
-_commit=848b0161226f0a62f4324b25f6001a414fd62e37
+_commit=4ccc3cb4bf7116737f793d62fdc45c36749f0d78
 
 # Runtime deps.
 #
@@ -268,4 +273,11 @@ package() {
 
     install -Dm644 "$srcdir/chibi-llm/docs/security-overview.md" \
         "$pkgdir/usr/share/doc/$pkgname/security-overview.md"
+
+    # chibi's own licence. The vendored deps under pydeps/ carry theirs already
+    # — pip keeps each wheel's <pkg>.dist-info/licenses/ — so this is the one
+    # that was missing, and it only exists to install because upstream gained a
+    # LICENSE in 4ccc3cb.
+    install -Dm644 "$srcdir/chibi-llm/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

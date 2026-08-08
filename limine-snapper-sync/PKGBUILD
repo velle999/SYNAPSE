@@ -12,6 +12,15 @@
 # far the most network-dependent package in the tree. Verified to build and
 # produce a 9 MB package of native binaries on 2026-07-29.
 #
+# WHAT ENDS UP IN THE BINARY, since GraalVM is more than a compiler here:
+# native-image statically links its own runtime (SubstrateVM) and the JDK code
+# the program touches INTO the produced executable, so GraalVM CE material
+# ships in that 9 MB even though GraalVM itself is only a makedepend. GraalVM CE
+# is GPL-2.0-WITH-Classpath-exception-2.0, and the Classpath Exception exists
+# precisely so a linked work does not inherit the GPL — which is what makes
+# distributing this under upstream's own GPL-3.0 fine. Worth writing down
+# because "it's just a build tool" is the natural assumption and it is wrong.
+#
 # HOW IT WORKS, which drives the partition layout: it copies each snapshot's
 # kernel and initramfs ONTO THE FAT32 ESP and writes a limine.conf entry for
 # them, stopping once the ESP passes LIMIT_USAGE_PERCENT (85 by default). So
@@ -22,7 +31,7 @@
 # Maintainer: Zesko
 pkgname="limine-snapper-sync"
 pkgver=1.31.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Integrates Limine boot entries with Snapper snapshots."
 arch=('x86_64' 'aarch64')
 url="https://gitlab.com/Zesko/limine-snapper-sync"
@@ -83,6 +92,13 @@ package() {
 
 	# docs
 	install -Dm 644 README.md CHANGELOG.md -t "$pkgdir/usr/share/doc/limine-snapper-sync/"
+
+	# The licence, which this shipped without for its whole life here. Upstream
+	# is GPL-3.0 and carries LICENSE at the repository root (checked at this
+	# tag), so redistributing the binary without it is the one thing GPL-3 §4
+	# does not allow. README and CHANGELOG were being installed and the licence
+	# was not, which is the wrong way round.
+	install -Dm 644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 
 	# files
 	cp -a "$src/etc" "$src/usr" "$pkgdir/"

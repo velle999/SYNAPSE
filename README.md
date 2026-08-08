@@ -721,6 +721,7 @@ SPDX identifiers, per component:
 | `synapse-wallpapers` | `GPL-3.0-or-later` |
 | `fetch` (the "About OS" tool) | `ISC`, upstream — packaged from [areofyl/fetch](https://github.com/areofyl/fetch) at a pinned commit, plus two local patches meant for upstream |
 | `limine-snapper-sync` | `GPL-3.0`, upstream ([Zesko](https://gitlab.com/Zesko/limine-snapper-sync)) |
+| GraalVM CE (linked into `limine-snapper-sync`) | `GPL-2.0-WITH-Classpath-exception-2.0`, © Oracle — it is a `native-image` build, so GraalVM's runtime is statically linked into the shipped binary rather than merely used to compile it |
 | `samsung-m2020` | `custom:Samsung` — Samsung's proprietary Unified Linux Driver binaries (`rastertospl`, `libscmssc.so`, the PPD), from the same ULD release the AUR `samsung-unified-driver` package uses |
 
 **Wallpaper Engine's own content is not redistributed.** `linux-wallpaperengine`
