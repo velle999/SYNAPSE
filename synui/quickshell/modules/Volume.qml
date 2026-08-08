@@ -25,12 +25,18 @@ BarModule {
     // own mixer while the pointer is over the popup rather than the bar.
     readonly property bool mixerOpen: mixer.visible
 
-    readonly property var sink: Pipewire.defaultAudioSink
+    // The device behind the equalizer when it is on — the chain is pinned at
+    // unity, so the default sink would read a flat 100% that never moves. See
+    // EqState.targetNode. Unchanged whenever the equalizer is off.
+    readonly property var sink: EqState.targetNode || Pipewire.defaultAudioSink
     readonly property var audio: sink ? sink.audio : null
     readonly property bool muted: audio ? audio.muted : false
     readonly property int  volume: audio ? Math.round(audio.volume * 100) : 0
 
-    PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
+    // defaultAudioSink stays in the list even when it is not what is shown:
+    // this is the tracker that opens the PipeWire connection for the whole bar
+    // process, and EqState's own node lookup depends on it having done so.
+    PwObjectTracker { objects: [Pipewire.defaultAudioSink, EqState.targetNode].filter(n => n) }
 
     icon: muted ? Icons.volMuted
                 : (volume >= 66 ? Icons.volHigh

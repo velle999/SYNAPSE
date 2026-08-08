@@ -86,13 +86,20 @@ QtObject {
     }
 
     // ── Volume ───────────────────────────────────────────
-    readonly property var sink: Pipewire.defaultAudioSink
+    // EqState.targetNode when the equalizer is on, because the chain is pinned
+    // at unity and the DEVICE holds the level — binding to the default sink
+    // would show a flat 100% that never moves however hard the keys are
+    // pressed. Null whenever the equalizer is off or its target is not resolved
+    // yet, and then this is exactly what it always was.
+    readonly property var sink: EqState.targetNode || Pipewire.defaultAudioSink
     readonly property var audio: sink ? sink.audio : null
 
     // Without a tracker the node stays unbound and every property reads null,
     // so the OSD would simply never fire. Same trap as modules/Volume.qml.
+    // BOTH nodes are tracked: `sink` swaps the moment the equalizer is toggled,
+    // and a tracker listing only today's answer unbinds the one it moves to.
     property PwObjectTracker tracker: PwObjectTracker {
-        objects: [Pipewire.defaultAudioSink]
+        objects: [Pipewire.defaultAudioSink, EqState.targetNode].filter(n => n)
     }
 
     function showVolume() {

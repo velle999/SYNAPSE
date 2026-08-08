@@ -84,6 +84,53 @@ QtObject {
     // reporting a problem rather than a setting.
     readonly property bool warning: root.enabled && !root.active
 
+    // ── The node that actually owns the volume ───────────
+    //
+    // NOT chainNode. The chain feeds a real sink, so both would apply their own
+    // volume and the signal would be attenuated twice — velle's headset at 29%
+    // squared to -64.5 dB, which is silence, reported 2026-08-08 as "turning eq
+    // on mutes my music through bluetooth". So synui-eq pins the chain at unity
+    // and the DEVICE keeps the level.
+    //
+    // Which means anything bound to Pipewire.defaultAudioSink for a VOLUME sits
+    // at a flat 100% while the equalizer is on and never moves when the keys
+    // are pressed. The OSD and the bar's readout bind to this instead.
+    //
+    // The name comes from synui-volume(1), which reads the live link, and not
+    // from eq.state's prev_sink: prev_sink is the device as it was when the
+    // equalizer was switched ON. The chain's output is passive, so connecting a
+    // headset later moves the audio without the state file changing, and
+    // prev_sink would have this reporting the speakers while the sound is in
+    // someone's ears.
+    property string targetName: ""
+    readonly property var targetNode: {
+        if (!root.active || root.targetName === "") return null
+        const m = Pipewire.nodes.values.filter(n => n.name === root.targetName)
+        return m.length > 0 ? m[0] : null
+    }
+
+    property Process targetProc: Process {
+        command: ["synui-volume", "target"]
+        stdout: StdioCollector {
+            onStreamFinished: root.targetName = this.text.trim()
+        }
+    }
+    function resolveTarget() {
+        if (root.active) targetProc.running = true
+        else root.targetName = ""
+    }
+
+    // Re-resolve on the two events that can move the target, rather than on a
+    // timer: the equalizer coming on or going off, and a device appearing or
+    // disappearing (which is what plugging in a headset looks like from here).
+    // A poll would spawn a process every tick for a value that changes twice a
+    // day.
+    property Connections targetConn: Connections {
+        target: Pipewire.nodes
+        function onValuesChanged() { root.resolveTarget() }
+    }
+    onActiveChanged: resolveTarget()
+
     // ── Reading ──────────────────────────────────────────
     // QtObject has no default property, so the watcher is held by a named one —
     // the same shape Theme.qml uses for the palette.

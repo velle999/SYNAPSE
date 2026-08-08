@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=313
+pkgrel=314
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -387,6 +387,10 @@ package() {
     # panel is a no-op.
     install -Dm755 systemd/synui-eq.sh \
         "$pkgdir/usr/bin/synui-eq"
+    # The volume keys go through this, not wpctl — it finds the device behind
+    # the equalizer. input.c spawns it by name, so it has to be on PATH.
+    install -Dm755 systemd/synui-volume.sh \
+        "$pkgdir/usr/bin/synui-volume"
 
     # The Wallpaper Engine control script. It used to ship inside
     # linux-wallpaperengine, which syn-update can never rebuild on an installed

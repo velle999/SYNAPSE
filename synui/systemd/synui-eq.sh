@@ -389,46 +389,45 @@ default_sink_unpin() {
     pw-metadata -d 0 default.configured.audio.sink >/dev/null 2>&1 || true
 }
 
-# ── The volume has to come WITH the audio ───────────────────────────────────
+# ── EXACTLY ONE STAGE MAY OWN THE VOLUME ────────────────────────────────────
 #
-# The chain is a second sink, and a sink owns its volume. WirePlumber remembers
-# that volume per node — `Audio/Sink:media.name:SynapseOS\sEqualizer` in
-# ~/.local/state/wireplumber/stream-properties — entirely separately from the
-# speakers'. So the two devices keep two independent volumes and switching
-# between them JUMPS the loudness, in whichever direction the memories happen
-# to differ.
+# The chain is a sink that FEEDS another sink, so both apply their own volume
+# and the signal is attenuated TWICE. Until 2026-08-08 this script copied the
+# device's level onto the chain (to stop the loudness jumping when the two
+# nodes' remembered volumes differed), which made the double stage exact:
 #
-# That is not hypothetical: velle's chain came up at channelVolumes [0.027,
-# 0.027] on 2026-08-08 — 30% on the cubic scale, about -31 dB — and the whole
-# desktop went quiet the moment the equalizer was switched on. Nothing in the
-# filter graph was wrong; the band gains were a mild boost. It was the sink's
-# own remembered level, and it is invisible from the panel, which shows band
-# gains and a preamp and no device volume at all.
+#     bluetooth at 29%  ->  0.29^3 = 0.0244 amplitude, -32 dB
+#     chain also at 29% ->  0.0244 * 0.0244 = 0.000595, -64.5 dB   SILENT
 #
-# How it got low is the ordinary way: the volume keys run `wpctl set-volume
-# @DEFAULT_AUDIO_SINK@`, so turning the volume down WHILE THE EQUALIZER IS ON
-# turns down the equalizer, and WirePlumber dutifully saves that against the
-# equalizer. Switch it off and the speakers are still at 100%; switch it back
-# on and you are at 30% again with no way to tell why.
+# velle reported it as "turning eq on mutes my music through bluetooth", and
+# the reason it looked like a bluetooth-only bug is that the speakers sit at
+# 50%: 0.125 * 0.125 is -36 dB, quiet but still audible. Same defect, one
+# device just had enough level left to survive it.
 #
-# So the volume is carried across every switch, in both directions. An
-# equalizer is a tone control: turning it on may change the TONE and must not
-# change the LEVEL.
+# So the DEVICE owns the volume and the chain is pinned at unity, forever.
+# Nothing here ever writes a device's volume — in particular it never raises
+# one, because on a bluetooth headset that is an AVRCP absolute-volume command
+# to hardware in someone's ears (see the P20i's connect-at-100% quirk), and a
+# chain that later dies would leave the next sound playing at hardware max.
+#
+# The volume KEYS follow the device instead of the default sink, so turning the
+# equalizer on no longer redirects them onto the chain. See input.c.
+#
+# WirePlumber still remembers a level against the chain node
+# (`Audio/Sink:media.name:SynapseOS\sEqualizer` in stream-properties) and
+# restores it as the node appears — velle's was saved at 0.024387 by the old
+# code — so unity has to be ASSERTED against that restore, not assumed.
 #
 # Percentages rather than raw values because both sides of the round trip go
-# through pactl's cubic scale, so what is read is what is written. A sink that
-# cannot be read leaves this a no-op rather than guessing at 100% — asserting a
-# volume nobody asked for is how you make a quiet desktop suddenly loud.
+# through pactl's cubic scale, so what is read is what is written.
 sink_volume_pct() {
     pactl get-sink-volume "$1" 2>/dev/null |
         grep -oE '[0-9]+%' | head -1 | tr -d '%'
 }
 
-carry_volume() {
-    local from=$1 to=$2 pct got i
-    [[ -n $from && -n $to && $from != "$to" ]] || return 0
-    pct=$(sink_volume_pct "$from")
-    [[ -n $pct ]] || return 0
+assert_sink_pct() {
+    local to=$1 pct=$2 got i
+    [[ -n $to && -n $pct ]] || return 0
 
     # Set it, then CHECK it, because we are racing WirePlumber's own restore.
     # The remembered level is applied as the node appears, and whether that
@@ -465,9 +464,10 @@ eq_on() {
     chain_start || return 1
 
     # BEFORE the streams move, so nothing is ever audible at the chain's own
-    # remembered level. See carry_volume: this is what stops switching the
-    # equalizer on from changing how loud the desktop is.
-    carry_volume "$prev_sink" "$NODE_NAME"
+    # remembered level — which is the whole level bug: WirePlumber restores
+    # whatever was last saved against this node, and a chain at anything but
+    # unity attenuates a second time on top of the device. See assert_sink_pct.
+    assert_sink_pct "$NODE_NAME" 100
 
     pactl set-default-sink "$NODE_NAME" 2>/dev/null || true
 
@@ -487,11 +487,11 @@ eq_off() {
     # default sink leaves PipeWire with no default at all until wireplumber
     # notices, and that gap is audible as a dropout.
     if [[ -n $prev_sink ]] && pactl list short sinks 2>/dev/null | grep -q "$prev_sink"; then
-        # The other direction, and it matters just as much: turn the volume
-        # down while the equalizer is on, switch it off, and without this the
-        # speakers snap back to whatever they were last set to.
-        carry_volume "$NODE_NAME" "$prev_sink"
-
+        # No volume is carried back. The device kept its own level the whole
+        # time the equalizer was on — that is the point of pinning the chain at
+        # unity — so it is already correct and writing to it could only make it
+        # wrong. This is where the old code raised a device, and on a bluetooth
+        # headset raising a device is a command to hardware.
         pactl set-default-sink "$prev_sink" 2>/dev/null || true
         local id
         while read -r id _; do
@@ -532,6 +532,12 @@ eq_reapply() {
 
     # Not running, or the live path failed — build it from scratch.
     chain_start || return 1
+    # A cold start is a NEW node, so WirePlumber restores its remembered level
+    # onto it exactly as it does in eq_on, and unity has to be asserted here
+    # too. Missing this would make the equalizer mute itself on the first
+    # preset change after a chain crash, which is indistinguishable from the
+    # preset being at fault — the same misattribution the chain-start bug had.
+    assert_sink_pct "$NODE_NAME" 100
     # The sink is new, so the default has to be asserted and the streams moved
     # across. Only on this path: the retune above leaves both alone.
     pactl set-default-sink "$NODE_NAME" 2>/dev/null || true

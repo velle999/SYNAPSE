@@ -951,17 +951,22 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
     } else if (strcmp(action, "launcher_style") == 0) {
         launcher_toggle_style(s);
     } else if (strcmp(action, "volume") == 0) {
-        /* wpctl asks WirePlumber, which owns the sink, rather than poking ALSA
-         * behind PipeWire's back. @DEFAULT_AUDIO_SINK@ is resolved at run time,
-         * so the knob follows the sink the user actually switched to instead of
-         * a device id captured when synui started. -l caps the raise at 100%:
-         * without it a spun knob keeps climbing into software gain and clips. */
+        /* synui-volume(1) rather than wpctl directly, and the difference is the
+         * equalizer. It is a virtual sink that FEEDS a real one, so while it is
+         * on @DEFAULT_AUDIO_SINK@ is the CHAIN and these keys would drive a
+         * second gain stage stacked on the device's own. Two stages multiply:
+         * velle's headset at 29% is 0.0244 amplitude, squared is -64.5 dB, and
+         * "turning eq on mutes my music through bluetooth" is what that sounds
+         * like. The helper resolves the device behind the chain, at press time
+         * from the live link, so it stays right when a headset connects while
+         * the equalizer is already on. It keeps wpctl's semantics, -l cap and
+         * all; with no equalizer running it IS @DEFAULT_AUDIO_SINK@. */
         if (arg && strcmp(arg, "up") == 0)
-            spawn("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+");
+            spawn("synui-volume up");
         else if (arg && strcmp(arg, "down") == 0)
-            spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-");
+            spawn("synui-volume down");
         else if (arg && strcmp(arg, "mute") == 0)
-            spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+            spawn("synui-volume mute");
         else
             wlr_log(WLR_ERROR, "synui: volume: bad arg '%s'", arg ? arg : "");
         /* The feedback blip, off by default like every other event sound. Not
