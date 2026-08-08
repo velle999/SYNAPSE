@@ -355,6 +355,62 @@ current_default_sink() {
     pactl get-default-sink 2>/dev/null || true
 }
 
+# ── The volume has to come WITH the audio ───────────────────────────────────
+#
+# The chain is a second sink, and a sink owns its volume. WirePlumber remembers
+# that volume per node — `Audio/Sink:media.name:SynapseOS\sEqualizer` in
+# ~/.local/state/wireplumber/stream-properties — entirely separately from the
+# speakers'. So the two devices keep two independent volumes and switching
+# between them JUMPS the loudness, in whichever direction the memories happen
+# to differ.
+#
+# That is not hypothetical: velle's chain came up at channelVolumes [0.027,
+# 0.027] on 2026-08-08 — 30% on the cubic scale, about -31 dB — and the whole
+# desktop went quiet the moment the equalizer was switched on. Nothing in the
+# filter graph was wrong; the band gains were a mild boost. It was the sink's
+# own remembered level, and it is invisible from the panel, which shows band
+# gains and a preamp and no device volume at all.
+#
+# How it got low is the ordinary way: the volume keys run `wpctl set-volume
+# @DEFAULT_AUDIO_SINK@`, so turning the volume down WHILE THE EQUALIZER IS ON
+# turns down the equalizer, and WirePlumber dutifully saves that against the
+# equalizer. Switch it off and the speakers are still at 100%; switch it back
+# on and you are at 30% again with no way to tell why.
+#
+# So the volume is carried across every switch, in both directions. An
+# equalizer is a tone control: turning it on may change the TONE and must not
+# change the LEVEL.
+#
+# Percentages rather than raw values because both sides of the round trip go
+# through pactl's cubic scale, so what is read is what is written. A sink that
+# cannot be read leaves this a no-op rather than guessing at 100% — asserting a
+# volume nobody asked for is how you make a quiet desktop suddenly loud.
+sink_volume_pct() {
+    pactl get-sink-volume "$1" 2>/dev/null |
+        grep -oE '[0-9]+%' | head -1 | tr -d '%'
+}
+
+carry_volume() {
+    local from=$1 to=$2 pct got i
+    [[ -n $from && -n $to && $from != "$to" ]] || return 0
+    pct=$(sink_volume_pct "$from")
+    [[ -n $pct ]] || return 0
+
+    # Set it, then CHECK it, because we are racing WirePlumber's own restore.
+    # The remembered level is applied as the node appears, and whether that
+    # lands before or after this write is not something the script gets to
+    # decide — so assert it until it sticks rather than assuming an ordering.
+    # Three tries over ~0.3s: enough to lose the race twice and still win,
+    # short enough that nobody hears it. If it never takes, leave it — a loop
+    # that fought WirePlumber forever would be worse than a wrong volume.
+    for i in 1 2 3; do
+        pactl set-sink-volume "$to" "${pct}%" 2>/dev/null || true
+        got=$(sink_volume_pct "$to")
+        [[ $got == "$pct" ]] && return 0
+        sleep 0.1
+    done
+}
+
 # ── Turning it on and off ───────────────────────────────────────────────────
 
 eq_on() {
@@ -368,6 +424,12 @@ eq_on() {
     fi
 
     chain_start || return 1
+
+    # BEFORE the streams move, so nothing is ever audible at the chain's own
+    # remembered level. See carry_volume: this is what stops switching the
+    # equalizer on from changing how loud the desktop is.
+    carry_volume "$prev_sink" "$NODE_NAME"
+
     pactl set-default-sink "$NODE_NAME" 2>/dev/null || true
 
     # Move streams that are already playing, or the equalizer only applies to
@@ -386,6 +448,11 @@ eq_off() {
     # default sink leaves PipeWire with no default at all until wireplumber
     # notices, and that gap is audible as a dropout.
     if [[ -n $prev_sink ]] && pactl list short sinks 2>/dev/null | grep -q "$prev_sink"; then
+        # The other direction, and it matters just as much: turn the volume
+        # down while the equalizer is on, switch it off, and without this the
+        # speakers snap back to whatever they were last set to.
+        carry_volume "$NODE_NAME" "$prev_sink"
+
         pactl set-default-sink "$prev_sink" 2>/dev/null || true
         local id
         while read -r id _; do
