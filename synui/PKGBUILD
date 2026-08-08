@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=301
+pkgrel=302
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -373,6 +373,12 @@ package() {
         "$pkgdir/usr/bin/synui-sound"
     install -Dm755 systemd/synui-bar.sh \
         "$pkgdir/usr/bin/synui-bar"
+
+    # NOT /usr/bin: it takes root to do anything, it is named by exactly one
+    # sudoers rule, and it is not a command to find by tab-completing. Same
+    # placement reasoning as syn's /usr/lib/syn/syn-resolve.
+    install -Dm755 systemd/synui-kmod-events.sh \
+        "$pkgdir/usr/lib/synui/synui-kmod-events"
 
     # The system equalizer. Single writer of eq.state AND the thing that runs
     # the PipeWire filter chain, for the reason synui-sound is shaped the same

@@ -780,6 +780,15 @@ test('readme_binds', readme_binds,
 # an output, so this asserts the command line rather than the capture. The
 # constant-rate flag in particular has no visible symptom when it goes missing
 # — the recording still works, it just becomes unusable to every editor.
+# Game mode borrows the machine from the desktop; this asserts it gives every
+# piece back, including on the compositor-shutdown path where the external
+# processes it stopped would otherwise stay stopped.
+game_actions = find_program('tests/game_actions.sh')
+test('game_actions', game_actions,
+     args    : [meson.current_source_dir() / 'src/game.c',
+                meson.current_source_dir() / 'src/config.c'],
+     timeout : 30)
+
 record_args = find_program('tests/record_args.sh')
 test('record_args', record_args,
      args    : [meson.current_source_dir() / 'systemd/synui-record.sh',

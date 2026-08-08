@@ -1902,6 +1902,14 @@ typedef struct {
     int  active;        /* engaged right now */
     int  forced;        /* Super+G: -1 forced off, 0 auto, +1 forced on */
     int  ai_suspended;  /* we stopped synapd and owe it a restart */
+    /* Each is "we did this and owe the undo", never "this is the current
+     * state" — so a setting flipped mid-game, or a wallpaper the user had off
+     * already, is not clobbered on the way out. */
+    int  effects_dropped;
+    int  wallpaper_paused;
+    int  bar_stopped;
+    int  kmod_quieted;
+    int  effects_saved;  /* what config.effects was before we dropped it */
     char app[64];       /* app_id that triggered it (for the log) */
 } syn_game_t;
 
@@ -2735,6 +2743,38 @@ typedef struct {
     int   game_exclude_count;
     char  game_ai_stop_cmd[192];
     char  game_ai_start_cmd[192];
+
+    /* The rest of what a fullscreen game does not need. Measured on a live
+     * desktop before any of these were written, because the obvious candidate
+     * was the wrong one: synguard costs 5 MB and 0.09% of a core over a day,
+     * so suspending the security monitor would have bought nothing and blinded
+     * it during exactly the window untrusted game code runs. These are where
+     * the resources actually are.
+     *
+     * game_drop_effects is the big one and the reason this block exists. With
+     * the post-process pass on, effects.c renders the scene into an offscreen
+     * swapchain and forces WHOLE-OUTPUT damage every frame, then runs a
+     * fullscreen shader over it — so a fullscreen game never reaches direct
+     * scanout, where its buffer would go to the display untouched. Dropping the
+     * pass for the duration costs nothing visible: CRT warp and scanlines are
+     * behind an opaque game. */
+    int   game_drop_effects;    /* restore direct scanout, default 1 */
+    int   game_pause_wallpaper; /* stop linux-wallpaperengine, default 1 */
+    /* RAM-only: the bar is ~400 MB but under 0.3% of a core, and restarting it
+     * on exit is visible. Off by default for that reason — turn it on if the
+     * memory matters more than a second of missing bar when you alt-tab out. */
+    int   game_stop_bar;        /* default 0 */
+    /* Honest expectation: near-zero. The probes still trap; events_enabled only
+     * skips event construction, and a desktop sits around 50 syscalls/sec. It
+     * also stops synguard seeing events while it applies, so it is off unless
+     * asked for. */
+    int   game_quiet_kmod;      /* default 0 */
+    char  game_wp_stop_cmd[192];
+    char  game_wp_start_cmd[192];
+    char  game_bar_stop_cmd[192];
+    char  game_bar_start_cmd[192];
+    char  game_kmod_quiet_cmd[192];
+    char  game_kmod_restore_cmd[192];
 
     /* News aggregator (news.c). Empty means "use the built-in source list";
      * the first `news_source =` line in synuirc replaces the lot, so a user

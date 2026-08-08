@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include "synui.h"
 
@@ -133,6 +134,51 @@ static syn_view_t *game_find_view(syn_server_t *s)
     return NULL;
 }
 
+/* Repaint every output now. Toggling the post-process pass changes the whole
+ * render path, so waiting for incidental damage would leave the old path on
+ * screen until something else moved. */
+static void game_repaint_all(syn_server_t *s)
+{
+    syn_output_t *o;
+    wl_list_for_each(o, &s->outputs, link)
+        if (o->wlr_output) wlr_output_schedule_frame(o->wlr_output);
+}
+
+/* Is a wallpaper engine actually running?
+ *
+ * Asked before stopping it, and the answer is what gates the restore on exit:
+ * `synui-wpengine restore` re-applies the SAVED state, so running it for a user
+ * who had no wallpaper engine up would switch one on that they never had. Only
+ * pause what was actually playing.
+ *
+ * /proc rather than the control script: this runs on every fullscreen change,
+ * and spawning a shell to ask a yes/no question is not something to do on that
+ * path. comm is truncated to 15 chars by the kernel, so the prefix is the whole
+ * name available — hence a prefix compare, not an equality one. */
+static int game_wpengine_running(void)
+{
+    DIR *d = opendir("/proc");
+    if (!d) return 0;
+
+    int found = 0;
+    struct dirent *e;
+    while (!found && (e = readdir(d))) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+
+        char path[64], comm[64];
+        snprintf(path, sizeof(path), "/proc/%s/comm", e->d_name);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;                       /* raced with exit; fine */
+        if (fgets(comm, sizeof(comm), f)) {
+            comm[strcspn(comm, "\r\n")] = '\0';
+            if (strncmp(comm, "linux-wallpaper", 15) == 0) found = 1;
+        }
+        fclose(f);
+    }
+    closedir(d);
+    return found;
+}
+
 static void game_enter(syn_server_t *s, syn_view_t *v)
 {
     const char *aid = (v && view_app_id(v)) ? view_app_id(v) : "unknown";
@@ -148,6 +194,63 @@ static void game_enter(syn_server_t *s, syn_view_t *v)
         s->game.ai_suspended = 1;
         wlr_log(WLR_INFO, "synui: game: suspending synapd (freeing GPU/CPU) — `%s`",
                 s->config.game_ai_stop_cmd);
+    }
+
+    /* Drop the post-process pass, which is what actually costs a game frames.
+     *
+     * With it on, effects.c renders the scene into an offscreen swapchain and
+     * forces whole-output damage every frame, then runs a fullscreen shader
+     * over the result — so the game's buffer can never be handed to direct
+     * scanout, which is the whole point of a fullscreen client. Nothing is lost
+     * visually: CRT warp, scanlines and vignette are behind an opaque game.
+     *
+     * The prior value is saved rather than assumed, so a user who had effects
+     * off already does not come out of a game with them on. */
+    if (s->config.game_drop_effects && !s->game.effects_dropped &&
+        s->config.effects) {
+        s->game.effects_saved   = s->config.effects;
+        s->config.effects       = 0;
+        s->game.effects_dropped = 1;
+        game_repaint_all(s);
+        wlr_log(WLR_INFO, "synui: game: post-process pass off "
+                          "(fullscreen client can reach direct scanout)");
+    }
+
+    /* Wallpaper Engine renders continuously into a surface an opaque
+     * fullscreen game completely covers, so every frame of it is waste — and
+     * it leaks RSS per output while it does, which a long session accumulates.
+     * `off all` hands the background back to synui; `restore` re-applies the
+     * saved state on the way out.
+     *
+     * Only stopped if something is actually running: `restore` on exit would
+     * otherwise START a wallpaper for a user who had none, which is a setting
+     * changed behind their back rather than one put back. */
+    if (s->config.game_pause_wallpaper && !s->game.wallpaper_paused &&
+        game_wpengine_running()) {
+        synui_spawn(s->config.game_wp_stop_cmd);
+        s->game.wallpaper_paused = 1;
+        wlr_log(WLR_INFO, "synui: game: pausing wallpaper engine — `%s`",
+                s->config.game_wp_stop_cmd);
+    }
+
+    /* The bar is a few hundred MB of QML that a fullscreen game hides. Off by
+     * default: the CPU saving is negligible and the restart is visible when you
+     * alt-tab out, so this is only worth it if the memory is what is tight. */
+    if (s->config.game_stop_bar && !s->game.bar_stopped) {
+        synui_spawn(s->config.game_bar_stop_cmd);
+        s->game.bar_stopped = 1;
+        wlr_log(WLR_INFO, "synui: game: stopping the bar — `%s`",
+                s->config.game_bar_stop_cmd);
+    }
+
+    /* Kernel-side event construction. Measured saving is near zero — the probes
+     * still trap, this only skips building and queueing the event — and it
+     * costs synguard its event stream for the duration, so it is opt-in. */
+    if (s->config.game_quiet_kmod && !s->game.kmod_quieted) {
+        synui_spawn(s->config.game_kmod_quiet_cmd);
+        s->game.kmod_quieted = 1;
+        wlr_log(WLR_INFO, "synui: game: quieting synapse_kmod events — `%s`",
+                s->config.game_kmod_quiet_cmd);
     }
 
     /* Re-run the idle arming with game mode now set: power_arm() sees it and
@@ -172,6 +275,33 @@ static void game_leave(syn_server_t *s)
         synmon_start(s);
         wlr_log(WLR_INFO, "synui: game: restoring synapd — `%s`",
                 s->config.game_ai_start_cmd);
+    }
+
+    /* Undo, each gated on "we are the ones who did it". A setting the user
+     * changed mid-game is theirs; only our own changes get reverted. */
+    if (s->game.effects_dropped) {
+        s->config.effects       = s->game.effects_saved;
+        s->game.effects_dropped = 0;
+        game_repaint_all(s);
+        wlr_log(WLR_INFO, "synui: game: post-process pass restored");
+    }
+    if (s->game.wallpaper_paused) {
+        synui_spawn(s->config.game_wp_start_cmd);
+        s->game.wallpaper_paused = 0;
+        wlr_log(WLR_INFO, "synui: game: restoring wallpaper engine — `%s`",
+                s->config.game_wp_start_cmd);
+    }
+    if (s->game.bar_stopped) {
+        synui_spawn(s->config.game_bar_start_cmd);
+        s->game.bar_stopped = 0;
+        wlr_log(WLR_INFO, "synui: game: restarting the bar — `%s`",
+                s->config.game_bar_start_cmd);
+    }
+    if (s->game.kmod_quieted) {
+        synui_spawn(s->config.game_kmod_restore_cmd);
+        s->game.kmod_quieted = 0;
+        wlr_log(WLR_INFO, "synui: game: restoring synapse_kmod events — `%s`",
+                s->config.game_kmod_restore_cmd);
     }
 
     /* Rearm the idle stages from now, not from whenever the game started. */
@@ -234,6 +364,27 @@ void game_finish(syn_server_t *s)
         wlr_log(WLR_INFO, "synui: game: shutting down with synapd suspended "
                           "— restoring it");
     }
+    /* The in-process ones do not matter here — synui is exiting and takes
+     * config.effects with it. These are separate PROCESSES, and leaving a
+     * desktop with no wallpaper, no bar, or a silenced security module because
+     * the compositor died mid-game is the same failure the synapd restore above
+     * exists to prevent. */
+    if (s->game.wallpaper_paused) {
+        synui_spawn(s->config.game_wp_start_cmd);
+        s->game.wallpaper_paused = 0;
+        wlr_log(WLR_INFO, "synui: game: shutting down — restoring the wallpaper");
+    }
+    if (s->game.bar_stopped) {
+        synui_spawn(s->config.game_bar_start_cmd);
+        s->game.bar_stopped = 0;
+        wlr_log(WLR_INFO, "synui: game: shutting down — restarting the bar");
+    }
+    if (s->game.kmod_quieted) {
+        synui_spawn(s->config.game_kmod_restore_cmd);
+        s->game.kmod_quieted = 0;
+        wlr_log(WLR_INFO, "synui: game: shutting down — restoring kmod events");
+    }
+
     s->game.active = 0;
     game_publish(s);
 }

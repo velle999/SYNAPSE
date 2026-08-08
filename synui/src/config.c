@@ -195,6 +195,13 @@
  *   game_mode = on|off                 (default on)
  *   game_suspend_ai = on|off           (default on — stop synapd while gaming)
  *   game_inhibit_idle = on|off         (default on — no dim/blank/lock)
+ *   game_drop_effects = on|off         (default on — restores DIRECT SCANOUT)
+ *       The post-process pass renders the scene offscreen and forces whole-
+ *       output damage every frame, so a fullscreen game never reaches direct
+ *       scanout while it is on. Dropping it for the game is invisible.
+ *   game_pause_wallpaper = on|off      (default on — stop wallpaperengine)
+ *   game_stop_bar = on|off             (default OFF — ~400 MB, visible restart)
+ *   game_quiet_kmod = on|off           (default OFF — near-zero saving)
  *   game_exclude = firefox chibi tepris nexus-chat foot
  *       Space-separated app_ids that are NOT games; REPLACES the built-in list.
  *       This is what keeps a fullscreen Firefox video from stopping the AI.
@@ -1086,6 +1093,35 @@ static void config_set_defaults(syn_config_t *cfg)
              "sudo -n systemctl stop synapd.socket synapd.service");
     snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd),
              "sudo -n systemctl start synapd.socket synapd.service");
+    /* On by default: both are invisible behind an opaque fullscreen game and
+     * both give back real work. Off by default: the bar (RAM only, and the
+     * restart shows) and the kmod (measurably near-nothing, and it costs
+     * synguard its event stream while it applies). */
+    cfg->game_drop_effects    = 1;
+    cfg->game_pause_wallpaper = 1;
+    cfg->game_stop_bar        = 0;
+    cfg->game_quiet_kmod      = 0;
+    snprintf(cfg->game_wp_stop_cmd,  sizeof(cfg->game_wp_stop_cmd),
+             "synui-wpengine off all");
+    snprintf(cfg->game_wp_start_cmd, sizeof(cfg->game_wp_start_cmd),
+             "synui-wpengine restore");
+    /* pkill -x, because the bar is quickshell(1) and killing the wrong
+     * quickshell would take out any other shell the user runs. synui-bar is the
+     * only supported way back up — it resolves which of the two QML trees
+     * bar_shell selected. */
+    snprintf(cfg->game_bar_stop_cmd,  sizeof(cfg->game_bar_stop_cmd),
+             "pkill -x quickshell");
+    snprintf(cfg->game_bar_start_cmd, sizeof(cfg->game_bar_start_cmd),
+             "synui-bar");
+    /* Needs root: /sys/kernel/synapse/config is root-owned 0644. Like
+     * game_ai_stop_cmd this is fire-and-forget, so without the matching
+     * sudoers rule it fails INVISIBLY — which is exactly how the synapd stop
+     * went unnoticed for a month. game_quiet_kmod is off by default partly for
+     * that reason. */
+    snprintf(cfg->game_kmod_quiet_cmd, sizeof(cfg->game_kmod_quiet_cmd),
+             "sudo -n /usr/lib/synui/synui-kmod-events off");
+    snprintf(cfg->game_kmod_restore_cmd, sizeof(cfg->game_kmod_restore_cmd),
+             "sudo -n /usr/lib/synui/synui-kmod-events on");
     /* The fullscreen X11 clients on this system that are NOT games. Without
      * these, going fullscreen on a YouTube video would stop synapd. The
      * firefox-app-mode apps (tepris, nexus-chat) report their own app_id via
@@ -1772,6 +1808,26 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         snprintf(cfg->game_ai_stop_cmd, sizeof(cfg->game_ai_stop_cmd), "%s", val);
     else if (strcmp(key, "game_ai_start_cmd") == 0)
         snprintf(cfg->game_ai_start_cmd, sizeof(cfg->game_ai_start_cmd), "%s", val);
+    else if (strcmp(key, "game_drop_effects") == 0)
+        cfg->game_drop_effects = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_pause_wallpaper") == 0)
+        cfg->game_pause_wallpaper = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_stop_bar") == 0)
+        cfg->game_stop_bar = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_quiet_kmod") == 0)
+        cfg->game_quiet_kmod = strcmp(val, "on") == 0;
+    else if (strcmp(key, "game_wp_stop_cmd") == 0)
+        snprintf(cfg->game_wp_stop_cmd, sizeof(cfg->game_wp_stop_cmd), "%s", val);
+    else if (strcmp(key, "game_wp_start_cmd") == 0)
+        snprintf(cfg->game_wp_start_cmd, sizeof(cfg->game_wp_start_cmd), "%s", val);
+    else if (strcmp(key, "game_bar_stop_cmd") == 0)
+        snprintf(cfg->game_bar_stop_cmd, sizeof(cfg->game_bar_stop_cmd), "%s", val);
+    else if (strcmp(key, "game_bar_start_cmd") == 0)
+        snprintf(cfg->game_bar_start_cmd, sizeof(cfg->game_bar_start_cmd), "%s", val);
+    else if (strcmp(key, "game_kmod_quiet_cmd") == 0)
+        snprintf(cfg->game_kmod_quiet_cmd, sizeof(cfg->game_kmod_quiet_cmd), "%s", val);
+    else if (strcmp(key, "game_kmod_restore_cmd") == 0)
+        snprintf(cfg->game_kmod_restore_cmd, sizeof(cfg->game_kmod_restore_cmd), "%s", val);
     else if (strcmp(key, "game_exclude") == 0) {
         /* space-separated app_ids that are NOT games. Replaces the built-in
          * list rather than adding to it, so a user can widen or narrow it. */

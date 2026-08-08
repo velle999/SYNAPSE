@@ -2988,6 +2988,22 @@ arch-chroot /mnt bash <<'SYN_CHROOT'
         > /etc/sudoers.d/zz-synapd-gamemode
     chmod 440 /etc/sudoers.d/zz-synapd-gamemode
 
+    # Game mode can also quiet synapse_kmod's event capture while a game runs
+    # (game_quiet_kmod, off by default). /sys/kernel/synapse/config is
+    # root-owned 0644, so the session user cannot write it.
+    #
+    # Scoped to a helper with two fixed arguments rather than to `tee` or a
+    # shell: a rule for tee on that path would allow writing ANY key to it, and
+    # a shell rule allows everything. synui-kmod-events writes one known key and
+    # reads it back.
+    #
+    # Same character-for-character warning as the block above — these strings
+    # must match game_kmod_{quiet,restore}_cmd in synui/src/config.c exactly, or
+    # sudo refuses and synui's fire-and-forget spawn never notices.
+    echo '%wheel ALL=(ALL:ALL) NOPASSWD: /usr/lib/synui/synui-kmod-events on, /usr/lib/synui/synui-kmod-events off' \
+        > /etc/sudoers.d/zz-synui-kmod-events
+    chmod 440 /etc/sudoers.d/zz-synui-kmod-events
+
     # The 'AI backend' row (welcome menu / control panel) toggles synapd
     # between GPU/CPU/off via synui-ai-backend, which rewrites synapd's
     # systemd drop-in and restarts it. Under a greetd session synui runs as
