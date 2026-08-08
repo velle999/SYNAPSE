@@ -81,7 +81,28 @@ except Exception:
 # describes; it is reachable, not merely absent). So resolve the node to its
 # client and judge the process, which covers the engine however many players it
 # embeds and whatever they choose to call themselves.
-IGNORE = ("linux-wallpaperengine",)
+# Third instance of the same trap, 2026-08-08: the EQUALIZER, held running by
+# the VISUALISER widget. cava reads effect_input.synui_eq:monitor_*, and a
+# monitor that is being read keeps the chain processing, so effect_output.synui_eq
+# sits at state "running" for as long as the visualiser is on — with nothing
+# playing at all. velle left the machine overnight and it never slept: cava
+# started at 02:44:09, this went "audio active" at 02:44:11, and it did not
+# release once in the following eight hours (108 releases in the day before it).
+# dim, blank, lock and suspend were all dead for the whole night, exactly as in
+# the two wallpaper cases above.
+#
+# Ignoring the equalizer sounds like it should break the feature outright, since
+# EVERYTHING routes through it — Firefox -> effect_input.synui_eq ->
+# effect_output.synui_eq -> alsa. It does not, and this is the point worth
+# keeping: the EQ node is a DERIVED one. Every real source still carries its own
+# Stream/Output/Audio node (Firefox appears as node.name "Firefox" alongside the
+# EQ, not instead of it), so genuine playback is still counted on the node that
+# actually describes it, and only the double-count goes away.
+#
+# Matched on node.name, not on the "SynapseOS Equalizer" description: the
+# description is a user-facing string that a rename or a translation could move,
+# and node.name is what eq.c actually creates the chain with.
+IGNORE = ("linux-wallpaperengine", "effect_output.synui_eq")
 NAME_KEYS = ("application.name", "node.name", "node.description", "media.name")
 CLIENT_KEYS = ("application.process.binary", "application.name")
 
