@@ -303,6 +303,24 @@ repeat_delay = 600
 numlock      = on
 
 # ── The bar (synui-bar) ────────────────────────────────────
+# Is there a bar at all. Control panel ▸ Desktop ▸ Bar flips this and, unlike
+# every other row on that panel, also has to go and DO something: the bar is a
+# separate process this compositor never started (the `autostart =` line above
+# did), so switching it off means stopping it and switching it back on means
+# knowing what to run.
+#
+# Hence a command pair rather than a flag. The default stop names BOTH shipped
+# bars — pkill -x on a name that is not running costs nothing, and a switch
+# whose "off" silently fails on the bar you happen to run is worse than useless.
+# The default start is the shipped bar, so a WAYBAR desktop must say so here or
+# the switch turns the bar off and cannot put it back:
+#
+#   bar_start_cmd = synui-waybar
+#
+# bar_enabled   = off
+# bar_stop_cmd  = pkill -x quickshell ; pkill -x waybar
+# bar_start_cmd = synui-bar
+#
 # TWO shells ship. `synapse` (the default) is SynapseOS's own bar; `antiquity`
 # is a port of diinki's linux-antiquity — a radial taskbar, a sidebar and a
 # different visual language entirely. See

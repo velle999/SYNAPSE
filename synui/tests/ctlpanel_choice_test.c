@@ -83,6 +83,10 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
 void syn_rebind_reset_all(syn_server_t *s, char *status, size_t n)
 { (void)s; if (n) status[0] = '\0'; }
 
+/* The Bar row shells out to stop or start the bar — it is a separate
+ * process, so the row cannot just flip a flag the way the Dock row does. */
+void synui_spawn(const char *cmd)             { (void)cmd; }
+
 void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     (void)s; (void)arg;

@@ -1028,6 +1028,19 @@ static void config_set_defaults(syn_config_t *cfg)
     /* The shipped bar, and the system icon theme. Both read by synui-bar, not
      * by the compositor — see syn_bar_shell_t. */
     cfg->bar_shell         = SYN_BAR_SHELL_SYNAPSE;
+    /* The bar is on, and the pair that turns it off and back on. See the
+     * fields' comment in synui.h for why this is commands and not a flag.
+     *
+     * The stop names BOTH shipped bars, because "off" failing silently on the
+     * one the user happens to run is the worst outcome for a switch — pkill -x
+     * on a name that is not running is a no-op, so naming both costs nothing.
+     * -x, never -f: the -f form matches against whole command lines, which
+     * includes the argv of whatever launched this, and a `pkill -f` has taken
+     * out more than it meant to in this tree before. */
+    cfg->bar_enabled       = 1;
+    snprintf(cfg->bar_stop_cmd,  sizeof(cfg->bar_stop_cmd),
+             "pkill -x quickshell ; pkill -x waybar");
+    snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "synui-bar");
     cfg->bar_edge          = SYN_BAR_EDGE_TOP;
     cfg->bar_icon_theme[0] = '\0';
 
@@ -1734,6 +1747,18 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->dock_enabled = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_autohide") == 0)
         cfg->dock_autohide = strcmp(val, "on") == 0;
+    /* Is there a bar, and how is it stopped and started. The compositor does
+     * not start the bar (the session's autostart line does), so `bar_enabled`
+     * is not read at boot to decide anything — it is the control panel row's
+     * memory of which way the switch is set, so that the row comes up saying
+     * what the desktop actually looks like. The two commands are what the row
+     * runs; see the fields' comment in synui.h. */
+    else if (strcmp(key, "bar_enabled") == 0)
+        cfg->bar_enabled = strcmp(val, "on") == 0;
+    else if (strcmp(key, "bar_stop_cmd") == 0)
+        snprintf(cfg->bar_stop_cmd, sizeof(cfg->bar_stop_cmd), "%s", val);
+    else if (strcmp(key, "bar_start_cmd") == 0)
+        snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "%s", val);
     /* Which of the two the Super+Space key runs; the other gets Super+=. The
      * swap itself is applied at the end of the load (the binds this names may
      * not have been parsed yet when this line is read). */

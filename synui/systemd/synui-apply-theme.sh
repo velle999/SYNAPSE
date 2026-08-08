@@ -673,13 +673,39 @@ prompt   { text-color: $r_accent; vertical-align: 0.5; }
 entry    { placeholder: "Search"; placeholder-color: $fg; }
 listview { lines: 10; scrollbar: false; spacing: 2px; }
 element  { padding: 6px 8px; border-radius: 6px; }
-element selected {
-    background-color: $r_accent;
-    text-color:       $r_on_accent;
-}
-element-icon { size: 20px; padding: 0 8px 0 0; }
-element-text { text-color: inherit; }
-message  { padding: 6px 8px; }
+/* ── The rows, spelled STATE BY STATE ────────────────────────────────────────
+   rofi still loads its built-in default theme underneath this one, and that
+   theme styles rows with STATE-QUALIFIED selectors — \`element normal.normal\`,
+   \`element selected.normal\`, \`element alternate.normal\`. A plain \`element\`
+   or \`element selected\` rule does not outrank them, so for as long as this
+   file said only those two things the launcher drew a cream list on the themed
+   window and a slate-blue selection instead of the accent: the one part of the
+   surface a theme switch never reached.
+
+   So every state gets named. normal and alternate are transparent, which is
+   what puts the window's own colour behind the list; urgent and active are
+   left on the same surface with a tinted foreground rather than a filled row,
+   because a drun list marks nothing urgent and a filled row there would read
+   as a second selection. */
+element normal.normal    { background-color: transparent; text-color: $fg; }
+element normal.urgent    { background-color: transparent; text-color: $r_accent; }
+element normal.active    { background-color: transparent; text-color: $r_accent; }
+element alternate.normal { background-color: transparent; text-color: $fg; }
+element alternate.urgent { background-color: transparent; text-color: $r_accent; }
+element alternate.active { background-color: transparent; text-color: $r_accent; }
+element selected.normal  { background-color: $r_accent;   text-color: $r_on_accent; }
+element selected.urgent  { background-color: $r_accent;   text-color: $r_on_accent; }
+element selected.active  { background-color: $r_accent;   text-color: $r_on_accent; }
+element-icon { size: 20px; padding: 0 8px 0 0; background-color: transparent; }
+element-text { text-color: inherit; background-color: transparent; }
+/* Named for the same reason the rows are: the default theme gives these a
+   surface of their own, and an unthemed one shows up the moment rofi is asked
+   for something other than drun — \`-e\` messages, and the modi tabs. */
+message  { padding: 6px 8px; background-color: transparent; }
+textbox  { background-color: transparent; text-color: $fg; }
+button   { background-color: transparent; text-color: $fg; }
+button selected { background-color: $r_accent; text-color: $r_on_accent; }
+sidebar  { background-color: transparent; }
 RASI
 
         # rofi resolves a bare @import against its own config dir, so the line

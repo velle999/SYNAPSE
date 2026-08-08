@@ -364,6 +364,15 @@ static const struct ctl_item ctl_items[] = {
       .key = "super_space", .off = CFG(super_space), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_super_space), .apply = CTL_APPLY_BINDS,
       .help = "Swap the app launcher and the AI command bar; the other gets Super+=" },
+    /* Is there a bar at all — the row the Dock switch above has always had and
+     * this side of the desktop never did. Bespoke rather than table-driven
+     * (.key/.off left zeroed) because flipping the flag is the easy half: the
+     * bar is a separate process, so the row also has to go and stop or start
+     * it. See CTL_ROW_BAR in ctlpanel_activate. */
+    { CTL_ROW_BAR,           CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar",              NULL,
+      .section = "Bar",
+      .help = "The top bar. Off stops it now; a waybar desktop needs "
+              "bar_start_cmd in synuirc to put it back" },
     /* The bar is a SEPARATE PROCESS, and this is the one row on the panel whose
      * value the compositor does not act on — synui-bar reads it at startup.
      * CTL_APPLY_NONE is therefore literally right, and the help line has to say
@@ -1046,6 +1055,9 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
     }
     case CTL_ROW_DOCK:
         snprintf(buf, n, "%s", s->config.dock_enabled ? "on" : "off");
+        break;
+    case CTL_ROW_BAR:
+        snprintf(buf, n, "%s", s->config.bar_enabled ? "on" : "off");
         break;
     case CTL_ROW_DOCK_AUTOHIDE:
         /* "n/a" when the dock is off entirely: hide-behaviour is moot. */
@@ -1886,10 +1898,43 @@ static void ctlpanel_activate(syn_server_t *s)
         return;
     }
 
+    /*
+     * The bar, which unlike every other row on this panel is not ours to draw.
+     *
+     * So the flag is only the bookkeeping — the actual work is running one of
+     * the two commands, and the flag exists so that reopening the panel says
+     * what the desktop looks like rather than always "on".
+     *
+     * Fire-and-forget through synui_spawn, like every other shell-out here. A
+     * start command that is wrong for this desktop (the default names the
+     * shipped bar, and this box may run waybar) therefore fails silently — the
+     * help line on the row is where that is said, because there is nothing to
+     * wait for and nothing to report.
+     */
+    case CTL_ROW_BAR: {
+        s->config.bar_enabled = !s->config.bar_enabled;
+
+        const char *cmd = s->config.bar_enabled ? s->config.bar_start_cmd
+                                                : s->config.bar_stop_cmd;
+        if (cmd && *cmd) synui_spawn(cmd);
+
+        settings_state_set("bar_enabled", s->config.bar_enabled ? "on" : "off");
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 "bar %s", s->config.bar_enabled ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+    }
     case CTL_ROW_DOCK:
         s->config.dock_enabled = !s->config.dock_enabled;
         dock_rebuild(s);
         dock_relayout(s);
+        /* PERSISTED, which it was not until now: the row turned the dock off,
+         * the dock went away, and the next login brought it straight back —
+         * which reads as the setting not working rather than as the setting
+         * not being saved. The table-driven rows get this for free (see
+         * ctl_adjust); the bespoke ones have to ask, and this one never did.
+         * "on"/"off" is the spelling config_parse_kv reads back. */
+        settings_state_set("dock_enabled", s->config.dock_enabled ? "on" : "off");
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock %s", s->config.dock_enabled ? "on" : "off");
         ctlpanel_repaint(s);

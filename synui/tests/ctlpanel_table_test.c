@@ -64,6 +64,9 @@ void synui_render_ctlpanel(syn_server_t *s)   { (void)s; }
 void synui_render_aimodel(syn_server_t *s)    { (void)s; }
 void synmon_want_refresh(syn_server_t *s)     { (void)s; }
 void synui_child_reset_signals(void)          { }
+/* The Bar row shells out to stop or start the bar — it is a separate process,
+ * so the row cannot just flip a flag the way the Dock row does. */
+void synui_spawn(const char *cmd)             { (void)cmd; }
 void synui_binding_execute(syn_server_t *s, const char *a, const char *b)
 { (void)s; (void)a; (void)b; }
 int  synmon_send_reload(const char *m, char *o, size_t n)

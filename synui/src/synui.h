@@ -1378,6 +1378,7 @@ typedef enum {
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
     CTL_ROW_CALC,          /* System ▸ Calculator (calc.c) */
+    CTL_ROW_BAR,           /* Desktop ▸ Bar — is there one at all */
 
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
@@ -2709,6 +2710,27 @@ typedef struct {
      * the control panel's enum row. Read by systemd/synui-bar.sh, never by the
      * compositor — see the enum's comment. */
     int bar_shell;
+
+    /* ── Is there a bar at all? ──────────────────────────────────────────
+     *
+     * The dock is drawn by the compositor and switches off by not drawing it.
+     * The bar is a SEPARATE PROCESS this compositor did not start — the
+     * session's `autostart =` line did — so turning it off means killing
+     * something, and turning it back on means knowing what to run.
+     *
+     * Hence a command pair rather than a flag the renderer could honour. Same
+     * shape as game_bar_stop_cmd / game_bar_start_cmd below, which solve the
+     * identical problem for game mode, and overridable for the same reason:
+     * two bars ship (quickshell and waybar) and only the user's autostart line
+     * knows which one this desktop actually runs.
+     *
+     * The default STOP covers both, so "off" always works. The default START
+     * is the shipped bar; a waybar desktop wants
+     *     bar_start_cmd = synui-waybar
+     * in synuirc, or the switch turns the bar off and cannot put it back. */
+    int  bar_enabled;           /* default 1 */
+    char bar_stop_cmd[192];
+    char bar_start_cmd[192];
 
     /* Which screen edge the bar sits on. A syn_bar_edge_t held as an int, for
      * the control panel's enum row. Read by quickshell's BarConfig.qml, never
