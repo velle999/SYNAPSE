@@ -41,7 +41,14 @@ for _c in "${ONLY[@]}"; do
     esac
 done
 
+# Every name a build rule below actually asks about. KNOWN= gates the argument
+# check and the build rules are a SEPARATE list, so a component can sit in the
+# first with no entry in the second; this records the second so the check at the
+# end can tell them apart. See the guard after the build sequence.
+DISPATCHED=()
+
 want() {
+    DISPATCHED+=("$1")
     [ ${#ONLY[@]} -eq 0 ] && return 0
     local c
     for c in "${ONLY[@]}"; do
@@ -215,6 +222,35 @@ build_script_pkg tepris
 # reporting a successful build.
 build_component vibe
 build_script_pkg samsung-m2020
+# syn-arsenal — the BlackArch category browser. Plain script package: its
+# PKGBUILD sources the six files by basename out of the component directory, so
+# there is no tarball to roll and build_script_pkg is the whole rule.
+build_script_pkg syn-arsenal
+
+# A name in KNOWN= with no build rule above is what this catches.
+#
+# syn-arsenal sat in KNOWN= and in syn-update's COMPONENTS for two releases with
+# no rule here. `./build-all.sh syn-arsenal` therefore passed the argument
+# check, matched no rule, built nothing and exited 0 — so `syn-update apply`
+# reported success, published nothing, and `syn-update check` listed the same
+# pending update again on the next run, forever. That is exactly the
+# frozen-component bug syn-update exists to prevent, arriving through the one
+# path nothing was watching. Exit status must never say "built" when no rule
+# ran.
+missing=()
+for _c in "${ONLY[@]}"; do
+    case " ${DISPATCHED[*]} " in
+        *" $_c "*) ;;
+        *) missing+=("$_c") ;;
+    esac
+done
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "" >&2
+    echo "BUG: no build rule for: ${missing[*]}" >&2
+    echo "     Listed in KNOWN= but never passed to build_component/build_script_pkg," >&2
+    echo "     so nothing was built. Add a rule in the build sequence above." >&2
+    exit 1
+fi
 
 echo ""
 echo "=== All components built! ==="
