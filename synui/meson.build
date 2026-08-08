@@ -179,6 +179,7 @@ synui_exe = executable('synui',
     'src/xwayland.c',
     'src/output_mgmt.c',
     'src/deskmenu.c',
+    'src/deskdrop.c',
     'src/geom_persist.c',
     'src/output_persist.c',
     'src/dispcfg.c',
@@ -465,6 +466,19 @@ deskicon_drag_test = executable('deskicon_drag_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('deskicon_drag', deskicon_drag_test)
+
+# The text/uri-list a drag-and-drop hands the desktop. INCLUDES deskdrop.c
+# rather than linking it: the percent-decoding, the list walk and the
+# collision-renaming are all static, and there is no way to drive the wire side
+# of a drop headless (no client, no seat, no pointer). Touches only its own
+# mkdtemp scratch dir.
+deskdrop_test = executable('deskdrop_test',
+  ['tests/deskdrop_test.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('deskdrop', deskdrop_test)
 
 # EDID HDR detection. edid.c deliberately depends on nothing but
 # libdisplay-info, so this links it directly — no stubs, no wlroots, and the

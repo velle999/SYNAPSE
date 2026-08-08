@@ -648,7 +648,91 @@ int main(void)
     assert_cell(s, "zulu.bin", 5, 8);   /* the file still puts it back */
     printf("ok 21 — the state file keeps the pin, not the clamped cell\n");
 
+    /* ── 22. A drop from another app lands where it was dropped ── */
+    /*
+     * deskdrop.c copies the file in, rescans, and then calls this with the
+     * names it created and the cursor position. Without the call the file is
+     * just a new file: unpinned, flowed to the first free cell, which is the
+     * top-left corner of the screen no matter where the user aimed.
+     */
+    static const char *dropped[] = { "papa.png", "quebec.png", "romeo.png" };
+    for (unsigned i = 0; i < sizeof(dropped) / sizeof(dropped[0]); i++) {
+        snprintf(path, sizeof(path), "%s/%s", desk, dropped[i]);
+        write_file(path, "x\n");
+    }
+
+    deskicons_reload(s);
+    {
+        const char *one[] = { dropped[0] };
+        /* Cursor in the middle of cell (3,6). */
+        deskicons_place_dropped(s, one, 1,
+                                CELL_X(3) + SYN_DESKICON_W / 2,
+                                CELL_Y(6) + SYN_DESKICON_H / 2);
+        assert_cell(s, "papa.png", 3, 6);
+        assert_no_overlap(s);
+    }
+    printf("ok 22 — a dropped file is pinned on the cell under the cursor\n");
+
+    /* ── 23. …and a busy cell is stepped over, not landed on ── */
+    /*
+     * A drag inside the desktop can swap, because it has a cell of its own to
+     * hand over. A drop arrives with nothing to trade, so it takes the next
+     * free cell in flow order instead — burying the icon that was there would
+     * lose whichever one ended up underneath.
+     */
+    {
+        const char *one[] = { dropped[1] };
+        deskicons_place_dropped(s, one, 1,
+                                CELL_X(3) + SYN_DESKICON_W / 2,
+                                CELL_Y(6) + SYN_DESKICON_H / 2);
+        assert_cell(s, "papa.png",   3, 6);   /* undisturbed */
+        assert_cell(s, "quebec.png", 3, 7);   /* the next cell down */
+        assert_no_overlap(s);
+    }
+    printf("ok 23 — a drop onto an occupied cell takes the next free one\n");
+
+    /* ── 24. Several files in one drag stay together ────── */
+    {
+        deskicons_reload(s);
+        const char *three[] = { dropped[0], dropped[1], dropped[2] };
+        deskicons_place_dropped(s, three, 3,
+                                CELL_X(6) + SYN_DESKICON_W / 2,
+                                CELL_Y(1) + SYN_DESKICON_H / 2);
+        assert_cell(s, "papa.png",   6, 1);
+        assert_cell(s, "quebec.png", 6, 2);
+        assert_cell(s, "romeo.png",  6, 3);
+        assert_no_overlap(s);
+    }
+    printf("ok 24 — a multi-file drop fills the cells after the first\n");
+
+    /* ── 25. A drop persists like any other placement ───── */
+    /*
+     * The whole point of pinning is that it outlives the session. A drop that
+     * placed the icon but never reached deskicons.state would come back in the
+     * top-left corner on the next login, which is the bug it exists to avoid.
+     */
+    {
+        char *st = slurp(statefile);
+        assert(st);
+        char want[64];
+        snprintf(want, sizeof(want), "pos=%d,%d,romeo.png\n",
+                 CELL_X(6), CELL_Y(3));
+        if (!strstr(st, want)) {
+            fprintf(stderr, "FAIL: state has no '%s':\n%s", want, st);
+            abort();
+        }
+    }
+    deskicons_reload(s);
+    assert_cell(s, "papa.png",   6, 1);
+    assert_cell(s, "quebec.png", 6, 2);
+    assert_cell(s, "romeo.png",  6, 3);
+    printf("ok 25 — a dropped icon's cell survives a reload\n");
+
     /* Leave the scratch tree behind only on success. */
+    for (unsigned i = 0; i < sizeof(dropped) / sizeof(dropped[0]); i++) {
+        snprintf(path, sizeof(path), "%s/%s", desk, dropped[i]);
+        unlink(path);
+    }
     for (unsigned i = 0; i < sizeof(extras) / sizeof(extras[0]); i++) {
         snprintf(path, sizeof(path), "%s/%s", desk, extras[i]);
         unlink(path);

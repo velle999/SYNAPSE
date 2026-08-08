@@ -2295,6 +2295,7 @@ void synui_destroy(syn_server_t *s)
     news_finish(s);
     aimodel_finish(s);
     clipboard_finish(s);
+    deskdrop_finish(s);
     logind_finish(s);
     notif_finish(s);
     bt_finish(s);

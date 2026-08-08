@@ -5944,6 +5944,28 @@ void deskicon_drag_begin(syn_server_t *s, int idx, double lx, double ly);
 void deskicon_drag_motion(syn_server_t *s, double lx, double ly);
 void deskicon_drag_end(syn_server_t *s, double lx, double ly);
 
+/* Pin freshly-arrived files (basenames, as they now exist in ~/Desktop) at the
+ * point they were dropped, first one on the cell under the cursor and the rest
+ * in the free cells after it. Call AFTER deskicons_reload(), or the model has
+ * no icons by these names to place. Persists, like any other drop. */
+void deskicons_place_dropped(syn_server_t *s, const char *const *names, int n,
+                             int lx, int ly);
+
+/* ── deskdrop.c (a client's drag-and-drop, dropped on the desktop) ──
+ * The compositor is the drop target here — the desktop is wallpaper plus a
+ * cairo buffer, not a wl_surface, so there is nothing for wlroots to deliver a
+ * drop to and it talks to the drag's data source directly. hover() is called
+ * on every motion during a drag and answers accept/refuse; take() claims the
+ * release, reads the uri-list and copies the files in. See deskdrop.c for why
+ * the release must be intercepted before wlroots sees it. */
+void deskdrop_hover(syn_server_t *s, bool over_desktop);
+bool deskdrop_take(syn_server_t *s, double lx, double ly);
+/* The drag ended some other way (dropped on a client, cancelled): forget any
+ * acceptance, so the next drag starts from a clean answer. */
+void deskdrop_reset(syn_server_t *s);
+/* Shutdown: abandon any transfer still in flight. */
+void deskdrop_finish(syn_server_t *s);
+
 void synui_render_deskmenu(syn_server_t *s);
 void synui_render_deskicons(syn_server_t *s);
 /* Move the drag layer to the dragged icon's current position. No repaint —

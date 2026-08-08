@@ -2290,6 +2290,29 @@ static bool panel_pointer_scroll(syn_server_t *s, double lx, double ly,
     return false;
 }
 
+/*
+ * Is (lx,ly) the desktop — the wallpaper itself, with nothing of ours and
+ * nothing of a client's over it?
+ *
+ * The same question the desktop right-click answers by falling through every
+ * other branch of pointer_button(). A drag-and-drop cannot ask it that way: it
+ * has to be answered on every motion event, while the drag is still in flight,
+ * so the source can be told whether letting go here will do anything.
+ */
+static bool point_is_desktop(syn_server_t *s, double lx, double ly)
+{
+    if (s->nlock.active) return false;
+    if (panel_pointer_active(s)) return false;
+    if (s->deskmenu.visible || s->dockmenu.visible || s->bt.visible) return false;
+    if (dock_entry_at(s, lx, ly)) return false;
+    if (dock_bar_at(s, lx, ly, NULL)) return false;
+
+    double sx, sy;
+    struct wlr_surface *surface = NULL;
+    syn_view_t *view = view_at(s, lx, ly, &surface, &sx, &sy);
+    return !view && !surface;
+}
+
 /* Shared relative-motion path: broadcast the raw delta to relative-pointer
  * clients, let an active constraint absorb (locked) or clamp (confined) the
  * move, then move the cursor and update pointer focus. */
@@ -2322,6 +2345,14 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     /* An in-flight DnD icon rides the cursor (tree is empty otherwise). */
     wlr_scene_node_set_position(&s->drag_icon_tree->node,
                                 (int)s->cursor->x, (int)s->cursor->y);
+
+    /* …and if that drag is over the wallpaper, the desktop is the target. Told
+     * here, BEFORE pointer_update_focus() below hands drag focus to whatever
+     * surface the cursor moved onto: leaving the desktop and entering a window
+     * are the same motion event, and our acceptance has to be withdrawn before
+     * that client is offered the drag, not after. */
+    if (s->seat->drag)
+        deskdrop_hover(s, point_is_desktop(s, s->cursor->x, s->cursor->y));
 
     if (s->cursor_mode == SYNUI_CURSOR_MOVE)   { process_cursor_move(s);   return; }
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
@@ -2422,6 +2453,38 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
      * dock or panel underneath may be reached. */
     if (s->nlock.active) {
         lock_notify_activity(s);
+        return;
+    }
+
+    /*
+     * A client's drag-and-drop, let go over the wallpaper: the desktop takes it
+     * (deskdrop.c copies the files into ~/Desktop).
+     *
+     * This has to come before anything that forwards the release, because
+     * wlroots' drag grab reads a release with no CLIENT drag focus as a failed
+     * drop and destroys the data source — which cancels the transfer we are in
+     * the middle of asking for. So the data is claimed first and the drag is
+     * then ended here rather than by the grab: wlr_seat_pointer_end_grab()
+     * tears the drag down and leaves the source alive to finish writing.
+     *
+     * The release is still delivered afterwards, exactly as the untaken path
+     * would have: wlroots decrements the seat's button count inside
+     * notify_button, and until that happens pointer_update_focus() honours the
+     * implicit grab and refuses to re-derive focus — the cursor would keep the
+     * drag's image and enter nothing until the next motion event.
+     *
+     * point_is_desktop() is asked again here rather than trusted from the last
+     * motion event: drag focus can also move because a window mapped or closed
+     * under a stationary cursor, and no motion runs to withdraw the desktop's
+     * acceptance on either.
+     */
+    if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->seat->drag &&
+        button == s->seat->pointer_state.grab_button &&
+        point_is_desktop(s, s->cursor->x, s->cursor->y) &&
+        deskdrop_take(s, s->cursor->x, s->cursor->y)) {
+        wlr_seat_pointer_end_grab(s->seat);
+        wlr_seat_pointer_notify_button(s->seat, time_msec, button, state);
+        pointer_update_focus(s, time_msec);
         return;
     }
 
@@ -3138,6 +3201,10 @@ static void server_drag_destroy(struct wl_listener *listener, void *data)
     syn_server_t *s = wl_container_of(listener, s, drag_destroy);
     wl_list_remove(&s->drag_destroy.link);
     wl_list_init(&s->drag_destroy.link);
+    /* However it ended — dropped on a client, taken by the desktop, or
+     * cancelled — the acceptance the desktop may have given this drag dies with
+     * it. Anything already in flight is a transfer now, not a drag. */
+    deskdrop_reset(s);
     if (!s->shutting_down)
         pointer_update_focus(s, 0);
 }

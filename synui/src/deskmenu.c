@@ -896,3 +896,91 @@ void deskicon_drag_end(syn_server_t *s, double lx, double ly)
     deskicons_state_save(s);
     synui_render_deskicons(s);
 }
+
+/* ── Drops from other applications (deskdrop.c) ──────────── */
+
+/* The icon whose file is called `name`, or -1. Matched on the last path
+ * component because that is all the copy knew it was creating. */
+static int deskicon_by_name(syn_server_t *s, const char *name)
+{
+    for (int i = 0; i < s->deskicon_count; i++) {
+        const char *slash = strrchr(s->deskicons[i].path, '/');
+        const char *base  = slash ? slash + 1 : s->deskicons[i].path;
+        if (strcmp(base, name) == 0) return i;
+    }
+    return -1;
+}
+
+/* Is any icon but `except` sitting on cell origin (x,y) right now? Unlike
+ * deskicon_cell_taken() this asks about the layout as it stands, not about one
+ * pass in progress — a drop lands on a desktop that is already laid out. */
+static bool deskicon_cell_busy(syn_server_t *s, int except, int x, int y)
+{
+    for (int i = 0; i < s->deskicon_count; i++)
+        if (i != except && s->deskicons[i].x == x && s->deskicons[i].y == y)
+            return true;
+    return false;
+}
+
+/*
+ * Put files that just arrived from another application where they were dropped.
+ *
+ * Without this a drop would obey the same rule as any other new file — flow to
+ * the first free cell, column-major — and land in the top-left corner of the
+ * screen no matter where the user aimed. A drop is a placement, so it pins,
+ * exactly like dragging an icon does, and is persisted the same way.
+ *
+ * Occupied cells are stepped over rather than swapped through: a drag inside
+ * the desktop has a cell of its own to give away, and this does not. A drop of
+ * several files fills the cells after the first, so a multi-file drag stays
+ * together instead of piling up on one square.
+ */
+void deskicons_place_dropped(syn_server_t *s, const char *const *names, int n,
+                             int lx, int ly)
+{
+    if (n <= 0 || s->deskicon_count == 0) return;
+
+    syn_output_t *o = deskicon_output(s);
+    if (!o) return;
+
+    struct wlr_box area;
+    output_usable_box_of(s, o, &area);
+
+    int cols, rows, col, row;
+    deskicon_grid(&area, &cols, &rows);
+    /* The cursor is the middle of where the user meant the icon to be, and a
+     * cell is addressed by its top-left, so aim the cell at the cursor. */
+    deskicon_cell_at(&area, cols, rows,
+                     lx - SYN_DESKICON_W / 2, ly - SYN_DESKICON_H / 2,
+                     &col, &row);
+
+    int total = cols * rows;
+    int next  = col * rows + row;   /* column-major, as deskicons_layout flows */
+    bool any  = false;
+
+    for (int k = 0; k < n; k++) {
+        int i = deskicon_by_name(s, names[k]);
+        if (i < 0) continue;        /* the copy failed, or something ate it */
+
+        for (int t = 0; t < total; t++) {
+            int cell = (next + t) % total;
+            int cx, cy;
+            deskicon_cell_origin(&area, cell / rows, cell % rows, &cx, &cy);
+            if (deskicon_cell_busy(s, i, cx, cy)) continue;
+
+            s->deskicons[i].pin_x  = cx;
+            s->deskicons[i].pin_y  = cy;
+            s->deskicons[i].x      = cx;
+            s->deskicons[i].y      = cy;
+            s->deskicons[i].placed = 1;
+            next = (cell + 1) % total;
+            any  = true;
+            break;
+        }
+    }
+
+    if (!any) return;
+    deskicons_layout(s);
+    deskicons_state_save(s);
+    synui_render_deskicons(s);
+}

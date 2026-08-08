@@ -251,6 +251,25 @@ verify on hardware with a game or `wlroots`' pointer-constraints example.
       scene tree that rides the cursor (mouse and tablet paths); when the
       drag ends, pointer focus is re-derived from the surface under the
       cursor.
+- [x] **drop onto the desktop** (deskdrop.c): a drag let go over the wallpaper
+      copies its files into `~/Desktop` and pins each icon on the cell it was
+      dropped on. The desktop is not a wl_surface, so there is nothing for
+      wlroots to deliver a drop to — the compositor talks to the drag's
+      `wlr_data_source` directly (accept + dnd_action on hover; dnd_drop, send
+      down a pipe read from the event loop, dnd_finish on the drop). The
+      release is claimed in `pointer_button()` *before* wlroots sees it,
+      because the drag grab reads a release with no client focus as a failed
+      drop and destroys the source mid-transfer; the drag is then ended with
+      `wlr_seat_pointer_end_grab()`, which leaves the source alone.
+      Requires `desktop_icons`; always a COPY (in this protocol the *source*
+      deletes the original on MOVE, and there is no exit status to promise it
+      on); sources that never called `set_actions` are refused, since wlroots'
+      dnd_drop/dnd_finish assert on pre-v3 `wl_data_source`. `text/uri-list`
+      only, local `file://` URIs only — a link drag from a browser is declined
+      rather than half-handled. Collisions become `name (copy).ext`; nothing
+      is ever overwritten. Rigs: `deskdrop` (uri-list parsing, collision
+      renaming) and `deskicon_drag` 22–25 (where a drop lands, and that it
+      persists).
 
 Verified headless: all 8 new globals advertised; **grim** captured a real
 1280x720 PNG (screencopy); **wl-copy/wl-paste** round-tripped the clipboard
