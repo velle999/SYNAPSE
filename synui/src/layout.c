@@ -1482,6 +1482,12 @@ static syn_output_t *fullscreen_target_output(syn_server_t *s, syn_view_t *view)
 {
     struct wlr_output *wo = NULL;
 
+    /* A game goes where game mode says, not where the client asked. Checked
+     * first because for a game the client's request is exactly the thing being
+     * overridden — see game_output_for(). */
+    syn_output_t *forced = game_output_for(s, view);
+    if (forced) return forced;
+
     if (view->is_xwayland) {
         struct wlr_xwayland_surface *xs = view->xsurface;
         if (xs->width > 0 && xs->height > 0)

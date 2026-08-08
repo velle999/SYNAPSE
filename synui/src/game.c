@@ -8,6 +8,17 @@
  * are not games (a fullscreen Firefox video being the one that matters, since
  * suspending the AI to watch a video would be a nasty surprise).
  *
+ * ...and one hole that signal has: a gamescope launched from a Wayland session
+ * is a Wayland-native client, because it runs the game on a nested Xwayland of
+ * its own that synui never sees. Every Steam title with `gamescope -f --
+ * %command%` in its launch options was therefore invisible to game mode. Those
+ * are named in game_include; see synui.h for why an allow-list and not "any
+ * fullscreen Wayland client".
+ *
+ * Placement. A game also gets put on the main screen (game_output) — the
+ * clients cannot be trusted to pick, and the failure is loud: a game that
+ * opens on the wrong monitor every time. game_output_for() has the details.
+ *
  * What it does while a game is up:
  *
  *   - Stops synapd. It pins ~4GB of VRAM and llama.cpp worker threads, and it
@@ -109,7 +120,41 @@ static int game_excluded(const syn_config_t *cfg, const char *app_id)
     return 0;
 }
 
-/* The first mapped, fullscreen, non-excluded XWayland view — or NULL.
+/* Is this a Wayland-NATIVE client that is nonetheless a game wrapper?
+ * Same matching rule as the exclusion list, opposite sense — see the
+ * game_include comment in synui.h for why this has to be an allow-list. */
+static int game_included(const syn_config_t *cfg, const char *app_id)
+{
+    if (!app_id) return 0;
+    for (int i = 0; i < cfg->game_include_count; i++)
+        if (strcasestr(app_id, cfg->game_include[i])) return 1;
+    return 0;
+}
+
+/* The shared definition of "this is a game". Kept silent so it can be called
+ * from the placement path as well as the detector; the logging that used to
+ * live here is in game_find_view(), which runs once per decision. */
+int game_view_is_game(syn_server_t *s, syn_view_t *view)
+{
+    if (!view || !view->mapped || !view->fullscreen) return 0;
+
+    const char *aid = view_app_id(view);
+
+    if (!view->is_xwayland) {
+        /* A Wayland-native client is an ordinary desktop app unless it is a
+         * named wrapper. Note the exclusion list still applies on top, so a
+         * wrapper can be un-named again without editing the include list. */
+        return game_included(&s->config, aid) && !game_excluded(&s->config, aid);
+    }
+
+    /* A NULL/empty WM_CLASS cannot match an exclusion, so it stays a game: the
+     * fullscreen-X11 evidence stands on its own and the class is only ever
+     * used to rule things out. */
+    if (!aid || !*aid) return 1;
+    return !game_excluded(&s->config, aid);
+}
+
+/* The first mapped, fullscreen view that counts as a game — or NULL.
  * Views live per-workspace, so a game on an inactive workspace still counts:
  * it is still rendering and still holding the GPU. */
 static syn_view_t *game_find_view(syn_server_t *s)
@@ -117,21 +162,48 @@ static syn_view_t *game_find_view(syn_server_t *s)
     for (int wi = 0; wi < WORKSPACE_MAX; wi++) {
         syn_view_t *v;
         wl_list_for_each(v, &s->workspaces[wi].windows, link) {
-            if (!v->mapped || !v->fullscreen || !v->is_xwayland) continue;
+            if (!game_view_is_game(s, v)) continue;
+            /* An unexpected trigger is exactly what a user would want to see,
+             * and a classless client is the one case decided by absence of
+             * evidence rather than by a match. */
             const char *aid = view_app_id(v);
-            /* A NULL/empty WM_CLASS cannot match an exclusion, so it stays a
-             * game: the fullscreen-X11 evidence stands on its own and the class
-             * is only ever used to rule things out. Log it — an unexpected
-             * trigger is exactly what a user would want to see. */
-            if (!aid || !*aid)
+            if (v->is_xwayland && (!aid || !*aid))
                 wlr_log(WLR_INFO, "synui: game: fullscreen X11 client with no "
                                   "WM_CLASS — treating as a game");
-            else if (game_excluded(&s->config, aid))
-                continue;
             return v;
         }
     }
     return NULL;
+}
+
+/* Which monitor a game belongs on.
+ *
+ * The client's own answer is not usable. An X11 game picks by RandR order
+ * unless something marks a primary (see xwayland_apply_primary), and a
+ * gamescope on the Wayland backend names an output of its own choosing that
+ * neither `-O/--prefer-output` nor the X11 primary flag budges — measured
+ * 2026-08-08: with DP-3 both primary AND focused, `gamescope -O DP-3 -f`
+ * fullscreened onto DP-2 anyway. So the compositor decides, or nobody does.
+ *
+ * Returns NULL for "not our call", which is every non-game and the explicit
+ * GAME_OUT_ASK setting for anyone who wants the old behaviour back. */
+syn_output_t *game_output_for(syn_server_t *s, syn_view_t *view)
+{
+    if (!s->config.game_mode) return NULL;
+    if (s->config.game_output == GAME_OUT_ASK) return NULL;
+    /* forced < 0 is "no game mode right now", and that has to include the
+     * placement: a user who turned game mode off for a false positive should
+     * get their window back where they put it. forced > 0 does NOT force
+     * placement, because the view it is applied to may be any window. */
+    if (s->game.forced < 0) return NULL;
+    if (!game_view_is_game(s, view)) return NULL;
+
+    syn_output_t *o = s->config.game_output == GAME_OUT_FOCUSED
+                    ? server_focused_output(s)
+                    : server_primary_output(s);
+    /* server_primary_output falls back to the largest enabled output, so a NULL
+     * here means there are no outputs at all — nothing to place onto. */
+    return o;
 }
 
 /* Repaint every output now. Toggling the post-process pass changes the whole

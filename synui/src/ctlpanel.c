@@ -124,6 +124,11 @@ static const char *const ctl_names_panel_close[] = { "Clickoff", "Button", "Wind
  * above, and folded to lower case they ARE the synuirc spellings — which is
  * what lets "put it at the bottom" mean one thing across both. */
 static const char *const ctl_names_bar_edge[]    = { "Top", "Bottom" };
+/* Order matches the GAME_OUT_* enum in synui.h, and folded to lower case these
+ * ARE the synuirc spellings config.c's `game_output` case parses back. Single
+ * words for the reason the whole table is — "Main screen" would be written to
+ * settings.state as `main screen`. The help line carries the meaning. */
+static const char *const ctl_names_game_output[] = { "Primary", "Focused", "Ask" };
 
 struct ctl_item {
     int             row;
@@ -522,12 +527,22 @@ static const struct ctl_item ctl_items[] = {
        * ~70 chars the other help lines hold to. */
       .help = "Install fprintd, run fprintd-enroll; your password always works too" },
 
+    /* Enter cycles auto → always on → always off → auto, through game_toggle()
+     * so this row and Super+G are the same control. The VALUE has to name the
+     * override and not just s->game.active, which is what it used to show:
+     * "auto, nothing running" and "forced off" both drew as plain `off`, so
+     * two of the three positions were indistinguishable and pressing Enter
+     * looked like it did nothing. */
     { CTL_ROW_GAME,  CTL_CAT_POWER, CTL_KIND_TOGGLE, "Game mode",    NULL,
       .section = "Game mode",
-      .help = "Right now: is a game running. The rows below are the policy" },
+      .help = "Enter cycles auto / always on / always off — same as Super+G" },
     { CTL_ROW_GAME_MODE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Detect games", NULL,
       .key = "game_mode", .off = CFG(game_mode), .vtype = CTL_VAL_BOOL,
-      .help = "Treat a fullscreen X11 window as a game unless it is excluded" },
+      .help = "Treat a fullscreen game window as a game unless it is excluded" },
+    { CTL_ROW_GAME_OUTPUT, CTL_CAT_POWER, CTL_KIND_VALUE, "Open games on", NULL,
+      .key = "game_output", .off = CFG(game_output), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_game_output), .apply = CTL_APPLY_NONE,
+      .help = "Primary = the monitor marked PRIMARY in Super+D; Ask obeys the game" },
     { CTL_ROW_GAME_SUSPEND_AI, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Stop the AI while gaming", NULL,
       .key = "game_suspend_ai", .off = CFG(game_suspend_ai), .vtype = CTL_VAL_BOOL },
     { CTL_ROW_GAME_INHIBIT_IDLE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Hold off idle while gaming", NULL,
@@ -1066,7 +1081,13 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
         else                  snprintf(buf, n, "%s", s->config.effects ? "on" : "off");
         break;
     case CTL_ROW_GAME:
-        snprintf(buf, n, "%s", s->game.active ? "on" : "off");
+        /* Two independent facts, and the row used to show only the second:
+         * which of the three override positions is selected, and whether a
+         * game is running right now. Auto is the only one where the second is
+         * not implied by the first, so only auto spells it out. */
+        if      (s->game.forced > 0) snprintf(buf, n, "always on");
+        else if (s->game.forced < 0) snprintf(buf, n, "always off");
+        else snprintf(buf, n, "auto (%s)", s->game.active ? "on" : "off");
         break;
     case CTL_ROW_AI_BACKEND:
         snprintf(buf, n, "%s", ai_backend_label());
@@ -1909,8 +1930,15 @@ static void ctlpanel_activate(syn_server_t *s)
 
     case CTL_ROW_GAME:
         game_toggle(s);
+        /* Say what was SELECTED, not what happened to result: cycling onto
+         * "always off" with no game running changed nothing observable, and a
+         * status line reading "game mode off" made that look like the row had
+         * refused rather than moved. */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
-                 "game mode %s", s->game.active ? "on" : "off");
+                 s->game.forced > 0 ? "game mode: always on" :
+                 s->game.forced < 0 ? "game mode: always off" :
+                 s->game.active     ? "game mode: auto \xc2\xb7 a game is running"
+                                    : "game mode: auto \xc2\xb7 no game running");
         return;
 
     case CTL_ROW_LAYOUT: {

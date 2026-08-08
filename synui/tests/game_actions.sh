@@ -42,8 +42,14 @@ check() {  # check <description> <expected> <actual>
 # The body of one function, so "is it undone in game_leave" cannot be satisfied
 # by a match somewhere else in the file.
 body() {  # body <function-name> <file>
+    # The return type is matched loosely rather than listed: it started as
+    # (void|int), which silently matched NOTHING once the functions worth
+    # checking returned syn_view_t * and syn_output_t *. A body() that finds no
+    # body makes every grep against it count 0, so the checks would have failed
+    # loudly here — but a *new* check written against a pointer-returning
+    # function would look like a real defect instead of a broken matcher.
     awk -v fn="$1" '
-        $0 ~ "^(static )?(void|int) " fn "\\(" { inside = 1 }
+        $0 ~ "^(static )?[A-Za-z_][A-Za-z0-9_]* \\*?" fn "\\(" { inside = 1 }
         inside { print }
         inside && /^}/ { exit }
     ' "$2"
@@ -143,7 +149,8 @@ echo "=== every action is reachable and wired from the panel ==="
 # right the whole time.
 panel=${3:-}
 if [ -n "$panel" ] && [ -f "$panel" ]; then
-    for key in game_drop_effects game_pause_wallpaper game_stop_bar game_quiet_kmod; do
+    for key in game_drop_effects game_pause_wallpaper game_stop_bar game_quiet_kmod \
+               game_output; do
         check "panel has a row for $key" "1" \
               "$(grep -c "\.key = \"$key\"" "$panel")"
         check "that row points at the $key field" "1" \
@@ -153,6 +160,56 @@ if [ -n "$panel" ] && [ -f "$panel" ]; then
     done
 else
     echo "  skip  panel wiring (no ctlpanel.c passed)"
+fi
+
+echo ""
+echo "=== there is ONE definition of \"this is a game\" ==="
+# The detector and the fullscreen placement both have to answer it, and if they
+# answer it separately they will drift: a window sent to the main screen that
+# then does not trigger game mode (or the reverse) is worse than either bug
+# alone, and neither half looks wrong on its own.
+check "game_find_view asks the shared predicate" "1" \
+      "$(body game_find_view "$game" | grep -c 'game_view_is_game(s, v)')"
+check "game_output_for asks the same predicate" "1" \
+      "$(body game_output_for "$game" | grep -c 'game_view_is_game(s, view)')"
+# ...and the predicate must not decide on is_xwayland alone, which is the hole
+# gamescope fell through.
+check "the predicate handles Wayland-native clients" "1" \
+      "$(body game_view_is_game "$game" | grep -c 'if (!view->is_xwayland)')"
+check "gamescope is a game wrapper by default" "1" \
+      "$(grep -c '"gamescope"' "$config")"
+
+layout=${4:-}
+if [ -n "$layout" ] && [ -f "$layout" ]; then
+    # A game's fullscreen output is the compositor's call. The clients cannot
+    # be told: an X11 game follows RandR order and gamescope on the Wayland
+    # backend ignores --prefer-output AND the X11 primary flag.
+    check "fullscreen placement asks game mode first" "1" \
+          "$(body fullscreen_target_output "$layout" | grep -c 'game_output_for(s, view)')"
+else
+    echo "  skip  fullscreen placement (no layout.c passed)"
+fi
+
+echo ""
+echo "=== games open on the main screen unless told otherwise ==="
+# Anchored at the defaults function's indent: the `primary` arm of the parser
+# assigns the same constant, so an unanchored match counts two and would go on
+# counting two if the default were deleted outright.
+check "game_output defaults to primary" "1" \
+      "$(grep -c '^    cfg->game_output = GAME_OUT_PRIMARY;' "$config")"
+# The enum round-trip, which is the three-things rule in its nastiest form: the
+# panel writes an ENUM as its display name folded to lower case, so every name
+# in the row's list has to be a spelling config_parse_kv accepts. A name that
+# is not parses back as "unrecognised", and the row silently reverts at the
+# next login having looked correct all session.
+if [ -n "$panel" ] && [ -f "$panel" ]; then
+    names=$(grep 'ctl_names_game_output\[\]' "$panel" |
+            sed 's/.*{//; s/}.*//; s/[",]/ /g' | tr 'A-Z' 'a-z')
+    [ -n "$names" ] || { echo "  FAIL  no ctl_names_game_output[]"; fails=$((fails + 1)); }
+    for n in $names; do
+        check "config_parse_kv accepts game_output = $n" "1" \
+              "$(grep -c "strcmp(val, \"$n\")" "$config")"
+    done
 fi
 
 echo ""

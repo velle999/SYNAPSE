@@ -211,6 +211,20 @@
  *   game_exclude = firefox chibi tepris nexus-chat foot
  *       Space-separated app_ids that are NOT games; REPLACES the built-in list.
  *       This is what keeps a fullscreen Firefox video from stopping the AI.
+ *   game_include = gamescope             (REPLACES the built-in list)
+ *       Wayland-NATIVE app_ids that ARE games. "Fullscreen XWayland" misses a
+ *       gamescope started from a Wayland session: it uses its own Wayland
+ *       backend and runs the game on a nested Xwayland synui never sees, so
+ *       every title with `gamescope -f -- %command%` in its Steam launch
+ *       options went undetected. An allow-list, not "any fullscreen Wayland
+ *       client" — that would make every fullscreen video a game.
+ *   game_output = primary|focused|ask    (default primary)
+ *       Which monitor a detected game is fullscreened onto. Games pick badly
+ *       and cannot be told otherwise: an X11 game follows RandR order, and
+ *       gamescope on the Wayland backend ignores both --prefer-output and the
+ *       X11 primary flag. `primary` is the monitor marked PRIMARY in the
+ *       display panel (Super+D, `p`); `ask` restores the old obey-the-client
+ *       behaviour.
  *   game_ai_stop_cmd = sudo -n systemctl stop synapd.socket synapd.service
  *   game_ai_start_cmd = sudo -n systemctl start synapd.socket synapd.service
  *       synapd is a *system* unit, so a plain `systemctl stop` from the session
@@ -1177,6 +1191,19 @@ static void config_set_defaults(syn_config_t *cfg)
         snprintf(cfg->game_exclude[cfg->game_exclude_count++],
                  sizeof(cfg->game_exclude[0]), "%s", defaults[i]);
 
+    /* Wayland-native clients that ARE games. gamescope is the only one that
+     * ships here, and it is the one that matters: Steam launch options of the
+     * form `gamescope -f -- %command%` are the recommended fix for half a
+     * dozen other problems, so a growing share of the library arrives wrapped
+     * in it and none of it was being detected. */
+    static const char *const wrappers[] = { "gamescope" };
+    cfg->game_include_count = 0;
+    for (size_t i = 0; i < sizeof(wrappers) / sizeof(wrappers[0]); i++)
+        snprintf(cfg->game_include[cfg->game_include_count++],
+                 sizeof(cfg->game_include[0]), "%s", wrappers[i]);
+
+    cfg->game_output = GAME_OUT_PRIMARY;
+
     cfg->bind_count = 0;
     seed_default_binds(cfg);
 }
@@ -1914,6 +1941,30 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
              tok = strtok_r(NULL, " \t", &save))
             snprintf(cfg->game_exclude[cfg->game_exclude_count++],
                      sizeof(cfg->game_exclude[0]), "%s", tok);
+    }
+    else if (strcmp(key, "game_include") == 0) {
+        /* Space-separated app_ids of Wayland-native clients that ARE games,
+         * same replace-not-append rule as game_exclude. An empty value is
+         * therefore how you turn wrapper detection off entirely. */
+        char buf[512];
+        snprintf(buf, sizeof(buf), "%s", val);
+        char *save = NULL;
+        cfg->game_include_count = 0;
+        for (char *tok = strtok_r(buf, " \t", &save);
+             tok && cfg->game_include_count < GAME_EXCLUDE_MAX;
+             tok = strtok_r(NULL, " \t", &save))
+            snprintf(cfg->game_include[cfg->game_include_count++],
+                     sizeof(cfg->game_include[0]), "%s", tok);
+    }
+    else if (strcmp(key, "game_output") == 0) {
+        /* Anything unrecognised keeps the default rather than silently
+         * meaning "ask the client" — a typo here should not quietly restore
+         * the behaviour this setting exists to stop. */
+        if      (strcmp(val, "focused") == 0) cfg->game_output = GAME_OUT_FOCUSED;
+        else if (strcmp(val, "ask")     == 0) cfg->game_output = GAME_OUT_ASK;
+        else if (strcmp(val, "primary") == 0) cfg->game_output = GAME_OUT_PRIMARY;
+        else wlr_log(WLR_ERROR, "synui: game_output '%s': expected "
+                                "primary|focused|ask — keeping primary", val);
     }
     else if (strcmp(key, "bind") == 0) {
         /* value = "<combo> <action> [arg]" — split on first whitespace */

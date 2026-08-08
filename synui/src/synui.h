@@ -1449,6 +1449,7 @@ typedef enum {
     CTL_ROW_EFFECT_BLOOM,
 
     CTL_ROW_GAME_MODE,
+    CTL_ROW_GAME_OUTPUT,
     CTL_ROW_GAME_SUSPEND_AI,
     CTL_ROW_GAME_INHIBIT_IDLE,
     /* The rest of what game mode borrows. Ordered by what each is worth, which
@@ -2881,6 +2882,14 @@ typedef struct {
     int   record_edit;          /* default 0 */
 #define DOCK_PIN_MAX 16
 #define GAME_EXCLUDE_MAX 16
+/* game_output: which monitor a detected game is fullscreened onto. The order
+ * is the order the control panel cycles them in, so PRIMARY — the answer that
+ * makes "games open on the main screen" true — comes first and is the
+ * default. (#define, not an enum: this sits inside syn_config_t's body, where
+ * an enum declaration draws -Wmissing-declarations for declaring no member.) */
+#define GAME_OUT_PRIMARY 0   /* the monitor marked primary (Super+D, `p`) */
+#define GAME_OUT_FOCUSED 1   /* wherever the keyboard focus is right now */
+#define GAME_OUT_ASK     2   /* honour whatever the client asked for */
     /* Runtime-mutable pinned set: seeded from synuirc `dock_pin`, then
      * overridden by ~/.config/synui/dock.state and edited live via the dock
      * context menu (dock_pin_toggle). */
@@ -2946,6 +2955,24 @@ typedef struct {
     int   game_inhibit_idle;    /* hold off dim/blank/lock, default 1 */
     char  game_exclude[GAME_EXCLUDE_MAX][64];
     int   game_exclude_count;
+    /* Wayland-NATIVE clients that are game wrappers, and so count as games
+     * despite not being XWayland. "fullscreen XWayland" cannot see these: a
+     * gamescope launched from a Wayland session uses its own Wayland backend
+     * (its log says `xdg_backend: Initted Wayland backend`) and runs the game
+     * on a NESTED Xwayland of its own, which synui never sees. To synui the
+     * whole thing is one Wayland toplevel named "gamescope".
+     *
+     * This is an allow-list rather than "any fullscreen Wayland client"
+     * precisely because the XWayland test was never about X: it was a cheap
+     * proxy for "not an ordinary desktop app". Wayland-native fullscreen is
+     * what a maximised video player, a slideshow and a browser all do, so the
+     * proxy does not survive being dropped — it has to be replaced by naming
+     * the wrappers. */
+    char  game_include[GAME_EXCLUDE_MAX][64];
+    int   game_include_count;
+    /* Which monitor a detected game is fullscreened onto, regardless of where
+     * the client asked to go. See game_output_for(). */
+    int   game_output;          /* GAME_OUT_*, default GAME_OUT_PRIMARY */
     char  game_ai_stop_cmd[192];
     char  game_ai_start_cmd[192];
 
@@ -5124,6 +5151,17 @@ void synui_render_news(syn_server_t *s);
 /* Startup: publish the (off) state for waybar's indicator, so a file left
  * behind by a synui that died mid-game cannot show a phantom game. */
 void game_init(syn_server_t *s);
+/* Would this view, as it stands, make game mode engage? The single definition
+ * of "this is a game", shared by the detector and by the fullscreen placement
+ * in layout.c so the two can never disagree about what a game is — a game sent
+ * to the main screen that then failed to trigger game mode (or the reverse)
+ * would be the worst of both. Silent and cheap: it is called per fullscreen
+ * transition, not per frame. */
+int game_view_is_game(syn_server_t *s, syn_view_t *view);
+/* Where this view should be fullscreened, or NULL to leave the choice to the
+ * caller's usual rules. Non-NULL only for an actual game with game_output set
+ * to something other than GAME_OUT_ASK. */
+syn_output_t *game_output_for(syn_server_t *s, syn_view_t *view);
 /* Idempotent decision point: call after any fullscreen change, map, or unmap.
  * Enters/leaves game mode (suspend synapd, hold off idle) as needed. */
 void game_reevaluate(syn_server_t *s);
