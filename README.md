@@ -169,6 +169,27 @@ moved into the bar shortly after. Right-clicking the bar's volume module opens a
 mixer drawn by the bar itself: output and input devices, and a slider per
 application.
 
+**Two shells ship**, and `bar_shell` in synuirc (or Control panel ▸ Desktop ▸
+*Bar shell*) picks between them:
+
+| `bar_shell` | What you get |
+|---|---|
+| `synapse` *(default)* | The bar described above — start menu, tray, mixer, widgets |
+| `antiquity` | A radial taskbar, a sidebar and a tarot-card power menu |
+
+**Antiquity is a port of [linux-antiquity](https://github.com/diinki/linux-antiquity)
+by [diinki](https://github.com/diinki)** — her design, her QML, and the three
+wallpapers the theme was drawn against, used here under the MIT licence
+(© 2026 diinki) with her notice kept in the tree as `LICENSE.antiquity`. The two
+shells are complete and independent of each other; they disagree about nearly
+every visual decision, and nothing is shared between them. Changing `bar_shell`
+takes effect at the next login, because synui does not start the bar itself.
+
+The provenance of everything shipped alongside it that we did not draw is
+recorded in `quickshell-antiquity/FONTS.md` and `WALLPAPERS.md` — including the
+Indian Type Foundry credit clause that Boska, Recia and Quilon carry, and the
+three upstream fonts that were **not** redistributable and so were removed.
+
 Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 
 | Key | Action |
@@ -245,6 +266,24 @@ that reason.
 
 Screenshots land in `~/Pictures/Screenshots` *and* on the clipboard, so you can
 paste one straight into a chat without opening the file.
+
+Screen recordings land in `~/Videos`, at a constant 60 fps. That detail matters
+more than it sounds: a recorder that grabs a frame only when the screen changes
+writes a file with no real frame rate, and while it plays perfectly, every video
+editor has to conform it on import and drops frames doing so. Recording at a
+fixed rate costs nothing — on a high-refresh screen it is actually the smaller
+file, because damage-driven capture runs *faster* than 60 whenever anything
+moves. `SYNUI_RECORD_FPS` changes the rate if you want the display's own.
+
+Editing one is a separate problem, and not one SynapseOS can solve outright: the
+free edition of DaVinci Resolve on Linux decodes neither H.264 nor AAC, so an
+ordinary recording imports as media offline however many codecs are installed.
+That is a licensing limit inside Resolve, not a missing package. There are two
+ways round it — convert afterwards with `syn resolve transcode <file>`, which
+writes a DNxHR `.mov` beside the original, or record straight to that format
+with **Control panel ▸ Sound ▸ Record for editing**. The second skips a lossy
+generation but costs roughly 1 GB a minute against a few hundred KB for an
+ordinary take, so it is off by default and the panel row says the rate out loud.
 
 ### Fingerprint unlock
 
@@ -399,6 +438,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 |---|---|
 | `syn` | Top-level CLI — `syn status`, `syn info`, `syn model/net/guard/nix …`, `syn shell`, `syn ui`, `syn install` |
 | `syn nix` | The optional Nix layer — `apply`, `build`, `update`, `facts`, `edit`, `rollback`, `init`. See [Declarative user environment](#declarative-user-environment-nix) |
+| `syn resolve` | DaVinci Resolve support — `doctor` (what is missing), `setup` (OpenCL runtime + launch environment), `install`, `transcode` (footage the free edition can read), `launch` |
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
@@ -673,6 +713,9 @@ SPDX identifiers, per component:
 | `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-firstboot`, `vibe` | `GPL-2.0-or-later` |
 | `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
 | `shelly` | `GPL-3.0-only` |
+| `synui/quickshell-antiquity/` and its three wallpapers | `MIT`, © 2026 [diinki](https://github.com/diinki) — a port of [linux-antiquity](https://github.com/diinki/linux-antiquity); notice kept as `LICENSE.antiquity` |
+| Boska, Recia, Quilon (bundled with Antiquity) | © [Indian Type Foundry](https://www.indiantypefoundry.com/), via Fontshare — their licence requires naming the faces and crediting ITF's ownership; `quickshell-antiquity/FONTS.md` is that credit |
+| `MaterialSymbolsSharp` (bundled with Antiquity) | `Apache-2.0`, © Google LLC |
 
 The kernel module is `-only` deliberately: it is a derived work of the kernel,
 which is GPL-2.0-only, so relicensing it forward is not ours to do.
