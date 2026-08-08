@@ -389,6 +389,26 @@ default_sink_unpin() {
     pw-metadata -d 0 default.configured.audio.sink >/dev/null 2>&1 || true
 }
 
+# ── prev_sink GOES STALE, SO ASK THE GRAPH ──────────────────────────────────
+#
+# The device the chain is feeding RIGHT NOW, read from the link. This is not
+# the same thing as prev_sink, and the difference is a bug velle hit twice:
+# prev_sink is the default as it was when the equalizer was switched ON and is
+# never updated afterwards, but the chain's output is passive, so WirePlumber
+# re-links it whenever the default device changes. Switch the equalizer on with
+# the headset asleep, connect the headset, and the audio moves to it while
+# eq.state still says speakers. Turning the equalizer off then "restores" a
+# device that was abandoned ten minutes ago and the music jumps to the
+# speakers with the headset still on your head.
+#
+# Captured on 2026-08-08 by a watcher across a logout: four consecutive
+# eq_off's, every one of them landing on alsa_output while acl=yes,
+# profile=a2dp-sink.
+chain_target_sink() {
+    pw-link -o -l "effect_output.${SINK_NAME}" 2>/dev/null |
+        sed -n 's/^[[:space:]]*|-> \([^:]*\):.*/\1/p' | head -1
+}
+
 # ── EXACTLY ONE STAGE MAY OWN THE VOLUME ────────────────────────────────────
 #
 # The chain is a sink that FEEDS another sink, so both apply their own volume
@@ -483,19 +503,26 @@ eq_on() {
 }
 
 eq_off() {
+    # WHERE the audio actually is beats where it was when this started. Only
+    # fall back to prev_sink when the link cannot be read — a stale answer is
+    # still better than none, because leaving no default at all is silence.
+    local restore_to
+    restore_to=$(chain_target_sink)
+    [[ -n $restore_to ]] || restore_to=$prev_sink
+
     # Put the default back FIRST. Killing the chain while it is still the
     # default sink leaves PipeWire with no default at all until wireplumber
     # notices, and that gap is audible as a dropout.
-    if [[ -n $prev_sink ]] && pactl list short sinks 2>/dev/null | grep -q "$prev_sink"; then
+    if [[ -n $restore_to ]] && pactl list short sinks 2>/dev/null | grep -q "$restore_to"; then
         # No volume is carried back. The device kept its own level the whole
         # time the equalizer was on — that is the point of pinning the chain at
         # unity — so it is already correct and writing to it could only make it
         # wrong. This is where the old code raised a device, and on a bluetooth
         # headset raising a device is a command to hardware.
-        pactl set-default-sink "$prev_sink" 2>/dev/null || true
+        pactl set-default-sink "$restore_to" 2>/dev/null || true
         local id
         while read -r id _; do
-            [[ -n $id ]] && pactl move-sink-input "$id" "$prev_sink" 2>/dev/null || true
+            [[ -n $id ]] && pactl move-sink-input "$id" "$restore_to" 2>/dev/null || true
         done < <(pactl list short sink-inputs 2>/dev/null)
     fi
 
@@ -503,10 +530,19 @@ eq_off() {
 
     # The restore above had to go through set-default-sink — anything softer
     # leaves the audible gap this function opens with — so it has necessarily
-    # just written a pin. Undo it here, once the chain is down and the dropout
-    # window is closed. Only when there was no pin to begin with: a device the
-    # user really did choose is theirs to keep.
-    if [[ -z $prev_pin ]]; then
+    # just written a pin. What happens to it depends on what was there before:
+    #
+    #   no pin before      -> unpin, so auto-switching works again
+    #   pin, still current -> put it back; the user did choose that device
+    #   pin, now stale     -> unpin
+    #
+    # That last case is the one that bites. prev_pin is recorded at eq_on and
+    # ages exactly like prev_sink, so restoring it blindly re-pins a device the
+    # audio has long since left — and a pin outranks a connecting headset by
+    # +30000, which is precisely the bug that started all of this. An abandoned
+    # preference is not a preference; when it no longer matches where the sound
+    # is, auto-switching is the safer thing to leave behind.
+    if [[ -z $prev_pin || $prev_pin != "$restore_to" ]]; then
         default_sink_unpin
     fi
 
