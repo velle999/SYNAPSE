@@ -271,10 +271,27 @@ PanelWindow {
                 // stock install holds only cups' "Manage Printing". The page id
                 // matches the CATEGORIES display name on purpose, so such an
                 // entry folds onto this page instead of creating a second one.
+                // ONE ROW PER CONTROL-PANEL CATEGORY, in the panel's own order.
+                //
+                // The arg is matched by ctlpanel_cat_from_name(), which
+                // strcasecmp's it against ctlpanel_cat_name() — so these
+                // strings are the category display names, lower-cased, and
+                // nothing else is valid. An arg that matches nothing does NOT
+                // fail: ctlpanel_show_cat falls back to the plain front door,
+                // so a wrong or missing row looks like the panel opening on
+                // whatever category it happened to be left on.
+                //
+                // Which is exactly how this list came to be missing Windows and
+                // Input for as long as it was (fixed 2026-08-08): two whole
+                // categories were unreachable from the menu and nothing
+                // anywhere said so. tests/menu_cats.sh now compares this list
+                // against ctlpanel.c and fails if a category is not here.
                 p["Settings"] = [
                     { kind: "action", label: "Control Panel",  action: "control" },
                     { kind: "action", label: "Appearance",     action: "control", arg: "appearance" },
+                    { kind: "action", label: "Windows",        action: "control", arg: "windows" },
                     { kind: "action", label: "Desktop",        action: "control", arg: "desktop" },
+                    { kind: "action", label: "Input",          action: "control", arg: "input" },
                     { kind: "action", label: "Display",        action: "control", arg: "display" },
                     { kind: "action", label: "Sound",          action: "control", arg: "sound" },
                     { kind: "action", label: "Network",        action: "control", arg: "network" },

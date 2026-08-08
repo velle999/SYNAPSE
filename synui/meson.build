@@ -792,6 +792,19 @@ test('readme_binds', readme_binds,
                 meson.current_source_dir() / '../README.md'],
      timeout : 30)
 
+# The start menu's Settings page against the control panel's categories. Same
+# shape as readme_binds above and there for the same reason: a hand-written QML
+# list of things C defines, with nothing keeping the two in step. It had already
+# drifted — Windows and Input were categories with no row, so they could not be
+# reached from the menu at all — and it drifts SILENTLY, because an arg that
+# matches no category makes ctlpanel_show_cat fall back to the plain front door
+# instead of failing. Source-only: no compositor, no QML engine, runs anywhere.
+menu_cats = find_program('tests/menu_cats.sh')
+test('menu_cats', menu_cats,
+     args    : [meson.current_source_dir() / 'src/ctlpanel.c',
+                meson.current_source_dir() / 'quickshell/StartMenu.qml'],
+     timeout : 30)
+
 # What synui-record hands wf-recorder. Source-only: recording needs a seat and
 # an output, so this asserts the command line rather than the capture. The
 # constant-rate flag in particular has no visible symptom when it goes missing
