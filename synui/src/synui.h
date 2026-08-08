@@ -1307,6 +1307,12 @@ typedef enum {
     CTL_ROW_GAME_MODE,
     CTL_ROW_GAME_SUSPEND_AI,
     CTL_ROW_GAME_INHIBIT_IDLE,
+    /* The rest of what game mode borrows. Ordered by what each is worth, which
+     * is also the order the panel shows them in. */
+    CTL_ROW_GAME_DROP_EFFECTS,
+    CTL_ROW_GAME_PAUSE_WALLPAPER,
+    CTL_ROW_GAME_STOP_BAR,
+    CTL_ROW_GAME_QUIET_KMOD,
 
     CTL_ROW_AI_LAYOUT,
     CTL_ROW_AI_CTX_DECOR,

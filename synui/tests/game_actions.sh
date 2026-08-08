@@ -134,6 +134,28 @@ check "quieting the kmod is OFF by default" "1" \
       "$(grep -c 'game_quiet_kmod      = 0' "$config")"
 
 echo ""
+echo "=== every action is reachable and wired from the panel ==="
+# Three things have to agree for a toggle to work, and nothing links them:
+#   the panel row's .key  ->  the string config_parse_kv matches  ->  the field
+# settings.state stores the row's .key and replays it through config_parse_kv on
+# every reload, so a row whose .key does not match the parser toggles, saves,
+# and then silently does nothing the next time synui starts. The row would look
+# right the whole time.
+panel=${3:-}
+if [ -n "$panel" ] && [ -f "$panel" ]; then
+    for key in game_drop_effects game_pause_wallpaper game_stop_bar game_quiet_kmod; do
+        check "panel has a row for $key" "1" \
+              "$(grep -c "\.key = \"$key\"" "$panel")"
+        check "that row points at the $key field" "1" \
+              "$(grep -c "CFG($key)" "$panel")"
+        check "config_parse_kv knows $key" "1" \
+              "$(grep -c "strcmp(key, \"$key\")" "$config")"
+    done
+else
+    echo "  skip  panel wiring (no ctlpanel.c passed)"
+fi
+
+echo ""
 if [ "$fails" -eq 0 ]; then
     echo "all game mode symmetry checks passed"
 else

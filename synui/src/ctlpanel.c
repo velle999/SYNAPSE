@@ -493,6 +493,21 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_GAME_INHIBIT_IDLE, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Hold off idle while gaming", NULL,
       .key = "game_inhibit_idle", .off = CFG(game_inhibit_idle), .vtype = CTL_VAL_BOOL,
       .help = "A gamepad is not input as far as the idle timer is concerned" },
+    /* The help lines say what each one BUYS, because the four are worth wildly
+     * different amounts and two of them look more attractive than they are.
+     * Measured rather than guessed — see game.c. */
+    { CTL_ROW_GAME_DROP_EFFECTS, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Drop screen effects while gaming", NULL,
+      .key = "game_drop_effects", .off = CFG(game_drop_effects), .vtype = CTL_VAL_BOOL,
+      .help = "The biggest win: lets the game draw straight to the display" },
+    { CTL_ROW_GAME_PAUSE_WALLPAPER, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Pause the wallpaper while gaming", NULL,
+      .key = "game_pause_wallpaper", .off = CFG(game_pause_wallpaper), .vtype = CTL_VAL_BOOL,
+      .help = "Animated wallpapers keep rendering behind a fullscreen game" },
+    { CTL_ROW_GAME_STOP_BAR, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Stop the bar while gaming", NULL,
+      .key = "game_stop_bar", .off = CFG(game_stop_bar), .vtype = CTL_VAL_BOOL,
+      .help = "Frees memory, but the bar takes a moment to come back" },
+    { CTL_ROW_GAME_QUIET_KMOD, CTL_CAT_POWER, CTL_KIND_TOGGLE, "Quiet the kernel monitor while gaming", NULL,
+      .key = "game_quiet_kmod", .off = CFG(game_quiet_kmod), .vtype = CTL_VAL_BOOL,
+      .help = "Saves very little, and security monitoring pauses with it" },
 
     /* System */
     { CTL_ROW_AI_BACKEND, CTL_CAT_SYSTEM, CTL_KIND_TOGGLE, "AI backend",        NULL,

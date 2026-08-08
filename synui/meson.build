@@ -786,7 +786,8 @@ test('readme_binds', readme_binds,
 game_actions = find_program('tests/game_actions.sh')
 test('game_actions', game_actions,
      args    : [meson.current_source_dir() / 'src/game.c',
-                meson.current_source_dir() / 'src/config.c'],
+                meson.current_source_dir() / 'src/config.c',
+                meson.current_source_dir() / 'src/ctlpanel.c'],
      timeout : 30)
 
 record_args = find_program('tests/record_args.sh')
