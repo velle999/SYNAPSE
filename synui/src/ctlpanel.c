@@ -325,8 +325,16 @@ static const struct ctl_item ctl_items[] = {
       .vmin = 0, .vmax = 1000, .vstep = 25, .unit = "ms",
       .help = "How long the pointer rests before focus follows it. 0 is "
               "instant, which also focuses windows you only crossed over" },
+    /* Next to the focus rows because it is the same question asked about the
+     * compositor's own windows: what does the pointer moving somewhere else
+     * change? Nothing, now, unless you turn this on. */
+    { CTL_ROW_PANEL_FOLLOW,   CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Panels follow the pointer", NULL,
+      .key = "panel_follow_pointer", .off = CFG(panel_follow_pointer),
+      .vtype = CTL_VAL_BOOL,
+      .help = "On, an open panel moves to whichever monitor the pointer is on. "
+              "Off, it stays on the monitor you opened it on" },
 
-    { CTL_ROW_SNAP,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Edge snapping", NULL,
+    { CTL_ROW_SNAP,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Edge snapping", NULL,
       .key = "snap", .off = CFG(snap), .vtype = CTL_VAL_BOOL,
       .help = "Drag a window to an edge to fill that half or quarter" },
     { CTL_ROW_SNAP_ZONE,      CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Snap zone", NULL,

@@ -1392,6 +1392,7 @@ typedef enum {
     CTL_ROW_CASCADE_STACK, /* windows per pile in LAYOUT_CASCADE */
     CTL_ROW_FOCUS_MODE,
     CTL_ROW_FOCUS_DELAY,
+    CTL_ROW_PANEL_FOLLOW,  /* do panels chase the pointer between monitors */
     CTL_ROW_SNAP,
     CTL_ROW_SNAP_ZONE,
     CTL_ROW_REMEMBER_GEOMETRY,
@@ -2501,6 +2502,23 @@ typedef struct {
      * pointer steals keystrokes as you cross a window on the way somewhere
      * else — the keypress lands wherever the pointer happened to be. */
     int   focus_delay_ms;
+
+    /* Does the compositor's own UI — the panels, the pickers, the toasts —
+     * re-centre on whichever output the pointer is over, repaint by repaint?
+     *
+     * OFF, and off is the default. get_output_box() asks server_focused_output()
+     * on every repaint, and that answers "the output under the cursor" first —
+     * so an open panel that repaints (the task manager ticks, the control panel
+     * repaints on hover) TELEPORTED to the other monitor the moment the pointer
+     * crossed onto it, mid-read. velle, 2026-08-08: "turn off that thing where
+     * windows chase the mouse around ... if i move the cursor to the other
+     * monitor it will move task manager over there too ... i hate it myself".
+     *
+     * Off, the output is pinned by server_ui_output_track() at the click or
+     * keystroke that opened the panel and held for as long as any panel is up,
+     * so a panel stays on the monitor it was opened on. On restores the old
+     * behaviour for anyone who wants the UI to come to the pointer. */
+    int   panel_follow_pointer;
 
     /* NOT HERE YET, on purpose. KWin's other two window-behaviour staples —
      * focus-stealing prevention and "raise on click" — both want a change
@@ -3771,6 +3789,14 @@ struct syn_server {
      * for focus_delay_ms, which is the behaviour the setting describes. */
     struct wl_event_source *focus_follow_timer;
 
+    /* The output the compositor's own UI is drawn on — see
+     * server_ui_output_track(). Re-derived at every click and keystroke while
+     * nothing is up, and held from there for as long as a panel is open, which
+     * is what stops a repainting panel from following the pointer onto the
+     * other monitor. NULL means "nothing pinned yet, ask the cursor", and the
+     * output-destroy handler puts it back to NULL so this cannot dangle. */
+    syn_output_t     *ui_output;
+
     /* Interactive move/resize grab state (Super + mouse drag). */
     syn_cursor_mode_t cursor_mode;      /* PASSTHROUGH / MOVE / RESIZE */
     syn_view_t       *grabbed_view;
@@ -4457,6 +4483,24 @@ void synui_config_reload(syn_server_t *s);   /* SIGHUP: reparse + reapply */
 /* The output the user is currently working on: the one under the cursor,
  * else the one holding the focused window, else the first connected output. */
 syn_output_t *server_focused_output(syn_server_t *s);
+
+/*
+ * The output the compositor draws its OWN UI on — panels, pickers, toasts.
+ *
+ * Not the same question as server_focused_output(), and that is the whole
+ * point. The focused output is re-derived from the cursor every time it is
+ * asked, which is right for "where should this new window go" and wrong for
+ * "where is the panel I am already reading": a panel repaints (the task
+ * manager ticks, a hover redraws a row) and the answer moved with the pointer,
+ * so the panel jumped monitors under the user's hands.
+ *
+ * So the UI output is a PIN. server_ui_output_track() re-takes it at every
+ * click and keystroke — but only while nothing is open, so an open panel keeps
+ * its monitor until it is closed. `panel_follow_pointer = on` gives the old
+ * chase back.
+ */
+syn_output_t *server_ui_output(syn_server_t *s);
+void server_ui_output_track(syn_server_t *s);
 
 /* The effective X11 primary: the output flagged ->primary, else the largest.
  * NULL only when no outputs are connected. */
@@ -5641,6 +5685,10 @@ void clipboard_show(syn_server_t *s);
 void clipboard_hide(syn_server_t *s);
 void clipboard_toggle(syn_server_t *s);
 void clipboard_clear(syn_server_t *s);
+/* The clipboard's current text, or NULL when there is none. Borrowed — valid
+ * until the next selection. Synchronous: the history is already in memory, so
+ * a panel can paste without piping a client. See clipboard.c. */
+const char *clipboard_current_text(syn_server_t *s);
 int  clipboard_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
 /* …and the pointer, per the panel pointer contract at the top of this file. */
 int  clipboard_motion(syn_server_t *s, double lx, double ly);
@@ -5966,6 +6014,20 @@ void panel_drop_kbd(syn_server_t *s);
 /* Does this panel currently answer for keys? Always true when it is not
  * windowed, so the modal panels are unaffected by any of this. */
 int  panel_wants_keys(syn_server_t *s, syn_pdrag_t which);
+
+/*
+ * Is ANY panel on screen — modal or windowed?
+ *
+ * Lives in input.c beside panel_pointer_active(), because both walk the one
+ * SYN_PANEL_LIST and a second hand-kept roster is the bug that list exists to
+ * prevent. The difference is the windowed panels: they are excluded there
+ * (a window is not modal) and included here, because a windowed task manager
+ * has a monitor it lives on just as much as a modal one does.
+ *
+ * Asked by server_ui_output_track(): while this is true, the UI's output is
+ * pinned where it was.
+ */
+bool panel_any_visible(syn_server_t *s);
 
 /* Dragging, wired into input.c beside the dock and desktop-icon drags. */
 void panel_drag_begin(syn_server_t *s, syn_pdrag_t which, double lx, double ly);

@@ -1341,6 +1341,13 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
 
     notify_activity(s);
 
+    /* Same as the click path: a keystroke says where the user is, and a keybind
+     * is how most panels are opened. Asked before the bind runs, so the panel
+     * this key is about to open is not yet visible — see
+     * server_ui_output_track(). */
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
+        server_ui_output_track(s);
+
     /* Translate keycode to keysym */
     uint32_t keycode = event->keycode + 8;
     const xkb_keysym_t *syms;
@@ -1508,8 +1515,9 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* Calculator. Modal, and it claims bare Shift because its expression
          * box needs the shifted characters — ( ) * + ^ % are all Shift on a US
          * layout, so a panel that let Shift through would be a calculator that
-         * could not multiply. Ctrl+C is claimed too (copy the answer); every
-         * other Super+… and Ctrl+… still falls through to the bind table. */
+         * could not multiply. Ctrl+C and Ctrl+V are claimed too (copy the
+         * answer, paste a number into the expression); every other Super+… and
+         * Ctrl+… still falls through to the bind table. */
         for (int i = 0; i < nsyms; i++)
             if (calc_key(s, syms[i], modifiers))
                 absorbed = true;
@@ -2255,6 +2263,20 @@ static bool panel_pointer_active(syn_server_t *s)
     return false;
 }
 
+/* Is any of them on screen at all? The modality filter above is deliberately
+ * NOT applied: server_ui_output_track() is asking "does something already have
+ * a monitor it lives on", and a windowed panel has one as much as a modal one
+ * does. Declared in synui.h next to the rest of panel.c's contract, defined
+ * here because this is where the one roster lives. */
+bool panel_any_visible(syn_server_t *s)
+{
+    if (s->cmdbar.visible) return true;
+#define X(fn, mem) if (s->mem.visible) return true;
+    SYN_PANEL_LIST(X)
+#undef X
+    return false;
+}
+
 static bool panel_pointer_motion(syn_server_t *s, double lx, double ly)
 {
 #define X(fn, mem) if (fn##_motion(s, lx, ly)) return true;
@@ -2485,6 +2507,13 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
                            uint32_t button, enum wl_pointer_button_state state)
 {
     notify_activity(s);
+
+    /* A click is the user saying where they are. If this one opens a panel, it
+     * opens on the monitor the click landed on and stays there — see
+     * server_ui_output_track(). Before any dispatch, so the panel this press is
+     * about to open is not yet visible and cannot pin the previous answer. */
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED)
+        server_ui_output_track(s);
 
     /* Locked: a click wakes the native lock and goes no further — no window,
      * dock or panel underneath may be reached. */

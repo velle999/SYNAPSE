@@ -691,6 +691,73 @@ static void calc_copy(syn_server_t *s)
     calc_status(s, 0, note);
 }
 
+/*
+ * Ctrl+V, and Shift+Insert for the same reason every terminal takes both.
+ *
+ * The other half of Ctrl+C, and wanting it is the whole premise of the panel:
+ * "what is 1440 * 0.8" is a question asked in the middle of doing something
+ * else, and the number is nearly always already on screen in something else —
+ * a price in a browser, a byte count in a terminal. Retyping fourteen digits
+ * by eye is how a correct calculator produces a wrong answer.
+ *
+ * The text comes from clipboard.c's history rather than from piping the owning
+ * client, and that is not a shortcut: the compositor must never block on a
+ * client (clipboard.c's header spells out the deadlock), and it does not have
+ * to, because the selection was already captured when it was set.
+ *
+ * NOTHING IS SILENTLY REPAIRED. A paste that could not have been typed is
+ * refused with a reason, and one too long for the line is refused whole rather
+ * than clipped. Both rules are the same rule: every quiet fix-up would put a
+ * DIFFERENT number in the box from the one on the clipboard, and the panel
+ * would then answer it confidently.
+ */
+static void calc_paste(syn_server_t *s)
+{
+    syn_calc_panel_t *c = &s->calc;
+
+    const char *text = clipboard_current_text(s);
+    if (!text) { calc_status(s, 1, "nothing on the clipboard"); return; }
+
+    /* The first line only. A copied cell, a shell's output and anything piped
+     * through wl-copy all arrive with a trailing newline, and the entry is one
+     * line — so this is the common case, not a degenerate one. */
+    size_t len = strcspn(text, "\r\n");
+    if (len == 0) { calc_status(s, 1, "nothing on the clipboard"); return; }
+
+    /* Exactly the set calc_key inserts when you type, so a paste can put
+     * nothing in the box that the keyboard could not. Rejecting UTF-8 is the
+     * point rather than a limitation: '−' (U+2212, what a web page prints for
+     * a minus) and '×' are invisible impostors for the operators they are not,
+     * and the parser would fail on them with a complaint about the character
+     * AFTER them. */
+    for (size_t i = 0; i < len; i++) {
+        unsigned char ch = (unsigned char)text[i];
+        if (ch < 0x20 || ch > 0x7e) {
+            calc_status(s, 1, "clipboard is not plain text");
+            return;
+        }
+    }
+
+    /* Checked before a single character lands, so a paste that does not fit
+     * leaves the line exactly as it was. calc_insert() stops at the limit, and
+     * a number silently missing its last three digits is the worst thing a
+     * calculator can do. */
+    if ((size_t)c->entry_len + len > sizeof(c->entry) - 1) {
+        calc_status(s, 1, "clipboard is too long for the line");
+        return;
+    }
+
+    char line[CALC_ENTRY_MAX];
+    memcpy(line, text, len);
+    line[len] = '\0';
+    calc_insert(s, line);      /* the one path into the entry: it also leaves
+                                * the history walk and clears the status */
+
+    /* Say so when there was more, because the rest was dropped on the floor and
+     * a pasted expression that is missing its second half still evaluates. */
+    if (text[len]) calc_status(s, 0, "pasted the first line");
+}
+
 /* Walk the tape into the expression box, newest first — a shell's history, and
  * for the same reason: the sum you want next is very often the last one with
  * one number changed. Down past the newest gives you the empty line back rather
@@ -905,12 +972,13 @@ int calc_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     syn_calc_panel_t *c = &s->calc;
 
     /*
-     * Ctrl+C is the ONE modified combo this panel claims.
+     * Ctrl+C and Ctrl+V are the ONLY modified combos this panel claims.
      *
-     * It is the copy key on every desktop, synui's bind table does not use it,
-     * and the alternative was putting "copy the answer" on a letter that the
-     * expression box needs for typing. Swallowed rather than passed on: the
-     * panel is modal, so the window underneath must not see it either.
+     * They are the copy and paste keys on every desktop, synui's bind table
+     * uses neither, and the alternative was putting "copy the answer" and
+     * "paste a number" on letters that the expression box needs for typing.
+     * Swallowed rather than passed on: the panel is modal, so the window
+     * underneath must not see them either.
      *
      * Everything else with Super or Ctrl held falls through to the bind table,
      * as in the emoji picker — those are how you leave, and a panel that ate
@@ -919,6 +987,11 @@ int calc_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     if (mods & WLR_MODIFIER_CTRL) {
         if (sym == XKB_KEY_c || sym == XKB_KEY_C) {
             calc_copy(s);
+            synui_render_calc(s);
+            return 1;
+        }
+        if (sym == XKB_KEY_v || sym == XKB_KEY_V) {
+            calc_paste(s);
             synui_render_calc(s);
             return 1;
         }
@@ -954,6 +1027,16 @@ int calc_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     case XKB_KEY_Delete:
         calc_clear(s);
+        synui_render_calc(s);
+        return 1;
+
+    /* Shift+Insert, the X11 paste every terminal still answers to — and plain
+     * Insert with it, since the entry line has no overwrite mode for it to
+     * mean anything else, so the shift state is not worth checking. The
+     * KEYPAD's Insert (KP_0 with numlock off) is deliberately NOT here: it is
+     * the zero key, and a zero key that pastes would be a trap. */
+    case XKB_KEY_Insert:
+        calc_paste(s);
         synui_render_calc(s);
         return 1;
 

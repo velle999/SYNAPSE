@@ -111,6 +111,31 @@ static void clip_history_add(syn_server_t *s, const char *text)
     c->count++;
 }
 
+/*
+ * What is on the clipboard right now, or NULL.
+ *
+ * Synchronous, which is the point: a panel that wants to paste (calc.c's
+ * Ctrl+V) cannot pipe-read the owning client and wait — that is the deadlock
+ * this whole file is written around. It does not have to. The history already
+ * holds the text, captured when the selection was set, so the answer is a
+ * pointer we already own.
+ *
+ * When WE own the selection the source is asked first rather than items[0]:
+ * picking out of the history offers the entry without lifting it to the top
+ * (clip_history_add is deliberately not called — the pick would duplicate the
+ * entry it came from), so after a pick the newest history entry and the actual
+ * clipboard are two different strings.
+ *
+ * Borrowed, never owned: it dies with the next selection, so copy it if you
+ * are going to do anything that can re-enter.
+ */
+const char *clipboard_current_text(syn_server_t *s)
+{
+    if (clip.ours && s->seat->selection_source == &clip.ours->base)
+        return clip.ours->text;
+    return s->clipboard.count ? s->clipboard.items[0].text : NULL;
+}
+
 void clipboard_clear(syn_server_t *s)
 {
     for (int i = 0; i < s->clipboard.count; i++) free(s->clipboard.items[i].text);

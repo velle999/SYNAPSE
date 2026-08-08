@@ -2276,7 +2276,7 @@ void synui_render_calc(syn_server_t *s)
     const int keypad_top = 244;
 
     int pw = pad * 2 + CALC_COLS * cell_w;
-    /* Room for TWO footer lines. One line cannot carry four instructions at a
+    /* Room for TWO footer lines. One line cannot carry five instructions at a
      * width the keypad is happy at, and the alternative — a panel wide enough
      * for the sentence — is a calculator the width of a browser window. */
     int ph = keypad_top + CALC_ROWS * cell_h + 50;
@@ -2505,10 +2505,16 @@ void synui_render_calc(syn_server_t *s)
      * line. Clipping makes an overrun visible as an ellipsis instead. */
     cairo_set_font_size(cr, 11);
     set_ink(cr, INK_DIM, 0.9);
+    /* Split by WIDTH, not by topic — five instructions across two lines that
+     * both have to fit in pw-36 (384px at the font the panel picks). Measured
+     * in Hack, the widest UI font on this desktop: 350px and 343px, against the
+     * 350px the copy line already was. Putting Ctrl+V on the copy line instead
+     * reads better and comes to 462px, which loses "Esc clears, then closes"
+     * off the edge — the one instruction a modal panel cannot leave unsaid. */
     draw_clipped(cr, 18, ph - 28, pw - 36,
-                 "Enter works it out \xc2\xb7 Up/Down recall the tape");
+                 "Enter works it out \xc2\xb7 Ctrl+C copies \xc2\xb7 Ctrl+V pastes");
     draw_clipped(cr, 18, ph - 12, pw - 36,
-                 "Ctrl+C copies the answer \xc2\xb7 Esc clears, then closes");
+                 "Up/Down recall the tape \xc2\xb7 Esc clears, then closes");
 
     cairo_destroy(cr);
     set_scene_buffer(&s->calc_ui.text_buf, s->calc_ui.tree, buf);

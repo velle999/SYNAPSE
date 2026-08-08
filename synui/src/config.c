@@ -74,6 +74,12 @@
  * Drag a window to the top edge to maximize it, to a side for that half, into a
  * corner for that quarter; dragging it off again restores its old size.
  *
+ * Where the compositor's own panels appear (synui_main.c, render.c):
+ *   panel_follow_pointer = on|off   (default off)
+ * On, a panel re-centres on whichever monitor the pointer is over every time it
+ * repaints, so an open task manager crosses the desk with the mouse. Off pins
+ * it to the monitor it was opened on until it is closed.
+ *
  * Alt+Tab switcher (render.c, input.c, overview.c):
  *   alt_tab_style        = overview|switcher   (default overview)
  *   alt_tab_preview      = on|off   (default on)
@@ -860,6 +866,11 @@ static void config_set_defaults(syn_config_t *cfg)
      * existed, so an upgrade changes nothing until someone opens the panel. */
     cfg->focus_mode     = SYN_FOCUS_CLICK;
     cfg->focus_delay_ms = 0;
+    /* The exception to the paragraph above: this one DOES change what synui did
+     * before the setting existed, on purpose. The old behaviour was a bug
+     * wearing a feature's clothes — an open panel followed the pointer onto
+     * whatever monitor it wandered to, mid-read. */
+    cfg->panel_follow_pointer = 0;
     cfg->alt_tab_preview = 1;
     cfg->alt_tab_all_desktops = 1;
     cfg->alt_tab_minimized    = 1;
@@ -1432,6 +1443,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if (cfg->focus_delay_ms < 0)    cfg->focus_delay_ms = 0;
         if (cfg->focus_delay_ms > 3000) cfg->focus_delay_ms = 3000;
     }
+    else if (strcmp(key, "panel_follow_pointer") == 0)
+        cfg->panel_follow_pointer = strcmp(val, "on") == 0;
     else if (strcmp(key, "alt_tab_preview") == 0)
         cfg->alt_tab_preview = strcmp(val, "on") == 0;
     else if (strcmp(key, "alt_tab_all_desktops") == 0)

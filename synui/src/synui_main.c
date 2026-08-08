@@ -269,14 +269,46 @@ void output_usable_box_of(syn_server_t *s, syn_output_t *o, struct wlr_box *box)
     output_box_of(s, o, box);
 }
 
+/*
+ * The pin. See the contract in synui.h.
+ *
+ * Taken at an input event rather than when a panel opens, and that is what
+ * makes it one function instead of an edit to twenty show() paths: every panel
+ * in synui is opened by a keybind or a click, so the output the user was on at
+ * their last click or keystroke IS the output they opened it from. Between
+ * events the pointer can wander wherever it likes and the answer does not move.
+ *
+ * Kept up to date even while panel_follow_pointer is ON — only the reader below
+ * consults that setting. Otherwise turning it OFF from the control panel would
+ * find no pin to fall back on, and the panel it was toggled from would go on
+ * chasing the pointer until it was closed: the setting would appear not to
+ * work, in the one panel anyone would test it from.
+ */
+void server_ui_output_track(syn_server_t *s)
+{
+    /* A panel is up: it keeps the monitor it was opened on. Without this, a
+     * click into a window on the other monitor would drag an open (windowed)
+     * panel across after it — the same complaint, one event later. */
+    if (panel_any_visible(s)) return;
+
+    s->ui_output = server_focused_output(s);
+}
+
+syn_output_t *server_ui_output(syn_server_t *s)
+{
+    if (s->config.panel_follow_pointer || !s->ui_output)
+        return server_focused_output(s);
+    return s->ui_output;
+}
+
 void server_output_box(syn_server_t *s, struct wlr_box *box)
 {
-    output_box_of(s, server_focused_output(s), box);
+    output_box_of(s, server_ui_output(s), box);
 }
 
 void server_usable_box(syn_server_t *s, struct wlr_box *box)
 {
-    output_usable_box_of(s, server_focused_output(s), box);
+    output_usable_box_of(s, server_ui_output(s), box);
 }
 
 /* ── Output events ───────────────────────────────────────── */
@@ -538,6 +570,13 @@ static void output_destroy(struct wl_listener *listener, void *data)
         if (home)
             layout_apply(server, server_active_workspace(server));
     }
+
+    /* The UI pin, cleared OUTSIDE the shutdown guard because this is about to be
+     * freed and a stale pin would be read by the next repaint. NULL means "ask
+     * the cursor", so an open panel simply re-homes onto a surviving monitor. */
+    if (server->ui_output == output)
+        server->ui_output = NULL;
+
     free(output);
 
     /* Re-home the compositor UI onto a surviving output. */

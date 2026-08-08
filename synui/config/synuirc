@@ -187,6 +187,20 @@ titlebar_height = 26
 # ever a move.
 # snap = on
 
+# ── Where synui's own panels appear ────────────────────────
+# The task manager, the control panel, the calculator, the pickers — the
+# windows synui draws itself rather than a client drawing them.
+#
+# They are placed on "the active output", and until 2026-08-08 that was
+# re-derived from the POINTER on every single repaint. A panel repaints often
+# (the task manager ticks, the control panel redraws as you hover a row), so
+# moving the mouse onto the other monitor dragged the open panel across after
+# it, mid-read. The panel is now pinned to the monitor it was opened on and
+# stays there until it is closed.
+#
+# Turn this on to get the old behaviour back — the UI comes to the pointer.
+# panel_follow_pointer = off
+
 # ── Alt+Tab switcher ───────────────────────────────────────
 # WHICH switcher Alt+Tab is. Two of them ship:
 #   overview   mission control — every window on the desktop, tiled over the

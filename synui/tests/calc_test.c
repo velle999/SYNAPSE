@@ -67,6 +67,16 @@ void synui_spawn(const char *cmd)
     snprintf(last_spawn, sizeof(last_spawn), "%s", cmd ? cmd : "");
 }
 
+/* The clipboard, stubbed: the real one reads a client's pipe through the event
+ * loop, and there is no client and no loop here. Ctrl+V asks this. NULL is a
+ * real answer — an empty clipboard is one of the cases below. */
+static const char *stub_clipboard;
+const char *clipboard_current_text(syn_server_t *s)
+{
+    (void)s;
+    return stub_clipboard;
+}
+
 static char scratch[256];
 
 bool syn_config_path(char *buf, size_t n, const char *leaf)
@@ -451,8 +461,8 @@ static void test_history_persists(void)
           "the reloaded answer is '%s'", srv->calc.hist[0].result);
 }
 
-/* Ctrl+C is the one modified combo the panel claims; everything else with a
- * modifier held falls through so there is always a way out. */
+/* Ctrl+C and Ctrl+V are the modified combos the panel claims; everything else
+ * with a modifier held falls through so there is always a way out. */
 static void test_copy(void)
 {
     panel_reset();
@@ -481,6 +491,94 @@ static void test_copy(void)
           "the panel swallowed Super+C and trapped the user in it");
     CHECK(calc_key(srv, XKB_KEY_z, WLR_MODIFIER_CTRL) == 0,
           "the panel swallowed a Ctrl combo that is not its own");
+}
+
+/*
+ * Ctrl+V.
+ *
+ * The refusals are the half worth pinning. A calculator that quietly pastes
+ * SOMETHING — the first line of a paragraph, a number with its last digits
+ * clipped off, a UTF-8 minus read as whatever survives — then answers it
+ * confidently is the failure mode this panel cannot have, and every one of
+ * those is a silent wrong number rather than a visible error.
+ */
+static void test_paste(void)
+{
+    panel_reset();
+    calc_show(srv);
+
+    /* An empty clipboard says so and leaves the line alone. */
+    stub_clipboard = NULL;
+    type("1+");
+    CHECK(calc_key(srv, XKB_KEY_v, WLR_MODIFIER_CTRL) == 1,
+          "Ctrl+V should be swallowed, not passed to the window underneath");
+    CHECK(srv->calc.status_err, "pasting an empty clipboard should say so");
+    CHECK(strcmp(srv->calc.entry, "1+") == 0,
+          "a refused paste changed the line to '%s'", srv->calc.entry);
+
+    /* The ordinary case: it lands at the cursor and evaluates. */
+    stub_clipboard = "1440";
+    calc_key(srv, XKB_KEY_v, WLR_MODIFIER_CTRL);
+    CHECK(strcmp(srv->calc.entry, "1+1440") == 0,
+          "paste appended '%s'", srv->calc.entry);
+    CHECK(!srv->calc.status_err, "a good paste read as an error");
+    calc_key(srv, XKB_KEY_Return, 0);
+    CHECK(strcmp(srv->calc.result, "1441") == 0,
+          "the pasted expression came to '%s'", srv->calc.result);
+
+    /* A trailing newline is the common case, not an edge one: everything that
+     * reaches a clipboard through a shell has one. */
+    panel_reset_keeping_history();
+    calc_show(srv);
+    stub_clipboard = "42\n";
+    calc_key(srv, XKB_KEY_v, WLR_MODIFIER_CTRL);
+    CHECK(strcmp(srv->calc.entry, "42") == 0,
+          "a trailing newline was not dropped ('%s')", srv->calc.entry);
+
+    /* More than one line: the first, and it says the rest went. */
+    panel_reset_keeping_history();
+    calc_show(srv);
+    stub_clipboard = "12\n34\n";
+    calc_key(srv, XKB_KEY_v, WLR_MODIFIER_CTRL);
+    CHECK(strcmp(srv->calc.entry, "12") == 0,
+          "a multi-line paste put '%s' in the box", srv->calc.entry);
+    CHECK(srv->calc.status[0], "a multi-line paste did not say the rest was dropped");
+
+    /* U+2212 MINUS SIGN, which is what a web page prints where it means '-'.
+     * Refused whole: pasting the digits either side of it would be a different
+     * sum from the one on the clipboard. */
+    panel_reset_keeping_history();
+    calc_show(srv);
+    stub_clipboard = "8\xe2\x88\x92""3";
+    calc_key(srv, XKB_KEY_v, WLR_MODIFIER_CTRL);
+    CHECK(srv->calc.entry_len == 0,
+          "a UTF-8 paste put '%s' in the box", srv->calc.entry);
+    CHECK(srv->calc.status_err, "a UTF-8 paste did not report a reason");
+
+    /* Too long for the line: refused whole rather than clipped, because a
+     * number missing its last digits still evaluates. */
+    panel_reset_keeping_history();
+    calc_show(srv);
+    static char big[CALC_ENTRY_MAX + 16];
+    memset(big, '9', sizeof(big) - 1);
+    big[sizeof(big) - 1] = '\0';
+    stub_clipboard = big;
+    calc_key(srv, XKB_KEY_v, WLR_MODIFIER_CTRL);
+    CHECK(srv->calc.entry_len == 0,
+          "an oversized paste was clipped into the box (%d chars)",
+          srv->calc.entry_len);
+    CHECK(srv->calc.status_err, "an oversized paste did not report a reason");
+
+    /* Shift+Insert is the same action. The shift state is not looked at. */
+    panel_reset_keeping_history();
+    calc_show(srv);
+    stub_clipboard = "7";
+    CHECK(calc_key(srv, XKB_KEY_Insert, WLR_MODIFIER_SHIFT) == 1,
+          "Shift+Insert was not taken");
+    CHECK(strcmp(srv->calc.entry, "7") == 0,
+          "Shift+Insert put '%s' in the box", srv->calc.entry);
+
+    stub_clipboard = NULL;
 }
 
 /* ── The pointer ─────────────────────────────────────────────
@@ -803,6 +901,7 @@ int main(void)
     test_recall();
     test_history_persists();
     test_copy();
+    test_paste();
 
     test_pointer();
     test_close_button();
