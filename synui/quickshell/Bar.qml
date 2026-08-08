@@ -173,12 +173,34 @@ PanelWindow {
                 // is an overline — anchored to the bottom there it would be
                 // drawn along the screen edge, where half of it is off-screen
                 // and the rest reads as a stray line rather than a rule.
+                //
+                // WHICH EDGE IS A `y`, NOT AN ANCHOR SWAP, and that is not a
+                // style preference.
+                //
+                // It used to be `top: atBottom ? parent.top : undefined` with a
+                // matching `bottom`, and those are two INDEPENDENT bindings. On
+                // a live move they do not re-evaluate atomically: `top` takes
+                // parent.top while `bottom` is still parent.bottom, and for that
+                // instant the rule is anchored top AND bottom — which is Qt's
+                // signal to size the item from its anchors and throw the
+                // `height` binding away. Clearing `bottom` a moment later
+                // removes the anchor but does NOT restore the height, so the
+                // 2px rule stayed 28px tall: the whole bar painted solid accent,
+                // Theme.bg nowhere, until the bar was restarted.
+                //
+                // It only ever bit a move, never a login — at startup the
+                // ternaries resolve once and only one of the two is ever set,
+                // which is why a bottom bar comes up correct and turns magenta
+                // the moment you touch Desktop ▸ Bar edge.
+                //
+                // With no vertical anchor at all there is nothing that can
+                // override `height`, and `y` is a single binding that cannot be
+                // observed half-applied. Verified with the pattern in
+                // isolation: rule.height across the flip is 2 → 2 here and was
+                // 2 → 28 before.
                 Rectangle {
-                    anchors {
-                        left: parent.left; right: parent.right
-                        top:    BarConfig.atBottom ? parent.top    : undefined
-                        bottom: BarConfig.atBottom ? undefined     : parent.bottom
-                    }
+                    anchors { left: parent.left; right: parent.right }
+                    y: BarConfig.atBottom ? 0 : parent.height - height
                     height: Theme.accentHeight
                     color: Theme.magenta
                 }
