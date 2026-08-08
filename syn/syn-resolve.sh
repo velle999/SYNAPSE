@@ -447,18 +447,49 @@ cmd_install() {
 
 # ── transcode ────────────────────────────────────────────────
 
+# The nearest broadcast-standard frame rate to $1, as an ffmpeg -r value.
+#
+# Screen recordings are VARIABLE rate. wf-recorder emits a frame per compositor
+# repaint, so a synui capture averages an arbitrary rate (67.2 fps, measured)
+# with gaps anywhere from 6 ms to 32 ms. An NLE has no concept of that: a clip
+# conforms to ONE timeline rate. Left to itself ffmpeg carries the odd average
+# straight through to the mezzanine, which is how a 313-frame capture came out
+# as a 67.2 fps DNxHR with 87 frames silently dropped — arbitrarily, wherever
+# the source happened to be dense. Snapping to a real rate is what turns that
+# into a uniform, predictable conform.
+nearest_fps() {
+    awk -v r="$1" 'BEGIN{
+        n = split("24000/1001 24 25 30000/1001 30 50 60000/1001 60", a, " ")
+        best = "60"; bd = -1
+        for (i = 1; i <= n; i++) {
+            v = a[i]
+            if (index(v, "/")) { split(v, p, "/"); x = p[1] / p[2] } else x = v + 0
+            d = (x > r) ? x - r : r - x
+            if (bd < 0 || d < bd) { bd = d; best = a[i] }
+        }
+        print best
+    }'
+}
+
+# A stream field, as a bare value ("" if absent).
+probe() { ffprobe -v error -select_streams v:0 -show_entries "stream=$1" \
+                  -of default=nw=1:nk=1 "$2" 2>/dev/null | head -1; }
+
 cmd_transcode() {
     # Free Resolve on Linux has no H.264/H.265 decode, so ordinary camera and
     # phone footage imports as media offline. DNxHR is what it does read, and
     # rewrapping is quicker than arguing with it.
     command -v ffmpeg >/dev/null 2>&1 || {
         echo "  ffmpeg is missing:  sudo pacman -S ffmpeg"; return 1; }
+    command -v ffprobe >/dev/null 2>&1 || {
+        echo "  ffprobe is missing:  sudo pacman -S ffmpeg"; return 1; }
 
-    local profile=dnxhr_sq outdir=""
+    local profile=dnxhr_sq outdir="" fps=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --profile) profile="${2:?--profile needs a value}"; shift 2 ;;
             --out)     outdir="${2:?--out needs a directory}"; shift 2 ;;
+            --fps)     fps="${2:?--fps needs a value}"; shift 2 ;;
             --) shift; break ;;
             -*) echo "  unknown option: $1"; return 1 ;;
             *)  break ;;
@@ -467,7 +498,7 @@ cmd_transcode() {
 
     [ $# -gt 0 ] || {
         cat <<'USAGE'
-  Usage: syn resolve transcode [--profile <p>] [--out <dir>] <file>...
+  Usage: syn resolve transcode [--profile <p>] [--out <dir>] [--fps <r>] <file>...
 
   Rewraps footage into DNxHR in a .mov, which free Resolve on Linux can read.
   Output goes next to each input in a DNxHR/ folder unless --out says otherwise.
@@ -475,6 +506,10 @@ cmd_transcode() {
   Profiles, smallest to largest:
     dnxhr_lb   offline/proxy       dnxhr_sq   standard quality (default)
     dnxhr_hq   high quality        dnxhr_hqx  10-bit, needs a 10-bit source
+
+  Variable-rate sources (every synui screen recording is one) are conformed to
+  constant rate, snapped to the nearest standard rate. --fps overrides that:
+    --fps 60   --fps 30   --fps 30000/1001
 USAGE
         return 1; }
 
@@ -497,13 +532,51 @@ USAGE
         fi
 
         echo "  → $(basename "$f")"
+
+        # What rate to conform to. avg_frame_rate is the honest one: a VFR file
+        # reports r_frame_rate as its TIMEBASE, not its rate — wf-recorder's is
+        # 90000/1, the 90 kHz clock, which is also what makes the capture claim
+        # H.264 level 6.2. Reading r_frame_rate here would ask for a 90000 fps
+        # mezzanine.
+        local rfr afr srcfps outfps vfr=0
+        rfr=$(probe r_frame_rate "$f")
+        afr=$(probe avg_frame_rate "$f")
+        srcfps=$(awk -v v="${afr:-0}" 'BEGIN{split(v, p, "/");
+                     print (p[2] > 0) ? p[1] / p[2] : 0}')
+        [ -n "$rfr" ] && [ "$rfr" != "$afr" ] && vfr=1
+
+        if [ -n "$fps" ]; then
+            outfps="$fps"
+        else
+            outfps=$(nearest_fps "$srcfps")
+        fi
+
+        if [ "$vfr" = 1 ]; then
+            info "variable rate (avg $(printf '%.2f' "$srcfps") fps) → constant $outfps"
+        fi
+
         # PCM audio because Resolve is as fussy about audio codecs as video
-        # ones, and this is a mezzanine file — size is not the point.
+        # ones, and this is a mezzanine file — size is not the point. Free
+        # Resolve on Linux reads no AAC either, so this is not belt-and-braces.
+        #
+        # -fps_mode cfr is the whole point of the rate work above: without it
+        # ffmpeg passes the source's variable timestamps through and the clip
+        # lands on the timeline at a rate no timeline has.
         if ffmpeg -nostdin -hide_banner -loglevel error -stats \
                   -i "$f" \
                   -c:v dnxhd -profile:v "$profile" -pix_fmt "$pixfmt" \
+                  -fps_mode cfr -r "$outfps" \
                   -c:a pcm_s16le \
                   "$out" </dev/null; then
+            # Say what the conform cost. Frames DO get dropped when a 67 fps
+            # capture becomes 60, and that is fine — what is not fine is it
+            # happening silently, which is how the 67.2 fps mezzanine shipped
+            # unnoticed in the first place.
+            local fin fout
+            fin=$(probe nb_frames "$f"); fout=$(probe nb_frames "$out")
+            if [ -n "$fin" ] && [ -n "$fout" ] && [ "$fin" != "$fout" ]; then
+                info "$fin frames → $fout at $outfps fps"
+            fi
             ok "$out"
             n=$((n + 1))
         else

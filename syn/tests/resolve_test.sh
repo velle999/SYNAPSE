@@ -137,6 +137,75 @@ check "triggers on Resolve and on syn" "5" \
       "$(grep -c '^Target = ' "$hook")"
 
 echo ""
+echo "=== transcode conforms variable-rate sources ==="
+# Every synui screen recording is variable rate, and a VFR source reaching the
+# dnxhd encoder untouched is not a loud failure — it is a mezzanine at a rate no
+# timeline has, with frames dropped wherever the source was dense. Measured on a
+# real 313-frame capture: 67.2 fps out, 87 frames gone, no warning.
+
+# nearest_fps is self-contained awk, so it can be lifted out and exercised
+# directly rather than inferred from the ffmpeg line.
+eval "$(sed -n '/^nearest_fps()/,/^}/p' "$sr")"
+check "67.2 fps (a synui capture) snaps to 60" "60"          "$(nearest_fps 67.2)"
+check "59.94 keeps its fraction"       "60000/1001"          "$(nearest_fps 59.94)"
+check "23.98 keeps its fraction"       "24000/1001"          "$(nearest_fps 23.98)"
+check "30.1 snaps to 30"               "30"                  "$(nearest_fps 30.1)"
+check "an exact rate is left alone"    "25"                  "$(nearest_fps 25)"
+
+check "the encode forces constant rate" "1" \
+      "$(grep -c -- '-fps_mode cfr -r' "$sr")"
+# r_frame_rate on a VFR file is the TIMEBASE (wf-recorder's is 90000/1), so
+# deciding the output rate from it asks for a 90000 fps mezzanine.
+check "rate comes from avg_frame_rate" "1" \
+      "$(grep -c 'srcfps=.*awk -v v="\${afr:-0}"' "$sr")"
+
+if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1 &&
+   ffmpeg -hide_banner -encoders 2>/dev/null | grep -q ' dnxhd ' &&
+   ffmpeg -hide_banner -encoders 2>/dev/null | grep -q ' libx264 '; then
+    # A source whose r_frame_rate and avg_frame_rate disagree — the same shape
+    # as a capture, without needing one.
+    ffmpeg -v error -f lavfi -i testsrc2=size=640x480:rate=60 -t 2 \
+           -vf "select='not(mod(n,3))+not(mod(n,7))'" -fps_mode vfr \
+           -c:v libx264 -pix_fmt yuv420p "$tmp/vfr.mp4" 2>/dev/null
+
+    r=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate \
+                -of default=nw=1:nk=1 "$tmp/vfr.mp4")
+    a=$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate \
+                -of default=nw=1:nk=1 "$tmp/vfr.mp4")
+    check "fixture really is variable rate" "differ" \
+          "$([ "$r" != "$a" ] && echo differ || echo "same:$r")"
+
+    bash "$sr" transcode --out "$tmp/dnx" "$tmp/vfr.mp4" >/dev/null 2>&1
+    out="$tmp/dnx/vfr.mov"
+    if [ -f "$out" ]; then
+        ro=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate \
+                     -of default=nw=1:nk=1 "$out")
+        ao=$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate \
+                     -of default=nw=1:nk=1 "$out")
+        check "output is constant rate" "equal" \
+              "$([ "$ro" = "$ao" ] && echo equal || echo "$ro vs $ao")"
+        check "output lands on a standard rate" "25/1" "$ro"
+        # Resolve reads neither H.264 nor AAC on Linux; both have to be gone.
+        check "video is DNxHR" "dnxhd" \
+              "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name \
+                         -of default=nw=1:nk=1 "$out")"
+        check "audio is not left as AAC" "" \
+              "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name \
+                         -of default=nw=1:nk=1 "$out" | grep '^aac$')"
+
+        bash "$sr" transcode --fps 30 --out "$tmp/dnx30" "$tmp/vfr.mp4" >/dev/null 2>&1
+        check "--fps overrides the snap" "30/1" \
+              "$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate \
+                         -of default=nw=1:nk=1 "$tmp/dnx30/vfr.mov" 2>/dev/null)"
+    else
+        echo "  FAIL  transcode produced no output"
+        fails=$((fails + 1))
+    fi
+else
+    echo "  skip  end-to-end conform (ffmpeg with dnxhd+libx264 not available)"
+fi
+
+echo ""
 echo "=== the PKGBUILD ships all of it ==="
 pkgbuild="$here/../PKGBUILD"
 for f in syn-resolve.sh syn-resolve.hook; do
