@@ -102,6 +102,7 @@ enabled=off
 preamp=0
 preset=flat
 prev_sink=
+prev_pin=
 declare -a gains
 for ((i = 0; i < NBANDS; i++)); do gains[i]=0; done
 
@@ -114,6 +115,7 @@ state_load() {
             preamp)    preamp=$v   ;;
             preset)    preset=$v   ;;
             prev_sink) prev_sink=$v ;;
+            prev_pin)  prev_pin=$v ;;
             band*)     local n=${k#band}; [[ $n =~ ^[0-9]+$ ]] && ((n >= 1 && n <= NBANDS)) && gains[n-1]=$v ;;
         esac
     done < "$STATE"
@@ -126,6 +128,7 @@ state_save() {
         echo "preset=$preset"
         echo "preamp=$preamp"
         echo "prev_sink=$prev_sink"
+        echo "prev_pin=$prev_pin"
         # The centre frequencies go in the file so the PANEL can label its rows
         # from them. They are this script's table and nowhere else's; a second
         # copy compiled into eq.c would be free to drift the day a band moves,
@@ -355,6 +358,37 @@ current_default_sink() {
     pactl get-default-sink 2>/dev/null || true
 }
 
+# ── A default is not the same thing as a PIN ────────────────────────────────
+#
+# `pactl set-default-sink` does not merely point the audio somewhere; it writes
+# WirePlumber's `default.configured.audio.sink`, which means "the user CHOSE
+# this device". find-selected-default-node.lua then hands that node
+# priority.session + 30000, so it outranks everything for as long as it exists.
+#
+# That is fatal for auto-switching. A bluetooth headset only wins the default
+# by being slightly higher priority than the speakers — 1010 vs 1009 on velle's
+# desktop — and no such margin survives +30000. Hit 2026-08-08: the equalizer
+# was switched off at 12:26, eq_off pinned the speakers on the way out, and
+# from then on connecting the P20i earbuds left the audio on the speakers with
+# nothing in any log to say why.
+#
+# So the pin has to be restored as what it WAS, and "there wasn't one" is a
+# value like any other — it cannot be represented by writing a sink name.
+default_sink_pin() {
+    command -v pw-metadata >/dev/null 2>&1 || return 0
+    # The JSON is not written in one style: pactl emits `{ "name": "x" }` and
+    # WirePlumber's own state file the compact `{"name":"x"}`, so the spaces
+    # have to be optional or this reads empty for half its callers — which
+    # looks exactly like "there was no pin" and silently unpins a real choice.
+    pw-metadata 0 default.configured.audio.sink 2>/dev/null |
+        sed -n "/key:'default.configured.audio.sink'/s/.*\"name\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
+}
+
+default_sink_unpin() {
+    command -v pw-metadata >/dev/null 2>&1 || return 0
+    pw-metadata -d 0 default.configured.audio.sink >/dev/null 2>&1 || true
+}
+
 # ── The volume has to come WITH the audio ───────────────────────────────────
 #
 # The chain is a second sink, and a sink owns its volume. WirePlumber remembers
@@ -421,6 +455,11 @@ eq_on() {
     cur=$(current_default_sink)
     if [[ -n $cur && $cur != "$NODE_NAME" ]]; then
         prev_sink=$cur
+        # Recorded in the SAME branch as prev_sink, and for the same reason: on
+        # a second eq_on the pin is already ours, and saving that would make
+        # "restore" mean "pin the equalizer", which outlives the chain itself.
+        # Empty is the common case and is meaningful — see default_sink_pin.
+        prev_pin=$(default_sink_pin)
     fi
 
     chain_start || return 1
@@ -461,6 +500,16 @@ eq_off() {
     fi
 
     chain_stop
+
+    # The restore above had to go through set-default-sink — anything softer
+    # leaves the audible gap this function opens with — so it has necessarily
+    # just written a pin. Undo it here, once the chain is down and the dropout
+    # window is closed. Only when there was no pin to begin with: a device the
+    # user really did choose is theirs to keep.
+    if [[ -z $prev_pin ]]; then
+        default_sink_unpin
+    fi
+
     enabled=off
     state_save
 }
