@@ -2072,8 +2072,21 @@ void pointer_update_focus(syn_server_t *s, uint32_t time_msec)
      * select) sees the press and the release with nothing in between. Send it
      * against the grab surface's origin rather than re-deriving coordinates
      * from whatever is under the cursor now — the cursor is routinely dragged
-     * off the grab surface and even off-screen. */
-    if (s->seat->pointer_state.button_count > 0) {
+     * off the grab surface and even off-screen.
+     *
+     * A DRAG-AND-DROP IS THE ONE EXCEPTION, and it has to be, because a DnD
+     * drag is always button-held: pinning focus here meant the surface under
+     * the cursor never got an enter for the whole drag. wlroots delivers the
+     * drop through the drag's own pointer grab (wlr_drag.pointer_grab), whose
+     * enter handler is what moves drag focus and — for an Xwayland target —
+     * what makes xwm send XdndEnter/XdndPosition. notify_enter() is the only
+     * thing that calls it, so returning early here meant the grab never heard
+     * about the target and every cross-app drop was refused. The drag icon
+     * still tracked the cursor (motion positions it directly, off the grab),
+     * which made this look like a target-side or MIME problem rather than
+     * focus never arriving. Falling through is safe: the icon surface cannot
+     * steal the hit test, since start_drag clears its input region. */
+    if (s->seat->pointer_state.button_count > 0 && !s->seat->drag) {
         if (s->seat->pointer_state.focused_surface)
             wlr_seat_pointer_notify_motion(s->seat, time_msec,
                                            s->cursor->x - s->ptr_grab_off_x,
