@@ -208,6 +208,17 @@ gap = 20
 border_width = 4
 bind = super+shift+r spawn true
 EOF
+# A theme picked since startup, so the reload has something to LOSE.
+#
+# theme.state was the one state file synui_config_load() did not read: it was
+# loaded once from synui_main(), and synui_config_reload() replaces s->config
+# wholesale, so every reload silently put the desktop back on stock SYNAPSE
+# until the next login — and the first save after that wrote the reset theme to
+# disk and made it permanent. XP rather than another dark preset because its
+# scheme is `light`: the log line carries it, so this pins that the PRESET was
+# really re-applied and not just the name copied across.
+mkdir -p "$TMP/synui"
+printf 'theme=winxp\n' > "$TMP/synui/theme.state"
 kill -HUP "$SYNUI_PID"
 i=0
 while ! grep -q "config reloaded" "$LOG"; do
@@ -219,9 +230,17 @@ done
 # the reload log line reports the applied values — pin them
 grep -q "config reloaded (.*gap 20, border 4)" "$LOG" \
     || fail "reload did not apply gap/border from the new config"
+# …and the theme survived it. Startup logged `theme applied: synapse`, so this
+# can only match if the reload re-read theme.state and re-applied what it found.
+i=0
+while ! grep -q "theme applied: winxp (scheme light)" "$LOG"; do
+    [ $i -ge 50 ] && fail "reload reset the theme instead of keeping theme.state"
+    sleep 0.1
+    i=$((i + 1))
+done
 # and the compositor must still be serving clients afterwards
 wayland-info >/dev/null 2>&1 || fail "compositor unresponsive after reload"
-echo "ok 5 - SIGHUP reloaded the config live"
+echo "ok 5 - SIGHUP reloaded the config live, theme and all"
 
 # ── 6. Clean shutdown ──────────────────────────────────────
 kill -TERM "$SYNUI_PID"

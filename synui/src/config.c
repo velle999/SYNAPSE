@@ -1160,6 +1160,7 @@ void synui_config_load(syn_config_t *cfg)
         record_audio_state_load(cfg);
         deskicons_state_load(cfg);
         settings_state_load(cfg);
+        theme_state_load_config(cfg);
         binds_state_load(cfg);
         synui_config_apply_launcher_binds(cfg);
         config_apply_ui_font(cfg);
@@ -1216,6 +1217,14 @@ void synui_config_load(syn_config_t *cfg)
      * settings.state is the one that can carry ANY key. Same precedent as the
      * others — delete the file to hand control back to synuirc. */
     settings_state_load(cfg);
+
+    /* Last of the state files, which is where it effectively sat before it was
+     * one: theme_state_load() used to run after the entire config load, from
+     * synui_main() — so theme.state's active_opacity and foot_alpha won over
+     * settings.state's, and they still do. Being read HERE rather than once at
+     * startup is what makes a config RELOAD keep the theme instead of resetting
+     * the desktop to stock SYNAPSE; see theme.c. */
+    theme_state_load_config(cfg);
 
     /* After settings.state and everything above it, because it MEASURES ITSELF
      * against them: binds.state holds only the difference between the bind

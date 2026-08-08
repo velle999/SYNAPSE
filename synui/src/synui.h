@@ -5327,7 +5327,15 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save);
 /* Copy a preset's colours + opacity levels into a config only (no server) —
  * what config.c calls for a synuirc `theme =` line at parse time. */
 void theme_load_colors(syn_config_t *cfg, syn_theme_t theme);
-void theme_state_load(syn_server_t *s);   /* lay theme.state over the config default */
+/* theme.state → cfg: the theme name, a pushed palette, and the translucency
+ * trio. Pure — no server, no render.c — so synui_config_load() can call it with
+ * the rest of the state files, which is what stops a config RELOAD from
+ * resetting the desktop to stock SYNAPSE. See theme.c for the whole story. */
+void theme_state_load_config(syn_config_t *cfg);
+/* …and the applying half: put the desktop on whatever the config now says.
+ * Startup passes push_apps=1 so the toolkits are reskinned too; a reload passes
+ * 0, since nothing outside the compositor changed. Never saves. */
+void theme_apply_from_config(syn_server_t *s, int push_apps);
 /* `synctl dispatch theme <arg>` — a preset token ("dark"), or three #rrggbb
  * colours (accent, panel surface, ink) to apply as a custom palette. Returns 0
  * and logs when the argument is neither. Bare `theme` opens the picker instead;

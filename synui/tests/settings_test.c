@@ -57,6 +57,11 @@ void deskicons_state_load(syn_config_t *c)    { (void)c; }
  * stub that dropped it would make the theme case untestable here. The colour
  * seeding it also does is theme.c's business, and is not. */
 void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
+/* theme.state is now read by synui_config_load() like the other eight state
+ * files (that is what stops a config reload resetting the desktop to stock).
+ * Stubbed here for the same reason as the loaders above: this test owns no
+ * theme.state, and reading the developer's would make the run non-hermetic. */
+void theme_state_load_config(syn_config_t *c) { (void)c; }
 void wallpaper_output_apply(syn_config_t *c, const char *name,
                             const char *tok, int mode)
 { (void)c; (void)name; (void)tok; (void)mode; }

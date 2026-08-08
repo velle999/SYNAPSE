@@ -527,10 +527,31 @@ void transparency_set_enabled(syn_server_t *s, int on)
     theme_state_save(s);
 }
 
-/* Copy a preset's colours + opacity levels into a config, nothing more. This is
- * the half config.c needs at parse time (`theme =`), before there is a server to
- * repaint or apps to reskin — and doing it here means an explicit border_color_*
- * written AFTER `theme =` in synuirc still overrides, because it parses later. */
+/*
+ * Push a config's resolved panel colours into render.c's file-scope cache.
+ *
+ * Separate from theme_load_colors() below, which used to do it inline. That
+ * cache is PROCESS-GLOBAL, and theme_load_colors() is reachable from
+ * config_parse_kv() on a `theme =` line — which config.c documents as safe to
+ * run against a SCRATCH config. It was not: a scratch parse reached past the
+ * struct it was handed and recoloured the live desktop's panels. Exactly the
+ * shape of the ui_font bug fixed in 293, one file over, and the reason that fix
+ * moved syn_text_set_ui_font() to the end of synui_config_load(). Same remedy:
+ * theme_load_colors() is pure now, and the push happens where there IS a server
+ * — theme_apply(), theme_apply_custom() and theme_apply_from_config().
+ */
+static void theme_push_panel_colors(const syn_config_t *cfg)
+{
+    render_set_panel_accent(cfg->panel_accent);
+    render_set_panel_surface(cfg->panel_bg, cfg->panel_ink);
+}
+
+/* Copy a preset's colours + opacity levels into a config, nothing more — no
+ * render.c push, no repaint, no spawn (see theme_push_panel_colors above). This
+ * is the half config.c needs at parse time (`theme =`), before there is a server
+ * to repaint or apps to reskin — and doing it here means an explicit
+ * border_color_* written AFTER `theme =` in synuirc still overrides, because it
+ * parses later. */
 void theme_load_colors(syn_config_t *cfg, syn_theme_t theme)
 {
     if (theme < 0 || theme >= SYN_THEME_COUNT) return;
@@ -565,12 +586,7 @@ void theme_load_colors(syn_config_t *cfg, syn_theme_t theme)
                                                                 : p->border_norm,
            sizeof(cfg->chrome_face));
 
-    /* Push the accent into render.c's cache now, so every panel drawn after this
-     * (including the first one, before any theme_apply) uses the theme's colour.
-     * Safe with no server — it only writes a static. */
-    render_set_panel_accent(p->panel_accent);
-
-    /* And the surface the accent is drawn ON. Alpha 0 = derive from the app
+    /* The surface the accent is drawn ON. Alpha 0 = derive from the app
      * window pair, which is what every theme but SYNAPSE does: the panels are
      * the same surface as a window, so a rice's panels come out in the rice's
      * colours without a second set of numbers to keep in step. */
@@ -593,10 +609,20 @@ void theme_load_colors(syn_config_t *cfg, syn_theme_t theme)
     }
     memcpy(cfg->panel_bg,  pbg,  sizeof(cfg->panel_bg));
     memcpy(cfg->panel_ink, pink, sizeof(cfg->panel_ink));
-    render_set_panel_surface(pbg, pink);
 }
 
-void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
+/*
+ * `push_apps` is whether to shell out to synui-apply-theme.
+ *
+ * Every PICK does (that is most of what picking a theme means). A re-apply of
+ * the theme the desktop is already on does not: the toolkit side has not
+ * changed, and the script is ~20 seconds of kwriteconfig/gsettings/dbus. That
+ * distinction only exists because theme_apply_from_config() re-applies on every
+ * config reload, and a SIGHUP should not cost a fifth of a minute of shelling
+ * out to redraw the same colours.
+ */
+static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
+                           int push_apps)
 {
     if (theme < 0 || theme >= SYN_THEME_COUNT) return;
     const syn_theme_preset_t *p = &theme_presets[theme];
@@ -607,6 +633,7 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
     s->config.theme_custom = 0;
 
     theme_load_colors(&s->config, theme);
+    theme_push_panel_colors(&s->config);
 
     /* Re-tint every window's chrome (the titlebar buffer is redrawn with the new
      * caption colours) and re-push opacity, since the inactive level may have
@@ -641,18 +668,25 @@ void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
     /* Hand the app-side reskin to the helper (safe/merge-y, and a no-op where the
      * tools aren't installed). Firefox transparency is already covered by the
      * compositor's opacity — this only carries the light/dark scheme. */
-    char cmd[224];
-    snprintf(cmd, sizeof(cmd),
-             "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d",
-             p->scheme, p->accent_r, p->accent_g, p->accent_b,
-             p->glyph_r, p->glyph_g, p->glyph_b,
-             p->base_r, p->base_g, p->base_b,
-             p->text_r, p->text_g, p->text_b);
-    synui_spawn(cmd);
+    if (push_apps) {
+        char cmd[224];
+        snprintf(cmd, sizeof(cmd),
+                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d",
+                 p->scheme, p->accent_r, p->accent_g, p->accent_b,
+                 p->glyph_r, p->glyph_g, p->glyph_b,
+                 p->base_r, p->base_g, p->base_b,
+                 p->text_r, p->text_g, p->text_b);
+        synui_spawn(cmd);
+    }
 
     if (save) theme_state_save(s);
     wlr_log(WLR_INFO, "synui: theme applied: %s (scheme %s)",
             syn_theme_names[theme], p->scheme);
+}
+
+void theme_apply(syn_server_t *s, syn_theme_t theme, int save)
+{
+    theme_apply_ex(s, theme, save, 1);
 }
 
 /* ── A palette from outside the preset table ─────────────── */
@@ -719,8 +753,7 @@ void theme_apply_custom(syn_server_t *s, const float accent[4],
     memcpy(cfg->panel_bg, base, sizeof(cfg->panel_bg));
     cfg->panel_bg[3] = 1.0f;
     col_ink_for(cfg->panel_ink, base, ink);
-    render_set_panel_accent(cfg->panel_accent);
-    render_set_panel_surface(cfg->panel_bg, cfg->panel_ink);
+    theme_push_panel_colors(cfg);
 
     /* Borders. Focus IS the accent (as given, not the panel-corrected one — a
      * border is drawn on the wallpaper, not on the panel surface, so the
@@ -852,70 +885,139 @@ int theme_dispatch(syn_server_t *s, const char *arg)
     return 1;
 }
 
-/* Lay theme.state over whatever synuirc left in cfg->theme, then apply it. Called
- * once at startup (save=0 — it is re-applying what it just read, not a new pick). */
-void theme_state_load(syn_server_t *s)
+/*
+ * theme.state, laid over whatever synuirc left in cfg — the CONFIG half.
+ *
+ * This used to be one function that read the file and applied it, called once
+ * from synui_main() and from nowhere else. That made theme.state the only one
+ * of the nine state files that synui_config_load() does not read, and
+ * synui_config_reload() replaces s->config WHOLESALE:
+ *
+ *     syn_config_t fresh = {0};
+ *     synui_config_load(&fresh);
+ *     s->config = fresh;
+ *
+ * so every reload silently reset the theme to SYNAPSE, threw away a palette the
+ * bar had pushed, and put transparency/opacity/foot_alpha back to the defaults —
+ * with nothing re-reading theme.state until the next login. The desktop flipped
+ * to stock neon and stayed there for the session (velle, 2026-08-07, twice).
+ *
+ * Worse, it did not even stay a session-only glitch: theme_state_save() writes
+ * `theme=<s->config.theme>`, and the control panel's Transparency row, Super+E
+ * and the theme manager's own +/- all call it. Touch any of them after a reload
+ * and the clobbered theme is written to disk, so the next login comes up on it
+ * too and the user's pick is gone for good. That is what made this one look
+ * unrecoverable rather than merely wrong.
+ *
+ * Reading it here, with the other eight, makes the reload correct by
+ * construction instead of by anyone remembering to add a call. Pure: it parses
+ * into the config it is handed and touches neither the server nor render.c, so
+ * it is safe on the scratch config a reload builds. The applying half is
+ * theme_apply_from_config() below.
+ *
+ * Loaded LAST of the state files (see synui_config_load), because that is where
+ * it effectively sat before: it ran after the whole config load, so its
+ * active_opacity/foot_alpha won over settings.state's. Keeping that order keeps
+ * the precedence a desktop already has.
+ */
+void theme_state_load_config(syn_config_t *cfg)
 {
-    int   have_tr = 0, tr = 0, have_op = 0, have_fa = 0;
-    float op = 0.0f, fa = 0.0f;
-    int   have_custom = 0;
-    float cust[3][4];
-
     char path[256];
-    if (syn_config_path(path, sizeof(path), "theme.state")) {
-        FILE *f = fopen(path, "r");
-        if (f) {
-            char line[128];
-            while (fgets(line, sizeof(line), f)) {
-                line[strcspn(line, "\r\n")] = '\0';
-                if (strncmp(line, "theme=", 6) == 0) {
-                    for (int t = 0; t < SYN_THEME_COUNT; t++)
-                        if (strcmp(line + 6, syn_theme_names[t]) == 0)
-                            s->config.theme = t;
-                } else if (strncmp(line, "transparency=", 13) == 0) {
-                    tr = strcmp(line + 13, "on") == 0; have_tr = 1;
-                } else if (strncmp(line, "active_opacity=", 15) == 0) {
-                    op = (float)atof(line + 15); have_op = 1;
-                } else if (strncmp(line, "foot_alpha=", 11) == 0) {
-                    fa = (float)atof(line + 11); have_fa = 1;
-                } else if (strncmp(line, "custom=", 7) == 0) {
-                    /* Three comma-separated rrggbb. All or nothing: a half-read
-                     * palette would be applied as two of the user's colours and
-                     * one uninitialised one. */
-                    char *p = line + 7;
-                    int n = 0;
-                    for (char *tok = strtok(p, ","); tok && n < 3;
-                         tok = strtok(NULL, ","))
-                        if (!theme_parse_hex(tok, cust[n++])) { n = -1; break; }
-                    have_custom = (n == 3);
-                    if (!have_custom)
-                        wlr_log(WLR_ERROR, "synui: theme.state: unreadable "
-                                           "custom palette, ignoring it");
-                }
+    if (!syn_config_path(path, sizeof(path), "theme.state")) return;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;   /* no pick recorded — synuirc and the defaults stand */
+
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (strncmp(line, "theme=", 6) == 0) {
+            for (int t = 0; t < SYN_THEME_COUNT; t++)
+                if (strcmp(line + 6, syn_theme_names[t]) == 0)
+                    theme_load_colors(cfg, (syn_theme_t)t);
+        } else if (strncmp(line, "transparency=", 13) == 0) {
+            cfg->transparency = strcmp(line + 13, "on") == 0;
+        } else if (strncmp(line, "active_opacity=", 15) == 0) {
+            float op = (float)atof(line + 15);
+            /* The theme's own levels were just seeded by theme_load_colors; a
+             * persisted slider position is the user's and wins over them. */
+            if (op >= 0.50f && op <= 1.00f) {
+                cfg->active_opacity   = op;
+                cfg->inactive_opacity = inactive_from_active(op);
             }
-            fclose(f);
+        } else if (strncmp(line, "foot_alpha=", 11) == 0) {
+            float fa = (float)atof(line + 11);
+            if (fa >= 0.0f && fa <= 1.00f) cfg->foot_alpha = fa;
+        } else if (strncmp(line, "custom=", 7) == 0) {
+            /* Three comma-separated rrggbb. All or nothing: a half-read palette
+             * would be applied as two of the user's colours and one
+             * uninitialised one.
+             *
+             * Only recorded here, not derived into the chrome: turning three
+             * colours into a dozen is theme_apply_custom()'s job and it needs a
+             * server to re-decorate with. The flag is what carries it across
+             * the reload, and theme_apply_from_config() does the derivation. */
+            float cust[3][4];
+            int n = 0;
+            for (char *tok = strtok(line + 7, ","); tok && n < 3;
+                 tok = strtok(NULL, ","))
+                if (!theme_parse_hex(tok, cust[n++])) { n = -1; break; }
+            if (n == 3) {
+                cfg->theme_custom = 1;
+                memcpy(cfg->theme_custom_accent, cust[0], sizeof(cust[0]));
+                memcpy(cfg->theme_custom_base,   cust[1], sizeof(cust[1]));
+                memcpy(cfg->theme_custom_ink,    cust[2], sizeof(cust[2]));
+            } else {
+                wlr_log(WLR_ERROR, "synui: theme.state: unreadable custom "
+                                   "palette, ignoring it");
+            }
         }
     }
+    fclose(f);
+}
 
-    /* Apply the theme first — it resets the opacity levels from the preset — then
-     * lay the persisted translucency back over them, so a user's slider position
-     * wins over the theme's default rather than being clobbered every boot. */
-    theme_apply(s, s->config.theme, 0);
-    /* Then the pushed palette over the top of it, if the last session was
-     * running one. This is the leg that makes the bar's picker stick: the bar
-     * only pushes when a theme is PICKED, so without this every login came up
-     * on the preset's colours while the bar came up on its own — the desktop
-     * back in two halves, and only until the next pick, which is the hardest
-     * kind of bug to be told about. save=0, same reason as the apply above. */
-    if (have_custom)
-        theme_apply_custom(s, cust[0], cust[1], cust[2], 0);
-    if (have_op && op >= 0.50f && op <= 1.00f) {
-        s->config.active_opacity   = op;
-        s->config.inactive_opacity = inactive_from_active(op);
-    }
-    if (have_tr) s->config.transparency = tr;
-    if (have_fa && fa >= 0.0f && fa <= 1.00f) s->config.foot_alpha = fa;
-    if (have_tr || have_op) anim_apply_alpha_all(s);
+/*
+ * Put the desktop on the theme the config resolved — the SERVER half.
+ *
+ * Called at startup and at the end of every synui_config_reload(). save=0
+ * throughout: this is re-applying what was already read, not a new pick, and
+ * saving here is precisely how a reload used to make its own damage permanent.
+ *
+ * `push_apps` is passed to theme_apply_ex: true at login so Dolphin/GTK/Firefox
+ * come up matching, false on a reload where nothing about the toolkit side has
+ * changed.
+ */
+void theme_apply_from_config(syn_server_t *s, int push_apps)
+{
+    /* Snapshot what theme_apply() is about to overwrite. It resets the opacity
+     * pair from the preset and clears theme_custom (picking a preset IS how a
+     * pushed palette is dropped) — both correct for a pick from the manager,
+     * both wrong here, where the config has already resolved all three. */
+    int   custom = s->config.theme_custom;
+    float cust[3][4];
+    memcpy(cust[0], s->config.theme_custom_accent, sizeof(cust[0]));
+    memcpy(cust[1], s->config.theme_custom_base,   sizeof(cust[1]));
+    memcpy(cust[2], s->config.theme_custom_ink,    sizeof(cust[2]));
+    int   tr  = s->config.transparency;
+    float act = s->config.active_opacity;
+    float ina = s->config.inactive_opacity;
+    float fa  = s->config.foot_alpha;
+
+    theme_apply_ex(s, s->config.theme, 0, push_apps);
+
+    /* Then the pushed palette over the top of it, if one is in force. This is
+     * the leg that makes the bar's picker stick: the bar only pushes when a
+     * theme is PICKED, so without this every login came up on the preset's
+     * colours while the bar came up on its own — the desktop back in two
+     * halves, and only until the next pick, which is the hardest kind of bug to
+     * be told about. */
+    if (custom) theme_apply_custom(s, cust[0], cust[1], cust[2], 0);
+
+    s->config.transparency     = tr;
+    s->config.active_opacity   = act;
+    s->config.inactive_opacity = ina;
+    s->config.foot_alpha       = fa;
+    anim_apply_alpha_all(s);
     /* Re-sync the terminal's own glass to the restored state: if the last
      * session left transparency off, foot.ini must go back to solid. */
     glass_push(s);

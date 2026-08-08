@@ -164,6 +164,21 @@ void synui_config_reload(syn_server_t *s)
     wallpaper_reload(s);
     input_reload_config(s);
 
+    /* The theme the config just resolved, back onto the desktop.
+     *
+     * `s->config = fresh` above replaces the WHOLE struct, so everything
+     * theme.state owns — the preset, a palette the bar pushed, the translucency
+     * trio — comes back from disk with it and has to be re-applied: the window
+     * chrome, the dock and render.c's panel colours are all caches that nothing
+     * else here invalidates. Without this pair (the load in synui_config_load(),
+     * this call) a reload put the desktop on stock SYNAPSE until the next login,
+     * and any later save wrote that back to theme.state and made it permanent.
+     *
+     * push_apps = 0: this re-applies the theme the desktop is already on, and
+     * synui-apply-theme is ~20s of shelling out to kwriteconfig/gsettings. A
+     * SIGHUP has no business paying it. */
+    theme_apply_from_config(s, 0);
+
     /* Re-tile the visible desktop (layout_apply covers every output) with the
      * new gap/border. Hidden desktops re-flow on switch. */
     layout_apply(s, server_active_workspace(s));
@@ -2060,10 +2075,12 @@ int synui_init(syn_server_t *s)
      * is owed here. */
     deco_state_load(s);
 
-    /* The theme last picked in the manager (theme.state), applied over whatever
-     * synuirc left. No windows are mapped yet, so this is mostly about firing
-     * synui-apply-theme once so Dolphin/GTK/Firefox match on login. */
-    theme_state_load(s);
+    /* The theme last picked in the manager, which synui_config_load() has
+     * already read out of theme.state and laid over synuirc. No windows are
+     * mapped yet, so this is mostly about firing synui-apply-theme once so
+     * Dolphin/GTK/Firefox match on login — hence push_apps = 1, the one caller
+     * that passes it. */
+    theme_apply_from_config(s, 1);
 
     /* Event sounds: the udev watch that makes "device plugged in" an event, and
      * the login chime. Both no-op on a desktop that has never turned a sound on,
