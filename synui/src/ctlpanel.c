@@ -523,6 +523,8 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_TASKMGR,    CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Task manager",      "taskmgr",
       .section = "Tools" },
     { CTL_ROW_CLIPBOARD,  CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Clipboard history", "clipboard" },
+    { CTL_ROW_CALC,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "Calculator",        "calc",
+      .help = "Expressions, not a four-function chain: pi, e, ans and sqrt/ln/sin all work" },
     { CTL_ROW_NEWS,       CTL_CAT_SYSTEM, CTL_KIND_PANEL,  "News",              "news"      },
     { CTL_ROW_NEWS_REFRESH, CTL_CAT_SYSTEM, CTL_KIND_VALUE, "News refresh", NULL,
       .key = "news_refresh", .off = CFG(news_refresh_min), .vtype = CTL_VAL_INT,
@@ -1628,6 +1630,7 @@ static int ctl_child_is_up(syn_server_t *s, const char *action)
     if (strcmp(action, "cursor") == 0)    return s->curpick.visible;
     if (strcmp(action, "font") == 0)      return s->fontpick.visible;
     if (strcmp(action, "emoji") == 0)     return s->emoji.visible;
+    if (strcmp(action, "calc") == 0)      return s->calc.visible;
     if (strcmp(action, "equalizer") == 0) return s->eq.visible;
     if (strcmp(action, "filters") == 0)   return s->filters.visible;
     if (strcmp(action, "widgets") == 0)   return s->widgets.visible;

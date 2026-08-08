@@ -2164,6 +2164,273 @@ void synui_render_emoji(syn_server_t *s)
 }
 
 
+/* ── The calculator ──────────────────────────────────────────
+ *
+ * The one panel that is neither a list nor purely a grid: a tape, an expression
+ * box, an answer and a keypad, stacked. Everything above the keypad is chrome
+ * as far as the pointer is concerned — s->calc.hit records the panel rect and
+ * the keypad grid, and nothing else on the panel is clickable, which is why the
+ * y offsets below are laid out as one column of named constants rather than
+ * derived from a row pitch the way the list panels' are.
+ *
+ * The labels are drawn CENTRED BY MEASUREMENT, as the emoji grid's are. The UI
+ * font is whatever fontpick last applied and may be proportional, so "1" and
+ * "sqrt" have nothing in common by way of advance, and a fixed offset per cell
+ * would leave a keypad of labels wandering about inside their keys.
+ */
+void synui_render_calc(syn_server_t *s)
+{
+    if (!s->calc.visible) {
+        wlr_scene_node_set_enabled(&s->calc_ui.tree->node, false);
+        hit_clear(&s->calc.hit);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    /* cell_w is what sets the panel's width, and the panel's width is set by
+     * the FOOTER rather than by the keypad: at 68px the keys were comfortable
+     * and the hint line lost "Esc clear/close" off the right-hand edge, which
+     * is the one instruction a modal panel cannot afford to leave unsaid. */
+    const int pad = 20, cell_w = 76, cell_h = 44;
+
+    /* The column, top to bottom. Baselines, except where a rect is named. */
+    const int y_title   = 30;
+    const int y_rule    = 42;
+    const int y_tape    = 60;    /* first tape baseline */
+    const int tape_step = 18;
+    const int entry_top = 144, entry_h = 34;
+    const int y_result  = 206;
+    const int y_status  = 228;
+    const int keypad_top = 244;
+
+    int pw = pad * 2 + CALC_COLS * cell_w;
+    /* Room for TWO footer lines. One line cannot carry four instructions at a
+     * width the keypad is happy at, and the alternative — a panel wide enough
+     * for the sentence — is a calculator the width of a browser window. */
+    int ph = keypad_top + CALC_ROWS * cell_h + 50;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->calc_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->calc_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->calc_ui.tree->node);
+
+    hit_set_panel(&s->calc.hit, px, py, pw, ph);
+    hit_set_grid(&s->calc.hit, pad, keypad_top, cell_w, cell_h,
+                 CALC_COLS, CALC_ROWS);
+    /* The keypad never scrolls: it is a fixed set of keys, so cell 0 is always
+     * the first one drawn. The tape's scroll offset is a different thing
+     * entirely and is not a hit-test index. */
+    hit_set_first(&s->calc.hit, 0);
+
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.985f);
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->calc_ui.bg)
+        s->calc_ui.bg = wlr_scene_rect_create(s->calc_ui.tree, pw, ph, bg_color);
+    else
+        wlr_scene_rect_set_size(s->calc_ui.bg, pw, ph);
+    wlr_scene_rect_set_color(s->calc_ui.bg, bg_color);
+    if (!s->calc_ui.accent)
+        s->calc_ui.accent = wlr_scene_rect_create(s->calc_ui.tree, pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->calc_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, y_title);
+    syn_show_text(cr, "CALCULATOR");
+
+    /* What `ans` currently holds, named in the corner. Without it the identifier
+     * is a promise the panel never shows you the value of, and "what does ans
+     * mean right now" is the question you have the moment you type it. */
+    if (s->calc.has_ans) {
+        char label[sizeof(s->calc.result) + 8];
+        snprintf(label, sizeof(label), "ans %s", s->calc.result);
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, label, &te);
+        cairo_set_source_rgba(cr, 0.75, 0.55, 0.95, 1.0);
+        cairo_move_to(cr, pw - 18 - te.x_advance, y_title);
+        syn_show_text(cr, label);
+    }
+
+    set_ink(cr, INK_RULE, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, y_rule);
+    cairo_line_to(cr, pw - 18, y_rule);
+    cairo_stroke(cr);
+
+    /* ── The tape ────────────────────────────────────────────
+     * Expression on the left, its answer right-aligned, oldest at the top. Both
+     * come out of calc.c so the newest-first array is reversed in exactly one
+     * place. Dim, because it is a record and not the thing being worked on. */
+    /* An empty tape is five rows of nothing between the rule and the box, which
+     * on a first open reads as a panel that failed to draw. The space is not
+     * reclaimed — the panel must not change size as you use it, or every key on
+     * the pad moves the first time you work something out — so it is named
+     * instead. One line, and only while there is genuinely nothing to show. */
+    if (s->calc.hist_count == 0) {
+        cairo_set_font_size(cr, 12);
+        set_ink(cr, INK_DIM, 0.75);
+        draw_clipped(cr, pad, y_tape + 2 * tape_step, pw - pad * 2,
+                     "Anything you work out is kept here.");
+    }
+
+    for (int r = 0; r < CALC_TAPE_ROWS; r++) {
+        const char *expr = "", *res = "";
+        if (!calc_tape_row(s, r, &expr, &res)) continue;
+
+        double ry = y_tape + r * tape_step;
+
+        cairo_set_font_size(cr, 12);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, res, &te);
+
+        set_ink(cr, INK_MUTED, 1.0);
+        cairo_move_to(cr, pw - pad - te.x_advance, ry);
+        syn_show_text(cr, res);
+
+        /* Clipped to what the answer left free, so a long expression fades out
+         * against its own result instead of drawing through it. */
+        set_ink(cr, INK_DIM, 1.0);
+        draw_clipped(cr, pad, ry, pw - pad * 2 - te.x_advance - 14, expr);
+    }
+
+    /* ── The expression box ──────────────────────────────────
+     * Boxed rather than left as a bare line: it is the one place on the panel
+     * that takes what you type, and on a panel with thirty keys drawn under it
+     * that has to be obvious without being read. */
+    set_accent(cr, 0.14);
+    cairo_rectangle(cr, pad - 4, entry_top, pw - (pad - 4) * 2, entry_h);
+    cairo_fill(cr);
+    cairo_set_line_width(cr, 1);
+    set_accent(cr, 0.55);
+    cairo_rectangle(cr, pad - 3.5, entry_top + 0.5, pw - (pad - 4) * 2 - 1, entry_h - 1);
+    cairo_stroke(cr);
+
+    {
+        double tx = pad + 2, ty = entry_top + 23;
+        cairo_set_font_size(cr, 17);
+
+        if (s->calc.entry_len == 0) {
+            set_ink(cr, INK_DIM, 1.0);
+            cairo_move_to(cr, tx, ty);
+            syn_show_text(cr, "type an expression");
+        } else {
+            set_ink(cr, INK_STRONG, 1.0);
+            /* draw_clipped rather than syn_show_text: the entry can hold more
+             * characters than the box is wide, and text running out past the
+             * border would draw over the keypad. */
+            draw_clipped(cr, tx, ty, pw - pad * 2 - 12, s->calc.entry);
+
+            /* The caret, drawn as a rect rather than typed as a character. A
+             * '|' or U+2502 would be at the mercy of the UI font — see the
+             * keypad labels — and a rectangle is the same two pixels in every
+             * family. Static, not blinking: a blink needs a timer, and the
+             * panel has no animation of its own to hang one off. */
+            cairo_text_extents_t te;
+            syn_text_extents(cr, s->calc.entry, &te);
+            double cx = tx + te.x_advance;
+            if (cx > pw - pad - 6) cx = pw - pad - 6;
+            set_accent(cr, 0.9);
+            cairo_rectangle(cr, cx + 2, entry_top + 7, 2, entry_h - 14);
+            cairo_fill(cr);
+        }
+    }
+
+    /* ── The answer ──────────────────────────────────────────
+     * Right-aligned and the biggest thing on the panel, because it is the only
+     * thing anybody opened it to see. */
+    if (s->calc.has_ans) {
+        cairo_set_font_size(cr, 24);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, s->calc.result, &te);
+        set_accent(cr, 1.0);
+        cairo_move_to(cr, pw - pad - te.x_advance, y_result);
+        syn_show_text(cr, s->calc.result);
+    }
+
+    /* ── Status, or the cheat sheet ──────────────────────────
+     * The same line does both: a message when there is one, and otherwise the
+     * names the evaluator knows. Nothing here is ever blank, and nothing has to
+     * move to make room. */
+    cairo_set_font_size(cr, 11);
+    if (s->calc.status[0]) {
+        if (s->calc.status_err)
+            /* Amber, as the font picker's warning is: the one line on the panel
+             * that is not an answer, and the accent is already spoken for. */
+            cairo_set_source_rgba(cr, 0.98, 0.72, 0.25, 1.0);
+        else
+            set_ink(cr, INK_MUTED, 1.0);
+        draw_clipped(cr, pad, y_status, pw - pad * 2, s->calc.status);
+    } else {
+        set_ink(cr, INK_DIM, 0.9);
+        draw_clipped(cr, pad, y_status, pw - pad * 2, calc_func_hint());
+    }
+
+    /* ── The keypad ──────────────────────────────────────────
+     * calc_buttons[] in reading order, so the hit-test index and the drawn cell
+     * are the same number by construction. */
+    for (int i = 0; i < calc_button_count() && i < CALC_COLS * CALC_ROWS; i++) {
+        int r = i / CALC_COLS, c = i % CALC_COLS;
+        double cx = pad + c * cell_w;
+        double cy = keypad_top + r * cell_h;
+
+        int hot = (i == s->calc.hover);
+
+        /* The key face. Action keys sit a shade brighter than the ones that
+         * only type a character, so "del" and "=" read as different in kind
+         * from "7" without needing a second colour. */
+        if (hot) {
+            set_accent(cr, 0.35);
+        } else if (calc_button_is_action(i)) {
+            set_ink(cr, INK_RULE, 0.55);
+        } else {
+            set_ink(cr, INK_RULE, 0.30);
+        }
+        cairo_rectangle(cr, cx + 2, cy + 2, cell_w - 4, cell_h - 4);
+        cairo_fill(cr);
+
+        if (hot) {
+            cairo_set_line_width(cr, 2);
+            set_accent(cr, 1.0);
+            cairo_rectangle(cr, cx + 2.5, cy + 2.5, cell_w - 5, cell_h - 5);
+            cairo_stroke(cr);
+        }
+
+        const char *label = calc_button_label(i);
+        cairo_set_font_size(cr, 15);
+        set_ink(cr, hot ? INK_STRONG : INK_BODY, 1.0);
+        cairo_text_extents_t te;
+        syn_text_extents(cr, label, &te);
+        cairo_move_to(cr, cx + (cell_w - te.x_advance) / 2, cy + cell_h / 2.0 + 5);
+        syn_show_text(cr, label);
+    }
+
+    /* Both through draw_clipped rather than syn_show_text: a hint that runs off
+     * the edge is not merely untidy, it silently deletes the end of the
+     * sentence — which is how "Esc clear/close" went missing when this was one
+     * line. Clipping makes an overrun visible as an ellipsis instead. */
+    cairo_set_font_size(cr, 11);
+    set_ink(cr, INK_DIM, 0.9);
+    draw_clipped(cr, 18, ph - 28, pw - 36,
+                 "Enter works it out \xc2\xb7 Up/Down recall the tape");
+    draw_clipped(cr, 18, ph - 12, pw - 36,
+                 "Ctrl+C copies the answer \xc2\xb7 Esc clears, then closes");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->calc_ui.text_buf, s->calc_ui.tree, buf);
+}
+
+
 /* ── The equalizer ───────────────────────────────────────────
  *
  * A list of rows, each with a label on the left, a bar in the middle and the
@@ -7663,6 +7930,7 @@ void synui_ui_init(syn_server_t *s)
     s->curpick_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->fontpick_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->emoji_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
+    s->calc_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->eq_ui.tree      = wlr_scene_tree_create(&s->scene->tree);
     s->crop_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->power_ui.tree   = wlr_scene_tree_create(&s->scene->tree);

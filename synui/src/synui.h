@@ -618,6 +618,62 @@ typedef struct {
     syn_hit_t hit;
 } syn_emoji_panel_t;
 
+/* ── The calculator (calc.c) ─────────────────────────────────
+ *
+ * A grid like the emoji picker, but the grid is the POINTER's interface only —
+ * the keyboard types into the expression box and never walks the keys. See
+ * calc.c's header. */
+
+#define CALC_ENTRY_MAX    128   /* one typed expression */
+#define CALC_RESULT_MAX    48   /* %.12g of a double, with room to spare */
+#define CALC_HISTORY_MAX   32   /* kept in ~/.config/synui/calc.history */
+#define CALC_TAPE_ROWS      5   /* transcript lines on screen; the rest scroll */
+#define CALC_COLS           5   /* keypad, and calc_buttons[] is COLS * ROWS */
+#define CALC_ROWS           6
+
+/* One line of the tape: what was typed, and what it came to. The answer is
+ * stored rather than recomputed — see calc.c, an expression containing `ans`
+ * would re-derive against a different number every time it was loaded. */
+typedef struct {
+    char expr[CALC_ENTRY_MAX];
+    char result[CALC_RESULT_MAX];
+} syn_calc_entry_t;
+
+/* A named type rather than an anonymous struct in syn_server_t, for the emoji
+ * panel's reason: calc.c passes it around as one thing. */
+typedef struct {
+    int visible;
+
+    char entry[CALC_ENTRY_MAX];
+    int  entry_len;
+
+    /* The last answer, both ways. `result` is what the panel draws, `ans` is
+     * what the identifier of the same name resolves to; has_ans separates "no
+     * answer yet" from an answer that happens to be zero. All three OUTLIVE a
+     * close, so shutting the panel to go and look something up does not throw
+     * away the figure you had. */
+    char   result[CALC_RESULT_MAX];
+    double ans;
+    int    has_ans;
+
+    /* The error line, or a note like "copied 42". Cleared by the next edit.
+     * status_err separates the two so render.c can put a failed sum in amber
+     * without also shouting about a successful copy. */
+    char status[96];
+    int  status_err;
+
+    syn_calc_entry_t hist[CALC_HISTORY_MAX];   /* newest first */
+    int hist_count;
+    /* Where Up/Down have walked to in hist[], or -1 when the line is the
+     * user's own. A shell's history cursor. */
+    int recall;
+    int scroll;    /* first tape line shown, counting from the newest */
+
+    int hover;     /* keypad cell under the pointer, -1 for none */
+
+    syn_hit_t hit;
+} syn_calc_panel_t;
+
 /* One installed cursor theme. The name is a directory name, which means it
  * comes from whatever archive it was unpacked from — treat it as untrusted
  * text on both the render path (cairo) and any command line. */
@@ -1321,6 +1377,7 @@ typedef enum {
     CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
+    CTL_ROW_CALC,          /* System ▸ Calculator (calc.c) */
 
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
@@ -4064,6 +4121,16 @@ struct syn_server {
         uint32_t  last_click_ms;
     } fontpick;
 
+    /* Calculator (calc.c) — Super+X. A grid like the emoji picker, but the
+     * grid is the pointer's half only; the keyboard types an expression. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } calc_ui;
+    syn_calc_panel_t calc;
+
     /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
      * (non-GLES2 renderer) or never initialized. */
     struct syn_matrix *matrix;
@@ -5737,6 +5804,53 @@ int  emoji_click(syn_server_t *s, double lx, double ly, uint32_t button,
                  uint32_t time_msec);
 int  emoji_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_emoji(syn_server_t *s);
+
+/* ── calc.c (calculator) ─────────────────────────────────────
+ *
+ * The second grid panel, and the only one whose grid the keyboard never walks:
+ * typing goes into the expression box, and the keypad is there so the pointer
+ * has something to press. See calc.c's header. */
+
+void calc_show(syn_server_t *s);
+void calc_hide(syn_server_t *s);
+void calc_toggle(syn_server_t *s);
+
+/*
+ * The evaluator, and the reason this file is testable without a compositor.
+ *
+ * `ans` is what the identifier of that name resolves to. Returns false with
+ * *err pointing at a static reason — "missing )", "division by zero",
+ * "unknown name" — and leaves *out alone. A result that is not finite is a
+ * failure, not an answer: that is how sqrt(-1) and 1e308*10 report themselves.
+ */
+bool calc_eval(const char *expr, double ans, double *out, const char **err);
+/* The answer as the panel draws it: %.12g, and never "-0". */
+void calc_format(double v, char *buf, size_t n);
+/* Every function name the evaluator knows, space-separated — built from the
+ * same table it dispatches on, so the help line cannot name one that is gone. */
+const char *calc_func_hint(void);
+
+/* The keypad. calc.c owns the labels and what each key means; render.c draws
+ * them into a CALC_COLS × CALC_ROWS grid, in this order. */
+int  calc_button_count(void);
+const char *calc_button_label(int i);
+/* An action key (del, C, copy, =) rather than something to type — render.c
+ * tints those differently. */
+int  calc_button_is_action(int i);
+
+/* One tape line, row 0 being the TOP. 0 when that row is empty; the newest
+ * entry is drawn LAST, nearest the expression box. */
+int  calc_tape_row(syn_server_t *s, int r, const char **expr, const char **result);
+
+int  calc_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+/* …and the pointer, per the panel pointer contract at the top of this file.
+ * The wheel scrolls the TAPE rather than moving the selection — the one
+ * documented divergence, argued in calc.c. */
+int  calc_motion(syn_server_t *s, double lx, double ly);
+int  calc_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                uint32_t time_msec);
+int  calc_scroll(syn_server_t *s, double lx, double ly, double delta);
+void synui_render_calc(syn_server_t *s);
 
 /* ── eq.c (equalizer panel) ──────────────────────────────────
  *

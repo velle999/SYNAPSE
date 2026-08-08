@@ -454,6 +454,23 @@ record_edit = off
 #   In the cropper: drag to select, drag a corner handle to adjust that corner,
 #   Tab picks which corner the arrows move, Ctrl+Arrows slide the whole
 #   selection, Shift makes any of those step 25px, and Enter writes the copy.
+# calc = the calculator (default super+x). Not a four-function keypad: the box
+# takes a whole EXPRESSION and works it out — + - * / % ^, brackets, unary
+# minus, the constants `pi` and `e`, and `ans` for the previous answer, so a
+# long sum can be done in stages. Functions: sqrt cbrt abs exp ln log log2
+# sin cos tan asin acos atan floor ceil round trunc rad deg — the panel lists
+# them on its own status line, built from the same table it dispatches on.
+#   Trigonometry is in RADIANS, and rad()/deg() convert: `sin(rad(30))` is the
+#   degrees spelling. There is deliberately no DEG/RAD mode — a mode has to be
+#   shown, remembered and persisted, and is still wrong half the time you open
+#   the panel.
+#   In the panel: Enter works it out, Up/Down recall the tape (kept in
+#   ~/.config/synui/calc.history), Ctrl+C puts the answer on the clipboard, Esc
+#   clears a half-typed line and closes on the second press. The keypad is for
+#   the mouse — the keyboard types into the box and never walks the keys.
+#   Why super+x: C was gone twice over (super+c is the control panel,
+#   super+shift+c is cat mode), and super+x came free when mission control
+#   moved to Alt+Tab.
 # displays = built-in display settings (rotate/arrange monitors, and p to set
 # the primary monitor — where X11/SDL games open; default super+d);
 # menu = the SYNAPSE OS welcome menu (default super+escape).

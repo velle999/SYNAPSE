@@ -235,6 +235,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`I` | Network / Wi-Fi |
 | `Super`+`V` | Clipboard history |
 | `Super`+`semicolon` | Emoji picker — type to search, `Tab` for categories, `Enter` inserts |
+| `Super`+`X` | Calculator — type a whole expression (`(1440-32)*0.8`), not a four-function chain. `pi`, `e`, `ans` and `sqrt`/`ln`/`log`/`sin`… all work, `Up`/`Down` recall the tape, `Ctrl`+`C` copies the answer |
 | `Super`+`R` | News (Hacker News, Arch, LWN, Phoronix, …) |
 | `Super`+`Shift`+`R` | Start/stop screen recording |
 | `Super`+`Shift`+`C` | Cat mode |

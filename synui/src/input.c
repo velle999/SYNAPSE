@@ -935,6 +935,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         eq_toggle(s);
     } else if (strcmp(action, "emoji") == 0) {
         emoji_toggle(s);
+    } else if (strcmp(action, "calc") == 0) {
+        calc_toggle(s);
     } else if (strcmp(action, "font") == 0) {
         /* No default keybind: this is a settings panel reached from Control
          * panel ▸ Appearance ▸ UI font, and the bind table is already dense
@@ -1500,6 +1502,16 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         /* UI font picker: same modal contract again. */
         for (int i = 0; i < nsyms; i++)
             if (fontpick_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
+        /* Calculator. Modal, and it claims bare Shift because its expression
+         * box needs the shifted characters — ( ) * + ^ % are all Shift on a US
+         * layout, so a panel that let Shift through would be a calculator that
+         * could not multiply. Ctrl+C is claimed too (copy the answer); every
+         * other Super+… and Ctrl+… still falls through to the bind table. */
+        for (int i = 0; i < nsyms; i++)
+            if (calc_key(s, syms[i], modifiers))
                 absorbed = true;
         if (absorbed) return;
 
@@ -2197,6 +2209,7 @@ void pointer_rebase(syn_server_t *s)
     X(curpick,  curpick)  \
     X(fontpick, fontpick) \
     X(emoji,    emoji)    \
+    X(calc,     calc)     \
     X(eq,       eq)       \
     X(crop,     crop)     \
     X(power,    power)    \

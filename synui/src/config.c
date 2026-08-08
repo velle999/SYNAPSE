@@ -574,16 +574,25 @@ static void seed_default_binds(syn_config_t *cfg)
          * existed — crop_open() needs a path and a keybind has none to give, so
          * a bare `crop` used to do nothing but close. */
         { "super+shift+x",   "crop" },
-        /* SUPER+X IS FREE. Mission control had it — X for eXposé — until
+        /* The calculator, on the chord this comment spent a day reserving.
+         *
+         * SUPER+X WAS FREE. Mission control had it — X for eXposé — until
          * 2026-08-07, when velle moved the overview onto Alt+Tab: "take mission
          * control off super x and make the alt tab default". A feature reached
          * by the key everybody already presses does not need a second one, and
-         * an unbound chord is worth more than a duplicate.
+         * an unbound chord is worth more than a duplicate. This is the feature
+         * it was being kept for.
+         *
+         * X rather than a letter of "calc", for the reason the cursor picker is
+         * on P and the cropper on Shift+X: C is gone twice over (super+c is the
+         * control panel, super+shift+c is cat mode), and the third letter of a
+         * word is not a shortcut anybody guesses. X is the free key.
          *
          * The `overview` action is still there and still dispatchable — bind it
          * to anything with a `bind = <chord> overview` line, or Super+/ then F2
          * on the row. The control panel's Desktop ▸ Mission control row opens it
          * too. */
+        { "super+x",         "calc" },
         /* Themes, not the task manager. The task manager had two binds and needs
          * one — ctrl+alt+delete below is the one everybody already reaches for,
          * so super+t goes to the theme manager, which had only the far less

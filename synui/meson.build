@@ -227,6 +227,7 @@ synui_exe = executable('synui',
     'src/fontpick.c',
     'src/emoji.c',
     'src/emoji_data.c',
+    'src/calc.c',
     'src/eq.c',
     'src/crop.c',
     'src/icons.c',
@@ -555,6 +556,21 @@ emoji_test = executable('emoji_test',
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('emoji', emoji_test)
+
+# The calculator. Two halves worth pinning for different reasons: the panel is
+# driven through calc_key()/calc_click() as input.c calls them (nothing can
+# synthesise input into a headless synui), and the EVALUATOR is the half that
+# can be quietly wrong — a parser that gets -2^2 or 2^3^2 the wrong way round
+# answers confidently and incorrectly, and nobody checks a calculator by hand.
+# hit.c comes along for the keypad geometry; libm because the evaluator is
+# mostly libm. Writes only into its own mkdtemp scratch home.
+calc_test = executable('calc_test',
+  ['tests/calc_test.c', 'src/calc.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libm],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('calc', calc_test)
 
 # The cropper's geometry and its output rules. Two things here can destroy
 # something — the image/screen coordinate mapping (get it wrong and the tool
