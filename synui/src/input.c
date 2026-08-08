@@ -1122,11 +1122,17 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
          * than baked into a second keybind: one bind starts and stops one
          * recorder, and pkill would not know which of two started it. */
         const char *aud = s->config.record_audio ? " --audio" : "";
+        /* --edit when Sound ▸ Record for editing is on: synui-record then
+         * captures DNxHR in a .mov instead of the H.264 mp4. Independent of
+         * --audio rather than exclusive with it — the mezzanine carries PCM,
+         * which is the other half of what a free Resolve on Linux can read. */
+        const char *ed = s->config.record_edit ? " --edit" : "";
         char cmd[256];
         if (name && *name)
-            snprintf(cmd, sizeof(cmd), "synui-record --output '%s'%s", name, aud);
+            snprintf(cmd, sizeof(cmd), "synui-record --output '%s'%s%s",
+                     name, aud, ed);
         else
-            snprintf(cmd, sizeof(cmd), "synui-record%s", aud);
+            snprintf(cmd, sizeof(cmd), "synui-record%s%s", aud, ed);
         synui_spawn(cmd);
     } else if (strcmp(action, "clipboard") == 0) {
         clipboard_toggle(s);

@@ -50,7 +50,7 @@ void dock_state_load(syn_config_t *c)         { (void)c; }
 void power_state_load(syn_config_t *c)        { (void)c; }
 void welcome_state_load(syn_config_t *c)      { (void)c; }
 void launcher_state_load(syn_config_t *c)     { (void)c; }
-void record_audio_state_load(syn_config_t *c) { (void)c; }
+void record_state_load(syn_config_t *c) { (void)c; }
 void deskicons_state_load(syn_config_t *c)    { (void)c; }
 /* Not a bare no-op: the real one records the preset it applied in cfg->theme,
  * and that assignment is the observable half of parsing a `theme =` line. A

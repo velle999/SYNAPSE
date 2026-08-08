@@ -47,18 +47,23 @@ static bool record_state_path(char *buf, size_t n)
     return syn_config_path(buf, n, "record.state");
 }
 
-void record_audio_state_load(syn_config_t *cfg)
+void record_state_load(syn_config_t *cfg)
 {
     char path[256];
     if (!record_state_path(path, sizeof(path))) return;
     FILE *f = fopen(path, "r");
-    if (!f) return;   /* no persisted choice — synuirc's record_audio stands */
+    if (!f) return;   /* no persisted choice — synuirc's record_* lines stand */
 
     char line[128];
     while (fgets(line, sizeof(line), f)) {
         line[strcspn(line, "\r\n")] = '\0';
         if (strncmp(line, "audio=", 6) == 0)
             cfg->record_audio = strcmp(line + 6, "on") == 0;
+        /* A file written before `edit` existed simply has no such line, and the
+         * synuirc value stands — which is the same "no persisted choice" the
+         * missing file means. Nothing to migrate. */
+        else if (strncmp(line, "edit=", 5) == 0)
+            cfg->record_edit = strcmp(line + 5, "on") == 0;
     }
     fclose(f);
 }
@@ -74,7 +79,11 @@ static void record_state_save(syn_server_t *s)
                 path, strerror(errno));
         return;
     }
+    /* BOTH keys, every time. The file is rewritten whole, so writing only the
+     * one that just changed would erase the other — flipping audio would
+     * silently turn a mezzanine capture back into an mp4. */
     fprintf(f, "audio=%s\n", s->config.record_audio ? "on" : "off");
+    fprintf(f, "edit=%s\n",  s->config.record_edit  ? "on" : "off");
     fclose(f);
 }
 
@@ -89,4 +98,20 @@ void record_audio_toggle(syn_server_t *s)
     record_state_save(s);
     wlr_log(WLR_INFO, "synui: record audio -> %s",
             s->config.record_audio ? "on" : "off");
+}
+
+/* Same contract as the audio switch: read where the `record` action spawns
+ * synui-record, so a flip mid-take does not change the file being written.
+ *
+ * The two are independent, not exclusive — synui-record takes --audio and
+ * --edit together and resolves the audio device the same way either way. The
+ * mezzanine simply carries PCM instead of AAC, which matters because free
+ * Resolve decodes neither H.264 nor AAC: an mp4 with sound is as unimportable
+ * as one without. */
+void record_edit_toggle(syn_server_t *s)
+{
+    s->config.record_edit = !s->config.record_edit;
+    record_state_save(s);
+    wlr_log(WLR_INFO, "synui: record mezzanine -> %s",
+            s->config.record_edit ? "on" : "off");
 }

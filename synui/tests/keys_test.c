@@ -113,6 +113,7 @@ void nightlight_toggle(syn_server_t *s)              { (void)s; }
 void cursor_reload(syn_server_t *s)                  { (void)s; }
 void deskicons_reload(syn_server_t *s)               { (void)s; }
 void record_audio_toggle(syn_server_t *s)            { (void)s; }
+void record_edit_toggle(syn_server_t *s)             { (void)s; }
 void sound_state_refresh(syn_server_t *s)            { (void)s; }
 void transparency_set_enabled(syn_server_t *s, int on)  { (void)s; (void)on; }
 void transparency_set_opacity(syn_server_t *s, float o) { (void)s; (void)o; }

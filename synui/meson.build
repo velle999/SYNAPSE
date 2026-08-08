@@ -783,7 +783,11 @@ test('readme_binds', readme_binds,
 record_args = find_program('tests/record_args.sh')
 test('record_args', record_args,
      args    : [meson.current_source_dir() / 'systemd/synui-record.sh',
-                meson.current_source_dir() / 'systemd/synui-record-status.sh'],
+                meson.current_source_dir() / 'systemd/synui-record-status.sh',
+                meson.current_source_dir() / 'src/input.c',
+                meson.current_source_dir() / 'src/record.c',
+                meson.current_source_dir() / 'src/config.c',
+                meson.current_source_dir() / 'config/synuirc'],
      timeout : 30)
 
 niri_strip = find_program('tests/niri_strip.sh')

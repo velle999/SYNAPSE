@@ -27,8 +27,12 @@
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-rec=${1:?usage: record_args.sh <synui-record.sh> <synui-record-status.sh>}
-status=${2:?usage: record_args.sh <synui-record.sh> <synui-record-status.sh>}
+rec=${1:?usage: record_args.sh <synui-record.sh> <status.sh> <input.c> <record.c> <config.c> <synuirc>}
+status=${2:?missing synui-record-status.sh}
+input_c=${3:?missing src/input.c}
+record_c=${4:?missing src/record.c}
+config_c=${5:?missing src/config.c}
+synuirc=${6:?missing config/synuirc}
 
 fails=0
 check() {  # check <description> <expected> <actual>
@@ -109,6 +113,27 @@ PY
 else
     echo "  skip  parser round-trip (no python3)"
 fi
+
+echo ""
+echo "=== the compositor reaches the flag ==="
+# The switch is only a switch if the `record` action passes it on. This is the
+# same shape as the audio row directly above it in the panel.
+check "input.c passes --edit" "1" \
+      "$(grep -c 'record_edit ? " --edit"' "$input_c")"
+check "--edit composes with --audio" "1" \
+      "$(grep -c 'synui-record --output .%s.%s%s' "$input_c")"
+check "config.c parses record_edit" "1" \
+      "$(grep -c 'strcmp(key, "record_edit")' "$config_c")"
+check "synuirc documents it" "1" \
+      "$(grep -c '^record_edit = off' "$synuirc")"
+
+# record.state is rewritten WHOLE on every flip, so a save that wrote only the
+# key that changed would erase the other -- toggling audio would quietly turn a
+# mezzanine capture back into an mp4, and the panel would still show it on.
+check "state save writes audio" "1" "$(grep -c 'fprintf(f, "audio=%s' "$record_c")"
+check "state save writes edit"  "1" "$(grep -c 'fprintf(f, "edit=%s'  "$record_c")"
+check "state load reads audio"  "1" "$(grep -c 'strncmp(line, "audio=", 6)' "$record_c")"
+check "state load reads edit"   "1" "$(grep -c 'strncmp(line, "edit=", 5)'  "$record_c")"
 
 echo ""
 if [ "$fails" -eq 0 ]; then

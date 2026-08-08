@@ -87,6 +87,7 @@ void game_toggle(syn_server_t *s)             { (void)s; }
 void launcher_toggle_style(syn_server_t *s)   { (void)s; }
 void nightlight_toggle(syn_server_t *s)       { (void)s; }
 void record_audio_toggle(syn_server_t *s)     { (void)s; }
+void record_edit_toggle(syn_server_t *s)      { (void)s; }
 void sound_state_refresh(syn_server_t *s)     { (void)s; }
 void transparency_set_enabled(syn_server_t *s, int on)  { (void)s; (void)on; }
 void transparency_set_opacity(syn_server_t *s, float o) { (void)s; (void)o; }
@@ -105,7 +106,7 @@ void dock_state_load(syn_config_t *c)         { (void)c; }
 void power_state_load(syn_config_t *c)        { (void)c; }
 void welcome_state_load(syn_config_t *c)      { (void)c; }
 void launcher_state_load(syn_config_t *c)     { (void)c; }
-void record_audio_state_load(syn_config_t *c) { (void)c; }
+void record_state_load(syn_config_t *c)       { (void)c; }
 void deskicons_state_load(syn_config_t *c)    { (void)c; }
 void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
 /* theme.state is now read by synui_config_load() like the other eight state

@@ -454,6 +454,8 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  "Equalizer", "equalizer",
       .help = "10-band system equalizer. Adds an output device while it is on" },
     { CTL_ROW_RECORD_AUDIO, CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record audio", NULL     },
+    { CTL_ROW_RECORD_EDIT,  CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Record for editing", NULL,
+      .help = "DNxHR .mov that video editors read directly. About 1.1 GB/min" },
 
     /* Network. Two of the three hand off to something synui does not own —
      * nmtui in a terminal, cups in a browser — so they close the panel rather
@@ -1069,6 +1071,14 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
          * this setting exists to remove — desktop sound, not the microphone. */
         snprintf(buf, n, "%s",
                  s->config.record_audio ? "desktop sound" : "off");
+        break;
+    case CTL_ROW_RECORD_EDIT:
+        /* Name the FORMAT, and name the cost. "on" would hide both the reason
+         * to want it and the reason not to leave it on — a mezzanine fills a
+         * disk in under an hour, and this row is where that is still cheap to
+         * notice. */
+        snprintf(buf, n, "%s",
+                 s->config.record_edit ? "DNxHR ~1.1 GB/min" : "off (H.264 mp4)");
         break;
     case CTL_ROW_THEME:
         /* A jump-off, but showing the active theme here saves opening the panel
@@ -1894,6 +1904,18 @@ static void ctlpanel_activate(syn_server_t *s)
                  s->config.record_audio
                      ? "recordings capture desktop sound"
                      : "recordings are silent");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_RECORD_EDIT:
+        /* Same next-take-only contract as the audio row. The status names the
+         * editor, because "DNxHR" answers a question nobody asked unless they
+         * already know why the mp4 would not import. */
+        record_edit_toggle(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 s->config.record_edit
+                     ? "recordings open in a video editor · ~1.1 GB/min"
+                     : "recordings are H.264 mp4 · small, share anywhere");
         ctlpanel_repaint(s);
         return;
 

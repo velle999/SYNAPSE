@@ -1209,6 +1209,7 @@ typedef enum {
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
     CTL_ROW_EQUALIZER,     /* 10-band system equalizer (eq.c) */
     CTL_ROW_RECORD_AUDIO,  /* Super+Shift+R captures desktop sound too */
+    CTL_ROW_RECORD_EDIT,   /* Super+Shift+R records an editable mezzanine */
     /* Network */
     CTL_ROW_NETWORK,
     CTL_ROW_BLUETOOTH,
@@ -2658,6 +2659,13 @@ typedef struct {
      * persisted to record.state; see record.c for why this is a setting and
      * not a second keybind. */
     int   record_audio;         /* default 0 */
+    /* Record an editable MEZZANINE (DNxHR in a .mov) instead of the H.264 mp4.
+     * Free DaVinci Resolve on Linux decodes neither H.264 nor AAC, so the
+     * default capture cannot be imported at all; this is the switch that makes
+     * Super+Shift+R produce something an editor reads. Costs about 1.1 GB/min
+     * against roughly 200 KB for a whole ordinary take, which is why it is off
+     * by default and says so in the panel. Persisted to record.state. */
+    int   record_edit;          /* default 0 */
 #define DOCK_PIN_MAX 16
 #define GAME_EXCLUDE_MAX 16
     /* Runtime-mutable pinned set: seeded from synuirc `dock_pin`, then
@@ -5842,7 +5850,8 @@ void launcher_state_load(syn_config_t *cfg);       /* lay launcher.state over sy
  * synui-record's; this is only the switch, and it persists like the launcher's
  * so a reload cannot undo it. */
 void record_audio_toggle(syn_server_t *s);         /* flip on↔off, persist */
-void record_audio_state_load(syn_config_t *cfg);   /* lay record.state over synuirc */
+void record_edit_toggle(syn_server_t *s);          /* flip mezzanine on↔off, persist */
+void record_state_load(syn_config_t *cfg);         /* lay record.state over synuirc */
 
 /* ── settings.state (settings.c) ─────────────────────────────
  *

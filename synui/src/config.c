@@ -103,6 +103,7 @@
  * panel's Sound ▸ Record audio row toggles it live and writes record.state,
  * which then overrides this line:
  *   record_audio = on|off       (default off)
+ *   record_edit  = on|off       (default off)  DNxHR .mov, ~1.1 GB/min
  *
  * Keyboard (input.c):
  *   numlock = on|off            (default on — lock NumLock at attach so the
@@ -995,6 +996,9 @@ static void config_set_defaults(syn_config_t *cfg)
 
     /* Recording sound is opt-in, like every other capture on this desktop. */
     cfg->record_audio       = 0;
+    /* A mezzanine is ~1.1 GB/min against ~200 KB for an ordinary take, so
+     * it is opt-in for size, not for privacy like the audio switch. */
+    cfg->record_edit        = 0;
 
     cfg->dock_enabled      = 1;
     cfg->dock_autohide     = 1;
@@ -1157,7 +1161,7 @@ void synui_config_load(syn_config_t *cfg)
         power_state_load(cfg);
         welcome_state_load(cfg);
         launcher_state_load(cfg);
-        record_audio_state_load(cfg);
+        record_state_load(cfg);
         deskicons_state_load(cfg);
         settings_state_load(cfg);
         theme_state_load_config(cfg);
@@ -1209,7 +1213,7 @@ void synui_config_load(syn_config_t *cfg)
     power_state_load(cfg);
     welcome_state_load(cfg);
     launcher_state_load(cfg);
-    record_audio_state_load(cfg);
+    record_state_load(cfg);
     deskicons_state_load(cfg);
 
     /* Last, because it is the most recent explicit intent of the lot: every one
@@ -1679,6 +1683,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         cfg->numlock = strcmp(val, "on") == 0;
     else if (strcmp(key, "record_audio") == 0)
         cfg->record_audio = strcmp(val, "on") == 0;
+    else if (strcmp(key, "record_edit") == 0)
+        cfg->record_edit = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_enabled") == 0)
         cfg->dock_enabled = strcmp(val, "on") == 0;
     else if (strcmp(key, "dock_autohide") == 0)

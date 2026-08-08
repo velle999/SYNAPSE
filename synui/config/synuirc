@@ -386,6 +386,24 @@ lock_fingerprint = on
 # back here.
 record_audio = off
 
+# Record something a video EDITOR can open, instead of the usual mp4.
+#
+# The default capture is H.264 with AAC sound, which is right for sharing and
+# wrong for editing: the free DaVinci Resolve on Linux decodes neither, so an
+# ordinary recording imports as media offline no matter what is installed. That
+# is a limit inside Resolve, not a missing codec on this system. On, a recording
+# is DNxHR in a .mov with PCM audio, which it reads directly.
+#
+# Off by default because of SIZE, not privacy: about 1.1 GB per minute at
+# 1440p60, against roughly 200 KB for an entire ordinary take. Leave it off and
+# convert only the recordings you actually edit, with
+# `syn resolve transcode <file>`; turn it on when you know the take is going
+# into an edit and you would rather not encode it twice.
+#
+# Control panel ▸ Sound ▸ Record for editing toggles it and writes
+# ~/.config/synui/record.state, which from then on overrides this line.
+record_edit = off
+
 # ── Pointer / touchpad (libinput) ──────────────────────────
 # Unset options leave the device at its default.
 # tap            = on          # touchpad tap-to-click
