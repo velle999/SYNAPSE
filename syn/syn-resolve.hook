@@ -1,0 +1,38 @@
+# Re-apply SynapseOS's DaVinci Resolve launch environment whenever either half
+# of it moves.
+#
+# davinci-resolve*: it owns the desktop entry we shadow. A fresh install has no
+#   override yet, and an upgrade ships a new entry whose Name, Icon or MimeType
+#   may have changed — the override is generated FROM that file, so it has to be
+#   regenerated with it or it freezes at whatever Resolve shipped the day it was
+#   written.
+# syn: it owns the launcher the override points at, and on a machine where
+#   Resolve was installed first, nothing else would ever create the override.
+#
+# All four package names are listed because the AUR ships them as separate,
+# mutually-conflicting packages; a user on the beta or on Studio is not a
+# different case as far as the session environment goes.
+#
+# PostTransaction, because the entry we read is the one pacman is in the middle
+# of writing.
+#
+# THE HOOK MUST NOT INSTALL ANYTHING. `syn resolve setup --quiet` is the hook
+# form on purpose: pacman holds its database lock for the whole transaction, so
+# a hook that shelled out to pacman would deadlock against the transaction that
+# invoked it. Where an OpenCL runtime is missing it prints the command instead —
+# the human running `sudo syn resolve setup` is the one who can install it.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = davinci-resolve
+Target = davinci-resolve-studio
+Target = davinci-resolve-beta
+Target = davinci-resolve-studio-beta
+Target = syn
+
+[Action]
+Description = Applying the SynapseOS DaVinci Resolve launch environment...
+When = PostTransaction
+Exec = /usr/lib/syn/syn-resolve setup --quiet

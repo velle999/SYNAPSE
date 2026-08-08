@@ -1,6 +1,6 @@
 pkgname=syn
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -9,7 +9,13 @@ depends=('bash' 'systemd')
 # front end for a package manager the user opted into at install time, and on a
 # box that declined it the subcommand says so and exits. Making it a dependency
 # would put a second package manager on every SynapseOS install.
-optdepends=('nix: declarative user environment via `syn nix` (Home Manager)')
+# Same rule for the two below: `syn resolve` names the command to install when
+# one is missing rather than dragging ffmpeg onto a box that will never edit
+# video. DaVinci Resolve itself is not listed at all — it is not in any repo,
+# and the whole point of `syn resolve install` is that you fetch it yourself.
+optdepends=('nix: declarative user environment via `syn nix` (Home Manager)'
+            'ffmpeg: DNxHR transcoding via `syn resolve transcode`'
+            'clinfo: OpenCL device listing in `syn resolve doctor`')
 # Flat, and it has to be: makepkg resolves a local source to its BASENAME in
 # $srcdir, so a "nix/flake.nix" entry is looked up as "flake.nix" beside the
 # PKGBUILD and the build dies with "not found in the build directory and is
@@ -17,11 +23,15 @@ optdepends=('nix: declarative user environment via `syn nix` (Home Manager)')
 # package() installs them under their real names.
 source=("syn.sh"
         "syn-nix-facts.sh"
+        "syn-resolve.sh"
+        "syn-resolve.hook"
         "nix-flake.nix"
         "nix-home.nix"
         "nix-render.nix"
         "nix-profile-example.nix")
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -35,6 +45,16 @@ package() {
     # stdout, which is a thing `syn nix` and syn-install call, not a thing to
     # find by tab-completing.
     install -Dm755 "$srcdir/syn-nix-facts.sh" "$pkgdir/usr/lib/syn/syn-nix-facts"
+
+    # Same reasoning, and one more: the pacman hook execs this path directly.
+    # A hook that went through `syn` would depend on PATH inside a pacman
+    # transaction, which is not somewhere to have opinions about PATH.
+    install -Dm755 "$srcdir/syn-resolve.sh" "$pkgdir/usr/lib/syn/syn-resolve"
+
+    # Flat in the source array because makepkg resolves a local source to its
+    # BASENAME (see the note above); it gets its real, ordered name here.
+    install -Dm644 "$srcdir/syn-resolve.hook" \
+                   "$pkgdir/usr/share/libalpm/hooks/74-syn-resolve.hook"
 
     # Templates, not config. `syn nix init` copies these into
     # /etc/synapseos/nix once and never overwrites them again — home.nix

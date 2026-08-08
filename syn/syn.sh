@@ -15,6 +15,9 @@ Usage:
   syn nix <cmd>           Declarative user environment via Nix + Home Manager
                           (status/apply/build/update/facts/edit/rollback/init)
   syn arsenal             Browse/install BlackArch security tooling
+  syn resolve <cmd>       DaVinci Resolve support: OpenCL runtime, launch
+                          environment, AUR build, DNxHR transcode
+                          (doctor/setup/install/transcode)
   syn shell               Launch synsh
   syn ui                  Launch synui Wayland compositor
   syn install             Install SynapseOS to disk
@@ -311,6 +314,10 @@ case "${1:-help}" in
     # --tui rather than bare syn-arsenal: `syn` is the terminal entry point, so
     # a subcommand typed in a shell must not fork a GUI window at the user.
     arsenal)        shift; exec syn-arsenal --tui "$@" ;;
+    # Its own file rather than a cmd_ function here: it is the length of the
+    # nix block again, and the pacman hook execs it directly — a hook that had
+    # to go through `syn` would break if PATH were ever not what it expects.
+    resolve)        shift; exec /usr/lib/syn/syn-resolve "$@" ;;
     install)        exec syn-install ;;
     update)         shift; exec syn-update "$@" ;;
     shell)          exec synsh ;;

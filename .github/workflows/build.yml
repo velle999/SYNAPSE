@@ -199,6 +199,15 @@ jobs:
         run: |
           ./syn-install/tests/crypt_test.sh
 
+      # The generated DaVinci Resolve desktop entry is what every menu launch of
+      # Resolve goes through once it exists, and the two ways it can be wrong —
+      # still running the raw binary, or losing the packaged entry's Name/Icon —
+      # both look exactly like a working one. Needs no Resolve: it is a
+      # transformation of a fixed file format, so the input is faked.
+      - name: DaVinci Resolve launch override (syn resolve)
+        run: |
+          ./syn/tests/resolve_test.sh
+
       - name: Daemon unit tests (synapd wire gate, synguard verdict feed)
         run: |
           meson test -C synapd/_ci wire --print-errorlogs
