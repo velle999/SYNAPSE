@@ -228,6 +228,7 @@ synui_exe = executable('synui',
     'src/emoji.c',
     'src/emoji_data.c',
     'src/calc.c',
+    'src/panel.c',
     'src/eq.c',
     'src/crop.c',
     'src/icons.c',
@@ -519,7 +520,7 @@ test('settings', settings_test)
 ctlpanel_table_test = executable('ctlpanel_table_test',
   ['tests/ctlpanel_table_test.c', 'src/ctlpanel.c', 'src/config.c',
    'src/settings.c', 'src/aimodel.c', 'src/gguf.c', 'src/hit.c',
-   'src/cat_draw.c', 'src/text.c'],
+   'src/panel.c', 'src/cat_draw.c', 'src/text.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE'],
@@ -565,7 +566,7 @@ test('emoji', emoji_test)
 # hit.c comes along for the keypad geometry; libm because the evaluator is
 # mostly libm. Writes only into its own mkdtemp scratch home.
 calc_test = executable('calc_test',
-  ['tests/calc_test.c', 'src/calc.c', 'src/hit.c'],
+  ['tests/calc_test.c', 'src/calc.c', 'src/hit.c', 'src/panel.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libm],
   c_args : ['-DWLR_USE_UNSTABLE'],
@@ -625,7 +626,7 @@ test('overview_layout', overview_layout_test)
 
 keys_test = executable('keys_test',
   ['tests/keys_test.c', 'src/keys.c', 'src/ctlpanel.c', 'src/aimodel.c',
-   'src/gguf.c', 'src/hit.c'],
+   'src/gguf.c', 'src/hit.c', 'src/panel.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],
   c_args : ['-DWLR_USE_UNSTABLE'],
@@ -648,7 +649,7 @@ test('panel_pointer', panel_pointer_test)
 # AIMODEL_DIR is redirected at a directory of stub files the test writes, the
 # way lid_test redirects SYNUI_POWER_SUPPLY_DIR.
 ctlpanel_choice_test = executable('ctlpanel_choice_test',
-  ['tests/ctlpanel_choice_test.c', 'src/ctlpanel.c', 'src/aimodel.c', 'src/gguf.c',
+  ['tests/ctlpanel_choice_test.c', 'src/panel.c', 'src/ctlpanel.c', 'src/aimodel.c', 'src/gguf.c',
    'src/hit.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon, libcurl],

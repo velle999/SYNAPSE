@@ -161,6 +161,9 @@ typedef struct {
      * drift apart. hit_set_panel() clears it, so a stale rect can never be read
      * back from the panel that used this struct last. */
     int close_x, close_y, close_w, close_h;
+    /* The header strip a windowed panel is dragged by. Zero width when the
+     * panel is not in window mode. Cleared by hit_set_panel() like the rest. */
+    int drag_x, drag_y, drag_w, drag_h;
 } syn_hit_t;
 
 /* Record the panel rect. Call once px/py/pw/ph are known. */
@@ -184,6 +187,9 @@ void hit_set_close(syn_hit_t *g, int lx, int ly, int w, int h);
 /* Is the cursor on it? False whenever there is no button, so a panel can ask
  * unconditionally instead of testing the config first. */
 int  hit_in_close(const syn_hit_t *g, double lx, double ly);
+/* The drag handle, same contract as the close button above. */
+void hit_set_drag(syn_hit_t *g, int lx, int ly, int w, int h);
+int  hit_in_drag(const syn_hit_t *g, double lx, double ly);
 /* Blank the rect. A hidden panel must hit-test as nothing at all. */
 void hit_clear(syn_hit_t *g);
 int  hit_in_panel(const syn_hit_t *g, double lx, double ly);
@@ -222,12 +228,46 @@ typedef enum {
     /* Click anywhere off the panel to close it. What every panel did before
      * this setting existed, and still the right default for a menu. */
     SYN_PANEL_CLOSE_CLICKOFF = 0,
-    /* A close button in the top-right corner. Clicking off does nothing but is
-     * still swallowed — these panels are modal, and letting a near-miss through
-     * to the window underneath is how you act on something you cannot see. */
+    /* A close button in the top-right corner. Clicking off does not close it,
+     * but is still SWALLOWED: the panel stays modal, so a near-miss cannot act
+     * on the window underneath. */
     SYN_PANEL_CLOSE_BUTTON,
+    /* Not chrome at all — a window. A close button, a header you can DRAG it
+     * around by, and clicks elsewhere go straight through to whatever is under
+     * them: no swallowing, no stolen pointer, and the keyboard goes back to the
+     * window you clicked. The panel simply stays where you put it.
+     *
+     * velle: "the menus don't need to force focus they can just be a normal
+     * window that you can still click other places and drag around."
+     *
+     * The panel keeps the keyboard until you click something else, so opening
+     * one and typing still works; clicking away hands keys back without closing
+     * anything. Esc still closes it while it has the keyboard. */
+    SYN_PANEL_CLOSE_WINDOW,
     SYN_PANEL_CLOSE_COUNT,
 } syn_panel_close_t;
+
+/* Per-panel window state: where it has been dragged to, and whether it still
+ * has the keyboard. Both only mean anything in SYN_PANEL_CLOSE_WINDOW.
+ *
+ * The offset is from where the panel WOULD be centred, not an absolute
+ * position, so a windowed panel still lands somewhere sensible when the monitor
+ * changes size or the panel's own height changes (the calculator's tape grows).
+ *
+ * `kbd` is the whole of the focus model, and it is deliberately not more than
+ * this: a windowed panel takes the keyboard when it is opened or clicked, and
+ * gives it back the moment you click anything else. That is what makes typing
+ * into a freshly-opened calculator work while still letting you click into a
+ * terminal without closing it. */
+typedef struct {
+    int dx, dy;   /* offset from centred, in layout pixels */
+    int kbd;      /* holds the keyboard */
+} syn_panel_win_t;
+
+/* A windowed panel being dragged. One at a time by construction — you have one
+ * pointer — so this is a single block on the server rather than per panel. */
+typedef enum { SYN_PDRAG_NONE = 0, SYN_PDRAG_CALC, SYN_PDRAG_CTLPANEL,
+               SYN_PDRAG_TASKMGR } syn_pdrag_t;
 
 /* ── The panel pointer contract ──────────────────────────────
  *
@@ -714,6 +754,9 @@ typedef struct {
     int scroll;    /* first tape line shown, counting from the newest */
 
     int hover;     /* keypad cell under the pointer, -1 for none */
+
+    /* Dragged position + keyboard, in window mode. See syn_panel_win_t. */
+    syn_panel_win_t win;
 
     syn_hit_t hit;
 } syn_calc_panel_t;
@@ -1422,7 +1465,9 @@ typedef enum {
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
     CTL_ROW_BAR,           /* Desktop ▸ Bar — is there one at all */
-    CTL_ROW_PANEL_CLOSE,   /* Windows ▸ Panel close — click off, or a button */
+    CTL_ROW_CALC_CLOSE,    /* Windows ▸ Panels — one row per panel */
+    CTL_ROW_CTLPANEL_CLOSE,
+    CTL_ROW_TASKMGR_CLOSE,
 
     CTL_ROW_COUNT,
 } syn_ctl_row_t;
@@ -1715,6 +1760,8 @@ typedef struct {
      * same panel rect, so either one answers "was this click off the panel". */
     syn_hit_t hit;         /* panel rect; rows = the category sidebar */
     syn_hit_t hit_items;   /* same rect; rows = the settings/shortcuts pane */
+    /* Dragged position + keyboard, in window mode. See syn_panel_win_t. */
+    syn_panel_win_t win;
 } syn_ctlpanel_t;
 
 
@@ -2099,6 +2146,8 @@ typedef struct {
     struct wl_event_source *timer;  /* 1 Hz, armed only while visible */
     /* Pointer geometry, written by this panel's synui_render_*. */
     syn_hit_t hit;
+    /* Dragged position + keyboard, in window mode. See syn_panel_win_t. */
+    syn_panel_win_t win;
 } syn_taskmgr_t;
 
 /* ── News aggregator (news.c) ────────────────────────────── */
@@ -2772,10 +2821,14 @@ typedef struct {
      * is the shipped bar; a waybar desktop wants
      *     bar_start_cmd = synui-waybar
      * in synuirc, or the switch turns the bar off and cannot put it back. */
-    /* How the calculator, control panel and task manager are dismissed. A
-     * syn_panel_close_t held as an int, for the control panel's enum row.
-     * See the enum for why only those three. */
-    int  panel_close;
+    /* How each of the three panels you work IN is dismissed — one setting per
+     * panel, not one for all of them: a calculator you drag around and a
+     * control panel you want gone the moment you look away are different
+     * answers to the same question. syn_panel_close_t held as an int, for the
+     * control panel's enum rows. */
+    int  calc_close;
+    int  ctlpanel_close;
+    int  taskmgr_close;
 
     int  bar_enabled;           /* default 1 */
     char bar_stop_cmd[192];
@@ -4201,6 +4254,14 @@ struct syn_server {
         struct wlr_scene_buffer *text_buf;
     } calc_ui;
     syn_calc_panel_t calc;
+
+    /* A windowed panel being dragged (panel.c). Same shape as dock_drag. */
+    struct {
+        int         active;
+        syn_pdrag_t which;
+        double      grab_lx, grab_ly;   /* pointer where the drag started */
+        int         base_dx, base_dy;   /* the panel's offset at that moment */
+    } panel_drag;
 
     /* matrix.c: animated-wallpaper GLES2 state; NULL when unavailable
      * (non-GLES2 renderer) or never initialized. */
@@ -5875,6 +5936,46 @@ int  emoji_click(syn_server_t *s, double lx, double ly, uint32_t button,
                  uint32_t time_msec);
 int  emoji_scroll(syn_server_t *s, double lx, double ly, double delta);
 void synui_render_emoji(syn_server_t *s);
+
+/* ── Windowed panels, in one place ───────────────────────────
+ *
+ * Three panels, three settings and three struct members, but one set of rules —
+ * so the rules live here and each panel asks rather than reimplementing them.
+ * panel.c owns these.
+ */
+
+/* This panel's syn_panel_close_t. Takes the SETTING and the state together so
+ * the caller never has to remember which config field goes with which panel. */
+int  panel_mode(syn_server_t *s, syn_pdrag_t which);
+/* Shorthands for the two questions every call site actually asks. */
+int  panel_is_windowed(syn_server_t *s, syn_pdrag_t which);
+int  panel_has_button(syn_server_t *s, syn_pdrag_t which);
+/* The panel's window state, or NULL for SYN_PDRAG_NONE. */
+syn_panel_win_t *panel_win(syn_server_t *s, syn_pdrag_t which);
+/* Its geometry, so the drag can clamp against the panel it is moving. */
+syn_hit_t *panel_hit(syn_server_t *s, syn_pdrag_t which);
+/* Repaint it — the drag moves the panel and something has to redraw it. */
+void panel_render(syn_server_t *s, syn_pdrag_t which);
+
+/* Give this panel the keyboard and take it from the other two. Called when a
+ * windowed panel is opened or clicked. */
+void panel_take_kbd(syn_server_t *s, syn_pdrag_t which);
+/* A click landed somewhere that is not a panel: every windowed panel gives the
+ * keyboard back, and none of them close. */
+void panel_drop_kbd(syn_server_t *s);
+/* Does this panel currently answer for keys? Always true when it is not
+ * windowed, so the modal panels are unaffected by any of this. */
+int  panel_wants_keys(syn_server_t *s, syn_pdrag_t which);
+
+/* Dragging, wired into input.c beside the dock and desktop-icon drags. */
+void panel_drag_begin(syn_server_t *s, syn_pdrag_t which, double lx, double ly);
+void panel_drag_motion(syn_server_t *s, double lx, double ly);
+void panel_drag_end(syn_server_t *s);
+
+/* Clamp a windowed panel's offset so it can never be dragged somewhere it
+ * cannot be dragged back from. render.c calls this as it positions the panel. */
+void panel_clamp(syn_panel_win_t *w, const struct wlr_box *ob,
+                 int px, int py, int pw, int ph);
 
 /* ── calc.c (calculator) ─────────────────────────────────────
  *

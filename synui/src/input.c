@@ -2230,13 +2230,26 @@ void pointer_rebase(syn_server_t *s)
 /* Is any of them open? Asked where there is nothing to hand the event to but it
  * still must not reach the window underneath — a horizontal wheel, and the
  * release of a click the panel already swallowed the press of. */
+/* Windowed panels are NOT modal — they are windows. Excluded from the "is a
+ * panel eating this" test below, or an open calculator would still swallow the
+ * wheel and the stray release for the whole desktop, which is most of what
+ * "forces focus" felt like. Named rather than folded into the X macro because
+ * only these three have a mode at all. */
+static bool panel_mem_is_modal(syn_server_t *s, const char *mem)
+{
+    if (!strcmp(mem, "calc"))     return !panel_is_windowed(s, SYN_PDRAG_CALC);
+    if (!strcmp(mem, "ctlpanel")) return !panel_is_windowed(s, SYN_PDRAG_CTLPANEL);
+    if (!strcmp(mem, "taskmgr"))  return !panel_is_windowed(s, SYN_PDRAG_TASKMGR);
+    return true;
+}
+
 static bool panel_pointer_active(syn_server_t *s)
 {
     /* The command bar is not in the list — it has no rows, so no _motion and no
      * _scroll — but it is just as modal, and the two things this answers (swallow
      * the wheel, swallow the stray release) apply to it identically. */
     if (s->cmdbar.visible) return true;
-#define X(fn, mem) if (s->mem.visible) return true;
+#define X(fn, mem) if (s->mem.visible && panel_mem_is_modal(s, #mem)) return true;
     SYN_PANEL_LIST(X)
 #undef X
     return false;
@@ -2377,6 +2390,11 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
     if (s->cursor_mode == SYNUI_CURSOR_RESIZE) { process_cursor_resize(s); return; }
 
     /* Dock drag-to-reposition floats the bar under the cursor. */
+    if (s->panel_drag.active) {
+        panel_drag_motion(s, s->cursor->x, s->cursor->y);
+        return;
+    }
+
     if (s->dock_drag.active) {
         dock_drag_motion(s, s->cursor->x, s->cursor->y);
         return;
@@ -2540,6 +2558,11 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
 
     /* A dock drag keeps cursor_mode == PASSTHROUGH, so catch its release
      * before the generic grab-release below. */
+    if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->panel_drag.active) {
+        panel_drag_end(s);
+        return;
+    }
+
     if (state == WL_POINTER_BUTTON_STATE_RELEASED && s->dock_drag.active) {
         dock_drag_end(s, s->cursor->x, s->cursor->y);
         return;

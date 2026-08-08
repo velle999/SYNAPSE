@@ -302,27 +302,31 @@ repeat_delay = 600
 # only thing on screen. Off leaves it to whoever presses the key.
 numlock      = on
 
-# ── How a panel is dismissed ───────────────────────────────
-# panel_close = clickoff|button   (default button)
+# ── How each panel behaves ─────────────────────────────────
+# calc_close     = clickoff|button|window   (default window)
+# ctlpanel_close = clickoff|button|window   (default window)
+# taskmgr_close  = clickoff|button|window   (default window)
 #
-# Applies to the three panels you work IN rather than pick from: the
-# CALCULATOR, the CONTROL PANEL and the TASK MANAGER. Everything else (the
-# pickers, the menus) always closes on a click off, because that is what
-# clicking away from a menu means.
+# One key per panel, not one for all three — a control panel you want gone the
+# moment you look away and a calculator you park in the corner are different
+# answers to the same question. Only these three: the pickers and menus always
+# close on a click off, because that is what clicking away from a menu means.
 #
-#   clickoff  every panel closes when you click anywhere off it. What synui
-#             did before this setting existed.
-#   button    a close button in the panel's top-right corner. Clicking off
-#             does nothing — it is still swallowed, since these panels are
-#             modal and a near-miss must not reach the window underneath.
+#   clickoff  closes when you click anywhere off it. What synui always did.
+#   button    a close button in the top-right. Clicking off does nothing, and
+#             is SWALLOWED — the panel is still modal.
+#   window    it is just a window. Close button, drag it around by its header,
+#             and clicks elsewhere go straight through to whatever is under
+#             them. Nothing is swallowed and nothing steals your pointer.
 #
-# The default is `button` because click-off is wrong for a panel you AIM at:
-# the calculator is thirty small keys, and a near-miss on one of them used to
-# close the panel and throw away the expression you were half way through.
+# `window` is the default because modal was wrong for panels you work IN: the
+# calculator would not let you click anything else and could not be moved.
 #
-# Esc closes all three whichever way this is set, so there is always a way out
-# even if the button fails to draw. Control panel ▸ Windows ▸ Panel close.
-# panel_close = clickoff
+# A windowed panel takes the keyboard when you open or click it and hands it
+# back the moment you click something else — so Super+X then typing works, and
+# clicking into a terminal types into the terminal with the calculator still
+# open beside it. Esc closes whichever panel currently has the keyboard.
+# Control panel ▸ Windows ▸ Panels.
 
 # ── The bar (synui-bar) ────────────────────────────────────
 # Is there a bar at all. Control panel ▸ Desktop ▸ Bar flips this and, unlike

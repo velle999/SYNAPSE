@@ -752,6 +752,7 @@ void calc_show(syn_server_t *s)
     calc_status_clear(s);
 
     s->calc.visible = 1;
+    panel_take_kbd(s, SYN_PDRAG_CALC);
     synui_render_calc(s);
 }
 
@@ -775,6 +776,13 @@ void calc_toggle(syn_server_t *s)
 
 int calc_motion(syn_server_t *s, double lx, double ly)
 {
+    /* A windowed panel does not own the pointer: off it, the event belongs
+     * to whatever is under the cursor, so take nothing. This is what stops
+     * an open panel freezing the rest of the desktop. */
+    if (s->calc.visible && panel_is_windowed(s, SYN_PDRAG_CALC) &&
+        !hit_in_panel(&s->calc.hit, lx, ly))
+        return 0;
+
     if (!s->calc.visible) return 0;
 
     /* Hover IS the cursor. Over the chrome it clears rather than sticking on
@@ -803,14 +811,37 @@ int calc_click(syn_server_t *s, double lx, double ly, uint32_t button,
         return 1;
     }
 
-    if (!hit_in_panel(&s->calc.hit, lx, ly)) {
-        /* Off the panel. In button mode this does NOT close it — that is the
-         * whole point of the setting, and it is the calculator that asked for
-         * it: a near-miss on a keypad key used to bin the expression. Still
-         * swallowed, because the panel is modal either way. */
-        if (s->config.panel_close == SYN_PANEL_CLOSE_CLICKOFF) calc_hide(s);
+    /* …and the header, which is what you drag the panel around by. */
+    if (button == BTN_LEFT && hit_in_drag(&s->calc.hit, lx, ly)) {
+        panel_take_kbd(s, SYN_PDRAG_CALC);
+        panel_drag_begin(s, SYN_PDRAG_CALC, lx, ly);
         return 1;
     }
+
+    if (!hit_in_panel(&s->calc.hit, lx, ly)) {
+        switch (panel_mode(s, SYN_PDRAG_CALC)) {
+        case SYN_PANEL_CLOSE_CLICKOFF:
+            calc_hide(s);
+            return 1;
+        case SYN_PANEL_CLOSE_WINDOW:
+            /* A WINDOW. The click belongs to whatever is under it, so this
+             * takes nothing at all — no close, no swallow — and only hands the
+             * keyboard back. Returning 0 is what lets the click reach the
+             * terminal you were aiming at. */
+            panel_drop_kbd(s);
+            synui_render_calc(s);
+            return 0;
+        default:
+            /* Modal with a button: nothing happens, but the click is eaten so
+             * a near-miss cannot act on the window underneath. */
+            return 1;
+        }
+    }
+
+    /* A click ON the panel takes the keyboard, so typing goes here again after
+     * you have been somewhere else. */
+    if (panel_is_windowed(s, SYN_PDRAG_CALC) && !s->calc.win.kbd)
+        panel_take_kbd(s, SYN_PDRAG_CALC);
     if (button != BTN_LEFT) return 1;
 
     int i = hit_index_at(&s->calc.hit, lx, ly);
@@ -866,6 +897,10 @@ int calc_scroll(syn_server_t *s, double lx, double ly, double delta)
 int calc_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->calc.visible) return 0;
+    /* In window mode the panel only answers for keys while it holds them —
+     * click into a terminal and your typing goes to the terminal, with the
+     * calculator still open beside it. Always true in the modal modes. */
+    if (!panel_wants_keys(s, SYN_PDRAG_CALC)) return 0;
 
     syn_calc_panel_t *c = &s->calc;
 

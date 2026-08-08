@@ -61,6 +61,11 @@ void layout_apply(syn_server_t *s, syn_workspace_t *ws)
 { (void)s; (void)ws; applied_layout++; }
 
 void synui_render_ctlpanel(syn_server_t *s)   { (void)s; }
+/* panel.c dispatches a repaint to whichever panel is being dragged, which pulls
+ * in the other two panels' renderers. Neither is exercised here. */
+void synui_render_calc(syn_server_t *s)    { (void)s; }
+void synui_render_taskmgr(syn_server_t *s) { (void)s; }
+
 void synui_render_aimodel(syn_server_t *s)    { (void)s; }
 void synmon_want_refresh(syn_server_t *s)     { (void)s; }
 void synui_child_reset_signals(void)          { }
@@ -165,6 +170,14 @@ static void rig_init(void)
 
     memset(&g_s, 0, sizeof(g_s));
     synui_config_load(&g_s.config);
+
+    /* The panel holds the keyboard, because that is the state a user is in when
+     * they press Right on a row. The control panel now ships as a WINDOW
+     * (syn_panel_close_t), and a windowed panel only answers for keys while it
+     * has them — so a rig that skipped this would be driving a panel nobody had
+     * focused, and every row would read as inert. */
+    panel_take_kbd(&g_s, SYN_PDRAG_CTLPANEL);
+
 
     /* ctlpanel_repaint() damages every output, so the list has to be a list
      * even though this rig has no outputs — a zeroed wl_list is not an empty

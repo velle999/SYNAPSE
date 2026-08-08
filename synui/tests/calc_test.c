@@ -55,6 +55,11 @@ static int  spawn_count;
 
 void synui_render_calc(syn_server_t *s) { (void)s; renders++; }
 void ctlpanel_child_closed(syn_server_t *s, const char *a) { (void)s; (void)a; }
+/* panel.c dispatches a repaint to whichever panel is being dragged, so linking
+ * it drags in the other two panels' renderers. Only the calculator's is
+ * exercised here. */
+void synui_render_ctlpanel(syn_server_t *s) { (void)s; }
+void synui_render_taskmgr(syn_server_t *s)  { (void)s; }
 
 void synui_spawn(const char *cmd)
 {
@@ -504,7 +509,7 @@ static void panel_place(void)
     hit_set_first(&srv->calc.hit, 0);
     /* Only when the panel would be drawing one, exactly as render.c does — so
      * hit_in_close answers false in click-off mode without anyone clearing it. */
-    if (srv->config.panel_close == SYN_PANEL_CLOSE_BUTTON)
+    if (srv->config.calc_close == SYN_PANEL_CLOSE_BUTTON)
         hit_set_close(&srv->calc.hit, PANEL_W - CLOSE_INSET - CLOSE_SZ,
                       CLOSE_INSET, CLOSE_SZ, CLOSE_SZ);
 }
@@ -680,7 +685,7 @@ static void test_close_button(void)
 {
     /* Click-off mode: unchanged, and still swallowed. */
     panel_reset();
-    srv->config.panel_close = SYN_PANEL_CLOSE_CLICKOFF;
+    srv->config.calc_close = SYN_PANEL_CLOSE_CLICKOFF;
     calc_show(srv);
     panel_place();
     CHECK(!hit_in_close(&srv->calc.hit, close_x(), close_y()),
@@ -692,7 +697,7 @@ static void test_close_button(void)
     /* Button mode: a click off is swallowed and changes NOTHING — the line you
      * were typing survives, which is the entire point. */
     panel_reset();
-    srv->config.panel_close = SYN_PANEL_CLOSE_BUTTON;
+    srv->config.calc_close = SYN_PANEL_CLOSE_BUTTON;
     calc_show(srv);
     panel_place();
     type("12+3");
@@ -728,7 +733,7 @@ static void test_close_button(void)
     /* Esc still closes in button mode — the guaranteed way out if the button
      * ever fails to draw. */
     panel_reset();
-    srv->config.panel_close = SYN_PANEL_CLOSE_BUTTON;
+    srv->config.calc_close = SYN_PANEL_CLOSE_BUTTON;
     calc_show(srv);
     panel_place();
     calc_key(srv, XKB_KEY_Escape, 0);
@@ -736,13 +741,44 @@ static void test_close_button(void)
 
     /* The button is chrome, not a key: it must not sit on a keypad cell. */
     panel_reset();
-    srv->config.panel_close = SYN_PANEL_CLOSE_BUTTON;
+    srv->config.calc_close = SYN_PANEL_CLOSE_BUTTON;
     calc_show(srv);
     panel_place();
     CHECK(hit_index_at(&srv->calc.hit, close_x(), close_y()) < 0,
           "the close button overlaps a keypad key");
 
-    srv->config.panel_close = SYN_PANEL_CLOSE_CLICKOFF;   /* leave it as found */
+    /* Window mode: the click is not ours at all. Returning 0 is what lets it
+     * reach the terminal underneath — 1 would be the "won't let you click
+     * anywhere else" complaint with a close button bolted on. */
+    panel_reset();
+    srv->config.calc_close = SYN_PANEL_CLOSE_WINDOW;
+    calc_show(srv);
+    panel_place();
+    type("9*9");
+
+    CHECK(srv->calc.win.kbd, "opening a windowed panel did not take the keyboard");
+    CHECK(calc_click(srv, PANEL_X - 40, PANEL_Y - 40, BTN_LEFT, 0) == 0,
+          "a windowed panel SWALLOWED a click meant for the window underneath");
+    CHECK(srv->calc.visible, "a windowed panel closed on a click off it");
+    CHECK(strcmp(srv->calc.entry, "9*9") == 0,
+          "the click disturbed the line ('%s')", srv->calc.entry);
+    CHECK(!srv->calc.win.kbd, "the panel kept the keyboard after a click elsewhere");
+
+    /* …and with the keyboard gone, typing goes to that window, not here. */
+    CHECK(calc_key(srv, XKB_KEY_5, 0) == 0,
+          "a windowed panel still ate a keystroke after losing the keyboard");
+    CHECK(strcmp(srv->calc.entry, "9*9") == 0,
+          "a key reached the panel that no longer had the keyboard ('%s')",
+          srv->calc.entry);
+
+    /* Clicking it takes the keyboard back, without needing to reopen it. */
+    CHECK(calc_click(srv, key_x(key_index("7")), key_y(key_index("7")), BTN_LEFT, 0) == 1,
+          "a click on the panel was not taken");
+    CHECK(srv->calc.win.kbd, "clicking the panel did not take the keyboard back");
+    CHECK(strcmp(srv->calc.entry, "9*97") == 0,
+          "the click did not press the key it landed on ('%s')", srv->calc.entry);
+
+    srv->config.calc_close = SYN_PANEL_CLOSE_CLICKOFF;   /* leave it as found */
 }
 
 int main(void)

@@ -89,6 +89,11 @@ void synui_child_reset_signals(void)         { }
  * process, so the row cannot just flip a flag the way the Dock row does. */
 void synui_spawn(const char *cmd)             { (void)cmd; }
 
+/* panel.c dispatches a repaint to whichever panel is being dragged, which pulls
+ * in the other two panels' renderers. Neither is exercised here. */
+void synui_render_calc(syn_server_t *s)    { (void)s; }
+void synui_render_taskmgr(syn_server_t *s) { (void)s; }
+
 void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     (void)s;

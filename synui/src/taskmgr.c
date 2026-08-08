@@ -411,6 +411,7 @@ void taskmgr_finish(syn_server_t *s)
 
 void taskmgr_show(syn_server_t *s)
 {
+    panel_take_kbd(s, SYN_PDRAG_TASKMGR);
     syn_taskmgr_t *t = &s->taskmgr;
 
     t->visible   = 1;
@@ -555,6 +556,13 @@ static void taskmgr_ask_kill(syn_server_t *s, syn_tm_confirm_t what)
 
 int taskmgr_motion(syn_server_t *s, double lx, double ly)
 {
+    /* A windowed panel does not own the pointer: off it, the event belongs
+     * to whatever is under the cursor, so take nothing. This is what stops
+     * an open panel freezing the rest of the desktop. */
+    if (s->taskmgr.visible && panel_is_windowed(s, SYN_PDRAG_TASKMGR) &&
+        !hit_in_panel(&s->taskmgr.hit, lx, ly))
+        return 0;
+
     syn_taskmgr_t *t = &s->taskmgr;
     if (!t->visible) return 0;
     if (t->confirm != TM_CONFIRM_NONE) return 1;
@@ -579,6 +587,13 @@ int taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
     int on_close  = hit_in_close(&t->hit, lx, ly);
     int off_panel = !hit_in_panel(&t->hit, lx, ly);
 
+    /* The header is the grab handle in window mode. */
+    if (!on_close && hit_in_drag(&t->hit, lx, ly)) {
+        panel_take_kbd(s, SYN_PDRAG_TASKMGR);
+        panel_drag_begin(s, SYN_PDRAG_TASKMGR, lx, ly);
+        return 1;
+    }
+
     if (on_close || off_panel) {
         /* A pending kill has to be answered, not clicked away — the same reason
          * the Bluetooth panel refuses to close under a pairing prompt. Cancel
@@ -593,10 +608,22 @@ int taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
         }
         /* The button always closes. Clicking off only closes when that is what
          * `panel_close` says; otherwise it is swallowed and nothing happens. */
-        if (on_close || s->config.panel_close == SYN_PANEL_CLOSE_CLICKOFF)
+        if (on_close || panel_mode(s, SYN_PDRAG_TASKMGR) == SYN_PANEL_CLOSE_CLICKOFF) {
             taskmgr_hide(s);
+            return 1;
+        }
+        /* A window: the click is not ours. Hand the keyboard back and let it
+         * reach whatever is underneath. */
+        if (panel_is_windowed(s, SYN_PDRAG_TASKMGR)) {
+            panel_drop_kbd(s);
+            synui_render_taskmgr(s);
+            return 0;
+        }
         return 1;
     }
+
+    if (panel_is_windowed(s, SYN_PDRAG_TASKMGR) && !t->win.kbd)
+        panel_take_kbd(s, SYN_PDRAG_TASKMGR);
     return taskmgr_motion(s, lx, ly);
 }
 
@@ -616,6 +643,7 @@ int taskmgr_scroll(syn_server_t *s, double lx, double ly, double delta)
 
 int taskmgr_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
+    if (!panel_wants_keys(s, SYN_PDRAG_TASKMGR)) return 0;
     syn_taskmgr_t *t = &s->taskmgr;
     if (!t->visible) return 0;
 

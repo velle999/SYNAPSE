@@ -2191,9 +2191,11 @@ void synui_render_emoji(syn_server_t *s)
 #define PANEL_CLOSE_SZ   20
 #define PANEL_CLOSE_INSET 10
 
-static int panel_close_draw(syn_server_t *s, cairo_t *cr, syn_hit_t *hit, int pw)
+static int panel_close_draw(syn_server_t *s, cairo_t *cr, syn_pdrag_t which,
+                            int pw, int header_h)
 {
-    if (s->config.panel_close != SYN_PANEL_CLOSE_BUTTON) return 0;
+    syn_hit_t *hit = panel_hit(s, which);
+    if (!hit || !panel_has_button(s, which)) return 0;
 
     const int bx = pw - PANEL_CLOSE_INSET - PANEL_CLOSE_SZ;
     const int by = PANEL_CLOSE_INSET;
@@ -2201,6 +2203,12 @@ static int panel_close_draw(syn_server_t *s, cairo_t *cr, syn_hit_t *hit, int pw
     /* hit_set_panel() cleared this, so the button is recorded only on the
      * renders that actually draw it. */
     hit_set_close(hit, bx, by, PANEL_CLOSE_SZ, PANEL_CLOSE_SZ);
+
+    /* In window mode the header is also the grab handle. It stops short of the
+     * close button so the two can never both claim a press — a drag that began
+     * on the X would close the panel the moment you let go somewhere else. */
+    if (panel_is_windowed(s, which))
+        hit_set_drag(hit, 0, 0, bx - 4, header_h);
 
     /* A face, so it reads as a button rather than as a decoration someone drew
      * in the corner. Faint: it is chrome, and the panel's content is what the
@@ -2274,6 +2282,15 @@ void synui_render_calc(syn_server_t *s)
     int ph = keypad_top + CALC_ROWS * cell_h + 50;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
+    /* Where it has been dragged to. Centred is only the STARTING point once the
+     * panel is a window; the clamp runs every render so a panel can never end
+     * up somewhere its header cannot be reached. */
+    if (panel_is_windowed(s, SYN_PDRAG_CALC)) {
+        panel_clamp(&s->calc.win, &ob, px, py, pw, ph);
+        px += s->calc.win.dx;
+        py += s->calc.win.dy;
+    }
+
     wlr_scene_node_set_position(&s->calc_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->calc_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->calc_ui.tree->node);
@@ -2313,7 +2330,7 @@ void synui_render_calc(syn_server_t *s)
     /* The corner button, and how much room it leaves the title row. This is the
      * panel the switch exists for: a keypad is thirty small targets, and a
      * near-miss used to close it and bin the expression. */
-    int close_pad = panel_close_draw(s, cr, &s->calc.hit, pw);
+    int close_pad = panel_close_draw(s, cr, SYN_PDRAG_CALC, pw, y_rule);
 
     /* What `ans` currently holds, named in the corner. Without it the identifier
      * is a promise the panel never shows you the value of, and "what does ans
@@ -4713,6 +4730,12 @@ void synui_render_ctlpanel(syn_server_t *s)
     int ph = CTL_TOP + body_rows * CTL_ROW_H + CTL_FOOTER;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
+    if (panel_is_windowed(s, SYN_PDRAG_CTLPANEL)) {
+        panel_clamp(&s->ctlpanel.win, &ob, px, py, pw, ph);
+        px += s->ctlpanel.win.dx;
+        py += s->ctlpanel.win.dy;
+    }
+
     wlr_scene_node_set_position(&s->ctlpanel_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->ctlpanel_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->ctlpanel_ui.tree->node);
@@ -4756,7 +4779,7 @@ void synui_render_ctlpanel(syn_server_t *s)
     /* The corner button. Its width is discarded here and nowhere else: this
      * title row draws a breadcrumb from the LEFT and nothing right-aligned, so
      * there is no header content to move out of the way. */
-    (void)panel_close_draw(s, cr, &cp->hit, pw);
+    (void)panel_close_draw(s, cr, SYN_PDRAG_CTLPANEL, pw, 44);
 
     /* Breadcrumb. Which category you are in is otherwise only visible as a
      * highlight in the sidebar, which is exactly the thing that goes quiet when
@@ -6388,6 +6411,12 @@ void synui_render_taskmgr(syn_server_t *s)
     int ph = table_top + 20 + TASKMGR_ROWS * TM_ROW_H + 74;
     int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
 
+    if (panel_is_windowed(s, SYN_PDRAG_TASKMGR)) {
+        panel_clamp(&s->taskmgr.win, &ob, px, py, pw, ph);
+        px += s->taskmgr.win.dx;
+        py += s->taskmgr.win.dy;
+    }
+
     wlr_scene_node_set_position(&s->taskmgr_ui.tree->node, px, py);
     wlr_scene_node_set_enabled(&s->taskmgr_ui.tree->node, true);
     wlr_scene_node_raise_to_top(&s->taskmgr_ui.tree->node);
@@ -6432,7 +6461,7 @@ void synui_render_taskmgr(syn_server_t *s)
     syn_show_text(cr, "TASK MANAGER");
 
     /* The corner button, and the room it takes from the summary beside it. */
-    int close_pad = panel_close_draw(s, cr, &t->hit, pw);
+    int close_pad = panel_close_draw(s, cr, SYN_PDRAG_TASKMGR, pw, 44);
 
     char sub[96];
     snprintf(sub, sizeof(sub), "%d procs \xc2\xb7 sort: %s%s",

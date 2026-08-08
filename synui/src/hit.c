@@ -42,6 +42,7 @@ void hit_set_panel(syn_hit_t *g, int x, int y, int w, int h)
      * one that stops drawing it — the setting was changed, or it never had one
      * — stops answering for it on the next render without saying so. */
     g->close_x = g->close_y = g->close_w = g->close_h = 0;
+    g->drag_x  = g->drag_y  = g->drag_w  = g->drag_h  = 0;
 }
 
 void hit_set_rows(syn_hit_t *g, int lx, int ly, int w, int h, int n)
@@ -96,6 +97,24 @@ void hit_set_close(syn_hit_t *g, int lx, int ly, int w, int h)
     g->close_y = g->y + ly;
     g->close_w = w < 0 ? 0 : w;
     g->close_h = h < 0 ? 0 : h;
+}
+
+/* The drag handle. Same panel-local contract as the close button, and cleared
+ * by the same hit_set_panel(), so a panel that leaves window mode stops being
+ * draggable on the next render without anyone saying so. */
+void hit_set_drag(syn_hit_t *g, int lx, int ly, int w, int h)
+{
+    g->drag_x = g->x + lx;
+    g->drag_y = g->y + ly;
+    g->drag_w = w < 0 ? 0 : w;
+    g->drag_h = h < 0 ? 0 : h;
+}
+
+int hit_in_drag(const syn_hit_t *g, double lx, double ly)
+{
+    if (g->drag_w <= 0 || g->drag_h <= 0) return 0;
+    return lx >= g->drag_x && lx < g->drag_x + g->drag_w &&
+           ly >= g->drag_y && ly < g->drag_y + g->drag_h;
 }
 
 int hit_in_close(const syn_hit_t *g, double lx, double ly)

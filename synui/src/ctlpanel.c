@@ -119,7 +119,7 @@ static const char *const ctl_names_bar_shell[]   = { "SYNAPSE", "Antiquity" };
  * spellings, which is what lets the row and `panel_close = clickoff` mean the
  * same thing. Single words for the reason the whole enum table is: ctl_format
  * lower-cases the display name and writes THAT. */
-static const char *const ctl_names_panel_close[] = { "Clickoff", "Button" };
+static const char *const ctl_names_panel_close[] = { "Clickoff", "Button", "Window" };
 /* Order matches syn_bar_edge_t. Same two words as the first two dock edges
  * above, and folded to lower case they ARE the synuirc spellings — which is
  * what lets "put it at the bottom" mean one thing across both. */
@@ -216,11 +216,24 @@ static const struct ctl_item ctl_items[] = {
      * Appearance was where the theme lives and these are not about colour: a
      * border width and a shadow sigma belong with snapping and tiling, not with
      * a wallpaper picker. */
-    { CTL_ROW_PANEL_CLOSE,    CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Panel close", NULL,
-      .key = "panel_close", .off = CFG(panel_close), .vtype = CTL_VAL_ENUM,
+    /* One row per panel, not one for all three: velle asked for "a switch for
+     * each of them in settings not all or nothing", and they genuinely differ —
+     * a control panel you want gone the moment you look away and a calculator
+     * you park in the corner are different answers. */
+    { CTL_ROW_CALC_CLOSE,     CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Calculator", NULL,
+      .section = "Panels",
+      .key = "calc_close", .off = CFG(calc_close), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
-      .help = "Calculator, control panel and task manager: click off to close, "
-              "or a corner button. Esc closes them either way" },
+      .help = "Window: drag it by the header, click elsewhere freely. "
+              "Clickoff: closes when you click away. Esc always closes" },
+    { CTL_ROW_CTLPANEL_CLOSE, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Control panel", NULL,
+      .key = "ctlpanel_close", .off = CFG(ctlpanel_close), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
+      .help = "How this panel itself behaves" },
+    { CTL_ROW_TASKMGR_CLOSE,  CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Task manager", NULL,
+      .key = "taskmgr_close", .off = CFG(taskmgr_close), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_panel_close), .apply = CTL_APPLY_NONE,
+      .help = "How the task manager behaves" },
     { CTL_ROW_TITLEBARS,      CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Titlebars", NULL,
       .section = "Frame", .help = "Server-side titlebars, on every window at once" },
     { CTL_ROW_TITLEBAR_HEIGHT, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Titlebar height", NULL,
@@ -1511,6 +1524,10 @@ int ctlpanel_tick(syn_server_t *s)
 
 void ctlpanel_show(syn_server_t *s)
 {
+    /* Opened from the keyboard, so it answers to the keyboard — a windowed
+     * panel you had to click before it would respond would be worse than the
+     * modal one it replaced. */
+    panel_take_kbd(s, SYN_PDRAG_CTLPANEL);
     s->ctlpanel.visible    = 1;
     s->ctlpanel.cat        = CTL_CAT_APPEARANCE;
     s->ctlpanel.item       = 0;
@@ -2254,6 +2271,13 @@ static void ctlpanel_adjust_choice(syn_server_t *s, int row, int dir)
 
 int ctlpanel_motion(syn_server_t *s, double lx, double ly)
 {
+    /* A windowed panel does not own the pointer: off it, the event belongs
+     * to whatever is under the cursor, so take nothing. This is what stops
+     * an open panel freezing the rest of the desktop. */
+    if (s->ctlpanel.visible && panel_is_windowed(s, SYN_PDRAG_CTLPANEL) &&
+        !hit_in_panel(&s->ctlpanel.hit, lx, ly))
+        return 0;
+
     syn_ctlpanel_t *cp = &s->ctlpanel;
     if (!cp->visible) return 0;
 
@@ -2298,10 +2322,27 @@ int ctlpanel_click(syn_server_t *s, double lx, double ly, uint32_t button,
         return 1;
     }
 
-    if (!hit_in_panel(&cp->hit, lx, ly)) {
-        if (s->config.panel_close == SYN_PANEL_CLOSE_CLICKOFF) ctlpanel_hide(s);
+    /* The header is the grab handle in window mode. Before the row hit-tests,
+     * since the header is chrome and owns the press outright. */
+    if (button == BTN_LEFT && hit_in_drag(&cp->hit, lx, ly)) {
+        panel_take_kbd(s, SYN_PDRAG_CTLPANEL);
+        panel_drag_begin(s, SYN_PDRAG_CTLPANEL, lx, ly);
         return 1;
     }
+
+    if (!hit_in_panel(&cp->hit, lx, ly)) {
+        switch (panel_mode(s, SYN_PDRAG_CTLPANEL)) {
+        case SYN_PANEL_CLOSE_CLICKOFF: ctlpanel_hide(s); return 1;
+        case SYN_PANEL_CLOSE_WINDOW:
+            panel_drop_kbd(s);
+            synui_render_ctlpanel(s);
+            return 0;          /* the click belongs to whatever is under it */
+        default: return 1;
+        }
+    }
+
+    if (panel_is_windowed(s, SYN_PDRAG_CTLPANEL) && !cp->win.kbd)
+        panel_take_kbd(s, SYN_PDRAG_CTLPANEL);
 
     /* Put the cursor where the pointer is first, so the activation below acts on
      * the row that was pointed at even if no motion event preceded this press
@@ -2436,6 +2477,7 @@ static int ctlpanel_search_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
 int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
+    if (!panel_wants_keys(s, SYN_PDRAG_CTLPANEL)) return 0;
     if (!s->ctlpanel.visible) return 0;
 
     /* ── Capture mode ────────────────────────────────────────
