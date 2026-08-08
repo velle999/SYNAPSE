@@ -442,6 +442,12 @@ extern const int                 synui_welcome_menu_len;
  * user of the list. */
 struct syn_font_family {
     char name[96];
+    /* fontconfig spacing >= FC_MONO. The terminals are given whatever family is
+     * picked (synui-apply-font no longer gates on this), so the picker has to
+     * be the thing that says a proportional face will not render kitty's
+     * columns and box-drawing properly — otherwise the only feedback is the
+     * terminal looking wrong afterwards. */
+    int  mono;
 };
 
 /* ── The image cropper (crop.c) ──────────────────────────────
@@ -1503,12 +1509,40 @@ typedef struct {
     int  item;         /* index *within* that category, not a syn_ctl_row_t */
     int  focus;        /* CTL_FOCUS_CATS / CTL_FOCUS_ITEMS */
     int  scroll;       /* first shortcuts row drawn */
+    /* ── The shortcuts cursor ────────────────────────────────
+     *
+     * Which shortcut row is highlighted, indexing the list ctlpanel_shortcuts()
+     * builds. The pane used to be a pure scroll with no cursor at all, because
+     * it was read-only and there was nothing to point AT; rebinding from here
+     * needs a row to rebind, so Up/Down now move this and drag `scroll` along
+     * behind them, as they do in every other pane on this panel.
+     *
+     * Not folded into `item`: that one indexes ctl_items[] within a category,
+     * and this category deliberately has no ctl_items[] entries at all (the list
+     * is generated from the live bind table). Sharing the field would make
+     * ctlpanel_item_count() == 0 stop meaning "no rows here", which is what
+     * every Up/Down/Page/Home path on this panel branches on. */
+    int  sc_sel;
     /* First SETTINGS row drawn. Separate from `scroll` above because the two
      * lists are different lengths and are scrolled by different keys; sharing
      * one offset carried a shortcuts position into a category with six rows and
      * drew an empty pane. Reset whenever the category changes. */
     int  row_scroll;
     char status[96];
+
+    /* ── Rebinding, from this panel ──────────────────────────
+     *
+     * F2/Ctrl+R arms `sc_capturing` and the NEXT chord becomes the selected
+     * shortcut's key; Ctrl+Shift+R puts every shortcut back. The rules are
+     * keys.c's syn_rebind_* — this panel owns only the arming.
+     *
+     * The target is kept as a COPY of the row rather than an index into
+     * anything. The pane rebuilds the shortcut list on every render (it is a
+     * view of the live bind table, which the rebind is about to rewrite), so an
+     * index would point at a different shortcut the moment the table moved, and
+     * a pointer would dangle outright. */
+    int                sc_capturing;
+    syn_ctl_shortcut_t sc_capture;
 
     /* ── Search ──────────────────────────────────────────────
      *
@@ -5154,6 +5188,11 @@ void ctlpanel_child_closed(syn_server_t *s, const char *action);
 /* The shortcuts column, rebuilt from the live bind table on every render.
  * Returns how many rows were written into out[] (at most max). */
 int  ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max);
+/* The shortcuts pane's cursor, for the rebind keys and for render.c's
+ * highlight. `_selected` copies the row out by value because every caller is
+ * about to rewrite the bind table it was derived from. */
+int  ctlpanel_shortcut_count(syn_server_t *s);
+int  ctlpanel_shortcut_selected(syn_server_t *s, syn_ctl_shortcut_t *out);
 /* What a bind action does, in words — the same table the shortcuts column
  * labels its rows from. Exposed for the rebind helper, which has to name the
  * shortcut a chord is already taken by. */
@@ -5171,6 +5210,26 @@ const char *ctlpanel_action_desc(const char *action, const char *arg);
  * shortcuts, and a hand-kept second list is the bug ctlpanel_shortcuts() was
  * written to make impossible. */
 void keys_show(syn_server_t *s);
+/* ── The rebind rules, shared (keys.c) ───────────────────────
+ *
+ * The control panel's Shortcuts category rebinds with the same three keys, and
+ * these are what it drives so that it cannot mean something different by them.
+ * The two panels share the shortcut LIST already; the rules are the half where
+ * a fork would be hardest to spot, because a second copy of "a bare letter is
+ * not bindable" fails only for the user who tries a bare letter.
+ *
+ * Each panel still owns its own capture state — which row is armed, and where
+ * the status line goes. That part is UI, and the two panels differ in it.
+ *
+ * syn_rebind_apply() returns 1 when the bind table actually changed, so the
+ * caller knows to re-read the list; `status` is filled either way. Its `sc` must
+ * not point into s->config.binds[], which it rewrites. */
+bool        syn_rebind_sym_is_modifier(xkb_keysym_t sym);
+const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc);
+int         syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                             xkb_keysym_t sym, uint32_t mods,
+                             char *status, size_t status_n);
+void        syn_rebind_reset_all(syn_server_t *s, char *status, size_t status_n);
 void keys_hide(syn_server_t *s);
 void keys_toggle(syn_server_t *s);
 int  keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
@@ -5568,6 +5627,10 @@ void fontpick_show(syn_server_t *s);
 void fontpick_hide(syn_server_t *s);
 void fontpick_toggle(syn_server_t *s);
 int  fontpick_total(syn_server_t *s);
+/* Whether a terminal will render properly in this row's family — the picker
+ * warns when it will not, since synui-apply-font hands the terminals whatever
+ * is chosen. Row 0 (the default) is "monospace" and never warns. */
+int  fontpick_row_is_mono(syn_server_t *s, int row);
 /* One row's family name; fontpick.c owns the text, render.c draws it — in that
  * family's own face, which is the whole point of the list. */
 void fontpick_row(syn_server_t *s, int row, const char **label);

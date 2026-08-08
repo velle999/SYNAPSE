@@ -628,6 +628,227 @@ static void test_rebind_reset(void)
     keys_hide(&g_s);
 }
 
+/* ── The SAME rebind, from the control panel ─────────────────
+ *
+ * Rebinding shipped reachable only from Super+/, which left the panel with a
+ * category literally called "Shortcuts" showing you every binding and letting
+ * you change none of them. The Shortcuts pane now takes the same three keys.
+ *
+ * What is pinned here is that it is the same MACHINERY, not a second copy: the
+ * assertions below are on the recorded config_bind_set/config_unbind_combo
+ * pair — keys.c's syn_rebind_apply() — reached through ctlpanel_key(). Both
+ * files are linked for real in this test, so a control panel that grew its own
+ * private notion of what is bindable would show up as these numbers changing
+ * while the palette's stayed the same.
+ *
+ * Driven by keysym for panel_pointer_test.c's reason: nothing can synthesise
+ * input into a headless synui, and uinput would land on the LIVE session.
+ */
+static void ctl_open_shortcuts(void)
+{
+    ctlpanel_show(&g_s);
+    g_s.ctlpanel.cat   = CTL_CAT_SHORTCUTS;
+    g_s.ctlpanel.focus = CTL_FOCUS_ITEMS;
+    g_s.ctlpanel.sc_sel = 0;
+    g_s.ctlpanel.scroll = 0;
+}
+
+/* Put the shortcuts cursor on the row holding this chord. By chord rather than
+ * by description because the description is prose and the chord is the thing
+ * the rebind acts on. */
+static int ctl_select_chord(uint32_t mods, xkb_keysym_t sym)
+{
+    int n = ctlpanel_shortcut_count(&g_s);
+    for (int i = 0; i < n; i++) {
+        syn_ctl_shortcut_t sc;
+        g_s.ctlpanel.sc_sel = i;
+        if (ctlpanel_shortcut_selected(&g_s, &sc) &&
+            sc.mods == mods && sc.sym == sym)
+            return 1;
+    }
+    return 0;
+}
+
+static void test_ctlpanel_rebind(void)
+{
+    printf("ctlpanel: the Shortcuts pane rebinds too\n");
+
+    rig_init();
+    ctl_open_shortcuts();
+    binds_set = binds_unbound = 0;
+
+    CHECK(ctlpanel_shortcut_count(&g_s) > 0,
+          "the pane lists the bind table (%d rows)",
+          ctlpanel_shortcut_count(&g_s));
+
+    /* ── F2 arms, and the chord lands ───────────────────── */
+    CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_w),
+          "found Super+W to rebind");
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.ctlpanel.sc_capturing, "F2 arms a capture");
+
+    /* THE claim of the capture branch: while armed, a Super combo is taken as
+     * the answer instead of falling through to the global bind table. The panel
+     * returns 0 for modified combos everywhere else, so this is the one place
+     * the ordering of that test actually matters. */
+    CHECK(ctlpanel_key(&g_s, XKB_KEY_Super_L, WLR_MODIFIER_LOGO) == 1 &&
+          g_s.ctlpanel.sc_capturing,
+          "a held modifier is half a chord, not the answer");
+
+    CHECK(ctlpanel_key(&g_s, XKB_KEY_y, WLR_MODIFIER_LOGO) == 1,
+          "the chord is SWALLOWED, not passed to the bind table");
+    CHECK(!g_s.ctlpanel.sc_capturing, "…and it ends the capture");
+    CHECK(binds_set == 1 && strcmp(last_bound, "super+y") == 0,
+          "the new chord is bound (got '%s')", last_bound);
+    CHECK(binds_unbound == 1 && strcmp(last_unbound, "super+w") == 0,
+          "…and the old one is taken away (got '%s')", last_unbound);
+
+    /* ── The refusals are shared, not reimplemented ─────── */
+    binds_set = binds_unbound = 0;
+    CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_f), "found Super+F");
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    ctlpanel_key(&g_s, XKB_KEY_k, 0);          /* a bare letter */
+    CHECK(binds_set == 0 && !g_s.ctlpanel.sc_capturing,
+          "a bare letter is refused — it would type itself");
+    CHECK(strstr(g_s.ctlpanel.status, "Super") != NULL,
+          "…and the panel says why (got '%s')", g_s.ctlpanel.status);
+
+    CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_f), "still on Super+F");
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    ctlpanel_key(&g_s, XKB_KEY_c, WLR_MODIFIER_LOGO);   /* Super+C = control */
+    CHECK(binds_set == 0,
+          "a chord already in use is refused, never stolen");
+    CHECK(strstr(g_s.ctlpanel.status, "already") != NULL,
+          "…by name (got '%s')", g_s.ctlpanel.status);
+
+    /* The collapsed nine-workspace row stands for nine binds and names none, so
+     * it has no single chord to move. */
+    {
+        int n = ctlpanel_shortcut_count(&g_s), found = 0;
+        for (int i = 0; i < n; i++) {
+            syn_ctl_shortcut_t sc;
+            g_s.ctlpanel.sc_sel = i;
+            if (!ctlpanel_shortcut_selected(&g_s, &sc) || sc.rebindable) continue;
+            found = 1;
+            ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+            CHECK(!g_s.ctlpanel.sc_capturing,
+                  "a row that is not one bind refuses to arm ('%s')", sc.desc);
+            break;
+        }
+        CHECK(found, "the rig has a non-rebindable row to refuse");
+    }
+
+    /* ── Esc cancels the capture, not the panel ─────────── */
+    CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_f), "back on Super+F");
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.ctlpanel.sc_capturing, "armed again");
+    ctlpanel_key(&g_s, XKB_KEY_Escape, 0);
+    CHECK(!g_s.ctlpanel.sc_capturing, "Esc disarms");
+    CHECK(g_s.ctlpanel.visible,
+          "…and does NOT also close the panel — one Esc, one level");
+
+    /* ── Closing while armed must not leave it armed ────── */
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.ctlpanel.sc_capturing, "armed before the close");
+    ctlpanel_hide(&g_s);
+    CHECK(!g_s.ctlpanel.sc_capturing,
+          "closing disarms, or the next key typed at the DESKTOP rebinds");
+
+    /* ── Ctrl+Shift+R resets, Ctrl+R arms ───────────────── */
+    rig_init();
+    ctl_open_shortcuts();
+    reloads = 0;
+
+    /* On a REBINDABLE row: row 0 of the list is the Super-tap "Start menu",
+     * which is the absence of a chord and refuses to arm — landing there would
+     * make this assert the refusal rather than the arm. */
+    CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_w), "on Super+W");
+    ctlpanel_key(&g_s, XKB_KEY_r, WLR_MODIFIER_CTRL);
+    CHECK(g_s.ctlpanel.sc_capturing, "Ctrl+R arms, as it does in the palette");
+
+    /* Disarm with the capture branch's own Esc — the panel's other Esc means
+     * "back out to the sidebar", which would take the focus this needs. */
+    ctlpanel_key(&g_s, XKB_KEY_Escape, 0);
+    CHECK(!g_s.ctlpanel.sc_capturing && g_s.ctlpanel.focus == CTL_FOCUS_ITEMS,
+          "Esc while armed cancels the capture and leaves the focus alone");
+
+    ctlpanel_key(&g_s, XKB_KEY_R, WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT);
+    CHECK(reloads == 1,
+          "Ctrl+Shift+R puts every shortcut back through the config reload");
+
+    /* Shift is read off the SYMBOL, not the mask: this is the case that would
+     * break if someone matched WLR_MODIFIER_SHIFT instead. */
+    reloads = 0;
+    CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_w), "back on Super+W");
+    ctlpanel_key(&g_s, XKB_KEY_r, WLR_MODIFIER_CTRL);
+    CHECK(g_s.ctlpanel.sc_capturing && reloads == 0,
+          "…and plain Ctrl+r is still the arm, not the reset");
+    ctlpanel_key(&g_s, XKB_KEY_Escape, 0);
+
+    /* ── The rebind keys belong to the Shortcuts pane ───── */
+    g_s.ctlpanel.cat = CTL_CAT_APPEARANCE;
+    reloads = 0;
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(!g_s.ctlpanel.sc_capturing,
+          "F2 in a settings category arms nothing");
+    CHECK(ctlpanel_key(&g_s, XKB_KEY_R,
+                       WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT) == 0 &&
+          reloads == 0,
+          "…and Ctrl+Shift+R there falls through to the bind table");
+
+    ctlpanel_hide(&g_s);
+}
+
+/* ── The cursor the rebind needs ─────────────────────────────
+ *
+ * The pane was a pure scroll with no cursor until rebinding needed a row to
+ * act on. Up/Down move the selection and drag the scroll behind them, which is
+ * what every other pane on this panel already does.
+ */
+static void test_ctlpanel_shortcut_cursor(void)
+{
+    printf("ctlpanel: the shortcuts pane has a cursor\n");
+
+    rig_init();
+    ctl_open_shortcuts();
+
+    int n = ctlpanel_shortcut_count(&g_s);
+    CHECK(n > 1, "more than one row to move between (%d)", n);
+
+    ctlpanel_key(&g_s, XKB_KEY_Down, 0);
+    CHECK(g_s.ctlpanel.sc_sel == 1, "Down moves the cursor (got %d)",
+          g_s.ctlpanel.sc_sel);
+    ctlpanel_key(&g_s, XKB_KEY_Up, 0);
+    CHECK(g_s.ctlpanel.sc_sel == 0, "Up moves it back");
+
+    /* Both ends hold rather than wrapping or running off the list. */
+    ctlpanel_key(&g_s, XKB_KEY_Up, 0);
+    CHECK(g_s.ctlpanel.sc_sel == 0, "the top holds");
+    ctlpanel_key(&g_s, XKB_KEY_End, 0);
+    CHECK(g_s.ctlpanel.sc_sel == n - 1, "End goes to the last row");
+    ctlpanel_key(&g_s, XKB_KEY_Down, 0);
+    CHECK(g_s.ctlpanel.sc_sel == n - 1, "the bottom holds");
+    ctlpanel_key(&g_s, XKB_KEY_Home, 0);
+    CHECK(g_s.ctlpanel.sc_sel == 0, "Home goes back to the first");
+
+    /* The scroll follows the cursor: a highlight outside the drawn window is a
+     * cursor the user cannot see. */
+    CHECK(g_s.ctlpanel.scroll <= g_s.ctlpanel.sc_sel &&
+          g_s.ctlpanel.sc_sel < g_s.ctlpanel.scroll + CTL_SHORTCUT_ROWS,
+          "the cursor is inside the drawn window");
+
+    /* Leaving the category drops the cursor AND any armed capture with it. */
+    ctlpanel_key(&g_s, XKB_KEY_Down, 0);
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.ctlpanel.sc_capturing, "armed on row 1");
+    ctlpanel_key(&g_s, XKB_KEY_Tab, 0);          /* out to the sidebar */
+    ctlpanel_key(&g_s, XKB_KEY_Down, 0);         /* a different category */
+    CHECK(!g_s.ctlpanel.sc_capturing,
+          "changing category disarms — the row it aimed at is gone");
+
+    ctlpanel_hide(&g_s);
+}
+
 int main(void)
 {
     test_list_is_the_bind_table();
@@ -638,6 +859,8 @@ int main(void)
     test_rebind_refusals();
     test_rebind_reset();
     test_modal_contract();
+    test_ctlpanel_shortcut_cursor();
+    test_ctlpanel_rebind();
 
     printf("%s: %d checked, %d failed\n",
            failures ? "FAIL" : "PASS", checks, failures);

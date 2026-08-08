@@ -1935,6 +1935,33 @@ void synui_render_fontpick(syn_server_t *s)
         syn_show_text(cr, pos);
     }
 
+    /* The terminal warning.
+     *
+     * synui-apply-font hands kitty and foot whatever family is chosen — it used
+     * to accept only monospaced ones and quietly leave the terminal alone,
+     * which read as the font setting being broken rather than as a decision. So
+     * the choice is allowed and this is where its cost is stated, on the row,
+     * BEFORE Enter — the alternative feedback is opening a terminal some time
+     * later and finding the columns no longer line up, with nothing connecting
+     * that to a font picked yesterday.
+     *
+     * Drawn only on a row that has the problem: a caution that is present on
+     * every row is a caution nobody reads. Spelled without arrows or symbols
+     * for the reason the control panel's hints are — this face has no U+2192
+     * and draws a missing glyph as garbage, which makes a warning look like a
+     * rendering fault, which is a poor joke in a warning about rendering. */
+    int warn = total > 0 && !fontpick_row_is_mono(s, s->fontpick.selected);
+    if (warn) {
+        cairo_set_font_size(cr, 12);
+        /* Amber rather than the accent: this is the one line on the panel that
+         * is not describing the font, and the accent is already spoken for by
+         * the selection and the title. */
+        cairo_set_source_rgba(cr, 0.98, 0.72, 0.25, 1.0);
+        cairo_move_to(cr, 18, ph - 38);
+        syn_show_text(cr,
+            "Not monospaced \xc2\xb7 kitty and foot may not render correctly in it");
+    }
+
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 20);
@@ -4494,11 +4521,33 @@ void synui_render_ctlpanel(syn_server_t *s)
 
         cairo_set_font_size(cr, 13);
         for (int i = 0; i < CTL_SHORTCUT_ROWS && first + i < n; i++) {
-            int ry = CTL_TOP + i * CTL_ROW_H;
+            int ry  = CTL_TOP + i * CTL_ROW_H;
+            int idx = first + i;
+            /* Only when the pane has the focus. A highlight in the column you
+             * are not driving names a row the keys would not act on, which is
+             * exactly the confusion the two-column focus model exists to avoid —
+             * the settings pane next door draws its cursor the same way. */
+            int sel = (idx == cp->sc_sel) && !cats_focused;
 
-            set_accent(cr, 0.95);
+            if (sel) {
+                /* The row the rebind keys would act on, and — while a capture is
+                 * armed — the row the next chord is about to land on. Worth
+                 * being loud about: at that moment every other key on the
+                 * keyboard has been taken over by this one row. */
+                set_accent(cr, cp->sc_capturing ? 0.30 : 0.16);
+                cairo_rectangle(cr, CTL_COL_RIGHT - 12, ry - CTL_ROW_H + 6,
+                                (CTL_SETTING_V + 12) - (CTL_COL_RIGHT - 12),
+                                CTL_ROW_H);
+                cairo_fill(cr);
+            }
+
+            set_accent(cr, sel ? 1.0 : 0.95);
             cairo_move_to(cr, CTL_COL_RIGHT, ry);
-            syn_show_text(cr, sc[first + i].combo);
+            /* While armed, the row shows what it is waiting for instead of the
+             * key it currently has: the old key is about to stop being true,
+             * and leaving it there reads as "nothing happened". */
+            syn_show_text(cr, (sel && cp->sc_capturing) ? "Press a key\xe2\x80\xa6"
+                                                        : sc[idx].combo);
 
             /* +200 rather than the +172 the old narrow column used: the widest
              * combo in the default binds is "XF86MonBrightnessDown", which ran
@@ -4507,7 +4556,7 @@ void synui_render_ctlpanel(syn_server_t *s)
             set_ink(cr, INK_BODY, 1.0);
             draw_clipped(cr, CTL_COL_RIGHT + 200, ry,
                          CTL_SETTING_V - (CTL_COL_RIGHT + 200),
-                         sc[first + i].desc);
+                         sc[idx].desc);
         }
 
         /* Say so when the list runs off the window, rather than silently
@@ -4741,8 +4790,13 @@ void synui_render_ctlpanel(syn_server_t *s)
         hint = "Type to filter \xc2\xb7 Up/Down select \xc2\xb7 Del reset \xc2\xb7 Esc back";
     else if (cats_focused)
         hint = "Up/Down category \xc2\xb7 Enter or Right opens \xc2\xb7 / find \xc2\xb7 Esc close";
+    else if (cp->cat == CTL_CAT_SHORTCUTS && cp->sc_capturing)
+        /* While armed there is exactly one thing to say, and every other hint
+         * would be naming a key that is currently being captured rather than
+         * obeyed. */
+        hint = "Press the new key for this shortcut \xc2\xb7 Esc cancels";
     else if (cp->cat == CTL_CAT_SHORTCUTS)
-        hint = "Up/Down \xc2\xb7 PgUp/PgDn scroll \xc2\xb7 Left or Esc goes back";
+        hint = "Up/Down select \xc2\xb7 F2 rebind \xc2\xb7 Ctrl+Shift+R reset all \xc2\xb7 Esc back";
     else if (ctlpanel_selected_row(s) >= 0 &&
              ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_VALUE)
         /* Left/Right are the value here, so the usual "Left goes back" would be

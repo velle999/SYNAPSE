@@ -69,6 +69,17 @@ void synui_binding_execute(syn_server_t *s, const char *a, const char *b)
 int  synmon_send_reload(const char *m, char *o, size_t n)
 { (void)m; (void)o; (void)n; return 0; }
 
+/* The rebind core is keys.c's, which is not linked here — this test is about
+ * the ctl_items[] table against the config parser. keys_test links keys.c and
+ * ctlpanel.c together and is where rebinding is actually exercised. */
+bool syn_rebind_sym_is_modifier(xkb_keysym_t sym) { (void)sym; return false; }
+const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc) { (void)sc; return NULL; }
+int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                     xkb_keysym_t sym, uint32_t mods, char *status, size_t n)
+{ (void)s; (void)sc; (void)sym; (void)mods; if (n) status[0] = '\0'; return 0; }
+void syn_rebind_reset_all(syn_server_t *s, char *status, size_t n)
+{ (void)s; if (n) status[0] = '\0'; }
+
 void deco_toggle_titlebars(syn_server_t *s)   { (void)s; }
 void dock_state_save(syn_server_t *s)         { (void)s; }
 void dock_wake(syn_server_t *s)               { (void)s; }

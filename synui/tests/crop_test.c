@@ -299,9 +299,29 @@ static void test_shell_injection(void)
 
     /* Belt and braces: run the command the panel built, in a real shell, and
      * confirm the injected payload did NOT fire. notify-send may not exist
-     * here — that is fine, the point is whether `touch` ran. */
+     * here — that is fine, the point is whether `touch` ran.
+     *
+     * WITH THE SESSION BUS TAKEN AWAY. The command being run is a real
+     * `notify-send`, and on a developer's own machine `meson test` inherits the
+     * DBUS_SESSION_BUS_ADDRESS of the desktop they are sitting in front of — so
+     * this line posted a toast to the LIVE session reading
+     *
+     *     Cropped — /tmp/synui-crop-test-XXXX/ev'il; touch PWNED; x-crop.png
+     *
+     * which is an alarming thing to have appear on your desktop out of nowhere,
+     * and reads like a compromise rather than like a passing test. (It was a
+     * passing test: the PWNED check below is what proves the quoting held.)
+     *
+     * Pointing the bus at a path that cannot exist makes notify-send fail to
+     * connect and exit non-zero, which this already tolerates — the assertion
+     * is about `touch`, and touch does not care about D-Bus. Same reason
+     * tests/notif.sh runs against a private session bus rather than the real
+     * one: a test that can write to the desktop it is running on is a test that
+     * eventually does. */
     char probe[4096];
-    snprintf(probe, sizeof(probe), "cd '%s' && { %s ; } >/dev/null 2>&1 || true",
+    snprintf(probe, sizeof(probe),
+             "cd '%s' && export DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent"
+             " && { %s ; } >/dev/null 2>&1 || true",
              scratch, last_spawn);
     if (system(probe) != 0) { /* the toast itself failing is not the test */ }
 

@@ -126,7 +126,8 @@ void fontpick_scan(syn_server_t *s)
     }
 
     FcPattern   *pat = FcPatternCreate();
-    FcObjectSet *os  = FcObjectSetBuild(FC_FAMILY, FC_CHARSET, (char *)NULL);
+    FcObjectSet *os  = FcObjectSetBuild(FC_FAMILY, FC_CHARSET, FC_SPACING,
+                                        (char *)NULL);
     if (!pat || !os) {
         if (pat) FcPatternDestroy(pat);
         if (os)  FcObjectSetDestroy(os);
@@ -165,6 +166,18 @@ void fontpick_scan(syn_server_t *s)
 
         snprintf(s->fontpick.fonts[s->fontpick.count].name,
                  sizeof(s->fontpick.fonts[0].name), "%s", (const char *)fam);
+
+        /* Asked of fontconfig rather than guessed from the name, for
+         * synui-apply-font(1)'s reason: "Hack" and "Adwaita Mono" are both
+         * monospaced and only one says so, and "DejaVu Math TeX Gyre" is not
+         * despite looking like it should be. Absent = proportional, which is
+         * the safe direction: it warns about a font that might have been fine,
+         * rather than staying quiet about one that is not. */
+        int spacing = 0;
+        s->fontpick.fonts[s->fontpick.count].mono =
+            (FcPatternGetInteger(fs->fonts[i], FC_SPACING, 0, &spacing)
+                 == FcResultMatch && spacing >= FC_MONO);
+
         s->fontpick.count++;
     }
 
@@ -233,6 +246,24 @@ static int fontpick_current_index(syn_server_t *s)
 int fontpick_total(syn_server_t *s)
 {
     return s->fontpick.count + 1;   /* +1 for the default row */
+}
+
+/*
+ * Will a terminal render properly in this row's family?
+ *
+ * The terminals follow whatever is picked — synui-apply-font(1) used to accept
+ * only monospaced families and silently leave kitty alone otherwise, which read
+ * as the font setting being broken. Letting it through means the picker owes
+ * the user the warning instead, because the alternative feedback is opening a
+ * terminal later and finding the columns no longer line up.
+ *
+ * Row 0 is the default, which IS "monospace" — so it never warns.
+ */
+int fontpick_row_is_mono(syn_server_t *s, int row)
+{
+    if (row <= 0) return 1;
+    if (row - 1 >= s->fontpick.count) return 1;
+    return s->fontpick.fonts[row - 1].mono;
 }
 
 void fontpick_row(syn_server_t *s, int row, const char **label)
@@ -357,7 +388,11 @@ static void fontpick_commit(syn_server_t *s)
         snprintf(s->config.ui_font, sizeof(s->config.ui_font), "%s", name);
         syn_text_set_ui_font(name);
         settings_state_set("ui_font", name);
-        wlr_log(WLR_INFO, "synui: fontpick: UI font set to '%s'", name);
+        wlr_log(WLR_INFO, "synui: fontpick: UI font set to '%s'%s", name,
+                fontpick_row_is_mono(s, idx)
+                    ? ""
+                    : " (not monospaced: the terminals get it anyway and may"
+                      " not render correctly)");
     }
 
     fontpick_hide(s);

@@ -185,6 +185,74 @@ static void test_parse_shapes(void)
     printf("  parse shapes ....... ok\n");
 }
 
+/* ── 1b. Asking for the defaults must not repaint the desktop ─
+ *
+ * THIS TEST MUST RUN BEFORE test_defaults(). synui_config_defaults() builds its
+ * static on the FIRST ask and never again, so the first ask is the only one
+ * that can have a side effect — and it is the one this pins.
+ *
+ * The bug: config_set_defaults() ended with syn_text_set_ui_font(NULL). It runs
+ * against a SCRATCH config, but text.c's copy of the family is process-global,
+ * so that line reached past the scratch struct into the live desktop. The
+ * control panel diffs every visible row against synui_config_defaults() on each
+ * repaint, so the first open of the panel in a session silently reset the UI
+ * font to monospace while settings.state still named the chosen family. The
+ * font came back at the next login and vanished again at the next open, which
+ * is the report this file now guards: "the control panel font resets itself".
+ *
+ * Generalised beyond the font: a defaults builder that touches anything outside
+ * the struct it was handed is a defaults builder that changes the running
+ * system just by being asked a question.
+ */
+static void test_defaults_have_no_side_effects(void)
+{
+    write_synuirc("ui_font = Liberation Serif\n");
+
+    syn_config_t c;
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(strcmp(c.ui_font, "Liberation Serif") == 0);
+    /* Parsed AND applied: a font in the config that text.c never hears about is
+     * a setting that does nothing until the picker is opened. */
+    assert(strcmp(syn_text_ui_font(), "Liberation Serif") == 0);
+
+    /* The first ask. What the control panel does on every single repaint. */
+    const syn_config_t *d = synui_config_defaults();
+    assert(d->ui_font[0] == '\0');                      /* scratch says default */
+    assert(strcmp(syn_text_ui_font(), "Liberation Serif") == 0);  /* live untouched */
+
+    /* Repeat asks are no-ops by construction, but assert it rather than trust
+     * the static. */
+    (void)synui_config_defaults();
+    assert(strcmp(syn_text_ui_font(), "Liberation Serif") == 0);
+
+    /* The other half of the contract: with nothing naming a font, a load DOES
+     * put the live copy back to the default. This is what the removed line was
+     * originally there for — a reload must not leave the previous session's
+     * font applied — and it is now done from the final resolved value at the
+     * end of synui_config_load() instead of from the defaults block. */
+    write_synuirc("# nothing here\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(c.ui_font[0] == '\0');
+    assert(strcmp(syn_text_ui_font(), "monospace") == 0);
+
+    /* And settings.state names it just as synuirc does — the picker writes
+     * there, not into synuirc. */
+    settings_state_set("ui_font", "DejaVu Sans");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(strcmp(c.ui_font, "DejaVu Sans") == 0);
+    assert(strcmp(syn_text_ui_font(), "DejaVu Sans") == 0);
+
+    settings_state_clear("ui_font");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(strcmp(syn_text_ui_font(), "monospace") == 0);
+
+    printf("  defaults pure ...... ok\n");
+}
+
 /* ── 2. Defaults are a value, and they match a fresh load ───── */
 
 static void test_defaults(void)
@@ -410,6 +478,9 @@ int main(void)
 
     printf("settings_test\n");
     test_parse_shapes();
+    /* Before test_defaults(): synui_config_defaults() builds its static on the
+     * first ask, so only the first ask can misbehave. See the function. */
+    test_defaults_have_no_side_effects();
     test_defaults();
     test_state_overrides();
     test_state_clear();

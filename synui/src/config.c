@@ -971,10 +971,21 @@ static void config_set_defaults(syn_config_t *cfg)
 
     /* Empty font = "monospace", the fontconfig alias every panel drew in before
      * the picker existed — so an untouched system looks exactly as it did.
-     * text.c is reset too, or a config RELOAD would leave the previous
-     * session's font applied with nothing in the config naming it. */
+     *
+     * text.c is deliberately NOT touched here. This function runs against a
+     * SCRATCH config (see the header) and text.c's copy is process-global, so a
+     * syn_text_set_ui_font() on this line reaches straight past the scratch
+     * struct and repaints the live desktop. That is not hypothetical: the
+     * control panel diffs every row against synui_config_defaults() on each
+     * repaint, so the first open of the panel in a session reset the UI font to
+     * monospace while settings.state still named the chosen family — the font
+     * came back at the next login and vanished again on the next open.
+     *
+     * synui_config_load() applies cfg->ui_font once at the end instead, which
+     * still covers the reload case this used to be here for: the font is pushed
+     * from the FINAL resolved value, so a reload with nothing naming a font
+     * lands back on the default. */
     cfg->ui_font[0] = '\0';
-    syn_text_set_ui_font(NULL);
 
     cfg->cat_start         = 0;   /* opt-in; Super+Shift+C toggles it live */
     cfg->cat_breed         = CAT_BREED_NEON;   /* the house cat */
@@ -1096,6 +1107,23 @@ static void config_set_defaults(syn_config_t *cfg)
  */
 void config_parse_kv(syn_config_t *cfg, const char *key, char *val);
 
+/*
+ * Push the resolved UI font into text.c.
+ *
+ * text.c holds the copy every draw path reads and has no server handle, so a
+ * font parsed but never applied is a setting that silently does nothing. This
+ * is the ONE place that applies it, and it is called only from
+ * synui_config_load() — after synuirc, settings.state and the rest have all had
+ * their say, so it pushes the final answer rather than each source's guess.
+ *
+ * Keeping it out of config_set_defaults() and config_parse_kv() is what makes
+ * those two safe to run against a scratch config; see config_set_defaults().
+ */
+static void config_apply_ui_font(const syn_config_t *cfg)
+{
+    syn_text_set_ui_font(cfg->ui_font[0] ? cfg->ui_font : NULL);
+}
+
 const syn_config_t *synui_config_defaults(void)
 {
     static syn_config_t def;
@@ -1134,6 +1162,7 @@ void synui_config_load(syn_config_t *cfg)
         settings_state_load(cfg);
         binds_state_load(cfg);
         synui_config_apply_launcher_binds(cfg);
+        config_apply_ui_font(cfg);
         return;
     }
 
@@ -1197,6 +1226,11 @@ void synui_config_load(syn_config_t *cfg)
 
     /* Dead last, after every writer of the bind table has had its say. */
     synui_config_apply_launcher_binds(cfg);
+
+    /* Every source has now been read, so this is the final answer for the font
+     * rather than one source's guess — which is why it is applied here and
+     * nowhere else. */
+    config_apply_ui_font(cfg);
 }
 
 /*
@@ -1458,13 +1492,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "cursor_theme") == 0)
         strncpy(cfg->cursor_theme, val, sizeof(cfg->cursor_theme) - 1);
-    else if (strcmp(key, "ui_font") == 0) {
+    else if (strcmp(key, "ui_font") == 0)
         strncpy(cfg->ui_font, val, sizeof(cfg->ui_font) - 1);
-        /* Push it straight into text.c: it holds the copy every draw path
-         * reads, has no server handle, and a font parsed but not applied is a
-         * setting that silently does nothing until the picker is opened. */
-        syn_text_set_ui_font(cfg->ui_font);
-    }
     else if (strcmp(key, "cursor_size") == 0) {
         int px = atoi(val);
         /* Clamped, not obeyed: 0 makes wlroots fall back in ways that are

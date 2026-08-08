@@ -2218,6 +2218,47 @@ static bool panel_pointer_motion(syn_server_t *s, double lx, double ly)
     return false;
 }
 
+/*
+ * A panel that owns the pointer owns the pointer IMAGE too.
+ *
+ * The motion path returns as soon as a panel takes the event, which means
+ * pointer_update_focus() — the only thing that ever puts the arrow back — does
+ * not run for as long as the panel is up. So the cursor keeps whatever image
+ * the client underneath last asked for, and the client keeps pointer focus and
+ * can go on changing it behind the panel.
+ *
+ * Usually invisible, because the client underneath is showing an arrow anyway.
+ * It is very much not invisible when that client had HIDDEN the pointer: kitty
+ * hides it while you type (mouse_hide_wait), and so do games, video players and
+ * most PDF viewers. Open the control panel over one of those and the mouse is
+ * simply gone — you are left with a panel full of clickable rows and no visible
+ * pointer to click them with. That is the "mouse disappears in the control
+ * panel" report, and it is worst exactly where the panel is most modal.
+ *
+ * Clearing focus is the load-bearing half. Merely setting our own image would
+ * be undone the moment the client set its own again — and per cursor_set_deco()
+ * above, a client only re-asserts its cursor on a wl_pointer.enter, so taking
+ * focus away now is also what makes it re-set the cursor properly on the way
+ * back out.
+ *
+ * Not done while a button is held: that is an implicit grab, the release still
+ * belongs to the surface that took the press, and stealing focus mid-drag is
+ * the bug pointer_update_focus() opens by warning about.
+ */
+static void panel_pointer_claim_cursor(syn_server_t *s)
+{
+    if (s->seat->pointer_state.button_count > 0) return;
+
+    if (s->seat->pointer_state.focused_surface)
+        wlr_seat_pointer_notify_clear_focus(s->seat);
+
+    /* Also drops any resize arrow a titlebar edge was holding when the panel
+     * opened — deco_hover_update() is below the early return too, so nothing
+     * else would take it back. */
+    s->deco_cursor = NULL;
+    wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+}
+
 static bool panel_pointer_click(syn_server_t *s, double lx, double ly,
                                 uint32_t button, uint32_t time_msec)
 {
@@ -2302,8 +2343,10 @@ static void process_pointer_motion(syn_server_t *s, uint32_t time_msec,
      * run. A modal panel is drawn over whatever is under the cursor, so lighting
      * up a titlebar button or a hover state the click can never reach would be
      * feedback for something that is not going to happen. */
-    if (panel_pointer_motion(s, s->cursor->x, s->cursor->y))
+    if (panel_pointer_motion(s, s->cursor->x, s->cursor->y)) {
+        panel_pointer_claim_cursor(s);
         return;
+    }
 
     /* Let the auto-hide dock react to the cursor reaching its edge. */
     dock_pointer_motion(s);

@@ -1469,6 +1469,8 @@ void ctlpanel_show(syn_server_t *s)
     s->ctlpanel.item       = 0;
     s->ctlpanel.focus      = CTL_FOCUS_CATS;
     s->ctlpanel.scroll     = 0;
+    s->ctlpanel.sc_sel     = 0;
+    s->ctlpanel.sc_capturing = 0;
     s->ctlpanel.row_scroll = 0;
     s->ctlpanel.searching  = 0;
     s->ctlpanel.search[0]  = '\0';
@@ -1499,6 +1501,11 @@ void ctlpanel_hide(syn_server_t *s)
      * not mean to start, so it must not fire the load on the way out. A switch
      * ALREADY sent keeps running: that one is synapd's now, not the panel's. */
     s->ctlpanel.model_commit_at = 0.0;
+    /* …and any armed rebind. A capture that survived the close would make the
+     * next chord typed at the desktop rebind a shortcut, which is the worst
+     * shape of "it did something I did not ask for": silent, persistent, and
+     * attributed to whatever you happened to press. */
+    s->ctlpanel.sc_capturing = 0;
     synmon_want_refresh(s);
     synui_render_ctlpanel(s);
 }
@@ -1544,6 +1551,8 @@ void ctlpanel_show_cat(syn_server_t *s, const char *name)
     s->ctlpanel.cat    = cat;
     s->ctlpanel.item   = 0;
     s->ctlpanel.scroll = 0;
+    s->ctlpanel.sc_sel = 0;
+    s->ctlpanel.sc_capturing = 0;
     /* Focus lands in the rows: the caller already chose the category, and
      * putting the cursor back on the sidebar would make them choose it again. */
     s->ctlpanel.focus  = CTL_FOCUS_ITEMS;
@@ -1707,6 +1716,11 @@ static void ctlpanel_set_cat(syn_server_t *s, int cat)
     s->ctlpanel.cat        = cat;
     s->ctlpanel.item       = 0;
     s->ctlpanel.scroll     = 0;
+    s->ctlpanel.sc_sel     = 0;
+    /* An armed capture belongs to a row in the category being left. Leaving it
+     * armed would make the next chord rebind a shortcut that is no longer on
+     * screen — the same reason ctlpanel_hide() drops it. */
+    s->ctlpanel.sc_capturing = 0;
     s->ctlpanel.row_scroll = 0;
     /* Moving to a category is the other way of saying "not that search". The
      * results list spans every category, so leaving it open while the sidebar
@@ -1942,19 +1956,111 @@ static void ctlpanel_activate(syn_server_t *s)
     }
 }
 
-/* Clamp the shortcuts scroll to the list — the panel draws CTL_SHORTCUT_ROWS
- * of it at a time, so scrolling past the end would show empty space. */
-static void ctlpanel_scroll_by(syn_server_t *s, int dir)
+/* How many shortcuts the pane is listing. */
+int ctlpanel_shortcut_count(syn_server_t *s)
+{
+    syn_ctl_shortcut_t sc[CTL_SHORTCUTS_MAX];
+    return ctlpanel_shortcuts(s, sc, CTL_SHORTCUTS_MAX);
+}
+
+/* Copy out the selected shortcut. Returns 0 when the list is empty or the
+ * cursor is somehow off the end of it.
+ *
+ * By value, not by pointer: every caller is about to rewrite the bind table
+ * this row was derived from, and the pane rebuilds the list from that table on
+ * every render. A pointer would be stale before it was used. */
+int ctlpanel_shortcut_selected(syn_server_t *s, syn_ctl_shortcut_t *out)
 {
     syn_ctl_shortcut_t sc[CTL_SHORTCUTS_MAX];
     int n = ctlpanel_shortcuts(s, sc, CTL_SHORTCUTS_MAX);
+    int i = s->ctlpanel.sc_sel;
+    if (n <= 0 || i < 0 || i >= n) return 0;
+    *out = sc[i];
+    return 1;
+}
+
+/* Keep the shortcuts cursor on screen — the pane draws CTL_SHORTCUT_ROWS at a
+ * time, so a cursor outside that window is a highlight you cannot see. */
+static void ctlpanel_shortcut_scroll_to_sel(syn_server_t *s)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+    int n = ctlpanel_shortcut_count(s);
+
+    if (cp->sc_sel >= n) cp->sc_sel = n > 0 ? n - 1 : 0;
+    if (cp->sc_sel < 0)  cp->sc_sel = 0;
+
+    if (cp->sc_sel < cp->scroll) cp->scroll = cp->sc_sel;
+    if (cp->sc_sel >= cp->scroll + CTL_SHORTCUT_ROWS)
+        cp->scroll = cp->sc_sel - CTL_SHORTCUT_ROWS + 1;
+
     int max_scroll = n - CTL_SHORTCUT_ROWS;
     if (max_scroll < 0) max_scroll = 0;
+    if (cp->scroll > max_scroll) cp->scroll = max_scroll;
+    if (cp->scroll < 0) cp->scroll = 0;
+}
 
-    int next = s->ctlpanel.scroll + dir;
-    if (next < 0) next = 0;
-    if (next > max_scroll) next = max_scroll;
-    s->ctlpanel.scroll = next;
+/* Move the shortcuts cursor, dragging the scroll behind it.
+ *
+ * This used to move `scroll` directly — the pane was read-only, so there was
+ * nothing to point at and scrolling was the only thing Up/Down could mean.
+ * Rebinding needs a row, and a cursor that the rest of the panel already has on
+ * every other pane is the least surprising place to put one. */
+static void ctlpanel_scroll_by(syn_server_t *s, int dir)
+{
+    s->ctlpanel.sc_sel += dir;
+    ctlpanel_shortcut_scroll_to_sel(s);
+}
+
+/* ── Rebinding from this pane ────────────────────────────────
+ *
+ * The same three keys as the palette (F2 or Ctrl+R to arm, Ctrl+Shift+R to put
+ * everything back), driving the same rules in keys.c. What lives here is only
+ * which row is armed and what the footer says about it — see syn_rebind_apply().
+ *
+ * Rebinding was reachable only from Super+/ for one pkgrel, which put the panel
+ * that has a whole category called "Shortcuts" in the position of showing you
+ * every binding and letting you change none of them.
+ */
+static void ctlpanel_rebind_begin(syn_server_t *s)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+
+    syn_ctl_shortcut_t sc;
+    if (!ctlpanel_shortcut_selected(s, &sc)) return;
+
+    const char *refusal = syn_rebind_refusal(&sc);
+    if (refusal) {
+        snprintf(cp->status, sizeof(cp->status), "%s", refusal);
+        return;
+    }
+
+    cp->sc_capturing = 1;
+    cp->sc_capture   = sc;
+    cp->status[0]    = '\0';
+}
+
+/* The captured chord. The cursor is left where it was: the row it is on is the
+ * one that just changed, and moving it would hide the result of the edit. */
+static void ctlpanel_rebind_finish(syn_server_t *s, xkb_keysym_t sym,
+                                   uint32_t mods)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+
+    cp->sc_capturing = 0;
+    syn_rebind_apply(s, &cp->sc_capture, sym, mods,
+                     cp->status, sizeof(cp->status));
+
+    /* The list is rebuilt by the next render either way, so nothing to
+     * re-snapshot — but the cursor can now be off the end of a shorter list if
+     * the rebind collapsed two rows into one. */
+    ctlpanel_shortcut_scroll_to_sel(s);
+}
+
+static void ctlpanel_rebind_reset_all(syn_server_t *s)
+{
+    syn_rebind_reset_all(s, s->ctlpanel.status, sizeof(s->ctlpanel.status));
+    /* The default table is a different length from the one that was on screen. */
+    ctlpanel_shortcut_scroll_to_sel(s);
 }
 
 /* Left/Right on the Transparency row are a slider: nudge the focused-window
@@ -2235,7 +2341,59 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
     if (!s->ctlpanel.visible) return 0;
 
+    /* ── Capture mode ────────────────────────────────────────
+     *
+     * FIRST — above the search box, and above the modified-combo passthrough
+     * below. While a capture is armed EVERY chord is the answer, including the
+     * compositor's own: moving a shortcut onto Super+K has to be possible, and
+     * letting Super through here would run whatever Super+K does today instead
+     * of capturing it. That is also why Esc is the only way out — with every
+     * other key taken as input, a capture that could not be cancelled would be
+     * a trap. Same shape as keys.c's, for the same reasons. */
+    if (s->ctlpanel.sc_capturing) {
+        /* A held modifier arrives as a press of its own while you reach for the
+         * other half of the chord. Ignore them, or every capture comes out as
+         * "Super". */
+        if (syn_rebind_sym_is_modifier(sym)) return 1;
+
+        if (sym == XKB_KEY_Escape) {
+            s->ctlpanel.sc_capturing = 0;
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "Rebind cancelled");
+        } else {
+            ctlpanel_rebind_finish(s, sym, mods);
+        }
+        synui_render_ctlpanel(s);
+        return 1;
+    }
+
     if (ctlpanel_search_key(s, sym, mods)) return 1;
+
+    /* Ctrl+R arms a rebind and Ctrl+Shift+R puts every shortcut back — tested
+     * here, ahead of the passthrough below, because Ctrl combos otherwise go
+     * straight to the global bind table. The pair is on Ctrl as well as F2
+     * because F2 is a long reach and half the keyboards this runs on need Fn to
+     * get to it; both spellings are the palette's, so the two panels do not
+     * disagree about which key rebinds.
+     *
+     * Shift is tested on the SYMBOL, not the mask: xkb reports Ctrl+Shift+r as
+     * XKB_KEY_R, and matching on WLR_MODIFIER_SHIFT alone would make every
+     * Ctrl+R a reset on a keyboard with caps lock on. */
+    if ((mods & WLR_MODIFIER_CTRL) &&
+        !(mods & (WLR_MODIFIER_LOGO | WLR_MODIFIER_ALT)) &&
+        s->ctlpanel.focus == CTL_FOCUS_ITEMS &&
+        s->ctlpanel.cat == CTL_CAT_SHORTCUTS && !s->ctlpanel.searching) {
+        if (sym == XKB_KEY_r) {
+            ctlpanel_rebind_begin(s);
+            synui_render_ctlpanel(s);
+            return 1;
+        }
+        if (sym == XKB_KEY_R) {
+            ctlpanel_rebind_reset_all(s);
+            synui_render_ctlpanel(s);
+            return 1;
+        }
+    }
 
     /* Modified combos (Super+…) still reach the global bind table, so Super+C
      * closes the panel it opened and Super+P still opens the power panel. */
@@ -2286,11 +2444,29 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     int row = ctlpanel_selected_row(s);
     int in_items = (s->ctlpanel.focus == CTL_FOCUS_ITEMS);
-    /* Up/Down mean "scroll" in the shortcuts list, which has no rows to step
-     * through — the one category where the row pane is a single object. */
+    /* The shortcuts pane has no ctl_items[] rows — its list is generated from
+     * the live bind table — so every "step the row cursor" path below has to
+     * move its own cursor instead. */
     int list_only = in_items && ctlpanel_item_count(s) == 0;
+    /* Named separately from list_only: that one is "this pane has no table
+     * rows", this one is "this pane is the shortcuts list", and only the second
+     * is a reason to rebind something. They coincide today and a category with
+     * no rows for some other reason would make them differ silently. */
+    int in_shortcuts = in_items && s->ctlpanel.cat == CTL_CAT_SHORTCUTS;
 
     switch (sym) {
+    /* The rebind key everything else in the world uses for "rename this". */
+    case XKB_KEY_F2:
+        if (in_shortcuts) {
+            ctlpanel_rebind_begin(s);
+            synui_render_ctlpanel(s);
+        } else {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "Rebinding lives in the Shortcuts category");
+            synui_render_ctlpanel(s);
+        }
+        return 1;
+
     case XKB_KEY_Escape:
     case XKB_KEY_q:
         /* Back out one level before closing: from a row pane to the category
@@ -2396,11 +2572,15 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 
     /* Home/End, which a hundred-row category is the first thing here to need. */
     case XKB_KEY_Home:
-        if (in_items) { s->ctlpanel.item = 0; ctlpanel_scroll_to_cursor(s); }
+        if (list_only) { s->ctlpanel.sc_sel = 0; ctlpanel_shortcut_scroll_to_sel(s); }
+        else if (in_items) { s->ctlpanel.item = 0; ctlpanel_scroll_to_cursor(s); }
         synui_render_ctlpanel(s);
         return 1;
     case XKB_KEY_End:
-        if (in_items) {
+        if (list_only) {
+            int n = ctlpanel_shortcut_count(s);
+            if (n > 0) { s->ctlpanel.sc_sel = n - 1; ctlpanel_shortcut_scroll_to_sel(s); }
+        } else if (in_items) {
             int n = ctlpanel_item_count(s);
             if (n > 0) { s->ctlpanel.item = n - 1; ctlpanel_scroll_to_cursor(s); }
         }

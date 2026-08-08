@@ -70,6 +70,19 @@ void synmon_want_refresh(syn_server_t *s)    { (void)s; }
 /* aimodel.c forks the downloader; input.c owns the real one. */
 void synui_child_reset_signals(void)         { }
 
+/* The rebind core lives in keys.c, which is not linked here — this test drives
+ * the AI-model CHOICE row, not the Shortcuts pane. Stubbed rather than linked
+ * because keys.c would drag in the config reload path and a shortcut palette
+ * that has nothing to do with what is under test. keys_test links both for
+ * real and is where the rebind path is actually exercised. */
+bool syn_rebind_sym_is_modifier(xkb_keysym_t sym) { (void)sym; return false; }
+const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc) { (void)sc; return NULL; }
+int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                     xkb_keysym_t sym, uint32_t mods, char *status, size_t n)
+{ (void)s; (void)sc; (void)sym; (void)mods; if (n) status[0] = '\0'; return 0; }
+void syn_rebind_reset_all(syn_server_t *s, char *status, size_t n)
+{ (void)s; if (n) status[0] = '\0'; }
+
 void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 {
     (void)s; (void)arg;
