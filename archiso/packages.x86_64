@@ -181,6 +181,11 @@ rtkit
 # subscriptions, and a user who has just subscribed to one should not then have
 # to build a CEF-carrying package by hand to see it.
 linux-wallpaperengine
+# SynapseOS' own Wallpaper Engine wallpapers (dendrite + Tux), installed to
+# /usr/share/synapse/wallpapers/431960 — the SYSROOT synui-wpengine.sh:48
+# searches after the user's Workshop tree. Same shape as the line above:
+# nothing depends on it, so this line is the only thing putting it on the ISO.
+synapse-wallpapers
 btrfs-progs
 xfsprogs
 f2fs-tools

@@ -212,6 +212,17 @@ PACKAGES=(
     # Order does not matter: nothing depends on it (synui lists it nowhere),
     # it is on the ISO because packages.x86_64 names it.
     linux-wallpaperengine-pkg
+    # SynapseOS' own Wallpaper Engine wallpapers (dendrite + Tux). Renders are
+    # derived at build time, so this needs python-pillow/librsvg/ffmpeg/
+    # adwaita-fonts — all upstream, and all picked up automatically by the
+    # BUILD_DEPS scan below now that this is in PACKAGES.
+    #
+    # Order does not matter: nothing depends on it. linux-wallpaperengine is an
+    # optdepend, not a depend, so leaving this OUT fails nothing — the ISO
+    # builds clean and simply ships no Synapse wallpapers, which is exactly
+    # what happened up to 0.2.6. The only witness is the package by name in
+    # pkglist.x86_64.txt. See the 0.2.2 lesson in the release memory.
+    synapse-wallpapers
     # Bootable btrfs snapshots for limine, vendored from the AUR because it is
     # in no official repo — the same reason scenefx0.5 is in this list. Order
     # does not matter: nothing depends on it, it reaches the ISO because
