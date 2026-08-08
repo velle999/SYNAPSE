@@ -716,6 +716,14 @@ SPDX identifiers, per component:
 | `synui/quickshell-antiquity/` and its three wallpapers | `MIT`, © 2026 [diinki](https://github.com/diinki) — a port of [linux-antiquity](https://github.com/diinki/linux-antiquity); notice kept as `LICENSE.antiquity` |
 | Boska, Recia, Quilon (bundled with Antiquity) | © [Indian Type Foundry](https://www.indiantypefoundry.com/), via Fontshare — their licence requires naming the faces and crediting ITF's ownership; `quickshell-antiquity/FONTS.md` is that credit |
 | `MaterialSymbolsSharp` (bundled with Antiquity) | `Apache-2.0`, © Google LLC |
+| `linux-wallpaperengine` | `GPL-3.0-or-later`, upstream — packaged from [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine) at a pinned commit |
+| CEF / Chromium (bundled with `linux-wallpaperengine`) | `BSD-3-Clause`, © The Chromium Embedded Framework Authors and © The Chromium Authors — the renderer links `libcef.so` for web wallpapers, so it and its `.pak` data ship with the package |
+| `synapse-wallpapers` | `GPL-3.0-or-later` |
+
+**Wallpaper Engine's own content is not redistributed.** `linux-wallpaperengine`
+is an independent renderer; the wallpapers, and Wallpaper Engine's `assets/`
+tree that it reads at runtime, stay where Steam put them. Nothing from the Steam
+app or the Workshop is on the ISO.
 
 The kernel module is `-only` deliberately: it is a derived work of the kernel,
 which is GPL-2.0-only, so relicensing it forward is not ours to do.

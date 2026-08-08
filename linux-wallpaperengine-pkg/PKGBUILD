@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=linux-wallpaperengine
 pkgver=0.1.0
-pkgrel=12
+pkgrel=13
 pkgdesc="Wallpaper Engine backgrounds on Wayland — layer-shell renderer for Steam Workshop wallpapers"
 arch=('x86_64')
 url="https://github.com/Almamu/linux-wallpaperengine"
@@ -171,6 +171,35 @@ EOF
 
     install -Dm644 "$srcdir/$pkgname/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # CEF's licence, which is a REDISTRIBUTION obligation and not a courtesy.
+    #
+    # This package ships libcef.so plus Chromium's .pak data, icudtl.dat and the
+    # whole locales/ tree — that is a binary redistribution of CEF and Chromium,
+    # both BSD-3-Clause, whose second clause requires reproducing the copyright
+    # notice and disclaimer "in the documentation and/or other materials
+    # provided with the distribution". Upstream's own LICENSE covers Almamu's
+    # GPL-3.0 code and says nothing about the blob, so for twelve pkgrels this
+    # package shipped ~219 MB of CEF with no notice at all.
+    #
+    # Located rather than hardcoded: cmake fetches CEF at configure time and the
+    # extracted directory carries the CEF version in its name, so a fixed path
+    # would silently stop matching on the next bump — which is exactly how the
+    # notice would go missing again without anyone noticing.
+    local _ceflic
+    _ceflic=$(find "$srcdir/$pkgname/build" -maxdepth 4 -name 'LICENSE.txt' \
+                   -path '*cef*' -print -quit 2>/dev/null)
+    if [ -n "$_ceflic" ]; then
+        install -Dm644 "$_ceflic" \
+            "$pkgdir/usr/share/licenses/$pkgname/LICENSE.cef"
+    else
+        # Loud, because the failure this replaces was silent. A package that
+        # redistributes CEF without its notice should not build quietly.
+        echo "ERROR: shipping libcef.so but found no CEF LICENSE.txt under build/" >&2
+        echo "       Redistributing CEF/Chromium requires its notice. Find the" >&2
+        echo "       file in the fetched CEF tree and fix the search above." >&2
+        return 1
+    fi
 
     # HARD check, not the makepkg warning. A RUNPATH into $srcdir does not fail
     # the build and does not fail on THIS machine — the build tree is still
