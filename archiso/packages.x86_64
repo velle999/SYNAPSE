@@ -61,6 +61,19 @@ nexus-chat
 tepris
 chibi
 vibe
+# SYNAPSE Arsenal — the BlackArch category browser (GUI + TUI over one backend).
+# It is in build.sh's PACKAGES because syn-install names it in SEL_APPS and an
+# app the installer asks for that the local repo does not carry fails the
+# install at pacman; that alone puts it in the ISO's [synapseos] repo, NOT in
+# the live session. This line is what puts it in the live session, which is
+# where every other SynapseOS app already is.
+#
+# It carries nothing heavy — depends are pacman/bash/curl, all present — and it
+# does NOT enable [blackarch] by being here. The repo is enabled by the
+# installer, or later with `sudo syn arsenal --enable-repo`; until then a live
+# user gets Arsenal's own "the repo is not enabled" path rather than a browser
+# with no packages behind it.
+syn-arsenal
 # "About OS" — areofyl/fetch, which spins the SynapseOS mark as a lit 3D relief
 # with the system info beside it. Reached from the control panel's
 # System ▸ About OS row and from `syn about`; both run it in a terminal.
