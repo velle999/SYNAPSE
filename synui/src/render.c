@@ -368,6 +368,11 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Power Saving",     "Super+P",       "power"     },
     { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
+    /* Here and NOT in the control panel. The control panel is for settings, and
+     * a calculator has none — it was listed there when it was written, which
+     * made the one row on that panel you could not change anything from. This
+     * menu is the list of things you OPEN, which is what a calculator is. */
+    { "Calculator",       "Super+X",       "calc"      },
     { "News",             "Super+R",       "news"      },
     { "Network / Wi-Fi",  "Super+I",       "network"   },
     { "Game Mode",        "Super+G",       "game"      },

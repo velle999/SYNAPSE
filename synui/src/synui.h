@@ -1377,7 +1377,6 @@ typedef enum {
     CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
-    CTL_ROW_CALC,          /* System ▸ Calculator (calc.c) */
     CTL_ROW_BAR,           /* Desktop ▸ Bar — is there one at all */
 
     CTL_ROW_COUNT,
