@@ -1015,6 +1015,30 @@ static void xwayland_ready(struct wl_listener *listener, void *data)
         wl_signal_add(&s->xwayland->server->events.destroy,
                       &s->xwayland_server_destroy);
 
+    /* Re-attach the seat for exactly the same reason as the death watch above,
+     * and this one was silently costing us the whole X11 bridge.
+     *
+     * wlr_xwayland_set_seat() hands the seat to the XWM, and the XWM is what
+     * bridges BOTH selections and drag-and-drop: it hangs its listeners off
+     * seat->events.selection / primary_selection / start_drag. We call it once
+     * in xwayland_setup(), where — with lazy Xwayland — there is no server and
+     * therefore no XWM yet, so the seat lands nowhere. Nothing re-applied it
+     * when one appeared, so the XWM ran the entire session with no seat.
+     *
+     * Symptoms, both silent and both fixed by this line:
+     *   - copying in a Wayland app and pasting into an X11 app did nothing
+     *     (the X11 CLIPBOARD selection had NO OWNER while a Wayland client
+     *      held the Wayland selection)
+     *   - dragging from a Wayland app onto ANY X11 window was refused: with no
+     *     seat there is no start_drag listener, so XdndEnter was never sent.
+     *     Verified against a bare XdndAware=5 target that accepts everything —
+     *     it received nothing at all.
+     *
+     * Idempotent: xwm_set_seat() drops its old listeners before re-adding, so
+     * re-running this on every ready (lazy Xwayland is destroyed and recreated)
+     * is correct rather than merely harmless. */
+    wlr_xwayland_set_seat(s->xwayland, s->seat);
+
     xwayland_apply_primary(s);
 
     struct wlr_xcursor *xc =
