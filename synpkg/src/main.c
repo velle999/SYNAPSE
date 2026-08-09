@@ -36,13 +36,16 @@ static void usage(FILE *out)
 "\n"
 "Other sources\n"
 "  arsenal [subcommand]    BlackArch security tooling\n"
-"  aur <search|install|updates>\n"
-"  flatpak [args...]       Flatpak, passed through\n"
+"  aur <search|install|installed|updates>\n"
+"  flatpak <search|install|remove|installed|updates|remotes|enable-flathub>\n"
 "  system <check|apply>    SynapseOS's own components, via syn-update\n"
 "\n"
 "Front-ends\n"
 "  tui                     browse in the terminal\n"
-"  gui                     open the graphical browser\n"
+"  gui [tab]               open the graphical browser, optionally on one tab\n"
+"                          (updates, suggested, repo, aur, flathub, arsenal,\n"
+"                           system, about)\n"
+"  about                   version, licence, and which sources are enabled\n"
 "\n"
 "Options\n"
 "  --tsv                   machine-readable output (what the GUI parses)\n"
@@ -59,7 +62,7 @@ static void usage(FILE *out)
 /* The graphical front-end is quickshell rendering data/synpkg.qml. It is a
  * separate process on purpose: the C binary stays usable on a headless box and
  * over SSH, and the GUI is the same TSV any other consumer would parse. */
-static int cmd_gui(void)
+static int cmd_gui(int argc, char **argv)
 {
 	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY")) {
 		warn("no display — falling back to the terminal browser");
@@ -70,12 +73,20 @@ static int cmd_gui(void)
 		return cmd_tui(0, NULL);
 	}
 
+	/* `synpkg gui flathub` opens on that tab. The start menu wants to point
+	 * separate entries at separate sources, and quickshell takes no arguments
+	 * of its own, so the tab travels in the environment. An unknown name is
+	 * ignored by the QML rather than refused here: this is a convenience, and
+	 * failing to open the window over a typo is a poor trade. */
+	if (argc > 0 && *argv[0])
+		setenv("SYNPKG_SECTION", argv[0], 1);
+
 	const char *qml = SYNPKG_DATADIR "/synpkg.qml";
 	if (access(qml, R_OK) != 0 && access("data/synpkg.qml", R_OK) == 0)
 		qml = "data/synpkg.qml";
 
-	char *argv[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
-	execvp(argv[0], argv);
+	char *child[] = { (char *)"quickshell", (char *)"-p", (char *)qml, NULL };
+	execvp(child[0], child);
 	die("could not start quickshell");
 }
 
@@ -138,7 +149,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "flatpak"))   return cmd_flatpak(rest_argc, rest);
 	if (!strcmp(cmd, "system"))    return cmd_system(rest_argc, rest);
 	if (!strcmp(cmd, "tui"))       return cmd_tui(rest_argc, rest);
-	if (!strcmp(cmd, "gui"))       return cmd_gui();
+	if (!strcmp(cmd, "gui"))       return cmd_gui(rest_argc, rest);
+	if (!strcmp(cmd, "about"))     return cmd_about(rest_argc, rest);
 
 	fprintf(stderr, "synpkg: unknown command '%s'\n\n", cmd);
 	usage(stderr);

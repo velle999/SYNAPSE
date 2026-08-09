@@ -101,26 +101,320 @@ int cmd_system(int argc, char **argv)
 	die("system: unknown subcommand '%s' — try check, apply, status", sub);
 }
 
-/* ── Flatpak ────────────────────────────────────────────────────────────── */
+/* ── Flatpak / Flathub ──────────────────────────────────────────────────────
+ *
+ * Flatpak is a first-class SOURCE here, not just a passthrough verb, because
+ * the GUI gives it a tab of its own and a tab that cannot search is furniture.
+ * What is still passed through is the transaction: flatpak owns its own
+ * permission model and its own polkit integration, and re-deriving either of
+ * those would be a second implementation of the part that has to be right.
+ *
+ * Rows carry a seventh column, `title`. A Flatpak's identity is its
+ * application id — `org.mozilla.firefox` is what `install` needs — but nobody
+ * reads an id, so the human name travels alongside it rather than replacing
+ * it. Every other source emits six columns and the GUI keys off the header.
+ */
+
+bool sp_flatpak_present(void)
+{
+	return have_cmd("flatpak");
+}
+
+static void flatpak_required(void)
+{
+	if (!sp_flatpak_present())
+		die("flatpak is not installed — synpkg install flatpak");
+}
+
+/* Every configured remote name, as "\nname\nname\n". */
+static char *flatpak_remote_names(void)
+{
+	char *argv[] = { (char *)"flatpak", (char *)"remotes",
+	                 (char *)"--columns=name", NULL };
+	int st = 0;
+	char *out = run_capture(argv, &st, true);
+	if (st != 0) {
+		free(out);
+		return xstrdup("\n");
+	}
+	char *names = xasprintf("\n%s\n", out);
+	free(out);
+	return names;
+}
+
+/* Membership against a "\na\nb\n" haystack. A bare strstr would report
+ * org.gnome.Boxes installed because org.gnome.BoxesDevel is. */
+static bool line_present(const char *haystack, const char *needle)
+{
+	char *wrapped = xasprintf("\n%s\n", needle);
+	bool hit = strstr(haystack, wrapped) != NULL;
+	free(wrapped);
+	return hit;
+}
+
+bool sp_flathub_enabled(void)
+{
+	if (!sp_flatpak_present())
+		return false;
+	char *names = flatpak_remote_names();
+	bool hit = line_present(names, SYNPKG_FLATHUB_NAME);
+	free(names);
+	return hit;
+}
+
+/* Installed application ids, same "\nid\nid\n" shape. */
+static char *flatpak_installed_ids(void)
+{
+	char *argv[] = { (char *)"flatpak", (char *)"list", (char *)"--app",
+	                 (char *)"--columns=application", NULL };
+	int st = 0;
+	char *out = run_capture(argv, &st, true);
+	if (st != 0) {
+		free(out);
+		return xstrdup("\n");
+	}
+	char *ids = xasprintf("\n%s\n", out);
+	free(out);
+	return ids;
+}
+
+static void flatpak_row_header(void)
+{
+	tsv_row(7, "name", "installed", "version", "repo", "size", "description",
+	        "title");
+}
+
+/* One row, in either renderer. `title` may be empty. */
+static void flatpak_row(const char *id, bool installed, const char *version,
+                        const char *origin, const char *title, const char *desc)
+{
+	if (g_out == OUT_TSV) {
+		tsv_row(7, id, installed ? "1" : "0", version ? version : "",
+		        origin && *origin ? origin : "flatpak", "0",
+		        desc ? desc : "", title ? title : "");
+		return;
+	}
+
+	printf("%s%s/%s%s%s%s", C_DIM(), origin && *origin ? origin : "flatpak",
+	       C_RESET(), C_BOLD(), title && *title ? title : id, C_RESET());
+	if (version && *version)
+		printf(" %s%s%s", C_ACCENT(), version, C_RESET());
+	if (installed)
+		printf(" %s[installed]%s", C_OK(), C_RESET());
+	putchar('\n');
+	printf("    %s%s%s\n", C_DIM(), id, C_RESET());
+	if (desc && *desc)
+		printf("    %s\n", desc);
+}
 
 static int flatpak_list(void)
 {
+	flatpak_required();
+
 	char *argv[] = { (char *)"flatpak", (char *)"list", (char *)"--app",
-	                 (char *)"--columns=application,version,name,origin", NULL };
+	                 (char *)"--columns=application,version,origin,name",
+	                 NULL };
+	int st = 0;
+	char *out = run_capture(argv, &st, false);
+
+	if (g_out == OUT_TSV)
+		flatpak_row_header();
+
+	int shown = 0;
+	size_t n = 0;
+	char **lines = split(out, '\n', &n);
+	for (size_t i = 0; i < n; i++) {
+		if (!*lines[i])
+			continue;
+		size_t nf = 0;
+		char **f = split(lines[i], '\t', &nf);
+		if (nf >= 1 && *f[0]) {
+			/* Installed apps have no description in `list` output; the
+			 * name is the only human string available without one
+			 * `flatpak info` per row. */
+			flatpak_row(f[0], true, nf >= 2 ? f[1] : "",
+			            nf >= 3 ? f[2] : "", nf >= 4 ? f[3] : "", "");
+			shown++;
+		}
+		free(f);
+	}
+	free(lines);
+	free(out);
+
+	if (g_out == OUT_HUMAN && !shown)
+		info("no Flatpak applications installed");
+	return shown ? 0 : (st == 0 ? 100 : st);
+}
+
+static int flatpak_search(const char *term)
+{
+	flatpak_required();
+
+	if (!sp_flathub_enabled()) {
+		/* Not fatal — another remote may be configured — but the empty
+		 * result that follows on a box with no remotes is indistinguishable
+		 * from "Flathub has nothing", so say it before it happens. */
+		char *names = flatpak_remote_names();
+		bool any = strlen(names) > 1;
+		free(names);
+		if (!any) {
+			if (g_out == OUT_TSV) {
+				flatpak_row_header();
+				return 100;
+			}
+			warn("no Flatpak remotes are configured — run: "
+			     "synpkg flatpak enable-flathub");
+			return 2;
+		}
+	}
+
+	char *argv[] = { (char *)"flatpak", (char *)"search",
+	                 (char *)"--columns=application,version,remotes,name,description",
+	                 (char *)term, NULL };
+	/* `flatpak search` exits non-zero and prints "No matches found" on an
+	 * empty result, which is not an error worth relaying into the GUI's
+	 * stderr. In human mode the message is the answer, so it stays. */
+	int st = 0;
+	char *out = run_capture(argv, &st, g_out == OUT_TSV);
+
+	char *ids = flatpak_installed_ids();
+
+	if (g_out == OUT_TSV)
+		flatpak_row_header();
+
+	int shown = 0;
+	size_t n = 0;
+	char **lines = split(out, '\n', &n);
+	for (size_t i = 0; i < n; i++) {
+		if (!*lines[i])
+			continue;
+		size_t nf = 0;
+		char **f = split(lines[i], '\t', &nf);
+		if (nf >= 1 && *f[0] && strchr(f[0], '.')) {
+			flatpak_row(f[0], line_present(ids, f[0]),
+			            nf >= 2 ? f[1] : "", nf >= 3 ? f[2] : "",
+			            nf >= 4 ? f[3] : "", nf >= 5 ? f[4] : "");
+			shown++;
+		}
+		free(f);
+	}
+	free(lines);
+	free(out);
+	free(ids);
+
+	if (g_out == OUT_HUMAN && !shown)
+		info("nothing matched");
+	return shown ? 0 : 100;
+}
+
+/* The 5-column updates shape every other source uses:
+ *   name \t installed_version \t new_version \t repo \t size
+ *
+ * `flatpak remote-ls --updates` has no version column — the man page's column
+ * list has none — so the new version is genuinely not knowable here without
+ * one `remote-info` round trip per application. It is emitted empty rather
+ * than filled with a commit hash pretending to be a version; the GUI renders
+ * an empty new version as "update available". */
+static int flatpak_updates(void)
+{
+	if (!sp_flatpak_present()) {
+		if (g_out == OUT_TSV)
+			tsv_row(5, "name", "installed_version", "new_version", "repo",
+			        "size");
+		return 100;
+	}
+
+	char *cur_argv[] = { (char *)"flatpak", (char *)"list", (char *)"--app",
+	                     (char *)"--columns=application,version", NULL };
+	int st = 0;
+	char *cur = run_capture(cur_argv, &st, true);
+
+	/* Split the installed list ONCE, up front. split() writes NULs into the
+	 * buffer it is given, so re-scanning `cur` per update row would truncate
+	 * it at the first match and silently blank every version after that. */
+	size_t ncur = 0;
+	char **cur_lines = split(cur, '\n', &ncur);
+	char **cur_ver = xmalloc((ncur ? ncur : 1) * sizeof *cur_ver);
+	for (size_t i = 0; i < ncur; i++) {
+		char *tab = strchr(cur_lines[i], '\t');
+		cur_ver[i] = tab ? tab + 1 : (char *)"";
+		if (tab)
+			*tab = '\0';
+	}
+
+	char *upd_argv[] = { (char *)"flatpak", (char *)"remote-ls",
+	                     (char *)"--updates", (char *)"--app",
+	                     (char *)"--columns=application,origin", NULL };
+	char *upd = run_capture(upd_argv, &st, g_out == OUT_TSV);
+
+	if (g_out == OUT_TSV)
+		tsv_row(5, "name", "installed_version", "new_version", "repo", "size");
+
+	int shown = 0;
+	size_t n = 0;
+	char **lines = split(upd, '\n', &n);
+	for (size_t i = 0; i < n; i++) {
+		if (!*lines[i])
+			continue;
+		size_t nf = 0;
+		char **f = split(lines[i], '\t', &nf);
+		if (nf < 1 || !*f[0] || !strchr(f[0], '.')) {
+			free(f);
+			continue;
+		}
+
+		/* Current version, looked up in the already-split `list` output
+		 * rather than a second flatpak call per row. */
+		const char *have = "";
+		for (size_t j = 0; j < ncur; j++) {
+			if (!strcmp(cur_lines[j], f[0])) {
+				have = cur_ver[j];
+				break;
+			}
+		}
+
+		shown++;
+		if (g_out == OUT_TSV)
+			tsv_row(5, f[0], have, "", nf >= 2 ? f[1] : "flatpak", "0");
+		else
+			printf("%s%-40s%s %s%s%s -> %supdate available%s\n", C_BOLD(),
+			       f[0], C_RESET(), C_DIM(), have, C_RESET(), C_ACCENT(),
+			       C_RESET());
+		free(f);
+	}
+	free(lines);
+	free(upd);
+	free(cur_lines);
+	free(cur_ver);
+	free(cur);
+
+	if (g_out == OUT_HUMAN && !shown)
+		printf("%sFlatpak applications are up to date%s\n", C_OK(), C_RESET());
+	return shown ? 0 : 100;
+}
+
+static int flatpak_remotes(void)
+{
+	flatpak_required();
+
+	char *argv[] = { (char *)"flatpak", (char *)"remotes",
+	                 (char *)"--columns=name,url,options", NULL };
 	if (g_out == OUT_HUMAN)
 		return run(argv, false);
 
 	int st = 0;
 	char *out = run_capture(argv, &st, false);
-	tsv_row(6, "name", "installed", "version", "repo", "size", "description");
+	tsv_row(3, "remote", "url", "options");
 
 	size_t n = 0;
 	char **lines = split(out, '\n', &n);
 	for (size_t i = 0; i < n; i++) {
+		if (!*lines[i])
+			continue;
 		size_t nf = 0;
 		char **f = split(lines[i], '\t', &nf);
-		if (nf >= 3)
-			tsv_row(6, f[0], "1", f[1], nf >= 4 ? f[3] : "flatpak", "0", f[2]);
+		if (nf >= 1 && *f[0])
+			tsv_row(3, f[0], nf >= 2 ? f[1] : "", nf >= 3 ? f[2] : "");
 		free(f);
 	}
 	free(lines);
@@ -128,20 +422,101 @@ static int flatpak_list(void)
 	return st;
 }
 
+/* Adding the remote is a system-wide change, so it goes through the same
+ * pkexec path install does rather than relying on a polkit agent being present
+ * — `synpkg flatpak enable-flathub` has to work over SSH too. */
+static int flatpak_enable_flathub(void)
+{
+	flatpak_required();
+
+	if (sp_flathub_enabled()) {
+		info("Flathub is already enabled");
+		return 0;
+	}
+	if (!is_root())
+		return escalate("flatpak", 1, (char *[]){ (char *)"enable-flathub" });
+
+	/* The .flatpakrepo carries Flathub's GPG key, which is why the URL is
+	 * the repo file and not the bare repository: adding the latter would
+	 * configure a remote with no signature verification at all. */
+	char *add[] = { (char *)"flatpak", (char *)"remote-add",
+	                (char *)"--if-not-exists", (char *)SYNPKG_FLATHUB_NAME,
+	                (char *)SYNPKG_FLATHUB_URL, NULL };
+	int rc = run(add, false);
+	if (rc != 0) {
+		warn("could not add the Flathub remote");
+		return rc;
+	}
+
+	/* A newly added remote has NO appstream index, and `flatpak search`
+	 * against one returns zero rows without erroring. Skipping this leaves a
+	 * Flathub tab that looks enabled and finds nothing, forever. */
+	info("fetching Flathub's application index — this takes a minute");
+	char *as[] = { (char *)"flatpak", (char *)"update", (char *)"--appstream",
+	               (char *)"--noninteractive", NULL };
+	run(as, false);
+
+	info("Flathub is enabled");
+	return 0;
+}
+
+/* install/remove stay flatpak's own: it prompts for the permissions an
+ * application asks for, and a wrapper that answered those prompts on the
+ * user's behalf would be strictly worse than the tool it replaced. */
+static int flatpak_transact(const char *verb, int argc, char **argv)
+{
+	flatpak_required();
+	/* `update` with no target is a whole-system update and is meaningful;
+	 * install and uninstall with no target are not. */
+	if (argc < 1 && strcmp(verb, "update"))
+		die("flatpak %s: need an application id", verb);
+
+	char **child = xmalloc((size_t)(argc + 4) * sizeof *child);
+	int k = 0;
+	child[k++] = (char *)"flatpak";
+	child[k++] = (char *)verb;
+	if (g_noconfirm)
+		child[k++] = (char *)"--noninteractive";
+	for (int i = 0; i < argc; i++)
+		child[k++] = argv[i];
+	child[k] = NULL;
+
+	int rc = run(child, false);
+	free(child);
+	return rc;
+}
+
 int cmd_flatpak(int argc, char **argv)
 {
-	if (!have_cmd("flatpak"))
-		die("flatpak is not installed — synpkg install flatpak");
-
 	const char *sub = argc > 0 ? argv[0] : "list";
 
-	if (!strcmp(sub, "list"))
+	if (!strcmp(sub, "list") || !strcmp(sub, "installed"))
 		return flatpak_list();
+	if (!strcmp(sub, "search")) {
+		if (argc < 2)
+			die("flatpak search: need a term");
+		return flatpak_search(argv[1]);
+	}
+	if (!strcmp(sub, "updates"))
+		return flatpak_updates();
+	if (!strcmp(sub, "remotes"))
+		return flatpak_remotes();
+	if (!strcmp(sub, "enable-flathub"))
+		return flatpak_enable_flathub();
+	if (!strcmp(sub, "install"))
+		return flatpak_transact("install", argc - 1, argv + 1);
+	if (!strcmp(sub, "remove") || !strcmp(sub, "uninstall"))
+		return flatpak_transact("uninstall", argc - 1, argv + 1);
+	/* `update` goes through the same wrapper purely so --noconfirm reaches it
+	 * as --noninteractive. The GUI's update button has nowhere to answer a
+	 * prompt, and flatpak asks one per application by default. */
+	if (!strcmp(sub, "update"))
+		return flatpak_transact("update", argc - 1, argv + 1);
 
-	/* Everything else is a straight pass-through. flatpak's own CLI is good,
-	 * it handles its own privilege escalation via polkit, and wrapping its
-	 * install/remove would mean re-deriving its remote and permission
-	 * semantics for no gain. */
+	/* Anything unrecognised is still handed to flatpak. Its CLI is larger
+	 * than the part worth wrapping, and `synpkg flatpak permissions foo`
+	 * should not need a release of this program to work. */
+	flatpak_required();
 	char **child = xmalloc((size_t)(argc + 2) * sizeof *child);
 	child[0] = (char *)"flatpak";
 	for (int i = 0; i < argc; i++)
@@ -675,10 +1050,50 @@ static int aur_install(int argc, char **argv)
 	return rc;
 }
 
+/* What the AUR tab shows before you have typed anything: every installed
+ * package no sync database offers. It is the same "foreign" set aur_updates
+ * computes.
+ *
+ * These rows are labelled `local`, NOT `aur`, and that distinction is the
+ * whole point of giving each source its own tab. Nothing on disk records where
+ * a package came from, so this list is AUR builds mixed with anything else
+ * built by hand — on a SynapseOS box that includes synpkg itself. Stamping
+ * `aur` on all of it would put a confident, wrong source badge on the
+ * program's own row. Confirming membership would mean an AUR round trip per
+ * package on tab open, which is `aur updates`' job, not this one's. */
+static int aur_installed(void)
+{
+	alpm_handle_t *h = sp_alpm_init(false);
+	emit_pkg_header();
+
+	int shown = 0;
+	for (alpm_list_t *i = alpm_db_get_pkgcache(alpm_get_localdb(h)); i; i = i->next) {
+		alpm_pkg_t *p = i->data;
+		const char *name = alpm_pkg_get_name(p);
+
+		bool known = false;
+		for (alpm_list_t *d = sp_syncdbs(h); d && !known; d = d->next)
+			known = alpm_db_get_pkg(d->data, name) != NULL;
+		if (known)
+			continue;
+
+		emit_pkg(name, true, alpm_pkg_get_version(p), "local",
+		         alpm_pkg_get_isize(p), alpm_pkg_get_desc(p));
+		shown++;
+	}
+	sp_alpm_free(h);
+
+	if (g_out == OUT_HUMAN && !shown)
+		info("no foreign packages installed");
+	return shown ? 0 : 100;
+}
+
 int cmd_aur(int argc, char **argv)
 {
 	const char *sub = argc > 0 ? argv[0] : "";
 
+	if (!strcmp(sub, "installed") || !strcmp(sub, "list"))
+		return aur_installed();
 	if (!strcmp(sub, "search")) {
 		if (argc < 2)
 			die("aur search: need a term");
@@ -692,5 +1107,6 @@ int cmd_aur(int argc, char **argv)
 		return aur_install(argc - 1, argv + 1);
 	}
 
-	die("aur: unknown subcommand '%s' — try search, install, updates", sub);
+	die("aur: unknown subcommand '%s' — try search, install, installed, updates",
+	    sub);
 }

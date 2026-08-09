@@ -142,6 +142,130 @@ n=$("$SYNPKG" --tsv arsenal status | tsv_cols)
 [ $? -ne 0 ] && ok "remove with no targets is an error" \
              || bad "remove with no targets succeeded"
 
+# ── about ───────────────────────────────────────────────────────────────────
+# The About pane is the only place that reports a source being switched OFF.
+# If it stops naming one, that source silently becomes undiscoverable.
+n=$("$SYNPKG" --tsv about | tsv_cols)
+[ "$n" = 4 ] && ok "about --tsv has 4 columns" || bad "about --tsv has 4 columns (got $n)"
+
+ragged=$("$SYNPKG" --tsv about | awk -F'\t' 'NR==1 {want=NF; next} NF!=want {n++} END {print n+0}')
+[ "$ragged" = 0 ] && ok "no ragged rows in about --tsv" \
+                  || bad "$ragged ragged rows in about --tsv"
+
+missing=""
+for item in Repositories AUR Flathub BlackArch SynapseOS; do
+    "$SYNPKG" --tsv about | cut -f1 | grep -qx "$item" || missing="$missing $item"
+done
+[ -z "$missing" ] && ok "about names every source" || bad "about omits:$missing"
+
+# Every state must be one the front-ends know how to colour. A typo here
+# renders as the "info" accent on a source that is actually broken.
+strange=$("$SYNPKG" --tsv about | awk -F'\t' 'NR>1 && $2 !~ /^(ok|off|missing|info)$/ {n++} END {print n+0}')
+[ "$strange" = 0 ] && ok "about states are all known" || bad "$strange unknown states in about"
+
+# ── installed: --native / --foreign partition the whole set ─────────────────
+# The Repositories tab shows --native and the AUR tab shows --foreign. If they
+# overlap a package appears twice under two different sources; if they leave a
+# gap it is unreachable from either tab.
+all=$("$SYNPKG" --tsv installed | tail -n +2 | wc -l)
+nat=$("$SYNPKG" --tsv installed --native | tail -n +2 | wc -l)
+frn=$("$SYNPKG" --tsv installed --foreign | tail -n +2 | wc -l)
+[ $((nat + frn)) = "$all" ] && ok "--native and --foreign partition installed" \
+    || bad "--native ($nat) + --foreign ($frn) != installed ($all)"
+
+"$SYNPKG" installed --native --foreign >/dev/null 2>&1
+[ $? -ne 0 ] && ok "--native with --foreign is refused" \
+             || bad "--native with --foreign was accepted"
+
+n=$("$SYNPKG" --tsv aur installed | tsv_cols)
+[ "$n" = 6 ] && ok "aur installed --tsv has 6 columns" \
+             || bad "aur installed --tsv has 6 columns (got $n)"
+
+# Foreign packages are labelled `local`, never `aur`: nothing on disk records
+# where a package came from, and on a SynapseOS box this list includes synpkg
+# itself. A confident `aur` badge on the program's own row is a lie.
+wrong=$("$SYNPKG" --tsv aur installed | awk -F'\t' 'NR>1 && $4 != "local" {n++} END {print n+0}')
+[ "$wrong" = 0 ] && ok "aur installed labels rows local, not aur" \
+                 || bad "$wrong aur-installed rows claim a source they cannot know"
+
+# ── Flatpak, against a stub ─────────────────────────────────────────────────
+# flatpak is an optdepend, so the machine running these tests may not have it —
+# and the parsing is exactly the part worth testing. The stub emits the column
+# shapes flatpak documents, including the two traps the real code guards:
+#   * BoxesDevel, to catch a substring match reporting Boxes as installed;
+#   * a remote-ls row with no version column, which flatpak genuinely lacks.
+STUB=$(mktemp -d)
+trap 'rm -rf "$STUB"' EXIT
+
+cat > "$STUB/flatpak" <<'STUBEOF'
+#!/usr/bin/env bash
+cols=""
+for a in "$@"; do case $a in --columns=*) cols=${a#--columns=} ;; esac; done
+case "$1" in
+remotes)
+    case $cols in
+        name) echo "flathub" ;;
+        *) printf 'flathub\thttps://dl.flathub.org/repo/\t\n' ;;
+    esac ;;
+list)
+    case $cols in
+        application) printf 'org.mozilla.firefox\norg.gnome.BoxesDevel\n' ;;
+        application,version) printf 'org.mozilla.firefox\t142.0\norg.gnome.BoxesDevel\t46.1\n' ;;
+        *) printf 'org.mozilla.firefox\t142.0\tflathub\tFirefox\n' ;;
+    esac ;;
+search)
+    printf 'org.mozilla.firefox\t142.0\tflathub\tFirefox\tWeb browser\n'
+    printf 'org.gnome.Boxes\t46.1\tflathub\tBoxes\tVirtual machines\n' ;;
+remote-ls)
+    printf 'org.mozilla.firefox\tflathub\n' ;;
+*) exit 0 ;;
+esac
+STUBEOF
+chmod +x "$STUB/flatpak"
+
+fp() { PATH="$STUB:$PATH" "$SYNPKG" "$@"; }
+
+n=$(fp --tsv flatpak search firefox | tsv_cols)
+[ "$n" = 7 ] && ok "flatpak search --tsv has 7 columns" \
+             || bad "flatpak search --tsv has 7 columns (got $n)"
+
+# The seventh column must be named, not just present: the GUI reads rows by
+# header name, so a renamed column silently blanks the app title everywhere.
+fp --tsv flatpak search firefox | head -1 | grep -q 'title$'
+check "flatpak search names its title column" $?
+
+ragged=$(fp --tsv flatpak search firefox | awk -F'\t' 'NR==1 {want=NF; next} NF!=want {n++} END {print n+0}')
+[ "$ragged" = 0 ] && ok "no ragged rows in flatpak search --tsv" \
+                  || bad "$ragged ragged rows in flatpak search --tsv"
+
+# org.gnome.Boxes is NOT installed; org.gnome.BoxesDevel is. A substring test
+# would mark the wrong one, and the button would offer to remove software the
+# user never installed.
+inst=$(fp --tsv flatpak search boxes | awk -F'\t' '$1=="org.gnome.Boxes" {print $2}')
+[ "$inst" = "0" ] && ok "flatpak search does not confuse Boxes with BoxesDevel" \
+                  || bad "org.gnome.Boxes reported installed=$inst (want 0)"
+
+inst=$(fp --tsv flatpak search firefox | awk -F'\t' '$1=="org.mozilla.firefox" {print $2}')
+[ "$inst" = "1" ] && ok "flatpak search marks an installed app installed" \
+                  || bad "org.mozilla.firefox reported installed=$inst (want 1)"
+
+n=$(fp --tsv flatpak list | tsv_cols)
+[ "$n" = 7 ] && ok "flatpak list --tsv has 7 columns" \
+             || bad "flatpak list --tsv has 7 columns (got $n)"
+
+# Updates must share the 5-column shape pacman and the AUR emit, because the
+# GUI concatenates all three into one Updates pane.
+n=$(fp --tsv flatpak updates | tsv_cols)
+[ "$n" = 5 ] && ok "flatpak updates --tsv has 5 columns" \
+             || bad "flatpak updates --tsv has 5 columns (got $n)"
+
+fp --tsv flatpak updates | grep -q '^org.mozilla.firefox	142.0	'
+check "flatpak updates pairs the app with its installed version" $?
+
+stray=$(fp --tsv flatpak search firefox 2>/dev/null | grep -cv $'\t')
+[ "$stray" = 0 ] && ok "flatpak search --tsv writes only records to stdout" \
+                 || bad "flatpak search --tsv wrote $stray non-record lines"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

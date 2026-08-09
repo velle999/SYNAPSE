@@ -40,6 +40,11 @@ static char *catalogue_path(void)
 	return xstrdup("data/curated.tsv");
 }
 
+char *sp_curated_path(void)
+{
+	return catalogue_path();
+}
+
 static entry_t *load(size_t *count, char **backing)
 {
 	char *path = catalogue_path();
@@ -210,4 +215,18 @@ done:
 	free(entries);
 	free(backing);
 	return 0;
+}
+
+/* Parses the catalogue purely to count it. Callers must check the file is
+ * readable first — load() dies on a missing catalogue, which is right for
+ * `suggest` and wrong for an About pane whose whole job is to report that the
+ * file is gone. */
+size_t sp_curated_count(void)
+{
+	size_t n = 0;
+	char *backing = NULL;
+	entry_t *entries = load(&n, &backing);
+	free(entries);
+	free(backing);
+	return n;
 }

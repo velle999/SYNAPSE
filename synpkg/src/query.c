@@ -249,12 +249,16 @@ int cmd_info(int argc, char **argv)
  * `synpkg installed --group blackarch` is the uninstall list for the arsenal. */
 int cmd_installed(int argc, char **argv)
 {
-	bool explicit_only = false;
+	bool explicit_only = false, native_only = false, foreign_only = false;
 	const char *group = NULL, *from_repo = NULL;
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--explicit"))
 			explicit_only = true;
+		else if (!strcmp(argv[i], "--native"))
+			native_only = true;
+		else if (!strcmp(argv[i], "--foreign"))
+			foreign_only = true;
 		else if (!strcmp(argv[i], "--group") && i + 1 < argc)
 			group = argv[++i];
 		else if (!strcmp(argv[i], "--repo") && i + 1 < argc)
@@ -262,6 +266,11 @@ int cmd_installed(int argc, char **argv)
 		else
 			die("installed: unknown argument '%s'", argv[i]);
 	}
+
+	/* Both at once is empty by definition, and an empty pane that looks like
+	 * "you have nothing installed" is worth an error instead. */
+	if (native_only && foreign_only)
+		die("installed: --native and --foreign are opposites");
 
 	alpm_handle_t *h = sp_alpm_init(false);
 	emit_pkg_header();
@@ -285,14 +294,22 @@ int cmd_installed(int argc, char **argv)
 		}
 
 		/* The local db has no repo, so "which repo did this come from" means
-		 * "which sync db still offers this name". */
-		const char *repo = "local";
+		 * "which sync db still offers this name". A package no sync db
+		 * offers is FOREIGN: built from the AUR, built by hand, or from a
+		 * repository that has since been disabled. */
+		const char *repo = NULL;
 		for (alpm_list_t *d = sp_syncdbs(h); d; d = d->next) {
 			if (alpm_db_get_pkg(d->data, alpm_pkg_get_name(p))) {
 				repo = alpm_db_get_name(d->data);
 				break;
 			}
 		}
+		if (native_only && !repo)
+			continue;
+		if (foreign_only && repo)
+			continue;
+		if (!repo)
+			repo = "local";
 		if (from_repo && strcmp(repo, from_repo))
 			continue;
 

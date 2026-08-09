@@ -5,9 +5,15 @@
 # GPL-2.0-or-later is not a choice here: this links libalpm, which is
 # GPL-2.0-or-later, so the binary can be nothing else.
 pkgname=synpkg
+# pkgver stays 0.1.0 and releases move pkgrel, which is the convention every
+# SynapseOS component follows — but here it is a HARD constraint, not a habit:
+# build-all.sh writes "$name-0.1.0.tar.gz" and transforms paths to
+# "$name-0.1.0/" for every component it builds (build-all.sh:123). Bumping
+# pkgver without changing that leaves makepkg looking for a tarball nothing
+# creates.
 pkgver=0.1.0
-pkgrel=1
-pkgdesc="SynapseOS package manager: repositories, AUR, Flatpak, BlackArch and SynapseOS itself"
+pkgrel=2
+pkgdesc="SynapseOS package manager: repositories, AUR, Flathub, BlackArch and SynapseOS itself"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
@@ -25,7 +31,7 @@ makedepends=('meson' 'ninja' 'gcc')
 # Each front-end degrades to the terminal rather than failing.
 optdepends=('quickshell: the graphical browser (synpkg gui)'
             'polkit: install and remove without sudo, from the GUI'
-            'flatpak: manage Flatpaks through synpkg flatpak'
+            'flatpak: the Flathub tab — search, install and update Flatpaks'
             'syn-update: update SynapseOS components through synpkg system'
             'git: build packages from the AUR'
             'base-devel: makepkg, for AUR builds'

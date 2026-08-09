@@ -31,6 +31,7 @@ sources = files(
   'src/curated.c',
   'src/arsenal.c',
   'src/ext.c',
+  'src/about.c',
   'src/tui.c',
 )
 

@@ -123,6 +123,11 @@ bool is_root(void);
 
 /* ── curated.c ──────────────────────────────────────────────────────────── */
 int cmd_suggest(int argc, char **argv);
+/* Where the catalogue was resolved from, and how many entries it holds — the
+ * About pane reports both, because "0 suggestions" and "the file is missing"
+ * look identical in a list. Path is malloc'd. */
+char  *sp_curated_path(void);
+size_t sp_curated_count(void);
 
 /* ── arsenal.c ──────────────────────────────────────────────────────────── */
 int cmd_arsenal(int argc, char **argv);
@@ -132,6 +137,20 @@ int aur_search_term(const char *term);   /* also reached by `search --aur` */
 int cmd_system(int argc, char **argv);   /* syn-update */
 int cmd_flatpak(int argc, char **argv);
 int cmd_aur(int argc, char **argv);
+
+/* The Flathub remote, named once. The URL is the .flatpakrepo and NOT the bare
+ * repository: the repo file carries Flathub's GPG key, and a remote added
+ * without it verifies no signatures at all. */
+#define SYNPKG_FLATHUB_NAME "flathub"
+#define SYNPKG_FLATHUB_URL  "https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+/* Is flatpak installed, and is Flathub among its remotes? Both are runtime
+ * facts on every machine, so every caller has to ask rather than assume. */
+bool sp_flatpak_present(void);
+bool sp_flathub_enabled(void);
+
+/* ── about.c ────────────────────────────────────────────────────────────── */
+int cmd_about(int argc, char **argv);
 
 /* ── tui.c ──────────────────────────────────────────────────────────────── */
 int cmd_tui(int argc, char **argv);

@@ -16,6 +16,22 @@ import Quickshell.Io
  * JSON by hand, and a package description containing a quote is not a hypo-
  * thetical. Parsing here is a split on newline and a split on tab.
  *
+ * ── One tab per SOURCE ──────────────────────────────────────────────────────
+ * The first version had a single "Search" pane fed by the repositories alone,
+ * with the AUR and Flatpak reachable only from the command line. That made the
+ * source of a row a thing you inferred from a small grey word. Now each source
+ * owns a tab — Repositories, AUR, Flathub, Arsenal, SynapseOS — every row
+ * carries a coloured badge naming where it came from, and every row remembers
+ * its own source so the install button runs the RIGHT tool for it. The three
+ * do genuinely different things: pacman transacts, makepkg builds from source
+ * and needs a terminal, flatpak runs its own permission prompts.
+ *
+ * Rows are read by COLUMN NAME out of each command's header row, not by
+ * position. Flatpak rows carry a seventh `title` column that no other source
+ * emits, and a positional parser would have needed a special case per command
+ * to cope with that — the exact shape of bug that renders as silently blank
+ * cells with no error anywhere.
+ *
  * The palette block is lifted from syn-arsenal's, deliberately unchanged — it
  * encodes two shipped bugs (reading theme.json's [r,g,b] ARRAYS as strings,
  * and taking ink from the theme while drawing on hardcoded surfaces) and this
@@ -28,8 +44,8 @@ FloatingWindow {
     id: root
 
     title: "SYNAPSE Software"
-    implicitWidth: 1120
-    implicitHeight: 720
+    implicitWidth: 1180
+    implicitHeight: 760
 
     // ShellRoot outlives its window: without this, quickshell stays alive with
     // nothing on screen and every later launch exits 0 having drawn nothing.
@@ -85,25 +101,88 @@ FloatingWindow {
     readonly property color cAccentRaw: themed("accent", 78, 201, 176, 1.0)
     readonly property color cAccent: readable(cAccentRaw, cPanel, 4.5)
     readonly property color cWarn: pick("#e0af68", "#5c3a00")
+    readonly property color cOk: readable(Qt.color(pick("#7ee787", "#0b6b2f")), cBg, 4.5)
 
     function wash(a) { return Qt.rgba(cAccent.r, cAccent.g, cAccent.b, a) }
 
-    // ── State ───────────────────────────────────────────────────────────────
+    // ── Sources ─────────────────────────────────────────────────────────────
+    // Which tool owns a row. Every list sets this per row, because the badge
+    // that tells the USER where a package came from and the code path that
+    // installs it must never be able to disagree.
+    function sourceOf(repo) {
+        const r = (repo || "").toLowerCase()
+        if (r === "aur") return "aur"
+        if (r === "flathub" || r === "flatpak") return "flathub"
+        if (r === "synapseos") return "repo"
+        return "repo"
+    }
+
+    // Badge hues are fixed rather than themed: the point of a source badge is
+    // that "purple means built from source" survives a theme change. They are
+    // still run through readable() against the surface they land on.
+    function sourceHue(repo) {
+        const r = (repo || "").toLowerCase()
+        if (r === "aur") return "#a78bfa"
+        if (r === "flathub" || r === "flatpak") return "#60a5fa"
+        if (r.indexOf("blackarch") === 0) return "#f87171"
+        if (r === "synapseos") return root.cAccentRaw
+        if (r === "local") return "#94a3b8"
+        return "#34d399"
+    }
+    function sourceColor(repo) {
+        return root.readable(Qt.color(root.sourceHue(repo)), root.cBg, 4.5)
+    }
+
     readonly property var sections: [
-        { id: "updates",   label: "Updates" },
-        { id: "suggested", label: "Suggested" },
-        { id: "search",    label: "Search" },
-        { id: "installed", label: "Installed" },
-        { id: "arsenal",   label: "Arsenal" },
-        { id: "system",    label: "SynapseOS" }
+        { id: "updates",   label: "Updates",      kind: "list" },
+        { id: "suggested", label: "Suggested",    kind: "list" },
+        { id: "repo",      label: "Repositories", kind: "source" },
+        { id: "aur",       label: "AUR",          kind: "source" },
+        { id: "flathub",   label: "Flathub",      kind: "source" },
+        { id: "arsenal",   label: "Arsenal",      kind: "list" },
+        { id: "system",    label: "SynapseOS",    kind: "list" },
+        { id: "about",     label: "About",        kind: "about" }
     ]
-    property string section: "updates"
-    property string busy: ""        // package currently being (un)installed
+
+    function sectionKind(id) {
+        for (const s of root.sections)
+            if (s.id === id) return s.kind
+        return "list"
+    }
+    readonly property bool isSourceTab: root.sectionKind(root.section) === "source"
+
+    // What each tab is, in one line, under the title. Half of these are only
+    // obvious if you already know the packaging landscape.
+    function sectionHint(id) {
+        if (id === "updates")   return "everything with a newer version available"
+        if (id === "suggested") return "the curated SynapseOS software list"
+        if (id === "repo")      return "official Arch repositories and SynapseOS's own — signed, binary, managed by pacman"
+        if (id === "aur")       return "the Arch User Repository — recipes built from source on this machine"
+        if (id === "flathub")   return "sandboxed applications from Flathub, with their own runtimes"
+        if (id === "arsenal")   return "BlackArch security tooling, by category"
+        if (id === "system")    return "this system's own components, rebuilt from git by syn-update"
+        return ""
+    }
+
+    // ── State ───────────────────────────────────────────────────────────────
+    // `synpkg gui flathub` opens straight on that tab, so the start menu can
+    // point separate entries at separate sources. An unrecognised name falls
+    // back to Updates rather than opening a blank window on a section that
+    // does not exist.
+    property string section: {
+        const want = Quickshell.env("SYNPKG_SECTION") || ""
+        for (const s of root.sections)
+            if (s.id === want) return want
+        return "updates"
+    }
+    property string mode: "search"    // source tabs: search | installed
+    property string busy: ""          // package currently being (un)installed
     property string statusLine: ""
     property bool   loading: false
 
-    property var rows: []           // {name, installed, version, repo, desc, extra}
-    property var categories: []     // arsenal categories / suggested categories
+    property var rows: []             // canonical row objects, see pkgRows()
+    property var aboutRows: []
+    property var categories: []
     property string currentGroup: ""
     property string filter: ""
 
@@ -111,84 +190,134 @@ FloatingWindow {
         if (filter === "") return rows
         const f = filter.toLowerCase()
         return rows.filter(r => r.name.toLowerCase().includes(f)
+                             || (r.title || "").toLowerCase().includes(f)
                              || (r.desc || "").toLowerCase().includes(f))
     }
 
-    // ── Backend ─────────────────────────────────────────────────────────────
-    // One reader for every list command. The C side emits a header row whose
-    // second column is the literal "installed"; skipping it here rather than
-    // suppressing it there keeps `synpkg --tsv` self-describing for anything
-    // else that reads it.
-    function parseRows(text) {
+    // ── Parsing ─────────────────────────────────────────────────────────────
+    // Read the header row and key every field by NAME. Every --tsv command
+    // emits its header first, and this is what lets one reader serve six
+    // commands with different column counts.
+    function parseTable(text) {
+        const lines = text.split("\n").filter(l => l !== "")
+        if (lines.length === 0) return []
+        const cols = lines[0].split("\t")
         const out = []
-        for (const line of text.split("\n")) {
-            if (!line) continue
-            const f = line.split("\t")
-            if (f[0] === "name" || f[0] === "category" || f[0] === "component") continue
-            out.push({ name: f[0], installed: f[1] === "1", version: f[2] || "",
-                       repo: f[3] || "", size: parseInt(f[4] || "0"),
-                       desc: f[5] || "", extra: f[6] || "" })
+        for (let i = 1; i < lines.length; i++) {
+            const f = lines[i].split("\t")
+            const o = ({})
+            for (let c = 0; c < cols.length; c++)
+                o[cols[c]] = f[c] !== undefined ? f[c] : ""
+            out.push(o)
         }
         return out
     }
 
+    // The canonical row. `source` is the tool that owns it; `repo` is the
+    // human label shown on the badge; they are not the same thing (a row from
+    // core and a row from blackarch are both `repo`).
+    function makeRow(name, title, installed, version, repo, size, desc, extra, source) {
+        return { name: name, title: title || "", installed: installed,
+                 version: version || "", repo: repo || "", size: size || 0,
+                 desc: desc || "", extra: extra || "", source: source }
+    }
+
+    function pkgRows(table, tab) {
+        return table.map(r => root.makeRow(r.name, r.title, r.installed === "1",
+                                           r.version, r.repo, parseInt(r.size || "0"),
+                                           r.description, r.flag,
+                                           tab || root.sourceOf(r.repo)))
+    }
+
+    function updateRows(table, tab) {
+        // An empty new_version is not missing data: Flatpak genuinely cannot
+        // report one without a round trip per app. Say so rather than showing
+        // "1.2.3 →  " with a blank after the arrow.
+        return table.map(r => root.makeRow(
+            r.name, "", true, r.new_version, r.repo, parseInt(r.size || "0"),
+            (r.installed_version || "?") + "  →  " + (r.new_version || "update available"),
+            "update", tab))
+    }
+
+    function suggestRows(table) {
+        return table.map(r => root.makeRow(
+            r.id, r.label, r.installed === "1", "",
+            r.source === "flatpak" ? "flathub" : r.source, 0,
+            r.description, r.category,
+            r.source === "flatpak" ? "flathub" : (r.source === "aur" ? "aur" : "repo")))
+    }
+
+    function systemRows(table) {
+        return table.map(r => root.makeRow(
+            r.component, "", true, r.available, "synapseos", 0,
+            (r.installed || "") + "  →  " + (r.available || ""),
+            "component", "system"))
+    }
+
+    // ── Backend ─────────────────────────────────────────────────────────────
+    // A step is {kind, tab, args}. Steps run in sequence and APPEND, which is
+    // what lets the Updates tab be the union of pacman, the AUR and Flatpak
+    // without any of the three knowing about the others.
+    property var chain: []
+
     Process {
         id: listProc
-        property string mode: ""
+        property string kind: ""
+        property string tab: ""
+
         stdout: StdioCollector {
             onStreamFinished: {
-                root.loading = false
-                if (listProc.mode === "categories") {
-                    const out = []
-                    for (const line of this.text.split("\n")) {
-                        if (!line) continue
-                        const f = line.split("\t")
-                        if (f[0] === "category") continue
-                        out.push({ name: f[0], total: parseInt(f[1] || "0"),
-                                   installed: parseInt(f[2] || "0") })
-                    }
-                    root.categories = out
-                } else if (listProc.mode === "updates") {
-                    // updates has its own shape: name, old, new, repo, size.
-                    const out = []
-                    for (const line of this.text.split("\n")) {
-                        if (!line) continue
-                        const f = line.split("\t")
-                        if (f[0] === "name") continue
-                        out.push({ name: f[0], installed: true, version: f[2] || "",
-                                   repo: f[3] || "", size: parseInt(f[4] || "0"),
-                                   desc: (f[1] || "") + "  →  " + (f[2] || ""),
-                                   extra: "update" })
-                    }
-                    root.rows = out
-                } else if (listProc.mode === "system") {
-                    const out = []
-                    for (const line of this.text.split("\n")) {
-                        if (!line) continue
-                        const f = line.split("\t")
-                        if (f[0] === "component") continue
-                        out.push({ name: f[0], installed: true, version: f[2] || "",
-                                   repo: "synapseos", size: 0,
-                                   desc: (f[1] || "") + "  →  " + (f[2] || ""),
-                                   extra: "component" })
-                    }
-                    root.rows = out
-                } else if (listProc.mode === "suggested") {
-                    const out = []
-                    for (const line of this.text.split("\n")) {
-                        if (!line) continue
-                        const f = line.split("\t")
-                        if (f[0] === "category") continue
-                        out.push({ name: f[1], installed: f[4] === "1",
-                                   version: "", repo: f[2] || "", size: 0,
-                                   desc: f[5] || "", extra: f[0] + " · " + f[3] })
-                    }
-                    root.rows = out
+                const table = root.parseTable(this.text)
+                let out = []
+
+                if (listProc.kind === "categories") {
+                    root.categories = table.map(r => ({
+                        name: r.category, total: parseInt(r.total || "0"),
+                        installed: parseInt(r.installed || "0")
+                    }))
+                } else if (listProc.kind === "about") {
+                    root.aboutRows = table
+                } else if (listProc.kind === "updates") {
+                    out = root.updateRows(table, listProc.tab)
+                } else if (listProc.kind === "suggest") {
+                    out = root.suggestRows(table)
+                } else if (listProc.kind === "system") {
+                    out = root.systemRows(table)
                 } else {
-                    root.rows = root.parseRows(this.text)
+                    out = root.pkgRows(table, listProc.tab)
                 }
+
+                if (out.length > 0)
+                    root.rows = root.rows.concat(out)
+
+                // Starting the next process from inside this handler would
+                // re-enter a Process that has not finished tearing down; let
+                // the event loop turn over first.
+                Qt.callLater(root.runNext)
             }
         }
+    }
+
+    function runChain(steps) {
+        root.rows = []
+        root.chain = steps
+        root.loading = true
+        root.runNext()
+    }
+
+    function runNext() {
+        if (root.chain.length === 0) {
+            root.loading = false
+            root.statusLine = ""
+            return
+        }
+        const step = root.chain[0]
+        root.chain = root.chain.slice(1)
+        root.statusLine = step.note || ""
+        listProc.kind = step.kind
+        listProc.tab = step.tab || ""
+        listProc.command = [root.bin, "--tsv"].concat(step.args)
+        listProc.running = true
     }
 
     // Mutations re-read the pane rather than patching the row in place: an
@@ -197,11 +326,7 @@ FloatingWindow {
     // No parameters on this handler, deliberately. Quickshell's `exited` signal
     // is exited(int, QProcess::ExitStatus), and a typed arrow-function handler
     // fails to compile because that second type is not resolvable from QML —
-    // The linter flags it, and the handler would simply never run.
-    //
-    // Nothing is lost: the exit code only drove a cosmetic message, and the
-    // reload below reports the truth either way. If the install failed, the row
-    // comes back still uninstalled.
+    // the linter flags it, and the handler would simply never run.
     Process {
         id: actProc
         onExited: {
@@ -211,43 +336,113 @@ FloatingWindow {
         }
     }
 
-    function runList(mode, args) {
-        root.loading = true
-        root.rows = []
-        listProc.mode = mode
-        listProc.command = [root.bin, "--tsv"].concat(args)
-        listProc.running = true
-    }
+    Process { id: termProc }
 
-    function reload() {
-        statusLine = ""
-        filter = ""
-        if (section === "updates")        runList("updates", ["updates"])
-        else if (section === "suggested") runList("suggested", ["suggest"])
-        else if (section === "installed") runList("list", ["installed", "--explicit"])
-        else if (section === "system")    runList("system", ["system", "check"])
-        else if (section === "search")    { rows = []; }
-        else if (section === "arsenal") {
-            currentGroup = ""
-            runList("categories", ["arsenal", "categories"])
-        }
+    // Hand a command to a terminal. kitty first: it is SynapseOS's default and
+    // what syn-install writes into limine-snapper-sync.conf. Both kitty and
+    // foot take the command positionally and both have --hold; the others need
+    // -e and a pause of their own.
+    //
+    // The command is passed as sh's $1 rather than pasted into the script, so
+    // nothing here has to be quoted. Joining argv on spaces is safe for what
+    // reaches it: ALPM package names and Flatpak application ids cannot
+    // contain whitespace.
+    function inTerminal(argv, note) {
+        root.statusLine = note || "opened a terminal"
+        termProc.command = ["sh", "-c",
+            'for t in kitty foot; do command -v "$t" >/dev/null 2>&1 && exec "$t" --hold sh -c "$1"; done; ' +
+            'for t in alacritty konsole xterm; do command -v "$t" >/dev/null 2>&1 && exec "$t" -e sh -c "$1; printf \'\\n[press enter] \'; read _"; done; ' +
+            'echo "no terminal emulator found" >&2; exit 127',
+            "sh", argv.join(" ")]
+        termProc.running = true
     }
 
     // --noconfirm because the GUI has no terminal to answer a prompt in; the C
     // side deliberately refuses to assume yes without it. Escalation to root
     // happens inside synpkg via pkexec, so nothing here runs privileged.
-    function act(verb, pkg) {
-        if (busy !== "") return
-        busy = pkg
-        statusLine = verb === "install" ? "installing " + pkg + "…"
-                                        : "removing " + pkg + "…"
-        actProc.command = [root.bin, "--tsv", "-y", verb, pkg]
+    //
+    // The AUR is the exception and always will be: `aur install` clones a git
+    // repository, shows you a PKGBUILD, and runs makepkg for minutes. makepkg
+    // refuses to run as root, needs a tty for its own prompts, and prints as
+    // it goes. A spinner in a window is exactly where someone force-quits a
+    // half-finished build.
+    function act(row, verb) {
+        if (root.busy !== "") return
+
+        if (row.source === "aur" && verb !== "remove") {
+            root.inTerminal([root.bin, "aur", "install", row.name],
+                            "building " + row.name + " in a terminal")
+            return
+        }
+
+        root.busy = row.name
+        root.statusLine = (verb === "remove" ? "removing " : "installing ") + row.name + "…"
+
+        if (row.source === "flathub") {
+            const fpVerb = verb === "remove" ? "remove"
+                                             : (row.extra === "update" ? "update" : "install")
+            actProc.command = [root.bin, "--tsv", "-y", "flatpak", fpVerb, row.name]
+        } else {
+            actProc.command = [root.bin, "--tsv", "-y", verb, row.name]
+        }
         actProc.running = true
+    }
+
+    function rowVerb(row) {
+        if (row.extra === "update") return "Update"
+        return row.installed ? "Remove" : "Install"
+    }
+
+    // ── Navigation ──────────────────────────────────────────────────────────
+    function installedStep(tab) {
+        if (tab === "aur")     return { kind: "pkgs", tab: "aur",     args: ["aur", "installed"] }
+        if (tab === "flathub") return { kind: "pkgs", tab: "flathub", args: ["flatpak", "list"] }
+        // --native, so packages no repository offers do not show up under
+        // Repositories wearing a "local" badge. Those are the AUR tab's.
+        return { kind: "pkgs", tab: "repo", args: ["installed", "--explicit", "--native"] }
+    }
+
+    function searchStep(tab, term) {
+        if (tab === "aur")     return { kind: "pkgs", tab: "aur",     args: ["aur", "search", term] }
+        if (tab === "flathub") return { kind: "pkgs", tab: "flathub", args: ["flatpak", "search", term] }
+        return { kind: "pkgs", tab: "repo", args: ["search", term] }
+    }
+
+    function reload() {
+        statusLine = ""
+        filter = ""
+        searchInput.text = ""
+
+        if (section === "updates") {
+            runChain([
+                { kind: "updates", tab: "repo",    args: ["updates"],           note: "checking repositories…" },
+                { kind: "updates", tab: "aur",     args: ["aur", "updates"],    note: "checking the AUR…" },
+                { kind: "updates", tab: "flathub", args: ["flatpak", "updates"], note: "checking Flathub…" }
+            ])
+        } else if (section === "suggested") {
+            runChain([{ kind: "suggest", args: ["suggest"] }])
+        } else if (section === "about") {
+            runChain([{ kind: "about", args: ["about"] }])
+        } else if (section === "system") {
+            runChain([{ kind: "system", args: ["system", "check"] }])
+        } else if (section === "arsenal") {
+            currentGroup = ""
+            runChain([{ kind: "categories", args: ["arsenal", "categories"] }])
+        } else if (isSourceTab) {
+            if (mode === "installed") runChain([installedStep(section)])
+            else                      rows = []
+        }
+    }
+
+    function showSection(id) {
+        root.section = id
+        root.mode = "search"
+        root.reload()
     }
 
     function doSearch(term) {
         if (!term) { rows = []; return }
-        runList("list", ["search", term])
+        runChain([searchStep(root.section, term)])
     }
 
     Component.onCompleted: reload()
@@ -260,22 +455,39 @@ FloatingWindow {
         Rectangle {
             id: header
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 56
+            height: 64
             color: root.cPanel
 
-            Text {
+            Column {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                text: "SYNAPSE Software"
-                color: root.cAccent
-                font { pixelSize: 18; bold: true }
+                spacing: 2
+                width: parent.width - 260
+
+                Text {
+                    text: "SYNAPSE Software"
+                    color: root.cAccent
+                    font { pixelSize: 17; bold: true }
+                }
+                Text {
+                    width: parent.width
+                    text: root.sectionHint(root.section)
+                    color: root.cDim
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    visible: text !== ""
+                }
             }
+
             Text {
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
-                color: root.busy !== "" ? root.cAccent : root.cDim
+                color: root.busy !== "" || root.loading ? root.cAccent : root.cDim
                 font.pixelSize: 12
-                text: root.loading ? "loading…"
+                horizontalAlignment: Text.AlignRight
+                text: root.loading ? (root.statusLine !== "" ? root.statusLine : "loading…")
                                    : (root.statusLine !== "" ? root.statusLine
-                                                             : root.rows.length + " items")
+                                      : (root.section === "about" ? ""
+                                         : root.shownRows.length + " items"))
             }
         }
 
@@ -283,7 +495,7 @@ FloatingWindow {
         Rectangle {
             id: nav
             anchors { top: header.bottom; left: parent.left; bottom: parent.bottom }
-            width: 170
+            width: 176
             color: root.cPanel
 
             Column {
@@ -301,6 +513,16 @@ FloatingWindow {
                         color: navRow.current ? root.wash(0.16)
                                               : (navMa.containsMouse ? root.wash(0.08) : "transparent")
 
+                        // A source tab gets its badge colour as a left edge, so
+                        // the nav and the row badges agree at a glance.
+                        Rectangle {
+                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                            width: 3
+                            visible: navRow.modelData.kind === "source"
+                            color: root.sourceColor(navRow.modelData.id)
+                            opacity: navRow.current ? 1 : 0.5
+                        }
+
                         Text {
                             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                             text: navRow.modelData.label
@@ -312,7 +534,7 @@ FloatingWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: { root.section = navRow.modelData.id; root.reload() }
+                            onClicked: root.showSection(navRow.modelData.id)
                         }
                     }
                 }
@@ -344,11 +566,8 @@ FloatingWindow {
                         // A full upgrade downloads for minutes and prints as it
                         // goes; a window with a spinner and no output is where
                         // people force-quit mid-transaction. Hand it a terminal.
-                        onClicked: {
-                            root.statusLine = "opened a terminal for the upgrade"
-                            termProc.command = ["foot", "--hold", root.bin, "upgrade"]
-                            termProc.running = true
-                        }
+                        onClicked: root.inTerminal([root.bin, "upgrade"],
+                                                   "upgrading in a terminal")
                     }
                 }
                 Text {
@@ -360,8 +579,6 @@ FloatingWindow {
                 }
             }
         }
-
-        Process { id: termProc }
 
         // ── Content ─────────────────────────────────────────────────────────
         Item {
@@ -404,7 +621,8 @@ FloatingWindow {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 root.currentGroup = "installed"
-                                root.runList("list", ["arsenal", "installed"])
+                                root.runChain([{ kind: "pkgs", tab: "repo",
+                                                 args: ["arsenal", "installed"] }])
                             }
                         }
                     }
@@ -441,83 +659,371 @@ FloatingWindow {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 root.currentGroup = catRow.modelData.name
-                                root.runList("list", ["arsenal", "packages", catRow.modelData.name])
+                                root.runChain([{ kind: "pkgs", tab: "repo",
+                                                 args: ["arsenal", "packages",
+                                                        catRow.modelData.name] }])
                             }
                         }
                     }
                 }
             }
 
-            // Search box: doubles as a filter for every other section, which is
-            // why it is always present rather than only on the Search page.
-            Rectangle {
-                id: searchBar
+            // ── Toolbar: mode toggle + search box ───────────────────────────
+            Item {
+                id: toolbar
                 anchors { top: parent.top; left: catPane.right; right: parent.right }
                 anchors.margins: 10
                 height: 30
-                radius: 4
-                color: root.cPanel
+                visible: root.section !== "about"
 
-                TextInput {
-                    id: searchInput
-                    anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                    verticalAlignment: TextInput.AlignVCenter
-                    color: root.cText
-                    font.pixelSize: 13
-                    clip: true
-                    onTextChanged: if (root.section !== "search") root.filter = text
-                    onAccepted: if (root.section === "search") root.doSearch(text)
+                Row {
+                    id: modeToggle
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    spacing: 0
+                    visible: root.isSourceTab
+
+                    Repeater {
+                        model: [{ id: "search", label: "Search" },
+                                { id: "installed", label: "Installed" }]
+                        delegate: Rectangle {
+                            id: modeBtn
+                            required property var modelData
+                            required property int index
+                            readonly property bool current: modeBtn.modelData.id === root.mode
+                            width: 84; height: 30
+                            color: modeBtn.current ? root.wash(0.22)
+                                                   : (modeMa.containsMouse ? root.wash(0.10)
+                                                                           : root.cPanel)
+                            border { width: 1; color: modeBtn.current ? root.cAccent : "transparent" }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: modeBtn.modelData.label
+                                color: modeBtn.current ? root.cAccent : root.cDim
+                                font { pixelSize: 12; bold: modeBtn.current }
+                            }
+                            MouseArea {
+                                id: modeMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.mode = modeBtn.modelData.id
+                                    root.reload()
+                                }
+                            }
+                        }
+                    }
                 }
-                Text {
-                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                    text: root.section === "search" ? "search the repositories — press Enter"
-                                                    : "filter this list…"
-                    color: root.cDim
-                    font.pixelSize: 13
-                    visible: searchInput.text === ""
+
+                // Search box: doubles as a filter for every other list, which is
+                // why it is always present rather than only on a search pane.
+                Rectangle {
+                    id: searchBar
+                    anchors {
+                        left: modeToggle.visible ? modeToggle.right : parent.left
+                        leftMargin: modeToggle.visible ? 10 : 0
+                        right: parent.right
+                        verticalCenter: parent.verticalCenter
+                    }
+                    height: 30
+                    radius: 4
+                    color: root.cPanel
+                    border {
+                        width: 1
+                        color: searchInput.activeFocus ? root.cAccent : "transparent"
+                    }
+
+                    readonly property bool searching: root.isSourceTab && root.mode === "search"
+
+                    TextInput {
+                        id: searchInput
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.cText
+                        font.pixelSize: 13
+                        clip: true
+                        onTextChanged: if (!searchBar.searching) root.filter = text
+                        onAccepted: if (searchBar.searching) root.doSearch(text)
+                        Keys.onEscapePressed: { text = ""; root.filter = "" }
+                    }
+                    Text {
+                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                        text: {
+                            if (root.section === "repo")    return "search the repositories — press Enter"
+                            if (root.section === "aur")     return "search the AUR — press Enter"
+                            if (root.section === "flathub") return "search Flathub — press Enter"
+                            return "filter this list…"
+                        }
+                        color: root.cDim
+                        font.pixelSize: 13
+                        visible: searchInput.text === ""
+                    }
                 }
             }
 
-            // Empty states say what to DO. "No results" with no next step is
-            // how the old arsenal looked on a machine without BlackArch.
+            // ── About ───────────────────────────────────────────────────────
+            // Not a credits screen: every source synpkg can install from is
+            // optional at runtime, and until this pane existed the only way to
+            // find out one was switched off was to open its tab and find it
+            // empty. "Nothing here" and "this source is disabled" are very
+            // different claims.
+            Flickable {
+                anchors.fill: parent
+                anchors.margins: 18
+                visible: root.section === "about"
+                contentHeight: aboutCol.implicitHeight
+                clip: true
+
+                Column {
+                    id: aboutCol
+                    width: parent.width
+                    spacing: 14
+
+                    Text {
+                        text: "SYNAPSE Software"
+                        color: root.cAccent
+                        font { pixelSize: 22; bold: true }
+                    }
+                    Text {
+                        width: aboutCol.width
+                        text: "One package manager over the repositories, the AUR, Flathub, "
+                              + "BlackArch and SynapseOS's own components. The graphical "
+                              + "browser, the terminal browser and the command line are the "
+                              + "same binary reading the same code paths, so they cannot "
+                              + "disagree about what is installed."
+                        color: root.cDim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Repeater {
+                        model: root.aboutRows
+                        delegate: Rectangle {
+                            id: aboutRow
+                            required property var modelData
+                            width: aboutCol.width
+                            height: 54
+                            radius: 4
+                            color: root.wash(0.05)
+
+                            readonly property color stateColor:
+                                aboutRow.modelData.state === "ok"      ? root.cOk
+                              : aboutRow.modelData.state === "off"     ? root.cWarn
+                              : aboutRow.modelData.state === "missing" ? root.cDim
+                                                                       : root.cAccent
+
+                            // A detail that is a command is an OFFER, not a
+                            // footnote: the pane that tells you Flathub is off
+                            // is the natural place to switch it on.
+                            readonly property bool runnable:
+                                aboutRow.modelData.detail !== undefined
+                                && aboutRow.modelData.detail.indexOf("synpkg ") === 0
+
+                            Rectangle {
+                                id: stateDot
+                                anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                                width: 8; height: 8; radius: 4
+                                color: aboutRow.stateColor
+                            }
+
+                            Text {
+                                id: aboutKey
+                                anchors { left: stateDot.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                width: 110
+                                text: aboutRow.modelData.item
+                                color: root.cText
+                                font { pixelSize: 12; bold: true }
+                                elide: Text.ElideRight
+                            }
+
+                            Column {
+                                anchors {
+                                    left: aboutKey.right; leftMargin: 12
+                                    right: aboutBtn.left; rightMargin: 12
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                spacing: 2
+
+                                Text {
+                                    width: parent.width
+                                    text: aboutRow.modelData.value
+                                    color: aboutRow.stateColor
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: aboutRow.modelData.detail
+                                    color: root.cDim
+                                    // Not `undefined` for the non-monospace
+                                    // case: QString will not take it, and Qt
+                                    // logs "Unable to assign [undefined]" once
+                                    // per row while rendering the row anyway.
+                                    font { pixelSize: 11
+                                           family: aboutRow.runnable ? "monospace"
+                                                                     : Qt.application.font.family }
+                                    elide: Text.ElideRight
+                                    visible: text !== ""
+                                }
+                            }
+
+                            Rectangle {
+                                id: aboutBtn
+                                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                width: 70; height: 26; radius: 4
+                                visible: aboutRow.runnable
+                                color: aboutBtnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                                border { width: 1; color: root.cAccent }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Run"
+                                    color: root.cAccent
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    id: aboutBtnMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    // Every one of these downloads something —
+                                    // a bootstrap, an appstream index — and
+                                    // prints as it goes.
+                                    onClicked: root.inTerminal(
+                                        aboutRow.modelData.detail.split(" "),
+                                        "running in a terminal")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Empty states ────────────────────────────────────────────────
+            // They say what to DO. "No results" with no next step is how the
+            // old arsenal looked on a machine without BlackArch.
             Column {
                 anchors.centerIn: parent
-                spacing: 8
-                visible: !root.loading && root.shownRows.length === 0
+                width: parent.width - 80
+                spacing: 10
+                visible: root.section !== "about" && !root.loading
+                         && root.shownRows.length === 0
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     color: root.cText
                     font.pixelSize: 15
+                    horizontalAlignment: Text.AlignHCenter
                     text: {
                         if (root.section === "updates")   return "Everything is up to date."
-                        if (root.section === "search")    return "Search the repositories."
                         if (root.section === "system")    return "SynapseOS components are current."
+                        if (root.section === "suggested") return "You already have everything suggested."
                         if (root.section === "arsenal")   return root.categories.length === 0
                                                                  ? "The BlackArch repository is not enabled."
                                                                  : "Pick a category."
-                        if (root.section === "suggested") return "You already have everything suggested."
-                        return "Nothing here."
+                        if (root.mode === "installed") {
+                            if (root.section === "aur")     return "Nothing installed from outside a repository."
+                            if (root.section === "flathub") return "No Flatpak applications installed."
+                            return "Nothing installed from the repositories."
+                        }
+                        if (root.section === "aur")     return "Search the AUR."
+                        if (root.section === "flathub") return "Search Flathub."
+                        return "Search the repositories."
+                    }
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
+                    color: root.cDim
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    visible: text !== ""
+                    text: {
+                        if (root.section === "aur" && root.mode === "installed")
+                            return "This lists every installed package no repository offers — "
+                                 + "AUR builds and anything else built on this machine, "
+                                 + "including SynapseOS's own packages."
+                        if (root.section === "aur")
+                            return "Packages here are recipes, not binaries. Installing one "
+                                 + "opens a terminal, shows you its PKGBUILD, and builds it."
+                        if (root.section === "flathub")
+                            return "Sandboxed applications with their own runtimes, installed "
+                                 + "alongside your system packages rather than into them."
+                        return ""
+                    }
+                }
+
+                // The one-click fix, where there is one.
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 200; height: 32; radius: 4
+                    visible: root.section === "arsenal" && root.categories.length === 0
+                    color: baMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                    border { width: 1; color: root.cAccent }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Enable BlackArch"
+                        color: root.cAccent
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        id: baMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.inTerminal([root.bin, "arsenal", "enable-repo"],
+                                                   "enabling BlackArch in a terminal")
+                    }
+                }
+
+                // Flathub's remote is not added by default, and `flatpak
+                // search` against a box with no remotes returns nothing at all
+                // rather than an error — the failure looks exactly like
+                // "Flathub has no browsers".
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 200; height: 32; radius: 4
+                    visible: root.section === "flathub"
+                    color: fhMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                    border { width: 1; color: root.cAccent }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Enable Flathub"
+                        color: root.cAccent
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        id: fhMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.inTerminal([root.bin, "flatpak", "enable-flathub"],
+                                                   "enabling Flathub in a terminal")
                     }
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    color: root.cAccent
-                    font { pixelSize: 12; family: "monospace" }
-                    visible: text !== ""
-                    text: (root.section === "arsenal" && root.categories.length === 0)
-                          ? "sudo synpkg arsenal enable-repo" : ""
+                    text: "already enabled? this is safe to run twice"
+                    color: root.cDim
+                    font.pixelSize: 10
+                    visible: root.section === "flathub"
                 }
             }
 
+            // ── Rows ────────────────────────────────────────────────────────
             ListView {
                 anchors {
-                    top: searchBar.bottom; topMargin: 6
+                    top: toolbar.visible ? toolbar.bottom : parent.top
+                    topMargin: 6
                     left: catPane.right; right: parent.right; bottom: parent.bottom
                 }
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
                 anchors.bottomMargin: 10
+                visible: root.section !== "about"
                 clip: true
                 model: root.shownRows
                 spacing: 2
@@ -526,7 +1032,7 @@ FloatingWindow {
                     id: pkgRow
                     required property var modelData
                     width: ListView.view.width
-                    height: 48
+                    height: 52
                     radius: 4
                     color: rowMa.containsMouse ? root.wash(0.07) : "transparent"
 
@@ -546,20 +1052,50 @@ FloatingWindow {
                             right: actionBtn.left; rightMargin: 12
                             verticalCenter: parent.verticalCenter
                         }
-                        spacing: 2
+                        spacing: 3
 
                         Row {
                             spacing: 8
+                            width: parent.width
+
+                            // A Flatpak's identity is org.mozilla.firefox and
+                            // its name is Firefox. The name goes here; the id
+                            // stays visible beside it, because the id is what
+                            // the command line takes.
                             Text {
-                                text: pkgRow.modelData.name
+                                text: pkgRow.modelData.title !== ""
+                                      ? pkgRow.modelData.title : pkgRow.modelData.name
                                 color: root.cText
                                 font { pixelSize: 13; bold: true }
                             }
-                            Text {
-                                text: pkgRow.modelData.repo
-                                color: root.cDim
-                                font.pixelSize: 10
+
+                            // The source badge. This is the whole point of the
+                            // rewrite: no row on this screen is ambiguous about
+                            // where it came from or what will install it.
+                            Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
+                                height: 15
+                                width: badgeText.implicitWidth + 12
+                                radius: 3
+                                visible: pkgRow.modelData.repo !== ""
+                                color: Qt.rgba(root.sourceColor(pkgRow.modelData.repo).r,
+                                               root.sourceColor(pkgRow.modelData.repo).g,
+                                               root.sourceColor(pkgRow.modelData.repo).b, 0.16)
+                                Text {
+                                    id: badgeText
+                                    anchors.centerIn: parent
+                                    text: pkgRow.modelData.repo
+                                    color: root.sourceColor(pkgRow.modelData.repo)
+                                    font { pixelSize: 9; bold: true }
+                                }
+                            }
+
+                            Text {
+                                text: pkgRow.modelData.title !== "" ? pkgRow.modelData.name : ""
+                                color: root.cDim
+                                font { pixelSize: 10; family: "monospace" }
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: text !== ""
                             }
                             Text {
                                 text: pkgRow.modelData.extra
@@ -595,9 +1131,7 @@ FloatingWindow {
                             color: root.cAccent
                             font.pixelSize: 11
                             text: root.busy === pkgRow.modelData.name
-                                  ? "working…"
-                                  : (pkgRow.modelData.extra === "update" ? "Upgrade"
-                                     : (pkgRow.modelData.installed ? "Remove" : "Install"))
+                                  ? "working…" : root.rowVerb(pkgRow.modelData)
                         }
                         MouseArea {
                             id: btnMa
@@ -606,10 +1140,10 @@ FloatingWindow {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (pkgRow.modelData.extra === "update")
-                                    root.act("install", pkgRow.modelData.name)
+                                    root.act(pkgRow.modelData, "install")
                                 else
-                                    root.act(pkgRow.modelData.installed ? "remove" : "install",
-                                             pkgRow.modelData.name)
+                                    root.act(pkgRow.modelData,
+                                             pkgRow.modelData.installed ? "remove" : "install")
                             }
                         }
                     }

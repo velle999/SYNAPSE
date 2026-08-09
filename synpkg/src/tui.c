@@ -316,6 +316,70 @@ static void screen_arsenal(void)
 	sp_alpm_free(h);
 }
 
+/* The AUR and Flathub screens deliberately do NOT go through browse(). That
+ * helper's install path is cmd_install(), which is pacman — pointing it at an
+ * AUR name would report "target not found" and pointing it at an application
+ * id would be worse. Each source installs with its own tool or not at all. */
+static void screen_aur(void)
+{
+	char *term = prompt("\n  search the AUR: ");
+	if (!term || !*term)
+		return;
+
+	char *copy = xstrdup(term);
+	printf("\n");
+	aur_search_term(copy);
+	free(copy);
+
+	char *pick = prompt("\n  build which? (name, or blank to go back): ");
+	if (!pick || !*pick)
+		return;
+
+	/* aur install shows the PKGBUILD and prompts before makepkg runs, so
+	 * there is nothing to confirm here that it does not confirm better. */
+	char *args[] = { (char *)"install", pick };
+	cmd_aur(2, args);
+}
+
+static void screen_flathub(void)
+{
+	if (!sp_flatpak_present()) {
+		printf("\n  %sflatpak is not installed.%s\n", C_WARN(), C_RESET());
+		if (confirm("  install it now?")) {
+			char *one[] = { (char *)"flatpak" };
+			cmd_install(1, one);
+		}
+		return;
+	}
+
+	if (!sp_flathub_enabled()) {
+		printf("\n  %sNo Flathub remote is configured.%s\n", C_WARN(), C_RESET());
+		printf("  %sSearching without one silently returns nothing.%s\n",
+		       C_DIM(), C_RESET());
+		if (confirm("  enable Flathub now? (adds the remote and fetches its index)")) {
+			char *args[] = { (char *)"enable-flathub" };
+			cmd_flatpak(1, args);
+		}
+		return;
+	}
+
+	char *term = prompt("\n  search Flathub: ");
+	if (!term || !*term)
+		return;
+
+	char *copy = xstrdup(term);
+	printf("\n");
+	char *args[] = { (char *)"search", copy };
+	cmd_flatpak(2, args);
+	free(copy);
+
+	char *pick = prompt("\n  install which? (application id, or blank to go back): ");
+	if (pick && *pick) {
+		char *ins[] = { (char *)"install", pick };
+		cmd_flatpak(2, ins);
+	}
+}
+
 static void screen_installed(void)
 {
 	alpm_handle_t *h = sp_alpm_init(false);
@@ -345,9 +409,15 @@ int cmd_tui(int argc, char **argv)
 	banner();
 
 	for (;;) {
-		printf("\n  %s1%s  Updates          %s2%s  Search           %s3%s  Suggested apps\n",
+		/* Grouped by SOURCE, in the same order the GUI's nav lists them:
+		 * repositories, the AUR, Flathub, BlackArch, SynapseOS. Two
+		 * front-ends that disagree about where software comes from is the
+		 * confusion this program exists to remove. */
+		printf("\n  %s1%s  Updates          %s2%s  Repositories     %s3%s  Suggested apps\n",
 		       C_ACCENT(), C_RESET(), C_ACCENT(), C_RESET(), C_ACCENT(), C_RESET());
-		printf("  %s4%s  Arsenal          %s5%s  Installed        %s6%s  SynapseOS itself\n",
+		printf("  %s4%s  AUR              %s5%s  Flathub          %s6%s  Arsenal\n",
+		       C_ACCENT(), C_RESET(), C_ACCENT(), C_RESET(), C_ACCENT(), C_RESET());
+		printf("  %s7%s  Installed        %s8%s  SynapseOS itself %s9%s  About\n",
 		       C_ACCENT(), C_RESET(), C_ACCENT(), C_RESET(), C_ACCENT(), C_RESET());
 		printf("  %sq%s  Quit\n", C_ACCENT(), C_RESET());
 
@@ -359,9 +429,12 @@ int cmd_tui(int argc, char **argv)
 		case '1': screen_updates(); break;
 		case '2': screen_search(); break;
 		case '3': screen_suggest(); break;
-		case '4': screen_arsenal(); break;
-		case '5': screen_installed(); break;
-		case '6': {
+		case '4': screen_aur(); break;
+		case '5': screen_flathub(); break;
+		case '6': screen_arsenal(); break;
+		case '7': screen_installed(); break;
+		case '9': cmd_about(0, NULL); break;
+		case '8': {
 			char *args[] = { (char *)"check" };
 			cmd_system(1, args);
 			if (confirm("\n  apply SynapseOS updates now? (opens a build)")) {
