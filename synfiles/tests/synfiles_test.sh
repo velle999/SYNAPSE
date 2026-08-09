@@ -685,6 +685,64 @@ n=$("$SYNFILES" --rec actions "$AM/archive.zip" "$AM/a.txt" | tail -n +2 | wc -l
 "$SYNFILES" action >/dev/null 2>&1
 [ $? -eq 1 ] && ok "action with no arguments is an error" || bad "action accepted no arguments"
 
+# ── mime aliases and subclasses ─────────────────────────────────────────────
+# THE bug that hid Mount ISO. globs2 answers application/vnd.efi.iso for *.iso,
+# synui's service menu declares application/x-cd-image, and /usr/share/mime/
+# aliases records the second as an alias of the first. Comparing the strings
+# directly finds nothing and the menu silently never appears — Dolphin resolves
+# aliases, so it showed the entry and synfiles did not.
+MM="$T/mimedb"
+mkdir -p "$MM"
+cat > "$MM/aliases" <<'AL'
+application/x-cd-image application/vnd.efi.iso
+application/x-iso9660-image application/vnd.efi.iso
+AL
+cat > "$MM/subclasses" <<'SC'
+text/x-csrc text/plain
+SC
+
+cat > "$A/kio/servicemenus/test-iso.desktop" <<'SM'
+[Desktop Entry]
+Type=Application
+Name=Disc Image
+MimeType=application/x-cd-image;
+Actions=mount;
+
+[Desktop Action mount]
+Name=Mount Image
+Exec=fixture-mount %F
+SM
+
+# A menu declared for a subclass's PARENT must apply to the child too, which is
+# what makes "open with a text editor" work on source code.
+cat > "$A/kio/servicemenus/test-text.desktop" <<'SM'
+[Desktop Entry]
+Type=Application
+Name=Text Tools
+MimeType=text/plain;
+Actions=count;
+
+[Desktop Action count]
+Name=Count Lines
+Exec=fixture-count %F
+SM
+
+export SYNFILES_MIME_DIR="$MM"
+touch "$AM/disc.iso" "$AM/prog.c"
+
+"$SYNFILES" --rec actions "$AM/disc.iso" | grep -q 'Mount Image'
+check "a service menu declared for a mime ALIAS still matches" $?
+
+"$SYNFILES" --rec actions "$AM/prog.c" | grep -q 'Count Lines'
+check "a service menu declared for a PARENT type matches a subclass" $?
+
+# The equivalence must not become "everything matches everything".
+"$SYNFILES" --rec actions "$AM/disc.iso" | grep -q 'Count Lines' \
+    && bad "alias resolution matched an unrelated mime type" \
+    || ok "alias resolution does not over-match"
+
+unset SYNFILES_MIME_DIR
+
 "$SYNFILES" action no-such-thing.desktop -- "$AM/a.txt" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "action refuses an unknown desktop entry" || bad "action accepted a missing entry"
 

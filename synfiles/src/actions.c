@@ -120,21 +120,148 @@ static char *entry_get(const char *text, const char *group, const char *key)
 	return result;
 }
 
-/* Is `mime` in a ";"-separated MimeType= list? Whole-entry match: a substring
- * test puts every application/x-tar handler on application/x-tar-gz. */
+/* ── mime aliases and subclasses ────────────────────────────────────────────
+ *
+ * A mime type has more than one name, and a service menu is written against
+ * whichever one its author had in front of them.
+ *
+ * This is not theoretical. synui's own Mount ISO menu declares
+ * application/x-cd-image and application/x-iso9660-image; shared-mime-info's
+ * glob table answers application/vnd.efi.iso for *.iso, and
+ * /usr/share/mime/aliases records the first two as ALIASES of the third. A
+ * matcher that compares the two strings directly finds nothing, so the menu
+ * silently never appears — which is exactly what happened, and why Dolphin
+ * showed the entry and synfiles did not.
+ *
+ * Subclasses matter for the same reason in the other direction: text/x-csrc is
+ * a subclass of text/plain, so a menu declared for text/plain should apply to
+ * a .c file. Following the chain is what makes "Open with a text editor" work
+ * on source code.
+ */
+static char *g_alias_backing, *g_sub_backing;
+static char **g_alias_from, **g_alias_to;   size_t g_nalias;
+static char **g_sub_child, **g_sub_parent;  size_t g_nsub;
+
+static void load_pairs(const char *path, char ***a, char ***b, size_t *n,
+                       char **backing)
+{
+	*backing = slurp(path);
+	if (!*backing)
+		return;
+
+	size_t nlines = 0;
+	char **lines = split(*backing, '\n', &nlines);
+	*a = xmalloc((nlines ? nlines : 1) * sizeof **a);
+	*b = xmalloc((nlines ? nlines : 1) * sizeof **b);
+
+	for (size_t i = 0; i < nlines; i++) {
+		if (!*lines[i])
+			continue;
+		char *sp = strchr(lines[i], ' ');
+		if (!sp)
+			continue;
+		*sp = '\0';
+		(*a)[*n] = lines[i];
+		(*b)[*n] = sp + 1;
+		(*n)++;
+	}
+	free(lines);
+}
+
+static void load_mime_tables(void)
+{
+	static bool done;
+	if (done)
+		return;
+	done = true;
+
+	const char *env = getenv("SYNFILES_MIME_DIR");
+	const char *dir = (env && *env) ? env : "/usr/share/mime";
+
+	char *ap = xasprintf("%s/aliases", dir);
+	char *sp = xasprintf("%s/subclasses", dir);
+	load_pairs(ap, &g_alias_from, &g_alias_to, &g_nalias, &g_alias_backing);
+	load_pairs(sp, &g_sub_child, &g_sub_parent, &g_nsub, &g_sub_backing);
+	free(ap);
+	free(sp);
+}
+
+static bool set_has(const char *set, const char *s)
+{
+	char *w = xasprintf("\n%s\n", s);
+	bool hit = strstr(set, w) != NULL;
+	free(w);
+	return hit;
+}
+
+static char *set_add(char *set, const char *s)
+{
+	if (set_has(set, s))
+		return set;
+	char *grown = xasprintf("%s%s\n", set, s);
+	free(set);
+	return grown;
+}
+
+/* Every name this type answers to: itself, whatever it is an alias OF, every
+ * alias pointing AT it, and the whole chain of parents. Returned as
+ * "\ntype\ntype\n" so membership is a whole-line test. */
+static char *mime_equivalents(const char *mime)
+{
+	load_mime_tables();
+
+	char *set = xasprintf("\n%s\n", mime);
+
+	/* If we were handed an alias, add what it resolves to. */
+	for (size_t i = 0; i < g_nalias; i++)
+		if (!strcmp(g_alias_from[i], mime))
+			set = set_add(set, g_alias_to[i]);
+
+	/* And every alias that resolves to anything already in the set — this is
+	 * the direction that fixes the ISO menu. */
+	for (int pass = 0; pass < 2; pass++)
+		for (size_t i = 0; i < g_nalias; i++)
+			if (set_has(set, g_alias_to[i]))
+				set = set_add(set, g_alias_from[i]);
+
+	/* Parents, transitively. Bounded rather than recursive: the table is data
+	 * and a cycle in it must not become an infinite loop here. */
+	for (int depth = 0; depth < 8; depth++) {
+		size_t before = strlen(set);
+		for (size_t i = 0; i < g_nsub; i++)
+			if (set_has(set, g_sub_child[i]))
+				set = set_add(set, g_sub_parent[i]);
+		if (strlen(set) == before)
+			break;
+	}
+
+	return set;
+}
+
+/* Is any name this type answers to in a ";"-separated MimeType= list?
+ * Whole-entry match: a substring test puts every application/x-tar handler on
+ * application/x-tar-gz. */
 static bool mime_listed(const char *list, const char *mime)
 {
 	if (!list || !mime || !*mime)
 		return false;
-	size_t n = strlen(mime);
-	for (const char *p = list; p && *p; ) {
+
+	char *equiv = mime_equivalents(mime);
+
+	bool hit = false;
+	for (const char *p = list; p && *p && !hit; ) {
 		const char *semi = strchr(p, ';');
 		size_t len = semi ? (size_t)(semi - p) : strlen(p);
-		if (len == n && !strncmp(p, mime, n))
-			return true;
+		if (len) {
+			char *one = xstrndup(p, len);
+			hit = set_has(equiv, one);
+			free(one);
+		}
 		p = semi ? semi + 1 : NULL;
 	}
-	return false;
+
+	free(equiv);
+	return hit;
 }
 
 /* ── emitting ───────────────────────────────────────────────────────────── */
@@ -177,16 +304,9 @@ static char *find_desktop(const char *id)
 	return found;
 }
 
-static void emit_open_with(const char *mime)
+static void emit_open_with_one(const char *mime, char **seen, char **dirs,
+                               size_t ndirs)
 {
-	size_t ndirs = 0;
-	char **dirs = data_dirs(&ndirs);
-
-	/* Seen-list, because the same application is listed in both the user's
-	 * cache and the system one on any machine where a .desktop was overridden.
-	 */
-	char *seen = xstrdup("\n");
-
 	for (size_t i = 0; i < ndirs; i++) {
 		char *cache = xasprintf("%s/applications/mimeinfo.cache", dirs[i]);
 		char *text = slurp(cache);
@@ -213,13 +333,13 @@ static void emit_open_with(const char *mime)
 					continue;
 
 				char *marker = xasprintf("\n%s\n", ids[k]);
-				if (strstr(seen, marker)) {
+				if (strstr(*seen, marker)) {
 					free(marker);
 					continue;
 				}
-				char *grown = xasprintf("%s%s\n", seen, ids[k]);
-				free(seen);
-				seen = grown;
+				char *grown = xasprintf("%s%s\n", *seen, ids[k]);
+				free(*seen);
+				*seen = grown;
 				free(marker);
 
 				char *path = find_desktop(ids[k]);
@@ -248,7 +368,34 @@ static void emit_open_with(const char *mime)
 		}
 		free(text);
 	}
+}
 
+/* mimeinfo.cache is keyed by whatever name each application declared, so an
+ * app registered for application/x-cd-image is invisible to a lookup of
+ * application/vnd.efi.iso even though they are the same type. Every
+ * equivalent name is tried, and the seen-list keeps one application from
+ * appearing once per spelling. */
+static void emit_open_with(const char *mime)
+{
+	size_t ndirs = 0;
+	char **dirs = data_dirs(&ndirs);
+
+	/* Seen-list, because the same application is listed in both the user's
+	 * cache and the system one on any machine where a .desktop was
+	 * overridden — and now also once per alias. */
+	char *seen = xstrdup("\n");
+
+	char *equiv = mime_equivalents(mime);
+	size_t nnames = 0;
+	char *copy = xstrdup(equiv);
+	char **names = split(copy, '\n', &nnames);
+	for (size_t i = 0; i < nnames; i++)
+		if (*names[i])
+			emit_open_with_one(names[i], &seen, dirs, ndirs);
+
+	free(names);
+	free(copy);
+	free(equiv);
 	free(seen);
 	free_list(dirs, ndirs);
 }

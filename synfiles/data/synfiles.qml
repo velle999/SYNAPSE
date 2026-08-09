@@ -712,6 +712,7 @@ FloatingWindow {
         else if (event.key === Qt.Key_A) { root.selectAll();          event.accepted = true }
         else if (event.key === Qt.Key_Z) { root.doUndo();             event.accepted = true }
         else if (event.key === Qt.Key_F) { root.beginSearch();        event.accepted = true }
+        else if (event.key === Qt.Key_L) { root.beginEditPath();      event.accepted = true }
         else if (event.key === Qt.Key_T) { root.newTab(root.tab.path, "dir"); event.accepted = true }
         else if (event.key === Qt.Key_W) { root.closeTab(root.current); event.accepted = true }
         else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
@@ -848,6 +849,41 @@ FloatingWindow {
                    (copy ? "copying " : "moving ") + paths.length
                    + (paths.length === 1 ? " item" : " items") + "…")
     }
+
+    // ── Address bar ─────────────────────────────────────────────────────────
+    //
+    // Breadcrumbs are faster to click; a text field is the only way to paste a
+    // path, or type one that is not on screen. Every browser and every other
+    // file manager offers both, switched by clicking the empty space beside
+    // the crumbs or pressing Ctrl+L.
+    property bool editingPath: false
+
+    function beginEditPath() {
+        if (!root.tab || root.tab.view !== "dir") return
+        root.editingPath = true
+    }
+
+    // Typed by a person, so it is RAW text — the one place a path enters this
+    // program already decoded. It is encoded on the way in, which is the exact
+    // inverse of everywhere else and the reason this is worth a comment.
+    function commitPath(text) {
+        root.editingPath = false
+        let p = text.trim()
+        if (!p) return
+        if (p.indexOf("file://") === 0) p = p.substring(7)
+        if (p.indexOf("~") === 0) p = root.homeDir + p.substring(1)
+        if (p.indexOf("/") !== 0) p = root.disp(root.tab.path) + "/" + p
+        root.navigate(root.encodePath(p), "dir")
+    }
+
+    // ── Hamburger ───────────────────────────────────────────────────────────
+    property bool menuOpen: false
+
+    // Split view is NOT here yet, deliberately. Two panes means factoring the
+    // 247-line file pane into a component and moving `selection` out of root
+    // and into each tab — selection is per-pane or it is nonsense. That is a
+    // structural change and it is its own commit; a Split button that toggled
+    // a flag and drew nothing would be worse than no button at all.
 
     // ── Search ──────────────────────────────────────────────────────────────
     //
@@ -1118,9 +1154,9 @@ FloatingWindow {
             Flickable {
                 anchors {
                     top: parent.top; left: parent.left; right: parent.right
-                    bottom: sideFooter.top
+                    bottom: parent.bottom
                 }
-                anchors.topMargin: 10
+                anchors.topMargin: 8
                 contentHeight: sideCol.implicitHeight
                 clip: true
 
@@ -1129,13 +1165,6 @@ FloatingWindow {
                     width: parent.width
                     spacing: 2
 
-                    Text {
-                        x: 14
-                        text: "SYNAPSE Files"
-                        color: root.cAccent
-                        font { pixelSize: 14; bold: true }
-                        bottomPadding: 8
-                    }
 
                     // Views that are not directories. About is NOT here — it is
                     // in the footer below, because it is read once and these
@@ -1343,25 +1372,6 @@ FloatingWindow {
                 }
             }
 
-            // Pinned to the bottom and outside the scrolling area, so it stays
-            // reachable without ever being in the way of the lists above.
-            Column {
-                id: sideFooter
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                bottomPadding: 6
-                spacing: 0
-
-                Rectangle {
-                    width: sidebar.width; height: 1
-                    color: root.wash(0.18)
-                }
-                SideRow {
-                    label: "About"
-                    iconName: "help-about"
-                    active: root.tab && root.tab.view === "about"
-                    onActivated: root.navigate("", "about")
-                }
-            }
         }
 
         // ── Main pane ───────────────────────────────────────────────────────
@@ -1371,10 +1381,164 @@ FloatingWindow {
                 right: parent.right; bottom: parent.bottom
             }
 
+            // ── Toolbar ─────────────────────────────────────────────────────
+            // Up, address, split, search, menu — the row every file manager
+            // and every browser puts here, in that order, because that is
+            // where hands already go.
+            Rectangle {
+                id: toolBar
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 38
+                color: root.cPanel
+
+                Rectangle {
+                    id: upBtn
+                    anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                    width: 28; height: 28; radius: 4
+                    color: upBtnMa.containsMouse ? root.wash(0.16) : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "↑"
+                        color: root.cAccent
+                        font.pixelSize: 15
+                    }
+                    MouseArea {
+                        id: upBtnMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        enabled: root.tab && root.tab.view === "dir"
+                        onClicked: root.navigate(root.parentEnc(root.tab.path), "dir")
+                    }
+                }
+
+                Rectangle {
+                    id: addressBar
+                    anchors {
+                        left: upBtn.right; leftMargin: 6
+                        right: toolActions.left; rightMargin: 8
+                        verticalCenter: parent.verticalCenter
+                    }
+                    height: 28
+                    radius: 4
+                    color: root.cBg
+                    border {
+                        width: 1
+                        color: root.editingPath ? root.cAccent : root.wash(0.18)
+                    }
+
+                    // Breadcrumbs, until somebody wants to type.
+                    Row {
+                        id: crumbs
+                        anchors {
+                            left: parent.left; leftMargin: 10
+                            verticalCenter: parent.verticalCenter
+                        }
+                        spacing: 0
+                        visible: !root.editingPath && root.tab && root.tab.view === "dir"
+
+                        Repeater {
+                            model: {
+                                if (!root.tab || root.tab.view !== "dir") return []
+                                const parts = root.tab.path.split("/").filter(x => x !== "")
+                                const out = [{ label: "/", path: "/" }]
+                                let acc = ""
+                                for (const seg of parts) {
+                                    acc = acc + "/" + seg
+                                    out.push({ label: root.disp(seg), path: acc })
+                                }
+                                return out
+                            }
+                            delegate: Row {
+                                id: crumb
+                                required property var modelData
+                                Text {
+                                    text: " › "
+                                    color: root.cDim
+                                    font.pixelSize: 12
+                                    visible: crumb.modelData.path !== "/"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Text {
+                                    text: crumb.modelData.label
+                                    color: crumbMa.containsMouse ? root.cAccent : root.cText
+                                    font.pixelSize: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    MouseArea {
+                                        id: crumbMa
+                                        anchors { fill: parent; margins: -3 }
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.navigate(crumb.modelData.path, "dir")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // A non-directory view has no path to show, so it says what
+                    // it is instead of leaving an empty box.
+                    Text {
+                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                        visible: !root.editingPath && root.tab && root.tab.view !== "dir"
+                        text: root.tab ? (root.tab.view === "recent" ? "Recently Modified"
+                                        : root.tab.view === "trash"  ? "Trash"
+                                        : "About") : ""
+                        color: root.cText
+                        font.pixelSize: 12
+                    }
+
+                    TextInput {
+                        id: pathInput
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        visible: root.editingPath
+                        color: root.cText
+                        font.pixelSize: 12
+                        clip: true
+                        selectByMouse: true
+                        onVisibleChanged: {
+                            if (visible) {
+                                text = root.disp(root.tab.path)
+                                forceActiveFocus()
+                                selectAll()
+                            }
+                        }
+                        onAccepted: root.commitPath(text)
+                        Keys.onEscapePressed: root.editingPath = false
+                    }
+
+                    // Clicking the bar's empty space switches to editing, the
+                    // way a browser's does.
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+                        enabled: !root.editingPath
+                        cursorShape: Qt.IBeamCursor
+                        onClicked: root.beginEditPath()
+                        z: -1
+                    }
+                }
+
+                Row {
+                    id: toolActions
+                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                    spacing: 2
+
+                    ToolButton { glyph: "⌕"; hint: "Search"; onActivated: root.beginSearch() }
+                    ToolButton {
+                        glyph: "☰"
+                        hint: "Menu"
+                        active: root.menuOpen
+                        onActivated: root.menuOpen = !root.menuOpen
+                    }
+                }
+            }
+
             // Tab strip
             Rectangle {
                 id: tabStrip
-                anchors { top: parent.top; left: parent.left; right: parent.right }
+                anchors { top: toolBar.bottom; left: parent.left; right: parent.right }
                 height: 34
                 color: root.cPanel
 
@@ -1487,71 +1651,6 @@ FloatingWindow {
                 anchors.margins: 8
                 height: 30
                 visible: root.tab && root.tab.view === "dir"
-
-                Row {
-                    id: crumbs
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                    spacing: 0
-
-                    Rectangle {
-                        width: 26; height: 26; radius: 3
-                        color: upMa.containsMouse ? root.wash(0.12) : "transparent"
-                        Text {
-                            anchors.centerIn: parent
-                            text: "↑"
-                            color: root.cAccent
-                            font.pixelSize: 14
-                        }
-                        MouseArea {
-                            id: upMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.navigate(root.parentEnc(root.tab.path), "dir")
-                        }
-                    }
-
-                    // Each crumb keeps the ENCODED prefix it navigates to;
-                    // rebuilding a path by re-joining displayed text would lose
-                    // exactly the names this whole scheme exists to protect.
-                    Repeater {
-                        model: {
-                            if (!root.tab || root.tab.view !== "dir") return []
-                            const parts = root.tab.path.split("/").filter(s => s !== "")
-                            const out = [{ label: "/", path: "/" }]
-                            let acc = ""
-                            for (const seg of parts) {
-                                acc = acc + "/" + seg
-                                out.push({ label: root.disp(seg), path: acc })
-                            }
-                            return out
-                        }
-                        delegate: Row {
-                            id: crumb
-                            required property var modelData
-                            Text {
-                                text: " / "
-                                color: root.cDim
-                                font.pixelSize: 12
-                                visible: crumb.modelData.path !== "/"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: crumb.modelData.label
-                                color: crumbMa.containsMouse ? root.cAccent : root.cText
-                                font.pixelSize: 12
-                                anchors.verticalCenter: parent.verticalCenter
-                                MouseArea {
-                                    id: crumbMa
-                                    anchors { fill: parent; margins: -3 }
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.navigate(crumb.modelData.path, "dir")
-                                }
-                            }
-                        }
-                    }
-                }
 
                 Row {
                     anchors { right: parent.right; verticalCenter: parent.verticalCenter }
@@ -2099,8 +2198,9 @@ FloatingWindow {
                                 // everywhere else.
                                 if (!root.isSelected(name)) root.selectOnly(name)
                                 ctxMenu.row = fileRow.modelData
-                                ctxMenu.x = fileRow.x + mouse.x
-                                ctxMenu.y = fileRow.y + mouse.y - fileList.contentY + heads.height + 8
+                                const gp = rowMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
+                                ctxMenu.rawX = gp.x
+                                ctxMenu.rawY = gp.y
                                 ctxMenu.open = true
                                 root.loadActions()
                                 return
@@ -2228,9 +2328,9 @@ FloatingWindow {
                             if (mouse.button === Qt.RightButton) {
                                 if (!root.isSelected(name)) root.selectOnly(name)
                                 ctxMenu.row = gridCell.modelData
-                                const p = gridCell.mapToItem(fileGrid.parent, mouse.x, mouse.y)
-                                ctxMenu.x = p.x
-                                ctxMenu.y = p.y
+                                const p = cellMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
+                                ctxMenu.rawX = p.x
+                                ctxMenu.rawY = p.y
                                 ctxMenu.open = true
                                 root.loadActions()
                                 return
@@ -2295,26 +2395,35 @@ FloatingWindow {
                 property var row: null
 
                 visible: ctxMenu.open
-                width: 190
-                height: ctxCol.implicitHeight + 8
+                width: 210
+                // Clamped as a BINDING, not assigned once on open. The action
+                // list arrives asynchronously, so the menu grows AFTER it is
+                // positioned — which is why it hung off the bottom of the
+                // window and was clipped at the border.
+                readonly property real wantX: ctxMenu.rawX
+                readonly property real wantY: ctxMenu.rawY
+                property real rawX: 0
+                property real rawY: 0
+                x: Math.max(4, Math.min(ctxMenu.rawX, parent.width - width - 4))
+                y: Math.max(4, Math.min(ctxMenu.rawY, parent.height - height - 4))
+
+                // And capped, so a menu with a dozen Open With entries scrolls
+                // instead of being taller than the window can show.
+                height: Math.min(ctxCol.implicitHeight + 8, parent.height - 16)
                 radius: 4
                 color: root.cPanel
                 border { width: 1; color: root.wash(0.35) }
                 z: 100
 
-                // Keep the menu inside the window rather than letting it hang
-                // off the bottom edge on a row near the end of a long list.
-                onOpenChanged: {
-                    if (!ctxMenu.open) return
-                    if (ctxMenu.y + ctxMenu.height > parent.height)
-                        ctxMenu.y = Math.max(0, parent.height - ctxMenu.height - 4)
-                    if (ctxMenu.x + ctxMenu.width > parent.width)
-                        ctxMenu.x = Math.max(0, parent.width - ctxMenu.width - 4)
-                }
+                Flickable {
+                    anchors { fill: parent; margins: 4 }
+                    contentHeight: ctxCol.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
 
                 Column {
                     id: ctxCol
-                    anchors { fill: parent; margins: 4 }
+                    width: parent.width
 
                     Repeater {
                         model: {
@@ -2458,6 +2567,141 @@ FloatingWindow {
                                             root.selection = inv
                                             break
                                         }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                }
+            }
+
+            // ── Hamburger menu ──────────────────────────────────────────────
+            // Where About went, and where the things that are settings rather
+            // than actions live. Keeping them out of the toolbar is what stops
+            // the toolbar becoming the thing it is meant to summarise.
+            MouseArea {
+                anchors.fill: parent
+                visible: root.menuOpen
+                acceptedButtons: Qt.AllButtons
+                onClicked: root.menuOpen = false
+                onPressed: root.menuOpen = false
+            }
+
+            Rectangle {
+                id: mainMenu
+                visible: root.menuOpen
+                anchors { top: parent.top; topMargin: 40; right: parent.right; rightMargin: 8 }
+                width: 230
+                height: Math.min(menuCol.implicitHeight + 8, parent.height - 60)
+                radius: 4
+                color: root.cPanel
+                border { width: 1; color: root.wash(0.35) }
+                z: 160
+
+                Flickable {
+                    anchors { fill: parent; margins: 4 }
+                    contentHeight: menuCol.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Column {
+                        id: menuCol
+                        width: parent.width
+
+                        Repeater {
+                            model: [
+                                { label: "New Tab",              act: "newtab",   on: true },
+                                { label: "New Folder…",          act: "newdir",   on: true },
+                                { label: "New Empty File…",      act: "newfile",  on: true },
+                                { label: "-",                    act: "",         on: true },
+                                { label: root.showTree ? "Hide Folder Tree" : "Show Folder Tree",
+                                  act: "tree",    on: true },
+                                { label: root.thumbs ? "Hide Previews" : "Show Previews",
+                                  act: "thumbs",  on: true },
+                                { label: "-",                    act: "",         on: true },
+                                { label: "Show Hidden Files",    act: "hidden",   on: true },
+                                { label: "Select All",           act: "selectall",on: true },
+                                { label: "-",                    act: "",         on: true },
+                                { label: "Search…",              act: "search",   on: true },
+                                { label: "Open Terminal Here",   act: "term",     on: true },
+                                { label: "-",                    act: "",         on: true },
+                                { label: "Open Trash",           act: "trash",    on: true },
+                                { label: "Recently Modified",    act: "recent",   on: true },
+                                { label: "-",                    act: "",         on: true },
+                                { label: "About SYNAPSE Files",  act: "about",    on: true }
+                            ]
+                            delegate: Item {
+                                id: menuItem
+                                required property var modelData
+                                width: menuCol.width
+                                height: menuItem.modelData.label === "-" ? 5 : 26
+
+                                Rectangle {
+                                    anchors { left: parent.left; right: parent.right
+                                              verticalCenter: parent.verticalCenter }
+                                    height: 1
+                                    color: root.wash(0.25)
+                                    visible: menuItem.modelData.label === "-"
+                                }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 3
+                                    visible: menuItem.modelData.label !== "-"
+                                    color: menuMa.containsMouse ? root.wash(0.18) : "transparent"
+                                    Text {
+                                        anchors { left: parent.left; leftMargin: 10
+                                                  verticalCenter: parent.verticalCenter }
+                                        text: menuItem.modelData.label
+                                        color: root.cText
+                                        font.pixelSize: 12
+                                    }
+                                    // A tick for the ones that are states, so
+                                    // the menu says what is on without being
+                                    // opened twice to find out.
+                                    Text {
+                                        anchors { right: parent.right; rightMargin: 10
+                                                  verticalCenter: parent.verticalCenter }
+                                        text: {
+                                            const a = menuItem.modelData.act
+                                            if (a === "hidden") return root.tab && root.tab.showHidden ? "✓" : ""
+                                            if (a === "tree")   return root.showTree ? "✓" : ""
+                                            if (a === "thumbs") return root.thumbs ? "✓" : ""
+                                            return ""
+                                        }
+                                        color: root.cAccent
+                                        font.pixelSize: 12
+                                    }
+                                    MouseArea {
+                                        id: menuMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.menuOpen = false
+                                            switch (menuItem.modelData.act) {
+                                            case "newtab":  root.newTab(root.tab ? root.tab.path
+                                                                       : root.encodePath(root.homeDir), "dir"); break
+                                            case "newdir":  root.creating = true; break
+                                            case "newfile": root.creatingFile = true; break
+                                            case "tree":
+                                                root.showTree = !root.showTree
+                                                if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
+                                                    root.treeToggle(root.encodePath(root.homeDir))
+                                                break
+                                            case "thumbs":  root.thumbs = !root.thumbs; break
+                                            case "hidden":
+                                                root.setTab({ showHidden: !root.tab.showHidden })
+                                                root.reload()
+                                                break
+                                            case "selectall": root.selectAll(); break
+                                            case "search":  root.beginSearch(); break
+                                            case "term":    root.openTerminalHere(); break
+                                            case "trash":   root.navigate("", "trash"); break
+                                            case "recent":  root.navigate("", "recent"); break
+                                            case "about":   root.navigate("", "about"); break
+                                            }
                                         }
                                     }
                                 }
@@ -2903,7 +3147,8 @@ FloatingWindow {
             id: sideLabel
             anchors {
                 left: sideIcon.right; leftMargin: 8
-                right: parent.right; rightMargin: 26
+                right: sideRow.hasMeter ? meterPct.left : parent.right
+                rightMargin: 8
                 verticalCenter: sideIcon.verticalCenter
             }
             text: sideRow.label
@@ -2934,11 +3179,19 @@ FloatingWindow {
                 color: sideRow.fillRatio >= 0.9 ? root.cWarn : root.cAccent
             }
         }
+        // Sits on the LABEL line, left of the trailing glyph. Anchoring it to
+        // the meter put it exactly where the eject button is, and the two
+        // overlapped whenever a mounted drive was hovered.
         Text {
-            visible: sideRow.hasMeter && sideMa.containsMouse
-            anchors { right: meterTrack.right; bottom: meterTrack.top; bottomMargin: 1 }
-            text: Math.round(sideRow.fillRatio * 100) + "% full"
-            color: root.cDim
+            id: meterPct
+            visible: sideRow.hasMeter
+            anchors {
+                right: parent.right
+                rightMargin: sideRow.trailing !== "" && sideMa.containsMouse ? 26 : 10
+                verticalCenter: sideIcon.verticalCenter
+            }
+            text: Math.round(sideRow.fillRatio * 100) + "%"
+            color: sideRow.fillRatio >= 0.9 ? root.cWarn : root.cDim
             font.pixelSize: 9
         }
 
@@ -3001,6 +3254,52 @@ FloatingWindow {
                     sideRow.activated()
                 }
             }
+        }
+    }
+
+    component ToolButton: Rectangle {
+        id: tb
+        property string glyph: ""
+        property string hint: ""
+        property bool active: false
+        signal activated()
+
+        width: 30; height: 28
+        radius: 4
+        color: tb.active ? root.wash(0.22)
+             : (tbMa.containsMouse ? root.wash(0.14) : "transparent")
+
+        Text {
+            anchors.centerIn: parent
+            text: tb.glyph
+            color: tb.active ? root.cAccent : root.cText
+            font.pixelSize: 14
+        }
+        // A hover label rather than a permanent one: five glyphs with words
+        // under them is a toolbar nobody can scan.
+        Rectangle {
+            visible: tbMa.containsMouse && tb.hint !== ""
+            anchors { top: parent.bottom; topMargin: 2; horizontalCenter: parent.horizontalCenter }
+            width: hintText.implicitWidth + 12
+            height: 18
+            radius: 3
+            color: root.cBg
+            border { width: 1; color: root.wash(0.3) }
+            z: 300
+            Text {
+                id: hintText
+                anchors.centerIn: parent
+                text: tb.hint
+                color: root.cText
+                font.pixelSize: 10
+            }
+        }
+        MouseArea {
+            id: tbMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tb.activated()
         }
     }
 
