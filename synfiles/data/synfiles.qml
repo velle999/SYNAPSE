@@ -2526,11 +2526,14 @@ FloatingWindow {
                     id: gridCell
                     required property var modelData
                     readonly property bool isSelected: root.isSelected(gridCell.modelData.name)
+                    property bool dropHover: false
                     width: fileGrid.cellWidth - 6
                     height: fileGrid.cellHeight - 6
                     radius: 4
-                    color: gridCell.isSelected ? root.wash(0.22)
+                    color: gridCell.dropHover ? root.wash(0.40)
+                         : gridCell.isSelected ? root.wash(0.22)
                          : (cellMa.containsMouse ? root.wash(0.10) : "transparent")
+                    border { width: gridCell.dropHover ? 1 : 0; color: root.cAccent }
 
                     Image {
                         id: cellIcon
@@ -2581,11 +2584,55 @@ FloatingWindow {
                         elide: Text.ElideRight
                     }
 
+                    // Both halves of drag-and-drop, the same as the list
+                    // rows have. They were only ever wired into the list, so
+                    // dragging did nothing at all in icon view — which is the
+                    // view anybody who turned previews on is looking at.
+                    DropArea {
+                        anchors.fill: parent
+                        enabled: gridCell.modelData.type === "dir" && root.dragging
+                        onEntered: gridCell.dropHover = root.canDropOn(gridCell.modelData.full)
+                        onExited: gridCell.dropHover = false
+                        onDropped: {
+                            gridCell.dropHover = false
+                            root.dropOn(gridCell.modelData.full)
+                        }
+                    }
+
                     MouseArea {
                         id: cellMa
                         anchors.fill: parent
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        property real pressX: 0
+                        property real pressY: 0
+                        onPressed: (mouse) => {
+                            cellMa.pressX = mouse.x
+                            cellMa.pressY = mouse.y
+                        }
+                        onReleased: {
+                            if (root.dragging) {
+                                dragGhost.Drag.drop()
+                                root.endDrag()
+                            }
+                        }
+                        onPositionChanged: (mouse) => {
+                            if (!cellMa.pressed) return
+                            root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
+                            const gp = cellMa.mapToItem(dragGhost.parent, mouse.x, mouse.y)
+                            if (!root.dragging) {
+                                const dx = mouse.x - cellMa.pressX
+                                const dy = mouse.y - cellMa.pressY
+                                if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
+                                    return
+                                root.beginDrag(gridCell.modelData,
+                                               root.selection.length > 1
+                                               ? root.selection.length + " items"
+                                               : root.disp(gridCell.modelData.name))
+                            }
+                            dragGhost.x = gp.x + 8
+                            dragGhost.y = gp.y + 8
+                        }
                         onClicked: (mouse) => {
                             fileGrid.forceActiveFocus()
                             const name = gridCell.modelData.name

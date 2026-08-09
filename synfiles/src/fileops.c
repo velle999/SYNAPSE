@@ -452,13 +452,17 @@ int cmd_copy(int argc, char **argv)
 	args_t a = parse_args(argc, argv, "copy");
 
 	char *dest = sf_resolve(a.dest);
-	struct stat ds;
-	if (stat(dest, &ds) != 0 || !S_ISDIR(ds.st_mode))
-		die("copy: %s is not a directory", a.dest);
 
+	/* O_DIRECTORY IS the "is it a directory" test — it fails with ENOTDIR on
+	 * anything else. Asking stat() first and opening afterwards resolves the
+	 * name twice and answers about two possibly different files; every
+	 * operation below then runs against this ONE descriptor. */
 	int dfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-	if (dfd < 0)
+	if (dfd < 0) {
+		if (errno == ENOTDIR)
+			die("copy: %s is not a directory", a.dest);
 		die("copy: cannot open %s: %s", dest, strerror(errno));
+	}
 
 	if (g_out == OUT_REC)
 		rec_row(3, "path", "status", "detail");
@@ -524,9 +528,16 @@ int cmd_move(int argc, char **argv)
 	args_t a = parse_args(argc, argv, "move");
 
 	char *dest = sf_resolve(a.dest);
-	struct stat ds;
-	if (stat(dest, &ds) != 0 || !S_ISDIR(ds.st_mode))
-		die("move: %s is not a directory", a.dest);
+
+	/* Opened once, up front, for the same reason as in copy: O_DIRECTORY is
+	 * the directory test, and the descriptor is what the loop below works
+	 * against instead of re-resolving the name per source. */
+	int destfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (destfd < 0) {
+		if (errno == ENOTDIR)
+			die("move: %s is not a directory", a.dest);
+		die("move: cannot open %s: %s", dest, strerror(errno));
+	}
 
 	if (g_out == OUT_REC)
 		rec_row(3, "path", "status", "detail");
@@ -544,9 +555,13 @@ int cmd_move(int argc, char **argv)
 
 		char *target = xasprintf("%s/%s", dest, sf_basename(src));
 
-		bool exists = faccessat(AT_FDCWD, target, F_OK, AT_SYMLINK_NOFOLLOW) == 0;
+		/* Asked THROUGH the destination descriptor rather than by path: the
+		 * answer and the action that follows it then refer to the same
+		 * directory even if `dest` is replaced underneath us. */
+		bool exists = faccessat(destfd, sf_basename(src), F_OK,
+		                        AT_SYMLINK_NOFOLLOW) == 0;
 		if (exists) {
-			int dfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+			const int dfd = destfd;
 			bool handled = false;
 			switch (a.pol) {
 			case CONFLICT_ERROR:
@@ -570,8 +585,6 @@ int cmd_move(int argc, char **argv)
 				sf_rm_rf(dfd, sf_basename(src));
 				break;
 			}
-			if (dfd >= 0)
-				close(dfd);
 			if (handled) {
 				free(target);
 				free(src);
@@ -605,36 +618,29 @@ int cmd_move(int argc, char **argv)
 		 * every entry — a partial copy followed by a delete is the worst
 		 * outcome this program could produce. */
 		tally_t sub = { 0, 0, 0 };
-		int sfd = AT_FDCWD;
-		int dfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-		if (dfd < 0) {
-			report(src, "failed", strerror(errno));
-			t.failed++;
-		} else {
-			copy_tree(sfd, src, dfd, sf_basename(target), a.pol, &sub, src);
-			close(dfd);
+		copy_tree(AT_FDCWD, src, destfd, sf_basename(target), a.pol, &sub, src);
 
-			if (sub.failed == 0) {
-				if (sf_rm_rf(AT_FDCWD, src) == 0) {
-					sf_journal("move", target, src);
-					report(src, "done", "copied across filesystems");
-					t.done++;
-				} else {
-					report(src, "failed",
-					       "copied, but the original could not be removed");
-					t.failed++;
-				}
+		if (sub.failed == 0) {
+			if (sf_rm_rf(AT_FDCWD, src) == 0) {
+				sf_journal("move", target, src);
+				report(src, "done", "copied across filesystems");
+				t.done++;
 			} else {
 				report(src, "failed",
-				       "copy incomplete — the original was left alone");
+				       "copied, but the original could not be removed");
 				t.failed++;
 			}
+		} else {
+			report(src, "failed",
+			       "copy incomplete — the original was left alone");
+			t.failed++;
 		}
 
 		free(target);
 		free(src);
 	}
 
+	close(destfd);
 	free(dest);
 	free(a.srcs);
 	return finish(&t);

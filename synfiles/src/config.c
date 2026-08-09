@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 typedef enum { T_INT, T_BOOL, T_ENUM } kind_t;
@@ -196,6 +197,11 @@ static int write_all(const char *path, const char *text, const char *key,
 
 	size_t len = strlen(out);
 	bool wrote = write(fd, out, len) == (ssize_t)len && fsync(fd) == 0;
+	/* The mode is set on the DESCRIPTOR, before the rename, so the file is
+	 * never briefly readable under its final name and no chmod ever resolves
+	 * a path a second time — mkstemp already gives 0600, this states it. */
+	if (fchmod(fd, 0600) != 0)
+		wrote = false;
 	close(fd);
 
 	int rc = 0;
@@ -203,8 +209,6 @@ static int write_all(const char *path, const char *text, const char *key,
 		warn("cannot save settings: %s", strerror(errno));
 		unlink(tmp);
 		rc = 1;
-	} else {
-		chmod(path, 0600);
 	}
 
 	free(tmp);

@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 /* realpath(p, NULL) mallocs a buffer of the right size. The PATH_MAX form
@@ -285,16 +286,22 @@ static int write_atomic(const char *path, const char *text)
 static void backup_once(const char *path)
 {
 	char *bak = xasprintf("%s.pre-synfiles", path);
-	if (access(bak, F_OK) != 0) {
+
+	/* O_EXCL IS the "once, ever" test. Asking access() whether the backup
+	 * exists and then opening it is two answers to one question, and the file
+	 * can appear — or be replaced with a link to something else — in between;
+	 * the open would then truncate whatever the link pointed at. Create-or-
+	 * fail says it in one call. */
+	int fd = open(bak, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+	if (fd >= 0) {
 		char *text = slurp(path);
 		if (text) {
-			FILE *f = fopen(bak, "w");
-			if (f) {
-				fputs(text, f);
-				fclose(f);
-			}
+			size_t len = strlen(text);
+			if (write(fd, text, len) != (ssize_t)len)
+				warn("could not write %s", bak);
 			free(text);
 		}
+		close(fd);
 	}
 	free(bak);
 }

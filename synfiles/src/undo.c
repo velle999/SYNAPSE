@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -126,8 +127,11 @@ void sf_journal(const char *op, const char *a, const char *b)
 			fputs(keep, f);
 		fprintf(f, "%ld\t%lld\t%s\t%s\t%s\n", g_batch, (long long)time(NULL),
 		        op, ea, eb);
+		/* On the descriptor, not the path: a chmod that resolves the name a
+		 * second time can land on a file that replaced this one between the
+		 * write and the mode change. */
+		fchmod(fileno(f), 0600);
 		fclose(f);
-		chmod(path, 0600);
 	}
 
 	free(ea);
@@ -218,8 +222,11 @@ static void forget_batch(long batch)
 				continue;
 			fprintf(f, "%s\n", lines[i]);
 		}
+		/* On the descriptor, not the path: a chmod that resolves the name a
+		 * second time can land on a file that replaced this one between the
+		 * write and the mode change. */
+		fchmod(fileno(f), 0600);
 		fclose(f);
-		chmod(path, 0600);
 	}
 
 	free(lines);
