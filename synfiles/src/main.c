@@ -50,6 +50,8 @@ static void usage(FILE *f)
 "  rename <path> <newname>\n"
 "  mkdir <path>...\n"
 "  delete --yes <path>...  PERMANENT, no trash, no undo\n"
+"  compress [--format=F] [--name=N] <path>...\n"
+"                          F is tar.gz (default), tar.xz, tar.zst, zip, 7z\n"
 "  undo                    reverse the last thing that changed files\n"
 "  undo list               what could be undone\n"
 "\n"
@@ -151,6 +153,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "rename"))  return cmd_rename(rest_argc, rest);
 	if (!strcmp(cmd, "mkdir"))   return cmd_mkdir(rest_argc, rest);
 	if (!strcmp(cmd, "delete"))  return cmd_delete(rest_argc, rest);
+	if (!strcmp(cmd, "compress")) return cmd_compress(rest_argc, rest);
 	if (!strcmp(cmd, "undo"))    return cmd_undo(rest_argc, rest);
 	if (!strcmp(cmd, "actions")) return cmd_actions(rest_argc, rest);
 	if (!strcmp(cmd, "action"))  return cmd_action(rest_argc, rest);

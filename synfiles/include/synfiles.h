@@ -179,6 +179,13 @@ const char *sf_basename(const char *path);
  * itself. Returns 0 on success, -1 with errno set. */
 int sf_rm_rf(int dirfd, const char *name);
 
+/* ── archive.c — creating archives ──────────────────────────────────────────
+ * Extraction already works through synui's KIO service menu; this is the half
+ * nothing provides. Compression is delegated to tar/7z/zip — every input must
+ * share one parent, and the tool runs with that directory as its cwd, or the
+ * archive records absolute paths and unpacking it scatters files. */
+int cmd_compress(int argc, char **argv);
+
 /* ── undo.c — the operation journal ─────────────────────────────────────────
  * Every mutation records how to reverse itself, in batches so that a move of
  * six files undoes as one thing. Undo VERIFIES before it acts and refuses

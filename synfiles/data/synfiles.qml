@@ -718,6 +718,137 @@ FloatingWindow {
     }
 }
 
+    // ── Folder tree ─────────────────────────────────────────────────────────
+    //
+    // Lazily loaded, one level at a time. Reading a whole home directory tree
+    // up front to draw a sidebar is how a file manager takes four seconds to
+    // open; a node is only listed when it is expanded, and the result is kept
+    // so collapsing and reopening costs nothing.
+    //
+    // Directories only — a tree with files in it is the list, twice.
+    property bool showTree: false
+    property var treeChildren: ({})    // encoded path -> [{name, full}]
+    property var treeOpen: ({})        // encoded path -> true
+
+    Process {
+        id: treeProc
+        property string forPath: ""
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const kids = root.parseRecords(this.text)
+                    .filter(r => r.type === "dir")
+                    .map(r => ({ name: r.name,
+                                 full: root.joinEnc(treeProc.forPath, r.name) }))
+                const m = ({})
+                for (const k in root.treeChildren) m[k] = root.treeChildren[k]
+                m[treeProc.forPath] = kids
+                root.treeChildren = m
+            }
+        }
+    }
+
+    function treeToggle(pathEnc) {
+        const open = ({})
+        for (const k in root.treeOpen) open[k] = root.treeOpen[k]
+        if (open[pathEnc]) {
+            delete open[pathEnc]
+        } else {
+            open[pathEnc] = true
+            if (!root.treeChildren[pathEnc]) {
+                treeProc.forPath = pathEnc
+                treeProc.command = [root.bin, "--rec", "list", root.disp(pathEnc)]
+                treeProc.running = true
+            }
+        }
+        root.treeOpen = open
+    }
+
+    // Flattened for a plain ListView: a real tree view would need a delegate
+    // that recurses, and QML makes that considerably more awkward than
+    // computing the visible rows here.
+    readonly property var treeRows: {
+        const rootPath = root.encodePath(root.homeDir)
+        const out = []
+        function walk(pathEnc, name, depth) {
+            out.push({ full: pathEnc, name: name, depth: depth,
+                       open: root.treeOpen[pathEnc] === true,
+                       loaded: root.treeChildren[pathEnc] !== undefined })
+            if (root.treeOpen[pathEnc] && root.treeChildren[pathEnc])
+                for (const k of root.treeChildren[pathEnc])
+                    walk(k.full, k.name, depth + 1)
+        }
+        walk(rootPath, "Home", 0)
+        return out
+    }
+
+    // ── Compress ────────────────────────────────────────────────────────────
+    function compressSelection(fmt) {
+        const paths = root.selectedPaths()
+        if (paths.length === 0) return
+        root.runOp(["compress", "--format=" + fmt].concat(paths),
+                   "compressing " + root.describeSelection() + "…")
+    }
+
+    // ── Drag and drop ───────────────────────────────────────────────────────
+    //
+    // Internal only. Dragging OUT to another application needs a Wayland data
+    // source, and the desktop-drop work already established that pre-v3
+    // wl_data_source aborts — so that is a separate problem, not a smaller
+    // version of this one.
+    //
+    // A ghost item carries Drag.active rather than the row itself: dragging
+    // the delegate would pull it out of the list and leave a hole where it was.
+    property bool dragging: false
+    property var dragPaths: []
+    property string dragLabel: ""
+    property bool dragCopy: false      // Ctrl during the drag
+
+    // A click that wanders two pixels is a click. Without a threshold, every
+    // selection becomes a potential move.
+    readonly property int dragThreshold: 8
+
+    function beginDrag(row, label) {
+        if (!root.tab || root.tab.view !== "dir") return
+        // Whatever is selected, or the row under the cursor if it is not part
+        // of the selection — the same rule the context menu follows.
+        if (!root.isSelected(row.name)) root.selectOnly(row.name)
+        root.dragPaths = root.selectedPaths()
+        root.dragLabel = label
+        root.dragging = true
+    }
+
+    function endDrag() {
+        root.dragging = false
+        root.dragPaths = []
+        root.dragLabel = ""
+    }
+
+    // A drop onto the folder something already lives in is a no-op, and a drop
+    // into one of its own descendants is the recursion the C side refuses
+    // anyway — caught here so the cursor can say no before the button is let go.
+    function canDropOn(destEnc) {
+        if (!root.dragging || root.dragPaths.length === 0) return false
+        const dest = root.disp(destEnc)
+        for (const p of root.dragPaths) {
+            if (p === dest) return false
+            if (dest.indexOf(p + "/") === 0) return false
+            const parent = p.substring(0, p.lastIndexOf("/"))
+            if (parent === dest) return false
+        }
+        return true
+    }
+
+    function dropOn(destEnc) {
+        if (!root.canDropOn(destEnc)) { root.endDrag(); return }
+        const paths = root.dragPaths.slice()
+        const copy = root.dragCopy
+        root.endDrag()
+        root.runOp([copy ? "copy" : "move", "--conflict=rename"]
+                   .concat(paths).concat([root.disp(destEnc)]),
+                   (copy ? "copying " : "moving ") + paths.length
+                   + (paths.length === 1 ? " item" : " items") + "…")
+    }
+
     // ── Search ──────────────────────────────────────────────────────────────
     //
     // Scoped to the folder you are standing in, because "search everywhere" is
@@ -1023,6 +1154,79 @@ FloatingWindow {
                     }
 
                     Item { width: 1; height: 10 }
+                    SideHeading {
+                        text: "Folders"
+                        visible: root.showTree
+                    }
+
+                    Repeater {
+                        model: root.showTree ? root.treeRows : []
+                        delegate: Rectangle {
+                            id: treeRow
+                            required property var modelData
+                            readonly property bool current:
+                                root.tab && root.tab.view === "dir"
+                                && root.tab.path === treeRow.modelData.full
+                            width: sidebar.width
+                            height: 24
+                            color: treeRow.dropHover ? root.wash(0.40)
+                                 : treeRow.current ? root.wash(0.18)
+                                 : (treeMa.containsMouse ? root.wash(0.08) : "transparent")
+                            property bool dropHover: false
+
+                            // The twisty is its own hit target: expanding a
+                            // folder and going into it are different intentions
+                            // and must not share a click.
+                            Text {
+                                id: twisty
+                                anchors {
+                                    left: parent.left
+                                    leftMargin: 8 + treeRow.modelData.depth * 12
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                width: 12
+                                text: treeRow.modelData.open ? "▾" : "▸"
+                                color: root.cDim
+                                font.pixelSize: 10
+                                MouseArea {
+                                    anchors { fill: parent; margins: -4 }
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.treeToggle(treeRow.modelData.full)
+                                }
+                            }
+                            Text {
+                                anchors {
+                                    left: twisty.right; leftMargin: 4
+                                    right: parent.right; rightMargin: 8
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                text: root.disp(treeRow.modelData.name)
+                                elide: Text.ElideRight
+                                color: treeRow.current ? root.cAccent : root.cText
+                                font.pixelSize: 11
+                            }
+
+                            DropArea {
+                                anchors.fill: parent
+                                enabled: root.dragging
+                                onEntered: treeRow.dropHover = root.canDropOn(treeRow.modelData.full)
+                                onExited: treeRow.dropHover = false
+                                onDropped: {
+                                    treeRow.dropHover = false
+                                    root.dropOn(treeRow.modelData.full)
+                                }
+                            }
+                            MouseArea {
+                                id: treeMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.navigate(treeRow.modelData.full, "dir")
+                            }
+                        }
+                    }
+
+                    Item { width: 1; height: 10 }
                     SideHeading { text: "Places" }
 
                     Repeater {
@@ -1034,6 +1238,7 @@ FloatingWindow {
                             active: root.tab && root.tab.view === "dir"
                                     && root.tab.path === modelData.href
                             removable: modelData.system !== "1"
+                            dropTarget: modelData.href
                             onActivated: root.navigate(modelData.href, "dir")
                             onRemoved: root.unpin(modelData.href)
                         }
@@ -1068,6 +1273,7 @@ FloatingWindow {
                             // not. Both go through udisks2.
                             trailing: volRow.isMounted ? "\u23cf" : "\u25b8"
                             trailingHint: volRow.isMounted ? "unmount" : "mount"
+                            dropTarget: volRow.isMounted ? volRow.modelData.path : ""
                             usedBytes: parseFloat(volRow.modelData.used || "0")
                             totalBytes: parseFloat(volRow.modelData.total || "0")
                             onActivated: {
@@ -1441,6 +1647,17 @@ FloatingWindow {
                         onToggled: root.doUndo()
                     }
                     ToggleChip {
+                        label: root.showTree ? "Tree ✓" : "Tree"
+                        on: root.showTree
+                        onToggled: {
+                            root.showTree = !root.showTree
+                            // Open Home on first reveal, so the pane is not an
+                            // empty box with one twisty in it.
+                            if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
+                                root.treeToggle(root.encodePath(root.homeDir))
+                        }
+                    }
+                    ToggleChip {
                         label: root.thumbs ? "Previews ✓" : "Previews"
                         on: root.thumbs
                         onToggled: root.thumbs = !root.thumbs
@@ -1709,11 +1926,14 @@ FloatingWindow {
                     required property var modelData
                     readonly property bool isSelected: root.isSelected(fileRow.modelData.name)
                     readonly property bool isRenaming: fileRow.modelData.name === root.renaming
+                    property bool dropHover: false
                     width: ListView.view.width
                     height: Math.max(30, root.iconSize + 10)
                     radius: 3
-                    color: fileRow.isSelected ? root.wash(0.22)
+                    color: fileRow.dropHover ? root.wash(0.40)
+                         : fileRow.isSelected ? root.wash(0.22)
                          : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
+                    border { width: fileRow.dropHover ? 1 : 0; color: root.cAccent }
 
                     // Four stages, walked on load failure rather than by
                     // testing for the files first: QML has no way to stat a
@@ -1848,6 +2068,19 @@ FloatingWindow {
                         font.pixelSize: 11
                     }
 
+                    // Only folders are targets — dropping onto a file has no
+                    // meaning, and highlighting one would promise otherwise.
+                    DropArea {
+                        anchors.fill: parent
+                        enabled: fileRow.modelData.type === "dir" && root.dragging
+                        onEntered: fileRow.dropHover = root.canDropOn(fileRow.modelData.full)
+                        onExited: fileRow.dropHover = false
+                        onDropped: {
+                            fileRow.dropHover = false
+                            root.dropOn(fileRow.modelData.full)
+                        }
+                    }
+
                     MouseArea {
                         id: rowMa
                         anchors.fill: parent
@@ -1877,6 +2110,35 @@ FloatingWindow {
                             else if (mouse.modifiers & Qt.ShiftModifier) root.selectRange(name)
                             else                                         root.selectOnly(name)
                         }
+                        onPressed: (mouse) => {
+                            rowMa.pressX = mouse.x
+                            rowMa.pressY = mouse.y
+                        }
+                        onReleased: {
+                            if (root.dragging) {
+                                dragGhost.Drag.drop()
+                                root.endDrag()
+                            }
+                        }
+                        onPositionChanged: (mouse) => {
+                            if (!pressed) return
+                            root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
+                            const p = rowMa.mapToItem(dragGhost.parent, mouse.x, mouse.y)
+                            if (!root.dragging) {
+                                const dx = mouse.x - rowMa.pressX
+                                const dy = mouse.y - rowMa.pressY
+                                if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
+                                    return
+                                root.beginDrag(fileRow.modelData,
+                                               root.selection.length > 1
+                                               ? root.selection.length + " items"
+                                               : root.disp(fileRow.modelData.name))
+                            }
+                            dragGhost.x = p.x + 8
+                            dragGhost.y = p.y + 8
+                        }
+                        property real pressX: 0
+                        property real pressY: 0
                         // Double-click to open, matching every other file
                         // manager. Single-click-to-open is a setting worth
                         // having and a default worth not having.
@@ -2106,6 +2368,14 @@ FloatingWindow {
                                                  desktop: a.desktop, actionId: a.action })
                             }
 
+                            if (t.view === "dir") {
+                                items.push({ label: "-", act: "", on: true })
+                                for (const f of [".tar.gz", ".zip", ".7z"])
+                                    items.push({ label: "Compress to " + f,
+                                                 act: "compress", on: n > 0,
+                                                 fmt: f.substring(1) })
+                            }
+
                             items.push({ label: "-", act: "", on: true })
                             items.push({ label: "Copy Path", act: "copypath", on: one })
                             items.push({ label: "Open Terminal Here", act: "term",
@@ -2177,6 +2447,7 @@ FloatingWindow {
                                             if (root.isPinned(r.full)) root.unpin(r.full)
                                             else root.pin(r.full)
                                             break
+                                        case "compress": root.compressSelection(ctxItem.modelData.fmt); break
                                         case "newdir":   root.creating = true; break
                                         case "newfile":  root.creatingFile = true; break
                                         case "selectall": root.selectAll(); break
@@ -2193,6 +2464,33 @@ FloatingWindow {
                             }
                         }
                     }
+                }
+            }
+
+            // The thing DropAreas actually see. Positioned by hand from the
+            // originating MouseArea, because during a drag the mouse is grabbed
+            // and no other item receives hover events.
+            Rectangle {
+                id: dragGhost
+                visible: root.dragging
+                z: 200
+                width: ghostText.implicitWidth + 20
+                height: 24
+                radius: 4
+                color: root.wash(0.85)
+                border { width: 1; color: root.cAccent }
+                opacity: 0.9
+
+                Drag.active: root.dragging
+                Drag.hotSpot: Qt.point(8, 12)
+                Drag.source: dragGhost
+
+                Text {
+                    id: ghostText
+                    anchors.centerIn: parent
+                    text: (root.dragCopy ? "Copy " : "Move ") + root.dragLabel
+                    color: root.cBg
+                    font { pixelSize: 11; bold: true }
                 }
             }
 
@@ -2568,6 +2866,10 @@ FloatingWindow {
         property bool dim: false
         property string trailing: ""       // a glyph shown on hover, "" for none
         property string trailingHint: ""
+        // An encoded path this row accepts drops into, or "" for none. Recent,
+        // Trash and About are not places anything can be dropped.
+        property string dropTarget: ""
+        property bool dropHover: false
         // 0 total means "unknown", NOT "empty" — an untriggered automount is
         // deliberately not measured, because statvfs would mount the disk just
         // to draw its meter.
@@ -2583,8 +2885,9 @@ FloatingWindow {
 
         width: sidebar.width
         height: sideRow.hasMeter ? 38 : 28
-        color: sideRow.active ? root.wash(0.18)
-                              : (sideMa.containsMouse ? root.wash(0.08) : "transparent")
+        color: sideRow.dropHover ? root.wash(0.40)
+             : sideRow.active ? root.wash(0.18)
+             : (sideMa.containsMouse ? root.wash(0.08) : "transparent")
 
         Image {
             id: sideIcon
@@ -2668,6 +2971,17 @@ FloatingWindow {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: sideRow.trailingClicked()
+            }
+        }
+
+        DropArea {
+            anchors.fill: parent
+            enabled: sideRow.dropTarget !== "" && root.dragging
+            onEntered: sideRow.dropHover = root.canDropOn(sideRow.dropTarget)
+            onExited: sideRow.dropHover = false
+            onDropped: {
+                sideRow.dropHover = false
+                root.dropOn(sideRow.dropTarget)
             }
         }
 

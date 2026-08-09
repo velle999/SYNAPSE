@@ -27,6 +27,7 @@ sources = files(
   'src/about.c',
   'src/actions.c',
   'src/undo.c',
+  'src/archive.c',
 )
 
 executable('synfiles', sources,

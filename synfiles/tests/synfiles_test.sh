@@ -893,6 +893,75 @@ rc=$?
 n=$(timeout 20 "$SYNFILES" --rec find "$F" --name=deep.txt | tail -n +2 | wc -l)
 [ "$n" = 1 ] && ok "a symlink loop yields no duplicate hits" || bad "got $n hits for one file"
 
+# ── compress ────────────────────────────────────────────────────────────────
+export SYNFILES_JOURNAL="$T/cjournal"
+export SYNFILES_TRASH="$T/ctrash"
+CZ="$T/comp"
+mkdir -p "$CZ/proj/sub" "$CZ/elsewhere"
+echo alpha > "$CZ/proj/a.txt"
+echo beta  > "$CZ/proj/sub/b.txt"
+echo gamma > "$CZ/elsewhere/c.txt"
+
+"$SYNFILES" compress "$CZ/proj" >/dev/null 2>&1
+[ -f "$CZ/proj.tar.gz" ] && ok "compress defaults to tar.gz beside the input" \
+                         || bad "no proj.tar.gz was produced"
+
+# THE thing that makes an archive safe to unpack anywhere: relative paths. An
+# archive full of absolute paths or "../" scatters files across the filesystem
+# on extraction, which is the tarbomb problem from the other end.
+tar tzf "$CZ/proj.tar.gz" 2>/dev/null | grep -qE '^(/|\.\./)' \
+    && bad "the archive contains absolute or parent-relative paths" \
+    || ok "archive paths are relative to the containing folder"
+tar tzf "$CZ/proj.tar.gz" 2>/dev/null | grep -q '^proj/sub/b.txt$'
+check "compress recurses into subdirectories" $?
+
+# Not overwriting matters here specifically: "compress" is not a command
+# anybody expects to destroy an existing backup.
+"$SYNFILES" compress "$CZ/proj" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "compress refuses to overwrite an existing archive" \
+             || bad "compress overwrote an existing archive"
+
+# Inputs from different folders would force absolute paths into the archive.
+"$SYNFILES" compress "$CZ/proj/a.txt" "$CZ/elsewhere/c.txt" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "compress refuses inputs from different folders" \
+             || bad "compress accepted inputs with no common parent"
+
+"$SYNFILES" compress --format=nonsense "$CZ/proj" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "an unknown format is refused" || bad "--format=nonsense was accepted"
+
+# --name is a NAME. A path would put the archive somewhere the user did not
+# choose while the tool still ran in the input's folder.
+"$SYNFILES" compress --name=../escape "$CZ/proj" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "--name refuses a path" || bad "--name accepted a path"
+
+"$SYNFILES" compress --name=backup "$CZ/proj" >/dev/null 2>&1
+[ -f "$CZ/backup.tar.gz" ] && ok "--name is used, with the extension added" \
+                           || bad "backup.tar.gz was not produced"
+
+# And not added twice.
+"$SYNFILES" compress --name=twice.tar.gz "$CZ/proj" >/dev/null 2>&1
+[ -f "$CZ/twice.tar.gz" ] && ok "--name keeps an extension it already has" \
+                          || bad "the extension was doubled"
+
+# zip falls back to 7z where zip is not installed, rather than telling somebody
+# to install a second tool for a format the one they have can write.
+if command -v zip >/dev/null 2>&1 || command -v 7z >/dev/null 2>&1; then
+    "$SYNFILES" compress --format=zip --name=z "$CZ/proj" >/dev/null 2>&1
+    [ -f "$CZ/z.zip" ] && ok "zip is produced by whichever tool is present" \
+                       || bad "no z.zip was produced"
+else
+    ok "zip is produced by whichever tool is present (skipped: no zip or 7z)"
+fi
+
+# An archive is journalled, so the undo that follows a mistaken compress
+# trashes it rather than leaving clutter.
+"$SYNFILES" undo >/dev/null 2>&1
+[ ! -e "$CZ/z.zip" ] && ok "undo removes a created archive" || bad "the archive survived undo"
+"$SYNFILES" --rec trash list | grep -q 'z.zip'
+check "the undone archive went to the trash" $?
+
+unset SYNFILES_JOURNAL SYNFILES_TRASH
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

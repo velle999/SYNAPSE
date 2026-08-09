@@ -240,6 +240,7 @@ static char *describe(entry_t *e, size_t n, size_t first, size_t last)
 	                 : !strcmp(op, "trash")  ? "Move to Trash"
 	                 : !strcmp(op, "copy")   ? "Copy"
 	                 : !strcmp(op, "mkdir")  ? "New Folder"
+	                 : !strcmp(op, "compress") ? "Compress"
 	                                         : op;
 
 	if (count == 1) {
@@ -294,7 +295,7 @@ static int undo_one(entry_t *e)
 	/* copy: the copies go to the TRASH, not to unlink(). They may have been
 	 * edited since, and undo must never be a shorter road to losing work than
 	 * deleting is. */
-	if (!strcmp(e->op, "copy")) {
+	if (!strcmp(e->op, "copy") || !strcmp(e->op, "compress")) {
 		if (faccessat(AT_FDCWD, e->a, F_OK, AT_SYMLINK_NOFOLLOW) != 0)
 			return 0;   /* already gone; nothing to undo, not an error */
 		char *argv[] = { e->a, NULL };
