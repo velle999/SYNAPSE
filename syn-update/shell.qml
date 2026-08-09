@@ -200,7 +200,7 @@ ShellRoot {
     }
 
     // --hold so the window survives the run and the build output stays readable,
-    // matching how the start menu already launches `shelly upgrade`.
+    // matching how the start menu already launches `synpkg upgrade`.
     Process {
         id: applyProc
         command: ["kitty", "--hold", "syn-update", "apply"]

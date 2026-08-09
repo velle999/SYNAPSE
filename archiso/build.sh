@@ -205,10 +205,6 @@ PACKAGES=(
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
     # still exists and still builds; it just fetches from Samsung now.
-    # Shelly — GTK4/libalpm package manager (dir 'shelly' builds pkg
-    # 'shelly-bin'). Prebuilt-binary PKGBUILD: makepkg downloads the pinned
-    # release tarball at build time, so this needs network like pacstrap does.
-    shelly
     # Wallpaper Engine renderer (dir 'linux-wallpaperengine-pkg' builds pkg
     # 'linux-wallpaperengine'). Git-sourced from a pinned commit, so it needs
     # network, and cmake fetches a ~1.3 GB CEF blob at configure time into the

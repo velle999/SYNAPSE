@@ -64,8 +64,8 @@ QtObject {
         }
     }
 
-    // Is synpkg installed? The start menu's "Software Manager" and "Update
-    // System" rows prefer it and fall back to shelly when it is absent.
+    // Is synpkg installed? "Software Manager" is omitted without it, and
+    // "Update System" falls back to a raw `pacman -Syu`.
     //
     // WHY THIS EXISTS AT ALL. synui pkgrel 317 pointed both rows at synpkg the
     // release synpkg landed, but a component that is not yet installed could
@@ -74,8 +74,10 @@ QtObject {
     // path is not reported anywhere) and an "Update System" that opened a
     // terminal reading `synpkg: command not found`. syn-update installs new
     // components now, but a menu row must not be a dead click even when
-    // delivery goes wrong again, and shelly is still installed on purpose for
-    // exactly this reason — the replacement is phased.
+    // delivery goes wrong again.
+    //
+    // This mattered more when shelly was the fallback; it matters MORE now that
+    // shelly is gone, because there is no second package manager to land on.
     //
     // `pacman -Qq`, with the answer read off STDOUT rather than the exit status:
     // Process's exited(int, QProcess::ExitStatus) cannot be given a typed

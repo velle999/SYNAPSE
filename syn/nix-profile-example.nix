@@ -78,7 +78,6 @@
     nexus   = false;
     tepris  = false;
     m2020   = false;     # Samsung M2020 printer driver
-    shelly  = false;
     arsenal = true;
   };
 

@@ -1754,7 +1754,7 @@ while :; do
 
     case "$INSTALL_PRESET" in
         1)
-            SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 shelly-bin syn-arsenal"
+            SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 syn-arsenal"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1
@@ -1772,8 +1772,8 @@ while :; do
             echo "  Answer y/n for each. The default (shown in caps) is the Standard install."
             echo ""
 
-            # Apps. Descriptions rather than bare package names — "shelly-bin" tells
-            # a first-time installer nothing about what it would be giving up.
+            # Apps. Descriptions rather than bare package names — "syn-arsenal"
+            # tells a first-time installer nothing about what it would be giving up.
             ask_opt() {   # ask_opt <varname> <default 0|1> <description>
                 local __var=$1 __def=$2 __desc=$3 __hint __ans
                 if [ "$__def" = 1 ]; then __hint="[Y/n]"; else __hint="[y/N]"; fi
@@ -1791,7 +1791,6 @@ while :; do
             ask_opt want_nexus   0 "Nexus Chat — peer-to-peer chat"
             ask_opt want_tepris  0 "TEPRIS — block game"
             ask_opt want_m2020   0 "Samsung M2020 printer driver"
-            ask_opt want_shelly  0 "Shelly — graphical package manager"
             ask_opt want_arsenal 1 "SYNAPSE Arsenal — browse/install BlackArch security tooling"
             echo ""
             ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
@@ -1810,7 +1809,6 @@ while :; do
             [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
             [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
             [ "$want_m2020"  = 1 ] && SEL_APPS="$SEL_APPS samsung-m2020"
-            [ "$want_shelly" = 1 ] && SEL_APPS="$SEL_APPS shelly-bin"
             [ "$want_arsenal" = 1 ] && SEL_APPS="$SEL_APPS syn-arsenal"
             SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
 
@@ -3564,7 +3562,7 @@ FOOTEOF
 #
 # NOTE: SNI clients do not re-register when the watcher changes owner, so a bar
 # restart drops the icon of any client that does not watch NameOwnerChanged
-# (norduserd does; shelly-notifications does not). It costs nothing at install
+# (norduserd does). It costs nothing at install
 # time — the bar starts before any tray app — but it is why swapping bars on a
 # running session loses icons until each app restarts.
 #

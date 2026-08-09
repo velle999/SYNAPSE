@@ -80,10 +80,9 @@ syn-arsenal
 # GUI, Flatpak and AUR paths are optdepends, so a headless install pays nothing
 # for them and still gets the CLI.
 #
-# shelly-bin is still here as well. The replacement is PHASED on purpose: shelly
-# is the current Software Manager and Update System entry in the start menu, and
-# dropping it in the same release synpkg lands would ship any remaining gap as a
-# regression on the one tool a user needs to fix a broken system.
+# It is now the ONLY package manager front-end on the ISO. shelly-bin rode
+# alongside it for one release while the replacement was phased; it is gone,
+# and synpkg owns the start menu's Software Manager and Update System rows.
 synpkg
 # "About OS" — areofyl/fetch, which spins the SynapseOS mark as a lit 3D relief
 # with the system info beside it. Reached from the control panel's
@@ -173,12 +172,6 @@ nss-mdns
 # now an on-demand install instead: `syn printer samsung` fetches the driver
 # from Samsung onto the machine that will print with it, which is the thing the
 # licence actually describes. Same reason the AUR ships a recipe, not the files.
-
-# Shelly — a GTK4 + libalpm package manager (CLI `shelly`, GUI `shelly-ui`), a
-# friendlier front-end to pacman/AUR/Flatpak. Built from shelly/PKGBUILD as
-# the pkgname `shelly-bin` (it provides `shelly`); listed by exact name so
-# pacstrap never has to resolve the provider.
-shelly-bin
 
 # Bluetooth. bluez is the daemon (org.bluez); bluez-utils is bluetoothctl, which
 # synui does not need — it talks BlueZ over sd-bus itself (synui/src/bt.c) — but

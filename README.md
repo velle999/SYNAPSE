@@ -79,10 +79,32 @@ An installed system needs **two** update commands, because they cover different
 halves of it:
 
 ```bash
-sudo pacman -Syu     # Arch: kernel, Mesa, Qt, everything from the Arch repos
+synpkg upgrade       # Arch: kernel, Mesa, Qt, everything from the Arch repos
 syn-update check     # SynapseOS: synui, synapd, synguard and the rest
 syn-update apply     # rebuild what changed and install it
 ```
+
+`synpkg upgrade` is the same libalpm engine `pacman -Syu` is, and `pacman -Syu`
+still works — `synpkg` refreshes the databases first either way, so neither can
+leave you with the partial upgrade a bare `-Sy` produces.
+
+Installing software is `synpkg` too — the **Software Manager** in the start
+menu is its GUI. It is one front-end over five places software comes from, and
+each has its own tab so a row is never ambiguous about where it came from or
+what will install it:
+
+| Tab | Source | Installed by |
+|---|---|---|
+| **Repositories** | Arch's `core`/`extra`/`multilib` and SynapseOS's own | `pacman`, signed binaries |
+| **AUR** | the Arch User Repository | `makepkg`, built from source in a terminal so you can read the `PKGBUILD` first |
+| **Flathub** | sandboxed applications with their own runtimes | `flatpak`, with its own permission prompts |
+| **Arsenal** | ~5000 BlackArch security tools, by category | `pacman`, once the repo is enabled |
+| **SynapseOS** | this system's own components | `syn-update`, which rebuilds from git |
+
+Flathub and BlackArch are **off until you enable them** — `synpkg flatpak
+enable-flathub` and `synpkg arsenal enable-repo`, or the buttons the GUI offers
+where it says they are off. `synpkg about` reports which sources are actually
+wired up on your machine.
 
 `syn-update` clones the project to `/var/lib/synapse-src` and rebuilds only the
 components whose `pkgver`/`pkgrel` moved, using `makepkg` — so it needs
@@ -116,6 +138,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synguard`** | Security monitor. Classifies syscall events, scores threats, publishes verdicts on a feed that `synui` subscribes to. |
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
+| **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
 
 ### Apps
 
@@ -443,7 +466,8 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
-| `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `pacman -Syu`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
+| `synpkg` | The package manager — `search`, `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
+| `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
 | `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
 | `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
@@ -712,8 +736,8 @@ SPDX identifiers, per component:
 |---|---|
 | `synapse_kmod` (kernel module) | `GPL-2.0-only` — it links the kernel |
 | `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `vibe`, `chibi` | `GPL-2.0-or-later` |
+| `synpkg` | `GPL-2.0-or-later` — it links `libalpm`, which is, so it can be nothing else |
 | `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
-| `shelly` | `GPL-3.0-only` |
 | `synui/quickshell-antiquity/` and its three wallpapers | `MIT`, © 2026 [diinki](https://github.com/diinki) — a port of [linux-antiquity](https://github.com/diinki/linux-antiquity); notice kept as `LICENSE.antiquity` |
 | Boska, Recia, Quilon (bundled with Antiquity) | © [Indian Type Foundry](https://www.indiantypefoundry.com/), via Fontshare — their licence requires naming the faces and crediting ITF's ownership; `quickshell-antiquity/FONTS.md` is that credit |
 | `MaterialSymbolsSharp` (bundled with Antiquity) | `Apache-2.0`, © Google LLC |

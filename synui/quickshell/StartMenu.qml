@@ -238,24 +238,21 @@ PanelWindow {
                     // synpkg, our own manager. A GUI (Terminal=false in its
                     // .desktop), so it runs bare, no terminal wrapper.
                     //
-                    // This row used to launch shelly-ui. shelly is still
-                    // INSTALLED and still reachable from its own scanned
-                    // .desktop entry — the replacement is phased on purpose, so
-                    // there is a working fallback if synpkg turns out to be
-                    // short of it somewhere. What changed is which one is the
-                    // default, and only synpkg can see all four sources plus
-                    // BlackArch and SynapseOS's own components.
+                    // This row used to fall back to shelly-ui. shelly is gone —
+                    // the phased replacement finished — so there is no second
+                    // graphical package manager to fall back TO, and the row is
+                    // OMITTED rather than pointed at something absent.
                     //
-                    // The fallback is WIRED UP, not just available: pkgrel 317
-                    // shipped this row pointing at a synpkg that no upgrade path
-                    // could install, and a failed exec here is silent, so the
-                    // row did nothing at all. MenuState probes for the package
-                    // and `pages` is a binding, so this re-resolves on its own
-                    // when the probe lands — and again if synpkg is installed
-                    // later in the session, with no relog.
+                    // That is not a formality. pkgrel 317 shipped this row
+                    // pointing at a synpkg that no upgrade path could install,
+                    // and a failed exec here is silent: the row did nothing at
+                    // all, with nothing anywhere saying why. A missing row is a
+                    // fact the user can act on; a dead one is not. `needs` is
+                    // filtered below, MenuState probes for the package, and
+                    // `pages` is a binding, so the row appears on its own when
+                    // synpkg lands mid-session, with no relog.
                     { kind: "exec", label: "Software Manager",
-                      argv: MenuState.synpkgPresent ? ["synpkg", "gui"]
-                                                    : ["shelly-ui"] },
+                      needs: "synpkg", argv: ["synpkg", "gui"] },
                     // The full-system upgrade, same libalpm engine the Software
                     // Manager GUI drives, so CLI and GUI stay in agreement —
                     // not raw pacman, and never a partial-upgrade -Sy (synpkg
@@ -285,7 +282,7 @@ PanelWindow {
                     // needs a terminal (build-all.sh runs sudo mid-build), and
                     // this GUI is the thing that owns that.
                     { kind: "exec", label: "SynapseOS Updates", argv: ["syn-update-gui"] }
-                ]
+                ].filter(r => r.needs !== "synpkg" || MenuState.synpkgPresent)
 
                 // The control panel's categories, not a second list of settings.
                 //

@@ -72,7 +72,6 @@ declare -A UNSUPPORTED=(
     [synapse-llama]="packaged from a tree that archiso/build.sh --llama-only stages; there is no staging tree on an installed system"
     [linux-wallpaperengine]="cmake fetches a ~1.3 GB CEF blob and needs ~6 GB of scratch to build; its synui-wpengine control script now lives in synui, which IS updatable"
     [chibi]="371 MB of bundled voice models; rebuild cost is all download, no source change"
-    [shelly-bin]="PKGBUILD downloads a pinned upstream release binary"
 )
 
 # In COMPONENTS — so it is UPDATED when present — but never ADDED to a system
