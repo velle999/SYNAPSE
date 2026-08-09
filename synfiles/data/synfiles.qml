@@ -941,8 +941,9 @@ FloatingWindow {
     // wl_data_source aborts — so that is a separate problem, not a smaller
     // version of this one.
     //
-    // A ghost item carries Drag.active rather than the row itself: dragging
-    // the delegate would pull it out of the list and leave a hole where it was.
+    // The source is a 1x1 item that draws nothing: dragging the delegate
+    // itself would pull it out of the list and leave a hole where it was, and
+    // with a system drag the picture is Drag.imageSource anyway.
     property bool dragging: false
     property var dragPaths: []
     property string dragLabel: ""
@@ -986,14 +987,20 @@ FloatingWindow {
         // A REAL drag, not an in-scene one: this is what reaches another
         // synfiles window, Dolphin, and synui's desktop — all of which are
         // separate processes that can only be handed a wl_data_source.
-        // startDrag() runs the drag to completion and returns when the button
-        // comes up, which is also why endDrag() is here and not in a released
-        // handler that a system grab never delivers.
-        dragGhost.Drag.startDrag()
+        //
+        // ⚠ Setting `active` IS the start. For Drag.Automatic, Qt's setActive()
+        // calls startDrag() itself; calling startDrag() from here instead is
+        // refused with "startDrag() drag must be active" — which is exactly
+        // what the log filled up with, 2528 times, while nothing dragged at
+        // all. It BLOCKS until the button comes up, which is why endDrag() is
+        // the next line and not in a release handler a system grab never
+        // delivers.
+        dragGhost.Drag.active = true
         root.endDrag()
     }
 
     function endDrag() {
+        dragGhost.Drag.active = false
         root.dragging = false
         root.dragPaths = []
         root.dragLabel = ""
@@ -2640,9 +2647,10 @@ FloatingWindow {
                             rowMa.pressX = mouse.x
                             rowMa.pressY = mouse.y
                         }
-                        // The drag runs to completion inside beginDrag(), so
-                        // there is nothing to finish on release or cancel.
-                        onCanceled: if (root.dragging) root.endDrag()
+                        // No release or cancel handler: the drag runs to
+                        // completion inside beginDrag(), and onCanceled fires
+                        // when QDrag TAKES the grab — mid-drag — which would
+                        // clear the very paths the drop is about to use.
                         onPositionChanged: (mouse) => {
                             if (!pressed || root.dragging) return
                             root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
@@ -2821,7 +2829,6 @@ FloatingWindow {
                             cellMa.pressX = mouse.x
                             cellMa.pressY = mouse.y
                         }
-                        onCanceled: if (root.dragging) root.endDrag()
                         onPositionChanged: (mouse) => {
                             if (!cellMa.pressed || root.dragging) return
                             root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
@@ -3254,6 +3261,18 @@ FloatingWindow {
                     "text/uri-list": root.dragUris,
                     "text/plain": root.dragText
                 })
+
+                // A drag that quietly fails to start is what cost this three
+                // rounds: the refusal went to a log nobody was reading while
+                // the window looked simply inert. The status line says what
+                // happened now, so the next failure is visible where the
+                // failure is.
+                Drag.onDragStarted: root.statusLine = "dragging " + root.dragLabel + "…"
+                Drag.onDragFinished: (dropAction) => {
+                    root.statusLine = dropAction === Qt.IgnoreAction
+                                      ? "nothing accepted that drop"
+                                      : ""
+                }
             }
 
             // ── Disk context menu ───────────────────────────────────────────
