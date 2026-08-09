@@ -12,9 +12,10 @@ ExecStart=/usr/lib/synapd/synapse-drm-watch
 Restart=always
 RestartSec=5
 
-# Reads sysfs and runs udevadm; needs nothing else. It never writes to a
-# connector — probing is synapse-gpu-sleep's job and doing it here would
-# disturb the very link this is measuring.
+# Reads sysfs, runs udevadm, and re-probes a connector that has just lost its
+# sink. ProtectSystem=strict leaves /sys writable (it exempts /dev, /proc and
+# /sys), which the probe needs; ProtectKernelTunables is deliberately NOT set
+# for the same reason.
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

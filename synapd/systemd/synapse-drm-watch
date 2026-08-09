@@ -31,8 +31,26 @@
 #      watcher that re-probed every 30s would be changing the thing it is
 #      supposed to be measuring.
 #
-# It never writes to a connector. Recovery is synapse-gpu-sleep's job; this one
-# only ever reports.
+# IT ALSO RECOVERS, and that is a reversal worth explaining.
+#
+# synapse-gpu-sleep checks ONCE, in the same second the machine resumes — the
+# journal shows the 08-07 probe firing at 11:38:49 against a resume at 11:38:49.
+# That is the moment connector state is least settled, and it is a one-shot: if
+# the connector still reads `connected` when the hook looks and the driver drops
+# it two seconds later, the hook has already looked and left, and nothing
+# notices. velle confirmed DP-3 was on when the machine suspended on 08-09,
+# which means it WAS in the pre-suspend snapshot, which means the hook should
+# have reported it missing and did not. A race against the driver's own
+# re-detection fits every piece of that.
+#
+# A hook that only runs at resume cannot cover a drop that happens at any other
+# time either. This watcher is the only thing present whenever the link goes, so
+# recovery belongs here: it re-probes on the TRANSITION rather than at a fixed
+# moment, which is the whole difference.
+#
+# It probes only a connector the kernel still has a mode on (`enabled=enabled`)
+# that has just lost its sink — the same narrow signature the sleep hook uses. A
+# port with nothing plugged in reads `enabled=disabled` and is never touched.
 #
 # SynapseOS Project
 # SPDX-License-Identifier: GPL-2.0-or-later
@@ -53,6 +71,38 @@ _snapshot() {
             "$(cat "$c/enabled" 2>/dev/null)" \
             "$(stat -c%s "$c/edid" 2>/dev/null || echo '?')"
     done
+}
+
+# ── recovery ────────────────────────────────────────────────────────────────
+#
+# Fires on the TRANSITION, which is the point. A sink that has just gone is the
+# best possible moment to ask for it back — the link is still settling, and the
+# existing evidence is that a probe run hours later recovers nothing.
+_maybe_recover() {
+    local name=$1 was=$2 now=$3
+    local dir=/sys/class/drm/$name tries
+
+    # Only a head that was live and has just lost its sink. Splitting on "/"
+    # rather than matching the whole string so an EDID size change alone never
+    # triggers this.
+    case "$was" in connected/*) ;; *) return 0 ;; esac
+    case "$now" in disconnected/enabled/*) ;; *) return 0 ;; esac
+
+    [ -w "$dir/status" ] || { log "$name: no write access to probe it back"; return 0; }
+
+    log "$name: lost its sink while still driven — re-probing"
+    for tries in 1 2 3 4 5 6; do
+        # Braced: a redirection that fails reports before `||` can catch it, so
+        # without this an unwritable connector spews one line per attempt.
+        { echo detect > "$dir/status"; } 2>/dev/null || true
+        sleep 1
+        if [ "$(cat "$dir/status" 2>/dev/null)" = connected ]; then
+            log "$name: came back after $tries probe(s)"
+            return 0
+        fi
+    done
+
+    log "$name: still no sink after 6 probes (EDID $(stat -c%s "$dir/edid" 2>/dev/null || echo ?) bytes)"
 }
 
 # ── udev half ───────────────────────────────────────────────────────────────
@@ -88,10 +138,14 @@ while :; do
                 now=${line#*=}
                 [ "$was" = "$now" ] && continue
                 log "$name: $was -> $now   (status/enabled/edid-bytes)"
+                _maybe_recover "$name" "$was" "$now"
                 ;;
             *) log "$name: appeared as ${line#*=}" ;;
         esac
     done <<< "$cur"
 
-    prev=$cur
+    # Re-read AFTER any recovery, so a connector that came back is not reported
+    # as still missing on the next pass — and so a successful probe does not
+    # look like a second transition.
+    prev=$(_snapshot)
 done
