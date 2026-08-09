@@ -948,6 +948,17 @@ FloatingWindow {
     property string dragLabel: ""
     property bool dragCopy: false      // Ctrl during the drag
 
+    // What OTHER applications get handed. text/uri-list is the format every
+    // file manager, browser and desktop speaks, and its lines are CRLF-
+    // terminated file:// URIs — which is what the encoded path already IS,
+    // so the identity rule holds all the way out of the process.
+    property string dragUris: ""
+    property string dragText: ""
+    // The picture the cursor carries. Qt draws only what Drag.imageSource
+    // names, so the hand-positioned ghost is not it: the dragged file's own
+    // thumbnail is both cheaper and what every other file manager shows.
+    property url dragImage: ""
+
     // A click that wanders two pixels is a click. Without a threshold, every
     // selection becomes a potential move.
     readonly property int dragThreshold: 8
@@ -959,13 +970,91 @@ FloatingWindow {
         if (!root.isSelected(row.name)) root.selectOnly(row.name)
         root.dragPaths = root.selectedPaths()
         root.dragLabel = label
+
+        const rows = root.selectedRows()
+        let uris = "", text = ""
+        for (const r of rows) {
+            uris += "file://" + r.full + "\r\n"   // r.full is already encoded
+            text += root.disp(r.full) + "\n"
+        }
+        root.dragUris = uris
+        root.dragText = text
+        root.dragImage = rows.length === 1 ? root.previewFor(rows[0]) : ""
+
         root.dragging = true
+
+        // A REAL drag, not an in-scene one: this is what reaches another
+        // synfiles window, Dolphin, and synui's desktop — all of which are
+        // separate processes that can only be handed a wl_data_source.
+        // startDrag() runs the drag to completion and returns when the button
+        // comes up, which is also why endDrag() is here and not in a released
+        // handler that a system grab never delivers.
+        dragGhost.Drag.startDrag()
+        root.endDrag()
     }
 
     function endDrag() {
         root.dragging = false
         root.dragPaths = []
         root.dragLabel = ""
+        root.dragUris = ""
+        root.dragText = ""
+        root.dragImage = ""
+    }
+
+    // ── Drops from somewhere else ───────────────────────────────────────────
+    //
+    // The other half of a real drag: another synfiles window, Dolphin, a
+    // browser saving an image. They all arrive as text/uri-list.
+    //
+    // Local files ONLY, and refused rather than half-done — a drag of a web
+    // link keeps its "no" cursor instead of producing an empty file. And a
+    // foreign drop always COPIES: moving means deleting something owned by an
+    // application that has not told us it finished with it.
+    function urlsToPaths(urls) {
+        const out = []
+        for (const u of urls) {
+            const s = "" + u
+            if (s.indexOf("file://") !== 0) continue
+            // The URI's path IS the encoded form — decode it exactly the way
+            // every other path crosses into argv.
+            out.push(root.disp(s.substring(7)))
+        }
+        return out
+    }
+
+    // Every DropArea in the window goes through these two, because "is this
+    // drop ours or a foreign one" is one question and it should have one
+    // answer. A drag we started is a move within this window; anything else is
+    // a copy in from another process.
+    function willAcceptDrop(destEnc, drag) {
+        if (destEnc === "") return false
+        if (root.dragging) return root.canDropOn(destEnc)
+        return drag !== undefined && drag !== null && drag.hasUrls
+    }
+
+    function handleDrop(destEnc, drop) {
+        if (root.dragging) { root.dropOn(destEnc); return }
+        if (drop && drop.hasUrls) {
+            root.dropUrls(destEnc, drop.urls)
+            drop.accept(Qt.CopyAction)
+        }
+    }
+
+    function dropUrls(destEnc, urls) {
+        const paths = root.urlsToPaths(urls)
+        if (paths.length === 0) {
+            root.statusLine = "only local files can be dropped here"
+            return
+        }
+        const dest = root.disp(destEnc)
+        // Dropping something into the folder it already lives in is a no-op,
+        // not an error worth a dialog.
+        const useful = paths.filter(p => p.substring(0, p.lastIndexOf("/")) !== dest)
+        if (useful.length === 0) return
+        root.runOp(["copy", "--conflict=rename"].concat(useful).concat([dest]),
+                   "copying " + useful.length
+                   + (useful.length === 1 ? " item" : " items") + " here…")
     }
 
     // A drop onto the folder something already lives in is a no-op, and a drop
@@ -1723,12 +1812,15 @@ FloatingWindow {
 
                             DropArea {
                                 anchors.fill: parent
-                                enabled: root.dragging
-                                onEntered: treeRow.dropHover = root.canDropOn(treeRow.modelData.full)
+                                onEntered: (drag) => {
+                                    treeRow.dropHover =
+                                        root.willAcceptDrop(treeRow.modelData.full, drag)
+                                    if (!treeRow.dropHover) drag.accepted = false
+                                }
                                 onExited: treeRow.dropHover = false
-                                onDropped: {
+                                onDropped: (drop) => {
                                     treeRow.dropHover = false
-                                    root.dropOn(treeRow.modelData.full)
+                                    root.handleDrop(treeRow.modelData.full, drop)
                                 }
                             }
                             MouseArea {
@@ -2245,6 +2337,40 @@ FloatingWindow {
                 }
             }
 
+            // The whole pane is a target for the CURRENT folder. Declared
+            // before the views, so a row or a cell — which is a more specific
+            // answer — takes the drop first and this catches the empty space
+            // around them, which is what "drop it in here" means.
+            DropArea {
+                id: paneDrop
+                anchors {
+                    top: heads.bottom; left: parent.left
+                    right: parent.right; bottom: statusBar.top
+                }
+                enabled: root.tab && root.tab.view === "dir"
+                property bool hovering: false
+                onEntered: (drag) => {
+                    paneDrop.hovering = root.willAcceptDrop(root.tab.path, drag)
+                    if (!paneDrop.hovering) drag.accepted = false
+                }
+                onExited: paneDrop.hovering = false
+                onDropped: (drop) => {
+                    paneDrop.hovering = false
+                    root.handleDrop(root.tab.path, drop)
+                }
+
+                // Says which folder is about to receive it, because a drop on
+                // empty space has no row under the cursor to highlight.
+                Rectangle {
+                    anchors.fill: parent
+                    visible: paneDrop.hovering
+                    color: "transparent"
+                    border { width: 2; color: root.cAccent }
+                    radius: 4
+                    opacity: 0.7
+                }
+            }
+
             // Column headings
             Item {
                 id: heads
@@ -2456,12 +2582,16 @@ FloatingWindow {
                     // meaning, and highlighting one would promise otherwise.
                     DropArea {
                         anchors.fill: parent
-                        enabled: fileRow.modelData.type === "dir" && root.dragging
-                        onEntered: fileRow.dropHover = root.canDropOn(fileRow.modelData.full)
+                        enabled: fileRow.modelData.type === "dir"
+                        onEntered: (drag) => {
+                            fileRow.dropHover =
+                                root.willAcceptDrop(fileRow.modelData.full, drag)
+                            if (!fileRow.dropHover) drag.accepted = false
+                        }
                         onExited: fileRow.dropHover = false
-                        onDropped: {
+                        onDropped: (drop) => {
                             fileRow.dropHover = false
-                            root.dropOn(fileRow.modelData.full)
+                            root.handleDrop(fileRow.modelData.full, drop)
                         }
                     }
 
@@ -2510,32 +2640,20 @@ FloatingWindow {
                             rowMa.pressX = mouse.x
                             rowMa.pressY = mouse.y
                         }
-                        onReleased: {
-                            if (root.dragging) {
-                                dragGhost.Drag.drop()
-                                root.endDrag()
-                            }
-                        }
-                        // Belt and braces: anything that takes the grab away
-                        // ends the drag rather than leaving the ghost on
-                        // screen and every DropArea armed.
+                        // The drag runs to completion inside beginDrag(), so
+                        // there is nothing to finish on release or cancel.
                         onCanceled: if (root.dragging) root.endDrag()
                         onPositionChanged: (mouse) => {
-                            if (!pressed) return
+                            if (!pressed || root.dragging) return
                             root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
-                            const p = rowMa.mapToItem(dragGhost.parent, mouse.x, mouse.y)
-                            if (!root.dragging) {
-                                const dx = mouse.x - rowMa.pressX
-                                const dy = mouse.y - rowMa.pressY
-                                if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
-                                    return
-                                root.beginDrag(fileRow.modelData,
-                                               root.selection.length > 1
-                                               ? root.selection.length + " items"
-                                               : root.disp(fileRow.modelData.name))
-                            }
-                            dragGhost.x = p.x + 8
-                            dragGhost.y = p.y + 8
+                            const dx = mouse.x - rowMa.pressX
+                            const dy = mouse.y - rowMa.pressY
+                            if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
+                                return
+                            root.beginDrag(fileRow.modelData,
+                                           root.selection.length > 1
+                                           ? root.selection.length + " items"
+                                           : root.disp(fileRow.modelData.name))
                         }
                         property real pressX: 0
                         property real pressY: 0
@@ -2668,12 +2786,16 @@ FloatingWindow {
                     // view anybody who turned previews on is looking at.
                     DropArea {
                         anchors.fill: parent
-                        enabled: gridCell.modelData.type === "dir" && root.dragging
-                        onEntered: gridCell.dropHover = root.canDropOn(gridCell.modelData.full)
+                        enabled: gridCell.modelData.type === "dir"
+                        onEntered: (drag) => {
+                            gridCell.dropHover =
+                                root.willAcceptDrop(gridCell.modelData.full, drag)
+                            if (!gridCell.dropHover) drag.accepted = false
+                        }
                         onExited: gridCell.dropHover = false
-                        onDropped: {
+                        onDropped: (drop) => {
                             gridCell.dropHover = false
-                            root.dropOn(gridCell.modelData.full)
+                            root.handleDrop(gridCell.modelData.full, drop)
                         }
                     }
 
@@ -2699,32 +2821,18 @@ FloatingWindow {
                             cellMa.pressX = mouse.x
                             cellMa.pressY = mouse.y
                         }
-                        onReleased: {
-                            if (root.dragging) {
-                                dragGhost.Drag.drop()
-                                root.endDrag()
-                            }
-                        }
-                        // Belt and braces: anything that takes the grab away
-                        // ends the drag rather than leaving the ghost on
-                        // screen and every DropArea armed.
                         onCanceled: if (root.dragging) root.endDrag()
                         onPositionChanged: (mouse) => {
-                            if (!cellMa.pressed) return
+                            if (!cellMa.pressed || root.dragging) return
                             root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
-                            const gp = cellMa.mapToItem(dragGhost.parent, mouse.x, mouse.y)
-                            if (!root.dragging) {
-                                const dx = mouse.x - cellMa.pressX
-                                const dy = mouse.y - cellMa.pressY
-                                if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
-                                    return
-                                root.beginDrag(gridCell.modelData,
-                                               root.selection.length > 1
-                                               ? root.selection.length + " items"
-                                               : root.disp(gridCell.modelData.name))
-                            }
-                            dragGhost.x = gp.x + 8
-                            dragGhost.y = gp.y + 8
+                            const dx = mouse.x - cellMa.pressX
+                            const dy = mouse.y - cellMa.pressY
+                            if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
+                                return
+                            root.beginDrag(gridCell.modelData,
+                                           root.selection.length > 1
+                                           ? root.selection.length + " items"
+                                           : root.disp(gridCell.modelData.name))
                         }
                         onClicked: (mouse) => {
                             fileGrid.forceActiveFocus()
@@ -3124,31 +3232,28 @@ FloatingWindow {
                 }
             }
 
-            // The thing DropAreas actually see. Positioned by hand from the
-            // originating MouseArea, because during a drag the mouse is grabbed
-            // and no other item receives hover events.
-            Rectangle {
+            // The drag SOURCE. Nothing is drawn here any more: with an
+            // automatic drag the compositor carries the picture named by
+            // Drag.imageSource, and a hand-positioned ghost would sit frozen
+            // on screen because the system grab delivers no more mouse moves.
+            Item {
                 id: dragGhost
-                visible: root.dragging
-                z: 200
-                width: ghostText.implicitWidth + 20
-                height: 24
-                radius: 4
-                color: root.wash(0.85)
-                border { width: 1; color: root.cAccent }
-                opacity: 0.9
+                width: 1
+                height: 1
 
-                Drag.active: root.dragging
-                Drag.hotSpot: Qt.point(8, 12)
+                Drag.dragType: Drag.Automatic
+                Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
+                Drag.proposedAction: root.dragCopy ? Qt.CopyAction : Qt.MoveAction
+                Drag.imageSource: root.dragImage
+                Drag.hotSpot: Qt.point(8, 8)
                 Drag.source: dragGhost
-
-                Text {
-                    id: ghostText
-                    anchors.centerIn: parent
-                    text: (root.dragCopy ? "Copy " : "Move ") + root.dragLabel
-                    color: root.cBg
-                    font { pixelSize: 11; bold: true }
-                }
+                // Both, because "which format" is the receiving application's
+                // choice: uri-list is what a file manager or the desktop takes,
+                // and a terminal or a text field takes the plain paths.
+                Drag.mimeData: ({
+                    "text/uri-list": root.dragUris,
+                    "text/plain": root.dragText
+                })
             }
 
             // ── Disk context menu ───────────────────────────────────────────
@@ -3856,12 +3961,15 @@ FloatingWindow {
 
         DropArea {
             anchors.fill: parent
-            enabled: sideRow.dropTarget !== "" && root.dragging
-            onEntered: sideRow.dropHover = root.canDropOn(sideRow.dropTarget)
+            enabled: sideRow.dropTarget !== ""
+            onEntered: (drag) => {
+                sideRow.dropHover = root.willAcceptDrop(sideRow.dropTarget, drag)
+                if (!sideRow.dropHover) drag.accepted = false
+            }
             onExited: sideRow.dropHover = false
-            onDropped: {
+            onDropped: (drop) => {
                 sideRow.dropHover = false
-                root.dropOn(sideRow.dropTarget)
+                root.handleDrop(sideRow.dropTarget, drop)
             }
         }
     }
