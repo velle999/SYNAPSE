@@ -135,6 +135,17 @@ int cmd_unmount(int argc, char **argv);
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);
 
+/* ── actions.c — the right-click menu's borrowed half ───────────────────────
+ * "Open With" comes from mimeinfo.cache; the Extract / Set as Wallpaper /
+ * Mount ISO style entries come from $XDG_DATA_DIRS/kio/servicemenus, which is
+ * where synui already installs its own — so synfiles inherits them rather than
+ * reimplementing them, and a helper is written once for both file managers.
+ *
+ * The GUI never builds a command line: it lists actions, then names one to
+ * run, so Exec parsing and %F/%f/%U substitution stay in one testable place. */
+int cmd_actions(int argc, char **argv);
+int cmd_action(int argc, char **argv);
+
 /* Where "Support" in the About pane points. Named once here and mirrored in
  * synpkg so the suite's windows cannot end up pointing at different places. */
 #define SYNAPSE_DONATE_URL "https://buymeacoffee.com/velle999"

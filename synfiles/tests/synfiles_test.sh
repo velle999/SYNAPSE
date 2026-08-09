@@ -321,7 +321,7 @@ unset SYNFILES_RECENT
 # the ISO, and a test that asserted a specific drive would be a test that gets
 # disabled on the first machine that does not have it.
 n=$("$SYNFILES" --rec volumes | awk -F'\t' 'NR==1 {print NF}')
-[ "$n" = 8 ] && ok "volumes --rec has 8 columns" || bad "volumes --rec has $n columns"
+[ "$n" = 10 ] && ok "volumes --rec has 10 columns" || bad "volumes --rec has $n columns"
 
 ragged=$("$SYNFILES" --rec volumes | awk -F'\t' 'NR==1 {w=NF; next} NF!=w {n++} END {print n+0}')
 [ "$ragged" = 0 ] && ok "no ragged rows in volumes --rec" || bad "$ragged ragged volume rows"
@@ -583,6 +583,149 @@ check "about carries a Support row with an https link" $?
 unknown=$("$SYNFILES" --rec about |
           awk -F'\t' 'NR>1 && $2!="ok" && $2!="off" && $2!="missing" && $2!="info" {n++} END {print n+0}')
 [ "$unknown" = 0 ] && ok "about states are all known" || bad "$unknown about rows have an unknown state"
+
+# ── actions: Open With and service menus ────────────────────────────────────
+# Against a fixture, not the machine's real menus: what is installed differs
+# between velle's box, a build chroot and the ISO, and a test that asserted
+# "Extract" exists would be a test that gets disabled on the first machine
+# without synui.
+# $M belongs to the move tests by this point in the file — these get their own.
+AM="$T/actions-files"
+mkdir -p "$AM"
+touch "$AM/a.txt" "$AM/archive.zip"
+A="$T/xdg"
+mkdir -p "$A/kio/servicemenus" "$A/applications"
+
+cat > "$A/kio/servicemenus/test-extract.desktop" <<'SM'
+[Desktop Entry]
+Type=Application
+Name=Extract
+Icon=application-x-archive
+MimeType=application/zip;application/x-tar;
+Actions=here;subdir;
+
+[Desktop Action here]
+Name=Extract Here
+Icon=archive-extract
+Exec=fixture-extract here %F
+
+[Desktop Action subdir]
+Name=Extract to Subfolder
+Exec=fixture-extract subdir %F
+SM
+
+cat > "$A/applications/fixture-editor.desktop" <<'DE'
+[Desktop Entry]
+Type=Application
+Name=Fixture Editor
+Icon=text-editor
+Exec=fixture-editor %F
+MimeType=text/plain;
+DE
+
+cat > "$A/applications/fixture-hidden.desktop" <<'DE'
+[Desktop Entry]
+Type=Application
+Name=Hidden Helper
+NoDisplay=true
+Exec=fixture-hidden %F
+MimeType=text/plain;
+DE
+
+cat > "$A/applications/mimeinfo.cache" <<'MC'
+[MIME Cache]
+text/plain=fixture-editor.desktop;fixture-hidden.desktop;
+MC
+
+export SYNFILES_DATA_DIRS="$A"
+export HOME="$T/fakehome"      # so xdg_data_home cannot reach the real one
+mkdir -p "$HOME"
+
+n=$("$SYNFILES" --rec actions "$AM/a.txt" | awk -F'\t' 'NR==1 {print NF}')
+[ "$n" = 5 ] && ok "actions --rec has 5 columns" || bad "actions --rec has $n columns"
+
+"$SYNFILES" --rec actions "$AM/a.txt" | grep -q '^open-with	fixture-editor.desktop		Fixture Editor	'
+check "actions lists an Open With candidate" $?
+
+# NoDisplay is how a helper .desktop hides itself from menus; offering it puts
+# something in front of the user that nobody meant to be there.
+"$SYNFILES" --rec actions "$AM/a.txt" | grep -q 'Hidden Helper' \
+    && bad "a NoDisplay application reached the menu" \
+    || ok "a NoDisplay application is left out"
+
+# The service menu must match on mime and expand to one row per action.
+touch "$AM/archive.zip"
+n=$("$SYNFILES" --rec actions "$AM/archive.zip" | grep -c '^service	')
+[ "$n" = 2 ] && ok "a service menu expands to one row per action" \
+             || bad "expected 2 service rows, got $n"
+
+"$SYNFILES" --rec actions "$AM/archive.zip" | grep -q '^service	test-extract.desktop	here	Extract Here	archive-extract$'
+check "a service action carries its id, label and icon" $?
+
+# A .txt is not an archive. Whole-entry mime matching is what keeps Extract off
+# every file in the folder.
+"$SYNFILES" --rec actions "$AM/a.txt" | grep -q '^service	' \
+    && bad "a service menu matched the wrong mime type" \
+    || ok "a service menu does not match an unrelated mime type"
+
+# A mixed selection has no single type, so nothing that acts on "the selection"
+# can be offered — running Extract over half a folder of photographs is exactly
+# the outcome this prevents.
+n=$("$SYNFILES" --rec actions "$AM/archive.zip" "$AM/a.txt" | tail -n +2 | wc -l)
+[ "$n" = 0 ] && ok "a mixed-type selection offers no actions" \
+             || bad "a mixed selection offered $n actions"
+
+# ── running one ─────────────────────────────────────────────────────────────
+# The .desktop argument is a NAME. Accepting a path would let a caller point
+# this at any file on the system and run whatever Exec= line it found there.
+"$SYNFILES" action ../../../etc/passwd here -- "$AM/a.txt" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "action refuses a path as the desktop name" \
+             || bad "action accepted a path traversal"
+
+"$SYNFILES" action >/dev/null 2>&1
+[ $? -eq 1 ] && ok "action with no arguments is an error" || bad "action accepted no arguments"
+
+"$SYNFILES" action no-such-thing.desktop -- "$AM/a.txt" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "action refuses an unknown desktop entry" || bad "action accepted a missing entry"
+
+unset SYNFILES_DATA_DIRS
+
+# ── automounts ──────────────────────────────────────────────────────────────
+# An autofs target is browsable and must not also be offered as an unmounted
+# device — taking that offer would mount the disk a second time under
+# /run/media while the automount still owns its own path. Fixture units, since
+# the real ones are velle's.
+U="$T/units"
+mkdir -p "$U"
+cat > "$U/fixture.mount" <<'MU'
+[Unit]
+Description=fixture
+
+[Mount]
+What=/dev/disk/by-uuid/FIXTURE-UUID
+Where=/mnt/fixture-target
+Type=ext4
+MU
+
+# Shape only: whether this machine HAS an automount differs everywhere, so the
+# assertion is that reading the unit directory changes nothing it should not.
+before=$("$SYNFILES" --rec volumes | wc -l)
+after=$(SYNFILES_UNIT_DIRS="$U" "$SYNFILES" --rec volumes | wc -l)
+[ "$before" = "$after" ] && ok "a unit for an absent device adds no volume rows" \
+                         || bad "unit parsing changed the row count ($before -> $after)"
+
+# used/total are numbers the meter divides. A non-numeric cell renders as NaN,
+# and 0 total must mean "unknown" rather than "empty" — an untriggered
+# automount is deliberately not measured.
+bad_nums=$("$SYNFILES" --rec volumes |
+           awk -F'\t' 'NR>1 && ($9 !~ /^[0-9]+$/ || $10 !~ /^[0-9]+$/) {n++} END {print n+0}')
+[ "$bad_nums" = 0 ] && ok "volume used/total are numeric" \
+                    || bad "$bad_nums volume rows have non-numeric usage"
+
+over=$("$SYNFILES" --rec volumes |
+       awk -F'\t' 'NR>1 && $10 > 0 && $9 > $10 {n++} END {print n+0}')
+[ "$over" = 0 ] && ok "no volume reports more used than it has" \
+               || bad "$over volumes report used > total"
 
 echo
 echo "  $pass passed, $fail failed"

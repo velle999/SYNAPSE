@@ -24,6 +24,7 @@ sources = files(
   'src/fileops.c',
   'src/trash.c',
   'src/about.c',
+  'src/actions.c',
 )
 
 executable('synfiles', sources,

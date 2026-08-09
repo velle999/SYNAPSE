@@ -25,6 +25,9 @@ static void usage(FILE *f)
 "       --sort=KEY         name (default), size, mtime, type\n"
 "       --no-dirs-first    do not float directories to the top\n"
 "  info <path>             everything a properties pane shows\n"
+"  actions <path>...       Open With entries and service menus that apply\n"
+"  action <desktop> [id] -- <path>...\n"
+"                          run one of them\n"
 "\n"
 "Sidebar\n"
 "  places [list]           pinned folders\n"
@@ -143,6 +146,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "rename"))  return cmd_rename(rest_argc, rest);
 	if (!strcmp(cmd, "mkdir"))   return cmd_mkdir(rest_argc, rest);
 	if (!strcmp(cmd, "delete"))  return cmd_delete(rest_argc, rest);
+	if (!strcmp(cmd, "actions")) return cmd_actions(rest_argc, rest);
+	if (!strcmp(cmd, "action"))  return cmd_action(rest_argc, rest);
 	if (!strcmp(cmd, "about"))   return cmd_about(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))     return cmd_gui(rest_argc, rest);
 
