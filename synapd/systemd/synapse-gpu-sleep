@@ -106,15 +106,41 @@ _record_connected() {
 }
 
 _reprobe_missing() {
-    [ -r "$STATE" ] || return 0
-
     local d missing="" tries
-    while read -r d; do
-        [ -n "$d" ] && [ -r "$d/status" ] || continue
-        [ "$(cat "$d/status" 2>/dev/null)" = connected ] && continue
-        missing="$missing $d"
-    done < "$STATE"
+
+    # 1. Connectors that were connected when we went to sleep and are not now.
+    if [ -r "$STATE" ]; then
+        while read -r d; do
+            [ -n "$d" ] && [ -r "$d/status" ] || continue
+            [ "$(cat "$d/status" 2>/dev/null)" = connected ] && continue
+            missing="$missing $d"
+        done < "$STATE"
+    fi
     rm -f "$STATE"
+
+    # 2. Connectors the KERNEL still has a mode on, whose sink is gone.
+    #
+    # The snapshot alone is not enough, and 2026-08-09 is why. DP-3 dropped its
+    # link some time overnight — the monitor powers the link down when IT goes
+    # to standby, which is ordinary DisplayPort behaviour and, on this panel,
+    # not something it recovers from. By the time the machine suspended at
+    # 05:07 the connector already read `disconnected`, so it was never in the
+    # snapshot, so this hook re-probed nothing at 12:35 and logged nothing
+    # either. The display was missing and the one mechanism meant to notice had
+    # correctly decided there was nothing to notice.
+    #
+    # `enabled=enabled` with `status=disconnected` is the exact signature and a
+    # narrow one: it means a CRTC is still assigned to a connector with no sink
+    # answering. A head that was never in use reads `enabled=disabled` — DP-1
+    # on this box does — so this cannot start probing ports that have nothing
+    # plugged into them.
+    for d in /sys/class/drm/card*-*; do
+        [ -r "$d/status" ] && [ -r "$d/enabled" ] || continue
+        [ "$(cat "$d/status" 2>/dev/null)" = disconnected ] || continue
+        [ "$(cat "$d/enabled" 2>/dev/null)" = enabled ] || continue
+        case " $missing " in *" $d "*) continue ;; esac
+        missing="$missing $d"
+    done
 
     [ -n "$missing" ] || return 0
 
