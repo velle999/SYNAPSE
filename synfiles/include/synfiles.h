@@ -127,4 +127,40 @@ int cmd_recent(int argc, char **argv);
 /* ── volumes.c ──────────────────────────────────────────────────────────── */
 int cmd_volumes(int argc, char **argv);
 
+/* ── about.c ────────────────────────────────────────────────────────────── */
+int cmd_about(int argc, char **argv);
+
+/* Where "Support" in the About pane points. Named once here and mirrored in
+ * synpkg so the suite's windows cannot end up pointing at different places. */
+#define SYNAPSE_DONATE_URL "https://buymeacoffee.com/velle999"
+
+/* ── fileops.c — the half that can destroy data ─────────────────────────────
+ * Nothing here follows a symlink, nothing overwrites without being told to,
+ * and a cross-filesystem move removes the source only after the copy has
+ * fully succeeded. See the file header for the reasoning behind each. */
+int cmd_copy(int argc, char **argv);
+int cmd_move(int argc, char **argv);
+int cmd_rename(int argc, char **argv);
+int cmd_mkdir(int argc, char **argv);
+int cmd_delete(int argc, char **argv);   /* PERMANENT — gated behind --yes */
+
+/* realpath() that dies on failure; caller frees. */
+char *sf_resolve(const char *path);
+/* Same, for a path whose final component does not exist yet — realpath()
+ * refuses those, which is every copy destination. NULL if the parent is bad. */
+char *sf_resolve_parent(const char *path);
+/* Is `child` at or inside `ancestor`? Both must already be resolved, or a
+ * symlink walks straight past the check this exists to make. */
+bool sf_is_descendant(const char *ancestor, const char *child);
+const char *sf_basename(const char *path);
+/* Depth-first remove. Never descends through a symlink — it unlinks the link
+ * itself. Returns 0 on success, -1 with errno set. */
+int sf_rm_rf(int dirfd, const char *name);
+
+/* ── trash.c — the XDG trash spec ───────────────────────────────────────────
+ * What the Delete key reaches. Trashing is always a rename() and never a copy,
+ * which is why a file on another filesystem goes to that volume's own
+ * .Trash-$uid rather than the home trash. */
+int cmd_trash(int argc, char **argv);
+
 #endif /* SYNFILES_H */

@@ -33,8 +33,23 @@ static void usage(FILE *f)
 "  recent [--limit=N] [--existing]\n"
 "  volumes [--block|--network]\n"
 "\n"
+"Changing things\n"
+"  trash <path>...         move to the trash (this is what Delete should do)\n"
+"  trash list              what is in the trash\n"
+"  trash restore <name>    put one back where it came from\n"
+"  trash empty --yes       permanently remove everything in the trash\n"
+"  copy [--conflict=P] <src>... <dir>\n"
+"  move [--conflict=P] <src>... <dir>\n"
+"  rename <path> <newname>\n"
+"  mkdir <path>...\n"
+"  delete --yes <path>...  PERMANENT, no trash, no undo\n"
+"\n"
+"  P is error (default), skip, rename or overwrite. The default refuses and\n"
+"  names the collision rather than guessing which file you meant to keep.\n"
+"\n"
 "Front-ends\n"
 "  gui [dir]               the graphical browser\n"
+"  about                   version, licence, and what works on this machine\n"
 "\n"
 "Options\n"
 "  --rec                   machine-readable records (what the GUI parses)\n"
@@ -118,6 +133,13 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "places"))  return cmd_places(rest_argc, rest);
 	if (!strcmp(cmd, "recent"))  return cmd_recent(rest_argc, rest);
 	if (!strcmp(cmd, "volumes")) return cmd_volumes(rest_argc, rest);
+	if (!strcmp(cmd, "trash"))   return cmd_trash(rest_argc, rest);
+	if (!strcmp(cmd, "copy"))    return cmd_copy(rest_argc, rest);
+	if (!strcmp(cmd, "move"))    return cmd_move(rest_argc, rest);
+	if (!strcmp(cmd, "rename"))  return cmd_rename(rest_argc, rest);
+	if (!strcmp(cmd, "mkdir"))   return cmd_mkdir(rest_argc, rest);
+	if (!strcmp(cmd, "delete"))  return cmd_delete(rest_argc, rest);
+	if (!strcmp(cmd, "about"))   return cmd_about(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))     return cmd_gui(rest_argc, rest);
 
 	fprintf(stderr, "synfiles: unknown command '%s'\n\n", cmd);

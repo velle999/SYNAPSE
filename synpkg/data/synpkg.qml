@@ -957,6 +957,16 @@ FloatingWindow {
                                 aboutRow.modelData.detail !== undefined
                                 && aboutRow.modelData.detail.indexOf("synpkg ") === 0
 
+                            // A detail that is a URL opens in a browser rather
+                            // than a terminal. The two must stay separate:
+                            // `runnable` splits argv on spaces and hands it to
+                            // a shell, and doing that to a URL would be both
+                            // broken and a way to run whatever a detail string
+                            // happened to contain.
+                            readonly property bool openable:
+                                aboutRow.modelData.detail !== undefined
+                                && aboutRow.modelData.detail.indexOf("https://") === 0
+
                             Rectangle {
                                 id: stateDot
                                 anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
@@ -1009,13 +1019,13 @@ FloatingWindow {
                                 id: aboutBtn
                                 anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
                                 width: 70; height: 26; radius: 4
-                                visible: aboutRow.runnable
+                                visible: aboutRow.runnable || aboutRow.openable
                                 color: aboutBtnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
                                 border { width: 1; color: root.cAccent }
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Run"
+                                    text: aboutRow.openable ? "Open" : "Run"
                                     color: root.cAccent
                                     font.pixelSize: 11
                                 }
@@ -1024,12 +1034,22 @@ FloatingWindow {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    // Every one of these downloads something —
-                                    // a bootstrap, an appstream index — and
-                                    // prints as it goes.
-                                    onClicked: root.inTerminal(
-                                        aboutRow.modelData.detail.split(" "),
-                                        "running in a terminal")
+                                    onClicked: {
+                                        if (aboutRow.openable) {
+                                            // Qt.openUrlExternally rather than a
+                                            // terminal: the whole point of the
+                                            // openable/runnable split.
+                                            Qt.openUrlExternally(aboutRow.modelData.detail)
+                                            root.statusLine = "opened in your browser"
+                                            return
+                                        }
+                                        // Every one of these downloads something —
+                                        // a bootstrap, an appstream index — and
+                                        // prints as it goes.
+                                        root.inTerminal(
+                                            aboutRow.modelData.detail.split(" "),
+                                            "running in a terminal")
+                                    }
                                 }
                             }
                         }

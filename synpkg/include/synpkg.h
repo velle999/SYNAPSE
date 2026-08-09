@@ -142,6 +142,10 @@ int cmd_aur(int argc, char **argv);
 /* The Flathub remote, named once. The URL is the .flatpakrepo and NOT the bare
  * repository: the repo file carries Flathub's GPG key, and a remote added
  * without it verifies no signatures at all. */
+/* Where "Support" in the About pane points. Named once so the suite's windows
+ * cannot end up pointing at different places. */
+#define SYNAPSE_DONATE_URL "https://buymeacoffee.com/velle999"
+
 #define SYNPKG_FLATHUB_NAME "flathub"
 #define SYNPKG_FLATHUB_URL  "https://dl.flathub.org/repo/flathub.flatpakrepo"
 

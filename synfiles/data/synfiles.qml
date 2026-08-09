@@ -256,7 +256,24 @@ FloatingWindow {
                 if (!t) return
 
                 let rows = []
-                if (t.view === "recent") {
+                if (t.view === "about") {
+                    root.aboutRows = table
+                    root.loading = false
+                    root.statusLine = ""
+                    return
+                } else if (t.view === "trash") {
+                    // `trashName` is the handle `trash restore` takes, and it
+                    // is NOT derivable from the path: two files called
+                    // notes.txt become notes.txt and notes.txt.2 in the trash.
+                    rows = table.map(r => ({
+                        name: root.baseEnc(r.path), full: r.path,
+                        trashName: r.name,
+                        type: r.present === "1" ? "file" : "missing",
+                        size: 0, mtime: 0, deleted: r.deleted,
+                        mime: "", link: "0", target: "",
+                        missing: r.present !== "1"
+                    }))
+                } else if (t.view === "recent") {
                     rows = table.map(r => ({
                         name: root.baseEnc(r.path), full: r.path,
                         type: r.exists === "1" ? "file" : "missing",
@@ -292,7 +309,11 @@ FloatingWindow {
         root.loading = true
         root.statusLine = ""
 
-        if (t.view === "recent") {
+        if (t.view === "about") {
+            listProc.command = [root.bin, "--rec", "about"]
+        } else if (t.view === "trash") {
+            listProc.command = [root.bin, "--rec", "trash", "list"]
+        } else if (t.view === "recent") {
             listProc.command = [root.bin, "--rec", "recent", "--limit=300"]
         } else {
             // The path goes to the binary DECODED — argv carries raw bytes and
@@ -307,11 +328,130 @@ FloatingWindow {
         listProc.running = true
     }
 
+    property var aboutRows: []
+
     // Sidebar sources. All three are read once at startup and on refresh —
     // they change rarely and re-running them per navigation would put three
     // process spawns in front of every double-click.
     property var places: []
     property var volumes: []
+
+    // ── Selection, clipboard and operations ─────────────────────────────────
+
+    property string selected: ""     // the ENCODED name of the focused row
+
+    // {op: "copy"|"cut", paths: [encoded...]}. Cut is not a move yet — nothing
+    // leaves its directory until Paste, which is what makes Ctrl+X reversible
+    // by simply not pasting.
+    property var clip: ({ op: "", paths: [] })
+
+    Process {
+        id: opProc
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (this.text) root.statusLine = this.text.split("\n")[0]
+            }
+        }
+        // No parameters, deliberately: quickshell's exited(int, QProcess::
+        // ExitStatus) has a second type QML cannot resolve, and a typed
+        // handler silently never runs.
+        onExited: {
+            root.busy = false
+            root.reload()
+            placesProc.running = true
+        }
+    }
+    property bool busy: false
+
+    function runOp(args, note) {
+        if (root.busy) return
+        root.busy = true
+        root.statusLine = note
+        // Paths cross the process boundary DECODED: argv carries raw bytes and
+        // needs no escaping. The encoding exists for the record stream, which
+        // is a text format, not for exec().
+        opProc.command = [root.bin].concat(args)
+        opProc.running = true
+    }
+
+    function selectedRow() {
+        for (const r of root.shownRows)
+            if (r.name === root.selected) return r
+        return null
+    }
+
+    function toTrash(row) {
+        if (!row) return
+        root.runOp(["trash", root.disp(row.full)],
+                   "moving " + root.disp(row.name) + " to the trash")
+    }
+
+    function restoreFromTrash(row) {
+        if (!row || !row.trashName) return
+        // The trashName is passed back EXACTLY as listed — percent-encoded.
+        // synfiles decodes it; re-deriving it from the display name would
+        // fail for anything that got a .2 suffix.
+        root.runOp(["trash", "restore", row.trashName],
+                   "restoring " + root.disp(row.name))
+    }
+
+    function copySelection(cut) {
+        const row = root.selectedRow()
+        if (!row) return
+        root.clip = { op: cut ? "cut" : "copy", paths: [row.full] }
+        root.statusLine = (cut ? "cut " : "copied ") + root.disp(row.name)
+    }
+
+    function paste() {
+        if (!root.tab || root.tab.view !== "dir") return
+        if (!root.clip.paths || root.clip.paths.length === 0) return
+
+        const args = [root.clip.op === "cut" ? "move" : "copy"]
+        // rename rather than error: a paste into the folder something was
+        // copied from is the common case, and refusing it there would be
+        // pedantic. Anywhere else a collision is still a real question, but
+        // the GUI has no way to ask one yet, so the non-destructive answer is
+        // the only defensible default.
+        args.push("--conflict=rename")
+        for (const p of root.clip.paths)
+            args.push(root.disp(p))
+        args.push(root.disp(root.tab.path))
+
+        root.runOp(args, root.clip.op === "cut" ? "moving…" : "copying…")
+        if (root.clip.op === "cut")
+            root.clip = ({ op: "", paths: [] })
+    }
+
+    // ── Rename ──────────────────────────────────────────────────────────────
+    property string renaming: ""     // encoded name being renamed, "" if none
+
+    function commitRename(newName) {
+        const row = root.selectedRow()
+        root.renaming = ""
+        if (!row || !newName || newName === root.disp(row.name)) return
+        root.runOp(["rename", root.disp(row.full), newName],
+                   "renaming to " + newName)
+    }
+
+    // ── Emptying the trash ──────────────────────────────────────────────────
+    // The only irreversible thing this window can do, so it asks, and the
+    // confirmation is what supplies --yes. The binary refuses without it.
+    property bool confirmEmpty: false
+
+    function emptyTrash() {
+        root.confirmEmpty = false
+        root.runOp(["trash", "empty", "--yes"], "emptying the trash…")
+    }
+
+    // ── New folder ──────────────────────────────────────────────────────────
+    property bool creating: false
+
+    function commitNewFolder(name) {
+        root.creating = false
+        if (!name) return
+        root.runOp(["mkdir", root.disp(root.tab.path) + "/" + name],
+                   "creating " + name)
+    }
 
     Process {
         id: placesProc
@@ -410,13 +550,16 @@ FloatingWindow {
 
                     // Views that are not directories.
                     Repeater {
-                        model: [{ label: "Recent", icon: "document-open-recent", view: "recent" }]
+                        model: [{ label: "Recent",  icon: "document-open-recent", view: "recent" },
+                                { label: "Trash",   icon: "user-trash",           view: "trash" },
+                                { label: "About",   icon: "help-about",           view: "about" }]
                         delegate: SideRow {
+                            id: viewRow
                             required property var modelData
-                            label: modelData.label
-                            iconName: modelData.icon
-                            active: root.tab && root.tab.view === modelData.view
-                            onActivated: root.navigate("", modelData.view)
+                            label: viewRow.modelData.label
+                            iconName: viewRow.modelData.icon
+                            active: root.tab && root.tab.view === viewRow.modelData.view
+                            onActivated: root.navigate("", viewRow.modelData.view)
                         }
                     }
 
@@ -548,6 +691,31 @@ FloatingWindow {
             }
 
             // Path bar: breadcrumbs, filter, and the per-tab toggles.
+            // Emptying the trash is the one destructive action reachable from
+            // this window, so it is a deliberate button on its own view rather
+            // than a menu entry next to something harmless — and the binary
+            // still refuses it without --yes, which is passed only from here.
+            Item {
+                id: trashBar
+                anchors { top: tabStrip.bottom; left: parent.left; right: parent.right }
+                anchors.margins: 8
+                height: 30
+                visible: root.tab && root.tab.view === "trash"
+
+                Text {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: "Deleted files. Restoring puts one back where it came from."
+                    color: root.cDim
+                    font.pixelSize: 12
+                }
+                ToggleChip {
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    label: "Empty Trash…"
+                    on: false
+                    onToggled: root.confirmEmpty = true
+                }
+            }
+
             Item {
                 id: pathBar
                 anchors { top: tabStrip.bottom; left: parent.left; right: parent.right }
@@ -645,6 +813,12 @@ FloatingWindow {
                         onToggled: { root.setTab({ reverse: !root.tab.reverse }); root.reload() }
                     }
                     ToggleChip {
+                        label: "New folder"
+                        on: false
+                        visible: root.tab && root.tab.view === "dir"
+                        onToggled: root.creating = true
+                    }
+                    ToggleChip {
                         label: root.tab && root.isPinned(root.tab.path) ? "Pinned ✓" : "Pin"
                         on: root.tab ? root.isPinned(root.tab.path) : false
                         visible: root.tab && root.tab.view === "dir"
@@ -663,6 +837,7 @@ FloatingWindow {
                           left: parent.left; right: parent.right }
                 anchors.margins: 8
                 height: 28
+                visible: root.tab && root.tab.view !== "about"
                 radius: 4
                 color: root.cPanel
                 border { width: 1; color: filterInput.activeFocus ? root.cAccent : "transparent" }
@@ -686,6 +861,132 @@ FloatingWindow {
                 }
             }
 
+            // ── About ───────────────────────────────────────────────────────
+            // Not a credits screen. Almost everything this browser does beyond
+            // listing a directory leans on something optional — gvfs, lsblk,
+            // shared-mime-info, xdg-open — and when one is missing the feature
+            // is silently EMPTY rather than broken. This says which.
+            Flickable {
+                anchors {
+                    top: tabStrip.bottom; left: parent.left
+                    right: parent.right; bottom: statusBar.top
+                }
+                anchors.margins: 18
+                visible: root.tab && root.tab.view === "about"
+                contentHeight: aboutCol.implicitHeight
+                clip: true
+
+                Column {
+                    id: aboutCol
+                    width: parent.width
+                    spacing: 6
+
+                    Text {
+                        text: "SYNAPSE Files"
+                        color: root.cAccent
+                        font { pixelSize: 20; bold: true }
+                    }
+                    Text {
+                        width: aboutCol.width
+                        text: "A file browser for SynapseOS. Tabs, pinned places shared with "
+                            + "Dolphin, recent files, volumes and network shares."
+                        color: root.cDim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        bottomPadding: 10
+                    }
+
+                    Repeater {
+                        model: root.aboutRows
+                        delegate: Rectangle {
+                            id: aboutRow
+                            required property var modelData
+                            width: aboutCol.width
+                            height: 52
+                            radius: 4
+                            color: root.wash(0.05)
+
+                            readonly property color stateColor:
+                                aboutRow.modelData.state === "ok"      ? root.cAccent
+                              : aboutRow.modelData.state === "off"     ? root.cWarn
+                              : aboutRow.modelData.state === "missing" ? root.cDim
+                                                                       : root.cAccent
+
+                            // A detail that is a URL opens in a browser. It is
+                            // never split and handed to a shell — that path is
+                            // for commands, and conflating the two would run
+                            // whatever a detail string happened to contain.
+                            readonly property bool openable:
+                                aboutRow.modelData.detail !== undefined
+                                && aboutRow.modelData.detail.indexOf("https://") === 0
+
+                            Rectangle {
+                                id: aboutDot
+                                anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                                width: 8; height: 8; radius: 4
+                                color: aboutRow.stateColor
+                            }
+                            Text {
+                                id: aboutKey
+                                anchors { left: aboutDot.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                width: 120
+                                text: aboutRow.modelData.item
+                                color: root.cText
+                                font { pixelSize: 12; bold: true }
+                                elide: Text.ElideRight
+                            }
+                            Column {
+                                anchors {
+                                    left: aboutKey.right; leftMargin: 12
+                                    right: aboutBtn.left; rightMargin: 12
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                spacing: 2
+                                Text {
+                                    width: parent.width
+                                    text: aboutRow.modelData.value
+                                    color: aboutRow.stateColor
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: aboutRow.modelData.detail
+                                    color: root.cDim
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                    visible: text !== ""
+                                }
+                            }
+                            Rectangle {
+                                id: aboutBtn
+                                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                width: 74; height: 26; radius: 4
+                                visible: aboutRow.openable
+                                color: aboutBtnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                                border { width: 1; color: root.cAccent }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Open"
+                                    color: root.cAccent
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    id: aboutBtnMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        Qt.openUrlExternally(aboutRow.modelData.detail)
+                                        root.statusLine = "opened in your browser"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Column headings
             Item {
                 id: heads
@@ -693,6 +994,7 @@ FloatingWindow {
                 anchors.margins: 8
                 anchors.topMargin: 4
                 height: 20
+                visible: root.tab && root.tab.view !== "about"
 
                 Text {
                     anchors { left: parent.left; leftMargin: 40 }
@@ -717,17 +1019,50 @@ FloatingWindow {
                 anchors.margins: 8
                 anchors.topMargin: 2
                 clip: true
+                visible: root.tab && root.tab.view !== "about"
                 model: root.shownRows
                 spacing: 1
                 currentIndex: -1
+                focus: true
+
+                // Shortcuts a file manager is expected to have. Delete goes to
+                // the TRASH — the permanent one is a separate command behind a
+                // separate flag, and no key reaches it.
+                Keys.onPressed: (event) => {
+                    const row = root.selectedRow()
+                    if (event.key === Qt.Key_Delete) {
+                        if (root.tab.view === "dir") root.toTrash(row)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_F2) {
+                        if (row && root.tab.view === "dir") root.renaming = row.name
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                        if (row) root.activate(row)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Backspace) {
+                        if (root.tab.view === "dir")
+                            root.navigate(root.parentEnc(root.tab.path), "dir")
+                        event.accepted = true
+                    } else if (event.modifiers & Qt.ControlModifier) {
+                        if (event.key === Qt.Key_C)      { root.copySelection(false); event.accepted = true }
+                        else if (event.key === Qt.Key_X) { root.copySelection(true);  event.accepted = true }
+                        else if (event.key === Qt.Key_V) { root.paste();              event.accepted = true }
+                        else if (event.key === Qt.Key_T) { root.newTab(root.tab.path, "dir"); event.accepted = true }
+                        else if (event.key === Qt.Key_W) { root.closeTab(root.current); event.accepted = true }
+                        else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
+                    }
+                }
 
                 delegate: Rectangle {
                     id: fileRow
                     required property var modelData
+                    readonly property bool isSelected: fileRow.modelData.name === root.selected
+                    readonly property bool isRenaming: fileRow.modelData.name === root.renaming
                     width: ListView.view.width
                     height: 30
                     radius: 3
-                    color: rowMa.containsMouse ? root.wash(0.10) : "transparent"
+                    color: fileRow.isSelected ? root.wash(0.22)
+                         : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
 
                     Image {
                         id: rowIcon
@@ -744,6 +1079,7 @@ FloatingWindow {
                             right: sizeText.left; rightMargin: 10
                             verticalCenter: parent.verticalCenter
                         }
+                        visible: !fileRow.isRenaming
                         // disp() — display only. Every action below uses
                         // modelData.full, which stays encoded.
                         text: root.disp(fileRow.modelData.name)
@@ -753,6 +1089,74 @@ FloatingWindow {
                         color: fileRow.modelData.missing ? root.cDim
                              : (fileRow.modelData.type === "dir" ? root.cAccent : root.cText)
                         font.pixelSize: 12
+                    }
+
+                    // Inline rename. Seeded with the DECODED name because that
+                    // is what a person edits; what comes back is a new name
+                    // typed by hand, so it needs no decoding on the way out.
+                    Rectangle {
+                        anchors {
+                            left: rowIcon.right; leftMargin: 8
+                            right: sizeText.left; rightMargin: 10
+                            verticalCenter: parent.verticalCenter
+                        }
+                        height: 24
+                        radius: 3
+                        visible: fileRow.isRenaming
+                        color: root.cPanel
+                        border { width: 1; color: root.cAccent }
+
+                        TextInput {
+                            id: renameInput
+                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: root.cText
+                            font.pixelSize: 12
+                            clip: true
+                            onVisibleChanged: {
+                                if (visible) {
+                                    text = root.disp(fileRow.modelData.name)
+                                    forceActiveFocus()
+                                    selectAll()
+                                }
+                            }
+                            onAccepted: root.commitRename(text)
+                            Keys.onEscapePressed: root.renaming = ""
+                        }
+                    }
+
+                    Text {
+                        anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
+                        text: fileRow.modelData.deleted || ""
+                        color: root.cDim
+                        font.pixelSize: 11
+                        visible: root.tab && root.tab.view === "trash"
+                    }
+
+                    // Restore is offered only where it means something, and it
+                    // passes the trashName back verbatim — the handle from the
+                    // listing, not something re-derived from the path, because
+                    // a second notes.txt is stored as notes.txt.2.
+                    Rectangle {
+                        anchors { right: parent.right; rightMargin: 150; verticalCenter: parent.verticalCenter }
+                        width: 66; height: 22; radius: 3
+                        visible: root.tab && root.tab.view === "trash"
+                                 && !fileRow.modelData.missing
+                        color: restoreMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                        border { width: 1; color: root.cAccent }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Restore"
+                            color: root.cAccent
+                            font.pixelSize: 10
+                        }
+                        MouseArea {
+                            id: restoreMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.restoreFromTrash(fileRow.modelData)
+                        }
                     }
 
                     Text {
@@ -773,7 +1177,18 @@ FloatingWindow {
                         id: rowMa
                         anchors.fill: parent
                         hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        enabled: !fileRow.isRenaming
+                        onClicked: (mouse) => {
+                            root.selected = fileRow.modelData.name
+                            fileList.forceActiveFocus()
+                            if (mouse.button === Qt.RightButton) {
+                                ctxMenu.row = fileRow.modelData
+                                ctxMenu.x = fileRow.x + mouse.x
+                                ctxMenu.y = fileRow.y + mouse.y - fileList.contentY + heads.height + 8
+                                ctxMenu.open = true
+                            }
+                        }
                         // Double-click to open, matching every other file
                         // manager. Single-click-to-open is a setting worth
                         // having and a default worth not having.
@@ -806,6 +1221,216 @@ FloatingWindow {
                     color: root.cDim
                     font.pixelSize: 11
                     visible: text !== ""
+                }
+            }
+
+            // ── Context menu ────────────────────────────────────────────────
+            // Built from a model rather than hand-placed rows so that what a
+            // given entry DOES and whether it is offered at all live in one
+            // place. "Move to Trash" is offered; permanent delete is not — it
+            // exists in the binary behind an explicit flag and no click in
+            // this window reaches it.
+            MouseArea {
+                anchors.fill: parent
+                visible: ctxMenu.open
+                acceptedButtons: Qt.AllButtons
+                onClicked: ctxMenu.open = false
+                onPressed: ctxMenu.open = false
+            }
+
+            Rectangle {
+                id: ctxMenu
+                property bool open: false
+                property var row: null
+
+                visible: ctxMenu.open
+                width: 190
+                height: ctxCol.implicitHeight + 8
+                radius: 4
+                color: root.cPanel
+                border { width: 1; color: root.wash(0.35) }
+                z: 100
+
+                // Keep the menu inside the window rather than letting it hang
+                // off the bottom edge on a row near the end of a long list.
+                onOpenChanged: {
+                    if (!ctxMenu.open) return
+                    if (ctxMenu.y + ctxMenu.height > parent.height)
+                        ctxMenu.y = Math.max(0, parent.height - ctxMenu.height - 4)
+                    if (ctxMenu.x + ctxMenu.width > parent.width)
+                        ctxMenu.x = Math.max(0, parent.width - ctxMenu.width - 4)
+                }
+
+                Column {
+                    id: ctxCol
+                    anchors { fill: parent; margins: 4 }
+
+                    Repeater {
+                        model: {
+                            const t = root.tab
+                            if (!t || !ctxMenu.row) return []
+                            const r = ctxMenu.row
+                            if (t.view === "trash")
+                                return [{ label: "Restore", act: "restore",
+                                          on: !r.missing }]
+
+                            const items = [
+                                { label: r.type === "dir" ? "Open Folder" : "Open",
+                                  act: "open", on: !r.missing },
+                                { label: "Open in New Tab", act: "tab",
+                                  on: r.type === "dir" }
+                            ]
+                            if (t.view === "dir") {
+                                items.push({ label: "-", act: "", on: true })
+                                items.push({ label: "Copy",   act: "copy",   on: true })
+                                items.push({ label: "Cut",    act: "cut",    on: true })
+                                items.push({ label: "Paste",  act: "paste",
+                                             on: root.clip.paths.length > 0 })
+                                items.push({ label: "-", act: "", on: true })
+                                items.push({ label: "Rename…", act: "rename", on: true })
+                                items.push({ label: "Move to Trash", act: "trash", on: true })
+                            }
+                            return items
+                        }
+                        delegate: Item {
+                            id: ctxItem
+                            required property var modelData
+                            width: ctxCol.width
+                            height: ctxItem.modelData.label === "-" ? 5 : 26
+
+                            Rectangle {
+                                anchors { left: parent.left; right: parent.right
+                                          verticalCenter: parent.verticalCenter }
+                                height: 1
+                                color: root.wash(0.25)
+                                visible: ctxItem.modelData.label === "-"
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 3
+                                visible: ctxItem.modelData.label !== "-"
+                                color: ctxMa.containsMouse && ctxItem.modelData.on
+                                       ? root.wash(0.18) : "transparent"
+
+                                Text {
+                                    anchors { left: parent.left; leftMargin: 10
+                                              verticalCenter: parent.verticalCenter }
+                                    text: ctxItem.modelData.label
+                                    color: ctxItem.modelData.on ? root.cText : root.cDim
+                                    font.pixelSize: 12
+                                }
+                                MouseArea {
+                                    id: ctxMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: ctxItem.modelData.on
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        const r = ctxMenu.row
+                                        ctxMenu.open = false
+                                        switch (ctxItem.modelData.act) {
+                                        case "open":    root.activate(r); break
+                                        case "tab":     root.newTab(r.full, "dir"); break
+                                        case "copy":    root.selected = r.name; root.copySelection(false); break
+                                        case "cut":     root.selected = r.name; root.copySelection(true); break
+                                        case "paste":   root.paste(); break
+                                        case "rename":  root.selected = r.name; root.renaming = r.name; break
+                                        case "trash":   root.toTrash(r); break
+                                        case "restore": root.restoreFromTrash(r); break
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Empty-trash confirmation ────────────────────────────────────
+            Rectangle {
+                anchors.centerIn: parent
+                width: 360; height: 130
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.cWarn }
+                visible: root.confirmEmpty
+                z: 120
+
+                Column {
+                    anchors { fill: parent; margins: 16 }
+                    spacing: 10
+
+                    Text {
+                        text: "Empty the trash?"
+                        color: root.cWarn
+                        font { pixelSize: 14; bold: true }
+                    }
+                    Text {
+                        width: parent.width - 4
+                        text: "Everything in the trash will be removed permanently. "
+                            + "This cannot be undone."
+                        color: root.cText
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                    Row {
+                        spacing: 8
+                        ToggleChip {
+                            label: "Cancel"
+                            on: false
+                            onToggled: root.confirmEmpty = false
+                        }
+                        ToggleChip {
+                            label: "Empty permanently"
+                            on: true
+                            onToggled: root.emptyTrash()
+                        }
+                    }
+                }
+            }
+
+            // ── New folder prompt ───────────────────────────────────────────
+            Rectangle {
+                anchors.centerIn: parent
+                width: 320; height: 96
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.cAccent }
+                visible: root.creating
+                z: 120
+
+                Column {
+                    anchors { fill: parent; margins: 14 }
+                    spacing: 10
+
+                    Text {
+                        text: "New folder"
+                        color: root.cAccent
+                        font { pixelSize: 13; bold: true }
+                    }
+                    Rectangle {
+                        width: parent.width; height: 28
+                        radius: 3
+                        color: root.cBg
+                        border { width: 1; color: root.wash(0.35) }
+                        TextInput {
+                            id: newFolderInput
+                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: root.cText
+                            font.pixelSize: 12
+                            clip: true
+                            onVisibleChanged: if (visible) { text = ""; forceActiveFocus() }
+                            onAccepted: root.commitNewFolder(text)
+                            Keys.onEscapePressed: root.creating = false
+                        }
+                    }
+                    Text {
+                        text: "Enter to create, Escape to cancel"
+                        color: root.cDim
+                        font.pixelSize: 10
+                    }
                 }
             }
 

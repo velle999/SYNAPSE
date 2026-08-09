@@ -163,6 +163,12 @@ int cmd_about(int argc, char **argv)
 	about_row("Front-ends", "info", "CLI, terminal browser, quickshell",
 	          have_cmd("quickshell") ? "synpkg gui" : "install quickshell for the GUI");
 
+	/* A detail beginning https:// is a LINK, and the front-ends open it in a
+	 * browser rather than handing it to a shell the way they do a
+	 * "synpkg ..." detail. Keeping those two apart is why the GUI has
+	 * separate openable/runnable tests rather than one "clickable". */
+	about_row("Support", "info", "Buy me a coffee", SYNAPSE_DONATE_URL);
+
 	if (g_out == OUT_HUMAN)
 		putchar('\n');
 	return 0;

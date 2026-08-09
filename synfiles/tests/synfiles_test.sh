@@ -326,6 +326,203 @@ n=$("$SYNFILES" --rec volumes | awk -F'\t' 'NR==1 {print NF}')
 ragged=$("$SYNFILES" --rec volumes | awk -F'\t' 'NR==1 {w=NF; next} NF!=w {n++} END {print n+0}')
 [ "$ragged" = 0 ] && ok "no ragged rows in volumes --rec" || bad "$ragged ragged volume rows"
 
+# ── trash, against a fixture ────────────────────────────────────────────────
+# SYNFILES_TRASH is an unconditional override: without it the device check
+# would route a scratch file to a volume trash and these tests could touch the
+# user's real one. Nothing below may reach ~/.local/share/Trash.
+export SYNFILES_TRASH="$T/Trash"
+W="$T/work"
+mkdir -p "$W"
+
+echo "content one" > "$W/notes.txt"
+printf 'payload' > "$W/$(printf 'weird\tname\nhere.txt')"
+echo "has-a-percent" > "$W/50%off.txt"
+mkdir -p "$W/subdir/deep" && echo deep > "$W/subdir/deep/f.txt"
+
+"$SYNFILES" trash "$W/notes.txt" >/dev/null 2>&1
+[ -e "$W/notes.txt" ] && bad "trash left the original in place" \
+                      || ok "trash moves the file out of its directory"
+
+# Both halves must exist. A file in files/ with no info/ entry is unrestorable
+# litter, and an info/ entry with no file is a phantom row in every trash
+# viewer on the system.
+[ -f "$SYNFILES_TRASH/files/notes.txt" ] && ok "the data lands in files/" \
+                                         || bad "nothing in files/"
+[ -f "$SYNFILES_TRASH/info/notes.txt.trashinfo" ] && ok "the info lands in info/" \
+                                                  || bad "nothing in info/"
+
+grep -q '^\[Trash Info\]$' "$SYNFILES_TRASH/info/notes.txt.trashinfo"
+check "trashinfo has the spec's section header" $?
+grep -q "^Path=$W/notes.txt$" "$SYNFILES_TRASH/info/notes.txt.trashinfo"
+check "trashinfo records an absolute Path for the home trash" $?
+grep -qE '^DeletionDate=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$' \
+     "$SYNFILES_TRASH/info/notes.txt.trashinfo"
+check "trashinfo records a spec-shaped DeletionDate" $?
+
+# Path= is percent-encoded per the spec. Unencoded, a filename containing a
+# newline would make the .trashinfo unparseable and the file unrestorable.
+"$SYNFILES" trash "$W/$(printf 'weird\tname\nhere.txt')" >/dev/null 2>&1
+grep -q 'Path=.*weird%09name%0Ahere\.txt$' "$SYNFILES_TRASH"/info/*.trashinfo
+check "trashinfo percent-encodes Path" $?
+
+# Reserving the name with O_EXCL is what makes a second file of the same name
+# become notes.txt.2 rather than overwriting the first.
+echo "content two" > "$W/notes.txt"
+"$SYNFILES" trash "$W/notes.txt" >/dev/null 2>&1
+[ -f "$SYNFILES_TRASH/files/notes.txt.2" ] && ok "a second file of the same name gets a suffix" \
+                                           || bad "no notes.txt.2 — the first was overwritten?"
+grep -q '^content one$' "$SYNFILES_TRASH/files/notes.txt" \
+    && ok "the first trashed file is untouched by the second" \
+    || bad "trashing a same-named file clobbered the first"
+
+n=$("$SYNFILES" --rec trash list | awk -F'\t' 'NR==1 {print NF}')
+[ "$n" = 5 ] && ok "trash list --rec has 5 columns" || bad "trash list --rec has $n columns"
+
+# THE round trip, and the reason `restore` decodes its argument: the name in
+# the listing is percent-encoded, so handing it straight back has to work.
+"$SYNFILES" trash "$W/50%off.txt" >/dev/null 2>&1
+enc=$("$SYNFILES" --rec trash list | awk -F'\t' '$2 ~ /50%25off/ {print $1}')
+[ "$enc" = "50%25off.txt" ] && ok "a % in a trashed name is double-encoded in the listing" \
+                            || bad "listed name is '$enc', want 50%25off.txt"
+
+"$SYNFILES" trash restore "$enc" >/dev/null 2>&1
+[ -f "$W/50%off.txt" ] && ok "restore takes the name exactly as listed" \
+                       || bad "restore did not put 50%off.txt back"
+grep -q '^has-a-percent$' "$W/50%off.txt" 2>/dev/null
+check "restored content is intact" $?
+
+# A name with a tab and a newline has to survive the same round trip, and it
+# is the case where an encode/decode mismatch actually loses the file.
+enc=$("$SYNFILES" --rec trash list | awk -F'\t' '$1 ~ /weird/ {print $1}')
+"$SYNFILES" trash restore "$enc" >/dev/null 2>&1
+[ -f "$W/$(printf 'weird\tname\nhere.txt')" ] \
+    && ok "a name with a tab and a newline survives trash and restore" \
+    || bad "the hostile name did not come back"
+
+# Restoring must never overwrite: something newer may occupy the old path.
+echo "newer" > "$W/notes.txt"
+"$SYNFILES" trash restore notes.txt >/dev/null 2>&1
+grep -q '^newer$' "$W/notes.txt"
+check "restore refuses to overwrite what is already there" $?
+
+# Directories go to the trash whole.
+"$SYNFILES" trash "$W/subdir" >/dev/null 2>&1
+[ -f "$SYNFILES_TRASH/files/subdir/deep/f.txt" ] && ok "a directory is trashed with its contents" \
+                                                 || bad "the directory tree did not survive trashing"
+
+"$SYNFILES" trash empty >/dev/null 2>&1
+[ $? -eq 1 ] && ok "trash empty refuses without --yes" || bad "trash empty ran unconfirmed"
+
+"$SYNFILES" trash empty --yes >/dev/null 2>&1
+n=$(ls -A "$SYNFILES_TRASH/files" 2>/dev/null | wc -l)
+[ "$n" = 0 ] && ok "trash empty --yes clears files/" || bad "$n items left in files/"
+n=$(ls -A "$SYNFILES_TRASH/info" 2>/dev/null | wc -l)
+[ "$n" = 0 ] && ok "trash empty --yes clears info/" || bad "$n items left in info/"
+
+unset SYNFILES_TRASH
+
+# ── copy ────────────────────────────────────────────────────────────────────
+C="$T/copy"
+mkdir -p "$C/src/deep" "$C/dst"
+echo alpha > "$C/src/a.txt"
+echo beta > "$C/src/deep/b.txt"
+chmod 700 "$C/src/a.txt"
+ln -s a.txt "$C/src/lnk"
+mkfifo "$C/src/afifo"
+
+"$SYNFILES" copy "$C/src" "$C/dst" >/dev/null 2>&1
+[ -f "$C/dst/src/deep/b.txt" ] && ok "copy recurses into subdirectories" \
+                               || bad "copy did not recurse"
+
+m=$(stat -c '%a' "$C/dst/src/a.txt" 2>/dev/null)
+[ "$m" = "700" ] && ok "copy preserves permissions" || bad "copied mode is $m, want 700"
+
+# A symlink must be RECREATED, not chased. Following it turns one 40-byte link
+# into a second copy of whatever it points at.
+[ -L "$C/dst/src/lnk" ] && ok "copy recreates a symlink as a symlink" \
+                        || bad "copy followed the symlink"
+
+# Opening a fifo blocks until somebody writes to it, so a copy that tried
+# would hang with no diagnosis.
+[ ! -e "$C/dst/src/afifo" ] && ok "copy skips a fifo rather than hanging on it" \
+                            || bad "copy created something for the fifo"
+
+# The default conflict policy refuses and says so. Silently overwriting is
+# unrecoverable and silently skipping hides work that did not happen.
+"$SYNFILES" copy "$C/src" "$C/dst" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "the default conflict policy refuses" || bad "a second copy did not refuse"
+
+"$SYNFILES" copy --conflict=skip "$C/src" "$C/dst" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "--conflict=skip succeeds" || bad "--conflict=skip returned failure"
+
+"$SYNFILES" copy --conflict=rename "$C/src" "$C/dst" >/dev/null 2>&1
+[ -f "$C/dst/src/a (copy).txt" ] && ok "--conflict=rename inserts before the extension" \
+                                 || bad "no 'a (copy).txt' was produced"
+
+"$SYNFILES" copy --conflict=nonsense "$C/src" "$C/dst" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "an unknown conflict policy is refused" || bad "--conflict=nonsense accepted"
+
+# Copying a directory into its own subtree recurses until the disk fills.
+"$SYNFILES" copy "$C/src" "$C/src/deep" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copy refuses a destination inside the source" \
+             || bad "copy accepted a destination inside the source"
+
+# ── move ────────────────────────────────────────────────────────────────────
+M="$T/move"
+mkdir -p "$M/a" "$M/b"
+echo moveme > "$M/a/f.txt"
+mkdir -p "$M/a/sub" && echo s > "$M/a/sub/g.txt"
+
+"$SYNFILES" move "$M/a/f.txt" "$M/b" >/dev/null 2>&1
+{ [ -f "$M/b/f.txt" ] && [ ! -e "$M/a/f.txt" ]; }
+check "move relocates a file" $?
+
+"$SYNFILES" move "$M/a/sub" "$M/b" >/dev/null 2>&1
+{ [ -f "$M/b/sub/g.txt" ] && [ ! -e "$M/a/sub" ]; }
+check "move relocates a directory with its contents" $?
+
+# ── rename ──────────────────────────────────────────────────────────────────
+"$SYNFILES" rename "$M/b/f.txt" renamed.txt >/dev/null 2>&1
+{ [ -f "$M/b/renamed.txt" ] && [ ! -e "$M/b/f.txt" ]; }
+check "rename renames in place" $?
+
+# A "/" in a new name would make rename a silent move — and "../.." a silent
+# move somewhere surprising.
+"$SYNFILES" rename "$M/b/renamed.txt" ../escaped.txt >/dev/null 2>&1
+[ $? -eq 1 ] && ok "rename refuses a path as the new name" || bad "rename accepted a path"
+
+"$SYNFILES" rename "$M/b/renamed.txt" .. >/dev/null 2>&1
+[ $? -eq 1 ] && ok "rename refuses '..' as a name" || bad "rename accepted '..'"
+
+echo occupied > "$M/b/taken.txt"
+"$SYNFILES" rename "$M/b/renamed.txt" taken.txt >/dev/null 2>&1
+grep -q '^occupied$' "$M/b/taken.txt"
+check "rename does not overwrite an existing name" $?
+
+# ── permanent delete ────────────────────────────────────────────────────────
+# The gate is the whole point: the GUI's Delete key reaches `trash`, and this
+# is the one that cannot be undone.
+"$SYNFILES" delete "$M/b/taken.txt" >/dev/null 2>&1
+{ [ $? -eq 1 ] && [ -f "$M/b/taken.txt" ]; }
+check "delete refuses without --yes, and changes nothing" $?
+
+"$SYNFILES" delete --yes "$M/b/taken.txt" >/dev/null 2>&1
+[ ! -e "$M/b/taken.txt" ] && ok "delete --yes removes the file" || bad "delete --yes did nothing"
+
+"$SYNFILES" delete --yes / >/dev/null 2>&1
+[ $? -eq 1 ] && ok "delete refuses the root directory" || bad "delete did not refuse /"
+
+# A recursive delete must never descend THROUGH a symlink — it unlinks the
+# link. Following one into a directory outside the tree would remove files the
+# user never selected.
+DL="$T/dellink"
+mkdir -p "$DL/keep" "$DL/target"
+echo precious > "$DL/target/precious.txt"
+ln -s "$DL/target" "$DL/keep/pointer"
+"$SYNFILES" delete --yes "$DL/keep" >/dev/null 2>&1
+[ -f "$DL/target/precious.txt" ] && ok "delete unlinks a symlink without following it" \
+                                 || bad "delete followed a symlink and destroyed the target"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
