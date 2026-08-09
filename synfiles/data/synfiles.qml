@@ -93,6 +93,10 @@ FloatingWindow {
     readonly property color cAccentRaw: themed("accent", 78, 201, 176, 1.0)
     readonly property color cAccent: readable(cAccentRaw, cPanel, 4.5)
     readonly property color cWarn: pick("#e0af68", "#5c3a00")
+    // Folders take the theme accent, lightened or darkened only as far as it
+    // takes to stay visible against the view background — a pale accent on a
+    // pale theme would otherwise draw folder-shaped holes.
+    readonly property color cFolder: readable(cAccentRaw, cBg, 2.0)
 
     function wash(a) { return Qt.rgba(cAccent.r, cAccent.g, cAccent.b, a) }
 
@@ -193,7 +197,11 @@ FloatingWindow {
             sort: root.defaultSort,
             reverse: root.defaultReverse,
             showHidden: root.defaultHidden,
-            filter: ""
+            filter: "",
+            // Back/forward, per tab. Shared history across tabs would send Back
+            // to a folder this tab was never in.
+            hist: [{ path: pathEnc || root.encodePath(root.homeDir), view: view || "dir" }],
+            hi: 0
         }
         const copy = root.tabs.slice()
         copy.push(t)
@@ -226,8 +234,45 @@ FloatingWindow {
     }
 
     function navigate(pathEnc, view) {
+        const v = view || "dir"
+        const t = root.tab
+        // Going somewhere new DISCARDS the forward entries, the way every
+        // browser does: forward means "where I came back from", and keeping a
+        // branch nobody can see would make the button lie.
+        if (t) {
+            const h = (t.hist || []).slice(0, (t.hi === undefined ? -1 : t.hi) + 1)
+            const last = h[h.length - 1]
+            if (!last || last.path !== pathEnc || last.view !== v)
+                h.push({ path: pathEnc, view: v })
+            root.setTab({ hist: h, hi: h.length - 1 })
+        }
+        root.go(pathEnc, v)
+    }
+
+    // The move itself, with no history written — what Back and Forward use.
+    function go(pathEnc, view) {
         root.setTab({ path: pathEnc, view: view || "dir", filter: "", rows: [] })
         root.reload()
+    }
+
+    readonly property bool canGoBack: root.tab && root.tab.hi > 0
+    readonly property bool canGoForward:
+        root.tab && root.tab.hist && root.tab.hi < root.tab.hist.length - 1
+
+    function goBack() {
+        if (!root.canGoBack) return
+        const i = root.tab.hi - 1
+        const e = root.tab.hist[i]
+        root.setTab({ hi: i })
+        root.go(e.path, e.view)
+    }
+
+    function goForward() {
+        if (!root.canGoForward) return
+        const i = root.tab.hi + 1
+        const e = root.tab.hist[i]
+        root.setTab({ hi: i })
+        root.go(e.path, e.view)
     }
 
     // ── Backend ─────────────────────────────────────────────────────────────
@@ -954,6 +999,50 @@ FloatingWindow {
     // ── Hamburger ───────────────────────────────────────────────────────────
     property bool menuOpen: false
 
+    // ── View menu ───────────────────────────────────────────────────────────
+    // Sort, hidden files, previews, the tree and icon size were nine chips in
+    // a row above the list. They are one button's worth of menu now, next to
+    // Forward, which is where a Dolphin user's hand goes for them.
+    property bool viewMenuOpen: false
+
+    // Every entry is a STATE, so each one re-applies whatever else it needs —
+    // sort and hidden also persist as the default a new tab starts from.
+    function applyViewAction(act) {
+        if (!root.tab) return
+        if (act.indexOf("sort:") === 0) {
+            const next = act.substring(5)
+            root.setTab({ sort: next })
+            root.defaultSort = next
+            root.saveSetting("sort", next)
+            root.reload()
+            return
+        }
+        switch (act) {
+        case "reverse": {
+            const v = !root.tab.reverse
+            root.setTab({ reverse: v })
+            root.defaultReverse = v
+            root.saveSetting("reverse", v ? 1 : 0)
+            root.reload()
+            break
+        }
+        case "hidden": {
+            const v = !root.tab.showHidden
+            root.setTab({ showHidden: v })
+            root.defaultHidden = v
+            root.saveSetting("hidden", v ? 1 : 0)
+            root.reload()
+            break
+        }
+        case "thumbs": root.thumbs = !root.thumbs; break   // onThumbsChanged saves
+        case "tree":
+            root.showTree = !root.showTree
+            if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
+                root.treeToggle(root.encodePath(root.homeDir))
+            break
+        }
+    }
+
     // Split view is NOT here yet, deliberately. Two panes means factoring the
     // 247-line file pane into a component and moving `selection` out of root
     // and into each tab — selection is per-pane or it is nonsense. That is a
@@ -1242,19 +1331,210 @@ FloatingWindow {
         anchors.fill: parent
         color: root.cBg
 
+        // ── Toolbar ─────────────────────────────────────────────────────────
+        // Full width and closed by a rule, the shape Dolphin has: navigation
+        // on the left, the address in the middle, and ONE line under all of it
+        // that everything else hangs below — sidebar included. Recent, Trash
+        // and Places start under that line rather than sharing the toolbar's
+        // row, which is what made the sidebar look like it began in the wrong
+        // place.
+        Rectangle {
+            id: toolBar
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: 38
+            color: root.cPanel
+
+            Row {
+                id: navGroup
+                anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                spacing: 2
+
+                // Back and Forward are per TAB. One shared history would send
+                // Back to a folder this tab was never in.
+                ToolButton {
+                    glyph: "←"
+                    hint: "Back"
+                    dim: !root.canGoBack
+                    onActivated: root.goBack()
+                }
+                ToolButton {
+                    glyph: "→"
+                    hint: "Forward"
+                    dim: !root.canGoForward
+                    onActivated: root.goForward()
+                }
+                ToolButton {
+                    glyph: "↑"
+                    hint: "Up one folder"
+                    dim: !(root.tab && root.tab.view === "dir")
+                    onActivated: {
+                        if (root.tab && root.tab.view === "dir")
+                            root.navigate(root.parentEnc(root.tab.path), "dir")
+                    }
+                }
+                // Everything about how the list LOOKS lives behind this one
+                // button, next to Forward, where Dolphin keeps it: sort order,
+                // hidden files, icon size, previews, the tree. They were nine
+                // chips in a row that had to be read left to right every time.
+                ToolButton {
+                    id: viewBtn
+                    glyph: "▤"
+                    label: "View"
+                    hint: ""
+                    active: root.viewMenuOpen
+                    onActivated: root.viewMenuOpen = !root.viewMenuOpen
+                }
+            }
+
+            Rectangle {
+                id: addressBar
+                anchors {
+                    left: navGroup.right; leftMargin: 6
+                    right: toolActions.left; rightMargin: 8
+                    verticalCenter: parent.verticalCenter
+                }
+                height: 28
+                radius: 4
+                color: root.cBg
+                border {
+                    width: 1
+                    color: root.editingPath ? root.cAccent : root.wash(0.18)
+                }
+
+                // Breadcrumbs, until somebody wants to type.
+                Row {
+                    id: crumbs
+                    anchors {
+                        left: parent.left; leftMargin: 10
+                        verticalCenter: parent.verticalCenter
+                    }
+                    spacing: 0
+                    visible: !root.editingPath && root.tab && root.tab.view === "dir"
+
+                    Repeater {
+                        model: {
+                            if (!root.tab || root.tab.view !== "dir") return []
+                            const parts = root.tab.path.split("/").filter(x => x !== "")
+                            const out = [{ label: "/", path: "/" }]
+                            let acc = ""
+                            for (const seg of parts) {
+                                acc = acc + "/" + seg
+                                out.push({ label: root.disp(seg), path: acc })
+                            }
+                            return out
+                        }
+                        delegate: Row {
+                            id: crumb
+                            required property var modelData
+                            Text {
+                                text: " › "
+                                color: root.cDim
+                                font.pixelSize: 12
+                                visible: crumb.modelData.path !== "/"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: crumb.modelData.label
+                                color: crumbMa.containsMouse ? root.cAccent : root.cText
+                                font.pixelSize: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                MouseArea {
+                                    id: crumbMa
+                                    anchors { fill: parent; margins: -3 }
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.navigate(crumb.modelData.path, "dir")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // A non-directory view has no path to show, so it says what
+                // it is instead of leaving an empty box.
+                Text {
+                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                    visible: !root.editingPath && root.tab && root.tab.view !== "dir"
+                    text: root.tab ? (root.tab.view === "recent" ? "Recently Modified"
+                                    : root.tab.view === "trash"  ? "Trash"
+                                    : "About") : ""
+                    color: root.cText
+                    font.pixelSize: 12
+                }
+
+                TextInput {
+                    id: pathInput
+                    anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                    verticalAlignment: TextInput.AlignVCenter
+                    visible: root.editingPath
+                    color: root.cText
+                    font.pixelSize: 12
+                    clip: true
+                    selectByMouse: true
+                    onVisibleChanged: {
+                        if (visible) {
+                            text = root.disp(root.tab.path)
+                            forceActiveFocus()
+                            selectAll()
+                        }
+                    }
+                    onAccepted: root.commitPath(text)
+                    Keys.onEscapePressed: root.editingPath = false
+                }
+
+                // Clicking the bar's empty space switches to editing, the
+                // way a browser's does.
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    enabled: !root.editingPath
+                    cursorShape: Qt.IBeamCursor
+                    onClicked: root.beginEditPath()
+                    z: -1
+                }
+            }
+
+            Row {
+                id: toolActions
+                anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                spacing: 2
+
+                ToolButton { glyph: "⌕"; hint: "Search"; onActivated: root.beginSearch() }
+                ToolButton {
+                    glyph: "☰"
+                    hint: "Menu"
+                    active: root.menuOpen
+                    onActivated: root.menuOpen = !root.menuOpen
+                }
+            }
+
+            // The rule under the toolbar. Full width, so the sidebar hangs
+            // below it too.
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 1
+                color: root.wash(0.25)
+            }
+        }
+
         // ── Sidebar ─────────────────────────────────────────────────────────
         Rectangle {
             id: sidebar
-            anchors { top: parent.top; left: parent.left; bottom: parent.bottom }
+            anchors { top: toolBar.bottom; left: parent.left; bottom: parent.bottom }
             width: 220
             color: root.cPanel
 
             Flickable {
+                id: sideScroll
                 anchors {
                     top: parent.top; left: parent.left; right: parent.right
                     bottom: parent.bottom
                 }
                 anchors.topMargin: 8
+                // The gutter the scrollbar lives in. Reserved always, or the
+                // eject glyph ends up underneath the handle exactly when a
+                // long sidebar makes both appear.
+                anchors.rightMargin: 12
                 contentHeight: sideCol.implicitHeight
                 clip: true
 
@@ -1294,7 +1574,7 @@ FloatingWindow {
                             readonly property bool current:
                                 root.tab && root.tab.view === "dir"
                                 && root.tab.path === treeRow.modelData.full
-                            width: sidebar.width
+                            width: sideScroll.width
                             height: 24
                             color: treeRow.dropHover ? root.wash(0.40)
                                  : treeRow.current ? root.wash(0.18)
@@ -1470,173 +1750,29 @@ FloatingWindow {
                 }
             }
 
+            // The sidebar scrolls too: with a tree open and three headings of
+            // devices it is longer than the window on any laptop.
+            VScroll {
+                flick: sideScroll
+                anchors {
+                    top: sideScroll.top; bottom: sideScroll.bottom
+                    right: parent.right; rightMargin: 2
+                }
+            }
         }
 
         // ── Main pane ───────────────────────────────────────────────────────
         Item {
             anchors {
-                top: parent.top; left: sidebar.right
+                top: toolBar.bottom; left: sidebar.right
                 right: parent.right; bottom: parent.bottom
             }
 
-            // ── Toolbar ─────────────────────────────────────────────────────
-            // Up, address, split, search, menu — the row every file manager
-            // and every browser puts here, in that order, because that is
-            // where hands already go.
-            Rectangle {
-                id: toolBar
-                anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: 38
-                color: root.cPanel
-
-                Rectangle {
-                    id: upBtn
-                    anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                    width: 28; height: 28; radius: 4
-                    color: upBtnMa.containsMouse ? root.wash(0.16) : "transparent"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "↑"
-                        color: root.cAccent
-                        font.pixelSize: 15
-                    }
-                    MouseArea {
-                        id: upBtnMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        enabled: root.tab && root.tab.view === "dir"
-                        onClicked: root.navigate(root.parentEnc(root.tab.path), "dir")
-                    }
-                }
-
-                Rectangle {
-                    id: addressBar
-                    anchors {
-                        left: upBtn.right; leftMargin: 6
-                        right: toolActions.left; rightMargin: 8
-                        verticalCenter: parent.verticalCenter
-                    }
-                    height: 28
-                    radius: 4
-                    color: root.cBg
-                    border {
-                        width: 1
-                        color: root.editingPath ? root.cAccent : root.wash(0.18)
-                    }
-
-                    // Breadcrumbs, until somebody wants to type.
-                    Row {
-                        id: crumbs
-                        anchors {
-                            left: parent.left; leftMargin: 10
-                            verticalCenter: parent.verticalCenter
-                        }
-                        spacing: 0
-                        visible: !root.editingPath && root.tab && root.tab.view === "dir"
-
-                        Repeater {
-                            model: {
-                                if (!root.tab || root.tab.view !== "dir") return []
-                                const parts = root.tab.path.split("/").filter(x => x !== "")
-                                const out = [{ label: "/", path: "/" }]
-                                let acc = ""
-                                for (const seg of parts) {
-                                    acc = acc + "/" + seg
-                                    out.push({ label: root.disp(seg), path: acc })
-                                }
-                                return out
-                            }
-                            delegate: Row {
-                                id: crumb
-                                required property var modelData
-                                Text {
-                                    text: " › "
-                                    color: root.cDim
-                                    font.pixelSize: 12
-                                    visible: crumb.modelData.path !== "/"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: crumb.modelData.label
-                                    color: crumbMa.containsMouse ? root.cAccent : root.cText
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    MouseArea {
-                                        id: crumbMa
-                                        anchors { fill: parent; margins: -3 }
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.navigate(crumb.modelData.path, "dir")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // A non-directory view has no path to show, so it says what
-                    // it is instead of leaving an empty box.
-                    Text {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        visible: !root.editingPath && root.tab && root.tab.view !== "dir"
-                        text: root.tab ? (root.tab.view === "recent" ? "Recently Modified"
-                                        : root.tab.view === "trash"  ? "Trash"
-                                        : "About") : ""
-                        color: root.cText
-                        font.pixelSize: 12
-                    }
-
-                    TextInput {
-                        id: pathInput
-                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        verticalAlignment: TextInput.AlignVCenter
-                        visible: root.editingPath
-                        color: root.cText
-                        font.pixelSize: 12
-                        clip: true
-                        selectByMouse: true
-                        onVisibleChanged: {
-                            if (visible) {
-                                text = root.disp(root.tab.path)
-                                forceActiveFocus()
-                                selectAll()
-                            }
-                        }
-                        onAccepted: root.commitPath(text)
-                        Keys.onEscapePressed: root.editingPath = false
-                    }
-
-                    // Clicking the bar's empty space switches to editing, the
-                    // way a browser's does.
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton
-                        enabled: !root.editingPath
-                        cursorShape: Qt.IBeamCursor
-                        onClicked: root.beginEditPath()
-                        z: -1
-                    }
-                }
-
-                Row {
-                    id: toolActions
-                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                    spacing: 2
-
-                    ToolButton { glyph: "⌕"; hint: "Search"; onActivated: root.beginSearch() }
-                    ToolButton {
-                        glyph: "☰"
-                        hint: "Menu"
-                        active: root.menuOpen
-                        onActivated: root.menuOpen = !root.menuOpen
-                    }
-                }
-            }
 
             // Tab strip
             Rectangle {
                 id: tabStrip
-                anchors { top: toolBar.bottom; left: parent.left; right: parent.right }
+                anchors { top: parent.top; left: parent.left; right: parent.right }
                 height: 34
                 color: root.cPanel
 
@@ -1755,124 +1891,12 @@ FloatingWindow {
                     spacing: 6
 
                     ToggleChip {
-                        label: root.tab && root.tab.showHidden ? "Hidden ✓" : "Hidden"
-                        on: root.tab ? root.tab.showHidden : false
-                        onToggled: {
-                            const v = !root.tab.showHidden
-                            root.setTab({ showHidden: v })
-                            root.defaultHidden = v
-                            root.saveSetting("hidden", v ? 1 : 0)
-                            root.reload()
-                        }
-                    }
-                    ToggleChip {
-                        label: root.tab ? ("Sort: " + root.tab.sort) : "Sort"
-                        on: false
-                        onToggled: {
-                            const order = ["name", "size", "mtime", "type"]
-                            const next = order[(order.indexOf(root.tab.sort) + 1) % order.length]
-                            root.setTab({ sort: next })
-                            root.defaultSort = next
-                            root.saveSetting("sort", next)
-                            root.reload()
-                        }
-                    }
-                    ToggleChip {
-                        label: root.tab && root.tab.reverse ? "↓" : "↑"
-                        on: root.tab ? root.tab.reverse : false
-                        onToggled: {
-                            const v = !root.tab.reverse
-                            root.setTab({ reverse: v })
-                            root.defaultReverse = v
-                            root.saveSetting("reverse", v ? 1 : 0)
-                            root.reload()
-                        }
-                    }
-                    // Small / Medium / Large, plus a slider for anything in
-                    // between — the presets are what people actually use, the
-                    // slider is for when none of the three is right.
-                    Repeater {
-                        model: [{ label: "S", size: 16 },
-                                { label: "M", size: 32 },
-                                { label: "L", size: 96 }]
-                        delegate: ToggleChip {
-                            id: sizeChip
-                            required property var modelData
-                            label: sizeChip.modelData.label
-                            on: root.iconSize === sizeChip.modelData.size
-                            onToggled: root.iconSize = sizeChip.modelData.size
-                        }
-                    }
-
-                    // Hand-rolled rather than QtQuick.Controls: importing the
-                    // Controls module for one widget pulls in a style that does
-                    // not match anything else in this window.
-                    Item {
-                        width: 96
-                        height: 26
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        Rectangle {
-                            id: sliderTrack
-                            anchors { left: parent.left; right: parent.right
-                                      verticalCenter: parent.verticalCenter }
-                            height: 3
-                            radius: 2
-                            color: root.wash(0.20)
-
-                            Rectangle {
-                                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                                width: sliderHandle.x + sliderHandle.width / 2
-                                radius: 2
-                                color: root.cAccent
-                            }
-                        }
-                        Rectangle {
-                            id: sliderHandle
-                            width: 11; height: 11; radius: 6
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: (root.iconSize - root.iconMin)
-                               / (root.iconMax - root.iconMin) * (parent.width - width)
-                            color: root.cAccent
-                        }
-                        MouseArea {
-                            anchors { fill: parent; topMargin: -4; bottomMargin: -4 }
-                            cursorShape: Qt.PointingHandCursor
-                            function setFrom(mx) {
-                                const w = width - sliderHandle.width
-                                const f = Math.max(0, Math.min(1, (mx - sliderHandle.width / 2) / w))
-                                root.iconSize = Math.round(root.iconMin
-                                                + f * (root.iconMax - root.iconMin))
-                            }
-                            onPressed: (m) => setFrom(m.x)
-                            onPositionChanged: (m) => { if (pressed) setFrom(m.x) }
-                        }
-                    }
-
-                    ToggleChip {
                         // Named, not just "Undo" — a recovery control that does
                         // not say what it reverses is one nobody dares press.
                         label: root.undoLabel !== "" ? "↶ " + root.undoLabel : "↶ Nothing to undo"
                         on: false
                         visible: root.undoLabel !== ""
                         onToggled: root.doUndo()
-                    }
-                    ToggleChip {
-                        label: root.showTree ? "Tree ✓" : "Tree"
-                        on: root.showTree
-                        onToggled: {
-                            root.showTree = !root.showTree
-                            // Open Home on first reveal, so the pane is not an
-                            // empty box with one twisty in it.
-                            if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
-                                root.treeToggle(root.encodePath(root.homeDir))
-                        }
-
-                    }
-                    ToggleChip {
-                        label: root.thumbs ? "Previews ✓" : "Previews"
-                        on: root.thumbs
-                        onToggled: root.thumbs = !root.thumbs
                     }
                     ToggleChip {
                         label: "New folder"
@@ -1961,6 +1985,22 @@ FloatingWindow {
                         on: false
                         onToggled: { filterInput.text = ""; root.endSearch() }
                     }
+                }
+            }
+
+            // One scrollbar per view, each anchored to the view it drives.
+            VScroll {
+                flick: fileList
+                anchors {
+                    top: fileList.top; bottom: fileList.bottom
+                    left: fileList.right; leftMargin: 4
+                }
+            }
+            VScroll {
+                flick: fileGrid
+                anchors {
+                    top: fileGrid.top; bottom: fileGrid.bottom
+                    left: fileGrid.right; leftMargin: 4
                 }
             }
 
@@ -2096,6 +2136,9 @@ FloatingWindow {
                 anchors { top: filterBar.bottom; left: parent.left; right: parent.right }
                 anchors.margins: 8
                 anchors.topMargin: 4
+                // Matches the list's own gutter, or "Size" and "Modified" sit
+                // 14px to the right of the column they name.
+                anchors.rightMargin: 22
                 height: 20
                 visible: root.tab && root.tab.view !== "about"
 
@@ -2121,6 +2164,8 @@ FloatingWindow {
                 }
                 anchors.margins: 8
                 anchors.topMargin: 2
+                // Room for the scrollbar, so a row never runs under the handle.
+                anchors.rightMargin: 22
                 clip: true
                 visible: root.tab && root.tab.view !== "about" && !root.gridView
                 model: root.shownRows
@@ -2162,6 +2207,8 @@ FloatingWindow {
                         asynchronous: true
                         opacity: fileRow.modelData.missing ? 0.4 : 1.0
                         cache: true
+                        // A folder is drawn below instead.
+                        visible: fileRow.modelData.type !== "dir"
 
                         property bool failed: false
                         source: rowIcon.failed ? root.iconFor(fileRow.modelData)
@@ -2173,6 +2220,13 @@ FloatingWindow {
                             target: fileRow
                             function onModelDataChanged() { rowIcon.failed = false }
                         }
+                    }
+
+                    FolderIcon {
+                        anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                        width: root.iconSize; height: root.iconSize
+                        visible: fileRow.modelData.type === "dir"
+                        dim: fileRow.modelData.missing
                     }
 
                     Text {
@@ -2372,6 +2426,8 @@ FloatingWindow {
                 }
                 anchors.margins: 8
                 anchors.topMargin: 2
+                // Room for the scrollbar, so a row never runs under the handle.
+                anchors.rightMargin: 22
                 clip: true
                 visible: root.tab && root.tab.view !== "about" && root.gridView
                 model: root.shownRows
@@ -2401,6 +2457,7 @@ FloatingWindow {
                         asynchronous: true
                         cache: true
                         opacity: gridCell.modelData.missing ? 0.4 : 1.0
+                        visible: gridCell.modelData.type !== "dir"
 
                         property bool failed: false
                         source: cellIcon.failed ? root.iconFor(gridCell.modelData)
@@ -2410,6 +2467,14 @@ FloatingWindow {
                             target: gridCell
                             function onModelDataChanged() { cellIcon.failed = false }
                         }
+                    }
+
+                    FolderIcon {
+                        anchors { top: parent.top; topMargin: 6
+                                  horizontalCenter: parent.horizontalCenter }
+                        width: root.iconSize; height: root.iconSize
+                        visible: gridCell.modelData.type === "dir"
+                        dim: gridCell.modelData.missing
                     }
 
                     Text {
@@ -2705,7 +2770,7 @@ FloatingWindow {
             Rectangle {
                 id: mainMenu
                 visible: root.menuOpen
-                anchors { top: parent.top; topMargin: 40; right: parent.right; rightMargin: 8 }
+                anchors { top: parent.top; topMargin: 2; right: parent.right; rightMargin: 8 }
                 width: 230
                 height: Math.min(menuCol.implicitHeight + 8, parent.height - 60)
                 radius: 4
@@ -3206,6 +3271,189 @@ FloatingWindow {
                 }
             }
         }
+
+        // ── View menu ───────────────────────────────────────────────────────
+        // A sibling of the toolbar rather than a child of it, so it draws OVER
+        // the panes: the toolbar is declared first and its children would fall
+        // underneath everything that comes after.
+        MouseArea {
+            anchors.fill: parent
+            visible: root.viewMenuOpen
+            acceptedButtons: Qt.AllButtons
+            z: 170
+            onClicked: root.viewMenuOpen = false
+            onPressed: root.viewMenuOpen = false
+        }
+
+        Rectangle {
+            visible: root.viewMenuOpen
+            // Dropped from the View button, not from the window edge: the
+            // toolbar is at 0,0 here, so the button's own x is the offset.
+            anchors { top: toolBar.bottom; topMargin: 2 }
+            x: navGroup.x + viewBtn.x
+            width: 220
+            height: viewCol.implicitHeight + 8
+            radius: 4
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.35) }
+            z: 180
+
+            Column {
+                id: viewCol
+                anchors { fill: parent; margins: 4 }
+
+                Repeater {
+                    model: [
+                        { label: "Sort by Name",     act: "sort:name",  tick: root.tab && root.tab.sort === "name" },
+                        { label: "Sort by Size",     act: "sort:size",  tick: root.tab && root.tab.sort === "size" },
+                        { label: "Sort by Modified", act: "sort:mtime", tick: root.tab && root.tab.sort === "mtime" },
+                        { label: "Sort by Type",     act: "sort:type",  tick: root.tab && root.tab.sort === "type" },
+                        { label: "-",                act: "",           tick: false },
+                        { label: "Descending",       act: "reverse",    tick: root.tab && root.tab.reverse },
+                        { label: "Show Hidden Files",act: "hidden",     tick: root.tab && root.tab.showHidden },
+                        { label: "-",                act: "",           tick: false },
+                        { label: "Previews",         act: "thumbs",     tick: root.thumbs },
+                        { label: "Folder Tree",      act: "tree",       tick: root.showTree },
+                        { label: "-",                act: "",           tick: false }
+                    ]
+                    delegate: Item {
+                        id: viewItem
+                        required property var modelData
+                        width: viewCol.width
+                        height: viewItem.modelData.label === "-" ? 5 : 26
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right
+                                      verticalCenter: parent.verticalCenter }
+                            height: 1
+                            color: root.wash(0.25)
+                            visible: viewItem.modelData.label === "-"
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            visible: viewItem.modelData.label !== "-"
+                            color: viewMa.containsMouse ? root.wash(0.18) : "transparent"
+
+                            Text {
+                                anchors { left: parent.left; leftMargin: 10
+                                          verticalCenter: parent.verticalCenter }
+                                text: viewItem.modelData.label
+                                color: root.cText
+                                font.pixelSize: 12
+                            }
+                            Text {
+                                anchors { right: parent.right; rightMargin: 10
+                                          verticalCenter: parent.verticalCenter }
+                                text: viewItem.modelData.tick ? "✓" : ""
+                                color: root.cAccent
+                                font.pixelSize: 12
+                            }
+                            MouseArea {
+                                id: viewMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                // The menu STAYS OPEN for these: they are the
+                                // controls you try two of in a row, and one
+                                // that closed itself would have to be reopened
+                                // to see the tick it just set.
+                                onClicked: root.applyViewAction(viewItem.modelData.act)
+                            }
+                        }
+                    }
+                }
+
+                // Icon size lives in the same menu, because it is the same
+                // question — how the list looks — and Dolphin keeps it there.
+                Item {
+                    width: viewCol.width
+                    height: 30
+
+                    Text {
+                        id: sizeLabel
+                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                        text: "Size"
+                        color: root.cText
+                        font.pixelSize: 12
+                    }
+                    Row {
+                        id: sizePresets
+                        anchors { left: sizeLabel.right; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                        spacing: 2
+                        Repeater {
+                            model: [{ label: "S", size: 16 },
+                                    { label: "M", size: 32 },
+                                    { label: "L", size: 96 }]
+                            delegate: Rectangle {
+                                id: sizeBtn
+                                required property var modelData
+                                width: 20; height: 20; radius: 3
+                                color: root.iconSize === sizeBtn.modelData.size ? root.wash(0.25)
+                                     : (sizeBtnMa.containsMouse ? root.wash(0.12) : "transparent")
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: sizeBtn.modelData.label
+                                    color: root.iconSize === sizeBtn.modelData.size ? root.cAccent : root.cDim
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    id: sizeBtnMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.iconSize = sizeBtn.modelData.size
+                                }
+                            }
+                        }
+                    }
+                    // Hand-rolled rather than QtQuick.Controls: importing the
+                    // Controls module for one widget pulls in a style that
+                    // matches nothing else in this window.
+                    Item {
+                        anchors { left: sizePresets.right; leftMargin: 8
+                                  right: parent.right; rightMargin: 10
+                                  verticalCenter: parent.verticalCenter }
+                        height: 20
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right
+                                      verticalCenter: parent.verticalCenter }
+                            height: 3
+                            radius: 2
+                            color: root.wash(0.20)
+
+                            Rectangle {
+                                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                                width: menuHandle.x + menuHandle.width / 2
+                                radius: 2
+                                color: root.cAccent
+                            }
+                        }
+                        Rectangle {
+                            id: menuHandle
+                            width: 11; height: 11; radius: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: (root.iconSize - root.iconMin)
+                               / (root.iconMax - root.iconMin) * (parent.width - width)
+                            color: root.cAccent
+                        }
+                        MouseArea {
+                            anchors { fill: parent; topMargin: -4; bottomMargin: -4 }
+                            cursorShape: Qt.PointingHandCursor
+                            function setFrom(mx) {
+                                const w = width - menuHandle.width
+                                const f = Math.max(0, Math.min(1, (mx - menuHandle.width / 2) / w))
+                                root.iconSize = Math.round(root.iconMin
+                                                + f * (root.iconMax - root.iconMin))
+                            }
+                            onPressed: (m) => setFrom(m.x)
+                            onPositionChanged: (m) => { if (pressed) setFrom(m.x) }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ── Small reusable pieces ───────────────────────────────────────────────
@@ -3244,7 +3492,7 @@ FloatingWindow {
         signal trailingClicked()
         signal contextRequested(real gx, real gy)
 
-        width: sidebar.width
+        width: sideScroll.width
         height: sideRow.hasMeter ? 38 : 28
         color: sideRow.dropHover ? root.wash(0.40)
              : sideRow.active ? root.wash(0.18)
@@ -3324,9 +3572,11 @@ FloatingWindow {
             cursorShape: Qt.PointingHandCursor
             onClicked: (mouse) => {
                 if (mouse.button === Qt.RightButton) {
-                    // Mapped to the window, because the menu is a sibling of
-                    // the content pane and not of this row.
-                    const p = sideRow.mapToItem(null, mouse.x, mouse.y)
+                    // Mapped to the MENU'S parent, not the window: the menu
+                    // is a sibling of the content pane, whose origin is the
+                    // sidebar's width to the right and the toolbar's height
+                    // down. Mapping to the window put it that far off.
+                    const p = sideRow.mapToItem(diskCtx.parent, mouse.x, mouse.y)
                     sideRow.contextRequested(p.x, p.y)
                 } else {
                     sideRow.activated()
@@ -3378,23 +3628,143 @@ FloatingWindow {
         }
     }
 
+    // A scrollbar you can actually grab. Flickable scrolls fine with a wheel,
+    // but a folder with two thousand files needs a handle you can throw — and
+    // it is the only thing that says how far down the list you are.
+    //
+    // Hand-rolled like every other control here: QtQuick.Controls has one, and
+    // importing Controls for a single widget brings a style that matches
+    // nothing else in this window.
+    component VScroll: Item {
+        id: vs
+        required property Flickable flick
+
+        width: 10
+        // Hidden when everything fits, because a full-length handle that
+        // cannot move is furniture.
+        visible: vs.flick.visible && vs.flick.contentHeight > vs.flick.height + 1
+
+        readonly property real handleH:
+            Math.max(30, vs.height * Math.min(1, vs.flick.height
+                                                 / Math.max(1, vs.flick.contentHeight)))
+        readonly property real span: Math.max(0, vs.height - vs.handleH)
+        readonly property real maxY: Math.max(0, vs.flick.contentHeight - vs.flick.height)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: root.wash(0.07)
+        }
+
+        // Paging: a click on the track moves a screenful TOWARD the click,
+        // never to it. Under the handle, so a click that lands on the handle
+        // starts a drag instead.
+        MouseArea {
+            anchors.fill: parent
+            onClicked: (m) => {
+                const page = vs.flick.height * 0.9
+                vs.flick.contentY = Math.max(0, Math.min(vs.maxY,
+                    vs.flick.contentY + (m.y < handle.y ? -page : page)))
+            }
+        }
+
+        Rectangle {
+            id: handle
+            x: 1
+            width: parent.width - 2
+            height: vs.handleH
+            radius: width / 2
+            // The position stays a BINDING on contentY: dragging moves the
+            // view and the handle follows from that, so a wheel scroll and a
+            // drag can never disagree about where the handle belongs.
+            y: vs.maxY <= 0 ? 0
+                            : Math.max(0, Math.min(vs.span, vs.flick.contentY / vs.maxY * vs.span))
+            color: dragMa.pressed ? root.cAccent
+                 : (dragMa.containsMouse ? root.wash(0.55) : root.wash(0.32))
+
+            MouseArea {
+                id: dragMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                property real grabY: 0
+                onPressed: (m) => { dragMa.grabY = m.y }
+                onPositionChanged: (m) => {
+                    if (!dragMa.pressed || vs.span <= 0) return
+                    const ny = Math.max(0, Math.min(vs.span, handle.y + m.y - dragMa.grabY))
+                    vs.flick.contentY = ny / vs.span * vs.maxY
+                }
+            }
+        }
+    }
+
+    // Folders are DRAWN, not fetched from the icon theme, and that is the whole
+    // point: it is the one icon that follows the accent, and Qt cannot re-tint
+    // a theme icon in a running process. Proven on this box — with
+    // QT_QPA_PLATFORMTHEME=kde the folder SVG carries class="ColorScheme-Accent"
+    // and KIconLoader substitutes the colour ONCE; changing kdeglobals, changing
+    // the application palette and re-requesting at a different size all render
+    // the OLD colour, so every folder in the window stayed the previous theme's
+    // pink until synfiles was restarted. Drawing it from the palette we already
+    // watch makes a theme switch land on the next frame, with no icon theme,
+    // no cache and nothing to invalidate.
+    component FolderIcon: Item {
+        id: fi
+        property bool dim: false
+        opacity: fi.dim ? 0.4 : 1.0
+
+        Rectangle {
+            // The tab, drawn darker rather than as a separate shape: at 16px
+            // an outline is one grey pixel and the folder reads as a blob.
+            anchors { left: parent.left; top: parent.top }
+            width: Math.max(6, parent.width * 0.45)
+            height: Math.max(4, parent.height * 0.26)
+            radius: Math.max(1, parent.width * 0.06)
+            color: Qt.darker(root.cFolder, 1.4)
+        }
+        Rectangle {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            height: parent.height * 0.74
+            radius: Math.max(1, parent.width * 0.08)
+            color: root.cFolder
+        }
+    }
+
     component ToolButton: Rectangle {
         id: tb
         property string glyph: ""
         property string hint: ""
+        // A word beside the glyph, for the buttons whose icon alone would be a
+        // guess — "View" is one, an arrow is not.
+        property string label: ""
         property bool active: false
+        // Drawn faint and unclickable. A Back button that vanishes when there
+        // is nowhere to go back to moves everything next to it.
+        property bool dim: false
         signal activated()
 
-        width: 30; height: 28
+        width: tb.label === "" ? 30 : tbLabel.x + tbLabel.implicitWidth + 10
+        height: 28
         radius: 4
         color: tb.active ? root.wash(0.22)
-             : (tbMa.containsMouse ? root.wash(0.14) : "transparent")
+             : (tbMa.containsMouse && !tb.dim ? root.wash(0.14) : "transparent")
+        opacity: tb.dim ? 0.35 : 1.0
 
         Text {
-            anchors.centerIn: parent
+            id: tbGlyph
+            anchors.verticalCenter: parent.verticalCenter
+            x: tb.label === "" ? (tb.width - implicitWidth) / 2 : 9
             text: tb.glyph
             color: tb.active ? root.cAccent : root.cText
             font.pixelSize: 14
+        }
+        Text {
+            id: tbLabel
+            anchors.verticalCenter: parent.verticalCenter
+            x: tbGlyph.x + tbGlyph.implicitWidth + (tb.label === "" ? 0 : 5)
+            text: tb.label === "" ? "" : tb.label + " ⌄"
+            color: tb.active ? root.cAccent : root.cText
+            font.pixelSize: 11
         }
         // A hover label rather than a permanent one: five glyphs with words
         // under them is a toolbar nobody can scan.
@@ -3419,6 +3789,7 @@ FloatingWindow {
             id: tbMa
             anchors.fill: parent
             hoverEnabled: true
+            enabled: !tb.dim
             cursorShape: Qt.PointingHandCursor
             onClicked: tb.activated()
         }
