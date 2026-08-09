@@ -1020,6 +1020,65 @@ check "the undone archive went to the trash" $?
 
 unset SYNFILES_JOURNAL SYNFILES_TRASH
 
+# ── config ──────────────────────────────────────────────────────────────────
+export SYNFILES_CONFIG="$T/settings"
+
+n=$("$SYNFILES" --rec config list | awk -F'\t' 'NR==1 {print NF}')
+[ "$n" = 2 ] && ok "config list --rec has 2 columns" || bad "config list --rec has $n columns"
+
+# With no file at all, every key still answers with its declared default —
+# a GUI reading settings on a fresh install must get values, not blanks.
+v=$("$SYNFILES" config get icon_size)
+[ "$v" = "20" ] && ok "an unset setting returns its default" || bad "icon_size default is '$v'"
+
+"$SYNFILES" config set icon_size 96 >/dev/null 2>&1
+v=$("$SYNFILES" config get icon_size)
+[ "$v" = "96" ] && ok "a set value is remembered" || bad "icon_size came back '$v'"
+
+# Written through the binary rather than by the GUI, because quickshell's
+# FileView silently drops setText() on a path that does not exist yet — the
+# exact state a fresh install is in.
+[ -f "$SYNFILES_CONFIG" ] && ok "the settings file is created on first write" \
+                          || bad "no settings file was written"
+
+# Numbers CLAMP rather than fail: a slider reporting a value outside the range
+# should land at the edge, not refuse.
+"$SYNFILES" config set icon_size 9999 >/dev/null 2>&1
+v=$("$SYNFILES" config get icon_size)
+[ "$v" = "128" ] && ok "an out-of-range number clamps" || bad "icon_size clamped to '$v'"
+
+# Enums and unknown keys do NOT get that treatment. A settings file that
+# accepts anything silently accumulates typos that never read back.
+"$SYNFILES" config set sort nonsense >/dev/null 2>&1
+[ $? -eq 1 ] && ok "an invalid choice is refused" || bad "sort accepted 'nonsense'"
+"$SYNFILES" config set bogus 1 >/dev/null 2>&1
+[ $? -eq 1 ] && ok "an unknown key is refused" || bad "an unknown key was written"
+
+"$SYNFILES" config set previews notabool >/dev/null 2>&1
+[ $? -eq 1 ] && ok "an invalid boolean is refused" || bad "previews accepted a non-boolean"
+
+# Writing one key must not lose another — the file is rewritten whole, and two
+# settings changed in quick succession would otherwise clobber each other.
+"$SYNFILES" config set sort mtime >/dev/null 2>&1
+"$SYNFILES" config set tree 1 >/dev/null 2>&1
+{ [ "$("$SYNFILES" config get icon_size)" = "128" ] \
+  && [ "$("$SYNFILES" config get sort)" = "mtime" ] \
+  && [ "$("$SYNFILES" config get tree)" = "1" ]; }
+check "writing one setting preserves the others" $?
+
+# A stored value that no longer validates falls back rather than propagating —
+# an enum member that was removed, or a range that shrank.
+printf 'icon_size\t99999\nsort\tgone\n' > "$SYNFILES_CONFIG"
+v=$("$SYNFILES" config get sort)
+[ "$v" = "name" ] && ok "an invalid stored value falls back to the default" \
+                  || bad "stored 'gone' came back as '$v'"
+
+"$SYNFILES" config reset >/dev/null 2>&1
+v=$("$SYNFILES" config get icon_size)
+[ "$v" = "20" ] && ok "reset restores the defaults" || bad "after reset icon_size is '$v'"
+
+unset SYNFILES_CONFIG
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

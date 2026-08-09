@@ -24,6 +24,7 @@ sources = files(
   'src/volumes.c',
   'src/fileops.c',
   'src/trash.c',
+  'src/config.c',
   'src/about.c',
   'src/actions.c',
   'src/undo.c',

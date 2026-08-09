@@ -61,6 +61,8 @@ static void usage(FILE *f)
 "Front-ends\n"
 "  gui [dir]               the graphical browser\n"
 "  about                   version, licence, and what works on this machine\n"
+"  config [list|get|set|reset]\n"
+"                          remembered view settings\n"
 "\n"
 "Options\n"
 "  --rec                   machine-readable records (what the GUI parses)\n"
@@ -157,6 +159,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "undo"))    return cmd_undo(rest_argc, rest);
 	if (!strcmp(cmd, "actions")) return cmd_actions(rest_argc, rest);
 	if (!strcmp(cmd, "action"))  return cmd_action(rest_argc, rest);
+	if (!strcmp(cmd, "config"))  return cmd_config(rest_argc, rest);
 	if (!strcmp(cmd, "about"))   return cmd_about(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))     return cmd_gui(rest_argc, rest);
 

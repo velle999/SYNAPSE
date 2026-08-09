@@ -138,6 +138,13 @@ int cmd_volumes(int argc, char **argv);
 int cmd_mount(int argc, char **argv);
 int cmd_unmount(int argc, char **argv);
 
+/* ── config.c — remembered settings ────────────────────────────────────────
+ * Written through the BINARY, never by the GUI: quickshell's FileView silently
+ * drops setText() on a path that does not exist yet, so a QML component owning
+ * its own settings file loses everything until something else creates it.
+ * Every key is declared with a type and a range; unknown keys are refused. */
+int cmd_config(int argc, char **argv);
+
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);
 

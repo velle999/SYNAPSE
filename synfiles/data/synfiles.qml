@@ -190,9 +190,9 @@ FloatingWindow {
             view: view || "dir",       // dir | recent | places-derived listing
             title: "",
             rows: [],
-            sort: "name",
-            reverse: false,
-            showHidden: false,
+            sort: root.defaultSort,
+            reverse: root.defaultReverse,
+            showHidden: root.defaultHidden,
             filter: ""
         }
         const copy = root.tabs.slice()
@@ -850,6 +850,81 @@ FloatingWindow {
                    + (paths.length === 1 ? " item" : " items") + "…")
     }
 
+    // ── Remembered settings ─────────────────────────────────────────────────
+    //
+    // Read once at startup, written through the binary whenever one changes.
+    // NOT through a FileView: quickshell's silently drops setText() on a path
+    // that does not exist yet, so the first ever write of a settings file
+    // vanishes with no error — which is precisely the state a fresh install is
+    // in. The binary validates and clamps, so the GUI never has to.
+    property bool settingsLoaded: false
+
+    // Sort, direction and hidden-files live on the TAB, because two tabs
+    // genuinely want different ones. What is remembered is the DEFAULT a new
+    // tab starts from — which is what "it should remember my setting" means
+    // when the setting is per-tab.
+    property string defaultSort: "name"
+    property bool   defaultReverse: false
+    property bool   defaultHidden: false
+
+    Process {
+        id: cfgReadProc
+        command: [root.bin, "--rec", "config", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                for (const r of root.parseRecords(this.text)) {
+                    switch (r.key) {
+                    case "icon_size": root.iconSize = parseInt(r.value) || 20; break
+                    case "previews":  root.thumbs   = r.value === "1"; break
+                    case "tree":      root.showTree = r.value === "1"; break
+                    case "sort":      root.defaultSort = r.value; break
+                    case "reverse":   root.defaultReverse = r.value === "1"; break
+                    case "hidden":    root.defaultHidden = r.value === "1"; break
+                    }
+                }
+                // Only after applying, or the act of applying would write every
+                // default straight back out as if the user had chosen it.
+                root.settingsLoaded = true
+
+                // The first tab was built before the settings arrived, so it
+                // gets them applied and re-read. Without this the remembered
+                // sort only took effect on the SECOND tab, which reads as
+                // "it forgot".
+                if (root.tab) {
+                    root.setTab({ sort: root.defaultSort,
+                                  reverse: root.defaultReverse,
+                                  showHidden: root.defaultHidden })
+                    root.reload()
+                }
+                if (root.showTree
+                    && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
+                    root.treeToggle(root.encodePath(root.homeDir))
+            }
+        }
+    }
+
+    Process { id: cfgWriteProc }
+
+    function saveSetting(key, value) {
+        if (!root.settingsLoaded) return
+        cfgWriteProc.command = [root.bin, "config", "set", key, "" + value]
+        cfgWriteProc.running = true
+    }
+
+    // The slider fires on every pixel of a drag. Writing a file per pixel is
+    // both wasteful and a good way to lose a write to a rename() race, so the
+    // save is coalesced to the end of the gesture.
+    Timer {
+        id: iconSaveTimer
+        interval: 400
+        onTriggered: root.saveSetting("icon_size", root.iconSize)
+    }
+    onIconSizeChanged: if (root.settingsLoaded) iconSaveTimer.restart()
+
+    // These are single clicks, so they save immediately.
+    onThumbsChanged: root.saveSetting("previews", root.thumbs ? 1 : 0)
+    onShowTreeChanged: root.saveSetting("tree", root.showTree ? 1 : 0)
+
     // ── Address bar ─────────────────────────────────────────────────────────
     //
     // Breadcrumbs are faster to click; a text field is the only way to paste a
@@ -1137,6 +1212,7 @@ FloatingWindow {
         volProc.running = true
         root.scanThumbs()
         root.refreshUndo()
+        cfgReadProc.running = true
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -1659,22 +1735,36 @@ FloatingWindow {
                     ToggleChip {
                         label: root.tab && root.tab.showHidden ? "Hidden ✓" : "Hidden"
                         on: root.tab ? root.tab.showHidden : false
-                        onToggled: { root.setTab({ showHidden: !root.tab.showHidden }); root.reload() }
+                        onToggled: {
+                            const v = !root.tab.showHidden
+                            root.setTab({ showHidden: v })
+                            root.defaultHidden = v
+                            root.saveSetting("hidden", v ? 1 : 0)
+                            root.reload()
+                        }
                     }
                     ToggleChip {
                         label: root.tab ? ("Sort: " + root.tab.sort) : "Sort"
                         on: false
                         onToggled: {
                             const order = ["name", "size", "mtime", "type"]
-                            const i = order.indexOf(root.tab.sort)
-                            root.setTab({ sort: order[(i + 1) % order.length] })
+                            const next = order[(order.indexOf(root.tab.sort) + 1) % order.length]
+                            root.setTab({ sort: next })
+                            root.defaultSort = next
+                            root.saveSetting("sort", next)
                             root.reload()
                         }
                     }
                     ToggleChip {
                         label: root.tab && root.tab.reverse ? "↓" : "↑"
                         on: root.tab ? root.tab.reverse : false
-                        onToggled: { root.setTab({ reverse: !root.tab.reverse }); root.reload() }
+                        onToggled: {
+                            const v = !root.tab.reverse
+                            root.setTab({ reverse: v })
+                            root.defaultReverse = v
+                            root.saveSetting("reverse", v ? 1 : 0)
+                            root.reload()
+                        }
                     }
                     // Small / Medium / Large, plus a slider for anything in
                     // between — the presets are what people actually use, the
@@ -1755,6 +1845,7 @@ FloatingWindow {
                             if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
                                 root.treeToggle(root.encodePath(root.homeDir))
                         }
+
                     }
                     ToggleChip {
                         label: root.thumbs ? "Previews ✓" : "Previews"
@@ -2690,11 +2781,15 @@ FloatingWindow {
                                                 if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
                                                     root.treeToggle(root.encodePath(root.homeDir))
                                                 break
-                                            case "thumbs":  root.thumbs = !root.thumbs; break
-                                            case "hidden":
-                                                root.setTab({ showHidden: !root.tab.showHidden })
+                                            case "thumbs":  root.thumbs = !root.thumbs; break   // onThumbsChanged saves
+                                            case "hidden": {
+                                                const v = !root.tab.showHidden
+                                                root.setTab({ showHidden: v })
+                                                root.defaultHidden = v
+                                                root.saveSetting("hidden", v ? 1 : 0)
                                                 root.reload()
                                                 break
+                                            }
                                             case "selectall": root.selectAll(); break
                                             case "search":  root.beginSearch(); break
                                             case "term":    root.openTerminalHere(); break
