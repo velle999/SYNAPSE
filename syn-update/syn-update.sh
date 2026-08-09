@@ -75,6 +75,20 @@ declare -A UNSUPPORTED=(
     [shelly-bin]="PKGBUILD downloads a pinned upstream release binary"
 )
 
+# In COMPONENTS — so it is UPDATED when present — but never ADDED to a system
+# that does not have it. Kept apart from UNSUPPORTED, which is about what cannot
+# be built here; this is about what must not arrive uninvited.
+#
+# syn-install ships /usr/bin/syn-install and /usr/bin/syn-crypt: a disk
+# partitioner. It belongs to the ISO, and it is the one component a normal
+# installed system is EXPECTED not to have. When scan() learned to install new
+# components it found exactly this and nothing else, so the first `apply` after
+# that change would have put a disk installer on PATH on every machine — a
+# footgun handed out as an update.
+declare -A NEVER_ADD=(
+    [syn-install]="the ISO's disk installer; an installed system is not meant to have it"
+)
+
 # ── output ───────────────────────────────────────────────────
 
 if [ -t 1 ]; then
@@ -206,12 +220,26 @@ pkgfield() {
 }
 
 # Fills CHANGED with "<component> <installed> <available>" for every component
-# that is installed AND older than the tree. Not-installed components are left
-# alone: this updates a system, it does not add software to it.
+# that is installed AND older than the tree, and NEW with "<component>
+# <available>" for one that exists upstream but is not installed here.
+#
+# NEW used to be `continue` — "this updates a system, it does not add software
+# to it". That principle broke the desktop on 2026-08-08. synui pkgrel 317
+# pointed the start menu's "Software Manager" and "Update System" rows at
+# `synpkg`, a component that had just landed in COMPONENTS and therefore could
+# never arrive: apply shipped the synui that needed it and skipped the thing it
+# needed, so every updated system got two dead menu rows. A component list that
+# silently declines to complete itself is the same class of bug as a component
+# frozen forever, which is what this tool exists to remove.
+#
+# NEW is kept SEPARATE from CHANGED rather than folded in, because installing
+# software a system has never had is a louder act than updating what it runs,
+# and report() says so in its own section. It is never silent.
 CHANGED=()
+NEW=()
 SKIPPED=()
 scan() {
-    CHANGED=(); SKIPPED=()
+    CHANGED=(); NEW=(); SKIPPED=()
 
     local c ver rel avail inst
     for c in "${COMPONENTS[@]}"; do
@@ -223,7 +251,15 @@ scan() {
         avail="$ver-$rel"
 
         inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
-        [ -n "$inst" ] || continue          # not installed here
+        # Not installed here. Reachable only for a component that DOES exist at
+        # the revision being scanned — cmd_check drops the directory entirely
+        # for one that does not, and the `-f PKGBUILD` guard above catches the
+        # rest — so an older system updating to a tree it has never seen reports
+        # the components it is genuinely missing, not every name in the list.
+        if [ -z "$inst" ]; then
+            [ -n "${NEVER_ADD[$c]:-}" ] || NEW+=("$c $avail")
+            continue
+        fi
 
         # vercmp, not string compare: 0.1.0-203 vs 0.1.0-99 sorts the wrong way
         # as text, and that mistake silently declines to ship an update.
@@ -256,9 +292,13 @@ show_commits() {
 
 report() {
     say ""
-    if [ ${#CHANGED[@]} -eq 0 ]; then
+    if [ ${#CHANGED[@]} -eq 0 ] && [ ${#NEW[@]} -eq 0 ]; then
         ok "everything build-all.sh can update is already current"
-    else
+    elif [ ${#CHANGED[@]} -eq 0 ]; then
+        ok "every installed component is current"
+    fi
+
+    if [ ${#CHANGED[@]} -gt 0 ]; then
         info "${#CHANGED[@]} component(s) to rebuild"
         printf '  %-16s %-14s -> %s\n' COMPONENT INSTALLED AVAILABLE
         local e
@@ -266,6 +306,20 @@ report() {
             # shellcheck disable=SC2086
             set -- $e
             printf '  %-16s %-14s -> %s\n' "$1" "$2" "$3"
+        done
+    fi
+
+    # Its own section, above SKIPPED: this is the one part of the report that
+    # adds software rather than moving it forward, and it should read that way.
+    if [ ${#NEW[@]} -gt 0 ]; then
+        say ""
+        info "${#NEW[@]} NEW component(s) to install"
+        printf '  %-16s %s\n' COMPONENT AVAILABLE
+        local n
+        for n in "${NEW[@]}"; do
+            # shellcheck disable=SC2086
+            set -- $n
+            printf '  %-16s %-14s %s\n' "$1" "$2" "(not installed here)"
         done
     fi
 
@@ -315,7 +369,8 @@ cmd_check() {
 
     report
     say ""
-    [ ${#CHANGED[@]} -gt 0 ] && say "Run ${C_B}syn-update apply${C_R} to build and install them."
+    { [ ${#CHANGED[@]} -gt 0 ] || [ ${#NEW[@]} -gt 0 ]; } &&
+        say "Run ${C_B}syn-update apply${C_R} to build and install them."
     return 0
 }
 
@@ -330,14 +385,18 @@ cmd_apply() {
     scan
     report
 
-    if [ ${#CHANGED[@]} -eq 0 ]; then
+    if [ ${#CHANGED[@]} -eq 0 ] && [ ${#NEW[@]} -eq 0 ]; then
         say ""
         ok "nothing to build"
         return 0
     fi
 
+    # CHANGED and NEW go into ONE build-all.sh invocation. They are reported
+    # apart because they mean different things to the user, but they build
+    # identically, and splitting the invocation would defeat build-all.sh's
+    # fixed dependency order — the exact mistake the comment below warns about.
     local names=() e
-    for e in "${CHANGED[@]}"; do
+    for e in "${CHANGED[@]}" "${NEW[@]}"; do
         # shellcheck disable=SC2086
         set -- $e
         names+=("$1")
@@ -370,8 +429,12 @@ refresh_local_repo() {
     [ -d "$LOCAL_REPO" ] || return 0
     info "refreshing the local [synapseos] repo"
 
+    # NEW as well as CHANGED. A newly installed component that never reaches
+    # /var/cache/synapseos is absent from the [synapseos] repo, so the next
+    # `pacman -Syu` sees a local package no repo advertises — the same drift this
+    # function exists to prevent, just from the other direction.
     local e c pkg copied=0
-    for e in "${CHANGED[@]}"; do
+    for e in "${CHANGED[@]}" "${NEW[@]}"; do
         # shellcheck disable=SC2086
         set -- $e
         c=$1
@@ -479,7 +542,8 @@ syn-update $VERSION — update an installed SynapseOS from git
 
 Usage:
   syn-update check          Fetch and show what would change (default, read-only)
-  syn-update apply          Fetch, rebuild the changed components, install them
+  syn-update apply          Fetch, rebuild the changed components, install them,
+                            and install any component the tree has gained since
   syn-update status         Show the source revision and installed versions
   syn-update help           This help
 

@@ -245,13 +245,32 @@ PanelWindow {
                     // short of it somewhere. What changed is which one is the
                     // default, and only synpkg can see all four sources plus
                     // BlackArch and SynapseOS's own components.
-                    { kind: "exec", label: "Software Manager", argv: ["synpkg", "gui"] },
+                    //
+                    // The fallback is WIRED UP, not just available: pkgrel 317
+                    // shipped this row pointing at a synpkg that no upgrade path
+                    // could install, and a failed exec here is silent, so the
+                    // row did nothing at all. MenuState probes for the package
+                    // and `pages` is a binding, so this re-resolves on its own
+                    // when the probe lands — and again if synpkg is installed
+                    // later in the session, with no relog.
+                    { kind: "exec", label: "Software Manager",
+                      argv: MenuState.synpkgPresent ? ["synpkg", "gui"]
+                                                    : ["shelly-ui"] },
                     // The full-system upgrade, same libalpm engine the Software
                     // Manager GUI drives, so CLI and GUI stay in agreement —
                     // not raw pacman, and never a partial-upgrade -Sy (synpkg
                     // upgrade always refreshes first unless told not to).
                     // --hold so the window survives the run.
-                    { kind: "exec", label: "Update System",    argv: ["kitty", "--hold", "synpkg", "upgrade"] },
+                    //
+                    // The fallback IS raw pacman, and -Syu (never -Sy): without
+                    // synpkg there is nothing else on the box that does a full
+                    // upgrade, and a bare -Sy leaves a system whose databases
+                    // are newer than its packages — every later install then
+                    // 404s on a filename the mirror has already rotated away.
+                    { kind: "exec", label: "Update System",
+                      argv: MenuState.synpkgPresent
+                          ? ["kitty", "--hold", "synpkg", "upgrade"]
+                          : ["kitty", "--hold", "sudo", "pacman", "-Syu"] },
                     // SynapseOS's OWN components. They come from the
                     // [synapseos] repo, which is a frozen copy of the
                     // installing ISO that nothing ever writes to, so no ALPM

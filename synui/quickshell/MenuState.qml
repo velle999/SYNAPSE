@@ -63,4 +63,33 @@ QtObject {
             }
         }
     }
+
+    // Is synpkg installed? The start menu's "Software Manager" and "Update
+    // System" rows prefer it and fall back to shelly when it is absent.
+    //
+    // WHY THIS EXISTS AT ALL. synui pkgrel 317 pointed both rows at synpkg the
+    // release synpkg landed, but a component that is not yet installed could
+    // never arrive through `syn-update apply` — so an updated system got a
+    // "Software Manager" that silently did nothing (a failed exec on the argv
+    // path is not reported anywhere) and an "Update System" that opened a
+    // terminal reading `synpkg: command not found`. syn-update installs new
+    // components now, but a menu row must not be a dead click even when
+    // delivery goes wrong again, and shelly is still installed on purpose for
+    // exactly this reason — the replacement is phased.
+    //
+    // `pacman -Qq`, with the answer read off STDOUT rather than the exit status:
+    // Process's exited(int, QProcess::ExitStatus) cannot be given a typed
+    // handler from QML, so the exit code is not reachable here — the same wall
+    // synpkg.qml's actProc hit. Empty stdout means not installed.
+    //
+    // Unlike outputProbe this runs unconditionally at startup, because the
+    // answer is wanted before the first click rather than in response to one.
+    property bool synpkgPresent: false
+    property Process synpkgProbe: Process {
+        running: true
+        command: ["pacman", "-Qq", "synpkg"]
+        stdout: StdioCollector {
+            onStreamFinished: root.synpkgPresent = this.text.trim() === "synpkg"
+        }
+    }
 }
