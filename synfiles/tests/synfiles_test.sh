@@ -523,6 +523,67 @@ ln -s "$DL/target" "$DL/keep/pointer"
 [ -f "$DL/target/precious.txt" ] && ok "delete unlinks a symlink without following it" \
                                  || bad "delete followed a symlink and destroyed the target"
 
+# ── mount / unmount ─────────────────────────────────────────────────────────
+# Shape and guards only. Actually mounting needs real hardware and a polkit
+# prompt, and a test that mounted one of velle's disks would be a test nobody
+# could run twice.
+"$SYNFILES" mount >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mount with no device is an error" || bad "mount accepted no argument"
+
+# A bare name is refused rather than passed through. udisksctl is a mount
+# helper, and handing it a caller-supplied string that was never checked is
+# where a surprising argument does damage.
+"$SYNFILES" mount sdc1 >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mount refuses a bare device name" || bad "mount accepted 'sdc1'"
+
+"$SYNFILES" unmount relative/path >/dev/null 2>&1
+[ $? -eq 1 ] && ok "unmount refuses a non-/dev path" || bad "unmount accepted a relative path"
+
+# ── the thumbnail URI contract ──────────────────────────────────────────────
+# The GUI finds a cached thumbnail at ~/.cache/thumbnails/<size>/<md5 of the
+# file's URI>.png, and computes that md5 itself from "file://" + the encoded
+# path in the record. That only works if this program's encoding is byte-for-
+# byte the one every other implementation hashed: escape everything outside
+# the RFC 3986 unreserved set, and leave "/" alone.
+#
+# If this ever drifts, thumbnails do not break loudly — they just silently
+# never hit the cache, which reads as "synfiles has no thumbnails".
+U="$T/uri"
+mkdir -p "$U"
+touch "$U/plain.png" "$U/with space.png" "$U/mixed-CASE_1.9~x.png"
+
+enc() { "$SYNFILES" --rec list "$U" | awk -F'\t' -v n="$1" '$1==n {print $1}'; }
+
+"$SYNFILES" --rec list "$U" | grep -q '^with%20space\.png	'
+check "a space becomes %20, as the URI form requires" $?
+
+# Unreserved characters must NOT be escaped, or the hash differs from the one
+# GTK and KDE computed for the same file.
+"$SYNFILES" --rec list "$U" | grep -q '^mixed-CASE_1\.9~x\.png	'
+check "unreserved characters are left alone" $?
+
+# And the full path form keeps its slashes, which is what makes
+# "file://" + path a valid URI rather than one long escaped blob.
+"$SYNFILES" --rec info "$U/plain.png" | grep -q "^path	$U/plain.png\$"
+check "info emits a path with its slashes intact" $?
+
+# ── about ───────────────────────────────────────────────────────────────────
+n=$("$SYNFILES" --rec about | awk -F'\t' 'NR==1 {print NF}')
+[ "$n" = 4 ] && ok "about --rec has 4 columns" || bad "about --rec has $n columns"
+
+ragged=$("$SYNFILES" --rec about | awk -F'\t' 'NR==1 {w=NF; next} NF!=w {n++} END {print n+0}')
+[ "$ragged" = 0 ] && ok "no ragged rows in about --rec" || bad "$ragged ragged about rows"
+
+# The donate link. The GUI decides between "open in a browser" and "run in a
+# terminal" purely on this prefix, so the row has to keep it.
+"$SYNFILES" --rec about | grep -q '^Support	info	Buy me a coffee	https://'
+check "about carries a Support row with an https link" $?
+
+# Every state the front-ends colour must be one they know about.
+unknown=$("$SYNFILES" --rec about |
+          awk -F'\t' 'NR>1 && $2!="ok" && $2!="off" && $2!="missing" && $2!="info" {n++} END {print n+0}')
+[ "$unknown" = 0 ] && ok "about states are all known" || bad "$unknown about rows have an unknown state"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

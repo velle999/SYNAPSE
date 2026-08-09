@@ -197,6 +197,78 @@ static int list_network(void)
 	return n;
 }
 
+/* ── mounting ───────────────────────────────────────────────────────────────
+ *
+ * Delegated to udisksctl, never reimplemented. udisks2 owns the polkit rules
+ * that let a desktop user mount a disk without being root, and a file manager
+ * that called mount(2) itself would have to run privileged to do the same job
+ * worse. The only work here is turning its output into a record.
+ */
+static int volume_mount(const char *device, bool unmount)
+{
+	if (!have_cmd("udisksctl"))
+		die("udisksctl is not installed — install udisks2 to mount from here");
+
+	/* A device path, not a name: "sdc1" would be ambiguous, and passing a
+	 * caller-supplied string straight through to a mount helper is exactly
+	 * where a surprising argument does damage. */
+	if (strncmp(device, "/dev/", 5))
+		die("%s: expected a device path like /dev/sdc1", device);
+
+	char *argv[] = { (char *)"udisksctl", (char *)(unmount ? "unmount" : "mount"),
+	                 (char *)"-b", (char *)device, NULL };
+	int st = 0;
+	char *out = run_capture(argv, &st, false);
+	strip_trailing_newline(out);
+
+	if (st != 0) {
+		if (g_out == OUT_REC) {
+			char *e = pct_encode(device, true);
+			rec_row(3, e, "failed", out);
+			free(e);
+		}
+		free(out);
+		return 1;
+	}
+
+	/* "Mounted /dev/sdc1 at /run/media/velle/label" — the mount point is what
+	 * the caller wants next, so it is dug out rather than making the GUI
+	 * re-run `volumes` to discover where the disk landed. */
+	const char *at = strstr(out, " at ");
+	const char *mp = at ? at + 4 : "";
+
+	if (g_out == OUT_REC) {
+		char *e = pct_encode(device, true);
+		char *m = pct_encode(mp, true);
+		rec_row(3, e, unmount ? "unmounted" : "mounted", m);
+		free(e);
+		free(m);
+	} else {
+		printf("%s\n", out);
+	}
+
+	free(out);
+	return 0;
+}
+
+int cmd_mount(int argc, char **argv)
+{
+	if (argc < 1)
+		die("mount: need a device path (see: synfiles volumes)");
+	if (g_out == OUT_REC)
+		rec_row(3, "device", "status", "path");
+	return volume_mount(argv[0], false);
+}
+
+int cmd_unmount(int argc, char **argv)
+{
+	if (argc < 1)
+		die("unmount: need a device path (see: synfiles volumes)");
+	if (g_out == OUT_REC)
+		rec_row(3, "device", "status", "path");
+	return volume_mount(argv[0], true);
+}
+
 int cmd_volumes(int argc, char **argv)
 {
 	bool net_only = false, blk_only = false;

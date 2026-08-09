@@ -338,7 +338,62 @@ FloatingWindow {
 
     // ── Selection, clipboard and operations ─────────────────────────────────
 
-    property string selected: ""     // the ENCODED name of the focused row
+    // Encoded names, because that is the identity. Storing display names here
+    // would make two files that differ only in an escaped byte the same
+    // selection.
+    property var selection: []
+    property string anchorName: ""   // where a Shift range started
+
+    function isSelected(name) { return root.selection.indexOf(name) >= 0 }
+
+    function selectOnly(name) {
+        root.selection = [name]
+        root.anchorName = name
+    }
+
+    function toggleSelect(name) {
+        const i = root.selection.indexOf(name)
+        const copy = root.selection.slice()
+        if (i >= 0) copy.splice(i, 1)
+        else copy.push(name)
+        root.selection = copy
+        root.anchorName = name
+    }
+
+    // A Shift range runs over the rows AS DISPLAYED, so it follows the current
+    // sort and filter rather than some underlying order the user cannot see.
+    function selectRange(name) {
+        const rows = root.shownRows
+        let a = -1, b = -1
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].name === root.anchorName) a = i
+            if (rows[i].name === name) b = i
+        }
+        if (a < 0) { root.selectOnly(name); return }
+        if (b < 0) return
+        const lo = Math.min(a, b), hi = Math.max(a, b)
+        const copy = []
+        for (let i = lo; i <= hi; i++) copy.push(rows[i].name)
+        root.selection = copy
+    }
+
+    function selectAll() {
+        root.selection = root.shownRows.map(r => r.name)
+    }
+
+    function clearSelection() {
+        root.selection = []
+        root.anchorName = ""
+    }
+
+    function selectedRows() {
+        return root.shownRows.filter(r => root.isSelected(r.name))
+    }
+
+    // Decoded paths for the process boundary — argv carries raw bytes.
+    function selectedPaths() {
+        return root.selectedRows().map(r => root.disp(r.full))
+    }
 
     // {op: "copy"|"cut", paths: [encoded...]}. Cut is not a move yet — nothing
     // leaves its directory until Paste, which is what makes Ctrl+X reversible
@@ -359,6 +414,10 @@ FloatingWindow {
             root.busy = false
             root.reload()
             placesProc.running = true
+            // Mounting changes what the Devices list should show, and so does
+            // trashing something onto a volume. Cheaper to re-read both than
+            // to work out which operations could have moved them.
+            volProc.running = true
         }
     }
     property bool busy: false
@@ -374,16 +433,27 @@ FloatingWindow {
         opProc.running = true
     }
 
+    // The single focused row, for the operations that only make sense on one
+    // thing — rename, and opening.
     function selectedRow() {
-        for (const r of root.shownRows)
-            if (r.name === root.selected) return r
-        return null
+        const rows = root.selectedRows()
+        return rows.length === 1 ? rows[0] : null
     }
 
-    function toTrash(row) {
-        if (!row) return
-        root.runOp(["trash", root.disp(row.full)],
-                   "moving " + root.disp(row.name) + " to the trash")
+    function describeSelection() {
+        const n = root.selection.length
+        if (n === 1) return root.disp(root.selectedRows()[0].name)
+        return n + " items"
+    }
+
+    // One process for the whole selection rather than one per file: the C side
+    // already takes many sources, and N spawns would each reload the pane on
+    // exit and fight each other.
+    function trashSelection() {
+        const paths = root.selectedPaths()
+        if (paths.length === 0) return
+        root.runOp(["trash"].concat(paths),
+                   "moving " + root.describeSelection() + " to the trash")
     }
 
     function restoreFromTrash(row) {
@@ -396,10 +466,10 @@ FloatingWindow {
     }
 
     function copySelection(cut) {
-        const row = root.selectedRow()
-        if (!row) return
-        root.clip = { op: cut ? "cut" : "copy", paths: [row.full] }
-        root.statusLine = (cut ? "cut " : "copied ") + root.disp(row.name)
+        const rows = root.selectedRows()
+        if (rows.length === 0) return
+        root.clip = { op: cut ? "cut" : "copy", paths: rows.map(r => r.full) }
+        root.statusLine = (cut ? "cut " : "copied ") + root.describeSelection()
     }
 
     function paste() {
@@ -431,6 +501,82 @@ FloatingWindow {
         if (!row || !newName || newName === root.disp(row.name)) return
         root.runOp(["rename", root.disp(row.full), newName],
                    "renaming to " + newName)
+    }
+
+    // ── Thumbnails ──────────────────────────────────────────────────────────
+    //
+    // The freedesktop thumbnail cache first: ~/.cache/thumbnails/<size>/<md5 of
+    // the file's URI>.png. That is a SHARED cache, so anything Dolphin, GTK or
+    // a video player has already thumbnailed shows up here for free — video and
+    // PDF included, which synfiles has no way to render itself.
+    //
+    // The URI has to be percent-encoded for the hash to match, and it already
+    // is: `full` is the encoded path, so "file://" + full is exactly the URI
+    // every other implementation hashed. That is the whole reason this needs no
+    // C code — Qt.md5() finishes the job.
+    property bool thumbs: true
+
+    // Loading a 200MB TIFF to draw a 24px square is not a thumbnail, it is a
+    // stall. Above this the icon is used and the cache is still consulted.
+    readonly property int thumbMaxBytes: 12 * 1024 * 1024
+
+    function thumbUri(row, size) {
+        if (!row || !row.full) return ""
+        return "file://" + root.homeDir + "/.cache/thumbnails/" + size + "/"
+             + Qt.md5("file://" + row.full) + ".png"
+    }
+
+    function canRenderDirectly(row) {
+        return row && row.mime && row.mime.indexOf("image/") === 0
+            && row.size > 0 && row.size <= root.thumbMaxBytes
+    }
+
+    // ── Properties ──────────────────────────────────────────────────────────
+    property bool showProps: false
+    property var propRows: []
+
+    Process {
+        id: infoProc
+        stdout: StdioCollector {
+            onStreamFinished: root.propRows = root.parseRecords(this.text)
+        }
+    }
+
+    function openProperties() {
+        const rows = root.selectedRows()
+        if (rows.length === 0) return
+        root.showProps = true
+        if (rows.length === 1) {
+            root.propRows = []
+            infoProc.command = [root.bin, "--rec", "info", root.disp(rows[0].full)]
+            infoProc.running = true
+        } else {
+            // No point running `info` N times to show one number. A
+            // multi-selection answers a different question anyway: how much is
+            // this, not what is it.
+            let total = 0, dirs = 0
+            for (const r of rows) {
+                total += r.size || 0
+                if (r.type === "dir") dirs++
+            }
+            root.propRows = [
+                { key: "selected", value: rows.length + " items" },
+                { key: "folders",  value: "" + dirs },
+                { key: "files",    value: "" + (rows.length - dirs) },
+                { key: "size",     value: root.fmtSize(total, false)
+                                          + (dirs > 0 ? "  (folder contents not counted)" : "") }
+            ]
+        }
+    }
+
+    // ── Mounting ────────────────────────────────────────────────────────────
+    function mountVolume(vol) {
+        if (!vol.device) return
+        root.runOp(["mount", vol.device], "mounting " + vol.title + "…")
+    }
+    function unmountVolume(vol) {
+        if (!vol.device) return
+        root.runOp(["unmount", vol.device], "unmounting " + vol.title + "…")
     }
 
     // ── Emptying the trash ──────────────────────────────────────────────────
@@ -469,7 +615,11 @@ FloatingWindow {
         command: [root.bin, "--rec", "volumes"]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.volumes = root.parseRecords(this.text).filter(r => r.mounted === "1")
+                // Unmounted volumes are KEPT. A disk that is plugged in but not
+                // mounted is the one case where a file manager has something
+                // useful to offer, and hiding it means the only way to reach
+                // the drive is to already know it exists.
+                root.volumes = root.parseRecords(this.text)
             }
         }
     }
@@ -586,13 +736,31 @@ FloatingWindow {
                     Repeater {
                         model: root.volumes
                         delegate: SideRow {
+                            id: volRow
                             required property var modelData
-                            label: modelData.title
-                            iconName: modelData.icon || "drive-harddisk"
-                            sub: modelData.size
+                            readonly property bool isMounted: volRow.modelData.mounted === "1"
+                            label: volRow.modelData.title
+                            iconName: volRow.modelData.icon || "drive-harddisk"
+                            sub: volRow.modelData.size
+                            // An unmounted volume is drawn dimmed rather than
+                            // hidden: it is reachable, it just needs one click
+                            // first, and that is worth showing.
+                            dim: !volRow.isMounted
                             active: root.tab && root.tab.view === "dir"
-                                    && root.tab.path === modelData.path
-                            onActivated: root.navigate(modelData.path, "dir")
+                                    && volRow.isMounted
+                                    && root.tab.path === volRow.modelData.path
+                            // Eject on a mounted volume, mount on one that is
+                            // not. Both go through udisks2.
+                            trailing: volRow.isMounted ? "⏏" : "▸"
+                            trailingHint: volRow.isMounted ? "unmount" : "mount"
+                            onActivated: {
+                                if (volRow.isMounted) root.navigate(volRow.modelData.path, "dir")
+                                else root.mountVolume(volRow.modelData)
+                            }
+                            onTrailingClicked: {
+                                if (volRow.isMounted) root.unmountVolume(volRow.modelData)
+                                else root.mountVolume(volRow.modelData)
+                            }
                         }
                     }
                 }
@@ -813,6 +981,11 @@ FloatingWindow {
                         onToggled: { root.setTab({ reverse: !root.tab.reverse }); root.reload() }
                     }
                     ToggleChip {
+                        label: root.thumbs ? "Previews ✓" : "Previews"
+                        on: root.thumbs
+                        onToggled: root.thumbs = !root.thumbs
+                    }
+                    ToggleChip {
                         label: "New folder"
                         on: false
                         visible: root.tab && root.tab.view === "dir"
@@ -1031,13 +1204,20 @@ FloatingWindow {
                 Keys.onPressed: (event) => {
                     const row = root.selectedRow()
                     if (event.key === Qt.Key_Delete) {
-                        if (root.tab.view === "dir") root.toTrash(row)
+                        if (root.tab.view === "dir") root.trashSelection()
                         event.accepted = true
                     } else if (event.key === Qt.Key_F2) {
+                        // Rename is the one operation that cannot be done to
+                        // six things at once, so it needs exactly one.
                         if (row && root.tab.view === "dir") root.renaming = row.name
                         event.accepted = true
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        if (row) root.activate(row)
+                        if (event.modifiers & Qt.AltModifier) root.openProperties()
+                        else if (row) root.activate(row)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Escape) {
+                        if (root.showProps) root.showProps = false
+                        else root.clearSelection()
                         event.accepted = true
                     } else if (event.key === Qt.Key_Backspace) {
                         if (root.tab.view === "dir")
@@ -1047,6 +1227,7 @@ FloatingWindow {
                         if (event.key === Qt.Key_C)      { root.copySelection(false); event.accepted = true }
                         else if (event.key === Qt.Key_X) { root.copySelection(true);  event.accepted = true }
                         else if (event.key === Qt.Key_V) { root.paste();              event.accepted = true }
+                        else if (event.key === Qt.Key_A) { root.selectAll();          event.accepted = true }
                         else if (event.key === Qt.Key_T) { root.newTab(root.tab.path, "dir"); event.accepted = true }
                         else if (event.key === Qt.Key_W) { root.closeTab(root.current); event.accepted = true }
                         else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
@@ -1056,7 +1237,7 @@ FloatingWindow {
                 delegate: Rectangle {
                     id: fileRow
                     required property var modelData
-                    readonly property bool isSelected: fileRow.modelData.name === root.selected
+                    readonly property bool isSelected: root.isSelected(fileRow.modelData.name)
                     readonly property bool isRenaming: fileRow.modelData.name === root.renaming
                     width: ListView.view.width
                     height: 30
@@ -1064,13 +1245,51 @@ FloatingWindow {
                     color: fileRow.isSelected ? root.wash(0.22)
                          : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
 
+                    // Four stages, walked on load failure rather than by
+                    // testing for the files first: QML has no way to stat a
+                    // path, and Image already reports Error when a source does
+                    // not resolve. Large cache, then normal cache, then the
+                    // file itself for images, then the mime icon.
                     Image {
                         id: rowIcon
                         anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                         width: 20; height: 20
-                        sourceSize: Qt.size(20, 20)
-                        source: root.iconFor(fileRow.modelData)
+                        sourceSize: Qt.size(40, 40)   // 2x, so it stays sharp when scaled
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
                         opacity: fileRow.modelData.missing ? 0.4 : 1.0
+                        cache: true
+
+                        property int stage: root.thumbs && fileRow.modelData.type === "file" ? 0 : 3
+
+                        source: {
+                            if (rowIcon.stage === 0) return root.thumbUri(fileRow.modelData, "large")
+                            if (rowIcon.stage === 1) return root.thumbUri(fileRow.modelData, "normal")
+                            if (rowIcon.stage === 2) return "file://" + fileRow.modelData.full
+                            return root.iconFor(fileRow.modelData)
+                        }
+
+                        onStatusChanged: {
+                            if (status !== Image.Error || rowIcon.stage >= 3) return
+                            // Skip the direct-render stage for anything that is
+                            // not a bounded image — Qt would try to decode a
+                            // 4GB video as a picture.
+                            if (rowIcon.stage === 1 && !root.canRenderDirectly(fileRow.modelData))
+                                rowIcon.stage = 3
+                            else
+                                rowIcon.stage++
+                        }
+
+                        // A row is recycled onto a different file as the view
+                        // scrolls; without this the next file inherits the last
+                        // one's stage and shows its icon.
+                        Connections {
+                            target: fileRow
+                            function onModelDataChanged() {
+                                rowIcon.stage = root.thumbs
+                                               && fileRow.modelData.type === "file" ? 0 : 3
+                            }
+                        }
                     }
 
                     Text {
@@ -1180,14 +1399,26 @@ FloatingWindow {
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         enabled: !fileRow.isRenaming
                         onClicked: (mouse) => {
-                            root.selected = fileRow.modelData.name
                             fileList.forceActiveFocus()
+                            const name = fileRow.modelData.name
+
                             if (mouse.button === Qt.RightButton) {
+                                // Right-clicking inside an existing selection
+                                // keeps it: "copy these six" is the whole point
+                                // of having selected six. Outside it, the click
+                                // moves the selection first, the way it does
+                                // everywhere else.
+                                if (!root.isSelected(name)) root.selectOnly(name)
                                 ctxMenu.row = fileRow.modelData
                                 ctxMenu.x = fileRow.x + mouse.x
                                 ctxMenu.y = fileRow.y + mouse.y - fileList.contentY + heads.height + 8
                                 ctxMenu.open = true
+                                return
                             }
+
+                            if (mouse.modifiers & Qt.ControlModifier)    root.toggleSelect(name)
+                            else if (mouse.modifiers & Qt.ShiftModifier) root.selectRange(name)
+                            else                                         root.selectOnly(name)
                         }
                         // Double-click to open, matching every other file
                         // manager. Single-click-to-open is a setting worth
@@ -1270,26 +1501,34 @@ FloatingWindow {
                             const t = root.tab
                             if (!t || !ctxMenu.row) return []
                             const r = ctxMenu.row
+                            const n = root.selection.length
+                            const one = n <= 1
                             if (t.view === "trash")
                                 return [{ label: "Restore", act: "restore",
                                           on: !r.missing }]
 
+                            // Labels count, so it is never a surprise how much
+                            // a menu entry is about to act on.
+                            const many = one ? "" : " (" + n + ")"
                             const items = [
                                 { label: r.type === "dir" ? "Open Folder" : "Open",
-                                  act: "open", on: !r.missing },
+                                  act: "open", on: one && !r.missing },
                                 { label: "Open in New Tab", act: "tab",
-                                  on: r.type === "dir" }
+                                  on: one && r.type === "dir" }
                             ]
                             if (t.view === "dir") {
                                 items.push({ label: "-", act: "", on: true })
-                                items.push({ label: "Copy",   act: "copy",   on: true })
-                                items.push({ label: "Cut",    act: "cut",    on: true })
-                                items.push({ label: "Paste",  act: "paste",
+                                items.push({ label: "Copy" + many,  act: "copy", on: n > 0 })
+                                items.push({ label: "Cut" + many,   act: "cut",  on: n > 0 })
+                                items.push({ label: "Paste",        act: "paste",
                                              on: root.clip.paths.length > 0 })
                                 items.push({ label: "-", act: "", on: true })
-                                items.push({ label: "Rename…", act: "rename", on: true })
-                                items.push({ label: "Move to Trash", act: "trash", on: true })
+                                items.push({ label: "Rename…", act: "rename", on: one })
+                                items.push({ label: "Move to Trash" + many,
+                                             act: "trash", on: n > 0 })
                             }
+                            items.push({ label: "-", act: "", on: true })
+                            items.push({ label: "Properties…", act: "props", on: n > 0 })
                             return items
                         }
                         delegate: Item {
@@ -1332,14 +1571,103 @@ FloatingWindow {
                                         switch (ctxItem.modelData.act) {
                                         case "open":    root.activate(r); break
                                         case "tab":     root.newTab(r.full, "dir"); break
-                                        case "copy":    root.selected = r.name; root.copySelection(false); break
-                                        case "cut":     root.selected = r.name; root.copySelection(true); break
+                                        case "copy":    root.copySelection(false); break
+                                        case "cut":     root.copySelection(true); break
                                         case "paste":   root.paste(); break
-                                        case "rename":  root.selected = r.name; root.renaming = r.name; break
-                                        case "trash":   root.toTrash(r); break
+                                        case "rename":  root.renaming = r.name; break
+                                        case "trash":   root.trashSelection(); break
                                         case "restore": root.restoreFromTrash(r); break
+                                        case "props":   root.openProperties(); break
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Properties ──────────────────────────────────────────────────
+            // A panel over `synfiles info`, so what it can show and what the
+            // CLI can show are the same list by construction.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 460
+                height: Math.min(parent.height - 60, propCol.implicitHeight + 56)
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.wash(0.35) }
+                visible: root.showProps
+                z: 130
+
+                Text {
+                    id: propTitle
+                    anchors { top: parent.top; left: parent.left; margins: 16 }
+                    text: "Properties"
+                    color: root.cAccent
+                    font { pixelSize: 14; bold: true }
+                }
+                Text {
+                    anchors { top: parent.top; right: parent.right; margins: 14 }
+                    text: "×"
+                    color: propCloseMa.containsMouse ? root.cAccent : root.cDim
+                    font.pixelSize: 16
+                    MouseArea {
+                        id: propCloseMa
+                        anchors { fill: parent; margins: -6 }
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showProps = false
+                    }
+                }
+
+                Flickable {
+                    anchors {
+                        top: propTitle.bottom; topMargin: 10
+                        left: parent.left; right: parent.right; bottom: parent.bottom
+                        leftMargin: 16; rightMargin: 16; bottomMargin: 14
+                    }
+                    contentHeight: propCol.implicitHeight
+                    clip: true
+
+                    Column {
+                        id: propCol
+                        width: parent.width
+                        spacing: 4
+
+                        Repeater {
+                            model: root.propRows
+                            delegate: Row {
+                                id: propRow
+                                required property var modelData
+                                width: propCol.width
+                                spacing: 10
+
+                                Text {
+                                    width: 96
+                                    text: propRow.modelData.key
+                                    color: root.cDim
+                                    font.pixelSize: 11
+                                }
+                                Text {
+                                    width: propCol.width - 106
+                                    // Paths and names arrive encoded like every
+                                    // other record; decode for reading only.
+                                    text: {
+                                        const k = propRow.modelData.key
+                                        const v = propRow.modelData.value
+                                        if (k === "path" || k === "name" || k === "target")
+                                            return root.disp(v)
+                                        if (k === "size")
+                                            return root.fmtSize(parseInt(v || "0"), false)
+                                                 + "  (" + v + " bytes)"
+                                        if (k === "mtime" || k === "atime" || k === "ctime")
+                                            return root.fmtTime(parseInt(v || "0"))
+                                        return v
+                                    }
+                                    color: root.cText
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WrapAnywhere
                                 }
                             }
                         }
@@ -1446,7 +1774,12 @@ FloatingWindow {
                         if (root.loading) return "reading…"
                         if (root.statusLine) return root.statusLine
                         const n = root.shownRows.length
-                        return n + (n === 1 ? " item" : " items")
+                        const s = root.selection.length
+                        const base = n + (n === 1 ? " item" : " items")
+                        // How much is selected is the thing you check right
+                        // before pressing Delete, so it goes where you are
+                        // already looking rather than only in a menu label.
+                        return s > 0 ? base + "  ·  " + s + " selected" : base
                     }
                     color: root.statusLine ? root.cWarn : root.cDim
                     font.pixelSize: 11
@@ -1477,8 +1810,12 @@ FloatingWindow {
         property string sub: ""
         property bool active: false
         property bool removable: false
+        property bool dim: false
+        property string trailing: ""       // a glyph shown on hover, "" for none
+        property string trailingHint: ""
         signal activated()
         signal removed()
+        signal trailingClicked()
 
         width: sidebar.width
         height: 28
@@ -1491,18 +1828,21 @@ FloatingWindow {
             width: 16; height: 16
             sourceSize: Qt.size(16, 16)
             source: Quickshell.iconPath(sideRow.iconName, true)
+            opacity: sideRow.dim ? 0.45 : 1.0
         }
         Text {
             anchors {
                 left: sideIcon.right; leftMargin: 8
-                right: parent.right; rightMargin: 24
+                right: parent.right; rightMargin: 26
                 verticalCenter: parent.verticalCenter
             }
             text: sideRow.label
             elide: Text.ElideRight
-            color: sideRow.active ? root.cAccent : root.cText
+            color: sideRow.active ? root.cAccent : (sideRow.dim ? root.cDim : root.cText)
             font.pixelSize: 12
         }
+
+        // Unpin, for a place the user added themselves.
         Text {
             anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
             text: "×"
@@ -1517,6 +1857,23 @@ FloatingWindow {
                 onClicked: sideRow.removed()
             }
         }
+
+        // Mount / eject.
+        Text {
+            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+            text: sideRow.trailing
+            color: trailMa.containsMouse ? root.cAccent : root.cDim
+            font.pixelSize: 12
+            visible: sideRow.trailing !== "" && sideMa.containsMouse
+            MouseArea {
+                id: trailMa
+                anchors { fill: parent; margins: -5 }
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: sideRow.trailingClicked()
+            }
+        }
+
         MouseArea {
             id: sideMa
             anchors.fill: parent

@@ -32,6 +32,8 @@ static void usage(FILE *f)
 "  places unpin <path>\n"
 "  recent [--limit=N] [--existing]\n"
 "  volumes [--block|--network]\n"
+"  mount <device>          mount a volume through udisks2\n"
+"  unmount <device>        unmount it again\n"
 "\n"
 "Changing things\n"
 "  trash <path>...         move to the trash (this is what Delete should do)\n"
@@ -134,6 +136,8 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "recent"))  return cmd_recent(rest_argc, rest);
 	if (!strcmp(cmd, "volumes")) return cmd_volumes(rest_argc, rest);
 	if (!strcmp(cmd, "trash"))   return cmd_trash(rest_argc, rest);
+	if (!strcmp(cmd, "mount"))   return cmd_mount(rest_argc, rest);
+	if (!strcmp(cmd, "unmount")) return cmd_unmount(rest_argc, rest);
 	if (!strcmp(cmd, "copy"))    return cmd_copy(rest_argc, rest);
 	if (!strcmp(cmd, "move"))    return cmd_move(rest_argc, rest);
 	if (!strcmp(cmd, "rename"))  return cmd_rename(rest_argc, rest);

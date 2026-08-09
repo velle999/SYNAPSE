@@ -196,6 +196,15 @@ void rec_row(int nfields, ...)
 
 /* ── odds and ends ──────────────────────────────────────────────────────── */
 
+void strip_trailing_newline(char *s)
+{
+	if (!s)
+		return;
+	size_t n = strlen(s);
+	while (n && (s[n - 1] == '\n' || s[n - 1] == '\r'))
+		s[--n] = '\0';
+}
+
 char **split(char *text, char sep, size_t *n)
 {
 	size_t cap = 16, k = 0;

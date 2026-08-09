@@ -85,6 +85,7 @@ const char *C_ACCENT(void);
 const char *C_WARN(void);
 
 char **split(char *text, char sep, size_t *n);
+void   strip_trailing_newline(char *s);
 char  *human_size(off_t bytes);
 bool   have_cmd(const char *name);
 char  *slurp(const char *path);           /* whole file, malloc'd, NULL on error */
@@ -126,6 +127,10 @@ int cmd_recent(int argc, char **argv);
 
 /* ── volumes.c ──────────────────────────────────────────────────────────── */
 int cmd_volumes(int argc, char **argv);
+/* Both delegate to udisksctl. Mounting is never reimplemented here: udisks2
+ * owns the polkit rules that let a desktop user mount a disk unprivileged. */
+int cmd_mount(int argc, char **argv);
+int cmd_unmount(int argc, char **argv);
 
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);
