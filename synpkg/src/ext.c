@@ -246,6 +246,146 @@ static int flatpak_list(void)
 	return shown ? 0 : (st == 0 ? 100 : st);
 }
 
+/* ── browsing Flathub by category ───────────────────────────────────────────
+ *
+ * The freedesktop main categories, in the order the pane shows them, with the
+ * label each one is displayed under. Two separate strings on purpose: "Game"
+ * is what the catalogue records and what `flatpak category` takes, "Games" is
+ * what a person reads, and collapsing them would mean either an odd-looking
+ * pane or a command that takes a label it then has to translate back.
+ *
+ * This is a CHERRY-PICK, not the full freedesktop list. The catalogue carries
+ * a hundred-odd category names, most of them subcategories (ArcadeGame,
+ * RasterGraphics, IDE) that would make the pane longer than the results it
+ * filters, plus toolkit tags (Qt, GTK, GNOME) that describe how an app was
+ * built rather than what it does. Ordering is editorial: what people install
+ * a Flatpak FOR comes first, and Utility — the biggest and vaguest bucket —
+ * comes last.
+ */
+static const struct { const char *key, *label; } fh_categories[] = {
+	{ "Game",        "Games" },
+	{ "AudioVideo",  "Audio & Video" },
+	{ "Graphics",    "Graphics" },
+	{ "Office",      "Office" },
+	{ "Development", "Development" },
+	{ "Network",     "Internet" },
+	{ "Education",   "Education" },
+	{ "Science",     "Science" },
+	{ "System",      "System" },
+	{ "Utility",     "Utilities" },
+};
+
+/* An index is missing on any machine whose Flathub remote was added but never
+ * had `flatpak update --appstream` run against it — the exact state
+ * enable-flathub exists to prevent. Saying so beats an empty pane, which reads
+ * as "Flathub has no games". */
+static void no_index(void)
+{
+	warn("no Flathub application index on this machine — run: "
+	     "synpkg flatpak enable-flathub");
+}
+
+static int flatpak_categories(void)
+{
+	flatpak_required();
+
+	size_t n = 0;
+	sp_as_app *apps = sp_appstream_load(&n);
+	if (!apps) {
+		if (g_out == OUT_TSV) {
+			tsv_row(4, "category", "total", "installed", "label");
+			return 100;
+		}
+		no_index();
+		return 2;
+	}
+
+	char *ids = flatpak_installed_ids();
+
+	/* Same four columns as `arsenal categories` and `suggest categories`: one
+	 * pane in the GUI renders all three, and it can only stay one pane if
+	 * they cannot drift apart. */
+	if (g_out == OUT_TSV)
+		tsv_row(4, "category", "total", "installed", "label");
+
+	for (size_t c = 0; c < sizeof fh_categories / sizeof *fh_categories; c++) {
+		int total = 0, have = 0;
+		for (size_t i = 0; i < n; i++) {
+			if (!sp_appstream_in(&apps[i], fh_categories[c].key))
+				continue;
+			total++;
+			have += line_present(ids, apps[i].id);
+		}
+		if (!total)
+			continue;
+
+		if (g_out == OUT_TSV) {
+			char *t = xasprintf("%d", total);
+			char *h = xasprintf("%d", have);
+			tsv_row(4, fh_categories[c].key, t, h, fh_categories[c].label);
+			free(t);
+			free(h);
+		} else {
+			printf("%s%-20s%s %s%5d%s", C_BOLD(), fh_categories[c].label,
+			       C_RESET(), C_DIM(), total, C_RESET());
+			if (have)
+				printf("  %s%d installed%s", C_OK(), have, C_RESET());
+			putchar('\n');
+		}
+	}
+
+	free(ids);
+	sp_appstream_free(apps, n);
+	return 0;
+}
+
+static int flatpak_category(const char *want)
+{
+	flatpak_required();
+
+	/* Resolve against the table rather than passing the string through: an
+	 * unknown category would otherwise render as a silent empty pane, which
+	 * is indistinguishable from a category Flathub genuinely has nothing in. */
+	const char *key = NULL;
+	for (size_t c = 0; c < sizeof fh_categories / sizeof *fh_categories; c++)
+		if (!strcasecmp(want, fh_categories[c].key)
+		    || !strcasecmp(want, fh_categories[c].label))
+			key = fh_categories[c].key;
+	if (!key)
+		die("flatpak: '%s' is not a Flathub category — "
+		    "try: synpkg flatpak categories", want);
+
+	size_t n = 0;
+	sp_as_app *apps = sp_appstream_load(&n);
+	if (!apps) {
+		if (g_out == OUT_TSV) {
+			flatpak_row_header();
+			return 100;
+		}
+		no_index();
+		return 2;
+	}
+
+	char *ids = flatpak_installed_ids();
+
+	if (g_out == OUT_TSV)
+		flatpak_row_header();
+
+	int shown = 0;
+	for (size_t i = 0; i < n; i++) {
+		if (!sp_appstream_in(&apps[i], key))
+			continue;
+		flatpak_row(apps[i].id, line_present(ids, apps[i].id),
+		            apps[i].version, SYNPKG_FLATHUB_NAME, apps[i].name,
+		            apps[i].summary);
+		shown++;
+	}
+
+	free(ids);
+	sp_appstream_free(apps, n);
+	return shown ? 0 : 100;
+}
+
 static int flatpak_search(const char *term)
 {
 	flatpak_required();
@@ -496,6 +636,14 @@ int cmd_flatpak(int argc, char **argv)
 		if (argc < 2)
 			die("flatpak search: need a term");
 		return flatpak_search(argv[1]);
+	}
+	if (!strcmp(sub, "categories"))
+		return flatpak_categories();
+	if (!strcmp(sub, "category")) {
+		if (argc < 2)
+			die("flatpak category: need a category — "
+			    "try: synpkg flatpak categories");
+		return flatpak_category(argv[1]);
 	}
 	if (!strcmp(sub, "updates"))
 		return flatpak_updates();

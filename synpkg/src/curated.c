@@ -144,35 +144,60 @@ int cmd_suggest(int argc, char **argv)
 	size_t n = 0;
 	entry_t *entries = load(&n, &backing);
 
+	alpm_handle_t *h = sp_alpm_init(false);
+	alpm_db_t *local = alpm_get_localdb(h);
+	char *fp = flatpak_installed_ids();
+
 	if (list_categories) {
+		/* Same three columns as `arsenal categories`, deliberately: the GUI's
+		 * category pane is one component serving both, and a pane that had to
+		 * know which source it was rendering would drift the moment either
+		 * side gained a column. The installed count is what makes the pane a
+		 * progress view rather than a menu — you can see at a glance which
+		 * categories you have already worked through. */
+		if (g_out == OUT_TSV)
+			tsv_row(4, "category", "total", "installed", "label");
+
 		/* Preserve catalogue order — it is an editorial ordering, and sorting
 		 * it alphabetically would put "Accessories" above "Browsers". */
-		if (g_out == OUT_TSV)
-			tsv_row(2, "category", "count");
 		for (size_t i = 0; i < n; i++) {
 			bool seen = false;
 			for (size_t j = 0; j < i && !seen; j++)
 				seen = !strcmp(entries[j].category, entries[i].category);
 			if (seen)
 				continue;
-			int count = 0;
-			for (size_t j = 0; j < n; j++)
-				count += !strcmp(entries[j].category, entries[i].category);
+
+			int total = 0, have = 0;
+			for (size_t j = 0; j < n; j++) {
+				if (strcmp(entries[j].category, entries[i].category))
+					continue;
+				total++;
+				have += !strcmp(entries[j].source, "flatpak")
+				            ? line_present(fp, entries[j].id)
+				            : alpm_db_get_pkg(local, entries[j].id) != NULL;
+			}
+
 			if (g_out == OUT_TSV) {
-				char *c = xasprintf("%d", count);
-				tsv_row(2, entries[i].category, c);
+				char *t = xasprintf("%d", total);
+				char *c = xasprintf("%d", have);
+				/* The catalogue's category name is already the display name,
+				 * so label repeats it — a column that is sometimes redundant
+				 * beats a pane that has to know which source it is showing. */
+				tsv_row(4, entries[i].category, t, c, entries[i].category);
+				free(t);
 				free(c);
 			} else {
-				printf("%s%-20s%s %s%d%s\n", C_BOLD(), entries[i].category,
-				       C_RESET(), C_DIM(), count, C_RESET());
+				printf("%s%-20s%s %s%d%s", C_BOLD(), entries[i].category,
+				       C_RESET(), C_DIM(), total, C_RESET());
+				if (have)
+					printf("  %s%d installed%s", C_OK(), have, C_RESET());
+				putchar('\n');
 			}
 		}
+		free(fp);
+		sp_alpm_free(h);
 		goto done;
 	}
-
-	alpm_handle_t *h = sp_alpm_init(false);
-	alpm_db_t *local = alpm_get_localdb(h);
-	char *fp = flatpak_installed_ids();
 
 	if (g_out == OUT_TSV)
 		tsv_row(6, "category", "id", "source", "label", "installed", "description");

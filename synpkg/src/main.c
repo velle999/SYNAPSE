@@ -33,11 +33,14 @@ static void usage(FILE *out)
 "Discovery\n"
 "  suggest [category]      the curated SynapseOS software list\n"
 "  suggest categories      just the category names\n"
+"  groups [group]          browsable package groups, or one group's packages\n"
 "\n"
 "Other sources\n"
 "  arsenal [subcommand]    BlackArch security tooling\n"
 "  aur <search|install|installed|updates>\n"
 "  flatpak <search|install|remove|installed|updates|remotes|enable-flathub>\n"
+"  flatpak categories      browse Flathub by category\n"
+"  flatpak category <name> the applications in one Flathub category\n"
 "  system <check|apply>    SynapseOS's own components, via syn-update\n"
 "\n"
 "Front-ends\n"
@@ -144,6 +147,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "orphans"))   return cmd_orphans(rest_argc, rest);
 	if (!strcmp(cmd, "status"))    return cmd_status(rest_argc, rest);
 	if (!strcmp(cmd, "suggest"))   return cmd_suggest(rest_argc, rest);
+	if (!strcmp(cmd, "groups"))    return cmd_groups(rest_argc, rest);
 	if (!strcmp(cmd, "arsenal"))   return cmd_arsenal(rest_argc, rest);
 	if (!strcmp(cmd, "aur"))       return cmd_aur(rest_argc, rest);
 	if (!strcmp(cmd, "flatpak"))   return cmd_flatpak(rest_argc, rest);

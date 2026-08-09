@@ -8,7 +8,9 @@
 #   1. Wayland-native, or at least sane under XWayland. SynapseOS has no X11
 #      session to fall back to.
 #   2. One recommendation per job. A list with four PDF readers is a search
-#      result, not a suggestion.
+#      result, not a suggestion. In Games the "job" is the GENRE — nobody wants
+#      one game, but they do not want three Lemmings clones either. Gaming is
+#      how you RUN games (launchers, Wine, overlays); Games are the games.
 #   3. Prefer `repo` over `aur` over `flatpak`. Repo packages are the only ones
 #      a plain `synpkg upgrade` keeps current.
 #   4. Category order below is the display order. It is editorial: the things a
@@ -63,6 +65,22 @@ Gaming	gamemode	repo	GameMode	Applies performance tuning while a game runs
 Gaming	mangohud	repo	MangoHud	In-game performance overlay
 Gaming	wine	repo	Wine	Run Windows software directly
 Gaming	prismlauncher	repo	Prism Launcher	Minecraft instance manager
+
+Games	0ad	repo	0 A.D.	Historical real-time strategy, in the Age of Empires mould
+Games	widelands	repo	Widelands	Build-and-settle strategy about economy and transport
+Games	wesnoth	repo	Battle for Wesnoth	Turn-based fantasy strategy with a long campaign
+Games	freeciv-gtk3	repo	Freeciv	Turn-based empire building, in the Civilization mould
+Games	openttd	repo	OpenTTD	Transport Tycoon Deluxe, rebuilt and still maintained
+Games	supertuxkart	repo	SuperTuxKart	Kart racing, local split-screen and online
+Games	xonotic	repo	Xonotic	Fast arena shooter in the Quake tradition
+Games	teeworlds	repo	Teeworlds	2D multiplayer shooter, easy to run a server for
+Games	luanti	repo	Luanti	Voxel sandbox, formerly Minetest — mods and multiplayer
+Games	endless-sky	repo	Endless Sky	Space trading and combat with an open galaxy
+Games	cataclysm-dda	repo	Cataclysm: DDA	Open-world post-apocalyptic survival roguelike
+Games	shattered-pixel-dungeon	repo	Shattered Pixel Dungeon	Dungeon-crawl roguelike, a short run at a time
+Games	hedgewars	repo	Hedgewars	Turn-based artillery, in the Worms mould
+Games	armagetronad	repo	Armagetron Advanced	Tron light-cycle arcade racing
+Games	pingus	repo	Pingus	Level-based puzzle game, in the Lemmings mould
 
 System	htop	repo	htop	Interactive process viewer
 System	btop	repo	btop	Resource monitor with a readable layout

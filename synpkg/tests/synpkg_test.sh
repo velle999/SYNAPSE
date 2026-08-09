@@ -266,6 +266,208 @@ stray=$(fp --tsv flatpak search firefox 2>/dev/null | grep -cv $'\t')
 [ "$stray" = 0 ] && ok "flatpak search --tsv writes only records to stdout" \
                  || bad "flatpak search --tsv wrote $stray non-record lines"
 
+# ── Category panes ──────────────────────────────────────────────────────────
+# Four sources feed ONE pane in the GUI, and the pane keys its fields by header
+# name. If any of them drifts a column the pane does not error — it draws blank
+# labels or, worse, sends the wrong string back as the category to open. This
+# is the invariant that makes one pane possible, so it is checked as one.
+for cmd in "suggest categories" "arsenal categories" "groups"; do
+    hdr=$("$SYNPKG" --tsv $cmd | head -1)
+    [ "$hdr" = $'category\ttotal\tinstalled\tlabel' ] \
+        && ok "$cmd --tsv has the category header" \
+        || bad "$cmd --tsv header is '$hdr'"
+done
+
+# The counts are numbers the pane does arithmetic on; a non-numeric cell renders
+# as NaN rather than failing.
+nonnum=$("$SYNPKG" --tsv suggest categories |
+         awk -F'\t' 'NR>1 && ($2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/) {n++} END {print n+0}')
+[ "$nonnum" = 0 ] && ok "suggest categories counts are numeric" \
+                  || bad "$nonnum suggest categories rows have non-numeric counts"
+
+# installed can never exceed total — if it does, the pane shows "17/6".
+overcount=$("$SYNPKG" --tsv suggest categories |
+            awk -F'\t' 'NR>1 && $3 > $2 {n++} END {print n+0}')
+[ "$overcount" = 0 ] && ok "suggest categories never counts more installed than total" \
+                     || bad "$overcount suggest categories rows have installed > total"
+
+# Arsenal's label is the group with its "blackarch-" prefix off. Stripping it in
+# the GUI would mean the shared pane knowing one source's naming scheme.
+bad_label=$("$SYNPKG" --tsv arsenal categories |
+            awk -F'\t' 'NR>1 && ($1 !~ /^blackarch-/ || $4 != substr($1, 11)) {n++} END {print n+0}')
+[ "$bad_label" = 0 ] && ok "arsenal categories label drops the blackarch- prefix" \
+                     || bad "$bad_label arsenal rows have a mislabelled category"
+
+n=$("$SYNPKG" --tsv groups | wc -l)
+[ "$n" -gt 1 ] && ok "groups lists at least one browsable group" \
+               || bad "groups listed nothing (got $n lines)"
+
+# Groups outside the curated set are refused rather than rendered. `kf6` is 300
+# libraries with an Install button on each, and none of them is installed by hand.
+"$SYNPKG" groups kf6 >/dev/null 2>&1
+[ $? -eq 1 ] && ok "groups refuses a non-browsable group" \
+             || bad "groups accepted kf6"
+
+# A browsable group must emit the SIX-column package shape, not the category
+# shape: its rows go into the same list as a search result.
+grp=$("$SYNPKG" --tsv groups | awk -F'\t' 'NR==2 {print $1}')
+if [ -n "$grp" ]; then
+    n=$("$SYNPKG" --tsv groups "$grp" | tsv_cols)
+    [ "$n" = 6 ] && ok "groups <group> --tsv has 6 columns" \
+                 || bad "groups <group> --tsv has 6 columns (got $n)"
+else
+    ok "groups <group> --tsv has 6 columns (skipped: no groups on this machine)"
+fi
+
+# The Games category is data, so it is deterministic and worth pinning: it is
+# what the Gaming category is NOT, and folding the two together was considered
+# and rejected.
+"$SYNPKG" --tsv suggest categories | grep -q $'^Games\t'
+check "the catalogue has a Games category" $?
+
+"$SYNPKG" --tsv suggest Games | grep -q $'^Games\t0ad\t'
+check "suggest Games lists a game" $?
+
+# Gaming is launchers and overlays, Games are games. A game turning up under
+# Gaming means the two have been merged by accident.
+"$SYNPKG" --tsv suggest Gaming | grep -q $'\t0ad\t' && \
+    bad "0ad is in Gaming — Gaming is tooling, Games are games" || \
+    ok "Gaming holds no games"
+
+# ── Flathub categories, against an AppStream fixture ────────────────────────
+# The scanner reads a 48MB catalogue for five fields, and every trap below is
+# one the real Flathub index contains. A fixture rather than the live index:
+# these must give the same answer on the ISO build chroot, which has neither
+# flatpak nor a remote.
+AS="$STUB/home/.local/share/flatpak/appstream/flathub/x86_64/active"
+mkdir -p "$AS"
+cat > "$AS/appstream.xml" <<'ASEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<components version="0.8">
+  <component type="desktop-application">
+    <id>org.mozilla.firefox.desktop</id>
+    <name>Firefox</name>
+    <name xml:lang="de">Feuerfuchs</name>
+    <summary>Browse the web</summary>
+    <summary xml:lang="de">Das Web durchsuchen</summary>
+    <bundle type="flatpak">app/org.mozilla.firefox/x86_64/stable</bundle>
+    <categories><category>Network</category><category>WebBrowser</category></categories>
+    <releases><release timestamp="1" version="142.0"/></releases>
+  </component>
+  <component type="desktop-application">
+    <id>org.audacityteam.Audacity</id>
+    <name>Audacity</name>
+    <summary>Record &amp; edit audio</summary>
+    <bundle type="flatpak">app/org.audacityteam.Audacity/x86_64/stable</bundle>
+    <categories><category>AudioVideo</category><category>Audio</category></categories>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.AudioOnly</id>
+    <name>Audio Only</name>
+    <summary>Carries the Audio subcategory and nothing else</summary>
+    <bundle type="flatpak">app/org.example.AudioOnly/x86_64/stable</bundle>
+    <categories><category>Audio</category></categories>
+  </component>
+  <component type="runtime">
+    <id>org.freedesktop.Platform</id>
+    <name>Freedesktop Platform</name>
+    <summary>A runtime, not an application</summary>
+    <bundle type="flatpak">runtime/org.freedesktop.Platform/x86_64/24.08</bundle>
+    <categories><category>Network</category></categories>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Uncategorised</id>
+    <name>Uncategorised</name>
+    <summary>No categories element at all</summary>
+    <bundle type="flatpak">app/org.example.Uncategorised/x86_64/stable</bundle>
+  </component>
+</components>
+ASEOF
+
+# HOME is what picks the fixture up: flatpak searches the user installation
+# before the system one, and so does this.
+fa() { PATH="$STUB:$PATH" HOME="$STUB/home" "$SYNPKG" "$@"; }
+
+hdr=$(fa --tsv flatpak categories | head -1)
+[ "$hdr" = $'category\ttotal\tinstalled\tlabel' ] \
+    && ok "flatpak categories --tsv has the category header" \
+    || bad "flatpak categories --tsv header is '$hdr'"
+
+# Internet holds Firefox and NOT the runtime that also claims Network.
+row=$(fa --tsv flatpak categories | awk -F'\t' '$1=="Network" {print $2"/"$3}')
+[ "$row" = "1/1" ] && ok "flatpak categories skips runtimes and counts installed" \
+                   || bad "Network category is $row (want 1/1 — a runtime leaked in?)"
+
+# Audio is a SUBcategory of nothing here: a substring match would file the
+# Audio-only app under AudioVideo, which is how Audacity and a soundboard end
+# up in the same bucket as a video editor.
+row=$(fa --tsv flatpak categories | awk -F'\t' '$1=="AudioVideo" {print $2}')
+[ "$row" = "1" ] && ok "flatpak categories matches whole category names" \
+                 || bad "AudioVideo holds $row apps (want 1 — did Audio substring-match?)"
+
+# An app with no <categories> belongs nowhere and must not inflate a count.
+fa --tsv flatpak categories | grep -q 'Uncategorised' && \
+    bad "an uncategorised app reached the category pane" || \
+    ok "an uncategorised app is left out"
+
+n=$(fa --tsv flatpak category Network | tsv_cols)
+[ "$n" = 7 ] && ok "flatpak category --tsv has 7 columns" \
+             || bad "flatpak category --tsv has 7 columns (got $n)"
+
+# THE trap. 474 of Flathub's components carry a legacy <id> ending in
+# ".desktop", and `flatpak install org.mozilla.firefox.desktop` installs
+# nothing. The installable id comes from the bundle ref.
+id=$(fa --tsv flatpak category Network | awk -F'\t' 'NR==2 {print $1}')
+[ "$id" = "org.mozilla.firefox" ] && ok "flatpak category takes the id from the bundle ref" \
+                                  || bad "row id is '$id' (want org.mozilla.firefox)"
+
+# Every human string is repeated once per translation. Matching "<name" rather
+# than "<name>" hands back whichever language sorted first.
+title=$(fa --tsv flatpak category Network | awk -F'\t' 'NR==2 {print $7}')
+[ "$title" = "Firefox" ] && ok "flatpak category takes the untranslated name" \
+                         || bad "row title is '$title' (want Firefox, not a translation)"
+
+ver=$(fa --tsv flatpak category Network | awk -F'\t' 'NR==2 {print $3}')
+[ "$ver" = "142.0" ] && ok "flatpak category reads the release version" \
+                     || bad "row version is '$ver' (want 142.0)"
+
+desc=$(fa --tsv flatpak category AudioVideo | awk -F'\t' 'NR==2 {print $6}')
+[ "$desc" = "Record & edit audio" ] && ok "flatpak category decodes XML entities" \
+                                    || bad "row description is '$desc' (want an unescaped &)"
+
+# The display label is accepted as well as the catalogue key, so
+# `synpkg flatpak category Internet` does what it looks like it does — the GUI
+# shows the label and a person retyping it should not be told it is not a
+# category.
+by_key=$(fa --tsv flatpak category Network)
+by_label=$(fa --tsv flatpak category Internet)
+[ "$by_key" = "$by_label" ] && ok "flatpak category accepts a display label" \
+                            || bad "'Internet' and 'Network' returned different rows"
+
+fa flatpak category Nonsense >/dev/null 2>&1
+[ $? -eq 1 ] && ok "flatpak category refuses an unknown category" \
+             || bad "flatpak category accepted 'Nonsense'"
+
+# A machine with a remote but no index is a real state, and it must not look
+# like "Flathub is empty". 100 is this program's "nothing to do".
+#
+# SYNPKG_APPSTREAM rather than an empty HOME: the discovery path falls back to
+# /var/lib/flatpak, so on a machine that HAS an index this would otherwise
+# quietly test the real catalogue and pass for the wrong reason.
+PATH="$STUB:$PATH" SYNPKG_APPSTREAM="$STUB/nothing-here.xml" \
+    "$SYNPKG" --tsv flatpak categories >/dev/null 2>&1
+[ $? -eq 100 ] && ok "flatpak categories reports 100 when there is no index" \
+               || bad "flatpak categories did not report 100 without an index"
+
+# The document's root element is <components>, and "<component" is a prefix of
+# it. A scan that does not check the delimiter treats the root tag as the first
+# component and drops the first real application — silently, forever, and only
+# the first one, which is why it survives a spot-check of the output.
+first=$(fa --tsv flatpak category Network | awk -F'\t' 'NR==2 {print $1}')
+[ "$first" = "org.mozilla.firefox" ] \
+    && ok "the <components> root does not swallow the first application" \
+    || bad "first application is '$first' — root element mis-scanned?"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

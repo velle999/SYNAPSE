@@ -486,3 +486,178 @@ int cmd_status(int argc, char **argv)
 	sp_alpm_free(h);
 	return 0;
 }
+
+/* ── groups: a category pane for the Repositories tab ───────────────────────
+ *
+ * ALPM has no notion of "category". What it has is GROUPS, and a cherry-picked
+ * subset of them is genuinely the shape the Arsenal pane already uses — the
+ * Arsenal tab is nothing but the blackarch-* groups rendered as categories.
+ *
+ * Cherry-picked, and not `pacman -Sg`, because the 160 groups on a stock Arch
+ * are three different kinds of thing wearing one name:
+ *
+ *   - browsable collections, which is what a category pane is for;
+ *   - dependency stacks (kf6, qt6, alpm, python-build-backend) that exist so
+ *     other packages can depend on them, and that nobody installs on purpose;
+ *   - build scaffolding (base-devel, reproducible-faketools).
+ *
+ * Showing all three sends somebody looking for a photo editor into a list of
+ * 300 Qt libraries. blackarch-* is excluded for a different reason: it has its
+ * own tab, with its own installed counts and its own enable button.
+ *
+ * xorg* is excluded deliberately rather than by oversight — SynapseOS ships no
+ * X11 session, so those groups install things that cannot run here.
+ *
+ * A group absent from this machine's databases is skipped silently, so the
+ * pane shows what is actually installable rather than what Arch has somewhere.
+ */
+static const struct { const char *group, *label; } repo_groups[] = {
+	/* Desktop environments and their application sets. */
+	{ "plasma",               "KDE Plasma" },
+	{ "kde-applications",     "KDE applications" },
+	{ "gnome",                "GNOME" },
+	{ "gnome-extra",          "GNOME extras" },
+	{ "gnome-circle",         "GNOME Circle" },
+	{ "xfce4",                "Xfce" },
+	{ "xfce4-goodies",        "Xfce goodies" },
+	{ "lxqt",                 "LXQt" },
+	{ "mate",                 "MATE" },
+	{ "cosmic",               "COSMIC" },
+	{ "budgie",               "Budgie" },
+	/* KDE's application set, split the way its own menu splits it. */
+	{ "kde-graphics",         "KDE graphics" },
+	{ "kde-multimedia",       "KDE multimedia" },
+	{ "kde-network",          "KDE network" },
+	{ "kde-office",           "KDE office" },
+	{ "kde-utilities",        "KDE utilities" },
+	{ "kde-games",            "KDE games" },
+	{ "kde-education",        "KDE education" },
+	{ "kde-system",           "KDE system" },
+	{ "kde-sdk",              "KDE development" },
+	{ "kde-pim",              "KDE mail and calendar" },
+	{ "kde-accessibility",    "KDE accessibility" },
+	/* Audio production. These are the reason `pro-audio` exists as a group at
+	 * all, and they are exactly the sort of thing nobody finds by search
+	 * because you have to know a plugin's name to search for it. */
+	{ "pro-audio",            "Pro audio" },
+	{ "lv2-plugins",          "LV2 plugins" },
+	{ "vst-plugins",          "VST plugins" },
+	{ "vst3-plugins",         "VST3 plugins" },
+	{ "clap-plugins",         "CLAP plugins" },
+	{ "ladspa-plugins",       "LADSPA plugins" },
+	{ "soundfonts",           "SoundFonts" },
+	/* Toolchains worth browsing as a set. */
+	{ "vulkan-devel",         "Vulkan development" },
+	{ "mingw-w64",            "MinGW-w64 (Windows cross)" },
+	{ "dlang",                "D toolchain" },
+	{ "risc-v",               "RISC-V toolchain" },
+	{ "kubernetes-tools",     "Kubernetes tools" },
+	{ "linux-tools",          "Kernel tools" },
+	{ "archlinux-tools",      "Arch tools" },
+	/* Editor ecosystems. */
+	{ "neovim-plugins",       "Neovim plugins" },
+	{ "vim-plugins",          "Vim plugins" },
+	{ "tree-sitter-grammars", "Tree-sitter grammars" },
+	/* Fonts, input methods, codecs, add-ons. */
+	{ "nerd-fonts",           "Nerd Fonts" },
+	{ "ipa-fonts",            "Japanese fonts" },
+	{ "fcitx5-im",            "Fcitx5 input methods" },
+	{ "gstreamer-plugins",    "GStreamer plugins" },
+	{ "libretro",             "libretro cores" },
+	{ "kodi-addons",          "Kodi add-ons" },
+	{ "texlive",              "TeX Live" },
+	{ "firefox-addons",       "Firefox add-ons" },
+	{ "thunderbird-addons",   "Thunderbird add-ons" },
+};
+
+static const char *group_label(const char *group)
+{
+	for (size_t i = 0; i < sizeof repo_groups / sizeof *repo_groups; i++)
+		if (!strcmp(repo_groups[i].group, group))
+			return repo_groups[i].label;
+	return NULL;
+}
+
+/* A group can span repositories — `pro-audio` has members in extra and in
+ * multilib — so membership comes from alpm_find_group_pkgs() across every sync
+ * db rather than from one db's group cache. */
+static int groups_list(alpm_handle_t *h)
+{
+	alpm_list_t *dbs = sp_syncdbs(h);
+	alpm_db_t *local = alpm_get_localdb(h);
+
+	if (g_out == OUT_TSV)
+		tsv_row(4, "category", "total", "installed", "label");
+
+	for (size_t i = 0; i < sizeof repo_groups / sizeof *repo_groups; i++) {
+		alpm_list_t *pkgs = alpm_find_group_pkgs(dbs, repo_groups[i].group);
+		if (!pkgs)
+			continue;   /* not in this machine's repositories */
+
+		int total = 0, have = 0;
+		for (alpm_list_t *p = pkgs; p; p = p->next) {
+			total++;
+			have += alpm_db_get_pkg(local, alpm_pkg_get_name(p->data)) != NULL;
+		}
+		alpm_list_free(pkgs);
+
+		if (g_out == OUT_TSV) {
+			char *t = xasprintf("%d", total);
+			char *c = xasprintf("%d", have);
+			tsv_row(4, repo_groups[i].group, t, c, repo_groups[i].label);
+			free(t);
+			free(c);
+		} else {
+			printf("%s%-26s%s %s%4d%s", C_BOLD(), repo_groups[i].label,
+			       C_RESET(), C_DIM(), total, C_RESET());
+			if (have)
+				printf("  %s%d installed%s", C_OK(), have, C_RESET());
+			putchar('\n');
+		}
+	}
+	return 0;
+}
+
+static int groups_packages(alpm_handle_t *h, const char *group)
+{
+	/* Restricted to the curated set on purpose. `synpkg groups kf6` would
+	 * otherwise render 300 libraries into a pane that offers an Install
+	 * button on each, and none of them is a thing to install by hand. */
+	if (!group_label(group))
+		die("groups: '%s' is not a browsable group — "
+		    "try: synpkg groups", group);
+
+	alpm_list_t *pkgs = alpm_find_group_pkgs(sp_syncdbs(h), group);
+	if (!pkgs) {
+		if (g_out == OUT_TSV)
+			emit_pkg_header();
+		else
+			warn("no packages in %s — is the repository that provides it "
+			     "enabled and synced?", group);
+		return 100;
+	}
+
+	alpm_db_t *local = alpm_get_localdb(h);
+	emit_pkg_header();
+
+	for (alpm_list_t *p = pkgs; p; p = p->next) {
+		alpm_pkg_t *pkg = p->data;
+		const char *name = alpm_pkg_get_name(pkg);
+		alpm_db_t *db = alpm_pkg_get_db(pkg);
+		emit_pkg(name, alpm_db_get_pkg(local, name) != NULL,
+		         alpm_pkg_get_version(pkg),
+		         db ? alpm_db_get_name(db) : "", alpm_pkg_get_size(pkg),
+		         alpm_pkg_get_desc(pkg));
+	}
+
+	alpm_list_free(pkgs);
+	return 0;
+}
+
+int cmd_groups(int argc, char **argv)
+{
+	alpm_handle_t *h = sp_alpm_init(false);
+	int rc = argc > 0 ? groups_packages(h, argv[0]) : groups_list(h);
+	sp_alpm_free(h);
+	return rc;
+}

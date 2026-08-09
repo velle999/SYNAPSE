@@ -108,6 +108,13 @@ int cmd_about(int argc, char **argv)
 	if (!sp_flatpak_present())
 		about_row("Flathub", "missing", "flatpak is not installed",
 		          "synpkg install flatpak");
+	else if (sp_flathub_enabled() && !sp_appstream_present())
+		/* The state that looks exactly like a working Flathub with nothing in
+		 * it: the remote is there, so nothing reports an error, but every
+		 * search and every category comes back empty. Any remote added by
+		 * anything other than enable-flathub starts here. */
+		about_row("Flathub", "off", "enabled, but no application index",
+		          "synpkg flatpak enable-flathub");
 	else if (sp_flathub_enabled())
 		about_row("Flathub", "ok", "enabled", SYNPKG_FLATHUB_URL);
 	else

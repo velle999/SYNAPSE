@@ -99,6 +99,7 @@ int cmd_installed(int argc, char **argv);
 int cmd_updates(int argc, char **argv);
 int cmd_orphans(int argc, char **argv);
 int cmd_status(int argc, char **argv);
+int cmd_groups(int argc, char **argv);
 
 /* Shared row shape for anything that lists packages:
  *   name \t installed(0|1) \t version \t repo \t size \t description */
@@ -148,6 +149,30 @@ int cmd_aur(int argc, char **argv);
  * facts on every machine, so every caller has to ask rather than assume. */
 bool sp_flatpak_present(void);
 bool sp_flathub_enabled(void);
+
+/* ── appstream.c — Flathub's category index ─────────────────────────────────
+ * The flatpak CLI can only search by term, so browsing Flathub by category
+ * means reading the AppStream catalogue flatpak has already downloaded. Every
+ * string field is a valid C string and never NULL; "" means the catalogue did
+ * not carry one, which is common and is not a fault. */
+typedef struct {
+	char *id;        /* the installable flatpak ref, e.g. org.mozilla.firefox */
+	char *name;      /* human name; "" when the catalogue omits it */
+	char *summary;   /* one-line description; may be "" */
+	char *version;   /* newest release; may be "" */
+	char *cats;      /* "\nGame\nActionGame\n" — match whole lines, not substrings */
+} sp_as_app;
+
+/* NULL means this machine has NO index (a remote added but never
+ * `flatpak update --appstream`), which callers must report differently from an
+ * index that simply holds nothing. *count is 0 in both cases. */
+sp_as_app *sp_appstream_load(size_t *count);
+/* Is there an index at all — answered from the filesystem, without reading it.
+ * "Remote configured, index never fetched" is a distinct state that makes every
+ * search and every category come back empty with no error. */
+bool       sp_appstream_present(void);
+void       sp_appstream_free(sp_as_app *apps, size_t count);
+bool       sp_appstream_in(const sp_as_app *a, const char *category);
 
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);

@@ -97,8 +97,14 @@ static int arsenal_categories(alpm_handle_t *h)
 	if (!db)
 		return arsenal_status(h);
 
+	/* `label` is what the pane displays, `category` is what `arsenal packages`
+	 * takes back. Every group here is "blackarch-<thing>" and the prefix is
+	 * noise repeated fifty times down a pane, but stripping it in the GUI
+	 * would mean the GUI knowing this source's naming scheme — and it renders
+	 * the suggestion and Flathub panes too. Strip it where the names are
+	 * known instead. */
 	if (g_out == OUT_TSV)
-		tsv_row(3, "category", "total", "installed");
+		tsv_row(4, "category", "total", "installed", "label");
 
 	alpm_db_t *local = alpm_get_localdb(h);
 
@@ -119,7 +125,7 @@ static int arsenal_categories(alpm_handle_t *h)
 		if (g_out == OUT_TSV) {
 			char *t = xasprintf("%d", total);
 			char *i = xasprintf("%d", have);
-			tsv_row(3, grp->name, t, i);
+			tsv_row(4, grp->name, t, i, grp->name + sizeof BA_REPO);
 			free(t);
 			free(i);
 		} else {
