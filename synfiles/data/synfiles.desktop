@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+GenericName=File Browser
+Comment=Browse files and folders
+Exec=synfiles gui %f
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileTools;FileManager;Utility;
+Keywords=files;folders;browser;manager;
+# No MimeType= line. Declaring inode/directory here would let the desktop
+# database make synfiles the default folder handler the moment it installs,
+# which is a decision for the user and not for the packaging.

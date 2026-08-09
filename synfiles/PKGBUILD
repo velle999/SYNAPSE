@@ -1,0 +1,62 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# synfiles — the SynapseOS file browser.
+#
+# ⚠ This package does NOT take over from Dolphin, and that is deliberate while
+# it is being evaluated. It ships no MimeType=inode/directory line, so
+# installing it changes no default and nothing in the desktop routes to it.
+# Making it the file manager is a separate, explicit decision:
+#   xdg-mime default synfiles.desktop inode/directory
+pkgname=synfiles
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component (build-all.sh:123), so bumping pkgver leaves makepkg looking for a
+# tarball nothing creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# Nothing but libc. File types come from shared-mime-info's data files, mounting
+# is delegated to udisks2/gvfs through their own tools, and the icon theme is
+# resolved by the front-end that already has it loaded.
+depends=('glibc')
+
+# shared-mime-info supplies /usr/share/mime/globs2. Without it every file falls
+# back to a generic icon — degraded, not broken — but it is a base package on
+# any desktop, so depending on it costs nothing and removes a whole class of
+# "why is everything a blank page".
+depends+=('shared-mime-info')
+
+makedepends=('meson' 'ninja' 'gcc')
+
+optdepends=('quickshell: the graphical browser (synfiles gui)'
+            'xdg-utils: open files in their default application'
+            'util-linux: the Devices sidebar (lsblk)'
+            'gvfs: network places — SMB, SFTP and MTP shares'
+            'udisks2: mount removable media without root')
+
+source=("synfiles-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/synfiles-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/synfiles-0.1.0"
+    # Every destructive test runs inside a mktemp -d that the EXIT trap removes,
+    # and the two commands that can modify a real file are pointed at a fixture
+    # through SYNFILES_PLACES. A file manager whose test suite could touch real
+    # data would be the most dangerous file in this repository.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/synfiles-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

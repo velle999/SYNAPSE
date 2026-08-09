@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal synpkg)
+       vibe samsung-m2020 syn-arsenal synpkg synfiles)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -237,6 +237,17 @@ build_script_pkg syn-arsenal
 # transaction is running -- the same constraint every other rule here already
 # lives under, since they all end in `pacman -U`.
 build_component synpkg
+
+# synfiles — the SynapseOS file browser. Same shape as synpkg: C, meson, a
+# source tarball the generic collector above assembles from src/, include/,
+# meson.build, data/ and tests/.
+#
+# NOT in syn-update's COMPONENTS yet, on purpose. It is under evaluation
+# alongside Dolphin, its package registers no handler for inode/directory, and
+# nothing in the desktop routes to it. Adding it there is the switch to flip
+# once velle decides it is ready -- at which point it also wants a line in
+# syn-install and the ISO package list.
+build_component synfiles
 
 # A name in KNOWN= with no build rule above is what this catches.
 #
