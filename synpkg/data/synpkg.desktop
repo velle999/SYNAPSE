@@ -6,6 +6,7 @@ Comment=Install and remove software, security tooling, and SynapseOS updates
 Exec=synpkg gui
 Icon=system-software-install
 Terminal=false
+StartupWMClass=synpkg
 # ONE main category. Two makes the entry appear twice in the scanned start-menu
 # pages, on top of the fixed entry — the same hint desktop-file-validate gives
 # about syn-update's launcher.

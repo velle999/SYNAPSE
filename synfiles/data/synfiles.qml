@@ -2471,6 +2471,17 @@ FloatingWindow {
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         enabled: !fileRow.isRenaming
+                        // A Flickable STEALS the mouse grab from its own
+                        // delegates once the pointer moves past Qt's
+                        // start-drag distance — that is how a list scrolls by
+                        // being dragged. It is also why dragging a file did
+                        // nothing: the grab was taken a pixel or two after the
+                        // drag began, this MouseArea was sent onCanceled
+                        // instead of onReleased, and the drop that lives in
+                        // onReleased never ran. Holding the grab is what makes
+                        // dragging a row mean the row. The view still scrolls
+                        // by wheel and by its scrollbar.
+                        preventStealing: true
                         onClicked: (mouse) => {
                             fileList.forceActiveFocus()
                             const name = fileRow.modelData.name
@@ -2505,6 +2516,10 @@ FloatingWindow {
                                 root.endDrag()
                             }
                         }
+                        // Belt and braces: anything that takes the grab away
+                        // ends the drag rather than leaving the ghost on
+                        // screen and every DropArea armed.
+                        onCanceled: if (root.dragging) root.endDrag()
                         onPositionChanged: (mouse) => {
                             if (!pressed) return
                             root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
@@ -2667,6 +2682,17 @@ FloatingWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        // A Flickable STEALS the mouse grab from its own
+                        // delegates once the pointer moves past Qt's
+                        // start-drag distance — that is how a list scrolls by
+                        // being dragged. It is also why dragging a file did
+                        // nothing: the grab was taken a pixel or two after the
+                        // drag began, this MouseArea was sent onCanceled
+                        // instead of onReleased, and the drop that lives in
+                        // onReleased never ran. Holding the grab is what makes
+                        // dragging a row mean the row. The view still scrolls
+                        // by wheel and by its scrollbar.
+                        preventStealing: true
                         property real pressX: 0
                         property real pressY: 0
                         onPressed: (mouse) => {
@@ -2679,6 +2705,10 @@ FloatingWindow {
                                 root.endDrag()
                             }
                         }
+                        // Belt and braces: anything that takes the grab away
+                        // ends the drag rather than leaving the ghost on
+                        // screen and every DropArea armed.
+                        onCanceled: if (root.dragging) root.endDrag()
                         onPositionChanged: (mouse) => {
                             if (!cellMa.pressed) return
                             root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0

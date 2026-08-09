@@ -6,6 +6,10 @@ Comment=Browse files and folders
 Exec=synfiles gui %f
 Icon=system-file-manager
 Terminal=false
+# The window's app_id, so a taskbar that maps windows to launchers finds THIS
+# entry. synfiles sets it on the quickshell process (QS_APP_ID); without both
+# halves the window belongs to "org.quickshell" and wears its icon.
+StartupWMClass=synfiles
 Categories=System;FileTools;FileManager;Utility;
 Keywords=files;folders;browser;manager;
 # No MimeType= line. Declaring inode/directory here would let the desktop

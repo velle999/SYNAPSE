@@ -84,6 +84,16 @@ static int cmd_gui(int argc, char **argv)
 	if (argc > 0 && *argv[0])
 		setenv("SYNPKG_SECTION", argv[0], 1);
 
+	/* The window's Wayland app_id, which is how the dock, the taskbar and
+	 * every other window-to-application mapping finds out WHAT this window
+	 * is. Without it quickshell names every one of its windows
+	 * "org.quickshell" — so the dock drew quickshell's own generic icon for
+	 * this app, could not resolve a .desktop for it, and therefore offered no
+	 * "New Window" either: synpkg and every other QML app on the system were one
+	 * indistinguishable entry. Set, not overridden, so a caller can still
+	 * choose. */
+	setenv("QS_APP_ID", "synpkg", 0);
+
 	const char *qml = SYNPKG_DATADIR "/synpkg.qml";
 	if (access(qml, R_OK) != 0 && access("data/synpkg.qml", R_OK) == 0)
 		qml = "data/synpkg.qml";
