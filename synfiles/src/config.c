@@ -44,6 +44,11 @@ static const setting_t settings[] = {
 	{ "hidden",    T_BOOL, "0",     0, 1,   NULL },
 	{ "reverse",   T_BOOL, "0",     0, 1,   NULL },
 	{ "sort",      T_ENUM, "name",  0, 0,   "name|size|mtime|type" },
+	/* "auto" is the default because it is what the window did before there
+	 * was a setting: the layout followed the icon size, list below 48px and
+	 * a grid above it. Nobody's window changes shape on upgrade, and the
+	 * first deliberate pick replaces the rule with an answer. */
+	{ "view",      T_ENUM, "auto",  0, 0,   "auto|icons|compact|details" },
 };
 
 static const setting_t *find_setting(const char *key)

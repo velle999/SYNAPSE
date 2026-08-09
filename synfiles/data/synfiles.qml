@@ -620,7 +620,25 @@ FloatingWindow {
     property int iconSize: 20
     readonly property int iconMin: 16
     readonly property int iconMax: 128
-    readonly property bool gridView: root.iconSize >= 48
+    // ── View mode ───────────────────────────────────────────────────────────
+    //
+    // Icons, Compact and Details, the three Dolphin has, and each is a thing
+    // you PICK. It used to be derived from the icon size — list below 48px,
+    // grid above — which is a rule nobody can find and nobody can override:
+    // wanting big icons in a list, or a compact list of large ones, was simply
+    // not expressible.
+    //
+    // "auto" keeps that old rule as the default, so no existing window changes
+    // shape on upgrade; the menu ticks whichever mode auto currently resolves
+    // to, and picking one replaces the rule with an answer.
+    property string viewMode: "auto"
+
+    readonly property string effectiveView:
+        root.viewMode !== "auto" ? root.viewMode
+                                 : (root.iconSize >= 48 ? "icons" : "details")
+
+    readonly property bool gridView: root.effectiveView !== "details"
+    readonly property bool compactView: root.effectiveView === "compact"
 
     // Loading a 200MB TIFF to draw a 24px square is not a thumbnail, it is a
     // stall. Above this the icon is used and the cache is still consulted.
@@ -1006,6 +1024,7 @@ FloatingWindow {
                     case "sort":      root.defaultSort = r.value; break
                     case "reverse":   root.defaultReverse = r.value === "1"; break
                     case "hidden":    root.defaultHidden = r.value === "1"; break
+                    case "view":      root.viewMode = r.value || "auto"; break
                     }
                 }
                 // Only after applying, or the act of applying would write every
@@ -1053,6 +1072,7 @@ FloatingWindow {
         root.refreshPeek()
     }
     onShowTreeChanged: root.saveSetting("tree", root.showTree ? 1 : 0)
+    onViewModeChanged: root.saveSetting("view", root.viewMode)
 
     // ── Address bar ─────────────────────────────────────────────────────────
     //
@@ -1093,6 +1113,10 @@ FloatingWindow {
     // sort and hidden also persist as the default a new tab starts from.
     function applyViewAction(act) {
         if (!root.tab) return
+        if (act.indexOf("view:") === 0) {
+            root.viewMode = act.substring(5)
+            return
+        }
         if (act.indexOf("sort:") === 0) {
             const next = act.substring(5)
             root.setTab({ sort: next })
@@ -2087,6 +2111,13 @@ FloatingWindow {
                     left: fileGrid.right; leftMargin: 4
                 }
             }
+            HScroll {
+                flick: fileGrid
+                anchors {
+                    left: fileGrid.left; right: fileGrid.right
+                    top: fileGrid.bottom; topMargin: 2
+                }
+            }
 
             // ── About ───────────────────────────────────────────────────────
             // Not a credits screen. Almost everything this browser does beyond
@@ -2223,8 +2254,10 @@ FloatingWindow {
                 // Matches the list's own gutter, or "Size" and "Modified" sit
                 // 14px to the right of the column they name.
                 anchors.rightMargin: 22
-                height: 20
-                visible: root.tab && root.tab.view !== "about"
+                // Column headings are the Details view's own furniture: over a
+                // grid of icons they name columns that are not there.
+                height: heads.visible ? 20 : 0
+                visible: root.tab && root.tab.view !== "about" && !root.gridView
 
                 Text {
                     anchors { left: parent.left; leftMargin: 40 }
@@ -2513,11 +2546,22 @@ FloatingWindow {
                 anchors.topMargin: 2
                 // Room for the scrollbar, so a row never runs under the handle.
                 anchors.rightMargin: 22
+                // ...and room UNDER it in compact, where the bar is the
+                // horizontal one and would otherwise sit on the status line.
+                anchors.bottomMargin: root.compactView ? 22 : 8
                 clip: true
                 visible: root.tab && root.tab.view !== "about" && root.gridView
                 model: root.shownRows
-                cellWidth: root.iconSize + 46
-                cellHeight: root.iconSize + 46
+                // Compact is the same view turned on its side: cells flow DOWN
+                // a column and the column list runs off to the right, which is
+                // what makes it compact — a name gets the width it needs
+                // instead of a square.
+                flow: root.compactView ? GridView.FlowTopToBottom
+                                       : GridView.FlowLeftToRight
+                cellWidth: root.compactView ? Math.max(150, root.iconSize * 5 + 60)
+                                            : root.iconSize + 46
+                cellHeight: root.compactView ? Math.max(22, root.iconSize + 8)
+                                             : root.iconSize + 46
                 focus: fileGrid.visible
 
                 Keys.onPressed: (event) => root.handleKey(event)
@@ -2535,11 +2579,26 @@ FloatingWindow {
                          : (cellMa.containsMouse ? root.wash(0.10) : "transparent")
                     border { width: gridCell.dropHover ? 1 : 0; color: root.cAccent }
 
+                    // One box holding whichever icon this row uses, so the
+                    // two layouts are expressed once here instead of three
+                    // times over the Image, the folder and the label.
+                    Item {
+                        id: cellIconBox
+                        width: root.iconSize
+                        height: root.iconSize
+                        anchors.top: root.compactView ? undefined : parent.top
+                        anchors.topMargin: 6
+                        anchors.horizontalCenter: root.compactView ? undefined
+                                                                   : parent.horizontalCenter
+                        anchors.left: root.compactView ? parent.left : undefined
+                        anchors.leftMargin: 6
+                        anchors.verticalCenter: root.compactView ? parent.verticalCenter
+                                                                 : undefined
+                    }
+
                     Image {
                         id: cellIcon
-                        anchors { top: parent.top; topMargin: 6
-                                  horizontalCenter: parent.horizontalCenter }
-                        width: root.iconSize; height: root.iconSize
+                        anchors.fill: cellIconBox
                         sourceSize: Qt.size(root.iconSize * 2, root.iconSize * 2)
                         fillMode: Image.PreserveAspectFit
                         asynchronous: true
@@ -2558,29 +2617,33 @@ FloatingWindow {
                     }
 
                     FolderIcon {
-                        anchors { top: parent.top; topMargin: 6
-                                  horizontalCenter: parent.horizontalCenter }
-                        width: root.iconSize; height: root.iconSize
+                        anchors.fill: cellIconBox
                         visible: gridCell.modelData.type === "dir"
                         dim: gridCell.modelData.missing
                         previews: root.folderPeek[gridCell.modelData.full] || []
                     }
 
                     Text {
-                        anchors {
-                            top: cellIcon.bottom; topMargin: 4
-                            left: parent.left; right: parent.right
-                            leftMargin: 4; rightMargin: 4
-                        }
+                        anchors.top: root.compactView ? undefined : cellIconBox.bottom
+                        anchors.topMargin: 4
+                        anchors.left: root.compactView ? cellIconBox.right : parent.left
+                        anchors.leftMargin: root.compactView ? 8 : 4
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
+                        anchors.verticalCenter: root.compactView ? parent.verticalCenter
+                                                                 : undefined
                         text: root.disp(gridCell.modelData.name)
                         color: gridCell.modelData.missing ? root.cDim
                              : (gridCell.modelData.type === "dir" ? root.cAccent : root.cText)
-                        font.pixelSize: 10
-                        horizontalAlignment: Text.AlignHCenter
+                        font.pixelSize: root.compactView ? 11 : 10
+                        horizontalAlignment: root.compactView ? Text.AlignLeft
+                                                              : Text.AlignHCenter
                         // Two lines and then elide: one line hides too much of
                         // a long name, and three turns the grid into a wall.
-                        maximumLineCount: 2
-                        wrapMode: Text.WrapAnywhere
+                        // Compact gets ONE — the cell is a row, and a second
+                        // line there would push every column out of alignment.
+                        maximumLineCount: root.compactView ? 1 : 2
+                        wrapMode: root.compactView ? Text.NoWrap : Text.WrapAnywhere
                         elide: Text.ElideRight
                     }
 
@@ -3442,6 +3505,13 @@ FloatingWindow {
 
                 Repeater {
                     model: [
+                        { label: "Icons",            act: "view:icons",
+                          tick: root.effectiveView === "icons" },
+                        { label: "Compact",          act: "view:compact",
+                          tick: root.effectiveView === "compact" },
+                        { label: "Details",          act: "view:details",
+                          tick: root.effectiveView === "details" },
+                        { label: "-",                act: "",           tick: false },
                         { label: "Sort by Name",     act: "sort:name",  tick: root.tab && root.tab.sort === "name" },
                         { label: "Sort by Size",     act: "sort:size",  tick: root.tab && root.tab.sort === "size" },
                         { label: "Sort by Modified", act: "sort:mtime", tick: root.tab && root.tab.sort === "mtime" },
@@ -3914,6 +3984,62 @@ FloatingWindow {
                     // A file that turns out to be unreadable leaves the folder
                     // colour showing, which is the fallback anyway.
                     visible: tile.status === Image.Ready
+                }
+            }
+        }
+    }
+
+    // The same handle, on its side. Compact view is the only thing here that
+    // scrolls horizontally, and a view you can only pan with a wheel is a view
+    // whose far end nobody finds.
+    component HScroll: Item {
+        id: hs
+        required property Flickable flick
+
+        height: 10
+        visible: hs.flick.visible && hs.flick.contentWidth > hs.flick.width + 1
+
+        readonly property real handleW:
+            Math.max(30, hs.width * Math.min(1, hs.flick.width
+                                                / Math.max(1, hs.flick.contentWidth)))
+        readonly property real span: Math.max(0, hs.width - hs.handleW)
+        readonly property real maxX: Math.max(0, hs.flick.contentWidth - hs.flick.width)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: root.wash(0.07)
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: (m) => {
+                const page = hs.flick.width * 0.9
+                hs.flick.contentX = Math.max(0, Math.min(hs.maxX,
+                    hs.flick.contentX + (m.x < hHandle.x ? -page : page)))
+            }
+        }
+        Rectangle {
+            id: hHandle
+            y: 1
+            height: parent.height - 2
+            width: hs.handleW
+            radius: height / 2
+            x: hs.maxX <= 0 ? 0
+                            : Math.max(0, Math.min(hs.span, hs.flick.contentX / hs.maxX * hs.span))
+            color: hDragMa.pressed ? root.cAccent
+                 : (hDragMa.containsMouse ? root.wash(0.55) : root.wash(0.32))
+
+            MouseArea {
+                id: hDragMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                property real grabX: 0
+                onPressed: (m) => { hDragMa.grabX = m.x }
+                onPositionChanged: (m) => {
+                    if (!hDragMa.pressed || hs.span <= 0) return
+                    const nx = Math.max(0, Math.min(hs.span, hHandle.x + m.x - hDragMa.grabX))
+                    hs.flick.contentX = nx / hs.span * hs.maxX
                 }
             }
         }

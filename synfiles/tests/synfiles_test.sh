@@ -455,6 +455,18 @@ icon=$("$SYNFILES" --rec list "$DT" | awk -F'\t' '$1 == "game.desktop" {print $9
 icon2=$("$SYNFILES" --rec list "$DT" | awk -F'\t' '$1 == "plain.txt" {print $9}')
 [ -z "$icon2" ] && ok "an ordinary file has no icon field" || bad "plain.txt got icon '$icon2'"
 
+# The view mode is a setting like the others, and "auto" has to survive being
+# the default: it is what keeps an existing window the shape it already was.
+v=$(SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config get view)
+[ "$v" = auto ] && ok "view defaults to auto" || bad "view defaulted to '$v'"
+
+SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config set view compact >/dev/null
+v=$(SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config get view)
+[ "$v" = compact ] && ok "a view mode is remembered" || bad "view came back '$v'"
+
+SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config set view sideways >/dev/null 2>&1
+[ $? -ne 0 ] && ok "an invented view mode is refused" || bad "view accepted 'sideways'"
+
 # ── trash, against a fixture ────────────────────────────────────────────────
 # SYNFILES_TRASH is an unconditional override: without it the device check
 # would route a scratch file to a volume trash and these tests could touch the
