@@ -18,6 +18,7 @@ sources = files(
   'src/util.c',
   'src/mime.c',
   'src/listing.c',
+  'src/find.c',
   'src/places.c',
   'src/recent.c',
   'src/volumes.c',

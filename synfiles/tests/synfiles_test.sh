@@ -820,6 +820,79 @@ n=$("$SYNFILES" --rec undo list | awk -F'\t' 'NR==1 {print NF}')
 
 unset SYNFILES_JOURNAL SYNFILES_TRASH
 
+# ── find ────────────────────────────────────────────────────────────────────
+F="$T/find"
+mkdir -p "$F/one/two" "$F/other"
+echo "the word needle is here" > "$F/one/haystack.txt"
+echo "nothing of note"          > "$F/one/two/deep.txt"
+echo "needle again"             > "$F/other/second.txt"
+printf 'binary\000needle\000data' > "$F/one/blob.bin"
+touch "$F/.hidden-needle.txt"
+
+n=$("$SYNFILES" --rec find "$F" --name=deep | awk -F'\t' 'NR==1 {print NF}')
+[ "$n" = 9 ] && ok "find --rec has 9 columns" || bad "find --rec has $n columns"
+
+# A bare word means "contains". Making somebody type *deep* would be a quiz
+# about fnmatch, not a search box.
+"$SYNFILES" --rec find "$F" --name=deep | grep -q '^deep\.txt	'
+check "a pattern with no wildcards means contains" $?
+
+# And where it was found, or a result list is unusable — the same filename
+# appears in three places in this fixture.
+d=$("$SYNFILES" --rec find "$F" --name=deep | awk -F'\t' 'NR==2 {print $9}')
+[ "$d" = "one/two" ] && ok "a hit reports the directory it is in" || bad "dir is '$d', want one/two"
+
+"$SYNFILES" --rec find "$F" --name='*.bin' | grep -q '^blob\.bin	'
+check "an explicit glob is used as given" $?
+
+# Case-insensitive, because a search box that cares is a search box that finds
+# nothing half the time.
+"$SYNFILES" --rec find "$F" --name=HAYSTACK | grep -q '^haystack\.txt	'
+check "name matching is case-insensitive" $?
+
+n=$("$SYNFILES" --rec find "$F" --content=needle | tail -n +2 | wc -l)
+[ "$n" = 2 ] && ok "content search finds both text files" || bad "content search found $n, want 2"
+
+# The NUL heuristic: blob.bin contains "needle" but is binary, and matching it
+# would put an unopenable file in the results of a text search.
+"$SYNFILES" --rec find "$F" --content=needle | grep -q 'blob\.bin' \
+    && bad "content search matched a binary file" \
+    || ok "content search skips binaries"
+
+# Both together means BOTH, which is what makes "*.txt containing needle" a
+# useful question rather than two unrelated ones.
+n=$("$SYNFILES" --rec find "$F" --name='second*' --content=needle | tail -n +2 | wc -l)
+[ "$n" = 1 ] && ok "--name and --content are ANDed" || bad "combined search returned $n, want 1"
+
+"$SYNFILES" --rec find "$F" --name=needle | grep -q 'hidden' \
+    && bad "a dotfile leaked into search results" \
+    || ok "find hides dotfiles by default"
+"$SYNFILES" --rec find "$F" --all --name=needle | grep -q 'hidden'
+check "--all searches dotfiles" $?
+
+n=$("$SYNFILES" --rec find "$F" --name='*' --limit=2 | tail -n +2 | wc -l)
+[ "$n" -le 2 ] && ok "--limit caps the results" || bad "--limit=2 returned $n"
+
+"$SYNFILES" find "$F" --name=nothing-matches-this >/dev/null 2>&1
+[ $? -eq 100 ] && ok "find with no matches exits 100" || bad "empty find did not exit 100"
+
+"$SYNFILES" find "$F" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "find with no pattern is an error" || bad "find ran with no pattern"
+
+# THE one that would hang. A symlink pointing at its own ancestor is a loop,
+# and one pointing at / turns a search of a project folder into a search of the
+# whole machine. Links are reported but never descended through.
+ln -s "$F" "$F/one/loop"
+ln -s / "$F/one/toroot"
+timeout 20 "$SYNFILES" --rec find "$F" --name=deep >/dev/null 2>&1
+rc=$?
+[ "$rc" != 124 ] && ok "a symlink loop does not hang the search" \
+                 || bad "the search hung on a symlink loop"
+
+# Exactly one hit, not one per trip around the loop.
+n=$(timeout 20 "$SYNFILES" --rec find "$F" --name=deep.txt | tail -n +2 | wc -l)
+[ "$n" = 1 ] && ok "a symlink loop yields no duplicate hits" || bad "got $n hits for one file"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

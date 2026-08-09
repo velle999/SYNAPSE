@@ -25,6 +25,8 @@ static void usage(FILE *f)
 "       --sort=KEY         name (default), size, mtime, type\n"
 "       --no-dirs-first    do not float directories to the top\n"
 "  info <path>             everything a properties pane shows\n"
+"  find [dir] --name=GLOB [--content=TEXT] [--limit=N] [--max-depth=N]\n"
+"                          search a tree; never follows symlinks\n"
 "  actions <path>...       Open With entries and service menus that apply\n"
 "  action <desktop> [id] -- <path>...\n"
 "                          run one of them\n"
@@ -137,6 +139,7 @@ int main(int argc, char **argv)
 
 	if (!strcmp(cmd, "list"))    return cmd_list(rest_argc, rest);
 	if (!strcmp(cmd, "info"))    return cmd_info(rest_argc, rest);
+	if (!strcmp(cmd, "find"))    return cmd_find(rest_argc, rest);
 	if (!strcmp(cmd, "places"))  return cmd_places(rest_argc, rest);
 	if (!strcmp(cmd, "recent"))  return cmd_recent(rest_argc, rest);
 	if (!strcmp(cmd, "volumes")) return cmd_volumes(rest_argc, rest);

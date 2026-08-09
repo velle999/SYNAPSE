@@ -113,6 +113,12 @@ const char *icon_for(const char *mime, bool is_dir);
 int cmd_list(int argc, char **argv);
 int cmd_info(int argc, char **argv);
 
+/* ── find.c — recursive search ──────────────────────────────────────────────
+ * Never follows a symlink while descending: a link to an ancestor is a loop,
+ * and one pointing at / turns a search of a project folder into a search of
+ * the whole machine. Bounded by --limit and --max-depth, both with defaults. */
+int cmd_find(int argc, char **argv);
+
 /* ── places.c ───────────────────────────────────────────────────────────────
  * Pinned folders live in ~/.local/share/user-places.xbel — DOLPHIN'S OWN FILE,
  * on purpose. Reading the format that is already populated means a user's

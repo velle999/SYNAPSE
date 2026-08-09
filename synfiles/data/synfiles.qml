@@ -249,6 +249,7 @@ FloatingWindow {
 
     Process {
         id: listProc
+        property string kind: ""
         stdout: StdioCollector {
             onStreamFinished: {
                 const table = root.parseRecords(this.text)
@@ -256,6 +257,26 @@ FloatingWindow {
                 if (!t) return
 
                 let rows = []
+                if (listProc.kind === "find") {
+                    listProc.kind = ""
+                    // A search result is not in the current folder, so it
+                    // carries its own full path rather than being joined onto
+                    // the tab's. `dir` is relative to where the search started.
+                    rows = table.map(r => ({
+                        name: r.name,
+                        full: r.dir ? root.joinEnc(root.joinEnc(root.searchRoot, r.dir), r.name)
+                                    : root.joinEnc(root.searchRoot, r.name),
+                        where: r.dir,
+                        type: r.type, size: parseInt(r.size || "0"),
+                        mtime: parseInt(r.mtime || "0"), mime: r.mime,
+                        link: r.link, target: r.target, mode: r.mode,
+                        missing: false
+                    }))
+                    root.setTab({ rows: rows })
+                    root.loading = false
+                    root.statusLine = ""
+                    return
+                }
                 if (t.view === "about") {
                     root.aboutRows = table
                     root.loading = false
@@ -677,6 +698,7 @@ FloatingWindow {
         event.accepted = true
     } else if (event.key === Qt.Key_Escape) {
         if (root.showProps) root.showProps = false
+        else if (root.searching) root.endSearch()
         else root.clearSelection()
         event.accepted = true
     } else if (event.key === Qt.Key_Backspace) {
@@ -689,11 +711,50 @@ FloatingWindow {
         else if (event.key === Qt.Key_V) { root.paste();              event.accepted = true }
         else if (event.key === Qt.Key_A) { root.selectAll();          event.accepted = true }
         else if (event.key === Qt.Key_Z) { root.doUndo();             event.accepted = true }
+        else if (event.key === Qt.Key_F) { root.beginSearch();        event.accepted = true }
         else if (event.key === Qt.Key_T) { root.newTab(root.tab.path, "dir"); event.accepted = true }
         else if (event.key === Qt.Key_W) { root.closeTab(root.current); event.accepted = true }
         else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
     }
 }
+
+    // ── Search ──────────────────────────────────────────────────────────────
+    //
+    // Scoped to the folder you are standing in, because "search everywhere" is
+    // a different and much slower question, and the answer to it is almost
+    // never what somebody pressing Ctrl+F in a folder wanted.
+    property bool searching: false
+    property string searchTerm: ""
+    property bool searchContent: false
+    property string searchRoot: ""
+
+    function beginSearch() {
+        if (!root.tab || root.tab.view !== "dir") return
+        root.searchRoot = root.tab.path
+        root.searching = true
+        root.setTab({ rows: [], filter: "" })
+        filterInput.forceActiveFocus()
+    }
+
+    function endSearch() {
+        root.searching = false
+        root.searchTerm = ""
+        root.reload()
+    }
+
+    function runSearch() {
+        if (!root.searchTerm) { root.setTab({ rows: [] }); return }
+        root.loading = true
+        root.statusLine = "searching " + root.disp(root.searchRoot) + "…"
+        const args = [root.bin, "--rec", "find", root.disp(root.searchRoot),
+                      "--limit=2000"]
+        if (root.searchContent) args.push("--content=" + root.searchTerm)
+        else                    args.push("--name=" + root.searchTerm)
+        if (root.tab.showHidden) args.push("--all")
+        listProc.kind = "find"
+        listProc.command = args
+        listProc.running = true
+    }
 
     // ── Undo ────────────────────────────────────────────────────────────────
     //
@@ -1414,22 +1475,63 @@ FloatingWindow {
                 color: root.cPanel
                 border { width: 1; color: filterInput.activeFocus ? root.cAccent : "transparent" }
 
+                // One box, two jobs, and the mode is explicit. Filtering hides
+                // rows already loaded; searching walks the tree and takes a
+                // moment — silently switching between them on the same
+                // keystroke would make the slow one a surprise.
                 TextInput {
                     id: filterInput
-                    anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                    anchors {
+                        left: parent.left; leftMargin: 10
+                        right: searchChips.left; rightMargin: 8
+                        top: parent.top; bottom: parent.bottom
+                    }
                     verticalAlignment: TextInput.AlignVCenter
                     color: root.cText
                     font.pixelSize: 12
                     clip: true
-                    onTextChanged: root.setTab({ filter: text })
-                    Keys.onEscapePressed: { text = ""; root.setTab({ filter: "" }) }
+                    onTextChanged: {
+                        if (root.searching) root.searchTerm = text
+                        else root.setTab({ filter: text })
+                    }
+                    onAccepted: if (root.searching) root.runSearch()
+                    Keys.onEscapePressed: {
+                        text = ""
+                        if (root.searching) root.endSearch()
+                        else root.setTab({ filter: "" })
+                    }
+                    onVisibleChanged: if (visible) text = ""
                 }
                 Text {
                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                    text: "filter these items…"
+                    text: root.searching
+                          ? ("search " + root.disp(root.baseEnc(root.searchRoot))
+                             + " and below — press Enter")
+                          : "filter these items…   (Ctrl+F to search)"
                     color: root.cDim
                     font.pixelSize: 12
                     visible: filterInput.text === ""
+                }
+
+                Row {
+                    id: searchChips
+                    anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                    spacing: 4
+                    visible: root.searching
+
+                    ToggleChip {
+                        label: root.searchContent ? "In contents" : "By name"
+                        on: root.searchContent
+                        onToggled: {
+                            root.searchContent = !root.searchContent
+                            if (root.searchTerm) root.runSearch()
+                        }
+                    }
+                    ToggleChip {
+                        label: "Done"
+                        on: false
+                        onToggled: { filterInput.text = ""; root.endSearch() }
+                    }
                 }
             }
 
@@ -1650,7 +1752,12 @@ FloatingWindow {
                         visible: !fileRow.isRenaming
                         // disp() — display only. Every action below uses
                         // modelData.full, which stays encoded.
+                        // "config.json" appears eleven times in a source tree;
+                        // the only useful thing about a search hit is which one
+                        // it is, so the containing folder rides along.
                         text: root.disp(fileRow.modelData.name)
+                              + (fileRow.modelData.where
+                                 ? "      " + root.disp(fileRow.modelData.where) + "/" : "")
                               + (fileRow.modelData.link === "1" && fileRow.modelData.target
                                  ? "  → " + root.disp(fileRow.modelData.target) : "")
                         elide: Text.ElideRight
@@ -1885,6 +1992,10 @@ FloatingWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: {
                         if (!root.tab) return ""
+                        if (root.searching)
+                            return root.searchTerm === ""
+                                   ? "Type to search this folder and everything below it."
+                                   : "Nothing matched."
                         if (root.tab.filter) return "Nothing matches that filter."
                         if (root.tab.view === "recent") return "No recently used files."
                         return "This folder is empty."
