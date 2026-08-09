@@ -1448,6 +1448,22 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
                 return;
     }
 
+    /* Delete on the DESKTOP.
+     *
+     * Only when nothing holds keyboard focus, which since the desktop click
+     * clears it is exactly "the desktop is what you are working in". Without
+     * this the key had nowhere to go at all: velle pressed Delete over a
+     * selected desktop icon and the file browser behind deleted its own
+     * selection instead. Trash, not unlink — see deskicon_trash_selected. */
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+        !s->focused_view && s->deskicon_selected >= 0) {
+        for (int i = 0; i < nsyms; i++)
+            if (syms[i] == XKB_KEY_Delete || syms[i] == XKB_KEY_KP_Delete) {
+                deskicon_trash_selected(s);
+                return;
+            }
+    }
+
     /* Command bar absorbs all input when open */
     if (s->cmdbar.visible && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
         for (int i = 0; i < nsyms; i++)
@@ -2833,6 +2849,17 @@ static void pointer_button(syn_server_t *s, uint32_t time_msec,
          * signal there is. */
         if (!view && !surface) {
             int icon = deskicon_at(s, s->cursor->x, s->cursor->y);
+
+            /* The desktop takes the KEYBOARD too.
+             *
+             * Without this the click selected a desktop icon while the last
+             * window kept keyboard focus, so the next keystroke went somewhere
+             * the user was not looking. velle hit the worst version of it:
+             * clicked a file on the desktop, pressed Delete, and the file
+             * browser behind deleted ITS selection instead. Whatever the
+             * desktop is about to do with a key, the window must not do it. */
+            if (button == BTN_LEFT || button == BTN_RIGHT)
+                focus_view(s, NULL, NULL);
 
             if (button == BTN_RIGHT) {
                 deskicon_select(s, icon);   /* -1 clears */

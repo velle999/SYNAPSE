@@ -82,6 +82,18 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *p) { (void)p; retur
 static char spawned[512];
 void synui_spawn(const char *cmd) { snprintf(spawned, sizeof(spawned), "%s", cmd); }
 
+/* Delete-on-the-desktop forks `gio trash` and says so; neither belongs in a
+ * layout test, but deskmenu.c is linked whole so both have to exist. */
+void synui_child_reset_signals(void) { }
+uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
+                    const char *body, int urgency, int32_t expire,
+                    uint32_t replaces)
+{
+    (void)s; (void)app; (void)summary; (void)body;
+    (void)urgency; (void)expire; (void)replaces;
+    return 1;
+}
+
 void wppick_toggle(syn_server_t *s)          { (void)s; }
 void theme_toggle(syn_server_t *s)           { (void)s; }
 void dispcfg_toggle(syn_server_t *s)         { (void)s; }

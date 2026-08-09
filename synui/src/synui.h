@@ -6387,6 +6387,10 @@ void deskicon_select(syn_server_t *s, int i);
 /* Drag an icon to a new cell. begin() arms on a press; motion() floats the
  * icon under the cursor once the slop is crossed; end() snaps it to the
  * nearest cell and persists every dragged icon to deskicons.state. */
+/* Delete on the desktop: the selected icon's file goes to the XDG trash via
+ * `gio trash`, never unlink(). Recoverable, like Delete anywhere else. */
+void deskicon_trash_selected(syn_server_t *s);
+
 void deskicon_drag_begin(syn_server_t *s, int idx, double lx, double ly);
 void deskicon_drag_motion(syn_server_t *s, double lx, double ly);
 void deskicon_drag_end(syn_server_t *s, double lx, double ly);

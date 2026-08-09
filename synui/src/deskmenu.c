@@ -43,11 +43,14 @@
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/util/log.h>
@@ -767,7 +770,92 @@ void deskicon_select(syn_server_t *s, int i)
     synui_render_deskicons(s);
 }
 
+/* ── Delete: the desktop's own Delete key ────────────────── */
+
+/*
+ * Trash, never unlink. The desktop is a folder like any other and Delete there
+ * means what Delete means in the file browser: recoverable. `gio trash` is the
+ * XDG trash implementation glib already ships, so this does not grow a second
+ * one inside the compositor — and it is refused outright when it is missing,
+ * because the alternative is deleting the file for real.
+ *
+ * The reload waits for the child. There is no inotify watch on ~/Desktop, so
+ * rescanning before `gio` has finished would find the file still there and
+ * leave an icon for something that is on its way out — the same reason
+ * deskdrop.c waits on a pipe hangup rather than reloading straight away.
+ */
+struct trash_watch {
+    syn_server_t           *server;
+    struct wl_event_source *ev;
+    int                     fd;
+};
+
+static int trash_watch_cb(int fd, uint32_t mask, void *data)
+{
+    struct trash_watch *w = data;
+    (void)fd; (void)mask;
+
+    deskicons_reload(w->server);
+
+    if (w->ev) wl_event_source_remove(w->ev);
+    if (w->fd >= 0) close(w->fd);
+    free(w);
+    return 0;
+}
+
+void deskicon_trash_selected(syn_server_t *s)
+{
+    int i = s->deskicon_selected;
+    if (i < 0 || i >= s->deskicon_count) return;
+
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s", s->deskicons[i].path);
+    const char *slash = strrchr(path, '/');
+    const char *name  = slash ? slash + 1 : path;
+
+    int pfd[2];
+    if (pipe2(pfd, O_CLOEXEC) != 0) return;
+
+    pid_t pid = fork();
+    if (pid < 0) { close(pfd[0]); close(pfd[1]); return; }
+    if (pid == 0) {
+        setsid();
+        synui_child_reset_signals();
+        fcntl(pfd[1], F_SETFD, 0);      /* the child holds the write end */
+        close(pfd[0]);
+
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > 2) close(devnull);
+        }
+        execlp("gio", "gio", "trash", "--", path, (char *)NULL);
+        _exit(127);
+    }
+    close(pfd[1]);
+
+    struct trash_watch *w = calloc(1, sizeof(*w));
+    if (!w) { close(pfd[0]); return; }
+    w->server = s;
+    w->fd     = pfd[0];
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
+    w->ev = wl_event_loop_add_fd(loop, pfd[0], WL_EVENT_READABLE,
+                                 trash_watch_cb, w);
+    if (!w->ev) { close(pfd[0]); free(w); return; }
+
+    /* Said out loud, because the icon does not disappear until `gio` returns
+     * and a Delete that looks like nothing happened invites a second press. */
+    notif_post(s, "Desktop", "Moved to Trash", name,
+               NOTIF_URGENCY_LOW, -1, 0);
+
+    s->deskicon_selected = -1;
+}
+
 /* ── Drag to move ────────────────────────────────────────── */
+
 
 void deskicon_drag_begin(syn_server_t *s, int idx, double lx, double ly)
 {
