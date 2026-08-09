@@ -27,6 +27,8 @@ static void usage(FILE *f)
 "  info <path>             everything a properties pane shows\n"
 "  find [dir] --name=GLOB [--content=TEXT] [--limit=N] [--max-depth=N]\n"
 "                          search a tree; never follows symlinks\n"
+"  peek [dir] [--limit=N]  a few previewable files inside each subfolder,\n"
+"                          for drawing them on the folder icon\n"
 "  actions <path>...       Open With entries and service menus that apply\n"
 "  action <desktop> [id] -- <path>...\n"
 "                          run one of them\n"
@@ -144,6 +146,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "list"))    return cmd_list(rest_argc, rest);
 	if (!strcmp(cmd, "info"))    return cmd_info(rest_argc, rest);
 	if (!strcmp(cmd, "find"))    return cmd_find(rest_argc, rest);
+	if (!strcmp(cmd, "peek"))    return cmd_peek(rest_argc, rest);
 	if (!strcmp(cmd, "places"))  return cmd_places(rest_argc, rest);
 	if (!strcmp(cmd, "recent"))  return cmd_recent(rest_argc, rest);
 	if (!strcmp(cmd, "volumes")) return cmd_volumes(rest_argc, rest);

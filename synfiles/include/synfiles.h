@@ -119,6 +119,13 @@ int cmd_info(int argc, char **argv);
  * the whole machine. Bounded by --limit and --max-depth, both with defaults. */
 int cmd_find(int argc, char **argv);
 
+/* ── peek.c — what is inside a folder, for its icon ─────────────────────────
+ * One pass over the subdirectories of one directory, reporting a few
+ * previewable files in each. Called ONCE per listing, never once per folder:
+ * a directory of 200 subfolders would otherwise fork 200 times to draw one
+ * screen. Bounded, one level deep, and nothing is opened or read. */
+int cmd_peek(int argc, char **argv);
+
 /* ── places.c ───────────────────────────────────────────────────────────────
  * Pinned folders live in ~/.local/share/user-places.xbel — DOLPHIN'S OWN FILE,
  * on purpose. Reading the format that is already populated means a user's

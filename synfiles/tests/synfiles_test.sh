@@ -64,9 +64,10 @@ n=$("$SYNFILES" --rec list "$D" | wc -l)
 
 # A tab inside a filename shifts every later column of a naive TSV row, and
 # the damage is invisible — the row still parses, it just describes something
-# else. Every record must have exactly 8 fields.
+# else. Every record must have exactly 9 fields (the 9th is a .desktop
+# launcher's own Icon=, empty for everything else).
 widths=$("$SYNFILES" --rec list "$D" | awk -F'\t' '{print NF}' | sort -u | tr '\n' ' ')
-[ "$widths" = "8 " ] && ok "every record has 8 fields" \
+[ "$widths" = "9 " ] && ok "every record has 9 fields" \
                      || bad "field counts seen: $widths (a tab in a name shifted columns?)"
 
 # Nothing may reach stdout that is not a record.
@@ -362,6 +363,97 @@ printf '%s' "$vols" | grep -q 'RUNFIX' \
 kind=$(printf '%s' "$vols" | awk -F'\t' '$3 == "STICKFIX" {print $2}')
 [ "$kind" = "removable" ] && ok "a hotplug volume is kind=removable" \
                           || bad "STICKFIX came back as kind='$kind'"
+
+# ── peek: what a folder has inside it, for its icon ─────────────────────────
+# One call answers for every subdirectory, so the assertions are about what
+# each subdirectory contributes — and about the bounds, because this runs on
+# every navigation.
+PK="$T/peek"
+mkdir -p "$PK/pics/deeper" "$PK/clips" "$PK/docs" "$PK/empty"
+: > "$PK/pics/one.png"; : > "$PK/pics/two.JPG"; : > "$PK/pics/notes.txt"
+: > "$PK/pics/deeper/buried.png"
+: > "$PK/clips/holiday.mp4"
+: > "$PK/docs/manual.pdf"
+: > "$PK/loose.png"                      # a file in the root is not a folder
+ln -s "$PK/pics" "$PK/link-to-pics"
+
+cols=$("$SYNFILES" --rec peek "$PK" | awk -F'\t' 'NR==1 {print NF}')
+[ "$cols" = 3 ] && ok "peek --rec has 3 columns" || bad "peek --rec has $cols columns"
+
+pk=$("$SYNFILES" --rec peek "$PK")
+n=$(printf '%s' "$pk" | awk -F'\t' -v d="$PK/pics" 'NR>1 && $1==d' | wc -l)
+[ "$n" = 2 ] && ok "peek reports the images in a folder" || bad "pics gave $n rows, want 2"
+
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/pics" 'NR>1 && $1==d {print $2}' | grep -q 'notes.txt' \
+  && bad "peek offered a text file as a preview" || ok "peek skips what cannot be previewed"
+
+printf '%s' "$pk" | grep -q 'buried.png' \
+  && bad "peek descended a second level" || ok "peek never descends past one level"
+
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/clips" 'NR>1 && $1==d {print $2}' | grep -q 'holiday.mp4' \
+  && ok "a video counts as previewable" || bad "peek skipped a video"
+
+printf '%s' "$pk" | grep -q 'manual.pdf' \
+  && bad "peek offered a PDF" || ok "peek leaves PDFs alone"
+
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/empty" 'NR>1 && $1==d' | grep -q . \
+  && bad "an empty folder produced a row" || ok "an empty folder produces no rows"
+
+printf '%s' "$pk" | grep -q 'loose.png' \
+  && bad "peek reported a file sitting in the root" || ok "peek only looks inside subfolders"
+
+# A symlinked directory is not followed — same rule as everywhere else here.
+printf '%s' "$pk" | awk -F'\t' -v d="$PK/link-to-pics" 'NR>1 && $1==d' | grep -q . \
+  && bad "peek followed a symlinked directory" || ok "peek does not follow a symlinked folder"
+
+one=$("$SYNFILES" --rec peek "$PK" --limit=1 |
+      awk -F'\t' -v d="$PK/pics" 'NR>1 && $1==d' | wc -l)
+[ "$one" = 1 ] && ok "--limit caps the previews per folder" || bad "--limit=1 gave $one rows"
+
+# The size is what lets the GUI refuse to read a 40MB photo to fill a 20px
+# tile, so it has to be a number on every row.
+bad_sz=$("$SYNFILES" --rec peek "$PK" |
+         awk -F'\t' 'NR>1 && $3 !~ /^[0-9]+$/ {n++} END {print n+0}')
+[ "$bad_sz" = 0 ] && ok "peek sizes are numeric" || bad "$bad_sz peek rows have no size"
+
+# Filenames are bytes here too: the row is the identity, so it stays encoded.
+mkdir -p "$PK/odd"
+: > "$PK/odd/hol iday%20.png"
+"$SYNFILES" --rec peek "$PK" | grep -q 'hol%20iday%2520.png' \
+  && ok "peek percent-encodes an awkward filename" \
+  || bad "peek did not encode a name with a space and a percent"
+
+# Trailing slash must not produce a doubled separator: the GUI matches these
+# strings against paths it already holds.
+"$SYNFILES" --rec peek "$PK/" | grep -q '//' \
+  && bad "a trailing slash produced a doubled separator" \
+  || ok "a trailing slash is trimmed"
+
+# "/" is the one directory whose name already ends in the separator.
+"$SYNFILES" --rec peek / | grep -q '^//' \
+  && bad "peek / produced doubled separators" || ok "peek / joins without doubling"
+
+# ── .desktop launchers name their own icon ──────────────────────────────────
+DT="$T/desktop"
+mkdir -p "$DT"
+cat > "$DT/game.desktop" <<'DE'
+[Desktop Entry]
+Type=Application
+Name=A Game
+Icon=steam_icon_1234
+Exec=true
+
+[Desktop Action Play]
+Icon=not-this-one
+DE
+: > "$DT/plain.txt"
+
+icon=$("$SYNFILES" --rec list "$DT" | awk -F'\t' '$1 == "game.desktop" {print $9}')
+[ "$icon" = "steam_icon_1234" ] && ok "a .desktop row carries its Icon=" \
+                               || bad "launcher icon came back as '$icon'"
+
+icon2=$("$SYNFILES" --rec list "$DT" | awk -F'\t' '$1 == "plain.txt" {print $9}')
+[ -z "$icon2" ] && ok "an ordinary file has no icon field" || bad "plain.txt got icon '$icon2'"
 
 # ── trash, against a fixture ────────────────────────────────────────────────
 # SYNFILES_TRASH is an unconditional override: without it the device check

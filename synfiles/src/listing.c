@@ -43,6 +43,9 @@ typedef struct {
 	off_t  size;
 	time_t mtime;
 	mode_t mode;
+	/* Only ever set for a .desktop launcher: the Icon= it names. NULL for
+	 * everything else, which is every other row in a normal directory. */
+	char  *icon;
 } entry_t;
 
 typedef enum { SORT_NAME, SORT_SIZE, SORT_MTIME, SORT_TYPE } sort_t;
@@ -106,7 +109,8 @@ static int entry_cmp(const void *va, const void *vb)
 
 static void emit_header(void)
 {
-	rec_row(8, "name", "type", "size", "mtime", "mode", "link", "target", "mime");
+	rec_row(9, "name", "type", "size", "mtime", "mode", "link", "target", "mime",
+	        "icon");
 }
 
 static void emit_entry(const entry_t *e)
@@ -119,8 +123,10 @@ static void emit_entry(const entry_t *e)
 		char *size = xasprintf("%lld", (long long)e->size);
 		char *mtime = xasprintf("%lld", (long long)e->mtime);
 		char *mode = xasprintf("%04o", (unsigned)(e->mode & 07777));
-		rec_row(8, name, e->type, size, mtime, mode,
-		        e->is_link ? "1" : "0", target, mime);
+		char *icon = e->icon ? pct_encode(e->icon, true) : xstrdup("");
+		rec_row(9, name, e->type, size, mtime, mode,
+		        e->is_link ? "1" : "0", target, mime, icon);
+		free(icon);
 		free(size);
 		free(mtime);
 		free(mode);
@@ -150,6 +156,71 @@ static void emit_entry(const entry_t *e)
 /* readlinkat into a malloc'd string. The size is discovered by growing rather
  * than trusting st_size: procfs and some network filesystems report 0 for a
  * link that has a perfectly good target. */
+/* The Icon= a .desktop launcher names.
+ *
+ * This is the ONE place a listing opens a file, and the exception is narrow on
+ * purpose: only for application/x-desktop, only under DESKTOP_MAX bytes, and
+ * the whole point of the file type is to name an icon. Without it ~/Desktop is
+ * two hundred identical grey sheets — the generic application-x-desktop icon —
+ * where the user put two hundred DIFFERENT games. Dolphin reads the same key
+ * for the same reason.
+ *
+ * Deliberately NOT a .desktop parser: the first Icon= inside [Desktop Entry],
+ * stopping at the next group header, because an [Desktop Action] block further
+ * down carries its own Icon= and that is not the launcher's.
+ */
+#define DESKTOP_MAX 65536
+
+static char *desktop_icon(int dirfd, const char *name)
+{
+	int fd = openat(dirfd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+	if (fd < 0)
+		return NULL;
+
+	char buf[DESKTOP_MAX];
+	ssize_t got = read(fd, buf, sizeof buf - 1);
+	close(fd);
+	if (got <= 0)
+		return NULL;
+	buf[got] = '\0';
+
+	char *icon = NULL;
+	bool in_entry = false;
+	for (char *line = buf, *next; line && *line; line = next) {
+		next = strchr(line, '\n');
+		if (next)
+			*next++ = '\0';
+
+		while (*line == ' ' || *line == '\t')
+			line++;
+		if (line[0] == '[') {
+			if (in_entry)
+				break;            /* left [Desktop Entry] without finding one */
+			in_entry = !strncmp(line, "[Desktop Entry]", 15);
+			continue;
+		}
+		if (!in_entry || strncmp(line, "Icon", 4))
+			continue;
+
+		char *eq = line + 4;
+		while (*eq == ' ' || *eq == '\t')
+			eq++;
+		if (*eq != '=')
+			continue;             /* "IconName=" is not "Icon=" */
+		eq++;
+		while (*eq == ' ' || *eq == '\t')
+			eq++;
+
+		size_t len = strlen(eq);
+		while (len && (eq[len - 1] == '\r' || eq[len - 1] == ' '))
+			len--;
+		if (len)
+			icon = xstrndup(eq, len);
+		break;
+	}
+	return icon;
+}
+
 static char *read_link(int dirfd, const char *name)
 {
 	size_t cap = 256;
@@ -260,6 +331,9 @@ int cmd_list(int argc, char **argv)
 		}
 
 		e.mime = mime_for(e.name, e.is_dir);
+		if (!e.is_dir && e.mime && !strcmp(e.mime, "application/x-desktop")
+		    && e.size > 0 && e.size < DESKTOP_MAX)
+			e.icon = desktop_icon(dirfd, de->d_name);
 
 		if (n == cap) {
 			cap *= 2;
@@ -281,6 +355,7 @@ int cmd_list(int argc, char **argv)
 	for (size_t i = 0; i < n; i++) {
 		free(ents[i].name);
 		free(ents[i].target);
+		free(ents[i].icon);
 	}
 	free(ents);
 	closedir(d);

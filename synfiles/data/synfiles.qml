@@ -165,6 +165,20 @@ FloatingWindow {
     // text-x-generic, then a blank page.
     function iconFor(row) {
         if (row.type === "dir") return Quickshell.iconPath("folder", true)
+
+        // A .desktop launcher names its OWN icon, and that is the icon a file
+        // manager shows. Without this ~/Desktop is two hundred identical grey
+        // sheets — breeze's generic application-x-desktop — where the user put
+        // two hundred different games.
+        if (row.icon) {
+            // An absolute path is a real file, which is what Steam and Wine
+            // launchers write; a bare name goes through the icon theme, and
+            // falls through to the mime icon when the theme has not got it.
+            if (root.disp(row.icon).indexOf("/") === 0) return "file://" + row.icon
+            const named = Quickshell.iconPath(root.disp(row.icon), true)
+            if (named) return named
+        }
+
         const mime = row.mime || "application/octet-stream"
         const specific = mime.replace("/", "-")
         let path = Quickshell.iconPath(specific, true)
@@ -353,6 +367,7 @@ FloatingWindow {
                         type: r.type, size: parseInt(r.size || "0"),
                         mtime: parseInt(r.mtime || "0"), mime: r.mime,
                         link: r.link, target: r.target, mode: r.mode,
+                        icon: r.icon || "",
                         missing: false
                     }))
                 }
@@ -360,6 +375,10 @@ FloatingWindow {
                 root.setTab({ rows: rows })
                 root.loading = false
                 root.statusLine = ""
+                // What is inside each subfolder, for the icons. After the
+                // listing rather than beside it: the rows are what the window
+                // is waiting for, and this only decorates them.
+                root.refreshPeek()
             }
         }
         stderr: StdioCollector {
@@ -687,6 +706,68 @@ FloatingWindow {
             && row.size > 0 && row.size <= root.thumbMaxBytes
     }
 
+    // ── Folder previews ─────────────────────────────────────────────────────
+    //
+    // What a folder has inside it, drawn on its icon the way Dolphin does —
+    // twenty subfolders of holiday photos are twenty identical shapes until
+    // something tells them apart.
+    //
+    // ONE call per listing, keyed by the folder's encoded path. Asking per
+    // folder as rows scroll into view would fork a process per row; see
+    // peek.c, which answers for every subdirectory of one directory in a
+    // single pass.
+    property var folderPeek: ({})
+
+    Process {
+        id: peekProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const map = ({})
+                for (const r of root.parseRecords(this.text)) {
+                    if (!r.dir || !r.file) continue
+                    if (!map[r.dir]) map[r.dir] = []
+                    map[r.dir].push({ full: r.file, size: parseInt(r.size || "0") })
+                }
+                root.folderPeek = map
+            }
+        }
+    }
+
+    function refreshPeek() {
+        // Previews off means previews off, everywhere: a folder that keeps its
+        // pictures after the toggle is turned off looks like the toggle broke.
+        if (!root.thumbs || !root.tab || root.tab.view !== "dir") {
+            root.folderPeek = ({})
+            return
+        }
+        peekProc.running = false
+        peekProc.command = [root.bin, "--rec", "peek", root.disp(root.tab.path)]
+        peekProc.running = true
+    }
+
+    // A preview tile's source, from a bare path — the peek rows carry no mime,
+    // so the extension decides whether the file itself can stand in for a
+    // thumbnail. A video never can: that needs a thumbnailer, and the shared
+    // cache is exactly where one would have left the result.
+    function peekSource(p) {
+        const hash = Qt.md5("file://" + p.full)
+        if (root.thumbIndex.large && root.thumbIndex.large[hash])
+            return "file://" + root.homeDir + "/.cache/thumbnails/large/" + hash + ".png"
+        if (root.thumbIndex.normal && root.thumbIndex.normal[hash])
+            return "file://" + root.homeDir + "/.cache/thumbnails/normal/" + hash + ".png"
+        if (root.looksLikeImage(p.full) && p.size > 0 && p.size <= root.thumbMaxBytes)
+            return "file://" + p.full
+        return ""
+    }
+
+    readonly property var imageExts: ["png", "jpg", "jpeg", "gif", "bmp", "webp",
+                                      "avif", "ico", "tif", "tiff", "jxl"]
+    function looksLikeImage(pathEnc) {
+        const dot = pathEnc.lastIndexOf(".")
+        if (dot < 0) return false
+        return root.imageExts.indexOf(pathEnc.substring(dot + 1).toLowerCase()) >= 0
+    }
+
     // ── Properties ──────────────────────────────────────────────────────────
     property bool showProps: false
     property var propRows: []
@@ -967,7 +1048,10 @@ FloatingWindow {
     onIconSizeChanged: if (root.settingsLoaded) iconSaveTimer.restart()
 
     // These are single clicks, so they save immediately.
-    onThumbsChanged: root.saveSetting("previews", root.thumbs ? 1 : 0)
+    onThumbsChanged: {
+        root.saveSetting("previews", root.thumbs ? 1 : 0)
+        root.refreshPeek()
+    }
     onShowTreeChanged: root.saveSetting("tree", root.showTree ? 1 : 0)
 
     // ── Address bar ─────────────────────────────────────────────────────────
@@ -2227,6 +2311,7 @@ FloatingWindow {
                         width: root.iconSize; height: root.iconSize
                         visible: fileRow.modelData.type === "dir"
                         dim: fileRow.modelData.missing
+                        previews: root.folderPeek[fileRow.modelData.full] || []
                     }
 
                     Text {
@@ -2475,6 +2560,7 @@ FloatingWindow {
                         width: root.iconSize; height: root.iconSize
                         visible: gridCell.modelData.type === "dir"
                         dim: gridCell.modelData.missing
+                        previews: root.folderPeek[gridCell.modelData.full] || []
                     }
 
                     Text {
@@ -2526,7 +2612,11 @@ FloatingWindow {
             Column {
                 anchors.centerIn: parent
                 spacing: 6
+                // About is not a listing, so it has no rows and is not empty.
+                // Without that test this printed "This folder is empty." across
+                // the middle of the About pane, on top of the Support line.
                 visible: !root.loading && root.shownRows.length === 0
+                         && root.tab && root.tab.view !== "about"
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -2538,6 +2628,7 @@ FloatingWindow {
                                    : "Nothing matched."
                         if (root.tab.filter) return "Nothing matches that filter."
                         if (root.tab.view === "recent") return "No recently used files."
+                        if (root.tab.view === "trash") return "The trash is empty."
                         return "This folder is empty."
                     }
                     color: root.cText
@@ -3711,7 +3802,25 @@ FloatingWindow {
     component FolderIcon: Item {
         id: fi
         property bool dim: false
+        // {full, size} records from `peek`, at most a handful.
+        property var previews: []
         opacity: fi.dim ? 0.4 : 1.0
+
+        // Resolved sources, empties dropped. A folder whose four candidates
+        // are all un-thumbnailed videos gets a plain folder rather than four
+        // blank tiles — an empty frame is worse than no frame.
+        readonly property var tiles: {
+            if (!root.thumbs || !fi.previews || fi.previews.length === 0) return []
+            // Four tiles need about 20 pixels each to be anything but mush.
+            const max = fi.width >= 44 ? 4 : 1
+            const out = []
+            for (const p of fi.previews) {
+                const src = root.peekSource(p)
+                if (src !== "") out.push(src)
+                if (out.length >= max) break
+            }
+            return out
+        }
 
         Rectangle {
             // The tab, drawn darker rather than as a separate shape: at 16px
@@ -3723,10 +3832,43 @@ FloatingWindow {
             color: Qt.darker(root.cFolder, 1.4)
         }
         Rectangle {
+            id: fiBody
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
             height: parent.height * 0.74
             radius: Math.max(1, parent.width * 0.08)
             color: root.cFolder
+            clip: true
+
+            readonly property real pad: Math.max(1, fi.width * 0.05)
+            readonly property int cols: fi.tiles.length > 1 ? 2 : 1
+            readonly property int rws: fi.tiles.length > 2 ? 2 : 1
+
+            Repeater {
+                model: fi.tiles
+                delegate: Image {
+                    id: tile
+                    required property int index
+                    required property string modelData
+
+                    width: (fiBody.width - fiBody.pad * (fiBody.cols + 1)) / fiBody.cols
+                    height: (fiBody.height - fiBody.pad * (fiBody.rws + 1)) / fiBody.rws
+                    x: fiBody.pad + (tile.index % fiBody.cols) * (tile.width + fiBody.pad)
+                    y: fiBody.pad + Math.floor(tile.index / fiBody.cols) * (tile.height + fiBody.pad)
+
+                    source: tile.modelData
+                    // Cropped, not fitted: a letterboxed tile is mostly folder
+                    // colour and reads as an empty slot.
+                    fillMode: Image.PreserveAspectCrop
+                    sourceSize: Qt.size(Math.max(8, tile.width * 2),
+                                        Math.max(8, tile.height * 2))
+                    asynchronous: true
+                    cache: true
+                    clip: true
+                    // A file that turns out to be unreadable leaves the folder
+                    // colour showing, which is the fallback anyway.
+                    visible: tile.status === Image.Ready
+                }
+            }
         }
     }
 
