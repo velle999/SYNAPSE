@@ -25,11 +25,14 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#include <wayland-server-core.h>
 
 #include "synui.h"
 
@@ -318,6 +321,80 @@ int main(void)
         }
     }
     printf("ok 8 — the exact uri-list synfiles sends parses to three paths\n");
+
+
+    /* ── The transfer, through a REAL pipe and a REAL event loop ───────
+     *
+     * This is the one that matters, and the one whose absence let the bug
+     * ship: everything above is text, and the text was never wrong. The
+     * failure was that EPOLLIN and EPOLLHUP arrive in a SINGLE event when the
+     * writer writes and closes without a dispatch in between — which is what
+     * a client with three URIs in hand does — and read_cb bailed on HANGUP
+     * before reading a byte. r->len was 0, so the drop reported itself EMPTY
+     * with the list sitting unread in the pipe.
+     *
+     * Anything that stubs the pipe passes against the broken code. So: a real
+     * pipe, one write, one close, no dispatch in between, and then ONE turn of
+     * a real wl_event_loop — all a real drop gets.
+     */
+    {
+        char home[] = "/tmp/deskdrop-test-XXXXXX";
+        assert(mkdtemp(home));
+        setenv("HOME", home, 1);          /* ~/Desktop must not be the real one */
+
+        char src_dir[PATH_MAX], src_file[PATH_MAX], landed[PATH_MAX];
+        snprintf(src_dir, sizeof(src_dir), "%s/from", home);
+        assert(mkdir(src_dir, 0755) == 0);
+        snprintf(src_file, sizeof(src_file), "%s/dropped file.txt", src_dir);
+        FILE *f = fopen(src_file, "w");
+        assert(f);
+        fputs("contents\n", f);
+        fclose(f);
+
+        struct wl_display *display = wl_display_create();
+        assert(display);
+        struct wl_event_loop *loop = wl_display_get_event_loop(display);
+
+        static syn_server_t server;       /* far too big for a frame */
+        server.display = display;
+
+        int fds[2];
+        assert(pipe2(fds, O_CLOEXEC | O_NONBLOCK) == 0);
+
+        struct drop_read *r = calloc(1, sizeof(*r));
+        assert(r);
+        r->server = &server;
+        r->fd     = fds[0];
+        r->x      = 100;
+        r->y      = 100;
+        wl_list_init(&r->link);
+        wl_list_init(&r->source_destroy.link);
+        r->ev = wl_event_loop_add_fd(loop, fds[0], WL_EVENT_READABLE, read_cb, r);
+        assert(r->ev);
+        wl_list_insert(&drop_reads, &r->link);
+
+        /* WRITE THEN CLOSE, with no dispatch in between. */
+        char list[PATH_MAX + 64];
+        int n = snprintf(list, sizeof(list), "file://%s/from/dropped%%20file.txt\r\n",
+                         home);
+        assert(write(fds[1], list, (size_t)n) == n);
+        close(fds[1]);
+
+        wl_event_loop_dispatch(loop, 0);
+
+        /* The copy is a forked `cp`, so wait for it before looking. */
+        int status;
+        while (wait(&status) > 0) { }
+
+        snprintf(landed, sizeof(landed), "%s/Desktop/dropped file.txt", home);
+        struct stat st;
+        if (stat(landed, &st) != 0) {
+            fprintf(stderr, "FAIL: a written-then-closed uri-list produced "
+                            "nothing at %s\n", landed);
+            abort();
+        }
+        printf("ok 9 — a write-then-close transfer lands the file (HANGUP with data)\n");
+    }
 
     printf("\nall deskdrop uri-list checks passed\n");
     return 0;

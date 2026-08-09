@@ -475,9 +475,18 @@ static int read_cb(int fd, uint32_t mask, void *data)
 {
     struct drop_read *r = data;
 
-    /* A hangup with bytes already in hand is the normal end of a short
-     * transfer, not a failure — the client wrote the list and closed. */
-    if (mask & (WL_EVENT_ERROR | WL_EVENT_HANGUP)) { read_done(r); return 0; }
+    /* ⚠ ONLY a real error may bail without draining.
+     *
+     * EPOLLIN and EPOLLHUP arrive in ONE event when the writer writes and
+     * closes without a dispatch in between — which is exactly what a client
+     * that already holds the answer does with a uri-list of three lines. This
+     * used to read `ERROR | HANGUP` and call read_done() straight away, so the
+     * list sat unread in the pipe, r->len was 0, and the drop was reported
+     * EMPTY. The clipboard had the identical line and lost every copy ever
+     * made (pkgrel 311 → 312); deskdrop.c was written before that fix and
+     * never got it. Same trap, same file shape, two months apart.
+     */
+    if (mask & WL_EVENT_ERROR) { read_finish(r); return 0; }
 
     for (;;) {
         if (r->len >= DROP_LIST_MAX) {
@@ -496,8 +505,13 @@ static int read_cb(int fd, uint32_t mask, void *data)
         ssize_t n = read(fd, r->buf + r->len, space);
         if (n > 0) { r->len += (size_t)n; continue; }
         if (n == 0) { read_done(r); return 0; }        /* EOF: the whole list */
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
         if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            /* Nothing more is coming if the writer has already gone. No spin
+             * risk either way: a pipe whose write end is closed returns 0. */
+            if (mask & WL_EVENT_HANGUP) read_done(r);
+            return 0;
+        }
         read_finish(r);
         return 0;
     }
