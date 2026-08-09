@@ -278,6 +278,46 @@ int main(void)
         assert(rmdir(dir) == 0);
     }
     printf("ok 7 — a colliding drop becomes \"(copy)\", extension intact\n");
+    
+    /* ── The bytes synfiles actually sends ────────────────────
+     *
+     * Not a hypothetical: this is the exact text/uri-list synfiles builds for
+     * a drag — "file://" in front of the percent-encoded path it already
+     * holds, CRLF-terminated, one line per selected file. If the desktop
+     * cannot parse THIS, dropping onto it does nothing at all and says
+     * nothing, because a zero-length list is indistinguishable from a
+     * transfer that never arrived. */
+    {
+        char list[] = "file:///home/velle/Pictures/synapse-20260809-141333.png\r\n"
+                      "file:///home/velle/Downloads/a%20file%20with%20spaces.png\r\n"
+                      "file:///home/velle/Downloads/100%25%20done.txt\r\n";
+        const char *want[] = {
+            "/home/velle/Pictures/synapse-20260809-141333.png",
+            "/home/velle/Downloads/a file with spaces.png",
+            "/home/velle/Downloads/100% done.txt",
+        };
+        char       *cursor = list;
+        const char *line;
+        size_t      len;
+        int n = 0;
+        while (uri_list_next(&cursor, &line, &len)) {
+            char path[PATH_MAX];
+            assert(n < 3);
+            if (!uri_to_path(line, len, path, sizeof(path))) {
+                fprintf(stderr, "FAIL: synfiles URI %d refused: %.*s\n",
+                        n, (int)len, line);
+                abort();
+            } else {
+                eq("synfiles uri-list", path, want[n]);
+            }
+            n++;
+        }
+        if (n != 3) {
+            fprintf(stderr, "FAIL: synfiles uri-list gave %d lines, want 3\n", n);
+            abort();
+        }
+    }
+    printf("ok 8 — the exact uri-list synfiles sends parses to three paths\n");
 
     printf("\nall deskdrop uri-list checks passed\n");
     return 0;

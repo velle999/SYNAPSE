@@ -258,6 +258,28 @@ struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
         wlr_scene_node_at(&s->scene->tree.node, lx, ly, sx, sy);
     if (!node || node->type != WLR_SCENE_NODE_BUFFER) return NULL;
 
+    /* Never the drag icon.
+     *
+     * It is the topmost thing in the scene and it is parked exactly ON the
+     * cursor, so during any drag that carries one — Qt's, GTK's, Dolphin's —
+     * this hit test answers "there is a surface here" for every point on the
+     * screen. That is not a near miss: point_is_desktop() is `!view &&
+     * !surface`, so the desktop stopped being a drop target the moment a
+     * client attached an icon to its drag, and deskdrop.c refused every drop
+     * in silence.
+     *
+     * wl_data_device is explicit that the icon's input region is cleared and
+     * that set_input_region is ignored for it afterwards; wlroots does not
+     * enforce it (types/data_device/wlr_drag.c has no input-region handling at
+     * all) and neither did we, so the rule is applied here, where every caller
+     * gets it. A drag icon is never an input target for anyone. */
+    if (s->drag_icon_tree) {
+        for (struct wlr_scene_node *n = node; n; n = &n->parent->node) {
+            if (n == &s->drag_icon_tree->node) return NULL;
+            if (!n->parent) break;
+        }
+    }
+
     struct wlr_scene_buffer *buf = wlr_scene_buffer_from_node(node);
     struct wlr_scene_surface *scene_surf = wlr_scene_surface_try_from_buffer(buf);
     if (!scene_surf) return NULL;

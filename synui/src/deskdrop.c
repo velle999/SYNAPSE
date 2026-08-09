@@ -456,6 +456,17 @@ static void read_done(struct drop_read *r)
     if (r->len) {
         r->buf[r->len] = '\0';
         drop_commit(r);
+    } else {
+        /* Zero bytes means the source was asked and answered with nothing —
+         * and this used to return in silence, which is the worst possible
+         * outcome: the drop was accepted, the cursor came home, and the file
+         * simply never appeared. Every other refusal in this file says so;
+         * this one has to as well, or the next person debugging it has no
+         * evidence that the drop even happened. */
+        wlr_log(WLR_ERROR, "synui: deskdrop: the source sent no uri-list");
+        notif_post(r->server, "Desktop", "The drop arrived empty",
+                   "That application offered a file list and then sent nothing.",
+                   NOTIF_URGENCY_NORMAL, -1, 0);
     }
     read_finish(r);
 }
