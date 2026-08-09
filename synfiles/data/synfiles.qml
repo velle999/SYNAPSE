@@ -2058,6 +2058,35 @@ FloatingWindow {
                         }
                     }
                 }
+
+                // The two controls that used to have a 30px band of their own
+                // with nothing else in it. The tab strip already reserves this
+                // row and the space to the right of the tabs was empty, so they
+                // cost no height at all here. New Folder went to the hamburger,
+                // which already had it.
+                Row {
+                    anchors { right: parent.right; rightMargin: 8
+                              verticalCenter: parent.verticalCenter }
+                    spacing: 6
+
+                    ToggleChip {
+                        // Named, not just "Undo" — a recovery control that does
+                        // not say what it reverses is one nobody dares press.
+                        label: "↶ " + root.undoLabel
+                        on: false
+                        visible: root.undoLabel !== ""
+                        onToggled: root.doUndo()
+                    }
+                    ToggleChip {
+                        label: root.tab && root.isPinned(root.tab.path) ? "Pinned ✓" : "Pin"
+                        on: root.tab ? root.isPinned(root.tab.path) : false
+                        visible: root.tab && root.tab.view === "dir"
+                        onToggled: {
+                            if (root.isPinned(root.tab.path)) root.unpin(root.tab.path)
+                            else root.pin(root.tab.path)
+                        }
+                    }
+                }
             }
 
             // Path bar: breadcrumbs, filter, and the per-tab toggles.
@@ -2086,47 +2115,13 @@ FloatingWindow {
                 }
             }
 
-            Item {
-                id: pathBar
-                anchors { top: tabStrip.bottom; left: parent.left; right: parent.right }
-                anchors.margins: 8
-                height: 30
-                visible: root.tab && root.tab.view === "dir"
-
-                Row {
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                    spacing: 6
-
-                    ToggleChip {
-                        // Named, not just "Undo" — a recovery control that does
-                        // not say what it reverses is one nobody dares press.
-                        label: root.undoLabel !== "" ? "↶ " + root.undoLabel : "↶ Nothing to undo"
-                        on: false
-                        visible: root.undoLabel !== ""
-                        onToggled: root.doUndo()
-                    }
-                    ToggleChip {
-                        label: "New folder"
-                        on: false
-                        visible: root.tab && root.tab.view === "dir"
-                        onToggled: root.creating = true
-                    }
-                    ToggleChip {
-                        label: root.tab && root.isPinned(root.tab.path) ? "Pinned ✓" : "Pin"
-                        on: root.tab ? root.isPinned(root.tab.path) : false
-                        visible: root.tab && root.tab.view === "dir"
-                        onToggled: {
-                            if (root.isPinned(root.tab.path)) root.unpin(root.tab.path)
-                            else root.pin(root.tab.path)
-                        }
-                    }
-                }
-            }
-
             // Filter box
             Rectangle {
                 id: filterBar
-                anchors { top: pathBar.visible ? pathBar.bottom : tabStrip.bottom
+                // Below the trash's own banner when there is one. It used to
+                // hang off the row that just went, and in the trash view both
+                // landed on tabStrip.bottom and drew over each other.
+                anchors { top: trashBar.visible ? trashBar.bottom : tabStrip.bottom
                           left: parent.left; right: parent.right }
                 anchors.margins: 8
                 height: 28
@@ -3252,7 +3247,12 @@ FloatingWindow {
                 Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
                 Drag.proposedAction: root.dragCopy ? Qt.CopyAction : Qt.MoveAction
                 Drag.imageSource: root.dragImage
-                Drag.hotSpot: Qt.point(8, 8)
+                // Capped, or the cursor carries the file at its NATURAL size —
+                // a 4K screenshot dragged across the screen at 4K. The
+                // thumbnail is a label for what is moving, not a preview of
+                // it, so it gets the size of a large icon.
+                Drag.imageSourceSize: Qt.size(96, 96)
+                Drag.hotSpot: Qt.point(48, 48)
                 Drag.source: dragGhost
                 // Both, because "which format" is the receiving application's
                 // choice: uri-list is what a file manager or the desktop takes,
