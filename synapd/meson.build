@@ -124,7 +124,16 @@ install_data('systemd/synapse-gpu-sleep',
   install_dir: '/usr/lib/systemd/system-sleep',
   install_mode: 'rwxr-xr-x')
 
+# The connector watcher. /usr/lib/synapd, not system-sleep: it is a long-lived
+# service and must be running across a suspend the hooks mishandle, not invoked
+# by the same machinery whose behaviour it is there to record.
+install_data('systemd/synapse-drm-watch',
+  install_dir: '/usr/lib/synapd',
+  install_mode: 'rwxr-xr-x')
+
 install_data('systemd/synapd.service',
+  install_dir: '/usr/lib/systemd/system')
+install_data('systemd/synapse-drm-watch.service',
   install_dir: '/usr/lib/systemd/system')
 install_data('config/synapd.conf',
   install_dir: '/etc/synapd')

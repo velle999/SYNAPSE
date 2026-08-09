@@ -1,0 +1,27 @@
+[Unit]
+Description=Record display connector state changes
+Documentation=man:drm(7)
+# Deliberately NOT ordered against the compositor or the sleep hooks. This must
+# be running BEFORE and AFTER anything interesting happens, including across a
+# suspend that a hook mishandles, or it will miss the event it exists to catch.
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/synapd/synapse-drm-watch
+Restart=always
+RestartSec=5
+
+# Reads sysfs and runs udevadm; needs nothing else. It never writes to a
+# connector — probing is synapse-gpu-sleep's job and doing it here would
+# disturb the very link this is measuring.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+MemoryMax=32M
+
+[Install]
+WantedBy=multi-user.target
