@@ -1,6 +1,6 @@
 pkgname=syn
 pkgver=0.1.0
-pkgrel=9
+pkgrel=10
 pkgdesc="SynapseOS unified CLI"
 arch=('any')
 license=('GPL-2.0-or-later')

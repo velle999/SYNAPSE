@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<!--
+  synpkg escalates by re-execing ITSELF through pkexec. This action exists so
+  the prompt names the package manager rather than "an application", and so an
+  administrator can scope it (auth_admin_keep for a workstation, allow_active
+  for a kiosk) without touching the binary.
+
+  auth_admin_keep, not auth_admin: a session that has already authenticated to
+  install one thing should not re-prompt for each row the user clicks, and it
+  should not be `yes` either — installing arbitrary packages is root.
+
+  SynapseOS Project — GPL-2.0-or-later
+  SPDX-License-Identifier: GPL-2.0-or-later
+-->
+<policyconfig>
+  <vendor>SynapseOS Project</vendor>
+  <vendor_url>https://github.com/velle999/SYNAPSE</vendor_url>
+
+  <action id="org.synapseos.synpkg.manage">
+    <description>Install or remove software</description>
+    <message>Authentication is required to change installed software</message>
+    <icon_name>system-software-install</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/synpkg</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

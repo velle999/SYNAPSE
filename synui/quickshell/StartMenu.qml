@@ -235,23 +235,36 @@ PanelWindow {
                     { kind: "exec", label: "AI Shell (synsh)", argv: ["kitty", "synsh"] },
                     { kind: "exec", label: "System Status",    argv: ["kitty", "--hold", "syn", "status"] },
                     { kind: "exec", label: "Network Setup",    argv: ["kitty", "-e", "nmtui"] },
-                    // Shelly is a GUI (Terminal=false in its .desktop), so it
-                    // runs bare, no foot wrapper. Its own .desktop also lands it
-                    // on a category page via the scan; this is its fixed
-                    // System-Tools home.
-                    { kind: "exec", label: "Software Manager", argv: ["shelly-ui"] },
-                    // shelly's own full-system upgrade — the same engine the
-                    // Software Manager GUI drives, so CLI and GUI stay in
-                    // agreement — not raw pacman, and never a partial-upgrade
-                    // -Sy. --hold so the window survives the run.
-                    { kind: "exec", label: "Update System",    argv: ["kitty", "--hold", "sudo", "shelly", "upgrade"] },
-                    // SynapseOS's OWN components, which shelly cannot see at
-                    // all: they come from the [synapseos] repo, which is a
-                    // frozen copy of the installing ISO that nothing ever
-                    // writes to. Deliberately NOT folded into "Update System"
-                    // above — that upgrades Arch, this upgrades the distro, and
-                    // conflating them is how someone ends up believing they are
-                    // current while synui sits 200 releases behind.
+                    // synpkg, our own manager. A GUI (Terminal=false in its
+                    // .desktop), so it runs bare, no terminal wrapper.
+                    //
+                    // This row used to launch shelly-ui. shelly is still
+                    // INSTALLED and still reachable from its own scanned
+                    // .desktop entry — the replacement is phased on purpose, so
+                    // there is a working fallback if synpkg turns out to be
+                    // short of it somewhere. What changed is which one is the
+                    // default, and only synpkg can see all four sources plus
+                    // BlackArch and SynapseOS's own components.
+                    { kind: "exec", label: "Software Manager", argv: ["synpkg", "gui"] },
+                    // The full-system upgrade, same libalpm engine the Software
+                    // Manager GUI drives, so CLI and GUI stay in agreement —
+                    // not raw pacman, and never a partial-upgrade -Sy (synpkg
+                    // upgrade always refreshes first unless told not to).
+                    // --hold so the window survives the run.
+                    { kind: "exec", label: "Update System",    argv: ["kitty", "--hold", "synpkg", "upgrade"] },
+                    // SynapseOS's OWN components. They come from the
+                    // [synapseos] repo, which is a frozen copy of the
+                    // installing ISO that nothing ever writes to, so no ALPM
+                    // upgrade can ever see a newer synui — only syn-update,
+                    // which rebuilds from git, can.
+                    //
+                    // Deliberately NOT folded into "Update System" above — that
+                    // upgrades Arch, this upgrades the distro, and conflating
+                    // them is how someone ends up believing they are current
+                    // while synui sits 200 releases behind. synpkg surfaces the
+                    // same check under `synpkg system check`, but applying it
+                    // needs a terminal (build-all.sh runs sudo mid-build), and
+                    // this GUI is the thing that owns that.
                     { kind: "exec", label: "SynapseOS Updates", argv: ["syn-update-gui"] }
                 ]
 

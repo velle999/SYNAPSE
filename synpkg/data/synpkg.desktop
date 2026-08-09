@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=SYNAPSE Software
+GenericName=Package Manager
+Comment=Install and remove software, security tooling, and SynapseOS updates
+Exec=synpkg gui
+Icon=system-software-install
+Terminal=false
+# ONE main category. Two makes the entry appear twice in the scanned start-menu
+# pages, on top of the fixed entry — the same hint desktop-file-validate gives
+# about syn-update's launcher.
+Categories=System;
+Keywords=package;software;install;update;pacman;aur;flatpak;blackarch;
+StartupNotify=true

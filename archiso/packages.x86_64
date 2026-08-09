@@ -74,6 +74,17 @@ vibe
 # user gets Arsenal's own "the repo is not enabled" path rather than a browser
 # with no packages behind it.
 syn-arsenal
+# synpkg — the SynapseOS package manager (repos + AUR + Flatpak + BlackArch +
+# SynapseOS's own components, one C binary with a quickshell GUI and a terminal
+# browser). Its hard depends are glibc/pacman/curl, all already present; the
+# GUI, Flatpak and AUR paths are optdepends, so a headless install pays nothing
+# for them and still gets the CLI.
+#
+# shelly-bin is still here as well. The replacement is PHASED on purpose: shelly
+# is the current Software Manager and Update System entry in the start menu, and
+# dropping it in the same release synpkg lands would ship any remaining gap as a
+# regression on the one tool a user needs to fix a broken system.
+synpkg
 # "About OS" — areofyl/fetch, which spins the SynapseOS mark as a lit 3D relief
 # with the system info beside it. Reached from the control panel's
 # System ▸ About OS row and from `syn about`; both run it in a terminal.

@@ -14,6 +14,8 @@ Usage:
   syn guard <cmd>         Security monitor (status/mode/alerts)
   syn nix <cmd>           Declarative user environment via Nix + Home Manager
                           (status/apply/build/update/facts/edit/rollback/init)
+  syn pkg <cmd>           Package manager: search/install/remove/upgrade,
+                          suggested apps, AUR, Flatpak  (synpkg)
   syn arsenal             Browse/install BlackArch security tooling
   syn resolve <cmd>       DaVinci Resolve support: OpenCL runtime, launch
                           environment, AUR build, DNxHR transcode
@@ -313,8 +315,14 @@ case "${1:-help}" in
     net)            shift; cmd_net "$@" ;;
     guard)          shift; cmd_guard "$@" ;;
     nix)            shift; cmd_nix "$@" ;;
-    # --tui rather than bare syn-arsenal: `syn` is the terminal entry point, so
-    # a subcommand typed in a shell must not fork a GUI window at the user.
+    # No argument means the terminal browser, not the GUI: `syn` is the
+    # terminal entry point, so a subcommand typed in a shell must not fork a
+    # window at the user. With arguments it is a straight pass-through, so
+    # `syn pkg search foo` is `synpkg search foo`.
+    pkg)            shift; [ $# -eq 0 ] && exec synpkg tui; exec synpkg "$@" ;;
+    # Same rule. syn-arsenal is still the old app; `syn pkg arsenal` is the
+    # same browser inside synpkg, and this line moves to it when syn-arsenal
+    # is retired.
     arsenal)        shift; exec syn-arsenal --tui "$@" ;;
     # Its own file rather than a cmd_ function here: it is the length of the
     # nix block again, and the pacman hook execs it directly — a hook that had

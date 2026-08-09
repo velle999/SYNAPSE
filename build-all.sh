@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal)
+       vibe samsung-m2020 syn-arsenal synpkg)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -226,6 +226,17 @@ build_script_pkg samsung-m2020
 # PKGBUILD sources the six files by basename out of the component directory, so
 # there is no tarball to roll and build_script_pkg is the whole rule.
 build_script_pkg syn-arsenal
+
+# synpkg — the SynapseOS package manager. build_component, not
+# build_script_pkg: it is C built with meson from a source tarball, so the
+# tarball has to be regenerated from the tree or makepkg silently packages the
+# previous build's sources. The generic collector above already picks up
+# src/, include/, meson.build, data/ and tests/, which is the whole component.
+#
+# It links libalpm and takes the database lock, so it must not be built while a
+# transaction is running -- the same constraint every other rule here already
+# lives under, since they all end in `pacman -U`.
+build_component synpkg
 
 # A name in KNOWN= with no build rule above is what this catches.
 #

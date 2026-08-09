@@ -1732,7 +1732,13 @@ while :; do
     # optional fetch would leave a settings row that opens a terminal and
     # reports command not found. It is 90 KB and depends on nothing but glibc,
     # which is the whole reason it can be unconditional.
-    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update fetch"
+    # synpkg is CORE for the same reason fetch is, only more so: it is the
+    # package manager. A Minimal install clears SEL_APPS entirely, and a
+    # SynapseOS with no way to install software is not a smaller system, it is
+    # a broken one. Its hard depends are glibc/pacman/curl, all already in the
+    # pacstrap set, so it costs a few hundred KB; the GUI, Flatpak and AUR
+    # paths are optdepends and a Minimal install pays for none of them.
+    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg fetch"
     SEL_APPS="chibi vibe syn-arsenal"
 
     echo "  What should be installed alongside the SynapseOS core?"
@@ -1826,7 +1832,9 @@ while :; do
                 ask_opt core_guard   1 "synguard + kernel module — security monitor"
                 ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
 
-                SEL_CORE="syn syn-model syn-firstboot"
+                # synpkg is unconditional here too — Custom lets the user
+                # drop synapd or synui, but not the package manager.
+                SEL_CORE="syn syn-model syn-firstboot synpkg"
                 [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
                 [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
                 [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"

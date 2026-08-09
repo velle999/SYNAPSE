@@ -196,6 +196,11 @@ PACKAGES=(
     # syn-install now names it in SEL_APPS, and an app the installer asks
     # for but the local repo does not carry fails the install at pacman.
     syn-arsenal
+    # synpkg — the package manager. Must be ON the ISO for the same reason
+    # syn-arsenal must: syn-install names it in its install set, and an app the
+    # installer asks for but the local repo does not carry fails the install at
+    # pacman. Builds offline (meson + libalpm headers from pacman).
+    synpkg
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

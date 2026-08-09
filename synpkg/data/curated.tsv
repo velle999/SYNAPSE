@@ -1,0 +1,118 @@
+# SynapseOS suggested software.
+#
+# category <TAB> id <TAB> source <TAB> label <TAB> description
+#
+# source is repo | aur | flatpak.
+#
+# Editorial rules, so this stays a CURATION and not a package dump:
+#   1. Wayland-native, or at least sane under XWayland. SynapseOS has no X11
+#      session to fall back to.
+#   2. One recommendation per job. A list with four PDF readers is a search
+#      result, not a suggestion.
+#   3. Prefer `repo` over `aur` over `flatpak`. Repo packages are the only ones
+#      a plain `synpkg upgrade` keeps current.
+#   4. Category order below is the display order. It is editorial: the things a
+#      fresh install most often lacks come first.
+
+Browsers	firefox	repo	Firefox	Mozilla's browser — the SynapseOS default
+Browsers	chromium	repo	Chromium	Open-source Chrome, for sites that demand Blink
+Browsers	torbrowser-launcher	repo	Tor Browser	Anonymous browsing over the Tor network
+Browsers	falkon	repo	Falkon	Lightweight Qt browser, low memory
+
+Communication	vesktop	aur	Vesktop	Discord with Wayland screen sharing that works
+Communication	signal-desktop	repo	Signal	End-to-end encrypted messaging
+Communication	thunderbird	repo	Thunderbird	Mail, calendar and contacts
+Communication	element-desktop	repo	Element	Matrix client for federated chat
+Communication	halloy	repo	Halloy	IRC client, still the best way to reach a project
+
+Media	mpv	repo	mpv	The video player everything else wraps
+Media	vlc	repo	VLC	Plays the file mpv refused
+Media	strawberry	repo	Strawberry	Music player for large local libraries
+Media	easyeffects	repo	EasyEffects	PipeWire equaliser and effects rack
+Media	obs-studio	repo	OBS Studio	Screen recording and streaming
+Media	plex-desktop	aur	Plex	Client for a Plex media server
+
+Graphics	gimp	repo	GIMP	Raster image editing
+Graphics	inkscape	repo	Inkscape	Vector illustration
+Graphics	krita	repo	Krita	Digital painting
+Graphics	darktable	repo	darktable	Raw photo development
+Graphics	imv	repo	imv	Fast Wayland image viewer
+Graphics	blender	repo	Blender	3D modelling, animation and video editing
+
+Development	code	repo	VS Code (OSS)	Editor with the extension ecosystem
+Development	neovim	repo	Neovim	Modal editor, scriptable in Lua
+Development	git	repo	Git	Version control
+Development	docker	repo	Docker	Containers
+Development	podman	repo	Podman	Rootless containers, no daemon
+Development	python	repo	Python	The interpreter and standard library
+Development	rustup	repo	rustup	Rust toolchain manager
+Development	go	repo	Go	The Go toolchain
+Development	meld	repo	Meld	Visual diff and merge
+Development	wireshark-qt	repo	Wireshark	Packet capture and protocol analysis
+
+Office	libreoffice-fresh	repo	LibreOffice	Documents, spreadsheets, presentations
+Office	obsidian	repo	Obsidian	Markdown notes with backlinks
+Office	zathura	repo	Zathura	Keyboard-driven document viewer
+Office	zathura-pdf-mupdf	repo	Zathura PDF backend	MuPDF rendering for Zathura
+Office	calibre	repo	Calibre	E-book library and converter
+Office	keepassxc	repo	KeePassXC	Offline password vault
+
+Gaming	steam	repo	Steam	Valve's store and Proton runtime
+Gaming	lutris	repo	Lutris	Launcher for non-Steam and Wine games
+Gaming	gamemode	repo	GameMode	Applies performance tuning while a game runs
+Gaming	mangohud	repo	MangoHud	In-game performance overlay
+Gaming	wine	repo	Wine	Run Windows software directly
+Gaming	prismlauncher	repo	Prism Launcher	Minecraft instance manager
+
+System	htop	repo	htop	Interactive process viewer
+System	btop	repo	btop	Resource monitor with a readable layout
+System	ncdu	repo	ncdu	Find what filled the disk
+System	gparted	repo	GParted	Partition editor
+System	timeshift	repo	Timeshift	System snapshots and rollback
+System	smartmontools	repo	smartmontools	SMART health for drives
+System	lm_sensors	repo	lm_sensors	Temperature and fan readouts
+System	pacman-contrib	repo	pacman-contrib	paccache, checkupdates, pactree
+System	reflector	repo	Reflector	Rank and refresh pacman mirrors
+
+Security	keepassxc	repo	KeePassXC	Offline password vault
+Security	veracrypt	repo	VeraCrypt	Encrypted containers and volumes
+Security	clamav	repo	ClamAV	On-demand malware scanning
+Security	rkhunter	repo	rkhunter	Rootkit detection
+Security	lynis	repo	Lynis	System hardening audit
+Security	firejail	repo	Firejail	Sandbox untrusted applications
+Security	opensnitch	repo	OpenSnitch	Interactive outbound firewall
+Security	gnupg	repo	GnuPG	Signing and encryption
+
+Networking	nmap	repo	Nmap	Network and port discovery
+Networking	wireguard-tools	repo	WireGuard	Modern VPN tunnels
+Networking	openssh	repo	OpenSSH	Remote shell and tunnels
+Networking	rsync	repo	rsync	Efficient file synchronisation
+Networking	nm-connection-editor	repo	Network Connections	Edit VPN and wired/wireless profiles
+Networking	bind	repo	dig and friends	DNS lookup tools
+Networking	iperf3	repo	iperf3	Throughput measurement
+Networking	syncthing	repo	Syncthing	Continuous peer-to-peer file sync
+
+Terminal	kitty	repo	kitty	GPU-accelerated terminal, the SynapseOS default
+Terminal	foot	repo	foot	Minimal Wayland terminal
+Terminal	fish	repo	fish	Shell with useful defaults
+Terminal	zsh	repo	zsh	Shell with deep customisation
+Terminal	tmux	repo	tmux	Keep sessions alive across disconnects
+Terminal	ripgrep	repo	ripgrep	Fast recursive search
+Terminal	fd	repo	fd	Fast, ergonomic find
+Terminal	fzf	repo	fzf	Fuzzy finder that pipes into anything
+Terminal	bat	repo	bat	cat with syntax highlighting
+Terminal	eza	repo	eza	Modern ls
+Terminal	jq	repo	jq	Query and reshape JSON
+Terminal	zoxide	repo	zoxide	Directory jumping that learns
+
+Files	dolphin	repo	Dolphin	The SynapseOS file manager
+Files	ark	repo	Ark	Archive browser and extractor
+Files	7zip	repo	7-Zip	7z, and the format everything else needs
+Files	unrar	repo	unrar	RAR extraction
+Files	gvfs	repo	GVFS	Mount network and device volumes in file managers
+Files	udiskie	repo	udiskie	Automount removable media
+
+Virtualisation	qemu-full	repo	QEMU	Full machine emulation and KVM
+Virtualisation	virt-manager	repo	virt-manager	Graphical VM management
+Virtualisation	libvirt	repo	libvirt	The virtualisation daemon virt-manager drives
+Virtualisation	distrobox	repo	Distrobox	Run any distro's userland on top of this one
