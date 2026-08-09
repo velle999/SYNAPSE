@@ -303,6 +303,17 @@ static bool boring_mount(const char *mp)
 {
 	if (!mp || !*mp)
 		return false;   /* unmounted is not boring — it is offerable */
+
+	/* Checked BEFORE the skip list, because udisks2 mounts removable media at
+	 * /run/media/<user>/<label> — which /run swallowed whole. The effect was
+	 * not a missing row but a DISAPPEARING one: click a USB stick, synfiles
+	 * mounts it, the volume list is re-read, and the drive is gone from the
+	 * sidebar. Mounting a disk looked exactly like ejecting it. */
+	static const char *keep[] = { "/run/media/", "/media/", "/mnt/" };
+	for (size_t i = 0; i < sizeof keep / sizeof *keep; i++)
+		if (!strncmp(mp, keep[i], strlen(keep[i])))
+			return false;
+
 	static const char *skip[] = {
 		"/proc", "/sys", "/dev", "/run", "/tmp", "/boot", "/efi", "/var",
 	};

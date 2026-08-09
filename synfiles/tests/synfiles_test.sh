@@ -326,6 +326,43 @@ n=$("$SYNFILES" --rec volumes | awk -F'\t' 'NR==1 {print NF}')
 ragged=$("$SYNFILES" --rec volumes | awk -F'\t' 'NR==1 {w=NF; next} NF!=w {n++} END {print n+0}')
 [ "$ragged" = 0 ] && ok "no ragged rows in volumes --rec" || bad "$ragged ragged volume rows"
 
+# Which mount points survive the "boring" filter, against a FAKE lsblk — the
+# one part of this that must not depend on what is plugged into the machine.
+#
+# /run/media/<user>/<label> is where udisks2 puts removable media, so a /run
+# prefix match hid every USB stick the instant it was mounted. That did not
+# read as a missing row: the drive was there, you clicked it, synfiles mounted
+# it, and the row VANISHED — mounting was indistinguishable from ejecting.
+B="$T/fakebin"
+mkdir -p "$B"
+cat > "$B/lsblk" <<'LB'
+#!/usr/bin/env bash
+cat <<'ROWS'
+NAME="fakeusb1" PATH="/dev/fakeusb1" LABEL="STICKFIX" SIZE="8G" FSTYPE="vfat" MOUNTPOINT="/run/media/tester/STICKFIX" RM="1" TYPE="part" HOTPLUG="1" UUID="1111-1111"
+NAME="fakeold1" PATH="/dev/fakeold1" LABEL="OLDSTYLE" SIZE="4G" FSTYPE="vfat" MOUNTPOINT="/media/OLDSTYLE" RM="1" TYPE="part" HOTPLUG="1" UUID="2222-2222"
+NAME="fakesys1" PATH="/dev/fakesys1" LABEL="ESPFIX" SIZE="512M" FSTYPE="vfat" MOUNTPOINT="/boot" RM="0" TYPE="part" HOTPLUG="0" UUID="3333-3333"
+NAME="fakerun1" PATH="/dev/fakerun1" LABEL="RUNFIX" SIZE="1G" FSTYPE="ext4" MOUNTPOINT="/run/somewhere-else" RM="0" TYPE="part" HOTPLUG="0" UUID="4444-4444"
+ROWS
+LB
+chmod +x "$B/lsblk"
+
+vols=$(PATH="$B:$PATH" "$SYNFILES" --rec volumes)
+printf '%s' "$vols" | grep -q '/run/media/tester/STICKFIX' \
+  && ok "a udisks mount under /run/media is listed" \
+  || bad "a volume mounted at /run/media/... was filtered out"
+printf '%s' "$vols" | grep -q '/media/OLDSTYLE' \
+  && ok "a mount under /media is listed" || bad "/media was filtered out"
+printf '%s' "$vols" | grep -q 'ESPFIX' \
+  && bad "/boot is listed as a browsable volume" || ok "/boot is still filtered out"
+printf '%s' "$vols" | grep -q 'RUNFIX' \
+  && bad "an unrelated /run mount is listed" || ok "/run at large is still filtered out"
+
+# The removable stick keeps its kind, or it lands under the wrong heading and
+# is offered "Unmount" where it wants "Eject".
+kind=$(printf '%s' "$vols" | awk -F'\t' '$3 == "STICKFIX" {print $2}')
+[ "$kind" = "removable" ] && ok "a hotplug volume is kind=removable" \
+                          || bad "STICKFIX came back as kind='$kind'"
+
 # ── trash, against a fixture ────────────────────────────────────────────────
 # SYNFILES_TRASH is an unconditional override: without it the device check
 # would route a scratch file to a volume trash and these tests could touch the

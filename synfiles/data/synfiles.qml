@@ -1115,8 +1115,16 @@ FloatingWindow {
     Process { id: clipProc }
 
     // ── Mounting ────────────────────────────────────────────────────────────
-    function mountVolume(vol) {
+    // Clicking a drive means "open this drive", so mounting one is only half
+    // the job — a stick that mounts and then sits there is indistinguishable
+    // from a click that did nothing. The device is remembered and opened once
+    // the refreshed list says it landed somewhere, rather than by parsing
+    // udisksctl's sentence: the record stream already carries the mount point.
+    property string pendingOpenDev: ""
+
+    function mountVolume(vol, thenOpen) {
         if (!vol.device) return
+        root.pendingOpenDev = thenOpen ? vol.device : ""
         root.runOp(["mount", vol.device], "mounting " + vol.title + "…")
     }
     function unmountVolume(vol) {
@@ -1165,6 +1173,20 @@ FloatingWindow {
                 // useful to offer, and hiding it means the only way to reach
                 // the drive is to already know it exists.
                 root.volumes = root.parseRecords(this.text)
+
+                if (root.pendingOpenDev !== "") {
+                    const dev = root.pendingOpenDev
+                    // Cleared unconditionally: a mount that FAILED must not
+                    // leave a request that fires on some later refresh and
+                    // navigates out from under whatever the user is doing.
+                    root.pendingOpenDev = ""
+                    for (const v of root.volumes) {
+                        if (v.device === dev && v.mounted === "1" && v.path) {
+                            root.navigate(v.path, "dir")
+                            break
+                        }
+                    }
+                }
             }
         }
     }
@@ -1383,7 +1405,7 @@ FloatingWindow {
                             totalBytes: parseFloat(volRow.modelData.total || "0")
                             onActivated: {
                                 if (volRow.isMounted) root.navigate(volRow.modelData.path, "dir")
-                                else root.mountVolume(volRow.modelData)
+                                else root.mountVolume(volRow.modelData, true)
                             }
                             onTrailingClicked: {
                                 if (volRow.isMounted) root.unmountVolume(volRow.modelData)
@@ -1416,7 +1438,7 @@ FloatingWindow {
                             trailing: remRow.isMounted ? "\u23cf" : "\u25b8"
                             onActivated: {
                                 if (remRow.isMounted) root.navigate(remRow.modelData.path, "dir")
-                                else root.mountVolume(remRow.modelData)
+                                else root.mountVolume(remRow.modelData, true)
                             }
                             onTrailingClicked: {
                                 if (remRow.isMounted) root.unmountVolume(remRow.modelData)
@@ -3290,6 +3312,28 @@ FloatingWindow {
             font.pixelSize: 9
         }
 
+        // Declared BEFORE the two little buttons below it, and that order is
+        // the whole contract: Qt Quick delivers a press to the LAST matching
+        // child first, so a row-wide MouseArea written last sits on top of
+        // everything and swallows every click meant for a button.
+        MouseArea {
+            id: sideMa
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            cursorShape: Qt.PointingHandCursor
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    // Mapped to the window, because the menu is a sibling of
+                    // the content pane and not of this row.
+                    const p = sideRow.mapToItem(null, mouse.x, mouse.y)
+                    sideRow.contextRequested(p.x, p.y)
+                } else {
+                    sideRow.activated()
+                }
+            }
+        }
+
         // Unpin, for a place the user added themselves.
         Text {
             anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
@@ -3330,24 +3374,6 @@ FloatingWindow {
             onDropped: {
                 sideRow.dropHover = false
                 root.dropOn(sideRow.dropTarget)
-            }
-        }
-
-        MouseArea {
-            id: sideMa
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            cursorShape: Qt.PointingHandCursor
-            onClicked: (mouse) => {
-                if (mouse.button === Qt.RightButton) {
-                    // Mapped to the window, because the menu is a sibling of
-                    // the content pane and not of this row.
-                    const p = sideRow.mapToItem(null, mouse.x, mouse.y)
-                    sideRow.contextRequested(p.x, p.y)
-                } else {
-                    sideRow.activated()
-                }
             }
         }
     }
