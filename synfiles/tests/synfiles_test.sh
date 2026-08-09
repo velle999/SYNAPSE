@@ -727,6 +727,99 @@ over=$("$SYNFILES" --rec volumes |
 [ "$over" = 0 ] && ok "no volume reports more used than it has" \
                || bad "$over volumes report used > total"
 
+# ── undo ────────────────────────────────────────────────────────────────────
+# Its own journal and its own trash, so nothing here can reach the real ones.
+export SYNFILES_JOURNAL="$T/journal"
+export SYNFILES_TRASH="$T/undo-trash"
+UW="$T/undo"
+mkdir -p "$UW/src" "$UW/dst"
+echo one > "$UW/src/f1.txt"
+echo two > "$UW/src/f2.txt"
+
+"$SYNFILES" undo >/dev/null 2>&1
+[ $? -eq 100 ] && ok "undo with an empty journal exits 100" || bad "empty undo did not exit 100"
+
+# A move of two files is ONE thing the user did, so it undoes as one — not the
+# second file now and the first on a second press.
+"$SYNFILES" move "$UW/src/f1.txt" "$UW/src/f2.txt" "$UW/dst" >/dev/null 2>&1
+"$SYNFILES" undo >/dev/null 2>&1
+{ [ -f "$UW/src/f1.txt" ] && [ -f "$UW/src/f2.txt" ] && [ -z "$(ls -A "$UW/dst")" ]; }
+check "a multi-file move undoes as one batch" $?
+
+# And is gone from the journal afterwards, so it cannot be undone twice.
+"$SYNFILES" undo >/dev/null 2>&1
+[ $? -eq 100 ] && ok "an undone batch is forgotten" || bad "the batch could be undone twice"
+
+"$SYNFILES" rename "$UW/src/f1.txt" newname.txt >/dev/null 2>&1
+"$SYNFILES" undo >/dev/null 2>&1
+{ [ -f "$UW/src/f1.txt" ] && [ ! -e "$UW/src/newname.txt" ]; }
+check "undo reverses a rename" $?
+
+"$SYNFILES" trash "$UW/src/f1.txt" >/dev/null 2>&1
+"$SYNFILES" undo >/dev/null 2>&1
+grep -q '^one$' "$UW/src/f1.txt" 2>/dev/null
+check "undo restores from the trash with content intact" $?
+
+"$SYNFILES" mkdir "$UW/made" >/dev/null 2>&1
+"$SYNFILES" undo >/dev/null 2>&1
+[ ! -d "$UW/made" ] && ok "undo removes a folder it made" || bad "the folder was left behind"
+
+# Only if it is still empty — something may have been put in it since, and
+# removing that is not what "undo the folder I just made" means.
+"$SYNFILES" mkdir "$UW/kept" >/dev/null 2>&1
+echo x > "$UW/kept/something.txt"
+"$SYNFILES" undo >/dev/null 2>&1
+[ -f "$UW/kept/something.txt" ] && ok "undo leaves a folder that is no longer empty" \
+                                || bad "undo removed a folder with a file in it"
+
+# THE one that matters. Undoing a copy must TRASH the copy, never unlink it:
+# the copy may have been edited since, and undo must not be a shorter road to
+# losing work than deleting is.
+"$SYNFILES" copy "$UW/src/f1.txt" "$UW/dst" >/dev/null 2>&1
+[ -f "$UW/dst/f1.txt" ] && ok "copy lands where expected" || bad "copy did not produce dst/f1.txt"
+"$SYNFILES" undo >/dev/null 2>&1
+[ ! -e "$UW/dst/f1.txt" ] && ok "undo removes the copy" || bad "the copy is still there"
+"$SYNFILES" --rec trash list | grep -q 'f1.txt'
+check "the undone copy went to the TRASH, not to unlink" $?
+grep -q '^one$' "$UW/src/f1.txt"
+check "undoing a copy leaves the original alone" $?
+
+# Undo VERIFIES. If something now occupies the place a file came from,
+# refusing is the only safe answer — overwriting it would destroy a file the
+# user created after the operation being undone.
+mkdir -p "$UW/a" "$UW/b"
+echo original > "$UW/a/c.txt"
+"$SYNFILES" move "$UW/a/c.txt" "$UW/b" >/dev/null 2>&1
+echo blocker > "$UW/a/c.txt"
+"$SYNFILES" undo >/dev/null 2>&1
+{ [ $? -eq 1 ] && grep -q '^blocker$' "$UW/a/c.txt"; }
+check "undo refuses rather than overwriting what took the old place" $?
+
+# A permanent delete is deliberately NOT journalled: an undo entry that could
+# not undo would look like a safety net and not be one.
+"$SYNFILES" undo clear >/dev/null 2>&1
+echo gone > "$UW/doomed.txt"
+"$SYNFILES" delete --yes "$UW/doomed.txt" >/dev/null 2>&1
+"$SYNFILES" undo >/dev/null 2>&1
+[ $? -eq 100 ] && ok "a permanent delete records nothing to undo" \
+               || bad "delete --yes left an undo entry it cannot honour"
+
+# The journal has to survive the same filenames everything else does.
+printf 'x' > "$UW/src/$(printf 'j\tk\nl.txt')"
+"$SYNFILES" move "$UW/src/$(printf 'j\tk\nl.txt')" "$UW/dst" >/dev/null 2>&1
+"$SYNFILES" undo >/dev/null 2>&1
+[ -f "$UW/src/$(printf 'j\tk\nl.txt')" ] && ok "undo survives a name with a tab and a newline" \
+                                         || bad "the hostile name did not come back"
+
+n=$("$SYNFILES" --rec undo list | awk -F'\t' 'NR==1 {print NF}')
+[ "$n" = 4 ] && ok "undo list --rec has 4 columns" || bad "undo list --rec has $n columns"
+
+"$SYNFILES" undo clear >/dev/null 2>&1
+"$SYNFILES" undo list >/dev/null 2>&1
+[ $? -eq 100 ] && ok "undo clear empties the journal" || bad "the journal survived a clear"
+
+unset SYNFILES_JOURNAL SYNFILES_TRASH
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

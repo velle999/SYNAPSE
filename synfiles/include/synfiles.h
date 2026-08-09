@@ -173,6 +173,14 @@ const char *sf_basename(const char *path);
  * itself. Returns 0 on success, -1 with errno set. */
 int sf_rm_rf(int dirfd, const char *name);
 
+/* ── undo.c — the operation journal ─────────────────────────────────────────
+ * Every mutation records how to reverse itself, in batches so that a move of
+ * six files undoes as one thing. Undo VERIFIES before it acts and refuses
+ * rather than guessing; `delete --yes` is deliberately not journalled, because
+ * an undo entry that cannot undo would look like a safety net and not be one. */
+int  cmd_undo(int argc, char **argv);
+void sf_journal(const char *op, const char *a, const char *b);
+
 /* ── trash.c — the XDG trash spec ───────────────────────────────────────────
  * What the Delete key reaches. Trashing is always a rename() and never a copy,
  * which is why a file on another filesystem goes to that volume's own

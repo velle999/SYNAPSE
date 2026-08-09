@@ -245,12 +245,19 @@ static int trash_put_one(const char *path)
 		unlink(ipath);
 		free(ipath);
 		rc = 1;
-	} else if (g_out == OUT_REC) {
-		char *e = pct_encode(real, true);
-		rec_row(3, e, "done", chosen);
-		free(e);
 	} else {
-		printf("trashed %s\n", real);
+		/* `chosen` is the handle `trash restore` takes — the name in the
+		 * trash, which is NOT derivable from the path once a second
+		 * notes.txt has become notes.txt.2. */
+		sf_journal("trash", real, chosen);
+
+		if (g_out == OUT_REC) {
+			char *e = pct_encode(real, true);
+			rec_row(3, e, "done", chosen);
+			free(e);
+		} else {
+			printf("trashed %s\n", real);
+		}
 	}
 
 	free(dest); free(chosen); free(filesdir); free(infodir);

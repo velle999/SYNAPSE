@@ -423,6 +423,7 @@ FloatingWindow {
         onExited: {
             root.busy = false
             root.reload()
+            root.refreshUndo()
             placesProc.running = true
             // Mounting changes what the Devices list should show, and so does
             // trashing something onto a volume. Cheaper to re-read both than
@@ -687,11 +688,39 @@ FloatingWindow {
         else if (event.key === Qt.Key_X) { root.copySelection(true);  event.accepted = true }
         else if (event.key === Qt.Key_V) { root.paste();              event.accepted = true }
         else if (event.key === Qt.Key_A) { root.selectAll();          event.accepted = true }
+        else if (event.key === Qt.Key_Z) { root.doUndo();             event.accepted = true }
         else if (event.key === Qt.Key_T) { root.newTab(root.tab.path, "dir"); event.accepted = true }
         else if (event.key === Qt.Key_W) { root.closeTab(root.current); event.accepted = true }
         else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
     }
 }
+
+    // ── Undo ────────────────────────────────────────────────────────────────
+    //
+    // The label says WHAT would be undone, not just "Undo". A recovery control
+    // that does not tell you what it is about to reverse is one nobody presses
+    // when it matters.
+    property string undoLabel: ""
+
+    Process {
+        id: undoListProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = root.parseRecords(this.text)
+                root.undoLabel = rows.length > 0 ? rows[0].what : ""
+            }
+        }
+    }
+
+    function refreshUndo() {
+        undoListProc.command = [root.bin, "--rec", "undo", "list"]
+        undoListProc.running = true
+    }
+
+    function doUndo() {
+        if (root.undoLabel === "") return
+        root.runOp(["undo"], "undoing " + root.undoLabel + "…")
+    }
 
     // ── Borrowed menu entries ───────────────────────────────────────────────
     //
@@ -879,6 +908,7 @@ FloatingWindow {
         placesProc.running = true
         volProc.running = true
         root.scanThumbs()
+        root.refreshUndo()
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -1341,6 +1371,14 @@ FloatingWindow {
                         }
                     }
 
+                    ToggleChip {
+                        // Named, not just "Undo" — a recovery control that does
+                        // not say what it reverses is one nobody dares press.
+                        label: root.undoLabel !== "" ? "↶ " + root.undoLabel : "↶ Nothing to undo"
+                        on: false
+                        visible: root.undoLabel !== ""
+                        onToggled: root.doUndo()
+                    }
                     ToggleChip {
                         label: root.thumbs ? "Previews ✓" : "Previews"
                         on: root.thumbs

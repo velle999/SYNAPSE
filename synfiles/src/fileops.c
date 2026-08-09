@@ -494,8 +494,19 @@ int cmd_copy(int argc, char **argv)
 			t.failed++;
 		} else {
 			const char *base = sf_basename(src);
+			int before = t.failed;
 			copy_tree(sfd, base, dfd, base, a.pol, &t, src);
 			close(sfd);
+
+			/* Only the top-level thing created is journalled, not every file
+			 * inside a copied tree — undo trashes the tree as one item, which
+			 * is what "undo the copy" means. */
+			if (t.failed == before) {
+				char *made = xasprintf("%s/%s", dest, base);
+				if (faccessat(AT_FDCWD, made, F_OK, AT_SYMLINK_NOFOLLOW) == 0)
+					sf_journal("copy", made, "");
+				free(made);
+			}
 		}
 
 		free(parent);
@@ -570,6 +581,10 @@ int cmd_move(int argc, char **argv)
 
 		/* The fast path, and the only one that is atomic. */
 		if (rename(src, target) == 0) {
+			/* target -> src is the inverse. Recorded AFTER success, so a
+			 * failed move never leaves an undo entry that would move a file
+			 * that was never moved. */
+			sf_journal("move", target, src);
 			report(src, "done", "moved");
 			t.done++;
 			free(target);
@@ -601,6 +616,7 @@ int cmd_move(int argc, char **argv)
 
 			if (sub.failed == 0) {
 				if (sf_rm_rf(AT_FDCWD, src) == 0) {
+					sf_journal("move", target, src);
 					report(src, "done", "copied across filesystems");
 					t.done++;
 				} else {
@@ -657,7 +673,7 @@ int cmd_rename(int argc, char **argv)
 	} else if (rename(src, target) != 0) {
 		warn("cannot rename %s: %s", src, strerror(errno));
 		rc = 1;
-	} else if (g_out == OUT_REC) {
+	} else if ((sf_journal("rename", target, src)), g_out == OUT_REC) {
 		char *e = pct_encode(target, true);
 		rec_row(3, "path", "status", "detail");
 		rec_row(3, e, "done", "renamed");
@@ -682,6 +698,12 @@ int cmd_mkdir(int argc, char **argv)
 		if (mkdir(argv[i], 0755) != 0) {
 			warn("cannot create %s: %s", argv[i], strerror(errno));
 			rc = 1;
+		} else {
+			char *real = sf_resolve_parent(argv[i]);
+			if (real) {
+				sf_journal("mkdir", real, "");
+				free(real);
+			}
 		}
 	}
 	return rc;
