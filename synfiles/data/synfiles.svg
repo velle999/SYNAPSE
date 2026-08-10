@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    SYNAPSE Files.
+
+    Until now this shipped Icon=system-file-manager, which is the theme's
+    generic entry and on a Breeze desktop is literally Dolphin's icon — two
+    file managers wearing one face in the dock, where the icon is the only
+    thing telling them apart.
+
+    The mark is a folder holding TWO PANES, because that is what this browser
+    is: the left one filled, the right one outlined, the same shape the split
+    button draws in the toolbar. Purple #a78bfa is the SynapseOS dendrite
+    colour, so it reads as part of the set rather than as a stray.
+
+    Drawn with four shapes and no gradients on purpose: it is looked at most
+    often at 22px in a dock, where anything finer turns to mush.
+
+    SynapseOS Project — GPL-2.0-or-later
+    SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+
+  <!-- The folder. One path, so the tab and the body cannot drift apart. -->
+  <path d="M4 12.5a3.5 3.5 0 0 1 3.5-3.5h10.7a3.5 3.5 0 0 1 2.8 1.4l1.9 2.5a3.5
+           3.5 0 0 0 2.8 1.4H40.5A3.5 3.5 0 0 1 44 17.8v17.7a3.5 3.5 0 0
+           1-3.5 3.5h-33A3.5 3.5 0 0 1 4 35.5z"
+        fill="#a78bfa"/>
+
+  <!-- The active pane, and the one you are not in. Two SOLID sheets with the
+       folder showing between them, rather than one filled and one outlined:
+       an outline is a 2px ring that closes up into a dark blob by 16px, where
+       two blocks of different value still read as two. -->
+  <rect x="8.5" y="18.5" width="12" height="18" rx="1.8" fill="#f6f3ff"/>
+  <rect x="27.5" y="18.5" width="12" height="18" rx="1.8" fill="#41307a"/>
+</svg>

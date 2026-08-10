@@ -4,7 +4,10 @@ Name=Files
 GenericName=File Browser
 Comment=Browse files and folders
 Exec=synfiles gui %f
-Icon=system-file-manager
+# Its own icon, not the theme's generic system-file-manager — which on a
+# Breeze desktop is Dolphin's, so two file managers sat in the dock wearing one
+# face. The mark is a folder with two panes in it; see data/synfiles.svg.
+Icon=synfiles
 Terminal=false
 # The window's app_id, so a taskbar that maps windows to launchers finds THIS
 # entry. synfiles sets it on the quickshell process (QS_APP_ID); without both

@@ -52,6 +52,12 @@ static const setting_t settings[] = {
 	/* A percentage, because the settings file holds integers. 100 is the
 	 * size the window was drawn at before there was a slider. */
 	{ "text_scale", T_INT, "100",  75, 175, NULL },
+	/* Two panes side by side. Remembered because it is a way of working —
+	 * somebody who files things for an hour wants both halves back on the
+	 * next launch — and off by default because one pane is what a file
+	 * manager is until you ask for two. The divider's position is NOT
+	 * remembered: that is a gesture about what is on screen right now. */
+	{ "split",     T_BOOL, "0",     0, 1,   NULL },
 };
 
 static const setting_t *find_setting(const char *key)

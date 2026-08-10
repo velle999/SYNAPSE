@@ -38,6 +38,12 @@ executable('synfiles', sources,
 
 install_data('data/synfiles.qml', install_dir: get_option('datadir') / 'synfiles')
 
+# The application icon. Scalable only: Qt renders the SVG at whatever size the
+# dock or the menu asks for, and a set of PNGs would be five more files to keep
+# in step with one drawing.
+install_data('data/synfiles.svg',
+             install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps')
+
 # Shipped so the browser can be LAUNCHED, deliberately without a MimeType= line.
 # Registering inode/directory here would make synfiles the default file manager
 # on install, which is exactly the decision this is not allowed to make for the

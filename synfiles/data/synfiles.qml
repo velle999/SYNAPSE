@@ -228,104 +228,97 @@ FloatingWindow {
         return Quickshell.iconPath("text-x-generic", true)
     }
 
-    // ── Tabs ────────────────────────────────────────────────────────────────
+    // ── Split view ──────────────────────────────────────────────────────────
     //
-    // A tab is {path, view, rows, sort, reverse, showHidden, selected}. Keeping
-    // per-tab state in the model rather than in the visible pane is what makes
-    // switching tabs instant and what stops a sort applied in one tab silently
-    // reordering another.
-    property var tabs: []
-    property int current: 0
-    property bool loading: false
+    // Two panes, side by side, each with its own tabs, history, listing and
+    // selection — see the Pane component at the bottom of this file. What is
+    // shared is the toolbar, the sidebar, the clipboard and the undo journal:
+    // two places, not two programs.
+    //
+    // Everything above the panes acts on "the ACTIVE pane", and any click
+    // inside a pane makes it the active one first. That is the whole contract,
+    // and it is what lets the toolbar, the address bar, the menus and every
+    // keyboard shortcut stay written exactly once.
+    property bool split: false
+    property int active: 0
+    // Where the divider sits, as a fraction of the width. Not remembered
+    // between runs: it is a gesture, not a preference, and the useful position
+    // depends on what is in the two panes right now.
+    property real splitRatio: 0.5
+
+    readonly property Item ap: (root.split && root.active === 1) ? paneB : paneA
+
+    function setActive(i) { root.active = (root.split && i === 1) ? 1 : 0 }
+
+    function toggleSplit() {
+        if (root.split) {
+            // Closing keeps what the ACTIVE pane was showing. Dropping back to
+            // whatever the left pane happened to hold would throw away the
+            // folder the user was actually working in.
+            if (root.active === 1) {
+                paneA.adopt(paneB)
+                paneB.discard()
+            }
+            root.active = 0
+            root.split = false
+        } else {
+            root.split = true
+            // The new pane opens on the folder you are already in — the only
+            // answer that is never a surprise — unless it still holds a place
+            // from last time, which is what happens when the split was closed
+            // from the LEFT pane and the right one was simply put away.
+            paneB.ensureStarted(root.tab ? root.tab.path
+                                         : root.encodePath(root.homeDir))
+            root.active = 1
+        }
+    }
+    onSplitChanged: root.saveSetting("split", root.split ? 1 : 0)
+
+    // Messages about operations, which belong to the window rather than to
+    // either pane: an op started in one can finish while you are looking at
+    // the other.
     property string statusLine: ""
 
-    readonly property var tab: tabs.length > 0 ? tabs[current] : null
+    // ── What the shared chrome talks to ─────────────────────────────────────
+    //
+    // Thin forwarders onto the active pane. They exist so that the toolbar,
+    // the sidebar and the menus below read the same as they did when there was
+    // one pane — `root.tab` still means "the folder on screen", it is just no
+    // longer the only one.
+    readonly property var tabs: root.ap.tabs
+    readonly property int current: root.ap.current
+    readonly property var tab: root.ap.tab
+    readonly property var selection: root.ap.selection
+    readonly property var shownRows: root.ap.shownRows
+    readonly property bool loading: root.ap.loading
+    readonly property bool canGoBack: root.ap.canGoBack
+    readonly property bool canGoForward: root.ap.canGoForward
 
-    function newTab(pathEnc, view) {
-        const t = {
-            path: pathEnc || root.encodePath(root.homeDir),
-            view: view || "dir",       // dir | recent | places-derived listing
-            title: "",
-            rows: [],
-            sort: root.defaultSort,
-            reverse: root.defaultReverse,
-            showHidden: root.defaultHidden,
-            filter: "",
-            // Back/forward, per tab. Shared history across tabs would send Back
-            // to a folder this tab was never in.
-            hist: [{ path: pathEnc || root.encodePath(root.homeDir), view: view || "dir" }],
-            hi: 0
-        }
-        const copy = root.tabs.slice()
-        copy.push(t)
-        root.tabs = copy
-        root.current = copy.length - 1
-        root.reload()
+    function newTab(pathEnc, view) { root.ap.newTab(pathEnc, view) }
+    function closeTab(i)           { root.ap.closeTab(i) }
+    function setTab(fields)        { root.ap.setTab(fields) }
+    function navigate(pathEnc, view) { root.ap.navigate(pathEnc, view) }
+    function goBack()              { root.ap.goBack() }
+    function goForward()           { root.ap.goForward() }
+    function reload()              { root.ap.reload() }
+    function beginSearch()         { root.ap.beginSearch() }
+    function isSelected(name)      { return root.ap.isSelected(name) }
+    function selectAll()           { root.ap.selectAll() }
+    function clearSelection()      { root.ap.clearSelection() }
+    function selectedRows()        { return root.ap.selectedRows() }
+    function selectedPaths()       { return root.ap.selectedPaths() }
+
+    // An operation can change what BOTH panes are showing — moving a file from
+    // one to the other is the entire point of having two. Reloading only the
+    // pane the command was issued from would leave the destination looking
+    // like the drop did nothing.
+    function reloadAll() {
+        paneA.reload()
+        if (root.split) paneB.reload()
     }
-
-    function closeTab(i) {
-        if (root.tabs.length <= 1) return
-        const copy = root.tabs.slice()
-        copy.splice(i, 1)
-        root.tabs = copy
-        if (root.current >= copy.length) root.current = copy.length - 1
-        root.reload()
-    }
-
-    // Mutating a property of an object inside an array does NOT re-evaluate
-    // bindings on that array — QML only notices the array identity changing.
-    // Every state change therefore rebuilds the outer array, which is why this
-    // helper exists rather than `tabs[current].sort = x` at each call site.
-    function setTab(fields) {
-        if (!root.tab) return
-        const copy = root.tabs.slice()
-        const t = ({})
-        for (const k in copy[root.current]) t[k] = copy[root.current][k]
-        for (const k in fields) t[k] = fields[k]
-        copy[root.current] = t
-        root.tabs = copy
-    }
-
-    function navigate(pathEnc, view) {
-        const v = view || "dir"
-        const t = root.tab
-        // Going somewhere new DISCARDS the forward entries, the way every
-        // browser does: forward means "where I came back from", and keeping a
-        // branch nobody can see would make the button lie.
-        if (t) {
-            const h = (t.hist || []).slice(0, (t.hi === undefined ? -1 : t.hi) + 1)
-            const last = h[h.length - 1]
-            if (!last || last.path !== pathEnc || last.view !== v)
-                h.push({ path: pathEnc, view: v })
-            root.setTab({ hist: h, hi: h.length - 1 })
-        }
-        root.go(pathEnc, v)
-    }
-
-    // The move itself, with no history written — what Back and Forward use.
-    function go(pathEnc, view) {
-        root.setTab({ path: pathEnc, view: view || "dir", filter: "", rows: [] })
-        root.reload()
-    }
-
-    readonly property bool canGoBack: root.tab && root.tab.hi > 0
-    readonly property bool canGoForward:
-        root.tab && root.tab.hist && root.tab.hi < root.tab.hist.length - 1
-
-    function goBack() {
-        if (!root.canGoBack) return
-        const i = root.tab.hi - 1
-        const e = root.tab.hist[i]
-        root.setTab({ hi: i })
-        root.go(e.path, e.view)
-    }
-
-    function goForward() {
-        if (!root.canGoForward) return
-        const i = root.tab.hi + 1
-        const e = root.tab.hist[i]
-        root.setTab({ hi: i })
-        root.go(e.path, e.view)
+    function refreshPeekAll() {
+        paneA.refreshPeek()
+        if (root.split) paneB.refreshPeek()
     }
 
     // ── Backend ─────────────────────────────────────────────────────────────
@@ -343,120 +336,6 @@ FloatingWindow {
             out.push(o)
         }
         return out
-    }
-
-    Process {
-        id: listProc
-        property string kind: ""
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const table = root.parseRecords(this.text)
-                const t = root.tab
-                if (!t) return
-
-                let rows = []
-                if (listProc.kind === "find") {
-                    listProc.kind = ""
-                    // A search result is not in the current folder, so it
-                    // carries its own full path rather than being joined onto
-                    // the tab's. `dir` is relative to where the search started.
-                    rows = table.map(r => ({
-                        name: r.name,
-                        full: r.dir ? root.joinEnc(root.joinEnc(root.searchRoot, r.dir), r.name)
-                                    : root.joinEnc(root.searchRoot, r.name),
-                        where: r.dir,
-                        type: r.type, size: parseInt(r.size || "0"),
-                        mtime: parseInt(r.mtime || "0"), mime: r.mime,
-                        link: r.link, target: r.target, mode: r.mode,
-                        missing: false
-                    }))
-                    root.setTab({ rows: rows })
-                    root.loading = false
-                    root.statusLine = ""
-                    return
-                }
-                if (t.view === "about") {
-                    root.aboutRows = table
-                    root.loading = false
-                    root.statusLine = ""
-                    return
-                } else if (t.view === "trash") {
-                    // `trashName` is the handle `trash restore` takes, and it
-                    // is NOT derivable from the path: two files called
-                    // notes.txt become notes.txt and notes.txt.2 in the trash.
-                    //
-                    // …which is also why `name` — the row's IDENTITY, what the
-                    // selection is a set of — has to be that trash name and not
-                    // the original basename. Two trashed notes.txt share a
-                    // basename, so clicking one highlighted both. `label` is
-                    // what the row shows: still the name the file had.
-                    rows = table.map(r => ({
-                        name: r.name, label: root.baseEnc(r.path),
-                        full: r.path,
-                        trashName: r.name,
-                        type: r.present === "1" ? "file" : "missing",
-                        size: 0, mtime: 0, deleted: r.deleted,
-                        mime: "", link: "0", target: "",
-                        missing: r.present !== "1"
-                    }))
-                } else if (t.view === "recent") {
-                    rows = table.map(r => ({
-                        name: root.baseEnc(r.path), full: r.path,
-                        type: r.exists === "1" ? "file" : "missing",
-                        size: 0, mtime: parseInt(r.mtime || "0"),
-                        mime: r.mime, link: "0", target: "",
-                        missing: r.exists !== "1"
-                    }))
-                } else {
-                    rows = table.map(r => ({
-                        name: r.name, full: root.joinEnc(t.path, r.name),
-                        type: r.type, size: parseInt(r.size || "0"),
-                        mtime: parseInt(r.mtime || "0"), mime: r.mime,
-                        link: r.link, target: r.target, mode: r.mode,
-                        icon: r.icon || "",
-                        missing: false
-                    }))
-                }
-
-                root.setTab({ rows: rows })
-                root.loading = false
-                root.statusLine = ""
-                // What is inside each subfolder, for the icons. After the
-                // listing rather than beside it: the rows are what the window
-                // is waiting for, and this only decorates them.
-                root.refreshPeek()
-            }
-        }
-        stderr: StdioCollector {
-            onStreamFinished: {
-                if (this.text) root.statusLine = this.text.split("\n")[0]
-            }
-        }
-    }
-
-    function reload() {
-        const t = root.tab
-        if (!t) return
-        root.loading = true
-        root.statusLine = ""
-
-        if (t.view === "about") {
-            listProc.command = [root.bin, "--rec", "about"]
-        } else if (t.view === "trash") {
-            listProc.command = [root.bin, "--rec", "trash", "list"]
-        } else if (t.view === "recent") {
-            listProc.command = [root.bin, "--rec", "recent", "--limit=300"]
-        } else {
-            // The path goes to the binary DECODED — argv carries raw bytes and
-            // needs no escaping. The encoded form exists for the record
-            // stream, not for the process boundary.
-            const args = [root.bin, "--rec", "list", "--sort=" + t.sort]
-            if (t.reverse) args.push("--reverse")
-            if (t.showHidden) args.push("--all")
-            args.push(root.disp(t.path))
-            listProc.command = args
-        }
-        listProc.running = true
     }
 
     property var aboutRows: []
@@ -479,63 +358,6 @@ FloatingWindow {
 
     // ── Selection, clipboard and operations ─────────────────────────────────
 
-    // Encoded names, because that is the identity. Storing display names here
-    // would make two files that differ only in an escaped byte the same
-    // selection.
-    property var selection: []
-    property string anchorName: ""   // where a Shift range started
-
-    function isSelected(name) { return root.selection.indexOf(name) >= 0 }
-
-    function selectOnly(name) {
-        root.selection = [name]
-        root.anchorName = name
-    }
-
-    function toggleSelect(name) {
-        const i = root.selection.indexOf(name)
-        const copy = root.selection.slice()
-        if (i >= 0) copy.splice(i, 1)
-        else copy.push(name)
-        root.selection = copy
-        root.anchorName = name
-    }
-
-    // A Shift range runs over the rows AS DISPLAYED, so it follows the current
-    // sort and filter rather than some underlying order the user cannot see.
-    function selectRange(name) {
-        const rows = root.shownRows
-        let a = -1, b = -1
-        for (let i = 0; i < rows.length; i++) {
-            if (rows[i].name === root.anchorName) a = i
-            if (rows[i].name === name) b = i
-        }
-        if (a < 0) { root.selectOnly(name); return }
-        if (b < 0) return
-        const lo = Math.min(a, b), hi = Math.max(a, b)
-        const copy = []
-        for (let i = lo; i <= hi; i++) copy.push(rows[i].name)
-        root.selection = copy
-    }
-
-    function selectAll() {
-        root.selection = root.shownRows.map(r => r.name)
-    }
-
-    function clearSelection() {
-        root.selection = []
-        root.anchorName = ""
-    }
-
-    function selectedRows() {
-        return root.shownRows.filter(r => root.isSelected(r.name))
-    }
-
-    // Decoded paths for the process boundary — argv carries raw bytes.
-    function selectedPaths() {
-        return root.selectedRows().map(r => root.disp(r.full))
-    }
-
     // {op: "copy"|"cut", paths: [encoded...]}. Cut is not a move yet — nothing
     // leaves its directory until Paste, which is what makes Ctrl+X reversible
     // by simply not pasting.
@@ -553,7 +375,7 @@ FloatingWindow {
         // handler silently never runs.
         onExited: {
             root.busy = false
-            root.reload()
+            root.reloadAll()
             root.refreshUndo()
             placesProc.running = true
             // Mounting changes what the Devices list should show, and so does
@@ -635,11 +457,11 @@ FloatingWindow {
     }
 
     // ── Rename ──────────────────────────────────────────────────────────────
-    property string renaming: ""     // encoded name being renamed, "" if none
-
+    // The name being edited is the PANE's — two panes can be renaming two
+    // different files at once, and the inline editor is drawn on a row.
     function commitRename(newName) {
         const row = root.selectedRow()
-        root.renaming = ""
+        root.ap.renaming = ""
         if (!row || !newName || newName === root.disp(row.name)) return
         root.runOp(["rename", root.disp(row.full), newName],
                    "renaming to " + newName)
@@ -770,45 +592,6 @@ FloatingWindow {
             && row.size > 0 && row.size <= root.thumbMaxBytes
     }
 
-    // ── Folder previews ─────────────────────────────────────────────────────
-    //
-    // What a folder has inside it, drawn on its icon the way Dolphin does —
-    // twenty subfolders of holiday photos are twenty identical shapes until
-    // something tells them apart.
-    //
-    // ONE call per listing, keyed by the folder's encoded path. Asking per
-    // folder as rows scroll into view would fork a process per row; see
-    // peek.c, which answers for every subdirectory of one directory in a
-    // single pass.
-    property var folderPeek: ({})
-
-    Process {
-        id: peekProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const map = ({})
-                for (const r of root.parseRecords(this.text)) {
-                    if (!r.dir || !r.file) continue
-                    if (!map[r.dir]) map[r.dir] = []
-                    map[r.dir].push({ full: r.file, size: parseInt(r.size || "0") })
-                }
-                root.folderPeek = map
-            }
-        }
-    }
-
-    function refreshPeek() {
-        // Previews off means previews off, everywhere: a folder that keeps its
-        // pictures after the toggle is turned off looks like the toggle broke.
-        if (!root.thumbs || !root.tab || root.tab.view !== "dir") {
-            root.folderPeek = ({})
-            return
-        }
-        peekProc.running = false
-        peekProc.command = [root.bin, "--rec", "peek", root.disp(root.tab.path)]
-        peekProc.running = true
-    }
-
     // A preview tile's source, from a bare path — the peek rows carry no mime,
     // so the extension decides whether the file itself can stand in for a
     // thumbnail. A video never can: that needs a thumbnailer, and the shared
@@ -869,45 +652,6 @@ FloatingWindow {
             ]
         }
     }
-
-    // Shared by the list and the grid: the two differ in arrangement, not
-    // in what a key means.
-    function handleKey(event) {
-    const row = root.selectedRow()
-    if (event.key === Qt.Key_Delete) {
-        if (root.tab.view === "dir") root.trashSelection()
-        event.accepted = true
-    } else if (event.key === Qt.Key_F2) {
-        // Rename is the one operation that cannot be done to
-        // six things at once, so it needs exactly one.
-        if (row && root.tab.view === "dir") root.renaming = row.name
-        event.accepted = true
-    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-        if (event.modifiers & Qt.AltModifier) root.openProperties()
-        else if (row) root.activate(row)
-        event.accepted = true
-    } else if (event.key === Qt.Key_Escape) {
-        if (root.showProps) root.showProps = false
-        else if (root.searching) root.endSearch()
-        else root.clearSelection()
-        event.accepted = true
-    } else if (event.key === Qt.Key_Backspace) {
-        if (root.tab.view === "dir")
-            root.navigate(root.parentEnc(root.tab.path), "dir")
-        event.accepted = true
-    } else if (event.modifiers & Qt.ControlModifier) {
-        if (event.key === Qt.Key_C)      { root.copySelection(false); event.accepted = true }
-        else if (event.key === Qt.Key_X) { root.copySelection(true);  event.accepted = true }
-        else if (event.key === Qt.Key_V) { root.paste();              event.accepted = true }
-        else if (event.key === Qt.Key_A) { root.selectAll();          event.accepted = true }
-        else if (event.key === Qt.Key_Z) { root.doUndo();             event.accepted = true }
-        else if (event.key === Qt.Key_F) { root.beginSearch();        event.accepted = true }
-        else if (event.key === Qt.Key_L) { root.beginEditPath();      event.accepted = true }
-        else if (event.key === Qt.Key_T) { root.newTab(root.tab.path, "dir"); event.accepted = true }
-        else if (event.key === Qt.Key_W) { root.closeTab(root.current); event.accepted = true }
-        else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
-    }
-}
 
     // ── Folder tree ─────────────────────────────────────────────────────────
     //
@@ -1168,6 +912,11 @@ FloatingWindow {
                     case "hidden":    root.defaultHidden = r.value === "1"; break
                     case "view":      root.viewMode = r.value || "auto"; break
                     case "text_scale": root.textScale = parseInt(r.value) || 100; break
+                    // Read straight into the property rather than through
+                    // toggleSplit(): that function adopts one pane's state into
+                    // the other and focuses the new pane, neither of which is
+                    // what restoring a remembered layout means.
+                    case "split":     root.split = r.value === "1"; break
                     }
                 }
                 // Only after applying, or the act of applying would write every
@@ -1178,12 +927,18 @@ FloatingWindow {
                 // gets them applied and re-read. Without this the remembered
                 // sort only took effect on the SECOND tab, which reads as
                 // "it forgot".
-                if (root.tab) {
-                    root.setTab({ sort: root.defaultSort,
-                                  reverse: root.defaultReverse,
-                                  showHidden: root.defaultHidden })
-                    root.reload()
+                if (paneA.tab) {
+                    paneA.setTab({ sort: root.defaultSort,
+                                   reverse: root.defaultReverse,
+                                   showHidden: root.defaultHidden })
+                    paneA.reload()
                 }
+                // A remembered split has no second pane yet — the window was
+                // built with one. Without this the setting restored a divider
+                // with an empty half beside it.
+                if (root.split)
+                    paneB.ensureStarted(paneA.tab ? paneA.tab.path
+                                                  : root.encodePath(root.homeDir))
                 if (root.showTree
                     && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
                     root.treeToggle(root.encodePath(root.homeDir))
@@ -1222,7 +977,7 @@ FloatingWindow {
     // These are single clicks, so they save immediately.
     onThumbsChanged: {
         root.saveSetting("previews", root.thumbs ? 1 : 0)
-        root.refreshPeek()
+        root.refreshPeekAll()
     }
     onShowTreeChanged: root.saveSetting("tree", root.showTree ? 1 : 0)
     onViewModeChanged: root.saveSetting("view", root.viewMode)
@@ -1296,56 +1051,13 @@ FloatingWindow {
             break
         }
         case "thumbs": root.thumbs = !root.thumbs; break   // onThumbsChanged saves
+        case "split": root.toggleSplit(); break            // onSplitChanged saves
         case "tree":
             root.showTree = !root.showTree
             if (root.showTree && root.treeChildren[root.encodePath(root.homeDir)] === undefined)
                 root.treeToggle(root.encodePath(root.homeDir))
             break
         }
-    }
-
-    // Split view is NOT here yet, deliberately. Two panes means factoring the
-    // 247-line file pane into a component and moving `selection` out of root
-    // and into each tab — selection is per-pane or it is nonsense. That is a
-    // structural change and it is its own commit; a Split button that toggled
-    // a flag and drew nothing would be worse than no button at all.
-
-    // ── Search ──────────────────────────────────────────────────────────────
-    //
-    // Scoped to the folder you are standing in, because "search everywhere" is
-    // a different and much slower question, and the answer to it is almost
-    // never what somebody pressing Ctrl+F in a folder wanted.
-    property bool searching: false
-    property string searchTerm: ""
-    property bool searchContent: false
-    property string searchRoot: ""
-
-    function beginSearch() {
-        if (!root.tab || root.tab.view !== "dir") return
-        root.searchRoot = root.tab.path
-        root.searching = true
-        root.setTab({ rows: [], filter: "" })
-        filterInput.forceActiveFocus()
-    }
-
-    function endSearch() {
-        root.searching = false
-        root.searchTerm = ""
-        root.reload()
-    }
-
-    function runSearch() {
-        if (!root.searchTerm) { root.setTab({ rows: [] }); return }
-        root.loading = true
-        root.statusLine = "searching " + root.disp(root.searchRoot) + "…"
-        const args = [root.bin, "--rec", "find", root.disp(root.searchRoot),
-                      "--limit=2000"]
-        if (root.searchContent) args.push("--content=" + root.searchTerm)
-        else                    args.push("--name=" + root.searchTerm)
-        if (root.tab.showHidden) args.push("--all")
-        listProc.kind = "find"
-        listProc.command = args
-        listProc.running = true
     }
 
     // ── Undo ────────────────────────────────────────────────────────────────
@@ -1437,7 +1149,7 @@ FloatingWindow {
     property bool creatingFile: false
     Process {
         id: newFileProc
-        onExited: root.reload()
+        onExited: root.reloadAll()
     }
 
     // ── Disk context menu ───────────────────────────────────────────────────
@@ -1577,17 +1289,12 @@ FloatingWindow {
         else if (!row.missing)  root.openFile(row.full)
     }
 
-    readonly property var shownRows: {
-        const t = root.tab
-        if (!t) return []
-        if (!t.filter) return t.rows
-        const f = t.filter.toLowerCase()
-        return t.rows.filter(r => root.disp(r.name).toLowerCase().includes(f))
-    }
-
     Component.onCompleted: {
         const start = Quickshell.env("SYNFILES_DIR") || root.homeDir
-        root.newTab(root.encodePath(start), "dir")
+        // Named, not root.newTab(): the active pane is paneA at this point and
+        // will be, but a window opening depends on which pane it starts in and
+        // that should not be inferred from a variable.
+        paneA.newTab(root.encodePath(start), "dir")
         placesProc.running = true
         volProc.running = true
         root.scanThumbs()
@@ -1768,6 +1475,28 @@ FloatingWindow {
                 anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                 spacing: 2
 
+                // Undo is the one journal, shared by both panes, so it
+                // belongs to the window and not to a pane's tab strip — which
+                // is where it used to live, and where a split window would
+                // have drawn two of it.
+                ToggleChip {
+                    // Named, not just "Undo": a recovery control that does not
+                    // say what it reverses is one nobody dares press.
+                    label: "↶ " + root.undoLabel
+                    on: false
+                    visible: root.undoLabel !== ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    onToggled: root.doUndo()
+                }
+                ToolButton {
+                    // Drawn, not a theme icon: it is the one glyph here that
+                    // has to say WHICH pane is which, and Qt cannot re-tint a
+                    // theme icon in a running process (see FolderIcon).
+                    splitIcon: true
+                    hint: root.split ? "Close split view" : "Split view (F3)"
+                    active: root.split
+                    onActivated: root.toggleSplit()
+                }
                 ToolButton { glyph: "⌕"; hint: "Search"; onActivated: root.beginSearch() }
                 ToolButton {
                     glyph: "☰"
@@ -2033,7 +1762,10 @@ FloatingWindow {
             }
         }
 
-        // ── Main pane ───────────────────────────────────────────────────────
+        // ── The content area ────────────────────────────────────────────────
+        // Everything right of the sidebar and under the toolbar: one or two
+        // panes, one status bar under both of them, and the menus and dialogs
+        // that belong to the window rather than to either pane.
         Item {
             anchors {
                 top: toolBar.bottom; left: sidebar.right
@@ -2041,1126 +1773,73 @@ FloatingWindow {
             }
 
 
-            // Tab strip
+            // ── The panes ───────────────────────────────────────────────────
+            //
+            // Two of them, always constructed; the second is shown only when
+            // the split is on. They are STATIC rather than a Repeater over a
+            // model because a Repeater rebuilds its delegates whenever the
+            // model array's identity changes — and every state change inside a
+            // pane replaces an array. Panes recreated mid-listing would lose
+            // their scroll position, their keyboard focus and the Process
+            // reading the directory out from under them.
+            Pane {
+                id: paneA
+                idx: 0
+                anchors { top: parent.top; bottom: statusBar.top; left: parent.left }
+                width: root.split
+                       ? Math.round((parent.width - splitter.width) * root.splitRatio)
+                       : parent.width
+            }
+
+            // The handle between them. Draggable, because the useful split is
+            // rarely the even one — copying into a deep tree wants a wide
+            // source and a narrow destination.
             Rectangle {
-                id: tabStrip
-                anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: 34
-                color: root.cPanel
+                id: splitter
+                visible: root.split
+                anchors { top: parent.top; bottom: statusBar.top }
+                x: paneA.width
+                width: 6
+                color: splitMa.pressed || splitMa.containsMouse ? root.wash(0.30)
+                                                                : root.cPanel
 
-                Row {
-                    anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                    spacing: 2
-
-                    Repeater {
-                        model: root.tabs
-                        delegate: Rectangle {
-                            id: tabBtn
-                            required property var modelData
-                            required property int index
-                            readonly property bool active: tabBtn.index === root.current
-                            width: Math.min(200, tabLabel.implicitWidth + 46)
-                            height: 26
-                            radius: 3
-                            color: tabBtn.active ? root.wash(0.20)
-                                                 : (tabMa.containsMouse ? root.wash(0.08) : "transparent")
-
-                            Text {
-                                id: tabLabel
-                                anchors {
-                                    left: parent.left; leftMargin: 10
-                                    right: closeBtn.left; rightMargin: 4
-                                    verticalCenter: parent.verticalCenter
-                                }
-                                text: tabBtn.modelData.view === "recent"
-                                      ? "Recent"
-                                      : (root.disp(root.baseEnc(tabBtn.modelData.path)) || "/")
-                                elide: Text.ElideRight
-                                color: tabBtn.active ? root.cAccent : root.cDim
-                                font { family: root.uiFont; pixelSize: root.ui(12) }
-                            }
-                            MouseArea {
-                                id: tabMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: { root.current = tabBtn.index; root.reload() }
-                            }
-                            Text {
-                                id: closeBtn
-                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                                text: "×"
-                                color: closeMa.containsMouse ? root.cAccent : root.cDim
-                                font { family: root.uiFont; pixelSize: root.ui(14) }
-                                visible: root.tabs.length > 1
-                                MouseArea {
-                                    id: closeMa
-                                    anchors { fill: parent; margins: -4 }
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.closeTab(tabBtn.index)
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        width: 26; height: 26; radius: 3
-                        color: addMa.containsMouse ? root.wash(0.12) : "transparent"
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+"
-                            color: root.cDim
-                            font { family: root.uiFont; pixelSize: root.ui(15) }
-                        }
-                        MouseArea {
-                            id: addMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.newTab(root.tab ? root.tab.path
-                                                            : root.encodePath(root.homeDir), "dir")
-                        }
-                    }
-                }
-
-                // The two controls that used to have a 30px band of their own
-                // with nothing else in it. The tab strip already reserves this
-                // row and the space to the right of the tabs was empty, so they
-                // cost no height at all here. New Folder went to the hamburger,
-                // which already had it.
-                Row {
-                    anchors { right: parent.right; rightMargin: 8
-                              verticalCenter: parent.verticalCenter }
-                    spacing: 6
-
-                    ToggleChip {
-                        // Named, not just "Undo" — a recovery control that does
-                        // not say what it reverses is one nobody dares press.
-                        label: "↶ " + root.undoLabel
-                        on: false
-                        visible: root.undoLabel !== ""
-                        onToggled: root.doUndo()
-                    }
-                    ToggleChip {
-                        label: root.tab && root.isPinned(root.tab.path) ? "Pinned ✓" : "Pin"
-                        on: root.tab ? root.isPinned(root.tab.path) : false
-                        visible: root.tab && root.tab.view === "dir"
-                        onToggled: {
-                            if (root.isPinned(root.tab.path)) root.unpin(root.tab.path)
-                            else root.pin(root.tab.path)
-                        }
-                    }
-                }
-            }
-
-            // Path bar: breadcrumbs, filter, and the per-tab toggles.
-            // Emptying the trash is the one destructive action reachable from
-            // this window, so it is a deliberate button on its own view rather
-            // than a menu entry next to something harmless — and the binary
-            // still refuses it without --yes, which is passed only from here.
-            Item {
-                id: trashBar
-                anchors { top: tabStrip.bottom; left: parent.left; right: parent.right }
-                anchors.margins: 8
-                height: 30
-                visible: root.tab && root.tab.view === "trash"
-
-                Text {
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                    text: "Deleted files. Restoring puts one back where it came from."
-                    color: root.cDim
-                    font { family: root.uiFont; pixelSize: root.ui(12) }
-                }
-                ToggleChip {
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                    label: "Empty Trash…"
-                    on: false
-                    onToggled: root.confirmEmpty = true
-                }
-            }
-
-            // Filter box
-            Rectangle {
-                id: filterBar
-                // Below the trash's own banner when there is one. It used to
-                // hang off the row that just went, and in the trash view both
-                // landed on tabStrip.bottom and drew over each other.
-                anchors { top: trashBar.visible ? trashBar.bottom : tabStrip.bottom
-                          left: parent.left; right: parent.right }
-                anchors.margins: 8
-                height: 28
-                visible: root.tab && root.tab.view !== "about"
-                radius: 4
-                color: root.cPanel
-                border { width: 1; color: filterInput.activeFocus ? root.cAccent : "transparent" }
-
-                // One box, two jobs, and the mode is explicit. Filtering hides
-                // rows already loaded; searching walks the tree and takes a
-                // moment — silently switching between them on the same
-                // keystroke would make the slow one a surprise.
-                TextInput {
-                    id: filterInput
-                    anchors {
-                        left: parent.left; leftMargin: 10
-                        right: searchChips.left; rightMargin: 8
-                        top: parent.top; bottom: parent.bottom
-                    }
-                    verticalAlignment: TextInput.AlignVCenter
-                    color: root.cText
-                    font { family: root.uiFont; pixelSize: root.ui(12) }
-                    clip: true
-                    onTextChanged: {
-                        if (root.searching) root.searchTerm = text
-                        else root.setTab({ filter: text })
-                    }
-                    onAccepted: if (root.searching) root.runSearch()
-                    Keys.onEscapePressed: {
-                        text = ""
-                        if (root.searching) root.endSearch()
-                        else root.setTab({ filter: "" })
-                    }
-                    onVisibleChanged: if (visible) text = ""
-                }
-                Text {
-                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                    text: root.searching
-                          ? ("search " + root.disp(root.baseEnc(root.searchRoot))
-                             + " and below — press Enter")
-                          : "filter these items…   (Ctrl+F to search)"
-                    color: root.cDim
-                    font { family: root.uiFont; pixelSize: root.ui(12) }
-                    visible: filterInput.text === ""
-                }
-
-                Row {
-                    id: searchChips
-                    anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
-                    spacing: 4
-                    visible: root.searching
-
-                    ToggleChip {
-                        label: root.searchContent ? "In contents" : "By name"
-                        on: root.searchContent
-                        onToggled: {
-                            root.searchContent = !root.searchContent
-                            if (root.searchTerm) root.runSearch()
-                        }
-                    }
-                    ToggleChip {
-                        label: "Done"
-                        on: false
-                        onToggled: { filterInput.text = ""; root.endSearch() }
-                    }
-                }
-            }
-
-            // One scrollbar per view, each anchored to the view it drives.
-            VScroll {
-                flick: fileList
-                anchors {
-                    top: fileList.top; bottom: fileList.bottom
-                    left: fileList.right; leftMargin: 4
-                }
-            }
-            VScroll {
-                flick: fileGrid
-                anchors {
-                    top: fileGrid.top; bottom: fileGrid.bottom
-                    left: fileGrid.right; leftMargin: 4
-                }
-            }
-            HScroll {
-                flick: fileGrid
-                anchors {
-                    left: fileGrid.left; right: fileGrid.right
-                    top: fileGrid.bottom; topMargin: 2
-                }
-            }
-
-            // ── About ───────────────────────────────────────────────────────
-            // Not a credits screen. Almost everything this browser does beyond
-            // listing a directory leans on something optional — gvfs, lsblk,
-            // shared-mime-info, xdg-open — and when one is missing the feature
-            // is silently EMPTY rather than broken. This says which.
-            Flickable {
-                anchors {
-                    top: tabStrip.bottom; left: parent.left
-                    right: parent.right; bottom: statusBar.top
-                }
-                anchors.margins: 18
-                visible: root.tab && root.tab.view === "about"
-                contentHeight: aboutCol.implicitHeight
-                clip: true
-
-                Column {
-                    id: aboutCol
-                    width: parent.width
-                    spacing: 6
-
-                    Text {
-                        text: "SYNAPSE Files"
-                        color: root.cAccent
-                        font { family: root.uiFont; pixelSize: root.ui(20); bold: true  }
-                    }
-                    Text {
-                        width: aboutCol.width
-                        text: "A file browser for SynapseOS. Tabs, pinned places shared with "
-                            + "Dolphin, recent files, volumes and network shares."
-                        color: root.cDim
-                        font { family: root.uiFont; pixelSize: root.ui(12) }
-                        wrapMode: Text.WordWrap
-                        bottomPadding: 10
-                    }
-
-                    Repeater {
-                        model: root.aboutRows
-                        delegate: Rectangle {
-                            id: aboutRow
-                            required property var modelData
-                            width: aboutCol.width
-                            height: 52
-                            radius: 4
-                            color: root.wash(0.05)
-
-                            readonly property color stateColor:
-                                aboutRow.modelData.state === "ok"      ? root.cAccent
-                              : aboutRow.modelData.state === "off"     ? root.cWarn
-                              : aboutRow.modelData.state === "missing" ? root.cDim
-                                                                       : root.cAccent
-
-                            // A detail that is a URL opens in a browser. It is
-                            // never split and handed to a shell — that path is
-                            // for commands, and conflating the two would run
-                            // whatever a detail string happened to contain.
-                            readonly property bool openable:
-                                aboutRow.modelData.detail !== undefined
-                                && aboutRow.modelData.detail.indexOf("https://") === 0
-
-                            Rectangle {
-                                id: aboutDot
-                                anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
-                                width: 8; height: 8; radius: 4
-                                color: aboutRow.stateColor
-                            }
-                            Text {
-                                id: aboutKey
-                                anchors { left: aboutDot.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                                width: 120
-                                text: aboutRow.modelData.item
-                                color: root.cText
-                                font { family: root.uiFont; pixelSize: root.ui(12); bold: true  }
-                                elide: Text.ElideRight
-                            }
-                            Column {
-                                anchors {
-                                    left: aboutKey.right; leftMargin: 12
-                                    right: aboutBtn.left; rightMargin: 12
-                                    verticalCenter: parent.verticalCenter
-                                }
-                                spacing: 2
-                                Text {
-                                    width: parent.width
-                                    text: aboutRow.modelData.value
-                                    color: aboutRow.stateColor
-                                    font { family: root.uiFont; pixelSize: root.ui(12) }
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    width: parent.width
-                                    text: aboutRow.modelData.detail
-                                    color: root.cDim
-                                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                                    elide: Text.ElideRight
-                                    visible: text !== ""
-                                }
-                            }
-                            Rectangle {
-                                id: aboutBtn
-                                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                                width: 74; height: 26; radius: 4
-                                visible: aboutRow.openable
-                                color: aboutBtnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
-                                border { width: 1; color: root.cAccent }
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Open"
-                                    color: root.cAccent
-                                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                                }
-                                MouseArea {
-                                    id: aboutBtnMa
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        Qt.openUrlExternally(aboutRow.modelData.detail)
-                                        root.statusLine = "opened in your browser"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // The whole pane is a target for the CURRENT folder. Declared
-            // before the views, so a row or a cell — which is a more specific
-            // answer — takes the drop first and this catches the empty space
-            // around them, which is what "drop it in here" means.
-            DropArea {
-                id: paneDrop
-                anchors {
-                    top: heads.bottom; left: parent.left
-                    right: parent.right; bottom: statusBar.top
-                }
-                enabled: root.tab && root.tab.view === "dir"
-                property bool hovering: false
-                onEntered: (drag) => {
-                    paneDrop.hovering = root.willAcceptDrop(root.tab.path, drag)
-                    if (!paneDrop.hovering) drag.accepted = false
-                }
-                onExited: paneDrop.hovering = false
-                onDropped: (drop) => {
-                    paneDrop.hovering = false
-                    root.handleDrop(root.tab.path, drop)
-                }
-
-                // Says which folder is about to receive it, because a drop on
-                // empty space has no row under the cursor to highlight.
                 Rectangle {
-                    anchors.fill: parent
-                    visible: paneDrop.hovering
-                    color: "transparent"
-                    border { width: 2; color: root.cAccent }
-                    radius: 4
-                    opacity: 0.7
+                    anchors.centerIn: parent
+                    width: 1
+                    height: parent.height
+                    color: root.wash(0.25)
                 }
-            }
 
-            // Column headings
-            Item {
-                id: heads
-                anchors { top: filterBar.bottom; left: parent.left; right: parent.right }
-                anchors.margins: 8
-                anchors.topMargin: 4
-                // Matches the list's own gutter, or "Size" and "Modified" sit
-                // 14px to the right of the column they name.
-                anchors.rightMargin: 22
-                // Column headings are the Details view's own furniture: over a
-                // grid of icons they name columns that are not there.
-                height: heads.visible ? 20 : 0
-                visible: root.tab && root.tab.view !== "about" && !root.gridView
-
-                Text {
-                    anchors { left: parent.left; leftMargin: 40 }
-                    text: "Name"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
-                }
-                Text {
-                    anchors { right: parent.right; rightMargin: 190 }
-                    text: "Size"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
-                }
-                Text {
-                    anchors { right: parent.right; rightMargin: 20 }
-                    text: "Modified"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
-                }
-            }
-
-            ListView {
-                id: fileList
-                anchors {
-                    top: heads.bottom; left: parent.left
-                    right: parent.right; bottom: statusBar.top
-                }
-                anchors.margins: 8
-                anchors.topMargin: 2
-                // Room for the scrollbar, so a row never runs under the handle.
-                anchors.rightMargin: 22
-                clip: true
-                visible: root.tab && root.tab.view !== "about" && !root.gridView
-                model: root.shownRows
-                spacing: 1
-                currentIndex: -1
-                focus: true
-
-                // Shortcuts a file manager is expected to have. Delete goes to
-                // the TRASH — the permanent one is a separate command behind a
-                // separate flag, and no key reaches it.
-                Keys.onPressed: (event) => root.handleKey(event)
-
-                delegate: Rectangle {
-                    id: fileRow
-                    required property var modelData
-                    readonly property bool isSelected: root.isSelected(fileRow.modelData.name)
-                    readonly property bool isRenaming: fileRow.modelData.name === root.renaming
-                    property bool dropHover: false
-                    width: ListView.view.width
-                    height: Math.max(30, root.iconSize + 10)
-                    radius: 3
-                    color: fileRow.dropHover ? root.wash(0.40)
-                         : fileRow.isSelected ? root.wash(0.22)
-                         : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
-                    border { width: fileRow.dropHover ? 1 : 0; color: root.cAccent }
-
-                    // Four stages, walked on load failure rather than by
-                    // testing for the files first: QML has no way to stat a
-                    // path, and Image already reports Error when a source does
-                    // not resolve. Large cache, then normal cache, then the
-                    // file itself for images, then the mime icon.
-                    Image {
-                        id: rowIcon
-                        anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                        width: root.iconSize; height: root.iconSize
-                        // 2x the drawn size, so a scaled thumbnail stays sharp.
-                        sourceSize: Qt.size(root.iconSize * 2, root.iconSize * 2)
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        opacity: fileRow.modelData.missing ? 0.4 : 1.0
-                        cache: true
-                        // A folder is drawn below instead.
-                        visible: fileRow.modelData.type !== "dir"
-
-                        property bool failed: false
-                        source: rowIcon.failed ? root.iconFor(fileRow.modelData)
-                                               : root.previewFor(fileRow.modelData)
-                        // A corrupt or unreadable image is the only way to get
-                        // here now; the icon is the answer.
-                        onStatusChanged: if (status === Image.Error) rowIcon.failed = true
-                        Connections {
-                            target: fileRow
-                            function onModelDataChanged() { rowIcon.failed = false }
-                        }
-                    }
-
-                    FolderIcon {
-                        anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                        width: root.iconSize; height: root.iconSize
-                        visible: fileRow.modelData.type === "dir"
-                        dim: fileRow.modelData.missing
-                        previews: root.folderPeek[fileRow.modelData.full] || []
-                    }
-
-                    Text {
-                        anchors {
-                            left: rowIcon.right; leftMargin: 10
-                            right: sizeText.left; rightMargin: 10
-                            verticalCenter: parent.verticalCenter
-                        }
-                        visible: !fileRow.isRenaming
-                        // disp() — display only. Every action below uses
-                        // modelData.full, which stays encoded.
-                        // "config.json" appears eleven times in a source tree;
-                        // the only useful thing about a search hit is which one
-                        // it is, so the containing folder rides along.
-                        text: root.rowLabel(fileRow.modelData)
-                              + (fileRow.modelData.where
-                                 ? "      " + root.disp(fileRow.modelData.where) + "/" : "")
-                              + (fileRow.modelData.link === "1" && fileRow.modelData.target
-                                 ? "  → " + root.disp(fileRow.modelData.target) : "")
-                        elide: Text.ElideRight
-                        color: fileRow.modelData.missing ? root.cDim
-                             : (fileRow.modelData.type === "dir" ? root.cAccent : root.cText)
-                        font { family: root.uiFont; pixelSize: root.ui(12) }
-                    }
-
-                    // Inline rename. Seeded with the DECODED name because that
-                    // is what a person edits; what comes back is a new name
-                    // typed by hand, so it needs no decoding on the way out.
-                    Rectangle {
-                        anchors {
-                            left: rowIcon.right; leftMargin: 8
-                            right: sizeText.left; rightMargin: 10
-                            verticalCenter: parent.verticalCenter
-                        }
-                        height: 24
-                        radius: 3
-                        visible: fileRow.isRenaming
-                        color: root.cPanel
-                        border { width: 1; color: root.cAccent }
-
-                        TextInput {
-                            id: renameInput
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                            verticalAlignment: TextInput.AlignVCenter
-                            color: root.cText
-                            font { family: root.uiFont; pixelSize: root.ui(12) }
-                            clip: true
-                            onVisibleChanged: {
-                                if (visible) {
-                                    text = root.disp(fileRow.modelData.name)
-                                    forceActiveFocus()
-                                    selectAll()
-                                }
-                            }
-                            onAccepted: root.commitRename(text)
-                            Keys.onEscapePressed: root.renaming = ""
-                        }
-                    }
-
-                    Text {
-                        anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
-                        text: fileRow.modelData.deleted || ""
-                        color: root.cDim
-                        font { family: root.uiFont; pixelSize: root.ui(11) }
-                        visible: root.tab && root.tab.view === "trash"
-                    }
-
-                    // Restore is offered only where it means something, and it
-                    // passes the trashName back verbatim — the handle from the
-                    // listing, not something re-derived from the path, because
-                    // a second notes.txt is stored as notes.txt.2.
-                    Rectangle {
-                        anchors { right: parent.right; rightMargin: 150; verticalCenter: parent.verticalCenter }
-                        width: 66; height: 22; radius: 3
-                        visible: root.tab && root.tab.view === "trash"
-                                 && !fileRow.modelData.missing
-                        color: restoreMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
-                        border { width: 1; color: root.cAccent }
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Restore"
-                            color: root.cAccent
-                            font { family: root.uiFont; pixelSize: root.ui(10) }
-                        }
-                        MouseArea {
-                            id: restoreMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.restoreFromTrash(fileRow.modelData)
-                        }
-                    }
-
-                    Text {
-                        id: sizeText
-                        anchors { right: parent.right; rightMargin: 190; verticalCenter: parent.verticalCenter }
-                        text: root.fmtSize(fileRow.modelData.size, fileRow.modelData.type === "dir")
-                        color: root.cDim
-                        font { family: root.uiFont; pixelSize: root.ui(11) }
-                    }
-                    Text {
-                        anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
-                        text: root.fmtTime(fileRow.modelData.mtime)
-                        color: root.cDim
-                        font { family: root.uiFont; pixelSize: root.ui(11) }
-                    }
-
-                    // Only folders are targets — dropping onto a file has no
-                    // meaning, and highlighting one would promise otherwise.
-                    DropArea {
-                        anchors.fill: parent
-                        enabled: fileRow.modelData.type === "dir"
-                        onEntered: (drag) => {
-                            fileRow.dropHover =
-                                root.willAcceptDrop(fileRow.modelData.full, drag)
-                            if (!fileRow.dropHover) drag.accepted = false
-                        }
-                        onExited: fileRow.dropHover = false
-                        onDropped: (drop) => {
-                            fileRow.dropHover = false
-                            root.handleDrop(fileRow.modelData.full, drop)
-                        }
-                    }
-
-                    MouseArea {
-                        id: rowMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        enabled: !fileRow.isRenaming
-                        // A Flickable STEALS the mouse grab from its own
-                        // delegates once the pointer moves past Qt's
-                        // start-drag distance — that is how a list scrolls by
-                        // being dragged. It is also why dragging a file did
-                        // nothing: the grab was taken a pixel or two after the
-                        // drag began, this MouseArea was sent onCanceled
-                        // instead of onReleased, and the drop that lives in
-                        // onReleased never ran. Holding the grab is what makes
-                        // dragging a row mean the row. The view still scrolls
-                        // by wheel and by its scrollbar.
-                        preventStealing: true
-                        onClicked: (mouse) => {
-                            fileList.forceActiveFocus()
-                            const name = fileRow.modelData.name
-
-                            if (mouse.button === Qt.RightButton) {
-                                // Right-clicking inside an existing selection
-                                // keeps it: "copy these six" is the whole point
-                                // of having selected six. Outside it, the click
-                                // moves the selection first, the way it does
-                                // everywhere else.
-                                if (!root.isSelected(name)) root.selectOnly(name)
-                                ctxMenu.row = fileRow.modelData
-                                const gp = rowMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
-                                ctxMenu.rawX = gp.x
-                                ctxMenu.rawY = gp.y
-                                ctxMenu.open = true
-                                root.loadActions()
-                                return
-                            }
-
-                            if (mouse.modifiers & Qt.ControlModifier)    root.toggleSelect(name)
-                            else if (mouse.modifiers & Qt.ShiftModifier) root.selectRange(name)
-                            else                                         root.selectOnly(name)
-                        }
-                        onPressed: (mouse) => {
-                            rowMa.pressX = mouse.x
-                            rowMa.pressY = mouse.y
-                        }
-                        // No release or cancel handler: the drag runs to
-                        // completion inside beginDrag(), and onCanceled fires
-                        // when QDrag TAKES the grab — mid-drag — which would
-                        // clear the very paths the drop is about to use.
-                        onPositionChanged: (mouse) => {
-                            if (!pressed || root.dragging) return
-                            root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
-                            const dx = mouse.x - rowMa.pressX
-                            const dy = mouse.y - rowMa.pressY
-                            if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
-                                return
-                            root.beginDrag(fileRow.modelData,
-                                           root.selection.length > 1
-                                           ? root.selection.length + " items"
-                                           : root.rowLabel(fileRow.modelData))
-                        }
-                        property real pressX: 0
-                        property real pressY: 0
-                        // Double-click to open, matching every other file
-                        // manager. Single-click-to-open is a setting worth
-                        // having and a default worth not having.
-                        onDoubleClicked: root.activate(fileRow.modelData)
+                MouseArea {
+                    id: splitMa
+                    // Wider than it looks: a 6px grab target is one nobody
+                    // catches on the first try.
+                    anchors { fill: parent; leftMargin: -3; rightMargin: -3 }
+                    hoverEnabled: true
+                    cursorShape: Qt.SplitHCursor
+                    property real grabX: 0
+                    onPressed: (m) => { splitMa.grabX = m.x }
+                    onPositionChanged: (m) => {
+                        if (!splitMa.pressed) return
+                        const total = splitter.parent.width - splitter.width
+                        if (total <= 0) return
+                        // Clamped. A pane dragged down to nothing is a pane you
+                        // can only get back by finding a six-pixel handle.
+                        root.splitRatio = Math.max(0.15, Math.min(0.85,
+                            (splitter.x + m.x - splitMa.grabX) / total))
                     }
                 }
             }
 
-            // The grid, for when the icons are the point rather than the
-            // metadata. Same selection and menu behaviour as the list — only
-            // the arrangement differs, so nothing here re-implements a
-            // decision the list already made.
-            GridView {
-                id: fileGrid
-                anchors {
-                    top: heads.bottom; left: parent.left
-                    right: parent.right; bottom: statusBar.top
-                }
-                anchors.margins: 8
-                anchors.topMargin: 2
-                // Room for the scrollbar, so a row never runs under the handle.
-                anchors.rightMargin: 22
-                // ...and room UNDER it in compact, where the bar is the
-                // horizontal one and would otherwise sit on the status line.
-                anchors.bottomMargin: root.compactView ? 22 : 8
-                clip: true
-                visible: root.tab && root.tab.view !== "about" && root.gridView
-                model: root.shownRows
-                // Compact is the same view turned on its side: cells flow DOWN
-                // a column and the column list runs off to the right, which is
-                // what makes it compact — a name gets the width it needs
-                // instead of a square.
-                flow: root.compactView ? GridView.FlowTopToBottom
-                                       : GridView.FlowLeftToRight
-                cellWidth: root.compactView ? Math.max(150, root.iconSize * 5 + 60)
-                                            : root.iconSize + 46
-                cellHeight: root.compactView ? Math.max(22, root.iconSize + 8)
-                                             : root.iconSize + 46
-                focus: fileGrid.visible
-
-                Keys.onPressed: (event) => root.handleKey(event)
-
-                delegate: Rectangle {
-                    id: gridCell
-                    required property var modelData
-                    readonly property bool isSelected: root.isSelected(gridCell.modelData.name)
-                    property bool dropHover: false
-                    width: fileGrid.cellWidth - 6
-                    height: fileGrid.cellHeight - 6
-                    radius: 4
-                    color: gridCell.dropHover ? root.wash(0.40)
-                         : gridCell.isSelected ? root.wash(0.22)
-                         : (cellMa.containsMouse ? root.wash(0.10) : "transparent")
-                    border { width: gridCell.dropHover ? 1 : 0; color: root.cAccent }
-
-                    // One box holding whichever icon this row uses, so the
-                    // two layouts are expressed once here instead of three
-                    // times over the Image, the folder and the label.
-                    Item {
-                        id: cellIconBox
-                        width: root.iconSize
-                        height: root.iconSize
-                        anchors.top: root.compactView ? undefined : parent.top
-                        anchors.topMargin: 6
-                        anchors.horizontalCenter: root.compactView ? undefined
-                                                                   : parent.horizontalCenter
-                        anchors.left: root.compactView ? parent.left : undefined
-                        anchors.leftMargin: 6
-                        anchors.verticalCenter: root.compactView ? parent.verticalCenter
-                                                                 : undefined
-                    }
-
-                    Image {
-                        id: cellIcon
-                        anchors.fill: cellIconBox
-                        sourceSize: Qt.size(root.iconSize * 2, root.iconSize * 2)
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        cache: true
-                        opacity: gridCell.modelData.missing ? 0.4 : 1.0
-                        visible: gridCell.modelData.type !== "dir"
-
-                        property bool failed: false
-                        source: cellIcon.failed ? root.iconFor(gridCell.modelData)
-                                                : root.previewFor(gridCell.modelData)
-                        onStatusChanged: if (status === Image.Error) cellIcon.failed = true
-                        Connections {
-                            target: gridCell
-                            function onModelDataChanged() { cellIcon.failed = false }
-                        }
-                    }
-
-                    FolderIcon {
-                        anchors.fill: cellIconBox
-                        visible: gridCell.modelData.type === "dir"
-                        dim: gridCell.modelData.missing
-                        previews: root.folderPeek[gridCell.modelData.full] || []
-                    }
-
-                    Text {
-                        anchors.top: root.compactView ? undefined : cellIconBox.bottom
-                        anchors.topMargin: 4
-                        anchors.left: root.compactView ? cellIconBox.right : parent.left
-                        anchors.leftMargin: root.compactView ? 8 : 4
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
-                        anchors.verticalCenter: root.compactView ? parent.verticalCenter
-                                                                 : undefined
-                        text: root.rowLabel(gridCell.modelData)
-                        color: gridCell.modelData.missing ? root.cDim
-                             : (gridCell.modelData.type === "dir" ? root.cAccent : root.cText)
-                        font { family: root.uiFont
-                               pixelSize: root.ui(root.compactView ? 11 : 10) }
-                        horizontalAlignment: root.compactView ? Text.AlignLeft
-                                                              : Text.AlignHCenter
-                        // Two lines and then elide: one line hides too much of
-                        // a long name, and three turns the grid into a wall.
-                        // Compact gets ONE — the cell is a row, and a second
-                        // line there would push every column out of alignment.
-                        maximumLineCount: root.compactView ? 1 : 2
-                        wrapMode: root.compactView ? Text.NoWrap : Text.WrapAnywhere
-                        elide: Text.ElideRight
-                    }
-
-                    // Both halves of drag-and-drop, the same as the list
-                    // rows have. They were only ever wired into the list, so
-                    // dragging did nothing at all in icon view — which is the
-                    // view anybody who turned previews on is looking at.
-                    DropArea {
-                        anchors.fill: parent
-                        enabled: gridCell.modelData.type === "dir"
-                        onEntered: (drag) => {
-                            gridCell.dropHover =
-                                root.willAcceptDrop(gridCell.modelData.full, drag)
-                            if (!gridCell.dropHover) drag.accepted = false
-                        }
-                        onExited: gridCell.dropHover = false
-                        onDropped: (drop) => {
-                            gridCell.dropHover = false
-                            root.handleDrop(gridCell.modelData.full, drop)
-                        }
-                    }
-
-                    MouseArea {
-                        id: cellMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        // A Flickable STEALS the mouse grab from its own
-                        // delegates once the pointer moves past Qt's
-                        // start-drag distance — that is how a list scrolls by
-                        // being dragged. It is also why dragging a file did
-                        // nothing: the grab was taken a pixel or two after the
-                        // drag began, this MouseArea was sent onCanceled
-                        // instead of onReleased, and the drop that lives in
-                        // onReleased never ran. Holding the grab is what makes
-                        // dragging a row mean the row. The view still scrolls
-                        // by wheel and by its scrollbar.
-                        preventStealing: true
-                        property real pressX: 0
-                        property real pressY: 0
-                        onPressed: (mouse) => {
-                            cellMa.pressX = mouse.x
-                            cellMa.pressY = mouse.y
-                        }
-                        onPositionChanged: (mouse) => {
-                            if (!cellMa.pressed || root.dragging) return
-                            root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
-                            const dx = mouse.x - cellMa.pressX
-                            const dy = mouse.y - cellMa.pressY
-                            if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
-                                return
-                            root.beginDrag(gridCell.modelData,
-                                           root.selection.length > 1
-                                           ? root.selection.length + " items"
-                                           : root.rowLabel(gridCell.modelData))
-                        }
-                        onClicked: (mouse) => {
-                            fileGrid.forceActiveFocus()
-                            const name = gridCell.modelData.name
-                            if (mouse.button === Qt.RightButton) {
-                                if (!root.isSelected(name)) root.selectOnly(name)
-                                ctxMenu.row = gridCell.modelData
-                                const p = cellMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
-                                ctxMenu.rawX = p.x
-                                ctxMenu.rawY = p.y
-                                ctxMenu.open = true
-                                root.loadActions()
-                                return
-                            }
-                            if (mouse.modifiers & Qt.ControlModifier)    root.toggleSelect(name)
-                            else if (mouse.modifiers & Qt.ShiftModifier) root.selectRange(name)
-                            else                                         root.selectOnly(name)
-                        }
-                        onDoubleClicked: root.activate(gridCell.modelData)
-                    }
-                }
+            Pane {
+                id: paneB
+                idx: 1
+                visible: root.split
+                enabled: root.split
+                anchors { top: parent.top; bottom: statusBar.top; right: parent.right }
+                width: root.split ? parent.width - splitter.x - splitter.width : 0
             }
 
-            // Empty state
-            Column {
-                anchors.centerIn: parent
-                spacing: 6
-                // About is not a listing, so it has no rows and is not empty.
-                // Without that test this printed "This folder is empty." across
-                // the middle of the About pane, on top of the Support line.
-                visible: !root.loading && root.shownRows.length === 0
-                         && root.tab && root.tab.view !== "about"
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: {
-                        if (!root.tab) return ""
-                        if (root.searching)
-                            return root.searchTerm === ""
-                                   ? "Type to search this folder and everything below it."
-                                   : "Nothing matched."
-                        if (root.tab.filter) return "Nothing matches that filter."
-                        if (root.tab.view === "recent") return "No recently used files."
-                        if (root.tab.view === "trash") return "The trash is empty."
-                        return "This folder is empty."
-                    }
-                    color: root.cText
-                    font { family: root.uiFont; pixelSize: root.ui(14) }
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.tab && root.tab.view === "dir" && !root.tab.showHidden
-                          ? "Hidden items are not shown." : ""
-                    color: root.cDim
-                    font { family: root.uiFont; pixelSize: root.ui(11) }
-                    visible: text !== ""
-                }
-            }
-
-            // ── Context menu ────────────────────────────────────────────────
-            // Built from a model rather than hand-placed rows so that what a
-            // given entry DOES and whether it is offered at all live in one
-            // place. "Move to Trash" is offered; permanent delete is not — it
-            // exists in the binary behind an explicit flag and no click in
-            // this window reaches it.
-            MouseArea {
-                anchors.fill: parent
-                visible: ctxMenu.open
-                acceptedButtons: Qt.AllButtons
-                onClicked: ctxMenu.open = false
-                onPressed: ctxMenu.open = false
-            }
-
-            Rectangle {
-                id: ctxMenu
-                property bool open: false
-                property var row: null
-
-                visible: ctxMenu.open
-                width: 210
-                // Clamped as a BINDING, not assigned once on open. The action
-                // list arrives asynchronously, so the menu grows AFTER it is
-                // positioned — which is why it hung off the bottom of the
-                // window and was clipped at the border.
-                readonly property real wantX: ctxMenu.rawX
-                readonly property real wantY: ctxMenu.rawY
-                property real rawX: 0
-                property real rawY: 0
-                x: Math.max(4, Math.min(ctxMenu.rawX, parent.width - width - 4))
-                y: Math.max(4, Math.min(ctxMenu.rawY, parent.height - height - 4))
-
-                // And capped, so a menu with a dozen Open With entries scrolls
-                // instead of being taller than the window can show.
-                height: Math.min(ctxCol.implicitHeight + 8, parent.height - 16)
-                radius: 4
-                color: root.cPanel
-                border { width: 1; color: root.wash(0.35) }
-                z: 100
-
-                Flickable {
-                    anchors { fill: parent; margins: 4 }
-                    contentHeight: ctxCol.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                Column {
-                    id: ctxCol
-                    width: parent.width
-
-                    Repeater {
-                        model: {
-                            const t = root.tab
-                            if (!t || !ctxMenu.row) return []
-                            const r = ctxMenu.row
-                            const n = root.selection.length
-                            const one = n <= 1
-                            if (t.view === "trash")
-                                return [{ label: "Restore", act: "restore",
-                                          on: !r.missing }]
-
-                            // Labels count, so it is never a surprise how much
-                            // a menu entry is about to act on.
-                            const many = one ? "" : " (" + n + ")"
-                            const items = [
-                                { label: r.type === "dir" ? "Open Folder" : "Open",
-                                  act: "open", on: one && !r.missing },
-                                { label: "Open in New Tab", act: "tab",
-                                  on: one && r.type === "dir" }
-                            ]
-                            if (t.view === "dir") {
-                                items.push({ label: "-", act: "", on: true })
-                                items.push({ label: "Copy" + many,  act: "copy", on: n > 0 })
-                                items.push({ label: "Cut" + many,   act: "cut",  on: n > 0 })
-                                items.push({ label: "Paste",        act: "paste",
-                                             on: root.clip.paths.length > 0 })
-                                items.push({ label: "-", act: "", on: true })
-                                items.push({ label: "Rename…", act: "rename", on: one })
-                                items.push({ label: "Move to Trash" + many,
-                                             act: "trash", on: n > 0 })
-                            }
-                            // Borrowed entries, appended flat rather than in a
-                            // submenu: a submenu that is empty half the time is
-                            // worse than four extra rows that are visibly about
-                            // this file.
-                            const opens = root.rowActions.filter(a => a.kind === "open-with")
-                            const svcs  = root.rowActions.filter(a => a.kind === "service")
-
-                            if (opens.length > 0) {
-                                items.push({ label: "-", act: "", on: true })
-                                for (const a of opens.slice(0, 6))
-                                    items.push({ label: "Open with " + a.label,
-                                                 act: "run", on: true,
-                                                 desktop: a.desktop, actionId: "" })
-                            }
-                            if (svcs.length > 0) {
-                                items.push({ label: "-", act: "", on: true })
-                                for (const a of svcs)
-                                    items.push({ label: a.label, act: "run", on: true,
-                                                 desktop: a.desktop, actionId: a.action })
-                            }
-
-                            if (t.view === "dir") {
-                                items.push({ label: "-", act: "", on: true })
-                                for (const f of [".tar.gz", ".zip", ".7z"])
-                                    items.push({ label: "Compress to " + f,
-                                                 act: "compress", on: n > 0,
-                                                 fmt: f.substring(1) })
-                            }
-
-                            items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Copy Path", act: "copypath", on: one })
-                            items.push({ label: "Open Terminal Here", act: "term",
-                                         on: t.view === "dir" })
-                            items.push({ label: root.isPinned(r.full) ? "Remove from Places"
-                                                                     : "Add to Places",
-                                         act: "pin", on: one && r.type === "dir" })
-                            items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "New Folder…", act: "newdir", on: t.view === "dir" })
-                            items.push({ label: "New Empty File…", act: "newfile", on: t.view === "dir" })
-                            items.push({ label: "Select All", act: "selectall", on: true })
-                            items.push({ label: "Invert Selection", act: "invert", on: true })
-                            items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Properties…", act: "props", on: n > 0 })
-                            return items
-                        }
-                        delegate: Item {
-                            id: ctxItem
-                            required property var modelData
-                            width: ctxCol.width
-                            height: ctxItem.modelData.label === "-" ? 5 : 26
-
-                            Rectangle {
-                                anchors { left: parent.left; right: parent.right
-                                          verticalCenter: parent.verticalCenter }
-                                height: 1
-                                color: root.wash(0.25)
-                                visible: ctxItem.modelData.label === "-"
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: 3
-                                visible: ctxItem.modelData.label !== "-"
-                                color: ctxMa.containsMouse && ctxItem.modelData.on
-                                       ? root.wash(0.18) : "transparent"
-
-                                Text {
-                                    anchors { left: parent.left; leftMargin: 10
-                                              verticalCenter: parent.verticalCenter }
-                                    text: ctxItem.modelData.label
-                                    color: ctxItem.modelData.on ? root.cText : root.cDim
-                                    font { family: root.uiFont; pixelSize: root.ui(12) }
-                                }
-                                MouseArea {
-                                    id: ctxMa
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    enabled: ctxItem.modelData.on
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        const r = ctxMenu.row
-                                        ctxMenu.open = false
-                                        switch (ctxItem.modelData.act) {
-                                        case "open":    root.activate(r); break
-                                        case "tab":     root.newTab(r.full, "dir"); break
-                                        case "copy":    root.copySelection(false); break
-                                        case "cut":     root.copySelection(true); break
-                                        case "paste":   root.paste(); break
-                                        case "rename":  root.renaming = r.name; break
-                                        case "trash":   root.trashSelection(); break
-                                        case "restore": root.restoreFromTrash(r); break
-                                        case "props":   root.openProperties(); break
-                                        case "run":     root.runAction(ctxItem.modelData.desktop,
-                                                                       ctxItem.modelData.actionId); break
-                                        case "copypath": root.copyToClipboard(root.disp(r.full)); break
-                                        case "term":     root.openTerminalHere(); break
-                                        case "pin":
-                                            if (root.isPinned(r.full)) root.unpin(r.full)
-                                            else root.pin(r.full)
-                                            break
-                                        case "compress": root.compressSelection(ctxItem.modelData.fmt); break
-                                        case "newdir":   root.creating = true; break
-                                        case "newfile":  root.creatingFile = true; break
-                                        case "selectall": root.selectAll(); break
-                                        case "invert": {
-                                            const inv = root.shownRows
-                                                .filter(x => !root.isSelected(x.name))
-                                                .map(x => x.name)
-                                            root.selection = inv
-                                            break
-                                        }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                }
-            }
 
             // ── Hamburger menu ──────────────────────────────────────────────
             // Where About went, and where the things that are settings rather
@@ -3205,6 +1884,8 @@ FloatingWindow {
                                   act: "tree",    on: true },
                                 { label: root.thumbs ? "Hide Previews" : "Show Previews",
                                   act: "thumbs",  on: true },
+                                { label: root.split ? "Close Split View" : "Split View",
+                                  act: "split",   on: true },
                                 { label: "-",                    act: "",         on: true },
                                 { label: "Show Hidden Files",    act: "hidden",   on: true },
                                 { label: "Select All",           act: "selectall",on: true },
@@ -3276,6 +1957,7 @@ FloatingWindow {
                                                     root.treeToggle(root.encodePath(root.homeDir))
                                                 break
                                             case "thumbs":  root.thumbs = !root.thumbs; break   // onThumbsChanged saves
+                                            case "split":   root.toggleSplit(); break
                                             case "hidden": {
                                                 const v = !root.tab.showHidden
                                                 root.setTab({ showHidden: v })
@@ -3675,7 +2357,12 @@ FloatingWindow {
                         if (root.statusLine) return root.statusLine
                         const n = root.shownRows.length
                         const s = root.selection.length
-                        const base = n + (n === 1 ? " item" : " items")
+                        // One status bar under both panes, so it has to say
+                        // WHICH pane it is counting — otherwise a split window
+                        // has one number and two possible meanings.
+                        const side = root.split
+                                     ? (root.active === 0 ? "Left  ·  " : "Right  ·  ") : ""
+                        const base = side + n + (n === 1 ? " item" : " items")
                         // How much is selected is the thing you check right
                         // before pressing Delete, so it goes where you are
                         // already looking rather than only in a menu label.
@@ -3742,6 +2429,7 @@ FloatingWindow {
                         { label: "-",                act: "",           tick: false },
                         { label: "Previews",         act: "thumbs",     tick: root.thumbs },
                         { label: "Folder Tree",      act: "tree",       tick: root.showTree },
+                        { label: "Split View",       act: "split",      tick: root.split },
                         { label: "-",                act: "",           tick: false }
                     ]
                     delegate: Item {
@@ -3951,6 +2639,1653 @@ FloatingWindow {
                     }
                 }
             }
+        }
+    }
+
+    // ── A pane ──────────────────────────────────────────────────────────────
+    //
+    // Everything that is "where am I and what have I got selected" lives in
+    // here rather than in root: the tabs, the history, the listing, the
+    // selection, the filter, the search and the process that reads the
+    // directory. Split view is two of these side by side, and that is exactly
+    // why it needed this factoring first — a SELECTION shared by two folder
+    // views is nonsense, because Move to Trash pressed in one pane would act
+    // on rows the other pane is showing.
+    //
+    // What stays shared: the toolbar, the sidebar, the clipboard, the undo
+    // journal and every dialog. Two panes are two places, not two programs.
+    component Pane: Item {
+        id: pane
+
+        // 0 or 1. A pane knows which it is so that any click inside it can
+        // make it the active one BEFORE whatever the shared toolbar, menu or
+        // keyboard is about to do gets to run.
+        required property int idx
+        // Strictly one pane at a time, even with the split closed — this is
+        // what decides which pane's views ask for the keyboard, and two views
+        // both declaring focus:true means the last one CONSTRUCTED wins. That
+        // would be the hidden pane, and every keystroke would have gone to a
+        // pane with no tabs in it.
+        readonly property bool isActive: root.active === pane.idx
+
+        function claim() { root.setActive(pane.idx) }
+
+        // Focus is the other way a pane becomes active: every row click ends
+        // in forceActiveFocus() on the view, and typing has to go to the pane
+        // the toolbar is talking about.
+        onActiveFocusChanged: if (pane.activeFocus) pane.claim()
+
+        // A context menu belongs to the pane it was opened in, and the overlay
+        // that dismisses it only covers that pane — so a click in the OTHER
+        // half would leave it hanging there over a pane nobody is using.
+        onIsActiveChanged: if (!pane.isActive) ctxMenu.open = false
+
+        // ── Tabs ────────────────────────────────────────────────────────────
+        //
+        // A tab is {path, view, rows, sort, reverse, showHidden, filter, hist,
+        // hi}. Keeping per-tab state in the model rather than in the visible
+        // pane is what makes switching tabs instant and what stops a sort
+        // applied in one tab silently reordering another.
+        property var tabs: []
+        property int current: 0
+        property bool loading: false
+
+        readonly property var tab: pane.tabs.length > 0 ? pane.tabs[pane.current] : null
+        readonly property bool started: pane.tabs.length > 0
+
+        function newTab(pathEnc, view) {
+            const t = {
+                path: pathEnc || root.encodePath(root.homeDir),
+                view: view || "dir",       // dir | recent | trash | about
+                title: "",
+                rows: [],
+                sort: root.defaultSort,
+                reverse: root.defaultReverse,
+                showHidden: root.defaultHidden,
+                filter: "",
+                // Back/forward, per tab. Shared history across tabs would send
+                // Back to a folder this tab was never in.
+                hist: [{ path: pathEnc || root.encodePath(root.homeDir), view: view || "dir" }],
+                hi: 0
+            }
+            const copy = pane.tabs.slice()
+            copy.push(t)
+            pane.tabs = copy
+            pane.current = copy.length - 1
+            pane.clearSelection()
+            pane.reload()
+        }
+
+        function closeTab(i) {
+            if (pane.tabs.length <= 1) return
+            const copy = pane.tabs.slice()
+            copy.splice(i, 1)
+            pane.tabs = copy
+            if (pane.current >= copy.length) pane.current = copy.length - 1
+            pane.clearSelection()
+            pane.reload()
+        }
+
+        // Switching tabs DROPS the selection. It is a set of names, and a name
+        // selected in one folder means nothing in another — keeping it meant a
+        // file that happened to share a name with a selected one came up
+        // already highlighted in the tab you switched to.
+        function showTab(i) {
+            if (i === pane.current) return
+            pane.current = i
+            pane.clearSelection()
+            pane.reload()
+        }
+
+        // Mutating a property of an object inside an array does NOT re-evaluate
+        // bindings on that array — QML only notices the array identity
+        // changing. Every state change therefore rebuilds the outer array,
+        // which is why this helper exists rather than `tabs[current].sort = x`
+        // at each call site.
+        function setTab(fields) {
+            if (!pane.tab) return
+            const copy = pane.tabs.slice()
+            const t = ({})
+            for (const k in copy[pane.current]) t[k] = copy[pane.current][k]
+            for (const k in fields) t[k] = fields[k]
+            copy[pane.current] = t
+            pane.tabs = copy
+        }
+
+        function navigate(pathEnc, view) {
+            const v = view || "dir"
+            const t = pane.tab
+            // Going somewhere new DISCARDS the forward entries, the way every
+            // browser does: forward means "where I came back from", and keeping
+            // a branch nobody can see would make the button lie.
+            if (t) {
+                const h = (t.hist || []).slice(0, (t.hi === undefined ? -1 : t.hi) + 1)
+                const last = h[h.length - 1]
+                if (!last || last.path !== pathEnc || last.view !== v)
+                    h.push({ path: pathEnc, view: v })
+                pane.setTab({ hist: h, hi: h.length - 1 })
+            }
+            pane.go(pathEnc, v)
+        }
+
+        // The move itself, with no history written — what Back and Forward use.
+        function go(pathEnc, view) {
+            pane.setTab({ path: pathEnc, view: view || "dir", filter: "", rows: [] })
+            // Same argument as switching tabs: these names are about the folder
+            // being left behind.
+            pane.clearSelection()
+            pane.reload()
+        }
+
+        readonly property bool canGoBack: pane.tab && pane.tab.hi > 0
+        readonly property bool canGoForward:
+            pane.tab && pane.tab.hist && pane.tab.hi < pane.tab.hist.length - 1
+
+        function goBack() {
+            if (!pane.canGoBack) return
+            const i = pane.tab.hi - 1
+            const e = pane.tab.hist[i]
+            pane.setTab({ hi: i })
+            pane.go(e.path, e.view)
+        }
+
+        function goForward() {
+            if (!pane.canGoForward) return
+            const i = pane.tab.hi + 1
+            const e = pane.tab.hist[i]
+            pane.setTab({ hi: i })
+            pane.go(e.path, e.view)
+        }
+
+        // Opening the split has to put something in the new pane, and the
+        // folder you are standing in is the only answer that is never a
+        // surprise. Called again on a pane that already has tabs does nothing:
+        // closing and reopening the split should come back to where you were.
+        function ensureStarted(pathEnc) {
+            if (pane.started) { pane.reload(); return }
+            pane.newTab(pathEnc, "dir")
+        }
+
+        // Closing the split keeps what the ACTIVE pane was showing, so the
+        // window does not jump back to a folder you left ten minutes ago.
+        function adopt(other) {
+            const copy = []
+            for (const t of other.tabs) {
+                const c = ({})
+                for (const k in t) c[k] = t[k]
+                copy.push(c)
+            }
+            pane.tabs = copy
+            pane.current = other.current
+            pane.selection = other.selection.slice()
+            pane.anchorName = other.anchorName
+            pane.reload()
+        }
+
+        // Emptied after its state has been taken over by the other pane. Left
+        // as it was, reopening the split would show the same folder twice —
+        // the one that was just moved across.
+        function discard() {
+            pane.tabs = []
+            pane.current = 0
+            pane.clearSelection()
+            pane.searching = false
+            pane.renaming = ""
+        }
+
+        // ── Backend ─────────────────────────────────────────────────────────
+        //
+        // One listing process PER PANE. A single shared one would have two
+        // panes racing to claim the same stdout, and the loser would be handed
+        // the other pane's directory.
+        Process {
+            id: listProc
+            property string kind: ""
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const table = root.parseRecords(this.text)
+                    const t = pane.tab
+                    if (!t) return
+
+                    let rows = []
+                    if (listProc.kind === "find") {
+                        listProc.kind = ""
+                        // A search result is not in the current folder, so it
+                        // carries its own full path rather than being joined
+                        // onto the tab's. `dir` is relative to where the search
+                        // started.
+                        rows = table.map(r => ({
+                            name: r.name,
+                            full: r.dir ? root.joinEnc(root.joinEnc(pane.searchRoot, r.dir), r.name)
+                                        : root.joinEnc(pane.searchRoot, r.name),
+                            where: r.dir,
+                            type: r.type, size: parseInt(r.size || "0"),
+                            mtime: parseInt(r.mtime || "0"), mime: r.mime,
+                            link: r.link, target: r.target, mode: r.mode,
+                            missing: false
+                        }))
+                        pane.setTab({ rows: rows })
+                        pane.loading = false
+                        root.statusLine = ""
+                        return
+                    }
+                    if (t.view === "about") {
+                        root.aboutRows = table
+                        pane.loading = false
+                        root.statusLine = ""
+                        return
+                    } else if (t.view === "trash") {
+                        // `trashName` is the handle `trash restore` takes, and
+                        // it is NOT derivable from the path: two files called
+                        // notes.txt become notes.txt and notes.txt.2 in the
+                        // trash.
+                        //
+                        // …which is also why `name` — the row's IDENTITY, what
+                        // the selection is a set of — has to be that trash name
+                        // and not the original basename. Two trashed notes.txt
+                        // share a basename, so clicking one highlighted both.
+                        // `label` is what the row shows: still the name the file
+                        // had.
+                        rows = table.map(r => ({
+                            name: r.name, label: root.baseEnc(r.path),
+                            full: r.path,
+                            trashName: r.name,
+                            type: r.present === "1" ? "file" : "missing",
+                            size: 0, mtime: 0, deleted: r.deleted,
+                            mime: "", link: "0", target: "",
+                            missing: r.present !== "1"
+                        }))
+                    } else if (t.view === "recent") {
+                        rows = table.map(r => ({
+                            name: root.baseEnc(r.path), full: r.path,
+                            type: r.exists === "1" ? "file" : "missing",
+                            size: 0, mtime: parseInt(r.mtime || "0"),
+                            mime: r.mime, link: "0", target: "",
+                            missing: r.exists !== "1"
+                        }))
+                    } else {
+                        rows = table.map(r => ({
+                            name: r.name, full: root.joinEnc(t.path, r.name),
+                            type: r.type, size: parseInt(r.size || "0"),
+                            mtime: parseInt(r.mtime || "0"), mime: r.mime,
+                            link: r.link, target: r.target, mode: r.mode,
+                            icon: r.icon || "",
+                            missing: false
+                        }))
+                    }
+
+                    pane.setTab({ rows: rows })
+                    pane.loading = false
+                    root.statusLine = ""
+                    // What is inside each subfolder, for the icons. After the
+                    // listing rather than beside it: the rows are what the
+                    // window is waiting for, and this only decorates them.
+                    pane.refreshPeek()
+                }
+            }
+            stderr: StdioCollector {
+                onStreamFinished: {
+                    if (this.text) root.statusLine = this.text.split("\n")[0]
+                }
+            }
+        }
+
+        function reload() {
+            const t = pane.tab
+            if (!t) return
+            pane.loading = true
+            root.statusLine = ""
+
+            if (t.view === "about") {
+                listProc.command = [root.bin, "--rec", "about"]
+            } else if (t.view === "trash") {
+                listProc.command = [root.bin, "--rec", "trash", "list"]
+            } else if (t.view === "recent") {
+                listProc.command = [root.bin, "--rec", "recent", "--limit=300"]
+            } else {
+                // The path goes to the binary DECODED — argv carries raw bytes
+                // and needs no escaping. The encoded form exists for the record
+                // stream, not for the process boundary.
+                const args = [root.bin, "--rec", "list", "--sort=" + t.sort]
+                if (t.reverse) args.push("--reverse")
+                if (t.showHidden) args.push("--all")
+                args.push(root.disp(t.path))
+                listProc.command = args
+            }
+            listProc.running = true
+        }
+
+        // ── Folder previews ─────────────────────────────────────────────────
+        //
+        // Per pane, for the same reason as the listing: the map is keyed by
+        // folder and answers "what is in the directory this pane is showing".
+        // One shared map would be overwritten by whichever pane listed last,
+        // and the other pane's folders would quietly lose their tiles.
+        property var folderPeek: ({})
+
+        Process {
+            id: peekProc
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const map = ({})
+                    for (const r of root.parseRecords(this.text)) {
+                        if (!r.dir || !r.file) continue
+                        if (!map[r.dir]) map[r.dir] = []
+                        map[r.dir].push({ full: r.file, size: parseInt(r.size || "0") })
+                    }
+                    pane.folderPeek = map
+                }
+            }
+        }
+
+        function refreshPeek() {
+            // Previews off means previews off, everywhere: a folder that keeps
+            // its pictures after the toggle is turned off looks like the toggle
+            // broke.
+            if (!root.thumbs || !pane.tab || pane.tab.view !== "dir") {
+                pane.folderPeek = ({})
+                return
+            }
+            peekProc.running = false
+            peekProc.command = [root.bin, "--rec", "peek", root.disp(pane.tab.path)]
+            peekProc.running = true
+        }
+
+        // ── Selection ───────────────────────────────────────────────────────
+        //
+        // Encoded names, because that is the identity. Storing display names
+        // here would make two files that differ only in an escaped byte the
+        // same selection.
+        property var selection: []
+        property string anchorName: ""   // where a Shift range started
+        property string renaming: ""     // encoded name being renamed, "" if none
+
+        function isSelected(name) { return pane.selection.indexOf(name) >= 0 }
+
+        function selectOnly(name) {
+            pane.selection = [name]
+            pane.anchorName = name
+        }
+
+        function toggleSelect(name) {
+            const i = pane.selection.indexOf(name)
+            const copy = pane.selection.slice()
+            if (i >= 0) copy.splice(i, 1)
+            else copy.push(name)
+            pane.selection = copy
+            pane.anchorName = name
+        }
+
+        // A Shift range runs over the rows AS DISPLAYED, so it follows the
+        // current sort and filter rather than some underlying order the user
+        // cannot see.
+        function selectRange(name) {
+            const rows = pane.shownRows
+            let a = -1, b = -1
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].name === pane.anchorName) a = i
+                if (rows[i].name === name) b = i
+            }
+            if (a < 0) { pane.selectOnly(name); return }
+            if (b < 0) return
+            const lo = Math.min(a, b), hi = Math.max(a, b)
+            const copy = []
+            for (let i = lo; i <= hi; i++) copy.push(rows[i].name)
+            pane.selection = copy
+        }
+
+        function selectAll() { pane.selection = pane.shownRows.map(r => r.name) }
+
+        function clearSelection() {
+            pane.selection = []
+            pane.anchorName = ""
+        }
+
+        function selectedRows() {
+            return pane.shownRows.filter(r => pane.isSelected(r.name))
+        }
+
+        // Decoded paths for the process boundary — argv carries raw bytes.
+        function selectedPaths() {
+            return pane.selectedRows().map(r => root.disp(r.full))
+        }
+
+        readonly property var shownRows: {
+            const t = pane.tab
+            if (!t) return []
+            if (!t.filter) return t.rows
+            const f = t.filter.toLowerCase()
+            return t.rows.filter(r => root.disp(r.name).toLowerCase().includes(f))
+        }
+
+        // ── Search ──────────────────────────────────────────────────────────
+        //
+        // Scoped to the folder you are standing in, because "search everywhere"
+        // is a different and much slower question, and the answer to it is
+        // almost never what somebody pressing Ctrl+F in a folder wanted.
+        property bool searching: false
+        property string searchTerm: ""
+        property bool searchContent: false
+        property string searchRoot: ""
+
+        function beginSearch() {
+            if (!pane.tab || pane.tab.view !== "dir") return
+            pane.claim()
+            pane.searchRoot = pane.tab.path
+            pane.searching = true
+            pane.setTab({ rows: [], filter: "" })
+            filterInput.forceActiveFocus()
+        }
+
+        function endSearch() {
+            pane.searching = false
+            pane.searchTerm = ""
+            pane.reload()
+        }
+
+        function runSearch() {
+            if (!pane.searchTerm) { pane.setTab({ rows: [] }); return }
+            pane.loading = true
+            root.statusLine = "searching " + root.disp(pane.searchRoot) + "…"
+            const args = [root.bin, "--rec", "find", root.disp(pane.searchRoot),
+                          "--limit=2000"]
+            if (pane.searchContent) args.push("--content=" + pane.searchTerm)
+            else                    args.push("--name=" + pane.searchTerm)
+            if (pane.tab.showHidden) args.push("--all")
+            listProc.kind = "find"
+            listProc.command = args
+            listProc.running = true
+        }
+
+        // Shared by the list and the grid: the two differ in arrangement, not
+        // in what a key means.
+        function handleKey(event) {
+            if (!pane.tab) return
+            pane.claim()
+            const rows = pane.selectedRows()
+            const row = rows.length === 1 ? rows[0] : null
+
+            if (event.key === Qt.Key_Delete) {
+                if (pane.tab.view === "dir") root.trashSelection()
+                event.accepted = true
+            } else if (event.key === Qt.Key_F2) {
+                // Rename is the one operation that cannot be done to six things
+                // at once, so it needs exactly one.
+                if (row && pane.tab.view === "dir") pane.renaming = row.name
+                event.accepted = true
+            } else if (event.key === Qt.Key_F3) {
+                // Dolphin's key for it, which is the one a hand already knows.
+                root.toggleSplit()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                if (event.modifiers & Qt.AltModifier) root.openProperties()
+                else if (row) root.activate(row)
+                event.accepted = true
+            } else if (event.key === Qt.Key_Escape) {
+                if (root.showProps) root.showProps = false
+                else if (pane.searching) pane.endSearch()
+                else pane.clearSelection()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Backspace) {
+                if (pane.tab.view === "dir")
+                    pane.navigate(root.parentEnc(pane.tab.path), "dir")
+                event.accepted = true
+            } else if (event.modifiers & Qt.ControlModifier) {
+                if (event.key === Qt.Key_C)      { root.copySelection(false); event.accepted = true }
+                else if (event.key === Qt.Key_X) { root.copySelection(true);  event.accepted = true }
+                else if (event.key === Qt.Key_V) { root.paste();              event.accepted = true }
+                else if (event.key === Qt.Key_A) { pane.selectAll();          event.accepted = true }
+                else if (event.key === Qt.Key_Z) { root.doUndo();             event.accepted = true }
+                else if (event.key === Qt.Key_F) { pane.beginSearch();        event.accepted = true }
+                else if (event.key === Qt.Key_L) { root.beginEditPath();      event.accepted = true }
+                else if (event.key === Qt.Key_T) { pane.newTab(pane.tab.path, "dir"); event.accepted = true }
+                else if (event.key === Qt.Key_W) { pane.closeTab(pane.current); event.accepted = true }
+                else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
+            }
+        }
+
+        // A click on the pane's own furniture — the strip beside the tabs, the
+        // space under the last row — is still a statement about which pane you
+        // are working in. Declared FIRST so it sits UNDER everything else and
+        // only ever catches what nothing more specific wanted: Qt Quick
+        // delivers a press to the last matching child first, and a full-size
+        // MouseArea written last would swallow every button in the pane.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onPressed: (m) => { pane.claim(); m.accepted = false }
+        }
+
+        // Tab strip
+        Rectangle {
+            id: tabStrip
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: 34
+            color: root.cPanel
+
+            Row {
+                anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                spacing: 2
+
+                Repeater {
+                    model: pane.tabs
+                    delegate: Rectangle {
+                        id: tabBtn
+                        required property var modelData
+                        required property int index
+                        readonly property bool active: tabBtn.index === pane.current
+                        width: Math.min(200, tabLabel.implicitWidth + 46)
+                        height: 26
+                        radius: 3
+                        color: tabBtn.active ? root.wash(0.20)
+                                             : (tabMa.containsMouse ? root.wash(0.08) : "transparent")
+
+                        Text {
+                            id: tabLabel
+                            anchors {
+                                left: parent.left; leftMargin: 10
+                                right: closeBtn.left; rightMargin: 4
+                                verticalCenter: parent.verticalCenter
+                            }
+                            text: tabBtn.modelData.view === "recent"
+                                  ? "Recent"
+                                  : (root.disp(root.baseEnc(tabBtn.modelData.path)) || "/")
+                            elide: Text.ElideRight
+                            color: tabBtn.active ? root.cAccent : root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
+                        }
+                        MouseArea {
+                            id: tabMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { pane.claim(); pane.showTab(tabBtn.index) }
+                        }
+                        Text {
+                            id: closeBtn
+                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            text: "×"
+                            color: closeMa.containsMouse ? root.cAccent : root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(14) }
+                            visible: pane.tabs.length > 1
+                            MouseArea {
+                                id: closeMa
+                                anchors { fill: parent; margins: -4 }
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { pane.claim(); pane.closeTab(tabBtn.index) }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 26; height: 26; radius: 3
+                    color: addMa.containsMouse ? root.wash(0.12) : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "+"
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(15) }
+                    }
+                    MouseArea {
+                        id: addMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            pane.claim()
+                            pane.newTab(pane.tab ? pane.tab.path
+                                                 : root.encodePath(root.homeDir), "dir")
+                        }
+                    }
+                }
+            }
+
+            // The two controls that used to have a 30px band of their own
+            // with nothing else in it. The tab strip already reserves this
+            // row and the space to the right of the tabs was empty, so they
+            // cost no height at all here. New Folder went to the hamburger,
+            // which already had it.
+            Row {
+                anchors { right: parent.right; rightMargin: 8
+                          verticalCenter: parent.verticalCenter }
+                spacing: 6
+
+                ToggleChip {
+                    label: pane.tab && root.isPinned(pane.tab.path) ? "Pinned ✓" : "Pin"
+                    on: pane.tab ? root.isPinned(pane.tab.path) : false
+                    visible: pane.tab && pane.tab.view === "dir"
+                    onToggled: {
+                        if (root.isPinned(pane.tab.path)) root.unpin(pane.tab.path)
+                        else root.pin(pane.tab.path)
+                    }
+                }
+            }
+        }
+
+        // Path bar: breadcrumbs, filter, and the per-tab toggles.
+        // Emptying the trash is the one destructive action reachable from
+        // this window, so it is a deliberate button on its own view rather
+        // than a menu entry next to something harmless — and the binary
+        // still refuses it without --yes, which is passed only from here.
+        Item {
+            id: trashBar
+            anchors { top: tabStrip.bottom; left: parent.left; right: parent.right }
+            anchors.margins: 8
+            height: 30
+            visible: pane.tab && pane.tab.view === "trash"
+
+            Text {
+                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                text: "Deleted files. Restoring puts one back where it came from."
+                color: root.cDim
+                font { family: root.uiFont; pixelSize: root.ui(12) }
+            }
+            ToggleChip {
+                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                label: "Empty Trash…"
+                on: false
+                onToggled: root.confirmEmpty = true
+            }
+        }
+
+        // Filter box
+        Rectangle {
+            id: filterBar
+            // Below the trash's own banner when there is one. It used to
+            // hang off the row that just went, and in the trash view both
+            // landed on tabStrip.bottom and drew over each other.
+            anchors { top: trashBar.visible ? trashBar.bottom : tabStrip.bottom
+                      left: parent.left; right: parent.right }
+            anchors.margins: 8
+            height: 28
+            visible: pane.tab && pane.tab.view !== "about"
+            radius: 4
+            color: root.cPanel
+            border { width: 1; color: filterInput.activeFocus ? root.cAccent : "transparent" }
+
+            // One box, two jobs, and the mode is explicit. Filtering hides
+            // rows already loaded; searching walks the tree and takes a
+            // moment — silently switching between them on the same
+            // keystroke would make the slow one a surprise.
+            TextInput {
+                id: filterInput
+                anchors {
+                    left: parent.left; leftMargin: 10
+                    right: searchChips.left; rightMargin: 8
+                    top: parent.top; bottom: parent.bottom
+                }
+                verticalAlignment: TextInput.AlignVCenter
+                color: root.cText
+                font { family: root.uiFont; pixelSize: root.ui(12) }
+                clip: true
+                onTextChanged: {
+                    if (pane.searching) pane.searchTerm = text
+                    else pane.setTab({ filter: text })
+                }
+                onAccepted: if (pane.searching) pane.runSearch()
+                Keys.onEscapePressed: {
+                    text = ""
+                    if (pane.searching) pane.endSearch()
+                    else pane.setTab({ filter: "" })
+                }
+                onVisibleChanged: if (visible) text = ""
+            }
+            Text {
+                anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                text: pane.searching
+                      ? ("search " + root.disp(root.baseEnc(pane.searchRoot))
+                         + " and below — press Enter")
+                      : "filter these items…   (Ctrl+F to search)"
+                color: root.cDim
+                font { family: root.uiFont; pixelSize: root.ui(12) }
+                visible: filterInput.text === ""
+            }
+
+            Row {
+                id: searchChips
+                anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                spacing: 4
+                visible: pane.searching
+
+                ToggleChip {
+                    label: pane.searchContent ? "In contents" : "By name"
+                    on: pane.searchContent
+                    onToggled: {
+                        pane.searchContent = !pane.searchContent
+                        if (pane.searchTerm) pane.runSearch()
+                    }
+                }
+                ToggleChip {
+                    label: "Done"
+                    on: false
+                    onToggled: { filterInput.text = ""; pane.endSearch() }
+                }
+            }
+        }
+
+        // One scrollbar per view, each anchored to the view it drives.
+        VScroll {
+            flick: fileList
+            anchors {
+                top: fileList.top; bottom: fileList.bottom
+                left: fileList.right; leftMargin: 4
+            }
+        }
+        VScroll {
+            flick: fileGrid
+            anchors {
+                top: fileGrid.top; bottom: fileGrid.bottom
+                left: fileGrid.right; leftMargin: 4
+            }
+        }
+        HScroll {
+            flick: fileGrid
+            anchors {
+                left: fileGrid.left; right: fileGrid.right
+                top: fileGrid.bottom; topMargin: 2
+            }
+        }
+
+        // ── About ───────────────────────────────────────────────────────
+        // Not a credits screen. Almost everything this browser does beyond
+        // listing a directory leans on something optional — gvfs, lsblk,
+        // shared-mime-info, xdg-open — and when one is missing the feature
+        // is silently EMPTY rather than broken. This says which.
+        Flickable {
+            anchors {
+                top: tabStrip.bottom; left: parent.left
+                right: parent.right; bottom: parent.bottom
+            }
+            anchors.margins: 18
+            visible: pane.tab && pane.tab.view === "about"
+            contentHeight: aboutCol.implicitHeight
+            clip: true
+
+            Column {
+                id: aboutCol
+                width: parent.width
+                spacing: 6
+
+                Text {
+                    text: "SYNAPSE Files"
+                    color: root.cAccent
+                    font { family: root.uiFont; pixelSize: root.ui(20); bold: true  }
+                }
+                Text {
+                    width: aboutCol.width
+                    text: "A file browser for SynapseOS. Tabs, pinned places shared with "
+                        + "Dolphin, recent files, volumes and network shares."
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
+                    wrapMode: Text.WordWrap
+                    bottomPadding: 10
+                }
+
+                Repeater {
+                    model: root.aboutRows
+                    delegate: Rectangle {
+                        id: aboutRow
+                        required property var modelData
+                        width: aboutCol.width
+                        height: 52
+                        radius: 4
+                        color: root.wash(0.05)
+
+                        readonly property color stateColor:
+                            aboutRow.modelData.state === "ok"      ? root.cAccent
+                          : aboutRow.modelData.state === "off"     ? root.cWarn
+                          : aboutRow.modelData.state === "missing" ? root.cDim
+                                                                   : root.cAccent
+
+                        // A detail that is a URL opens in a browser. It is
+                        // never split and handed to a shell — that path is
+                        // for commands, and conflating the two would run
+                        // whatever a detail string happened to contain.
+                        readonly property bool openable:
+                            aboutRow.modelData.detail !== undefined
+                            && aboutRow.modelData.detail.indexOf("https://") === 0
+
+                        Rectangle {
+                            id: aboutDot
+                            anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                            width: 8; height: 8; radius: 4
+                            color: aboutRow.stateColor
+                        }
+                        Text {
+                            id: aboutKey
+                            anchors { left: aboutDot.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                            width: 120
+                            text: aboutRow.modelData.item
+                            color: root.cText
+                            font { family: root.uiFont; pixelSize: root.ui(12); bold: true  }
+                            elide: Text.ElideRight
+                        }
+                        Column {
+                            anchors {
+                                left: aboutKey.right; leftMargin: 12
+                                right: aboutBtn.left; rightMargin: 12
+                                verticalCenter: parent.verticalCenter
+                            }
+                            spacing: 2
+                            Text {
+                                width: parent.width
+                                text: aboutRow.modelData.value
+                                color: aboutRow.stateColor
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: aboutRow.modelData.detail
+                                color: root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                                elide: Text.ElideRight
+                                visible: text !== ""
+                            }
+                        }
+                        Rectangle {
+                            id: aboutBtn
+                            anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                            width: 74; height: 26; radius: 4
+                            visible: aboutRow.openable
+                            color: aboutBtnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                            border { width: 1; color: root.cAccent }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Open"
+                                color: root.cAccent
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            }
+                            MouseArea {
+                                id: aboutBtnMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    Qt.openUrlExternally(aboutRow.modelData.detail)
+                                    root.statusLine = "opened in your browser"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The whole pane is a target for the CURRENT folder. Declared
+        // before the views, so a row or a cell — which is a more specific
+        // answer — takes the drop first and this catches the empty space
+        // around them, which is what "drop it in here" means.
+        DropArea {
+            id: paneDrop
+            anchors {
+                top: heads.bottom; left: parent.left
+                right: parent.right; bottom: parent.bottom
+            }
+            enabled: pane.tab && pane.tab.view === "dir"
+            property bool hovering: false
+            onEntered: (drag) => {
+                paneDrop.hovering = root.willAcceptDrop(pane.tab.path, drag)
+                if (!paneDrop.hovering) drag.accepted = false
+            }
+            onExited: paneDrop.hovering = false
+            onDropped: (drop) => {
+                paneDrop.hovering = false
+                root.handleDrop(pane.tab.path, drop)
+            }
+
+            // Says which folder is about to receive it, because a drop on
+            // empty space has no row under the cursor to highlight.
+            Rectangle {
+                anchors.fill: parent
+                visible: paneDrop.hovering
+                color: "transparent"
+                border { width: 2; color: root.cAccent }
+                radius: 4
+                opacity: 0.7
+            }
+        }
+
+        // Column headings
+        Item {
+            id: heads
+            anchors { top: filterBar.bottom; left: parent.left; right: parent.right }
+            anchors.margins: 8
+            anchors.topMargin: 4
+            // Matches the list's own gutter, or "Size" and "Modified" sit
+            // 14px to the right of the column they name.
+            anchors.rightMargin: 22
+            // Column headings are the Details view's own furniture: over a
+            // grid of icons they name columns that are not there.
+            height: heads.visible ? 20 : 0
+            visible: pane.tab && pane.tab.view !== "about" && !root.gridView
+
+            Text {
+                anchors { left: parent.left; leftMargin: 40 }
+                text: "Name"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+            }
+            Text {
+                anchors { right: parent.right; rightMargin: 190 }
+                text: "Size"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+            }
+            Text {
+                anchors { right: parent.right; rightMargin: 20 }
+                text: "Modified"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
+            }
+        }
+
+        ListView {
+            id: fileList
+            anchors {
+                top: heads.bottom; left: parent.left
+                right: parent.right; bottom: parent.bottom
+            }
+            anchors.margins: 8
+            anchors.topMargin: 2
+            // Room for the scrollbar, so a row never runs under the handle.
+            anchors.rightMargin: 22
+            clip: true
+            visible: pane.tab && pane.tab.view !== "about" && !root.gridView
+            model: pane.shownRows
+            spacing: 1
+            currentIndex: -1
+            // Not simply `pane.isActive`: the list and the grid are siblings
+            // in one pane, and both asking for the keyboard is the same fight
+            // one pane down. The grid takes it whenever it is the view; the
+            // list keeps it otherwise, About included — where neither is drawn
+            // but Escape still has to close a dialog.
+            focus: pane.isActive && !fileGrid.visible
+
+            // Shortcuts a file manager is expected to have. Delete goes to
+            // the TRASH — the permanent one is a separate command behind a
+            // separate flag, and no key reaches it.
+            Keys.onPressed: (event) => pane.handleKey(event)
+
+            delegate: Rectangle {
+                id: fileRow
+                required property var modelData
+                readonly property bool isSelected: pane.isSelected(fileRow.modelData.name)
+                readonly property bool isRenaming: fileRow.modelData.name === pane.renaming
+                property bool dropHover: false
+                width: ListView.view.width
+                height: Math.max(30, root.iconSize + 10)
+                radius: 3
+                color: fileRow.dropHover ? root.wash(0.40)
+                     : fileRow.isSelected ? root.wash(0.22)
+                     : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
+                border { width: fileRow.dropHover ? 1 : 0; color: root.cAccent }
+
+                // Four stages, walked on load failure rather than by
+                // testing for the files first: QML has no way to stat a
+                // path, and Image already reports Error when a source does
+                // not resolve. Large cache, then normal cache, then the
+                // file itself for images, then the mime icon.
+                Image {
+                    id: rowIcon
+                    anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                    width: root.iconSize; height: root.iconSize
+                    // 2x the drawn size, so a scaled thumbnail stays sharp.
+                    sourceSize: Qt.size(root.iconSize * 2, root.iconSize * 2)
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    opacity: fileRow.modelData.missing ? 0.4 : 1.0
+                    cache: true
+                    // A folder is drawn below instead.
+                    visible: fileRow.modelData.type !== "dir"
+
+                    property bool failed: false
+                    source: rowIcon.failed ? root.iconFor(fileRow.modelData)
+                                           : root.previewFor(fileRow.modelData)
+                    // A corrupt or unreadable image is the only way to get
+                    // here now; the icon is the answer.
+                    onStatusChanged: if (status === Image.Error) rowIcon.failed = true
+                    Connections {
+                        target: fileRow
+                        function onModelDataChanged() { rowIcon.failed = false }
+                    }
+                }
+
+                FolderIcon {
+                    anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                    width: root.iconSize; height: root.iconSize
+                    visible: fileRow.modelData.type === "dir"
+                    dim: fileRow.modelData.missing
+                    previews: pane.folderPeek[fileRow.modelData.full] || []
+                }
+
+                Text {
+                    anchors {
+                        left: rowIcon.right; leftMargin: 10
+                        right: sizeText.left; rightMargin: 10
+                        verticalCenter: parent.verticalCenter
+                    }
+                    visible: !fileRow.isRenaming
+                    // disp() — display only. Every action below uses
+                    // modelData.full, which stays encoded.
+                    // "config.json" appears eleven times in a source tree;
+                    // the only useful thing about a search hit is which one
+                    // it is, so the containing folder rides along.
+                    text: root.rowLabel(fileRow.modelData)
+                          + (fileRow.modelData.where
+                             ? "      " + root.disp(fileRow.modelData.where) + "/" : "")
+                          + (fileRow.modelData.link === "1" && fileRow.modelData.target
+                             ? "  → " + root.disp(fileRow.modelData.target) : "")
+                    elide: Text.ElideRight
+                    color: fileRow.modelData.missing ? root.cDim
+                         : (fileRow.modelData.type === "dir" ? root.cAccent : root.cText)
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
+                }
+
+                // Inline rename. Seeded with the DECODED name because that
+                // is what a person edits; what comes back is a new name
+                // typed by hand, so it needs no decoding on the way out.
+                Rectangle {
+                    anchors {
+                        left: rowIcon.right; leftMargin: 8
+                        right: sizeText.left; rightMargin: 10
+                        verticalCenter: parent.verticalCenter
+                    }
+                    height: 24
+                    radius: 3
+                    visible: fileRow.isRenaming
+                    color: root.cPanel
+                    border { width: 1; color: root.cAccent }
+
+                    TextInput {
+                        id: renameInput
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                        clip: true
+                        onVisibleChanged: {
+                            if (visible) {
+                                text = root.disp(fileRow.modelData.name)
+                                forceActiveFocus()
+                                selectAll()
+                            }
+                        }
+                        onAccepted: root.commitRename(text)
+                        Keys.onEscapePressed: pane.renaming = ""
+                    }
+                }
+
+                Text {
+                    anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
+                    text: fileRow.modelData.deleted || ""
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                    visible: pane.tab && pane.tab.view === "trash"
+                }
+
+                // Restore is offered only where it means something, and it
+                // passes the trashName back verbatim — the handle from the
+                // listing, not something re-derived from the path, because
+                // a second notes.txt is stored as notes.txt.2.
+                Rectangle {
+                    anchors { right: parent.right; rightMargin: 150; verticalCenter: parent.verticalCenter }
+                    width: 66; height: 22; radius: 3
+                    visible: pane.tab && pane.tab.view === "trash"
+                             && !fileRow.modelData.missing
+                    color: restoreMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
+                    border { width: 1; color: root.cAccent }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Restore"
+                        color: root.cAccent
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                    }
+                    MouseArea {
+                        id: restoreMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.restoreFromTrash(fileRow.modelData)
+                    }
+                }
+
+                Text {
+                    id: sizeText
+                    anchors { right: parent.right; rightMargin: 190; verticalCenter: parent.verticalCenter }
+                    text: root.fmtSize(fileRow.modelData.size, fileRow.modelData.type === "dir")
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                }
+                Text {
+                    anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
+                    text: root.fmtTime(fileRow.modelData.mtime)
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
+                }
+
+                // Only folders are targets — dropping onto a file has no
+                // meaning, and highlighting one would promise otherwise.
+                DropArea {
+                    anchors.fill: parent
+                    enabled: fileRow.modelData.type === "dir"
+                    onEntered: (drag) => {
+                        fileRow.dropHover =
+                            root.willAcceptDrop(fileRow.modelData.full, drag)
+                        if (!fileRow.dropHover) drag.accepted = false
+                    }
+                    onExited: fileRow.dropHover = false
+                    onDropped: (drop) => {
+                        fileRow.dropHover = false
+                        root.handleDrop(fileRow.modelData.full, drop)
+                    }
+                }
+
+                MouseArea {
+                    id: rowMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    enabled: !fileRow.isRenaming
+                    // A Flickable STEALS the mouse grab from its own
+                    // delegates once the pointer moves past Qt's
+                    // start-drag distance — that is how a list scrolls by
+                    // being dragged. It is also why dragging a file did
+                    // nothing: the grab was taken a pixel or two after the
+                    // drag began, this MouseArea was sent onCanceled
+                    // instead of onReleased, and the drop that lives in
+                    // onReleased never ran. Holding the grab is what makes
+                    // dragging a row mean the row. The view still scrolls
+                    // by wheel and by its scrollbar.
+                    preventStealing: true
+                    onClicked: (mouse) => {
+                        fileList.forceActiveFocus()
+                        const name = fileRow.modelData.name
+
+                        if (mouse.button === Qt.RightButton) {
+                            // Right-clicking inside an existing selection
+                            // keeps it: "copy these six" is the whole point
+                            // of having selected six. Outside it, the click
+                            // moves the selection first, the way it does
+                            // everywhere else.
+                            if (!pane.isSelected(name)) pane.selectOnly(name)
+                            ctxMenu.row = fileRow.modelData
+                            const gp = rowMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
+                            ctxMenu.rawX = gp.x
+                            ctxMenu.rawY = gp.y
+                            ctxMenu.open = true
+                            root.loadActions()
+                            return
+                        }
+
+                        if (mouse.modifiers & Qt.ControlModifier)    pane.toggleSelect(name)
+                        else if (mouse.modifiers & Qt.ShiftModifier) pane.selectRange(name)
+                        else                                         pane.selectOnly(name)
+                    }
+                    onPressed: (mouse) => {
+                        rowMa.pressX = mouse.x
+                        rowMa.pressY = mouse.y
+                    }
+                    // No release or cancel handler: the drag runs to
+                    // completion inside beginDrag(), and onCanceled fires
+                    // when QDrag TAKES the grab — mid-drag — which would
+                    // clear the very paths the drop is about to use.
+                    onPositionChanged: (mouse) => {
+                        if (!pressed || root.dragging) return
+                        root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
+                        const dx = mouse.x - rowMa.pressX
+                        const dy = mouse.y - rowMa.pressY
+                        if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
+                            return
+                        root.beginDrag(fileRow.modelData,
+                                       pane.selection.length > 1
+                                       ? pane.selection.length + " items"
+                                       : root.rowLabel(fileRow.modelData))
+                    }
+                    property real pressX: 0
+                    property real pressY: 0
+                    // Double-click to open, matching every other file
+                    // manager. Single-click-to-open is a setting worth
+                    // having and a default worth not having.
+                    onDoubleClicked: root.activate(fileRow.modelData)
+                }
+            }
+        }
+
+        // The grid, for when the icons are the point rather than the
+        // metadata. Same selection and menu behaviour as the list — only
+        // the arrangement differs, so nothing here re-implements a
+        // decision the list already made.
+        GridView {
+            id: fileGrid
+            anchors {
+                top: heads.bottom; left: parent.left
+                right: parent.right; bottom: parent.bottom
+            }
+            anchors.margins: 8
+            anchors.topMargin: 2
+            // Room for the scrollbar, so a row never runs under the handle.
+            anchors.rightMargin: 22
+            // ...and room UNDER it in compact, where the bar is the
+            // horizontal one and would otherwise sit on the status line.
+            anchors.bottomMargin: root.compactView ? 22 : 8
+            clip: true
+            visible: pane.tab && pane.tab.view !== "about" && root.gridView
+            model: pane.shownRows
+            // Compact is the same view turned on its side: cells flow DOWN
+            // a column and the column list runs off to the right, which is
+            // what makes it compact — a name gets the width it needs
+            // instead of a square.
+            flow: root.compactView ? GridView.FlowTopToBottom
+                                   : GridView.FlowLeftToRight
+            cellWidth: root.compactView ? Math.max(150, root.iconSize * 5 + 60)
+                                        : root.iconSize + 46
+            cellHeight: root.compactView ? Math.max(22, root.iconSize + 8)
+                                         : root.iconSize + 46
+            focus: pane.isActive && fileGrid.visible
+
+            Keys.onPressed: (event) => pane.handleKey(event)
+
+            delegate: Rectangle {
+                id: gridCell
+                required property var modelData
+                readonly property bool isSelected: pane.isSelected(gridCell.modelData.name)
+                property bool dropHover: false
+                width: fileGrid.cellWidth - 6
+                height: fileGrid.cellHeight - 6
+                radius: 4
+                color: gridCell.dropHover ? root.wash(0.40)
+                     : gridCell.isSelected ? root.wash(0.22)
+                     : (cellMa.containsMouse ? root.wash(0.10) : "transparent")
+                border { width: gridCell.dropHover ? 1 : 0; color: root.cAccent }
+
+                // One box holding whichever icon this row uses, so the
+                // two layouts are expressed once here instead of three
+                // times over the Image, the folder and the label.
+                Item {
+                    id: cellIconBox
+                    width: root.iconSize
+                    height: root.iconSize
+                    anchors.top: root.compactView ? undefined : parent.top
+                    anchors.topMargin: 6
+                    anchors.horizontalCenter: root.compactView ? undefined
+                                                               : parent.horizontalCenter
+                    anchors.left: root.compactView ? parent.left : undefined
+                    anchors.leftMargin: 6
+                    anchors.verticalCenter: root.compactView ? parent.verticalCenter
+                                                             : undefined
+                }
+
+                Image {
+                    id: cellIcon
+                    anchors.fill: cellIconBox
+                    sourceSize: Qt.size(root.iconSize * 2, root.iconSize * 2)
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    cache: true
+                    opacity: gridCell.modelData.missing ? 0.4 : 1.0
+                    visible: gridCell.modelData.type !== "dir"
+
+                    property bool failed: false
+                    source: cellIcon.failed ? root.iconFor(gridCell.modelData)
+                                            : root.previewFor(gridCell.modelData)
+                    onStatusChanged: if (status === Image.Error) cellIcon.failed = true
+                    Connections {
+                        target: gridCell
+                        function onModelDataChanged() { cellIcon.failed = false }
+                    }
+                }
+
+                FolderIcon {
+                    anchors.fill: cellIconBox
+                    visible: gridCell.modelData.type === "dir"
+                    dim: gridCell.modelData.missing
+                    previews: pane.folderPeek[gridCell.modelData.full] || []
+                }
+
+                Text {
+                    anchors.top: root.compactView ? undefined : cellIconBox.bottom
+                    anchors.topMargin: 4
+                    anchors.left: root.compactView ? cellIconBox.right : parent.left
+                    anchors.leftMargin: root.compactView ? 8 : 4
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: root.compactView ? parent.verticalCenter
+                                                             : undefined
+                    text: root.rowLabel(gridCell.modelData)
+                    color: gridCell.modelData.missing ? root.cDim
+                         : (gridCell.modelData.type === "dir" ? root.cAccent : root.cText)
+                    font { family: root.uiFont
+                           pixelSize: root.ui(root.compactView ? 11 : 10) }
+                    horizontalAlignment: root.compactView ? Text.AlignLeft
+                                                          : Text.AlignHCenter
+                    // Two lines and then elide: one line hides too much of
+                    // a long name, and three turns the grid into a wall.
+                    // Compact gets ONE — the cell is a row, and a second
+                    // line there would push every column out of alignment.
+                    maximumLineCount: root.compactView ? 1 : 2
+                    wrapMode: root.compactView ? Text.NoWrap : Text.WrapAnywhere
+                    elide: Text.ElideRight
+                }
+
+                // Both halves of drag-and-drop, the same as the list
+                // rows have. They were only ever wired into the list, so
+                // dragging did nothing at all in icon view — which is the
+                // view anybody who turned previews on is looking at.
+                DropArea {
+                    anchors.fill: parent
+                    enabled: gridCell.modelData.type === "dir"
+                    onEntered: (drag) => {
+                        gridCell.dropHover =
+                            root.willAcceptDrop(gridCell.modelData.full, drag)
+                        if (!gridCell.dropHover) drag.accepted = false
+                    }
+                    onExited: gridCell.dropHover = false
+                    onDropped: (drop) => {
+                        gridCell.dropHover = false
+                        root.handleDrop(gridCell.modelData.full, drop)
+                    }
+                }
+
+                MouseArea {
+                    id: cellMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    // A Flickable STEALS the mouse grab from its own
+                    // delegates once the pointer moves past Qt's
+                    // start-drag distance — that is how a list scrolls by
+                    // being dragged. It is also why dragging a file did
+                    // nothing: the grab was taken a pixel or two after the
+                    // drag began, this MouseArea was sent onCanceled
+                    // instead of onReleased, and the drop that lives in
+                    // onReleased never ran. Holding the grab is what makes
+                    // dragging a row mean the row. The view still scrolls
+                    // by wheel and by its scrollbar.
+                    preventStealing: true
+                    property real pressX: 0
+                    property real pressY: 0
+                    onPressed: (mouse) => {
+                        cellMa.pressX = mouse.x
+                        cellMa.pressY = mouse.y
+                    }
+                    onPositionChanged: (mouse) => {
+                        if (!cellMa.pressed || root.dragging) return
+                        root.dragCopy = (mouse.modifiers & Qt.ControlModifier) !== 0
+                        const dx = mouse.x - cellMa.pressX
+                        const dy = mouse.y - cellMa.pressY
+                        if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
+                            return
+                        root.beginDrag(gridCell.modelData,
+                                       pane.selection.length > 1
+                                       ? pane.selection.length + " items"
+                                       : root.rowLabel(gridCell.modelData))
+                    }
+                    onClicked: (mouse) => {
+                        fileGrid.forceActiveFocus()
+                        const name = gridCell.modelData.name
+                        if (mouse.button === Qt.RightButton) {
+                            if (!pane.isSelected(name)) pane.selectOnly(name)
+                            ctxMenu.row = gridCell.modelData
+                            const p = cellMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
+                            ctxMenu.rawX = p.x
+                            ctxMenu.rawY = p.y
+                            ctxMenu.open = true
+                            root.loadActions()
+                            return
+                        }
+                        if (mouse.modifiers & Qt.ControlModifier)    pane.toggleSelect(name)
+                        else if (mouse.modifiers & Qt.ShiftModifier) pane.selectRange(name)
+                        else                                         pane.selectOnly(name)
+                    }
+                    onDoubleClicked: root.activate(gridCell.modelData)
+                }
+            }
+        }
+
+        // Empty state
+        Column {
+            anchors.centerIn: parent
+            spacing: 6
+            // About is not a listing, so it has no rows and is not empty.
+            // Without that test this printed "This folder is empty." across
+            // the middle of the About pane, on top of the Support line.
+            visible: !pane.loading && pane.shownRows.length === 0
+                     && pane.tab && pane.tab.view !== "about"
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: {
+                    if (!pane.tab) return ""
+                    if (pane.searching)
+                        return pane.searchTerm === ""
+                               ? "Type to search this folder and everything below it."
+                               : "Nothing matched."
+                    if (pane.tab.filter) return "Nothing matches that filter."
+                    if (pane.tab.view === "recent") return "No recently used files."
+                    if (pane.tab.view === "trash") return "The trash is empty."
+                    return "This folder is empty."
+                }
+                color: root.cText
+                font { family: root.uiFont; pixelSize: root.ui(14) }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: pane.tab && pane.tab.view === "dir" && !pane.tab.showHidden
+                      ? "Hidden items are not shown." : ""
+                color: root.cDim
+                font { family: root.uiFont; pixelSize: root.ui(11) }
+                visible: text !== ""
+            }
+        }
+
+        // ── Context menu ────────────────────────────────────────────────
+        // Built from a model rather than hand-placed rows so that what a
+        // given entry DOES and whether it is offered at all live in one
+        // place. "Move to Trash" is offered; permanent delete is not — it
+        // exists in the binary behind an explicit flag and no click in
+        // this window reaches it.
+        MouseArea {
+            anchors.fill: parent
+            visible: ctxMenu.open
+            acceptedButtons: Qt.AllButtons
+            onClicked: ctxMenu.open = false
+            onPressed: ctxMenu.open = false
+        }
+
+        Rectangle {
+            id: ctxMenu
+            property bool open: false
+            property var row: null
+
+            visible: ctxMenu.open
+            width: 210
+            // Clamped as a BINDING, not assigned once on open. The action
+            // list arrives asynchronously, so the menu grows AFTER it is
+            // positioned — which is why it hung off the bottom of the
+            // window and was clipped at the border.
+            readonly property real wantX: ctxMenu.rawX
+            readonly property real wantY: ctxMenu.rawY
+            property real rawX: 0
+            property real rawY: 0
+            x: Math.max(4, Math.min(ctxMenu.rawX, parent.width - width - 4))
+            y: Math.max(4, Math.min(ctxMenu.rawY, parent.height - height - 4))
+
+            // And capped, so a menu with a dozen Open With entries scrolls
+            // instead of being taller than the window can show.
+            height: Math.min(ctxCol.implicitHeight + 8, parent.height - 16)
+            radius: 4
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.35) }
+            z: 100
+
+            Flickable {
+                anchors { fill: parent; margins: 4 }
+                contentHeight: ctxCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+            Column {
+                id: ctxCol
+                width: parent.width
+
+                Repeater {
+                    model: {
+                        const t = pane.tab
+                        if (!t || !ctxMenu.row) return []
+                        const r = ctxMenu.row
+                        const n = pane.selection.length
+                        const one = n <= 1
+                        if (t.view === "trash")
+                            return [{ label: "Restore", act: "restore",
+                                      on: !r.missing }]
+
+                        // Labels count, so it is never a surprise how much
+                        // a menu entry is about to act on.
+                        const many = one ? "" : " (" + n + ")"
+                        const items = [
+                            { label: r.type === "dir" ? "Open Folder" : "Open",
+                              act: "open", on: one && !r.missing },
+                            { label: "Open in New Tab", act: "tab",
+                              on: one && r.type === "dir" }
+                        ]
+                        if (t.view === "dir") {
+                            items.push({ label: "-", act: "", on: true })
+                            items.push({ label: "Copy" + many,  act: "copy", on: n > 0 })
+                            items.push({ label: "Cut" + many,   act: "cut",  on: n > 0 })
+                            items.push({ label: "Paste",        act: "paste",
+                                         on: root.clip.paths.length > 0 })
+                            items.push({ label: "-", act: "", on: true })
+                            items.push({ label: "Rename…", act: "rename", on: one })
+                            items.push({ label: "Move to Trash" + many,
+                                         act: "trash", on: n > 0 })
+                        }
+                        // Borrowed entries, appended flat rather than in a
+                        // submenu: a submenu that is empty half the time is
+                        // worse than four extra rows that are visibly about
+                        // this file.
+                        const opens = root.rowActions.filter(a => a.kind === "open-with")
+                        const svcs  = root.rowActions.filter(a => a.kind === "service")
+
+                        if (opens.length > 0) {
+                            items.push({ label: "-", act: "", on: true })
+                            for (const a of opens.slice(0, 6))
+                                items.push({ label: "Open with " + a.label,
+                                             act: "run", on: true,
+                                             desktop: a.desktop, actionId: "" })
+                        }
+                        if (svcs.length > 0) {
+                            items.push({ label: "-", act: "", on: true })
+                            for (const a of svcs)
+                                items.push({ label: a.label, act: "run", on: true,
+                                             desktop: a.desktop, actionId: a.action })
+                        }
+
+                        if (t.view === "dir") {
+                            items.push({ label: "-", act: "", on: true })
+                            for (const f of [".tar.gz", ".zip", ".7z"])
+                                items.push({ label: "Compress to " + f,
+                                             act: "compress", on: n > 0,
+                                             fmt: f.substring(1) })
+                        }
+
+                        items.push({ label: "-", act: "", on: true })
+                        items.push({ label: "Copy Path", act: "copypath", on: one })
+                        items.push({ label: "Open Terminal Here", act: "term",
+                                     on: t.view === "dir" })
+                        items.push({ label: root.isPinned(r.full) ? "Remove from Places"
+                                                                 : "Add to Places",
+                                     act: "pin", on: one && r.type === "dir" })
+                        items.push({ label: "-", act: "", on: true })
+                        items.push({ label: "New Folder…", act: "newdir", on: t.view === "dir" })
+                        items.push({ label: "New Empty File…", act: "newfile", on: t.view === "dir" })
+                        items.push({ label: "Select All", act: "selectall", on: true })
+                        items.push({ label: "Invert Selection", act: "invert", on: true })
+                        items.push({ label: "-", act: "", on: true })
+                        items.push({ label: "Properties…", act: "props", on: n > 0 })
+                        return items
+                    }
+                    delegate: Item {
+                        id: ctxItem
+                        required property var modelData
+                        width: ctxCol.width
+                        height: ctxItem.modelData.label === "-" ? 5 : 26
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right
+                                      verticalCenter: parent.verticalCenter }
+                            height: 1
+                            color: root.wash(0.25)
+                            visible: ctxItem.modelData.label === "-"
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            visible: ctxItem.modelData.label !== "-"
+                            color: ctxMa.containsMouse && ctxItem.modelData.on
+                                   ? root.wash(0.18) : "transparent"
+
+                            Text {
+                                anchors { left: parent.left; leftMargin: 10
+                                          verticalCenter: parent.verticalCenter }
+                                text: ctxItem.modelData.label
+                                color: ctxItem.modelData.on ? root.cText : root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            MouseArea {
+                                id: ctxMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: ctxItem.modelData.on
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    const r = ctxMenu.row
+                                    ctxMenu.open = false
+                                    switch (ctxItem.modelData.act) {
+                                    case "open":    root.activate(r); break
+                                    case "tab":     pane.newTab(r.full, "dir"); break
+                                    case "copy":    root.copySelection(false); break
+                                    case "cut":     root.copySelection(true); break
+                                    case "paste":   root.paste(); break
+                                    case "rename":  pane.renaming = r.name; break
+                                    case "trash":   root.trashSelection(); break
+                                    case "restore": root.restoreFromTrash(r); break
+                                    case "props":   root.openProperties(); break
+                                    case "run":     root.runAction(ctxItem.modelData.desktop,
+                                                                   ctxItem.modelData.actionId); break
+                                    case "copypath": root.copyToClipboard(root.disp(r.full)); break
+                                    case "term":     root.openTerminalHere(); break
+                                    case "pin":
+                                        if (root.isPinned(r.full)) root.unpin(r.full)
+                                        else root.pin(r.full)
+                                        break
+                                    case "compress": root.compressSelection(ctxItem.modelData.fmt); break
+                                    case "newdir":   root.creating = true; break
+                                    case "newfile":  root.creatingFile = true; break
+                                    case "selectall": pane.selectAll(); break
+                                    case "invert": {
+                                        const inv = pane.shownRows
+                                            .filter(x => !pane.isSelected(x.name))
+                                            .map(x => x.name)
+                                        pane.selection = inv
+                                        break
+                                    }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            }
+        }
+
+        // Which pane the shared toolbar is talking about. Without it a split
+        // window has two identical halves and every button in the toolbar is a
+        // guess — the line is thin because it is a hint, not a border.
+        Rectangle {
+            visible: root.split
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: 2
+            color: pane.isActive ? root.cAccent : "transparent"
+            z: 50
         }
     }
 
@@ -4342,6 +4677,13 @@ FloatingWindow {
         id: tb
         property string glyph: ""
         property string hint: ""
+        // The split-view icon, drawn rather than named. Two panes with the
+        // active one filled is not a character in any font, and a theme icon
+        // could not be it either: Qt resolves an icon's colour ONCE per
+        // process, so a shipped SVG would keep the old accent through a theme
+        // change and go invisible on a light one. The same reason FolderIcon
+        // exists. Two rectangles and a gap, bound to the palette.
+        property bool splitIcon: false
         // A word beside the glyph, for the buttons whose icon alone would be a
         // guess — "View" is one, an arrow is not.
         property string label: ""
@@ -4363,8 +4705,37 @@ FloatingWindow {
             anchors.verticalCenter: parent.verticalCenter
             x: tb.label === "" ? (tb.width - implicitWidth) / 2 : 9
             text: tb.glyph
+            visible: !tb.splitIcon
             color: tb.active ? root.cAccent : root.cText
             font { family: root.uiFont; pixelSize: root.ui(14) }
+        }
+
+        Item {
+            visible: tb.splitIcon
+            anchors.centerIn: parent
+            width: root.ui(15)
+            height: root.ui(12)
+
+            id: splitGlyph
+            readonly property color ink: tb.active ? root.cAccent : root.cText
+
+            // A frame with a divider down the middle, and the half that is
+            // "the active pane" filled in — the same thing the window shows,
+            // at button size.
+            Rectangle {
+                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                width: (parent.width - 2) / 2
+                color: tb.active ? splitGlyph.ink : "transparent"
+                border { width: 1; color: splitGlyph.ink }
+                radius: 1
+            }
+            Rectangle {
+                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                width: (parent.width - 2) / 2
+                color: "transparent"
+                border { width: 1; color: splitGlyph.ink }
+                radius: 1
+            }
         }
         Text {
             id: tbLabel

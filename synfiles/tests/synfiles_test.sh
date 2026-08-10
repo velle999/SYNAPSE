@@ -1251,6 +1251,23 @@ v=$("$SYNFILES" config get sort)
 [ "$v" = "name" ] && ok "an invalid stored value falls back to the default" \
                   || bad "stored 'gone' came back as '$v'"
 
+# Split view. Off by default — one pane is what a file manager is until you
+# ask for two — and remembered, because it is a way of working rather than a
+# momentary choice.
+v=$(SYNFILES_CONFIG="$T/splitcfg" "$SYNFILES" config get split)
+[ "$v" = "0" ] && ok "split view is off by default" || bad "split defaults to '$v'"
+SYNFILES_CONFIG="$T/splitcfg" "$SYNFILES" config set split 1 >/dev/null
+v=$(SYNFILES_CONFIG="$T/splitcfg" "$SYNFILES" config get split)
+[ "$v" = "1" ] && ok "split view is remembered" || bad "split came back '$v'"
+SYNFILES_CONFIG="$T/splitcfg" "$SYNFILES" config set split sometimes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "split refuses a non-boolean" || bad "split accepted 'sometimes'"
+
+# The divider's position is deliberately NOT a setting: it is a gesture about
+# what is on screen right now, and a remembered one would come back wrong.
+SYNFILES_CONFIG="$T/splitcfg" "$SYNFILES" config set split_ratio 0.7 >/dev/null 2>&1
+[ $? -eq 1 ] && ok "the divider position is not a stored setting" \
+             || bad "split_ratio was written"
+
 "$SYNFILES" config reset >/dev/null 2>&1
 v=$("$SYNFILES" config get icon_size)
 [ "$v" = "20" ] && ok "reset restores the defaults" || bad "after reset icon_size is '$v'"
