@@ -51,6 +51,36 @@ for pane in display region network bluetooth power system; do
     check_table "$pane"
 done
 
+# The `action` column is the contract between the C reader and the GUI: the
+# window decides what is editable purely from it. A verb the QML does not know
+# renders a dead button, and a malformed one renders a button that builds a
+# command nobody validated — so the shape is checked here rather than
+# discovered by clicking.
+check_actions() {
+    local pane=$1 out col line a
+    out=$("$BIN" --rec "$pane") || { bad "$pane: exited non-zero"; return; }
+    col=$(head -1 <<<"$out" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
+    [ -n "$col" ] || { ok "$pane: no action column (read-only pane)"; return; }
+
+    while IFS= read -r line; do
+        a=$(awk -F'\t' -v c="$col" '{print $c}' <<<"$line")
+        case "$a" in
+            -|set:*|toggle:*|unit:*|probe:*) ;;
+            *) bad "$pane: unknown action verb '$a'"; return ;;
+        esac
+        # A verb with an empty argument is the one that looks fine in a table
+        # and builds `syn-settings set  <value>` when clicked.
+        case "$a" in
+            *:) bad "$pane: action '$a' has no argument"; return ;;
+        esac
+    done < <(tail -n +2 <<<"$out")
+    ok "$pane: every action is a known verb with an argument"
+}
+
+for pane in display region power; do
+    check_actions "$pane"
+done
+
 # An unknown pane must be refused, not silently empty.
 if "$BIN" --rec nonesuch >/dev/null 2>&1; then
     bad "unknown pane was accepted"

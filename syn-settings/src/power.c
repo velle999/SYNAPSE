@@ -64,18 +64,23 @@ static void unit_state(const char *unit, char *en, size_t en_cap,
 
 int pane_power(void)
 {
-	rec_header("kind\tkey\tvalue\tstate\tdetail");
+	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	/* ── Sleep-critical units ─────────────────────────────────────────── */
 	if (have_cmd("systemctl")) {
 		for (size_t i = 0; i < sizeof units / sizeof units[0]; i++) {
-			char en[64], act[64];
+			char en[64], act[64], unit_action[128];
 			unit_state(units[i].unit, en, sizeof en, act, sizeof act);
-			rec_row("unit\t%s\t%s\t%s\t%s",
-			        units[i].unit, en, act, units[i].what);
+			snprintf(unit_action, sizeof unit_action, "unit:%s", units[i].unit);
+			/* Only a unit that EXISTS can be acted on. Offering
+			 * Enable on something systemd has never heard of is a
+			 * button whose only outcome is an error. */
+			rec_row("unit\t%s\t%s\t%s\t%s\t%s",
+			        units[i].unit, en, act, units[i].what,
+			        strcmp(en, "not installed") ? unit_action : "-");
 		}
 	} else {
-		rec_row("unit\t-\tunknown\t-\tsystemctl not available");
+		rec_row("unit\t-\tunknown\t-\tsystemctl not available\t-");
 	}
 
 	/* ── Sleep hooks on disk ──────────────────────────────────────────── */
@@ -118,7 +123,7 @@ int pane_power(void)
 			 * without a word, so the hook is installed and inert. */
 			const char *state = (st.st_mode & S_IXUSR) ? "executable"
 			                                           : "NOT executable";
-			rec_row("hook\t%s\t%s\t%s\t%s", e->d_name, state,
+			rec_row("hook\t%s\t%s\t%s\t%s\t-", e->d_name, state,
 			        d == 0 ? "override" : "shipped", hookdirs[d]);
 		}
 		closedir(dir);
@@ -150,9 +155,9 @@ int pane_power(void)
 			}
 			p = eol ? eol + 1 : NULL;
 		}
-		rec_row("sleep\tlast-suspend\t%s\t-\twhen this boot last went to sleep",
+		rec_row("sleep\tlast-suspend\t%s\t-\twhen this boot last went to sleep\t-",
 		        last_entry[0] ? last_entry : "none this boot");
-		rec_row("sleep\tlast-resume\t%s\t-\twhen it came back",
+		rec_row("sleep\tlast-resume\t%s\t-\twhen it came back\t-",
 		        last_exit[0] ? last_exit : "none this boot");
 	}
 

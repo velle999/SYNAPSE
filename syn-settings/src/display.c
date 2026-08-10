@@ -134,8 +134,8 @@ int pane_display(void)
 
 	DIR *d = opendir("/sys/class/drm");
 	if (!d) {
-		rec_header("connector\tstatus\tcrtc\tpreferred\tedid\tcompositor\tposition\tscale");
-		rec_row("-\tno /sys/class/drm\t-\t-\t-\t-\t-\t-");
+		rec_header("connector\tstatus\tcrtc\tpreferred\tedid\tcompositor\tposition\tscale\taction");
+		rec_row("-\tno /sys/class/drm\t-\t-\t-\t-\t-\t-\t-");
 		return 1;
 	}
 
@@ -156,7 +156,7 @@ int pane_display(void)
 	closedir(d);
 	qsort(names, n, sizeof names[0], name_cmp);
 
-	rec_header("connector\tstatus\tcrtc\tpreferred\tedid\tcompositor\tposition\tscale");
+	rec_header("connector\tstatus\tcrtc\tpreferred\tedid\tcompositor\tposition\tscale\taction");
 
 	for (size_t i = 0; i < n; i++) {
 		char dir[512];
@@ -180,9 +180,18 @@ int pane_display(void)
 		if (edid < 0) snprintf(edidbuf, sizeof edidbuf, "-");
 		else          snprintf(edidbuf, sizeof edidbuf, "%ld", edid);
 
-		rec_row("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
+		/* Offer a re-probe only for the signature that has one: a CRTC
+		 * still assigned to a head with no sink answering. A port with
+		 * nothing plugged in reads enabled=disabled and must not sprout
+		 * a button — probing it would be asking the driver to look for
+		 * a monitor nobody claimed was there. */
+		char action[128] = "-";
+		if (!strcmp(status, "disconnected") && !strcmp(enabled, "enabled"))
+			snprintf(action, sizeof action, "probe:%s", shortname);
+
+		rec_row("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
 		        shortname, status, enabled, mode, edidbuf,
-		        driven ? size : "not driven", at, scale);
+		        driven ? size : "not driven", at, scale, action);
 		free(names[i]);
 	}
 	return 0;
