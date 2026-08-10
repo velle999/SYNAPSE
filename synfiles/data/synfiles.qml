@@ -4175,6 +4175,7 @@ FloatingWindow {
             z: 100
 
             Flickable {
+                id: ctxFlick
                 anchors { fill: parent; margins: 4 }
                 contentHeight: ctxCol.implicitHeight
                 clip: true
@@ -4211,9 +4212,10 @@ FloatingWindow {
                             items.push({ label: "Paste",        act: "paste",
                                          on: root.clip.paths.length > 0 })
                             items.push({ label: "-", act: "", on: true })
-                            items.push({ label: "Rename…", act: "rename", on: one })
+                            items.push({ label: "Rename…", act: "rename", on: one,
+                                         hint: "F2" })
                             items.push({ label: "Move to Trash" + many,
-                                         act: "trash", on: n > 0 })
+                                         act: "trash", on: n > 0, hint: "Del" })
                         }
                         // Borrowed entries, appended flat rather than in a
                         // submenu: a submenu that is empty half the time is
@@ -4244,20 +4246,34 @@ FloatingWindow {
                                              fmt: f.substring(1) })
                         }
 
+                        // Properties leads the "what IS this" group rather than
+                        // trailing the whole menu. It used to be the last of
+                        // ~31 entries — for one PNG the menu is Open, Open in
+                        // New Tab, Copy/Cut/Paste, Rename, Trash, three
+                        // Open-with, two services, three Compress, and the
+                        // create/select block before you reach it, about 650px
+                        // of menu in a 700px window. It was present, enabled,
+                        // and bound to Alt+Enter the whole time, and still read
+                        // as missing, which is the only test that counts.
                         items.push({ label: "-", act: "", on: true })
+                        items.push({ label: "Properties…", act: "props", on: n > 0,
+                                     hint: "Alt+Enter" })
                         items.push({ label: "Copy Path", act: "copypath", on: one })
                         items.push({ label: "Open Terminal Here", act: "term",
                                      on: t.view === "dir" })
                         items.push({ label: root.isPinned(r.full) ? "Remove from Places"
                                                                  : "Add to Places",
                                      act: "pin", on: one && r.type === "dir" })
+                        // The create/select block is about the FOLDER, not the
+                        // file that was clicked, so it belongs after everything
+                        // that is about the file. It lives here only because
+                        // there is no empty-space context menu yet; moving it
+                        // out is what would really shorten this list.
                         items.push({ label: "-", act: "", on: true })
                         items.push({ label: "New Folder…", act: "newdir", on: t.view === "dir" })
                         items.push({ label: "New Empty File…", act: "newfile", on: t.view === "dir" })
                         items.push({ label: "Select All", act: "selectall", on: true })
                         items.push({ label: "Invert Selection", act: "invert", on: true })
-                        items.push({ label: "-", act: "", on: true })
-                        items.push({ label: "Properties…", act: "props", on: n > 0 })
                         return items
                     }
                     delegate: Item {
@@ -4282,11 +4298,31 @@ FloatingWindow {
                                    ? root.wash(0.18) : "transparent"
 
                             Text {
-                                anchors { left: parent.left; leftMargin: 10
-                                          verticalCenter: parent.verticalCenter }
+                                anchors {
+                                    left: parent.left; leftMargin: 10
+                                    right: ctxHint.left; rightMargin: 6
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                // Elided: "Open with GNU Image Manipulation
+                                // Program" is wider than the 210px menu and was
+                                // simply cut off by the Flickable's clip, with
+                                // no ellipsis to say so.
+                                elide: Text.ElideRight
                                 text: ctxItem.modelData.label
                                 color: ctxItem.modelData.on ? root.cText : root.cDim
                                 font { family: root.uiFont; pixelSize: root.ui(12) }
+                            }
+                            // The key that does the same thing, where the eye
+                            // already looks for it. Properties was reachable by
+                            // Alt+Enter long before anyone could have guessed.
+                            Text {
+                                id: ctxHint
+                                anchors { right: parent.right; rightMargin: 10
+                                          verticalCenter: parent.verticalCenter }
+                                text: ctxItem.modelData.hint || ""
+                                visible: text !== ""
+                                color: root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
                             }
                             MouseArea {
                                 id: ctxMa
@@ -4333,6 +4369,21 @@ FloatingWindow {
                     }
                 }
             }
+            }
+
+            // A capped menu used to hide its tail in silence. The menu height
+            // is min(content, window - 16), so on a short window the last
+            // entries are simply not there to look at — which is one of the
+            // two reasons Properties read as missing. A sibling of the
+            // Flickable, not a child, or it would scroll away with the list.
+            // VScroll hides itself when everything fits, so an ordinary short
+            // menu is unchanged.
+            VScroll {
+                flick: ctxFlick
+                anchors {
+                    top: parent.top; bottom: parent.bottom
+                    right: parent.right; margins: 4
+                }
             }
         }
 
