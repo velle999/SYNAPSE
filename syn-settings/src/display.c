@@ -188,6 +188,12 @@ int pane_display(void)
 		char action[128] = "-";
 		if (!strcmp(status, "disconnected") && !strcmp(enabled, "enabled"))
 			snprintf(action, sizeof action, "probe:%s", shortname);
+		else if (driven && !strcmp(status, "connected"))
+			/* A mode can only be set on a head the compositor is actually
+			 * driving. Offering it for a connector the kernel sees but synui
+			 * is not scanning out to would be a picker whose every choice is
+			 * refused. */
+			snprintf(action, sizeof action, "mode:%s", shortname);
 
 		rec_row("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
 		        shortname, status, enabled, mode, edidbuf,

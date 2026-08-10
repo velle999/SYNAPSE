@@ -15,6 +15,9 @@
 
 int g_dry_run = 0;
 
+static int run_capture_impl(char *const argv[], char *out, size_t cap,
+                           int silence_stderr);
+
 void rec_header(const char *cols)
 {
 	printf("%s\n", cols);
@@ -59,7 +62,25 @@ int have_cmd(const char *cmd)
 /* fork+exec rather than popen: popen goes through /bin/sh, which means every
  * argument would have to be quoted correctly forever. Nothing here is ever a
  * shell string. */
+/* Same as run_capture, but the child's stderr goes to /dev/null.
+ *
+ * For the callers where a NON-ZERO exit is an expected answer rather than a
+ * fault: `pacman -Q linux-zen` on a machine without it prints "error: package
+ * not found" and that is simply the word "no". Left alone, those lines reach
+ * the terminal — and, through the GUI's stderr collector, the status bar,
+ * where the app would report an error for a question it answered correctly. */
+int run_capture_quiet(char *const argv[], char *out, size_t cap)
+{
+	return run_capture_impl(argv, out, cap, 1);
+}
+
 int run_capture(char *const argv[], char *out, size_t cap)
+{
+	return run_capture_impl(argv, out, cap, 0);
+}
+
+static int run_capture_impl(char *const argv[], char *out, size_t cap,
+                            int silence_stderr)
 {
 	if (cap) out[0] = '\0';
 	if (!argv || !argv[0] || !have_cmd(argv[0])) return -1;
@@ -74,6 +95,13 @@ int run_capture(char *const argv[], char *out, size_t cap)
 		close(fds[0]);
 		dup2(fds[1], STDOUT_FILENO);
 		close(fds[1]);
+		if (silence_stderr) {
+			int devnull = open("/dev/null", O_WRONLY);
+			if (devnull >= 0) {
+				dup2(devnull, STDERR_FILENO);
+				if (devnull > STDERR_FILENO) close(devnull);
+			}
+		}
 		execvp(argv[0], argv);
 		_exit(127);
 	}

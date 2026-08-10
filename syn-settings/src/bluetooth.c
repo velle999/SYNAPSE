@@ -24,7 +24,7 @@ static void controller(void)
 	char out[8192] = "";
 	char *argv[] = { (char *)"bluetoothctl", (char *)"show", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("controller\t-\tnone\t-\tno adapter, or bluetoothd is not running");
+		rec_row("controller\t-\tnone\t-\tno adapter, or bluetoothd is not running\t-");
 		return;
 	}
 
@@ -40,9 +40,15 @@ static void controller(void)
 	if (!scrape_field(out, "Discoverable", discoverable, sizeof discoverable)) snprintf(discoverable, sizeof discoverable, "unknown");
 	if (!scrape_field(out, "Pairable", pairable, sizeof pairable)) snprintf(pairable, sizeof pairable, "unknown");
 
-	rec_row("controller\t%s\t%s\t%s\tthe adapter", addr, name, powered);
-	rec_row("controller\tdiscoverable\t%s\t-\tvisible to anything scanning", discoverable);
-	rec_row("controller\tpairable\t%s\t-\taccepts new pairings", pairable);
+	/* The adapter's power is the row worth acting on, and the VALUE column is
+	 * where the editor reads current state from — so "Powered: yes" goes there
+	 * rather than in `state`, with the adapter's name moved to detail. The
+	 * first cut had the name in `value` and a toggle that read the name to
+	 * decide which way to flip. */
+	rec_row("controller\tpowered\t%s\t%s\t%s (%s)\ttoggle:bluetooth",
+	        powered, addr, name, addr);
+	rec_row("controller\tdiscoverable\t%s\t-\tvisible to anything scanning\t-", discoverable);
+	rec_row("controller\tpairable\t%s\t-\taccepts new pairings\t-", pairable);
 }
 
 static void devices(void)
@@ -53,7 +59,7 @@ static void devices(void)
 	char *argv[] = { (char *)"bluetoothctl", (char *)"devices",
 	                 (char *)"Paired", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter");
+		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter\t-");
 		return;
 	}
 
@@ -82,12 +88,12 @@ static void devices(void)
 		snprintf(nbuf, sizeof nbuf, "%s", *name ? name : "(unnamed)");
 		tsv_clean(nbuf);
 
-		rec_row("device\t%s\t%s\t%s\tpaired", addr, nbuf,
+		rec_row("device\t%s\t%s\t%s\tpaired\t-", addr, nbuf,
 		        !strcmp(conn, "yes") ? "connected" : "not connected");
 		any = 1;
 	}
 	if (!any)
-		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter");
+		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter\t-");
 }
 
 static void radio(void)
@@ -95,7 +101,7 @@ static void radio(void)
 	char out[4096] = "";
 	char *argv[] = { (char *)"rfkill", (char *)"list", (char *)"bluetooth", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("radio\trfkill\tunknown\t-\trfkill reported nothing");
+		rec_row("radio\trfkill\tunknown\t-\trfkill reported nothing\t-");
 		return;
 	}
 
@@ -105,13 +111,13 @@ static void radio(void)
 	if (!scrape_field(out, "Hard blocked", hard, sizeof hard))
 		snprintf(hard, sizeof hard, "unknown");
 
-	rec_row("radio\tsoft-block\t%s\t-\tsoftware; a toggle can clear this", soft);
-	rec_row("radio\thard-block\t%s\t-\ta physical switch; software cannot clear it", hard);
+	rec_row("radio\tsoft-block\t%s\t-\tsoftware; clearing it needs root (rfkill)\t-", soft);
+	rec_row("radio\thard-block\t%s\t-\ta physical switch; software cannot clear it\t-", hard);
 }
 
 int pane_bluetooth(void)
 {
-	rec_header("kind\tkey\tvalue\tstate\tdetail");
+	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	if (have_cmd("systemctl")) {
 		char out[128] = "";
@@ -120,14 +126,14 @@ int pane_bluetooth(void)
 		run_capture(argv, out, sizeof out);
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
-		rec_row("service\tbluetooth.service\t%s\t-\tBlueZ; nothing below works without it",
+		rec_row("service\tbluetooth.service\t%s\t-\tBlueZ; nothing below works without it\tunit:bluetooth.service",
 		        out[0] ? out : "not installed");
 	}
 
 	if (have_cmd("rfkill")) radio();
 
 	if (!have_cmd("bluetoothctl")) {
-		rec_row("controller\t-\tunknown\t-\tbluez-utils is not installed");
+		rec_row("controller\t-\tunknown\t-\tbluez-utils is not installed\t-");
 		return 0;
 	}
 	controller();
@@ -138,7 +144,7 @@ int pane_bluetooth(void)
 	 * it connects, which is loud and startling and is not a SynapseOS bug. */
 	rec_row("note\tavrcp-volume\tsee detail\t-\t"
 	        "a connecting headset may announce 100%% volume (AVRCP quirk); "
-	        "SPA_DATA_DIR carries the wireplumber fix");
+	        "SPA_DATA_DIR carries the wireplumber fix\t-");
 
 	return 0;
 }

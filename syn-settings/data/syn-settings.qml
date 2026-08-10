@@ -124,6 +124,7 @@ FloatingWindow {
         { id: "network",   label: "Network",  blurb: "interfaces, radios, and whether anything is filtering traffic" },
         { id: "bluetooth", label: "Bluetooth", blurb: "the adapter, both kinds of radio block, and what is paired" },
         { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
+        { id: "kernel",    label: "Kernel",   blurb: "every kernel Arch ships, which are installed, and which one you booted" },
         { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"
@@ -144,6 +145,28 @@ FloatingWindow {
     property string selKey: ""
     property string selValue: ""
     property bool applying: false
+    // Modes for the output the editor is pointed at. Emptied on every
+    // selection change, so a slow `modes` call can never paint DP-2's list
+    // under DP-3's name.
+    property var modeList: []
+
+    Process {
+        id: modesProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                for (const line of this.text.split("\n")) {
+                    if (line === "") continue
+                    const f = line.split("\t")
+                    out.push({ mode: f[0], current: f.length > 1 && f[1] === "current" })
+                }
+                root.modeList = out
+                if (out.length === 0)
+                    root.status = "no modes listed — is wlr-randr installed?"
+            }
+        }
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
+    }
 
     readonly property int actionCol: root.cols.indexOf("action")
     function rowAction(r) {
@@ -151,6 +174,12 @@ FloatingWindow {
         return r[root.actionCol]
     }
     function actionVerb(a) { const i = a.indexOf(":"); return i < 0 ? a : a.substring(0, i) }
+    // Every tool spells "on" differently — systemd says active, nmcli says
+    // enabled, bluetoothctl says yes. A toggle that only knew one of them
+    // offered "Turn on" for something already on, and then turned it off.
+    function isOn(v) {
+        return ["active", "enabled", "yes", "on", "true"].indexOf(String(v).toLowerCase()) >= 0
+    }
     function actionArg(a)  { const i = a.indexOf(":"); return i < 0 ? "" : a.substring(i + 1) }
 
     function selectRow(i) {
@@ -167,6 +196,12 @@ FloatingWindow {
         const vi = root.cols.indexOf("value")
         root.selValue = vi >= 0 && vi < r.length ? r[vi] : (r[1] || "")
         editField.text = root.selValue
+
+        root.modeList = []
+        if (root.actionVerb(a) === "mode") {
+            modesProc.command = [root.bin, "modes", root.actionArg(a)]
+            modesProc.running = true
+        }
     }
 
     // Runs a write, then reloads. Never parses the tool's output: the reader
@@ -268,6 +303,7 @@ FloatingWindow {
         // same number, and the editor would happily write to it.
         root.selRow = -1
         root.selAction = ""
+        root.modeList = []
         readProc.command = [root.bin, "--rec", root.pane]
         readProc.running = true
     }
@@ -553,7 +589,13 @@ FloatingWindow {
         Rectangle {
             id: editor
             anchors { left: nav.right; right: parent.right; bottom: statusBar.top }
-            height: root.selRow >= 0 ? 44 : 0
+            // Height follows the wrapped flow rather than a guessed constant:
+            // how many lines eleven buttons take depends on the window width,
+            // and a fixed height would clip the last row at some sizes and
+            // leave a gap at others.
+            height: root.selRow < 0 ? 0
+                  : root.modeList.length > 0 ? Math.max(44, modeFlow.implicitHeight + 18)
+                  : 44
             visible: height > 0
             clip: true
             color: root.cPanel
@@ -605,10 +647,10 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: root.actionVerb(root.selAction) !== "unit"
+                    visible: ["unit", "mode", "pkg"].indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
-                        if (v === "toggle") return root.selValue === "active" ? "Turn off" : "Turn on"
+                        if (v === "toggle") return root.isOn(root.selValue) ? "Turn off" : "Turn on"
                         if (v === "probe")  return "Re-probe"
                         return "Apply"
                     }
@@ -618,10 +660,23 @@ FloatingWindow {
                         if (v === "set")
                             root.runWrite(["set", arg, editField.text], "setting " + arg + "…")
                         else if (v === "toggle")
-                            root.runWrite(["set", arg, root.selValue === "active" ? "off" : "on"],
+                            root.runWrite(["set", arg, root.isOn(root.selValue) ? "off" : "on"],
                                           "switching " + arg + "…")
                         else if (v === "probe")
                             root.runWrite(["probe", arg], "re-probing " + arg + "…")
+                    }
+                }
+
+                // A kernel: install or remove, both through synpkg.
+                Repeater {
+                    model: root.actionVerb(root.selAction) === "pkg"
+                           ? ["install", "remove"] : []
+                    delegate: SettingsButton {
+                        required property var modelData
+                        label: modelData.charAt(0).toUpperCase() + modelData.substring(1)
+                        onGo: root.runWrite(["pkg", modelData, root.actionArg(root.selAction)],
+                                            modelData + "ing " + root.actionArg(root.selAction)
+                                            + " — synpkg will ask to confirm…")
                     }
                 }
 
@@ -637,7 +692,39 @@ FloatingWindow {
                 }
             }
 
+            // The modes this output can take, fetched when the row is picked
+            // rather than carried in the table: a connector has a dozen of
+            // them and they belong to the row you chose, not to every row.
+            //
+            // A Flow, not a Row. Eleven buttons at ~90px do not fit on one
+            // line at any window width this app allows, and a Row would have
+            // run them off the right edge — the same overflow that made
+            // synfiles unreadable at 350px, which is a mistake worth not
+            // repeating in the app built to fix it.
+            Flow {
+                id: modeFlow
+                anchors {
+                    left: editLabel.right; leftMargin: 12
+                    right: closeBtn.left; rightMargin: 12
+                    verticalCenter: parent.verticalCenter
+                }
+                spacing: 6
+                visible: root.modeList.length > 0
+
+                Repeater {
+                    model: root.modeList
+                    delegate: SettingsButton {
+                        required property var modelData
+                        label: modelData.current ? modelData.mode + " ✓" : modelData.mode
+                        onGo: root.runWrite(["mode", root.actionArg(root.selAction), modelData.mode],
+                                            "setting " + root.actionArg(root.selAction)
+                                            + " to " + modelData.mode + "…")
+                    }
+                }
+            }
+
             SettingsButton {
+                id: closeBtn
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
                 label: "Close"
                 onGo: { root.selRow = -1; root.selAction = "" }

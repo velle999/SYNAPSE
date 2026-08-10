@@ -8,16 +8,21 @@ pkgname=syn-settings
 # "$name-0.1.0/" for every component it builds. Bumping pkgver without changing
 # that leaves makepkg looking for a tarball nothing creates.
 pkgver=0.1.0
-pkgrel=4
-pkgdesc="SynapseOS settings: display, keyboard and region, network, Bluetooth, power and sleep, and where configuration lives"
+pkgrel=5
+pkgdesc="SynapseOS settings: displays and resolution, keyboard and region, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
 
-# Nothing beyond libc. Every answer comes from a tool that already owns it or
-# from sysfs, and each of those is an optdepend rather than a hard one so this
-# still works on a headless box and on the ISO.
-depends=('glibc')
+# wlr-randr is a hard dependency, not an optional one: it is the only way this
+# app can change a resolution, and "Settings cannot change your resolution
+# until you install something" is not a settings app. It is 28 KB, and on a
+# headless box it simply never runs.
+#
+# Everything else stays optional. Each answer comes from a tool that already
+# owns it, and each pane degrades to "not installed" rather than failing, so
+# this still works over SSH and on the ISO.
+depends=('glibc' 'wlr-randr')
 makedepends=('meson' 'ninja' 'gcc')
 
 optdepends=('quickshell: the settings window (syn-settings gui)'
@@ -26,6 +31,8 @@ optdepends=('quickshell: the settings window (syn-settings gui)'
             'networkmanager: nmcli — the Network pane'
             'bluez-utils: bluetoothctl — the Bluetooth pane'
             'util-linux: rfkill — soft and hard radio blocks'
+            'synpkg: install and remove kernels from the Kernel pane'
+            'pacman: which kernels are installed'
             'polkit: change settings without dropping to a root shell')
 
 source=("syn-settings-0.1.0.tar.gz")

@@ -47,7 +47,7 @@ check_table() {
 
 echo "syn-settings smoke tests"
 
-for pane in display region network bluetooth power system; do
+for pane in display region network bluetooth power kernel system; do
     check_table "$pane"
 done
 
@@ -65,7 +65,7 @@ check_actions() {
     while IFS= read -r line; do
         a=$(awk -F'\t' -v c="$col" '{print $c}' <<<"$line")
         case "$a" in
-            -|set:*|toggle:*|unit:*|probe:*) ;;
+            -|set:*|toggle:*|unit:*|probe:*|mode:*|pkg:*) ;;
             *) bad "$pane: unknown action verb '$a'"; return ;;
         esac
         # A verb with an empty argument is the one that looks fine in a table
@@ -77,7 +77,7 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region power; do
+for pane in display region network bluetooth power kernel; do
     check_actions "$pane"
 done
 
@@ -113,6 +113,52 @@ for bad_val in "--adjust" "a;b" 'x$(id)' "back\`tick\`"; do
         ok "refused: $bad_val"
     fi
 done
+
+# pkg is restricted to the kernels this pane manages. It must never become a
+# general "install anything by name" endpoint reachable from a GUI row.
+for evil in "firefox" "base" "sudo" "linux-lts-evil"; do
+    if "$BIN" --dry-run pkg install "$evil" >/dev/null 2>&1; then
+        bad "pkg accepted a package outside the kernel list: $evil"
+    else
+        ok "pkg refused: $evil"
+    fi
+done
+if "$BIN" --dry-run pkg install linux-lts | grep -q 'synpkg install linux-lts linux-lts-headers'; then
+    ok "pkg install pulls the matching headers"
+else
+    bad "pkg install did not include headers"
+fi
+
+# A mode string reaches a command line; anything that is not WxH[@R] is refused
+# here with a readable message rather than by wlr-randr with a usage dump.
+#
+# Checked by EXIT CODE, not merely non-zero. On a machine without wlr-randr
+# every one of these fails whatever the argument is, so "it failed" would be a
+# test that passes for the wrong reason and would keep passing if the
+# validation were deleted. 2 is "refused the argument", 1 is "tool missing".
+for m in "--output" "1920" "abcxdef" "1920x1080; reboot" ""; do
+    # `|| rc=$?` and not a bare call: under `set -e` a non-zero exit that is
+    # not part of a conditional kills the script, and every one of these is
+    # SUPPOSED to be non-zero. The first version of this loop ended the suite
+    # silently at the first case it was testing for.
+    rc=0
+    "$BIN" --dry-run mode DP-1 "$m" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ]; then
+        ok "mode refused (exit 2): ${m:-<empty>}"
+    else
+        bad "mode did not refuse '${m:-<empty>}' as a bad argument (exit $rc)"
+    fi
+done
+
+# And the converse: a WELL-FORMED mode must get PAST validation. Without this
+# the four checks above would still pass if sane_mode() rejected everything.
+rc=0
+"$BIN" --dry-run mode DP-1 1920x1080@60 >/dev/null 2>&1 || rc=$?
+case "$rc" in
+    0) ok "a valid mode passes validation (wlr-randr present)" ;;
+    1) ok "a valid mode passes validation (stops at missing wlr-randr)" ;;
+    *) bad "a valid mode was refused as a bad argument (exit $rc)" ;;
+esac
 
 if "$BIN" --dry-run unit enable not-a-unit >/dev/null 2>&1; then
     bad "accepted a name with no unit suffix"

@@ -43,7 +43,7 @@ static void devices(void)
 	                 (char *)"-f", (char *)"DEVICE,TYPE,STATE,CONNECTION",
 	                 (char *)"device", NULL };
 	if (run_capture(argv, out, sizeof out) != 0 || !out[0]) {
-		rec_row("device\t-\tunknown\t-\tnmcli reported nothing");
+		rec_row("device\t-\tunknown\t-\tnmcli reported nothing\t-");
 		return;
 	}
 
@@ -70,7 +70,7 @@ static void devices(void)
 		snprintf(c, sizeof c, "%s", conn && *conn ? conn : "no connection");
 		tsv_clean(d); tsv_clean(t); tsv_clean(s); tsv_clean(c);
 
-		rec_row("device\t%s\t%s\t%s\t%s", d, t, s, c);
+		rec_row("device\t%s\t%s\t%s\t%s\t-", d, t, s, c);
 	}
 }
 
@@ -81,16 +81,20 @@ static void radio(const char *which)
 	run_capture(argv, out, sizeof out);
 	out[strcspn(out, "\n")] = '\0';
 	tsv_clean(out);
-	rec_row("radio\t%s\t%s\t-\tnmcli radio %s",
-	        which, out[0] ? out : "unknown", which);
+	/* Only wifi is offered as a toggle. wwan is reported because it exists,
+	 * and left alone because this machine has no modem to switch on and a
+	 * button that always errors teaches people to distrust the others. */
+	rec_row("radio\t%s\t%s\t-\tnmcli radio %s\t%s",
+	        which, out[0] ? out : "unknown", which,
+	        strcmp(which, "wifi") == 0 ? "toggle:wifi" : "-");
 }
 
 int pane_network(void)
 {
-	rec_header("kind\tkey\tvalue\tstate\tdetail");
+	rec_header("kind\tkey\tvalue\tstate\tdetail\taction");
 
 	if (!have_cmd("nmcli")) {
-		rec_row("device\t-\tunknown\t-\tNetworkManager is not installed");
+		rec_row("device\t-\tunknown\t-\tNetworkManager is not installed\t-");
 	} else {
 		devices();
 		radio("wifi");
@@ -113,7 +117,7 @@ int pane_network(void)
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
 		rec_row("firewall\tnftables.service\t%s\t-\t"
-		        "synnet manages its own table whether or not this is active",
+		        "synnet manages its own table whether or not this is active\t-",
 		        out[0] ? out : "not installed");
 
 		out[0] = '\0';
@@ -123,13 +127,13 @@ int pane_network(void)
 		out[strcspn(out, "\n")] = '\0';
 		tsv_clean(out);
 		rec_row("firewall\tsynnet.service\t%s\t-\t"
-		        "the egress policy and the default-deny input chain",
+		        "the egress policy and the default-deny input chain\t-",
 		        out[0] ? out : "not installed");
 	}
 
 	rec_row("firewall\truleset\tnot read\t-\t"
 	        "`nft list ruleset` needs root; run it yourself rather than trust "
-	        "an empty table here");
+	        "an empty table here\t-");
 
 	return 0;
 }

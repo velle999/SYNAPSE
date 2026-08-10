@@ -105,6 +105,30 @@ int do_set(int argc, char **argv)
 		              (char *)val, NULL };
 		return run_or_show(a);
 	}
+	/* The radios. Both go through the tool that owns the device and does its
+	 * own polkit check — nmcli for wifi, bluetoothctl for the adapter — for
+	 * the same reason localectl handles the keymap.
+	 *
+	 * Deliberately NOT rfkill: it needs root outright, so a button wired to it
+	 * would fail for the user it exists to serve. rfkill's soft/hard block
+	 * stays a READ on the Bluetooth pane, because a hard block is a physical
+	 * switch and no amount of software can clear it — showing it is the point,
+	 * offering to toggle it would be a lie. */
+	if (!strcmp(key, "wifi")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("wifi takes on or off");
+		char *a[] = { (char *)"nmcli", (char *)"radio", (char *)"wifi",
+		              (char *)val, NULL };
+		return run_or_show(a);
+	}
+	if (!strcmp(key, "bluetooth")) {
+		if (strcmp(val, "on") && strcmp(val, "off"))
+			return refuse("bluetooth takes on or off");
+		char *a[] = { (char *)"bluetoothctl", (char *)"power",
+		              (char *)val, NULL };
+		return run_or_show(a);
+	}
+
 	if (!strcmp(key, "ntp")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("ntp takes on or off");
@@ -113,7 +137,8 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
-	return refuse("unknown key — try keymap, xkb, locale, timezone or ntp");
+	return refuse("unknown key — try keymap, xkb, locale, timezone, ntp, "
+	              "wifi or bluetooth");
 }
 
 int do_unit(int argc, char **argv)

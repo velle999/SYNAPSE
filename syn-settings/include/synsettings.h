@@ -37,6 +37,10 @@ void rec_row(const char *fmt, ...);
  * alone so a real error is still visible on a terminal. */
 int run_capture(char *const argv[], char *out, size_t cap);
 
+/* As above, with the child stderr discarded. For callers where a non-zero
+ * exit is an expected ANSWER, not a fault. */
+int run_capture_quiet(char *const argv[], char *out, size_t cap);
+
 /* Run argv for its exit status, with stdout and stderr discarded. */
 int run_quiet(char *const argv[]);
 
@@ -63,6 +67,7 @@ int pane_power(void);
 int pane_system(void);
 int pane_network(void);
 int pane_bluetooth(void);
+int pane_kernel(void);
 
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *
@@ -76,6 +81,13 @@ int do_unit(int argc, char **argv);
 
 /* Re-probe a DRM connector. Does NOT escalate — see src/probe.c. */
 int do_probe(int argc, char **argv);
+
+/* Display modes, via wlr-randr; synui persists whatever it sets. */
+int do_modes(int argc, char **argv);
+int do_mode(int argc, char **argv);
+
+/* Install/remove, delegated to synpkg. Kernels only — see src/pkg.c. */
+int do_pkg(int argc, char **argv);
 
 extern int g_dry_run;
 
