@@ -141,6 +141,11 @@ void deskdrop_hover(syn_server_t *s, bool over_desktop)
      * copy files into a ~/Desktop the user cannot see. */
     bool take = over_desktop &&
                 s->config.desktop_icons &&
+                /* …but never our OWN drag out of the desktop. Dropping one of
+                 * these back where it came from would copy the file on top of
+                 * itself and leave "name (copy)" behind — a gesture that ended
+                 * where it started has to be a no-op. */
+                !deskdrag_is_ours(src) &&
                 src->actions >= 0 &&        /* == "this source is v3+"; see top */
                 (src->actions & WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY) &&
                 source_offers(src, DROP_MIME);

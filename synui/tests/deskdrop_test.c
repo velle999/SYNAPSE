@@ -54,7 +54,23 @@ uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
     return 1;
 }
 
+/* deskdrag.c reaches for the scene to pick a seat client; nothing here starts
+ * a real drag, and the URI builder it is included for touches none of this. */
+struct wlr_surface *surface_at(syn_server_t *s, double lx, double ly,
+                               syn_view_t **view_out, double *sx, double *sy)
+{
+    (void)s; (void)lx; (void)ly; (void)sx; (void)sy;
+    if (view_out) *view_out = NULL;
+    return NULL;
+}
+
 #include "deskdrop.c"
+
+/* Both halves of the same encoding, in one test: deskdrag.c builds the URI a
+ * file dragged OFF the desktop travels as, deskdrop.c reads the URI a file
+ * dropped ON it arrives as. They have to be inverses or a filename changes in
+ * mid-air. */
+#include "deskdrag.c"
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -395,6 +411,62 @@ int main(void)
         }
         printf("ok 9 — a write-then-close transfer lands the file (HANGUP with data)\n");
     }
+
+
+    /* ── The desktop as a SOURCE: URI out, path back ──────────────────── */
+    {
+        static const char *paths[] = {
+            "/home/velle/notes.txt",
+            "/home/velle/a file with spaces.png",
+            "/home/velle/100% done.txt",
+            "/home/velle/Ünïcødé — dash.jpg",
+            "/home/velle/awkward#hash?question&amp.txt",
+            "/home/velle/quote'and\"double.txt",
+        };
+        for (size_t i = 0; i < sizeof paths / sizeof *paths; i++) {
+            char uri[PATH_MAX * 3 + 16], back[PATH_MAX];
+            if (!deskdrag_uri_for(paths[i], uri, sizeof(uri))) {
+                fprintf(stderr, "FAIL: no URI for %s\n", paths[i]);
+                abort();
+            }
+            if (strncmp(uri, "file:///", 8) != 0) {
+                fprintf(stderr, "FAIL: %s did not start file:/// — %s\n",
+                        paths[i], uri);
+                abort();
+            }
+            /* Nothing but the unreserved set and %XX survives the encoder —
+             * a raw space or a raw # in a uri-list means a different file, or
+             * a truncated one, to whatever reads it. */
+            for (const char *c = uri + 7; *c; c++) {
+                if ((unsigned char)*c <= ' ' || (unsigned char)*c > '~' ||
+                    strchr(" \"#<>?[]^`{|}", *c)) {
+                    fprintf(stderr, "FAIL: %s left '%c' raw in %s\n",
+                            paths[i], *c, uri);
+                    abort();
+                }
+            }
+            if (!uri_to_path(uri, strlen(uri), back, sizeof(back))) {
+                fprintf(stderr, "FAIL: our own URI was refused: %s\n", uri);
+                abort();
+            }
+            eq("deskdrag round trip", back, paths[i]);
+        }
+
+        /* A relative path is not a file:// URI and must be refused rather than
+         * turned into one that names something else. */
+        char uri[64];
+        if (deskdrag_uri_for("Desktop/notes.txt", uri, sizeof(uri))) {
+            fprintf(stderr, "FAIL: a relative path produced a URI\n");
+            abort();
+        }
+        /* And a buffer that cannot hold the answer gets no answer. */
+        char tiny[12];
+        if (deskdrag_uri_for("/home/velle/notes.txt", tiny, sizeof(tiny))) {
+            fprintf(stderr, "FAIL: a too-small buffer produced a URI\n");
+            abort();
+        }
+    }
+    printf("ok 10 — a path out and a path back are the same path\n");
 
     printf("\nall deskdrop uri-list checks passed\n");
     return 0;

@@ -6391,6 +6391,18 @@ void deskicon_select(syn_server_t *s, int i);
  * `gio trash`, never unlink(). Recoverable, like Delete anywhere else. */
 void deskicon_trash_selected(syn_server_t *s);
 
+/* ── deskdrag.c — the desktop as a drag SOURCE ──────────────────────────────
+ * Dragging an icon off the desktop and into a window. The compositor owns the
+ * file, so the compositor is the wl_data_source; a drag out is always a COPY.
+ * Promoted from the reposition gesture the moment the cursor leaves the
+ * desktop, which is what keeps moving an icon to a cell unchanged. */
+bool deskdrag_start(syn_server_t *s, const char *path);
+/* So deskdrop.c does not accept our own drag back onto the desktop and copy a
+ * file on top of itself. */
+bool deskdrag_is_ours(struct wlr_data_source *source);
+/* file:// URI for a path, percent-encoded. Exposed for the test. */
+bool deskdrag_uri_for(const char *path, char *out, size_t n);
+
 void deskicon_drag_begin(syn_server_t *s, int idx, double lx, double ly);
 void deskicon_drag_motion(syn_server_t *s, double lx, double ly);
 void deskicon_drag_end(syn_server_t *s, double lx, double ly);

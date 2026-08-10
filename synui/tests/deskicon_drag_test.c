@@ -82,6 +82,25 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *p) { (void)p; retur
 static char spawned[512];
 void synui_spawn(const char *cmd) { snprintf(spawned, sizeof(spawned), "%s", cmd); }
 
+/* Promotion to a real drag asks what is under the cursor and hands off to
+ * deskdrag.c. Here there are no windows and never will be, so view_at answers
+ * "nothing" and every gesture in this file stays the reposition it is testing —
+ * which is also the assertion that promotion does not fire over the desktop. */
+static bool promoted;
+syn_view_t *view_at(syn_server_t *s, double lx, double ly,
+                    struct wlr_surface **surface, double *sx, double *sy)
+{
+    (void)s; (void)lx; (void)ly; (void)sx; (void)sy;
+    if (surface) *surface = NULL;
+    return NULL;
+}
+bool deskdrag_start(syn_server_t *s, const char *path)
+{
+    (void)s; (void)path;
+    promoted = true;
+    return true;
+}
+
 /* Delete-on-the-desktop forks `gio trash` and says so; neither belongs in a
  * layout test, but deskmenu.c is linked whole so both have to exist. */
 void synui_child_reset_signals(void) { }
@@ -763,5 +782,11 @@ int main(void)
     free(s);
 
     printf("\nall deskicon drag/persistence checks passed\n");
+    if (promoted) {
+        printf("FAIL: a drag that never left the desktop was promoted to a "
+               "wl_data_source drag\n");
+        return 1;
+    }
+
     return 0;
 }

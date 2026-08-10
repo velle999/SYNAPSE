@@ -877,6 +877,40 @@ void deskicon_drag_motion(syn_server_t *s, double lx, double ly)
     int i = s->deskicon_drag.idx;
     if (i < 0 || i >= s->deskicon_count) { s->deskicon_drag.active = 0; return; }
 
+    /* Left the desktop → this is no longer a reposition, it is a drag OUT.
+     *
+     * The icon goes back where it came from first: it was following the cursor
+     * as a preview of where it would land, and it is not landing anywhere on
+     * the desktop now. Then the gesture is handed to deskdrag.c, which starts
+     * a real Wayland drag under the same button press, and this one ends. If
+     * that fails for any reason the reposition simply carries on, which is the
+     * behaviour there has always been.
+     *
+     * The test is a WINDOW under the cursor, not merely "not the desktop": the
+     * dock and the bar are things a dragged icon passes OVER on its way
+     * somewhere, and promoting there would snap the icon home for a gesture
+     * the user has not finished making. */
+    double sx, sy;
+    struct wlr_surface *over = NULL;
+    if (s->deskicon_drag.moved && view_at(s, lx, ly, &over, &sx, &sy)) {
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s", s->deskicons[i].path);
+
+        int orig_x = s->deskicon_drag.orig_x;
+        int orig_y = s->deskicon_drag.orig_y;
+        s->deskicons[i].x = orig_x;
+        s->deskicons[i].y = orig_y;
+
+        if (deskdrag_start(s, path)) {
+            s->deskicon_drag.active = 0;
+            s->deskicon_drag.moved  = 0;
+            s->deskicon_drag.idx    = -1;
+            synui_render_deskicons(s);
+            return;
+        }
+        synui_render_deskicons(s);
+    }
+
     double dx = lx - s->deskicon_drag.start_x;
     double dy = ly - s->deskicon_drag.start_y;
     bool lifted = false;
