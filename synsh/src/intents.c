@@ -56,6 +56,12 @@ static const char *const music_players[] = {
 static const char *const browsers[] = {
     "firefox", "chromium", "google-chrome-stable", "epiphany", NULL
 };
+/* synfiles is NOT in this list, and that is not an oversight — it is handled
+ * by name in intent_files() because its browser is a SUBCOMMAND
+ * (`synfiles gui DIR`); the bare binary is a command-line file tool and would
+ * print usage into /dev/null. Keep the rest in step with
+ * synui/systemd/synui-open-folder.sh, which makes the same choice the same
+ * way. */
 static const char *const file_managers[] = {
     "dolphin", "thunar", "nautilus", "pcmanfm", NULL
 };
@@ -170,6 +176,31 @@ static bool line_starts(const char *line, const char *phrase)
 /* Detach a GUI program from the shell: synsh is usually the foreground job in
  * a terminal, and a browser inheriting the tty means closing the terminal
  * takes the browser with it. Double-fork so we do not leave a zombie either. */
+/* Two arguments, for a program whose GUI is a subcommand. Kept as its own
+ * function rather than a varargs one: every other caller passes a path and
+ * nothing else, and a variadic launcher is a way to forget the NULL. */
+static int launch_detached2(const char *cmd, const char *a1, const char *a2)
+{
+    pid_t p = fork();
+    if (p < 0) { perror("synsh: fork"); return 1; }
+    if (p == 0) {
+        if (fork() != 0) _exit(0);
+        setsid();
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > 2) close(devnull);
+        }
+        execlp(cmd, cmd, a1, a2, (char *)NULL);
+        _exit(127);
+    }
+    int st;
+    waitpid(p, &st, 0);
+    return 0;
+}
+
 static int launch_detached(const char *cmd, const char *arg)
 {
     pid_t p = fork();
@@ -315,6 +346,15 @@ static int intent_url(synsh_state_t *s, const char *url)
 
 static int intent_files(synsh_state_t *s)
 {
+    const char *where = s->cwd ? s->cwd : (s->home ? s->home : "/");
+
+    /* SynapseOS's own, and the distribution default for inode/directory since
+     * 2026-08-10, so it answers first. */
+    if (have("synfiles")) {
+        printf("  %sopening%s %s in synfiles\n", COLOR_DIM, COLOR_RESET, where);
+        return launch_detached2("synfiles", "gui", where);
+    }
+
     const char *fm = first_present(file_managers);
     if (!fm) {
         /* xdg-open on a directory reaches whatever IS registered, which may be
@@ -322,11 +362,10 @@ static int intent_files(synsh_state_t *s)
         if (have("xdg-open")) fm = "xdg-open";
         else {
             fprintf(stderr, "  synsh: no file manager installed\n"
-                            "         sudo pacman -S dolphin\n");
+                            "         sudo pacman -S synfiles\n");
             return 1;
         }
     }
-    const char *where = s->cwd ? s->cwd : (s->home ? s->home : "/");
     printf("  %sopening%s %s in %s\n", COLOR_DIM, COLOR_RESET, where, fm);
     return launch_detached(fm, where);
 }

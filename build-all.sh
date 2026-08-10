@@ -242,11 +242,12 @@ build_component synpkg
 # source tarball the generic collector above assembles from src/, include/,
 # meson.build, data/ and tests/.
 #
-# NOT in syn-update's COMPONENTS yet, on purpose. It is under evaluation
-# alongside Dolphin, its package registers no handler for inode/directory, and
-# nothing in the desktop routes to it. Adding it there is the switch to flip
-# once velle decides it is ready -- at which point it also wants a line in
-# syn-install and the ISO package list.
+# The switch was flipped on 2026-08-10 (velle: "have it replace dolphin and
+# drop that from being default"). It is THE file manager now: in syn-update's
+# COMPONENTS, in syn-install's SEL_CORE, on the ISO, declaring
+# MimeType=inode/directory and shipping the distribution mimeapps.list that
+# makes a folder open in it. Dolphin stays installed and stays working; it is
+# simply not what a folder opens in any more.
 build_component synfiles
 
 # A name in KNOWN= with no build rule above is what this catches.

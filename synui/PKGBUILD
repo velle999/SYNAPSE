@@ -1,6 +1,6 @@
 pkgname=synui
 pkgver=0.1.0
-pkgrel=325
+pkgrel=326
 pkgdesc="SynapseOS Wayland Compositor"
 arch=('x86_64')
 # GPL-2.0-or-later is synui's own code. MIT covers quickshell-antiquity/, a port
@@ -105,12 +105,19 @@ optdepends=('foot: CPU-rendered rescue terminal — the `term` keybind falls bac
             'pop-sound-theme: extra sound theme for the Super+S picker'
             'deepin-sound-theme: extra sound theme for the Super+S picker'
             # synui-open-folder takes any of these, so this is a genuine choice
-            # rather than a hint — dolphin is only first because the KIO service
-            # menus (Mount Image, Run with Wine) are Dolphin-only.
-            'dolphin: file manager for the Files button, desktop menu and ISO mounter'
-            'nautilus: file manager, alternative to dolphin'
-            'thunar: file manager, alternative to dolphin'
-            'wine: run Windows .exe/.msi from Dolphin (Run with Wine service menu)'
+            # rather than a hint. synfiles is first because it is SynapseOS's
+            # own and, since 2026-08-10, the distribution default for
+            # inode/directory — a complete install already has it, and this
+            # entry is for a synui installed on its own. The KIO service menus
+            # (Mount Image, Run with Wine, Extract, Crop, Set as Wallpaper) are
+            # no longer a reason to prefer Dolphin: synfiles reads
+            # $XDG_DATA_DIRS/kio/servicemenus itself, so one helper written
+            # once still shows up in both.
+            'synfiles: SynapseOS file manager — the default for the Files button and folder handling'
+            'dolphin: file manager, the KDE one; no longer the default'
+            'nautilus: file manager, alternative to synfiles'
+            'thunar: file manager, alternative to synfiles'
+            'wine: run Windows .exe/.msi from the file manager (Run with Wine service menu)'
             'mangohud: in-game FPS/temp overlay, any launcher (Shift_R+F12)'
             'lib32-mangohud: same overlay for 32-bit Vulkan titles'
             'gamemode: CPU/GPU governor for synui-game-run (gamemoderun)'

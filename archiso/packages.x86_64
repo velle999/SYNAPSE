@@ -111,7 +111,17 @@ kitty
 # detected late.
 rofi
 firefox
-# File manager. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
+# THE file manager, since 2026-08-10. Tabs, split view, pinned places shared
+# with Dolphin's own bookmarks, trash, search and undo, in C plus quickshell,
+# depending on nothing but glibc and shared-mime-info. It ships the
+# distribution's /usr/share/applications/mimeapps.list, which is what actually
+# makes a folder open in it.
+synfiles
+# Dolphin, which is no longer the default and is no longer the only one that
+# can reach synui's KIO service menus — synfiles reads
+# $XDG_DATA_DIRS/kio/servicemenus itself. Still on the ISO: it is a mature file
+# manager, some people want it, and kdeconnect drags most of its tree in
+# regardless. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
 # /etc/xdg files KDE-outside-Plasma needs to actually work: menus/applications.menu
 # (or every file opens the "Open With" chooser) and kdeglobals (or "Open Terminal"
 # silently does nothing, KIO's fallback being a konsole we don't ship).

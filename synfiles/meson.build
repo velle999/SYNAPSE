@@ -44,11 +44,14 @@ install_data('data/synfiles.qml', install_dir: get_option('datadir') / 'synfiles
 install_data('data/synfiles.svg',
              install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps')
 
-# Shipped so the browser can be LAUNCHED, deliberately without a MimeType= line.
-# Registering inode/directory here would make synfiles the default file manager
-# on install, which is exactly the decision this is not allowed to make for the
-# user. Until it is chosen deliberately, nothing routes to it.
 install_data('data/synfiles.desktop',
+             install_dir: get_option('datadir') / 'applications')
+
+# ...and the distribution's answer to "which of the candidates opens a folder".
+# The .desktop only makes synfiles a candidate; this is what makes it the one
+# that runs. It sits at the bottom of the mime-apps precedence list, so a user's
+# own choice and an admin's /etc/xdg override both still win. See the file.
+install_data('data/mimeapps.list',
              install_dir: get_option('datadir') / 'applications')
 
 test('synfiles', find_program('tests/synfiles_test.sh'),

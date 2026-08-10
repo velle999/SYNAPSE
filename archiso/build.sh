@@ -201,6 +201,13 @@ PACKAGES=(
     # installer asks for but the local repo does not carry fails the install at
     # pacman. Builds offline (meson + libalpm headers from pacman).
     synpkg
+    # synfiles — the file manager. Must be ON the ISO for the same reason
+    # synpkg must: syn-install names it in SEL_CORE, and a package the
+    # installer asks for but the local repo does not carry fails the install
+    # at pacman. Since 2026-08-10 it is also the distribution default for
+    # inode/directory, so the live session needs it too or clicking a folder
+    # reaches an entry with nothing behind it. Builds offline — meson and libc.
+    synfiles
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

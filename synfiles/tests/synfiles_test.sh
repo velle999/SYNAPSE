@@ -1272,6 +1272,33 @@ SYNFILES_CONFIG="$T/splitcfg" "$SYNFILES" config set split_ratio 0.7 >/dev/null 
 v=$("$SYNFILES" config get icon_size)
 [ "$v" = "20" ] && ok "reset restores the defaults" || bad "after reset icon_size is '$v'"
 
+# ── the folder association ──────────────────────────────────────────────────
+#
+# Two files have to agree or synfiles is not the file manager, and the failure
+# is SILENT both ways: a MimeType line with no mimeapps.list entry makes it a
+# candidate that never wins, and a mimeapps.list entry naming a .desktop that
+# does not declare the type is ignored by some implementations and honoured by
+# others — which is the worst kind of "it works on my machine".
+grep -q '^MimeType=inode/directory;$' data/synfiles.desktop
+check "the .desktop claims inode/directory" $?
+
+grep -q '^inode/directory=synfiles.desktop$' data/mimeapps.list
+check "the vendor mimeapps.list makes synfiles the default for folders" $?
+
+grep -q '^\[Default Applications\]$' data/mimeapps.list
+check "mimeapps.list has the [Default Applications] group" $?
+
+# The name in mimeapps.list is resolved against the applications directories,
+# so it has to be the .desktop's FILENAME. Naming it after the app, or after
+# the binary, silently resolves to nothing.
+[ -f "data/synfiles.desktop" ] && ok "the .desktop is named synfiles.desktop" \
+                               || bad "mimeapps.list names a file that is not there"
+
+# Exec has to take a path, or the association is a launcher that always opens
+# $HOME no matter which folder was clicked.
+grep -q '^Exec=synfiles gui %f$' data/synfiles.desktop
+check "the handler is passed the folder that was opened" $?
+
 unset SYNFILES_CONFIG
 
 echo

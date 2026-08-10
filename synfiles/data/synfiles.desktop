@@ -15,6 +15,14 @@ Terminal=false
 StartupWMClass=synfiles
 Categories=System;FileTools;FileManager;Utility;
 Keywords=files;folders;browser;manager;
-# No MimeType= line. Declaring inode/directory here would let the desktop
-# database make synfiles the default folder handler the moment it installs,
-# which is a decision for the user and not for the packaging.
+# THE folder handler, as of 2026-08-10 — velle: "have it replace dolphin and
+# drop that from being default." Declaring the type is only half of it: a
+# MimeType= line makes synfiles a CANDIDATE, and which candidate wins is
+# decided by mimeapps.list. See data/mimeapps.list, which ships the
+# distribution default beside this file.
+#
+# inode/directory alone, which is exactly what Dolphin declares. The extra
+# folder-ish types (inode/mount-point, x-directory/normal) are aliases and
+# subclasses of it in shared-mime-info, so claiming them separately adds
+# nothing but rows that can fall out of step.
+MimeType=inode/directory;

@@ -1,0 +1,40 @@
+# The DISTRIBUTION default for "open this folder" — SynapseOS says synfiles.
+#
+# Installed to /usr/share/applications/mimeapps.list, which the mime-apps spec
+# reserves for exactly this: the vendor's answer, at the BOTTOM of the
+# precedence list. In full, highest first:
+#
+#   ~/.config/mimeapps.list          the user's own choice
+#   /etc/xdg/mimeapps.list           the sysadmin's
+#   ~/.local/share/applications/…    (legacy user location)
+#   /usr/share/applications/…        THIS FILE — the distribution's
+#   mimeinfo.cache                   whichever app happened to declare the type
+#
+# So a user who picks something else keeps it, an admin can override us for
+# every account, and nobody has to be migrated: a system with no explicit
+# choice starts opening folders in synfiles the moment this file lands.
+#
+# ── Why it exists at all ────────────────────────────────────────────────────
+#
+# Without a mimeapps.list entry the winner comes from mimeinfo.cache, which is
+# just "who declared the type", and on SynapseOS the answer was KITTY —
+# kitty-open.desktop lists inode/directory among its MimeTypes. Nothing else
+# claimed it, so a terminal became the system answer to "open this folder", and
+# every "Show in folder" in every application opened a shell at $HOME. It never
+# reported an error, because kitty genuinely can display a directory.
+# synui-open-folder learned to refuse a terminal handler; this fixes the same
+# question for everything that does not go through synui-open-folder.
+#
+# ── Why it is here and not in the installer ─────────────────────────────────
+#
+# syn-install used to write inode/directory into the new user's own
+# ~/.config/mimeapps.list. That is the user's file, and a default written there
+# is indistinguishable from a choice the user made — it also only ever reached
+# machines installed AFTER the line was added. A package-owned vendor default
+# reaches every system on the next upgrade and un-installs itself with the
+# package.
+#
+# SynapseOS Project — GPL-2.0-or-later
+# SPDX-License-Identifier: GPL-2.0-or-later
+[Default Applications]
+inode/directory=synfiles.desktop

@@ -1,6 +1,11 @@
 #!/bin/bash
 # synui-open-folder — open a directory in whatever file manager this system has.
 #
+# ⚠ This is the FALLBACK path, not the normal one. Since 2026-08-10 synfiles
+# is the distribution default for inode/directory (it ships the vendor
+# mimeapps.list saying so), so step 2 below answers on any complete SynapseOS
+# and the loop at the bottom is what runs on a system missing it.
+#
 # synui used to hardcode `dolphin` in three places: the bar's Files button
 # (quickshell/widgets/QuickLaunch.qml), the desktop right-click menu
 # (src/deskmenu.c) and the ISO mounter's open-the-mount step
@@ -18,8 +23,11 @@
 #      (kde-open5, gio) depend on XDG_CURRENT_DESKTOP being a desktop whose
 #      tools are installed. Asking xdg-mime first turns it from a guess into a
 #      lookup of the user's own preference.
-#   3. A known file manager on PATH. Same list synsh uses for its "open the
-#      files" intent (synsh/src/intents.c) — keep the two in step.
+#   3. A known file manager on PATH, synfiles first — it is SynapseOS's own and
+#      the one the distribution's mimeapps.list names, so on a system where
+#      step 2 found nothing it is still the right answer. Same list synsh uses
+#      for its "open the files" intent (synsh/src/intents.c) — keep the two in
+#      step.
 #   4. xdg-open anyway, for a handler that is registered in a way step 2 misses.
 #   5. Tell the user, because a silent no-op is the bug this script exists for.
 #
@@ -79,6 +87,17 @@ if [ -n "$_handler" ] && ! handler_is_terminal "$_handler"; then
     xdg-open "$dir" 2>/dev/null && exit 0
 fi
 
+# synfiles first, and named separately rather than added to the loop: the
+# browser is a SUBCOMMAND. The bare binary is a command-line file tool, so
+# `synfiles "$dir"` would not open a window — it would exit 2 with a usage
+# message into a terminal nobody is looking at, which is precisely the silent
+# no-op this whole script exists to stop.
+if command -v synfiles >/dev/null 2>&1; then
+    exec synfiles gui "$dir"
+fi
+
+# The others stay: this script's job is to work on a system that has something
+# ELSE, and demoting Dolphin is not the same as dropping it.
 for fm in dolphin nautilus thunar nemo caja pcmanfm-qt pcmanfm; do
     if command -v "$fm" >/dev/null 2>&1; then
         exec "$fm" "$dir"
@@ -91,5 +110,5 @@ echo "synui-open-folder: no file manager found for $dir" >&2
 notify-send -a SynapseUI -u critical \
     "No file manager installed" \
     "Nothing on this system can open $dir.
-Install one with:  sudo pacman -S dolphin" 2>/dev/null
+Install one with:  sudo pacman -S synfiles" 2>/dev/null
 exit 1

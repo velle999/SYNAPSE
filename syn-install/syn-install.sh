@@ -1706,7 +1706,7 @@ while :; do
     WANT_MODEL=1          # copy the ~4.3 GB gguf off the ISO
     WANT_BLUETOOTH=1      # bluez + bluez-utils
     WANT_PRINTING=1       # cups + drivers
-    WANT_FILEMGR=1        # dolphin — synui's Files button and desktop menu launch it
+    WANT_FILEMGR=1        # dolphin — a SECOND file manager; synfiles is the default
     WANT_WINE=1           # wine + wine-mono
     WANT_PHONE=1          # kdeconnect — pair a phone with the desktop
     # Steam is Full-only, not Standard. It is the only item here that needs a
@@ -1738,7 +1738,13 @@ while :; do
     # a broken one. Its hard depends are glibc/pacman/curl, all already in the
     # pacstrap set, so it costs a few hundred KB; the GUI, Flatpak and AUR
     # paths are optdepends and a Minimal install pays for none of them.
-    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg fetch"
+    # synfiles is CORE for the third time the same argument has been made,
+    # after fetch and synpkg: it is THE file manager since 2026-08-10, it
+    # depends on nothing but glibc and shared-mime-info, and a desktop where
+    # clicking a folder does nothing is not a smaller system but a broken one.
+    # Dolphin is the optional extra below (WANT_FILEMGR), because IT is the one
+    # that costs 550 MB of Qt6 and KF6.
+    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles fetch"
     SEL_APPS="chibi vibe syn-arsenal"
 
     echo "  What should be installed alongside the SynapseOS core?"
@@ -1796,7 +1802,7 @@ while :; do
             ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
             ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
             ask_opt WANT_PRINTING   1 "Printing (CUPS)"
-            ask_opt WANT_FILEMGR    1 "File manager (Dolphin) — the desktop's Files button opens it"
+            ask_opt WANT_FILEMGR    1 "Dolphin as a second file manager (Qt6 + KF6, ~550 MB) — synfiles is installed either way"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
             ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) — enables [multilib] (~1.5 GB)"
@@ -1830,9 +1836,10 @@ while :; do
                 ask_opt core_guard   1 "synguard + kernel module — security monitor"
                 ask_opt core_update  1 "syn-update — WITHOUT THIS THE SYSTEM CAN NEVER BE UPDATED"
 
-                # synpkg is unconditional here too — Custom lets the user
-                # drop synapd or synui, but not the package manager.
-                SEL_CORE="syn syn-model syn-firstboot synpkg"
+                # synpkg and synfiles are unconditional here too — Custom lets
+                # the user drop synapd or synui, but not the package manager
+                # and not the file manager.
+                SEL_CORE="syn syn-model syn-firstboot synpkg synfiles"
                 [ "$core_synapd" = 1 ] && SEL_CORE="$SEL_CORE synapd"
                 [ "$core_synui"  = 1 ] && SEL_CORE="$SEL_CORE synui"
                 [ "$core_synsh"  = 1 ] && SEL_CORE="$SEL_CORE synsh"
@@ -1860,7 +1867,7 @@ while :; do
     echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo 'yes (~4.3 GB)' || echo 'no')"
     echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
     echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
-    echo "    Files    : $([ "$WANT_FILEMGR" = 1 ] && echo 'yes (Dolphin)' || echo no)"
+    echo "    Files    : synfiles$([ "$WANT_FILEMGR" = 1 ] && echo ' + Dolphin' || echo '')"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
     echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope, enables multilib)' || echo no)"
@@ -2114,18 +2121,17 @@ case "$DE_CHOICE" in
         # stays down and synui's panel reports no adapter. That is the whole
         # user-visible effect, and it is what the option promises.
         #
-        # dolphin is the file manager, chosen in step 4 and installed here
-        # rather than in pacstrap: it drags in Qt6 + KF6, so it is much the
+        # dolphin is the SECOND file manager, chosen in step 4 and installed
+        # here rather than in pacstrap: it drags in Qt6 + KF6, so it is much the
         # largest optional item in the install and a headless or small-disk box
         # has no use for it. synui ships the /etc/xdg files that make KDE apps
         # work outside Plasma (applications.menu, kdeglobals) — see its PKGBUILD.
         #
-        # synui no longer names dolphin: the bar's Files button, the desktop
-        # right-click menu and the ISO mounter all go through
-        # synui-open-folder, which takes any file manager on PATH and raises a
-        # notification when there is none. So declining this is survivable —
-        # install nautilus or thunar instead and the desktop follows. Still
-        # warn, because with NOTHING installed those three are inert.
+        # Declining it no longer leaves the desktop without a file manager:
+        # synfiles is in SEL_CORE and is the distribution default for
+        # inode/directory. The bar's Files button, the desktop right-click menu
+        # and the ISO mounter all go through synui-open-folder, which finds it
+        # first. Dolphin is here for someone who wants the KDE one as well.
         DESKTOP_PKGS="greetd greetd-tuigreet quickshell swaybg python wtype"
         [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
         [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
@@ -2137,10 +2143,6 @@ case "$DE_CHOICE" in
         [ "$WANT_PHONE"     = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS kdeconnect"
         arch-chroot /mnt pacman -S --noconfirm $DESKTOP_PKGS \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"
-        [ "$WANT_FILEMGR" = 1 ] || warn "No file manager installed. The bar's Files button, the desktop
-  right-click entry and the ISO mounter will report that rather than
-  doing nothing. Installing any of dolphin / nautilus / thunar later
-  is all that is needed — nothing hardcodes a particular one."
         success "SynapseUI selected (included)"
         ;;
 esac
@@ -3442,35 +3444,23 @@ if [ -f /usr/share/synapseos/logo.txt ]; then
     cp /usr/share/synapseos/logo.txt "/mnt/home/$NEW_USER/.config/fetch/logo.txt"
 fi
 
-# Default applications — and one association that has to be claimed rather than
-# left to chance.
+# Default applications.
 #
-# kitty ships kitty-open.desktop with `inode/directory` among its MimeTypes. On
-# a fresh install nothing else claims that type, so kitty wins by walkover and
-# becomes the system answer to "open this folder" — which is how the bar's
-# Files button, the desktop right-click entry and the ISO mounter all came to
-# open a TERMINAL at $HOME on a machine with a file manager installed. Nothing
-# reports it as an error, because kitty genuinely can display a directory.
+# There used to be a block here writing inode/directory into the new user's own
+# ~/.config/mimeapps.list, to stop kitty — which lists inode/directory among
+# kitty-open.desktop's MimeTypes — winning "open this folder" by walkover and
+# opening a TERMINAL at $HOME.
 #
-# synui-open-folder now refuses a terminal handler on its own, so this is the
-# belt to that braces: it fixes the association for everything ELSE that asks
-# xdg-open the same question — Firefox's "Open Containing Folder", an archive
-# tool's "show in folder", any app at all.
+# The synfiles package owns that answer now: it ships
+# /usr/share/applications/mimeapps.list, the DISTRIBUTION default, which beats
+# a bare MimeType= declaration and loses to anything the user or the admin
+# chooses. Two things get better by moving it there. It reaches every existing
+# machine on the next upgrade instead of only the ones installed after the line
+# was added; and it stops writing a default into the user's own file, where a
+# default is indistinguishable from a choice they made.
 #
-# Only written when a file manager was actually installed, and only the one
-# line: a mimeapps.list that claims types no installed app can open is worse
-# than none.
-if [ "$WANT_FILEMGR" = 1 ]; then
-    mkdir -p "/mnt/home/$NEW_USER/.config"
-    _mimeapps="/mnt/home/$NEW_USER/.config/mimeapps.list"
-    if [ ! -e "$_mimeapps" ]; then
-        cat > "$_mimeapps" << 'MIMEEOF'
-[Default Applications]
-inode/directory=org.kde.dolphin.desktop
-MIMEEOF
-        echo "  Folders open in Dolphin (not kitty, which claims inode/directory)"
-    fi
-fi
+# Nothing to do here. If this comment outlives the arrangement, the file to
+# look at is synfiles/data/mimeapps.list.
 
 mkdir -p "/mnt/home/$NEW_USER/.config/kitty"
 cat > "/mnt/home/$NEW_USER/.config/kitty/kitty.conf" << 'KITTYEOF'

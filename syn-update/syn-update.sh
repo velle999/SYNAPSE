@@ -86,7 +86,6 @@ declare -A UNSUPPORTED=(
 # footgun handed out as an update.
 declare -A NEVER_ADD=(
     [syn-install]="the ISO's disk installer; an installed system is not meant to have it"
-    [synfiles]="the file browser is being evaluated and replaces nothing; it arrives only when somebody installs it deliberately"
 )
 
 # ── output ───────────────────────────────────────────────────
