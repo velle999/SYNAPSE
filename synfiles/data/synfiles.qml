@@ -38,6 +38,20 @@ FloatingWindow {
     implicitWidth: 1240
     implicitHeight: 780
 
+    // Below this the layout cannot hold its shape and it fails UGLY rather than
+    // tight: the sidebar is a fixed 220, the toolbar's nav group and action
+    // group are fixed, and the address bar in between is anchored
+    // left:navGroup.right / right:toolActions.left — so once the window is
+    // narrow enough that those two meet, the address bar's width goes NEGATIVE
+    // and its breadcrumbs paint straight over the buttons on both sides.
+    // Screenshot 2026-08-10 10:58 caught exactly that: back/forward/up, "View",
+    // the whole path, and the three action icons all stacked in one 130px strip.
+    //
+    // 560 = sidebar 220 + a pane wide enough to show a filename. clip and
+    // elide (below, and on the status bar) stop it looking broken on the way
+    // down; this stops it getting there at all.
+    minimumSize: Qt.size(560, 360)
+
     // ShellRoot outlives its window: without this, quickshell stays alive with
     // nothing on screen and every later launch exits 0 having drawn nothing.
     onClosed: Qt.quit()
@@ -1380,18 +1394,28 @@ FloatingWindow {
                 height: 28
                 radius: 4
                 color: root.cBg
+                // Nothing inside may paint outside. A long path used to run
+                // straight through this rounded border and over the toolbar
+                // buttons on either side — visible in the 2026-08-10 00:32
+                // screenshot, where "› Downloads" sits outside the box.
+                clip: true
                 border {
                     width: 1
                     color: root.editingPath ? root.cAccent : root.wash(0.18)
                 }
 
                 // Breadcrumbs, until somebody wants to type.
+                //
+                // x rather than a left anchor. A short path sits at the left
+                // margin like it always did; a long one slides left by exactly
+                // its overflow so the END stays visible and clip eats the head.
+                // Anchoring left and clipping would cut off the folder you are
+                // actually in and leave you reading "/ › home"; anchoring right
+                // would park short paths against the wrong edge.
                 Row {
                     id: crumbs
-                    anchors {
-                        left: parent.left; leftMargin: 10
-                        verticalCenter: parent.verticalCenter
-                    }
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: Math.min(10, parent.width - 10 - width)
                     spacing: 0
                     visible: !root.editingPath && root.tab && root.tab.view === "dir"
 
@@ -2359,7 +2383,17 @@ FloatingWindow {
                 color: root.cPanel
 
                 Text {
+                    id: statusLeft
                     anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                    // Both halves of this bar were anchored to opposite edges
+                    // with no width and no elide, so a narrow window drew them
+                    // straight through each other — "79 items" and
+                    // "/home/velle" came out as "79 /bomevvelle". The counts
+                    // are the half worth keeping legible, so the path yields
+                    // first: this one takes what it needs up to 60%, and the
+                    // path gets the rest.
+                    width: Math.min(implicitWidth, parent.width * 0.6 - 12)
+                    elide: Text.ElideRight
                     text: {
                         if (root.loading) return "reading…"
                         if (root.statusLine) return root.statusLine
@@ -2380,7 +2414,17 @@ FloatingWindow {
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 Text {
-                    anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                    anchors {
+                        left: statusLeft.right; leftMargin: 12
+                        right: parent.right; rightMargin: 12
+                        verticalCenter: parent.verticalCenter
+                    }
+                    // Anchored to the counts rather than only to the edge, so
+                    // it can never start left of where they end. ElideLeft:
+                    // the tail of a path says where you are, the head says
+                    // "/home/velle/" for the thousandth time.
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideLeft
                     text: root.tab && root.tab.view === "dir" ? root.disp(root.tab.path) : ""
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(11) }

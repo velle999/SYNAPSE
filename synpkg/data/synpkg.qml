@@ -47,6 +47,17 @@ FloatingWindow {
     implicitWidth: 1180
     implicitHeight: 760
 
+    // Same failure as synfiles, same cause: fixed furniture either side of a
+    // flexible middle, with no floor. nav is 176, catPane is 230, and the
+    // toolbar's mode toggle is three hard-coded 84px buttons — 252 before the
+    // search box gets a pixel. Narrower than the sum and the search box has
+    // negative width, so its placeholder runs off the edge and gets sliced
+    // mid-word ("filte" in the 2026-08-09 22:49 screenshot, taken mid-resize).
+    //
+    // 700 = 176 + 230 + 252 + margins, i.e. the width at which every fixed
+    // element still fits and the search box is merely small rather than absent.
+    minimumSize: Qt.size(700, 420)
+
     // ShellRoot outlives its window: without this, quickshell stays alive with
     // nothing on screen and every later launch exits 0 having drawn nothing.
     onClosed: Qt.quit()
@@ -800,6 +811,11 @@ FloatingWindow {
                 anchors.margins: 10
                 height: 30
                 visible: root.section !== "about"
+                // Belt to minimumSize's braces: a pane narrower than the mode
+                // toggle must not let the search box paint over it or off the
+                // window. minimumSize keeps us out of that range; this makes
+                // the failure tidy if some future layout gets there anyway.
+                clip: true
 
                 Row {
                     id: modeToggle
@@ -861,6 +877,11 @@ FloatingWindow {
                     height: 30
                     radius: 4
                     color: root.cPanel
+                    // The box itself clips, so the placeholder is cut at ITS
+                    // edge with the rounded border still drawn round it,
+                    // instead of running past the window and being sliced by
+                    // the screen.
+                    clip: true
                     border {
                         width: 1
                         color: searchInput.activeFocus ? root.cAccent : "transparent"
