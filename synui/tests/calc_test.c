@@ -879,6 +879,59 @@ static void test_close_button(void)
     srv->config.calc_close = SYN_PANEL_CLOSE_CLICKOFF;   /* leave it as found */
 }
 
+
+/*
+ * `synctl calc` runs through calc_run(), which is the panel's "=" without the
+ * panel. Sharing state is the entire feature, so that is what is asserted: the
+ * answer becomes `ans` for the next expression, and the line lands on the tape
+ * the panel shows. A separate memory would be a second calculator.
+ */
+static void test_calc_run(void)
+{
+    char out[64];
+    const char *err = NULL;
+
+    srv->calc.has_ans = 0;
+    srv->calc.hist_count = 0;
+
+    CHECK(calc_run(srv, "1440 * 0.8", out, sizeof(out), &err),
+          "calc_run should evaluate (err: %s)", err ? err : "none");
+    CHECK(strcmp(out, "1152") == 0, "calc_run gave \"%s\", want 1152", out);
+
+    /* The answer carried into the next expression, from the terminal. */
+    CHECK(calc_run(srv, "ans / 2", out, sizeof(out), &err),
+          "ans should carry into the next calc_run");
+    CHECK(strcmp(out, "576") == 0, "ans / 2 gave \"%s\", want 576", out);
+
+    /* …and into the PANEL, which is the point of not having two memories. */
+    CHECK(srv->calc.has_ans && near(srv->calc.ans, 576),
+          "the panel's ans is %g after calc_run", srv->calc.ans);
+
+    /* Both lines are on the tape, newest first. */
+    const char *expr = NULL, *result = NULL;
+    CHECK(srv->calc.hist_count == 2,
+          "the tape has %d rows after two calc_runs, want 2",
+          srv->calc.hist_count);
+    /* The tape reads DOWNWARD to the newest — row CALC_TAPE_ROWS-1 sits nearest
+     * the expression box, and the rows above it are blank until there is
+     * enough history to fill them. */
+    if (calc_tape_row(srv, CALC_TAPE_ROWS - 1, &expr, &result))
+        CHECK(strcmp(expr, "ans / 2") == 0 && strcmp(result, "576") == 0,
+              "the newest tape row is \"%s\" = \"%s\"", expr, result);
+    else
+        CHECK(false, "the newest tape row is empty after two calc_runs");
+
+    /* A bad expression changes nothing — no answer, no tape row. */
+    err = NULL;
+    CHECK(!calc_run(srv, "2 +", out, sizeof(out), &err),
+          "calc_run should refuse an incomplete expression");
+    CHECK(err != NULL, "a refusal must say why");
+    CHECK(srv->calc.hist_count == 2,
+          "a refused expression added a tape row (%d)", srv->calc.hist_count);
+    CHECK(near(srv->calc.ans, 576), "a refused expression moved ans to %g",
+          srv->calc.ans);
+}
+
 int main(void)
 {
     char tmpl[] = "/tmp/calc_test.XXXXXX";
@@ -894,6 +947,7 @@ int main(void)
     test_ans();
     test_errors();
     test_format();
+    test_calc_run();
 
     test_typing_and_enter();
     test_error_keeps_the_line();

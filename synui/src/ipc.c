@@ -290,6 +290,33 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
         return;
     }
 
+    /* "calc <expression>" — the answer, plus the panel's memory.
+     *
+     * Not `dispatch calc`, which toggles the window: this one has a RESULT to
+     * return, and dispatch's contract is a bare {"ok":true}. syn-calc(1) is the
+     * same parser with no session behind it; this is the one that shares `ans`
+     * and the tape with the panel. */
+    if (strncmp(line, "calc", 4) == 0 && (line[4] == ' ' || line[4] == '\0')) {
+        const char *expr = line[4] ? line + 5 : "";
+        while (*expr == ' ') expr++;
+        if (!*expr) { bputs(out, "{\"error\":\"calc needs an expression\"}\n"); return; }
+
+        char result[64];
+        const char *err = NULL;
+        if (!calc_run(s, expr, result, sizeof(result), &err)) {
+            bputs(out, "{\"error\":\"");
+            bjson_str(out, err ? err : "cannot work that out");
+            bputs(out, "\"}\n");
+            return;
+        }
+        /* The result is digits, '.', '-' and 'e' — quoted anyway, because a
+         * JSON number is a promise about precision this is not making. */
+        bputs(out, "{\"ok\":true,\"result\":\"");
+        bjson_str(out, result);
+        bputs(out, "\"}\n");
+        return;
+    }
+
     if (strcmp(line, "clients") == 0 || strcmp(line, "windows") == 0) {
         cmd_clients(s, out);
         return;
@@ -328,7 +355,7 @@ static void ipc_run(syn_server_t *s, char *line, ipc_buf_t *out)
     if (strcmp(line, "help") == 0) {
         bputs(out, "{\"commands\":[\"clients\",\"workspaces\",\"outputs\","
                    "\"activeworkspace\",\"activewindow\",\"version\","
-                   "\"dispatch <action> [arg]\"]}\n");
+                   "\"dispatch <action> [arg]\",\"calc <expression>\"]}\n");
         return;
     }
 

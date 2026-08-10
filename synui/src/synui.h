@@ -6101,6 +6101,10 @@ void calc_toggle(syn_server_t *s);
  * failure, not an answer: that is how sqrt(-1) and 1e308*10 report themselves.
  */
 bool calc_eval(const char *expr, double ans, double *out, const char **err);
+/* The panel's "=" without the panel: evaluates, updates `ans` and appends to
+ * the tape, so `synctl calc` and Super+X share one calculator. */
+bool calc_run(syn_server_t *s, const char *expr, char *out, size_t n,
+              const char **err);
 /* The answer as the panel draws it: %.12g, and never "-0". */
 void calc_format(double v, char *buf, size_t n);
 /* Every function name the evaluator knows, space-separated — built from the

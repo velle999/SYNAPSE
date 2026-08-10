@@ -229,6 +229,7 @@ synui_exe = executable('synui',
     'src/emoji.c',
     'src/emoji_data.c',
     'src/calc.c',
+    'src/calceval.c',
     'src/panel.c',
     'src/eq.c',
     'src/crop.c',
@@ -311,6 +312,18 @@ install_data('data/wallpaper.png',    install_dir : synui_datadir)
 install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
 install_data('data/logo.svg',         install_dir : synui_datadir)
 install_data('data/logo-bold.svg',    install_dir : synui_datadir)
+
+# syn-calc — the calculator's parser with a main() around it.
+#
+# Deliberately NOT linked against wlroots, wayland or cairo: calceval.c was
+# split out of calc.c precisely so that answering "1440 * 0.8" needs no
+# compositor, and the dependency list is what enforces that. If this target
+# ever needs another dependency, something has leaked back across the line.
+syn_calc = executable('syn-calc',
+  ['tools/syn-calc.c', 'src/calceval.c'],
+  include_directories : include_directories('src'),
+  dependencies : [libm],
+  install : true)
 
 # The calculator, as a launchable entry.
 #
@@ -577,12 +590,16 @@ test('emoji', emoji_test)
 # hit.c comes along for the keypad geometry; libm because the evaluator is
 # mostly libm. Writes only into its own mkdtemp scratch home.
 calc_test = executable('calc_test',
-  ['tests/calc_test.c', 'src/calc.c', 'src/hit.c', 'src/panel.c'],
+  ['tests/calc_test.c', 'src/calc.c', 'src/calceval.c', 'src/hit.c', 'src/panel.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon, libm],
   c_args : ['-DWLR_USE_UNSTABLE'],
   build_by_default : false)
 test('calc', calc_test)
+
+# …and the PROGRAM around it: arguments, stdin, and the exit status a script
+# depends on. calc_test cannot see any of that.
+test('syncalc', find_program('tests/syncalc.sh'), args : [syn_calc])
 
 # The clipboard history CAPTURES. Not the panel, not the keys — that a copy
 # reaches items[0] at all, which is what pkgrel 311 shipped not doing while
