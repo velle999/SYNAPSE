@@ -24,5 +24,30 @@ RestrictAddressFamilies=AF_UNIX AF_NETLINK
 CapabilityBoundingSet=
 MemoryMax=32M
 
+# Second pass, 2026-08-10: `systemd-analyze security` scored this 5.5 MEDIUM.
+# It is a bash loop over sysfs plus `udevadm monitor` and `logger`; none of the
+# below is anywhere near what it touches.
+ProtectClock=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateDevices=true
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# PrivateDevices is safe here specifically because the recovery path re-probes
+# through SYSFS (`echo detect > /sys/class/drm/*/status`), never through
+# /dev/dri. If this script is ever changed to open a DRM node directly, this
+# line has to go with it — the failure would be a silent loss of recovery,
+# which is exactly the blind spot this watcher was written to close.
+#
+# ProtectKernelTunables stays off for the same reason the header already gives:
+# it would remount /sys read-only and the probe write is the point.
+# ProtectKernelLogs is fine — `logger` goes to /dev/log, not /dev/kmsg.
+
 [Install]
 WantedBy=multi-user.target

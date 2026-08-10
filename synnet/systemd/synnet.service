@@ -29,5 +29,36 @@ RestrictSUIDSGID=true
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
 RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 
+# Second pass, 2026-08-10: `systemd-analyze security synnet` scored 5.7 MEDIUM
+# even with the above, because none of the kernel-facing knobs were set. All of
+# these are free for a daemon whose entire job is a netlink socket and shelling
+# out to `nft`.
+ProtectClock=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+PrivateDevices=true
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+
+# NOT set, and each for a reason:
+#
+#   User=  — needs CAP_NET_ADMIN for its nftables set and NETLINK_CONNECTOR to
+#            see process events. Both want root here.
+#
+#   ProtectProc=invisible / ProcSubset=pid — monitor.c exists to watch OTHER
+#            processes. Hiding them is not hardening, it is a lobotomy.
+#
+#   ProtectKernelTunables — untested against the nft path; left for a pass that
+#            can actually verify it rather than guess.
+#
+# ProtectKernelModules is the one with residual risk: `nft` creating a table
+# triggers an autoload of nf_tables. That autoload happens kernel-side via the
+# usermode helper and is not filtered by our seccomp, and nf_tables is loaded
+# at boot here anyway — but if the firewall ever comes up empty after a change
+# to this file, this is the first line to remove.
+
 [Install]
 WantedBy=multi-user.target
