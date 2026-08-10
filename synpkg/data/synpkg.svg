@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    SYNAPSE Software.
+
+    Until now this shipped Icon=system-software-install, the theme's generic
+    entry — which on a Breeze desktop is whatever KDE's Discover happens to
+    use. The same problem synfiles had with system-file-manager: the icon is
+    the only thing telling two applications apart in a dock, and a generic one
+    tells you nothing.
+
+    The mark is a package with something going INTO it, because that is the
+    verb: this app installs. The arrow is drawn over the box rather than above
+    it so the two shapes read as one object at 22px instead of as an arrow
+    that happens to be near a square.
+
+    Purple #a78bfa is the SynapseOS dendrite colour, the same one synfiles
+    uses, so the two read as part of one set.
+
+    Four shapes, no gradients, on purpose: this is looked at most often at
+    22px in a dock, where anything finer turns to mush. The seam is a full
+    band rather than a thin line for the same reason — a 1px line disappears
+    entirely at small sizes and takes "this is a package" with it.
+
+    SynapseOS Project — GPL-2.0-or-later
+    SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+
+  <!-- The package. One rounded body; the lid is a band drawn on top of it
+       rather than a separate outline, so they cannot drift apart.
+
+       Deliberately large. The first draft made the arrow the biggest shape on
+       the canvas and rendering it at 22px settled the argument: the box
+       survived only as a thin purple fringe and the mark read as a bare
+       download arrow, which is every app store's icon. The BOX is what makes
+       this a package manager, so the box gets the silhouette and the arrow
+       sits inside it with clear ground on all four sides.
+
+       The margin is equal on all four sides. The draft before this one ran
+       edge to edge horizontally while leaving space above and below, which
+       looked fine at 128px and squat at 22. -->
+  <path d="M6 17a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v22a4 4 0 0 1-4 4H10a4 4 0 0
+           1-4-4z"
+        fill="#a78bfa"/>
+
+  <!-- The lid seam. Darker, not lighter: the arrow is the light shape, and two
+       light shapes touching would merge into one at small sizes. A full band
+       rather than a 1px line, which vanishes at 22px and takes "this is a
+       package" with it. -->
+  <path d="M6 17a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v4.5H6z" fill="#7c5cd6"/>
+
+  <!-- The arrow, plunging in. Shaft and head are separate shapes so the head
+       can be wider than the shaft without a join that renders as a notch.
+       It crosses the seam on purpose: that overlap is what makes the two
+       read as one object rather than an arrow parked on a square. -->
+  <rect x="21.5" y="18" width="5" height="11" rx="1" fill="#f1ecff"/>
+  <path d="M16.5 27h15L24 36.5z" fill="#f1ecff"/>
+</svg>

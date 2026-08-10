@@ -4,7 +4,10 @@ Name=SYNAPSE Software
 GenericName=Package Manager
 Comment=Install and remove software, security tooling, and SynapseOS updates
 Exec=synpkg gui
-Icon=system-software-install
+# Our own, not the theme's generic system-software-install — which on a
+# Breeze desktop is whatever Discover uses, leaving the dock with two
+# applications wearing one face.
+Icon=synpkg
 Terminal=false
 StartupWMClass=synpkg
 # ONE main category. Two makes the entry appear twice in the scanned start-menu

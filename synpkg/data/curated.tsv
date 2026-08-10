@@ -123,7 +123,7 @@ Terminal	eza	repo	eza	Modern ls
 Terminal	jq	repo	jq	Query and reshape JSON
 Terminal	zoxide	repo	zoxide	Directory jumping that learns
 
-Files	dolphin	repo	Dolphin	The SynapseOS file manager
+Files	dolphin	repo	Dolphin	KDE's file manager, as a second one — synfiles is the SynapseOS default
 Files	ark	repo	Ark	Archive browser and extractor
 Files	7zip	repo	7-Zip	7z, and the format everything else needs
 Files	unrar	repo	unrar	RAR extraction

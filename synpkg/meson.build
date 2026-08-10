@@ -52,6 +52,12 @@ install_data('data/synpkg-enable-blackarch.sh',
              install_mode: 'rwxr-xr-x')
 
 install_data('data/synpkg.qml',    install_dir: get_option('datadir') / 'synpkg')
+
+# The application icon. Scalable only: Qt renders the SVG at whatever size the
+# dock asks for, and shipping rasterised copies would mean four files that can
+# disagree with each other.
+install_data('data/synpkg.svg',
+             install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps')
 install_data('data/synpkg.desktop',
              install_dir: get_option('datadir') / 'applications')
 install_data('data/org.synapseos.synpkg.policy',
