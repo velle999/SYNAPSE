@@ -106,6 +106,11 @@ ShellRoot {
     property bool   upToDate: false
 
     property var updates: []    // [{name, from, to}]
+    // Components in the tree that are NOT installed here. A separate list from
+    // updates because they are a different action — this ADDS software rather
+    // than moving it forward — and because they arrive in a different shape:
+    // there is no "from" version to show.
+    property var fresh: []      // [{name, to}]
     property var commits: []    // ["hash subject"]
     property var blocked: []    // ["name  reason"]
 
@@ -128,7 +133,7 @@ ShellRoot {
      * tty, and under Process it is a pipe.
      */
     function parseCheck(text) {
-        const ups = [], cms = [], blk = []
+        const ups = [], cms = [], blk = [], nws = []
         let section = ""
         root.upToDate = false
 
@@ -144,12 +149,26 @@ ShellRoot {
 
             if (/commits since your installed source revision/.test(line)) { section = "commits"; continue }
             if (/component\(s\) to rebuild/.test(line))                    { section = "updates"; continue }
+            // "N NEW component(s) to install". This case existed in syn-update
+            // from the day scan() learned to add components and was never
+            // parsed here, so the first NEW component to actually appear —
+            // syn-settings, 2026-08-10 — landed in no section, left `ups`
+            // empty, failed the up-to-date test too, and the window reported
+            // "Could not determine update status" about a report it had
+            // understood perfectly well.
+            if (/NEW component\(s\) to install/.test(line))                 { section = "new"; continue }
             if (/not updatable from source/.test(line))                    { section = "blocked"; continue }
 
             if (section === "updates") {
                 // "  synui            0.1.0-203      -> 0.1.0-204"
                 m = line.match(/^\s{2}(\S+)\s+(\S+)\s+->\s+(\S+)\s*$/)
                 if (m && m[1] !== "COMPONENT") ups.push({ name: m[1], from: m[2], to: m[3] })
+                continue
+            }
+            if (section === "new") {
+                // "  syn-settings     0.1.0-3        (not installed here)"
+                m = line.match(/^\s{2}(\S+)\s+(\S+)\s+\(not installed here\)\s*$/)
+                if (m && m[1] !== "COMPONENT") nws.push({ name: m[1], to: m[2] })
                 continue
             }
             if (section === "commits") {
@@ -167,13 +186,22 @@ ShellRoot {
         root.updates = ups
         root.commits = cms
         root.blocked = blk
+        root.fresh = nws
 
-        if (ups.length > 0)
-            root.statusLine = ups.length + (ups.length === 1 ? " update available" : " updates available")
-        else if (root.upToDate)
+        // Counted together, because "apply" does both in one build-all.sh
+        // invocation and a window that offered to install 1 thing while saying
+        // "up to date" would be describing a different machine.
+        const total = ups.length + nws.length
+        if (total > 0) {
+            const parts = []
+            if (ups.length > 0) parts.push(ups.length + (ups.length === 1 ? " update" : " updates"))
+            if (nws.length > 0) parts.push(nws.length + " new")
+            root.statusLine = parts.join(", ") + " available"
+        } else if (root.upToDate) {
             root.statusLine = "SynapseOS is up to date"
-        else
+        } else {
             root.statusLine = "Could not determine update status — see the log"
+        }
     }
 
     function check() {
@@ -251,7 +279,8 @@ ShellRoot {
                         Text {
                             text: root.statusLine
                             color: root.upToDate ? root.cOk
-                                 : (root.updates.length > 0 ? root.cAccent : root.cText)
+                                 : ((root.updates.length + root.fresh.length) > 0
+                                    ? root.cAccent : root.cText)
                             font.pixelSize: 21
                             font.bold: true
                         }
@@ -275,7 +304,10 @@ ShellRoot {
                         }
                         Button {
                             text: "Install updates…"
-                            enabled: !root.busy && root.updates.length > 0
+                            // New components count. Gating Apply on updates
+                            // alone left the button dead on a machine whose
+                            // only pending work was an install.
+                            enabled: !root.busy && (root.updates.length + root.fresh.length) > 0
                             onClicked: applyProc.running = true
                         }
                     }
@@ -310,6 +342,47 @@ ShellRoot {
                                 }
                                 Text {
                                     text: modelData.from + "  →  " + modelData.to
+                                    color: root.cAccent
+                                    font.pixelSize: 13; font.family: "monospace"
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── components that are not installed here yet ──
+                // Its own card rather than another row in "to rebuild": these
+                // ADD software to the machine, which is a different decision
+                // from moving a version forward, and it should read that way
+                // before it is applied rather than after.
+                Rectangle {
+                    width: parent.width
+                    height: Math.min(150, 34 + root.fresh.length * 26)
+                    visible: root.fresh.length > 0
+                    color: root.cPanel
+                    radius: 8
+                    border.color: root.cLine
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 4
+
+                        Text {
+                            text: "New components to install"
+                            color: root.cDim; font.pixelSize: 11; font.bold: true
+                        }
+                        Repeater {
+                            model: root.fresh
+                            Row {
+                                spacing: 10
+                                Text {
+                                    text: modelData.name; color: root.cText
+                                    font.pixelSize: 13; font.family: "monospace"
+                                    width: 170
+                                }
+                                Text {
+                                    text: modelData.to + "   (not installed here)"
                                     color: root.cAccent
                                     font.pixelSize: 13; font.family: "monospace"
                                 }
