@@ -754,15 +754,23 @@ FloatingWindow {
     // selection becomes a potential move.
     readonly property int dragThreshold: 8
 
-    function beginDrag(row, label) {
-        if (!root.tab || root.tab.view !== "dir") return
+    // ⚠ The PANE is a parameter, not root.ap. A press-and-drag never reaches
+    // onClicked — the click is swallowed by the drag — so the pane the drag
+    // started in was still not the active one when this ran, and every lookup
+    // below went to the OTHER pane. Dragging out of the inactive half either
+    // carried nothing (empty selection → canDropOn refuses → the drop looked
+    // dead) or, worse, silently dragged a file of the same name out of the
+    // other pane's folder. The press claims the pane now as well, but reading
+    // a global for "which pane am I in" from inside a pane was the mistake.
+    function beginDrag(src, row, label) {
+        if (!src || !src.tab || src.tab.view !== "dir") return
         // Whatever is selected, or the row under the cursor if it is not part
         // of the selection — the same rule the context menu follows.
-        if (!root.isSelected(row.name)) root.selectOnly(row.name)
-        root.dragPaths = root.selectedPaths()
+        if (!src.isSelected(row.name)) src.selectOnly(row.name)
+        root.dragPaths = src.selectedPaths()
         root.dragLabel = label
 
-        const rows = root.selectedRows()
+        const rows = src.selectedRows()
         let uris = "", text = ""
         for (const r of rows) {
             uris += "file://" + r.full + "\r\n"   // r.full is already encoded
@@ -3257,6 +3265,7 @@ FloatingWindow {
                     on: pane.tab ? root.isPinned(pane.tab.path) : false
                     visible: pane.tab && pane.tab.view === "dir"
                     onToggled: {
+                        pane.claim()
                         if (root.isPinned(pane.tab.path)) root.unpin(pane.tab.path)
                         else root.pin(pane.tab.path)
                     }
@@ -3819,6 +3828,11 @@ FloatingWindow {
                         else                                         pane.selectOnly(name)
                     }
                     onPressed: (mouse) => {
+                        // On the PRESS, not the click. A drag never produces a
+                        // click, so claiming the pane in onClicked left every
+                        // drag out of the inactive half reading the other
+                        // pane's selection.
+                        pane.claim()
                         rowMa.pressX = mouse.x
                         rowMa.pressY = mouse.y
                     }
@@ -3833,7 +3847,7 @@ FloatingWindow {
                         const dy = mouse.y - rowMa.pressY
                         if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
                             return
-                        root.beginDrag(fileRow.modelData,
+                        root.beginDrag(pane, fileRow.modelData,
                                        pane.selection.length > 1
                                        ? pane.selection.length + " items"
                                        : root.rowLabel(fileRow.modelData))
@@ -4002,6 +4016,7 @@ FloatingWindow {
                     property real pressX: 0
                     property real pressY: 0
                     onPressed: (mouse) => {
+                        pane.claim()
                         cellMa.pressX = mouse.x
                         cellMa.pressY = mouse.y
                     }
@@ -4012,7 +4027,7 @@ FloatingWindow {
                         const dy = mouse.y - cellMa.pressY
                         if (dx * dx + dy * dy < root.dragThreshold * root.dragThreshold)
                             return
-                        root.beginDrag(gridCell.modelData,
+                        root.beginDrag(pane, gridCell.modelData,
                                        pane.selection.length > 1
                                        ? pane.selection.length + " items"
                                        : root.rowLabel(gridCell.modelData))
