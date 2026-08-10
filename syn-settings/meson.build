@@ -22,6 +22,9 @@ sources = files(
   'src/power.c',
   'src/system.c',
   'src/set.c',
+  'src/network.c',
+  'src/bluetooth.c',
+  'src/probe.c',
 )
 
 executable('syn-settings', sources,

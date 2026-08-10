@@ -52,7 +52,10 @@ int pane_system(void)
 	rec_header("kind\tkey\tvalue\tdetail");
 
 	/* ── Identity ─────────────────────────────────────────────────────── */
-	char buf[512];
+	/* Sized to the destination it feeds, not to the file's line length:
+	 * a scratch buffer wider than `pretty` is a truncation warning that is
+	 * harmless and still worth not having. */
+	char buf[256];
 	FILE *f = fopen("/etc/os-release", "re");
 	char pretty[256] = "unknown";
 	if (f) {

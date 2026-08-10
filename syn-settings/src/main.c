@@ -30,12 +30,15 @@ static void usage(void)
 "\n"
 "usage: syn-settings <command> [args]\n"
 "\n"
-"  gui [pane]        open the settings window (display, region, power, system)\n"
+"  gui [pane]        open the settings window (display, region, network,\n"
+"                    bluetooth, power, system)\n"
 "\n"
 "  --rec display     connectors: kernel state beside what the compositor drives\n"
 "  --rec region      keyboard, locale, timezone, NTP\n"
 "  --rec power       sleep-critical units, sleep hooks, last suspend\n"
 "  --rec system      identity, and WHERE configuration actually lives\n"
+"  --rec network     interfaces, radios, and whether a firewall is up\n"
+"  --rec bluetooth   adapter, radio blocks, and what is paired\n"
 "\n"
 "  set keymap <map>          console keymap        (localectl)\n"
 "  set xkb <layout> [var]    desktop layout        (localectl)\n"
@@ -43,6 +46,7 @@ static void usage(void)
 "  set timezone <zone>       time zone             (timedatectl)\n"
 "  set ntp on|off            network time          (timedatectl)\n"
 "  unit <action> <name>      enable|disable|start|stop|restart (systemctl)\n"
+"  probe <connector>         ask the kernel to re-detect a display (needs root)\n"
 "\n"
 "  -n, --dry-run     print what would be run, change nothing\n"
 "\n"
@@ -122,6 +126,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "gui"))  return cmd_gui(rest_argc, rest);
 	if (!strcmp(cmd, "set"))  return do_set(rest_argc, rest);
 	if (!strcmp(cmd, "unit")) return do_unit(rest_argc, rest);
+	if (!strcmp(cmd, "probe")) return do_probe(rest_argc, rest);
 
 	if (!strcmp(cmd, "--rec")) {
 		if (rest_argc < 1) { usage(); return 2; }
@@ -130,6 +135,8 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "region"))  return pane_region();
 		if (!strcmp(pane, "power"))   return pane_power();
 		if (!strcmp(pane, "system"))  return pane_system();
+		if (!strcmp(pane, "network"))   return pane_network();
+		if (!strcmp(pane, "bluetooth")) return pane_bluetooth();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);
 		return 2;
 	}

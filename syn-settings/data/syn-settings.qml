@@ -45,10 +45,12 @@ FloatingWindow {
 
     // ── State ───────────────────────────────────────────────────────────────
     readonly property var panes: [
-        { id: "display", label: "Display",  blurb: "connectors as the kernel sees them, beside what the compositor drives" },
-        { id: "region",  label: "Keyboard & Region", blurb: "layout, locale, time zone and whether the clock is actually disciplined" },
-        { id: "power",   label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
-        { id: "system",  label: "System",   blurb: "identity, and which layer each configuration file comes from" }
+        { id: "display",   label: "Display",  blurb: "connectors as the kernel sees them, beside what the compositor drives" },
+        { id: "region",    label: "Keyboard & Region", blurb: "layout, locale, time zone and whether the clock is actually disciplined" },
+        { id: "network",   label: "Network",  blurb: "interfaces, radios, and whether anything is filtering traffic" },
+        { id: "bluetooth", label: "Bluetooth", blurb: "the adapter, both kinds of radio block, and what is paired" },
+        { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
+        { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"
     property var cols: []

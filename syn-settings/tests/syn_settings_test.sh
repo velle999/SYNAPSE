@@ -47,7 +47,7 @@ check_table() {
 
 echo "syn-settings smoke tests"
 
-for pane in display region power system; do
+for pane in display region network bluetooth power system; do
     check_table "$pane"
 done
 
@@ -88,6 +88,33 @@ if "$BIN" --dry-run unit enable not-a-unit >/dev/null 2>&1; then
     bad "accepted a name with no unit suffix"
 else
     ok "refused a name with no unit suffix"
+fi
+
+# probe resolves a connector against the ones that ACTUALLY EXIST rather than
+# building a path from the argument, so a traversal attempt cannot become a
+# path at all. Checked with --dry-run so nothing is written even when this
+# suite runs as root.
+for bogus in "nope" "../../etc/passwd" "card1-DP-3/../../.."; do
+    if "$BIN" --dry-run probe "$bogus" >/dev/null 2>&1; then
+        bad "probe accepted a non-connector: $bogus"
+    else
+        ok "probe refused: $bogus"
+    fi
+done
+
+# A real connector must resolve, whatever this machine happens to have. Skipped
+# rather than failed on a box with no DRM at all (a VM, a container, the CI
+# runner) — the test is that resolution WORKS, not that hardware is present.
+real=$(ls /sys/class/drm 2>/dev/null | grep -m1 -- '-' || true)
+if [ -n "$real" ]; then
+    short=${real#*-}
+    if "$BIN" --dry-run probe "$short" | grep -q "would write: detect"; then
+        ok "probe resolves $short without writing"
+    else
+        bad "probe did not resolve the real connector $short"
+    fi
+else
+    ok "no DRM connectors here; probe resolution not exercised"
 fi
 
 if [ "$fails" -gt 0 ]; then

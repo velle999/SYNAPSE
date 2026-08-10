@@ -6,6 +6,7 @@
 #ifndef SYNSETTINGS_H
 #define SYNSETTINGS_H
 
+#include <dirent.h>
 #include <stdio.h>
 
 /* ── The record protocol ────────────────────────────────────────────────────
@@ -60,6 +61,8 @@ int pane_display(void);
 int pane_region(void);
 int pane_power(void);
 int pane_system(void);
+int pane_network(void);
+int pane_bluetooth(void);
 
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *
@@ -70,6 +73,9 @@ int pane_system(void);
  */
 int do_set(int argc, char **argv);
 int do_unit(int argc, char **argv);
+
+/* Re-probe a DRM connector. Does NOT escalate — see src/probe.c. */
+int do_probe(int argc, char **argv);
 
 extern int g_dry_run;
 
