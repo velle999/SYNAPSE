@@ -42,6 +42,22 @@ static int sane_mode(const char *m)
 	return x == 1 && digits >= 4;
 }
 
+/* An output name as the kernel and wlr-randr spell them: DP-3, HDMI-A-1,
+ * eDP-1. Checked for SHAPE here so validation stays independent of whether a
+ * compositor is running; whether the output actually exists is checked later,
+ * against wlr-randr, and only when something is really going to be set. */
+static int sane_output(const char *o)
+{
+	if (!o || !*o || *o == '-') return 0;
+	for (const char *p = o; *p; p++) {
+		if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+		    (*p >= '0' && *p <= '9') || *p == '-' || *p == '_')
+			continue;
+		return 0;
+	}
+	return 1;
+}
+
 /* wlr-randr's listing indents modes under their output:
  *
  *   DP-3 "Goldstar Company Ltd 27GL850 ..."
@@ -124,6 +140,25 @@ int do_mode(int argc, char **argv)
 		                "expected WIDTHxHEIGHT or WIDTHxHEIGHT@REFRESH\n", mode);
 		return 2;
 	}
+	if (!sane_output(conn)) {
+		fprintf(stderr, "syn-settings: '%s' is not an output name\n", conn);
+		return 2;
+	}
+
+	/* --dry-run stops HERE, before anything looks at the session.
+	 *
+	 * It used to go on to query wlr-randr and check the output existed, which
+	 * made a dry run depend on there being a Wayland session — so the package
+	 * check() failed the moment wlr-randr became a hard dependency: present in
+	 * the build environment, no compositor to talk to, every mode "refused".
+	 * `--dry-run unit enable foo.service` does not verify the unit exists
+	 * either; this now matches. Argument validation above is environment-free
+	 * on purpose, which is exactly what a test can assert. */
+	if (g_dry_run) {
+		printf("would run: wlr-randr --output %s --mode %s\n", conn, mode);
+		return 0;
+	}
+
 	/* A connector name is checked the same way probe checks it: against what
 	 * wlr-randr actually reports, so a name that is not a real output never
 	 * becomes an argument. */
@@ -153,13 +188,6 @@ int do_mode(int argc, char **argv)
 
 	char *a[] = { (char *)"wlr-randr", (char *)"--output", (char *)conn,
 	              (char *)"--mode", (char *)mode, NULL };
-
-	if (g_dry_run) {
-		fputs("would run:", stdout);
-		for (int i = 0; a[i]; i++) printf(" %s", a[i]);
-		putchar('\n');
-		return 0;
-	}
 
 	int rc = run_quiet(a);
 	if (rc != 0) {
