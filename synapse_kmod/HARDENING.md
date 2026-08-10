@@ -18,7 +18,34 @@ and how to turn on the ones that are opt-in.
 - **Tightened sysfs perms** — `ai_hints` 0200, `status`/`config` 0644,
   `lockdown` 0640 (root-write only).
 - **sysctls** (`/usr/lib/sysctl.d/90-synapse-hardening.conf`) —
-  `kptr_restrict=2`, `dmesg_restrict=1`, `kexec_load_disabled=1`.
+  `kptr_restrict=2`, `dmesg_restrict=1`, `kexec_load_disabled=1`, plus the
+  2026-08-10 batch: `suid_dumpable=0`, `protected_fifos/regular=2`,
+  `ldisc_autoload=0`, no ICMP redirects in or out, loose `rp_filter`,
+  `bpf_jit_harden=1`.
+- **module blacklist** (`/usr/lib/modprobe.d/90-synapse-blacklist.conf`) —
+  dccp/sctp/rds/tipc and the FireWire stack refuse to load.
+
+## Auditing this with Lynis
+
+`lynis audit system` scored **66** on 2026-08-10 with zero warnings. Two things
+to know before chasing the number:
+
+1. `--pentest` does nothing when you run as root — you get the identical
+   privileged scan. Run it **unprivileged** (`lynis audit system --pentest` as
+   your normal user) if you want the local-attacker view; that is a different
+   report, not a stricter one.
+2. Several remaining suggestions are ones we decline on purpose. The reasons
+   are written next to each setting in `config/90-synapse-hardening.conf` and
+   `config/90-synapse-blacklist.conf` rather than here, so they are read at the
+   point of change. In short: `modules_disabled` (breaks DKMS/NVIDIA — use the
+   opt-in unit below instead), `sysrq=0` (we keep 16, sync-only, for recovery),
+   `unprivileged_bpf_disabled` (we are already stricter than the test), strict
+   `rp_filter` (breaks VPN/policy routing), `usb-storage` (we build install
+   media), compilers-root-only (this is a dev distro), and `auditd`
+   (synguard's kmod already collects syscalls; two collectors would fight).
+
+To stop those from masking real drift, put them in `/etc/lynis/custom.prf` as
+`skip-test=` lines so the index tracks things we would actually act on.
 
 ## Opt-in: module self-pin (anti-rmmod)
 
