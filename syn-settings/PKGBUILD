@@ -8,8 +8,8 @@ pkgname=syn-settings
 # "$name-0.1.0/" for every component it builds. Bumping pkgver without changing
 # that leaves makepkg looking for a tarball nothing creates.
 pkgver=0.1.0
-pkgrel=2
-pkgdesc="SynapseOS settings: display, keyboard and region, power and sleep, and where configuration lives"
+pkgrel=3
+pkgdesc="SynapseOS settings: display, keyboard and region, network, Bluetooth, power and sleep, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
 license=('GPL-2.0-or-later')
@@ -23,6 +23,9 @@ makedepends=('meson' 'ninja' 'gcc')
 optdepends=('quickshell: the settings window (syn-settings gui)'
             'systemd: localectl, timedatectl and systemctl — the Region and Power panes'
             'synui: synctl, for what the compositor is actually driving'
+            'networkmanager: nmcli — the Network pane'
+            'bluez-utils: bluetoothctl — the Bluetooth pane'
+            'util-linux: rfkill — soft and hard radio blocks'
             'polkit: change settings without dropping to a root shell')
 
 source=("syn-settings-0.1.0.tar.gz")
