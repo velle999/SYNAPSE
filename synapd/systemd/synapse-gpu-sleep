@@ -95,14 +95,30 @@ log() { logger -t synapse-gpu-sleep "$@"; echo "synapse-gpu-sleep: $*" >&2; }
 # uevent and the compositor picks the output up on its own.
 STATE=/run/synapse-gpu-sleep.connected
 
+# EDID size by CONTENT, not by `stat`. See the long note in
+# /usr/lib/synapd/synapse-drm-watch: `stat -c%s` on a sysfs binary attribute
+# returns 0 for every connector regardless of what it holds, so every "EDID 0
+# bytes" this hook has ever logged was noise.
+_edid_bytes() { wc -c < "$1" 2>/dev/null || echo '?'; }
+
 _record_connected() {
     : > "$STATE" 2>/dev/null || return 0
-    local c
+    local c d line=""
     for c in /sys/class/drm/card*-*/status; do
         [ -r "$c" ] || continue
+        d=$(dirname "$c")
+        line="$line $(basename "$d")=$(cat "$c" 2>/dev/null)/$(cat "$d/enabled" 2>/dev/null)/$(_edid_bytes "$d/edid")"
         [ "$(cat "$c" 2>/dev/null)" = connected ] || continue
-        dirname "$c" >> "$STATE"
+        printf '%s\n' "$d" >> "$STATE"
     done
+
+    # Log the whole pre-suspend picture, not just the connectors we intend to
+    # re-probe. On 2026-08-10 the state at suspend entry had to be RECONSTRUCTED
+    # from synapse-drm-watch's last transition nearly three hours earlier — it
+    # was correct, but "no news since 01:49" is a weaker claim than a reading
+    # taken at 04:39, and the difference matters when the question is whether a
+    # link died before the suspend or during it. One line, once per suspend.
+    log "connectors at suspend entry:$line   (status/enabled/edid-bytes)"
 }
 
 _reprobe_missing() {
@@ -120,14 +136,31 @@ _reprobe_missing() {
 
     # 2. Connectors the KERNEL still has a mode on, whose sink is gone.
     #
-    # The snapshot alone is not enough, and 2026-08-09 is why. DP-3 dropped its
-    # link some time overnight — the monitor powers the link down when IT goes
-    # to standby, which is ordinary DisplayPort behaviour and, on this panel,
-    # not something it recovers from. By the time the machine suspended at
-    # 05:07 the connector already read `disconnected`, so it was never in the
-    # snapshot, so this hook re-probed nothing at 12:35 and logged nothing
-    # either. The display was missing and the one mechanism meant to notice had
-    # correctly decided there was nothing to notice.
+    # ⚠ THE 2026-08-09 STORY THAT USED TO BE WRITTEN HERE IS WRONG. It claimed
+    # DP-3 dropped its link overnight BEFORE the suspend, because the monitor
+    # powers the link down when it goes to standby, so the connector already
+    # read `disconnected` at suspend entry and was never in the snapshot.
+    # synapse-drm-watch has now measured a whole cycle and it did not happen
+    # that way (2026-08-10):
+    #
+    #   01:49:34  DP-3 connected/disabled   <- last transition before sleep
+    #   04:39:25  suspend entry             <- ~510 polls, no change: STILL connected
+    #   10:38:28  resume; this hook runs, DP-3 still reads connected, no-op
+    #   10:38:40  DP-3 -> DISCONNECTED, ~12s after resume
+    #
+    # The link survives suspend entry and dies roughly twelve seconds into
+    # resume. So the pre-suspend snapshot was never the gap.
+    #
+    # THIS HOOK STILL MISSES IT, for a different reason: it samples once, at
+    # resume+0s, and at that instant DP-3 reads `connected`. It is a one-shot
+    # inside systemd-sleep's post hook, which resume BLOCKS on, so it cannot
+    # simply wait — that would add its own delay to every resume on a machine
+    # that is usually fine. Making this hook sleep is the wrong fix.
+    #
+    # synapse-drm-watch is the real safety net: it polls, so it sees the drop
+    # whenever it lands, and it re-probes on the TRANSITION. Keep this section
+    # for the case where the sink is already gone by resume+0s, but do not
+    # treat it as the thing that catches DP-3.
     #
     # `enabled=enabled` with `status=disconnected` is the exact signature and a
     # narrow one: it means a CRTC is still assigned to a connector with no sink
@@ -160,7 +193,7 @@ _reprobe_missing() {
             fi
         done
         if [ "$(cat "$d/status" 2>/dev/null)" != connected ]; then
-            log "$(basename "$d") still has no sink after 5 probes (EDID $(stat -c%s "$d/edid" 2>/dev/null || echo ?) bytes) — the panel is not re-enumerating; a power cycle of the monitor, or a reboot, is the only recovery"
+            log "$(basename "$d") still has no sink after 5 probes (EDID $(_edid_bytes "$d/edid") bytes) — the panel is not re-enumerating; a power cycle of the monitor, or a reboot, is the only recovery"
         fi
     done
 }

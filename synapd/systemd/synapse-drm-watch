@@ -61,6 +61,25 @@ INTERVAL=${SYNAPSE_DRM_WATCH_INTERVAL:-20}
 
 log() { logger -t synapse-drm-watch "$@"; }
 
+# EDID size, measured by CONTENT.
+#
+# `stat -c%s` was wrong and had been since this file was written. On a sysfs
+# binary attribute it reports the attribute's allocated size, not how many
+# bytes it holds, and for DRM `edid` that is 0 on EVERY connector — plugged in
+# or not. Proven on this box 2026-08-10:
+#
+#     DP-2       status=connected      stat=0   real=256
+#     HDMI-A-1   status=connected      stat=0   real=128
+#     DP-3       status=disconnected   stat=0   real=0
+#
+# So the third field of the signature was a constant, every "EDID 0 bytes" line
+# in the journal carried no information, and "0-byte EDID" as part of the DP-3
+# fingerprint was never evidence of anything. It reads properly now, which
+# makes `connected` with an empty EDID — a sink answering hotplug but failing
+# to hand over a mode list — distinguishable from a healthy head for the first
+# time.
+_edid_bytes() { wc -c < "$1" 2>/dev/null || echo '?'; }
+
 _snapshot() {
     local c name
     for c in /sys/class/drm/card*-*; do
@@ -69,7 +88,7 @@ _snapshot() {
         printf '%s=%s/%s/%s\n' "$name" \
             "$(cat "$c/status" 2>/dev/null)" \
             "$(cat "$c/enabled" 2>/dev/null)" \
-            "$(stat -c%s "$c/edid" 2>/dev/null || echo '?')"
+            "$(_edid_bytes "$c/edid")"
     done
 }
 
@@ -91,18 +110,31 @@ _maybe_recover() {
     [ -w "$dir/status" ] || { log "$name: no write access to probe it back"; return 0; }
 
     log "$name: lost its sink while still driven — re-probing"
-    for tries in 1 2 3 4 5 6; do
+
+    # Six probes over six seconds is PROVEN insufficient: 2026-08-10, DP-3
+    # dropped at 10:38:40, was probed six times, and reported "still no sink"
+    # at 10:38:46 — it has not come back since. Six seconds was a guess and it
+    # lost, so widen the window with a backoff rather than keep guessing: ~61s
+    # total, dense at the start where a prompt retry is most likely to catch
+    # the sink still coming back, sparse after.
+    #
+    # This blocks the poll loop while it runs, so a second connector dropping
+    # inside the same minute is seen late. Acceptable: the loop re-snapshots
+    # after recovery, so the event is recorded, only its timestamp is coarse.
+    local elapsed=0
+    for tries in 1 1 1 1 1 2 2 3 5 5 10 10 20; do
         # Braced: a redirection that fails reports before `||` can catch it, so
         # without this an unwritable connector spews one line per attempt.
         { echo detect > "$dir/status"; } 2>/dev/null || true
-        sleep 1
+        sleep "$tries"
+        elapsed=$((elapsed + tries))
         if [ "$(cat "$dir/status" 2>/dev/null)" = connected ]; then
-            log "$name: came back after $tries probe(s)"
+            log "$name: came back after ${elapsed}s of probing"
             return 0
         fi
     done
 
-    log "$name: still no sink after 6 probes (EDID $(stat -c%s "$dir/edid" 2>/dev/null || echo ?) bytes)"
+    log "$name: still no sink after ${elapsed}s of probing (EDID $(_edid_bytes "$dir/edid") bytes) — the panel is not re-enumerating; power-cycle the monitor"
 }
 
 # ── udev half ───────────────────────────────────────────────────────────────
