@@ -70,7 +70,17 @@ static void devices(void)
 		snprintf(c, sizeof c, "%s", conn && *conn ? conn : "no connection");
 		tsv_clean(d); tsv_clean(t); tsv_clean(s); tsv_clean(c);
 
-		rec_row("device\t%s\t%s\t%s\t%s\t-", d, t, s, c);
+		/* Loopback carries no action: see do_device. Everything else — the
+		 * wired link included, which is the whole point — can be brought up
+		 * and down. */
+		/* Sized to hold "device:" plus the widest interface name this
+		 * function can produce, so the compiler does not have to assume
+		 * truncation. */
+		char act[264] = "-";
+		if (strcmp(d, "lo"))
+			snprintf(act, sizeof act, "device:%s", d);
+
+		rec_row("device\t%s\t%s\t%s\t%s\t%s", d, t, s, c, act);
 	}
 }
 

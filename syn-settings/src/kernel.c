@@ -46,6 +46,55 @@ static const struct kern kernels[] = {
 	{ "linux-rt-lts",    "real-time on the LTS base" },
 };
 
+/* Does the bootloader have an entry that would BOOT this kernel?
+ *
+ * This is the question the pane was missing, and its absence made the whole
+ * thing a trap: installing linux-lts writes /boot/vmlinuz-linux-lts and its
+ * initramfs — mkinitcpio has a pacman hook, so that part works — and then
+ * NOTHING adds a boot entry for it. On this machine limine.conf names
+ * vmlinuz-linux 55 times and no other kernel, and limine-snapper-sync only
+ * generates snapshot entries, all of which point at the same kernel. GRUB is
+ * installed too and Arch ships no hook that runs grub-mkconfig either.
+ *
+ * So a kernel could be installed, correct, and unbootable, and the pane would
+ * have said "installed" as though the job were done. It says this instead.
+ */
+static int has_boot_entry(const char *pkg)
+{
+	/* vmlinuz is named after the package: linux -> vmlinuz-linux,
+	 * linux-lts -> vmlinuz-linux-lts. */
+	char needle[128];
+	snprintf(needle, sizeof needle, "vmlinuz-%s", pkg);
+
+	static const char *confs[] = {
+		"/boot/limine.conf",
+		"/boot/grub/grub.cfg",
+		"/boot/loader/entries",   /* systemd-boot: a directory, checked below */
+	};
+
+	for (size_t i = 0; i < 2; i++) {
+		FILE *f = fopen(confs[i], "re");
+		if (!f) continue;
+		char line[4096];
+		while (fgets(line, sizeof line, f)) {
+			char *hit = strstr(line, needle);
+			if (!hit) continue;
+			/* "vmlinuz-linux" is a prefix of "vmlinuz-linux-lts", so a bare
+			 * strstr would report the stock kernel as bootable on the
+			 * strength of an LTS entry. The character after the match has to
+			 * end the name. */
+			char after = hit[strlen(needle)];
+			if (after == '\0' || after == '\n' || after == ' ' ||
+			    after == '\t' || after == '"' || after == '\'') {
+				fclose(f);
+				return 1;
+			}
+		}
+		fclose(f);
+	}
+	return 0;
+}
+
 /* Installed version of a package, or NULL. `pacman -Q <pkg>` prints
  * "name version" and exits non-zero when it is not installed. */
 static int installed_version(const char *pkg, char *out, size_t cap)
@@ -108,18 +157,27 @@ int pane_kernel(void)
 		char hver[128] = "";
 		int have_hdr = installed_version(hdr, hver, sizeof hver);
 
+		int bootable = have ? has_boot_entry(kernels[i].pkg) : 0;
+
+		/* "installed" alone was the lie. A kernel on disk that the
+		 * bootloader has never heard of is not a kernel you can switch to. */
 		const char *state = !have      ? "not installed"
 		                  : is_running ? "running"
-		                               : "installed";
+		                  : bootable   ? "installed, bootable"
+		                               : "installed, NO BOOT ENTRY";
 
 		char detail[640];
 		/* Headers matter here and nowhere else on this pane: without them
 		 * DKMS cannot build synapse_kmod or the NVIDIA module against this
 		 * kernel, so it boots to a system with no GPU driver. Reported per
 		 * kernel because it is per kernel. */
-		snprintf(detail, sizeof detail, "%s%s", kernels[i].what,
+		snprintf(detail, sizeof detail, "%s%s%s", kernels[i].what,
 		         have && !have_hdr
 		           ? "  ⚠ headers MISSING — DKMS cannot build for it"
+		           : "",
+		         have && !is_running && !bootable
+		           ? "  ⚠ no bootloader entry — installing a kernel does NOT "
+		             "add one, so you cannot boot this yet"
 		           : "");
 
 		char action[128];
@@ -137,6 +195,14 @@ int pane_kernel(void)
 	rec_row("-\t-\t-\tThe running kernel has no actions: removing what you "
 	        "booted from is how a machine stops booting. Reboot into another "
 	        "one first.\t-");
+
+	/* Said plainly, because the gap is real and a user who installs a second
+	 * kernel from this pane will otherwise reboot expecting a choice and not
+	 * get one. */
+	rec_row("-\t-\t-\tInstalling a kernel does NOT make it bootable. "
+	        "mkinitcpio builds its initramfs from a pacman hook, but nothing "
+	        "adds a bootloader entry — limine.conf and grub.cfg are not "
+	        "regenerated. Adding the entry is still a manual step.\t-");
 
 	if (have_cmd("bootctl") || have_cmd("grub-mkconfig") || have_cmd("limine")) {
 		rec_row("-\t-\t-\tWhich kernel boots by DEFAULT is the bootloader's "

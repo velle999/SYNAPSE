@@ -79,6 +79,9 @@ int pane_kernel(void);
 int do_set(int argc, char **argv);
 int do_unit(int argc, char **argv);
 
+/* Bring one interface up or down, wired or wireless. */
+int do_device(int argc, char **argv);
+
 /* Re-probe a DRM connector. Does NOT escalate — see src/probe.c. */
 int do_probe(int argc, char **argv);
 

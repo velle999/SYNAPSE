@@ -65,7 +65,7 @@ check_actions() {
     while IFS= read -r line; do
         a=$(awk -F'\t' -v c="$col" '{print $c}' <<<"$line")
         case "$a" in
-            -|set:*|toggle:*|unit:*|probe:*|mode:*|pkg:*) ;;
+            -|set:*|toggle:*|unit:*|probe:*|mode:*|pkg:*|device:*) ;;
             *) bad "$pane: unknown action verb '$a'"; return ;;
         esac
         # A verb with an empty argument is the one that looks fine in a table
@@ -159,6 +159,26 @@ case "$rc" in
     1) ok "a valid mode passes validation (stops at missing wlr-randr)" ;;
     *) bad "a valid mode was refused as a bad argument (exit $rc)" ;;
 esac
+
+# Loopback must be refused before nmcli ever sees it: taking lo down breaks
+# every daemon on the machine that talks to itself over a UNIX socket.
+if "$BIN" --dry-run device disconnect lo >/dev/null 2>&1; then
+    bad "device accepted loopback"
+else
+    ok "device refused loopback"
+fi
+if "$BIN" --dry-run device disconnect enp0s1 | grep -q 'nmcli device disconnect enp0s1'; then
+    ok "device builds the nmcli command"
+else
+    bad "device did not build the expected command"
+fi
+for bad_act in "up" "delete" "--help"; do
+    if "$BIN" --dry-run device "$bad_act" eth0 >/dev/null 2>&1; then
+        bad "device accepted action: $bad_act"
+    else
+        ok "device refused action: $bad_act"
+    fi
+done
 
 if "$BIN" --dry-run unit enable not-a-unit >/dev/null 2>&1; then
     bad "accepted a name with no unit suffix"

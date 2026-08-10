@@ -647,7 +647,8 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: ["unit", "mode", "pkg"].indexOf(root.actionVerb(root.selAction)) < 0
+                    visible: ["unit", "mode", "pkg", "device"]
+                             .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
                         if (v === "toggle") return root.isOn(root.selValue) ? "Turn off" : "Turn on"
@@ -664,6 +665,19 @@ FloatingWindow {
                                           "switching " + arg + "…")
                         else if (v === "probe")
                             root.runWrite(["probe", arg], "re-probing " + arg + "…")
+                    }
+                }
+
+                // An interface: up or down. Wired included — a desktop whose
+                // only link is ethernet had nothing to click before this.
+                Repeater {
+                    model: root.actionVerb(root.selAction) === "device"
+                           ? ["connect", "disconnect"] : []
+                    delegate: SettingsButton {
+                        required property var modelData
+                        label: modelData === "connect" ? "Connect" : "Disconnect"
+                        onGo: root.runWrite(["device", modelData, root.actionArg(root.selAction)],
+                                            modelData + "ing " + root.actionArg(root.selAction) + "…")
                     }
                 }
 

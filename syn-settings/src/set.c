@@ -141,6 +141,39 @@ int do_set(int argc, char **argv)
 	              "wifi or bluetooth");
 }
 
+/* Bring a single interface up or down.
+ *
+ * This is what was missing: the pane had a Wi-Fi RADIO toggle and nothing at
+ * all for the wired link, so on a desktop whose only connection is ethernet
+ * the Network pane could not change one thing. `nmcli device` covers both —
+ * a radio switch and a link are different controls and both belong here.
+ */
+int do_device(int argc, char **argv)
+{
+	if (argc < 2) return refuse("device needs connect|disconnect and a name");
+
+	const char *act = argv[0], *dev = argv[1];
+
+	if (strcmp(act, "connect") && strcmp(act, "disconnect"))
+		return refuse("device action must be connect or disconnect");
+
+	/* An interface name, not a path and not a flag. */
+	if (!sane_value(dev)) return refuse("that does not look like an interface");
+
+	/* Refusing loopback here rather than letting NetworkManager do it: taking
+	 * lo down breaks everything that talks to itself, which on this machine is
+	 * every daemon with a UNIX socket, and the error you would get back is
+	 * about NetworkManager rather than about what you just broke. */
+	if (!strcmp(dev, "lo")) return refuse("refusing to touch loopback");
+
+	if (!have_cmd("nmcli"))
+		return refuse("NetworkManager is not installed");
+
+	char *a[] = { (char *)"nmcli", (char *)"device", (char *)act,
+	              (char *)dev, NULL };
+	return run_or_show(a);
+}
+
 int do_unit(int argc, char **argv)
 {
 	if (argc < 2) return refuse("unit needs an action and a unit name");

@@ -47,6 +47,7 @@ static void usage(void)
 "  set timezone <zone>       time zone             (timedatectl)\n"
 "  set ntp on|off            network time          (timedatectl)\n"
 "  unit <action> <name>      enable|disable|start|stop|restart (systemctl)\n"
+"  device connect|disconnect <if>   bring an interface up or down (nmcli)\n"
 "  probe <connector>         ask the kernel to re-detect a display (needs root)\n"
 "  modes <connector>         list the modes that output can take\n"
 "  mode <connector> <mode>   set one, e.g. DP-3 2560x1440@144 (wlr-randr)\n"
@@ -130,6 +131,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "gui"))  return cmd_gui(rest_argc, rest);
 	if (!strcmp(cmd, "set"))  return do_set(rest_argc, rest);
 	if (!strcmp(cmd, "unit")) return do_unit(rest_argc, rest);
+	if (!strcmp(cmd, "device")) return do_device(rest_argc, rest);
 	if (!strcmp(cmd, "probe")) return do_probe(rest_argc, rest);
 	if (!strcmp(cmd, "modes")) return do_modes(rest_argc, rest);
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
