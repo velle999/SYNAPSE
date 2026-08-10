@@ -282,6 +282,34 @@ n=$("$SYNFILES" --rec places | tail -n +2 | wc -l)
 [ "$n" = 4 ] && ok "unpin leaves the other bookmarks intact" \
              || bad "after unpin there are $n rows, want 4"
 
+# ⚠ A folder whose CHILD is pinned is not itself pinned.
+#
+# The existence check was a bare substring search over the whole file, and
+# "file:///home/velle" is a substring of "file:///home/velle/Desktop" — so
+# pinning Home reported "already pinned" and did nothing, for as long as
+# anything under Home was in the list. The Pin button looked dead. It is the
+# closing quote of the href attribute that makes the match exact, which unpin
+# had and pin did not.
+mkdir -p "$T/ancestor/inside"
+"$SYNFILES" places pin "$T/ancestor/inside" >/dev/null 2>&1
+"$SYNFILES" places pin "$T/ancestor" >/dev/null 2>&1
+check "an ancestor of a pinned folder can still be pinned" $?
+"$SYNFILES" --rec places | awk -F'\t' -v p="$T/ancestor" '$1 == p {found=1} END {exit !found}'
+check "…and it lands in the list" $?
+
+# The real duplicate still has to be refused, or Pin would grow a second row
+# every time it was pressed.
+"$SYNFILES" places pin "$T/ancestor" >/dev/null 2>&1
+dupes=$("$SYNFILES" --rec places | awk -F'\t' -v p="$T/ancestor" '$1 == p' | wc -l)
+[ "$dupes" = 1 ] && ok "pinning the same folder twice does not duplicate it" \
+                 || bad "$dupes rows for one folder after pinning twice"
+
+# And unpinning the ancestor must not take the child with it.
+"$SYNFILES" places unpin "$T/ancestor" >/dev/null 2>&1
+"$SYNFILES" --rec places | awk -F'\t' -v p="$T/ancestor/inside" '$1 == p {found=1} END {exit !found}'
+check "unpinning a folder leaves the one inside it alone" $?
+"$SYNFILES" places unpin "$T/ancestor/inside" >/dev/null 2>&1
+
 # A backup is taken before the first modification of a file synfiles did not
 # create — this is user data that predates the program.
 [ -f "$SYNFILES_PLACES.pre-synfiles" ] && ok "the first write backs the file up" \
@@ -466,6 +494,15 @@ v=$(SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config get view)
 
 SYNFILES_CONFIG="$T/viewcfg" "$SYNFILES" config set view sideways >/dev/null 2>&1
 [ $? -ne 0 ] && ok "an invented view mode is refused" || bad "view accepted 'sideways'"
+
+# The text slider is a percentage with a floor and a ceiling, like icon_size:
+# a settings file that accepts 0 or 5000 is a window that opens unreadable.
+SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config set text_scale 5000 >/dev/null
+v=$(SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config get text_scale)
+[ "$v" = 175 ] && ok "text_scale clamps to its maximum" || bad "text_scale went to '$v'"
+SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config set text_scale 10 >/dev/null
+v=$(SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config get text_scale)
+[ "$v" = 75 ] && ok "text_scale clamps to its minimum" || bad "text_scale went to '$v'"
 
 # ── trash, against a fixture ────────────────────────────────────────────────
 # SYNFILES_TRASH is an unconditional override: without it the device check

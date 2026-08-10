@@ -13,7 +13,7 @@ pkgname=synfiles
 # component (build-all.sh:123), so bumping pkgver leaves makepkg looking for a
 # tarball nothing creates.
 pkgver=0.1.0
-pkgrel=18
+pkgrel=19
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

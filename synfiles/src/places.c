@@ -316,6 +316,22 @@ static char *href_for(const char *path)
 	return href;
 }
 
+/* The bookmark whose href is EXACTLY this one, or NULL.
+ *
+ * The closing quote is the entire point. "file:///home/velle" is a SUBSTRING of
+ * "file:///home/velle/Desktop", so a bare strstr() over the file reports Home
+ * as already pinned for as long as anything beneath it is pinned — and the Pin
+ * button then does nothing at all, on any folder that happens to be an ancestor
+ * of a pinned one. unpin has always had this guard; pin did not. */
+static char *href_find(char *text, const char *href)
+{
+	size_t n = strlen(href);
+	for (char *hit = strstr(text, href); hit; hit = strstr(hit + 1, href))
+		if (hit[n] == '"')
+			return hit;
+	return NULL;
+}
+
 static int places_pin(const char *path, const char *title)
 {
 	char *real = resolve(path);
@@ -335,7 +351,7 @@ static int places_pin(const char *path, const char *title)
 	}
 
 	char *href = href_for(real);
-	if (strstr(text, href)) {
+	if (href_find(text, href)) {
 		warn("%s is already pinned", real);
 		free(href); free(text); free(file); free(real);
 		return 0;
@@ -396,15 +412,8 @@ static int places_unpin(const char *path)
 	 * first and walking BACKWARDS to the element start is what keeps this
 	 * from cutting the wrong bookmark when one path is a prefix of another. */
 	int rc = 1;
-	char *hit = strstr(text, href);
+	char *hit = href_find(text, href);
 	while (hit) {
-		/* Guard against /home/a matching inside /home/abc: the href must be
-		 * followed by the closing quote of the attribute. */
-		if (hit[strlen(href)] != '"') {
-			hit = strstr(hit + 1, href);
-			continue;
-		}
-
 		char *start = hit;
 		while (start > text && strncmp(start, "<bookmark ", 10))
 			start--;

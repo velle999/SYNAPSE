@@ -49,6 +49,9 @@ static const setting_t settings[] = {
 	 * a grid above it. Nobody's window changes shape on upgrade, and the
 	 * first deliberate pick replaces the rule with an answer. */
 	{ "view",      T_ENUM, "auto",  0, 0,   "auto|icons|compact|details" },
+	/* A percentage, because the settings file holds integers. 100 is the
+	 * size the window was drawn at before there was a slider. */
+	{ "text_scale", T_INT, "100",  75, 175, NULL },
 };
 
 static const setting_t *find_setting(const char *key)

@@ -100,6 +100,45 @@ FloatingWindow {
 
     function wash(a) { return Qt.rgba(cAccent.r, cAccent.g, cAccent.b, a) }
 
+    // ── The UI font ─────────────────────────────────────────────────────────
+    //
+    // Its own file, watched, exactly as the bar watches it (synui's
+    // quickshell/Theme.qml): font.state is written by synui-apply-font(1) and
+    // outlives a theme switch, which is why it is not a key in theme.json.
+    // Empty means the shipped default — an empty family string is Qt's own way
+    // of saying "whatever the platform picked".
+    //
+    // A window that kept the old face until it was reopened is exactly what
+    // velle reported, and the reason is worth stating: Qt resolves the default
+    // font ONCE at startup from the platform theme, and nothing in QML can
+    // change an application's font afterwards. So every Text here names the
+    // family, and the name is a binding.
+    property string uiFont: ""
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one. A warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const m = this.text().match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+        }
+        onLoadFailed: root.uiFont = ""
+    }
+
+    // ── Text size ───────────────────────────────────────────────────────────
+    // One multiplier over every pixelSize in the window, so the View menu's
+    // slider moves all of it together and nothing drifts out of proportion.
+    // Stored as a percentage because the settings file holds integers.
+    property int textScale: 100
+    readonly property int textMin: 75
+    readonly property int textMax: 175
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
     // ── Encoding ────────────────────────────────────────────────────────────
 
     // Decode for DISPLAY ONLY. Never feed the result back to the binary.
@@ -345,8 +384,15 @@ FloatingWindow {
                     // `trashName` is the handle `trash restore` takes, and it
                     // is NOT derivable from the path: two files called
                     // notes.txt become notes.txt and notes.txt.2 in the trash.
+                    //
+                    // …which is also why `name` — the row's IDENTITY, what the
+                    // selection is a set of — has to be that trash name and not
+                    // the original basename. Two trashed notes.txt share a
+                    // basename, so clicking one highlighted both. `label` is
+                    // what the row shows: still the name the file had.
                     rows = table.map(r => ({
-                        name: root.baseEnc(r.path), full: r.path,
+                        name: r.name, label: root.baseEnc(r.path),
+                        full: r.path,
                         trashName: r.name,
                         type: r.present === "1" ? "file" : "missing",
                         size: 0, mtime: 0, deleted: r.deleted,
@@ -538,7 +584,7 @@ FloatingWindow {
 
     function describeSelection() {
         const n = root.selection.length
-        if (n === 1) return root.disp(root.selectedRows()[0].name)
+        if (n === 1) return root.rowLabel(root.selectedRows()[0])
         return n + " items"
     }
 
@@ -1121,6 +1167,7 @@ FloatingWindow {
                     case "reverse":   root.defaultReverse = r.value === "1"; break
                     case "hidden":    root.defaultHidden = r.value === "1"; break
                     case "view":      root.viewMode = r.value || "auto"; break
+                    case "text_scale": root.textScale = parseInt(r.value) || 100; break
                     }
                 }
                 // Only after applying, or the act of applying would write every
@@ -1161,6 +1208,16 @@ FloatingWindow {
         onTriggered: root.saveSetting("icon_size", root.iconSize)
     }
     onIconSizeChanged: if (root.settingsLoaded) iconSaveTimer.restart()
+
+    // Same bargain for the text slider, and for the same reason: a file write
+    // per pixel of a drag is both wasteful and a good way to lose one to a
+    // rename() race.
+    Timer {
+        id: textSaveTimer
+        interval: 400
+        onTriggered: root.saveSetting("text_scale", root.textScale)
+    }
+    onTextScaleChanged: if (root.settingsLoaded) textSaveTimer.restart()
 
     // These are single clicks, so they save immediately.
     onThumbsChanged: {
@@ -1507,6 +1564,14 @@ FloatingWindow {
         return false
     }
 
+    // What a row is called on screen, which is not always what it is called in
+    // the selection: a trashed file keeps its original name here and its unique
+    // trash name as its identity.
+    function rowLabel(row) {
+        return root.disp(row.label !== undefined && row.label !== ""
+                         ? row.label : row.name)
+    }
+
     function activate(row) {
         if (row.type === "dir") root.navigate(row.full, "dir")
         else if (!row.missing)  root.openFile(row.full)
@@ -1633,14 +1698,14 @@ FloatingWindow {
                             Text {
                                 text: " › "
                                 color: root.cDim
-                                font.pixelSize: 12
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
                                 visible: crumb.modelData.path !== "/"
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
                                 text: crumb.modelData.label
                                 color: crumbMa.containsMouse ? root.cAccent : root.cText
-                                font.pixelSize: 12
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
                                 anchors.verticalCenter: parent.verticalCenter
                                 MouseArea {
                                     id: crumbMa
@@ -1663,7 +1728,7 @@ FloatingWindow {
                                     : root.tab.view === "trash"  ? "Trash"
                                     : "About") : ""
                     color: root.cText
-                    font.pixelSize: 12
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                 }
 
                 TextInput {
@@ -1672,7 +1737,7 @@ FloatingWindow {
                     verticalAlignment: TextInput.AlignVCenter
                     visible: root.editingPath
                     color: root.cText
-                    font.pixelSize: 12
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                     clip: true
                     selectByMouse: true
                     onVisibleChanged: {
@@ -1798,7 +1863,7 @@ FloatingWindow {
                                 width: 12
                                 text: treeRow.modelData.open ? "▾" : "▸"
                                 color: root.cDim
-                                font.pixelSize: 10
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
                                 MouseArea {
                                     anchors { fill: parent; margins: -4 }
                                     cursorShape: Qt.PointingHandCursor
@@ -1814,7 +1879,7 @@ FloatingWindow {
                                 text: root.disp(treeRow.modelData.name)
                                 elide: Text.ElideRight
                                 color: treeRow.current ? root.cAccent : root.cText
-                                font.pixelSize: 11
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
                             }
 
                             DropArea {
@@ -2012,7 +2077,7 @@ FloatingWindow {
                                       : (root.disp(root.baseEnc(tabBtn.modelData.path)) || "/")
                                 elide: Text.ElideRight
                                 color: tabBtn.active ? root.cAccent : root.cDim
-                                font.pixelSize: 12
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
                             MouseArea {
                                 id: tabMa
@@ -2026,7 +2091,7 @@ FloatingWindow {
                                 anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                                 text: "×"
                                 color: closeMa.containsMouse ? root.cAccent : root.cDim
-                                font.pixelSize: 14
+                                font { family: root.uiFont; pixelSize: root.ui(14) }
                                 visible: root.tabs.length > 1
                                 MouseArea {
                                     id: closeMa
@@ -2046,7 +2111,7 @@ FloatingWindow {
                             anchors.centerIn: parent
                             text: "+"
                             color: root.cDim
-                            font.pixelSize: 15
+                            font { family: root.uiFont; pixelSize: root.ui(15) }
                         }
                         MouseArea {
                             id: addMa
@@ -2105,7 +2170,7 @@ FloatingWindow {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     text: "Deleted files. Restoring puts one back where it came from."
                     color: root.cDim
-                    font.pixelSize: 12
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                 }
                 ToggleChip {
                     anchors { right: parent.right; verticalCenter: parent.verticalCenter }
@@ -2143,7 +2208,7 @@ FloatingWindow {
                     }
                     verticalAlignment: TextInput.AlignVCenter
                     color: root.cText
-                    font.pixelSize: 12
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                     clip: true
                     onTextChanged: {
                         if (root.searching) root.searchTerm = text
@@ -2164,7 +2229,7 @@ FloatingWindow {
                              + " and below — press Enter")
                           : "filter these items…   (Ctrl+F to search)"
                     color: root.cDim
-                    font.pixelSize: 12
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                     visible: filterInput.text === ""
                 }
 
@@ -2236,14 +2301,14 @@ FloatingWindow {
                     Text {
                         text: "SYNAPSE Files"
                         color: root.cAccent
-                        font { pixelSize: 20; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(20); bold: true  }
                     }
                     Text {
                         width: aboutCol.width
                         text: "A file browser for SynapseOS. Tabs, pinned places shared with "
                             + "Dolphin, recent files, volumes and network shares."
                         color: root.cDim
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                         wrapMode: Text.WordWrap
                         bottomPadding: 10
                     }
@@ -2284,7 +2349,7 @@ FloatingWindow {
                                 width: 120
                                 text: aboutRow.modelData.item
                                 color: root.cText
-                                font { pixelSize: 12; bold: true }
+                                font { family: root.uiFont; pixelSize: root.ui(12); bold: true  }
                                 elide: Text.ElideRight
                             }
                             Column {
@@ -2298,14 +2363,14 @@ FloatingWindow {
                                     width: parent.width
                                     text: aboutRow.modelData.value
                                     color: aboutRow.stateColor
-                                    font.pixelSize: 12
+                                    font { family: root.uiFont; pixelSize: root.ui(12) }
                                     elide: Text.ElideRight
                                 }
                                 Text {
                                     width: parent.width
                                     text: aboutRow.modelData.detail
                                     color: root.cDim
-                                    font.pixelSize: 11
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
                                     elide: Text.ElideRight
                                     visible: text !== ""
                                 }
@@ -2321,7 +2386,7 @@ FloatingWindow {
                                     anchors.centerIn: parent
                                     text: "Open"
                                     color: root.cAccent
-                                    font.pixelSize: 11
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
                                 MouseArea {
                                     id: aboutBtnMa
@@ -2389,15 +2454,15 @@ FloatingWindow {
 
                 Text {
                     anchors { left: parent.left; leftMargin: 40 }
-                    text: "Name"; color: root.cDim; font.pixelSize: 10
+                    text: "Name"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
                 Text {
                     anchors { right: parent.right; rightMargin: 190 }
-                    text: "Size"; color: root.cDim; font.pixelSize: 10
+                    text: "Size"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
                 Text {
                     anchors { right: parent.right; rightMargin: 20 }
-                    text: "Modified"; color: root.cDim; font.pixelSize: 10
+                    text: "Modified"; color: root.cDim; font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
             }
 
@@ -2487,7 +2552,7 @@ FloatingWindow {
                         // "config.json" appears eleven times in a source tree;
                         // the only useful thing about a search hit is which one
                         // it is, so the containing folder rides along.
-                        text: root.disp(fileRow.modelData.name)
+                        text: root.rowLabel(fileRow.modelData)
                               + (fileRow.modelData.where
                                  ? "      " + root.disp(fileRow.modelData.where) + "/" : "")
                               + (fileRow.modelData.link === "1" && fileRow.modelData.target
@@ -2495,7 +2560,7 @@ FloatingWindow {
                         elide: Text.ElideRight
                         color: fileRow.modelData.missing ? root.cDim
                              : (fileRow.modelData.type === "dir" ? root.cAccent : root.cText)
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
 
                     // Inline rename. Seeded with the DECODED name because that
@@ -2518,7 +2583,7 @@ FloatingWindow {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                             verticalAlignment: TextInput.AlignVCenter
                             color: root.cText
-                            font.pixelSize: 12
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                             clip: true
                             onVisibleChanged: {
                                 if (visible) {
@@ -2536,7 +2601,7 @@ FloatingWindow {
                         anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
                         text: fileRow.modelData.deleted || ""
                         color: root.cDim
-                        font.pixelSize: 11
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                         visible: root.tab && root.tab.view === "trash"
                     }
 
@@ -2555,7 +2620,7 @@ FloatingWindow {
                             anchors.centerIn: parent
                             text: "Restore"
                             color: root.cAccent
-                            font.pixelSize: 10
+                            font { family: root.uiFont; pixelSize: root.ui(10) }
                         }
                         MouseArea {
                             id: restoreMa
@@ -2571,13 +2636,13 @@ FloatingWindow {
                         anchors { right: parent.right; rightMargin: 190; verticalCenter: parent.verticalCenter }
                         text: root.fmtSize(fileRow.modelData.size, fileRow.modelData.type === "dir")
                         color: root.cDim
-                        font.pixelSize: 11
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                     Text {
                         anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
                         text: root.fmtTime(fileRow.modelData.mtime)
                         color: root.cDim
-                        font.pixelSize: 11
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
 
                     // Only folders are targets — dropping onto a file has no
@@ -2656,7 +2721,7 @@ FloatingWindow {
                             root.beginDrag(fileRow.modelData,
                                            root.selection.length > 1
                                            ? root.selection.length + " items"
-                                           : root.disp(fileRow.modelData.name))
+                                           : root.rowLabel(fileRow.modelData))
                         }
                         property real pressX: 0
                         property real pressY: 0
@@ -2768,10 +2833,11 @@ FloatingWindow {
                         anchors.rightMargin: 4
                         anchors.verticalCenter: root.compactView ? parent.verticalCenter
                                                                  : undefined
-                        text: root.disp(gridCell.modelData.name)
+                        text: root.rowLabel(gridCell.modelData)
                         color: gridCell.modelData.missing ? root.cDim
                              : (gridCell.modelData.type === "dir" ? root.cAccent : root.cText)
-                        font.pixelSize: root.compactView ? 11 : 10
+                        font { family: root.uiFont
+                               pixelSize: root.ui(root.compactView ? 11 : 10) }
                         horizontalAlignment: root.compactView ? Text.AlignLeft
                                                               : Text.AlignHCenter
                         // Two lines and then elide: one line hides too much of
@@ -2834,7 +2900,7 @@ FloatingWindow {
                             root.beginDrag(gridCell.modelData,
                                            root.selection.length > 1
                                            ? root.selection.length + " items"
-                                           : root.disp(gridCell.modelData.name))
+                                           : root.rowLabel(gridCell.modelData))
                         }
                         onClicked: (mouse) => {
                             fileGrid.forceActiveFocus()
@@ -2882,14 +2948,14 @@ FloatingWindow {
                         return "This folder is empty."
                     }
                     color: root.cText
-                    font.pixelSize: 14
+                    font { family: root.uiFont; pixelSize: root.ui(14) }
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: root.tab && root.tab.view === "dir" && !root.tab.showHidden
                           ? "Hidden items are not shown." : ""
                     color: root.cDim
-                    font.pixelSize: 11
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                     visible: text !== ""
                 }
             }
@@ -3046,7 +3112,7 @@ FloatingWindow {
                                               verticalCenter: parent.verticalCenter }
                                     text: ctxItem.modelData.label
                                     color: ctxItem.modelData.on ? root.cText : root.cDim
-                                    font.pixelSize: 12
+                                    font { family: root.uiFont; pixelSize: root.ui(12) }
                                 }
                                 MouseArea {
                                     id: ctxMa
@@ -3174,7 +3240,7 @@ FloatingWindow {
                                                   verticalCenter: parent.verticalCenter }
                                         text: menuItem.modelData.label
                                         color: root.cText
-                                        font.pixelSize: 12
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
                                     }
                                     // A tick for the ones that are states, so
                                     // the menu says what is on without being
@@ -3190,7 +3256,7 @@ FloatingWindow {
                                             return ""
                                         }
                                         color: root.cAccent
-                                        font.pixelSize: 12
+                                        font { family: root.uiFont; pixelSize: root.ui(12) }
                                     }
                                     MouseArea {
                                         id: menuMa
@@ -3350,7 +3416,7 @@ FloatingWindow {
                                               verticalCenter: parent.verticalCenter }
                                     text: diskItem.modelData.label
                                     color: diskItem.modelData.on ? root.cText : root.cDim
-                                    font.pixelSize: 12
+                                    font { family: root.uiFont; pixelSize: root.ui(12) }
                                 }
                                 MouseArea {
                                     id: diskMa
@@ -3395,13 +3461,13 @@ FloatingWindow {
                     anchors { top: parent.top; left: parent.left; margins: 16 }
                     text: "Properties"
                     color: root.cAccent
-                    font { pixelSize: 14; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(14); bold: true  }
                 }
                 Text {
                     anchors { top: parent.top; right: parent.right; margins: 14 }
                     text: "×"
                     color: propCloseMa.containsMouse ? root.cAccent : root.cDim
-                    font.pixelSize: 16
+                    font { family: root.uiFont; pixelSize: root.ui(16) }
                     MouseArea {
                         id: propCloseMa
                         anchors { fill: parent; margins: -6 }
@@ -3437,7 +3503,7 @@ FloatingWindow {
                                     width: 96
                                     text: propRow.modelData.key
                                     color: root.cDim
-                                    font.pixelSize: 11
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
                                 Text {
                                     width: propCol.width - 106
@@ -3456,7 +3522,7 @@ FloatingWindow {
                                         return v
                                     }
                                     color: root.cText
-                                    font.pixelSize: 11
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
                                     wrapMode: Text.WrapAnywhere
                                 }
                             }
@@ -3482,14 +3548,14 @@ FloatingWindow {
                     Text {
                         text: "Empty the trash?"
                         color: root.cWarn
-                        font { pixelSize: 14; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(14); bold: true  }
                     }
                     Text {
                         width: parent.width - 4
                         text: "Everything in the trash will be removed permanently. "
                             + "This cannot be undone."
                         color: root.cText
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                         wrapMode: Text.WordWrap
                     }
                     Row {
@@ -3525,7 +3591,7 @@ FloatingWindow {
                     Text {
                         text: "New folder"
                         color: root.cAccent
-                        font { pixelSize: 13; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(13); bold: true  }
                     }
                     Rectangle {
                         width: parent.width; height: 28
@@ -3537,7 +3603,7 @@ FloatingWindow {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                             verticalAlignment: TextInput.AlignVCenter
                             color: root.cText
-                            font.pixelSize: 12
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                             clip: true
                             onVisibleChanged: if (visible) { text = ""; forceActiveFocus() }
                             onAccepted: root.commitNewFolder(text)
@@ -3547,7 +3613,7 @@ FloatingWindow {
                     Text {
                         text: "Enter to create, Escape to cancel"
                         color: root.cDim
-                        font.pixelSize: 10
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
                 }
             }
@@ -3569,7 +3635,7 @@ FloatingWindow {
                     Text {
                         text: "New empty file"
                         color: root.cAccent
-                        font { pixelSize: 13; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(13); bold: true  }
                     }
                     Rectangle {
                         width: parent.width; height: 28
@@ -3581,7 +3647,7 @@ FloatingWindow {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                             verticalAlignment: TextInput.AlignVCenter
                             color: root.cText
-                            font.pixelSize: 12
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                             clip: true
                             onVisibleChanged: if (visible) { text = ""; forceActiveFocus() }
                             onAccepted: root.createEmptyFile(text)
@@ -3591,7 +3657,7 @@ FloatingWindow {
                     Text {
                         text: "Enter to create, Escape to cancel"
                         color: root.cDim
-                        font.pixelSize: 10
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
                 }
             }
@@ -3616,13 +3682,13 @@ FloatingWindow {
                         return s > 0 ? base + "  ·  " + s + " selected" : base
                     }
                     color: root.statusLine ? root.cWarn : root.cDim
-                    font.pixelSize: 11
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 Text {
                     anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                     text: root.tab && root.tab.view === "dir" ? root.disp(root.tab.path) : ""
                     color: root.cDim
-                    font.pixelSize: 11
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
             }
         }
@@ -3702,14 +3768,14 @@ FloatingWindow {
                                           verticalCenter: parent.verticalCenter }
                                 text: viewItem.modelData.label
                                 color: root.cText
-                                font.pixelSize: 12
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
                             Text {
                                 anchors { right: parent.right; rightMargin: 10
                                           verticalCenter: parent.verticalCenter }
                                 text: viewItem.modelData.tick ? "✓" : ""
                                 color: root.cAccent
-                                font.pixelSize: 12
+                                font { family: root.uiFont; pixelSize: root.ui(12) }
                             }
                             MouseArea {
                                 id: viewMa
@@ -3726,6 +3792,76 @@ FloatingWindow {
                     }
                 }
 
+                // Text size. Same question as icon size — how big is this
+                // window's content — so it sits directly under it, and it
+                // scales every label in the window at once rather than the
+                // list alone: half a window resized is a window that looks
+                // broken. The font FAMILY is not a setting here; that is the
+                // desktop's, and synfiles follows it live.
+                Item {
+                    width: viewCol.width
+                    height: 30
+
+                    Text {
+                        id: textLabel
+                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                        text: "Text"
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                    }
+                    Text {
+                        id: textPct
+                        anchors { left: textLabel.right; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                        width: 34
+                        text: root.textScale + "%"
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                    }
+                    Item {
+                        anchors { left: textPct.right; leftMargin: 8
+                                  right: parent.right; rightMargin: 10
+                                  verticalCenter: parent.verticalCenter }
+                        height: 20
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right
+                                      verticalCenter: parent.verticalCenter }
+                            height: 3
+                            radius: 2
+                            color: root.wash(0.20)
+
+                            Rectangle {
+                                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                                width: textHandle.x + textHandle.width / 2
+                                radius: 2
+                                color: root.cAccent
+                            }
+                        }
+                        Rectangle {
+                            id: textHandle
+                            width: 11; height: 11; radius: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: (root.textScale - root.textMin)
+                               / (root.textMax - root.textMin) * (parent.width - width)
+                            color: root.cAccent
+                        }
+                        MouseArea {
+                            anchors { fill: parent; topMargin: -4; bottomMargin: -4 }
+                            cursorShape: Qt.PointingHandCursor
+                            function setFrom(mx) {
+                                const w = width - textHandle.width
+                                const f = Math.max(0, Math.min(1, (mx - textHandle.width / 2) / w))
+                                // Stepped in fives: a per-pixel percentage is a
+                                // number nobody can land on twice.
+                                const v = root.textMin + f * (root.textMax - root.textMin)
+                                root.textScale = Math.round(v / 5) * 5
+                            }
+                            onPressed: (m) => setFrom(m.x)
+                            onPositionChanged: (m) => { if (pressed) setFrom(m.x) }
+                        }
+                    }
+                }
+
                 // Icon size lives in the same menu, because it is the same
                 // question — how the list looks — and Dolphin keeps it there.
                 Item {
@@ -3737,7 +3873,7 @@ FloatingWindow {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         text: "Size"
                         color: root.cText
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
                     Row {
                         id: sizePresets
@@ -3757,7 +3893,7 @@ FloatingWindow {
                                     anchors.centerIn: parent
                                     text: sizeBtn.modelData.label
                                     color: root.iconSize === sizeBtn.modelData.size ? root.cAccent : root.cDim
-                                    font.pixelSize: 11
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
                                 MouseArea {
                                     id: sizeBtnMa
@@ -3824,7 +3960,7 @@ FloatingWindow {
         leftPadding: 14
         bottomPadding: 4
         color: root.cDim
-        font { pixelSize: 10; bold: true }
+        font { family: root.uiFont; pixelSize: root.ui(10); bold: true  }
     }
 
     component SideRow: Rectangle {
@@ -3881,7 +4017,7 @@ FloatingWindow {
             text: sideRow.label
             elide: Text.ElideRight
             color: sideRow.active ? root.cAccent : (sideRow.dim ? root.cDim : root.cText)
-            font.pixelSize: 12
+            font { family: root.uiFont; pixelSize: root.ui(12) }
         }
 
         // The fill meter, the way Dolphin shows one. It turns amber past 90%
@@ -3919,7 +4055,7 @@ FloatingWindow {
             }
             text: Math.round(sideRow.fillRatio * 100) + "%"
             color: sideRow.fillRatio >= 0.9 ? root.cWarn : root.cDim
-            font.pixelSize: 9
+            font { family: root.uiFont; pixelSize: root.ui(9) }
         }
 
         // Declared BEFORE the two little buttons below it, and that order is
@@ -3951,7 +4087,7 @@ FloatingWindow {
             anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
             text: "×"
             color: unpinMa.containsMouse ? root.cAccent : root.cDim
-            font.pixelSize: 12
+            font { family: root.uiFont; pixelSize: root.ui(12) }
             visible: sideRow.removable && sideMa.containsMouse
             MouseArea {
                 id: unpinMa
@@ -3967,7 +4103,7 @@ FloatingWindow {
             anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
             text: sideRow.trailing
             color: trailMa.containsMouse ? root.cAccent : root.cDim
-            font.pixelSize: 12
+            font { family: root.uiFont; pixelSize: root.ui(12) }
             visible: sideRow.trailing !== "" && sideMa.containsMouse
             MouseArea {
                 id: trailMa
@@ -4228,7 +4364,7 @@ FloatingWindow {
             x: tb.label === "" ? (tb.width - implicitWidth) / 2 : 9
             text: tb.glyph
             color: tb.active ? root.cAccent : root.cText
-            font.pixelSize: 14
+            font { family: root.uiFont; pixelSize: root.ui(14) }
         }
         Text {
             id: tbLabel
@@ -4236,7 +4372,7 @@ FloatingWindow {
             x: tbGlyph.x + tbGlyph.implicitWidth + (tb.label === "" ? 0 : 5)
             text: tb.label === "" ? "" : tb.label + " ⌄"
             color: tb.active ? root.cAccent : root.cText
-            font.pixelSize: 11
+            font { family: root.uiFont; pixelSize: root.ui(11) }
         }
         // A hover label rather than a permanent one: five glyphs with words
         // under them is a toolbar nobody can scan.
@@ -4254,7 +4390,7 @@ FloatingWindow {
                 anchors.centerIn: parent
                 text: tb.hint
                 color: root.cText
-                font.pixelSize: 10
+                font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
         MouseArea {
@@ -4285,7 +4421,7 @@ FloatingWindow {
             anchors.centerIn: parent
             text: chip.label
             color: chip.on ? root.cAccent : root.cDim
-            font.pixelSize: 11
+            font { family: root.uiFont; pixelSize: root.ui(11) }
         }
         MouseArea {
             id: chipMa
