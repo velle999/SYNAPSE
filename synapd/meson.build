@@ -135,6 +135,14 @@ install_data('systemd/synapd.service',
   install_dir: '/usr/lib/systemd/system')
 install_data('systemd/synapse-drm-watch.service',
   install_dir: '/usr/lib/systemd/system')
+
+# Sandbox for NVIDIA's stock persistence daemon, which ships as an unhardened
+# sample unit and scored 9.6 UNSAFE. It is synapd-setup.service's Wants= that
+# starts it at all, so its posture is ours to set. A drop-in rather than a
+# patched unit so a nvidia-utils upgrade cannot silently revert it.
+install_data('systemd/nvidia-persistenced-hardening.conf',
+  install_dir: '/usr/lib/systemd/system/nvidia-persistenced.service.d',
+  rename: '50-synapse-hardening.conf')
 install_data('config/synapd.conf',
   install_dir: '/etc/synapd')
 
