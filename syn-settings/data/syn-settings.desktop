@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=SYNAPSE Settings
+GenericName=System Settings
+Comment=Display, keyboard, region, power and where this system's configuration lives
+Exec=syn-settings gui
+Icon=preferences-system
+Terminal=false
+StartupWMClass=syn-settings
+# ONE main category. Two makes the entry appear twice in the scanned start-menu
+# pages on top of the fixed entry — the same hint desktop-file-validate gives
+# about syn-update's and synpkg's launchers.
+Categories=Settings;
+Keywords=settings;system;display;monitor;keyboard;layout;locale;timezone;power;suspend;
+StartupNotify=true

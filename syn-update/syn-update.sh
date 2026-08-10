@@ -62,7 +62,8 @@ LOCAL_REPO=/var/cache/synapseos
 # OS — the exact dead end this tool exists to remove.
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
-            nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles)
+            nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles
+            syn-settings)
 
 # On the ISO but NOT updatable this way, with the reason. Reported rather than
 # skipped in silence: a component quietly frozen forever is exactly the bug

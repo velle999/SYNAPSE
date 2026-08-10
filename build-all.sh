@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal synpkg synfiles)
+       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -249,6 +249,11 @@ build_component synpkg
 # makes a folder open in it. Dolphin stays installed and stays working; it is
 # simply not what a folder opens in any more.
 build_component synfiles
+
+# syn-settings — the settings app. build_component, not build_script_pkg: it is
+# a meson C project whose tarball has to be regenerated from the tree, the same
+# shape as synfiles and synpkg.
+build_component syn-settings
 
 # A name in KNOWN= with no build rule above is what this catches.
 #
