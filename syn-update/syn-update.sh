@@ -62,7 +62,7 @@ LOCAL_REPO=/var/cache/synapseos
 # OS — the exact dead end this tool exists to remove.
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
-            nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg)
+            nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles)
 
 # On the ISO but NOT updatable this way, with the reason. Reported rather than
 # skipped in silence: a component quietly frozen forever is exactly the bug
@@ -86,6 +86,7 @@ declare -A UNSUPPORTED=(
 # footgun handed out as an update.
 declare -A NEVER_ADD=(
     [syn-install]="the ISO's disk installer; an installed system is not meant to have it"
+    [synfiles]="the file browser is being evaluated and replaces nothing; it arrives only when somebody installs it deliberately"
 )
 
 # ── output ───────────────────────────────────────────────────
