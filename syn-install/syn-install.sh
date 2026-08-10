@@ -1655,6 +1655,11 @@ fi
 # limine itself is needed whether or not snapshots are on.
 [ "$BOOTLOADER" = "limine" ] && SNAP_PKGS="$SNAP_PKGS limine"
 
+# arch-audit and lynis are in the base set on purpose. They are ~6.5 MB
+# together, and a security-focused OS that cannot tell you whether its packages
+# have known CVEs until you first install a tool is telling on itself. lynis
+# reads the skip-test profile synapse_kmod ships at /etc/lynis/custom.prf.
+# (No inline comments below — the list is one backslash-continued command.)
 pacstrap /mnt \
     base linux linux-firmware linux-headers kitty foot \
     grub efibootmgr os-prober ntfs-3g \
@@ -1666,6 +1671,7 @@ pacstrap /mnt \
     mkinitcpio dkms \
     cryptsetup \
     zram-generator \
+    arch-audit lynis \
     2>&1 || die "pacstrap failed — check network connection"
 
 # Hard verify grub landed in the chroot

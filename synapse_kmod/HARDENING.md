@@ -44,8 +44,18 @@ to know before chasing the number:
    media), compilers-root-only (this is a dev distro), and `auditd`
    (synguard's kmod already collects syscalls; two collectors would fight).
 
-To stop those from masking real drift, put them in `/etc/lynis/custom.prf` as
-`skip-test=` lines so the index tracks things we would actually act on.
+So that those do not mask real drift, this package ships them as `skip-test=`
+lines in **`/etc/lynis/custom.prf`** (Lynis merges every `.prf` in `/etc/lynis`,
+so it adds to `default.prf` rather than replacing it). The index then only moves
+when something we would actually act on changes.
+
+That file is in `backup=`, so local edits survive an upgrade as a `.pacnew`.
+Every skip in it carries its reason, and the tail of the file lists the
+suggestions left **deliberately firing** — real work not yet done. Do not add
+those to the skip list to make the number go up.
+
+`lynis` and `arch-audit` are `optdepends` here and are installed by default on
+new systems; `arch-audit` is what closes PKGS-7398.
 
 ## Opt-in: module self-pin (anti-rmmod)
 

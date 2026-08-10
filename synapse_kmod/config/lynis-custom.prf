@@ -1,0 +1,137 @@
+# /etc/lynis/custom.prf — SynapseOS audit profile
+#
+# Lynis reads every .prf in /etc/lynis and merges them, so this sits alongside
+# the stock default.prf rather than replacing it. Added 2026-08-10.
+#
+# WHAT THIS FILE IS FOR
+#
+# A hardening index only means something if it moves when the system gets worse.
+# Ours sat at 66 with a permanent floor of suggestions we had already decided
+# not to act on, which makes a drop from a real regression invisible — the
+# number is noise either way. Everything skipped below is a DECISION, recorded
+# with its reason, not a nuisance being silenced. Nothing is skipped because it
+# was tedious to fix.
+#
+# The full reasoning for the sysctl entries lives next to the settings
+# themselves in /usr/lib/sysctl.d/90-synapse-hardening.conf, and for the module
+# entries in /usr/lib/modprobe.d/90-synapse-blacklist.conf. This file is the
+# index; those are the argument.
+#
+# BEFORE YOU ADD A LINE HERE: a skip is a claim that the finding will never
+# matter on SynapseOS. If it might matter later, leave it firing and live with
+# the score.
+#
+# Run unprivileged (`lynis audit system --pentest` as your normal user) for the
+# local-attacker view. Running --pentest as root gives you the identical
+# privileged scan, not a stricter one — the flag is ignored when euid is 0.
+
+profile-name=synapseos
+
+# ── sysctl: values we set differently on purpose (KRNL-6000) ────────────────
+
+# We ship 2 (loose). Lynis wants 1 (strict), which drops any packet arriving on
+# an interface other than the one we would route its source back through — that
+# breaks VPNs, policy routing and multi-homing, all of which this OS does.
+skip-test=KRNL-6000:net.ipv4.conf.all.rp_filter
+skip-test=KRNL-6000:net.ipv4.conf.default.rp_filter
+
+# We ship 1 (unprivileged only). Lynis wants 2 (all users), which makes
+# synguard's own BPF-LSM programs pay constant-blinding cost. This stack has
+# already lost 80% of an event burst once for want of throughput.
+skip-test=KRNL-6000:net.core.bpf_jit_harden
+
+# Already 2 — disabled with no recourse, STRICTER than the 1 Lynis tests for.
+# Its check is an equality test, not a floor.
+skip-test=KRNL-6000:kernel.unprivileged_bpf_disabled
+
+# A one-way latch that stops all module loading until reboot. It would break
+# DKMS, synapse_kmod's own reload, and NVIDIA. synapse_kmod ships an opt-in
+# synapse-lock-modules.service for people who actually want this; see
+# /usr/share/doc/synapse_kmod/HARDENING.md.
+skip-test=KRNL-6000:kernel.modules_disabled
+
+# We ship 16 (sync only); Lynis wants 0. Given this project's history of
+# VT-switch lockouts and suspend stalls, being able to force a sync before a
+# hard reset is worth more than the residual risk.
+skip-test=KRNL-6000:kernel.sysrq
+
+# Useful signal, wrong sink. Martian logging belongs in synguard's netwatch
+# feed, not sprayed into the journal. Un-skip when there is a UI consuming it.
+skip-test=KRNL-6000:net.ipv4.conf.all.log_martians
+skip-test=KRNL-6000:net.ipv4.conf.default.log_martians
+
+# ── Storage ────────────────────────────────────────────────────────────────
+
+# USB-1000 wants usb-storage disabled. SynapseOS writes its own install media
+# and boots from USB as a routine part of every release; this would break the
+# distro's primary workflow to close a threat model that physical access
+# already defeats.
+skip-test=USB-1000
+
+# ── Things synguard already does ───────────────────────────────────────────
+
+# auditd. synguard's kmod already collects syscall events; two collectors on
+# the same kprobes would fight, and the second one would be the unmonitored
+# one. If synguard is ever removed, un-skip this the same day.
+skip-test=ACCT-9628
+
+# Periodic malware scanner (rkhunter/chkrootkit/OSSEC). Same answer: the
+# in-kernel monitor is the SynapseOS approach, and a signature scanner on top
+# of it is duplicated cost for a desktop. Deliberately NOT skipping FINT-4350
+# (file integrity) — `pacman -Qkk` gives us that for free and we should be
+# running it.
+skip-test=HRDN-7230
+
+# ── Wrong shape for a single-seat desktop ──────────────────────────────────
+
+# Restricting compilers to root. This is a development distro; gcc being
+# reachable is the point.
+skip-test=HRDN-7222
+
+# Remote syslog host. There is no second machine to ship logs to.
+skip-test=LOGG-2154
+
+# /var on its own partition. Decided at install time by syn-install's disk
+# plan, not something to retrofit, and not a default we want.
+skip-test=FILE-6310
+
+# Password aging (min/max days). Meaningless on a personal desktop with one
+# interactive account and no central directory.
+skip-test=AUTH-9286
+
+# Legal login banner in /etc/issue. No legal need here, and synui's greeter
+# owns tty1 so console banners are not visible anyway.
+skip-test=BANN-7126
+
+# Configuration-management tooling (Ansible/Puppet/etc). Not how this OS is
+# built or deployed.
+skip-test=TOOL-5002
+
+# ── False positives on this system ─────────────────────────────────────────
+
+# Home-directory permissions and ownership. Both fire on system accounts
+# Lynis classifies as home dirs — /, /srv/ftp, /srv/http, /var/spool/mail,
+# /var/lib/libuuid. The real interactive homes are 0700 and correctly owned;
+# verified 2026-08-10.
+skip-test=HOME-9304
+skip-test=HOME-9306
+
+# ── Deliberately still firing ──────────────────────────────────────────────
+#
+# Left un-skipped because they are real work we have not done. Do not add
+# these here to make the number go up:
+#
+#   BOOT-5264   systemd unit exposure. Three units hardened 2026-08-10
+#               (synnet 5.7->3.9, synapse-drm-watch 5.5->3.3,
+#               nvidia-persistenced 9.4->4.1). Others will regress; that is
+#               exactly what this test is for.
+#   AUTH-9230   password hashing rounds in /etc/login.defs
+#   AUTH-9262   pam_pwquality in the auth stack
+#   AUTH-9328   default umask 027
+#   KRNL-5820   core dump limits in /etc/security/limits.conf
+#   FINT-4350   file integrity — `pacman -Qkk` is the intended implementation
+#   PKGS-7398   package vulnerability audit — arch-audit is now shipped
+#   CRYP-7902   certificate expiry
+#   TIME-3104   NTP client
+#   NAME-4404   FQDN in /etc/hosts
+#   FILE-7524   file permission review

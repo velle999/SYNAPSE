@@ -239,3 +239,14 @@ zram-generator
 # ~30 MB is not worth it, deleting this line costs only that convenience and
 # the installer already says so when nix is missing.
 nix
+
+# Security auditing. Both are small (arch-audit ~4.8 MB, lynis ~1.7 MB) and
+# both are on the live ISO deliberately: auditing an install you have not
+# booted yet is the case where you least want to be fetching tools.
+#
+# arch-audit closes Lynis PKGS-7398 (package vulnerability check) and is the
+# first check syn-secure's hardening pane will call. lynis reads the
+# skip-test profile that synapse_kmod ships at /etc/lynis/custom.prf, which is
+# what keeps the hardening index a signal rather than a constant.
+arch-audit
+lynis

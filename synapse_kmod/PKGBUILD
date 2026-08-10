@@ -1,11 +1,14 @@
 pkgname=synapse_kmod
 pkgver=0.1.0
-pkgrel=25
+pkgrel=26
 pkgdesc="SynapseOS kernel module — AI_CTX syscalls, kprobes, AI scheduler bridge"
 arch=('x86_64')
 license=('GPL-2.0-only')
 depends=('dkms' 'linux-headers')
 options=('!strip')
+backup=('etc/lynis/custom.prf')
+optdepends=('lynis: audit the hardening baseline with the shipped custom.prf'
+            'arch-audit: package vulnerability check (Lynis PKGS-7398)')
 install=synapse_kmod.install
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
@@ -74,6 +77,12 @@ package() {
     # parameters, and the two need to be revertible separately.
     install -Dm644 config/90-synapse-blacklist.conf \
         "$pkgdir/usr/lib/modprobe.d/90-synapse-blacklist.conf"
+
+    # Lynis audit profile. Lynis merges every .prf in /etc/lynis, so this adds
+    # to the stock default.prf rather than replacing it. It is in backup=, so
+    # local edits survive an upgrade as a .pacnew. Harmless if lynis is absent.
+    install -Dm644 config/lynis-custom.prf \
+        "$pkgdir/etc/lynis/custom.prf"
 
     # Opt-in "seal module loading" unit — installed DISABLED (see HARDENING.md)
     install -Dm644 systemd/synapse-lock-modules.service \
