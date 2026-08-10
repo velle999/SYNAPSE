@@ -1082,8 +1082,23 @@ FloatingWindow {
             // They say what to DO. "No results" with no next step is how the
             // old arsenal looked on a machine without BlackArch.
             Column {
-                anchors.centerIn: parent
-                width: parent.width - 80
+                // Centred in the RESULTS area, not in the whole pane. It used
+                // to be anchors.centerIn: parent with width = parent.width-80,
+                // and parent includes catPane — so on a narrow window the block
+                // reached back across the category list and painted on top of
+                // it. Screenshot 2026-08-10 11:38 caught "Utilities 948" with
+                // "sandboxed applications with their own runtimes, installed"
+                // drawn straight through it.
+                //
+                // Anchored exactly like the ListView it stands in for, so the
+                // empty state occupies the space the rows would have. catPane
+                // is width 0 when hidden, so this is still the full pane when
+                // there are no categories.
+                anchors {
+                    left: catPane.right; leftMargin: 40
+                    right: parent.right; rightMargin: 40
+                    verticalCenter: parent.verticalCenter
+                }
                 spacing: 10
                 visible: root.section !== "about" && !root.loading
                          && root.shownRows.length === 0
