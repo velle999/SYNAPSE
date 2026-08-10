@@ -2402,8 +2402,13 @@ typedef enum {
     SYN_DESKACT_ARRANGE_SIZE,
     SYN_DESKACT_ARRANGE_DATE,
     SYN_DESKACT_TASKMGR,
+    /* Offered only when the right-click landed ON an icon, and listed first:
+     * a menu about the file you clicked has to be about that file before it is
+     * about the desktop it sits on. */
+    SYN_DESKACT_ICON_OPEN,
+    SYN_DESKACT_ICON_TRASH,
 } syn_deskact_t;
-#define SYN_DESKMENU_MAX 16
+#define SYN_DESKMENU_MAX 20
 
 /* The order the auto-grid flows ~/Desktop in. Every mode falls back to name
  * order for ties, so the desktop never reshuffles between two equal files. */

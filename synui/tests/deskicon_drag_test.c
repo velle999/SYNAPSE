@@ -82,18 +82,12 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *p) { (void)p; retur
 static char spawned[512];
 void synui_spawn(const char *cmd) { snprintf(spawned, sizeof(spawned), "%s", cmd); }
 
-/* Promotion to a real drag asks what is under the cursor and hands off to
- * deskdrag.c. Here there are no windows and never will be, so view_at answers
- * "nothing" and every gesture in this file stays the reposition it is testing —
- * which is also the assertion that promotion does not fire over the desktop. */
+/* Promotion to a real drag asks whether a window is under the cursor and hands
+ * off to deskdrag.c. Every workspace here is empty, so nothing promotes and
+ * every gesture stays the reposition this file is testing — which is also the
+ * assertion that dragging around the desktop never turns into a file drag. */
 static bool promoted;
-syn_view_t *view_at(syn_server_t *s, double lx, double ly,
-                    struct wlr_surface **surface, double *sx, double *sy)
-{
-    (void)s; (void)lx; (void)ly; (void)sx; (void)sy;
-    if (surface) *surface = NULL;
-    return NULL;
-}
+int workspace_visible(syn_workspace_t *ws) { (void)ws; return 1; }
 bool deskdrag_start(syn_server_t *s, const char *path)
 {
     (void)s; (void)path;
@@ -271,6 +265,7 @@ static char *slurp(const char *path)
 
 int main(void)
 {
+
     /* Scratch $HOME with a five-file desktop. Names are deliberately out of
      * readdir order; the layout has to be name-ordered. */
     char home[] = "/tmp/synui-deskicon-XXXXXX";
@@ -296,6 +291,12 @@ int main(void)
     setenv("HOME", home, 1);
 
     syn_server_t *s = calloc(1, sizeof(*s));
+    assert(s);
+    /* The compositor initialises these at startup; point_over_window() walks
+     * them on every promotion check, and an uninitialised wl_list is a walk
+     * off the end of the world. */
+    for (int i = 0; i < WORKSPACE_MAX; i++)
+        wl_list_init(&s->workspaces[i].windows);
     assert(s);
     s->deskicon_selected       = -1;
     s->deskicon_last_click_idx = -1;

@@ -86,6 +86,8 @@ const char *deskact_label(syn_deskact_t a)
     case SYN_DESKACT_ARRANGE_SIZE: return "Arrange by Size";
     case SYN_DESKACT_ARRANGE_DATE: return "Arrange by Date";
     case SYN_DESKACT_TASKMGR:   return "Task Manager";
+    case SYN_DESKACT_ICON_OPEN: return "Open";
+    case SYN_DESKACT_ICON_TRASH:return "Move to Trash";
     }
     return "";
 }
@@ -115,6 +117,15 @@ static int deskmenu_row_h(syn_server_t *s, int i)
 void deskmenu_open(syn_server_t *s, double lx, double ly)
 {
     int n = 0;
+
+    /* Right-clicking an icon selects it (input.c) — so if something is
+     * selected, this menu opened on it and leads with what to do to it. */
+    if (s->config.desktop_icons && s->deskicon_selected >= 0) {
+        s->deskmenu.actions[n++] = SYN_DESKACT_ICON_OPEN;
+        s->deskmenu.actions[n++] = SYN_DESKACT_ICON_TRASH;
+        s->deskmenu.actions[n++] = SYN_DESKACT_SEP;
+    }
+
     s->deskmenu.actions[n++] = SYN_DESKACT_TERMINAL;
     s->deskmenu.actions[n++] = SYN_DESKACT_FILES;
     s->deskmenu.actions[n++] = SYN_DESKACT_APPS;
@@ -281,6 +292,12 @@ void deskmenu_click(syn_server_t *s, double lx, double ly)
         break;
     case SYN_DESKACT_TASKMGR:
         taskmgr_toggle(s);
+        break;
+    case SYN_DESKACT_ICON_OPEN:
+        if (s->deskicon_selected >= 0) deskicon_activate(s, s->deskicon_selected);
+        break;
+    case SYN_DESKACT_ICON_TRASH:
+        deskicon_trash_selected(s);
         break;
     case SYN_DESKACT_SEP:
         break;
@@ -870,6 +887,32 @@ void deskicon_drag_begin(syn_server_t *s, int idx, double lx, double ly)
     s->deskicon_drag.orig_y  = s->deskicons[idx].y;
 }
 
+/*
+ * Is a window under this point?
+ *
+ * Deliberately NOT view_at(): while an icon is being dragged it has been
+ * lifted into a scene layer that sits ON the cursor, and that layer is a cairo
+ * buffer rather than a surface — so surface_at() stops at it, finds no
+ * wlr_scene_surface, and answers "nothing here" for every point on the screen.
+ * The same shape as the wl_data_device drag icon that hid the desktop from
+ * deskdrop, one layer further in. Geometry is enough for the question being
+ * asked, which is not "which surface" but "am I still over the desktop".
+ */
+static bool point_over_window(syn_server_t *s, double lx, double ly)
+{
+    for (int wi = 0; wi < WORKSPACE_MAX; wi++) {
+        syn_view_t *v;
+        wl_list_for_each(v, &s->workspaces[wi].windows, link) {
+            if (!v->mapped || v->minimized) continue;
+            if (v->workspace && !workspace_visible(v->workspace)) continue;
+            if (lx >= v->x && lx < v->x + v->w &&
+                ly >= v->y && ly < v->y + v->h)
+                return true;
+        }
+    }
+    return false;
+}
+
 void deskicon_drag_motion(syn_server_t *s, double lx, double ly)
 {
     if (!s->deskicon_drag.active) return;
@@ -890,9 +933,7 @@ void deskicon_drag_motion(syn_server_t *s, double lx, double ly)
      * dock and the bar are things a dragged icon passes OVER on its way
      * somewhere, and promoting there would snap the icon home for a gesture
      * the user has not finished making. */
-    double sx, sy;
-    struct wlr_surface *over = NULL;
-    if (s->deskicon_drag.moved && view_at(s, lx, ly, &over, &sx, &sy)) {
+    if (s->deskicon_drag.moved && point_over_window(s, lx, ly)) {
         char path[PATH_MAX];
         snprintf(path, sizeof(path), "%s", s->deskicons[i].path);
 
