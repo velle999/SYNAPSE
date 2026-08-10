@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Calculator
+GenericName=Calculator
+Comment=The SynapseOS calculator — also Super+X
+# The calculator is a compositor panel, not a program: synctl asks synui to
+# open the same thing the keybind does. That is also why StartupNotify is off —
+# no window ever appears, so a startup spinner would hang until it timed out.
+Exec=synctl dispatch calc
+Icon=accessories-calculator
+Terminal=false
+StartupNotify=false
+Categories=Utility;Calculator;
+Keywords=calc;calculator;math;arithmetic;sum;

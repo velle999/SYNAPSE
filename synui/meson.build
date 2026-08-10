@@ -312,6 +312,16 @@ install_data('data/kanji_atlas.png',  install_dir : synui_datadir)
 install_data('data/logo.svg',         install_dir : synui_datadir)
 install_data('data/logo-bold.svg',    install_dir : synui_datadir)
 
+# The calculator, as a launchable entry.
+#
+# Super+X has opened it for a while, but a keybind is not discoverable and it
+# was in neither the start menu nor rofi — both of which read
+# /usr/share/applications and nothing else. One file serves both. It is a
+# compositor panel rather than a program, so its Exec asks synui to open the
+# same thing the keybind does.
+install_data('data/synui-calc.desktop',
+             install_dir : get_option('prefix') / get_option('datadir') / 'applications')
+
 # Extra wallpapers, into /usr/share/backgrounds rather than synui's own datadir:
 # that is one of the directories the picker (Super+W) already scans, so they show
 # up as rows with no code change and no per-machine copying — on the live ISO too,
