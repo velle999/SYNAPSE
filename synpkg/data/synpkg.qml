@@ -587,15 +587,27 @@ FloatingWindow {
             height: 64
             color: root.cPanel
 
+            // Anchored to the counter, NOT to a fixed reservation.
+            //
+            // This was `width: parent.width - 260`, and 260 is roughly five
+            // times what "0 items" occupies — so the subtitle elided to
+            // "everything with a newer v…" while ~180 px of empty header sat
+            // between it and the counter. A constant cannot track a string
+            // whose length changes with the status.
             Column {
-                anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
+                anchors {
+                    left: parent.left; leftMargin: 18
+                    right: headCount.left; rightMargin: 12
+                    verticalCenter: parent.verticalCenter
+                }
                 spacing: 2
-                width: parent.width - 260
 
                 Text {
+                    width: parent.width
                     text: "SYNAPSE Software"
                     color: root.cAccent
                     font { pixelSize: 17; bold: true }
+                    elide: Text.ElideRight
                 }
                 Text {
                     width: parent.width
@@ -609,7 +621,14 @@ FloatingWindow {
             }
 
             Text {
+                id: headCount
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
+                // Sized to its own text, but never more than a share of the
+                // header: this shows `statusLine` too, and a long status
+                // ("opening …") would otherwise push the title out entirely
+                // now that the title's width is derived from this one.
+                width: Math.min(implicitWidth, header.width * 0.45)
+                elide: Text.ElideRight
                 color: root.busy !== "" || root.loading ? root.cAccent : root.cDim
                 font.pixelSize: 12
                 horizontalAlignment: Text.AlignRight
@@ -1104,6 +1123,18 @@ FloatingWindow {
                          && root.shownRows.length === 0
 
                 Text {
+                    // width + wrap, or this sizes to implicitWidth and runs
+                    // straight out of the window: "Everything is up to date."
+                    // rendered as "Everything is up to da" with the rest past
+                    // the right edge. Centring an item wider than its parent
+                    // centres the OVERFLOW too, so it was clipped at both ends.
+                    //
+                    // Wrapped and NOT elided on purpose — a Text with both
+                    // wrapMode and elide whose height is not yet resolved at
+                    // first layout elides every line away and never recomputes,
+                    // which is how synui's post-it shipped blank.
+                    width: parent.width
+                    wrapMode: Text.WordWrap
                     anchors.horizontalCenter: parent.horizontalCenter
                     color: root.cText
                     font.pixelSize: 15
