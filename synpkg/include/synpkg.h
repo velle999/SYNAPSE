@@ -135,6 +135,32 @@ int cmd_arsenal(int argc, char **argv);
 
 /* ── ext.c — the non-ALPM sources ───────────────────────────────────────── */
 int aur_search_term(const char *term);   /* also reached by `search --aur` */
+
+/* ── AUR, reached from the repo commands ────────────────────────────────────
+ *
+ * `install` falls back here when a name is in no repository, and `upgrade`
+ * comes here for the foreign packages a sysupgrade structurally cannot see.
+ *
+ * ALL THREE MUST RUN UNPRIVILEGED. makepkg refuses to run as root because it
+ * executes a PKGBUILD fetched off the internet, so the AUR half of a command
+ * happens in the pass BEFORE (or AFTER) escalate(), never inside the pkexec'd
+ * child. See the note above aur_install() in ext.c.
+ */
+
+/* Which of `names` actually exist in the AUR. One RPC call, not n. Returns the
+ * count and fills `*out` with malloc'd names (caller frees both). */
+size_t aur_filter_existing(char **names, size_t n, char ***out);
+
+/* Installed foreign packages the AUR has a NEWER version of. */
+size_t aur_outdated_names(char ***out);
+
+/* Clone/pull and makepkg -si each name. Refuses if called as root. */
+int aur_build_install(char **names, size_t n);
+
+/* Did synpkg install this from the AUR? `upgrade` rebuilds only what it owns —
+ * "foreign" also covers every locally built SynapseOS package, and names do
+ * collide with the AUR. See the note above the definition in ext.c. */
+bool aur_have_checkout(const char *name);
 int cmd_system(int argc, char **argv);   /* syn-update */
 int cmd_flatpak(int argc, char **argv);
 int cmd_aur(int argc, char **argv);

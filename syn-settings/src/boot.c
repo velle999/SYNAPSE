@@ -325,9 +325,18 @@ static int boot_command(const struct syn_boot *bl, const char *pkg,
 			argv[n++] = (char *)"pkexec";
 			argv[n++] = (char *)"limine-update";
 		} else {
+			/* Say that it may BUILD. On a machine whose repositories do
+			 * not carry it — any limine install predating the package —
+			 * synpkg falls back to the AUR, and this one is a GraalVM
+			 * native-image build: several minutes with no output, because
+			 * this runs it with stdout discarded. Unannounced, that is
+			 * indistinguishable from a hung settings app. */
 			*why = "limine has no entry generator of its own; installing "
 			       "limine-mkinitcpio-hook adds one, plus a pacman hook so "
-			       "future kernels are handled automatically";
+			       "future kernels are handled automatically. If your "
+			       "repositories do not carry it, synpkg builds it from the "
+			       "AUR — that can take SEVERAL MINUTES with no visible "
+			       "progress";
 			if (!have_cmd("synpkg")) {
 				*why = NULL;
 				return boot_refuse("synpkg is not installed; it is what "

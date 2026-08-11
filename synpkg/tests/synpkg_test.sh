@@ -468,6 +468,74 @@ first=$(fa --tsv flatpak category Network | awk -F'\t' 'NR==2 {print $1}')
     && ok "the <components> root does not swallow the first application" \
     || bad "first application is '$first' — root element mis-scanned?"
 
+# ── install: the AUR fallback ───────────────────────────────────────────────
+#
+# `install` used to stop at "not found in any repository", so a package the AUR
+# carries and no repository does could not be installed by name at all — which
+# is what broke `synpkg install limine-mkinitcpio-hook` on limine machines
+# installed before the local repo carried it.
+#
+# None of these may build anything, so every case here is one that must REFUSE.
+# The fallback's success path is deliberately not exercised: it clones and runs
+# makepkg, which is not a thing a test suite should do to the machine it is on.
+
+# A name in neither place must say so, and must say it about BOTH places — the
+# old message named only repositories and was then telling the truth about half
+# the search.
+out=$("$SYNPKG" install definitely-not-a-real-package-xyzzy 2>&1 </dev/null || true)
+case "$out" in
+    *"not found in any repository or in the AUR"*)
+        ok "a name in neither place says both were searched" ;;
+    *) bad "unexpected refusal: $out" ;;
+esac
+
+# --no-aur must not merely skip the build, it must not CLAIM to have searched
+# the AUR. A message naming a source that was never consulted is worse than a
+# terse one.
+out=$("$SYNPKG" install definitely-not-a-real-package-xyzzy --no-aur 2>&1 </dev/null || true)
+case "$out" in
+    *"or in the AUR"*) bad "--no-aur still claimed to have searched the AUR" ;;
+    *"not found in any repository"*)
+        ok "--no-aur refuses without claiming an AUR search" ;;
+    *) bad "unexpected --no-aur refusal: $out" ;;
+esac
+
+# THE POINT OF THE FLAG: a package that really is in the AUR must be refused
+# outright under --no-aur rather than built.
+#
+# The name is checked against BOTH sources before the case runs, and the case
+# is skipped unless it is genuinely AUR-only. That guard is not defensive
+# padding — the first version of this test used `yay`, which is in [extra], so
+# `install` correctly took the REPOSITORY path and asked pkexec to authenticate
+# a real transaction on the machine running the suite. A test must not be able
+# to do that, and "the name I picked is in no repo" is not a fact that stays
+# true: limine-mkinitcpio-hook is AUR-only today and is vendored in-tree, so on
+# a box whose local repo carries it this must skip, not escalate.
+probe=limine-mkinitcpio-hook
+if pacman -Si "$probe" >/dev/null 2>&1; then
+    ok "skipped: $probe is in a repository here, so it is not an AUR-only case"
+elif curl -fsS --max-time 15 \
+        "https://aur.archlinux.org/rpc/v5/info?arg[]=$probe" 2>/dev/null \
+        | grep -q '"resultcount":1'; then
+    out=$("$SYNPKG" install "$probe" --no-aur 2>&1 </dev/null || true)
+    case "$out" in
+        *"not found in any repository"*)
+            ok "--no-aur refuses a package that IS in the AUR" ;;
+        *) bad "--no-aur did not refuse an AUR-only package: $out" ;;
+    esac
+else
+    ok "offline or $probe is gone from the AUR; that case was not exercised"
+fi
+
+# An unknown option must still be rejected. --no-aur was added to this parser,
+# and a parser that starts accepting anything beginning with two dashes is how
+# a typo becomes a package name.
+if "$SYNPKG" install --no-such-flag foo >/dev/null 2>&1 </dev/null; then
+    bad "install accepted an unknown option"
+else
+    ok "install still rejects an unknown option"
+fi
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

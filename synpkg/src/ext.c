@@ -1001,6 +1001,164 @@ static char **foreign_packages(alpm_handle_t *h, size_t *n)
 	return out;
 }
 
+/* One multiinfo URL for a whole set of names.
+ *
+ * The RPC takes repeated arg[] parameters, so a hundred packages is ONE
+ * request. Factored out because three callers now need it and a second copy
+ * would be a second place to forget url_encode(). */
+static char *aur_info_url(char **names, size_t n)
+{
+	size_t len = 64;
+	for (size_t i = 0; i < n; i++)
+		len += strlen(names[i]) * 3 + 8;
+
+	char *url = xmalloc(len);
+	int k = sprintf(url, "https://aur.archlinux.org/rpc/v5/info?");
+	for (size_t i = 0; i < n; i++) {
+		char *enc = url_encode(names[i]);
+		k += sprintf(url + k, "%sarg[]=%s", i ? "&" : "", enc);
+		free(enc);
+	}
+	return url;
+}
+
+/* A growable name list, which the two collectors below both fill. */
+struct aur_name_ctx {
+	alpm_handle_t *h;      /* NULL when no version comparison is wanted */
+	char **names;
+	size_t n, cap;
+};
+
+static void aur_name_push(struct aur_name_ctx *c, const char *name)
+{
+	if (c->n + 1 >= c->cap) {
+		c->cap = c->cap ? c->cap * 2 : 8;
+		c->names = xrealloc(c->names, c->cap * sizeof *c->names);
+	}
+	c->names[c->n++] = xstrdup(name);
+}
+
+/* "does it exist" — the AUR answered about it, so it does. */
+static void aur_collect_name(aur_pkg_t *p, void *vctx)
+{
+	if (p->name)
+		aur_name_push(vctx, p->name);
+}
+
+/* "is it out of date" — same, plus a version comparison against what is
+ * installed. */
+static void aur_collect_outdated(aur_pkg_t *p, void *vctx)
+{
+	struct aur_name_ctx *c = vctx;
+	if (!p->name || !p->version)
+		return;
+
+	alpm_pkg_t *local = alpm_db_get_pkg(alpm_get_localdb(c->h), p->name);
+	if (!local)
+		return;
+
+	/* alpm_pkg_vercmp, not strcmp: "0.1.0-203" sorts below "0.1.0-99" as
+	 * text, and that mistake silently declines to offer an update. */
+	if (alpm_pkg_vercmp(p->version, alpm_pkg_get_version(local)) > 0)
+		aur_name_push(c, p->name);
+}
+
+size_t aur_filter_existing(char **names, size_t n, char ***out)
+{
+	*out = NULL;
+	if (!n || !have_cmd("curl"))
+		return 0;
+
+	char *url = aur_info_url(names, n);
+	char *json = aur_rpc(url);
+	free(url);
+	if (!json)
+		return 0;
+
+	struct aur_name_ctx ctx = { NULL, NULL, 0, 0 };
+	int parsed = aur_each(json, aur_collect_name, &ctx);
+	free(json);
+
+	if (parsed < 0) {
+		for (size_t i = 0; i < ctx.n; i++)
+			free(ctx.names[i]);
+		free(ctx.names);
+		return 0;
+	}
+	*out = ctx.names;
+	return ctx.n;
+}
+
+/* Did SYNPKG install this from the AUR?
+ *
+ * This is the ownership question, and `upgrade` must ask it before rebuilding
+ * anything. "Foreign" only means no sync database offers the package — on a
+ * SynapseOS box that set also holds every locally built component, and names
+ * DO collide: `davinci-resolve` is installed here from Blackmagic's own
+ * installer and there is a `davinci-resolve` in the AUR. Rebuilding that from
+ * a PKGBUILD because the AUR happened to carry a higher version would replace
+ * a hand-managed, licence-gated install with an unrelated one — silently, in
+ * the middle of a routine upgrade.
+ *
+ * Nothing on disk records where a package came from, so the honest signal is
+ * the checkout synpkg made when it installed it. Anything else is reported and
+ * left alone: an AUR package installed by yay or paru does not get updated
+ * here, and that is the safe direction to be wrong in.
+ */
+bool aur_have_checkout(const char *name)
+{
+	const char *home = getenv("HOME");
+	if (!home || !*home)
+		return false;
+
+	char *p = xasprintf("%s/.cache/synpkg/aur/%s/PKGBUILD", home, name);
+	bool ok = access(p, R_OK) == 0;
+	free(p);
+	return ok;
+}
+
+size_t aur_outdated_names(char ***out)
+{
+	*out = NULL;
+
+	alpm_handle_t *h = sp_alpm_init(false);
+	size_t nf = 0;
+	char **foreign = foreign_packages(h, &nf);
+	if (!nf) {
+		sp_alpm_free(h);
+		free(foreign);
+		return 0;
+	}
+
+	char *url = aur_info_url(foreign, nf);
+	char *json = aur_rpc(url);
+	free(url);
+	for (size_t i = 0; i < nf; i++)
+		free(foreign[i]);
+	free(foreign);
+
+	if (!json) {
+		sp_alpm_free(h);
+		warn("could not reach the AUR — AUR packages were not checked");
+		return 0;
+	}
+
+	struct aur_name_ctx ctx = { h, NULL, 0, 0 };
+	int parsed = aur_each(json, aur_collect_outdated, &ctx);
+	free(json);
+	sp_alpm_free(h);
+
+	if (parsed < 0) {
+		for (size_t i = 0; i < ctx.n; i++)
+			free(ctx.names[i]);
+		free(ctx.names);
+		warn("the AUR returned something this does not understand");
+		return 0;
+	}
+	*out = ctx.names;
+	return ctx.n;
+}
+
 struct aur_update_ctx {
 	alpm_handle_t *h;
 	int n;
@@ -1043,17 +1201,7 @@ static int aur_updates(void)
 
 	/* One multiinfo call for every foreign package: the RPC takes repeated
 	 * arg[] parameters, so this is a single request rather than nf of them. */
-	size_t len = 64;
-	for (size_t i = 0; i < nf; i++)
-		len += strlen(foreign[i]) * 3 + 8;
-	char *url = xmalloc(len);
-	int k = sprintf(url, "https://aur.archlinux.org/rpc/v5/info?");
-	for (size_t i = 0; i < nf; i++) {
-		char *enc = url_encode(foreign[i]);
-		k += sprintf(url + k, "%sarg[]=%s", i ? "&" : "", enc);
-		free(enc);
-	}
-
+	char *url = aur_info_url(foreign, nf);
 	char *json = aur_rpc(url);
 	free(url);
 	for (size_t i = 0; i < nf; i++)
@@ -1196,6 +1344,18 @@ static int aur_install(int argc, char **argv)
 
 	free(base);
 	return rc;
+}
+
+/* The same builder, reachable from install and upgrade.
+ *
+ * aur_install() takes (argc, argv) because it is a command handler; this is
+ * the same thing for callers that already hold an array of names, so neither
+ * has to fake the other's shape. */
+int aur_build_install(char **names, size_t n)
+{
+	if (!n)
+		return 0;
+	return aur_install((int)n, names);
 }
 
 /* What the AUR tab shows before you have typed anything: every installed

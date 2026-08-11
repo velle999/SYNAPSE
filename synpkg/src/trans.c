@@ -242,14 +242,46 @@ static alpm_pkg_t *find_sync_pkg(alpm_handle_t *h, const char *name)
 	return NULL;
 }
 
+/* Split targets into "a repository has it" and "no repository has it".
+ *
+ * Runs UNPRIVILEGED, against the databases already on disk. Those can be
+ * stale, which is why a name that misses here is only ever routed to the AUR
+ * when the AUR separately confirms it exists — a stale database then produces
+ * today's "not found" rather than a surprise source build. A package in BOTH a
+ * repository and the AUR resolves here first and never reaches the fallback.
+ */
+static size_t split_repo_vs_foreign(char **names, size_t n,
+                                    char ***repo, size_t *nrepo,
+                                    char ***foreign)
+{
+	alpm_handle_t *h = sp_alpm_init(false);
+
+	*repo = xmalloc(n * sizeof **repo);
+	*foreign = xmalloc(n * sizeof **foreign);
+	*nrepo = 0;
+	size_t nf = 0;
+
+	for (size_t i = 0; i < n; i++) {
+		if (find_sync_pkg(h, names[i]))
+			(*repo)[(*nrepo)++] = names[i];
+		else
+			(*foreign)[nf++] = names[i];
+	}
+
+	sp_alpm_free(h);
+	return nf;
+}
+
 int cmd_install(int argc, char **argv)
 {
-	bool refresh = true;
+	bool refresh = true, use_aur = true;
 	alpm_list_t *targets = NULL;
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--no-refresh"))
 			refresh = false;
+		else if (!strcmp(argv[i], "--no-aur"))
+			use_aur = false;
 		else if (argv[i][0] == '-')
 			die("install: unknown option '%s'", argv[i]);
 		else
@@ -259,8 +291,82 @@ int cmd_install(int argc, char **argv)
 		die("install: need at least one package");
 
 	if (!is_root()) {
+		/* ── THE AUR FALLBACK ────────────────────────────────────────────
+		 *
+		 * It has to happen HERE, before escalate(), because makepkg refuses
+		 * to run as root and the escalated child is root for its whole life.
+		 * Falling back on the far side of pkexec is not possible: that
+		 * process cannot drop back to a user it would have to guess at.
+		 *
+		 * Without this, a package that exists only in the AUR reported "not
+		 * found in any repository" and stopped — which is what made
+		 * `synpkg install limine-mkinitcpio-hook` fail on limine machines
+		 * installed before the local repo carried it, and with it
+		 * syn-settings' "Make bootable".
+		 */
+		size_t n = alpm_list_count(targets);
+		char **names = xmalloc(n * sizeof *names);
+		size_t k = 0;
+		for (alpm_list_t *t = targets; t; t = t->next)
+			names[k++] = t->data;
 		alpm_list_free(targets);
-		return escalate("install", argc, argv);
+
+		char **repo = NULL, **foreign = NULL;
+		size_t nrepo = 0;
+		size_t nf = split_repo_vs_foreign(names, n, &repo, &nrepo, &foreign);
+
+		char **aur = NULL;
+		size_t naur = 0;
+		if (nf && use_aur)
+			naur = aur_filter_existing(foreign, nf, &aur);
+
+		/* Named, in no repository, and not in the AUR either. Reported here
+		 * rather than after an authentication prompt for a transaction that
+		 * cannot succeed. */
+		int rc = 0;
+		for (size_t i = 0; i < nf; i++) {
+			bool found = false;
+			for (size_t j = 0; j < naur && !found; j++)
+				found = !strcmp(foreign[i], aur[j]);
+			if (!found) {
+				warn("package '%s' was not found in any repository%s",
+				     foreign[i], use_aur ? " or in the AUR" : "");
+				rc = 1;
+			}
+		}
+
+		/* Repository packages first: they are fast, and an AUR build that
+		 * depends on one then finds it already present. */
+		if (nrepo && rc == 0) {
+			int sub_argc = (int)nrepo + (refresh ? 0 : 1);
+			char **sub = xmalloc((size_t)(sub_argc + 1) * sizeof *sub);
+			int s = 0;
+			if (!refresh)
+				sub[s++] = (char *)"--no-refresh";
+			for (size_t i = 0; i < nrepo; i++)
+				sub[s++] = repo[i];
+			sub[s] = NULL;
+			rc = escalate("install", s, sub);
+			free(sub);
+		}
+
+		if (naur && rc == 0) {
+			/* Never silent. An AUR build is arbitrary code from the
+			 * internet, and the user asked for what looked like an ordinary
+			 * install — so say where it is coming from before it starts. */
+			for (size_t i = 0; i < naur; i++)
+				info("%s is not in any repository; building it from the AUR",
+				     aur[i]);
+			rc = aur_build_install(aur, naur);
+		}
+
+		for (size_t i = 0; i < naur; i++)
+			free(aur[i]);
+		free(aur);
+		free(repo);
+		free(foreign);
+		free(names);
+		return rc;
 	}
 
 	alpm_handle_t *h = sp_alpm_init(true);
@@ -425,19 +531,80 @@ out:
 
 int cmd_upgrade(int argc, char **argv)
 {
-	bool downgrade = false, refresh = true;
+	bool downgrade = false, refresh = true, use_aur = true;
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--allow-downgrade"))
 			downgrade = true;
 		else if (!strcmp(argv[i], "--no-refresh"))
 			refresh = false;
+		else if (!strcmp(argv[i], "--no-aur"))
+			use_aur = false;
 		else
 			die("upgrade: unknown argument '%s'", argv[i]);
 	}
 
-	if (!is_root())
-		return escalate("upgrade", argc, argv);
+	if (!is_root()) {
+		/* ── THE OTHER HALF OF AN UPGRADE ────────────────────────────────
+		 *
+		 * alpm_sync_sysupgrade() compares the local database against the
+		 * SYNC databases, so a package no sync database contains is
+		 * structurally invisible to it — it is not skipped by choice, it can
+		 * never be a candidate. Every AUR package therefore sat at whatever
+		 * version it was built at, forever, while `upgrade` reported success
+		 * and "everything is up to date".
+		 *
+		 * Same root constraint as the install fallback: makepkg refuses to
+		 * run as root, so this runs in the UNPRIVILEGED pass, after the
+		 * escalated repository upgrade returns. Doing it inside the pkexec'd
+		 * child is not possible.
+		 *
+		 * Repository first, deliberately: an AUR package is built against
+		 * the libraries on the system, so building it before the system
+		 * upgrade would link it against versions being replaced minutes
+		 * later.
+		 */
+		int rc = escalate("upgrade", argc, argv);
+		if (rc != 0 || !use_aur)
+			return rc;
+
+		char **out = NULL;
+		size_t n = aur_outdated_names(&out);
+
+		/* Rebuild only what synpkg installed. "Foreign" also covers every
+		 * locally built SynapseOS package, and the names really do collide —
+		 * davinci-resolve is installed here from Blackmagic's own installer
+		 * and the AUR has one too. Rebuilding that from a PKGBUILD during a
+		 * routine upgrade would replace a hand-managed install with an
+		 * unrelated one. Anything unowned is NAMED rather than skipped in
+		 * silence, so an update nobody applies is still an update you saw. */
+		char **mine = xmalloc((n ? n : 1) * sizeof *mine);
+		size_t nmine = 0, nother = 0;
+		for (size_t i = 0; i < n; i++) {
+			if (aur_have_checkout(out[i])) {
+				mine[nmine++] = out[i];
+			} else {
+				nother++;
+				warn("%s has a newer version in the AUR, but synpkg did not "
+				     "install it — leaving it alone (synpkg aur install %s)",
+				     out[i], out[i]);
+			}
+		}
+
+		if (nmine) {
+			for (size_t i = 0; i < nmine; i++)
+				info("%s has a newer version in the AUR", mine[i]);
+			rc = aur_build_install(mine, nmine);
+		} else if (!nother && g_out == OUT_HUMAN) {
+			printf("%sAUR packages are up to date%s\n", C_OK(), C_RESET());
+		}
+
+		free(mine);
+		for (size_t i = 0; i < n; i++)
+			free(out[i]);
+		free(out);
+		return rc;
+	}
 
 	alpm_handle_t *h = sp_alpm_init(true);
 	int rc = 1;

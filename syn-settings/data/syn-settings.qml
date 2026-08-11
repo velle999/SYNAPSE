@@ -959,9 +959,15 @@ FloatingWindow {
                             label: "Make bootable"
                             onGo: {
                                 root.confirmOpen = false
+                                // "may take several minutes" is not padding: on
+                                // limine this can fall through to an AUR source
+                                // build, and the command runs with its output
+                                // discarded, so silence is the only feedback
+                                // there is.
                                 root.runWrite(["boot", root.confirmKernel, "--confirm"],
                                               "making " + root.confirmKernel
-                                              + " bootable — you may be asked to authenticate…")
+                                              + " bootable — you may be asked to authenticate;"
+                                              + " this can take several minutes…")
                             }
                         }
                     }
