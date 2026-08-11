@@ -3271,9 +3271,29 @@ FloatingWindow {
             height: 34
             color: root.cPanel
 
+            // Bounded on the RIGHT by the pin control, and clipped.
+            //
+            // These were two independent Rows in one parent — this one growing
+            // from the left, the pin control anchored to the right — with
+            // nothing arbitrating between them. Cascaded, this pane is about
+            // 120 px wide and cannot hold both, so the "velle" tab and the
+            // "Pinned ✓" chip drew through each other and came out as
+            // "vellPinned" with a tick over the new-tab plus.
+            //
+            // Same shape as the toolbar's address bar and the package row's
+            // Update button: whenever something is laid out from each edge,
+            // one of them has to yield explicitly or they meet in the middle.
             Row {
-                anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                // x + width, floored at 0, for the reason the address bar is:
+                // anchored to both edges this goes NEGATIVE when they cross —
+                // measured -20 on a pane that is not currently shown — and
+                // clip: true does nothing to a negative-width item, which is
+                // precisely when the clip is needed.
+                anchors.verticalCenter: parent.verticalCenter
+                x: 6
+                width: Math.max(0, pinRow.x - 6 - x)
                 spacing: 2
+                clip: true
 
                 Repeater {
                     model: pane.tabs
@@ -3356,6 +3376,7 @@ FloatingWindow {
             // cost no height at all here. New Folder went to the hamburger,
             // which already had it.
             Row {
+                id: pinRow
                 anchors { right: parent.right; rightMargin: 8
                           verticalCenter: parent.verticalCenter }
                 spacing: 6
@@ -3363,7 +3384,16 @@ FloatingWindow {
                 ToggleChip {
                     label: pane.tab && root.isPinned(pane.tab.path) ? "Pinned ✓" : "Pin"
                     on: pane.tab ? root.isPinned(pane.tab.path) : false
+                    // Gone when the pane cannot hold it beside the tabs. The
+                    // tabs are how you move around and cannot be given up; this
+                    // is a convenience, and the same folder can still be pinned
+                    // by right-clicking it ("Pin to Places" / "Remove from
+                    // Places"), so nothing becomes unreachable.
+                    //
+                    // Hidden means zero-width here, so the tabs Row anchored to
+                    // pinRow.left gets the whole strip back.
                     visible: pane.tab && pane.tab.view === "dir"
+                             && tabStrip.width >= 240
                     onToggled: {
                         pane.claim()
                         if (root.isPinned(pane.tab.path)) root.unpin(pane.tab.path)
