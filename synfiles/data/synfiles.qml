@@ -2246,17 +2246,34 @@ FloatingWindow {
             }
 
             // ── Empty-trash confirmation ────────────────────────────────────
+            //
+            // HEIGHT COMES FROM THE CONTENT. It was a hardcoded 130, and the
+            // content is measured in root.ui() — a font SCALE — so the box
+            // could only ever be right at one scale. Everywhere else the
+            // buttons hung through the bottom border, which on THIS dialog
+            // means "Empty permanently" half outside the box that is asking
+            // you to confirm a permanent delete.
+            //
+            // Bumping the constant is what was tried before; it fixes one
+            // machine and breaks the next. A constant cannot track a scale.
             Rectangle {
                 anchors.centerIn: parent
-                width: 360; height: 130
+                width: 360
+                height: emptyCol.implicitHeight + 32   // margins, top and bottom
                 radius: 6
                 color: root.cPanel
                 border { width: 1; color: root.cWarn }
                 visible: root.confirmEmpty
                 z: 120
 
+                // NOT anchors.fill: that would make the Column's height derive
+                // from the parent while the parent's height derives from the
+                // Column, which is a binding loop. Left/right/top only, so the
+                // height stays implicit and flows upward.
                 Column {
-                    anchors { fill: parent; margins: 16 }
+                    id: emptyCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 16 }
                     spacing: 10
 
                     Text {
@@ -2289,9 +2306,15 @@ FloatingWindow {
             }
 
             // ── New folder prompt ───────────────────────────────────────────
+            //
+            // Same fixed-height bug as the trash confirmation above: 96 px
+            // against roughly 107 px of ui()-scaled content, so "Enter to
+            // create, Escape to cancel" — the line that tells you how to
+            // work the dialog — sat through the border.
             Rectangle {
                 anchors.centerIn: parent
-                width: 320; height: 96
+                width: 320
+                height: newFolderCol.implicitHeight + 28
                 radius: 6
                 color: root.cPanel
                 border { width: 1; color: root.cAccent }
@@ -2299,7 +2322,9 @@ FloatingWindow {
                 z: 120
 
                 Column {
-                    anchors { fill: parent; margins: 14 }
+                    id: newFolderCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 14 }
                     spacing: 10
 
                     Text {
@@ -2335,7 +2360,8 @@ FloatingWindow {
             // ── New empty file prompt ───────────────────────────────────────
             Rectangle {
                 anchors.centerIn: parent
-                width: 320; height: 96
+                width: 320
+                height: newFileCol.implicitHeight + 28
                 radius: 6
                 color: root.cPanel
                 border { width: 1; color: root.cAccent }
@@ -2343,7 +2369,9 @@ FloatingWindow {
                 z: 120
 
                 Column {
-                    anchors { fill: parent; margins: 14 }
+                    id: newFileCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 14 }
                     spacing: 10
 
                     Text {

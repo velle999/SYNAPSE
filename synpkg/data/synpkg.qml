@@ -1324,7 +1324,11 @@ FloatingWindow {
                     Column {
                         anchors {
                             left: dot.right; leftMargin: 12
-                            right: actionBtn.left; rightMargin: 12
+                            // When the button is hidden the text takes its
+                            // place; anchoring to a hidden item would keep
+                            // reserving the 84 px that is the whole problem.
+                            right: actionBtn.visible ? actionBtn.left : parent.right
+                            rightMargin: 12
                             verticalCenter: parent.verticalCenter
                         }
                         spacing: 3
@@ -1338,6 +1342,16 @@ FloatingWindow {
                             // stays visible beside it, because the id is what
                             // the command line takes.
                             Text {
+                                // Capped and elided, not free-running. With no
+                                // width a Text renders at implicitWidth whatever
+                                // its parent is, so at cascade width on the
+                                // portrait monitor "binutils" drew straight
+                                // over the badge and the Update button — the
+                                // row read "binutits". The cap is what stops a
+                                // name escaping its column at ANY width; the
+                                // hidden button below is what gives it room.
+                                width: Math.min(implicitWidth, parent.width)
+                                elide: Text.ElideRight
                                 text: pkgRow.modelData.title !== ""
                                       ? pkgRow.modelData.title : pkgRow.modelData.name
                                 color: root.cText
@@ -1396,7 +1410,22 @@ FloatingWindow {
                         width: 84; height: 26; radius: 4
                         // A SynapseOS component is not installable from here —
                         // syn-update owns that, and it needs a terminal.
+                        //
+                        // AND it goes away when the row is too narrow to hold
+                        // it. Cascaded onto the portrait monitor (Super+Shift+Y)
+                        // this list is about 165 px wide: the button plus its
+                        // margins take 104 of that, leaving ~34 px for name,
+                        // badge and version — so every row collapsed into
+                        // itself and the versions read "2.…".
+                        //
+                        // That size is INTENTIONAL, not a window too small to
+                        // use, so the row has to give something up, and a
+                        // per-row button is the right thing to lose: "Upgrade
+                        // all" is still there, and a wider window brings it
+                        // back. 250 = the 104 it costs plus enough left over
+                        // for a package name and a version.
                         visible: pkgRow.modelData.extra !== "component"
+                                 && pkgRow.width >= 250
                         color: btnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
                         border { width: 1; color: root.cAccent }
                         opacity: root.busy === "" || root.busy === pkgRow.modelData.name ? 1 : 0.4
