@@ -1308,6 +1308,26 @@ static bool is_volume_key(xkb_keysym_t sym)
            sym == XKB_KEY_XF86AudioMute;
 }
 
+/* Print, for the same reason as the volume keys and then one more.
+ *
+ * The modal panels absorb every keystroke — aimodel_key ignores its `mods`
+ * argument entirely and returns 1 on the way out of its switch — so with a
+ * panel open the screenshot binds never ran. That makes a panel the one thing
+ * on this desktop that CANNOT be photographed, which is exactly backwards: a
+ * menu is where you most want a screenshot, because reporting a layout bug in
+ * one is otherwise a description rather than a picture. velle asked for this
+ * after hitting precisely that trying to show me the AI panel.
+ *
+ * Safe ahead of the panels in a way a letter key would not be: Print is not a
+ * text character, so it cannot be swallowed from a search box, and no panel
+ * binds it. Dispatched with the REAL modifiers so shift+print (region) and
+ * ctrl+print (full) keep working, not just bare Print.
+ */
+static bool is_screenshot_key(xkb_keysym_t sym)
+{
+    return sym == XKB_KEY_Print || sym == XKB_KEY_3270_PrintScreen;
+}
+
 /* Run the first bind whose (mods, sym) matches. */
 static bool bind_dispatch(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
 {
@@ -1445,6 +1465,15 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
         for (int i = 0; i < nsyms; i++)
             if (is_volume_key(syms[i]) && bind_dispatch(s, syms[i], 0))
+                return;
+
+        /* Screenshots, ahead of the modal panels, so that an open menu can be
+         * captured instead of eating the key. Real modifiers, not 0: the
+         * region and full-screen variants are shift+print and ctrl+print. */
+        uint32_t shot_mods = modifiers & (WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT |
+                                          WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT);
+        for (int i = 0; i < nsyms; i++)
+            if (is_screenshot_key(syms[i]) && bind_dispatch(s, syms[i], shot_mods))
                 return;
     }
 

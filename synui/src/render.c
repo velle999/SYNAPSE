@@ -3442,12 +3442,35 @@ static void aimodel_count_str(long long n, char *out, size_t len)
  * most worth knowing, and hunting for the row you started it on to see how
  * far it got would be a worse panel than the one that had no downloads.
  */
+/* The download block's geometry, named — because the block is drawn HERE and
+ * the body that must stay clear of it is measured 90 lines away, and two bare
+ * numbers in two functions are what let the footer creep into the download in
+ * the first place.
+ */
+#define AIMODEL_DL_FIRST_LINE   104  /* first baseline, above the pane bottom */
+#define AIMODEL_DL_ASCENT        10  /* its ink reaches this far above that   */
+#define AIMODEL_FOOTER_DROP      22  /* footer baseline, below body_bottom    */
+#define AIMODEL_FOOTER_DESCENT    3
+#define AIMODEL_DL_GAP            4  /* air between the two                   */
+
+/* What the body must give up while a download is on screen. */
+#define AIMODEL_DL_RESERVE      144
+
+/* And the reason it is 144, checked by the compiler rather than by eye. The
+ * previous value was 132, which fails this: the footer reached ph-107 while
+ * the download started at ph-114. Move either number and the BUILD breaks,
+ * instead of the panel. */
+_Static_assert(AIMODEL_DL_RESERVE - AIMODEL_FOOTER_DROP - AIMODEL_FOOTER_DESCENT
+                   - AIMODEL_DL_GAP
+               >= AIMODEL_DL_FIRST_LINE + AIMODEL_DL_ASCENT,
+               "AI panel: the footer would draw into the download block");
+
 static void aimodel_render_dl(cairo_t *cr, syn_aimodel_t *am,
                               int x, int w, int ph)
 {
     if (am->dl.state == AIMODEL_DL_IDLE) return;
 
-    int by = ph - 104;
+    int by = ph - AIMODEL_DL_FIRST_LINE;
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_TITLE, 1.0);
     cairo_move_to(cr, x, by);
@@ -3529,9 +3552,24 @@ static void aimodel_render_pane(cairo_t *cr, syn_server_t *s,
                                                       : NULL;
 
     /* The pane's body stops short of the progress block when one is drawn, so
-     * the quantisation list and the download never overlap. */
+     * the quantisation list and the download never overlap.
+     *
+     * 132 was SIX PIXELS TOO FEW and the footer ran into the download's first
+     * line. The arithmetic, since two constants have to agree across two
+     * functions and nothing else records why:
+     *
+     *   aimodel_render_dl draws its first line at ph-104 in a 12px font, so
+     *   its topmost ink is about ph-114.
+     *   The footer sits at body_bottom+22 in a 12px font, so its lowest ink
+     *   is about body_bottom+24.
+     *
+     * With body_bottom = ph-132 the footer reached ph-108 and the download
+     * started at ph-114 — a 6px collision, which is what velle saw as the
+     * status writing over the title. body_bottom <= ph-142 clears it;
+     * AIMODEL_DL_RESERVE is that with a little air.
+     */
     int dl_live = (am->dl.state != AIMODEL_DL_IDLE);
-    int body_bottom = ph - (dl_live ? 132 : 72);
+    int body_bottom = ph - (dl_live ? AIMODEL_DL_RESERVE : 72);
 
     if (!c) {
         if (am->count == 0) {
