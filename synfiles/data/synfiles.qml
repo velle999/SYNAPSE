@@ -1377,8 +1377,13 @@ FloatingWindow {
                 ToolButton {
                     id: viewBtn
                     glyph: "▤"
-                    label: "View"
-                    hint: ""
+                    // The word costs about 50 px of a toolbar that has none to
+                    // spare when cascaded. It goes, and the hint takes over
+                    // saying what the glyph means — which is why the hint is
+                    // filled in here rather than left empty as it was when the
+                    // label was always present.
+                    label: toolBar.width >= 520 ? "View" : ""
+                    hint: toolBar.width >= 520 ? "" : "View options"
                     active: root.viewMenuOpen
                     onActivated: root.viewMenuOpen = !root.viewMenuOpen
                 }
@@ -1386,11 +1391,19 @@ FloatingWindow {
 
             Rectangle {
                 id: addressBar
-                anchors {
-                    left: navGroup.right; leftMargin: 6
-                    right: toolActions.left; rightMargin: 8
-                    verticalCenter: parent.verticalCenter
-                }
+                // x and width, NOT left/right anchors.
+                //
+                // Anchored between two groups, this went to a NEGATIVE width
+                // the moment they met — and clip: true on a negative-width
+                // Rectangle does not clip, so everything inside was free to
+                // paint across the whole toolbar. That is the failure mode the
+                // clip was added to prevent, and it was the one case where clip
+                // could not help. Floored at 0 the clip always applies: the bar
+                // shrinks to nothing and takes its contents with it, instead of
+                // spilling them over the buttons.
+                anchors.verticalCenter: parent.verticalCenter
+                x: navGroup.x + navGroup.width + 6
+                width: Math.max(0, toolActions.x - 8 - x)
                 height: 28
                 radius: 4
                 color: root.cBg
@@ -1514,9 +1527,24 @@ FloatingWindow {
                 ToggleChip {
                     // Named, not just "Undo": a recovery control that does not
                     // say what it reverses is one nobody dares press.
+                    //
+                    // But the name is a FILENAME, and this chip had no width
+                    // limit — so "↶ Move to Trash of synapse-20260811-121046.png"
+                    // made this Row 474 px wide inside a 347 px window. Anchored
+                    // right, that put its left edge at -134, which dragged the
+                    // address bar's right anchor NEGATIVE, and a Rectangle with
+                    // negative width does not clip — so its breadcrumbs painted
+                    // straight across the toolbar and over the View button. One
+                    // long undo label took the whole bar apart.
+                    //
+                    // Capped at a third of the toolbar, and dropped entirely
+                    // when the bar is tight: navigation and the address are
+                    // what a file manager cannot do without, and Ctrl+Z still
+                    // undoes with no chip on screen.
                     label: "↶ " + root.undoLabel
+                    maxWidth: Math.max(90, toolBar.width * 0.33)
                     on: false
-                    visible: root.undoLabel !== ""
+                    visible: root.undoLabel !== "" && toolBar.width >= 520
                     anchors.verticalCenter: parent.verticalCenter
                     onToggled: root.doUndo()
                 }
@@ -4841,7 +4869,17 @@ FloatingWindow {
         Text {
             id: tbGlyph
             anchors.verticalCenter: parent.verticalCenter
-            x: tb.label === "" ? (tb.width - implicitWidth) / 2 : 9
+            // 30, not tb.width — and they are the same number, because 30 is
+            // exactly what tb.width evaluates to when the label is empty.
+            //
+            // Reading tb.width here closes a cycle: tb.width -> tbLabel.x ->
+            // tbGlyph.x -> tb.width. It lay dormant for as long as every
+            // ToolButton's label was a constant, since only one branch of each
+            // ternary was ever taken. Giving the View button a label that
+            // switches to "" on a narrow toolbar made both branches live and
+            // Qt started reporting "Binding loop detected for property width",
+            // leaving the button unsized. The constant breaks it for good.
+            x: tb.label === "" ? (30 - implicitWidth) / 2 : 9
             text: tb.glyph
             visible: !tb.splitIcon
             color: tb.active ? root.cAccent : root.cText
@@ -4916,9 +4954,16 @@ FloatingWindow {
         id: chip
         property string label: ""
         property bool on: false
+        // 0 = size to the label, which is right for a chip whose text is a
+        // fixed word ("Cancel"). Set it wherever the label is DATA — the undo
+        // chip's is a filename, and an unbounded chip carrying a filename is
+        // what blew the toolbar apart. See the note on the undo chip.
+        property real maxWidth: 0
         signal toggled()
 
-        width: chipText.implicitWidth + 20
+        width: chip.maxWidth > 0
+               ? Math.min(chipText.implicitWidth + 20, chip.maxWidth)
+               : chipText.implicitWidth + 20
         height: 26
         radius: 3
         color: chip.on ? root.wash(0.20)
@@ -4928,6 +4973,10 @@ FloatingWindow {
         Text {
             id: chipText
             anchors.centerIn: parent
+            // implicitWidth is the UNCONSTRAINED width, so it does not change
+            // when this width is set — no loop with chip.width above.
+            width: Math.min(implicitWidth, chip.width - 20)
+            elide: Text.ElideRight
             text: chip.label
             color: chip.on ? root.cAccent : root.cDim
             font { family: root.uiFont; pixelSize: root.ui(11) }
