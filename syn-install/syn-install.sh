@@ -3699,7 +3699,20 @@ if [ "$ENCRYPT" = "yes" ]; then
 fi
 
 echo "  Generating initramfs..."
-arch-chroot /mnt mkinitcpio -P 2>&1 | tail -5 \
+# /usr/bin/mkinitcpio by ABSOLUTE PATH, not `mkinitcpio`.
+#
+# limine-mkinitcpio-hook installs a wrapper at /usr/local/bin/mkinitcpio, which
+# comes FIRST on the default PATH, and that wrapper ends in an interactive
+# prompt when it is passed -P:
+#
+#     read -rp "==> Would you like to run 'limine-mkinitcpio' now? [Y/n]: "
+#
+# It is installed by pacstrap far above, so by the time this line runs the
+# wrapper is already inside /mnt. Called by name this would block the installer
+# forever on a question nobody is there to answer — or, worse, consume a
+# keystroke intended for a later prompt, which is a failure this installer has
+# already had once with pacstrap. The absolute path takes the real one.
+arch-chroot /mnt /usr/bin/mkinitcpio -P 2>&1 | tail -5 \
     || die "mkinitcpio failed — the installed system would not boot"
 [ -s /mnt/boot/initramfs-linux.img ] \
     || die "initramfs missing after mkinitcpio — the installed system would not boot"
@@ -3760,6 +3773,43 @@ EOF
         || die "grub-mkconfig failed"
 
     [ -f /mnt/boot/grub/grub.cfg ] || die "grub.cfg missing after install"
+
+    # ── Make FUTURE kernels bootable ──────────────────────
+    #
+    # grub-mkconfig above runs ONCE, here. Arch ships no hook that runs it
+    # again, so installing linux-lts next month gets an initramfs from
+    # mkinitcpio's hook and no menu entry from anything — a complete, correct,
+    # unbootable kernel that pacman reports as installed.
+    #
+    # grub-mkconfig is the right tool for this and needs no arguments: its
+    # 10_linux script enumerates every kernel in /boot by itself. So the hook is
+    # simply "run the same command the installer ran".
+    #
+    # NEEDED, not Exec-on-every-transaction: the trigger is narrow on purpose.
+    # A pacman hook that regenerates the boot menu on every package would run
+    # grub-mkconfig hundreds of times a year for no reason, and os-prober makes
+    # it slow.
+    mkdir -p /mnt/etc/pacman.d/hooks
+    cat > /mnt/etc/pacman.d/hooks/95-grub-mkconfig.hook << 'EOF'
+# Written by syn-install.
+#
+# Arch ships nothing that regenerates grub.cfg when a kernel is added or
+# removed, so without this a second kernel is installed, gets an initramfs, and
+# never appears in the boot menu. Triggers on the kernel module trees rather
+# than on package names so it covers every kernel, including ones this OS does
+# not ship a name for.
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Target = usr/lib/modules/*/vmlinuz
+
+[Action]
+Description = Updating the GRUB boot menu...
+When = PostTransaction
+Exec = /usr/bin/grub-mkconfig -o /boot/grub/grub.cfg
+EOF
 
 elif [ "$BOOTLOADER" = "systemd-boot" ]; then
     # ── systemd-boot ──────────────────────────────────────
@@ -3856,6 +3906,53 @@ EOF
     _miss="$(esp_entry_missing_file /mnt/boot)" \
         && die "a boot entry names a file that is not on the ESP — $_miss"
 
+    # ── Make FUTURE kernels bootable ──────────────────────
+    #
+    # synapseos.conf above names /vmlinuz-linux and nothing else, so a kernel
+    # installed later gets an initramfs from mkinitcpio's hook and no entry
+    # from anything. systemd-boot has no config generator by design — it boots
+    # what it finds on the ESP — but systemd DOES ship kernel-install for
+    # exactly this, and Arch's mkinitcpio ships the 50-mkinitcpio.install
+    # plugin it needs. So the entry writing is delegated, not reimplemented.
+    #
+    # kernel-install reads the command line from /etc/kernel/cmdline. Written
+    # here from the same facts as synapseos.conf rather than left to fall back
+    # to /proc/cmdline, which during an install is the live ISO's command line
+    # — on an encrypted install that is the difference between booting and a
+    # rescue shell.
+    mkdir -p /mnt/etc/kernel
+    printf '%s rw %s\n' "$SDB_ROOT" "$GPU_KERNEL_PARAMS" > /mnt/etc/kernel/cmdline
+
+    # THE STOCK KERNEL IS DELIBERATELY SKIPPED. synapseos.conf already boots
+    # it and loader.conf names that file as the default, so letting
+    # kernel-install handle it too would add a second menu entry for the same
+    # kernel AND a second copy of vmlinuz+initramfs on the ESP — around 150 MB
+    # on a partition sized at 1 GiB. This hook exists for the kernels
+    # synapseos.conf does not cover, which is all the others.
+    mkdir -p /mnt/etc/pacman.d/hooks
+    cat > /mnt/etc/pacman.d/hooks/95-systemd-boot-entries.hook << 'EOF'
+# Written by syn-install.
+#
+# systemd-boot has no config generator, so nothing would give a kernel
+# installed after the OS a boot entry. kernel-install is systemd's own tool for
+# this and mkinitcpio ships the plugin it needs.
+#
+# The stock `linux` kernel is skipped: syn-install wrote synapseos.conf for it
+# and loader.conf makes that the default, so generating a second entry would
+# duplicate both the menu item and the ~150 MB of kernel+initramfs on the ESP.
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/lib/modules/*/pkgbase
+
+[Action]
+Description = Adding boot entries for newly installed kernels...
+When = PostTransaction
+NeedsTargets
+Exec = /bin/sh -c 'while read -r t; do rel=${t#usr/lib/modules/}; rel=${rel%/pkgbase}; [ -f "/$t" ] || continue; [ "$(cat "/$t")" = linux ] && continue; [ -f "/usr/lib/modules/$rel/vmlinuz" ] || continue; /usr/bin/kernel-install add "$rel" "/usr/lib/modules/$rel/vmlinuz" || true; done'
+EOF
+
 else
     # ── limine ────────────────────────────────────────────
     #
@@ -3909,6 +4006,48 @@ comment: machine-id=$(cat /mnt/etc/machine-id 2>/dev/null)
     kernel_cmdline: $LIM_ROOT rw $GPU_KERNEL_PARAMS
     module_path: boot():/initramfs-linux.img
 EOF
+
+    # ── Make FUTURE kernels bootable ──────────────────────
+    #
+    # The entry above covers the kernel this install ships and nothing else.
+    # Install linux-lts later and mkinitcpio's pacman hook builds its initramfs
+    # — so /boot fills with a complete, correct, entirely unbootable kernel,
+    # and pacman reports success. GRUB regenerates grub.cfg and systemd-boot
+    # has kernel-install; limine has no generator in the base system at all.
+    #
+    # limine-mkinitcpio-hook is that generator, from the same upstream as the
+    # limine-snapper-sync installed alongside it. It replaces Arch's
+    # 90-mkinitcpio-install.hook from /etc (which shadows the one in
+    # /usr/share/libalpm/hooks) with one that writes the limine entry too.
+    #
+    # /etc/default/limine is written HERE, from the same facts as the entry
+    # above, rather than left for the tool to guess. Unset, it falls back to
+    # /etc/kernel/cmdline or /proc/cmdline — and /proc/cmdline during an install
+    # is the ISO's command line, which would give every future kernel the live
+    # medium's root instead of this machine's. On an encrypted install that is
+    # the difference between booting and a rescue shell.
+    cat > /mnt/etc/default/limine << EOF
+# Written by syn-install. See /etc/limine-entry-tool.conf for every option.
+#
+# The kernel command line for entries limine-entry-tool generates. It is the
+# same one syn-install wrote into the SynapseOS entry in limine.conf, taken
+# from this machine's own root device rather than from /proc/cmdline — which
+# at install time belongs to the live ISO.
+KERNEL_CMDLINE[default]="$LIM_ROOT rw $GPU_KERNEL_PARAMS"
+
+# Target the entry syn-install wrote, by machine-id. limine.conf already
+# carries a matching "comment: machine-id=" line, which is also what
+# limine-snapper-sync uses to find where to hang snapshots.
+ESP_PATH="/boot"
+EOF
+
+    # Not fatal. A machine that boots the kernel it shipped with is a working
+    # install; what it loses is the ability to add a second one later without
+    # editing limine.conf by hand, and syn-settings' Kernel pane says so
+    # plainly when the generator is absent.
+    arch-chroot /mnt pacman -S --noconfirm --needed limine-mkinitcpio-hook \
+        >/dev/null 2>&1 \
+        || warn "limine-mkinitcpio-hook not installed — a kernel installed later will NOT get a boot entry"
 
     # limine does not register itself with the firmware; without this the
     # machine falls back to the removable-media path and may not boot at all on

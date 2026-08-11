@@ -1,0 +1,130 @@
+# Vendored from the AUR (limine-mkinitcpio-hook), pinned at the tag below.
+#
+# WHY THIS IS IN-TREE: limine ships no way to turn an installed kernel into a
+# boot entry. Arch's mkinitcpio hook builds the initramfs and nothing writes
+# limine.conf, so `pacman -S linux-lts` produces a kernel that is complete,
+# correct and UNBOOTABLE — and every surface says it worked. This package is
+# the generator that closes that, and it is in no official repo. Same reasoning
+# as limine-snapper-sync, which is the same upstream project by the same author
+# and already names this one in its own optdepends.
+#
+# It is what makes syn-settings' "Make bootable" mean anything on a limine
+# install; GRUB has grub-mkconfig and systemd-boot has kernel-install, both in
+# the base system, and limine had nothing.
+#
+# WHAT IT COSTS: another GraalVM native-image build — a ~300 MB GraalVM
+# tarball, `gradle` and its own JDK, and gradle fetching plugins and Java deps
+# FROM THE NETWORK at build time. See limine-snapper-sync/PKGBUILD; everything
+# said there about slow builds and network failures applies here too. gradle is
+# already in archiso/build.sh's TOOL_PKG preflight for that package, so this one
+# adds no new host requirement.
+#
+# LICENCE: native-image statically links SubstrateVM and the JDK code the
+# program touches into the produced binary, so GraalVM CE material ships inside
+# it. GraalVM CE is GPL-2.0-WITH-Classpath-exception-2.0 and the Classpath
+# Exception is exactly what stops a linked work inheriting the GPL, so shipping
+# under upstream's GPL-3.0 is fine. Unlike the AUR original, this installs
+# LICENSE — GPL-3 section 4 does not allow redistributing the binary without
+# it, and that was the bug found in limine-snapper-sync's packaging.
+#
+# ── TWO THINGS IT SHADOWS, both deliberate upstream, both worth knowing ──
+#
+# 1. /etc/pacman.d/hooks/90-mkinitcpio-install.hook OVERRIDES Arch's
+#    /usr/share/libalpm/hooks/90-mkinitcpio-install.hook. Same basename, and
+#    /etc wins — the same shadowing rule that bites systemd units on this OS.
+#    That is the mechanism: it replaces the stock hook with one that builds the
+#    initramfs AND writes the limine entry, so future kernels need no button.
+#
+# 2. /usr/local/bin/mkinitcpio SHADOWS /usr/bin/mkinitcpio on the default PATH,
+#    and the wrapper ends in an INTERACTIVE `read -rp` when it sees -P or -p:
+#
+#        read -rp "==> Would you like to run 'limine-mkinitcpio' now? [Y/n]: "
+#
+#    A script that runs plain `mkinitcpio -P` therefore BLOCKS on a prompt, or
+#    worse consumes a keystroke meant for something else — this installer has
+#    already been bitten once by a pacstrap prompt answering itself from
+#    typeahead. Anything non-interactive must call /usr/bin/mkinitcpio by
+#    absolute path, or redirect stdin from /dev/null. syn-install does the
+#    former; if you add a caller, do the same.
+
+# Maintainer: Zesko
+_pkgname="limine-entry-tool"
+pkgname="limine-mkinitcpio-hook"
+_pkgver=1.37.1
+_extver=""
+pkgver="${_pkgver}${_extver}"
+pkgrel=1
+pkgdesc="Install kernels for the Limine bootloader."
+arch=('x86_64' 'aarch64')
+url="https://gitlab.com/Zesko/limine-entry-tool"
+source=("${_pkgname}::git+${url}.git#tag=${pkgver}")
+source_x86_64=("https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.1.3/graalvm-community-jdk-25i1-25.0.3_linux-x64_bin.tar.gz")
+source_aarch64=("https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.1.3/graalvm-community-jdk-25i1-25.0.3_linux-aarch64_bin.tar.gz")
+license=("GPL3")
+provides=('limine-entry-tool')
+options=(!debug !strip)
+_graalvm_version=graalvm_ce_jdk25
+depends=(
+	'bash'
+	'grep'
+	'tar'
+	'limine'
+	'mkinitcpio'
+	'efibootmgr')
+optdepends=(
+	'kernel-modules-hook: Safely keeps kernel on upgrade failure'
+	'sbctl: Signs UEFI boot files for Secure Boot when enabled'
+	'journalctl-desktop-notification: Sends desktop notifications when errors occur'
+)
+makedepends=('git' 'gradle')
+backup=(etc/limine-entry-tool.conf)
+conflicts=('limine-entry-tool')
+sha256sums=('e0a1d5800ef1b0a79eee935d1a295d4b929a713686e8bb8340484d402deb5621')
+sha256sums_x86_64=('e9cd1637be853e105f8b09125b4b19fbce385696465d782cbca8bb80e1df8f0d')
+sha256sums_aarch64=('5e79978983439d28506ebef82254fe9f98995121208dc8be77c604f4ad5bc579')
+
+prepare() {
+	[[ -d "${_graalvm_version}" ]] && rm -rf "${_graalvm_version}"
+	mv graalvm-community-*/ "${_graalvm_version}"
+	if ! command -v "${_graalvm_version}"/bin/javac >/dev/null 2>&1; then
+		echo "Error: ${_graalvm_version}/bin/javac not found." >&2
+		return 1
+	fi
+}
+
+build() {
+	cd "$srcdir/${_pkgname}"
+	export GRAALVM_HOME="$srcdir/${_graalvm_version}"
+	export JAVA_HOME="${GRAALVM_HOME}"
+	export NATIVE_IMAGE_OPTIONS="-march=compatibility --future-defaults=all"
+	/usr/bin/gradle clean nativeCompile -Dorg.gradle.java.home="${JAVA_HOME}"
+}
+
+package() {
+	cd "$srcdir/${_pkgname}"
+	local src="install/arch-linux"
+
+	# directories
+	install -dm 755 \
+		"$pkgdir/usr/share/doc/limine-entry-tool" \
+		"$pkgdir/etc/boot/hooks/pre.d" \
+		"$pkgdir/etc/boot/hooks/post.d" \
+		"$pkgdir/usr/lib/limine"
+
+	# docs
+	install -Dm 644 README.md CHANGELOG.md -t "$pkgdir/usr/share/doc/limine-entry-tool/"
+
+	# The licence. Upstream is GPL-3.0 and carries LICENSE at the repository
+	# root; the AUR PKGBUILD installs README and CHANGELOG and not this, which
+	# is the wrong way round — see the note at the top.
+	install -Dm 644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+	# files
+	cp -a "$src/limine-entry-tool/etc" "$src/limine-entry-tool/usr" "$pkgdir/"
+	cp -a "$src/limine-mkinitcpio-hook/etc" "$src/limine-mkinitcpio-hook/usr" "$pkgdir/"
+	install -Dm 755 "build/native/nativeCompile/limine-entry-tool" "$pkgdir/usr/lib/limine/"
+
+	# limine hook symlinks
+	ln -sf /usr/bin/limine-reset-enroll "$pkgdir/etc/boot/hooks/pre.d/10-limine-reset-enroll"
+	ln -sf /usr/bin/limine-enroll-config "$pkgdir/etc/boot/hooks/post.d/90-limine-enroll-config"
+}

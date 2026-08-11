@@ -741,6 +741,44 @@ check "the xkb layout, not the keymap, reaches synuirc" "yes" \
 check "the keymap is no longer fed straight to xkb" "no" \
     "$(in_code 'SYNUI_XKB="$KEYMAP"')"
 
+# ── A SECOND KERNEL MUST BE BOOTABLE ON ALL THREE LOADERS ───────────────────
+#
+# Installing a kernel builds its initramfs from mkinitcpio's pacman hook and
+# nothing else happens. Without a per-loader generator wired in, `pacman -S
+# linux-lts` yields a complete, correct, UNBOOTABLE kernel while every surface
+# reports success — the trap syn-settings' Kernel pane could only describe.
+#
+# Each loader needs a different mechanism, so each is asserted separately. This
+# is structural (does the installer wire it?) rather than behavioural; only a
+# real install proves the entry appears.
+check "grub regenerates grub.cfg when a kernel changes" "yes" \
+    "$(in_code '95-grub-mkconfig.hook')"
+check "the grub hook runs grub-mkconfig" "yes" \
+    "$(in_code 'Exec = /usr/bin/grub-mkconfig -o /boot/grub/grub.cfg')"
+check "the grub hook triggers on kernel module trees" "yes" \
+    "$(in_code 'Target = usr/lib/modules/*/vmlinuz')"
+
+check "systemd-boot delegates new entries to kernel-install" "yes" \
+    "$(in_code '95-systemd-boot-entries.hook')"
+check "systemd-boot writes /etc/kernel/cmdline for it" "yes" \
+    "$(in_code '/mnt/etc/kernel/cmdline')"
+
+check "limine installs the entry generator" "yes" \
+    "$(in_code 'limine-mkinitcpio-hook')"
+check "limine gets an /etc/default/limine with a real cmdline" "yes" \
+    "$(in_code 'KERNEL_CMDLINE[default]=')"
+
+# THE SHIM. limine-mkinitcpio-hook puts a wrapper at /usr/local/bin/mkinitcpio
+# which comes first on PATH and ends in an interactive `read -rp` when passed
+# -P. pacstrap installs it long before the initramfs is generated, so calling
+# `mkinitcpio` by NAME would block the installer forever on a prompt nobody is
+# there to answer — or eat a keystroke meant for a later one, which this
+# installer has already suffered once via pacstrap typeahead.
+check "the initramfs run calls mkinitcpio by ABSOLUTE path" "yes" \
+    "$(in_code 'arch-chroot /mnt /usr/bin/mkinitcpio -P')"
+check "and never by bare name, which would hit the prompting shim" "no" \
+    "$(in_code 'arch-chroot /mnt mkinitcpio -P')"
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "$fails check(s) FAILED"

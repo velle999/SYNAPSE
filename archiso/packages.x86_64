@@ -228,6 +228,12 @@ grub-btrfs
 inotify-tools
 limine
 limine-snapper-sync
+# Writes limine boot entries for installed kernels. Without it a limine install
+# can add a second kernel and never boot it — mkinitcpio builds the initramfs
+# and nothing writes limine.conf. On the ISO so the local repo carries it: the
+# installer names it for limine installs, and a package syn-install asks for
+# that the repo does not hold fails the install at pacman.
+limine-mkinitcpio-hook
 zram-generator
 
 # nix — ONLY so `syn-install --config profile.nix` can evaluate a Nix install

@@ -63,7 +63,7 @@ LOCAL_REPO=/var/cache/synapseos
 COMPONENTS=(scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
             syn syn-model syn-install syn-update syn-firstboot
             nexus-chat tepris vibe samsung-m2020 syn-arsenal synpkg synfiles
-            syn-settings)
+            syn-settings limine-mkinitcpio-hook)
 
 # On the ISO but NOT updatable this way, with the reason. Reported rather than
 # skipped in silence: a component quietly frozen forever is exactly the bug
@@ -87,6 +87,20 @@ declare -A UNSUPPORTED=(
 # footgun handed out as an update.
 declare -A NEVER_ADD=(
     [syn-install]="the ISO's disk installer; an installed system is not meant to have it"
+    # It writes limine boot entries, and it is boot-critical on a limine
+    # machine — so it belongs in COMPONENTS, where it stays current.
+    #
+    # But it must never ARRIVE on its own. It depends on `limine`, so adding it
+    # would install a second bootloader on a GRUB box; worse, it ships
+    # /etc/pacman.d/hooks/90-mkinitcpio-install.hook, which SHADOWS Arch's own
+    # hook of that name, and a wrapper at /usr/local/bin/mkinitcpio that comes
+    # first on PATH and prompts interactively. On a machine that does not boot
+    # limine that is a broken initramfs pipeline delivered as an update.
+    #
+    # It reaches limine machines two ways instead: syn-install installs it
+    # during a limine install, and syn-settings' Kernel pane offers it when it
+    # finds limine with no entry generator.
+    [limine-mkinitcpio-hook]="writes limine boot entries; on any other bootloader it would override the mkinitcpio hook and pull in limine"
 )
 
 # ── output ───────────────────────────────────────────────────

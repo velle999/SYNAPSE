@@ -167,6 +167,23 @@ archiso/out/*.b2sum
 /chibi/*.onnx
 /chibi/*.onnx.json
 
+# The two GraalVM packages. Both clone their upstream into the package root and
+# unpack a ~300 MB GraalVM tarball beside it, so a single build leaves several
+# hundred MB and 700+ files in `git status` — the same problem chibi had, and
+# the reason a genuinely-untracked source file can go unnoticed. Only the
+# PKGBUILD is tracked for either; everything below is fetched or generated.
+#
+# limine-snapper-sync has been built in-tree since 2026-07-29 with none of this
+# ignored; the leavings were being cleaned by hand.
+/limine-snapper-sync/src/
+/limine-snapper-sync/limine-snapper-sync/
+/limine-snapper-sync/graalvm-*.tar.gz
+/limine-snapper-sync/*.pkg.tar.zst
+/limine-mkinitcpio-hook/src/
+/limine-mkinitcpio-hook/limine-entry-tool/
+/limine-mkinitcpio-hook/graalvm-*.tar.gz
+/limine-mkinitcpio-hook/*.pkg.tar.zst
+
 # Debug leavings from bugs that are already fixed. The xwayland-abort dir is
 # 365 MB of core dumps and strace logs from the SIGCHLD/wait4 abort (fixed);
 # it is forensics, not source, and must never enter a release tarball.

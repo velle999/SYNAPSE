@@ -242,6 +242,24 @@ PACKAGES=(
     # the code. See limine-snapper-sync/PKGBUILD for what it does and why the
     # ESP is sized the way it is.
     limine-snapper-sync
+    # Kernel boot entries for limine, from the SAME upstream project as
+    # limine-snapper-sync above — which already names it in its own optdepends.
+    # Vendored for the same reason: no official repo carries it.
+    #
+    # It is what makes a SECOND KERNEL BOOTABLE on a limine install. Arch's
+    # mkinitcpio hook builds the initramfs and nothing writes limine.conf, so
+    # without this `pacman -S linux-lts` yields a complete, correct, unbootable
+    # kernel while every surface reports success. GRUB has grub-mkconfig and
+    # systemd-boot has kernel-install, both in the base system; limine had
+    # nothing, which is why syn-settings' Kernel pane could only ever report
+    # the gap rather than close it.
+    #
+    # ANOTHER GraalVM native-image build, with everything that implies above —
+    # but it adds no new host requirement, since gradle is already in TOOL_PKG
+    # for limine-snapper-sync. Read limine-mkinitcpio-hook/PKGBUILD before
+    # touching anything that runs mkinitcpio: this package puts a wrapper at
+    # /usr/local/bin/mkinitcpio that PROMPTS interactively.
+    limine-mkinitcpio-hook
 )
 
 step "Preflight checks"
