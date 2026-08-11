@@ -228,6 +228,54 @@ FloatingWindow {
         writeProc.running = true
     }
 
+    // ── Changing boot configuration ─────────────────────────────────────────
+    //
+    // This is the one action in the app that can leave a machine that does not
+    // boot, so it is the one action that does not happen on a single click.
+    //
+    // The dialogue does NOT describe the change in its own words. It runs the
+    // real thing under --dry-run and displays what came back, so what you are
+    // asked to approve and what then runs are produced by the same code path
+    // and cannot drift apart. `syn-settings boot` refuses without --confirm
+    // regardless of what this QML does — the C binary is the boundary, and a
+    // confirmation that only lives in a GUI is one anything else can skip.
+    property bool confirmOpen: false
+    property string confirmKernel: ""
+    property var confirmPlan: ({})
+
+    Process {
+        id: planProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const plan = {}
+                for (const line of this.text.split("\n")) {
+                    const t = line.indexOf("\t")
+                    if (t > 0) plan[line.substring(0, t)] = line.substring(t + 1)
+                }
+                if (plan["command"]) {
+                    root.confirmPlan = plan
+                    root.confirmOpen = true
+                } else {
+                    root.status = "could not work out what to run"
+                }
+            }
+        }
+        // A refusal explains itself on stderr — no bootloader found, kernel not
+        // installed. Showing that beats an empty dialogue.
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text) root.status = this.text.split("\n")[0]
+        }
+    }
+
+    function askBootable(kernel) {
+        if (root.applying) return
+        root.confirmKernel = kernel
+        root.confirmPlan = ({})
+        root.status = "working out what this would do…"
+        planProc.command = [root.bin, "-n", "boot", kernel]
+        planProc.running = true
+    }
+
     function paneMeta(id) {
         for (const p of root.panes) if (p.id === id) return p
         return root.panes[0]
@@ -647,7 +695,7 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: ["unit", "mode", "pkg", "device"]
+                    visible: ["unit", "mode", "pkg", "device", "boot"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
@@ -679,6 +727,14 @@ FloatingWindow {
                         onGo: root.runWrite(["device", modelData, root.actionArg(root.selAction)],
                                             modelData + "ing " + root.actionArg(root.selAction) + "…")
                     }
+                }
+
+                // An installed kernel the bootloader has never heard of. Goes
+                // through the confirmation dialogue, never straight to a write.
+                SettingsButton {
+                    visible: root.actionVerb(root.selAction) === "boot"
+                    label: "Make bootable…"
+                    onGo: root.askBootable(root.actionArg(root.selAction))
                 }
 
                 // A kernel: install or remove, both through synpkg.
@@ -772,6 +828,144 @@ FloatingWindow {
                 text: root.bin + " --rec " + root.pane
                 color: root.cDim
                 font { family: root.uiFont; pixelSize: 10 }
+            }
+        }
+
+        // ── Confirm a boot-configuration change ─────────────────────────────
+        //
+        // Last in the file so it stacks above every other child without needing
+        // a z-order anyone can accidentally out-bid later.
+        Rectangle {
+            id: confirmVeil
+            anchors.fill: parent
+            visible: root.confirmOpen
+            color: Qt.rgba(0, 0, 0, 0.55)
+
+            // Swallows every click and key that would otherwise reach the table
+            // underneath. A modal you can click behind is not a modal, and the
+            // thing behind this one changes kernels.
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {}
+            }
+
+            Keys.onEscapePressed: root.confirmOpen = false
+            focus: root.confirmOpen
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 60, 560)
+                height: confirmCol.implicitHeight + 36
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.wash(0.30) }
+
+                Column {
+                    id: confirmCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 18 }
+                    spacing: 10
+
+                    Text {
+                        text: "Change boot configuration?"
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: 14; bold: true }
+                    }
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: "This makes " + root.confirmKernel + " bootable. It is the "
+                            + "only change in this app that can leave a machine that does "
+                            + "not start, so read what it will do first."
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: 11 }
+                    }
+
+                    Grid {
+                        columns: 2
+                        rowSpacing: 4
+                        columnSpacing: 10
+                        width: parent.width
+
+                        Text {
+                            text: "Bootloader"
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: 11 }
+                        }
+                        Text {
+                            width: confirmCol.width - 100
+                            elide: Text.ElideRight
+                            text: root.confirmPlan["loader"] || "-"
+                            color: root.cText
+                            font { family: root.uiFont; pixelSize: 11; bold: true }
+                        }
+
+                        Text {
+                            text: "Config"
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: 11 }
+                        }
+                        Text {
+                            width: confirmCol.width - 100
+                            elide: Text.ElideMiddle
+                            text: root.confirmPlan["config"] || "-"
+                            color: root.cText
+                            font { family: root.uiFont; pixelSize: 11 }
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: root.confirmPlan["why"] || ""
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: 11 }
+                    }
+
+                    // The command, verbatim. Whoever is about to authorise a
+                    // pkexec prompt is entitled to see exactly what it will run.
+                    Rectangle {
+                        width: parent.width
+                        height: cmdText.implicitHeight + 16
+                        radius: 4
+                        color: root.cBg
+                        border { width: 1; color: root.wash(0.20) }
+
+                        Text {
+                            id: cmdText
+                            anchors { fill: parent; margins: 8 }
+                            wrapMode: Text.WrapAnywhere
+                            text: root.confirmPlan["command"] || ""
+                            color: root.cText
+                            font { family: "monospace"; pixelSize: 11 }
+                        }
+                    }
+
+                    Item { width: 1; height: 2 }
+
+                    Row {
+                        spacing: 8
+                        layoutDirection: Qt.RightToLeft
+                        width: parent.width
+
+                        SettingsButton {
+                            label: "Cancel"
+                            onGo: root.confirmOpen = false
+                        }
+
+                        SettingsButton {
+                            label: "Make bootable"
+                            onGo: {
+                                root.confirmOpen = false
+                                root.runWrite(["boot", root.confirmKernel, "--confirm"],
+                                              "making " + root.confirmKernel
+                                              + " bootable — you may be asked to authenticate…")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

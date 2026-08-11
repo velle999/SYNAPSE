@@ -44,6 +44,10 @@ int run_capture_quiet(char *const argv[], char *out, size_t cap);
 /* Run argv for its exit status, with stdout and stderr discarded. */
 int run_quiet(char *const argv[]);
 
+/* run_quiet, except under --dry-run it prints the command and changes
+ * nothing. Every write in this app goes through here. */
+int run_or_show(char *const argv[]);
+
 /* Is `cmd` on PATH? */
 int have_cmd(const char *cmd);
 
@@ -59,6 +63,42 @@ int scrape_field(const char *text, const char *key, char *out, size_t cap);
 /* Collapse anything that would break TSV. Tabs and newlines become spaces,
  * because a value that contains one silently invents a column. */
 void tsv_clean(char *s);
+
+/* ── Bootloaders ────────────────────────────────────────────────────────────
+ *
+ * SynapseOS installs one of three, and each answers "can I boot this kernel?"
+ * somewhere different. See src/boot.c for why detection is by config file
+ * rather than by installed package, and why matching needs the kernel release
+ * and not just the image name.
+ */
+enum syn_bl { SYN_BL_NONE = 0, SYN_BL_LIMINE, SYN_BL_SYSTEMD, SYN_BL_GRUB };
+
+struct syn_boot {
+	enum syn_bl kind;
+	char esp[256];    /* where the ESP is mounted — NOT always /boot */
+	char conf[256];   /* limine.conf, grub.cfg, or the loader/entries dir */
+};
+
+/* Fill `out` with every bootloader that has a config actually present.
+ * Returns how many. Plural on purpose: a machine can carry more than one. */
+int syn_boot_detect(struct syn_boot *out, size_t max);
+
+const char *syn_boot_name(enum syn_bl kind);
+
+/* Would this bootloader boot the kernel from `pkg`? `release` may be "". */
+int syn_boot_has_entry(const struct syn_boot *bl, const char *pkg,
+                       const char *release);
+
+/* The kernel release a package owns, from /usr/lib/modules/<rel>/pkgbase. */
+int syn_kernel_release(const char *pkg, char *out, size_t cap);
+
+/* Is this one of the kernels this app manages? The list lives in kernel.c;
+ * pkg.c and boot.c both ask rather than keeping copies. */
+int syn_kernel_known(const char *pkg);
+
+/* Make a kernel bootable under the detected bootloader. Refuses without
+ * --confirm; see the escalation note at the top of src/boot.c. */
+int do_boot(int argc, char **argv);
 
 /* ── Panes ──────────────────────────────────────────────────────────────── */
 int pane_display(void);

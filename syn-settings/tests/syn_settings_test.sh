@@ -65,7 +65,7 @@ check_actions() {
     while IFS= read -r line; do
         a=$(awk -F'\t' -v c="$col" '{print $c}' <<<"$line")
         case "$a" in
-            -|set:*|toggle:*|unit:*|probe:*|mode:*|pkg:*|device:*) ;;
+            -|set:*|toggle:*|unit:*|probe:*|mode:*|pkg:*|device:*|boot:*) ;;
             *) bad "$pane: unknown action verb '$a'"; return ;;
         esac
         # A verb with an empty argument is the one that looks fine in a table
@@ -212,6 +212,174 @@ if [ -n "$real" ]; then
 else
     ok "no DRM connectors here; probe resolution not exercised"
 fi
+
+# ── Bootloaders ─────────────────────────────────────────────────────────────
+#
+# The reason these are fixture-driven rather than run against the real /boot:
+# SynapseOS installs three bootloaders and every machine this project is
+# developed on boots exactly one of them. The systemd-boot path shipped broken
+# — the loop that was supposed to read loader/entries stopped one index short,
+# and the "checked below" case was never written — and no amount of running it
+# here would have caught that, because there is no systemd-boot here to run it
+# against. SYN_SETTINGS_BOOT_ROOT exists so the suite can pose all three.
+bootfx=$(mktemp -d)
+trap 'rm -rf "$bootfx"' EXIT
+
+mkdir -p "$bootfx/limine/boot" \
+         "$bootfx/grub/boot/grub" \
+         "$bootfx/sdb/boot/loader/entries" \
+         "$bootfx/bls/boot/loader/entries" \
+         "$bootfx/multi/boot/grub" \
+         "$bootfx/none/boot"
+
+printf 'timeout: 5\n/+SynapseOS\n //SynapseOS\n kernel_path: boot():/vmlinuz-linux\n' \
+    > "$bootfx/limine/boot/limine.conf"
+printf 'menuentry "SynapseOS" {\n linux /vmlinuz-linux root=UUID=x\n}\n' \
+    > "$bootfx/grub/boot/grub/grub.cfg"
+printf 'title SynapseOS\nlinux /vmlinuz-linux\ninitrd /initramfs-linux.img\n' \
+    > "$bootfx/sdb/boot/loader/entries/synapseos.conf"
+printf 'timeout: 5\n' > "$bootfx/multi/boot/limine.conf"
+printf 'menuentry x {}\n' > "$bootfx/multi/boot/grub/grub.cfg"
+
+# The pure kernel-install layout. This entry names neither "vmlinuz" nor the
+# package — only the kernel RELEASE — so matching on the image filename cannot
+# find it at all. It is why the release is carried alongside.
+run_rel=$(cat /usr/lib/modules/*/pkgbase >/dev/null 2>&1 && \
+          for d in /usr/lib/modules/*/; do
+              [ -f "$d/pkgbase" ] && [ "$(cat "$d/pkgbase")" = linux ] && basename "$d"
+          done | head -1)
+if [ -n "${run_rel:-}" ]; then
+    printf 'title SynapseOS\nlinux /b153/%s/linux\ninitrd /b153/%s/initrd\n' \
+        "$run_rel" "$run_rel" > "$bootfx/bls/boot/loader/entries/b153-$run_rel.conf"
+fi
+
+boot_state() {
+    SYN_SETTINGS_BOOT_ROOT="$1" "$BIN" --rec kernel \
+        | awk -F'\t' '$1=="linux" {print $3}'
+}
+
+for fx in limine grub sdb; do
+    if [ "$(boot_state "$bootfx/$fx")" = "installed, bootable" ] ||
+       [ "$(boot_state "$bootfx/$fx")" = "running" ]; then
+        ok "boot: $fx entry naming vmlinuz-linux reads as bootable"
+    else
+        bad "boot: $fx did not see its own entry (got '$(boot_state "$bootfx/$fx")')"
+    fi
+done
+
+# systemd-boot with ONLY a Boot Loader Spec entry. Skipped rather than failed
+# where the linux package owns no module tree, since the fixture cannot then be
+# written — the test is that release matching works, not that a kernel is here.
+if [ -n "${run_rel:-}" ]; then
+    if [ "$(boot_state "$bootfx/bls")" = "installed, bootable" ] ||
+       [ "$(boot_state "$bootfx/bls")" = "running" ]; then
+        ok "boot: a BLS entry naming only the release reads as bootable"
+    else
+        bad "boot: BLS entry missed (got '$(boot_state "$bootfx/bls")')"
+    fi
+else
+    ok "boot: no linux module tree here; BLS release matching not exercised"
+fi
+
+# THE PREFIX TRAP. "vmlinuz-linux" is a prefix of "vmlinuz-linux-lts", so an
+# unanchored search reports the stock kernel bootable on the strength of an LTS
+# entry — the pane would say "bootable" about the one kernel that is not.
+printf 'menuentry "SynapseOS" {\n linux /vmlinuz-linux-lts root=UUID=x\n}\n' \
+    > "$bootfx/grub/boot/grub/grub.cfg"
+if [ "$(boot_state "$bootfx/grub")" = "installed, NO BOOT ENTRY" ]; then
+    ok "boot: an LTS-only entry does not make plain linux look bootable"
+else
+    bad "boot: prefix match leaked (got '$(boot_state "$bootfx/grub")')"
+fi
+
+# Nothing configured is an ANSWER, not a crash.
+rc=0; SYN_SETTINGS_BOOT_ROOT="$bootfx/none" "$BIN" --rec kernel >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+    ok "boot: a machine with no bootloader config still renders the pane"
+else
+    bad "boot: no-bootloader machine failed the pane (exit $rc)"
+fi
+
+# ── The confirmation gate ───────────────────────────────────────────────────
+#
+# The GUI shows a dialogue, but the binary is the boundary. A confirmation that
+# only exists in QML is one that anything else can skip, so it is enforced here
+# and tested here. Without --confirm nothing may run, and the exit must be 2
+# (refused) rather than 0 with a silent no-op.
+rc=0
+SYN_SETTINGS_BOOT_ROOT="$bootfx/grub" "$BIN" boot linux >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 2 ]; then
+    ok "boot: refuses to change anything without --confirm"
+else
+    bad "boot: ran without --confirm (exit $rc)"
+fi
+
+# And the refusal must SAY what it would have done, or the GUI has nothing to
+# put in the dialogue and the user has nothing to approve.
+#
+# Captured into a variable rather than piped into grep: this command exits 2 on
+# purpose, `set -o pipefail` is on, and a pipeline reports the FIRST non-zero
+# status — so `"$BIN" boot linux | grep -q x` returns 2 even when grep matched,
+# and the check fails for a reason that has nothing to do with the output.
+refusal=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/grub" "$BIN" boot linux 2>&1 || true)
+if grep -qF 'grub-mkconfig' <<<"$refusal"; then
+    ok "boot: the refusal names the command it would run"
+else
+    bad "boot: the refusal did not name the command"
+fi
+
+# Each bootloader gets ITS OWN mechanism. Getting this wrong means running
+# grub-mkconfig on a limine machine, which succeeds and changes nothing.
+if SYN_SETTINGS_BOOT_ROOT="$bootfx/grub" "$BIN" -n boot linux \
+     | grep -q '^command	pkexec grub-mkconfig -o '; then
+    ok "boot: grub gets grub-mkconfig"
+else
+    bad "boot: wrong mechanism for grub"
+fi
+if [ -n "${run_rel:-}" ]; then
+    if SYN_SETTINGS_BOOT_ROOT="$bootfx/sdb" "$BIN" -n boot linux \
+         | grep -q '^command	pkexec kernel-install add '; then
+        ok "boot: systemd-boot gets kernel-install"
+    else
+        bad "boot: wrong mechanism for systemd-boot"
+    fi
+fi
+if SYN_SETTINGS_BOOT_ROOT="$bootfx/limine" "$BIN" -n boot linux \
+     | grep -qE '^command	(pkexec limine-update|synpkg install limine-mkinitcpio-hook)'; then
+    ok "boot: limine gets limine-update or the hook that provides it"
+else
+    bad "boot: wrong mechanism for limine"
+fi
+
+# With several bootloaders configured, picking one for the user means picking
+# which config file to rewrite. Being wrong there is the failure this pane
+# exists to prevent, so it must refuse rather than guess.
+rc=0
+SYN_SETTINGS_BOOT_ROOT="$bootfx/multi" "$BIN" boot linux --confirm >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 2 ]; then
+    ok "boot: refuses to guess between two configured bootloaders"
+else
+    bad "boot: picked a bootloader on its own (exit $rc)"
+fi
+if SYN_SETTINGS_BOOT_ROOT="$bootfx/multi" "$BIN" -n boot linux --loader grub \
+     | grep -q '^loader	grub'; then
+    ok "boot: --loader resolves the ambiguity"
+else
+    bad "boot: --loader did not select the named bootloader"
+fi
+
+# boot is restricted to the kernels this pane manages, exactly as pkg is. A GUI
+# row must never become a way to run a boot-config generator against an
+# arbitrary name.
+for evil in "firefox" "base" "../../etc/passwd" "linux-lts-evil"; do
+    rc=0
+    SYN_SETTINGS_BOOT_ROOT="$bootfx/grub" "$BIN" boot "$evil" --confirm >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ]; then
+        ok "boot refused: $evil"
+    else
+        bad "boot accepted a name outside the kernel list: $evil (exit $rc)"
+    fi
+done
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"

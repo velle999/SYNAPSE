@@ -52,12 +52,18 @@ static void usage(void)
 "  modes <connector>         list the modes that output can take\n"
 "  mode <connector> <mode>   set one, e.g. DP-3 2560x1440@144 (wlr-randr)\n"
 "  pkg install|remove <k>    add or remove a kernel, through synpkg\n"
+"  boot <kernel> [--loader <name>] --confirm\n"
+"                            make an installed kernel BOOTABLE: grub-mkconfig,\n"
+"                            kernel-install, or limine-mkinitcpio-hook,\n"
+"                            whichever this machine's bootloader needs\n"
 "\n"
 "  -n, --dry-run     print what would be run, change nothing\n"
 "\n"
-"Every write is performed by a systemd tool that does its own polkit check.\n"
-"This binary is not setuid and grants no privilege of its own: if localectl\n"
-"would refuse you at a terminal, it refuses you here.\n"
+"Most writes are performed by a systemd tool that does its own polkit check;\n"
+"this binary is not setuid and ships no polkit policy of its own. `boot` is\n"
+"the exception in that it needs root outright, so it goes through pkexec —\n"
+"which, with no policy shipped, means it asks for admin authentication. It\n"
+"also refuses to do anything at all without --confirm.\n"
 "\n"
 "--rec prints TSV — a header line, then rows. `syn-settings --rec region |\n"
 "column -t -s$'\\t'` is meant to be a useful thing to type.\n"
@@ -136,6 +142,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "modes")) return do_modes(rest_argc, rest);
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
+	if (!strcmp(cmd, "boot"))  return do_boot(rest_argc, rest);
 
 	if (!strcmp(cmd, "--rec")) {
 		if (rest_argc < 1) { usage(); return 2; }

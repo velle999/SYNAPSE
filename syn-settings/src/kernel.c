@@ -46,52 +46,13 @@ static const struct kern kernels[] = {
 	{ "linux-rt-lts",    "real-time on the LTS base" },
 };
 
-/* Does the bootloader have an entry that would BOOT this kernel?
- *
- * This is the question the pane was missing, and its absence made the whole
- * thing a trap: installing linux-lts writes /boot/vmlinuz-linux-lts and its
- * initramfs — mkinitcpio has a pacman hook, so that part works — and then
- * NOTHING adds a boot entry for it. On this machine limine.conf names
- * vmlinuz-linux 55 times and no other kernel, and limine-snapper-sync only
- * generates snapshot entries, all of which point at the same kernel. GRUB is
- * installed too and Arch ships no hook that runs grub-mkconfig either.
- *
- * So a kernel could be installed, correct, and unbootable, and the pane would
- * have said "installed" as though the job were done. It says this instead.
- */
-static int has_boot_entry(const char *pkg)
+/* THE list. pkg.c used to keep a second copy as its install allowlist, which
+ * is two places to add a kernel and one place to forget — a pane offering a
+ * kernel the installer refuses, or worse the reverse. */
+int syn_kernel_known(const char *pkg)
 {
-	/* vmlinuz is named after the package: linux -> vmlinuz-linux,
-	 * linux-lts -> vmlinuz-linux-lts. */
-	char needle[128];
-	snprintf(needle, sizeof needle, "vmlinuz-%s", pkg);
-
-	static const char *confs[] = {
-		"/boot/limine.conf",
-		"/boot/grub/grub.cfg",
-		"/boot/loader/entries",   /* systemd-boot: a directory, checked below */
-	};
-
-	for (size_t i = 0; i < 2; i++) {
-		FILE *f = fopen(confs[i], "re");
-		if (!f) continue;
-		char line[4096];
-		while (fgets(line, sizeof line, f)) {
-			char *hit = strstr(line, needle);
-			if (!hit) continue;
-			/* "vmlinuz-linux" is a prefix of "vmlinuz-linux-lts", so a bare
-			 * strstr would report the stock kernel as bootable on the
-			 * strength of an LTS entry. The character after the match has to
-			 * end the name. */
-			char after = hit[strlen(needle)];
-			if (after == '\0' || after == '\n' || after == ' ' ||
-			    after == '\t' || after == '"' || after == '\'') {
-				fclose(f);
-				return 1;
-			}
-		}
-		fclose(f);
-	}
+	for (size_t i = 0; i < sizeof kernels / sizeof kernels[0]; i++)
+		if (!strcmp(pkg, kernels[i].pkg)) return 1;
 	return 0;
 }
 
@@ -125,39 +86,50 @@ int pane_kernel(void)
 	struct utsname u;
 	const char *running = uname(&u) == 0 ? u.release : "";
 
+	/* Which bootloader(s) this machine actually has configured. Detected once:
+	 * it cannot change between rows, and reading three files per kernel to
+	 * learn the same thing six times is wasteful in a pane that redraws. */
+	struct syn_boot loaders[6];
+	int nloaders = syn_boot_detect(loaders, sizeof loaders / sizeof loaders[0]);
+
+	/* Did any installed package turn out to own the release we booted? */
+	int running_is_owned = 0;
+
 	for (size_t i = 0; i < sizeof kernels / sizeof kernels[0]; i++) {
 		char ver[128] = "";
 		int have = installed_version(kernels[i].pkg, ver, sizeof ver);
 
-		/* Is THIS the kernel currently booted? pacman's version is
-		 * "7.1.6.arch1-1" and uname reports "7.1.6-arch1-1" — same build,
-		 * different punctuation — so a string compare says no every time.
-		 * Comparing the leading numeric release is what actually answers it.
+		/* The kernel release this package owns, from its module tree's
+		 * pkgbase — "7.1.7-arch1-1". This is the form uname reports and the
+		 * form systemd-boot's generated entries are named after, so it answers
+		 * both "is this running?" and "is there an entry?" exactly.
 		 *
-		 * A kernel package can also be installed and NOT running because the
-		 * machine has not rebooted since, which is a state worth naming: it is
-		 * the difference between "this is what you are on" and "this is what
-		 * you would be on after a reboot". */
-		int is_running = 0;
-		if (have && running[0]) {
-			/* utsname.release is 65 bytes, so b must be at least that. */
-			char a[128], b[128];
-			snprintf(a, sizeof a, "%s", ver);
-			snprintf(b, sizeof b, "%s", running);
-			for (char *p = a; *p; p++) if (*p == '.' || *p == '-') *p = ' ';
-			for (char *p = b; *p; p++) if (*p == '.' || *p == '-') *p = ' ';
-			int a1, a2, a3, b1, b2, b3;
-			if (sscanf(a, "%d %d %d", &a1, &a2, &a3) == 3 &&
-			    sscanf(b, "%d %d %d", &b1, &b2, &b3) == 3)
-				is_running = (a1 == b1 && a2 == b2 && a3 == b3);
-		}
+		 * It replaces comparing pacman's version numerically. pacman says
+		 * "7.1.7.arch1-1" where uname says "7.1.7-arch1-1", so a plain compare
+		 * never matched and the old code parsed three integers out of each —
+		 * which made 7.1.6.arch1-1 and 7.1.6.arch2-1 compare EQUAL, reporting a
+		 * different build as the one you booted.
+		 *
+		 * A kernel can be installed and NOT running because the machine has
+		 * not rebooted since — this box is in exactly that state — and that is
+		 * the difference between what you are on and what you would be on
+		 * after a reboot. */
+		char release[128] = "";
+		int have_rel = have && syn_kernel_release(kernels[i].pkg, release,
+		                                         sizeof release);
+		int is_running = have_rel && running[0] && !strcmp(release, running);
+		if (is_running) running_is_owned = 1;
 
 		char hdr[64];
 		snprintf(hdr, sizeof hdr, "%s-headers", kernels[i].pkg);
 		char hver[128] = "";
 		int have_hdr = installed_version(hdr, hver, sizeof hver);
 
-		int bootable = have ? has_boot_entry(kernels[i].pkg) : 0;
+		/* Bootable under ANY configured loader. On a machine with one — the
+		 * normal case — this is just that one's answer. */
+		int bootable = 0;
+		for (int b = 0; have && !bootable && b < nloaders; b++)
+			bootable = syn_boot_has_entry(&loaders[b], kernels[i].pkg, release);
 
 		/* "installed" alone was the lie. A kernel on disk that the
 		 * bootloader has never heard of is not a kernel you can switch to. */
@@ -176,17 +148,44 @@ int pane_kernel(void)
 		           ? "  ⚠ headers MISSING — DKMS cannot build for it"
 		           : "",
 		         have && !is_running && !bootable
-		           ? "  ⚠ no bootloader entry — installing a kernel does NOT "
-		             "add one, so you cannot boot this yet"
+		           ? "  ⚠ no bootloader entry yet — use “Make bootable” before "
+		             "you reboot expecting a choice"
 		           : "");
 
+		/* An installed kernel with no entry needs making bootable; anything
+		 * else offers install/remove. The running one offers nothing at all —
+		 * see below. */
 		char action[128];
-		snprintf(action, sizeof action, "pkg:%s", kernels[i].pkg);
+		if (have && !is_running && !bootable && nloaders > 0)
+			snprintf(action, sizeof action, "boot:%s", kernels[i].pkg);
+		else
+			snprintf(action, sizeof action, "pkg:%s", kernels[i].pkg);
 
 		rec_row("%s\t%s\t%s\t%s\t%s",
 		        kernels[i].pkg, have ? ver : "-", state, detail,
 		        is_running ? "-" : action);
 	}
+
+	/* You are running a kernel no installed package owns.
+	 *
+	 * The ordinary cause is benign and extremely common: a kernel upgrade
+	 * landed and the machine has not rebooted, so /usr/lib/modules holds the
+	 * NEW release while uname still reports the old one. It is worth saying
+	 * out loud anyway, because it is also the state in which `modprobe` cannot
+	 * find modules for the running kernel — the module tree it wants was
+	 * replaced — and that surfaces later as hardware that stops working with
+	 * nothing pointing back at the upgrade.
+	 *
+	 * It is equally the signature of a hand-built or removed kernel, which is
+	 * the case where "none of the rows above is what you booted" genuinely
+	 * changes what the rest of this pane means. */
+	if (running[0] && !running_is_owned)
+		rec_row("-\t%s\t⚠ running, unowned\tYou booted %s, and no installed "
+		        "kernel package owns that release — so none of the rows above "
+		        "is the kernel you are on. Usually this just means a kernel "
+		        "upgrade has not been rebooted into yet; until you do, modules "
+		        "for the running kernel are gone from /usr/lib/modules.\t-",
+		        running, running);
 
 	/* Removing the kernel you booted from is the one action here that can
 	 * leave a machine unbootable, so the running one carries no action at all
@@ -196,17 +195,44 @@ int pane_kernel(void)
 	        "booted from is how a machine stops booting. Reboot into another "
 	        "one first.\t-");
 
-	/* Said plainly, because the gap is real and a user who installs a second
-	 * kernel from this pane will otherwise reboot expecting a choice and not
-	 * get one. */
-	rec_row("-\t-\t-\tInstalling a kernel does NOT make it bootable. "
-	        "mkinitcpio builds its initramfs from a pacman hook, but nothing "
-	        "adds a bootloader entry — limine.conf and grub.cfg are not "
-	        "regenerated. Adding the entry is still a manual step.\t-");
+	/* What this machine boots with, named. The gap this pane used to describe
+	 * — install a kernel, get no boot entry — is real and is what "Make
+	 * bootable" now closes, so the standing text says which mechanism will run
+	 * rather than telling the user they are on their own. */
+	if (nloaders == 0) {
+		rec_row("-\t-\t-\tNo bootloader configuration was found, so whether a "
+		        "kernel is bootable cannot be answered here. Looked for "
+		        "limine.conf and loader/entries under /boot, /boot/efi and "
+		        "/efi, and /boot/grub/grub.cfg.\t-");
+	} else {
+		for (int b = 0; b < nloaders; b++) {
+			const char *how =
+				loaders[b].kind == SYN_BL_GRUB
+				  ? "“Make bootable” runs grub-mkconfig, which finds every "
+				    "installed kernel by itself"
+				: loaders[b].kind == SYN_BL_SYSTEMD
+				  ? "“Make bootable” runs kernel-install, which writes a Boot "
+				    "Loader Spec entry"
+				: have_cmd("limine-update")
+				  ? "“Make bootable” runs limine-update, which regenerates the "
+				    "kernel entries"
+				  : "limine has no entry generator installed — “Make bootable” "
+				    "installs limine-mkinitcpio-hook, which adds one plus a "
+				    "pacman hook so future kernels are handled automatically";
 
-	if (have_cmd("bootctl") || have_cmd("grub-mkconfig") || have_cmd("limine")) {
-		rec_row("-\t-\t-\tWhich kernel boots by DEFAULT is the bootloader's "
-		        "choice, not this pane's — pick it at the boot menu.\t-");
+			rec_row("-\t-\t-\tBootloader: %s (%s). %s.\t-",
+			        syn_boot_name(loaders[b].kind), loaders[b].conf, how);
+		}
+
+		if (nloaders > 1)
+			rec_row("-\t-\t-\t⚠ More than one bootloader is configured here. "
+			        "Which one the firmware actually starts cannot be read "
+			        "reliably, so a kernel counts as bootable if ANY of them "
+			        "can boot it.\t-");
+
+		rec_row("-\t-\t-\tWhich kernel boots by DEFAULT is still the "
+		        "bootloader's choice, not this pane's — pick it at the boot "
+		        "menu.\t-");
 	}
 
 	return 0;

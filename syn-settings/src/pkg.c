@@ -14,15 +14,6 @@
 
 #include <string.h>
 
-/* Only the kernels this app offers. A settings pane must not become a general
- * "install anything by name" endpoint: that is synpkg's job, it has a search
- * and a description for every result, and a package name arriving from a GUI
- * row is not a considered choice about software. */
-static const char *allowed[] = {
-	"linux", "linux-lts", "linux-zen", "linux-hardened",
-	"linux-rt", "linux-rt-lts",
-};
-
 int do_pkg(int argc, char **argv)
 {
 	if (argc < 2) {
@@ -36,10 +27,14 @@ int do_pkg(int argc, char **argv)
 		return 2;
 	}
 
-	int ok = 0;
-	for (size_t i = 0; i < sizeof allowed / sizeof allowed[0]; i++)
-		if (!strcmp(name, allowed[i])) { ok = 1; break; }
-	if (!ok) {
+	/* Only the kernels this app offers. A settings pane must not become a
+	 * general "install anything by name" endpoint: that is synpkg's job, it has
+	 * a search and a description for every result, and a package name arriving
+	 * from a GUI row is not a considered choice about software.
+	 *
+	 * The list lives in kernel.c, which is where the pane's own list is — two
+	 * copies is two places to add a kernel and one place to forget. */
+	if (!syn_kernel_known(name)) {
 		fprintf(stderr, "syn-settings: '%s' is not one of the kernels this "
 		                "pane manages — use synpkg for anything else\n", name);
 		return 2;

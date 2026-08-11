@@ -44,26 +44,6 @@ static int sane_value(const char *v)
 	return 1;
 }
 
-static int run_or_show(char *const argv[])
-{
-	if (g_dry_run) {
-		fputs("would run:", stdout);
-		for (int i = 0; argv[i]; i++) printf(" %s", argv[i]);
-		putchar('\n');
-		return 0;
-	}
-	int rc = run_quiet(argv);
-	if (rc == -1) {
-		fprintf(stderr, "syn-settings: could not run %s\n", argv[0]);
-		return 1;
-	}
-	if (rc != 0)
-		fprintf(stderr, "syn-settings: %s exited %d "
-		                "(authorisation refused, or the value was rejected)\n",
-		        argv[0], rc);
-	return rc;
-}
-
 int do_set(int argc, char **argv)
 {
 	if (argc < 2) return refuse("set needs a key and a value");

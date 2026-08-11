@@ -149,6 +149,30 @@ int run_quiet(char *const argv[])
 	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 }
 
+/* Run argv, or — under --dry-run — print what would have run and change
+ * nothing. Shared rather than duplicated: a second copy is how a dry run stops
+ * being dry for exactly one caller, which is the caller you find out about
+ * afterwards. */
+int run_or_show(char *const argv[])
+{
+	if (g_dry_run) {
+		fputs("would run:", stdout);
+		for (int i = 0; argv[i]; i++) printf(" %s", argv[i]);
+		putchar('\n');
+		return 0;
+	}
+	int rc = run_quiet(argv);
+	if (rc == -1) {
+		fprintf(stderr, "syn-settings: could not run %s\n", argv[0]);
+		return 1;
+	}
+	if (rc != 0)
+		fprintf(stderr, "syn-settings: %s exited %d "
+		                "(authorisation refused, or the value was rejected)\n",
+		        argv[0], rc);
+	return rc;
+}
+
 const char *read_line_file(const char *path, char *buf, size_t cap)
 {
 	FILE *f = fopen(path, "re");
