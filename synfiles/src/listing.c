@@ -404,12 +404,29 @@ int cmd_info(int argc, char **argv)
 	free(ename);
 
 	bool is_dir = S_ISDIR(tst.st_mode);
+	const char *mime = mime_for(base ? base + 1 : path, is_dir);
 	kv("type", broken ? "broken" : kind_of(tst.st_mode));
-	kv("mime", mime_for(base ? base + 1 : path, is_dir));
-	kv("icon", icon_for(mime_for(base ? base + 1 : path, is_dir), is_dir));
+	kv("mime", mime);
+	kv("icon", icon_for(mime, is_dir));
 
 	char *n;
 	n = xasprintf("%lld", (long long)tst.st_size);          kv("size", n); free(n);
+
+	/* How big the picture is — the one question a properties pane is asked
+	 * that stat() cannot answer. Emitted only when the file actually has
+	 * dimensions: a row reading "resolution  unknown" on every text file is
+	 * noise, and an empty one looks like a bug in the reader. WIDTHxHEIGHT so
+	 * the field stays one token a script can split; the GUI is what turns it
+	 * into a × for reading. */
+	if (!is_dir && !broken) {
+		long rw = 0, rh = 0;
+		if (resolution_for(path, mime, &rw, &rh)) {
+			n = xasprintf("%ldx%ld", rw, rh);
+			kv("resolution", n);
+			free(n);
+		}
+	}
+
 	n = xasprintf("%04o", (unsigned)(tst.st_mode & 07777)); kv("mode", n); free(n);
 	n = xasprintf("%lld", (long long)tst.st_mtime);         kv("mtime", n); free(n);
 	n = xasprintf("%lld", (long long)tst.st_atime);         kv("atime", n); free(n);

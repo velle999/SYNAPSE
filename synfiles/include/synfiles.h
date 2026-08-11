@@ -113,6 +113,16 @@ const char *icon_for(const char *mime, bool is_dir);
 int cmd_list(int argc, char **argv);
 int cmd_info(int argc, char **argv);
 
+/* ── resolution.c — pixel dimensions, for the properties pane ───────────────
+ * The one place this program reads a file's CONTENT. Called by `info` only,
+ * which is one file somebody asked about; a listing must never call it, for
+ * the same reason mime.c matches globs instead of sniffing bytes.
+ *
+ * The format is decided by MAGIC, never by the extension, so a photo saved
+ * as .txt still answers and a text file named .png is never mis-parsed. False
+ * on anything without dimensions — which is most files, and not an error. */
+bool resolution_for(const char *path, const char *mime, long *w, long *h);
+
 /* ── find.c — recursive search ──────────────────────────────────────────────
  * Never follows a symlink while descending: a link to an ancestor is a loop,
  * and one pointing at / turns a search of a project folder into a search of

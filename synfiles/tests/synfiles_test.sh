@@ -206,6 +206,119 @@ check "info percent-encodes the name" $?
 "$SYNFILES" info "$T/does-not-exist" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "info on a missing path exits 1" || bad "info on a missing path did not exit 1"
 
+# ── resolution ──────────────────────────────────────────────────────────────
+#
+# Every fixture here is a HEADER, written by hand, with no pixel data behind
+# it. That is deliberate: the parsers are only ever allowed to read a bounded
+# prefix, so a file that is nothing but its header is the strictest version of
+# the input they will meet, and any parser that wandered further would fail
+# these instead of quietly reading a neighbouring file's bytes.
+R="$T/res"
+mkdir -p "$R"
+
+res() { "$SYNFILES" --rec info "$1" | awk -F'\t' '$1=="resolution" {print $2}'; }
+
+# PNG: IHDR is mandatory and first, so its offset is fixed. 300x200.
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x01\x2c\x00\x00\x00\xc8' > "$R/a.png"
+[ "$(res "$R/a.png")" = "300x200" ] && ok "info reads a PNG's resolution" \
+                                    || bad "PNG is '$(res "$R/a.png")', want 300x200"
+
+# GIF: little-endian, unlike almost everything else here.
+printf 'GIF89a\xc8\x00\x64\x00' > "$R/a.gif"
+[ "$(res "$R/a.gif")" = "200x100" ] && ok "info reads a GIF's resolution" \
+                                    || bad "GIF is '$(res "$R/a.gif")'"
+
+# JPEG has to WALK: the frame header sits behind however many APP segments the
+# camera wrote, so this one puts a JFIF segment in front of the SOF0 to prove
+# the walk skips by declared length rather than scanning for 0xFFC0.
+printf '\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00' > "$R/a.jpg"
+printf '\xff\xc0\x00\x11\x08\x01\x90\x02\x8a\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01' >> "$R/a.jpg"
+[ "$(res "$R/a.jpg")" = "650x400" ] && ok "info walks a JPEG's segments to the frame header" \
+                                    || bad "JPEG is '$(res "$R/a.jpg")', want 650x400"
+
+# A NEGATIVE BMP height is legal and means top-down rows, not a negative image.
+printf 'BM\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' > "$R/a.bmp"
+printf '\x28\x00\x00\x00\x40\x00\x00\x00\xe0\xff\xff\xff' >> "$R/a.bmp"
+[ "$(res "$R/a.bmp")" = "64x32" ] && ok "a top-down BMP's negative height reads as 32" \
+                                 || bad "BMP is '$(res "$R/a.bmp")', want 64x32"
+
+# WebP lossless packs both dimensions, minus one, into 28 bits.
+printf 'RIFF\x18\x00\x00\x00WEBPVP8L\x0c\x00\x00\x00\x2f\x1f\xc0\x03\x00' > "$R/a.webp"
+[ "$(res "$R/a.webp")" = "32x16" ] && ok "info reads a lossless WebP's resolution" \
+                                   || bad "WebP is '$(res "$R/a.webp")'"
+
+# TIFF in BIG-endian byte order, which is the half a reader that assumes
+# little-endian still parses without ever looking wrong.
+printf 'MM\x00\x2a\x00\x00\x00\x08\x00\x02' > "$R/a.tif"
+printf '\x01\x00\x00\x03\x00\x00\x00\x01\x02\x80\x00\x00' >> "$R/a.tif"
+printf '\x01\x01\x00\x03\x00\x00\x00\x01\x01\xe0\x00\x00\x00\x00\x00\x00' >> "$R/a.tif"
+[ "$(res "$R/a.tif")" = "640x480" ] && ok "info reads a big-endian TIFF's resolution" \
+                                    || bad "TIFF is '$(res "$R/a.tif")', want 640x480"
+
+# An ICO stores 256 as a zero, because the field is one byte wide.
+printf '\x00\x00\x01\x00\x01\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' > "$R/a.ico"
+[ "$(res "$R/a.ico")" = "256x256" ] && ok "an ICO's zero dimension means 256" \
+                                    || bad "ICO is '$(res "$R/a.ico")'"
+
+# THE RULE THIS ALL RESTS ON: the format is decided by magic, not by the name.
+# Both directions, because only checking one would pass on a reader that had
+# quietly gone back to trusting the extension.
+cp "$R/a.png" "$R/photo-of-a-cat.txt"
+[ "$(res "$R/photo-of-a-cat.txt")" = "300x200" ] \
+    && ok "a PNG named .txt still reports its resolution" \
+    || bad "a PNG named .txt reported '$(res "$R/photo-of-a-cat.txt")'"
+
+printf 'This is a text file that somebody named .png\n' > "$R/liar.png"
+[ -z "$(res "$R/liar.png")" ] && ok "a text file named .png reports no resolution" \
+                             || bad "a text file named .png reported '$(res "$R/liar.png")'"
+
+# Nothing else grows a resolution row: a directory has none, and a truncated
+# image must be answered or refused, never hang.
+[ -z "$(res "$R")" ] && ok "a directory has no resolution" || bad "a directory reported one"
+
+head -c 6 "$R/a.png" > "$R/trunc.png"
+[ -z "$(timeout 5 "$SYNFILES" --rec info "$R/trunc.png" | awk -F'\t' '$1=="resolution"')" ] \
+    && ok "a truncated image reports no resolution" \
+    || bad "a truncated image reported one"
+
+# The listing must NEVER pay for this. Opening 4000 files to draw 4000 rows is
+# the whole reason mime.c matches globs instead of sniffing, so the column
+# count is asserted here as well as in the field-count test above.
+c=$("$SYNFILES" --rec list "$R" | awk -F'\t' 'NR==2 {print NF}')
+[ "$c" = 9 ] && ok "list gained no resolution column" || bad "list rows now have $c fields"
+
+# ── video: delegated, and only for video ────────────────────────────────────
+# A fake ffprobe on PATH, the same shape as the fake lsblk further down: the
+# real one's answer depends on what codecs are installed, and this has to
+# assert the delegation, not ffmpeg.
+mkdir -p "$T/fakebin"
+cat > "$T/fakebin/ffprobe" <<'FFP'
+#!/bin/sh
+echo "$@" >> "$FFPROBE_CALLS"
+echo "1280,720"
+FFP
+chmod +x "$T/fakebin/ffprobe"
+export FFPROBE_CALLS="$T/ffprobe-calls"
+: > "$FFPROBE_CALLS"
+
+printf 'not really a matroska file\n' > "$R/clip.mkv"
+r=$(PATH="$T/fakebin:$PATH" res "$R/clip.mkv")
+[ "$r" = "1280x720" ] && ok "a video's resolution is delegated to ffprobe" \
+                      || bad "delegated video resolution is '$r'"
+
+# ...and ONLY for video. Forking a subprocess to open the properties of a text
+# file is the cost this guard exists to refuse.
+: > "$FFPROBE_CALLS"
+PATH="$T/fakebin:$PATH" res "$M/a.txt" >/dev/null
+[ ! -s "$FFPROBE_CALLS" ] && ok "ffprobe is not run for a text file" \
+                          || bad "ffprobe was run for a text file"
+
+# No ffprobe, no row — never a wrong one, and never an error.
+r=$(PATH="$T/nonexistent-bin" "$SYNFILES" --rec info "$R/clip.mkv" \
+    | awk -F'\t' '$1=="resolution" {print $2}')
+[ -z "$r" ] && ok "without ffprobe a video simply has no resolution row" \
+            || bad "without ffprobe the video reported '$r'"
+
 # ── places, against a fixture ───────────────────────────────────────────────
 # SYNFILES_PLACES keeps every one of these off the real ~/.local/share file.
 export SYNFILES_PLACES="$T/places.xbel"

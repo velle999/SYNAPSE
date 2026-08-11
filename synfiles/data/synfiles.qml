@@ -473,8 +473,13 @@ FloatingWindow {
     // ── Rename ──────────────────────────────────────────────────────────────
     // The name being edited is the PANE's — two panes can be renaming two
     // different files at once, and the inline editor is drawn on a row.
-    function commitRename(newName) {
-        const row = root.selectedRow()
+    //
+    // The row is a PARAMETER, not the current selection. The editor knows
+    // exactly which row it is drawn on; re-deriving that from what happens to
+    // be selected is the same class of mistake as beginDrag reading the active
+    // pane instead of its own — it agrees with the visible state right up until
+    // it doesn't, and then it renames the wrong file.
+    function commitRename(row, newName) {
         root.ap.renaming = ""
         if (!row || !newName || newName === root.disp(row.name)) return
         root.runOp(["rename", root.disp(row.full), newName],
@@ -2261,6 +2266,11 @@ FloatingWindow {
                                                  + "  (" + v + " bytes)"
                                         if (k === "mtime" || k === "atime" || k === "ctime")
                                             return root.fmtTime(parseInt(v || "0"))
+                                        // C emits one token a script can split;
+                                        // the × belongs to the reader, not to
+                                        // the record.
+                                        if (k === "resolution")
+                                            return v.replace("x", " × ")
                                         return v
                                     }
                                     color: root.cText
@@ -3831,6 +3841,13 @@ FloatingWindow {
                     visible: fileRow.isRenaming
                     color: root.cPanel
                     border { width: 1; color: root.cAccent }
+                    // The row-wide MouseArea is declared BELOW this and input
+                    // is delivered in reverse paint order, so without a z the
+                    // row swallows every click meant for the editor: clicking
+                    // into the text to fix one character re-selected the row
+                    // instead, and dragging across it started a drag. Same
+                    // shape as the eject glyph the sidebar row sat on top of.
+                    z: 5
 
                     TextInput {
                         id: renameInput
@@ -3846,7 +3863,7 @@ FloatingWindow {
                                 selectAll()
                             }
                         }
-                        onAccepted: root.commitRename(text)
+                        onAccepted: root.commitRename(fileRow.modelData, text)
                         Keys.onEscapePressed: pane.renaming = ""
                     }
                 }
@@ -4030,6 +4047,7 @@ FloatingWindow {
                 id: gridCell
                 required property var modelData
                 readonly property bool isSelected: pane.isSelected(gridCell.modelData.name)
+                readonly property bool isRenaming: gridCell.modelData.name === pane.renaming
                 property bool dropHover: false
                 width: fileGrid.cellWidth - 6
                 height: fileGrid.cellHeight - 6
@@ -4084,6 +4102,7 @@ FloatingWindow {
                 }
 
                 Text {
+                    id: cellLabel
                     anchors.top: root.compactView ? undefined : cellIconBox.bottom
                     anchors.topMargin: 4
                     anchors.left: root.compactView ? cellIconBox.right : parent.left
@@ -4092,6 +4111,7 @@ FloatingWindow {
                     anchors.rightMargin: 4
                     anchors.verticalCenter: root.compactView ? parent.verticalCenter
                                                              : undefined
+                    visible: !gridCell.isRenaming
                     text: root.rowLabel(gridCell.modelData)
                     color: gridCell.modelData.missing ? root.cDim
                          : (gridCell.modelData.type === "dir" ? root.cAccent : root.cText)
@@ -4106,6 +4126,57 @@ FloatingWindow {
                     maximumLineCount: root.compactView ? 1 : 2
                     wrapMode: root.compactView ? Text.NoWrap : Text.WrapAnywhere
                     elide: Text.ElideRight
+                }
+
+                // Inline rename, drawn where the label is. THE SAME OMISSION
+                // AS DRAG-AND-DROP BELOW, found the same way: the editor was
+                // wired into the list delegate only, so in Icons and Compact —
+                // where anyone with previews on is working — the Rename entry
+                // set pane.renaming, nothing was drawn to edit, and the menu
+                // read as a dead button. F2 was dead there for the same reason.
+                //
+                // Whatever is added to one delegate has to be added to the
+                // other; they are two renderings of one row, not two features.
+                Rectangle {
+                    // The label's own anchors, repeated rather than anchored
+                    // TO the label: a top anchor and a verticalCenter on one
+                    // item is the pair Qt refuses, and the label switches
+                    // between them with the layout.
+                    anchors.top: root.compactView ? undefined : cellIconBox.bottom
+                    anchors.topMargin: 4
+                    anchors.left: root.compactView ? cellIconBox.right : parent.left
+                    anchors.leftMargin: root.compactView ? 8 : 4
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: root.compactView ? parent.verticalCenter
+                                                             : undefined
+                    height: Math.max(20, root.ui(20))
+                    radius: 3
+                    visible: gridCell.isRenaming
+                    color: root.cPanel
+                    border { width: 1; color: root.cAccent }
+                    // Above the neighbouring cells: an editor for a long name
+                    // is wider than the cell it belongs to, and being painted
+                    // over by the next delegate is how it would look truncated.
+                    z: 5
+
+                    TextInput {
+                        id: cellRenameInput
+                        anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                        clip: true
+                        onVisibleChanged: {
+                            if (visible) {
+                                text = root.disp(gridCell.modelData.name)
+                                forceActiveFocus()
+                                selectAll()
+                            }
+                        }
+                        onAccepted: root.commitRename(gridCell.modelData, text)
+                        Keys.onEscapePressed: pane.renaming = ""
+                    }
                 }
 
                 // Both halves of drag-and-drop, the same as the list

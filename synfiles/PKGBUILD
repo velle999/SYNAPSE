@@ -22,7 +22,7 @@ pkgname=synfiles
 # component (build-all.sh:123), so bumping pkgver leaves makepkg looking for a
 # tarball nothing creates.
 pkgver=0.1.0
-pkgrel=27
+pkgrel=28
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -45,7 +45,12 @@ optdepends=('quickshell: the graphical browser (synfiles gui)'
             'xdg-utils: open files in their default application'
             'util-linux: the Devices sidebar (lsblk)'
             'gvfs: network places — SMB, SFTP and MTP shares'
-            'udisks2: mount removable media without root')
+            'udisks2: mount removable media without root'
+            # Images are read in-tree, by magic bytes; so are MP4 and MOV,
+            # which carry their size in a track header. Matroska, WebM and AVI
+            # do not, and ffprobe is what already knows how to ask. Without it
+            # those simply show no resolution row.
+            'ffmpeg: the resolution of Matroska, WebM and AVI video')
 
 source=("synfiles-0.1.0.tar.gz")
 sha256sums=('SKIP')
