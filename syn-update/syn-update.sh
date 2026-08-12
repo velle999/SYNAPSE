@@ -53,6 +53,10 @@ SRC="${SYN_UPDATE_SRC:-/var/lib/synapse-src}"
 
 LOCAL_REPO=/var/cache/synapseos
 
+# The git tree, when SRC is temporarily pointed somewhere that is not one.
+# Set only by cmd_check, which scans a mktemp -d of remote PKGBUILDs.
+SRC_GIT=""
+
 # Components build-all.sh knows how to build from a source tarball. Kept as a
 # list here rather than scraped out of build-all.sh's KNOWN= line so that a
 # rename over there fails loudly in review instead of silently narrowing what
@@ -296,8 +300,13 @@ BLOCKED=()
 #
 # Read with `git show` rather than off disk so `check` describes what `apply`
 # would do — cmd_check never moves the tree.
+#
+# SRC_GIT, not SRC: cmd_check points SRC at a mktemp -d of PKGBUILDs read out
+# of the remote revision, and that directory is not a git repository. Reading
+# the tree through it would fail, silently, in exactly the mode whose whole job
+# is to tell you what apply is going to do.
 buildable_names() {
-    git -C "$SRC" show "origin/$REPO_REF:build-all.sh" 2>/dev/null |
+    git -C "${SRC_GIT:-$SRC}" show "origin/$REPO_REF:build-all.sh" 2>/dev/null |
         awk '/^KNOWN=\(/{f=1} f{print} f && /\)/{exit}' |
         sed 's/^KNOWN=(//; s/).*//' | tr -s ' \t\n' ' '
 }
@@ -452,7 +461,7 @@ cmd_check() {
         git -C "$SRC" show "origin/$REPO_REF:$c/PKGBUILD" > "$tmp/$c/PKGBUILD" 2>/dev/null ||
             rm -rf "$tmp/$c"
     done
-    local real="$SRC"; SRC="$tmp"; scan; SRC="$real"
+    local real="$SRC"; SRC="$tmp"; SRC_GIT="$real"; scan; SRC="$real"; SRC_GIT=""
 
     report
     say ""
