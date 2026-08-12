@@ -42,6 +42,37 @@ for _c in "${ONLY[@]}"; do
     esac
 done
 
+# Components that DEPEND on another component of this repo, as "<pkg> <needs>".
+#
+# A selective build of the dependant alone dies inside makepkg with
+#
+#   ==> ERROR: 'pacman' failed to install missing dependencies.
+#     -> syn-confine
+#
+# which says nothing about this script, nothing about ordering, and leaves
+# somebody to work out that a second component had to be named on the command
+# line. Worse, syn-update computes its own build set from the COMPONENTS list
+# in the syn-update that is INSTALLED — so a machine running an older one asks
+# for the dependant without the dependency and fails the same way through no
+# fault of the person running it.
+#
+# So the need is pulled in rather than diagnosed. Only when it is not already
+# installed: rebuilding a component nobody asked about would be a surprise, and
+# an installed one already satisfies makepkg.
+LOCAL_DEPS=(
+    "vibe syn-confine"     # vibe's bash tool refuses to run without the sandbox
+)
+if [ ${#ONLY[@]} -gt 0 ]; then
+    for _d in "${LOCAL_DEPS[@]}"; do
+        _pkg=${_d%% *}; _needs=${_d##* }
+        case " ${ONLY[*]} " in *" $_pkg "*) ;; *) continue ;; esac
+        case " ${ONLY[*]} " in *" $_needs "*) continue ;; esac
+        pacman -Qq "$_needs" >/dev/null 2>&1 && continue
+        echo "note: $_pkg needs $_needs, which is not installed — building it too"
+        ONLY+=("$_needs")
+    done
+fi
+
 # Every name a build rule below actually asks about. KNOWN= gates the argument
 # check and the build rules are a SEPARATE list, so a component can sit in the
 # first with no entry in the second; this records the second so the check at the
@@ -217,6 +248,18 @@ build_script_pkg syn-firstboot
 build_script_pkg nexus-chat
 build_script_pkg tepris
 
+# syn-confine BEFORE vibe, which DEPENDS on it — the same rule as scenefx
+# before synui above, and it is load-bearing rather than tidy. vibe's bash tool
+# runs every model-proposed command inside syn-confine's Landlock sandbox and
+# refuses to run one at all without it, so the dependency is hard. Built after
+# vibe, makepkg cannot resolve it and the whole run dies at:
+#
+#   ==> ERROR: 'pacman' failed to install missing dependencies.
+#     -> syn-confine
+#
+# One C file against libc, so it can sit anywhere above here.
+build_component syn-confine
+
 # Also shipped on the ISO, and updatable now that they have rules here. vibe
 # goes through build_component so its tarball is regenerated from the tree by
 # vibe/mktarball.sh -- as a committed artefact it could ship stale code while
@@ -267,15 +310,6 @@ build_component syn-settings
 # matters here more than anywhere else in this script, because this is the one
 # component whose tests run as part of a build that also calls pacman.
 build_component syn-disks
-
-# syn-confine — the Landlock sandbox. One C file, no dependency but libc.
-#
-# ⚠ Its check() asserts DENIALS: that a confined command cannot read ~/.ssh,
-# cannot reach the network, and cannot escape by nesting shells. That suite has
-# to run on a kernel with Landlock, which every supported SynapseOS kernel has
-# — and it is verified to go RED (7 failures, canary included) against a build
-# with landlock_restrict_self() disabled, so a green run means something.
-build_component syn-confine
 
 # A name in KNOWN= with no build rule above is what this catches.
 #
