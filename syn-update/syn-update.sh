@@ -229,8 +229,35 @@ checkout_remote() {
 
 # PKGBUILD field, without sourcing the file (a PKGBUILD is arbitrary code and
 # this runs before anything has been reviewed).
+# The pkgver/pkgrel a PKGBUILD actually PRODUCES, not the text on its line.
+#
+# This was a sed scrape, and the vendored limine-mkinitcpio-hook composes its
+# version from another variable:
+#
+#     _pkgver=1.37.1
+#     pkgver="${_pkgver}${_extver}"
+#
+# The scrape returned the literal string ${_pkgver}${_extver}, and `vercmp`
+# ranks that ABOVE every real version — so the component was permanently "out
+# of date". Every run added it to CHANGED and handed it to build-all.sh, which
+# (having never been told the name) exited 1 on `unknown component`, taking the
+# whole update with it: on 2026-08-12 syn-settings 17 could not ship because a
+# package nobody had touched looked newer than itself, for ever.
+#
+# So it is SOURCED. That executes the file — which is exactly what makepkg is
+# about to do with the same file from the same tree, so it adds no exposure the
+# update does not already have — in a subshell, with `set +e +u` because a
+# PKGBUILD is not written to be sourced by a script running under either.
+#
+# A value that cannot be resolved returns EMPTY, and the caller skips the
+# component with a warning. A version that cannot be read must never become an
+# update: that is the failure this whole function is here to stop.
 pkgfield() {
-    sed -n "s/^$2=//p" "$1/PKGBUILD" 2>/dev/null | tr -d "\"'()" | awk '{print $1; exit}'
+    local v
+    v=$( set +e +u; cd "$1" 2>/dev/null && . ./PKGBUILD >/dev/null 2>&1 &&
+         printf '%s' "${!2}" ) || return 1
+    case "$v" in *'$'*|"") return 1 ;; esac
+    printf '%s' "$v"
 }
 
 # Fills CHANGED with "<component> <installed> <available>" for every component
@@ -252,12 +279,46 @@ pkgfield() {
 CHANGED=()
 NEW=()
 SKIPPED=()
+BLOCKED=()
+
+# The names build-all.sh will ACCEPT, read from the revision that would run.
+#
+# COMPONENTS is deliberately not scraped out of build-all.sh (see its comment),
+# and the price of two hand-kept lists is that they can disagree. They did:
+# limine-mkinitcpio-hook was added here and never to KNOWN= over there, so the
+# first run that wanted it died on `unknown component` — after fetching, with
+# nothing built, and naming neither list as the thing that was wrong. Every
+# later run died the same way, so no fix to anything could ship past it.
+#
+# build-all.sh already has the mirror-image guard (a KNOWN= name with no build
+# rule); this is the other half. A disagreement now costs that one component,
+# reported, instead of the entire update.
+#
+# Read with `git show` rather than off disk so `check` describes what `apply`
+# would do — cmd_check never moves the tree.
+buildable_names() {
+    git -C "$SRC" show "origin/$REPO_REF:build-all.sh" 2>/dev/null |
+        awk '/^KNOWN=\(/{f=1} f{print} f && /\)/{exit}' |
+        sed 's/^KNOWN=(//; s/).*//' | tr -s ' \t\n' ' '
+}
+
 scan() {
-    CHANGED=(); NEW=(); SKIPPED=()
+    CHANGED=(); NEW=(); SKIPPED=(); BLOCKED=()
+
+    # Empty means the scrape failed, not that nothing is buildable — an update
+    # must not be withheld because a guard could not read its own input.
+    local known; known=$(buildable_names)
 
     local c ver rel avail inst
     for c in "${COMPONENTS[@]}"; do
         [ -f "$SRC/$c/PKGBUILD" ] || continue
+
+        if [ -n "$known" ]; then
+            case " $known " in
+                *" $c "*) ;;
+                *) BLOCKED+=("$c"); continue ;;
+            esac
+        fi
 
         ver=$(pkgfield "$SRC/$c" pkgver)
         rel=$(pkgfield "$SRC/$c" pkgrel)
@@ -335,6 +396,18 @@ report() {
             set -- $n
             printf '  %-16s %-14s %s\n' "$1" "$2" "(not installed here)"
         done
+    fi
+
+    # A bug in OUR tree, not in this machine. Loud, and named as ours: the
+    # person running an update cannot fix it and should not be left guessing.
+    if [ ${#BLOCKED[@]} -gt 0 ]; then
+        say ""
+        warn "${#BLOCKED[@]} component(s) SKIPPED — build-all.sh does not accept the name:"
+        local b
+        for b in "${BLOCKED[@]}"; do printf '    %s\n' "$b" >&2; done
+        printf '    %s\n' "This is a packaging bug in SynapseOS: the name is in syn-update's" >&2
+        printf '    %s\n' "COMPONENTS but not in build-all.sh's KNOWN=. Everything else still" >&2
+        printf '    %s\n' "updates; these will not until the two lists agree." >&2
     fi
 
     if [ ${#SKIPPED[@]} -gt 0 ]; then

@@ -32,7 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
-       syn-confine syn-edit)
+       syn-confine syn-edit limine-mkinitcpio-hook)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -194,6 +194,59 @@ build_script_pkg() {
     fi
 }
 
+# Bring an ALREADY-INSTALLED vendored package up to the tree's version.
+#
+# For limine-mkinitcpio-hook, which is vendored rather than ours. Two things
+# make it unlike every other rule here:
+#
+# 1. IT MUST NEVER ARRIVE UNINVITED. It depends on `limine`, so installing it
+#    would put a second bootloader on a GRUB box, and it ships
+#    /etc/pacman.d/hooks/90-mkinitcpio-install.hook, which SHADOWS Arch's own
+#    hook of that name, plus an interactive /usr/local/bin/mkinitcpio ahead of
+#    the real one on PATH. On a machine that does not boot limine that is a
+#    broken initramfs pipeline delivered as a build artifact. It reaches limine
+#    machines deliberately — syn-install during a limine install, or
+#    syn-settings' Kernel pane — and this script only ever moves it FORWARD.
+#    That is the same policy as syn-update's NEVER_ADD, enforced where the
+#    building happens, so `./build-all.sh` with no arguments cannot install it.
+#
+# 2. Building it is a GraalVM native-image build: a ~250 MB download and
+#    several minutes. Nobody should pay that to re-package the version they
+#    already run, so the installed version is compared first. The tree's
+#    version is composed from _pkgver, so it is read by SOURCING the PKGBUILD,
+#    not scraped — scraping it is what broke syn-update (it read the literal
+#    string ${_pkgver}${_extver}, which vercmp ranks above every real version).
+build_vendored_pkg() {
+    local name=$1
+    want "$name" || return 0
+
+    local inst avail
+    inst=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
+    if [ -z "$inst" ]; then
+        echo "=== $name: not installed here; not adding it (see the comment above) ==="
+        return 0
+    fi
+
+    # set +e +u INSIDE the subshell: this script runs under `set -e`, and a
+    # PKGBUILD is not written to be sourced by it — one command returning
+    # non-zero would take the whole build down instead of just this read.
+    avail=$( set +e +u; cd "$BASE/$name" && . ./PKGBUILD >/dev/null 2>&1 &&
+             printf '%s-%s' "$pkgver" "$pkgrel" ) || avail=""
+    case "$avail" in
+        *'$'*|-*|"")
+            echo "=== $name: cannot read the tree's version, leaving $inst alone ==="
+            return 0 ;;
+    esac
+
+    if [ "$(vercmp "$avail" "$inst")" -le 0 ]; then
+        echo "=== $name: $inst is already current (tree has $avail) ==="
+        return 0
+    fi
+
+    echo "=== $name: $inst -> $avail ==="
+    build_script_pkg "$name"
+}
+
 # Retire the old ld.so.conf entries that pointed the DYNAMIC LINKER at this
 # build tree. They made a root daemon (synapd) load its core libraries out of a
 # user's $HOME, so a `git clean` or an ISO rebuild could take synapd down — and
@@ -319,6 +372,10 @@ build_component syn-disks
 # keys to a file and prints the result instead of saving it, inside a
 # mktemp -d. Nothing in it edits anything outside that directory.
 build_component syn-edit
+
+# Vendored, boot-critical where it is installed, and never installed by this
+# script. See build_vendored_pkg.
+build_vendored_pkg limine-mkinitcpio-hook
 
 # A name in KNOWN= with no build rule above is what this catches.
 #
