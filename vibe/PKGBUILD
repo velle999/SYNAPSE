@@ -1,7 +1,7 @@
 # Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
 pkgname=vibe
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Vibe — local AI coding assistant (agentic read/write/edit/bash loop) wired to SynapseOS's synapd"
 arch=('any')
 url="https://github.com/velle999/vibe"
@@ -18,6 +18,11 @@ depends=(
     'python-rich'            # streaming TUI output
     'python-prompt_toolkit'  # REPL input
     'synapd'                 # default backend — the resident model on SynapseOS
+    # ⚠ HARD dependency, not optional. The bash tool runs model-proposed
+    # commands through syn-confine's Landlock sandbox and REFUSES to run them
+    # at all if it is missing — fail closed, because a shell that quietly
+    # degrades to unconfined is worse than one that does not run.
+    'syn-confine'
 )
 optdepends=(
     'ollama: alternative backend (run with VIBE_BACKEND=ollama)'

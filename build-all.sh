@@ -31,7 +31,8 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks)
+       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
+       syn-confine)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -266,6 +267,15 @@ build_component syn-settings
 # matters here more than anywhere else in this script, because this is the one
 # component whose tests run as part of a build that also calls pacman.
 build_component syn-disks
+
+# syn-confine — the Landlock sandbox. One C file, no dependency but libc.
+#
+# ⚠ Its check() asserts DENIALS: that a confined command cannot read ~/.ssh,
+# cannot reach the network, and cannot escape by nesting shells. That suite has
+# to run on a kernel with Landlock, which every supported SynapseOS kernel has
+# — and it is verified to go RED (7 failures, canary included) against a build
+# with landlock_restrict_self() disabled, so a green run means something.
+build_component syn-confine
 
 # A name in KNOWN= with no build rule above is what this catches.
 #

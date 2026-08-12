@@ -214,7 +214,14 @@ PACKAGES=(
     # pacman. The live session wants it independently — a rescue boot is
     # exactly when somebody needs to see what disks a machine has. Builds
     # offline: meson and libc.
-    syn-disks Its EULA forbids
+    syn-disks
+    # syn-confine — the Landlock sandbox vibe's bash tool runs through. Must be
+    # ON the ISO because vibe DEPENDS on it: vibe refuses to run a shell
+    # command at all when it is missing, so a live session with vibe and no
+    # syn-confine is a live session where the assistant cannot run anything.
+    # Builds offline — meson and libc, no library for Landlock at all.
+    syn-confine
+    # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
     # still exists and still builds; it just fetches from Samsung now.

@@ -1,0 +1,76 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-confine — run a command inside a kernel-enforced allowlist.
+#
+# Built for one job: SynapseOS runs a local agentic assistant (vibe) whose bash
+# tool executes commands a language model proposed, as the user, with the
+# user's whole authority. What stood in front of that was a regular expression
+# looking for `rm -rf /`. A denylist over shell strings is not a boundary — a
+# shell has unlimited ways to spell a command, and that denylist said nothing
+# about READING, which is the half that matters when the process can reach
+# ~/.ssh and the network.
+#
+# The real threat is not a malicious model. It is prompt injection: anything
+# the agent reads can carry instructions, and the agent has the keys in reach.
+# So the boundary has to hold regardless of what the command says, which means
+# it has to be in the kernel.
+#
+# Landlock is applied by a process TO ITSELF, needs no privilege, is inherited
+# across execve and cannot be dropped. This program builds a ruleset, restricts
+# itself, and execs. It is strictly additive: it can only ever remove access
+# the calling process already had, so it can never hand out a permission.
+#
+# ⚠ WHAT IT DOES NOT DO, stated here so nobody has to find out the hard way:
+# Landlock's network rules cover TCP bind and connect ONLY. UDP is not covered,
+# so DNS still resolves and DNS is an exfiltration channel — `--isolate-net`
+# adds a network namespace for that, plain --tcp/--net does not. It is
+# path-based, so it confines WHERE and never WHAT. And a newer kernel may add
+# access rights this binary does not know about, which are unhandled and
+# therefore unrestricted.
+pkgname=syn-confine
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Run a command inside a kernel-enforced allowlist (Landlock)"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# Nothing but libc. glibc ships no wrappers for the three landlock syscalls, so
+# they go through syscall(2) directly — which also means no libseccomp, no
+# libcap, and nothing to keep in step with a kernel release.
+depends=('glibc')
+makedepends=('meson' 'ninja' 'gcc')
+
+source=("syn-confine-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syn-confine-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syn-confine-0.1.0"
+    # ⚠ The suite asserts the DENIALS, by name. A sandbox test suite is uniquely
+    # easy to write green — "the command ran and exited 0" passes just as well
+    # when the ruleset was never applied — so every allow-case is paired with a
+    # deny-case, and the canary is whether ~/.ssh is readable from inside.
+    #
+    # Verified to go RED: a build with landlock_restrict_self() disabled fails
+    # 7 assertions including the canary.
+    #
+    # It needs a kernel with Landlock, which every supported SynapseOS kernel
+    # has. A builder without it fails here rather than shipping a binary whose
+    # confinement was never demonstrated.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syn-confine-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

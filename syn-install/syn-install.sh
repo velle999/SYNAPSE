@@ -1750,7 +1750,7 @@ while :; do
     # clicking a folder does nothing is not a smaller system but a broken one.
     # Dolphin is the optional extra below (WANT_FILEMGR), because IT is the one
     # that costs 550 MB of Qt6 and KF6.
-    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks fetch"
+    SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-confine fetch"
     SEL_APPS="chibi vibe syn-arsenal"
 
     echo "  What should be installed alongside the SynapseOS core?"

@@ -123,6 +123,7 @@ synfiles
 # everything that changes something is delegated to udisks2, smartmontools or
 # polkit. Formatting anything on the disk holding / is refused outright.
 syn-disks
+syn-confine
 # Dolphin, which is no longer the default and is no longer the only one that
 # can reach synui's KIO service menus — synfiles reads
 # $XDG_DATA_DIRS/kio/servicemenus itself. Still on the ISO: it is a mature file

