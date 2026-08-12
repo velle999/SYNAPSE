@@ -200,6 +200,30 @@ FloatingWindow {
         return r[root.actionCol]
     }
     function actionVerb(a) { const i = a.indexOf(":"); return i < 0 ? a : a.substring(0, i) }
+
+    // An action cell is a SPACE-SEPARATED LIST of verb:arg, and a row means
+    // every one of them. It used to be a single token, and the kernel pane's
+    // `pkg:<name>` was answered here by drawing an Install button AND a Remove
+    // button for every row that carried it — so a kernel that was not
+    // installed offered to remove itself, and an installed one offered to
+    // install itself again. The buttons described the verb; nothing consulted
+    // the machine.
+    //
+    // Every other pane emits one token, which is a one-element list, so these
+    // read the same there. Ask "does this row offer <verb>?" — never "what is
+    // the verb of this row?", which cannot answer a row offering two.
+    function actionHas(a, verb) {
+        const t = String(a).split(" ")
+        for (let i = 0; i < t.length; i++)
+            if (root.actionVerb(t[i]) === verb) return true
+        return false
+    }
+    function actionArgFor(a, verb) {
+        const t = String(a).split(" ")
+        for (let i = 0; i < t.length; i++)
+            if (root.actionVerb(t[i]) === verb) return root.actionArg(t[i])
+        return ""
+    }
     // Every tool spells "on" differently — systemd says active, nmcli says
     // enabled, bluetoothctl says yes. A toggle that only knew one of them
     // offered "Turn on" for something already on, and then turned it off.
@@ -224,8 +248,8 @@ FloatingWindow {
         editField.text = root.selValue
 
         root.modeList = []
-        if (root.actionVerb(a) === "mode") {
-            modesProc.command = [root.bin, "modes", root.actionArg(a)]
+        if (root.actionHas(a, "mode")) {
+            modesProc.command = [root.bin, "modes", root.actionArgFor(a, "mode")]
             modesProc.running = true
         }
     }
@@ -876,7 +900,7 @@ FloatingWindow {
                 anchors { left: editLabel.right; leftMargin: 12
                           verticalCenter: parent.verticalCenter }
                 width: 220; height: 26; radius: 4
-                visible: root.actionVerb(root.selAction) === "set"
+                visible: root.actionHas(root.selAction, "set")
                 color: root.cBg
                 border { width: 1; color: editField.activeFocus ? root.cAccent : root.wash(0.25) }
                 clip: true
@@ -925,56 +949,61 @@ FloatingWindow {
                 // An interface: up or down. Wired included — a desktop whose
                 // only link is ethernet had nothing to click before this.
                 Repeater {
-                    model: root.actionVerb(root.selAction) === "device"
+                    model: root.actionHas(root.selAction, "device")
                            ? ["connect", "disconnect"] : []
                     delegate: SettingsButton {
                         required property var modelData
                         label: modelData === "connect" ? "Connect" : "Disconnect"
-                        onGo: root.runWrite(["device", modelData, root.actionArg(root.selAction)],
-                                            modelData + "ing " + root.actionArg(root.selAction) + "…")
+                        onGo: root.runWrite(["device", modelData, root.actionArgFor(root.selAction, "device")],
+                                            modelData + "ing " + root.actionArgFor(root.selAction, "device") + "…")
                     }
                 }
 
                 // An installed kernel the bootloader has never heard of. Goes
                 // through the confirmation dialogue, never straight to a write.
                 SettingsButton {
-                    visible: root.actionVerb(root.selAction) === "boot"
+                    visible: root.actionHas(root.selAction, "boot")
                     label: "Make bootable…"
-                    onGo: root.askBootable(root.actionArg(root.selAction))
+                    onGo: root.askBootable(root.actionArgFor(root.selAction, "boot"))
                 }
 
-                // A kernel: install or remove, both through synpkg.
-                Repeater {
-                    model: root.actionVerb(root.selAction) === "pkg"
-                           ? ["install", "remove"] : []
-                    delegate: SettingsButton {
-                        required property var modelData
-                        label: modelData.charAt(0).toUpperCase() + modelData.substring(1)
-                        // "synpkg will ask to confirm" was a promise that could
-                        // not be kept: synpkg asks on a terminal, and there is
-                        // no terminal behind this button. The polkit challenge
-                        // is the confirmation the user actually gets.
-                        onGo: root.runWrite(
-                            ["pkg", modelData, root.actionArg(root.selAction)],
-                            (modelData === "install" ? "Installing " : "Removing ")
-                            + root.actionArg(root.selAction),
-                            modelData === "install"
-                              ? "Authorise when asked. A kernel and its headers "
-                                + "are a few hundred megabytes to fetch and an "
-                                + "initramfs to build, so this takes minutes, not "
-                                + "seconds."
-                              : "Authorise when asked.")
-                    }
+                // Install and Remove are now SEPARATE verbs, drawn only when
+                // the row offers them: the C decides which of the two this
+                // kernel can take, and a row can offer neither (the one you
+                // booted) or both alongside "Make bootable…".
+                //
+                // "synpkg will ask to confirm" was a promise that could not be
+                // kept: synpkg asks on a terminal, and there is no terminal
+                // behind this button. The polkit challenge is the confirmation
+                // the user actually gets.
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "install")
+                    label: "Install"
+                    onGo: root.runWrite(
+                        ["pkg", "install", root.actionArgFor(root.selAction, "install")],
+                        "Installing " + root.actionArgFor(root.selAction, "install"),
+                        "Authorise when asked. A kernel and its headers are a few "
+                        + "hundred megabytes to fetch and an initramfs to build, so "
+                        + "this takes minutes, not seconds.")
+                }
+
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "remove")
+                    label: "Remove"
+                    onGo: root.runWrite(
+                        ["pkg", "remove", root.actionArgFor(root.selAction, "remove")],
+                        "Removing " + root.actionArgFor(root.selAction, "remove"),
+                        "Authorise when asked.")
                 }
 
                 Repeater {
-                    model: root.actionVerb(root.selAction) === "unit"
+                    model: root.actionHas(root.selAction, "unit")
                            ? ["enable", "disable", "start", "stop", "restart"] : []
                     delegate: SettingsButton {
                         required property var modelData
                         label: modelData.charAt(0).toUpperCase() + modelData.substring(1)
-                        onGo: root.runWrite(["unit", modelData, root.actionArg(root.selAction)],
-                                            modelData + " " + root.actionArg(root.selAction) + "…")
+                        onGo: root.runWrite(["unit", modelData, root.actionArgFor(root.selAction, "unit")],
+                                            modelData + " " + root.actionArgFor(root.selAction, "unit") + "…")
                     }
                 }
             }
@@ -1003,8 +1032,8 @@ FloatingWindow {
                     delegate: SettingsButton {
                         required property var modelData
                         label: modelData.current ? modelData.mode + " ✓" : modelData.mode
-                        onGo: root.runWrite(["mode", root.actionArg(root.selAction), modelData.mode],
-                                            "setting " + root.actionArg(root.selAction)
+                        onGo: root.runWrite(["mode", root.actionArgFor(root.selAction, "mode"), modelData.mode],
+                                            "setting " + root.actionArgFor(root.selAction, "mode")
                                             + " to " + modelData.mode + "…")
                     }
                 }

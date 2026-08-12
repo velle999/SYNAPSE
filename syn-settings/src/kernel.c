@@ -251,18 +251,49 @@ int pane_kernel(void)
 		             "you reboot expecting a choice"
 		           : "");
 
-		/* An installed kernel with no entry needs making bootable; anything
-		 * else offers install/remove. The running one offers nothing at all —
-		 * see below. */
-		char action[128];
-		if (have && !is_running && !bootable && nloaders > 0)
-			snprintf(action, sizeof action, "boot:%s", kernels[i].pkg);
-		else
-			snprintf(action, sizeof action, "pkg:%s", kernels[i].pkg);
+		/* WHAT YOU CAN DO TO THIS KERNEL — a list, and it is the whole list.
+		 *
+		 * This was one token, `pkg:<name>`, for every row that was not asking
+		 * to be made bootable, and the GUI answered it by drawing BOTH an
+		 * Install and a Remove button. So a kernel that was not installed
+		 * offered to remove itself, and one that was installed offered to
+		 * install itself again: the buttons described the verb, never the
+		 * machine. Reported 2026-08-12 as "the install and remove button
+		 * disregard actual state".
+		 *
+		 * Splitting `pkg:` into `install:` and `remove:` is what makes the
+		 * state legible, and a SPACE-SEPARATED LIST is what lets a row offer
+		 * the two things that are genuinely both true at once — an installed
+		 * kernel with no boot entry can be made bootable AND removed, and
+		 * under one token it could only ever be the first.
+		 *
+		 * The C decides, never the QML. A button drawn from a verb the row did
+		 * not offer is a button that has no idea what it is looking at.
+		 */
+		char action[192];
+		int n = 0;
+		action[0] = '\0';
+
+		if (!have) {
+			n += snprintf(action + n, sizeof action - n, "install:%s",
+			              kernels[i].pkg);
+		} else {
+			if (!bootable && nloaders > 0)
+				n += snprintf(action + n, sizeof action - n, "boot:%s",
+				              kernels[i].pkg);
+			/* REMOVING WHAT YOU BOOTED is how a machine stops booting, so the
+			 * running kernel never offers it. That rule is about removal
+			 * alone: making the kernel you are running bootable is not only
+			 * safe, it is the one case where the entry is provably missing
+			 * while the kernel provably works. */
+			if (!is_running)
+				n += snprintf(action + n, sizeof action - n, "%sremove:%s",
+				              n ? " " : "", kernels[i].pkg);
+		}
 
 		rec_row("%s\t%s\t%s\t%s\t%s",
 		        kernels[i].pkg, have ? ver : "-", state, detail,
-		        is_running ? "-" : action);
+		        n ? action : "-");
 	}
 
 	/* You are running a kernel no installed package owns.

@@ -65,17 +65,24 @@ check_actions() {
     col=$(head -1 <<<"$out" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
     [ -n "$col" ] || { ok "$pane: no action column (read-only pane)"; return; }
 
+    # An action cell is a SPACE-SEPARATED LIST — a row offering two things
+    # genuinely offers both, and the GUI draws one button per token. Validating
+    # the whole cell as one token would pass anything once a second appeared.
+    local t
     while IFS= read -r line; do
         a=$(awk -F'\t' -v c="$col" '{print $c}' <<<"$line")
-        case "$a" in
-            -|set:*|toggle:*|unit:*|probe:*|mode:*|pkg:*|device:*|boot:*) ;;
-            *) bad "$pane: unknown action verb '$a'"; return ;;
-        esac
-        # A verb with an empty argument is the one that looks fine in a table
-        # and builds `syn-settings set  <value>` when clicked.
-        case "$a" in
-            *:) bad "$pane: action '$a' has no argument"; return ;;
-        esac
+        [ "$a" = "-" ] && continue
+        for t in $a; do
+            case "$t" in
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*) ;;
+                *) bad "$pane: unknown action verb '$t'"; return ;;
+            esac
+            # A verb with an empty argument is the one that looks fine in a
+            # table and builds `syn-settings set  <value>` when clicked.
+            case "$t" in
+                *:) bad "$pane: action '$t' has no argument"; return ;;
+            esac
+        done
     done < <(tail -n +2 <<<"$out")
     ok "$pane: every action is a known verb with an argument"
 }
@@ -483,6 +490,48 @@ if [ "$rc" -eq 0 ]; then
     ok "boot: a machine with no bootloader config still renders the pane"
 else
     bad "boot: no-bootloader machine failed the pane (exit $rc)"
+fi
+
+# ── The actions a kernel row offers MATCH ITS STATE ─────────────────────────
+#
+# The pane emitted one token, `pkg:<name>`, for every row that was not asking
+# to be made bootable, and the GUI answered it by drawing an Install button AND
+# a Remove button — so a kernel that was not installed offered to remove
+# itself, and an installed one offered to install itself again. Reported
+# 2026-08-12: "the install and remove button disregard actual state".
+#
+# Read straight off the real pane: every row's state and its actions have to
+# agree, whatever this machine happens to have installed.
+kact_fail=""
+while IFS=$'\t' read -r kname _ kstate _ kaction; do
+    case "$kname" in -|kernel) continue ;; esac
+    case "$kstate" in
+        "not installed")
+            case " $kaction " in
+                *" remove:"*) kact_fail="$kname is not installed and offers remove" ;;
+            esac
+            case " $kaction " in
+                *" install:$kname "*) ;;
+                *) kact_fail="$kname is not installed and does not offer install" ;;
+            esac ;;
+        running)
+            case " $kaction " in
+                *" remove:"*) kact_fail="$kname is RUNNING and offers remove" ;;
+            esac ;;
+        installed*)
+            case " $kaction " in
+                *" install:"*) kact_fail="$kname is installed and offers install" ;;
+            esac
+            case " $kaction " in
+                *" remove:$kname "*) ;;
+                *) kact_fail="$kname is installed, not running, and does not offer remove" ;;
+            esac ;;
+    esac
+done < <("$BIN" --rec kernel | awk -F'\t' 'NR>1 {print $1"\t"$2"\t"$3"\t"$4"\t "$5" "}')
+if [ -z "$kact_fail" ]; then
+    ok "kernel: every row's actions match its state"
+else
+    bad "kernel: $kact_fail"
 fi
 
 # ── The confirmation gate ───────────────────────────────────────────────────
