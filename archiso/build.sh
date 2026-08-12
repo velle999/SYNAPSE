@@ -208,7 +208,13 @@ PACKAGES=(
     # inode/directory, so the live session needs it too or clicking a folder
     # reaches an entry with nothing behind it. Builds offline — meson and libc.
     synfiles
-    # samsung-m2020 is deliberately NOT built here. Its EULA forbids
+    # syn-disks — the disk utility. Must be ON the ISO for the same reason
+    # synfiles must: syn-install names it in SEL_CORE, and a package the
+    # installer asks for but the local repo does not carry fails the install at
+    # pacman. The live session wants it independently — a rescue boot is
+    # exactly when somebody needs to see what disks a machine has. Builds
+    # offline: meson and libc.
+    syn-disks Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
     # still exists and still builds; it just fetches from Samsung now.

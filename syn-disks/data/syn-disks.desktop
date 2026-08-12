@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Disks
+GenericName=Disk Utility
+Comment=Inspect drives, mount volumes, check health and format removable media
+Exec=syn-disks gui %f
+# Its own icon, not the theme's generic drive-harddisk — which on Breeze is the
+# face every removable device in the dock already wears. synfiles shipped a
+# stock icon name once and ended up indistinguishable from Dolphin for it.
+Icon=syn-disks
+Terminal=false
+# The window's app_id, so a taskbar that maps windows to launchers finds THIS
+# entry. syn-disks sets it on the quickshell process (QS_APP_ID); without both
+# halves the window belongs to "org.quickshell" and wears its icon.
+StartupWMClass=syn-disks
+Categories=System;Settings;HardwareSettings;Filesystem;
+Keywords=disk;drive;partition;format;mount;usb;smart;health;volume;storage;

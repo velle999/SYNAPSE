@@ -1,0 +1,82 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-disks — the SynapseOS disk utility.
+#
+# The suite's answer to GNOME Disks: what drives are in the machine, what is on
+# them, how healthy they are, and the four things a desktop user actually does
+# to one — mount, unmount, safely remove, and reformat a stick.
+#
+# It reads the storage tree out of /sys/class/block, which is the kernel's own
+# account of it, so the shape of the machine is described with no daemon and no
+# library. Everything that CHANGES something is delegated to whoever already
+# owns it: udisks2 for mounting (it has the polkit rules), smartmontools for
+# health, polkit for the one operation that needs root.
+#
+# ⚠ Formatting anything that shares a physical disk with "/" is refused, with
+# no override. The check walks the whole stack — on an encrypted install "/" is
+# /dev/mapper/cryptroot over dm-N over a partition over the disk — so the
+# encrypted container holding a running system is refused even though nothing
+# reports that partition itself as mounted.
+pkgname=syn-disks
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS disk utility: drives, partitions, health, mounting and formatting"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# Nothing but libc for the storage tree itself.
+depends=('glibc')
+
+# util-linux supplies lsblk, which is where filesystem types, labels and UUIDs
+# come from — they live in the udev database rather than in sysfs. Without it
+# every drive still lists with its size, kind, bus and mounts and only the type
+# and label columns read "unknown", so this is a soft need met by a package
+# that is on every Arch system anyway.
+depends+=('util-linux')
+
+makedepends=('meson' 'ninja' 'gcc')
+
+optdepends=('quickshell: the graphical window (syn-disks gui)'
+            'udisks2: mount, unmount and safely remove drives without root'
+            'smartmontools: drive health (syn-disks smart)'
+            'polkit: authorisation for formatting'
+            # One per filesystem offered, because "Format" listing a type the
+            # machine cannot actually create is a button that fails at the last
+            # step. syn-disks reports each as unavailable instead.
+            'e2fsprogs: format as ext4'
+            'btrfs-progs: format as btrfs'
+            'xfsprogs: format as XFS'
+            'dosfstools: format as FAT'
+            'exfatprogs: format as exFAT'
+            'ntfs-3g: format as NTFS')
+
+source=("syn-disks-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syn-disks-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syn-disks-0.1.0"
+    # ⚠ The suite drives the binary entirely through SYN_DISKS_SYSFS and
+    # SYN_DISKS_MOUNTS, which point it at a described machine inside a
+    # mktemp -d that the EXIT trap removes. Nothing in it can reach a real
+    # block device: format is only ever exercised through --dry-run, and mount
+    # and eject run against a fake udisksctl on PATH that records its argv
+    # instead of doing anything. A disk utility whose tests could touch real
+    # hardware would be the most dangerous file in this repository.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syn-disks-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}

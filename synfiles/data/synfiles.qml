@@ -1187,6 +1187,42 @@ FloatingWindow {
     property real diskMenuX: 0
     property real diskMenuY: 0
 
+    // ── Opening a drive in the disk utility ─────────────────────────────────
+    //
+    // syn-disks is an optdepend, not a dependency: this is still a file
+    // manager on a machine that has not installed it. So the entry is PROBED
+    // for rather than shown unconditionally — a menu entry that silently does
+    // nothing is the exact failure this codebase keeps re-learning (Rename in
+    // icon view, drag-and-drop in the grid, the dock's New Window).
+    //
+    // The probe runs `sh -c 'command -v …'` rather than the tool itself: sh
+    // always exists, so the check itself can never be the thing that is
+    // missing, and it costs one short-lived process at startup.
+    property bool haveDisks: false
+
+    Process {
+        id: disksProbe
+        command: ["sh", "-c", "command -v syn-disks >/dev/null 2>&1"]
+        running: true
+        onExited: (code) => root.haveDisks = (code === 0)
+    }
+
+    // ⚠ execDetached, NOT a Process — `syn-disks gui` execs quickshell in the
+    // FOREGROUND and lives as long as its window, so a shared Process would
+    // queue the next launch behind it and every later one would look dead
+    // until this window was closed. See the start menu, which had exactly this
+    // bug. Detaching also stops synfiles quitting from taking the disk window
+    // with it.
+    function openInDisks(vol) {
+        if (!vol || !vol.device) return
+        // The device is ASCII (/dev/<kernel name>), so encoded and decoded are
+        // the same string — but it goes through disp() anyway, because "this
+        // field happens not to need decoding" is a fact that stops being true
+        // the moment somebody changes what the field holds.
+        Quickshell.execDetached(["syn-disks", "gui", root.disp(vol.device)])
+        root.statusLine = "opened " + root.disp(vol.device) + " in Disks"
+    }
+
     function openDiskMenu(vol, gx, gy) {
         root.diskMenu = vol
         root.diskMenuX = gx
@@ -2137,6 +2173,17 @@ FloatingWindow {
                             items.push({ label: "-", act: "", on: true })
                             items.push({ label: "Pin to Places", act: "pin", on: mounted })
                             items.push({ label: "Copy Path", act: "copypath", on: mounted })
+
+                            // The disk utility, when it is installed and when
+                            // there is a real block device to point it at.
+                            // A network share has no device and an automount
+                            // target that lsblk never saw has none either, so
+                            // both would open a window on nothing.
+                            if (root.haveDisks && !isNet && v.device !== "") {
+                                items.push({ label: "-", act: "", on: true })
+                                items.push({ label: "Open in Disks", act: "disks",
+                                             on: true })
+                            }
                             return items
                         }
                         delegate: Item {
@@ -2181,6 +2228,7 @@ FloatingWindow {
                                         case "unmount":  root.unmountVolume(v); break
                                         case "pin":      root.pin(v.path); break
                                         case "copypath": root.copyToClipboard(root.disp(v.path)); break
+                                        case "disks":    root.openInDisks(v); break
                                         }
                                     }
                                 }

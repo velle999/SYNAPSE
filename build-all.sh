@@ -31,7 +31,7 @@ echo "llama backend: ${SYNAPSE_LLAMA_BACKEND}"
 ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
-       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings)
+       vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -254,6 +254,18 @@ build_component synfiles
 # a meson C project whose tarball has to be regenerated from the tree, the same
 # shape as synfiles and synpkg.
 build_component syn-settings
+
+# syn-disks — the disk utility. Same shape again: meson C plus a quickshell
+# front-end, built from a source tarball the generic collector above assembles
+# from src/, include/, meson.build, data/ and tests/.
+#
+# ⚠ Its check() runs a suite that drives the binary against a FIXTURE of
+# /sys/class/block and a fake /proc/self/mounts inside a mktemp -d. Nothing in
+# it can reach a real block device — format is exercised only through
+# --dry-run, and mount and eject against a fake udisksctl on PATH — which
+# matters here more than anywhere else in this script, because this is the one
+# component whose tests run as part of a build that also calls pacman.
+build_component syn-disks
 
 # A name in KNOWN= with no build rule above is what this catches.
 #

@@ -140,6 +140,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
 | **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
 | **`synfiles`** | The file manager, and what a folder opens in. One C binary — tabs, split view, search, trash, undo, archives, drag-and-drop, properties — plus a quickshell window that only renders what `synfiles --rec` prints. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
+| **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, and mounting, safe removal and formatting. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Right-click a drive in `synfiles` to open it. |
 
 ### Apps
 
