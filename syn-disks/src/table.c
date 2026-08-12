@@ -250,7 +250,7 @@ int cmd_table(int argc, char **argv)
 			 * GUI draws its buttons from, so a row saying nothing is in the
 			 * way of deleting a partition, beside a binary that then refuses,
 			 * is the exact failure this column exists to prevent. */
-			char *why = guard_why_protected(slots[i].kname, GUARD_DESTROY);
+			char *why = guard_why_protected(slots[i].kname, GUARD_DESTROY, NULL);
 
 			if (g_out == OUT_REC) {
 				rec_row(9, dev, snum, sstart, sbytes, "partition",

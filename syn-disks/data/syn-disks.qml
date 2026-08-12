@@ -300,6 +300,14 @@ FloatingWindow {
             if (code !== 0 && root.status === "")
                 root.status = "refused (exit " + code + ")"
             root.reload()
+            // Chained off the real exit, never off a timer: a re-plan run
+            // while the unmount was still in flight would read the OLD state
+            // and refuse again, which looks exactly like the button being
+            // broken.
+            if (root.replanAfterOp) {
+                root.replanAfterOp = false
+                root.planFormat()
+            }
         }
     }
 
@@ -374,28 +382,75 @@ FloatingWindow {
         { id: "ntfs",  blurb: "Windows" }
     ]
 
+    // The two streams and the exit are THREE events, and their order is not
+    // guaranteed. This used to decide inside each handler as it landed, which
+    // worked for a plan and failed for a refusal: on a refusal stdout is EMPTY,
+    // so its handler reset fmtPlan to {} — and any time it landed after
+    // stderr's, it wiped the reason that had just been recorded. What was left
+    // was a dialogue with no explanation and a Format button that would not
+    // light up, which is the single outcome this dialogue exists to prevent.
+    //
+    // So each event only STORES its text, and resolvePlan() fills the plan in.
+    // It never clears one that is already good, so order cannot matter.
+    property string planOut: ""
+    property string planErr: ""
+
     Process {
         id: planProc
         stdout: StdioCollector {
-            onStreamFinished: {
-                const plan = root.parseFields(this.text)
-                if (plan["command"]) {
-                    root.fmtPlan = plan
-                } else {
-                    root.fmtPlan = ({})
-                    root.status = "could not work out what that would do"
-                }
-            }
+            onStreamFinished: { root.planOut = this.text; root.resolvePlan(false) }
         }
-        // A refusal explains itself on stderr — mounted, or on the system disk.
-        // Showing that beats an empty dialogue.
         stderr: StdioCollector {
-            onStreamFinished: {
-                if (this.text) {
-                    root.fmtPlan = ({ refused: this.text.split("\n")[0] })
-                }
-            }
+            onStreamFinished: { root.planErr = this.text; root.resolvePlan(false) }
         }
+        onExited: root.resolvePlan(true)
+    }
+
+    function resolvePlan(final) {
+        const plan = root.parseFields(root.planOut)
+        // A refusal now arrives as RECORDS, with a `fix` field naming the way
+        // out. It used to come only on stderr, where the plan parser never
+        // looked.
+        if (plan["command"] !== undefined || plan["refused"] !== undefined) {
+            root.fmtPlan = plan
+            return
+        }
+        if (root.planErr) {
+            // Something the binary reported on stderr instead — a name that is
+            // not a block device, say. The WHOLE text, not split("\n")[0]:
+            // the second line is the way out, and dropping it is what left
+            // somebody reading "it is mounted" with nothing to do about it.
+            root.fmtPlan = ({ refused: root.planErr.trim() })
+            return
+        }
+        if (final)
+            root.status = "could not work out what that would do"
+    }
+
+    // The way out, from the `fix` FIELD and never from the wording of the
+    // sentence beside it. A window that decided whether to offer Unmount by
+    // matching prose would stop offering it the day the prose improved.
+    readonly property string fixHint: {
+        switch (root.fmtPlan["fix"]) {
+        case "unmount": return "It is mounted. Unmount it and this becomes possible."
+        case "swapoff": return "Swap is live on it — run: swapoff " + root.fmtDev
+        case "lock":    return "A volume is unlocked on top of it; lock it first."
+        case "fstab":   return "/etc/fstab expects this at the next boot."
+        case "none":    return "There is nothing that overrides this."
+        default:        return ""
+        }
+    }
+
+    // Unmount, then work the plan out again, so the dialogue that just said
+    // "it is mounted" becomes the dialogue that can format it. Opening a stick
+    // from Files mounts it, which is how most people arrive here — making them
+    // close this, find the partition, unmount it and come back is a round trip
+    // for a state the window already knows about. The binary still decides.
+    property bool replanAfterOp: false
+    function unmountForFormat() {
+        if (!root.fmtDev || root.busy) return
+        root.replanAfterOp = true
+        root.runOp(["unmount", root.fmtDev], "unmounting " + root.fmtDev)
     }
 
     function askFormat(dev) {
@@ -409,6 +464,8 @@ FloatingWindow {
     function planFormat() {
         if (!root.fmtDev) return
         root.fmtPlan = ({})
+        root.planOut = ""
+        root.planErr = ""
         const args = [root.bin, "--rec", "format", root.fmtDev,
                       "--fs=" + root.fmtFs, "--dry-run"]
         if (root.fmtLabel !== "") args.push("--label=" + root.fmtLabel)
@@ -1214,6 +1271,14 @@ FloatingWindow {
                     color: root.cWarn
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
+                Text {
+                    width: fmtCol.width
+                    wrapMode: Text.WordWrap
+                    visible: root.fixHint !== ""
+                    text: root.fixHint
+                    color: root.cWarn
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
+                }
             }
 
             Row {
@@ -1223,6 +1288,11 @@ FloatingWindow {
                 Btn {
                     label: "Cancel"
                     onGo: root.fmtOpen = false
+                }
+                Btn {
+                    label: "Unmount it"
+                    visible: root.fmtPlan["fix"] === "unmount"
+                    onGo: root.unmountForFormat()
                 }
                 Btn {
                     label: "Erase and format"

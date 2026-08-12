@@ -295,8 +295,14 @@ static char *fstab_under(const char *kname, int depth)
 
 /* ── the one answer ─────────────────────────────────────────────────────── */
 
-char *guard_why_protected(const char *kname, guard_mode_t mode)
+char *guard_why_protected(const char *kname, guard_mode_t mode,
+                          const char **fix)
 {
+	/* Set once here so no return below can forget it; the branches that have
+	 * a way out overwrite it. */
+	if (fix)
+		*fix = "none";
+
 	if (!kname || !*kname)
 		return xstrdup("there is no such device");
 
@@ -317,6 +323,8 @@ char *guard_why_protected(const char *kname, guard_mode_t mode)
 		if (point) {
 			char *why = xasprintf("it is mounted at %s", point);
 			free(point);
+			if (fix)
+				*fix = "unmount";
 			return why;
 		}
 
@@ -324,6 +332,8 @@ char *guard_why_protected(const char *kname, guard_mode_t mode)
 		if (swap) {
 			char *why = xasprintf("%s is in use as swap", swap);
 			free(swap);
+			if (fix)
+				*fix = "swapoff";
 			return why;
 		}
 
@@ -331,6 +341,8 @@ char *guard_why_protected(const char *kname, guard_mode_t mode)
 		if (holder) {
 			char *why = xasprintf("%s is unlocked on top of it", holder);
 			free(holder);
+			if (fix)
+				*fix = "lock";
 			return why;
 		}
 
@@ -339,6 +351,8 @@ char *guard_why_protected(const char *kname, guard_mode_t mode)
 			if (fst) {
 				char *why = xasprintf("/etc/fstab expects it at %s", fst);
 				free(fst);
+				if (fix)
+					*fix = "fstab";
 				return why;
 			}
 		}
@@ -356,30 +370,61 @@ char *guard_why_protected(const char *kname, guard_mode_t mode)
 	return NULL;
 }
 
+void guard_report_refusal(const char *dev, const char *why, const char *fix)
+{
+	/* A REFUSAL IS AN ANSWER, and in --rec mode it has to arrive as records.
+	 *
+	 * Printing it only on stderr is what left the format window with an empty
+	 * dry run and a greyed-out button: the plan parser reads stdout, found
+	 * nothing there, and had no idea why. The reason existed the whole time,
+	 * on a stream nothing was reading. */
+	if (g_out == OUT_REC) {
+		rec_row(2, "field", "value");
+		rec_row(2, "device", dev);
+		rec_row(2, "refused", why);
+		rec_row(2, "fix", fix);
+		return;
+	}
+
+	fprintf(stderr, "%ssyn-disks: refusing — %s.%s\n",
+	        C_BAD(), why, C_RESET());
+	guard_print_fix(dev, fix);
+}
+
+void guard_print_fix(const char *dev, const char *fix)
+{
+	/* The way out, where there is one, keyed off the CODE and not the prose.
+	 * "It is mounted" is somebody's next step; "the running system is on it"
+	 * is not, and offering a fixed-with-one-command tone for that would be an
+	 * invitation. */
+	if (!strcmp(fix, "unmount"))
+		fprintf(stderr, "  Unmount it first: syn-disks unmount %s\n", dev);
+	else if (!strcmp(fix, "swapoff"))
+		fprintf(stderr, "  Turn it off first: swapoff %s\n", dev);
+	else if (!strcmp(fix, "lock"))
+		fprintf(stderr, "  Lock it first: udisksctl lock -b %s\n", dev);
+	else if (!strcmp(fix, "fstab"))
+		fprintf(stderr, "  Remove its line from /etc/fstab first, or this "
+		        "machine will not boot.\n");
+	else
+		fprintf(stderr, "  There is no flag that overrides this.\n");
+}
+
 bool guard_refuse(const char *kname, const char *dev, const char *verb,
                   guard_mode_t mode)
 {
-	char *why = guard_why_protected(kname, mode);
+	const char *fix = "none";
+	char *why = guard_why_protected(kname, mode, &fix);
 	if (!why)
 		return false;
 
-	fprintf(stderr, "%ssyn-disks: refusing to %s %s — %s.%s\n",
-	        C_BAD(), verb, dev, why, C_RESET());
-
-	/* The way out, where there is one. "It is mounted" is somebody's next
-	 * step; "the running system is on it" is not, and offering a
-	 * fixed-with-one-command tone for that would be an invitation. */
-	if (!strncmp(why, "the running system", 18))
-		fprintf(stderr, "  There is no flag that overrides this.\n");
-	else if (!strncmp(why, "it is mounted", 13))
-		fprintf(stderr, "  Unmount it first: syn-disks unmount %s\n", dev);
-	else if (strstr(why, "in use as swap"))
-		fprintf(stderr, "  Turn it off first: swapoff %s\n", dev);
-	else if (strstr(why, "unlocked on top of it"))
-		fprintf(stderr, "  Lock it first: udisksctl lock -b %s\n", dev);
-	else if (strstr(why, "/etc/fstab"))
-		fprintf(stderr, "  Remove its line from /etc/fstab first, or this "
-		        "machine will not boot.\n");
+	if (g_out == OUT_REC) {
+		guard_report_refusal(dev, why, fix);
+	} else {
+		fprintf(stderr, "%ssyn-disks: refusing to %s %s — %s.%s\n",
+		        C_BAD(), verb, dev, why, C_RESET());
+		guard_print_fix(dev, fix);
+	}
 
 	free(why);
 	return true;

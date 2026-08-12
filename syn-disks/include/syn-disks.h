@@ -345,13 +345,28 @@ typedef enum {
 } guard_mode_t;
 
 /* One sentence naming why this device may not be touched, or NULL if it may.
- * malloc'd. This is the single place the rules live. */
-char *guard_why_protected(const char *kname, guard_mode_t mode);
+ * malloc'd. This is the single place the rules live.
+ *
+ * `fix`, when not NULL, receives a static WORD for the way out — "unmount",
+ * "swapoff", "lock", "fstab", or "none" when there is no way out. It is set
+ * beside the sentence at each return rather than derived from it: a front-end
+ * that decided whether to offer an Unmount button by matching the prose would
+ * be re-deriving the rule from a string, and would silently stop offering it
+ * the day the wording improved. */
+char *guard_why_protected(const char *kname, guard_mode_t mode,
+                          const char **fix);
 
-/* guard_why_protected, printed as a refusal on stderr in the house style, with
- * the way out where there is one. Returns true when the caller must STOP. */
+/* guard_why_protected, reported as a refusal: records under --rec, the house
+ * style on stderr otherwise, with the way out where there is one. Returns true
+ * when the caller must STOP. */
 bool guard_refuse(const char *kname, const char *dev, const char *verb,
                   guard_mode_t mode);
+
+/* The same reporting, for a refusal a caller worked out for itself — format's
+ * system-disk rule is wider than the guard's and lives in actions.c, but a
+ * front-end must not be able to tell the two apart. */
+void guard_report_refusal(const char *dev, const char *why, const char *fix);
+void guard_print_fix(const char *dev, const char *fix);
 
 /* ── actions.c ──────────────────────────────────────────────────────────── */
 int cmd_mount(int argc, char **argv);

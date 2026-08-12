@@ -308,13 +308,18 @@ int cmd_format(int argc, char **argv)
 	 * writes over a whole device, so it refuses the whole drive. */
 	char *shared = guard_shares_root_disk(k);
 	if (shared) {
-		fprintf(stderr,
-		        "%ssyn-disks: refusing to format %s — it is on /dev/%s, "
-		        "the disk holding this running system.%s\n",
-		        C_BAD(), dev, shared, C_RESET());
-		fprintf(stderr,
-		        "  There is no flag that overrides this. If you truly mean "
-		        "to, use mkfs.%s directly.\n", fs);
+		char *why = xasprintf("it is on /dev/%s, the disk holding this "
+		                      "running system", shared);
+		if (g_out == OUT_REC) {
+			guard_report_refusal(dev, why, "none");
+		} else {
+			fprintf(stderr, "%ssyn-disks: refusing to format %s — %s.%s\n",
+			        C_BAD(), dev, why, C_RESET());
+			fprintf(stderr,
+			        "  There is no flag that overrides this. If you truly "
+			        "mean to, use mkfs.%s directly.\n", fs);
+		}
+		free(why);
 		free(shared);
 		free(dev);
 		free(k);
@@ -323,10 +328,21 @@ int cmd_format(int argc, char **argv)
 
 	char *busy = guard_mounted_under(k);
 	if (busy) {
-		fprintf(stderr,
-		        "%ssyn-disks: refusing to format %s — something on it is "
-		        "mounted at %s.%s\n", C_BAD(), dev, busy, C_RESET());
-		fprintf(stderr, "  Unmount it first: syn-disks unmount %s\n", dev);
+		char *why = xasprintf("something on it is mounted at %s", busy);
+		if (g_out == OUT_REC) {
+			/* Records, not stderr. The window's dry run reads stdout; with
+			 * the reason on stderr it saw an empty plan, greyed the button
+			 * out and said nothing — and "unmount it first" was on a second
+			 * line that nothing was reading at all. Opening a stick from
+			 * Files MOUNTS it, so this is the state a user is most likely to
+			 * arrive in. */
+			guard_report_refusal(dev, why, "unmount");
+		} else {
+			fprintf(stderr, "%ssyn-disks: refusing to format %s — %s.%s\n",
+			        C_BAD(), dev, why, C_RESET());
+			guard_print_fix(dev, "unmount");
+		}
+		free(why);
 		free(busy);
 		free(dev);
 		free(k);

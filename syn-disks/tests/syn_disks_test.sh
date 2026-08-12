@@ -603,6 +603,54 @@ check "sfdisk is given the device and nothing else on its command line" $?
 grep -q '^stdin: label: gpt$' "$T/sfdisk.log"
 check "...and the script arrives on stdin, where a shell cannot reach it" $?
 
+# ── a refusal is an ANSWER, not just a message on stderr ────────────────────
+#
+# Under --rec a refusal has to arrive as RECORDS. It used to go to stderr only,
+# which is not the stream the format window's plan parser reads: the window saw
+# an empty dry run, greyed its button out and said nothing at all. Worse, the
+# one thing the user needed — that unmounting fixes it — was on a SECOND line
+# that nothing looked at. Opening a stick from Files mounts it, so "mounted" is
+# the state most people arrive in.
+
+r=$("$SD" --rec format sdz1 --fs=ext4 -n 2>/dev/null)
+
+echo "$r" | grep -q '^refused	'
+check "a refusal under --rec is reported on STDOUT as records" $?
+
+echo "$r" | grep -q '^fix	unmount$'
+check "...with the way out as a field a front-end can switch on" $?
+
+echo "$r" | grep -q '^device	/dev/sdz1$'
+check "...naming the device it refused" $?
+
+# The `fix` code is set beside the sentence at each return, never derived from
+# it. A GUI matching prose to decide whether to offer an Unmount button would
+# stop offering it the day the wording improved.
+# ⚠ Captured first, matched second — every one of these EXITS 1, and under
+# pipefail `cmd | grep` reports the refusal's status rather than grep's. Three
+# of these read FAIL while the program was doing exactly the right thing, which
+# is the same trap says() was written for at the top of this file.
+r=$("$SD" --rec format nvme1n1p2 --fs=ext4 -n 2>/dev/null)
+echo "$r" | grep -q '^fix	none$'
+check "a refusal with no way out says so, rather than offering one" $?
+
+r=$(SYN_DISKS_SWAPS="$T/swaps" sdp --rec rmpart sdz2 --yes 2>/dev/null)
+echo "$r" | grep -q '^fix	swapoff$'
+check "live swap reports its own way out" $?
+
+r=$(SYN_DISKS_FSTAB="$T/fstab" sdp --rec rmpart sdz2 --yes 2>/dev/null)
+echo "$r" | grep -q '^fix	fstab$'
+check "an fstab entry reports its own way out" $?
+
+# The human form must NOT turn into records — somebody reading a terminal wants
+# the sentence and the hint, not a two-column table.
+says "$SD" --no-color format sdz1 --fs=ext4 -n | grep -q 'Unmount it first'
+check "the human refusal still prints the hint on its second line" $?
+
+says "$SD" --no-color format sdz1 --fs=ext4 -n | grep -q '^field'
+[ $? -ne 0 ] && ok "...and does not print records at a person" \
+             || bad "...and does not print records at a person"
+
 # ── the record format ───────────────────────────────────────────────────────
 #
 # A filesystem label is arbitrary bytes and a mount point is a path. Either can
