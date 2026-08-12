@@ -137,8 +137,24 @@ int pane_kernel(void)
 		return 1;
 	}
 
+	/* The kernel release this machine booted — overridable, on exactly the
+	 * terms and for exactly the reason as SYN_SETTINGS_BOOT_ROOT in boot.c.
+	 *
+	 * Every state on this pane pivots on is_running, and "running" takes
+	 * precedence over the bootable check below. So on a machine booted into
+	 * plain `linux` — which is every SynapseOS box here — the one kernel a
+	 * fixture bootloader can name is the one whose bootable answer cannot be
+	 * observed. The prefix-trap test could only pass on a machine booted into
+	 * something else, which is not a test passing, it is a coincidence. It
+	 * duly failed here and took the package build down with it.
+	 *
+	 * Safe for the same reason: this binary is not setuid and this grants
+	 * nothing. It changes which row is LABELLED running, and nothing writes
+	 * based on it. */
 	struct utsname u;
-	const char *running = uname(&u) == 0 ? u.release : "";
+	const char *env_rel = getenv("SYN_SETTINGS_RUNNING_RELEASE");
+	const char *running = (env_rel && *env_rel) ? env_rel
+	                    : (uname(&u) == 0 ? u.release : "");
 
 	/* Which bootloader(s) this machine actually has configured. Detected once:
 	 * it cannot change between rows, and reading three files per kernel to

@@ -293,26 +293,52 @@ if [ -n "${run_rel:-}" ]; then
         "$run_rel" "$run_rel" > "$bootfx/bls/boot/loader/entries/b153-$run_rel.conf"
 fi
 
+# ⚠ The running release is PINNED to something no package can own.
+#
+# "running" takes precedence over the bootable check in the state ladder, so
+# on a machine booted into plain `linux` — every box here — the bootable
+# answer for `linux` is unobservable, and these assertions had to accept
+# "running" as a pass. That made them vacuous exactly where they mattered: the
+# prefix trap below could only ever be checked on a machine booted into
+# something else, and on this one it FAILED and took the package build with
+# it. Pinned, every assertion below means the same thing everywhere.
 boot_state() {
-    SYN_SETTINGS_BOOT_ROOT="$1" "$BIN" --rec kernel \
-        | awk -F'\t' '$1=="linux" {print $3}'
+    SYN_SETTINGS_BOOT_ROOT="$1" \
+    SYN_SETTINGS_RUNNING_RELEASE="0.0.0-synsettings-test" \
+        "$BIN" --rec kernel | awk -F'\t' '$1=="linux" {print $3}'
 }
 
-for fx in limine grub sdb; do
-    if [ "$(boot_state "$bootfx/$fx")" = "installed, bootable" ] ||
-       [ "$(boot_state "$bootfx/$fx")" = "running" ]; then
-        ok "boot: $fx entry naming vmlinuz-linux reads as bootable"
-    else
-        bad "boot: $fx did not see its own entry (got '$(boot_state "$bootfx/$fx")')"
+# All of it rests on the `linux` package being installed; where it is not,
+# every state below is "not installed" and proves nothing. Skipped rather than
+# failed, the same way the BLS fixture is.
+if [ "$(boot_state "$bootfx/none")" = "not installed" ]; then
+    linux_here=0
+    ok "boot: no linux package here; bootloader matching not exercised"
+else
+    linux_here=1
+    # The pin must actually have taken, or everything below silently reverts
+    # to the coincidence it replaced.
+    if [ "$(boot_state "$bootfx/none")" = "running" ]; then
+        bad "boot: SYN_SETTINGS_RUNNING_RELEASE was ignored — the checks below are vacuous"
+        linux_here=0
     fi
-done
+fi
+
+if [ "$linux_here" = 1 ]; then
+    for fx in limine grub sdb; do
+        if [ "$(boot_state "$bootfx/$fx")" = "installed, bootable" ]; then
+            ok "boot: $fx entry naming vmlinuz-linux reads as bootable"
+        else
+            bad "boot: $fx did not see its own entry (got '$(boot_state "$bootfx/$fx")')"
+        fi
+    done
+fi
 
 # systemd-boot with ONLY a Boot Loader Spec entry. Skipped rather than failed
 # where the linux package owns no module tree, since the fixture cannot then be
 # written — the test is that release matching works, not that a kernel is here.
-if [ -n "${run_rel:-}" ]; then
-    if [ "$(boot_state "$bootfx/bls")" = "installed, bootable" ] ||
-       [ "$(boot_state "$bootfx/bls")" = "running" ]; then
+if [ -n "${run_rel:-}" ] && [ "$linux_here" = 1 ]; then
+    if [ "$(boot_state "$bootfx/bls")" = "installed, bootable" ]; then
         ok "boot: a BLS entry naming only the release reads as bootable"
     else
         bad "boot: BLS entry missed (got '$(boot_state "$bootfx/bls")')"
@@ -326,7 +352,9 @@ fi
 # entry — the pane would say "bootable" about the one kernel that is not.
 printf 'menuentry "SynapseOS" {\n linux /vmlinuz-linux-lts root=UUID=x\n}\n' \
     > "$bootfx/grub/boot/grub/grub.cfg"
-if [ "$(boot_state "$bootfx/grub")" = "installed, NO BOOT ENTRY" ]; then
+if [ "$linux_here" != 1 ]; then
+    ok "boot: no linux package here; the prefix trap is not exercised"
+elif [ "$(boot_state "$bootfx/grub")" = "installed, NO BOOT ENTRY" ]; then
     ok "boot: an LTS-only entry does not make plain linux look bootable"
 else
     bad "boot: prefix match leaked (got '$(boot_state "$bootfx/grub")')"
