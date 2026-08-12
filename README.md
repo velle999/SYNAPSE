@@ -139,6 +139,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
 | **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
+| **`synfiles`** | The file manager, and what a folder opens in. One C binary — tabs, split view, search, trash, undo, archives, drag-and-drop, properties — plus a quickshell window that only renders what `synfiles --rec` prints. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
 
 ### Apps
 
@@ -309,6 +310,54 @@ with **Control panel ▸ Sound ▸ Record for editing**. The second skips a loss
 generation but costs roughly 1 GB a minute against a few hundred KB for an
 ordinary take, so it is off by default and the panel row says the rate out loud.
 
+### Files
+
+A folder opens in **SYNAPSE Files** (`synfiles`) — the system's own file
+manager, built in the same shape as `synpkg`: a C binary that does the work and
+prints records, and a quickshell window that only renders them. Nothing in the
+QML knows how to stat a file. It replaced Dolphin as the default in August 2026;
+Dolphin is still installed, still works, and is one command away.
+
+Tabs, a split view (`F3`), Icons / Compact / Details, thumbnails, a folder tree,
+pinned places, recent files, mounted volumes with fill meters, search that walks
+the tree (`Ctrl`+`F`), archives, and drag-and-drop — into another window, onto
+the desktop, or out to any other application.
+
+Two things are worth saying out loud because they are the whole design:
+
+- **Delete means the trash.** The XDG trash, so what Dolphin or Nautilus put
+  there is what you see, and restoring puts a file back where it came from. The
+  permanent one is `synfiles delete --yes` and no key or click reaches it.
+- **Anything that changed files can be undone** — `Ctrl`+`Z`, or the chip in the
+  toolbar that says what it would reverse. A move of six files undoes as one
+  thing. Undo of a *copy* trashes the copies rather than unlinking them: undo
+  must never be a shorter road to losing work than delete is.
+
+The right-click menu inherits synui's own service menus — Extract, Crop, Mount
+ISO, Run with Wine, Set as Wallpaper — because both file managers read the same
+`kio/servicemenus` files. Write a helper once and it appears in both.
+
+**Properties** (`Alt`+`Enter`) is a panel over `synfiles info`, so the dialog and
+the command print the same list by construction — including **resolution** for
+images and video. Images, MP4 and MOV are read in-tree by their magic bytes, not
+their extension: a photo saved as `.txt` still reports its size. Matroska, WebM
+and AVI are handed to `ffprobe` if it is installed, and simply show no
+resolution row if it is not.
+
+```bash
+synfiles gui ~/Downloads       # the window
+synfiles find . --name=iso     # or --content=, bounded, never follows a symlink
+synfiles info photo.jpg        # what the properties pane shows
+synfiles undo list             # what Ctrl+Z would reverse
+```
+
+Prefer Dolphin? One command, and it outranks ours because it lands in your own
+config:
+
+```bash
+xdg-mime default org.kde.dolphin.desktop inode/directory
+```
+
 ### Fingerprint unlock
 
 The lock screen (`Super`+`L`) takes a fingerprint beside the password. Both are
@@ -468,6 +517,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
 | `synpkg` | The package manager — `search`, `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
+| `synfiles` | The file manager — `list`, `info`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window; `--rec` prints the records the window parses. See [Files](#files) |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
 | `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
 | `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
@@ -735,7 +785,7 @@ SPDX identifiers, per component:
 | Scope | License |
 |---|---|
 | `synapse_kmod` (kernel module) | `GPL-2.0-only` — it links the kernel |
-| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `vibe`, `chibi` | `GPL-2.0-or-later` |
+| `synapd`, `synui`, `synsh`, `synguard`, `synnet`, `syn`, `syn-install`, `syn-model`, `syn-update`, `syn-firstboot`, `syn-arsenal`, `synfiles`, `vibe`, `chibi` | `GPL-2.0-or-later` |
 | `synpkg` | `GPL-2.0-or-later` — it links `libalpm`, which is, so it can be nothing else |
 | `scenefx` (vendored fork), `synapse-llama`, `nexus-chat`, `tepris` | `MIT`, upstream |
 | `synui/quickshell-antiquity/` and its three wallpapers | `MIT`, © 2026 [diinki](https://github.com/diinki) — a port of [linux-antiquity](https://github.com/diinki/linux-antiquity); notice kept as `LICENSE.antiquity` |
