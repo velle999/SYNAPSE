@@ -18,9 +18,10 @@
  * which bootloaders are installed would confidently return the wrong answer.
  * A config file that exists is evidence; a package that exists is not.
  *
- * MATCHING IS BY KERNEL RELEASE, NOT BY FILENAME. limine and GRUB name the
- * image (`vmlinuz-linux-lts`), but systemd-boot entries written by
- * kernel-install follow the Boot Loader Spec and name neither the package nor
+ * MATCHING IS BY KERNEL RELEASE, NOT BY FILENAME. GRUB names the image
+ * (`vmlinuz-linux-lts`), limine names it either way (see limine_line_boots —
+ * its generated entries are Boot Loader Spec paths), but systemd-boot entries
+ * written by kernel-install follow the Boot Loader Spec and name neither the package nor
  * "vmlinuz" — they point at /<machine-id>/<release>/linux. So the release is
  * carried alongside, read from /usr/lib/modules/<release>/pkgbase, which is the
  * file that states which package owns a module tree. It is also what makes
@@ -170,6 +171,84 @@ static int token_match(const char *hay, const char *needle)
 	return 0;
 }
 
+/* Is this limine.conf line an entry that boots `pkg` (release `release`)?
+ *
+ * limine.conf carries TWO entry shapes at once on this OS and the first version
+ * of this code knew only one of them. syn-install writes an entry by hand:
+ *
+ *     kernel_path: boot():/vmlinuz-linux
+ *
+ * while limine-mkinitcpio-hook — the generator the "Make bootable" button
+ * installs — writes the Boot Loader Spec layout, which names neither "vmlinuz-"
+ * nor the release:
+ *
+ *     comment: kernel-id=linux-cachyos
+ *     path: boot():/<machine-id>/linux-cachyos/vmlinuz#<sha256>
+ *
+ * So the button worked, the entry was written, and the pane went on reporting
+ * NO BOOT ENTRY — offering to fix a thing it had already fixed, for ever.
+ *
+ * It is NOT enough to look for the package name anywhere in the file. Where
+ * limine-snapper-sync is installed, limine.conf also holds a snapshot list, and
+ * each snapshot's comment is the pacman command line that made it:
+ *
+ *     comment: /usr/bin/synpkg --noconfirm install linux-cachyos ...
+ *
+ * That is a description of a transaction, not a boot entry — the snapshot below
+ * it boots the OLD kernel. Only a line that actually names a kernel image
+ * counts, plus the generator's own kernel-id declaration.
+ */
+static int limine_line_boots(const char *line, const char *pkg,
+                             const char *release)
+{
+	const char *p = line;
+	while (*p == ' ' || *p == '\t') p++;
+
+	/* limine-entry-tool states the identity itself; take it at its word. */
+	if (!strncmp(p, "comment:", 8)) {
+		char id[160];
+		snprintf(id, sizeof id, "kernel-id=%s", pkg);
+		return token_match(p, id);
+	}
+
+	/* `path:` and `kernel_path:` name the image. `module_path:` is the
+	 * initramfs — it sits in the same directory and would match the same
+	 * segment, but an initramfs alone boots nothing, so it is not evidence. */
+	const char *val;
+	if (!strncmp(p, "kernel_path:", 12))   val = p + 12;
+	else if (!strncmp(p, "path:", 5))      val = p + 5;
+	else                                   return 0;
+
+	char img[160];
+	snprintf(img, sizeof img, "vmlinuz-%s", pkg);
+	if (token_match(val, img)) return 1;
+
+	/* BLS layout: the directory component before /vmlinuz is the kernel-id,
+	 * which is the pkgbase. Some generators use the release there instead. */
+	char seg[192];
+	snprintf(seg, sizeof seg, "/%s/vmlinuz", pkg);
+	if (strstr(val, seg)) return 1;
+	if (release && *release) {
+		snprintf(seg, sizeof seg, "/%s/vmlinuz", release);
+		if (strstr(val, seg)) return 1;
+	}
+	return 0;
+}
+
+static int limine_has_entry(const char *conf, const char *pkg,
+                            const char *release)
+{
+	FILE *f = fopen(conf, "re");
+	if (!f) return 0;
+
+	char line[4096];
+	int hit = 0;
+	while (!hit && fgets(line, sizeof line, f))
+		hit = limine_line_boots(line, pkg, release);
+	fclose(f);
+	return hit;
+}
+
 /* Scan one file for either the image name or the kernel release. */
 static int file_names_kernel(const char *path, const char *img, const char *release)
 {
@@ -201,6 +280,10 @@ int syn_boot_has_entry(const struct syn_boot *bl, const char *pkg,
 
 	switch (bl->kind) {
 	case SYN_BL_LIMINE:
+		/* Line-scoped: limine.conf mixes boot entries with a snapshot list
+		 * whose comments quote pacman command lines verbatim. */
+		return limine_has_entry(bl->conf, pkg, release);
+
 	case SYN_BL_GRUB:
 		return file_names_kernel(bl->conf, img, NULL);
 

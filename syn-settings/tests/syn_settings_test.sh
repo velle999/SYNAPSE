@@ -348,6 +348,8 @@ bootfx=$(mktemp -d)
 trap 'rm -rf "$bootfx"' EXIT
 
 mkdir -p "$bootfx/limine/boot" \
+         "$bootfx/limbls/boot" \
+         "$bootfx/limsnap/boot" \
          "$bootfx/grub/boot/grub" \
          "$bootfx/sdb/boot/loader/entries" \
          "$bootfx/bls/boot/loader/entries" \
@@ -427,6 +429,39 @@ if [ -n "${run_rel:-}" ] && [ "$linux_here" = 1 ]; then
     fi
 else
     ok "boot: no linux module tree here; BLS release matching not exercised"
+fi
+
+# ── limine, as the GENERATOR actually writes it ─────────────────────────────
+#
+# The fixture above poses only the entry syn-install writes by hand. The entry
+# limine-mkinitcpio-hook writes — the thing "Make bootable" installs — looks
+# nothing like it: Boot Loader Spec paths, no "vmlinuz-" prefix, no release.
+# So on 2026-08-12 the button installed the hook, the hook wrote the entry, and
+# the pane still said NO BOOT ENTRY and offered to fix it again. Posing only
+# the shape we already handled is the same hole the systemd-boot case had.
+printf 'timeout: 5\n/+SynapseOS\ncomment: machine-id=b153\n  //linux\n  comment: Kernel version: %s\n  comment: kernel-id=linux \n  protocol: linux\n  module_path: boot():/b153/linux/initramfs#aaaa\n  path: boot():/b153/linux/vmlinuz#bbbb\n' \
+    "${run_rel:-0-test}" > "$bootfx/limbls/boot/limine.conf"
+if [ "$linux_here" = 1 ]; then
+    if [ "$(boot_state "$bootfx/limbls")" = "installed, bootable" ]; then
+        ok "boot: a limine entry written by limine-mkinitcpio-hook reads as bootable"
+    else
+        bad "boot: generated limine entry missed (got '$(boot_state "$bootfx/limbls")')"
+    fi
+fi
+
+# THE SNAPSHOT COMMENT. With limine-snapper-sync installed, limine.conf also
+# carries a snapshot list, and each snapshot's comment is the pacman command
+# line that made it — "install linux linux-headers". That names the package
+# while booting a DIFFERENT kernel, so any whole-file search for the package
+# name calls the wrong thing bootable. Only an image line counts.
+printf 'timeout: 5\n/+SynapseOS\n  //linux-lts\n  comment: kernel-id=linux-lts \n  path: boot():/b153/linux-lts/vmlinuz#cccc\n     //Snapshots\n     ///620 | 2026-08-12 18:04:06\n     comment: /usr/bin/synpkg --noconfirm install linux linux-headers\n     ////SynapseOS\n     kernel_path: boot():/b153/limine_history/vmlinuz-linux-lts_sha256_dddd\n' \
+    > "$bootfx/limsnap/boot/limine.conf"
+if [ "$linux_here" != 1 ]; then
+    ok "boot: no linux package here; the snapshot-comment trap is not exercised"
+elif [ "$(boot_state "$bootfx/limsnap")" = "installed, NO BOOT ENTRY" ]; then
+    ok "boot: a snapper comment naming the package is not a boot entry"
+else
+    bad "boot: snapshot comment read as an entry (got '$(boot_state "$bootfx/limsnap")')"
 fi
 
 # THE PREFIX TRAP. "vmlinuz-linux" is a prefix of "vmlinuz-linux-lts", so an
