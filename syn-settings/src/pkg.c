@@ -53,8 +53,24 @@ int do_pkg(int argc, char **argv)
 	char headers[128];
 	snprintf(headers, sizeof headers, "%s-headers", name);
 
-	char *a[] = { (char *)"synpkg", (char *)act, (char *)name,
-	              (char *)headers, NULL };
+	/* ⚠ --noconfirm is REQUIRED here, and it is not a shortcut.
+	 *
+	 * synpkg's confirm() returns FALSE when stdin is not a terminal — the safe
+	 * default, since a GUI front-end has no terminal to answer "Proceed?" in.
+	 * This process has no terminal, so without this flag the sequence was:
+	 * polkit authenticated, the escalated child asked a question into a stdin
+	 * that could never answer, took the refusal, and exited 0. A declined
+	 * transaction is not an error, so nothing was printed and nothing was
+	 * installed — the button authenticated and then did nothing at all.
+	 *
+	 * What is dropped is only the unanswerable prompt. The authorisation
+	 * itself is untouched: polkit still challenges, and the target is still
+	 * restricted to syn_kernel_known() above.
+	 *
+	 * It must come BEFORE the verb — synpkg stops parsing globals at the first
+	 * non-option argument. */
+	char *a[] = { (char *)"synpkg", (char *)"--noconfirm", (char *)act,
+	              (char *)name, (char *)headers, NULL };
 
 	if (g_dry_run) {
 		fputs("would run:", stdout);

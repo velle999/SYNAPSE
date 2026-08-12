@@ -759,9 +759,13 @@ FloatingWindow {
                     delegate: SettingsButton {
                         required property var modelData
                         label: modelData.charAt(0).toUpperCase() + modelData.substring(1)
+                        // "synpkg will ask to confirm" was a promise that could
+                        // not be kept: synpkg asks on a terminal, and there is
+                        // no terminal behind this button. The polkit challenge
+                        // is the confirmation the user actually gets.
                         onGo: root.runWrite(["pkg", modelData, root.actionArg(root.selAction)],
                                             modelData + "ing " + root.actionArg(root.selAction)
-                                            + " — synpkg will ask to confirm…")
+                                            + " — authorise when asked…")
                     }
                 }
 

@@ -251,9 +251,20 @@ bool confirm(const char *fmt, ...)
 		return true;
 	/* A GUI front-end has no terminal to answer in. Refusing is the safe
 	 * default: the GUI always passes --noconfirm when the user has already
-	 * clicked through its own dialog. */
-	if (g_out == OUT_TSV || !isatty(STDIN_FILENO))
+	 * clicked through its own dialog.
+	 *
+	 * But SAY SO. This used to refuse in silence, and a caller that forgot
+	 * --noconfirm got a transaction that authenticated through polkit and then
+	 * declined itself — the callers treat a declined transaction as success,
+	 * so nothing was printed, nothing was installed, and the only symptom was
+	 * a button that went quiet after the password prompt. That was
+	 * syn-settings' kernel installer for its whole life. A refusal nobody can
+	 * see is indistinguishable from a hang. */
+	if (g_out == OUT_TSV || !isatty(STDIN_FILENO)) {
+		warn("declined: there is no terminal to confirm on "
+		     "(a front-end must pass --noconfirm once the user has agreed)");
 		return false;
+	}
 
 	va_list ap;
 	va_start(ap, fmt);
