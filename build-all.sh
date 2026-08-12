@@ -32,7 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
-       syn-confine)
+       syn-confine syn-edit)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -310,6 +310,15 @@ build_component syn-settings
 # matters here more than anywhere else in this script, because this is the one
 # component whose tests run as part of a build that also calls pacman.
 build_component syn-disks
+
+# syn-edit — the text editor. Same shape again: meson C plus a quickshell
+# front-end, built from a source tarball the generic collector above assembles
+# from src/, include/, meson.build, data/ and tests/.
+#
+# Its check() drives the editing engine through `syn-edit run`, which applies
+# keys to a file and prints the result instead of saving it, inside a
+# mktemp -d. Nothing in it edits anything outside that directory.
+build_component syn-edit
 
 # A name in KNOWN= with no build rule above is what this catches.
 #

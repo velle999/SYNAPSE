@@ -1,0 +1,27 @@
+[Desktop Entry]
+Type=Application
+Name=Text Editor
+GenericName=Text Editor
+Comment=Edit text and source code, with vim keys and syntax highlighting
+Exec=syn-edit gui %F
+# Its own icon, not the theme's generic accessories-text-editor — which on
+# Breeze is the face Kate and KWrite already wear. synfiles shipped a stock
+# icon once and ended up indistinguishable from Dolphin in the dock.
+Icon=syn-edit
+Terminal=false
+# The window's app_id, so a taskbar that maps windows to launchers finds THIS
+# entry. syn-edit sets it on the quickshell process (QS_APP_ID); without both
+# halves the window belongs to "org.quickshell" and wears its icon — and the
+# dock, on a miss, runs the app_id as a command.
+StartupWMClass=syn-edit
+Categories=Utility;TextEditor;Development;
+Keywords=text;editor;code;vim;source;write;notes;
+# Declared, but this does NOT make syn-edit the default for text files. Which
+# candidate runs is decided by mimeapps.list, and nothing here ships one — Kate
+# keeps whatever it already had until somebody chooses otherwise.
+MimeType=text/plain;text/x-csrc;text/x-chdr;text/x-c++src;text/x-python;text/x-shellscript;text/markdown;application/json;text/x-makefile;application/x-yaml;text/css;text/html;application/xml;
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Exec=syn-edit gui

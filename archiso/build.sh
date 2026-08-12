@@ -222,6 +222,14 @@ PACKAGES=(
     # exactly when somebody needs to see what disks a machine has. Builds
     # offline: meson and libc.
     syn-disks
+    # syn-edit — the text editor. Must be ON the ISO for the same reason
+    # syn-disks must: syn-install names it in SEL_CORE, and a package the
+    # installer asks for but the local repo does not carry fails the install at
+    # pacman. The live session wants it independently, and more than most —
+    # editing fstab or a bootloader entry from a rescue boot is the whole point
+    # of having an editor there, and its terminal front-end works with no
+    # display at all. Builds offline: meson and libc.
+    syn-edit
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD

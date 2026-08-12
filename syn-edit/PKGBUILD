@@ -1,0 +1,77 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syn-edit — the SynapseOS text editor.
+#
+# The suite's answer to Kate, and to vim, without being two programs. There is
+# ONE editing engine and it is modal; the terminal editor and the graphical
+# window are both renderers over it. They collect keys, hand them to the
+# engine, and draw what it says the buffer now looks like. Neither contains a
+# rule about what a key does.
+#
+# That is why `ciw`, `:%s/old/new/g`, undo, registers, marks and macros work in
+# the window: they are not implemented in the window. It is also why the whole
+# thing is testable from a shell script — `syn-edit run --keys 'ggdG' file`
+# drives the same engine with no terminal and no display, which is how all 255
+# tests exercise it.
+#
+# Nothing is linked but libc. Regular expressions are POSIX regcomp, compiled
+# as BASIC expressions so that a pattern typed out of vim habit behaves the way
+# it looks (\( \) group, \| alternates, \+ and \? repeat), with \v switching to
+# extended. Syntax highlighting is a table of twenty-odd languages driving one
+# tokeniser rather than a parser per language. The clipboard is delegated to
+# wl-copy/wl-paste, which is how everything else on this desktop reaches it.
+#
+# ⚠ Files are opened and saved BYTE-FAITHFULLY. CRLF endings, a missing final
+# newline, invalid UTF-8 and embedded NULs all survive a round trip, and the
+# permission bits of the file being replaced are preserved. An editor that
+# silently "fixes" a missing final newline turns opening a file into a diff.
+#
+# ⚠ This package does NOT make itself the default text editor. It declares the
+# MIME types it can handle, which makes it a candidate; which candidate runs is
+# decided by mimeapps.list, and nothing here ships one. Kate keeps whatever it
+# already had until somebody chooses otherwise.
+pkgname=syn-edit
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS text editor: modal editing, syntax highlighting, in a terminal or a window"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# Nothing but libc. The regex engine is POSIX regcomp, which is part of it.
+depends=('glibc')
+
+makedepends=('meson' 'ninja' 'gcc')
+
+optdepends=('quickshell: the graphical window (syn-edit gui)'
+            'wl-clipboard: yank to and put from the desktop clipboard ("+y and "+p)')
+
+source=("syn-edit-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syn-edit-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syn-edit-0.1.0"
+    # ⚠ The suite drives the binary through `syn-edit run`, which applies keys
+    # to a file and PRINTS the result rather than saving it. Everything happens
+    # inside a mktemp -d that the EXIT trap removes, and the single test that
+    # writes to a file at all is the one that tests -w. It also points
+    # SYN_EDIT_CONFIG at that directory, so the settings of whoever is running
+    # the build cannot change what `>>` or `cc` produce and make the suite pass
+    # or fail depending on whose machine it is.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syn-edit-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}
