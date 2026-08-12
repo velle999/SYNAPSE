@@ -260,7 +260,8 @@ int cmd_table(int argc, char **argv)
 			} else {
 				printf("  %s%-16s%s %s%-16s%s %s%9s%s  %s%s%s\n",
 				       C_ACCENT(), dev, C_RESET(),
-				       lb && lb->fstype ? lb->fstype : "", "", "",
+				       C_DIM(), lb && lb->fstype ? lb->fstype : "",
+				       C_RESET(),
 				       C_BOLD(), hu, C_RESET(),
 				       why ? C_WARN() : C_DIM(),
 				       why ? why : (*mounts ? mounts : ""), C_RESET());

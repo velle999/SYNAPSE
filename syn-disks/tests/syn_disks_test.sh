@@ -360,6 +360,19 @@ echo "$t" | awk -F'\t' '$5 == "free" && $4 < 1048576' | grep -q .
 [ $? -ne 0 ] && ok "no gap smaller than a megabyte is reported" \
              || bad "no gap smaller than a megabyte is reported"
 
+# The HUMAN output, which every other assertion in this file ignores in favour
+# of --rec. It shipped misaligned: the filesystem type was passed into the
+# printf's COLOUR argument and the %-16s beside it padded an empty string, so
+# every size moved by the length of the fstype. --rec was perfect throughout,
+# because it does not use that format string at all.
+#
+# The size is right-aligned and ends at column 45: 2 spaces + 16 (device) + 1
+# + 16 (fstype) + 1 + 9 (size).
+sdp --no-color table sdz | tail -n +2 \
+    | awk '{ if (substr($0, 37, 9) !~ /[0-9.]+ [KMGTP]i?B$/) bad = 1 }
+           END { exit bad ? 1 : 0 }'
+check "every row of the human table puts its size in the same column" $?
+
 # ── table: the protected column ─────────────────────────────────────────────
 #
 # This column is the whole reason guard.c returns a sentence. The GUI greys a
