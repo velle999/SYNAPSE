@@ -1185,6 +1185,97 @@ static int limine_write_default(const char *conf, const char *esc_path)
 	return 0;
 }
 
+/* Put GRUB_DEFAULT=saved into /etc/default/grub.
+ *
+ * Returns 1 if it changed the file, 0 if it was already right, negative on
+ * failure. Three shapes have to be handled and only the first is the easy one:
+ *
+ *   GRUB_DEFAULT=0        replaced in place, so its position and any comment
+ *                         above it survive
+ *   #GRUB_DEFAULT=0       a commented example is not a setting — the comment
+ *                         is left exactly where it is and a real line added,
+ *                         because editing somebody's commented-out example
+ *                         into a live setting is a change they did not make
+ *   (absent)              appended
+ *
+ * Everything else in the file is copied byte for byte. This is a file people
+ * hand-edit — cmdline, timeouts, themes — and a settings app that reformats it
+ * has taken something that was not offered.
+ */
+static int grub_write_default_saved(const char *path)
+{
+	FILE *in = fopen(path, "re");
+	if (!in) return -1;
+
+	char tmp[600];
+	if (snprintf(tmp, sizeof tmp, "%s.syn-new", path) >= (int)sizeof tmp) {
+		fclose(in);
+		return -1;
+	}
+
+	/* Read it all first: the file is small, and holding it means the original
+	 * is never open for writing — an interrupted run leaves the temp file and
+	 * an untouched /etc/default/grub. */
+	static char buf[64 * 1024];
+	size_t len = fread(buf, 1, sizeof buf - 1, in);
+	int truncated = !feof(in);
+	fclose(in);
+	if (truncated) return -1;
+	buf[len] = '\0';
+
+	FILE *out = fopen(tmp, "we");
+	if (!out) return -1;
+
+	int replaced = 0, ok = 1, changed = 0;
+	char *save = NULL;
+	/* strtok_r would eat empty lines; walk it by hand so blank lines and the
+	 * absence of a trailing newline both survive. */
+	char *p = buf;
+	while (ok && *p) {
+		char *nl = strchr(p, '\n');
+		size_t n = nl ? (size_t)(nl - p) : strlen(p);
+
+		const char *q = p;
+		while (*q == ' ' || *q == '\t') q++;
+		if (!replaced && !strncmp(q, "GRUB_DEFAULT=", 13)) {
+			char val[256];
+			snprintf(val, sizeof val, "%.*s", (int)(n - (q - p) - 13), q + 13);
+			for (char *v = val; *v; v++)
+				if (*v == '"' || *v == '\'') { memmove(v, v + 1, strlen(v)); v--; }
+			if (strcmp(val, "saved")) changed = 1;
+			ok = fputs("GRUB_DEFAULT=saved\n", out) != EOF;
+			replaced = 1;
+		} else {
+			ok = fwrite(p, 1, n, out) == n && fputc('\n', out) != EOF;
+		}
+
+		if (!nl) break;
+		p = nl + 1;
+	}
+
+	if (ok && !replaced) {
+		ok = fputs("\n# Set by syn-settings: grub reads its saved default only\n"
+		           "# when this is `saved`.\n"
+		           "GRUB_DEFAULT=saved\n", out) != EOF;
+		changed = 1;
+	}
+
+	if (ok) ok = fflush(out) == 0 && fsync(fileno(out)) == 0;
+	if (fclose(out) != 0) ok = 0;
+	if (!ok) { unlink(tmp); return -1; }
+
+	if (!changed) { unlink(tmp); return 0; }
+
+	/* Keep whatever mode it had; a fresh temp file is 0600 and this one is
+	 * read by grub-mkconfig. */
+	struct stat st;
+	if (stat(path, &st) == 0) (void)chmod(tmp, st.st_mode & 07777);
+
+	if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
+	(void)save;
+	return 1;
+}
+
 /* This binary's own path, for the pkexec re-exec.
  *
  * /proc/self/exe, not a compiled-in /usr/bin path: the test suite and every
@@ -1251,32 +1342,47 @@ static int default_command(const struct syn_boot *bl, const char *pkg,
 	}
 
 	case SYN_BL_GRUB: {
-		/* grub-set-default writes saved_entry into grubenv, and grub reads
-		 * grubenv ONLY when GRUB_DEFAULT=saved. Setting it otherwise is a
-		 * write that succeeds, reports success, and changes nothing that
-		 * boots — so it is refused, and the refusal says what to change. This
-		 * pane does not edit /etc/default/grub: that file is where a person
-		 * keeps their own boot decisions, and no SynapseOS machine here runs
-		 * GRUB to have proven an edit to it. */
-		char defconf[512], val[256] = "";
-		snprintf(defconf, sizeof defconf, "%s/etc/default/grub", boot_root());
-		conf_value(defconf, "GRUB_DEFAULT", val, sizeof val);
-		if (strcmp(val, "saved")) {
-			*why = NULL;
-			return boot_refuse("GRUB only remembers a default when "
-			                   "/etc/default/grub sets GRUB_DEFAULT=saved — set "
-			                   "that, run grub-mkconfig, and this will work");
-		}
+		/* THREE steps, in one privileged child, for the reason the ordering
+		 * demands it: GRUB_DEFAULT is read by grub-mkconfig at GENERATION
+		 * time, not by grub at boot. Setting saved_entry while grub.cfg still
+		 * says `set default="0"` is a write that succeeds, reports success and
+		 * changes nothing that boots. And the entry id has to be read from the
+		 * grub.cfg that mkconfig has just written, not the one it replaced.
+		 *
+		 * A sequence that has to happen in order, with a value computed
+		 * between two of its steps, is not something a single argv can carry —
+		 * so the child does the whole thing and the dialogue lists the steps.
+		 */
 		if (!grub_scan(bl, "", 0, img, release, scratch, scap)) {
 			*why = NULL;
 			return boot_refuse("no menu entry in grub.cfg names that kernel — "
 			                   "make it bootable first");
 		}
-		*why = "grub-set-default writes saved_entry, which GRUB_DEFAULT=saved "
-		       "tells grub to read";
+		*why = "grub reads saved_entry only when GRUB_DEFAULT=saved, and only "
+		       "grub-mkconfig puts that into grub.cfg";
+
+		/* GRUB_SAVEDEFAULT means "whatever you boot becomes the default", so
+		 * booting anything else once undoes this — quietly, later, long after
+		 * the dialogue was dismissed. It is the user's setting and not ours to
+		 * change; saying so beforehand is the whole of what this app can
+		 * honestly do about it. */
+		{
+			char defconf[512], sd[64] = "";
+			snprintf(defconf, sizeof defconf, "%s/etc/default/grub", boot_root());
+			conf_value(defconf, "GRUB_SAVEDEFAULT", sd, sizeof sd);
+			if (!strcmp(sd, "true") || !strcmp(sd, "yes"))
+				*why = "grub reads saved_entry only when GRUB_DEFAULT=saved, and "
+				       "only grub-mkconfig puts that into grub.cfg. NOTE: you "
+				       "have GRUB_SAVEDEFAULT set, so booting a different entry "
+				       "will replace this choice with that one";
+		}
 		argv[n++] = (char *)"pkexec";
-		argv[n++] = (char *)"grub-set-default";
-		argv[n++] = scratch;
+		argv[n++] = (char *)self_path();
+		argv[n++] = (char *)"default";
+		argv[n++] = (char *)pkg;
+		argv[n++] = (char *)"--loader";
+		argv[n++] = (char *)"grub";
+		argv[n++] = (char *)"--as-root";
 		break;
 	}
 
@@ -1348,14 +1454,88 @@ int do_default(int argc, char **argv)
 	 * config, the entry path — so nothing the unprivileged parent said is
 	 * trusted beyond the name of a kernel this app already knows. */
 	if (as_root) {
-		if (bl->kind != SYN_BL_LIMINE)
-			return boot_refuse("--as-root is only for the limine edit; the "
-			                   "other loaders have their own tools");
-		struct lim_walk w;
-		limine_walk(bl->conf, pkg, release, "", 1, &w);
-		if (!w.found)
-			return boot_refuse("that kernel has no entry in limine.conf");
-		return limine_write_default(bl->conf, w.found_esc);
+		if (bl->kind == SYN_BL_LIMINE) {
+			struct lim_walk w;
+			limine_walk(bl->conf, pkg, release, "", 1, &w);
+			if (!w.found)
+				return boot_refuse("that kernel has no entry in limine.conf");
+			if (g_dry_run) {
+				printf("would write: default_entry: %s  ->  %s\n",
+				       w.found_esc, bl->conf);
+				return 0;
+			}
+			return limine_write_default(bl->conf, w.found_esc);
+		}
+
+		if (bl->kind == SYN_BL_GRUB) {
+			char img[128];
+			snprintf(img, sizeof img, "vmlinuz-%s", pkg);
+
+			/* Checked BEFORE anything is written. Editing /etc/default/grub
+			 * and then discovering there is no grub-mkconfig to act on it
+			 * leaves a machine whose configured default is a promise nothing
+			 * kept. */
+			if (!have_cmd("grub-mkconfig") || !have_cmd("grub-set-default"))
+				return boot_refuse("grub-mkconfig and grub-set-default are what "
+				                   "perform this, and one of them is missing");
+
+			char defconf[512];
+			snprintf(defconf, sizeof defconf, "%s/etc/default/grub", boot_root());
+
+			if (g_dry_run) {
+				char val[256] = "";
+				conf_value(defconf, "GRUB_DEFAULT", val, sizeof val);
+				printf("would write: GRUB_DEFAULT=saved -> %s%s\n", defconf,
+				       strcmp(val, "saved") ? "" : " (already set)");
+			} else {
+				int w = grub_write_default_saved(defconf);
+				if (w < 0)
+					return boot_refuse("could not set GRUB_DEFAULT=saved in "
+					                   "/etc/default/grub — nothing was changed");
+				if (w > 0)
+					fprintf(stderr, "syn-settings: set GRUB_DEFAULT=saved in %s\n",
+					        defconf);
+			}
+
+			/* Regenerate FIRST. GRUB_DEFAULT is read by grub-mkconfig, not by
+			 * grub at boot: until this runs, grub.cfg still says
+			 * `set default="0"` and saved_entry is a file nothing reads. */
+			char *mk[6];
+			int m = 0;
+			mk[m++] = (char *)"grub-mkconfig";
+			mk[m++] = (char *)"-o";
+			mk[m++] = (char *)bl->conf;
+			mk[m] = NULL;
+			int rc = run_or_show_progress(mk);
+			if (rc != 0)
+				return boot_refuse("grub-mkconfig failed — the default was not "
+				                   "changed");
+
+			/* And read the id out of the file mkconfig has JUST written. Ids
+			 * carry the kernel version, so a regeneration that picked up a new
+			 * kernel changes them; the one computed before this ran could name
+			 * an entry that no longer exists. */
+			char id[512] = "";
+			if (!grub_scan(bl, "", 0, img, release, id, sizeof id)) {
+				if (g_dry_run) {
+					printf("would run: grub-set-default <id of %s in the "
+					       "regenerated grub.cfg>\n", pkg);
+					return 0;
+				}
+				return boot_refuse("the regenerated grub.cfg has no entry for "
+				                   "that kernel");
+			}
+
+			char *sd[4];
+			int s = 0;
+			sd[s++] = (char *)"grub-set-default";
+			sd[s++] = id;
+			sd[s] = NULL;
+			return run_or_show_progress(sd);
+		}
+
+		return boot_refuse("--as-root is only for the loaders this app writes "
+		                   "itself");
 	}
 
 	char *cmd[8];
@@ -1385,6 +1565,35 @@ int do_default(int argc, char **argv)
 		fputs("command\t", stdout);
 		for (int i = 0; cmd[i]; i++) printf("%s%s", i ? " " : "", cmd[i]);
 		putchar('\n');
+
+		/* THE STEPS, when the command is this binary re-running itself.
+		 *
+		 * "pkexec syn-settings default linux --as-root" is a true description
+		 * of what runs and tells you nothing about what it DOES — and on grub
+		 * what it does is edit /etc/default/grub, regenerate grub.cfg and set
+		 * a saved entry, three privileged acts behind one opaque line. A
+		 * confirmation dialogue that hides them is not a confirmation. Each is
+		 * printed by the same code that will perform it, under --dry-run, so
+		 * the list cannot drift from the work. */
+		if (!strcmp(cmd[1], self_path())) {
+			char *sub[10];
+			int s = 0;
+			sub[s++] = (char *)self_path();
+			sub[s++] = (char *)"-n";
+			for (int i = 2; cmd[i]; i++) sub[s++] = cmd[i];
+			sub[s] = NULL;
+
+			char out[4096];
+			if (run_capture_quiet(sub, out, sizeof out) == 0) {
+				int nstep = 0;
+				for (char *l = strtok(out, "\n"); l; l = strtok(NULL, "\n")) {
+					const char *t = strstr(l, "would run:");
+					if (!t) t = strstr(l, "would write:");
+					if (!t) continue;
+					printf("step%d\t%s\n", ++nstep, t);
+				}
+			}
+		}
 		return 0;
 	}
 

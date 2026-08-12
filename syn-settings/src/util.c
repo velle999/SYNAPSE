@@ -43,6 +43,14 @@ void tsv_clean(char *s)
 
 int have_cmd(const char *cmd)
 {
+	/* A name with a slash in it is a PATH, and PATH is not consulted for one —
+	 * exactly as execvp decides. Without this, "/usr/bin/syn-settings" was
+	 * looked for at "/usr/bin//usr/bin/syn-settings" and every caller was told
+	 * the program did not exist: run_quiet(), run_capture() and
+	 * run_or_show_progress() all guard on this, so an absolute command was not
+	 * refused loudly, it simply never ran. */
+	if (strchr(cmd, '/')) return access(cmd, X_OK) == 0;
+
 	const char *path = getenv("PATH");
 	if (!path || !*path) path = "/usr/bin:/bin";
 

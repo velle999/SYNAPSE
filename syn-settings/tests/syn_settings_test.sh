@@ -618,12 +618,111 @@ if [ "$linux_here" = 1 ]; then
         bad "default: grub read grubenv it should not have (got '$(boot_state "$bootfx/grubdef")')"
     fi
 
-    # ...and setting it is REFUSED there, rather than run to no effect.
-    out=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/grubdef" "$BIN" default linux --confirm 2>&1 || true)
-    case "$out" in
-        *GRUB_DEFAULT=saved*) ok "default: grub refuses and names what to change" ;;
-        *) bad "default: grub refusal did not explain itself ($out)" ;;
-    esac
+fi
+
+# ── grub, written the whole way through ─────────────────────────────────────
+#
+# Three privileged acts in an order that MATTERS, so they run in one child and
+# are tested as one: GRUB_DEFAULT is read by grub-mkconfig at generation time,
+# not by grub at boot, and the entry id has to come out of the grub.cfg that
+# mkconfig has just written. Getting the order wrong produces a write that
+# succeeds, reports success and changes nothing that boots.
+#
+# grub-mkconfig and grub-set-default are STUBS on PATH: no machine here boots
+# GRUB, the real ones need root and probe every disk, and what is being tested
+# is what this app does — the arguments it passes and the file it edits.
+mkdir -p "$bootfx/grubw/boot/grub" "$bootfx/grubw/etc/default" "$bootfx/grubw/bin"
+printf "menuentry 'SynapseOS' \$menuentry_id_option 'gnulinux-simple-x' {\n linux /vmlinuz-linux root=UUID=x\n}\nmenuentry 'Other' \$menuentry_id_option 'gnulinux-lts-x' {\n linux /vmlinuz-linux-lts root=UUID=x\n}\n" \
+    > "$bootfx/grubw/boot/grub/grub.cfg"
+printf '# hand-written, and it stays that way\nGRUB_DEFAULT=0\nGRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="quiet splash"\n' \
+    > "$bootfx/grubw/etc/default/grub"
+for stub in grub-mkconfig grub-set-default; do
+    printf '#!/bin/sh\necho "%s $*" >> "$STUBLOG"\n' "$stub" > "$bootfx/grubw/bin/$stub"
+    chmod +x "$bootfx/grubw/bin/$stub"
+done
+
+if [ "$linux_here" = 1 ]; then
+    export STUBLOG="$bootfx/grubw/stub.log"
+    : > "$STUBLOG"
+    if SYN_SETTINGS_BOOT_ROOT="$bootfx/grubw" PATH="$bootfx/grubw/bin:$PATH" \
+       "$BIN" default linux --as-root >/dev/null 2>&1; then
+        ok "default: the grub write ran to completion"
+    else
+        bad "default: the grub write failed"
+    fi
+
+    if grep -q '^GRUB_DEFAULT=saved$' "$bootfx/grubw/etc/default/grub"; then
+        ok "default: GRUB_DEFAULT=saved is written into /etc/default/grub"
+    else
+        bad "default: GRUB_DEFAULT was not set to saved"
+    fi
+
+    # The rest of that file is somebody's, and this app is a guest in it.
+    if grep -q '^GRUB_TIMEOUT=5$' "$bootfx/grubw/etc/default/grub" &&
+       grep -q 'quiet splash' "$bootfx/grubw/etc/default/grub" &&
+       grep -q '^# hand-written' "$bootfx/grubw/etc/default/grub" &&
+       [ "$(grep -c '^GRUB_DEFAULT=' "$bootfx/grubw/etc/default/grub")" = 1 ]; then
+        ok "default: every other line of /etc/default/grub survives, exactly once"
+    else
+        bad "default: /etc/default/grub was mangled"
+    fi
+
+    # ORDER. mkconfig before set-default, or the saved entry is written into a
+    # grub.cfg that has not been told to read it.
+    if [ "$(sed -n 1p "$STUBLOG")" = "grub-mkconfig -o $bootfx/grubw/boot/grub/grub.cfg" ]; then
+        ok "default: grub.cfg is regenerated FIRST, to the config that was found"
+    else
+        bad "default: wrong first step ($(sed -n 1p "$STUBLOG"))"
+    fi
+    if [ "$(sed -n 2p "$STUBLOG")" = "grub-set-default gnulinux-simple-x" ]; then
+        ok "default: grub-set-default gets the id of the entry naming that kernel"
+    else
+        bad "default: wrong saved entry ($(sed -n 2p "$STUBLOG"))"
+    fi
+
+    # Idempotent: a second run must not append a second GRUB_DEFAULT.
+    SYN_SETTINGS_BOOT_ROOT="$bootfx/grubw" PATH="$bootfx/grubw/bin:$PATH" \
+        "$BIN" default linux --as-root >/dev/null 2>&1
+    if [ "$(grep -c '^GRUB_DEFAULT=' "$bootfx/grubw/etc/default/grub")" = 1 ]; then
+        ok "default: setting it twice leaves one GRUB_DEFAULT"
+    else
+        bad "default: GRUB_DEFAULT accumulated"
+    fi
+
+    # A COMMENTED example is not a setting, and turning one into a live line is
+    # a change nobody made.
+    printf '#GRUB_DEFAULT=0\nGRUB_TIMEOUT=5\n' > "$bootfx/grubw/etc/default/grub"
+    SYN_SETTINGS_BOOT_ROOT="$bootfx/grubw" PATH="$bootfx/grubw/bin:$PATH" \
+        "$BIN" default linux --as-root >/dev/null 2>&1
+    if grep -q '^#GRUB_DEFAULT=0$' "$bootfx/grubw/etc/default/grub" &&
+       grep -q '^GRUB_DEFAULT=saved$' "$bootfx/grubw/etc/default/grub"; then
+        ok "default: a commented GRUB_DEFAULT is left alone and a real one added"
+    else
+        bad "default: the commented example was rewritten"
+    fi
+
+    # The dialogue must SHOW those three acts. "pkexec syn-settings --as-root"
+    # is a true description of what runs and says nothing about what it does.
+    plan=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/grubw" PATH="$bootfx/grubw/bin:$PATH" \
+           "$BIN" -n default linux 2>/dev/null)
+    if printf '%s' "$plan" | grep -q '^step1.*GRUB_DEFAULT=saved' &&
+       printf '%s' "$plan" | grep -q '^step2.*grub-mkconfig' &&
+       printf '%s' "$plan" | grep -q '^step3.*grub-set-default'; then
+        ok "default: the confirmation lists all three privileged steps"
+    else
+        bad "default: the confirmation hid what the child would do"
+    fi
+
+    # ...and asking what it would do must not DO it.
+    printf 'GRUB_DEFAULT=0\n' > "$bootfx/grubw/etc/default/grub"
+    SYN_SETTINGS_BOOT_ROOT="$bootfx/grubw" PATH="$bootfx/grubw/bin:$PATH" \
+        "$BIN" -n default linux >/dev/null 2>&1
+    if grep -q '^GRUB_DEFAULT=0$' "$bootfx/grubw/etc/default/grub"; then
+        ok "default: --dry-run changes nothing"
+    else
+        bad "default: --dry-run edited /etc/default/grub"
+    fi
+    unset STUBLOG
 fi
 
 # Each loader gets ITS OWN mechanism, and none of them is the other's.

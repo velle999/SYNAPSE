@@ -421,6 +421,17 @@ FloatingWindow {
     // exactly that, run the same path with --confirm — and the verb is the
     // only thing that differs.
     property string confirmVerb: "boot"
+    // step1..stepN out of the plan, in order. A dict cannot hold a list, so
+    // the binary numbers them and this collects them back.
+    readonly property var confirmSteps: {
+        const out = []
+        for (let i = 1; ; i++) {
+            const v = root.confirmPlan["step" + i]
+            if (!v) break
+            out.push(v)
+        }
+        return out
+    }
 
     Process {
         id: planProc
@@ -1249,6 +1260,39 @@ FloatingWindow {
                             text: root.confirmPlan["command"] || ""
                             color: root.cText
                             font { family: "monospace"; pixelSize: root.ui(11) }
+                        }
+                    }
+
+                    // WHAT THAT COMMAND THEN DOES, when it is this binary
+                    // re-running itself as root. On grub that one line is
+                    // three privileged acts — edit /etc/default/grub,
+                    // regenerate grub.cfg, set the saved entry — and a
+                    // dialogue that shows only the invocation is asking for
+                    // approval of something it has not described. The binary
+                    // produces these under --dry-run, so they are the steps
+                    // that will actually run, not a retelling.
+                    Column {
+                        width: parent.width
+                        spacing: 3
+                        visible: root.confirmSteps.length > 0
+
+                        Text {
+                            text: "It will:"
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
+                        }
+
+                        Repeater {
+                            model: root.confirmSteps
+                            delegate: Text {
+                                required property var modelData
+                                required property int index
+                                width: confirmCol.width
+                                wrapMode: Text.WrapAnywhere
+                                text: "  " + (index + 1) + ". " + modelData
+                                color: root.cText
+                                font { family: "monospace"; pixelSize: root.ui(10) }
+                            }
                         }
                     }
 

@@ -387,9 +387,11 @@ int pane_kernel(void)
 		for (int b = 0; b < nloaders; b++) {
 			const char *how =
 				loaders[b].kind == SYN_BL_GRUB
-				  ? "“Make default” runs grub-set-default, which needs "
-				    "GRUB_DEFAULT=saved in /etc/default/grub — this pane will "
-				    "not edit that file for you"
+				  ? "“Make default” sets GRUB_DEFAULT=saved in "
+				    "/etc/default/grub, regenerates grub.cfg, then runs "
+				    "grub-set-default — in that order, because GRUB_DEFAULT is "
+				    "read when the config is generated, not at boot. The "
+				    "confirmation lists all three"
 				: loaders[b].kind == SYN_BL_SYSTEMD
 				  ? "“Make default” runs bootctl set-default"
 				  : "“Make default” writes default_entry: into limine.conf, "
