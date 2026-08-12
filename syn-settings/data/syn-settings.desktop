@@ -4,7 +4,11 @@ Name=SYNAPSE Settings
 GenericName=System Settings
 Comment=Display, keyboard, region, power and where this system's configuration lives
 Exec=syn-settings gui
-Icon=preferences-system
+# Its own icon, not the theme's generic preferences-system — which on Breeze is
+# the same grey gear every settings-ish app in the menu already wears. A stock
+# icon name is whatever the icon theme decides; synfiles shipped
+# system-file-manager once and got Dolphin's face for it. See data/syn-settings.svg.
+Icon=syn-settings
 Terminal=false
 StartupWMClass=syn-settings
 # ONE main category. Two makes the entry appear twice in the scanned start-menu

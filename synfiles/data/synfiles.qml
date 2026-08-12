@@ -138,8 +138,24 @@ FloatingWindow {
         printErrors: false
         onFileChanged: reload()
         onLoaded: {
-            const m = this.text().match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
             root.uiFont = m ? m[1] : ""
+            // The text scale moved OUT of synfiles' own settings and into the
+            // desktop font state, because it was never a property of this
+            // window: synfiles ran at 115% while syn-settings and syn-disks sat
+            // at 100, which reads as the theming having missed those apps.
+            //
+            // This wins over the config key whenever the file carries it, and
+            // it says so with a flag rather than by arriving later — the config
+            // is read by a Process and this by a FileView, so which lands first
+            // is a race, and "last writer wins" would make the setting depend
+            // on disk timing.
+            const sc = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            if (sc) {
+                root.scaleFromDesktop = true
+                root.textScale = parseInt(sc[1])
+            }
         }
         onLoadFailed: root.uiFont = ""
     }
@@ -149,6 +165,12 @@ FloatingWindow {
     // slider moves all of it together and nothing drifts out of proportion.
     // Stored as a percentage because the settings file holds integers.
     property int textScale: 100
+    // Whether font.state supplied the scale. See the FileView above: this makes
+    // the precedence explicit instead of leaving it to whichever of two
+    // asynchronous loads happens to finish last.
+    property bool scaleFromDesktop: false
+    property int configScale: 100
+    property bool scaleMigrated: false
     readonly property int textMin: 75
     readonly property int textMax: 175
     function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
@@ -938,7 +960,13 @@ FloatingWindow {
                     case "reverse":   root.defaultReverse = r.value === "1"; break
                     case "hidden":    root.defaultHidden = r.value === "1"; break
                     case "view":      root.viewMode = r.value || "auto"; break
-                    case "text_scale": root.textScale = parseInt(r.value) || 100; break
+                    // Only when the desktop has not already answered. Kept as
+                    // the fallback for a machine with synfiles but no synui,
+                    // where there is no font.state and nothing to write one.
+                    case "text_scale":
+                        root.configScale = parseInt(r.value) || 100
+                        if (!root.scaleFromDesktop) root.textScale = root.configScale
+                        break
                     // Read straight into the property rather than through
                     // toggleSplit(): that function adopts one pane's state into
                     // the other and focuses the new pane, neither of which is
@@ -949,6 +977,27 @@ FloatingWindow {
                 // Only after applying, or the act of applying would write every
                 // default straight back out as if the user had chosen it.
                 root.settingsLoaded = true
+
+                // ── One-time migration of the text scale ────────────────────
+                //
+                // Anyone who set a text size before it became a desktop setting
+                // has it in this config and nowhere else, so the desktop still
+                // reads 100 and their other windows stay small — the exact
+                // symptom that prompted moving it. Pushing it once makes the
+                // move invisible: the size they already chose simply starts
+                // applying everywhere.
+                //
+                // Guarded three ways so it cannot fight the desktop: only when
+                // font.state carried no scale at all, only when the config
+                // holds something other than the default, and only once per
+                // process. After this the desktop is authoritative and this
+                // branch is never reached again.
+                if (!root.scaleFromDesktop && root.configScale !== 100
+                    && !root.scaleMigrated) {
+                    root.scaleMigrated = true
+                    Quickshell.execDetached(["synui-apply-font", "--scale",
+                                             String(root.configScale)])
+                }
 
                 // The first tab was built before the settings arrived, so it
                 // gets them applied and re-read. Without this the remembered
@@ -997,7 +1046,15 @@ FloatingWindow {
     Timer {
         id: textSaveTimer
         interval: 400
-        onTriggered: root.saveSetting("text_scale", root.textScale)
+        onTriggered: {
+            root.saveSetting("text_scale", root.textScale)
+            // ...and to the desktop, which is what carries it to the other
+            // windows. Best effort by design: on a box with synfiles and no
+            // synui there is no helper and no font.state, and the config key
+            // above is then the whole story rather than half of one.
+            Quickshell.execDetached(["synui-apply-font", "--scale",
+                                     String(root.textScale)])
+        }
     }
     onTextScaleChanged: if (root.settingsLoaded) textSaveTimer.restart()
 

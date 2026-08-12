@@ -57,8 +57,26 @@ STATE="$STATE_DIR/font.state"
 # family" means in a world where a font setting is a family AND a size.
 DEFAULT_SIZE=10
 
+# ── The text scale ─────────────────────────────────────────────────────────
+#
+# A PERCENT, and a separate setting from the size above. `size` is a point size
+# handed to GTK, Qt, kitty and rofi; `scale` is for the suite's own quickshell
+# windows, which draw at pixel sizes chosen for their layouts rather than from
+# a point size, and which therefore cannot honour `size` without every window
+# reflowing to a number that means something different in each of them.
+#
+# It lives HERE, in the desktop-wide font state, and not in any one app's
+# config — which is exactly the bug this was added to fix. synfiles had a text
+# size slider writing its own settings file, so synfiles ran at 115% while
+# syn-settings and syn-disks sat at 100 and looked like the theming had missed
+# them. One setting, one file, every window watching it.
+DEFAULT_SCALE=100
+SCALE_MIN=75
+SCALE_MAX=175
+
 family=
 size=$DEFAULT_SIZE
+scale=$DEFAULT_SCALE
 
 state_load() {
     [[ -f $STATE ]] || return 0
@@ -67,6 +85,7 @@ state_load() {
         case "$k" in
             family) family=$v ;;
             size)   size=$v   ;;
+            scale)  scale=$v  ;;
         esac
     done < "$STATE"
 }
@@ -79,7 +98,18 @@ state_save() {
         echo "family=$family"
         echo "size=$size"
         echo "mono=$(is_mono "$family" && echo yes || echo no)"
+        echo "scale=$scale"
     } > "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE" || rm -f "$STATE.tmp"
+}
+
+# Clamp rather than refuse: this is reached from a GUI slider, and the binary
+# that owns a setting should be the thing that decides its range.
+clamp_scale() {
+    local n=${1//[!0-9]/}
+    [[ -n $n ]] || n=$DEFAULT_SCALE
+    (( n < SCALE_MIN )) && n=$SCALE_MIN
+    (( n > SCALE_MAX )) && n=$SCALE_MAX
+    printf '%s' "$n"
 }
 
 # Is this family monospaced? Asked of fontconfig rather than guessed from the
@@ -359,29 +389,55 @@ apply() {   # apply <family|""> <size>
     # instant it changes is repainting into a desktop that already agrees.
     family=$fam
     size=$sz
-    if [[ -z $fam ]]; then rm -f "$STATE"; else state_save; fi
+    # ⚠ Resetting the FONT must not reset the text scale — they are two
+    # settings that happen to share a file. Removing font.state outright (what
+    # this used to do unconditionally) silently threw away a scale the user had
+    # set from a different window entirely. The file only goes when there is
+    # nothing left in it worth keeping.
+    if [[ -z $fam && $scale == "$DEFAULT_SCALE" ]]; then
+        rm -f "$STATE"
+    else
+        state_save
+    fi
 }
 
 # ── Entry point ─────────────────────────────────────────────────────────────
+
+# ⚠ EVERY path loads the existing state first, and the reason is a bug this
+# had the moment `scale` was added: `apply` ends by calling state_save, which
+# writes whatever the `scale` variable currently holds. A run that had not read
+# the file still held the built-in default — so picking a font, or resetting
+# one, silently rewrote a text scale the user had set from a different window.
+#
+# Two settings sharing a file means every writer has to read it first. Loading
+# once here is what makes that true of all of them rather than of whichever
+# branches somebody remembered.
+state_load
 
 case "${1:-status}" in
 --default)
     apply "" "$DEFAULT_SIZE"
     ;;
 
+--scale)
+    # Sets the text scale alone, leaving the family and size exactly as they
+    # are. This is what the suite's text-size sliders call.
+    scale=$(clamp_scale "${2:-$DEFAULT_SCALE}")
+    state_save
+    ;;
+
 --reapply)
     # What synui-apply-theme calls. Silent and successful when no font has ever
     # been picked — the common case, and not an error.
-    state_load
     [[ -n $family ]] || exit 0
     apply "$family" "$size"
     ;;
 
 status)
-    state_load
     echo "family=$family"
     echo "size=$size"
     echo "mono=$(is_mono "$family" && echo yes || echo no)"
+    echo "scale=$scale"
     ;;
 
 -h|--help)

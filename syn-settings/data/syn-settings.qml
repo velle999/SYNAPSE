@@ -111,11 +111,26 @@ FloatingWindow {
         printErrors: false
         onFileChanged: reload()
         onLoaded: {
-            const m = this.text().match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
             root.uiFont = m ? m[1] : ""
+            // The text scale lives in the same file, because it is a property
+            // of the desktop and not of this window. It was a per-app setting
+            // once — synfiles had a slider writing its own config — and the
+            // result was synfiles drawing at 115% beside two sibling windows
+            // stuck at 100, which reads as "the theming missed those apps".
+            const s = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = s ? parseInt(s[1]) : 100
         }
-        onLoadFailed: root.uiFont = ""
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
     }
+
+    // Every pixelSize in this file goes through here. Qt cannot restyle an
+    // application's font after startup, so the size has to be a BINDING on
+    // each Text rather than something applied once — the same reason the
+    // family is named on every one of them.
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
 
     // ── State ───────────────────────────────────────────────────────────────
     readonly property var panes: [
@@ -300,7 +315,7 @@ FloatingWindow {
             anchors.centerIn: parent
             text: btn.label
             color: root.cText
-            font { family: root.uiFont; pixelSize: 11 }
+            font { family: root.uiFont; pixelSize: root.ui(11) }
         }
         MouseArea {
             id: btnMa
@@ -393,7 +408,7 @@ FloatingWindow {
                     x: 16
                     text: "SYNAPSE Settings"
                     color: root.cAccent
-                    font { family: root.uiFont; pixelSize: 14; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                 }
                 Item { width: 1; height: 14 }
 
@@ -420,7 +435,7 @@ FloatingWindow {
                             elide: Text.ElideRight
                             text: navItem.modelData.label
                             color: navItem.modelData.id === root.pane ? root.cText : root.cDim
-                            font { family: root.uiFont; pixelSize: 12 }
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
                         MouseArea {
                             id: navMa
@@ -441,7 +456,7 @@ FloatingWindow {
                     + "timedatectl and systemctl, which do their own "
                     + "authorisation."
                 color: root.cDim
-                font { family: root.uiFont; pixelSize: 9 }
+                font { family: root.uiFont; pixelSize: root.ui(9) }
             }
         }
 
@@ -456,7 +471,7 @@ FloatingWindow {
                 anchors { left: parent.left; leftMargin: 18; top: parent.top; topMargin: 14 }
                 text: root.paneMeta(root.pane).label
                 color: root.cText
-                font { family: root.uiFont; pixelSize: 15; bold: true }
+                font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
             }
             Text {
                 anchors { left: parent.left; leftMargin: 18
@@ -465,7 +480,7 @@ FloatingWindow {
                 elide: Text.ElideRight
                 text: root.paneMeta(root.pane).blurb
                 color: root.cDim
-                font { family: root.uiFont; pixelSize: 10 }
+                font { family: root.uiFont; pixelSize: root.ui(10) }
             }
 
             Rectangle {
@@ -478,7 +493,7 @@ FloatingWindow {
                     anchors.centerIn: parent
                     text: root.loading ? "reading…" : "Refresh"
                     color: root.cText
-                    font { family: root.uiFont; pixelSize: 11 }
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 MouseArea {
                     id: refreshMa
@@ -516,7 +531,7 @@ FloatingWindow {
                         elide: Text.ElideRight
                         text: modelData
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 10; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                     }
                 }
             }
@@ -598,7 +613,7 @@ FloatingWindow {
                             text: modelData
                             color: index === 0 ? root.cText
                                                : root.tone(root.cols[index] || "", modelData)
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                     }
                 }
@@ -625,7 +640,7 @@ FloatingWindow {
                   + root.pane + "` to see why."
             horizontalAlignment: Text.AlignHCenter
             color: root.cDim
-            font { family: root.uiFont; pixelSize: 11 }
+            font { family: root.uiFont; pixelSize: root.ui(11) }
         }
 
         // ── Editor ──────────────────────────────────────────────────────────
@@ -661,7 +676,7 @@ FloatingWindow {
                 elide: Text.ElideRight
                 text: root.selKey
                 color: root.cText
-                font { family: root.uiFont; pixelSize: 12; bold: true }
+                font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
             }
 
             // A value to type: keymap, xkb layout, locale, time zone.
@@ -680,7 +695,7 @@ FloatingWindow {
                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                     verticalAlignment: TextInput.AlignVCenter
                     color: root.cText
-                    font { family: root.uiFont; pixelSize: 12 }
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                     selectByMouse: true
                     onAccepted: applyBtn.go()
                 }
@@ -817,7 +832,7 @@ FloatingWindow {
                     : root.loading ? "reading…"
                     : root.rows.length + (root.rows.length === 1 ? " row" : " rows")
                 color: root.status !== "" ? root.cWarn : root.cDim
-                font { family: root.uiFont; pixelSize: 10 }
+                font { family: root.uiFont; pixelSize: root.ui(10) }
             }
             Text {
                 anchors { left: statusLeft.right; leftMargin: 12
@@ -827,7 +842,7 @@ FloatingWindow {
                 elide: Text.ElideLeft
                 text: root.bin + " --rec " + root.pane
                 color: root.cDim
-                font { family: root.uiFont; pixelSize: 10 }
+                font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
 
@@ -870,7 +885,7 @@ FloatingWindow {
                     Text {
                         text: "Change boot configuration?"
                         color: root.cText
-                        font { family: root.uiFont; pixelSize: 14; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                     }
 
                     Text {
@@ -880,7 +895,7 @@ FloatingWindow {
                             + "only change in this app that can leave a machine that does "
                             + "not start, so read what it will do first."
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
 
                     Grid {
@@ -892,27 +907,27 @@ FloatingWindow {
                         Text {
                             text: "Bootloader"
                             color: root.cDim
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                         Text {
                             width: confirmCol.width - 100
                             elide: Text.ElideRight
                             text: root.confirmPlan["loader"] || "-"
                             color: root.cText
-                            font { family: root.uiFont; pixelSize: 11; bold: true }
+                            font { family: root.uiFont; pixelSize: root.ui(11); bold: true }
                         }
 
                         Text {
                             text: "Config"
                             color: root.cDim
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                         Text {
                             width: confirmCol.width - 100
                             elide: Text.ElideMiddle
                             text: root.confirmPlan["config"] || "-"
                             color: root.cText
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                     }
 
@@ -921,7 +936,7 @@ FloatingWindow {
                         wrapMode: Text.WordWrap
                         text: root.confirmPlan["why"] || ""
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
 
                     // The command, verbatim. Whoever is about to authorise a
@@ -939,7 +954,7 @@ FloatingWindow {
                             wrapMode: Text.WrapAnywhere
                             text: root.confirmPlan["command"] || ""
                             color: root.cText
-                            font { family: "monospace"; pixelSize: 11 }
+                            font { family: "monospace"; pixelSize: root.ui(11) }
                         }
                     }
 

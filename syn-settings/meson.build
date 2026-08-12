@@ -37,6 +37,12 @@ executable('syn-settings', sources,
 
 install_data('data/syn-settings.qml',
              install_dir: get_option('datadir') / 'syn-settings')
+# The application icon. Scalable only: Qt renders the SVG at whatever size the
+# dock or the menu asks for, and a set of PNGs would be five more files to keep
+# in step with one drawing.
+install_data('data/syn-settings.svg',
+             install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps')
+
 install_data('data/syn-settings.desktop',
              install_dir: get_option('datadir') / 'applications')
 

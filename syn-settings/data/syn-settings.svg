@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- syn-settings — the SynapseOS settings app.
+
+     Three sliders, in the dendrite purple the rest of the suite uses.
+
+     Deliberately NOT the theme's `preferences-system`, which is what this
+     shipped before: a stock name is whatever the icon theme decides, and on
+     Breeze it is the same grey gear that every settings-ish application in the
+     menu already wears. synfiles learned this the expensive way — it shipped
+     `system-file-manager`, which on Breeze is literally Dolphin's icon, and
+     put two file managers in the dock wearing one face.
+
+     Sliders rather than a gear for the same reason: a gear is the one shape
+     every other configuration tool has already taken.
+
+     Scalable only. Qt renders this at whatever size the dock asks for.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cd6"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="6" y="6" width="36" height="36" rx="7" fill="url(#plate)"/>
+
+  <!-- three tracks, each with its handle at a different position: the shape
+       reads as "things you can set" rather than "a picture of a slider" -->
+  <g stroke="#1b1030" stroke-width="2.4" stroke-linecap="round">
+    <path d="M13 17 H35"/>
+    <path d="M13 24 H35"/>
+    <path d="M13 31 H35"/>
+  </g>
+  <g fill="#1b1030">
+    <circle cx="19" cy="17" r="3.6"/>
+    <circle cx="30" cy="24" r="3.6"/>
+    <circle cx="23" cy="31" r="3.6"/>
+  </g>
+  <g fill="#4ec9b0">
+    <circle cx="19" cy="17" r="1.5"/>
+    <circle cx="30" cy="24" r="1.5"/>
+    <circle cx="23" cy="31" r="1.5"/>
+  </g>
+</svg>

@@ -116,11 +116,26 @@ FloatingWindow {
         printErrors: false
         onFileChanged: reload()
         onLoaded: {
-            const m = this.text().match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
             root.uiFont = m ? m[1] : ""
+            // The text scale lives in the same file, because it is a property
+            // of the desktop and not of this window. It was a per-app setting
+            // once — synfiles had a slider writing its own config — and the
+            // result was synfiles drawing at 115% beside two sibling windows
+            // stuck at 100, which reads as "the theming missed those apps".
+            const s = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = s ? parseInt(s[1]) : 100
         }
-        onLoadFailed: root.uiFont = ""
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
     }
+
+    // Every pixelSize in this file goes through here. Qt cannot restyle an
+    // application's font after startup, so the size has to be a BINDING on
+    // each Text rather than something applied once — the same reason the
+    // family is named on every one of them.
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
 
     // ── Records ─────────────────────────────────────────────────────────────
 
@@ -448,7 +463,7 @@ FloatingWindow {
             anchors.centerIn: parent
             text: btn.label
             color: btn.danger ? root.cBad : root.cText
-            font { family: root.uiFont; pixelSize: 11 }
+            font { family: root.uiFont; pixelSize: root.ui(11) }
         }
         MouseArea {
             id: btnMa
@@ -527,7 +542,7 @@ FloatingWindow {
                 y: 14
                 text: "Disks"
                 color: root.cAccent
-                font { family: root.uiFont; pixelSize: 14; bold: true }
+                font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
             }
 
             ListView {
@@ -571,7 +586,7 @@ FloatingWindow {
                         elide: Text.ElideRight
                         text: dRow.modelData.name
                         color: dRow.chosen ? root.cText : root.cDim
-                        font { family: root.uiFont; pixelSize: 12 }
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
                     Text {
                         anchors { left: dGlyph.right; leftMargin: 10
@@ -581,7 +596,7 @@ FloatingWindow {
                         text: dRow.modelData.size + " · " + dRow.modelData.bus
                               + (dRow.modelData.system === "system" ? " · system" : "")
                         color: dRow.modelData.system === "system" ? root.cWarn : root.cDim
-                        font { family: root.uiFont; pixelSize: 10 }
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
                     MouseArea {
                         id: dMa
@@ -614,7 +629,7 @@ FloatingWindow {
                 elide: Text.ElideRight
                 text: root.drive ? root.drive.name : "No drive selected"
                 color: root.cText
-                font { family: root.uiFont; pixelSize: 15; bold: true }
+                font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
             }
             Text {
                 anchors { left: parent.left; leftMargin: 18
@@ -630,7 +645,7 @@ FloatingWindow {
                     return s
                 }
                 color: root.cDim
-                font { family: root.uiFont; pixelSize: 10 }
+                font { family: root.uiFont; pixelSize: root.ui(10) }
             }
 
             Btn {
@@ -724,7 +739,7 @@ FloatingWindow {
                             elide: Text.ElideRight
                             text: slice.modelData.label
                             color: slice.modelData.gap ? root.cDim : root.cText
-                            font { family: root.uiFont; pixelSize: 10 }
+                            font { family: root.uiFont; pixelSize: root.ui(10) }
                         }
                         MouseArea {
                             id: sliceMa
@@ -766,7 +781,7 @@ FloatingWindow {
                         elide: Text.ElideRight
                         text: modelData
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 10; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                     }
                 }
             }
@@ -822,7 +837,7 @@ FloatingWindow {
                             elide: Text.ElideRight
                             text: (pRow.depth > 0 ? "└ " : "") + pRow.modelData.device
                             color: root.cText
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                     }
                     Text {
@@ -830,28 +845,28 @@ FloatingWindow {
                         elide: Text.ElideRight
                         text: pRow.modelData.label || "—"
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                     Text {
                         width: headRow.colWidth(2)
                         elide: Text.ElideRight
                         text: pRow.modelData.fstype || "—"
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                     Text {
                         width: headRow.colWidth(3)
                         elide: Text.ElideRight
                         text: pRow.modelData.size
                         color: root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                     Text {
                         width: headRow.colWidth(4)
                         elide: Text.ElideRight
                         text: pRow.modelData.mounts || "not mounted"
                         color: pRow.modelData.mounts ? root.cGood : root.cDim
-                        font { family: root.uiFont; pixelSize: 11 }
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
 
                     // A meter, and only when there is something to measure.
@@ -888,7 +903,7 @@ FloatingWindow {
                             visible: parent.total <= 0
                             text: "—"
                             color: root.cDim
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                     }
                 }
@@ -910,7 +925,7 @@ FloatingWindow {
             horizontalAlignment: Text.AlignHCenter
             text: "This drive has no partition table.\nNothing is allocated on it."
             color: root.cDim
-            font { family: root.uiFont; pixelSize: 11 }
+            font { family: root.uiFont; pixelSize: root.ui(11) }
         }
 
         // ── Health, when it has been asked for ──────────────────────────────
@@ -930,7 +945,7 @@ FloatingWindow {
                 anchors { top: parent.top; left: parent.left; margins: 16 }
                 text: "Drive health"
                 color: root.cAccent
-                font { family: root.uiFont; pixelSize: 14; bold: true }
+                font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
             }
 
             Column {
@@ -954,7 +969,7 @@ FloatingWindow {
                             elide: Text.ElideRight
                             text: parent.modelData.field
                             color: root.cDim
-                            font { family: root.uiFont; pixelSize: 11 }
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                         }
                         Text {
                             anchors { left: parent.left; leftMargin: 150; right: parent.right
@@ -966,7 +981,7 @@ FloatingWindow {
                                  : root.cText
                             font {
                                 family: root.uiFont
-                                pixelSize: 11
+                                pixelSize: root.ui(11)
                                 bold: parent.modelData.field === "health"
                             }
                         }
@@ -1012,7 +1027,7 @@ FloatingWindow {
                 Text {
                     text: "SYNAPSE Disks"
                     color: root.cAccent
-                    font { family: root.uiFont; pixelSize: 15; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(15); bold: true }
                 }
                 Text {
                     width: aboutCol.width
@@ -1022,7 +1037,7 @@ FloatingWindow {
                         + "smartmontools, and formatting through polkit — each "
                         + "of which does its own authorisation."
                     color: root.cDim
-                    font { family: root.uiFont; pixelSize: 11 }
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 Item { width: 1; height: 4 }
                 Text {
@@ -1031,13 +1046,13 @@ FloatingWindow {
                     text: "Formatting anything on the disk holding this running "
                         + "system is refused, and there is no override."
                     color: root.cWarn
-                    font { family: root.uiFont; pixelSize: 11 }
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 Item { width: 1; height: 4 }
                 Text {
                     text: "Support: buymeacoffee.com/velle999"
                     color: root.cAccent
-                    font { family: root.uiFont; pixelSize: 11; underline: true }
+                    font { family: root.uiFont; pixelSize: root.ui(11); underline: true }
 
                     MouseArea {
                         anchors.fill: parent
@@ -1078,14 +1093,14 @@ FloatingWindow {
                 Text {
                     text: "Erase " + root.fmtDev
                     color: root.cBad
-                    font { family: root.uiFont; pixelSize: 14; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                 }
                 Text {
                     width: fmtCol.width
                     wrapMode: Text.WordWrap
                     text: "Everything on this device will be destroyed. There is no undo."
                     color: root.cText
-                    font { family: root.uiFont; pixelSize: 11 }
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
 
                 Item { width: 1; height: 2 }
@@ -1093,7 +1108,7 @@ FloatingWindow {
                 Text {
                     text: "Filesystem"
                     color: root.cDim
-                    font { family: root.uiFont; pixelSize: 10; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
                 Flow {
                     width: fmtCol.width
@@ -1116,7 +1131,7 @@ FloatingWindow {
                                 anchors.centerIn: parent
                                 text: fsChip.modelData.id
                                 color: root.cText
-                                font { family: root.uiFont; pixelSize: 11 }
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
                             }
                             MouseArea {
                                 id: fsMa
@@ -1136,7 +1151,7 @@ FloatingWindow {
                         return ""
                     }
                     color: root.cDim
-                    font { family: root.uiFont; pixelSize: 10 }
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
 
                 Item { width: 1; height: 2 }
@@ -1144,7 +1159,7 @@ FloatingWindow {
                 Text {
                     text: "Label (optional)"
                     color: root.cDim
-                    font { family: root.uiFont; pixelSize: 10; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
                 Rectangle {
                     width: 240; height: 26; radius: 4
@@ -1157,7 +1172,7 @@ FloatingWindow {
                         anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                         verticalAlignment: TextInput.AlignVCenter
                         color: root.cText
-                        font { family: root.uiFont; pixelSize: 12 }
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                         selectByMouse: true
                         // The binary is the boundary for what a label may hold;
                         // this only keeps the preview in step with the typing.
@@ -1172,7 +1187,7 @@ FloatingWindow {
                 Text {
                     text: root.fmtPlan["refused"] ? "This is not allowed:" : "This will run:"
                     color: root.cDim
-                    font { family: root.uiFont; pixelSize: 10; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
                 Rectangle {
                     width: fmtCol.width
@@ -1188,7 +1203,7 @@ FloatingWindow {
                             : root.fmtPlan["command"] ? root.fmtPlan["command"]
                             : "working it out…"
                         color: root.fmtPlan["refused"] ? root.cBad : root.cText
-                        font { family: "monospace"; pixelSize: 10 }
+                        font { family: "monospace"; pixelSize: root.ui(10) }
                     }
                 }
                 Text {
@@ -1197,7 +1212,7 @@ FloatingWindow {
                     visible: root.fmtPlan["blocked"] !== undefined
                     text: root.fmtPlan["blocked"] || ""
                     color: root.cWarn
-                    font { family: root.uiFont; pixelSize: 10 }
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
             }
 
@@ -1243,7 +1258,7 @@ FloatingWindow {
                 elide: Text.ElideRight
                 text: root.part ? root.part.device : "select a partition"
                 color: root.part ? root.cText : root.cDim
-                font { family: root.uiFont; pixelSize: 12; bold: root.part !== null }
+                font { family: root.uiFont; pixelSize: root.ui(12); bold: root.part !== null }
             }
 
             Row {
@@ -1295,7 +1310,7 @@ FloatingWindow {
                 text: root.status !== "" ? root.status
                     : root.drives.length + " drive" + (root.drives.length === 1 ? "" : "s")
                 color: root.status !== "" ? root.cText : root.cDim
-                font { family: root.uiFont; pixelSize: 10 }
+                font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
     }
