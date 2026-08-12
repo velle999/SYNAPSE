@@ -457,10 +457,45 @@ refresh_local_repo() {
         sudo cp -f "$pkg" "$LOCAL_REPO/" && copied=$((copied + 1))
     done
 
+    # Then RECONCILE: publish anything that is installed at a version the repo
+    # does not carry, whoever built it.
+    #
+    # The loop above only knows what THIS syn-update decided to build, and that
+    # is not the whole set. build-all.sh installs every package it produces
+    # with `pacman -U`, and it now pulls an in-repo dependency into the build
+    # when a selective run needs one — so a component can be built, installed
+    # and working while appearing in neither CHANGED nor NEW.
+    #
+    # That happened the moment vibe gained a hard dependency on syn-confine: a
+    # machine on an older syn-update asks for vibe, build-all.sh builds and
+    # installs syn-confine to satisfy it, and syn-confine is then a package on
+    # the system that no repo advertises — permanently, because every later
+    # scan finds it installed and unchanged and so never lists it either.
+    #
+    # Matched against the INSTALLED version rather than "newest built", so this
+    # publishes what the machine is actually running and never advertises some
+    # older build left in the tree.
+    local ver inst reconciled=0
+    for c in "${COMPONENTS[@]}"; do
+        inst=$(pacman -Q "$c" 2>/dev/null | awk '{print $2}')
+        [ -n "$inst" ] || continue
+        for pkg in "$SRC/$c/$c"-*.pkg.tar.zst; do
+            [ -e "$pkg" ] || continue
+            case $pkg in *-debug-*) continue ;; esac
+            read -r _ ver < <(pacman -Qp "$pkg" 2>/dev/null)
+            [ "$ver" = "$inst" ] || continue
+            [ -e "$LOCAL_REPO/$(basename "$pkg")" ] && continue
+            sudo cp -f "$pkg" "$LOCAL_REPO/" &&
+                reconciled=$((reconciled + 1))
+        done
+    done
+
     prune_superseded
     rebuild_db
     sudo pacman -Sy --quiet >/dev/null 2>&1 || true
     [ "$copied" -gt 0 ] && ok "published $copied package(s) to $LOCAL_REPO"
+    [ "$reconciled" -gt 0 ] &&
+        ok "published $reconciled installed package(s) the repo was missing"
     return 0
 }
 
