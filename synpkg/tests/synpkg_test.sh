@@ -130,10 +130,57 @@ n=$("$SYNPKG" --tsv arsenal status | tsv_cols)
 [ $? -ne 0 ] && ok "arsenal packages rejects a non-blackarch group" \
              || bad "arsenal packages accepted a non-blackarch group"
 
+# ── cachyos ─────────────────────────────────────────────────────────────────
+# Same rule as arsenal: status must ANSWER on a machine without the repo. The
+# Kernel pane asks this to decide whether its Cachy rows can install, and a
+# status that errored would make them look broken rather than unavailable.
+"$SYNPKG" cachyos status >/dev/null 2>&1
+check "cachyos status answers without the repo" $?
+
+n=$("$SYNPKG" --tsv cachyos status | tsv_cols)
+[ "$n" = 2 ] && ok "cachyos status --tsv has 2 columns" \
+             || bad "cachyos status --tsv has 2 columns (got $n)"
+
+"$SYNPKG" cachyos frobnicate >/dev/null 2>&1
+[ $? -ne 0 ] && ok "cachyos rejects an unknown subcommand" \
+             || bad "cachyos accepted an unknown subcommand"
+
+# The bootstrap helper. It cannot be RUN here — it needs root and the network —
+# but the two ways it could be wrong before it ever gets that far are cheap to
+# check, and a syntax error in it would only surface at the polkit prompt.
+CACHY_SH="$(dirname "$0")/../data/synpkg-enable-cachyos.sh"
+if [ -f "$CACHY_SH" ]; then
+    bash -n "$CACHY_SH" >/dev/null 2>&1
+    check "synpkg-enable-cachyos.sh parses" $?
+
+    bash "$CACHY_SH" frobnicate >/dev/null 2>&1
+    [ $? -ne 0 ] && ok "the cachyos helper rejects an unknown action" \
+                 || bad "the cachyos helper accepted an unknown action"
+
+    # ⚠ It must NEVER add the v3/v4 repositories or upstream's pacman fork.
+    # That is the whole reason it exists instead of running cachyos-repo.sh,
+    # and it is one careless copy-paste from upstream away from being undone.
+    n=$(grep -cE '^[^#]*(cachyos-v3|cachyos-v4|cachyos-znver4|pacman-7)' "$CACHY_SH")
+    [ "$n" = 0 ] && ok "the cachyos helper adds no v3/v4 repo or pacman fork" \
+                 || bad "the cachyos helper has $n line(s) touching v3/v4 or pacman"
+
+    # Appended, never inserted ahead of [core] — so core and extra keep
+    # precedence and enabling the repo cannot re-resolve an installed package.
+    grep -q '>> "\$PACMAN_CONF"' "$CACHY_SH" \
+        && ok "the cachyos repo section is appended" \
+        || bad "the cachyos repo section is not appended to pacman.conf"
+else
+    bad "synpkg-enable-cachyos.sh not found beside the tests: $CACHY_SH"
+fi
+
 # ── mutations refuse rather than assume ─────────────────────────────────────
 # In TSV mode confirm() returns false, so a transaction without --noconfirm
-# must decline. This is what stops a GUI click from installing silently if the
-# --noconfirm flag is ever dropped from the QML.
+# declines. NOTE: the two checks below do NOT cover that — they only prove an
+# empty target list errors. The decline path needs root and a real transaction,
+# so it is untested here, and that gap is exactly how syn-settings' kernel
+# installer shipped broken: it never passed --noconfirm, so every install
+# authenticated through polkit and then silently declined itself. confirm() now
+# says why it refused, which is the part that would have surfaced it.
 "$SYNPKG" install >/dev/null 2>&1
 [ $? -ne 0 ] && ok "install with no targets is an error" \
              || bad "install with no targets succeeded"

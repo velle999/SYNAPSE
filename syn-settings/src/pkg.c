@@ -46,6 +46,34 @@ int do_pkg(int argc, char **argv)
 		return 1;
 	}
 
+	/* A kernel from a repository this machine may not have yet.
+	 *
+	 * Done HERE, before the install, because pacman cannot be told to find a
+	 * package in a repository that is not configured — the install would fail
+	 * with "not found in any repository" AFTER the user had authenticated,
+	 * which is indistinguishable from the pane offering software that does not
+	 * exist.
+	 *
+	 * Only on install. Removing a kernel must never add a repository, and a
+	 * `remove` that quietly configured one would be a genuinely surprising
+	 * thing for a button labelled Remove to do.
+	 *
+	 * synpkg decides whether the work is needed — enable-repo is idempotent
+	 * and returns early when [cachyos] is already there — so this does not
+	 * keep its own answer to "is it enabled", which could disagree. */
+	if (!strcmp(act, "install") && syn_kernel_repo(name)) {
+		char *r[] = { (char *)"synpkg", (char *)"cachyos",
+		              (char *)"enable-repo", NULL };
+		if (g_dry_run) {
+			fputs("would run: synpkg cachyos enable-repo\n", stdout);
+		} else if (run_quiet(r) != 0) {
+			fprintf(stderr, "syn-settings: could not enable the CachyOS "
+			                "repository — %s cannot be installed without it\n",
+			        name);
+			return 1;
+		}
+	}
+
 	/* Headers travel with the kernel, always. A kernel installed without them
 	 * boots to a machine where DKMS cannot build synapse_kmod or the NVIDIA
 	 * module — which is to say, no GPU driver — and the failure appears one

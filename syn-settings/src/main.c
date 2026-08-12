@@ -39,7 +39,7 @@ static void usage(void)
 "  --rec system      identity, and WHERE configuration actually lives\n"
 "  --rec network     interfaces, radios, and whether a firewall is up\n"
 "  --rec bluetooth   adapter, radio blocks, and what is paired\n"
-"  --rec kernel      every kernel Arch ships, which are installed, which runs\n"
+"  --rec kernel      every kernel on offer, which are installed, which runs\n"
 "\n"
 "  set keymap <map>          console keymap        (localectl)\n"
 "  set xkb <layout> [var]    desktop layout        (localectl)\n"

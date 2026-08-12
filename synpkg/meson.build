@@ -30,6 +30,7 @@ sources = files(
   'src/trans.c',
   'src/curated.c',
   'src/arsenal.c',
+  'src/cachyos.c',
   'src/ext.c',
   'src/appstream.c',
   'src/about.c',
@@ -49,6 +50,14 @@ install_data('data/curated.tsv',   install_dir: get_option('datadir') / 'synpkg'
 install_data('data/synpkg-enable-blackarch.sh',
              install_dir: get_option('prefix') / 'lib' / 'synpkg',
              rename: 'synpkg-enable-blackarch',
+             install_mode: 'rwxr-xr-x')
+
+# The CachyOS bootstrap, beside it and for the same reason. It deliberately does
+# NOT run upstream's cachyos-repo.sh — that installs a pacman fork and adds the
+# v3/v4 whole-system repositories ahead of [core]. See the script's header.
+install_data('data/synpkg-enable-cachyos.sh',
+             install_dir: get_option('prefix') / 'lib' / 'synpkg',
+             rename: 'synpkg-enable-cachyos',
              install_mode: 'rwxr-xr-x')
 
 install_data('data/synpkg.qml',    install_dir: get_option('datadir') / 'synpkg')

@@ -40,6 +40,8 @@ static void usage(FILE *out)
 "\n"
 "Other sources\n"
 "  arsenal [subcommand]    BlackArch security tooling\n"
+"  cachyos [subcommand]    the CachyOS kernel repository\n"
+"                          (status, enable-repo, disable-repo)\n"
 "  aur <search|install|installed|updates>\n"
 "  flatpak <search|install|remove|installed|updates|remotes|enable-flathub>\n"
 "  flatpak categories      browse Flathub by category\n"
@@ -162,6 +164,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "suggest"))   return cmd_suggest(rest_argc, rest);
 	if (!strcmp(cmd, "groups"))    return cmd_groups(rest_argc, rest);
 	if (!strcmp(cmd, "arsenal"))   return cmd_arsenal(rest_argc, rest);
+	if (!strcmp(cmd, "cachyos"))   return cmd_cachyos(rest_argc, rest);
 	if (!strcmp(cmd, "aur"))       return cmd_aur(rest_argc, rest);
 	if (!strcmp(cmd, "flatpak"))   return cmd_flatpak(rest_argc, rest);
 	if (!strcmp(cmd, "system"))    return cmd_system(rest_argc, rest);

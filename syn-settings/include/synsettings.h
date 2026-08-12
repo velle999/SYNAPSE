@@ -95,6 +95,9 @@ int syn_kernel_release(const char *pkg, char *out, size_t cap);
 /* Is this one of the kernels this app manages? The list lives in kernel.c;
  * pkg.c and boot.c both ask rather than keeping copies. */
 int syn_kernel_known(const char *pkg);
+/* The repository a kernel needs, or NULL when Arch ships it (the CachyOS ones
+ * are the only ones that are not in core/extra). */
+const char *syn_kernel_repo(const char *pkg);
 
 /* Make a kernel bootable under the detected bootloader. Refuses without
  * --confirm; see the escalation note at the top of src/boot.c. */

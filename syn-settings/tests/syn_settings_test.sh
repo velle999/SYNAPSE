@@ -123,10 +123,50 @@ for evil in "firefox" "base" "sudo" "linux-lts-evil"; do
         ok "pkg refused: $evil"
     fi
 done
-if "$BIN" --dry-run pkg install linux-lts | grep -q 'synpkg install linux-lts linux-lts-headers'; then
+if "$BIN" --dry-run pkg install linux-lts | grep -q 'synpkg --noconfirm install linux-lts linux-lts-headers'; then
     ok "pkg install pulls the matching headers"
 else
     bad "pkg install did not include headers"
+fi
+
+# ⚠ --noconfirm is LOAD-BEARING, not cosmetic. synpkg's confirm() refuses when
+# stdin is not a terminal, and this binary has no terminal — so without the
+# flag every install authenticated through polkit and then declined itself,
+# exiting 0 with nothing installed. That was the Kernel pane's install button
+# for its whole life, and nothing failed loudly enough to catch it.
+if "$BIN" --dry-run pkg install linux-zen | grep -q -- '--noconfirm'; then
+    ok "pkg install passes --noconfirm"
+else
+    bad "pkg install dropped --noconfirm — it will silently install nothing"
+fi
+
+# A CachyOS kernel is not in any Arch repository, so the repo has to be added
+# BEFORE the install, or pacman reports "not found" after the password prompt.
+out=$("$BIN" --dry-run pkg install linux-cachyos)
+if printf '%s' "$out" | grep -q 'synpkg cachyos enable-repo'; then
+    ok "installing a Cachy kernel enables the repo first"
+else
+    bad "installing a Cachy kernel did not enable the CachyOS repo"
+fi
+if printf '%s' "$out" | grep -q 'install linux-cachyos linux-cachyos-headers'; then
+    ok "the Cachy kernel still pulls its headers"
+else
+    bad "the Cachy kernel did not pull its headers"
+fi
+
+# An Arch kernel must NOT drag the CachyOS repo onto the machine.
+if "$BIN" --dry-run pkg install linux-zen | grep -q 'cachyos'; then
+    bad "installing an Arch kernel touched the CachyOS repo"
+else
+    ok "an Arch kernel does not enable the CachyOS repo"
+fi
+
+# Neither must REMOVE, in either direction. A button labelled Remove that
+# configures a new repository would be a genuinely surprising thing.
+if "$BIN" --dry-run pkg remove linux-cachyos | grep -q 'enable-repo'; then
+    bad "removing a Cachy kernel enabled a repository"
+else
+    ok "remove never enables a repository"
 fi
 
 # A mode string reaches a command line; anything that is not WxH[@R] is refused

@@ -132,6 +132,9 @@ size_t sp_curated_count(void);
 
 /* ── arsenal.c ──────────────────────────────────────────────────────────── */
 int cmd_arsenal(int argc, char **argv);
+int cmd_cachyos(int argc, char **argv);
+/* Is [cachyos] in pacman.conf? The Kernel pane's rows depend on it. */
+bool cachyos_repo_enabled(void);
 
 /* ── ext.c — the non-ALPM sources ───────────────────────────────────────── */
 int aur_search_term(const char *term);   /* also reached by `search --aur` */

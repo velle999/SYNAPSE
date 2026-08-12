@@ -139,7 +139,7 @@ FloatingWindow {
         { id: "network",   label: "Network",  blurb: "interfaces, radios, and whether anything is filtering traffic" },
         { id: "bluetooth", label: "Bluetooth", blurb: "the adapter, both kinds of radio block, and what is paired" },
         { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
-        { id: "kernel",    label: "Kernel",   blurb: "every kernel Arch ships, which are installed, and which one you booted" },
+        { id: "kernel",    label: "Kernel",   blurb: "every kernel on offer, which are installed, and which one you booted" },
         { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
     property string pane: Quickshell.env("SYNSETTINGS_PANE") || "display"
