@@ -49,7 +49,8 @@ static void load(void)
 
 	char *argv[] = {
 		(char *)tool, (char *)"-P", (char *)"-o",
-		(char *)"NAME,FSTYPE,LABEL,UUID,PARTLABEL,PARTTYPENAME,PTTYPE,MODEL",
+		(char *)"NAME,FSTYPE,LABEL,UUID,PARTLABEL,PARTTYPENAME,PARTTYPE,"
+		        "PARTUUID,PTTYPE,MODEL",
 		NULL
 	};
 	int st = 0;
@@ -76,8 +77,13 @@ static void load(void)
 			.partlabel = kv_val(lines[i], "PARTLABEL"),
 			/* PARTTYPENAME before PTTYPE is not an accident of order —
 			 * kv_val anchors on the delimiters precisely so that asking
-			 * for one cannot match inside the other. */
+			 * for one cannot match inside the other. PARTTYPE is the same
+			 * hazard twice over: it sits inside PARTTYPENAME, and UUID
+			 * sits inside PARTUUID. Both are safe only because kv_val
+			 * requires a space before the key and an '=' after it. */
 			.parttype  = kv_val(lines[i], "PARTTYPENAME"),
+			.parttype_raw = kv_val(lines[i], "PARTTYPE"),
+			.partuuid  = kv_val(lines[i], "PARTUUID"),
 			.pttype    = kv_val(lines[i], "PTTYPE"),
 			.model     = kv_val(lines[i], "MODEL"),
 		};
@@ -124,6 +130,8 @@ void lsblk_done(void)
 		free(g_ent[i].v.uuid);
 		free(g_ent[i].v.partlabel);
 		free(g_ent[i].v.parttype);
+		free(g_ent[i].v.parttype_raw);
+		free(g_ent[i].v.partuuid);
 		free(g_ent[i].v.pttype);
 		free(g_ent[i].v.model);
 	}

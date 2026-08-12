@@ -17,13 +17,22 @@
 # /dev/mapper/cryptroot over dm-N over a partition over the disk — so the
 # encrypted container holding a running system is refused even though nothing
 # reports that partition itself as mounted.
+#
+# ⚠ Partitioning (mkpart, rmpart, resize, mktable) is guarded by the same file
+# and a deliberately NARROWER rule, because refusing the whole drive would mean
+# the feature could never do anything on a machine with one disk. It refuses
+# the partitions that matter — anything "/" rests on, anything mounted,
+# anything holding live swap, anything with a volume unlocked on top of it,
+# anything /etc/fstab expects at the next boot — and allows the free space
+# around them. There is no --force for any of it, and resize will grow a
+# partition but never shrink one.
 pkgname=syn-disks
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="SynapseOS disk utility: drives, partitions, health, mounting and formatting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -32,11 +41,14 @@ license=('GPL-2.0-or-later')
 # Nothing but libc for the storage tree itself.
 depends=('glibc')
 
-# util-linux supplies lsblk, which is where filesystem types, labels and UUIDs
-# come from — they live in the udev database rather than in sysfs. Without it
-# every drive still lists with its size, kind, bus and mounts and only the type
-# and label columns read "unknown", so this is a soft need met by a package
-# that is on every Arch system anyway.
+# util-linux supplies two things. lsblk is where filesystem types, labels and
+# UUIDs come from — they live in the udev database rather than in sysfs — and
+# that half is soft: without it every drive still lists with its size, kind,
+# bus and mounts, and only the type and label columns read "unknown".
+#
+# sfdisk is not soft. It is the only thing that writes a partition table here,
+# because reimplementing GPT would mean writing a CRC32 over a structure that,
+# if it is wrong, makes a drive look blank. It is on every Arch system anyway.
 depends+=('util-linux')
 
 makedepends=('meson' 'ninja' 'gcc')

@@ -26,6 +26,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/statvfs.h>
 
 typedef struct {
@@ -173,6 +174,143 @@ bool mt_is_autofs(const char *point)
 		    && !strcmp(g_mounts[i].fstype, "autofs"))
 			return true;
 	return false;
+}
+
+/* ── the two ways a device is in use without being mounted ─────────────────
+ *
+ * Both of these exist because /proc/self/mounts is not the whole story, and a
+ * guard that believes it is waves through exactly the two cases that hurt.
+ */
+
+char **mt_swap_devices(size_t *n)
+{
+	*n = 0;
+
+	const char *env = getenv("SYN_DISKS_SWAPS");
+	char *text = slurp((env && *env) ? env : "/proc/swaps");
+	if (!text)
+		return NULL;
+
+	size_t nlines = 0;
+	char **lines = split(text, '\n', &nlines);
+
+	char **out = NULL;
+	for (size_t i = 0; i < nlines; i++) {
+		/* The first line is the header — "Filename Type Size Used Priority" —
+		 * and the device column is whitespace-padded rather than
+		 * single-space-separated, so the field is taken as "up to the first
+		 * space" instead of by splitting. */
+		if (i == 0 || !*lines[i])
+			continue;
+		char *sp = strchr(lines[i], ' ');
+		if (sp)
+			*sp = '\0';
+		if (!*lines[i] || lines[i][0] != '/')
+			continue;              /* a swap FILE, which is not a device */
+
+		/* Resolved by device number like every other path in this program: a
+		 * swap line may name /dev/mapper/swap while the guard is asking about
+		 * dm-1. */
+		char *k = sd_kernel_name(lines[i]);
+
+		/* Failing that, the last component — but ONLY if sysfs agrees it names
+		 * a block device, and only for a path under /dev.
+		 *
+		 * sd_kernel_name stats the path and insists it is a block device,
+		 * which is the right rule everywhere it is given a string somebody
+		 * typed: without it, a regular file called /home/me/sdz2 would resolve
+		 * to a disk. This input is not that. /proc/swaps is written by the
+		 * kernel and every line in it names something the kernel has swap
+		 * open on, so a name that fails to stat means the node is missing, not
+		 * that the entry is a decoy. Refusing to resolve it would mean the
+		 * guard quietly stopped protecting live swap. */
+		if (!k && !strncmp(lines[i], "/dev/", 5)) {
+			const char *base = strrchr(lines[i], '/') + 1;
+			char *maybe = *base ? sd_kernel_name(base) : NULL;
+			k = maybe;
+		}
+		if (!k)
+			continue;
+		out = xrealloc(out, (*n + 1) * sizeof *out);
+		out[(*n)++] = k;
+	}
+
+	free(lines);
+	free(text);
+	return out;
+}
+
+/* One fstab spec — the first field — matched against a device.
+ *
+ * fstab names things by UUID far more often than by path, precisely so that it
+ * keeps working when the kernel renames sdb to sdc. That means a guard
+ * comparing device paths matches almost nothing on a modern system, and would
+ * report "/boot is not in fstab" for a machine whose fstab is nothing but
+ * UUIDs. */
+static bool spec_names(const char *spec, const char *kname, const lsblk_t *lb)
+{
+	if (!strncmp(spec, "UUID=", 5))
+		return lb->uuid && *lb->uuid && !strcasecmp(spec + 5, lb->uuid);
+	if (!strncmp(spec, "PARTUUID=", 9))
+		return lb->partuuid && *lb->partuuid
+		    && !strcasecmp(spec + 9, lb->partuuid);
+	if (!strncmp(spec, "LABEL=", 6))
+		return lb->label && *lb->label && !strcmp(spec + 6, lb->label);
+	if (!strncmp(spec, "PARTLABEL=", 10))
+		return lb->partlabel && *lb->partlabel
+		    && !strcmp(spec + 10, lb->partlabel);
+	if (spec[0] != '/')
+		return false;              /* "none", "tmpfs", a network share */
+
+	char *k = sd_kernel_name(spec);
+	bool hit = k && !strcmp(k, kname);
+	free(k);
+	return hit;
+}
+
+char *mt_fstab_point(const char *kname)
+{
+	if (!kname || !*kname)
+		return NULL;
+
+	const char *env = getenv("SYN_DISKS_FSTAB");
+	char *text = slurp((env && *env) ? env : "/etc/fstab");
+	if (!text)
+		return NULL;
+
+	const lsblk_t *lb = lsblk_for(kname);
+
+	size_t nlines = 0;
+	char **lines = split(text, '\n', &nlines);
+
+	char *found = NULL;
+	for (size_t i = 0; i < nlines && !found; i++) {
+		char *line = trim(lines[i]);
+		if (!*line || *line == '#')
+			continue;
+
+		/* Fields are separated by runs of spaces and tabs, and an fstab
+		 * written by an installer is column-aligned with both. */
+		char *spec = line;
+		char *p = line;
+		while (*p && *p != ' ' && *p != '\t')
+			p++;
+		if (*p)
+			*p++ = '\0';
+		while (*p == ' ' || *p == '\t')
+			p++;
+		char *point = p;
+		while (*p && *p != ' ' && *p != '\t')
+			p++;
+		*p = '\0';
+
+		if (spec_names(spec, kname, lb))
+			found = xstrdup(*point ? point : spec);
+	}
+
+	free(lines);
+	free(text);
+	return found;
 }
 
 void mt_usage(const char *point, unsigned long long *used,

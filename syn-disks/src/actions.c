@@ -178,13 +178,13 @@ int cmd_eject(int argc, char **argv)
 
 /* The filesystems offered, each with the tool that makes it and the flag that
  * sets a label. A fixed table rather than "mkfs.$fs": that would turn the --fs
- * argument into a choice of which program to execute. */
-static const struct {
-	const char *name;
-	const char *tool;
-	const char *label_flag;
-	const char *note;
-} FS[] = {
+ * argument into a choice of which program to execute.
+ *
+ * Shared with partition.c through fs_all/fs_find rather than copied into it.
+ * `mkpart --fs=` offers what `format --fs=` offers because it is reading the
+ * same array — two lists would agree on the day they were written and drift on
+ * the day somebody added a filesystem to one of them. */
+static const fs_kind_t FS[] = {
 	{ "ext4",  "mkfs.ext4",  "-L", "Linux, journalled" },
 	{ "btrfs", "mkfs.btrfs", "-L", "Linux, snapshots and compression" },
 	{ "xfs",   "mkfs.xfs",   "-L", "Linux, large files" },
@@ -194,11 +194,27 @@ static const struct {
 };
 static const size_t NFS = sizeof FS / sizeof *FS;
 
+const fs_kind_t *fs_all(size_t *n)
+{
+	*n = NFS;
+	return FS;
+}
+
+const fs_kind_t *fs_find(const char *name)
+{
+	if (!name)
+		return NULL;
+	for (size_t i = 0; i < NFS; i++)
+		if (!strcmp(FS[i].name, name))
+			return &FS[i];
+	return NULL;
+}
+
 /* A label goes to a tool that writes it into a filesystem superblock, so it is
  * checked rather than trusted. Conservative on purpose: the set below is what
  * every one of these filesystems accepts, and a rejected label costs somebody
  * a retype while a smuggled one costs them a disk. */
-static bool label_ok(const char *s)
+bool fs_label_ok(const char *s)
 {
 	if (!s)
 		return true;
@@ -214,61 +230,40 @@ static bool label_ok(const char *s)
 	return true;
 }
 
-/* Rule 2, and the reason this file exists. Returns the disk they have in
- * common, or NULL. */
-static char *shares_disk_with_root(const char *kname)
+const char *priv_prefix(void)
 {
-	char *rootdev = mt_root_device();
-	if (!rootdev)
+	/* SYN_DISKS_NO_PKEXEC exists for the test suite and for a root shell,
+	 * where pkexec has nothing to ask. */
+	if (getenv("SYN_DISKS_NO_PKEXEC"))
 		return NULL;
-
-	size_t nt = 0, nr = 0;
-	char **target = sd_base_disks(kname, &nt);
-	char **root = sd_base_disks(rootdev, &nr);
-
-	char *hit = NULL;
-	for (size_t i = 0; i < nt && !hit; i++)
-		for (size_t j = 0; j < nr && !hit; j++)
-			if (!strcmp(target[i], root[j]))
-				hit = xstrdup(target[i]);
-
-	sd_free_list(target, nt);
-	sd_free_list(root, nr);
-	free(rootdev);
-	return hit;
+	const char *pkexec = getenv("SYN_DISKS_PKEXEC");
+	return (pkexec && *pkexec) ? pkexec : "pkexec";
 }
 
-/* Anything mounted on this device, or on anything built on top of it. A LUKS
- * container reports nothing mounted while the volume inside it holds five
- * filesystems, so checking the target alone is checking the wrong device. */
-static char *anything_mounted_under(const char *kname, int depth)
+int fs_mkfs_argv(const fs_kind_t *fs, const char *label, const char *dev,
+                 char **out)
 {
-	if (depth > 8)
-		return NULL;
-
-	size_t n = 0;
-	char **pts = mt_points_of(kname, &n);
-	if (n > 0) {
-		char *first = xstrdup(pts[0]);
-		sd_free_list(pts, n);
-		return first;
+	int n = 0;
+	const char *priv = priv_prefix();
+	if (priv)
+		out[n++] = (char *)priv;
+	out[n++] = (char *)fs->tool;
+	if (label && *label) {
+		out[n++] = (char *)fs->label_flag;
+		out[n++] = (char *)label;
 	}
-	sd_free_list(pts, n);
-
-	size_t nh = 0;
-	char **holders = sd_holders(kname, &nh);
-	char *hit = NULL;
-	for (size_t i = 0; i < nh && !hit; i++)
-		hit = anything_mounted_under(holders[i], depth + 1);
-	sd_free_list(holders, nh);
-
-	size_t np = 0;
-	char **parts = sd_partitions(kname, &np);
-	for (size_t i = 0; i < np && !hit; i++)
-		hit = anything_mounted_under(parts[i], depth + 1);
-	sd_free_list(parts, np);
-
-	return hit;
+	/* mkfs.ntfs on a large disk spends an hour zeroing unless told not to,
+	 * and mkfs.vfat refuses a whole device that has no partition table unless
+	 * told the target really is the device. Neither is a preference: without
+	 * them the command this program has just described, and had confirmed,
+	 * fails at the last step for a reason the user cannot act on. */
+	if (!strcmp(fs->name, "ntfs"))
+		out[n++] = (char *)"--quick";
+	else if (!strcmp(fs->name, "vfat"))
+		out[n++] = (char *)"-I";
+	out[n++] = (char *)dev;
+	out[n] = NULL;
+	return n;
 }
 
 int cmd_format(int argc, char **argv)
@@ -292,15 +287,11 @@ int cmd_format(int argc, char **argv)
 	if (!fs)
 		die("format: need --fs=TYPE (one of: ext4 btrfs xfs vfat exfat ntfs)");
 
-	const size_t nfs = NFS;
-	size_t pick = nfs;
-	for (size_t i = 0; i < nfs; i++)
-		if (!strcmp(FS[i].name, fs))
-			pick = i;
-	if (pick == nfs)
+	const fs_kind_t *kind = fs_find(fs);
+	if (!kind)
 		die("format: '%s' is not a filesystem this offers", fs);
 
-	if (!label_ok(label))
+	if (!fs_label_ok(label))
 		die("format: a label may hold up to 32 letters, digits, spaces, "
 		    "'-', '_' and '.' — '%s' does not", label);
 
@@ -308,8 +299,14 @@ int cmd_format(int argc, char **argv)
 	char *dev = canonical_dev(target, &k);
 
 	/* Rule 2 first, because it is the one whose failure is unrecoverable and
-	 * because it is true regardless of what is mounted right now. */
-	char *shared = shares_disk_with_root(k);
+	 * because it is true regardless of what is mounted right now.
+	 *
+	 * This is deliberately WIDER than the rule partitioning uses. guard.c
+	 * refuses the partitions that matter and allows the free space around
+	 * them, because a partition editor that will not touch the only drive in
+	 * the machine is no use to anybody. Formatting has no such excuse: it
+	 * writes over a whole device, so it refuses the whole drive. */
+	char *shared = guard_shares_root_disk(k);
 	if (shared) {
 		fprintf(stderr,
 		        "%ssyn-disks: refusing to format %s — it is on /dev/%s, "
@@ -324,7 +321,7 @@ int cmd_format(int argc, char **argv)
 		return 1;
 	}
 
-	char *busy = anything_mounted_under(k, 0);
+	char *busy = guard_mounted_under(k);
 	if (busy) {
 		fprintf(stderr,
 		        "%ssyn-disks: refusing to format %s — something on it is "
@@ -340,10 +337,10 @@ int cmd_format(int argc, char **argv)
 	 * worth answering on a machine that cannot yet do it, and a GUI asking
 	 * for confirmation needs the description before it can offer the button.
 	 * Only an actual write is refused. */
-	bool have_tool = have_cmd(FS[pick].tool);
+	bool have_tool = have_cmd(kind->tool);
 	if (!have_tool && yes && !dry) {
 		fprintf(stderr, "syn-disks: %s is not installed — cannot make an %s "
-		        "filesystem\n", FS[pick].tool, fs);
+		        "filesystem\n", kind->tool, fs);
 		free(dev);
 		free(k);
 		return 3;
@@ -353,44 +350,10 @@ int cmd_format(int argc, char **argv)
 	 * shows and what --yes executes cannot drift apart. syn-settings takes
 	 * the same approach for changing the bootloader, for the same reason. */
 	char *cmd[10];
-	int n = 0;
-	const char *pkexec = getenv("SYN_DISKS_PKEXEC");
-	if (!pkexec || !*pkexec)
-		pkexec = "pkexec";
-	/* SYN_DISKS_NO_PKEXEC exists for the test suite and for a root shell,
-	 * where pkexec has nothing to ask. */
-	if (!getenv("SYN_DISKS_NO_PKEXEC"))
-		cmd[n++] = (char *)pkexec;
-	cmd[n++] = (char *)FS[pick].tool;
-	if (label && *label) {
-		cmd[n++] = (char *)FS[pick].label_flag;
-		cmd[n++] = (char *)label;
-	}
-	/* mkfs.ntfs on a large disk spends an hour zeroing unless told not to,
-	 * and mkfs.vfat needs to be told the target is a whole device when it
-	 * has no partition table. Neither is a preference. */
-	if (!strcmp(fs, "ntfs"))
-		cmd[n++] = (char *)"--quick";
-	cmd[n++] = dev;
-	cmd[n] = NULL;
+	fs_mkfs_argv(kind, label, dev, cmd);
 
 	if (dry || !yes) {
-		/* An argument holding a space is QUOTED for display. The command is
-		 * executed as an argv array and a label of "My Stick" is one
-		 * argument either way — but printed bare it reads as two, and the
-		 * whole point of showing the command is that somebody can check it
-		 * or run it themselves. A description that is not the thing it
-		 * describes is worse than no description. */
-		char *line = NULL;
-		for (int i = 0; i < n; i++) {
-			bool needs_quotes = strchr(cmd[i], ' ') != NULL;
-			char *piece = needs_quotes ? xasprintf("'%s'", cmd[i])
-			                           : xstrdup(cmd[i]);
-			char *g = line ? xasprintf("%s %s", line, piece) : xstrdup(piece);
-			free(piece);
-			free(line);
-			line = g;
-		}
+		char *line = cmd_display(cmd);
 		if (g_out == OUT_REC) {
 			rec_row(2, "field", "value");
 			rec_row(2, "device", dev);
@@ -401,7 +364,7 @@ int cmd_format(int argc, char **argv)
 			/* The GUI needs this to disable its own confirm button rather
 			 * than offering an action that will fail at the last step. */
 			if (!have_tool) {
-				char *why = xasprintf("%s is not installed", FS[pick].tool);
+				char *why = xasprintf("%s is not installed", kind->tool);
 				rec_row(2, "blocked", why);
 				free(why);
 			}

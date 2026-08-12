@@ -23,7 +23,10 @@ sources = files(
   'src/lsblk.c',
   'src/disks.c',
   'src/smart.c',
+  'src/guard.c',
   'src/actions.c',
+  'src/table.c',
+  'src/partition.c',
   'src/about.c',
 )
 

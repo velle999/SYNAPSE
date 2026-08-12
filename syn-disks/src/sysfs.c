@@ -188,6 +188,11 @@ char **sd_holders(const char *kname, size_t *n)
 	return child_names(kname, "holders", n);
 }
 
+char **sd_slaves(const char *kname, size_t *n)
+{
+	return child_names(kname, "slaves", n);
+}
+
 /* The partitions of a disk, in on-disk order.
  *
  * A disk's sysfs directory contains its partitions as subdirectories, each

@@ -109,6 +109,27 @@ char  *run_capture(char *const argv[], int *status, bool quiet_stderr);
  * NULL. */
 char  *kv_val(const char *line, const char *key);
 
+/* Like run_capture, but `input` is written to the child's stdin and the pipe is
+ * then closed. sfdisk takes its script that way and there is no argument form
+ * of it, so this is what stands between a partition request and a shell. */
+char  *run_capture_in(char *const argv[], const char *input, int *status);
+
+/* An argv rendered as the command line somebody could type themselves.
+ *
+ * Arguments holding a space are QUOTED. The command is executed as an array and
+ * a label of "My Stick" is one argument either way — but printed bare it reads
+ * as two, and the whole point of showing the command is that it can be checked
+ * or run by hand. A description that is not the thing it describes is worse
+ * than no description at all. */
+char  *cmd_display(char *const argv[]);
+
+/* "512MiB", "20G", "1.5 TiB", "4096". IEC suffixes are powers of 1024 and the
+ * two-letter SI ones (KB, MB, GB, TB) are powers of 1000, which is the same
+ * split every other tool on the system uses. Returns false — rather than a
+ * guess — on anything it does not fully understand, including a negative
+ * number, an overflow, and trailing rubbish. */
+bool   parse_size(const char *s, unsigned long long *bytes);
+
 /* ── sysfs.c — the kernel's account of the storage tree ─────────────────────
  *
  * Everything here works on a KERNEL NAME ("sda1", "nvme0n1", "dm-0"), never on
@@ -168,6 +189,11 @@ int    sd_count_partitions(const char *kname);
  * LVM volume over a physical volume. The inverse of slaves/. */
 char **sd_holders(const char *kname, size_t *n);
 
+/* What this device is built OUT OF — the container under an unlocked LUKS
+ * volume, the physical volumes under an LVM one. The inverse of sd_holders,
+ * and one rung only: dm-0's slave is nvme1n1p2, not the disk under it. */
+char **sd_slaves(const char *kname, size_t *n);
+
 /* usb, nvme, sata, scsi, virtio, mmc, dm, or "" when the device link says
  * nothing recognisable. Derived from the sysfs path, which names the bus it
  * hangs off. */
@@ -207,19 +233,40 @@ void mt_usage(const char *point, unsigned long long *used, unsigned long long *t
 /* Is this path an autofs trigger rather than a real mount? */
 bool mt_is_autofs(const char *point);
 
+/* Every device with swap active on it right now, as kernel names, from
+ * /proc/swaps.
+ *
+ * Swap is NOT in /proc/self/mounts, so every check built on mounts alone
+ * reports the swap partition as idle. Deleting it out from under a running
+ * kernel takes the machine down at the next page-out, which is minutes later
+ * and looks like unrelated hardware failure. SYN_DISKS_SWAPS overrides the
+ * file. Caller frees with sd_free_list. */
+char **mt_swap_devices(size_t *n);
+
+/* Does /etc/fstab name this device — by path, UUID=, LABEL=, PARTUUID= or
+ * PARTLABEL=? The entry's mount point is returned, or NULL.
+ *
+ * A partition listed in fstab is one the system expects to find at the next
+ * boot whether or not it happens to be mounted this minute. /boot on a machine
+ * that is up and running is very often not mounted, and deleting it is not less
+ * destructive for that. SYN_DISKS_FSTAB overrides the file. */
+char *mt_fstab_point(const char *kname);
+
 /* ── lsblk.c — the udev database, for what sysfs does not carry ────────────*/
 
-/* FSTYPE, LABEL, UUID, PARTLABEL, PARTTYPENAME, PTTYPE and MODEL for one
- * kernel name. Returns NULL if lsblk is absent or says nothing — every caller
- * must degrade to "unknown" rather than failing, because the storage tree is
- * still fully described without it. malloc'd; free with lsblk_free. */
+/* What lsblk knows and sysfs does not, for one kernel name. Returns an
+ * all-NULL record if lsblk is absent or says nothing — every caller must
+ * degrade to "unknown" rather than failing, because the storage tree is still
+ * fully described without it. */
 typedef struct {
 	char *fstype;
 	char *label;
 	char *uuid;
 	char *partlabel;
-	char *parttype;
-	char *pttype;
+	char *parttype;       /* PARTTYPENAME — "EFI System", for a human */
+	char *parttype_raw;   /* PARTTYPE — the GUID, or the hex code on MBR */
+	char *partuuid;       /* what fstab means by PARTUUID= */
+	char *pttype;         /* the TABLE's type: "gpt", "dos", or absent */
 	char *model;
 } lsblk_t;
 
@@ -238,6 +285,74 @@ int cmd_info(int argc, char **argv);
  * polkit prompt at somebody who just wanted to see how full a disk was. */
 int cmd_smart(int argc, char **argv);
 
+/* ── guard.c — the rules that stop this program destroying the machine ──────
+ *
+ * Everything destructive asks here first, and every answer is a SENTENCE
+ * naming what is in the way rather than a bare bool: the GUI prints it beside
+ * the greyed-out button, the command line prints it as the refusal, and
+ * `table` puts it in a column — so all three explain a refusal in the same
+ * words and none of them re-derives the rule for itself.
+ *
+ * Two tiers, and the difference is deliberate:
+ *
+ *   FORMAT refuses anything sharing a physical disk with "/" — the whole
+ *   drive, no override. Writing a filesystem is total and the blast radius of
+ *   getting it wrong is the machine.
+ *
+ *   PARTITIONING refuses the partitions that matter and allows the free space
+ *   around them, which is the only way the feature is usable on a one-drive
+ *   machine. What it refuses is anything "/" rests on, anything mounted,
+ *   anything holding live swap, anything with a volume unlocked on top of it,
+ *   and anything fstab expects at the next boot.
+ */
+
+/* Every device in the stack UNDER `kname`, inclusive: itself, whatever it is
+ * built on (slaves/), and the disk a partition belongs to. sd_base_disks stops
+ * at physical hardware; this keeps the rungs in between, which is where the
+ * partition holding an encrypted root actually is. */
+char **sd_stack_under(const char *kname, size_t *n);
+
+/* Does the running system's "/" ultimately rest ON this exact device? True for
+ * /dev/nvme1n1p2 and for /dev/nvme1n1 when "/" is a btrfs inside a LUKS volume
+ * on that partition. */
+bool  guard_holds_root(const char *kname);
+/* The physical disk this device and "/" have in common, or NULL. Format's
+ * rule, and deliberately wider than guard_holds_root. */
+char *guard_shares_root_disk(const char *kname);
+/* First mount point on this device or anything built on it, or NULL. */
+char *guard_mounted_under(const char *kname);
+/* /dev path of active swap on this device or under it, or NULL. */
+char *guard_swap_under(const char *kname);
+/* A volume unlocked or assembled on top of this one — an open LUKS mapping, an
+ * LVM physical volume in a live group. Its /dev path, or NULL. */
+char *guard_holder_of(const char *kname);
+
+typedef enum {
+	/* The entry goes away: rmpart, mktable. Refuses everything below,
+	 * including a partition fstab expects but has not mounted. */
+	GUARD_DESTROY,
+	/* The entry stays and its extent changes: resize. Same rules minus the
+	 * fstab one — growing a partition does not change its UUID, so an fstab
+	 * entry naming it still resolves afterwards. */
+	GUARD_MODIFY,
+	/* A NEW entry in free space, and nothing that exists is touched: mkpart.
+	 * None of the in-use rules apply, and applying them anyway would be the
+	 * end of the feature — the disk holding "/" is protected precisely
+	 * because "/" is on it, so asking it about the system drive refuses the
+	 * free space on the only drive most machines have. What is left is
+	 * whether the device can be written to at all. */
+	GUARD_ADD
+} guard_mode_t;
+
+/* One sentence naming why this device may not be touched, or NULL if it may.
+ * malloc'd. This is the single place the rules live. */
+char *guard_why_protected(const char *kname, guard_mode_t mode);
+
+/* guard_why_protected, printed as a refusal on stderr in the house style, with
+ * the way out where there is one. Returns true when the caller must STOP. */
+bool guard_refuse(const char *kname, const char *dev, const char *verb,
+                  guard_mode_t mode);
+
 /* ── actions.c ──────────────────────────────────────────────────────────── */
 int cmd_mount(int argc, char **argv);
 int cmd_unmount(int argc, char **argv);
@@ -246,6 +361,84 @@ int cmd_eject(int argc, char **argv);
  * for any device that is mounted or that shares a physical disk with "/".
  * See the file header in actions.c for why there is no --force. */
 int cmd_format(int argc, char **argv);
+
+/* The filesystems this program is willing to create, each with the tool that
+ * makes it. A FIXED TABLE and not "mkfs.$fs", which would turn an argument
+ * into a choice of which program to execute. Shared so that `mkpart --fs=`
+ * offers exactly what `format --fs=` does and the two lists cannot drift. */
+typedef struct {
+	const char *name;
+	const char *tool;
+	const char *label_flag;
+	const char *note;
+} fs_kind_t;
+
+const fs_kind_t *fs_all(size_t *n);
+const fs_kind_t *fs_find(const char *name);
+/* A label reaches a tool that writes it into a superblock, so it is checked
+ * rather than trusted. Conservative on purpose. */
+bool fs_label_ok(const char *s);
+/* Build the mkfs argv for a device, pkexec prefix and all. Returns the number
+ * of arguments written into `out` (which must hold at least 10). The strings
+ * are borrowed from the arguments and from static tables; only `out` itself is
+ * the caller's. */
+int fs_mkfs_argv(const fs_kind_t *fs, const char *label, const char *dev,
+                 char **out);
+/* The pkexec this program runs things under, or NULL when it must not use one
+ * — a root shell, and the test suite, where there is nothing to ask. */
+const char *priv_prefix(void);
+
+/* ── table.c — the partition table, as geometry ─────────────────────────────
+ *
+ * Read from SYSFS, never from sfdisk. Every partition's `start` and `size` are
+ * there in 512-byte units, so the layout of a drive — and therefore where its
+ * free space is — can be worked out by a desktop user with no privilege and no
+ * authentication prompt. `sfdisk --json /dev/nvme1n1` is "Permission denied"
+ * for anybody who is not root, and a window that had to ask for a password
+ * before it could draw a bar chart would ask on every open.
+ *
+ * sfdisk is used for WRITING and nothing else.
+ */
+typedef struct {
+	char *kname;                    /* "" for a gap */
+	int   number;                   /* partition number; 0 for a gap */
+	unsigned long long start;       /* bytes from the start of the disk */
+	unsigned long long bytes;
+	bool  gap;
+} pt_slot_t;
+
+/* Every partition of `disk` and every usable gap between them, in ON-DISK
+ * order. `*label` receives "gpt", "dos", or "" when there is no table (the
+ * caller must not free it — it is owned by the lsblk cache).
+ *
+ * Gaps smaller than a megabyte are not reported: they are the rounding left
+ * over by whoever partitioned the drive, not somewhere a partition can go. */
+pt_slot_t *pt_layout(const char *disk, size_t *n, const char **label);
+void       pt_free_layout(pt_slot_t *v, size_t n);
+
+/* Partitions are aligned to a megabyte. Not a preference: an unaligned
+ * partition on a 4Kn drive, or on any SSD, makes every write a read-modify-
+ * write of the block underneath it. */
+#define PT_ALIGN (1024ULL * 1024ULL)
+
+/* The last byte of the disk a partition may occupy. GPT keeps a backup header
+ * and its entry array in the final 33 sectors, and a partition written over
+ * them destroys the very copy the kernel falls back to. */
+unsigned long long pt_usable_end(const char *disk, const char *label);
+
+/* The lowest partition number not in use, or 0 when all 128 are. GPT numbers
+ * are slots and not an ordering, so a disk holding 1, 2 and 4 has 3 free. */
+int pt_next_number(const char *disk);
+
+int cmd_table(int argc, char **argv);
+
+/* ── partition.c ────────────────────────────────────────────────────────────
+ * All four are DESTRUCTIVE to some degree and all four take --yes and
+ * --dry-run, exactly as format does. */
+int cmd_mkpart(int argc, char **argv);
+int cmd_rmpart(int argc, char **argv);
+int cmd_resize(int argc, char **argv);
+int cmd_mktable(int argc, char **argv);
 
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);

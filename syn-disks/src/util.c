@@ -8,10 +8,13 @@
 #include "syn-disks.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -366,6 +369,157 @@ char *run_capture(char *const argv[], int *status, bool quiet_stderr)
 	if (status)
 		*status = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 	return buf;
+}
+
+/* run_capture with a string on the child's stdin.
+ *
+ * sfdisk takes its partition script that way and offers no argument form of
+ * it, so without this the only way to drive it would be a shell — which is
+ * precisely what run_capture exists to avoid. The script still travels as
+ * data on a pipe, never as a command line, so nothing in it can be a command
+ * however it was spelled.
+ *
+ * SIGPIPE is ignored for the duration: a tool that refuses the request and
+ * exits before reading its input would otherwise kill this process with a
+ * signal instead of letting it report the refusal. */
+char *run_capture_in(char *const argv[], const char *input, int *status)
+{
+	int out[2], in[2];
+	if (pipe(out) < 0) {
+		if (status) *status = -1;
+		return xstrdup("");
+	}
+	if (pipe(in) < 0) {
+		close(out[0]);
+		close(out[1]);
+		if (status) *status = -1;
+		return xstrdup("");
+	}
+
+	pid_t pid = fork();
+	if (pid < 0) {
+		close(out[0]); close(out[1]);
+		close(in[0]); close(in[1]);
+		if (status) *status = -1;
+		return xstrdup("");
+	}
+	if (pid == 0) {
+		close(out[0]);
+		close(in[1]);
+		dup2(in[0], STDIN_FILENO);
+		dup2(out[1], STDOUT_FILENO);
+		/* Merged, so a tool that explains its refusal on stderr is quoted
+		 * back to the user rather than vanishing. */
+		dup2(out[1], STDERR_FILENO);
+		if (in[0] > STDERR_FILENO)
+			close(in[0]);
+		if (out[1] > STDERR_FILENO)
+			close(out[1]);
+		execvp(argv[0], argv);
+		_exit(127);
+	}
+	close(out[1]);
+	close(in[0]);
+
+	void (*old)(int) = signal(SIGPIPE, SIG_IGN);
+
+	/* Written before anything is read. A partition script is a line or two,
+	 * far below the pipe buffer, so this cannot deadlock against a child that
+	 * reads its whole input before saying anything. */
+	for (size_t off = 0, n = input ? strlen(input) : 0; off < n; ) {
+		ssize_t w = write(in[1], input + off, n - off);
+		if (w <= 0)
+			break;
+		off += (size_t)w;
+	}
+	close(in[1]);
+
+	size_t cap = 8192, len = 0;
+	char *buf = xmalloc(cap);
+	for (;;) {
+		if (len + 1 >= cap) {
+			cap *= 2;
+			buf = xrealloc(buf, cap);
+		}
+		ssize_t n = read(out[0], buf + len, cap - len - 1);
+		if (n <= 0)
+			break;
+		len += (size_t)n;
+	}
+	buf[len] = '\0';
+	close(out[0]);
+
+	int st = 0;
+	waitpid(pid, &st, 0);
+	signal(SIGPIPE, old);
+	if (status)
+		*status = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+	return buf;
+}
+
+char *cmd_display(char *const argv[])
+{
+	char *line = NULL;
+	for (int i = 0; argv[i]; i++) {
+		bool quote = strchr(argv[i], ' ') != NULL || !*argv[i];
+		char *piece = quote ? xasprintf("'%s'", argv[i]) : xstrdup(argv[i]);
+		char *grown = line ? xasprintf("%s %s", line, piece) : xstrdup(piece);
+		free(piece);
+		free(line);
+		line = grown;
+	}
+	return line ? line : xstrdup("");
+}
+
+bool parse_size(const char *s, unsigned long long *bytes)
+{
+	if (!s || !*s)
+		return false;
+
+	errno = 0;
+	char *end = NULL;
+	double v = strtod(s, &end);
+	/* A leading '-' parses perfectly well and yields a negative size, which
+	 * then wraps to something enormous on the way to unsigned long long. It is
+	 * rejected here rather than clamped, because somebody who typed it meant
+	 * something this program cannot work out. */
+	if (end == s || errno == ERANGE || !(v >= 0.0))
+		return false;
+
+	while (*end == ' ')
+		end++;
+
+	/* IEC suffixes are 1024s and the two-letter SI ones are 1000s, which is
+	 * the same split lsblk, du and every disk vendor's box already use. A bare
+	 * number is bytes. */
+	static const struct { const char *suffix; double mult; } U[] = {
+		{ "",    1.0 },
+		{ "B",   1.0 },
+		{ "K",   1024.0 },            { "KiB", 1024.0 },
+		{ "M",   1048576.0 },         { "MiB", 1048576.0 },
+		{ "G",   1073741824.0 },      { "GiB", 1073741824.0 },
+		{ "T",   1099511627776.0 },   { "TiB", 1099511627776.0 },
+		{ "P",   1125899906842624.0 },{ "PiB", 1125899906842624.0 },
+		{ "KB",  1e3 }, { "MB", 1e6 }, { "GB", 1e9 },
+		{ "TB",  1e12 }, { "PB", 1e15 },
+	};
+
+	double mult = 0.0;
+	for (size_t i = 0; i < sizeof U / sizeof *U; i++) {
+		if (!strcasecmp(end, U[i].suffix)) {
+			mult = U[i].mult;
+			break;
+		}
+	}
+	if (mult == 0.0)
+		return false;          /* trailing rubbish, or a suffix not offered */
+
+	double total = v * mult;
+	if (!(total >= 0.0) || total >= 18446744073709549568.0)
+		return false;
+
+	*bytes = (unsigned long long)total;
+	return true;
 }
 
 char *kv_val(const char *line, const char *key)

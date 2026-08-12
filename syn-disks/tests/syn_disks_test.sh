@@ -93,17 +93,23 @@ mkdisk() {  # name sectors rotational removable
 }
 # A partition lives INSIDE its disk's directory and is also visible flat in
 # /sys/class/block, exactly as the kernel presents it.
-mkpart() {  # disk name number sectors
+#
+# `start` is a real offset and not a constant, because the partition table and
+# the free space in it are DERIVED from where the partitions sit. A fixture
+# where every partition started at sector 2048 described four partitions all
+# on top of each other, which is not a disk any kernel would produce and would
+# have made `table` look correct while testing nothing.
+mkpart() {  # disk name number sectors start
     mkdir -p "$S/$1/$2"
     echo "$3" > "$S/$1/$2/partition"
     echo "$4" > "$S/$1/$2/size"
-    echo 2048 > "$S/$1/$2/start"
+    echo "${5:-2048}" > "$S/$1/$2/start"
     ln -sfn "$1/$2" "$S/$2"
 }
 
 mkdisk nvme1n1 500118192 0 0
-mkpart nvme1n1 nvme1n1p1 1 8388608
-mkpart nvme1n1 nvme1n1p2 2 491708416
+mkpart nvme1n1 nvme1n1p1 1 8388608   2048
+mkpart nvme1n1 nvme1n1p2 2 400000000 8390656
 
 # The device-mapper volume over the LUKS container, both directions: dm-0 has
 # nvme1n1p2 as a slave, nvme1n1p2 has dm-0 as a holder.
@@ -111,11 +117,23 @@ mkdir -p "$S/dm-0/slaves/nvme1n1p2" "$S/dm-0/dm" "$S/nvme1n1p2/holders/dm-0"
 echo 491692032 > "$S/dm-0/size"
 echo cryptroot > "$S/dm-0/dm/name"
 
+# sdz is laid out with TWO gaps of different sizes, and the small one first.
+# "the largest free space" and "the first free space that fits" are the same
+# answer on a disk with one gap, and on a disk that has been repartitioned a
+# few times they are a 20MB scrap and the 100GB at the end.
+#
+#   sdz1   2048        .. 500002048     (mounted at /mnt/data)
+#   gap A  500002048   .. 500043008     ~20MB
+#   sdz2   500043008   .. 700043008     (the only formattable thing here)
+#   gap B  700043008   .. 900000000     ~95GB   <- the largest
+#   sdz9   900000000   .. 900002048
+#   sdz10  900002048   .. 900004096
+#   gap C  900004096   .. 1000215216    ~47GB
 mkdisk sdz 1000215216 1 0
-mkpart sdz sdz1 1 500000000
-mkpart sdz sdz2 2 500000000
-mkpart sdz sdz9 9 2048
-mkpart sdz sdz10 10 2048
+mkpart sdz sdz1 1 500000000 2048
+mkpart sdz sdz2 2 200000000 500043008
+mkpart sdz sdz9 9 2048      900000000
+mkpart sdz sdz10 10 2048    900002048
 
 # The USB stick that lies about being a spinning disk. This is not a
 # hypothetical: the SanDisk Cruzer Blade in the machine this was written on
@@ -278,6 +296,299 @@ check "...and would run mkfs on exactly that device" $?
 "$SD" format sdy --fs=vfat -n >/dev/null 2>&1
 [ $? -eq 0 ] && ok "format ALLOWS an unmounted USB stick" \
              || bad "format ALLOWS an unmounted USB stick"
+
+# ── partitioning ────────────────────────────────────────────────────────────
+#
+# ⚠ Everything below drives a FAKE sfdisk that appends its arguments and its
+# stdin to a log. Not one of these tests can reach a partition table, and the
+# fake is the only reason a `mktable --yes` may appear in a test suite at all.
+#
+# The partition table also needs a LABEL — "gpt" or "dos" — and that lives in
+# the udev database rather than in sysfs, so this section is the one place a
+# fake lsblk is provided. Everything above it still runs with no lsblk at all,
+# which is the point: enrichment, not a dependency.
+
+mkdir -p "$T/bin"
+
+cat > "$T/bin/sfdisk-fake" <<EOF
+#!/bin/sh
+printf 'argv:%s\n' " \$*" >> "$T/sfdisk.log"
+sed 's/^/stdin: /' >> "$T/sfdisk.log"
+echo "The partition table has been altered."
+EOF
+chmod +x "$T/bin/sfdisk-fake"
+
+# lsblk -P output for the fixture. sdz2 gets a UUID so the fstab rule below has
+# something to match by — which is the case that matters, since a modern fstab
+# names nothing by path.
+cat > "$T/bin/lsblk-fake" <<'EOF'
+#!/bin/sh
+cat <<'ROWS'
+NAME="nvme1n1" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="gpt" MODEL="WD Blue SN570 1TB"
+NAME="nvme1n1p1" FSTYPE="vfat" LABEL="BOOT" UUID="1234-ABCD" PARTLABEL="EFI" PARTTYPENAME="EFI System" PARTTYPE="c12a7328-f81f-11d2-ba4b-00a0c93ec93b" PARTUUID="aaaa-0001" PTTYPE="gpt" MODEL=""
+NAME="nvme1n1p2" FSTYPE="crypto_LUKS" LABEL="" UUID="cccc-0002" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="0fc63daf-8483-4772-8e79-3d69d8477de4" PARTUUID="aaaa-0002" PTTYPE="gpt" MODEL=""
+NAME="sdz" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="gpt" MODEL="Fixture Disk"
+NAME="sdz1" FSTYPE="ext4" LABEL="data" UUID="dddd-0001" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0001" PTTYPE="gpt" MODEL=""
+NAME="sdz2" FSTYPE="ext4" LABEL="spare" UUID="dddd-0002" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0002" PTTYPE="gpt" MODEL=""
+NAME="sdy" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="" MODEL="Cruzer Blade"
+ROWS
+EOF
+chmod +x "$T/bin/lsblk-fake"
+
+# Every partitioning call goes through these two, so no test can forget the
+# fake and reach the real sfdisk on the machine running the suite.
+sdp()   { PATH="$T/bin:$PATH" SYN_DISKS_LSBLK=lsblk-fake \
+          SYN_DISKS_SFDISK=sfdisk-fake SYN_DISKS_NO_PKEXEC=1 "$SD" "$@"; }
+saysp() { local out; out=$(sdp "$@" 2>&1); printf '%s\n' "$out"; }
+
+# ── table: the layout, and the free space in it ─────────────────────────────
+
+t=$(sdp --rec table sdz)
+
+echo "$t" | tail -n +2 | cut -f1,5 | tr '\n' ' ' \
+    | grep -q '/dev/sdz1	partition 	free /dev/sdz2	partition 	free /dev/sdz9	partition /dev/sdz10	partition 	free'
+check "table reports partitions and gaps in on-disk order" $?
+
+# Derived, because nothing stores it: the disk is 1000215216 sectors and the
+# partitions account for 700006144 of them.
+[ "$(echo "$t" | awk -F'\t' '$5 == "free"' | wc -l)" = 3 ]
+check "the three gaps in the fixture are all found" $?
+
+# sdz9 ends at 900002048 and sdz10 starts there. A gap between two adjacent
+# partitions would mean the arithmetic is off by a partition.
+echo "$t" | awk -F'\t' '$5 == "free" && $4 < 1048576' | grep -q .
+[ $? -ne 0 ] && ok "no gap smaller than a megabyte is reported" \
+             || bad "no gap smaller than a megabyte is reported"
+
+# ── table: the protected column ─────────────────────────────────────────────
+#
+# This column is the whole reason guard.c returns a sentence. The GUI greys a
+# button out from it; if it disagreed with the binary the button would be
+# enabled for something that is then refused — or, worse, the other way round.
+
+echo "$t" | grep '/dev/sdz1	' | cut -f9 | grep -q 'mounted'
+check "table marks a mounted partition as protected" $?
+
+echo "$t" | grep '/dev/sdz2	' | awk -F'\t' '{exit ($9 == "") ? 0 : 1}'
+check "...and leaves an idle one unprotected" $?
+
+sdp --rec table nvme1n1 | grep '/dev/nvme1n1p2' | cut -f9 | grep -q 'running%20system'
+check "the LUKS partition under / is protected in the table too" $?
+
+# The reason a front-end must not re-derive this: the SAME sentence comes back
+# from the command that refuses. Two implementations of one rule agree on the
+# day they are written; the day they drift, the GUI offers a button the binary
+# then refuses — or, far worse, offers one it does not.
+p=$(sdp --rec table nvme1n1 | grep '/dev/nvme1n1p2' | cut -f9)
+r=$(saysp rmpart nvme1n1p2 --yes | grep -o 'the running system is on it')
+[ -n "$r" ] && [ "$p" = "the%20running%20system%20is%20on%20it" ] \
+    && ok "the table's reason and the refusal's reason are the same sentence" \
+    || bad "the table's reason and the refusal's reason are the same sentence"
+
+# ── rmpart ──────────────────────────────────────────────────────────────────
+
+for target in nvme1n1p1 nvme1n1p2; do
+    sdp rmpart "$target" --yes >/dev/null 2>&1
+    [ $? -eq 1 ] && ok "rmpart refuses $target (system disk)" \
+                 || bad "rmpart refuses $target (system disk)"
+done
+
+sdp rmpart sdz1 --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "rmpart refuses a mounted partition" \
+             || bad "rmpart refuses a mounted partition"
+
+saysp rmpart sdz1 --yes | grep -q '/mnt/data'
+check "...and names where it is mounted" $?
+
+saysp rmpart sdz --yes | grep -q 'whole drive'
+check "rmpart on a whole drive says so rather than deleting something" $?
+
+# The suite would be worthless if everything were refused.
+sdp rmpart sdz2 -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "rmpart ALLOWS an idle partition on a non-system disk" \
+             || bad "rmpart ALLOWS an idle partition on a non-system disk"
+
+saysp rmpart sdz2 -n | grep -q 'sfdisk-fake --delete /dev/sdz 2'
+check "...and would delete that partition, by number, from its disk" $?
+
+sdp rmpart sdz2 >/dev/null 2>&1
+[ $? -eq 2 ] && ok "rmpart without --yes exits 2 and does nothing" \
+             || bad "rmpart without --yes exits 2 and does nothing"
+
+# ── swap: the device nothing reports as mounted ─────────────────────────────
+#
+# /proc/swaps is not /proc/self/mounts. A guard built on mounts alone calls a
+# live swap partition idle, and the machine dies at the next page-out.
+
+cat > "$T/swaps" <<'EOF'
+Filename				Type		Size	Used	Priority
+/dev/sdz2                               partition	8388604	0	-2
+EOF
+
+SYN_DISKS_SWAPS="$T/swaps" sdp rmpart sdz2 --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "rmpart refuses a partition holding live swap" \
+             || bad "rmpart refuses a partition holding live swap"
+
+SYN_DISKS_SWAPS="$T/swaps" saysp rmpart sdz2 --yes | grep -q 'swapoff'
+check "...and says how to free it" $?
+
+# A swap FILE is not a swap device, and reading it as one would protect
+# whichever partition the file happens to live on.
+cat > "$T/swaps-file" <<'EOF'
+Filename				Type		Size	Used	Priority
+/swapfile                               file		8388604	0	-2
+EOF
+SYN_DISKS_SWAPS="$T/swaps-file" sdp rmpart sdz2 -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "a swap FILE does not protect the partition under it" \
+             || bad "a swap FILE does not protect the partition under it"
+
+# ── fstab: what the next boot expects ───────────────────────────────────────
+#
+# /boot on a running machine is very often not mounted. Deleting it is not less
+# destructive for that, and a modern fstab names it by UUID.
+
+cat > "$T/fstab" <<'EOF'
+# a comment, and a blank line follow
+
+UUID=dddd-0002	/srv	ext4	defaults	0 2
+PARTUUID=aaaa-0002	/boot	vfat	defaults	0 2
+tmpfs	/tmp	tmpfs	defaults	0 0
+EOF
+
+SYN_DISKS_FSTAB="$T/fstab" sdp rmpart sdz2 --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "rmpart refuses a partition fstab expects, matched by UUID" \
+             || bad "rmpart refuses a partition fstab expects, matched by UUID"
+
+SYN_DISKS_FSTAB="$T/fstab" saysp rmpart sdz2 --yes | grep -q '/srv'
+check "...and says where the next boot expects it" $?
+
+# The rule is skipped for a RESIZE, and only for a resize: growing a partition
+# leaves its UUID alone, so the entry still resolves afterwards.
+SYN_DISKS_FSTAB="$T/fstab" sdp resize sdz2 --size=150G -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "an fstab entry does not block a resize" \
+             || bad "an fstab entry does not block a resize"
+
+# ── mkpart: the case the two-tier design exists for ─────────────────────────
+#
+# THE test in this section. Formatting refuses anything sharing a disk with
+# "/", and if partitioning used that rule a laptop with one drive could never
+# make a partition at all. Free space is not the running system.
+
+sdp mkpart nvme1n1 --size=1G -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "mkpart ALLOWS free space on the disk holding /" \
+             || bad "mkpart ALLOWS free space on the disk holding /"
+
+# ...while everything that would touch what is already there still refuses.
+sdp mktable nvme1n1 --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "...and mktable on that same disk is still refused" \
+             || bad "...and mktable on that same disk is still refused"
+
+# The largest gap, not the first that fits. Gap A is ~20MB and comes first;
+# gap B is ~95GB. Landing in A because it was first is a surprise nobody asked
+# for, and it is what "first fit" does on any disk that has been repartitioned.
+#
+# 700043264 and not 700043008, which is where gap B actually begins: that is
+# not a multiple of 2048 sectors, so the start is rounded UP to the next
+# megabyte. An unaligned partition on an SSD or a 4Kn drive turns every write
+# into a read-modify-write of the block underneath it, and the cost is
+# invisible — it looks like a slow disk, for the life of the partition.
+saysp mkpart sdz -n | grep -q 'start=700043264'
+check "mkpart picks the largest free space, not the first one" $?
+
+# ...and the size is rounded DOWN, out of the same gap. Rounded up, a partition
+# placed at an aligned start would end one megabyte past the free space it was
+# put in — which sfdisk refuses, after the confirmation.
+saysp mkpart sdz -n | grep -q 'size=199956480'
+check "...aligned at the start, and still inside the gap at the end" $?
+
+# Aligned at both ends: the start rounded up to a megabyte, the size rounded
+# down so it still fits in the gap afterwards.
+saysp mkpart sdz --size=10GiB -n | grep -q 'size=20971520'
+check "a requested size is rounded down to a megabyte boundary" $?
+
+sdp mkpart sdz --size=500G -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mkpart refuses a size larger than the free space" \
+             || bad "mkpart refuses a size larger than the free space"
+
+saysp mkpart sdz --size=500G -n | grep -q 'largest free space'
+check "...and says how much there actually is" $?
+
+for size in 'not-a-size' '-5G' '10ZB' '4 4G' ''; do
+    sdp mkpart sdz --size="$size" -n >/dev/null 2>&1
+    [ $? -eq 1 ] || bad "mkpart refuses the size '$size'"
+done
+ok "a size that is not a size is refused rather than guessed at"
+
+# A disk with no partition table has no free space to speak of — "the whole
+# disk" is not a gap in a table that does not exist.
+sdp mkpart sdy --size=1G -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mkpart on a disk with no table says to make one first" \
+             || bad "mkpart on a disk with no table says to make one first"
+
+# --fs picks a row in the same fixed table format uses. Two lists would agree
+# on the day they were written.
+sdp mkpart sdz --fs=reiserfs -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mkpart and format offer the same filesystems" \
+             || bad "mkpart and format offer the same filesystems"
+
+sdp mkpart sdz --fs=ext4 --label='a;rm -rf /' -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mkpart checks a label exactly as format does" \
+             || bad "mkpart checks a label exactly as format does"
+
+# ── resize: grows, and will not shrink ──────────────────────────────────────
+
+sdp resize sdz2 --size=50G --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "resize refuses to SHRINK a partition" \
+             || bad "resize refuses to SHRINK a partition"
+
+saysp resize sdz2 --size=50G --yes | grep -q 'filesystem inside'
+check "...and says why, rather than offering a flag" $?
+
+sdp resize sdz2 --size=300G -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "resize refuses to grow past the free space that follows" \
+             || bad "resize refuses to grow past the free space that follows"
+
+sdp resize sdz2 --size=150G -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "resize ALLOWS growing into the gap after the partition" \
+             || bad "resize ALLOWS growing into the gap after the partition"
+
+# The start is restated rather than left to sfdisk's merge behaviour: a
+# partition that grew from the wrong start is one that moved.
+saysp resize sdz2 --size=150G -n | grep -q 'start=500043008'
+check "...from exactly where it already starts" $?
+
+sdp resize sdz1 --size=300G --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "resize refuses a mounted partition" \
+             || bad "resize refuses a mounted partition"
+
+# ── mktable ─────────────────────────────────────────────────────────────────
+
+sdp mktable sdz --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mktable refuses a disk with a mounted partition on it" \
+             || bad "mktable refuses a disk with a mounted partition on it"
+
+sdp mktable sdz1 --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mktable refuses a partition — a table belongs to a drive" \
+             || bad "mktable refuses a partition — a table belongs to a drive"
+
+sdp mktable sdy --type=zfs --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "mktable refuses a table type that is not gpt or dos" \
+             || bad "mktable refuses a table type that is not gpt or dos"
+
+# ── the script reaches sfdisk on STDIN, never as a command line ─────────────
+#
+# sdy has nothing mounted, nothing in fstab and no swap, so this is the one
+# call in the suite that runs all the way through — against the fake.
+
+: > "$T/sfdisk.log"
+sdp mktable sdy --type=gpt --yes >/dev/null 2>&1
+check "mktable ALLOWS an idle USB stick" $?
+
+grep -q '^argv: /dev/sdy$' "$T/sfdisk.log"
+check "sfdisk is given the device and nothing else on its command line" $?
+
+grep -q '^stdin: label: gpt$' "$T/sfdisk.log"
+check "...and the script arrives on stdin, where a shell cannot reach it" $?
 
 # ── the record format ───────────────────────────────────────────────────────
 #
