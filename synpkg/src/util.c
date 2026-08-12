@@ -245,6 +245,14 @@ bool have_cmd(const char *name)
 
 /* ── misc ───────────────────────────────────────────────────────────────── */
 
+/* Can the question be put at all? A caller that must distinguish "the user
+ * said no" from "there was nobody to ask" asks this — the two look identical
+ * in confirm()'s return value and mean opposite things about the exit code. */
+bool confirm_possible(void)
+{
+	return g_noconfirm || (g_out != OUT_TSV && isatty(STDIN_FILENO));
+}
+
 bool confirm(const char *fmt, ...)
 {
 	if (g_noconfirm)
@@ -253,14 +261,16 @@ bool confirm(const char *fmt, ...)
 	 * default: the GUI always passes --noconfirm when the user has already
 	 * clicked through its own dialog.
 	 *
-	 * But SAY SO. This used to refuse in silence, and a caller that forgot
+	 * But SAY SO, and — via confirm_possible() at the transaction call sites —
+	 * EXIT NON-ZERO. This used to refuse in silence, and a caller that forgot
 	 * --noconfirm got a transaction that authenticated through polkit and then
 	 * declined itself — the callers treat a declined transaction as success,
 	 * so nothing was printed, nothing was installed, and the only symptom was
 	 * a button that went quiet after the password prompt. That was
-	 * syn-settings' kernel installer for its whole life. A refusal nobody can
-	 * see is indistinguishable from a hang. */
-	if (g_out == OUT_TSV || !isatty(STDIN_FILENO)) {
+	 * syn-settings' kernel installer for its whole life, and then, until
+	 * 2026-08-12, its "Make bootable" button. A refusal nobody can see is
+	 * indistinguishable from a hang. */
+	if (!confirm_possible()) {
 		warn("declined: there is no terminal to confirm on "
 		     "(a front-end must pass --noconfirm once the user has agreed)");
 		return false;

@@ -15,6 +15,9 @@ fails=0
 
 ok()   { printf '  ok   %s\n' "$1"; }
 bad()  { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
+# Named, not silent: a check that does not apply on this machine has to say so,
+# or a suite that quietly stopped covering something still prints all green.
+skip() { printf '  --   %s\n' "$1"; }
 
 # `((n++))` evaluates to the OLD value, so it returns 1 the first time and
 # kills the script under `set -e`. Hence fails=$((fails + 1)) above.
@@ -497,6 +500,32 @@ if SYN_SETTINGS_BOOT_ROOT="$bootfx/limine" "$BIN" -n boot linux \
 else
     bad "boot: wrong mechanism for limine"
 fi
+
+# ⚠ --noconfirm is LOAD-BEARING here for the same reason it is on `pkg install`
+# — and this is the check that was missing when it was. The pattern above
+# tolerates any flags, so it passed happily while "Make bootable" authenticated
+# through polkit three times on 2026-08-12 and installed nothing: synpkg's
+# confirm() refuses with no terminal to ask in, and a declined transaction was
+# a zero exit. Only assert it on the branch that actually invokes synpkg — a
+# machine with limine-update already installed builds a pkexec command instead.
+bootcmd=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/limine" "$BIN" -n boot linux | grep '^command	')
+case "$bootcmd" in
+*synpkg*)
+    case "$bootcmd" in
+    *"--noconfirm"*) ok "boot: the synpkg install passes --noconfirm" ;;
+    *) bad "boot: synpkg install dropped --noconfirm — it will install nothing" ;;
+    esac
+    # Globals must precede the verb; synpkg stops parsing them at the first
+    # non-option argument, so "install --noconfirm" is a flag it never sees.
+    case "$bootcmd" in
+    *"--noconfirm"*install*) ok "boot: --noconfirm comes before the verb" ;;
+    *) bad "boot: --noconfirm lands after 'install', where synpkg ignores it" ;;
+    esac
+    ;;
+*)
+    skip "boot: limine-update is installed, so no synpkg install to check"
+    ;;
+esac
 
 # With several bootloaders configured, picking one for the user means picking
 # which config file to rewrite. Being wrong there is the failure this pane

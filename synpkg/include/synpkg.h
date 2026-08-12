@@ -64,6 +64,7 @@ int   run(char *const argv[], bool quiet);
 char *run_capture(char *const argv[], int *status, bool quiet_stderr);
 
 bool  confirm(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+bool  confirm_possible(void);
 char *human_size(off_t bytes);   /* malloc'd, e.g. "4.91 MiB" */
 bool  have_cmd(const char *name);
 void  strip_trailing_newline(char *s);

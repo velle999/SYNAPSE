@@ -122,7 +122,19 @@ static void report_trans_error(alpm_handle_t *h, alpm_list_t *data)
 
 /* Summarise before committing. A package manager that starts writing without
  * telling you what it is about to write is how an unrelated 400-package
- * upgrade rides along with `install vim`. */
+ * upgrade rides along with `install vim`.
+ *
+ * FALSE from here means one of two opposite things, and every caller resolves
+ * it the same way: `rc = confirm_possible() ? 0 : 1`.
+ *
+ *   · A person answered "n". That is a decision, the transaction did exactly
+ *     what was asked of it, and the exit code is 0.
+ *   · There was no terminal to ask in — a front-end forgot --noconfirm. That
+ *     is a bug in the CALLER, and reporting it as success is what let
+ *     syn-settings' "Make bootable" authenticate through polkit three times
+ *     in one sitting and install nothing, each time reporting that it had
+ *     worked. Exit 1 so the front-end's own error path fires.
+ */
 static bool confirm_transaction(alpm_handle_t *h)
 {
 	alpm_list_t *add = alpm_trans_get_add(h);
@@ -412,7 +424,7 @@ int cmd_install(int argc, char **argv)
 
 	if (!confirm_transaction(h)) {
 		alpm_trans_release(h);
-		rc = 0;
+		rc = confirm_possible() ? 0 : 1;
 		goto out;
 	}
 
@@ -505,7 +517,7 @@ int cmd_remove(int argc, char **argv)
 
 	if (!confirm_transaction(h)) {
 		alpm_trans_release(h);
-		rc = 0;
+		rc = confirm_possible() ? 0 : 1;
 		goto out;
 	}
 
@@ -644,7 +656,7 @@ int cmd_upgrade(int argc, char **argv)
 
 	if (!confirm_transaction(h)) {
 		alpm_trans_release(h);
-		rc = 0;
+		rc = confirm_possible() ? 0 : 1;
 		goto out;
 	}
 

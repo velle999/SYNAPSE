@@ -344,7 +344,20 @@ static int boot_command(const struct syn_boot *bl, const char *pkg,
 				return boot_refuse("synpkg is not installed; it is what "
 				                   "performs the install");
 			}
+			/* ⚠ --noconfirm is LOAD-BEARING, exactly as in src/pkg.c, and
+			 * this is where forgetting it was found: three polkit prompts on
+			 * 2026-08-12, authenticated every time, nothing installed.
+			 *
+			 * synpkg's confirm() returns FALSE with no terminal to ask in, a
+			 * declined transaction exits 0, so the button authenticated and
+			 * then reported success having done nothing. The confirmation was
+			 * already given — to the dialogue that showed this very command —
+			 * and there is no second question worth asking into a pipe.
+			 *
+			 * Before the verb: synpkg stops parsing globals at the first
+			 * non-option argument. */
 			argv[n++] = (char *)"synpkg";
+			argv[n++] = (char *)"--noconfirm";
 			argv[n++] = (char *)"--verbose";
 			argv[n++] = (char *)"install";
 			argv[n++] = (char *)"limine-mkinitcpio-hook";
@@ -454,7 +467,17 @@ int do_boot(int argc, char **argv)
 	/* Streamed. Every branch of this is slow enough to be doubted:
 	 * grub-mkconfig probes every disk, kernel-install rebuilds an initramfs,
 	 * and the limine branch may compile a package from source. */
-	return run_or_show_progress(cmd);
+	rc = run_or_show_progress(cmd);
+
+	/* Say so on the way out, as src/pkg.c does. This returned bare, so a
+	 * failure reached the GUI as an exit code and no words — and the pane it
+	 * then reloads still reads "NO BOOT ENTRY", which is true but does not
+	 * explain itself. */
+	if (rc != 0)
+		fprintf(stderr, "syn-settings: %s exited %d — the boot configuration "
+		                "was NOT changed; authorisation may have been refused\n",
+		        cmd[0], rc);
+	return rc;
 }
 
 /* The kernel release a package currently owns, e.g. "7.1.7-arch1-1".

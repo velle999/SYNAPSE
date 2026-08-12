@@ -148,6 +148,17 @@ FloatingWindow {
     property bool loading: false
     property string status: ""
 
+    // What the LAST write ended up doing, kept apart from `status` because the
+    // two have opposite lifetimes. `status` is about right now and every
+    // reload clears it — which is how the one message that mattered was lost:
+    // a write failed, said so, and reload() (which a finished write always
+    // triggers) blanked the line before it could be read. Reported on
+    // 2026-08-12 as "it said decline but it's closing too fast to tell".
+    //
+    // This one survives the reload and is cleared by the NEXT write, or by
+    // clicking it away. A failure is not over when the command is.
+    property string outcome: ""
+
     // ── Editing ─────────────────────────────────────────────────────────────
     //
     // The row the editor is pointed at, and what it is allowed to do. Driven
@@ -301,6 +312,13 @@ FloatingWindow {
     // only progress — what is happening, never what happened.
     Process {
         id: writeProc
+        // This binary's OWN stderr, which is not where a failing child speaks:
+        // run_progress() (src/util.c) folds the child's stderr into our stdout
+        // as progress records, so synpkg's "declined: there is no terminal to
+        // confirm on" arrives as the last progress line, not here. Both are
+        // read below, and neither is thrown away on a failure any more.
+        property string errLine: ""
+
         // SplitParser, not StdioCollector: a collector hands over its text when
         // the stream ENDS, which for a five-minute install is five minutes
         // after the only moment the text was worth having.
@@ -312,13 +330,29 @@ FloatingWindow {
                     root.status = line
             }
         }
-        stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (!this.text) return
+                writeProc.errLine = this.text.split("\n")[0]
+                // Whether this arrives before or after onExited is not ours to
+                // decide, so handle both: if the exit already ran and settled
+                // for a weaker message, replace it with the real one.
+                if (!root.applying && root.outcome !== "")
+                    root.outcome = writeProc.errLine
+            }
+        }
         onExited: (code) => {
             root.applying = false
             root.workOpen = false
             workDelay.stop()
-            if (code !== 0 && root.status === "")
-                root.status = "refused (exit " + code + ") — polkit may have declined"
+            // A non-zero exit ALWAYS leaves something on screen. This was once
+            // gated on the status line being empty — which it never was, since
+            // runWrite() had just put the note there — so a write could fail
+            // and say nothing whatsoever.
+            if (code !== 0)
+                root.outcome = writeProc.errLine !== "" ? writeProc.errLine
+                    : root.progressLine !== "" ? root.progressLine
+                    : "refused (exit " + code + ") — polkit may have declined"
             root.reload()
         }
     }
@@ -331,6 +365,8 @@ FloatingWindow {
         root.applying = true
         root.applyNote = note
         root.applyDetail = detail || ""
+        root.outcome = ""
+        writeProc.errLine = ""
         root.progressLine = ""
         root.progressPct = -1
         root.progressLog = []
@@ -1014,11 +1050,26 @@ FloatingWindow {
                         ? (root.applyNote
                            + (root.progressLine !== "" ? " — " + root.progressLine : ""))
                     : root.status !== "" ? root.status
+                    // Ahead of "reading…" and the row count deliberately: the
+                    // reload that follows a failed write must not be allowed to
+                    // paint over the reason it failed.
+                    : root.outcome !== "" ? root.outcome
                     : root.loading ? "reading…"
                     : root.rows.length + (root.rows.length === 1 ? " row" : " rows")
                 color: root.applying ? root.cText
-                     : root.status !== "" ? root.cWarn : root.cDim
+                     : (root.status !== "" || root.outcome !== "") ? root.cWarn
+                     : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(10) }
+
+                // Click it away once read. Nothing else dismisses it — that is
+                // the point — but a message that cannot be cleared becomes
+                // furniture and stops being read at all.
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: root.outcome !== "" && !root.applying
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.outcome = ""
+                }
             }
             Text {
                 anchors { left: statusLeft.right; leftMargin: 12
