@@ -51,8 +51,42 @@ says() { local out; out=$("$@" 2>&1); printf '%s\n' "$out"; }
 # sanitiser build purely because it is slower.
 #
 # gq reads all of stdin before matching, so the pipe is never closed early.
-gq()  { local out; out=$(cat); printf '%s\n' "$out" | command grep -q -- "$1"; }
-gqv() { local out; out=$(cat); printf '%s\n' "$out" | command grep -qv -- "$1"; }
+#
+# ⚠ ...but "all of stdin" must be BOUNDED, or the cure is worse than the
+# disease. This was `out=$(cat)` until 2026-08-12, and a producer that loops
+# instead of exiting made every one of those captures grow without limit. Run
+# under `timeout`, which kills the script but NOT the subshells it left mid-
+# capture, the orphans keep buffering: ~1000 of them reached 17 GB of shell
+# heap, took the box to 27.5G of 31G, and the kernel OOM-killer took out
+# user@1000.service — which is pipewire, wireplumber and the whole user bus.
+# Losing the desktop's audio is a steep price for a grep.
+#
+# So cap the bytes. Every real producer here emits a few lines; blowing past
+# the cap means the thing under test is looping, and the right outcome is a
+# failed test, not a dead session. Hitting the cap closes the pipe, so the
+# producer takes the SIGPIPE it would have taken from `grep -q` anyway —
+# acceptable, because by then the test has already lost.
+#
+# ⚠ GQ_TIMEOUT bounds how long we wait FOR DATA, not the producer. `a | gq b`
+# makes bash wait on every member of the pipeline, so a producer that hangs
+# without ever writing still hangs the suite — this cannot fix that from the
+# consumer end. What it does guarantee is that the wait is FLAT: no capture
+# grows while it happens. meson's `timeout: 120` is the backstop for the hang
+# itself. Measured against `yes | gq`: 36ms bounded, versus unbounded growth
+# until the allocator gives up.
+GQ_MAX_BYTES=${GQ_MAX_BYTES:-1048576}
+GQ_TIMEOUT=${GQ_TIMEOUT:-10}
+
+# Bounded slurp. Mirrors `$(cat)`: command substitution eats trailing newlines
+# and the printf puts one back, so matching behaviour is unchanged for any
+# output that fits.
+_slurp() {
+	local out
+	out=$(timeout "$GQ_TIMEOUT" head -c "$GQ_MAX_BYTES")
+	printf '%s\n' "$out"
+}
+gq()  { _slurp | command grep -q -- "$1"; }
+gqv() { _slurp | command grep -qv -- "$1"; }
 
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
