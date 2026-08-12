@@ -116,6 +116,39 @@ FloatingWindow {
 
     function wash(a) { return Qt.rgba(cAccent.r, cAccent.g, cAccent.b, a) }
 
+    // ── The UI font ─────────────────────────────────────────────────────────
+    // Lifted from syn-settings for the same reason the palette block above is
+    // lifted from syn-arsenal's. font.state is written by synui-apply-font(1)
+    // and is deliberately NOT a key in theme.json — the font outlives a theme
+    // switch. It carries the desktop's family AND its text scale, and an app
+    // that reads one without the other still looks wrong beside its siblings.
+    //
+    // Qt resolves an application's default font ONCE at startup, so both the
+    // family and the size have to be BINDINGS on every Text — which is why the
+    // control panel's font picker moved Settings and Files and left this window
+    // and Arsenal on the old face until they were reopened.
+    property string uiFont: ""
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+            const s = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = s ? parseInt(s[1]) : 100
+        }
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
+    }
+
     // ── Sources ─────────────────────────────────────────────────────────────
     // Which tool owns a row. Every list sets this per row, because the badge
     // that tells the USER where a package came from and the code path that
@@ -606,14 +639,14 @@ FloatingWindow {
                     width: parent.width
                     text: "SYNAPSE Software"
                     color: root.cAccent
-                    font { pixelSize: 17; bold: true }
+                    font { family: root.uiFont; pixelSize: root.ui(17); bold: true }
                     elide: Text.ElideRight
                 }
                 Text {
                     width: parent.width
                     text: root.sectionHint(root.section)
                     color: root.cDim
-                    font.pixelSize: 11
+                    font { family: root.uiFont; pixelSize: root.ui(11) }
                     elide: Text.ElideRight
                     maximumLineCount: 1
                     visible: text !== ""
@@ -630,7 +663,7 @@ FloatingWindow {
                 width: Math.min(implicitWidth, header.width * 0.45)
                 elide: Text.ElideRight
                 color: root.busy !== "" || root.loading ? root.cAccent : root.cDim
-                font.pixelSize: 12
+                font { family: root.uiFont; pixelSize: root.ui(12) }
                 horizontalAlignment: Text.AlignRight
                 text: root.loading ? (root.statusLine !== "" ? root.statusLine : "loading…")
                                    : (root.statusLine !== "" ? root.statusLine
@@ -675,7 +708,7 @@ FloatingWindow {
                             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                             text: navRow.modelData.label
                             color: navRow.current ? root.cAccent : root.cText
-                            font { pixelSize: 13; bold: navRow.current }
+                            font { family: root.uiFont; pixelSize: root.ui(13); bold: navRow.current }
                         }
                         MouseArea {
                             id: navMa
@@ -704,7 +737,7 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: "Upgrade all"
                         color: root.cAccent
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
                     MouseArea {
                         id: upMa
@@ -722,7 +755,7 @@ FloatingWindow {
                     width: parent.width
                     text: "runs in a terminal"
                     color: root.cDim
-                    font.pixelSize: 10
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
@@ -768,7 +801,7 @@ FloatingWindow {
                             anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
                             text: root.allLabel(root.section)
                             color: root.cAccent
-                            font { pixelSize: 12; bold: true }
+                            font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
                         }
                         MouseArea {
                             id: allMa
@@ -801,7 +834,7 @@ FloatingWindow {
                             text: catRow.modelData.label
                             elide: Text.ElideRight
                             color: catRow.current ? root.cAccent : root.cText
-                            font.pixelSize: 12
+                            font { family: root.uiFont; pixelSize: root.ui(12) }
                         }
                         Text {
                             id: catCount
@@ -810,7 +843,7 @@ FloatingWindow {
                                   ? catRow.modelData.installed + "/" + catRow.modelData.total
                                   : catRow.modelData.total
                             color: catRow.modelData.installed > 0 ? root.cAccent : root.cDim
-                            font.pixelSize: 10
+                            font { family: root.uiFont; pixelSize: root.ui(10) }
                         }
                         MouseArea {
                             id: catMa
@@ -867,7 +900,7 @@ FloatingWindow {
                                 anchors.centerIn: parent
                                 text: modeBtn.modelData.label
                                 color: modeBtn.current ? root.cAccent : root.cDim
-                                font { pixelSize: 12; bold: modeBtn.current }
+                                font { family: root.uiFont; pixelSize: root.ui(12); bold: modeBtn.current }
                             }
                             MouseArea {
                                 id: modeMa
@@ -913,7 +946,7 @@ FloatingWindow {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                         verticalAlignment: TextInput.AlignVCenter
                         color: root.cText
-                        font.pixelSize: 13
+                        font { family: root.uiFont; pixelSize: root.ui(13) }
                         clip: true
                         onTextChanged: if (!searchBar.searching) root.filter = text
                         onAccepted: if (searchBar.searching) root.doSearch(text)
@@ -933,7 +966,7 @@ FloatingWindow {
                             return "filter this list…"
                         }
                         color: root.cDim
-                        font.pixelSize: 13
+                        font { family: root.uiFont; pixelSize: root.ui(13) }
                         visible: searchInput.text === ""
                     }
                 }
@@ -960,7 +993,7 @@ FloatingWindow {
                     Text {
                         text: "SYNAPSE Software"
                         color: root.cAccent
-                        font { pixelSize: 22; bold: true }
+                        font { family: root.uiFont; pixelSize: root.ui(22); bold: true }
                     }
                     Text {
                         width: aboutCol.width
@@ -970,7 +1003,7 @@ FloatingWindow {
                               + "same binary reading the same code paths, so they cannot "
                               + "disagree about what is installed."
                         color: root.cDim
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                         wrapMode: Text.WordWrap
                     }
 
@@ -1020,7 +1053,7 @@ FloatingWindow {
                                 width: 110
                                 text: aboutRow.modelData.item
                                 color: root.cText
-                                font { pixelSize: 12; bold: true }
+                                font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
                                 elide: Text.ElideRight
                             }
 
@@ -1036,7 +1069,7 @@ FloatingWindow {
                                     width: parent.width
                                     text: aboutRow.modelData.value
                                     color: aboutRow.stateColor
-                                    font.pixelSize: 12
+                                    font { family: root.uiFont; pixelSize: root.ui(12) }
                                     elide: Text.ElideRight
                                 }
                                 Text {
@@ -1047,9 +1080,14 @@ FloatingWindow {
                                     // case: QString will not take it, and Qt
                                     // logs "Unable to assign [undefined]" once
                                     // per row while rendering the row anyway.
-                                    font { pixelSize: 11
+                                    // Qt.application.font.family was the wrong
+                                    // fallback: Qt resolves the application
+                                    // font once at startup, so this row kept
+                                    // the face the window opened with while the
+                                    // rest of the pane followed font.state.
+                                    font { pixelSize: root.ui(11)
                                            family: aboutRow.runnable ? "monospace"
-                                                                     : Qt.application.font.family }
+                                                                     : root.uiFont }
                                     elide: Text.ElideRight
                                     visible: text !== ""
                                 }
@@ -1067,7 +1105,7 @@ FloatingWindow {
                                     anchors.centerIn: parent
                                     text: aboutRow.openable ? "Open" : "Run"
                                     color: root.cAccent
-                                    font.pixelSize: 11
+                                    font { family: root.uiFont; pixelSize: root.ui(11) }
                                 }
                                 MouseArea {
                                     id: aboutBtnMa
@@ -1137,7 +1175,7 @@ FloatingWindow {
                     wrapMode: Text.WordWrap
                     anchors.horizontalCenter: parent.horizontalCenter
                     color: root.cText
-                    font.pixelSize: 15
+                    font { family: root.uiFont; pixelSize: root.ui(15) }
                     horizontalAlignment: Text.AlignHCenter
                     text: {
                         if (root.section === "updates")   return "Everything is up to date."
@@ -1174,7 +1212,7 @@ FloatingWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: parent.width
                     color: root.cDim
-                    font.pixelSize: 12
+                    font { family: root.uiFont; pixelSize: root.ui(12) }
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     visible: text !== ""
@@ -1204,7 +1242,7 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: "Enable BlackArch"
                         color: root.cAccent
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
                     MouseArea {
                         id: baMa
@@ -1238,7 +1276,7 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: "Enable Flathub"
                         color: root.cAccent
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
                     MouseArea {
                         id: fhMa
@@ -1267,7 +1305,7 @@ FloatingWindow {
                         anchors.centerIn: parent
                         text: "Fetch the app index"
                         color: root.cAccent
-                        font.pixelSize: 12
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
                     }
                     MouseArea {
                         id: fiMa
@@ -1282,7 +1320,7 @@ FloatingWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "runs in a terminal — takes a minute"
                     color: root.cDim
-                    font.pixelSize: 10
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
                     visible: root.section === "flathub"
                              && (!root.flathubEnabled || root.categories.length === 0)
                 }
@@ -1355,7 +1393,7 @@ FloatingWindow {
                                 text: pkgRow.modelData.title !== ""
                                       ? pkgRow.modelData.title : pkgRow.modelData.name
                                 color: root.cText
-                                font { pixelSize: 13; bold: true }
+                                font { family: root.uiFont; pixelSize: root.ui(13); bold: true }
                             }
 
                             // The source badge. This is the whole point of the
@@ -1375,21 +1413,21 @@ FloatingWindow {
                                     anchors.centerIn: parent
                                     text: pkgRow.modelData.repo
                                     color: root.sourceColor(pkgRow.modelData.repo)
-                                    font { pixelSize: 9; bold: true }
+                                    font { family: root.uiFont; pixelSize: root.ui(9); bold: true }
                                 }
                             }
 
                             Text {
                                 text: pkgRow.modelData.title !== "" ? pkgRow.modelData.name : ""
                                 color: root.cDim
-                                font { pixelSize: 10; family: "monospace" }
+                                font { family: "monospace"; pixelSize: root.ui(10) }
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: text !== ""
                             }
                             Text {
                                 text: pkgRow.modelData.extra
                                 color: root.cWarn
-                                font.pixelSize: 10
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: text !== "" && text !== "update" && text !== "component"
                             }
@@ -1398,7 +1436,7 @@ FloatingWindow {
                             width: parent.width
                             text: pkgRow.modelData.desc
                             color: root.cDim
-                            font.pixelSize: 11
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
@@ -1433,7 +1471,7 @@ FloatingWindow {
                         Text {
                             anchors.centerIn: parent
                             color: root.cAccent
-                            font.pixelSize: 11
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                             text: root.busy === pkgRow.modelData.name
                                   ? "working…" : root.rowVerb(pkgRow.modelData)
                         }

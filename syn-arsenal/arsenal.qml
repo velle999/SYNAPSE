@@ -155,6 +155,42 @@ FloatingWindow {
     // themed set. The light value is burnt rather than bright for that reason.
     readonly property color cWarn: pick("#e0af68", "#5c3a00")
 
+    // ── The UI font ─────────────────────────────────────────────────────────
+    // Watched the same way the bar, synfiles, syn-settings and syn-disks watch
+    // it: font.state is written by synui-apply-font(1) and outlives a theme
+    // switch, which is why it is not a key in theme.json. Qt resolves an
+    // application's default font ONCE at startup, so every Text below names the
+    // family and the name is a BINDING — otherwise this window keeps the old
+    // face until it is reopened, which is exactly how it behaved before: the
+    // control panel changed the desktop font and Arsenal did not move.
+    property string uiFont: ""
+
+    // Same file, same reason: the text scale is a property of the DESKTOP, not
+    // of this window, so it is read here rather than owned here. An app that
+    // reads the family but not the scale is the second half of the same bug —
+    // right face, wrong size, and it still reads as untheme d beside its
+    // siblings.
+    property int textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked
+        // one; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+            const s = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = s ? parseInt(s[1]) : 100
+        }
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
+    }
+
     // ── State ───────────────────────────────────────────────────────────────
     property string repoState: "loading"   // loading|enabled|unsynced|disabled
     property string keyring: ""
@@ -259,12 +295,12 @@ FloatingWindow {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 text: "SYNAPSE Arsenal"
                 color: root.cAccent
-                font { pixelSize: 18; bold: true }
+                font { family: root.uiFont; pixelSize: root.ui(18); bold: true }
             }
             Text {
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
                 color: root.keyring === "missing" ? root.cWarn : root.cDim
-                font.pixelSize: 12
+                font { family: root.uiFont; pixelSize: root.ui(12) }
                 text: {
                     if (root.repoState === "loading")  return "checking repository…"
                     if (root.repoState === "disabled") return "BlackArch not enabled"
@@ -287,13 +323,18 @@ FloatingWindow {
                     text: root.repoState === "disabled"
                           ? "The BlackArch repository is not enabled."
                           : "BlackArch is configured but has never been synced."
-                    color: root.cText; font.pixelSize: 15
+                    color: root.cText
+                    font { family: root.uiFont; pixelSize: root.ui(15) }
                 }
                 Text {
                     text: root.repoState === "disabled"
                           ? "sudo syn arsenal --enable-repo"
                           : "sudo pacman -Sy"
-                    color: root.cAccent; font { pixelSize: 13; family: "monospace" }
+                    // The family stays "monospace" — this line is a command to
+                    // type, and the desktop font is chosen for prose. Only the
+                    // SIZE follows the desktop, so it still grows with the rest
+                    // of the window. Same split as syn-settings and syn-disks.
+                    color: root.cAccent; font { family: "monospace"; pixelSize: root.ui(13) }
                 }
             }
         }
@@ -334,13 +375,13 @@ FloatingWindow {
                         // repeated 50 times down the pane.
                         text: catRow.modelData.name.replace("blackarch-", "")
                         color: catRow.current ? root.cAccent : root.cText
-                        font.pixelSize: 13
+                        font { family: root.uiFont; pixelSize: root.ui(13) }
                     }
                     Text {
                         anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                         text: catRow.modelData.count
                         color: root.cDim
-                        font.pixelSize: 11
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
                     MouseArea {
                         id: ma
@@ -375,7 +416,7 @@ FloatingWindow {
                     anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                     verticalAlignment: TextInput.AlignVCenter
                     color: root.cText
-                    font.pixelSize: 13
+                    font { family: root.uiFont; pixelSize: root.ui(13) }
                     clip: true
                     onTextChanged: root.filter = text
                 }
@@ -383,7 +424,7 @@ FloatingWindow {
                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                     text: "filter packages…"
                     color: root.cDim
-                    font.pixelSize: 13
+                    font { family: root.uiFont; pixelSize: root.ui(13) }
                     visible: searchInput.text === ""
                 }
             }
@@ -393,7 +434,7 @@ FloatingWindow {
                 visible: root.currentGroup === ""
                 text: "Pick a category"
                 color: root.cDim
-                font.pixelSize: 15
+                font { family: root.uiFont; pixelSize: root.ui(15) }
             }
 
             ListView {
@@ -438,13 +479,13 @@ FloatingWindow {
                         Text {
                             text: pkgRow.modelData.name
                             color: root.cText
-                            font { pixelSize: 13; bold: true }
+                            font { family: root.uiFont; pixelSize: root.ui(13); bold: true }
                         }
                         Text {
                             width: parent.width
                             text: pkgRow.modelData.desc
                             color: root.cDim
-                            font.pixelSize: 11
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
@@ -463,7 +504,7 @@ FloatingWindow {
                         Text {
                             anchors.centerIn: parent
                             color: root.cAccent
-                            font.pixelSize: 11
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
                             text: root.busy === pkgRow.modelData.name
                                   ? "working…"
                                   : (pkgRow.modelData.installed ? "Remove" : "Install")

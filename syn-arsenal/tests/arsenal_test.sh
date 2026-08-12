@@ -127,6 +127,29 @@ check "the ink is contrast-guarded against the background" "1" \
 check "the accent is contrast-guarded against the chrome" "1" \
     "$(grep -c 'readable(cAccentRaw, cPanel, 4.5)' "$QML")"
 
+# ── arsenal.qml font ────────────────────────────────────────────────────────
+# The desktop font is ~/.config/synui/font.state, not theme.json, and it carries
+# a SCALE as well as a family. This window read neither until 2026-08-11: the
+# control panel's font picker moved Settings and Files while Arsenal and
+# Software stayed on the startup face, which reads as "the theming missed those
+# apps". Qt resolves an application font once at startup, so both have to be
+# bindings on every Text — a bare `font.pixelSize: 13` is the regression.
+echo
+echo "  arsenal.qml font"
+check "the desktop font file is watched" "1" \
+    "$(grep -c 'config/synui/font.state' "$QML")"
+check "the scale is read from the same file" "1" \
+    "$(grep -c 'root.textScale = s' "$QML")"
+# Every size goes through ui(). The monospace hint is exempt from the FAMILY
+# rule — a command to type is not prose — but not from the size rule.
+#
+# awk rather than `grep -c ... | grep -vc ...`: grep exits 1 on no matches, and
+# under pipefail a correct zero would be read as a failed check.
+check "no pixel size bypasses ui()" "0" \
+    "$(awk '/pixelSize: *[0-9]/ { n++ } END { print n + 0 }' "$QML")"
+check "every literal family is the deliberate monospace" "0" \
+    "$(awk '/family: *"/ && !/family: *"monospace"/ { n++ } END { print n + 0 }' "$QML")"
+
 # ── Launcher ────────────────────────────────────────────────────────────────
 echo
 echo "  syn-arsenal"

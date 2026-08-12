@@ -536,6 +536,41 @@ else
     ok "install still rejects an unknown option"
 fi
 
+# ── the window follows the desktop font ─────────────────────────────────────
+# The font is ~/.config/synui/font.state, not theme.json — it outlives a theme
+# switch — and it carries a SCALE as well as a family. This window read neither
+# until 2026-08-11: the control panel's font picker moved Settings and Files
+# while Software and Arsenal stayed on the face they started with, which reads
+# as "the theming missed those apps".
+#
+# Qt resolves an application's default font ONCE at startup, so both the family
+# and the size have to be BINDINGS on every Text. A bare `font.pixelSize: 13`
+# or a literal family is the regression, and neither shows up as an error
+# anywhere — the window simply stops moving with the desktop.
+QML="$(dirname "$0")/../data/synpkg.qml"
+if [ -f "$QML" ]; then
+    grep -q 'config/synui/font.state' "$QML" \
+        && ok "the desktop font file is watched" \
+        || bad "synpkg.qml does not read font.state"
+    grep -q 'root.textScale = s' "$QML" \
+        && ok "the scale is read from the same file" \
+        || bad "synpkg.qml reads the family but not the scale"
+
+    # awk rather than `grep -c ... | grep -vc ...`: grep exits 1 on no matches,
+    # and under pipefail a correct zero would be read as a failed check.
+    n=$(awk '/pixelSize: *[0-9]/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "no pixel size bypasses ui()" \
+                 || bad "$n pixel size(s) bypass ui()"
+
+    # The monospace exception is exempt from the FAMILY rule — a command to
+    # type is not prose — but not from the size rule above.
+    n=$(awk '/family: *"/ && !/family: *"monospace"/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "every literal family is the deliberate monospace" \
+                 || bad "$n literal font family/families are not monospace"
+else
+    bad "synpkg.qml not found beside the tests: $QML"
+fi
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
