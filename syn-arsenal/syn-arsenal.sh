@@ -59,4 +59,11 @@ fi
 command -v quickshell >/dev/null 2>&1 \
     || { echo "syn-arsenal: quickshell is not installed; using the terminal browser." >&2; tui; }
 
+# The window's app_id. Without it every quickshell window on the system is
+# "org.quickshell", so the dock cannot tell Arsenal from the updater from the
+# file manager, draws quickshell's generic icon on all of them, and its
+# right-click "New Window" has no .desktop to resolve. The .desktop's
+# StartupWMClass is the other half of the same fact.
+export QS_APP_ID="${QS_APP_ID:-syn-arsenal}"
+
 exec quickshell -p "$QML"

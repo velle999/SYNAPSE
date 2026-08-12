@@ -7,7 +7,7 @@
 # handing you `syn arsenal --enable-repo` is most of what a first run is for.
 pkgname=syn-arsenal
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="SYNAPSE Arsenal: browse and install BlackArch security tooling by category"
 arch=('any')
 url="https://github.com/velle999/SYNAPSE"
@@ -24,8 +24,9 @@ source=('syn-arsenal.sh'
         'arsenal-tui.sh'
         'arsenal-enable-repo.sh'
         'syn-arsenal.desktop'
+        'syn-arsenal.svg'
         'arsenal.qml')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     cd "$srcdir"
@@ -41,4 +42,11 @@ package() {
 
     install -Dm644 arsenal.qml             "$pkgdir/usr/share/syn-arsenal/arsenal.qml"
     install -Dm644 syn-arsenal.desktop     "$pkgdir/usr/share/applications/syn-arsenal.desktop"
+
+    # Scalable only: Qt renders the SVG at whatever size the dock or the menu
+    # asks for, and a set of PNGs would be five more files to keep in step with
+    # one drawing. hicolor is the theme every icon theme inherits from, so the
+    # mark survives a theme switch.
+    install -Dm644 syn-arsenal.svg \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/syn-arsenal.svg"
 }

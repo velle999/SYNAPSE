@@ -35,4 +35,9 @@ fi
 # quits on window close, so a live instance always has a window on screen. If
 # that handler is ever removed, this flag turns every later launch into a
 # silent no-op with a success exit code.
+# The window's app_id, so the dock draws this entry's icon on the window and
+# can tell the updater from the Software Manager, the file manager and Arsenal
+# — all of them quickshell, all of them "org.quickshell" without this.
+export QS_APP_ID="${QS_APP_ID:-syn-update}"
+
 exec qs -n --path "$QML" "$@"

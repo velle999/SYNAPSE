@@ -30,6 +30,17 @@ FloatingWindow {
     implicitWidth: 1040
     implicitHeight: 680
 
+    // Closing the window must END the process. quickshell's root object outlives
+    // its window: destroying the FloatingWindow leaves `quickshell` alive owning
+    // nothing — invisible, unreachable, and still holding whatever the QML had
+    // open. Measured on a live session: an Arsenal closed eight minutes earlier
+    // was still running with no window anywhere in `synctl clients`, and every
+    // open-and-close leaves another one.
+    //
+    // synpkg, synfiles and syn-update all carry this line; this window was the
+    // one that did not.
+    onClosed: Qt.quit()
+
     readonly property string query: Quickshell.env("SYN_ARSENAL_QUERY")
                                     || "/usr/lib/syn-arsenal/arsenal-query"
 

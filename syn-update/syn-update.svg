@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    SynapseOS Updates.
+
+    Until now this shipped Icon=system-software-update, the theme's generic
+    entry — and the Software Manager next to it in the menu shipped the generic
+    system-software-install. Two updaters, two borrowed icons, and on some
+    themes very nearly the same drawing. That is exactly the confusion these
+    two windows cannot afford, because they update different halves of the
+    system: `synpkg` covers Arch, this covers SynapseOS's own components, and
+    reaching for the wrong one is several minutes before it says so.
+
+    So the two marks are deliberate opposites, matched as a pair — a purple
+    field with one light glyph on it, in the two silhouettes that stay
+    distinguishable at any size and under any theme:
+
+      synpkg      SQUARE package, arrow going IN — something arrives from a
+                  repository, already built.
+      syn-update  ROUND badge, arrow going AROUND — nothing arrives; what is
+                  already here is fetched from git and rebuilt in place.
+
+    Round versus square survives 22px in a dock. Two variations on an arrow do
+    not, which is why the first draft of this — a thin ring around the dendrite
+    mark — was thrown away: at 22 the ring closed up and the dendrite's three
+    branches read as a little stick figure.
+
+    Purple #a78bfa is the SynapseOS dendrite colour, the same one synpkg,
+    synfiles and syn-arsenal use.
+
+    SynapseOS Project — GPL-2.0-or-later
+    SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+
+  <!-- The badge. A full disc rather than an outlined ring: the silhouette is
+       what identifies an icon at small sizes, and an outline has none. -->
+  <circle cx="24" cy="24" r="20" fill="#a78bfa"/>
+
+  <!-- The cycle. Drawn as a stroked ARC, not as a filled donut with a hole:
+       a donut needs fill-rule="evenodd" to keep its middle open, and one wrong
+       attribute fills it solid with nothing to warn you.
+
+       The gap is wide — about 60° — and sits at the top right where the
+       arrowhead lands. A nearly closed ring reads as a plain circle the moment
+       the arrowhead is down to a pixel or two. -->
+  <path d="M33.1 18.75A10.5 10.5 0 1 1 24 13.5"
+        fill="none" stroke="#f1ecff" stroke-width="4.4" stroke-linecap="round"/>
+
+  <!-- The arrowhead, at the end of the sweep and pointing the way the arc is
+       travelling. A triangle rather than two strokes: at this size two strokes
+       land on different pixel boundaries and one of them vanishes. -->
+  <path d="M23 8.2 31.5 13.6 23 19z" fill="#f1ecff"/>
+</svg>

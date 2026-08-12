@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 /*
  * The SYNAPSE start menu.
@@ -396,8 +395,29 @@ PanelWindow {
         }
 
         // ── Activation ───────────────────────────────────
-        Process { id: runner }
-        Process { id: dispatcher }
+        //
+        // execDetached, NOT a shared Process object — the rule PostItState.qml
+        // already writes down for two deletions in a row, and the menu is where
+        // it was not applied.
+        //
+        // A Process runs ONE command at a time. Assigning `command` while it is
+        // still running does not start a second child; it QUEUES, and the queued
+        // command runs the moment the first child exits. Every row here launches
+        // something that lives as long as its window does — `synpkg gui` and
+        // `syn-update-gui` both exec quickshell in the FOREGROUND, `kitty` stays
+        // up — so one shared Process meant the start menu could only ever have
+        // one launched application alive at a time.
+        //
+        // What that looked like: open Software Manager, then click SynapseOS
+        // Updates, and nothing happens — no window, no error, and the row looks
+        // broken. Close Software and the Updates window appears instantly,
+        // which is the queued command finally running. Any pair collided the
+        // same way: Terminal and Software, System Status and Network Setup, two
+        // terminals. Reported as "updates doesn't want software open at the
+        // same time", which is exactly what it does.
+        //
+        // Detaching is also what stops a bar restart from taking every
+        // application launched from the menu with it.
 
         function activate(row) {
             if (!row) return
@@ -414,18 +434,16 @@ PanelWindow {
                 // The optional arg is one word from this file's own tables — a
                 // control-panel category — never anything scanned off disk, and
                 // it goes through argv rather than a shell either way.
-                dispatcher.command = row.arg
+                Quickshell.execDetached(row.arg
                     ? ["synctl", "dispatch", row.action, row.arg]
-                    : ["synctl", "dispatch", row.action]
-                dispatcher.running = true
+                    : ["synctl", "dispatch", row.action])
                 break
             case "exec":
                 // argv, not a shell string. Nothing here needs a shell, and a
                 // menu that runs /bin/sh -c is a menu one hostile .desktop name
                 // away from being an injection — the exact hazard synui-cursor
                 // had to defend against for theme names.
-                runner.command = row.argv
-                runner.running = true
+                Quickshell.execDetached(row.argv)
                 break
             case "app":
                 // execute() handles the field codes (%f %u %i %c), Terminal=

@@ -5,9 +5,16 @@ Name=SynapseOS Updates
 GenericName=System Updater
 Comment=Update SynapseOS itself — fetches new components from git and rebuilds them
 Exec=syn-update-gui
-Icon=system-software-update
+# Its own mark, not the theme's generic system-software-update — which on some
+# themes is very nearly the icon the Software Manager draws, and these two
+# update different halves of the system. See syn-update.svg.
+Icon=syn-update
 Terminal=false
 Categories=System;
 Keywords=update;upgrade;synapse;synapseos;git;system;
 StartupNotify=true
-StartupWMClass=quickshell
+# The window's app_id, set by syn-update-gui as QS_APP_ID. It used to say
+# "quickshell", which never matched anything: quickshell names its windows
+# "org.quickshell" unless told otherwise, so this entry matched no window while
+# every other quickshell app on the system matched the same non-name.
+StartupWMClass=syn-update

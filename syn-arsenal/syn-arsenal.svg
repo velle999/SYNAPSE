@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!--
+    SYNAPSE Arsenal.
+
+    Until now this shipped Icon=security-high — the theme's generic entry,
+    which on a Breeze desktop is a shield with a tick in it and is used by
+    anything that wants to say "secure". The same problem synfiles had with
+    system-file-manager and synpkg with system-software-install: in a dock the
+    icon is the only thing telling two applications apart, and a borrowed one
+    tells you nothing about which is which.
+
+    The mark is a shield holding a RACK — three bars, the last one short. The
+    shield is what makes it security tooling at a glance; the rack is what
+    makes it a *browser* of ~5000 of them by category rather than a monitor or
+    a firewall. synguard is the thing that watches; this is the thing you pick
+    a tool out of.
+
+    Purple #a78bfa is the SynapseOS dendrite colour, the same one synfiles and
+    synpkg use, so the three read as one set.
+
+    Four shapes, no gradients, on purpose: this is looked at most often at 22px
+    in a dock, where anything finer turns to mush. The bars are 4px deep and
+    4px apart for the same reason — a rack of thin lines closes up into a solid
+    block at small sizes and takes the whole idea with it.
+
+    SynapseOS Project — GPL-2.0-or-later
+    SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+
+  <!-- The shield. One path: a crest that tapers to a point, not a rounded
+       badge — the taper is what survives being 22 pixels tall, and it is what
+       distinguishes the silhouette from synpkg's square package at a glance. -->
+  <path d="M24 3.5 42 9.4v13.9c0 10.6-7.2 18.8-18 21.7-10.8-2.9-18-11.1-18-21.7V9.4z"
+        fill="#a78bfa"/>
+
+  <!-- The rack. Three bars, the third deliberately short: three equal bars
+       read as a stack of plates, and the ragged end is what makes it a LIST of
+       things you scroll rather than one solid object.
+
+       Inset well clear of the shield's edge on both sides. The draft before
+       this one ran the bars to the full inner width, and at the point of the
+       shield the bottom bar's corners poked through the taper. -->
+  <rect x="13" y="14" width="22" height="4" rx="2" fill="#f1ecff"/>
+  <rect x="13" y="22" width="22" height="4" rx="2" fill="#f1ecff"/>
+  <rect x="13" y="30" width="13" height="4" rx="2" fill="#f1ecff"/>
+</svg>

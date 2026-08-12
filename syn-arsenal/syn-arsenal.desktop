@@ -4,8 +4,16 @@ Name=SYNAPSE Arsenal
 GenericName=Security Tool Browser
 Comment=Browse and install BlackArch security tooling by category
 Exec=syn-arsenal
-Icon=security-high
+# Its own mark, not the theme's generic security-high — which is a shield with
+# a tick that anything claiming to be secure also uses. See syn-arsenal.svg.
+Icon=syn-arsenal
 Terminal=false
+# The window's app_id, so a taskbar that maps windows to launchers finds THIS
+# entry and draws the icon above on it. syn-arsenal sets the matching QS_APP_ID
+# on the quickshell process; WITHOUT BOTH HALVES the window belongs to
+# "org.quickshell" and wears quickshell's own generic icon — which every other
+# quickshell app on this system would then share.
+StartupWMClass=syn-arsenal
 Categories=System;Security;PackageManager;
 Keywords=blackarch;security;pentest;forensics;packages;tools;
 StartupNotify=true

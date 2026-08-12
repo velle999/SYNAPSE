@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import ".."
 
 /*
@@ -131,14 +130,16 @@ WidgetFrame {
                     id: mouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: {
-                        launch.command = row.modelData.exec
-                        launch.running = true
-                    }
+                    // execDetached, not a shared Process: a Process runs one
+                    // command at a time and QUEUES the next one until the
+                    // running child exits, so clicking a second tile while the
+                    // first application was still open did nothing until that
+                    // application was closed. The start menu had the identical
+                    // bug — a widget whose whole purpose is launching things
+                    // cannot launch only one at a time.
+                    onClicked: Quickshell.execDetached(row.modelData.exec)
                 }
             }
         }
     }
-
-    Process { id: launch }
 }

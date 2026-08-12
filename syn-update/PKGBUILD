@@ -1,6 +1,6 @@
 pkgname=syn-update
 pkgver=0.1.0
-pkgrel=20
+pkgrel=21
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -24,8 +24,9 @@ optdepends=('quickshell: graphical updater (syn-update-gui, "SynapseOS Updates" 
             'qt6-declarative: QtQuick runtime for the graphical updater'
             'kitty: terminal the GUI hands the privileged build off to'
             'zenity: dialog used to report a missing quickshell')
-source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update-gui.desktop")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update-gui.desktop"
+        "syn-update.svg")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-update.sh"     "$pkgdir/usr/bin/syn-update"
@@ -37,4 +38,10 @@ package() {
     # dropping the file here is all that is needed for the entry to appear.
     install -Dm644 "$srcdir/syn-update-gui.desktop" \
         "$pkgdir/usr/share/applications/syn-update-gui.desktop"
+
+    # Scalable only, in hicolor — the theme every icon theme inherits from, so
+    # the mark survives a theme switch. One drawing instead of a set of PNGs to
+    # keep in step.
+    install -Dm644 "$srcdir/syn-update.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/syn-update.svg"
 }
