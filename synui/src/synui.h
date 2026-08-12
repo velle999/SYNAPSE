@@ -2040,6 +2040,15 @@ typedef struct {
     struct wl_event_source *t_dim, *t_blank, *t_lock, *t_suspend;
     int dimmed;
     int blanked;
+
+    /* Post-resume sink sweep. A resume re-enables every output synchronously,
+     * but a DP link that is going to fail has not failed yet at that moment —
+     * so the un-blank can bind a CRTC to a head that is about to go away, and
+     * on DP-3 that is what stops the panel re-enumerating. This ticks
+     * power_apply_blank() for a short window afterwards so the release happens
+     * once the connectors have settled. Counts down; 0 = not sweeping. */
+    struct wl_event_source *t_sinksweep;
+    int sink_sweeps;
     int locked;        /* we spawned the locker and have seen no activity since */
     uint32_t last_arm_ms;  /* rearm throttle — see power_notify_activity */
 

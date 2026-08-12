@@ -36,6 +36,7 @@
 #define _GNU_SOURCE
 #include <dirent.h>    /* /sys/class/power_supply — see power_on_ac */
 #include <errno.h>
+#include <limits.h>    /* PATH_MAX — see output_sink_present */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -181,6 +182,49 @@ static bool output_is_internal(struct wlr_output *o)
     return false;
 }
 
+/* Is there still a sink answering on this connector?
+ *
+ * wlroots cannot tell us. A wlr_output normally disappears with its monitor,
+ * so there is no "is it still there?" to ask — but that is exactly what does
+ * NOT happen here: after a bad resume DP-3 keeps its wlr_output, and its CRTC,
+ * for as long as we leave it enabled. The kernel's own connector status is the
+ * only truthful source, so read it the way edid_hdr_probe_connector() does
+ * (edid.c) — the card index is not derivable from the wlroots name ("DP-3")
+ * and is not card0 on this machine.
+ *
+ * Unknown deliberately reads as PRESENT. If sysfs cannot be opened or the
+ * connector is not found, answering "gone" would blank every output on resume
+ * — far worse than the fault this is here to avoid. Only an explicit
+ * "disconnected" counts against a head. */
+static bool output_sink_present(struct wlr_output *o)
+{
+    if (!o || !o->name[0]) return true;
+
+    DIR *dir = opendir("/sys/class/drm");
+    if (!dir) return true;
+
+    bool present = true;
+    struct dirent *de;
+    while ((de = readdir(dir))) {
+        if (strncmp(de->d_name, "card", 4) != 0) continue;
+        const char *dash = strchr(de->d_name + 4, '-');
+        if (!dash || strcmp(dash + 1, o->name) != 0) continue;
+
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "/sys/class/drm/%s/status", de->d_name);
+        FILE *f = fopen(path, "re");
+        if (f) {
+            char st[32] = {0};
+            if (fgets(st, sizeof(st), f))
+                present = (strncmp(st, "disconnected", 12) != 0);
+            fclose(f);
+        }
+        break;
+    }
+    closedir(dir);
+    return present;
+}
+
 bool power_docked(syn_server_t *s)
 {
     syn_output_t *o;
@@ -265,6 +309,30 @@ static void power_apply_blank(syn_server_t *s)
     wl_list_for_each(o, &s->outputs, link) {
         bool off = s->power.blanked ||
                    (s->power.lid_blanked && output_is_internal(o->wlr_output));
+
+        /* Never drive a head whose sink has gone.
+         *
+         * Committing enabled=true on a connector with no sink binds a CRTC to
+         * a dead head, and on DP-3 that is precisely what stops the panel from
+         * re-enumerating: it then never returns without a power cycle. Four
+         * resumes were measured on 2026-08-12 and the only one DP-3 survived
+         * was the one where its disconnect landed BEFORE this loop ran, so the
+         * output was never enabled and the panel came back by itself in ~20s.
+         *
+         * Forcing `off` here does both halves of the fix with the commit that
+         * is already below: it refuses to light a sinkless head, and it
+         * RELEASES one that is already lit. It is also self-correcting — when
+         * the sink returns, a later pass computes off=false and enables it
+         * again — which is what makes the sweep in power_sinksweep_cb() safe
+         * against a connector that reads disconnected only momentarily. */
+        if (!off && !output_sink_present(o->wlr_output)) {
+            off = true;
+            if (o->wlr_output->enabled)
+                wlr_log(WLR_INFO, "synui: power: %s has no sink — releasing "
+                        "its CRTC so the panel can re-enumerate",
+                        o->wlr_output->name);
+        }
+
         if (off == !o->wlr_output->enabled) continue;   /* already there */
 
         /* Mirrors the wlr-output-power-management handler in output_mgmt.c:
@@ -415,6 +483,37 @@ void power_notify_activity(syn_server_t *s)
     power_arm(s);
 }
 
+/* Keep checking the connectors for a short while after a resume.
+ *
+ * power_apply_blank() cannot get this right in one pass. It runs synchronously
+ * off the resume signal, and a DP link that is going to fail has not failed
+ * yet at that moment — the connector still reads `connected` from its cached
+ * state, so the head is enabled and only then does the link not come back.
+ * One pass can only ever see the before picture.
+ *
+ * So re-run it once a second while the connectors settle. Each pass releases a
+ * head whose sink has since gone, and re-enables one whose sink has returned,
+ * so this converges from either direction rather than latching a decision.
+ *
+ * This is NOT the re-probe timing that was already tried and abandoned: that
+ * widened `echo detect > status` from 6s to 62s and recovered nothing, because
+ * probing cannot help while the CRTC is still asserted. This releases the CRTC
+ * instead. Once released, the panel re-enumerates on its own and the ordinary
+ * hotplug path (output_persist) restores it — which is exactly what was
+ * observed happening unaided on 2026-08-11. */
+#define POWER_SINK_SWEEPS 30      /* passes, one per second */
+
+static int power_sinksweep_cb(void *data)
+{
+    syn_server_t *s = data;
+
+    power_apply_blank(s);
+
+    if (--s->power.sink_sweeps > 0 && s->power.t_sinksweep)
+        wl_event_source_timer_update(s->power.t_sinksweep, 1000);
+    return 0;
+}
+
 /* A resume has to light the screens itself.
  *
  * Nothing else does it. The blank stage commits every output disabled, and the
@@ -435,6 +534,12 @@ void power_wake_display(syn_server_t *s)
     power_set_dim(s, false);
     power_set_blank(s, false);
     power_arm(s);
+
+    /* Watch the connectors for the next POWER_SINK_SWEEPS seconds. Restarts
+     * the count if a second resume lands inside an existing window. */
+    s->power.sink_sweeps = POWER_SINK_SWEEPS;
+    if (s->power.t_sinksweep)
+        wl_event_source_timer_update(s->power.t_sinksweep, 1000);
 }
 
 void power_reload(syn_server_t *s)
@@ -608,6 +713,7 @@ void power_init(syn_server_t *s)
     s->power.t_blank   = wl_event_loop_add_timer(loop, power_blank_cb,   s);
     s->power.t_lock    = wl_event_loop_add_timer(loop, power_lock_cb,    s);
     s->power.t_suspend = wl_event_loop_add_timer(loop, power_suspend_cb, s);
+    s->power.t_sinksweep = wl_event_loop_add_timer(loop, power_sinksweep_cb, s);
     power_arm(s);
 }
 
@@ -617,8 +723,11 @@ void power_finish(syn_server_t *s)
     if (s->power.t_blank)   wl_event_source_remove(s->power.t_blank);
     if (s->power.t_lock)    wl_event_source_remove(s->power.t_lock);
     if (s->power.t_suspend) wl_event_source_remove(s->power.t_suspend);
+    if (s->power.t_sinksweep) wl_event_source_remove(s->power.t_sinksweep);
     s->power.t_dim = s->power.t_blank = NULL;
     s->power.t_lock = s->power.t_suspend = NULL;
+    s->power.t_sinksweep = NULL;
+    s->power.sink_sweeps = 0;
 }
 
 /* ── Persisted state ─────────────────────────────────────── */
