@@ -290,6 +290,23 @@ int cmd_serve(int argc, char **argv)
 				ed_message(e, false, "\"%s\" written", buf_name(ed_buf(e)));
 			free(err);
 			free(p);
+		} else if (!strcmp(verb, "set")) {
+			/* The same option change as :set, but SILENT.
+			 *
+			 * A toolbar button is not a typed command. Clicking Documents
+			 * went through `ex set tree!` and left "tree=true" sitting in
+			 * the message line, which reads as the window reporting
+			 * something rather than as a panel having been toggled. The TUI
+			 * keeps the echo, because there it is the only feedback a :set
+			 * gets.
+			 *
+			 * An ERROR still speaks: clearing the message unconditionally
+			 * would turn a rejected option into a button that does nothing
+			 * and says nothing about it. */
+			char cmd[512];
+			snprintf(cmd, sizeof cmd, "set %s", rest);
+			if (ed_ex(e, cmd) && !e->msg_err)
+				e->msg[0] = '\0';
 		} else if (!strcmp(verb, "buf")) {
 			size_t i = (size_t)atol(rest);
 			if (i >= 1 && i <= e->nbuf) {

@@ -312,6 +312,7 @@ FloatingWindow {
     readonly property bool inCmd: (root.st.cmdline || "") !== ""
 
     Rectangle {
+        id: shell
         anchors.fill: parent
         color: root.cBg
 
@@ -322,31 +323,63 @@ FloatingWindow {
             height: Math.round(root.ui(38))
             color: root.cPanel
 
-            Row {
-                anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                spacing: 4
+            // ⚠ The two groups sit in CLIPPED boxes of an explicit width, and
+            // are not simply anchored to opposite edges and left to meet in
+            // the middle. minimumSize is not the floor it looks like: synui
+            // enforces a client minimum only during an INTERACTIVE resize, so
+            // a tiled or otherwise forced configure puts this window well
+            // under 640 — and two anchored Rows with no floor do not degrade,
+            // they paint through each other ("UndoDocuments", "F Abolut R").
+            //
+            // The widths are arithmetic with a max(0, …) rather than a left
+            // AND right anchor pair, because a negative width silently
+            // defeats clip — the overflow this exists to contain would escape
+            // at exactly the sizes that produce it.
+            Item {
+                id: rightTools
+                anchors { right: parent.right; rightMargin: 8
+                          top: parent.top; bottom: parent.bottom }
+                width: Math.min(rightRow.implicitWidth, Math.max(0, parent.width - 16))
+                clip: true
 
-                ToolButton { label: "New";  tip: "a new empty buffer";  onTriggered: root.send("new") }
-                ToolButton { label: "Open"; tip: "type a path (:e)";    onTriggered: root.sendKeys(":e ") }
-                ToolButton { label: "Save"; tip: "write this buffer";   onTriggered: root.send("save") }
-                Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
-                            anchors.verticalCenter: parent.verticalCenter }
-                ToolButton { label: "Undo"; tip: "u";                   onTriggered: root.sendKeys("u") }
-                ToolButton { label: "Redo"; tip: "Ctrl-R";              onTriggered: root.sendKeys("<C-r>") }
-                Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
-                            anchors.verticalCenter: parent.verticalCenter }
-                ToolButton { label: "Find"; tip: "/";                   onTriggered: root.sendKeys("/") }
-                ToolButton { label: "Replace"; tip: ":%s/…/…/g";        onTriggered: root.sendKeys(":%s/") }
+                Row {
+                    id: rightRow
+                    // Anchored LEFT inside a right-anchored box, so the button
+                    // that falls off the end when there is no room is About
+                    // and not the Documents toggle.
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    spacing: 4
+                    ToolButton { label: "Documents"; tip: "show or hide the list"
+                                 active: root.st.tree === "1"
+                                 onTriggered: root.send("set tree!") }
+                    ToolButton { label: "About"; tip: "version and licence"
+                                 onTriggered: aboutPane.visible = !aboutPane.visible }
+                }
             }
 
-            Row {
-                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                spacing: 4
-                ToolButton { label: "Documents"; tip: "show or hide the list"
-                             active: root.st.tree === "1"
-                             onTriggered: root.sendEx("set tree!") }
-                ToolButton { label: "About"; tip: "version and licence"
-                             onTriggered: aboutPane.visible = !aboutPane.visible }
+            Item {
+                id: leftTools
+                anchors { left: parent.left; leftMargin: 8
+                          top: parent.top; bottom: parent.bottom }
+                width: Math.max(0, rightTools.x - leftTools.x - 6)
+                clip: true
+
+                Row {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    spacing: 4
+
+                    ToolButton { label: "New";  tip: "a new empty buffer";  onTriggered: root.send("new") }
+                    ToolButton { label: "Open"; tip: "type a path (:e)";    onTriggered: root.sendKeys(":e ") }
+                    ToolButton { label: "Save"; tip: "write this buffer";   onTriggered: root.send("save") }
+                    Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
+                                anchors.verticalCenter: parent.verticalCenter }
+                    ToolButton { label: "Undo"; tip: "u";                   onTriggered: root.sendKeys("u") }
+                    ToolButton { label: "Redo"; tip: "Ctrl-R";              onTriggered: root.sendKeys("<C-r>") }
+                    Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
+                                anchors.verticalCenter: parent.verticalCenter }
+                    ToolButton { label: "Find"; tip: "/";                   onTriggered: root.sendKeys("/") }
+                    ToolButton { label: "Replace"; tip: ":%s/…/…/g";        onTriggered: root.sendKeys(":%s/") }
+                }
             }
 
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1
@@ -398,7 +431,14 @@ FloatingWindow {
         Rectangle {
             id: sidebar
             anchors { top: tabstrip.bottom; bottom: statusbar.top; left: parent.left }
-            width: root.st.tree === "1" ? Math.round(root.ui(200)) : 0
+            // Capped as a FRACTION as well as an absolute. A flat 200px is
+            // most of a narrow window: at 350px wide it left ~120px of
+            // editor, which is less than the gutter plus any usable number of
+            // columns, so the pane the sidebar exists to list became
+            // unreadable to make room for the list.
+            width: root.st.tree === "1"
+                   ? Math.min(Math.round(root.ui(200)), Math.round(parent.width * 0.4))
+                   : 0
             visible: width > 0
             clip: true
             color: Qt.rgba(root.cPanel.r, root.cPanel.g, root.cPanel.b, 0.45)
@@ -420,7 +460,10 @@ FloatingWindow {
                     model: root.bufs
                     Rectangle {
                         required property var modelData
-                        width: sidebar.width - 16
+                        // max(0, …): the sidebar is capped against the window
+                        // now, and a row narrower than its own margins would
+                        // go negative — which does not clip, it paints out.
+                        width: Math.max(0, sidebar.width - 16)
                         height: Math.round(root.ui(26))
                         radius: 4
                         color: modelData.current ? root.wash(0.18)
@@ -706,9 +749,13 @@ FloatingWindow {
             id: aboutPane
             visible: false
             anchors.centerIn: parent
-            width: Math.min(parent.width - 60, Math.round(root.ui(420)))
+            width: Math.max(0, Math.min(parent.width - 60, Math.round(root.ui(420))))
             height: aboutCol.implicitHeight + 32
             radius: 8
+            // Belt and braces. The rows below are given a real width, which is
+            // the actual fix; this is here so that the next row added without
+            // one is merely cut off instead of drawn across the editor.
+            clip: true
             color: root.cPanel
             border.color: root.wash(0.4)
             border.width: 1
@@ -736,6 +783,7 @@ FloatingWindow {
                         required property var modelData
                         spacing: 8
                         Text {
+                            id: aboutField
                             width: Math.round(root.ui(110))
                             text: modelData.field
                             font.family: root.uiFont
@@ -743,6 +791,15 @@ FloatingWindow {
                             color: root.cDim
                         }
                         Text {
+                            // ⚠ Widthless, this laid out to its own advance and
+                            // ran clean through the panel's right border and
+                            // across the editor behind it — `engine` and the
+                            // wl-paste line both did. The width cap on
+                            // aboutPane decides where the BORDER is drawn; it
+                            // constrains nothing inside. max(0, …) because a
+                            // negative width does not clip, it paints out.
+                            width: Math.max(0, aboutCol.width - aboutField.width - 8)
+                            wrapMode: Text.WordWrap
                             text: modelData.value
                                   + (modelData.detail ? "  " + modelData.detail : "")
                             font.family: root.uiFont
@@ -779,6 +836,62 @@ FloatingWindow {
                         hoverEnabled: true
                         onClicked: aboutPane.visible = false
                     }
+                }
+            }
+        }
+
+        // ── tooltips ────────────────────────────────────────────────────────
+        //
+        // ONE bubble for the whole window, declared LAST so it is above every
+        // panel, and living outside the toolbar's clipped groups.
+        //
+        // A tip parented to its own button lost twice: the toolbar is declared
+        // before the sidebar and the editor, and later siblings paint on top,
+        // so the part of the bubble that hung below the toolbar was covered —
+        // which is how "write this buffer" reached the screen as "write this
+        // buf", not clipped but buried. Moving the groups into clip:true boxes
+        // would then have cut it for real.
+        Item {
+            id: shellTip
+            anchors.fill: parent
+            visible: shellTip.owner !== null
+
+            property var owner: null
+            property string text: ""
+            property real bx: 0
+            property real by: 0
+            property real bw: 0
+
+            function showFor(o, t, x, y, w) {
+                shellTip.owner = o; shellTip.text = t
+                shellTip.bx = x; shellTip.by = y; shellTip.bw = w
+            }
+            // Keyed on the owner: a button that has already lost the pointer
+            // must not hide the tip of the one that just gained it.
+            function hideFor(o) { if (shellTip.owner === o) shellTip.owner = null }
+
+            Rectangle {
+                // Centred on the BUTTON. The old `x: -width / 2` was relative
+                // to a zero-width Item at the button's origin, so it centred
+                // the bubble on the button's left EDGE — every tip sat half a
+                // button too far left. Then clamped into the window, or the
+                // leftmost button's tip hangs off the side of it.
+                x: Math.max(4, Math.min(shellTip.width - width - 4,
+                                        shellTip.bx + (shellTip.bw - width) / 2))
+                y: shellTip.by + Math.round(root.ui(22))
+                width: ttText.implicitWidth + 12
+                height: ttText.implicitHeight + 8
+                radius: 3
+                color: root.cBg
+                border.color: root.wash(0.4)
+                border.width: 1
+                Text {
+                    id: ttText
+                    anchors.centerIn: parent
+                    text: shellTip.text
+                    font.family: root.uiFont
+                    font.pixelSize: root.ui(10)
+                    color: root.cText
                 }
             }
         }
@@ -856,30 +969,18 @@ FloatingWindow {
                 // in a modal editor that keystroke is usually a command.
                 editor.forceActiveFocus()
             }
-        }
-        ToolTip { text: tb.tip; shown: tbMa.containsMouse && tb.tip !== "" }
-    }
-
-    component ToolTip: Item {
-        property string text: ""
-        property bool shown: false
-        visible: shown && text !== ""
-        Rectangle {
-            x: -width / 2
-            y: Math.round(root.ui(22))
-            width: ttText.implicitWidth + 12
-            height: ttText.implicitHeight + 8
-            radius: 3
-            color: root.cBg
-            border.color: root.wash(0.4)
-            border.width: 1
-            Text {
-                id: ttText
-                anchors.centerIn: parent
-                text: parent.parent.text
-                font.family: root.uiFont
-                font.pixelSize: root.ui(10)
-                color: root.cText
+            onContainsMouseChanged: {
+                if (tbMa.containsMouse && tb.tip !== "") {
+                    // Resolved ONCE, on hover, and deliberately not as a
+                    // binding: mapToItem() does not re-evaluate when the
+                    // toolbar reflows, so a bound position keeps pointing at
+                    // where the button used to be. Hover is exactly the moment
+                    // the answer is fresh.
+                    const pt = tb.mapToItem(shell, 0, 0)
+                    shellTip.showFor(tb, tb.tip, pt.x, pt.y, tb.width)
+                } else {
+                    shellTip.hideFor(tb)
+                }
             }
         }
     }
