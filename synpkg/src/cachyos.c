@@ -55,10 +55,24 @@ bool cachyos_repo_enabled(void)
 	return found;
 }
 
-static int cachyos_helper(const char *action)
+/* ⚠ TWO NAMESPACES, and they are not the same words.
+ *
+ *   subcmd — synpkg's own subcommand: "enable-repo" / "disable-repo"
+ *   action — the helper script's argument: "enable" / "disable"
+ *
+ * escalate() re-execs SYNPKG, not the script, so what it is handed must be a
+ * subcommand cmd_cachyos() below actually accepts. Passing the script's word
+ * made the pkexec'd child run `synpkg cachyos enable`, which is not a
+ * subcommand — so every install of a Cachy kernel prompted for a password and
+ * then died on synpkg's own usage message, with run_quiet() swallowing it.
+ *
+ * Both are passed explicitly rather than derived from one another, so the one
+ * place that knows both namespaces states both.
+ */
+static int cachyos_helper(const char *subcmd, const char *action)
 {
 	if (!is_root()) {
-		char *a[] = { (char *)action, NULL };
+		char *a[] = { (char *)subcmd, NULL };
 		return escalate("cachyos", 1, a);
 	}
 
@@ -111,9 +125,9 @@ int cmd_cachyos(int argc, char **argv)
 	if (!strcmp(sub, "status"))
 		return cachyos_status();
 	if (!strcmp(sub, "enable-repo"))
-		return cachyos_helper("enable");
+		return cachyos_helper("enable-repo", "enable");
 	if (!strcmp(sub, "disable-repo"))
-		return cachyos_helper("disable");
+		return cachyos_helper("disable-repo", "disable");
 
 	die("cachyos: unknown subcommand '%s'\n"
 	    "  try: status, enable-repo, disable-repo", sub);

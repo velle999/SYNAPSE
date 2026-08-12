@@ -169,6 +169,33 @@ if [ -f "$CACHY_SH" ]; then
     grep -q '>> "\$PACMAN_CONF"' "$CACHY_SH" \
         && ok "the cachyos repo section is appended" \
         || bad "the cachyos repo section is not appended to pacman.conf"
+fi
+
+# ⚠ escalate() re-execs SYNPKG, so the word it is handed must be one of
+# synpkg's OWN subcommands — never the helper script's action.
+#
+# Getting this wrong is invisible until a real install: the pkexec prompt
+# appears, the user authenticates, and the root child dies on synpkg's usage
+# message, which run_quiet() swallows. That is exactly what shipped —
+# `synpkg cachyos enable` is not a subcommand, so every Cachy kernel install
+# asked for a password and then did nothing.
+CACHY_C="$(dirname "$0")/../src/cachyos.c"
+if [ -f "$CACHY_C" ]; then
+    if grep -A3 'escalate("cachyos"' "$CACHY_C" | grep -qE '"(enable|disable)"[^-]'; then
+        bad "cachyos escalates a helper ACTION where a synpkg SUBCOMMAND is required"
+    else
+        ok "cachyos escalates a real synpkg subcommand"
+    fi
+
+    # Every subcommand handed to escalate() must be one the dispatcher accepts.
+    for sub in $(grep -oE 'escalate\("cachyos", 1, [a-z]+\)' "$CACHY_C" >/dev/null 2>&1; \
+                 grep -oE '"(enable|disable)-repo"' "$CACHY_C" | tr -d '"' | sort -u); do
+        if grep -q "strcmp(sub, \"$sub\")" "$CACHY_C"; then
+            ok "cachyos dispatcher accepts '$sub'"
+        else
+            bad "cachyos uses '$sub' but the dispatcher does not accept it"
+        fi
+    done
 else
     bad "synpkg-enable-cachyos.sh not found beside the tests: $CACHY_SH"
 fi
