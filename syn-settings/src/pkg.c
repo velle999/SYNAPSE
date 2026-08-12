@@ -73,7 +73,7 @@ int do_pkg(int argc, char **argv)
 		              (char *)"enable-repo", NULL };
 		if (g_dry_run) {
 			fputs("would run: synpkg cachyos enable-repo\n", stdout);
-		} else if (run_quiet(r) != 0) {
+		} else if (run_progress(r) != 0) {
 			fprintf(stderr, "syn-settings: could not enable the CachyOS "
 			                "repository — %s cannot be installed without it\n",
 			        name);
@@ -103,9 +103,17 @@ int do_pkg(int argc, char **argv)
 	 * restricted to syn_kernel_known() above.
 	 *
 	 * It must come BEFORE the verb — synpkg stops parsing globals at the first
-	 * non-option argument. */
-	char *a[] = { (char *)"synpkg", (char *)"--noconfirm", (char *)act,
-	              (char *)name, (char *)headers, NULL };
+	 * non-option argument.
+	 *
+	 * --verbose for the same reason run_progress() exists: a kernel is a couple
+	 * of hundred megabytes, and synpkg names each file only once it is
+	 * downloaded and only when asked. Without it the longest stretch of the
+	 * whole operation reports nothing at all. It changes what is SAID and
+	 * nothing about what is done, and synpkg carries it across its own pkexec
+	 * (trans.c escalate()), so the escalated half stays as talkative as this
+	 * one. */
+	char *a[] = { (char *)"synpkg", (char *)"--noconfirm", (char *)"--verbose",
+	              (char *)act, (char *)name, (char *)headers, NULL };
 
 	if (g_dry_run) {
 		fputs("would run:", stdout);
@@ -114,7 +122,10 @@ int do_pkg(int argc, char **argv)
 		return 0;
 	}
 
-	int rc = run_quiet(a);
+	/* Streamed, not discarded: this is the one button in the app that can run
+	 * for five minutes, and what it prints while it does is the only evidence
+	 * anything is happening. */
+	int rc = run_progress(a);
 	if (rc != 0)
 		fprintf(stderr, "syn-settings: synpkg exited %d — "
 		                "authorisation refused, or the package was not found\n", rc);

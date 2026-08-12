@@ -123,7 +123,7 @@ for evil in "firefox" "base" "sudo" "linux-lts-evil"; do
         ok "pkg refused: $evil"
     fi
 done
-if "$BIN" --dry-run pkg install linux-lts | grep -q 'synpkg --noconfirm install linux-lts linux-lts-headers'; then
+if "$BIN" --dry-run pkg install linux-lts | grep -q 'synpkg .*install linux-lts linux-lts-headers'; then
     ok "pkg install pulls the matching headers"
 else
     bad "pkg install did not include headers"
@@ -138,6 +138,16 @@ if "$BIN" --dry-run pkg install linux-zen | grep -q -- '--noconfirm'; then
     ok "pkg install passes --noconfirm"
 else
     bad "pkg install dropped --noconfirm — it will silently install nothing"
+fi
+
+# --verbose is what makes the DOWNLOAD visible. synpkg names each file only
+# once it has arrived and only when asked; a kernel is a couple of hundred
+# megabytes, so without this the longest stretch of the operation reports
+# nothing and the window looks hung — which is how this was reported.
+if "$BIN" --dry-run pkg install linux-zen | grep -q -- '--verbose'; then
+    ok "pkg install asks synpkg to say what it is doing"
+else
+    bad "pkg install dropped --verbose — the download will be silent"
 fi
 
 # A CachyOS kernel is not in any Arch repository, so the repo has to be added
@@ -172,6 +182,56 @@ if printf '%s' "$out" | grep -q 'install linux-cachyos linux-cachyos-headers'; t
 else
     bad "repo present: the install did not run"
 fi
+
+# ── Progress records ────────────────────────────────────────────────────────
+#
+# Installing a kernel takes minutes. It used to run with its output on
+# /dev/null, so the window showed a dimmed button and a status line frozen at
+# the moment of the click — reported, twice in one sitting, as a hung app.
+#
+# The fix is that everything the child says is re-emitted as "progress<TAB>…"
+# on our stdout, flushed per line. This drives the whole path with a STUB
+# synpkg first on PATH, so the contract is checked without installing a kernel
+# on the machine running the tests.
+#
+# What is checked is the part that is easy to get wrong and impossible to see:
+# that a '\r' redraw — which is how pacman-shaped progress arrives, with no
+# newline from beginning to end — becomes one record per update rather than
+# one enormous record at the end.
+stubdir=$(mktemp -d)
+trap 'rm -rf "$stubdir"' EXIT
+cat > "$stubdir/synpkg" <<'STUB'
+#!/bin/sh
+printf ':: synchronising package databases\n' >&2
+printf '\r(1/2) linux-lts   7%%' >&2
+printf '\r(1/2) linux-lts 100%%' >&2
+printf '\n' >&2
+exit 0
+STUB
+chmod +x "$stubdir/synpkg"
+
+stream=$(PATH="$stubdir:$PATH" "$BIN" pkg install linux-lts 2>/dev/null)
+n=$(printf '%s\n' "$stream" | grep -c '^progress	' || true)
+if [ "$n" -eq 3 ]; then
+    ok "a write streams one progress record per line, carriage returns included"
+else
+    bad "expected 3 progress records from the stub, got $n"
+fi
+if printf '%s\n' "$stream" | grep -q '^progress	(1/2) linux-lts 100%$'; then
+    ok "the record carries the percentage the GUI parses"
+else
+    bad "the percentage line did not survive as its own record"
+fi
+# An escape sequence reaching the status bar would print as literal "[0m".
+printf '#!/bin/sh\nprintf "\\033[2m::\\033[0m coloured\\n" >&2\n' > "$stubdir/synpkg"
+if PATH="$stubdir:$PATH" "$BIN" pkg install linux-lts 2>/dev/null \
+     | grep -q '^progress	:: coloured$'; then
+    ok "colour is stripped out of a progress record"
+else
+    bad "an ANSI escape survived into a progress record"
+fi
+rm -rf "$stubdir"
+trap - EXIT
 
 # An Arch kernel must NOT drag the CachyOS repo onto the machine.
 if "$BIN" --dry-run pkg install linux-zen | grep -q 'cachyos'; then
@@ -432,7 +492,7 @@ if [ -n "${run_rel:-}" ]; then
     fi
 fi
 if SYN_SETTINGS_BOOT_ROOT="$bootfx/limine" "$BIN" -n boot linux \
-     | grep -qE '^command	(pkexec limine-update|synpkg install limine-mkinitcpio-hook)'; then
+     | grep -qE '^command	(pkexec limine-update|synpkg( --[a-z]+)* install limine-mkinitcpio-hook)'; then
     ok "boot: limine gets limine-update or the hook that provides it"
 else
     bad "boot: wrong mechanism for limine"

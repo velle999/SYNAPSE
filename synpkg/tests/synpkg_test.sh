@@ -200,6 +200,33 @@ else
     bad "synpkg-enable-cachyos.sh not found beside the tests: $CACHY_SH"
 fi
 
+# Downloading is the longest part of installing anything large — a kernel is a
+# couple of hundred megabytes — and it used to report only "downloaded <file>",
+# after the fact, and only under --verbose. A caller reading this from outside a
+# terminal (syn-settings' Kernel pane, which forwards it to its window) showed a
+# status line frozen for minutes, which reads as a hung application.
+#
+# A source check, because the real one needs a download: the callback must
+# handle the PROGRESS event, not just COMPLETED. Losing that is silent — nothing
+# fails, there is simply nothing to see for several minutes.
+ALPM_C="$(dirname "$0")/../src/alpmctx.c"
+if [ -f "$ALPM_C" ]; then
+    if grep -q 'ALPM_DOWNLOAD_PROGRESS' "$ALPM_C"; then
+        ok "the download callback reports progress, not just completion"
+    else
+        bad "cb_download ignores ALPM_DOWNLOAD_PROGRESS — downloads are silent again"
+    fi
+    # Per-chunk, libcurl calls this thousands of times a second. Unthrottled it
+    # is a hot loop on a flush, and a flood for anything keeping a history.
+    if grep -q 'last_pct' "$ALPM_C"; then
+        ok "download progress is throttled to whole percents"
+    else
+        bad "download progress is unthrottled"
+    fi
+else
+    bad "alpmctx.c not found beside the tests: $ALPM_C"
+fi
+
 # ── mutations refuse rather than assume ─────────────────────────────────────
 # In TSV mode confirm() returns false, so a transaction without --noconfirm
 # declines. NOTE: the two checks below do NOT cover that — they only prove an

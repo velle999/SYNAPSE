@@ -44,9 +44,22 @@ int run_capture_quiet(char *const argv[], char *out, size_t cap);
 /* Run argv for its exit status, with stdout and stderr discarded. */
 int run_quiet(char *const argv[]);
 
+/* Run argv for its exit status, forwarding every line it writes — on either
+ * stream — to OUR stdout as a "progress<TAB>text" record, flushed as it
+ * arrives. For the writes that take minutes: installing a kernel, and making
+ * one bootable when that means an AUR build. On a terminal the child is left
+ * connected to it instead, so the CLI keeps synpkg's own live output.
+ *
+ * The GUI shows the latest record and any percentage in it. Discarding this
+ * output is what made a five-minute install look like a hung window. */
+int run_progress(char *const argv[]);
+
 /* run_quiet, except under --dry-run it prints the command and changes
  * nothing. Every write in this app goes through here. */
 int run_or_show(char *const argv[]);
+
+/* run_or_show, with run_progress doing the running. */
+int run_or_show_progress(char *const argv[]);
 
 /* Is `cmd` on PATH? */
 int have_cmd(const char *cmd);

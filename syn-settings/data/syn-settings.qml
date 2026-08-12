@@ -219,26 +219,125 @@ FloatingWindow {
         }
     }
 
-    // Runs a write, then reloads. Never parses the tool's output: the reader
-    // is the source of truth for what the system now says, and believing our
-    // own success message over a re-read is how a settings app starts showing
-    // a value the system never accepted.
+    // ── While a write is running ────────────────────────────────────────────
+    //
+    // Most writes here finish inside the click. TWO do not: installing a kernel
+    // downloads a couple of hundred megabytes and runs mkinitcpio, and making
+    // one bootable can fall through to an AUR source build. Those used to show
+    // a dimmed button and a status line frozen at the moment of the click for
+    // minutes at a time, which reads as a hung application — reported as
+    // exactly that on 2026-08-12, twice in one sitting.
+    //
+    // So the tool streams (run_progress() in src/util.c) and this reads what it
+    // streams. Three things carry it, in ascending order of how hard they are
+    // to miss:
+    //
+    //   · the status bar — the latest line, elapsed time, a moving bar;
+    //   · a work panel, after a delay, for anything still going;
+    //   · nothing at all for a write that finishes quickly, which is most.
+    property string applyNote: ""     // "Installing linux-cachyos"
+    property string applyDetail: ""   // the paragraph under it, if any
+    property string progressLine: ""  // the newest line the child printed
+    property int progressPct: -1      // parsed out of it, or -1 for unknowable
+    property var progressLog: []      // the last few, for a panel that moves
+    property double applyStart: 0
+    property int applyElapsed: 0
+    // The panel appears only once a write has outstayed its welcome. Flashing
+    // a modal for the 200ms that "Turn on" takes would be worse than the
+    // silence it replaces.
+    property bool workOpen: false
+
+    Timer {
+        id: applyClock
+        interval: 1000
+        repeat: true
+        running: root.applying
+        onTriggered: root.applyElapsed =
+            Math.floor((Date.now() - root.applyStart) / 1000)
+    }
+
+    Timer {
+        id: workDelay
+        interval: 900
+        onTriggered: root.workOpen = root.applying
+    }
+
+    function mmss(s) {
+        const m = Math.floor(s / 60)
+        const r = s % 60
+        return m + ":" + (r < 10 ? "0" : "") + r
+    }
+
+    function noteProgress(text) {
+        if (text === "") return
+        root.progressLine = text
+
+        // "(2/9) linux-cachyos   62%" — pacman's shape, which synpkg keeps.
+        // Anything else leaves the bar indeterminate rather than inventing a
+        // number, because a progress bar that is guessing is worse than one
+        // that admits it does not know.
+        const m = text.match(/(\d{1,3})\s*%\s*$/)
+        root.progressPct = m ? Math.min(100, parseInt(m[1])) : -1
+
+        // That line is redrawn once per percent. Logged naively it would be a
+        // hundred entries of the same package name, so entries are keyed on
+        // everything before the numbers: the same key replaces, a new one
+        // appends. The log then reads as a list of steps, with the current one
+        // counting up at the bottom.
+        const key = text.replace(/[\s\d.,%\/()]+$/, "")
+        const log = root.progressLog.slice()
+        if (log.length > 0 && log[log.length - 1].key === key)
+            log[log.length - 1] = { key: key, text: text }
+        else
+            log.push({ key: key, text: text })
+        while (log.length > 6) log.shift()
+        root.progressLog = log
+    }
+
+    // Runs a write, then reloads. Never parses the tool's output for the RESULT:
+    // the reader is the source of truth for what the system now says, and
+    // believing our own success message over a re-read is how a settings app
+    // starts showing a value the system never accepted. What is parsed here is
+    // only progress — what is happening, never what happened.
     Process {
         id: writeProc
-        stdout: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
+        // SplitParser, not StdioCollector: a collector hands over its text when
+        // the stream ENDS, which for a five-minute install is five minutes
+        // after the only moment the text was worth having.
+        stdout: SplitParser {
+            onRead: (line) => {
+                if (line.startsWith("progress\t"))
+                    root.noteProgress(line.substring(9))
+                else if (line !== "")
+                    root.status = line
+            }
+        }
         stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
         onExited: (code) => {
             root.applying = false
+            root.workOpen = false
+            workDelay.stop()
             if (code !== 0 && root.status === "")
                 root.status = "refused (exit " + code + ") — polkit may have declined"
             root.reload()
         }
     }
 
-    function runWrite(args, note) {
+    // `note` is the short label — it is what the status bar and the panel title
+    // say. `detail` is the paragraph the panel adds underneath, for the writes
+    // where "this takes minutes" is the thing worth knowing.
+    function runWrite(args, note, detail) {
         if (root.applying) return
         root.applying = true
+        root.applyNote = note
+        root.applyDetail = detail || ""
+        root.progressLine = ""
+        root.progressPct = -1
+        root.progressLog = []
+        root.applyStart = Date.now()
+        root.applyElapsed = 0
         root.status = note
+        workDelay.restart()
         writeProc.command = [root.bin].concat(args)
         writeProc.running = true
     }
@@ -303,12 +402,19 @@ FloatingWindow {
     component SettingsButton: Rectangle {
         id: btn
         property string label: ""
+        // Every button in this app is dead while a write is running — clicking
+        // one would build a second command against a system mid-change. The
+        // exception is a button that does nothing to the system: the work
+        // panel's Hide, which exists PRECISELY for when a write is running and
+        // would otherwise be dimmed and unclickable at exactly its moment.
+        property bool ignoreBusy: false
+        readonly property bool busy: root.applying && !btn.ignoreBusy
         signal go()
         width: btnText.implicitWidth + 22
         height: 26
         radius: 4
-        color: btnMa.containsMouse && !root.applying ? root.wash(0.22) : root.wash(0.10)
-        opacity: root.applying ? 0.5 : 1.0
+        color: btnMa.containsMouse && !btn.busy ? root.wash(0.22) : root.wash(0.10)
+        opacity: btn.busy ? 0.5 : 1.0
 
         Text {
             id: btnText
@@ -321,10 +427,59 @@ FloatingWindow {
             id: btnMa
             anchors.fill: parent
             hoverEnabled: true
-            enabled: !root.applying
+            enabled: !btn.busy
             cursorShape: Qt.PointingHandCursor
             onClicked: btn.go()
         }
+    }
+
+    // A bar that is honest about what it knows. With a percentage it fills to
+    // it; without one it runs a shuttle back and forth, which says "working"
+    // without claiming to know how much is left. The alternative — a bar that
+    // creeps to 90% and waits — is a lie the user finds out about.
+    component ProgressTrack: Rectangle {
+        id: track
+        property int pct: -1
+        property bool active: false
+        height: 4
+        radius: height / 2
+        color: root.wash(0.10)
+        clip: true
+
+        Rectangle {
+            visible: track.pct >= 0
+            height: parent.height
+            radius: parent.radius
+            width: parent.width * Math.max(0, Math.min(100, track.pct)) / 100
+            color: root.cAccent
+            Behavior on width { NumberAnimation { duration: 200 } }
+        }
+
+        Rectangle {
+            id: shuttle
+            visible: track.active && track.pct < 0
+            width: Math.max(48, track.width * 0.22)
+            height: parent.height
+            radius: parent.radius
+            color: root.cAccent
+            opacity: 0.8
+            x: -width
+        }
+
+        // from/to are read at (re)start, not bound — so the width change that
+        // comes with a window resize has to restart it, or the shuttle keeps
+        // sweeping the width the window used to have.
+        NumberAnimation {
+            id: shuttleAnim
+            target: shuttle
+            property: "x"
+            from: -shuttle.width
+            to: track.width
+            duration: 1400
+            loops: Animation.Infinite
+            running: shuttle.visible
+        }
+        onWidthChanged: if (shuttle.visible) shuttleAnim.restart()
     }
 
     // ── Loading ─────────────────────────────────────────────────────────────
@@ -763,9 +918,16 @@ FloatingWindow {
                         // not be kept: synpkg asks on a terminal, and there is
                         // no terminal behind this button. The polkit challenge
                         // is the confirmation the user actually gets.
-                        onGo: root.runWrite(["pkg", modelData, root.actionArg(root.selAction)],
-                                            modelData + "ing " + root.actionArg(root.selAction)
-                                            + " — authorise when asked…")
+                        onGo: root.runWrite(
+                            ["pkg", modelData, root.actionArg(root.selAction)],
+                            (modelData === "install" ? "Installing " : "Removing ")
+                            + root.actionArg(root.selAction),
+                            modelData === "install"
+                              ? "Authorise when asked. A kernel and its headers "
+                                + "are a few hundred megabytes to fetch and an "
+                                + "initramfs to build, so this takes minutes, not "
+                                + "seconds."
+                              : "Authorise when asked.")
                     }
                 }
 
@@ -827,15 +989,35 @@ FloatingWindow {
             height: 22
             color: root.cPanel
 
+            // Along the very top edge of the bar, full width. Present for a
+            // slow READ as well as a write: the Kernel pane asks pacman about
+            // nine kernels and synpkg about a repository, which is seconds on a
+            // cold cache, and "is it doing anything?" is the same question
+            // whether or not the app is changing something.
+            ProgressTrack {
+                id: statusTrack
+                anchors { left: parent.left; right: parent.right; top: parent.top }
+                pct: root.applying ? root.progressPct : -1
+                active: root.applying || root.loading
+                visible: active
+            }
+
             Text {
                 id: statusLeft
                 anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                width: Math.min(implicitWidth, parent.width * 0.6 - 12)
+                width: Math.min(implicitWidth, parent.width * 0.62 - 12)
                 elide: Text.ElideRight
-                text: root.status !== "" ? root.status
+                // While a write runs, the newest line from the tool replaces
+                // the note: the note said what was STARTED, and after a minute
+                // of it the only useful question is what is happening now.
+                text: root.applying
+                        ? (root.applyNote
+                           + (root.progressLine !== "" ? " — " + root.progressLine : ""))
+                    : root.status !== "" ? root.status
                     : root.loading ? "reading…"
                     : root.rows.length + (root.rows.length === 1 ? " row" : " rows")
-                color: root.status !== "" ? root.cWarn : root.cDim
+                color: root.applying ? root.cText
+                     : root.status !== "" ? root.cWarn : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(10) }
             }
             Text {
@@ -844,8 +1026,15 @@ FloatingWindow {
                           verticalCenter: parent.verticalCenter }
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideLeft
-                text: root.bin + " --rec " + root.pane
-                color: root.cDim
+                // The clock lives at this end, where nothing elides it away.
+                // A number that changes every second is the difference between
+                // "still going" and "stuck", and it is the one thing on screen
+                // that keeps moving even when the tool has gone quiet.
+                text: root.applying
+                        ? (root.progressPct >= 0 ? root.progressPct + "%  ·  " : "")
+                          + root.mmss(root.applyElapsed) + " elapsed"
+                        : root.bin + " --rec " + root.pane
+                color: root.applying ? root.cAccent : root.cDim
                 font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
@@ -978,16 +1167,154 @@ FloatingWindow {
                             label: "Make bootable"
                             onGo: {
                                 root.confirmOpen = false
-                                // "may take several minutes" is not padding: on
-                                // limine this can fall through to an AUR source
-                                // build, and the command runs with its output
-                                // discarded, so silence is the only feedback
-                                // there is.
                                 root.runWrite(["boot", root.confirmKernel, "--confirm"],
-                                              "making " + root.confirmKernel
-                                              + " bootable — you may be asked to authenticate;"
-                                              + " this can take several minutes…")
+                                              "Making " + root.confirmKernel + " bootable",
+                                              "You may be asked to authenticate. On limine "
+                                              + "this can mean building the entry generator "
+                                              + "from source, which takes several minutes — "
+                                              + "the lines below are it working.")
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── A write that is taking a while ──────────────────────────────────
+        //
+        // Deliberately LAST: it must sit above the confirm veil, which is the
+        // thing it usually follows.
+        //
+        // It is not a modal for safety's sake — nothing underneath is clickable
+        // while a write runs anyway. It is here because a dimmed button is not
+        // an answer to "is this working?", and the honest answer — the tool's
+        // own output, a clock, and a bar — needs more than a 22px strip.
+        // Dismissable, because someone who wants to read the table underneath
+        // should not have to wait out a kernel download to do it; the status
+        // bar keeps every one of these numbers.
+        Rectangle {
+            id: workVeil
+            anchors.fill: parent
+            visible: root.workOpen && root.applying
+            color: Qt.rgba(0, 0, 0, 0.45)
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
+            Keys.onEscapePressed: root.workOpen = false
+            focus: workVeil.visible
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 60, 560)
+                height: workCol.implicitHeight + 36
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.wash(0.30) }
+
+                Column {
+                    id: workCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 18 }
+                    spacing: 10
+
+                    Text {
+                        width: parent.width
+                        elide: Text.ElideRight
+                        text: root.applyNote
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
+                    }
+
+                    Text {
+                        width: parent.width
+                        visible: root.applyDetail !== ""
+                        wrapMode: Text.WordWrap
+                        text: root.applyDetail
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    ProgressTrack {
+                        width: parent.width
+                        pct: root.progressPct
+                        active: true
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: elapsedText.implicitHeight
+
+                        Text {
+                            id: elapsedText
+                            anchors.left: parent.left
+                            text: root.mmss(root.applyElapsed) + " elapsed"
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(11) }
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            visible: root.progressPct >= 0
+                            text: root.progressPct + "%"
+                            color: root.cAccent
+                            font { family: root.uiFont; pixelSize: root.ui(11); bold: true }
+                        }
+                    }
+
+                    // What the tool is actually saying, verbatim. Monospace and
+                    // dim: it is evidence, not prose, and on an AUR build it is
+                    // a compiler talking. Six lines, oldest dropped — enough to
+                    // see movement, not so much that the panel resizes with
+                    // every step.
+                    Rectangle {
+                        width: parent.width
+                        visible: root.progressLog.length > 0
+                        height: logCol.implicitHeight + 16
+                        radius: 4
+                        color: root.cBg
+                        border { width: 1; color: root.wash(0.20) }
+
+                        Column {
+                            id: logCol
+                            anchors { left: parent.left; right: parent.right
+                                      top: parent.top; margins: 8 }
+                            spacing: 2
+
+                            Repeater {
+                                model: root.progressLog
+                                delegate: Text {
+                                    required property var modelData
+                                    required property int index
+                                    width: logCol.width
+                                    elide: Text.ElideRight
+                                    text: modelData.text
+                                    // The newest line is the one that is
+                                    // happening; the rest are what led here.
+                                    color: index === root.progressLog.length - 1
+                                           ? root.cText : root.cDim
+                                    font { family: "monospace"; pixelSize: root.ui(10) }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: "Leave this running. Closing the window will not stop it — "
+                            + "it will only stop you seeing how it went."
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                    }
+
+                    Item { width: 1; height: 2 }
+
+                    Row {
+                        layoutDirection: Qt.RightToLeft
+                        width: parent.width
+
+                        SettingsButton {
+                            label: "Hide"
+                            ignoreBusy: true
+                            onGo: root.workOpen = false
                         }
                     }
                 }

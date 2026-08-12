@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #include "synsettings.h"
 
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,7 @@ int g_dry_run = 0;
 
 static int run_capture_impl(char *const argv[], char *out, size_t cap,
                            int silence_stderr);
+static int run_or_show_impl(char *const argv[], int stream);
 
 void rec_header(const char *cols)
 {
@@ -149,11 +151,167 @@ int run_quiet(char *const argv[])
 	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 }
 
+/* ── Live progress ───────────────────────────────────────────────────────────
+ *
+ * run_quiet() is right for a write that finishes in the time it takes to let go
+ * of the mouse — systemctl, localectl, wlr-randr. It is WRONG for the two that
+ * do not: installing a kernel and making one bootable. Those hand off to
+ * synpkg, which downloads a couple of hundred megabytes, runs mkinitcpio, and
+ * on a machine whose repositories lack limine-mkinitcpio-hook falls through to
+ * an AUR source build. With their output going to /dev/null, the whole thing
+ * was several minutes of a greyed-out button and a status line that had not
+ * changed since the click — indistinguishable from a hung app, which is exactly
+ * how it was reported.
+ *
+ * The output already exists and is already live: synpkg writes its progress to
+ * STDERR, flushed, one redraw per percent. Nothing needed inventing — it only
+ * needed forwarding.
+ *
+ * Each line the child produces is re-emitted as a record:
+ *
+ *     progress<TAB>(2/9) linux-cachyos                      62%
+ *
+ * on our own stdout, flushed, so the GUI sees it as it happens. It is the same
+ * TSV the readers print, so the window parses it with the parser it already
+ * has, and anything else piping this binary gets a stream it can read too.
+ */
+
+/* Strip ANSI escape sequences in place.
+ *
+ * Belt and braces: synpkg only colours when its stdout is a terminal, and
+ * through this pipe it is not. But grub-mkconfig and kernel-install are not
+ * ours, a stray CSI would reach the status bar as literal "[0m", and the cost
+ * of not finding out is one unreadable line in the middle of a kernel install.
+ */
+static void strip_ansi(char *s)
+{
+	char *w = s;
+	for (const char *r = s; *r; ) {
+		if (*r != 0x1b) { *w++ = *r++; continue; }
+		r++;
+		if (*r == '[') {              /* CSI: parameters, then a final byte */
+			r++;
+			while (*r && (*r < 0x40 || *r > 0x7e)) r++;
+			if (*r) r++;
+		} else if (*r == ']') {       /* OSC: runs to BEL or ST */
+			r++;
+			while (*r && *r != 0x07 && !(*r == 0x1b && r[1] == '\\')) r++;
+			if (*r == 0x1b) r++;
+			if (*r) r++;
+		} else if (*r) {
+			r++;                      /* a two-character escape */
+		}
+	}
+	*w = '\0';
+}
+
+static void emit_progress(char *line)
+{
+	strip_ansi(line);
+	tsv_clean(line);   /* a tab in it would invent a column */
+
+	char *p = line;
+	while (*p && isspace((unsigned char)*p)) p++;
+	size_t n = strlen(p);
+	while (n && isspace((unsigned char)p[n - 1])) p[--n] = '\0';
+	if (!*p) return;
+
+	printf("progress\t%s\n", p);
+	/* Unmissable: our own stdout is a pipe when the GUI is the caller, so
+	 * without this the records arrive in 4 KB lumps — which for an install
+	 * that prints a few hundred bytes means they arrive when it is over. */
+	fflush(stdout);
+}
+
+int run_progress(char *const argv[])
+{
+	if (!argv || !argv[0] || !have_cmd(argv[0])) return -1;
+
+	/* On a terminal there is nothing to translate. Let the child write
+	 * straight to it — carriage returns, colour and all — so `syn-settings
+	 * pkg install linux-zen` looks like running synpkg, because it is. */
+	int piped = !isatty(STDOUT_FILENO);
+
+	int fds[2] = { -1, -1 };
+	if (piped && pipe(fds) != 0) return -1;
+
+	fflush(stdout);
+	pid_t pid = fork();
+	if (pid < 0) {
+		if (piped) { close(fds[0]); close(fds[1]); }
+		return -1;
+	}
+
+	if (pid == 0) {
+		if (piped) {
+			close(fds[0]);
+			/* Both onto the one pipe. synpkg's progress is on stderr and its
+			 * records are on stdout; splitting them here would mean two
+			 * readers and an ordering question with no answer. */
+			dup2(fds[1], STDOUT_FILENO);
+			dup2(fds[1], STDERR_FILENO);
+			if (fds[1] > STDERR_FILENO) close(fds[1]);
+		}
+		execvp(argv[0], argv);
+		_exit(127);
+	}
+
+	if (piped) {
+		close(fds[1]);
+
+		/* A FIXED line buffer, flushed when it fills. An accumulating one is
+		 * how an unbounded capture ends up OOM-killing the session — a
+		 * progress bar that redraws with no newline for an hour is a plausible
+		 * thing for someone else's tool to do. */
+		char line[512];
+		size_t len = 0;
+		char buf[512];
+		ssize_t n;
+
+		while ((n = read(fds[0], buf, sizeof buf)) > 0) {
+			for (ssize_t i = 0; i < n; i++) {
+				char c = buf[i];
+				/* '\r' ends a line as surely as '\n' does: pacman-style
+				 * progress redraws the SAME line, and treating only '\n' as a
+				 * terminator would hold the whole download in the buffer and
+				 * then emit it as one unreadable record. */
+				if (c == '\n' || c == '\r' || len + 1 >= sizeof line) {
+					line[len] = '\0';
+					emit_progress(line);
+					len = 0;
+					if (c != '\n' && c != '\r') line[len++] = c;
+					continue;
+				}
+				line[len++] = c;
+			}
+		}
+		line[len] = '\0';
+		emit_progress(line);
+		close(fds[0]);
+	}
+
+	int st = 0;
+	if (waitpid(pid, &st, 0) < 0) return -1;
+	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
 /* Run argv, or — under --dry-run — print what would have run and change
  * nothing. Shared rather than duplicated: a second copy is how a dry run stops
  * being dry for exactly one caller, which is the caller you find out about
  * afterwards. */
 int run_or_show(char *const argv[])
+{
+	return run_or_show_impl(argv, 0);
+}
+
+/* Same contract, except the child's output is forwarded as progress records
+ * while it runs. For the writes that take minutes rather than milliseconds. */
+int run_or_show_progress(char *const argv[])
+{
+	return run_or_show_impl(argv, 1);
+}
+
+static int run_or_show_impl(char *const argv[], int stream)
 {
 	if (g_dry_run) {
 		fputs("would run:", stdout);
@@ -161,7 +319,7 @@ int run_or_show(char *const argv[])
 		putchar('\n');
 		return 0;
 	}
-	int rc = run_quiet(argv);
+	int rc = stream ? run_progress(argv) : run_quiet(argv);
 	if (rc == -1) {
 		fprintf(stderr, "syn-settings: could not run %s\n", argv[0]);
 		return 1;

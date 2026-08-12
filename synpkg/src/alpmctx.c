@@ -164,15 +164,71 @@ static void cb_progress(void *ctx, alpm_progress_t kind, const char *pkg,
 	fflush(stderr);
 }
 
+/* Downloading is the LONGEST part of installing a kernel — a couple of hundred
+ * megabytes — and it used to be the only part that said nothing at all: this
+ * reported one line per file, after that file had arrived, and only under
+ * --verbose. Everything watching from outside a terminal (syn-settings' Kernel
+ * pane, which forwards this to its window) therefore showed a frozen status
+ * line for minutes, which reads as a hung application rather than a download.
+ *
+ * So progress is reported as it happens, in the same shape and on the same
+ * stream as cb_progress above — one redrawn line, stderr, flushed — and under
+ * the same rule: silent in TSV mode, because there the GUI's stdout carries
+ * records and nothing else.
+ *
+ * Throttled to whole percents. libcurl calls this per chunk, which on a fast
+ * mirror is thousands of times a second; unthrottled it is a hot loop on a
+ * flush, and for a reader that keeps a line of history it is a flood of
+ * identical lines.
+ */
 static void cb_download(void *ctx, const char *filename,
                         alpm_download_event_type_t type, void *data)
 {
 	(void)ctx;
-	(void)data;
-	if (g_out == OUT_TSV || !g_verbose)
+	/* The percent last PRINTED, and the file it belongs to. alpm interleaves
+	 * parallel downloads, so the filename is part of the identity — without it
+	 * two files at the same percent would suppress each other's lines. */
+	static int last_pct = -1;
+	static char last_file[256] = "";
+
+	if (g_out == OUT_TSV || !filename)
 		return;
-	if (type == ALPM_DOWNLOAD_COMPLETED)
-		fprintf(stderr, "  %sdownloaded%s %s\n", C_DIM(), C_RESET(), filename);
+
+	switch (type) {
+	case ALPM_DOWNLOAD_PROGRESS: {
+		alpm_download_event_progress_t *p = data;
+		if (!p || p->total <= 0)
+			return;   /* unknown size: nothing honest to draw */
+
+		int pct = (int)((p->downloaded * 100) / p->total);
+		if (pct < 0) pct = 0;
+		if (pct > 100) pct = 100;
+		if (pct == last_pct && !strcmp(filename, last_file))
+			return;
+		last_pct = pct;
+		snprintf(last_file, sizeof last_file, "%s", filename);
+
+		fprintf(stderr, "\r%sdownloading%s %-32.32s %3d%%",
+		        C_DIM(), C_RESET(), filename, pct);
+		fflush(stderr);
+		break;
+	}
+	case ALPM_DOWNLOAD_COMPLETED:
+		/* Ends the redrawn line, so the next thing printed does not land on
+		 * top of it. Named at verbose only, as before — the difference is
+		 * that the line above it now existed. */
+		if (last_pct >= 0) {
+			fputc('\n', stderr);
+			last_pct = -1;
+			last_file[0] = '\0';
+		}
+		if (g_verbose)
+			fprintf(stderr, "  %sdownloaded%s %s\n", C_DIM(), C_RESET(), filename);
+		fflush(stderr);
+		break;
+	default:
+		break;
+	}
 }
 
 /* ── handle ─────────────────────────────────────────────────────────────── */
