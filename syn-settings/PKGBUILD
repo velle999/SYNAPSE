@@ -8,7 +8,7 @@ pkgname=syn-settings
 # "$name-0.1.0/" for every component it builds. Bumping pkgver without changing
 # that leaves makepkg looking for a tarball nothing creates.
 pkgver=0.1.0
-pkgrel=13
+pkgrel=14
 pkgdesc="SynapseOS settings: displays and resolution, keyboard and region, network, Bluetooth, power and sleep, kernels, and where configuration lives"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

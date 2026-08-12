@@ -98,6 +98,8 @@ int syn_kernel_known(const char *pkg);
 /* The repository a kernel needs, or NULL when Arch ships it (the CachyOS ones
  * are the only ones that are not in core/extra). */
 const char *syn_kernel_repo(const char *pkg);
+/* Is [cachyos] configured? Asked of synpkg, which owns the answer. */
+int syn_cachyos_enabled(void);
 
 /* Make a kernel bootable under the detected bootloader. Refuses without
  * --confirm; see the escalation note at the top of src/boot.c. */

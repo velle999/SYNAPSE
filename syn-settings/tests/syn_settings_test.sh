@@ -142,16 +142,35 @@ fi
 
 # A CachyOS kernel is not in any Arch repository, so the repo has to be added
 # BEFORE the install, or pacman reports "not found" after the password prompt.
-out=$("$BIN" --dry-run pkg install linux-cachyos)
+#
+# ⚠ BOTH branches are pinned. A machine is only ever in one of them, and the
+# interesting one — repo absent — stops being reachable the moment the repo is
+# enabled, which is the state every machine ends up in. Read from the live
+# answer this check would have quietly rotted into a no-op.
+out=$(SYN_SETTINGS_CACHYOS_ENABLED=0 "$BIN" --dry-run pkg install linux-cachyos)
 if printf '%s' "$out" | grep -q 'synpkg cachyos enable-repo'; then
-    ok "installing a Cachy kernel enables the repo first"
+    ok "repo absent: installing a Cachy kernel enables it first"
 else
-    bad "installing a Cachy kernel did not enable the CachyOS repo"
+    bad "repo absent: installing a Cachy kernel did not enable the CachyOS repo"
 fi
 if printf '%s' "$out" | grep -q 'install linux-cachyos linux-cachyos-headers'; then
     ok "the Cachy kernel still pulls its headers"
 else
     bad "the Cachy kernel did not pull its headers"
+fi
+
+# Already enabled: enable-repo needs root, so running it anyway would be a
+# second password prompt before every install, to be told "already enabled".
+out=$(SYN_SETTINGS_CACHYOS_ENABLED=1 "$BIN" --dry-run pkg install linux-cachyos)
+if printf '%s' "$out" | grep -q 'enable-repo'; then
+    bad "repo present: installing prompted for a redundant enable-repo"
+else
+    ok "repo present: installing does not re-enable the repo"
+fi
+if printf '%s' "$out" | grep -q 'install linux-cachyos linux-cachyos-headers'; then
+    ok "repo present: the install still runs"
+else
+    bad "repo present: the install did not run"
 fi
 
 # An Arch kernel must NOT drag the CachyOS repo onto the machine.

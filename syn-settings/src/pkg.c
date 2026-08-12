@@ -58,10 +58,17 @@ int do_pkg(int argc, char **argv)
 	 * `remove` that quietly configured one would be a genuinely surprising
 	 * thing for a button labelled Remove to do.
 	 *
-	 * synpkg decides whether the work is needed — enable-repo is idempotent
-	 * and returns early when [cachyos] is already there — so this does not
-	 * keep its own answer to "is it enabled", which could disagree. */
-	if (!strcmp(act, "install") && syn_kernel_repo(name)) {
+	 * Skipped when the repo is already there. enable-repo IS idempotent, so
+	 * running it regardless would be correct — but it needs root, and every
+	 * escalation is another password prompt. On a machine where the repo was
+	 * added once, that is a second prompt before every single Cachy install,
+	 * for a command whose whole job would be to print "already enabled".
+	 *
+	 * The answer still comes from synpkg (syn_cachyos_enabled() asks it), so
+	 * this is not a second opinion about what "enabled" means — just a reason
+	 * not to wake pkexec to hear it. */
+	if (!strcmp(act, "install") && syn_kernel_repo(name)
+	    && !syn_cachyos_enabled()) {
 		char *r[] = { (char *)"synpkg", (char *)"cachyos",
 		              (char *)"enable-repo", NULL };
 		if (g_dry_run) {

@@ -117,8 +117,18 @@ static int installed_version(const char *pkg, char *out, size_t cap)
  * ⚠ The test is a PREFIX, not strstr(): the two answers are "enabled" and
  * "disabled", and "disabled" contains "enabled".
  */
-static int cachyos_enabled(void)
+int syn_cachyos_enabled(void)
 {
+	/* Overridable, on the same terms as SYN_SETTINGS_RUNNING_RELEASE and
+	 * SYN_SETTINGS_BOOT_ROOT: the suite has to check BOTH branches of the
+	 * repo gate, and a machine is only ever in one of them. Without this the
+	 * "installing a Cachy kernel enables the repo first" assertion silently
+	 * stops meaning anything the moment the repo is enabled — which is the
+	 * state every machine ends up in, so the check would rot exactly where it
+	 * is needed. Reads nothing and writes nothing. */
+	const char *env = getenv("SYN_SETTINGS_CACHYOS_ENABLED");
+	if (env && (*env == '0' || *env == '1')) return *env == '1';
+
 	if (!have_cmd("synpkg")) return 0;
 
 	char buf[128] = "";
@@ -219,7 +229,7 @@ int pane_kernel(void)
 		 * software that does not exist. */
 		int needs_repo = 0;
 		if (kernels[i].repo && !have) {
-			if (!cachy_checked) { cachy_on = cachyos_enabled(); cachy_checked = 1; }
+			if (!cachy_checked) { cachy_on = syn_cachyos_enabled(); cachy_checked = 1; }
 			needs_repo = !cachy_on;
 		}
 
