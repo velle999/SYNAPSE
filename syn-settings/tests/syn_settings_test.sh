@@ -381,6 +381,44 @@ for evil in "firefox" "base" "../../etc/passwd" "linux-lts-evil"; do
     fi
 done
 
+# ── the window follows the desktop font ─────────────────────────────────────
+# This pane is where the font gets PICKED, so it is the one window that must
+# never drift from font.state. The file carries the desktop's family AND its
+# text scale; it is deliberately not a key in theme.json, because the font
+# outlives a theme switch.
+#
+# Qt resolves an application's default font ONCE at startup, so both have to be
+# BINDINGS on every Text. A bare `font.pixelSize: 13` or a literal family is the
+# regression, and it fails silently — the window just stops moving with the
+# desktop, which is how syn-arsenal and synpkg behaved until 2026-08-11.
+QML="$(dirname "$0")/../data/syn-settings.qml"
+if [ -f "$QML" ]; then
+    grep -q 'config/synui/font.state' "$QML" \
+        && ok "the desktop font file is watched" \
+        || bad "syn-settings.qml does not read font.state"
+    grep -q 'root.textScale = s' "$QML" \
+        && ok "the scale is read from the same file" \
+        || bad "syn-settings.qml reads the family but not the scale"
+
+    # awk rather than `grep -c ... | grep -vc ...`: grep exits 1 on no matches,
+    # and under pipefail a correct zero would be read as a failed check.
+    n=$(awk '/pixelSize: *[0-9]/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "no pixel size bypasses ui()" \
+                 || bad "$n pixel size(s) bypass ui()"
+
+    n=$(awk '/family: *"/ && !/family: *"monospace"/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "every literal family is the deliberate monospace" \
+                 || bad "$n literal font family/families are not monospace"
+
+    # Qt.application.font.family is the STARTUP font: as a fallback it freezes
+    # the very thing this is fixing.
+    n=$(grep -c 'Qt.application.font' "$QML" || true)
+    [ "$n" = 0 ] && ok "no fallback pins the startup font" \
+                 || bad "$n use(s) of Qt.application.font"
+else
+    bad "syn-settings.qml not found beside the tests: $QML"
+fi
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d test(s) failed\n' "$fails"
     exit 1

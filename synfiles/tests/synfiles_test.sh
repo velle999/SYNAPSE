@@ -1412,6 +1412,50 @@ check "mimeapps.list has the [Default Applications] group" $?
 grep -q '^Exec=synfiles gui %f$' data/synfiles.desktop
 check "the handler is passed the folder that was opened" $?
 
+# ── the window follows the desktop font ─────────────────────────────────────
+# ~/.config/synui/font.state carries the desktop's family AND its text scale.
+# Qt resolves an application's default font ONCE at startup, so both have to be
+# BINDINGS on every Text — a bare `font.pixelSize: 13` or a literal family is
+# the regression, and it fails silently: the window just stops moving when the
+# control panel changes the font, which is how syn-arsenal and synpkg behaved
+# until 2026-08-11.
+QML="$(dirname "$0")/../data/synfiles.qml"
+if [ -f "$QML" ]; then
+    grep -q 'config/synui/font.state' "$QML" \
+        && ok "the desktop font file is watched" \
+        || bad "synfiles.qml does not read font.state"
+
+    # synfiles is the ONE app whose scale has two sources, because it owned a
+    # text_scale slider before the setting was desktop-wide. font.state wins by
+    # a FLAG and not by arrival order: it reads its own config through a Process
+    # and font.state through a FileView, so which lands first is a race, and
+    # "last writer wins" would make the size depend on disk timing. Losing
+    # scaleFromDesktop is how the config silently starts overriding the desktop
+    # again — the exact bug that had synfiles drawing at 115% beside siblings
+    # stuck at 100.
+    grep -q 'scaleFromDesktop' "$QML" \
+        && ok "font.state wins the scale by a flag, not by arrival order" \
+        || bad "synfiles.qml lost scaleFromDesktop; the config can override the desktop"
+
+    # awk rather than `grep -c ... | grep -vc ...`: grep exits 1 on no matches,
+    # and under pipefail a correct zero would be read as a failed check.
+    n=$(awk '/pixelSize: *[0-9]/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "no pixel size bypasses ui()" \
+                 || bad "$n pixel size(s) bypass ui()"
+
+    n=$(awk '/family: *"/ && !/family: *"monospace"/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "every literal family is the deliberate monospace" \
+                 || bad "$n literal font family/families are not monospace"
+
+    # Qt.application.font.family is the STARTUP font: as a fallback it freezes
+    # the very thing this is fixing.
+    n=$(grep -c 'Qt.application.font' "$QML" || true)
+    [ "$n" = 0 ] && ok "no fallback pins the startup font" \
+                 || bad "$n use(s) of Qt.application.font"
+else
+    bad "synfiles.qml not found beside the tests: $QML"
+fi
+
 unset SYNFILES_CONFIG
 
 echo

@@ -435,6 +435,46 @@ check "about carries the donate link" $?
 "$SD" --rec about | grep -q 'system%20disk	protected'
 check "about states that the system disk is protected" $?
 
+# ── the window follows the desktop font ─────────────────────────────────────
+# ~/.config/synui/font.state carries the desktop's family AND its text scale.
+# It is not a key in theme.json on purpose: the font outlives a theme switch.
+#
+# Qt resolves an application's default font ONCE at startup, so both have to be
+# BINDINGS on every Text — a bare `font.pixelSize: 13` or a literal family is
+# the regression, and it fails silently: the window simply stops moving when the
+# control panel changes the font. That is exactly how syn-arsenal and synpkg
+# behaved until 2026-08-11, while this window and syn-settings moved correctly.
+QML="$(dirname "$0")/../data/syn-disks.qml"
+if [ -f "$QML" ]; then
+    grep -q 'config/synui/font.state' "$QML" \
+        && ok "the desktop font file is watched" \
+        || bad "syn-disks.qml does not read font.state"
+    grep -q 'root.textScale = s' "$QML" \
+        && ok "the scale is read from the same file" \
+        || bad "syn-disks.qml reads the family but not the scale"
+
+    # awk rather than `grep -c ... | grep -vc ...`: grep exits 1 on no matches,
+    # and under pipefail a correct zero would be read as a failed check.
+    n=$(awk '/pixelSize: *[0-9]/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "no pixel size bypasses ui()" \
+                 || bad "$n pixel size(s) bypass ui()"
+
+    # The SMART table's monospace is exempt from the FAMILY rule — columns of
+    # figures are not prose — but not from the size rule above.
+    n=$(awk '/family: *"/ && !/family: *"monospace"/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "every literal family is the deliberate monospace" \
+                 || bad "$n literal font family/families are not monospace"
+
+    # Qt.application.font.family is the STARTUP font. As a fallback it freezes
+    # the very thing this is fixing — synpkg shipped one and had a row that kept
+    # the old face while the pane around it moved.
+    n=$(grep -c 'Qt.application.font' "$QML" || true)
+    [ "$n" = 0 ] && ok "no fallback pins the startup font" \
+                 || bad "$n use(s) of Qt.application.font"
+else
+    bad "syn-disks.qml not found beside the tests: $QML"
+fi
+
 # ── done ────────────────────────────────────────────────────────────────────
 
 echo ""
