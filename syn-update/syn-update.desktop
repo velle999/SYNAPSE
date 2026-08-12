@@ -17,4 +17,13 @@ StartupNotify=true
 # "quickshell", which never matched anything: quickshell names its windows
 # "org.quickshell" unless told otherwise, so this entry matched no window while
 # every other quickshell app on the system matched the same non-name.
+#
+# ⚠ THIS FILE'S NAME MUST STAY "syn-update.desktop" — the same string.
+#
+# synui's dock looks a pinned app's launch command up as "<app_id>.desktop"
+# and does not consult StartupWMClass at all (synui/src/icons.c says so in its
+# header). While this file was called syn-update-gui.desktop the dock found
+# nothing for "syn-update", got an empty Exec, and did nothing when clicked —
+# with the icon still drawing correctly, because icons fall back to the theme.
+# A dead shortcut that looks perfectly normal.
 StartupWMClass=syn-update

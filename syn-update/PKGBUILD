@@ -1,6 +1,6 @@
 pkgname=syn-update
 pkgver=0.1.0
-pkgrel=22
+pkgrel=23
 pkgdesc="Update an installed SynapseOS from git — rebuilds changed components from source"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -24,7 +24,7 @@ optdepends=('quickshell: graphical updater (syn-update-gui, "SynapseOS Updates" 
             'qt6-declarative: QtQuick runtime for the graphical updater'
             'kitty: terminal the GUI hands the privileged build off to'
             'zenity: dialog used to report a missing quickshell')
-source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update-gui.desktop"
+source=("syn-update.sh" "syn-update-gui.sh" "shell.qml" "syn-update.desktop"
         "syn-update.svg")
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
@@ -36,8 +36,23 @@ package() {
 
     # The menu is a freedesktop .desktop scan (quickshell's DesktopEntries), so
     # dropping the file here is all that is needed for the entry to appear.
-    install -Dm644 "$srcdir/syn-update-gui.desktop" \
-        "$pkgdir/usr/share/applications/syn-update-gui.desktop"
+    #
+    # ⚠ THE BASENAME MUST EQUAL THE WINDOW'S app_id, which is "syn-update".
+    #
+    # synui's dock resolves a pinned app to its launch command by a direct
+    # "<app_id>.desktop" lookup — see the header of synui/src/icons.c, which
+    # states the limitation. This file was "syn-update-gui.desktop", so the
+    # lookup for "syn-update" found nothing, the entry's Exec came back empty,
+    # and clicking the dock icon did NOTHING AT ALL. The icon still drew,
+    # because icon resolution falls back to the theme and syn-update.svg is
+    # there — so the shortcut looked completely normal and was dead.
+    #
+    # Every other pinned app in the suite already matched (synfiles, synpkg,
+    # syn-disks, syn-arsenal, syn-settings); this was the only one that did not.
+    # It is also what xdg-desktop-portal looks up: with the old name it logged
+    # "Could not register app ID: App info not found for 'syn-update'".
+    install -Dm644 "$srcdir/syn-update.desktop" \
+        "$pkgdir/usr/share/applications/syn-update.desktop"
 
     # Scalable only, in hicolor — the theme every icon theme inherits from, so
     # the mark survives a theme switch. One drawing instead of a set of PNGs to
