@@ -114,9 +114,21 @@ const char *syn_kernel_repo(const char *pkg);
 /* Is [cachyos] configured? Asked of synpkg, which owns the answer. */
 int syn_cachyos_enabled(void);
 
+/* Would this bootloader boot `pkg` when nobody touches the menu?
+ * 1 yes, 0 no, -1 cannot be told. Every loader keeps this answer somewhere
+ * different, and for two of the three it is NOT where their own tool writes
+ * it — see the note above syn_boot_is_default in src/boot.c. */
+int syn_boot_is_default(const struct syn_boot *bl, const char *pkg,
+                        const char *release);
+
 /* Make a kernel bootable under the detected bootloader. Refuses without
  * --confirm; see the escalation note at the top of src/boot.c. */
 int do_boot(int argc, char **argv);
+
+/* Make a kernel the one that BOOTS. Same posture as do_boot: refuses without
+ * --confirm, and --dry-run reports what would run so the dialogue and the
+ * write are one code path. */
+int do_default(int argc, char **argv);
 
 /* ── Panes ──────────────────────────────────────────────────────────────── */
 int pane_display(void);

@@ -216,12 +216,23 @@ int pane_kernel(void)
 		for (int b = 0; have && !bootable && b < nloaders; b++)
 			bootable = syn_boot_has_entry(&loaders[b], kernels[i].pkg, release);
 
+		/* And which one the machine will actually PICK. "Bootable" was still
+		 * only half the answer: a kernel can be installed, have an entry, and
+		 * never boot, because the loader goes on choosing whatever it chose
+		 * before. -1 means the loader could not be asked, which is not the
+		 * same as "no" and must not be drawn as one. */
+		int is_default = 0;
+		for (int b = 0; have && !is_default && b < nloaders; b++)
+			is_default = syn_boot_is_default(&loaders[b], kernels[i].pkg,
+			                                 release) == 1;
+
 		/* "installed" alone was the lie. A kernel on disk that the
 		 * bootloader has never heard of is not a kernel you can switch to. */
 		const char *state = !have      ? "not installed"
-		                  : is_running ? "running"
-		                  : bootable   ? "installed, bootable"
-		                               : "installed, NO BOOT ENTRY";
+		                  : is_running ? (is_default ? "running, default" : "running")
+		                  : !bootable  ? "installed, NO BOOT ENTRY"
+		                  : is_default ? "installed, boots by default"
+		                               : "installed, bootable";
 
 		/* A kernel from a repository this machine does not have. Said on the
 		 * row rather than discovered at the click: "not found in any
@@ -281,6 +292,13 @@ int pane_kernel(void)
 			if (!bootable && nloaders > 0)
 				n += snprintf(action + n, sizeof action - n, "boot:%s",
 				              kernels[i].pkg);
+			/* Offered for the RUNNING kernel too. Booting it once is not the
+			 * same as it being what boots — this box ran linux-cachyos with
+			 * limine still set to pick the stock kernel, which is exactly the
+			 * gap this action closes. */
+			if (bootable && !is_default && nloaders > 0)
+				n += snprintf(action + n, sizeof action - n, "%sdefault:%s",
+				              n ? " " : "", kernels[i].pkg);
 			/* REMOVING WHAT YOU BOOTED is how a machine stops booting, so the
 			 * running kernel never offers it. That rule is about removal
 			 * alone: making the kernel you are running bootable is not only
@@ -360,9 +378,26 @@ int pane_kernel(void)
 			        "reliably, so a kernel counts as bootable if ANY of them "
 			        "can boot it.\t-");
 
-		rec_row("-\t-\t-\tWhich kernel boots by DEFAULT is still the "
-		        "bootloader's choice, not this pane's — pick it at the boot "
-		        "menu.\t-");
+		/* This row used to say the default was the bootloader's business and
+		 * you should pick it at the menu. It was true and it was not enough:
+		 * a kernel that is installed and bootable and never chosen is a
+		 * kernel you are not running, and "reboot and catch the menu" is not
+		 * a setting. Each loader now gets named with the mechanism that will
+		 * actually run, the same way "Make bootable" does. */
+		for (int b = 0; b < nloaders; b++) {
+			const char *how =
+				loaders[b].kind == SYN_BL_GRUB
+				  ? "“Make default” runs grub-set-default, which needs "
+				    "GRUB_DEFAULT=saved in /etc/default/grub — this pane will "
+				    "not edit that file for you"
+				: loaders[b].kind == SYN_BL_SYSTEMD
+				  ? "“Make default” runs bootctl set-default"
+				  : "“Make default” writes default_entry: into limine.conf, "
+				    "naming the entry by path so a reordering cannot quietly "
+				    "change what it means";
+
+			rec_row("-\t-\t-\t%s.\t-", how);
+		}
 	}
 
 	return 0;

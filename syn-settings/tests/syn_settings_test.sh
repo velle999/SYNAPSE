@@ -74,7 +74,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -415,9 +415,19 @@ else
     fi
 fi
 
+# "Bootable" is now two states: an entry exists, and it is or is not the one
+# the loader will pick. Both mean the entry was found, which is what these
+# assert — the default itself is tested on its own below.
+is_bootable() {
+    case "$1" in
+        "installed, bootable"|"installed, boots by default") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 if [ "$linux_here" = 1 ]; then
     for fx in limine grub sdb; do
-        if [ "$(boot_state "$bootfx/$fx")" = "installed, bootable" ]; then
+        if is_bootable "$(boot_state "$bootfx/$fx")"; then
             ok "boot: $fx entry naming vmlinuz-linux reads as bootable"
         else
             bad "boot: $fx did not see its own entry (got '$(boot_state "$bootfx/$fx")')"
@@ -429,7 +439,7 @@ fi
 # where the linux package owns no module tree, since the fixture cannot then be
 # written — the test is that release matching works, not that a kernel is here.
 if [ -n "${run_rel:-}" ] && [ "$linux_here" = 1 ]; then
-    if [ "$(boot_state "$bootfx/bls")" = "installed, bootable" ]; then
+    if is_bootable "$(boot_state "$bootfx/bls")"; then
         ok "boot: a BLS entry naming only the release reads as bootable"
     else
         bad "boot: BLS entry missed (got '$(boot_state "$bootfx/bls")')"
@@ -449,7 +459,7 @@ fi
 printf 'timeout: 5\n/+SynapseOS\ncomment: machine-id=b153\n  //linux\n  comment: Kernel version: %s\n  comment: kernel-id=linux \n  protocol: linux\n  module_path: boot():/b153/linux/initramfs#aaaa\n  path: boot():/b153/linux/vmlinuz#bbbb\n' \
     "${run_rel:-0-test}" > "$bootfx/limbls/boot/limine.conf"
 if [ "$linux_here" = 1 ]; then
-    if [ "$(boot_state "$bootfx/limbls")" = "installed, bootable" ]; then
+    if is_bootable "$(boot_state "$bootfx/limbls")"; then
         ok "boot: a limine entry written by limine-mkinitcpio-hook reads as bootable"
     else
         bad "boot: generated limine entry missed (got '$(boot_state "$bootfx/limbls")')"
@@ -490,6 +500,148 @@ if [ "$rc" -eq 0 ]; then
     ok "boot: a machine with no bootloader config still renders the pane"
 else
     bad "boot: no-bootloader machine failed the pane (exit $rc)"
+fi
+
+# ── Which kernel boots by DEFAULT ───────────────────────────────────────────
+#
+# Bootable was only half of it: this box had linux-cachyos installed, with an
+# entry, and limine still picking the stock kernel every time. Each loader
+# keeps the answer somewhere different, and for two of the three the place it
+# is READ from is not the place their own tool WRITES it — so all three are
+# posed from fixtures, including the systemd-boot EFI variable, which no
+# machine here can produce.
+mkdir -p "$bootfx/limdef/boot" "$bootfx/limidx/boot" \
+         "$bootfx/sdbdef/boot/loader/entries" \
+         "$bootfx/sdbvar/boot/loader/entries" \
+         "$bootfx/sdbvar/sys/firmware/efi/efivars" \
+         "$bootfx/grubdef/boot/grub" "$bootfx/grubdef/etc/default"
+
+# limine: default_entry names an entry by PATH. Two entries, and the one the
+# path names is NOT the first — an index-based reading would answer the other.
+lim_two() {
+    printf 'timeout: 5\n%s/+SynapseOS\n  //linux-lts\n  path: boot():/b1/linux-lts/vmlinuz#a\n  //linux\n  path: boot():/b1/linux/vmlinuz#b\n' "$1"
+}
+lim_two "default_entry: SynapseOS/linux
+" > "$bootfx/limdef/boot/limine.conf"
+lim_two "" > "$bootfx/limidx/boot/limine.conf"
+
+if [ "$linux_here" = 1 ]; then
+    if [ "$(boot_state "$bootfx/limdef")" = "installed, boots by default" ]; then
+        ok "default: limine default_entry by path picks the named entry"
+    else
+        bad "default: limine path default missed (got '$(boot_state "$bootfx/limdef")')"
+    fi
+
+    # No default_entry at all is limine's documented "entry 1", and entry 1
+    # here is linux-lts. Reading the file and finding nothing must mean THAT,
+    # not "the kernel you asked about".
+    if [ "$(boot_state "$bootfx/limidx")" = "installed, bootable" ]; then
+        ok "default: no default_entry means entry 1, which is the other kernel"
+    else
+        bad "default: absent default_entry mis-read (got '$(boot_state "$bootfx/limidx")')"
+    fi
+
+    # ROUND TRIP. The write is the half that cannot be checked by reading, and
+    # a default written in a form the reader does not accept is exactly the
+    # bug this pane shipped in pkgrel 16.
+    if SYN_SETTINGS_BOOT_ROOT="$bootfx/limidx" "$BIN" default linux --as-root >/dev/null 2>&1 &&
+       [ "$(boot_state "$bootfx/limidx")" = "installed, boots by default" ]; then
+        ok "default: limine write is read back as the default it set"
+    else
+        bad "default: limine round trip failed (got '$(boot_state "$bootfx/limidx")')"
+    fi
+
+    # ...and it stays ONE line, however many times it is set.
+    lines=$(grep -c '^default_entry:' "$bootfx/limidx/boot/limine.conf")
+    SYN_SETTINGS_BOOT_ROOT="$bootfx/limidx" "$BIN" default linux --as-root >/dev/null 2>&1
+    lines2=$(grep -c '^default_entry:' "$bootfx/limidx/boot/limine.conf")
+    if [ "$lines" = 1 ] && [ "$lines2" = 1 ]; then
+        ok "default: setting it twice leaves exactly one default_entry"
+    else
+        bad "default: default_entry accumulated ($lines then $lines2)"
+    fi
+fi
+
+# systemd-boot: loader.conf's `default`, and the EFI variable that OVERRIDES
+# it. bootctl set-default writes the variable, so a pane that read only
+# loader.conf would never see its own write.
+printf 'title SynapseOS\nlinux /vmlinuz-linux\n' \
+    > "$bootfx/sdbdef/boot/loader/entries/arch-linux.conf"
+printf 'title LTS\nlinux /vmlinuz-linux-lts\n' \
+    > "$bootfx/sdbdef/boot/loader/entries/arch-lts.conf"
+printf 'timeout 4\ndefault arch-linux\n' > "$bootfx/sdbdef/boot/loader/loader.conf"
+
+cp -r "$bootfx/sdbdef/boot/loader/entries/." "$bootfx/sdbvar/boot/loader/entries/"
+mkdir -p "$bootfx/sdbvar/boot/loader"
+printf 'timeout 4\ndefault arch-linux\n' > "$bootfx/sdbvar/boot/loader/loader.conf"
+# 4 bytes of attributes then UTF-16LE, which is the on-disk shape of an EFI
+# variable — written here rather than described, because "we assumed the
+# encoding" is how a reader confidently reports the wrong entry.
+printf '\007\000\000\000' > "$bootfx/sdbvar/sys/firmware/efi/efivars/LoaderEntryDefault-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+printf 'arch-lts.conf' | sed 's/./&\x00/g' \
+    >> "$bootfx/sdbvar/sys/firmware/efi/efivars/LoaderEntryDefault-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+
+if [ "$linux_here" = 1 ]; then
+    if [ "$(boot_state "$bootfx/sdbdef")" = "installed, boots by default" ]; then
+        ok "default: systemd-boot reads loader.conf's default"
+    else
+        bad "default: loader.conf default missed (got '$(boot_state "$bootfx/sdbdef")')"
+    fi
+    # The variable says LTS, loader.conf says linux. The variable wins.
+    if [ "$(boot_state "$bootfx/sdbvar")" = "installed, bootable" ]; then
+        ok "default: LoaderEntryDefault overrides loader.conf"
+    else
+        bad "default: the EFI variable was ignored (got '$(boot_state "$bootfx/sdbvar")')"
+    fi
+fi
+
+# grub: saved_entry in grubenv, which counts only when GRUB_DEFAULT=saved.
+printf "menuentry 'SynapseOS' --class arch \$menuentry_id_option 'gnulinux-simple-x' {\n linux /vmlinuz-linux root=UUID=x\n}\nmenuentry 'LTS' \$menuentry_id_option 'gnulinux-lts-x' {\n linux /vmlinuz-linux-lts root=UUID=x\n}\n" \
+    > "$bootfx/grubdef/boot/grub/grub.cfg"
+printf 'saved_entry=gnulinux-simple-x\n' > "$bootfx/grubdef/boot/grub/grubenv"
+printf 'GRUB_DEFAULT=saved\nGRUB_TIMEOUT=5\n' > "$bootfx/grubdef/etc/default/grub"
+
+if [ "$linux_here" = 1 ]; then
+    if [ "$(boot_state "$bootfx/grubdef")" = "installed, boots by default" ]; then
+        ok "default: grub reads saved_entry when GRUB_DEFAULT=saved"
+    else
+        bad "default: grub saved_entry missed (got '$(boot_state "$bootfx/grubdef")')"
+    fi
+
+    # GRUB_DEFAULT=0 means grubenv is not consulted at all, so saved_entry
+    # naming this kernel must NOT make it the default — that is a write that
+    # would report success and change nothing that boots.
+    printf 'GRUB_DEFAULT=1\n' > "$bootfx/grubdef/etc/default/grub"
+    if [ "$(boot_state "$bootfx/grubdef")" = "installed, bootable" ]; then
+        ok "default: grub ignores saved_entry unless GRUB_DEFAULT=saved"
+    else
+        bad "default: grub read grubenv it should not have (got '$(boot_state "$bootfx/grubdef")')"
+    fi
+
+    # ...and setting it is REFUSED there, rather than run to no effect.
+    out=$(SYN_SETTINGS_BOOT_ROOT="$bootfx/grubdef" "$BIN" default linux --confirm 2>&1 || true)
+    case "$out" in
+        *GRUB_DEFAULT=saved*) ok "default: grub refuses and names what to change" ;;
+        *) bad "default: grub refusal did not explain itself ($out)" ;;
+    esac
+fi
+
+# Each loader gets ITS OWN mechanism, and none of them is the other's.
+for pair in "limdef limine default_entry" "sdbdef systemd-boot bootctl" ; do
+    set -- $pair
+    if SYN_SETTINGS_BOOT_ROOT="$bootfx/$1" "$BIN" -n default linux 2>/dev/null | grep -q "$3"; then
+        ok "default: $2 is set through $3"
+    else
+        bad "default: $2 did not name $3"
+    fi
+done
+
+# The confirmation gate is the C binary's, not the dialogue's.
+rc=0; SYN_SETTINGS_BOOT_ROOT="$bootfx/limdef" "$BIN" default linux >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 2 ]; then
+    ok "default: refuses to change the default without --confirm"
+else
+    bad "default: changed the default without --confirm (exit $rc)"
 fi
 
 # ── The actions a kernel row offers MATCH ITS STATE ─────────────────────────

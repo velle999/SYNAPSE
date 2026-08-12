@@ -416,6 +416,11 @@ FloatingWindow {
     property bool confirmOpen: false
     property string confirmKernel: ""
     property var confirmPlan: ({})
+    // Which of the two boot writes is being confirmed. The dialogue is shared
+    // because the shape is identical — ask the binary what it would do, show
+    // exactly that, run the same path with --confirm — and the verb is the
+    // only thing that differs.
+    property string confirmVerb: "boot"
 
     Process {
         id: planProc
@@ -441,14 +446,17 @@ FloatingWindow {
         }
     }
 
-    function askBootable(kernel) {
+    function askBootWrite(verb, kernel) {
         if (root.applying) return
+        root.confirmVerb = verb
         root.confirmKernel = kernel
         root.confirmPlan = ({})
         root.status = "working out what this would do…"
-        planProc.command = [root.bin, "-n", "boot", kernel]
+        planProc.command = [root.bin, "-n", verb, kernel]
         planProc.running = true
     }
+    function askBootable(kernel) { root.askBootWrite("boot", kernel) }
+    function askDefault(kernel)  { root.askBootWrite("default", kernel) }
 
     function paneMeta(id) {
         for (const p of root.panes) if (p.id === id) return p
@@ -967,6 +975,15 @@ FloatingWindow {
                     onGo: root.askBootable(root.actionArgFor(root.selAction, "boot"))
                 }
 
+                // Bootable and BOOTED are different things. A kernel with an
+                // entry the loader never picks is a kernel you are not running,
+                // and "catch the boot menu" is not a setting.
+                SettingsButton {
+                    visible: root.actionHas(root.selAction, "default")
+                    label: "Make default…"
+                    onGo: root.askDefault(root.actionArgFor(root.selAction, "default"))
+                }
+
                 // Install and Remove are now SEPARATE verbs, drawn only when
                 // the row offers them: the C decides which of the two this
                 // kernel can take, and a row can offer neither (the one you
@@ -1164,9 +1181,13 @@ FloatingWindow {
                     Text {
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: "This makes " + root.confirmKernel + " bootable. It is the "
-                            + "only change in this app that can leave a machine that does "
-                            + "not start, so read what it will do first."
+                        text: root.confirmVerb === "default"
+                            ? "This makes " + root.confirmKernel + " the kernel this "
+                              + "machine BOOTS. It changes nothing about the kernel you "
+                              + "are running now; it takes effect at the next restart."
+                            : "This makes " + root.confirmKernel + " bootable. It is the "
+                              + "only change in this app that can leave a machine that does "
+                              + "not start, so read what it will do first."
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
@@ -1244,15 +1265,21 @@ FloatingWindow {
                         }
 
                         SettingsButton {
-                            label: "Make bootable"
+                            label: root.confirmVerb === "default" ? "Make default"
+                                                                  : "Make bootable"
                             onGo: {
                                 root.confirmOpen = false
-                                root.runWrite(["boot", root.confirmKernel, "--confirm"],
-                                              "Making " + root.confirmKernel + " bootable",
-                                              "You may be asked to authenticate. On limine "
-                                              + "this can mean building the entry generator "
-                                              + "from source, which takes several minutes — "
-                                              + "the lines below are it working.")
+                                if (root.confirmVerb === "default")
+                                    root.runWrite(["default", root.confirmKernel, "--confirm"],
+                                                  "Making " + root.confirmKernel + " the default",
+                                                  "You may be asked to authenticate.")
+                                else
+                                    root.runWrite(["boot", root.confirmKernel, "--confirm"],
+                                                  "Making " + root.confirmKernel + " bootable",
+                                                  "You may be asked to authenticate. On limine "
+                                                  + "this can mean building the entry generator "
+                                                  + "from source, which takes several minutes — "
+                                                  + "the lines below are it working.")
                             }
                         }
                     }

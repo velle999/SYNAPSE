@@ -56,6 +56,10 @@ static void usage(void)
 "                            make an installed kernel BOOTABLE: grub-mkconfig,\n"
 "                            kernel-install, or limine-mkinitcpio-hook,\n"
 "                            whichever this machine's bootloader needs\n"
+"  default <kernel> [--loader <name>] --confirm\n"
+"                            make an installed kernel the one that BOOTS:\n"
+"                            limine's default_entry, bootctl set-default, or\n"
+"                            grub-set-default\n"
 "\n"
 "  -n, --dry-run     print what would be run, change nothing\n"
 "\n"
@@ -143,6 +147,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
 	if (!strcmp(cmd, "boot"))  return do_boot(rest_argc, rest);
+	if (!strcmp(cmd, "default")) return do_default(rest_argc, rest);
 
 	if (!strcmp(cmd, "--rec")) {
 		if (rest_argc < 1) { usage(); return 2; }

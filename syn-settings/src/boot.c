@@ -35,6 +35,7 @@
 #define _GNU_SOURCE
 #include "synsettings.h"
 
+#include <fnmatch.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -249,6 +250,203 @@ static int limine_has_entry(const char *conf, const char *pkg,
 	return hit;
 }
 
+/* ── The limine entry TREE ──────────────────────────────────────────────────
+ *
+ * limine.conf is a tree. Depth is the number of leading slashes, a `+` after
+ * them means "branch, expanded", and everything until the next tree line is
+ * that entry's body:
+ *
+ *     /+SynapseOS              depth 1, branch
+ *       //linux-cachyos        depth 2, entry -> path "SynapseOS/linux-cachyos"
+ *       path: boot():/...
+ *     /EFI fallback            depth 1, entry -> path "EFI fallback"
+ *
+ * That path is how `default_entry` names an entry, and naming it by PATH is
+ * the whole reason this walker exists: the alternative is the 1-based index,
+ * and limine-mkinitcpio-hook reorders the generated entries whenever BOOT_ORDER
+ * or the installed kernels change. An index would be a default that silently
+ * comes to mean a different kernel.
+ */
+#define LIM_MAXDEPTH 8
+
+/* Depth of a tree line, 0 if this line is not one. Sets *name to the entry
+ * name (after the slashes and any `+`). */
+static int lim_tree_line(const char *line, const char **name)
+{
+	const char *p = line;
+	while (*p == ' ' || *p == '\t') p++;
+	if (*p != '/') return 0;
+
+	int depth = 0;
+	while (*p == '/') { depth++; p++; }
+	if (*p == '+') p++;
+	*name = p;
+	return depth;
+}
+
+/* Trailing newline and spaces off a name read from the file. limine writes
+ * `comment: kernel-id=linux ` with a trailing space, and an entry name that
+ * carries a stray \n composes a path that matches nothing. */
+static void lim_trim(char *s)
+{
+	size_t n = strlen(s);
+	while (n && (s[n-1] == '\n' || s[n-1] == '\r' || s[n-1] == ' ' || s[n-1] == '\t'))
+		s[--n] = '\0';
+}
+
+/* `/`, `\` and `#` are structural in an entry path and must be escaped when it
+ * is written into default_entry. Kernel names never contain them; the branch
+ * name is PRETTY_NAME out of os-release and could. */
+static void lim_escape(const char *in, char *out, size_t cap)
+{
+	size_t o = 0;
+	for (const char *p = in; *p && o + 2 < cap; p++) {
+		if (*p == '/' || *p == '\\' || *p == '#') out[o++] = '\\';
+		out[o++] = *p;
+	}
+	out[o < cap ? o : cap - 1] = '\0';
+}
+
+static void lim_unescape(const char *in, char *out, size_t cap)
+{
+	size_t o = 0;
+	for (const char *p = in; *p && o + 1 < cap; p++) {
+		if (*p == '\\' && (p[1] == '/' || p[1] == '\\' || p[1] == '#')) p++;
+		out[o++] = *p;
+	}
+	out[o < cap ? o : cap - 1] = '\0';
+}
+
+/* The global `default_entry:` value, "" if unset. First occurrence wins:
+ * limine's own precedence for a repeated global is not documented, and this
+ * file only ever writes one. */
+static void limine_default_value(const char *conf, char *out, size_t cap)
+{
+	if (cap) out[0] = '\0';
+	FILE *f = fopen(conf, "re");
+	if (!f) return;
+
+	char line[4096];
+	while (fgets(line, sizeof line, f)) {
+		const char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		if (strncmp(p, "default_entry:", 14)) continue;
+		p += 14;
+		while (*p == ' ' || *p == '\t') p++;
+		snprintf(out, cap, "%s", p);
+		lim_trim(out);
+		break;
+	}
+	fclose(f);
+}
+
+/* Walk the tree, calling nothing back — this fills in the two answers both
+ * callers want, in ONE pass, because they need the same state:
+ *
+ *   want_pkg  : the path of the first entry that boots this kernel
+ *   want_dflt : whether the entry `default_entry` names boots this kernel
+ *
+ * `target` is the unescaped default_entry path, or "" to select by index.
+ * `target_idx` is that index; limine's default when unset is 1.
+ */
+struct lim_walk {
+	char found_path[512];   /* path of the first entry booting pkg */
+	char found_esc[768];    /* the same path, escaped for default_entry */
+	int  found;
+	int  default_boots_pkg; /* -1 until the default entry is identified */
+};
+
+static void limine_walk(const char *conf, const char *pkg, const char *release,
+                        const char *target, int target_idx, struct lim_walk *w)
+{
+	memset(w, 0, sizeof *w);
+	w->default_boots_pkg = -1;
+
+	FILE *f = fopen(conf, "re");
+	if (!f) return;
+
+	char stack[LIM_MAXDEPTH][192];
+	memset(stack, 0, sizeof stack);
+
+	char cur_path[512] = "";
+	char cur_esc[768] = "";
+	int  cur_open = 0;      /* inside an entry at all */
+	int  cur_leaf = 0;      /* has it shown a bootable directive? */
+	int  cur_boots = 0;
+	int  leaf_index = 0;
+
+	char line[4096];
+	/* Closing an entry is the only place a decision is made, so both the next
+	 * tree line and EOF go through the same code. */
+	#define LIM_CLOSE()                                                       \
+		do {                                                                  \
+			if (cur_open && cur_leaf) {                                       \
+				if (cur_boots && !w->found) {                                 \
+					snprintf(w->found_path, sizeof w->found_path, "%s",       \
+					         cur_path);                                       \
+					snprintf(w->found_esc, sizeof w->found_esc, "%s",         \
+					         cur_esc);                                        \
+					w->found = 1;                                             \
+				}                                                             \
+				int is_target = *target ? !strcmp(cur_path, target)           \
+				                        : (leaf_index == target_idx);         \
+				if (is_target && w->default_boots_pkg < 0)                    \
+					w->default_boots_pkg = cur_boots;                         \
+			}                                                                 \
+		} while (0)
+
+	while (fgets(line, sizeof line, f)) {
+		const char *name;
+		int depth = lim_tree_line(line, &name);
+
+		if (depth > 0) {
+			LIM_CLOSE();
+
+			if (depth > LIM_MAXDEPTH) depth = LIM_MAXDEPTH;
+			snprintf(stack[depth - 1], sizeof stack[0], "%s", name);
+			lim_trim(stack[depth - 1]);
+
+			/* Both forms, built together: the raw path is what a default_entry
+			 * read out of the file is compared against, the escaped one is
+			 * what a default_entry written into it must say. Escaping the
+			 * joined path instead would escape its own separators. */
+			cur_path[0] = '\0';
+			cur_esc[0] = '\0';
+			for (int d = 0; d < depth; d++) {
+				char esc[384];
+				lim_escape(stack[d], esc, sizeof esc);
+				if (d) {
+					strncat(cur_path, "/", sizeof cur_path - strlen(cur_path) - 1);
+					strncat(cur_esc, "/", sizeof cur_esc - strlen(cur_esc) - 1);
+				}
+				strncat(cur_path, stack[d], sizeof cur_path - strlen(cur_path) - 1);
+				strncat(cur_esc, esc, sizeof cur_esc - strlen(cur_esc) - 1);
+			}
+			cur_open = 1; cur_leaf = 0; cur_boots = 0;
+			continue;
+		}
+
+		if (!cur_open) continue;
+
+		const char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		/* A branch has no directives of its own; the first one an entry shows
+		 * is what makes it a bootable leaf, and only leaves are counted by the
+		 * 1-based index limine uses when default_entry is unset. */
+		if (!cur_leaf &&
+		    (!strncmp(p, "protocol:", 9) || !strncmp(p, "path:", 5) ||
+		     !strncmp(p, "kernel_path:", 12))) {
+			cur_leaf = 1;
+			leaf_index++;
+		}
+		if (limine_line_boots(line, pkg, release)) cur_boots = 1;
+	}
+	LIM_CLOSE();
+	#undef LIM_CLOSE
+
+	fclose(f);
+}
+
 /* Scan one file for either the image name or the kernel release. */
 static int file_names_kernel(const char *path, const char *img, const char *release)
 {
@@ -313,6 +511,309 @@ int syn_boot_has_entry(const struct syn_boot *bl, const char *pkg,
 
 	default:
 		return 0;
+	}
+}
+
+/* ── Which kernel boots by DEFAULT ──────────────────────────────────────────
+ *
+ * "Bootable" and "booted by default" are different questions, and answering
+ * only the first is what left this pane saying a kernel was ready while the
+ * machine went on booting the other one. Every loader stores the answer
+ * somewhere else, and — the trap — for two of the three the place it is READ
+ * from is not the place the tool WRITES it:
+ *
+ *   limine        default_entry: in limine.conf. Written here, read here.
+ *   systemd-boot  `bootctl set-default` writes the EFI variable
+ *                 LoaderEntryDefault, which OVERRIDES loader.conf's `default`.
+ *                 Reading only loader.conf would mean the pane never noticed
+ *                 its own write — the exact bug fixed in pkgrel 17.
+ *   grub          `grub-set-default` writes saved_entry into grubenv, which is
+ *                 consulted only when /etc/default/grub says GRUB_DEFAULT=saved.
+ */
+
+/* The first `KEY=value` in a shell-ish config, unquoted. */
+static int conf_value(const char *path, const char *key, char *out, size_t cap)
+{
+	if (cap) out[0] = '\0';
+	FILE *f = fopen(path, "re");
+	if (!f) return 0;
+
+	size_t klen = strlen(key);
+	char line[1024];
+	int got = 0;
+	while (!got && fgets(line, sizeof line, f)) {
+		const char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		if (strncmp(p, key, klen) || p[klen] != '=') continue;
+		p += klen + 1;
+		if (*p == '"' || *p == '\'') p++;
+		snprintf(out, cap, "%s", p);
+		for (char *q = out; *q; q++)
+			if (*q == '"' || *q == '\'' || *q == '\n' || *q == '\r') { *q = '\0'; break; }
+		got = 1;
+	}
+	fclose(f);
+	return got;
+}
+
+/* LoaderEntryDefault, as systemd-boot's bootctl writes it: 4 bytes of EFI
+ * variable attributes, then UTF-16LE. Only the low byte of each unit is taken
+ * — an entry id is a filename systemd itself keeps to ASCII. */
+static int efi_loader_default(char *out, size_t cap)
+{
+	if (cap) out[0] = '\0';
+
+	char path[512];
+	snprintf(path, sizeof path,
+	         "%s/sys/firmware/efi/efivars/"
+	         "LoaderEntryDefault-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f",
+	         boot_root());
+
+	FILE *f = fopen(path, "re");
+	if (!f) return 0;
+
+	unsigned char buf[512];
+	size_t n = fread(buf, 1, sizeof buf, f);
+	fclose(f);
+	if (n < 6) return 0;
+
+	size_t o = 0;
+	for (size_t i = 4; i + 1 < n && o + 1 < cap; i += 2) {
+		if (!buf[i] && !buf[i+1]) break;
+		out[o++] = (char)buf[i];
+	}
+	out[o] = '\0';
+	return o > 0;
+}
+
+/* Does the systemd-boot entry file `name` (an id, possibly a glob) boot pkg? */
+static int sdb_entry_boots(const struct syn_boot *bl, const char *want,
+                           const char *img, const char *release)
+{
+	DIR *d = opendir(bl->conf);
+	if (!d) return 0;
+
+	int hit = 0;
+	struct dirent *de;
+	while (!hit && (de = readdir(d))) {
+		const char *dot = strrchr(de->d_name, '.');
+		if (!dot || strcmp(dot, ".conf")) continue;
+
+		/* loader.conf's `default` takes a glob and is conventionally written
+		 * without the extension; the EFI variable carries the full filename. */
+		char stem[256];
+		snprintf(stem, sizeof stem, "%.*s", (int)(dot - de->d_name), de->d_name);
+		if (fnmatch(want, de->d_name, 0) && fnmatch(want, stem, 0)) continue;
+
+		char path[1024];
+		if (snprintf(path, sizeof path, "%s/%s", bl->conf, de->d_name)
+		    >= (int)sizeof path)
+			continue;
+		hit = file_names_kernel(path, img, release);
+	}
+	closedir(d);
+	return hit;
+}
+
+/* grub.cfg is a shell script, and the only structure worth reading out of it
+ * is the menu tree: `submenu '...' ... {` nests, `menuentry '...' ... {` is a
+ * leaf, and `$menuentry_id_option 'id'` names it the way grub-set-default
+ * wants — with a submenu's id joined by '>'.
+ *
+ * Not a shell parser. It tracks braces at the ends of header lines, which is
+ * the shape grub-mkconfig writes and the only shape this needs to survive.
+ */
+static int grub_scan(const struct syn_boot *bl, const char *want,
+                     int want_idx, const char *img, const char *release,
+                     char *id_out, size_t id_cap)
+{
+	if (id_out && id_cap) id_out[0] = '\0';
+
+	FILE *f = fopen(bl->conf, "re");
+	if (!f) return -1;
+
+	char sub_id[256] = "";
+	char cur_id[256] = "";
+	char cur_path[512] = "";
+	int  in_entry = 0, in_sub = 0, index = 0, is_target = 0, answer = -1;
+
+	char line[4096];
+	while (fgets(line, sizeof line, f)) {
+		const char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+
+		int is_menu = !strncmp(p, "menuentry ", 10);
+		int is_submenu = !strncmp(p, "submenu ", 8);
+
+		if (is_menu || is_submenu) {
+			char id[256] = "";
+			const char *opt = strstr(p, "$menuentry_id_option");
+			if (opt) {
+				const char *q = strchr(opt, '\'');
+				if (q) {
+					const char *e = strchr(++q, '\'');
+					if (e && (size_t)(e - q) < sizeof id)
+						snprintf(id, sizeof id, "%.*s", (int)(e - q), q);
+				}
+			}
+			if (is_submenu) {
+				snprintf(sub_id, sizeof sub_id, "%s", id);
+				in_sub = 1;
+				continue;
+			}
+			snprintf(cur_id, sizeof cur_id, "%s", id);
+			if (in_sub && *sub_id)
+				snprintf(cur_path, sizeof cur_path, "%s>%s", sub_id, cur_id);
+			else
+				snprintf(cur_path, sizeof cur_path, "%s", cur_id);
+
+			index++;
+			in_entry = 1;
+			is_target = *want ? (!strcmp(cur_path, want) || !strcmp(cur_id, want))
+			                  : (index == want_idx);
+			continue;
+		}
+
+		if (in_entry && *p == '}') { in_entry = 0; continue; }
+		if (!in_entry && *p == '}') { in_sub = 0; sub_id[0] = '\0'; continue; }
+
+		if (!in_entry) continue;
+		if (strncmp(p, "linux", 5) && strncmp(p, "linuxefi", 8)) continue;
+		if (!token_match(p, img) &&
+		    !(release && *release && token_match(p, release)))
+			continue;
+
+		/* Asked for the id: the FIRST entry that boots this kernel. That is
+		 * grub-mkconfig's own top-level entry for it, which comes before the
+		 * advanced submenu's copies — the one a person would pick. */
+		if (id_out) {
+			if (!*id_out && *cur_path)
+				snprintf(id_out, id_cap, "%s", cur_path);
+			continue;
+		}
+		if (is_target && answer < 0) answer = 1;
+	}
+	fclose(f);
+
+	if (id_out) return *id_out != '\0';
+
+	/* A target that was found and did not name this kernel is a NO, not an
+	 * "I could not tell" — those are different answers to the pane. */
+	return answer < 0 ? 0 : 1;
+}
+
+/* The systemd-boot entry id (the .conf filename) that boots this kernel —
+ * what `bootctl set-default` takes. */
+static int sdb_entry_id(const struct syn_boot *bl, const char *img,
+                        const char *release, char *out, size_t cap)
+{
+	if (cap) out[0] = '\0';
+	DIR *d = opendir(bl->conf);
+	if (!d) return 0;
+
+	struct dirent *de;
+	while ((de = readdir(d))) {
+		const char *dot = strrchr(de->d_name, '.');
+		if (!dot || strcmp(dot, ".conf")) continue;
+
+		char path[1024];
+		if (snprintf(path, sizeof path, "%s/%s", bl->conf, de->d_name)
+		    >= (int)sizeof path)
+			continue;
+		if (!file_names_kernel(path, img, release)) continue;
+
+		snprintf(out, cap, "%s", de->d_name);
+		break;
+	}
+	closedir(d);
+	return *out != '\0';
+}
+
+/* Is `pkg` what this bootloader boots when nobody touches the menu?
+ * 1 yes, 0 no, -1 cannot be told. */
+int syn_boot_is_default(const struct syn_boot *bl, const char *pkg,
+                        const char *release)
+{
+	char img[128];
+	snprintf(img, sizeof img, "vmlinuz-%s", pkg);
+
+	switch (bl->kind) {
+	case SYN_BL_LIMINE: {
+		char raw[512], target[512];
+		limine_default_value(bl->conf, raw, sizeof raw);
+
+		int idx = 1;
+		target[0] = '\0';
+		if (*raw) {
+			char *end = NULL;
+			long n = strtol(raw, &end, 10);
+			if (end && *end == '\0' && n > 0) idx = (int)n;
+			else lim_unescape(raw, target, sizeof target);
+		}
+
+		struct lim_walk w;
+		limine_walk(bl->conf, pkg, release, target, idx, &w);
+		return w.default_boots_pkg;
+	}
+
+	case SYN_BL_SYSTEMD: {
+		char want[256];
+		if (!efi_loader_default(want, sizeof want)) {
+			char lconf[512];
+			if (snprintf(lconf, sizeof lconf, "%s/loader/loader.conf", bl->esp)
+			    >= (int)sizeof lconf)
+				return -1;
+			if (!conf_value(lconf, "default", want, sizeof want)) {
+				/* loader.conf uses `key value`, not `key=value`. */
+				FILE *f = fopen(lconf, "re");
+				if (!f) return -1;
+				char line[1024];
+				want[0] = '\0';
+				while (fgets(line, sizeof line, f)) {
+					const char *p = line;
+					while (*p == ' ' || *p == '\t') p++;
+					if (strncmp(p, "default", 7) || (p[7] != ' ' && p[7] != '\t'))
+						continue;
+					p += 7;
+					while (*p == ' ' || *p == '\t') p++;
+					snprintf(want, sizeof want, "%s", p);
+					for (char *q = want; *q; q++)
+						if (*q == '\n' || *q == '\r') { *q = '\0'; break; }
+					break;
+				}
+				fclose(f);
+				if (!*want) return -1;
+			}
+		}
+		return sdb_entry_boots(bl, want, img, release);
+	}
+
+	case SYN_BL_GRUB: {
+		char defconf[512], val[256] = "", want[256] = "";
+		snprintf(defconf, sizeof defconf, "%s/etc/default/grub", boot_root());
+		conf_value(defconf, "GRUB_DEFAULT", val, sizeof val);
+
+		int idx = 1;
+		if (!strcmp(val, "saved")) {
+			char env[512];
+			snprintf(env, sizeof env, "%s/grubenv", bl->esp);
+			if (!conf_value(env, "saved_entry", want, sizeof want)) {
+				snprintf(env, sizeof env, "%s/grub/grubenv", bl->esp);
+				conf_value(env, "saved_entry", want, sizeof want);
+			}
+			if (!*want) return -1;
+		} else if (*val) {
+			char *end = NULL;
+			long n = strtol(val, &end, 10);
+			/* GRUB_DEFAULT is 0-based where limine's index is 1-based. */
+			if (end && *end == '\0') idx = (int)n + 1;
+			else snprintf(want, sizeof want, "%s", val);
+		}
+		return grub_scan(bl, want, idx, img, release, NULL, 0);
+	}
+
+	default:
+		return -1;
 	}
 }
 
@@ -598,4 +1099,299 @@ int syn_kernel_release(const char *pkg, char *out, size_t cap)
 	}
 	closedir(d);
 	return found;
+}
+
+/* ── Making a kernel the DEFAULT ────────────────────────────────────────────
+ *
+ * "Bootable" was only half the job. A kernel can be installed, have an entry,
+ * and still never boot — the machine goes on picking whatever the loader
+ * decided, which on a limine install is entry 1 and on this box was the stock
+ * kernel, for ever, no matter what the pane said about linux-cachyos.
+ *
+ * WHY LIMINE IS WRITTEN BY THIS BINARY AND THE OTHER TWO ARE NOT. grub and
+ * systemd-boot each ship the tool for this — grub-set-default and bootctl —
+ * and it is theirs to own. limine ships nothing: the default lives in
+ * limine.conf as a `default_entry:` line, and there is no command anywhere
+ * that sets it. So this one edit is ours.
+ *
+ * It is done by RE-EXECUTING THIS BINARY under pkexec (--as-root), not by
+ * handing pkexec a path and a string to write. The privileged child re-detects
+ * the bootloader and recomputes the entry path from scratch, so the only file
+ * it can ever write is a limine.conf it found itself, and the only thing it
+ * can write into it is a default_entry naming an entry that exists. A helper
+ * that took "write THIS to THAT" would be a general-purpose root file writer
+ * wearing a settings app's name.
+ */
+
+/* Replace or insert the global `default_entry:` line.
+ *
+ * Written to a sibling temp file and renamed, so an interrupted write cannot
+ * leave a half-written limine.conf on the ESP — that file is the boot menu,
+ * and truncating it is how a machine stops offering anything to boot.
+ */
+static int limine_write_default(const char *conf, const char *esc_path)
+{
+	FILE *in = fopen(conf, "re");
+	if (!in) return boot_refuse("cannot read the limine configuration");
+
+	char tmp[512];
+	if (snprintf(tmp, sizeof tmp, "%s.syn-new", conf) >= (int)sizeof tmp) {
+		fclose(in);
+		return boot_refuse("that configuration path is too long to write beside");
+	}
+
+	FILE *out = fopen(tmp, "we");
+	if (!out) {
+		fclose(in);
+		return boot_refuse("cannot write beside the limine configuration — "
+		                   "this needs root, and is meant to be reached "
+		                   "through pkexec");
+	}
+
+	/* FIRST LINE, always — a global may appear anywhere in limine.conf, so
+	 * the position is ours to choose, and choosing it means the line lands in
+	 * one predictable place instead of "wherever the old one happened to be,
+	 * or the end of the file". Appending was the first version and it has two
+	 * faults: a file whose last line has no newline gets the directive fused
+	 * onto it, and the setting ends up 200 lines below the timeout it belongs
+	 * beside, where nobody reading the file will find it.
+	 *
+	 * Every existing default_entry line is then dropped as the file is copied,
+	 * so a config that somehow carried two ends up with exactly one. */
+	int ok = fprintf(out, "default_entry: %s\n", esc_path) > 0;
+
+	char line[4096];
+	while (ok && fgets(line, sizeof line, in)) {
+		const char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		if (!strncmp(p, "default_entry:", 14)) continue;
+		ok = fputs(line, out) != EOF;
+	}
+
+	fclose(in);
+	if (ok) ok = fflush(out) == 0 && fsync(fileno(out)) == 0;
+	if (fclose(out) != 0) ok = 0;
+
+	if (!ok) {
+		unlink(tmp);
+		return boot_refuse("writing the new limine configuration failed — "
+		                   "nothing was changed");
+	}
+	if (rename(tmp, conf) != 0) {
+		unlink(tmp);
+		return boot_refuse("could not replace the limine configuration — "
+		                   "nothing was changed");
+	}
+	return 0;
+}
+
+/* This binary's own path, for the pkexec re-exec.
+ *
+ * /proc/self/exe, not a compiled-in /usr/bin path: the test suite and every
+ * development build run from the build directory, and a command that names an
+ * installed binary while a different one composed it is a dialogue describing
+ * something other than what would run. Falls back to the install path only if
+ * the link cannot be read.
+ */
+static const char *self_path(void)
+{
+	static char buf[512];
+	if (!buf[0]) {
+		ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+		if (n > 0) buf[n] = '\0';
+		else snprintf(buf, sizeof buf, "/usr/bin/syn-settings");
+	}
+	return buf;
+}
+
+/* Build the command that makes `pkg` the default under `bl`. */
+static int default_command(const struct syn_boot *bl, const char *pkg,
+                           const char *release, char *argv[8], char *scratch,
+                           size_t scap, const char **why)
+{
+	int n = 0;
+	char img[128];
+	snprintf(img, sizeof img, "vmlinuz-%s", pkg);
+
+	switch (bl->kind) {
+	case SYN_BL_LIMINE: {
+		struct lim_walk w;
+		limine_walk(bl->conf, pkg, release, "", 1, &w);
+		if (!w.found) {
+			*why = NULL;
+			return boot_refuse("that kernel has no entry in limine.conf to make "
+			                   "default — make it bootable first");
+		}
+		*why = "limine picks by default_entry:, and an entry PATH survives the "
+		       "reordering that an index does not";
+		argv[n++] = (char *)"pkexec";
+		argv[n++] = (char *)self_path();
+		argv[n++] = (char *)"default";
+		argv[n++] = (char *)pkg;
+		argv[n++] = (char *)"--loader";
+		argv[n++] = (char *)"limine";
+		argv[n++] = (char *)"--as-root";
+		snprintf(scratch, scap, "%s", w.found_esc);
+		break;
+	}
+
+	case SYN_BL_SYSTEMD: {
+		if (!sdb_entry_id(bl, img, release, scratch, scap)) {
+			*why = NULL;
+			return boot_refuse("no loader entry names that kernel — make it "
+			                   "bootable first");
+		}
+		*why = "bootctl set-default writes LoaderEntryDefault, which is what "
+		       "systemd-boot reads before loader.conf";
+		argv[n++] = (char *)"pkexec";
+		argv[n++] = (char *)"bootctl";
+		argv[n++] = (char *)"set-default";
+		argv[n++] = scratch;
+		break;
+	}
+
+	case SYN_BL_GRUB: {
+		/* grub-set-default writes saved_entry into grubenv, and grub reads
+		 * grubenv ONLY when GRUB_DEFAULT=saved. Setting it otherwise is a
+		 * write that succeeds, reports success, and changes nothing that
+		 * boots — so it is refused, and the refusal says what to change. This
+		 * pane does not edit /etc/default/grub: that file is where a person
+		 * keeps their own boot decisions, and no SynapseOS machine here runs
+		 * GRUB to have proven an edit to it. */
+		char defconf[512], val[256] = "";
+		snprintf(defconf, sizeof defconf, "%s/etc/default/grub", boot_root());
+		conf_value(defconf, "GRUB_DEFAULT", val, sizeof val);
+		if (strcmp(val, "saved")) {
+			*why = NULL;
+			return boot_refuse("GRUB only remembers a default when "
+			                   "/etc/default/grub sets GRUB_DEFAULT=saved — set "
+			                   "that, run grub-mkconfig, and this will work");
+		}
+		if (!grub_scan(bl, "", 0, img, release, scratch, scap)) {
+			*why = NULL;
+			return boot_refuse("no menu entry in grub.cfg names that kernel — "
+			                   "make it bootable first");
+		}
+		*why = "grub-set-default writes saved_entry, which GRUB_DEFAULT=saved "
+		       "tells grub to read";
+		argv[n++] = (char *)"pkexec";
+		argv[n++] = (char *)"grub-set-default";
+		argv[n++] = scratch;
+		break;
+	}
+
+	default:
+		*why = NULL;
+		return boot_refuse("no bootloader configuration found");
+	}
+
+	argv[n] = NULL;
+	return 0;
+}
+
+int do_default(int argc, char **argv)
+{
+	if (argc < 1)
+		return boot_refuse("default needs a kernel name "
+		                   "(default <kernel> [--loader <name>] [--confirm])");
+
+	const char *pkg = argv[0];
+	const char *want_loader = NULL;
+	int confirmed = 0, as_root = 0;
+
+	for (int i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--confirm")) { confirmed = 1; continue; }
+		/* Set by the pkexec re-exec above, never by a person: it means "you
+		 * are the privileged child, do the limine edit yourself". It implies
+		 * --confirm because the parent already required it — asking the child
+		 * to confirm a decision the user made two processes ago would be
+		 * theatre, and the parent is where the boundary is. */
+		if (!strcmp(argv[i], "--as-root")) { as_root = 1; confirmed = 1; continue; }
+		if (!strcmp(argv[i], "--loader")) {
+			if (++i >= argc) return boot_refuse("--loader needs a name");
+			want_loader = argv[i];
+			continue;
+		}
+		return boot_refuse("unknown option — try --loader <name> or --confirm");
+	}
+
+	if (!syn_kernel_known(pkg))
+		return boot_refuse("that is not one of the kernels this pane manages");
+
+	struct syn_boot found[6];
+	int n = syn_boot_detect(found, sizeof found / sizeof found[0]);
+	if (n == 0)
+		return boot_refuse("no bootloader configuration found");
+
+	const struct syn_boot *bl = NULL;
+	if (want_loader) {
+		for (int i = 0; i < n; i++)
+			if (!strcmp(syn_boot_name(found[i].kind), want_loader))
+				bl = &found[i];
+		if (!bl)
+			return boot_refuse("no configuration present for that bootloader");
+	} else if (n == 1) {
+		bl = &found[0];
+	} else {
+		fprintf(stderr, "syn-settings: more than one bootloader is configured "
+		                "here; name one with --loader:\n");
+		for (int i = 0; i < n; i++)
+			fprintf(stderr, "    %-13s %s\n",
+			        syn_boot_name(found[i].kind), found[i].conf);
+		return 2;
+	}
+
+	char release[128] = "";
+	syn_kernel_release(pkg, release, sizeof release);
+
+	/* The privileged half. Everything is recomputed here — the loader, the
+	 * config, the entry path — so nothing the unprivileged parent said is
+	 * trusted beyond the name of a kernel this app already knows. */
+	if (as_root) {
+		if (bl->kind != SYN_BL_LIMINE)
+			return boot_refuse("--as-root is only for the limine edit; the "
+			                   "other loaders have their own tools");
+		struct lim_walk w;
+		limine_walk(bl->conf, pkg, release, "", 1, &w);
+		if (!w.found)
+			return boot_refuse("that kernel has no entry in limine.conf");
+		return limine_write_default(bl->conf, w.found_esc);
+	}
+
+	char *cmd[8];
+	char scratch[768];
+	const char *why = NULL;
+	int rc = default_command(bl, pkg, release, cmd, scratch, sizeof scratch, &why);
+	if (rc != 0) return rc;
+
+	if (!confirmed && !g_dry_run) {
+		fprintf(stderr,
+		        "syn-settings: this changes which kernel boots and needs "
+		        "--confirm.\n"
+		        "  bootloader : %s\n"
+		        "  config     : %s\n"
+		        "  because    : %s\n"
+		        "  would run  :",
+		        syn_boot_name(bl->kind), bl->conf, why ? why : "-");
+		for (int i = 0; cmd[i]; i++) fprintf(stderr, " %s", cmd[i]);
+		fputc('\n', stderr);
+		return 2;
+	}
+
+	if (g_dry_run) {
+		printf("loader\t%s\n", syn_boot_name(bl->kind));
+		printf("config\t%s\n", bl->conf);
+		printf("why\t%s\n", why ? why : "-");
+		fputs("command\t", stdout);
+		for (int i = 0; cmd[i]; i++) printf("%s%s", i ? " " : "", cmd[i]);
+		putchar('\n');
+		return 0;
+	}
+
+	rc = run_or_show_progress(cmd);
+	if (rc != 0)
+		fprintf(stderr, "syn-settings: %s exited %d — the default was NOT "
+		                "changed; authorisation may have been refused\n",
+		        cmd[0], rc);
+	return rc;
 }
