@@ -319,12 +319,18 @@ static const char *selected_combo(void)
     return k->all[k->view[k->selected]].combo;
 }
 
-static int view_has(const char *desc)
+static int view_count(const char *desc)
 {
     syn_keys_t *k = &g_s.keys;
+    int n = 0;
     for (int i = 0; i < k->n_view; i++)
-        if (strcmp(k->all[k->view[i]].desc, desc) == 0) return 1;
-    return 0;
+        if (strcmp(k->all[k->view[i]].desc, desc) == 0) n++;
+    return n;
+}
+
+static int view_has(const char *desc)
+{
+    return view_count(desc) > 0;
 }
 
 /* ── The list comes from the bind table ──────────────────── */
@@ -749,21 +755,36 @@ static void test_tap_action(void)
     keys_show(&g_s);
     binds_set = binds_unbound = 0;
 
+    int before = g_s.keys.n;
     CHECK(select_desc("Wallpaper picker"), "found a row to put on the tap");
     keys_key(&g_s, XKB_KEY_F3, 0);
     CHECK(strcmp(g_s.config.tap_action, "wallpaper") == 0 &&
           g_s.config.tap_arg[0] == '\0',
           "F3 puts the selected row's action on the tap (got '%s')",
           g_s.config.tap_action);
-    CHECK(binds_set == 0 && binds_unbound == 0,
-          "…and touches no bind: the row it copied keeps its own chord");
+
+    /* And TAKES the chord. Leaving it bound is what put rofi on both the Super
+     * tap and Super+Space: one feature answering two keys, one of which cannot
+     * be rebound afterwards because syn_rebind_apply() refuses a taken combo. */
+    CHECK(binds_unbound == 1 && strcmp(last_unbound, "super+w") == 0,
+          "…and frees the chord it came from (%d unbound, last '%s')",
+          binds_unbound, last_unbound);
+    CHECK(binds_set == 0, "…without binding anything (got %d)", binds_set);
     CHECK(strstr(g_s.keys.status, "Super tap") != NULL &&
-          strstr(g_s.keys.status, "Wallpaper picker") != NULL,
-          "…and names both halves (got '%s')", g_s.keys.status);
+          strstr(g_s.keys.status, "Wallpaper picker") != NULL &&
+          strstr(g_s.keys.status, "freed") != NULL,
+          "…and names both halves and the freed key (got '%s')", g_s.keys.status);
 
     /* The list is re-read, so the tap row now DESCRIBES what it opens. A row
      * that always said "Start menu" would be the list disagreeing with the
-     * keyboard, which is the same bug the combo column was fixed for. */
+     * keyboard, which is the same bug the combo column was fixed for.
+     *
+     * Exactly ONE row names it now, and it is the tap: the list IS the bind
+     * table, so the freed chord's row is gone from it. Two rows reading
+     * "Wallpaper picker" would be the duplicate still on screen. */
+    CHECK(view_count("Wallpaper picker") == 1 && g_s.keys.n == before - 1,
+          "the row it came from is gone (%d named it, %d rows vs %d)",
+          view_count("Wallpaper picker"), g_s.keys.n, before);
     CHECK(select_desc("Wallpaper picker") &&
           strcmp(selected_combo(), "Super (tap)") == 0,
           "the tap row now reads as the thing it opens (got '%s')",
@@ -777,12 +798,57 @@ static void test_tap_action(void)
           strcmp(g_s.config.tap_arg, "synui-screenshot region") == 0,
           "the argument goes with it (got '%s' / '%s')",
           g_s.config.tap_action, g_s.config.tap_arg);
+    CHECK(strcmp(last_unbound, "super+shift+s") == 0,
+          "the freed chord is that row's, modifiers and all (got '%s')",
+          last_unbound);
 
-    /* Twice on the same row is not an edit. Said out loud rather than silently
-     * rewriting binds.state, like every other rebind that changes nothing. */
+    /* The state velle was actually in: the tap already opens this feature AND
+     * the chord is still live. F3 is the key that clears it up, so it has to
+     * act here — "Unchanged" would be true of the tap and leave the duplicate
+     * keybinding it was pressed to remove. */
+    rig_init();
+    snprintf(g_s.config.tap_action, sizeof(g_s.config.tap_action), "wallpaper");
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+    /* Row 0 is the tap, which now reads "Wallpaper picker" too — take the
+     * SECOND one, the chord, or this presses F3 on the tap row. */
+    CHECK(view_count("Wallpaper picker") == 2, "the duplicate is on screen");
+    CHECK(select_desc("Wallpaper picker"), "found the tap row");
+    g_s.keys.selected++;
+    CHECK(strcmp(selected_combo(), "Super+W") == 0,
+          "…and the row under it is the chord (got '%s')", selected_combo());
     keys_key(&g_s, XKB_KEY_F3, 0);
-    CHECK(strcmp(g_s.keys.status, "Unchanged") == 0,
-          "the same row twice is 'Unchanged' (got '%s')", g_s.keys.status);
+    CHECK(binds_unbound == 1 && view_count("Wallpaper picker") == 1,
+          "F3 clears a duplicate the tap already runs (%d unbound)",
+          binds_unbound);
+    CHECK(strstr(g_s.keys.status, "freed") != NULL &&
+          strstr(g_s.keys.status, "already opens") != NULL,
+          "…and says it was the key, not the action, that moved (got '%s')",
+          g_s.keys.status);
+
+    /* With no tap key the chord STAYS. `tap_key = none` runs nothing, so
+     * freeing it here would leave the feature on no key at all — reachable from
+     * neither a chord nor a tap, and recoverable only by Ctrl+Shift+R. */
+    rig_init();
+    g_s.config.tap_mod = 0;
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+
+    CHECK(select_desc("Wallpaper picker"), "found the row again");
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.config.tap_action, "wallpaper") == 0 && binds_unbound == 0,
+          "a tap with no key takes the action but not the chord (%d unbound)",
+          binds_unbound);
+    CHECK(strstr(g_s.keys.status, "no tap key yet") != NULL,
+          "…and sends you to F2 first (got '%s')", g_s.keys.status);
+
+    /* Which leaves the one case that really is a no-op: same action, and no
+     * chord left to take either. The cursor has not moved — nothing was removed
+     * from the list — so this is the same row a second time. */
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.keys.status, "Unchanged") == 0 && binds_unbound == 0,
+          "the same row twice with nothing to free is 'Unchanged' (got '%s')",
+          g_s.keys.status);
 
     /* The tap row cannot be pointed at itself — that is the one row whose
      * action IS whatever this key is setting, so it would be a no-op that looks

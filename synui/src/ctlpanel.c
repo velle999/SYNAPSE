@@ -2312,6 +2312,11 @@ static void ctlpanel_tap_action_set(syn_server_t *s)
     if (!ctlpanel_shortcut_selected(s, &sc)) return;
 
     syn_rebind_set_tap_action(s, &sc, cp->status, sizeof(cp->status));
+
+    /* The row the cursor was on is GONE — F3 takes its chord, and this list is
+     * the bind table. Same clamp the rebind path above owes, for the same
+     * reason: the next render builds a list one row shorter than the cursor. */
+    ctlpanel_shortcut_scroll_to_sel(s);
 }
 
 static void ctlpanel_rebind_reset_all(syn_server_t *s)

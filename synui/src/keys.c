@@ -608,9 +608,15 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
  * screen already names every action this desktop has, so "put the tap on that
  * one" is a cursor and a keypress instead of a picker nobody would find.
  *
- * That the row's action is copied and not referenced is the point: after this
- * the tap and that row's chord both run the same thing, and moving the chord
- * later does not drag the tap along with it.
+ * That the row's action is copied and not referenced is the point: the tap gets
+ * a value, not a link, so moving a chord later does not drag the tap with it.
+ *
+ * It also TAKES the row's chord away (pkgrel 339). The tap is a key too, so
+ * leaving the old one bound answers the same feature on two keys — and the one
+ * it leaves occupied is a chord the user now has no use for and cannot rebind,
+ * because syn_rebind_apply() refuses a combo that is already taken. That is
+ * exactly how velle's Super+Space stayed on rofi after the tap was pointed at
+ * it. The escape hatch is Ctrl+Shift+R, which puts every shortcut back.
  */
 int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
                               char *status, size_t status_n)
@@ -629,8 +635,25 @@ int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
         return 0;
     }
 
-    if (strcmp(s->config.tap_action, sc->action) == 0 &&
-        strcmp(s->config.tap_arg,    sc->arg)    == 0) {
+    int changed = strcmp(s->config.tap_action, sc->action) != 0 ||
+                  strcmp(s->config.tap_arg,    sc->arg)    != 0;
+
+    /* Take the chord, but ONLY once there is a tap to take it onto. With
+     * `tap_key = none` the tap runs nothing at all, so freeing the chord here
+     * would leave the feature on no key whatever — the action would still be
+     * spelled out in binds.state and be unreachable from the keyboard, which is
+     * a worse answer than the duplicate this is here to remove. The status line
+     * below already sends them to F2 on the tap row; the chord goes when they
+     * come back. */
+    int freed = 0;
+    if (s->config.tap_mod && sc->sym != XKB_KEY_NoSymbol)
+        freed = config_unbind_combo(&s->config, sc->mods, sc->sym);
+
+    /* Twice on the same row is only "Unchanged" if there was also no chord left
+     * to take. A tap that already opens this row's action while the row keeps
+     * its own key is the very state this change exists to clear up, and F3 is
+     * the key that clears it — refusing there would leave no way out of it. */
+    if (!changed && !freed) {
         snprintf(status, status_n, "Unchanged");
         return 0;
     }
@@ -639,12 +662,21 @@ int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
     snprintf(s->config.tap_arg,    sizeof(s->config.tap_arg),    "%s", sc->arg);
     binds_state_save(s);
 
-    wlr_log(WLR_INFO, "synui: tap action -> %s %s", sc->action, sc->arg);
+    wlr_log(WLR_INFO, "synui: tap action -> %s %s%s%s", sc->action, sc->arg,
+            freed ? ", freed " : "", freed ? sc->combo : "");
 
     /* Named by what it opens, not by the action word: "spawn rofi -show drun"
      * is not what the row said, and the message has to be recognisable as the
-     * line the cursor was on. */
-    if (s->config.tap_mod)
+     * line the cursor was on. The freed chord is named for a second reason —
+     * the row it was on has just vanished from the list under the cursor, and a
+     * disappearing line needs to be accounted for. */
+    if (freed && changed)
+        snprintf(status, status_n, "A %s tap now opens %s — %s freed",
+                 ctlpanel_tap_key_name(s->config.tap_mod), sc->desc, sc->combo);
+    else if (freed)
+        snprintf(status, status_n, "%s freed — the %s tap already opens %s",
+                 sc->combo, ctlpanel_tap_key_name(s->config.tap_mod), sc->desc);
+    else if (s->config.tap_mod)
         snprintf(status, status_n, "A %s tap now opens %s",
                  ctlpanel_tap_key_name(s->config.tap_mod), sc->desc);
     else

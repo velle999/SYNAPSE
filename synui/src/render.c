@@ -5206,7 +5206,7 @@ void synui_render_ctlpanel(syn_server_t *s)
              ? "Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for no tap \xc2\xb7 Esc cancels"
              : "Press the new key for this shortcut \xc2\xb7 Esc cancels";
     else if (cp->cat == CTL_CAT_SHORTCUTS)
-        hint = "F2 rebind \xc2\xb7 F3 put it on the tap \xc2\xb7 Ctrl+Shift+R reset all \xc2\xb7 Esc back";
+        hint = "F2 rebind \xc2\xb7 F3 moves it onto the tap \xc2\xb7 Ctrl+Shift+R reset all \xc2\xb7 Esc back";
     else if (ctlpanel_selected_row(s) >= 0 &&
              ctlpanel_row_kind(ctlpanel_selected_row(s)) == CTL_KIND_VALUE)
         /* Left/Right are the value here, so the usual "Left goes back" would be
@@ -5452,7 +5452,7 @@ void synui_render_keys(syn_server_t *s)
     else if (k->capturing)
         foot = "Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels";
     else
-        foot = "Filter \xc2\xb7 Enter runs it \xc2\xb7 F2 rebinds \xc2\xb7 F3 puts it on the tap \xc2\xb7 Ctrl+Shift+R resets";
+        foot = "Filter \xc2\xb7 Enter runs it \xc2\xb7 F2 rebinds \xc2\xb7 F3 moves it onto the tap \xc2\xb7 Ctrl+Shift+R resets";
     syn_show_text(cr, foot);
 
     cairo_destroy(cr);
