@@ -88,6 +88,9 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
 { (void)s; (void)sc; (void)sym; (void)mods; if (n) status[0] = '\0'; return 0; }
 void syn_rebind_reset_all(syn_server_t *s, char *status, size_t n)
 { (void)s; if (n) status[0] = '\0'; }
+int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                              char *status, size_t n)
+{ (void)s; (void)sc; if (n) status[0] = '\0'; return 0; }
 
 void deco_toggle_titlebars(syn_server_t *s)   { (void)s; }
 void dock_state_save(syn_server_t *s)         { (void)s; }

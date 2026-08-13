@@ -191,6 +191,10 @@ static int        g_base_count;
  * table — it is one modifier mask — but it is rebound through the same helper
  * and has to go back on the same reset, so it is part of the same diff. */
 static uint32_t   g_base_tap;
+/* And what the tap RUNS, for the same reason: `tap_action` is rebound from the
+ * same panels and has to come back on the same Ctrl+Shift+R. */
+static char       g_base_tap_action[SYN_BIND_ACTION_LEN];
+static char       g_base_tap_arg[SYN_BIND_ARG_LEN];
 
 static int binds_state_path(char *buf, size_t n)
 {
@@ -241,6 +245,9 @@ static bool live_holds_combo(const syn_config_t *cfg, uint32_t mods,
  *                      is written the same way and for the same reason: a diff,
  *                      so a user who moved the tap onto Alt still gets whatever
  *                      the next synui makes the default of everything else.
+ *   tap_action = …     the fourth, and the tap's other half: what it runs. Same
+ *                      diff rule — a user who pointed the tap at rofi has said
+ *                      nothing about the rest of the table.
  *
  * Through a temp file and rename(), like settings.state: truncating the real
  * one and dying mid-write would lose every rebind the user has ever made.
@@ -299,6 +306,16 @@ static void binds_state_save(syn_server_t *s)
         changed++;
     }
 
+    /* The fourth line, and the tap's other half: what it opens. Written whole —
+     * action and argument — because `spawn rofi -show drun` is one setting, and
+     * because the parser this file is read back by splits them the same way. */
+    if (strcmp(s->config.tap_action, g_base_tap_action) != 0 ||
+        strcmp(s->config.tap_arg,    g_base_tap_arg)    != 0) {
+        fprintf(f, "tap_action = %s%s%s\n", s->config.tap_action,
+                s->config.tap_arg[0] ? " " : "", s->config.tap_arg);
+        changed++;
+    }
+
     fclose(f);
 
     /* An empty diff means every key is back where it started, and the right
@@ -332,6 +349,8 @@ void binds_state_load(syn_config_t *cfg)
     memcpy(g_base_binds, cfg->binds,
            (size_t)g_base_count * sizeof(g_base_binds[0]));
     g_base_tap = cfg->tap_mod;
+    snprintf(g_base_tap_action, sizeof(g_base_tap_action), "%s", cfg->tap_action);
+    snprintf(g_base_tap_arg,    sizeof(g_base_tap_arg),    "%s", cfg->tap_arg);
 
     char path[256];
     if (!binds_state_path(path, sizeof(path))) return;
@@ -355,12 +374,13 @@ void binds_state_load(syn_config_t *cfg)
         char *val = eq + 1;
         while (*val == ' ' || *val == '\t') val++;
 
-        /* Only the three keys this file is allowed to carry. It is generated,
+        /* Only the four keys this file is allowed to carry. It is generated,
          * so anything else in it is corruption or a hand edit that meant to be
          * in synuirc — and applying an arbitrary key from here would make a
          * generated file a second place settings can hide. */
-        if (strcmp(key, "bind")    != 0 && strcmp(key, "unbind") != 0 &&
-            strcmp(key, "tap_key") != 0) {
+        if (strcmp(key, "bind")       != 0 && strcmp(key, "unbind") != 0 &&
+            strcmp(key, "tap_key")    != 0 &&
+            strcmp(key, "tap_action") != 0) {
             wlr_log(WLR_ERROR, "synui: binds.state: ignoring '%s'", key);
             continue;
         }
@@ -578,6 +598,62 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
     return 1;
 }
 
+/*
+ * Point the tap at this row's action — F3 in both panels.
+ *
+ * The tap is the one shortcut with TWO things to choose: which key it is, and
+ * what it does. syn_rebind_apply() above answers the first by capturing a
+ * modifier; this answers the second, and it does it by naming a ROW rather than
+ * by capturing anything, because an action is not a keystroke — the list on
+ * screen already names every action this desktop has, so "put the tap on that
+ * one" is a cursor and a keypress instead of a picker nobody would find.
+ *
+ * That the row's action is copied and not referenced is the point: after this
+ * the tap and that row's chord both run the same thing, and moving the chord
+ * later does not drag the tap along with it.
+ */
+int syn_rebind_set_tap_action(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                              char *status, size_t status_n)
+{
+    if (!sc || !sc->action[0]) {
+        /* The collapsed workspace rows: nine binds, no single action to copy.
+         * Same refusal as F2 makes on them, for the same reason. */
+        snprintf(status, status_n,
+                 "That row names no single action to put on the tap");
+        return 0;
+    }
+
+    if (sc->tap) {
+        snprintf(status, status_n,
+                 "That IS the tap — pick the row you want it to open");
+        return 0;
+    }
+
+    if (strcmp(s->config.tap_action, sc->action) == 0 &&
+        strcmp(s->config.tap_arg,    sc->arg)    == 0) {
+        snprintf(status, status_n, "Unchanged");
+        return 0;
+    }
+
+    snprintf(s->config.tap_action, sizeof(s->config.tap_action), "%s", sc->action);
+    snprintf(s->config.tap_arg,    sizeof(s->config.tap_arg),    "%s", sc->arg);
+    binds_state_save(s);
+
+    wlr_log(WLR_INFO, "synui: tap action -> %s %s", sc->action, sc->arg);
+
+    /* Named by what it opens, not by the action word: "spawn rofi -show drun"
+     * is not what the row said, and the message has to be recognisable as the
+     * line the cursor was on. */
+    if (s->config.tap_mod)
+        snprintf(status, status_n, "A %s tap now opens %s",
+                 ctlpanel_tap_key_name(s->config.tap_mod), sc->desc);
+    else
+        snprintf(status, status_n,
+                 "Tap set to %s — no tap key yet, press F2 on the tap row",
+                 sc->desc);
+    return 1;
+}
+
 /* Put every shortcut back: delete binds.state and reload. Reload rather than
  * un-applying the diff by hand — synui_config_reload() is the one path that
  * knows how to re-seat everything a config change touches, and a second
@@ -645,6 +721,32 @@ static void keys_capture_finish(syn_server_t *s, xkb_keysym_t sym, uint32_t mods
         keys_scroll_to_selection(s);
     }
 
+    synui_render_keys(s);
+}
+
+/* F3: hand the selected row's action to the modifier tap. No capture — the row
+ * IS the answer — so unlike a rebind this takes effect on the keypress. The
+ * list is re-snapshotted because the tap row's own text changes: it names what
+ * it opens, and that is what just moved. */
+static void keys_tap_action_set(syn_server_t *s)
+{
+    syn_keys_t *k = &s->keys;
+    const syn_ctl_shortcut_t *sel = keys_selected(s);
+    if (!sel) return;
+
+    /* By value, for syn_rebind_apply()'s reason one step removed: the re-snapshot
+     * below overwrites all[], and `sel` points into it. */
+    syn_ctl_shortcut_t sc = *sel;
+
+    if (syn_rebind_set_tap_action(s, &sc, k->status, sizeof(k->status))) {
+        int save_sel = k->selected, scroll = k->scroll;
+        k->n = ctlpanel_shortcuts(s, k->all, KEYS_MAX);
+        keys_filter(s);
+        k->selected = save_sel < k->n_view ? save_sel
+                                           : (k->n_view ? k->n_view - 1 : 0);
+        k->scroll   = scroll;
+        keys_scroll_to_selection(s);
+    }
     synui_render_keys(s);
 }
 
@@ -878,6 +980,14 @@ int keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
      * Cannot be a letter: the box types letters. */
     case XKB_KEY_F2:
         keys_capture_begin(s);
+        return 1;
+
+    /* F3 puts the SELECTED row on the modifier tap. Next to F2 because it is
+     * the same edit seen from the other side — F2 answers "which key runs this
+     * row", F3 answers "which row does the tap run" — and it needs no capture
+     * at all: the row under the cursor is the whole answer. */
+    case XKB_KEY_F3:
+        keys_tap_action_set(s);
         return 1;
 
     /* Tab would be the obvious "next row" — it is also a shortcut the list

@@ -2849,6 +2849,20 @@ typedef struct {
      * input.c resolves the pressed keysym back with syn_tap_mod_from_sym(). */
     uint32_t tap_mod;
 
+    /* And WHAT that tap does — a bind action and its argument, run through
+     * synui_binding_execute() exactly as a chord's would be. `tap_action` in
+     * synuirc; default "start_menu", which is what the tap did when it was the
+     * only thing it could do.
+     *
+     * Split from tap_mod because they answer different questions and moved at
+     * different times: tap_mod is "which key", and this is "which feature".
+     * Making the tap a (mods, action) pair rather than a hard-coded call is
+     * what lets it open rofi or the AI command bar — velle asked for exactly
+     * that after finding the rebind helper could only move the tap, never
+     * change what it opened. */
+    char tap_action[SYN_BIND_ACTION_LEN];
+    char tap_arg[SYN_BIND_ARG_LEN];
+
     /* Which QML tree synui-bar starts. A syn_bar_shell_t held as an int, for
      * the control panel's enum row. Read by systemd/synui-bar.sh, never by the
      * compositor — see the enum's comment. */
@@ -5625,6 +5639,15 @@ int         syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
                              xkb_keysym_t sym, uint32_t mods,
                              char *status, size_t status_n);
 void        syn_rebind_reset_all(syn_server_t *s, char *status, size_t status_n);
+/* Point the modifier tap at THIS row's action (F3 in both panels). The other
+ * half of the tap: syn_rebind_apply() moves it to another key, this says what
+ * it opens when tapped. Takes a row rather than an action string so the two
+ * panels cannot disagree about what is assignable — the collapsed workspace
+ * rows name no single action, and the tap row cannot be pointed at itself.
+ * Returns 1 if config.tap_action changed; `status` is filled either way. */
+int         syn_rebind_set_tap_action(syn_server_t *s,
+                                      const syn_ctl_shortcut_t *sc,
+                                      char *status, size_t status_n);
 void keys_hide(syn_server_t *s);
 void keys_toggle(syn_server_t *s);
 int  keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);

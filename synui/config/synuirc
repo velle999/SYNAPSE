@@ -550,16 +550,28 @@ record_edit = off
 #   touching them and says so in the log. Your bind wins.
 #
 # tap_key = super|ctrl|alt|shift|none  (default super)
-#   The start menu's other key, and the one shortcut that is not a bind: a
+#   The tap's key, and the one shortcut that is not a bind: a
 #   modifier pressed and released with NOTHING in between. Any other key or a
 #   mouse button in between disarms it, so the same key used as a modifier
 #   (super+e, super+drag) never opens the menu on release.
 #   `none` turns the tap off. The menu is still on super+escape's welcome page,
 #   the bar's start button and `synctl dispatch start_menu`, so switching the
 #   tap off is not switching the menu off.
-#   Super+/ then F2 on the "Start menu" row moves it: tap the modifier you want,
+#   Super+/ then F2 on the tap row moves it: tap the modifier you want,
 #   or Delete for none. That writes binds.state, not this file, and
 #   Ctrl+Shift+R in the same palette puts it back with every other shortcut.
+#
+# tap_action = <action> [arg]  (default start_menu)
+#   WHAT the tap opens. tap_key is which key; this is which feature, and it
+#   takes any action a `bind =` line takes — so the tap is not tied to the start
+#   menu:
+#       tap_action = spawn rofi -show drun    the application launcher
+#       tap_action = cmdbar                   the AI command bar
+#       tap_action = overview                 mission control
+#   Super+/ then F3 on ANY row points the tap at that row — no capture, the row
+#   under the cursor is the answer, and the tap row's own line then reads as
+#   whatever it opens. Written to binds.state, and it comes back on the same
+#   Ctrl+Shift+R as everything else.
 #
 # A bind on the same combo as a default replaces the default.
 # bind = super+w spawn rofi -show run

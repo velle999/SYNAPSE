@@ -458,7 +458,7 @@ static const struct ctl_item ctl_items[] = {
      * shortcut can be CHANGED, and Super+/ is only discoverable once you have
      * read the list it opens. */
     { CTL_ROW_KEYBINDS,     CTL_CAT_INPUT, CTL_KIND_PANEL, "Keyboard shortcuts", "keys",
-      .help = "The whole list, searchable. F2 on a row moves it to another key" },
+      .help = "Searchable. F2 moves a shortcut to another key, F3 onto the tap" },
     { CTL_ROW_NUMLOCK,      CTL_CAT_INPUT, CTL_KIND_TOGGLE, "NumLock on at login", NULL,
       .key = "numlock", .off = CFG(numlock), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_INPUT,
@@ -1406,10 +1406,17 @@ int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
                      ctlpanel_tap_key_name(s->config.tap_mod));
         else
             snprintf(out[n].combo, sizeof(out[n].combo), "Off");
-        snprintf(out[n].desc,  sizeof(out[n].desc),  "Start menu");
+        /* What it opens comes from the live config too, for the same reason the
+         * modifier does: `tap_action` can point the tap at rofi or the command
+         * bar, and a row that always said "Start menu" would be a list
+         * disagreeing with the keyboard on the other axis. */
+        snprintf(out[n].desc,  sizeof(out[n].desc),  "%s",
+                 action_desc(s->config.tap_action, s->config.tap_arg));
         /* No bind, but there IS an action behind it — the palette can run this
          * one even though no combo in the table produces it. */
-        snprintf(out[n].action, sizeof(out[n].action), "start_menu");
+        snprintf(out[n].action, sizeof(out[n].action), "%s",
+                 s->config.tap_action);
+        snprintf(out[n].arg,    sizeof(out[n].arg),    "%s", s->config.tap_arg);
         /* Rebindable, but to a bare modifier: `tap` is what tells the capture
          * loops that a Super press is the answer here and not a chord half. */
         out[n].rebindable = 1;
@@ -2230,6 +2237,19 @@ static void ctlpanel_rebind_finish(syn_server_t *s, xkb_keysym_t sym,
     ctlpanel_shortcut_scroll_to_sel(s);
 }
 
+/* F3: put the selected row's action on the modifier tap. No capture state to
+ * keep — the row is the answer — so this is the whole of it here, and the rules
+ * are keys.c's like the rest of the rebind path. */
+static void ctlpanel_tap_action_set(syn_server_t *s)
+{
+    syn_ctlpanel_t *cp = &s->ctlpanel;
+
+    syn_ctl_shortcut_t sc;
+    if (!ctlpanel_shortcut_selected(s, &sc)) return;
+
+    syn_rebind_set_tap_action(s, &sc, cp->status, sizeof(cp->status));
+}
+
 static void ctlpanel_rebind_reset_all(syn_server_t *s)
 {
     syn_rebind_reset_all(s, s->ctlpanel.status, sizeof(s->ctlpanel.status));
@@ -2669,6 +2689,18 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
                      "Rebinding lives in the Shortcuts category");
             synui_render_ctlpanel(s);
         }
+        return 1;
+
+    /* F3: point the modifier tap at the selected row. The palette's key, so the
+     * two panels do not mean different things by it. */
+    case XKB_KEY_F3:
+        if (in_shortcuts) {
+            ctlpanel_tap_action_set(s);
+        } else {
+            snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                     "The tap is set from the Shortcuts category");
+        }
+        synui_render_ctlpanel(s);
         return 1;
 
     case XKB_KEY_Escape:

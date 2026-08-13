@@ -1500,9 +1500,14 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         return;
     }
 
-    /* The modifier tap opens the start menu (see syn_server::tap_armed). Which
+    /* The modifier tap runs a bind action (see syn_server::tap_armed). Which
      * modifier is `tap_key` in synuirc — Super by default, and rebindable from
      * the palette; 0 means no tap at all, and then this whole block is inert.
+     * WHAT it runs is `tap_action`, default start_menu, and it goes through
+     * synui_binding_execute() so the tap can reach anything a chord can — rofi,
+     * the AI command bar, whatever the user pointed it at with F3 in the
+     * palette. It used to call synui_start_menu_open() here, which made the
+     * start menu the one thing the tap could ever do.
      *
      * That modifier is first and foremost a modifier, so the tap is defined by
      * what did *not* happen: armed on a bare press of it, disarmed by any other
@@ -1533,7 +1538,8 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
                        !s->keys.capturing && !s->ctlpanel.sc_capturing;
     } else if (is_tap_key && s->tap_armed) {
         s->tap_armed = 0;
-        synui_start_menu_open(s);
+        if (s->config.tap_action[0])
+            synui_binding_execute(s, s->config.tap_action, s->config.tap_arg);
     }
 
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {

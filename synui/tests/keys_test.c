@@ -267,6 +267,10 @@ static void rig_init(void)
      * mean "no tap at all", and the tap row would come up as "Off" in every
      * test that never mentions it. */
     g_s.config.tap_mod = WLR_MODIFIER_LOGO;
+    /* And what it opens, for the same reason — an empty tap_action would make
+     * the row's description come out of action_desc("") in every test. */
+    snprintf(g_s.config.tap_action, sizeof(g_s.config.tap_action), "start_menu");
+    g_s.config.tap_arg[0] = '\0';
 
     bind_add(WLR_MODIFIER_LOGO, XKB_KEY_w,     "wallpaper", "");
     bind_add(WLR_MODIFIER_LOGO, XKB_KEY_f,     "float_toggle", "");
@@ -724,6 +728,82 @@ static void test_rebind_tap(void)
     keys_hide(&g_s);
 }
 
+/* ── The tap's OTHER half: what it opens ─────────────────────
+ *
+ * F2 on the tap row answers "which key"; F3 on any row answers "which feature",
+ * and the two are independent — the whole point of the pair is that the tap
+ * could only ever open the start menu before, no matter which key it was moved
+ * onto. Assignment is by ROW rather than by capture, because an action is not a
+ * keystroke and the list on screen already names every one of them.
+ */
+static void test_tap_action(void)
+{
+    printf("keys: pointing the tap at another action\n");
+
+    rig_init();
+    keys_show(&g_s);
+    binds_set = binds_unbound = 0;
+
+    CHECK(select_desc("Wallpaper picker"), "found a row to put on the tap");
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.config.tap_action, "wallpaper") == 0 &&
+          g_s.config.tap_arg[0] == '\0',
+          "F3 puts the selected row's action on the tap (got '%s')",
+          g_s.config.tap_action);
+    CHECK(binds_set == 0 && binds_unbound == 0,
+          "…and touches no bind: the row it copied keeps its own chord");
+    CHECK(strstr(g_s.keys.status, "Super tap") != NULL &&
+          strstr(g_s.keys.status, "Wallpaper picker") != NULL,
+          "…and names both halves (got '%s')", g_s.keys.status);
+
+    /* The list is re-read, so the tap row now DESCRIBES what it opens. A row
+     * that always said "Start menu" would be the list disagreeing with the
+     * keyboard, which is the same bug the combo column was fixed for. */
+    CHECK(select_desc("Wallpaper picker") &&
+          strcmp(selected_combo(), "Super (tap)") == 0,
+          "the tap row now reads as the thing it opens (got '%s')",
+          selected_combo());
+
+    /* An argument is part of the action: "spawn" alone would run nothing, and
+     * this is the shape velle wanted the tap in — rofi is a spawn with an arg. */
+    CHECK(select_desc("synui-screenshot region"), "found a spawn row");
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.config.tap_action, "spawn") == 0 &&
+          strcmp(g_s.config.tap_arg, "synui-screenshot region") == 0,
+          "the argument goes with it (got '%s' / '%s')",
+          g_s.config.tap_action, g_s.config.tap_arg);
+
+    /* Twice on the same row is not an edit. Said out loud rather than silently
+     * rewriting binds.state, like every other rebind that changes nothing. */
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.keys.status, "Unchanged") == 0,
+          "the same row twice is 'Unchanged' (got '%s')", g_s.keys.status);
+
+    /* The tap row cannot be pointed at itself — that is the one row whose
+     * action IS whatever this key is setting, so it would be a no-op that looks
+     * like a working assignment. */
+    rig_init();
+    keys_show(&g_s);
+    CHECK(select_desc("Start menu") &&
+          strcmp(selected_combo(), "Super (tap)") == 0, "on the tap row");
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.config.tap_action, "start_menu") == 0,
+          "F3 on the tap row changes nothing");
+    CHECK(strstr(g_s.keys.status, "IS the tap") != NULL,
+          "…and says why (got '%s')", g_s.keys.status);
+
+    /* And the collapsed workspace row, which names nine actions and none of
+     * them — the same refusal F2 makes on it, for the same reason. */
+    CHECK(select_desc("Switch to workspace"), "found the collapsed row");
+    keys_key(&g_s, XKB_KEY_F3, 0);
+    CHECK(strcmp(g_s.config.tap_action, "start_menu") == 0 &&
+          strstr(g_s.keys.status, "no single action") != NULL,
+          "a row that is nine binds cannot go on the tap (got '%s')",
+          g_s.keys.status);
+
+    keys_hide(&g_s);
+}
+
 static void test_rebind_reset(void)
 {
     printf("keys: putting every shortcut back\n");
@@ -1002,6 +1082,7 @@ int main(void)
     test_rebind();
     test_rebind_refusals();
     test_rebind_tap();
+    test_tap_action();
     test_rebind_reset();
     test_modal_contract();
     test_ctlpanel_shortcut_cursor();

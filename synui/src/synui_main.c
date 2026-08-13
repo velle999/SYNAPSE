@@ -2437,9 +2437,12 @@ static void usage(const char *prog) {
          * the only copy that is hand-written (the control panel's shortcuts
          * column is generated from the live bind table, so it cannot drift).
          * The tap alone opens the start menu; it is not a bind-table entry, so
-         * `bind =` cannot move it and `tap_key =` is what does. */
+         * `bind =` cannot move it — `tap_key =` moves it and `tap_action =`
+         * says what it opens. */
         "Default keybindings (override with 'bind =' lines in synuirc):\n"
-        "  Super (tapped)     Start menu ('tap_key =' moves it; none = off)\n"
+        "  Super (tapped)     Start menu ('tap_key =' moves it, none = off;\n"
+        "                     'tap_action =' picks what it opens, or F3 in\n"
+        "                     the Super+/ palette)\n"
         "  Super+Enter        Open terminal\n"
         "  Super+Space        Application launcher (rofi)\n"
         "  Super+=            Open AI command bar\n"

@@ -28,6 +28,11 @@
  * The one shortcut that is not a bind, because it is defined by the ABSENCE of
  * a chord — a modifier pressed and released with nothing in between:
  *   tap_key = super|ctrl|alt|shift|none   (default super)
+ *   tap_action = <action> [arg]           (default start_menu)
+ * The first is WHICH key, the second is WHAT it opens — any bind action, so
+ * `tap_action = spawn rofi -show drun` or `tap_action = cmdbar` are as valid as
+ * the default. Two keys because they are two questions: a user who moves the
+ * tap onto Alt has not said anything about what it should open.
  * That tap opens the start menu (input.c's syn_server::tap_armed). `none` turns
  * it off, which is the only way to stop a Super that is being used as a
  * modifier from occasionally opening the menu on a keyboard that reports the
@@ -1106,6 +1111,11 @@ static void config_set_defaults(syn_config_t *cfg)
     /* A tapped Super opens the start menu, the way it does everywhere else —
      * the default the key is named after. */
     cfg->tap_mod           = WLR_MODIFIER_LOGO;
+    /* ...and it opens the start menu, which is the only thing the tap could do
+     * before `tap_action` existed. Keeping that as the default is what makes
+     * the new key invisible to everyone who does not want it. */
+    snprintf(cfg->tap_action, sizeof(cfg->tap_action), "start_menu");
+    cfg->tap_arg[0]        = '\0';
     /* The shipped bar, and the system icon theme. Both read by synui-bar, not
      * by the compositor — see syn_bar_shell_t. */
     cfg->bar_shell         = SYN_BAR_SHELL_SYNAPSE;
@@ -1901,6 +1911,28 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             if (m) cfg->tap_mod = m;
             else   wlr_log(WLR_ERROR, "synui: tap_key: unknown '%s' "
                                       "(super|ctrl|alt|shift|none)", val);
+        }
+    }
+    /* What that tap runs. Split on the first whitespace exactly as `bind =`
+     * splits its own action from its argument, and for the same reason: the tap
+     * takes any bind action, so `spawn rofi -show drun` has to survive as one
+     * action and one argument rather than as a truncated word.
+     *
+     * Not validated against the action table here — input.c owns that list and
+     * logs an unknown action when the tap fires, which is the same treatment a
+     * mistyped `bind =` gets. Duplicating the table to check it early would be
+     * a second list to keep in step. */
+    else if (strcmp(key, "tap_action") == 0) {
+        const char *sp = val;
+        while (*sp && !isspace((unsigned char)*sp)) sp++;
+        size_t alen = (size_t)(sp - val);
+        if (alen == 0 || alen >= sizeof(cfg->tap_action)) {
+            wlr_log(WLR_ERROR, "synui: tap_action: bad action in '%s'", val);
+        } else {
+            memcpy(cfg->tap_action, val, alen);
+            cfg->tap_action[alen] = '\0';
+            while (*sp && isspace((unsigned char)*sp)) sp++;
+            snprintf(cfg->tap_arg, sizeof(cfg->tap_arg), "%s", sp);
         }
     }
     /* Which QML tree synui-bar starts. The compositor never acts on this — it
