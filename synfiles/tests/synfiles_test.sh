@@ -258,6 +258,45 @@ eq "du on a file reports its size" "5000" \
 "$SYNFILES" du "$T/does-not-exist" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "du on a missing path exits 1" || bad "du on a missing path did not exit 1"
 
+# A SYMLINK IS NOT THE TREE IT POINTS AT. `du` reports the link itself, the way
+# `list` shows it, and never walks through it — so the number can never be some
+# other directory's total wearing this name.
+ln -s "$T/du" "$T/du-link"
+eq "du does not walk through a symlink to a directory" "$(printf '%s' "$T/du" | wc -c)" \
+   "$("$SYNFILES" --rec du "$T/du-link" | awk -F'\t' 'END {print $1}')"
+
+# …AND IT MUST NOT BE PERSUADED TO. The name was checked with lstat() and then
+# opened again by name — two resolutions of one path, and a plain open() follows
+# a symlink that lstat() would not. Swapping the directory for a symlink between
+# the two sent the whole walk into another tree and reported ITS size as yours;
+# a preloaded lstat that swapped the path won that race every time.
+#
+# The open is now the test: O_DIRECTORY refuses a non-directory, O_NOFOLLOW
+# refuses the symlink, and the numbers come from fstat() on that descriptor. The
+# recursion always worked this way, and CodeQL flagged the entry point that did
+# not (cpp/toctou-race-condition, alert #12).
+_l="$(dirname "$0")/../src/listing.c"
+if [ -f "$_l" ]; then
+    # THE ENTRY POINT SPECIFICALLY — open(path, …), not the openat() in the
+    # recursion. Matching bare "O_NOFOLLOW" would find the recursion, which was
+    # always right, and so would pass against the very bug this guards.
+    grep -q 'open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW' "$_l" \
+        && ok "du opens the top of the walk with O_NOFOLLOW" \
+        || bad "du's entry-point open can follow a symlink again"
+    # The old shape: a bare open() of the path with no O_NOFOLLOW.
+    grep -qE 'open\([^,]*path[^)]*O_DIRECTORY \| O_CLOEXEC' "$_l" \
+        && bad "the check-then-open pattern is back in cmd_du" \
+        || ok "cmd_du no longer opens a path it only checked by name"
+    # The recursion was already descriptor-relative and symlink-refusing. It
+    # stays that way, or the walk can be redirected one level down instead.
+    grep -q 'openat(dirfd, e->d_name,' "$_l" \
+        && ok "the recursion still opens relative to its parent descriptor" \
+        || bad "du_walk no longer opens relative to the directory it is reading"
+    grep -q 'fstatat(dirfd, e->d_name, &st, AT_SYMLINK_NOFOLLOW)' "$_l" \
+        && ok "the recursion still stats without following symlinks" \
+        || bad "du_walk's stat can follow a symlink"
+fi
+
 # ── resolution ──────────────────────────────────────────────────────────────
 #
 # Every fixture here is a HEADER, written by hand, with no pixel data behind
