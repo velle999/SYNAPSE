@@ -9,7 +9,10 @@
 # Requirements: qemu, ovmf (for UEFI)
 #
 # Options (env vars):
-#   QEMU_RAM=8G      RAM (default: 4G — 8G+ recommended for 7B model)
+#   QEMU_RAM=4G      RAM (default: 8G. The stock ISO carries no model since
+#                    0.2.8 and runs fine in 4G; 8G is what a --with-model
+#                    image wants, and it stays the default so that one boots
+#                    without anyone having to know why it did not.)
 #   QEMU_CPUS=4      CPU count (default: 4)
 #   QEMU_VGA=virtio  VGA type (default: virtio)
 #   QEMU_KVM=1       Enable KVM (default: auto-detect)
