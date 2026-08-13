@@ -228,6 +228,12 @@ END {
 # relative and suppressed forms of the same code alone, before its opinion on
 # real sources is worth anything.
 if [ "$selftest" -eq 1 ]; then
+	# Plain output, even under Actions. The assertions below read the "file:line:"
+	# form, and an ::error annotation hung on a temp fixture would land on a file
+	# no one can open anyway — it would just decorate the log with two failures
+	# that are the test WORKING.
+	fmt=plain
+
 	fixture=$(mktemp -t toctou-fixture.XXXXXX.c)
 	trap 'rm -f "$fixture"' EXIT
 	cat >"$fixture" <<-'EOF'
