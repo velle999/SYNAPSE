@@ -822,8 +822,14 @@ sudo archiso/build.sh --with-model # embed a ~4.1 GB gguf in the image
 sudo archiso/build.sh --gpu=cuda   # NVIDIA backend for the ISO's own llama (needs cuda)
 sudo archiso/build.sh --gpu=vulkan # AMD/Intel backend (portable; needs shaderc)
 sudo archiso/build.sh --llama-only # build and stage llama.cpp, then stop
-sudo archiso/build.sh --jobs 8 --sign
+sudo archiso/build.sh --jobs=8     # parallel build jobs; defaults to nproc
 ```
+
+`--sign` also exists — it runs `gpg --detach-sign --armor` on the finished
+image — but note it runs as **root**, so it uses root's keyring, and it is the
+last step before the checksums: with no key there, a 25-minute build fails at
+the very end. Nothing in the release path consumes the `.asc`; the published
+checksums are the `.sha256`/`.b2sum` files the build always writes.
 
 Two defaults are worth stating because they used to be the other way round:
 
