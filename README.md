@@ -158,7 +158,7 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synnet`** | Network policy daemon with nftables integration. |
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
 | **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
-| **`synfiles`** | The file manager, and what a folder opens in. One C binary — tabs, split view, search, trash, undo, archives, drag-and-drop, properties — plus a quickshell window that only renders what `synfiles --rec` prints. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
+| **`synfiles`** | The file manager, and what a folder opens in. One C binary — tabs, split view, search, trash, undo, archives, drag-and-drop, properties — plus a quickshell window that only renders what `synfiles --rec` prints, and an arrow-key browser in the terminal for when there is no desktop to render it. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
 | **`syn-settings`** | The settings app. Displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, default applications, and where configuration actually lives. It reports what the system *reports* — every pane reads the real source (`localectl`, `timedatectl`, `wlr-randr`, `rfkill`, `bootctl`, `/etc/fstab`) rather than a cache of its own — and each row says **which file decided it**, so a setting that came from a fallback does not read like one you chose. The Kernel pane installs, removes and switches kernels on all three bootloaders. `syn-settings gui [pane]`, or `--rec <pane>` for the records the window parses. |
 | **`syn-edit`** | The text editor. One modal engine — press `i` to insert, `Escape` to stop, `:w` to write — driving a terminal editor, a graphical window, and a scripting mode with no terminal at all: `syn-edit run -k 'ggdG'` or `-c '%s/a/b/g'` applies keys and ex commands to a file and prints the result, which is how its own test suite drives it. Syntax highlighting, and it guesses the language from the file. |
 | **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
@@ -344,7 +344,8 @@ prints records, and a quickshell window that only renders them. Nothing in the
 QML knows how to stat a file. It replaced Dolphin as the default in August 2026,
 and Dolphin came off the image entirely shortly after.
 
-Tabs, a split view (`F3`), Icons / Compact / Details, thumbnails, a folder tree,
+Tabs — where closing the last one folds the split, or closes the window if there
+is no split — a split view (`F3`), Icons / Compact / Details, thumbnails, a folder tree,
 pinned places, recent files, mounted volumes with fill meters, search that walks
 the tree (`Ctrl`+`F`), archives, and drag-and-drop — into another window, onto
 the desktop, or out to any other application.
@@ -370,22 +371,44 @@ their extension: a photo saved as `.txt` still reports its size. Matroska, WebM
 and AVI are handed to `ffprobe` if it is installed, and simply show no
 resolution row if it is not.
 
+A folder's **size is its contents**, not the few hundred bytes of the directory
+entry that `stat` reports. That walk is `synfiles du`, kept out of `info` because it
+takes seconds on a large tree and the properties panel should draw immediately;
+it streams a running total instead. Two numbers, because they answer different
+questions: apparent bytes, which is what has to fit when you copy it, and blocks
+on disk. Hard links are counted once — a pacman cache is full of them — and
+symlinks are never followed, which double-counts and hangs on a cycle. Both
+totals match `du -sb` and `du -s` exactly.
+
 ```bash
 synfiles gui ~/Downloads       # the window
 synfiles tui ~/Downloads       # the same browser in a terminal
 synfiles find . --name=iso     # or --content=, bounded, never follows a symlink
 synfiles info photo.jpg        # what the properties pane shows
+synfiles du ~/Videos           # what a folder actually holds
 synfiles undo list             # what Ctrl+Z would reverse
 ```
 
 **In a terminal**, `synfiles tui` is the third front-end, and it is the one to
 reach for over SSH into a machine whose desktop will not start. Arrow keys move
 a highlighted row, `→` or `Enter` opens, `←` goes up — and lands on the folder
-you just left, which is where you were looking. `i` properties, `z` size, `m`
-move, `y` copy, `t` trash, `e` the service menus, `/` filter, `c` cd, `g` opens
-the window on the folder you are in. Moving and copying are `synfiles move` and
-`synfiles copy` underneath, so `Ctrl`+`Z`'s journal records them and `synfiles
-undo` reverses one made from the browser.
+you just left, which is where you were looking. `Home`/`End` and `PgUp`/`PgDn`
+move further; `h` goes home, `c` types a path, `/` filters what is on screen,
+`a` toggles hidden files, `s` cycles the sort, `r` reverses it, `q` quits.
+`i` properties, `z` size, `m` move, `y` copy, `t` trash, `e` the service menus,
+and `g` opens the window on the folder you are in.
+
+It reimplements none of that. The listing is the same `sf_scan` the `list`
+command prints, properties are `synfiles info`, sizes are `synfiles du`, and
+moving and copying are `synfiles move` and `synfiles copy` — so `Ctrl`+`Z`'s
+journal records them and `synfiles undo` reverses one made from the browser. A
+browser that walked directories itself would be a second set of answers about
+symlinks, broken links and sort order, and the two would drift on the first bug
+fixed in one of them. A path you type is relative to **what you are browsing**,
+not to the shell's working directory, and a mistake in one is reported and
+survivable: the underlying commands exit on a bad argument, so everything they
+would exit over is checked before they are called rather than ending the
+session.
 
 It is careful about your terminal, on purpose. It turns off echo and
 line-buffering and **nothing else** — no mouse reporting, no alternate screen —
@@ -642,7 +665,7 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
 | `synpkg` | The package manager — `search`, `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
-| `synfiles` | The file manager — `list`, `info`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
+| `synfiles` | The file manager — `list`, `info`, `du`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
