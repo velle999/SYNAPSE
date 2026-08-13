@@ -1371,21 +1371,50 @@ static void combo_str(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
              key);
 }
 
+/* The keycap word for a tap modifier, and "Off" for no tap at all. Here rather
+ * than in config.c beside syn_tap_mod_name() for the reason combo_str() is here
+ * beside syn_bind_format_combo(): that one spells what synuirc takes ("super"),
+ * this one spells what a keyboard says ("Super"). Exported because keys.c's
+ * status line names the new tap key and must not spell it a third way. */
+const char *ctlpanel_tap_key_name(uint32_t mod)
+{
+    switch (mod) {
+    case WLR_MODIFIER_LOGO:  return "Super";
+    case WLR_MODIFIER_CTRL:  return "Ctrl";
+    case WLR_MODIFIER_ALT:   return "Alt";
+    case WLR_MODIFIER_SHIFT: return "Shift";
+    default:                 return "Off";
+    }
+}
+
 int ctlpanel_shortcuts(syn_server_t *s, syn_ctl_shortcut_t *out, int max)
 {
     int n = 0;
     int saw_ws = 0, saw_movews = 0;
 
-    /* Super-tap is the one shortcut that is not a bind — it is defined by the
-     * absence of a chord (see syn_server::super_armed), so it appears in no
-     * bind table and would otherwise be the one feature this panel hid. */
+    /* The tap is the one shortcut that is not a bind — it is defined by the
+     * absence of a chord (see syn_server::tap_armed), so it appears in no bind
+     * table and would otherwise be the one feature this panel hid.
+     *
+     * Which modifier it is comes from the live config, not from the word
+     * "Super": the palette can move it, and a row that always said Super would
+     * be a list disagreeing with the keyboard. */
     if (n < max) {
         memset(&out[n], 0, sizeof(out[n]));
-        snprintf(out[n].combo, sizeof(out[n].combo), "Super (tap)");
+        if (s->config.tap_mod)
+            snprintf(out[n].combo, sizeof(out[n].combo), "%s (tap)",
+                     ctlpanel_tap_key_name(s->config.tap_mod));
+        else
+            snprintf(out[n].combo, sizeof(out[n].combo), "Off");
         snprintf(out[n].desc,  sizeof(out[n].desc),  "Start menu");
         /* No bind, but there IS an action behind it — the palette can run this
          * one even though no combo in the table produces it. */
         snprintf(out[n].action, sizeof(out[n].action), "start_menu");
+        /* Rebindable, but to a bare modifier: `tap` is what tells the capture
+         * loops that a Super press is the answer here and not a chord half. */
+        out[n].rebindable = 1;
+        out[n].tap        = 1;
+        out[n].mods       = s->config.tap_mod;
         n++;
     }
 
@@ -2528,8 +2557,8 @@ int ctlpanel_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     if (s->ctlpanel.sc_capturing) {
         /* A held modifier arrives as a press of its own while you reach for the
          * other half of the chord. Ignore them, or every capture comes out as
-         * "Super". */
-        if (syn_rebind_sym_is_modifier(sym)) return 1;
+         * "Super" — except on the tap row, where the modifier is the answer. */
+        if (syn_rebind_capture_ignores(&s->ctlpanel.sc_capture, sym)) return 1;
 
         if (sym == XKB_KEY_Escape) {
             s->ctlpanel.sc_capturing = 0;

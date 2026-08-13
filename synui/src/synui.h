@@ -1589,12 +1589,19 @@ typedef struct {
      * entry in the bind table, and cannot do it by action: `spawn` appears
      * three times over and `move_output` twice.
      *
-     * `rebindable` is NOT "sym != NoSymbol". The rows that are not a single
-     * bind divide into two kinds and both must be refused: Super-tap has an
-     * action but no chord at all (it is defined by the ABSENCE of one), and the
-     * two collapsed workspace rows stand for nine binds each — rebinding
-     * "Super+1–9" would mean picking one of the nine the row does not name. */
+     * `rebindable` is NOT "sym != NoSymbol". The row that is not a single bind
+     * and cannot be moved is the collapsed workspace pair: each stands for nine
+     * binds, and rebinding "Super+1–9" would mean picking one of the nine the
+     * row does not name.
+     *
+     * `tap` is the OTHER shape that is not a chord — the modifier tap that
+     * opens the start menu (config.tap_mod). It is rebindable, but to a bare
+     * modifier rather than to a combo, so the two panels' capture loops have to
+     * tell them apart: everywhere else a modifier keysym is the half of a chord
+     * you are still holding and must be ignored, and here it is the answer.
+     * `mods` carries the tap modifier and `sym` is NoSymbol. */
     int          rebindable;
+    int          tap;
     uint32_t     mods;
     xkb_keysym_t sym;
 } syn_ctl_shortcut_t;
@@ -2831,6 +2838,16 @@ typedef struct {
      * the control panel's enum row. Applied by
      * synui_config_apply_launcher_binds() at the end of every config load. */
     int super_space;
+
+    /* Which modifier, tapped alone, opens the start menu — a WLR_MODIFIER_*
+     * mask, or 0 for "no tap at all". Default LOGO, which is what `tap_key` in
+     * synuirc is named after.
+     *
+     * A mask rather than a keysym because a tap is the whole KEY, not one of
+     * its two halves: Super_L and Super_R are the same shortcut, and storing
+     * one of them would leave the other dead on a keyboard that has both.
+     * input.c resolves the pressed keysym back with syn_tap_mod_from_sym(). */
+    uint32_t tap_mod;
 
     /* Which QML tree synui-bar starts. A syn_bar_shell_t held as an int, for
      * the control panel's enum row. Read by systemd/synui-bar.sh, never by the
@@ -4087,12 +4104,18 @@ struct syn_server {
 
     syn_overview_t   overview;
 
-    /* Super-tap: Super pressed and released with nothing in between opens the
-     * start menu, the way it does on every other desktop. Armed on the Super
-     * press and disarmed by *any* intervening key or pointer button, so Super
-     * used as a modifier (Super+E, Super+drag) never opens the menu on release.
-     * Without that disarm the modifier and the tap are indistinguishable. */
-    int             super_armed;
+    /* The modifier tap: config.tap_mod pressed and released with nothing in
+     * between opens the start menu, the way a tapped Super does on every other
+     * desktop. Armed on that press and disarmed by *any* intervening key or
+     * pointer button, so the modifier used as a modifier (Super+E, Super+drag)
+     * never opens the menu on release. Without that disarm the modifier and the
+     * tap are indistinguishable.
+     *
+     * Not named super_armed any more because the key is `tap_key` and Super is
+     * only its default — the palette can move the tap onto Alt, or switch it
+     * off, and a field named after one modifier would be read as meaning that
+     * modifier by the next person to touch this. */
+    int             tap_armed;
 
     /* Task manager panel (Ctrl+Alt+Del) — process table + resource overview. */
     struct {
@@ -4963,6 +4986,12 @@ void synui_config_apply_launcher_binds(syn_config_t *cfg);
  */
 bool syn_bind_parse_combo(const char *combo, uint32_t *mods, xkb_keysym_t *sym);
 void syn_bind_format_combo(uint32_t mods, xkb_keysym_t sym, char *out, size_t n);
+/* The same pair for `tap_key`, which is a modifier and not a combo: a keysym
+ * back to the modifier it belongs to (0 if it is not one), and a modifier to
+ * the word synuirc spells it with ("none" for 0, which is a setting and not an
+ * error). See the tap-key block in config.c. */
+uint32_t    syn_tap_mod_from_sym(xkb_keysym_t sym);
+const char *syn_tap_mod_name(uint32_t mod);
 void config_bind_set(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym,
                      const char *action, const char *arg);
 bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym);
@@ -5552,6 +5581,11 @@ int  ctlpanel_shortcut_selected(syn_server_t *s, syn_ctl_shortcut_t *out);
  * labels its rows from. Exposed for the rebind helper, which has to name the
  * shortcut a chord is already taken by. */
 const char *ctlpanel_action_desc(const char *action, const char *arg);
+/* The tap modifier as a KEYCAP word — "Super", "Ctrl", "Alt", "Shift", or "Off"
+ * for no tap. Exposed for the same reason as the line above: keys.c's status
+ * line names the tap key the user just chose, and a third spelling of "Super"
+ * is a third one to keep in step. syn_tap_mod_name() is the synuirc half. */
+const char *ctlpanel_tap_key_name(uint32_t mod);
 /* ── Shortcut palette + rebind helper (keys.c) ───────────────
  * Super+/ (and Super+?): the same list ctlpanel_shortcuts() builds, filtered as
  * you type, with Enter running the bind you land on. Same modal contract as
@@ -5579,7 +5613,13 @@ void keys_show(syn_server_t *s);
  * syn_rebind_apply() returns 1 when the bind table actually changed, so the
  * caller knows to re-read the list; `status` is filled either way. Its `sc` must
  * not point into s->config.binds[], which it rewrites. */
-bool        syn_rebind_sym_is_modifier(xkb_keysym_t sym);
+/* Should an armed capture throw this keysym away? True for a modifier arriving
+ * as a press of its own while you reach for the other half of a chord — without
+ * it every capture comes out as "Super". FALSE for the tap row, where the
+ * modifier IS the shortcut, which is the whole reason this takes the row and is
+ * not a predicate on the keysym alone. */
+bool        syn_rebind_capture_ignores(const syn_ctl_shortcut_t *sc,
+                                       xkb_keysym_t sym);
 const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc);
 int         syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
                              xkb_keysym_t sym, uint32_t mods,

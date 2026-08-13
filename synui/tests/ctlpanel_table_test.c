@@ -80,7 +80,8 @@ int  synmon_send_reload(const char *m, char *o, size_t n)
 /* The rebind core is keys.c's, which is not linked here — this test is about
  * the ctl_items[] table against the config parser. keys_test links keys.c and
  * ctlpanel.c together and is where rebinding is actually exercised. */
-bool syn_rebind_sym_is_modifier(xkb_keysym_t sym) { (void)sym; return false; }
+bool syn_rebind_capture_ignores(const syn_ctl_shortcut_t *sc, xkb_keysym_t sym)
+{ (void)sc; (void)sym; return false; }
 const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc) { (void)sc; return NULL; }
 int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
                      xkb_keysym_t sym, uint32_t mods, char *status, size_t n)

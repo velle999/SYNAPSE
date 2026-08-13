@@ -219,7 +219,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 
 | Key | Action |
 |---|---|
-| `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) |
+| `Super` (tapped alone) | Start menu (the bar's SYNAPSE badge) — `tap_key = super\|ctrl\|alt\|shift\|none` moves it, or `F2` on that row in the palette |
 | `Super`+`C` | Control panel — every shortcut, plus the settings, in one place |
 | `Super`+`/` (or `Super`+`?`) | Shortcut palette — every binding below, searchable; `F2` on a row moves it to another key |
 | `Super`+`Return` | Open a terminal |

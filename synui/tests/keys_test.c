@@ -201,6 +201,32 @@ bool config_unbind_combo(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym)
 
 bool syn_bind_parse_combo(const char *c, uint32_t *m, xkb_keysym_t *s)
 { (void)c; (void)m; (void)s; return false; }
+
+/* The tap key's mask↔name pair, config.c's again. Real rather than stubbed for
+ * the same reason as the formatter above: the tap rebind tests are about which
+ * modifier a keysym resolves to, and a stub returning 0 would make every one of
+ * them assert the refusal instead. Four modifiers is the whole of it. */
+uint32_t syn_tap_mod_from_sym(xkb_keysym_t sym)
+{
+    switch (sym) {
+    case XKB_KEY_Super_L:   case XKB_KEY_Super_R:   return WLR_MODIFIER_LOGO;
+    case XKB_KEY_Control_L: case XKB_KEY_Control_R: return WLR_MODIFIER_CTRL;
+    case XKB_KEY_Alt_L:     case XKB_KEY_Alt_R:     return WLR_MODIFIER_ALT;
+    case XKB_KEY_Shift_L:   case XKB_KEY_Shift_R:   return WLR_MODIFIER_SHIFT;
+    default:                                        return 0;
+    }
+}
+
+const char *syn_tap_mod_name(uint32_t mod)
+{
+    switch (mod) {
+    case WLR_MODIFIER_LOGO:  return "super";
+    case WLR_MODIFIER_CTRL:  return "ctrl";
+    case WLR_MODIFIER_ALT:   return "alt";
+    case WLR_MODIFIER_SHIFT: return "shift";
+    default:                 return "none";
+    }
+}
 void syn_config_ensure_dir(void) { }
 void config_parse_kv(syn_config_t *c, const char *k, char *v)
 { (void)c; (void)k; (void)v; }
@@ -237,6 +263,11 @@ static void rig_init(void)
 {
     memset(&g_s, 0, sizeof(g_s));
 
+    /* The shipped default, seeded by hand like the binds: a zeroed config would
+     * mean "no tap at all", and the tap row would come up as "Off" in every
+     * test that never mentions it. */
+    g_s.config.tap_mod = WLR_MODIFIER_LOGO;
+
     bind_add(WLR_MODIFIER_LOGO, XKB_KEY_w,     "wallpaper", "");
     bind_add(WLR_MODIFIER_LOGO, XKB_KEY_f,     "float_toggle", "");
     bind_add(WLR_MODIFIER_LOGO, XKB_KEY_c,     "control", "");
@@ -269,6 +300,16 @@ static const char *selected_desc(void)
     return k->all[k->view[k->selected]].desc;
 }
 
+/* The combo column of the row the cursor is on — the string the user reads as
+ * "this shortcut's key". The tap tests assert on it because it is the only
+ * place the tap's modifier is visible. */
+static const char *selected_combo(void)
+{
+    syn_keys_t *k = &g_s.keys;
+    if (k->selected < 0 || k->selected >= k->n_view) return "";
+    return k->all[k->view[k->selected]].combo;
+}
+
 static int view_has(const char *desc)
 {
     syn_keys_t *k = &g_s.keys;
@@ -287,7 +328,7 @@ static void test_list_is_the_bind_table(void)
     keys_show(&g_s);
 
     /* Seven binds, less the eight collapsed into "Super+1–9" (one of which was
-     * seeded), plus the Super-tap row and the collapsed row itself. */
+     * seeded), plus the tap row and the collapsed row itself. */
     CHECK(g_s.keys.n == 8, "every bind is listed, workspaces collapsed (got %d)",
           g_s.keys.n);
     CHECK(g_s.keys.n_view == g_s.keys.n,
@@ -296,7 +337,7 @@ static void test_list_is_the_bind_table(void)
     CHECK(view_has("Wallpaper picker"), "a bind's description comes from its action");
     CHECK(view_has("Keyboard shortcuts (this list)"), "the palette lists itself");
     CHECK(view_has("Switch to workspace"), "the collapsed workspace row is there");
-    CHECK(view_has("Start menu"), "Super-tap is listed though it is not a bind");
+    CHECK(view_has("Start menu"), "the tap is listed though it is not a bind");
     CHECK(view_has("Move window to previous output"),
           "an arg that changes the meaning changes the description");
     CHECK(view_has("synui-screenshot region"),
@@ -596,16 +637,89 @@ static void test_rebind_refusals(void)
     CHECK(!g_s.keys.capturing && binds_set == 0 && binds_unbound == 0,
           "rebinding a shortcut to the key it already has changes nothing");
 
-    /* The two row shapes that are not one bind. Super-tap is defined by the
-     * ABSENCE of a chord; "Super+1–9" stands for nine of them and names none. */
-    CHECK(select_desc("Start menu"), "found the Super-tap row");
-    keys_key(&g_s, XKB_KEY_F2, 0);
-    CHECK(!g_s.keys.capturing, "Super-tap cannot be rebound — it is not a bind");
-
+    /* The one row shape that is not one bind and cannot be moved: "Super+1–9"
+     * stands for nine of them and names none. (The tap row is the other shape
+     * that is not a chord, and it IS rebindable — see the test below.) */
     CHECK(select_desc("Switch to workspace"), "found the collapsed row");
     keys_key(&g_s, XKB_KEY_F2, 0);
     CHECK(!g_s.keys.capturing,
-          "nor can a row that stands for nine binds and names none");
+          "a row that stands for nine binds and names none refuses a capture");
+
+    keys_hide(&g_s);
+}
+
+/* ── The tap, which is a rebind of a different shape ─────────
+ *
+ * Every other row is a chord: two halves, and the modifier half is thrown away
+ * while it is held. The tap row is one modifier and nothing else, so the key
+ * every other capture ignores is the only key this one accepts — which is why
+ * syn_rebind_capture_ignores() takes the row and not just the keysym, and why
+ * this is worth its own test rather than a line in the one above.
+ */
+static void test_rebind_tap(void)
+{
+    printf("keys: moving the start-menu tap\n");
+
+    rig_init();
+    keys_show(&g_s);
+
+    CHECK(select_desc("Start menu"), "found the tap row");
+    CHECK(strcmp(selected_combo(), "Super (tap)") == 0,
+          "…listed with the modifier the config says (got '%s')",
+          selected_combo());
+
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.keys.capturing, "the tap row arms a capture like any other");
+
+    /* A chord is not an answer here: the row takes one modifier, and taking
+     * "Super+K" would leave the tap on a key that is half of something else.
+     * Refused the way every other refusal in this panel is — the capture ends
+     * and the status line says what was wanted, rather than the panel sitting
+     * there re-asking a question it has already had the wrong answer to. */
+    keys_key(&g_s, XKB_KEY_k, WLR_MODIFIER_LOGO);
+    CHECK(!g_s.keys.capturing && g_s.config.tap_mod == WLR_MODIFIER_LOGO,
+          "a chord does not move the tap");
+    CHECK(strstr(g_s.keys.status, "Tap Super") != NULL,
+          "…and says what it wants instead (got '%s')", g_s.keys.status);
+
+    /* The modifier press every other capture throws away. */
+    CHECK(select_desc("Start menu"), "still on the tap row");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_Alt_L, 0);
+    CHECK(!g_s.keys.capturing && g_s.config.tap_mod == WLR_MODIFIER_ALT,
+          "a bare modifier IS the answer on the tap row");
+    CHECK(binds_set == 0 && binds_unbound == 0,
+          "…and it touches no bind, because the tap is not one");
+    CHECK(select_desc("Start menu") && strcmp(selected_combo(), "Alt (tap)") == 0,
+          "the list is re-read, so the row shows the new key (got '%s')",
+          selected_combo());
+
+    /* Off is a value. Without it the only way to stop a tapped Super opening
+     * the menu would be to hand-edit synuirc. */
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_Delete, 0);
+    CHECK(!g_s.keys.capturing && g_s.config.tap_mod == 0,
+          "Delete turns the tap off");
+    CHECK(select_desc("Start menu") && strcmp(selected_combo(), "Off") == 0,
+          "…and the row says so (got '%s')", selected_combo());
+
+    /* Still runnable with the tap off: the row has an action, and Enter on it
+     * has always been "open the start menu" rather than "press the key". */
+    dispatches = 0;
+    keys_key(&g_s, XKB_KEY_Return, 0);
+    CHECK(dispatches == 1 && strcmp(last_action, "start_menu") == 0,
+          "Enter still opens the start menu with no tap key at all");
+
+    /* And back onto the same key it already has, which is a no-op. */
+    rig_init();
+    keys_show(&g_s);
+    CHECK(select_desc("Start menu"), "back on the tap row");
+    keys_key(&g_s, XKB_KEY_F2, 0);
+    keys_key(&g_s, XKB_KEY_Super_L, 0);
+    CHECK(!g_s.keys.capturing && g_s.config.tap_mod == WLR_MODIFIER_LOGO,
+          "re-tapping the key it already has changes nothing");
+    CHECK(strcmp(g_s.keys.status, "Unchanged") == 0,
+          "…and says so (got '%s')", g_s.keys.status);
 
     keys_hide(&g_s);
 }
@@ -622,8 +736,8 @@ static void test_rebind_reset(void)
      * xkb reports the shifted letter, and matching on WLR_MODIFIER_SHIFT would
      * make every Ctrl+R a reset with caps lock on.
      *
-     * Off the top row first — the palette opens on Super-tap, which is the one
-     * row that refuses a capture. */
+     * Off the top row first anyway — the palette opens on the tap row, whose
+     * capture takes a bare modifier and would not read Ctrl+R as an arm. */
     CHECK(select_desc("Wallpaper picker"), "found a rebindable row");
     keys_key(&g_s, XKB_KEY_r, WLR_MODIFIER_CTRL);
     CHECK(g_s.keys.capturing, "Ctrl+R arms a capture, like F2");
@@ -748,6 +862,26 @@ static void test_ctlpanel_rebind(void)
         CHECK(found, "the rig has a non-rebindable row to refuse");
     }
 
+    /* ── The tap row is the same shape here too ──────────
+     *
+     * The one place the two panels could still diverge: the modifier press this
+     * one throws away on every other row has to be the answer on this one, and
+     * that decision is syn_rebind_capture_ignores()'s rather than each panel's.
+     * Asserted through ctlpanel_key(), so a control panel that kept its own
+     * "ignore every modifier" line fails here and nowhere else. */
+    g_s.ctlpanel.sc_sel = 0;   /* the tap row */
+    {
+        syn_ctl_shortcut_t sc;
+        CHECK(ctlpanel_shortcut_selected(&g_s, &sc) && sc.tap,
+              "row 0 is the tap");
+    }
+    ctlpanel_key(&g_s, XKB_KEY_F2, 0);
+    CHECK(g_s.ctlpanel.sc_capturing, "the tap row arms in the control panel");
+    ctlpanel_key(&g_s, XKB_KEY_Control_L, 0);
+    CHECK(!g_s.ctlpanel.sc_capturing &&
+          g_s.config.tap_mod == WLR_MODIFIER_CTRL,
+          "…and takes the bare modifier, the same as the palette does");
+
     /* ── Esc cancels the capture, not the panel ─────────── */
     CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_f), "back on Super+F");
     ctlpanel_key(&g_s, XKB_KEY_F2, 0);
@@ -769,9 +903,9 @@ static void test_ctlpanel_rebind(void)
     ctl_open_shortcuts();
     reloads = 0;
 
-    /* On a REBINDABLE row: row 0 of the list is the Super-tap "Start menu",
-     * which is the absence of a chord and refuses to arm — landing there would
-     * make this assert the refusal rather than the arm. */
+    /* On a CHORD row: row 0 of the list is the "Start menu" tap, whose capture
+     * answers to a bare modifier — landing there would make this assert the tap
+     * rules rather than the chord ones. */
     CHECK(ctl_select_chord(WLR_MODIFIER_LOGO, XKB_KEY_w), "on Super+W");
     ctlpanel_key(&g_s, XKB_KEY_r, WLR_MODIFIER_CTRL);
     CHECK(g_s.ctlpanel.sc_capturing, "Ctrl+R arms, as it does in the palette");
@@ -867,6 +1001,7 @@ int main(void)
     test_cursor();
     test_rebind();
     test_rebind_refusals();
+    test_rebind_tap();
     test_rebind_reset();
     test_modal_contract();
     test_ctlpanel_shortcut_cursor();

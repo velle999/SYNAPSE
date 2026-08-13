@@ -24,6 +24,16 @@
  * default is REMOVED rather than replaced. It is also half of what the rebind
  * helper writes (Super+/, then F2 — see binds.state in keys.c): moving a
  * shortcut is a `bind` for the new chord and an `unbind` for the old one.
+ *
+ * The one shortcut that is not a bind, because it is defined by the ABSENCE of
+ * a chord — a modifier pressed and released with nothing in between:
+ *   tap_key = super|ctrl|alt|shift|none   (default super)
+ * That tap opens the start menu (input.c's syn_server::tap_armed). `none` turns
+ * it off, which is the only way to stop a Super that is being used as a
+ * modifier from occasionally opening the menu on a keyboard that reports the
+ * release late. The rebind helper writes this key too — it is a shortcut in
+ * every sense the user cares about, so it goes back with the rest of them on
+ * Ctrl+Shift+R rather than being the one that has to be undone by hand.
  * Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
  * layout_cycle, retile, cascade, overview, about, focus_next/prev, alt_tab,
  * alt_tab_prev,
@@ -362,6 +372,49 @@ void syn_bind_format_combo(uint32_t mods, xkb_keysym_t sym, char *out, size_t n)
      * ones in the same language. */
     for (char *p = out; *p; p++)
         *p = (char)tolower((unsigned char)*p);
+}
+
+/* ── The tap key ─────────────────────────────────────────────
+ *
+ * `tap_key` is a modifier and nothing else — it is not half of a chord here, it
+ * IS the shortcut — so these two are a mask↔name pair rather than the
+ * combo pair above. They live beside that pair for the same reason it exists:
+ * the rebind helper writes `tap_key` into binds.state and this parser reads it
+ * back, and a second spelling would be a tap that works all session and is gone
+ * at the next login.
+ *
+ * Only the four that `parse_mod` knows. Caps Lock and the level-3 shift are
+ * modifiers too, but neither is one a desktop may quietly redefine.
+ */
+uint32_t syn_tap_mod_from_sym(xkb_keysym_t sym)
+{
+    switch (sym) {
+    case XKB_KEY_Super_L:   case XKB_KEY_Super_R:
+    case XKB_KEY_Meta_L:    case XKB_KEY_Meta_R:
+        return WLR_MODIFIER_LOGO;
+    case XKB_KEY_Control_L: case XKB_KEY_Control_R:
+        return WLR_MODIFIER_CTRL;
+    case XKB_KEY_Alt_L:     case XKB_KEY_Alt_R:
+        return WLR_MODIFIER_ALT;
+    case XKB_KEY_Shift_L:   case XKB_KEY_Shift_R:
+        return WLR_MODIFIER_SHIFT;
+    default:
+        return 0;
+    }
+}
+
+/* The synuirc spelling of a tap modifier — lower case, the words parse_mod
+ * takes back. 0 is "none", which is a real setting (the tap turned off) and not
+ * an error, so it has a name like the rest. */
+const char *syn_tap_mod_name(uint32_t mod)
+{
+    switch (mod) {
+    case WLR_MODIFIER_LOGO:  return "super";
+    case WLR_MODIFIER_CTRL:  return "ctrl";
+    case WLR_MODIFIER_ALT:   return "alt";
+    case WLR_MODIFIER_SHIFT: return "shift";
+    default:                 return "none";
+    }
 }
 
 /* Take a combo out of the table. Returns false if nothing was bound to it,
@@ -1050,6 +1103,9 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->launcher_style    = SYN_LAUNCHER_TEXT;
     /* Super+Space is the app launcher, the way it is everywhere else. */
     cfg->super_space       = SYN_SUPER_SPACE_LAUNCHER;
+    /* A tapped Super opens the start menu, the way it does everywhere else —
+     * the default the key is named after. */
+    cfg->tap_mod           = WLR_MODIFIER_LOGO;
     /* The shipped bar, and the system icon theme. Both read by synui-bar, not
      * by the compositor — see syn_bar_shell_t. */
     cfg->bar_shell         = SYN_BAR_SHELL_SYNAPSE;
@@ -1832,6 +1888,20 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     else if (strcmp(key, "super_space") == 0) {
         if      (strcmp(val, "launcher") == 0) cfg->super_space = SYN_SUPER_SPACE_LAUNCHER;
         else if (strcmp(val, "cmdbar")   == 0) cfg->super_space = SYN_SUPER_SPACE_CMDBAR;
+    }
+    /* Which modifier, tapped alone, opens the start menu. `none` is a value and
+     * not a parse failure — it is how the tap is turned off. Everything else is
+     * refused BY NAME rather than silently ignored: a mistyped tap_key would
+     * otherwise read as "the tap stopped working". */
+    else if (strcmp(key, "tap_key") == 0) {
+        if (strcmp(val, "none") == 0 || strcmp(val, "off") == 0) {
+            cfg->tap_mod = 0;
+        } else {
+            uint32_t m = parse_mod(val);
+            if (m) cfg->tap_mod = m;
+            else   wlr_log(WLR_ERROR, "synui: tap_key: unknown '%s' "
+                                      "(super|ctrl|alt|shift|none)", val);
+        }
     }
     /* Which QML tree synui-bar starts. The compositor never acts on this — it
      * parses it so that the key has ONE spelling and the control panel's row

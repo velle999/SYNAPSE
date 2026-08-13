@@ -5200,7 +5200,9 @@ void synui_render_ctlpanel(syn_server_t *s)
         /* While armed there is exactly one thing to say, and every other hint
          * would be naming a key that is currently being captured rather than
          * obeyed. */
-        hint = "Press the new key for this shortcut \xc2\xb7 Esc cancels";
+        hint = cp->sc_capture.tap
+             ? "Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for no tap \xc2\xb7 Esc cancels"
+             : "Press the new key for this shortcut \xc2\xb7 Esc cancels";
     else if (cp->cat == CTL_CAT_SHORTCUTS)
         hint = "Up/Down select \xc2\xb7 F2 rebind \xc2\xb7 Ctrl+Shift+R reset all \xc2\xb7 Esc back";
     else if (ctlpanel_selected_row(s) >= 0 &&
@@ -5439,9 +5441,17 @@ void synui_render_keys(syn_server_t *s)
     cairo_set_font_size(cr, 12);
     set_ink(cr, INK_DIM, 0.9);
     cairo_move_to(cr, 18, ph - 18);
-    syn_show_text(cr, k->capturing
-        ? "Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels"
-        : "Type to filter \xc2\xb7 Enter runs it \xc2\xb7 F2 rebinds \xc2\xb7 Ctrl+Shift+R resets \xc2\xb7 Esc close");
+    /* Three footers, not two: the tap row takes a bare modifier and nothing
+     * else, so the chord footer would be telling the one row that refuses a
+     * chord to press one. */
+    const char *foot;
+    if (k->capturing && k->all[k->capture_all].tap)
+        foot = "Tap Super, Ctrl, Alt or Shift \xc2\xb7 Del for none \xc2\xb7 Esc cancels";
+    else if (k->capturing)
+        foot = "Press any chord with Super, Ctrl or Alt \xc2\xb7 Esc cancels";
+    else
+        foot = "Type to filter \xc2\xb7 Enter runs it \xc2\xb7 F2 rebinds \xc2\xb7 Ctrl+Shift+R resets \xc2\xb7 Esc close";
+    syn_show_text(cr, foot);
 
     cairo_destroy(cr);
     set_scene_buffer(&s->keys_ui.text_buf, s->keys_ui.tree, buf);

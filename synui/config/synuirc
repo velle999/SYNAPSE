@@ -549,6 +549,18 @@ record_edit = off
 #   if you rebind either combo with a `bind =` line above, the setting stops
 #   touching them and says so in the log. Your bind wins.
 #
+# tap_key = super|ctrl|alt|shift|none  (default super)
+#   The start menu's other key, and the one shortcut that is not a bind: a
+#   modifier pressed and released with NOTHING in between. Any other key or a
+#   mouse button in between disarms it, so the same key used as a modifier
+#   (super+e, super+drag) never opens the menu on release.
+#   `none` turns the tap off. The menu is still on super+escape's welcome page,
+#   the bar's start button and `synctl dispatch start_menu`, so switching the
+#   tap off is not switching the menu off.
+#   Super+/ then F2 on the "Start menu" row moves it: tap the modifier you want,
+#   or Delete for none. That writes binds.state, not this file, and
+#   Ctrl+Shift+R in the same palette puts it back with every other shortcut.
+#
 # A bind on the same combo as a default replaces the default.
 # bind = super+w spawn rofi -show run
 # bind = super+shift+s spawn swaylock

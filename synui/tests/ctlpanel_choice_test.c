@@ -75,7 +75,8 @@ void synui_child_reset_signals(void)         { }
  * because keys.c would drag in the config reload path and a shortcut palette
  * that has nothing to do with what is under test. keys_test links both for
  * real and is where the rebind path is actually exercised. */
-bool syn_rebind_sym_is_modifier(xkb_keysym_t sym) { (void)sym; return false; }
+bool syn_rebind_capture_ignores(const syn_ctl_shortcut_t *sc, xkb_keysym_t sym)
+{ (void)sc; (void)sym; return false; }
 const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc) { (void)sc; return NULL; }
 int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
                      xkb_keysym_t sym, uint32_t mods, char *status, size_t n)

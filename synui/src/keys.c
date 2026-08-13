@@ -187,6 +187,10 @@ static void keys_activate(syn_server_t *s)
  * makes carried a second bind table it never reads. */
 static syn_bind_t g_base_binds[SYN_BINDS_MAX];
 static int        g_base_count;
+/* And the tap key's baseline, snapshotted with them. The tap is not in the bind
+ * table — it is one modifier mask — but it is rebound through the same helper
+ * and has to go back on the same reset, so it is part of the same diff. */
+static uint32_t   g_base_tap;
 
 static int binds_state_path(char *buf, size_t n)
 {
@@ -231,6 +235,12 @@ static bool live_holds_combo(const syn_config_t *cfg, uint32_t mods,
  *
  * A chord that is bound in both, to different actions, needs only the `bind`
  * line: config_bind_set() replaces by chord.
+ *
+ *   tap_key = <mod>    the third line, and the only one that is not about a
+ *                      chord — the modifier whose tap opens the start menu. It
+ *                      is written the same way and for the same reason: a diff,
+ *                      so a user who moved the tap onto Alt still gets whatever
+ *                      the next synui makes the default of everything else.
  *
  * Through a temp file and rename(), like settings.state: truncating the real
  * one and dying mid-write would lose every rebind the user has ever made.
@@ -281,6 +291,14 @@ static void binds_state_save(syn_server_t *s)
         changed++;
     }
 
+    /* The tap, if it has moved. Written even when it has moved to `none`: "off"
+     * is a decision, and the empty-file rule below would otherwise be unable to
+     * tell it from "never touched". */
+    if (s->config.tap_mod != g_base_tap) {
+        fprintf(f, "tap_key = %s\n", syn_tap_mod_name(s->config.tap_mod));
+        changed++;
+    }
+
     fclose(f);
 
     /* An empty diff means every key is back where it started, and the right
@@ -313,6 +331,7 @@ void binds_state_load(syn_config_t *cfg)
     g_base_count = cfg->bind_count;
     memcpy(g_base_binds, cfg->binds,
            (size_t)g_base_count * sizeof(g_base_binds[0]));
+    g_base_tap = cfg->tap_mod;
 
     char path[256];
     if (!binds_state_path(path, sizeof(path))) return;
@@ -336,11 +355,12 @@ void binds_state_load(syn_config_t *cfg)
         char *val = eq + 1;
         while (*val == ' ' || *val == '\t') val++;
 
-        /* Only the two keys this file is allowed to carry. It is generated, so
-         * anything else in it is corruption or a hand edit that meant to be in
-         * synuirc — and applying an arbitrary key from here would make a
+        /* Only the three keys this file is allowed to carry. It is generated,
+         * so anything else in it is corruption or a hand edit that meant to be
+         * in synuirc — and applying an arbitrary key from here would make a
          * generated file a second place settings can hide. */
-        if (strcmp(key, "bind") != 0 && strcmp(key, "unbind") != 0) {
+        if (strcmp(key, "bind")    != 0 && strcmp(key, "unbind") != 0 &&
+            strcmp(key, "tap_key") != 0) {
             wlr_log(WLR_ERROR, "synui: binds.state: ignoring '%s'", key);
             continue;
         }
@@ -374,10 +394,11 @@ static bool combo_is_bindable(uint32_t mods, xkb_keysym_t sym)
  * the other half, they arrive as presses of their own, and taking the first one
  * as the answer would make every capture come out as "Super".
  *
- * Exported because the control panel's Shortcuts pane captures chords too, and
- * a second opinion about what counts as a modifier is a second set of captures
- * that all come out as "Super". */
-bool syn_rebind_sym_is_modifier(xkb_keysym_t sym)
+ * Wider than syn_tap_mod_from_sym()'s four, deliberately: that one answers
+ * "which modifier may the tap be moved to", and this one answers "is this key
+ * still the half of a chord you are holding down" — Caps Lock and the level-3
+ * shift are the second and not the first. */
+static bool sym_is_modifier(xkb_keysym_t sym)
 {
     switch (sym) {
     case XKB_KEY_Super_L:   case XKB_KEY_Super_R:
@@ -396,7 +417,7 @@ bool syn_rebind_sym_is_modifier(xkb_keysym_t sym)
 
 /* ── The rebind core, shared with the control panel ──────────
  *
- * The three functions below are the whole of what a rebind MEANS — which chords
+ * The four functions below are the whole of what a rebind MEANS — which chords
  * are legal, what is refused and why, what gets written, and how "put it all
  * back" works. They know nothing about either panel.
  *
@@ -413,19 +434,72 @@ bool syn_rebind_sym_is_modifier(xkb_keysym_t sym)
  */
 
 /*
+ * Should an armed capture throw this keysym away rather than take it as the
+ * answer? See the header for why this takes the row and not just the keysym.
+ */
+bool syn_rebind_capture_ignores(const syn_ctl_shortcut_t *sc, xkb_keysym_t sym)
+{
+    if (sc && sc->tap) return false;
+    return sym_is_modifier(sym);
+}
+
+/*
  * Why this row cannot take a capture, or NULL if it can.
  *
- * The two shapes that are not one bind, told apart by whether the row has an
- * action: Super-tap has one and no chord, the collapsed workspace rows have a
- * chord range and no action.
+ * One shape is left: the collapsed workspace rows, which stand for nine binds
+ * each and name none of them. The tap row used to be the other — it has no
+ * chord at all — but "no chord" is what it IS rather than a reason it cannot be
+ * moved, and it is now rebindable to another modifier through the tap branch of
+ * syn_rebind_apply().
  */
 const char *syn_rebind_refusal(const syn_ctl_shortcut_t *sc)
 {
     if (!sc) return "No shortcut selected";
     if (sc->rebindable) return NULL;
-    return sc->action[0]
-               ? "Super-tap is not a bind — it is the absence of one"
-               : "That row stands for nine binds; rebind them in synuirc";
+    return "That row stands for nine binds; rebind them in synuirc";
+}
+
+/*
+ * The tap row's half of syn_rebind_apply(), which is a different question from
+ * the chord one all the way down: the answer is ONE modifier rather than a
+ * mods+sym pair, it cannot collide with anything (every chord in the table has
+ * a non-modifier key), and it has an "off" — which the chords do not, because a
+ * chord you want gone is unbound in synuirc rather than captured.
+ *
+ * Delete/Backspace is that off switch. It is the one key a capture can be given
+ * that is neither a modifier nor a mistake: the row is asking "which key", and
+ * "none of them" has to be sayable, or the only way to stop a tapped Super
+ * opening the menu would be to hand-edit synuirc.
+ */
+static int rebind_apply_tap(syn_server_t *s, const syn_ctl_shortcut_t *sc,
+                            xkb_keysym_t sym, char *status, size_t status_n)
+{
+    uint32_t mod;
+
+    if (sym == XKB_KEY_Delete || sym == XKB_KEY_KP_Delete ||
+        sym == XKB_KEY_BackSpace) {
+        mod = 0;
+    } else if ((mod = syn_tap_mod_from_sym(sym)) == 0) {
+        snprintf(status, status_n,
+                 "Tap Super, Ctrl, Alt or Shift — or Delete for no tap");
+        return 0;
+    }
+
+    if (mod == sc->mods) {
+        snprintf(status, status_n, "Unchanged");
+        return 0;
+    }
+
+    s->config.tap_mod = mod;
+    binds_state_save(s);
+
+    wlr_log(WLR_INFO, "synui: start-menu tap -> %s", syn_tap_mod_name(mod));
+    if (mod)
+        snprintf(status, status_n, "Start menu opens on a %s tap",
+                 ctlpanel_tap_key_name(mod));
+    else
+        snprintf(status, status_n, "Start menu no longer opens on a tap");
+    return 1;
 }
 
 /*
@@ -447,6 +521,12 @@ int syn_rebind_apply(syn_server_t *s, const syn_ctl_shortcut_t *sc,
         snprintf(status, status_n, "%s", refusal);
         return 0;
     }
+
+    /* The tap is not a chord and none of the rules below are about it — the
+     * modifiers held while it was captured are the answer itself, not context
+     * for a key. */
+    if (sc->tap)
+        return rebind_apply_tap(s, sc, sym, status, status_n);
 
     /* xkb reports the shifted symbol; the bind table stores the unshifted one
      * with SHIFT in the mask, which is how synuirc spells it and how
@@ -709,8 +789,8 @@ int keys_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods)
     if (k->capturing) {
         /* A held modifier arrives as a press of its own while you reach for the
          * other half of the chord. Ignore them, or every capture comes out as
-         * "Super". */
-        if (syn_rebind_sym_is_modifier(sym)) return 1;
+         * "Super" — except on the tap row, where the modifier is the answer. */
+        if (syn_rebind_capture_ignores(&k->all[k->capture_all], sym)) return 1;
 
         if (sym == XKB_KEY_Escape) {
             keys_capture_cancel(s);

@@ -804,6 +804,26 @@ else. The launcher moved onto it and the command bar moved off.
       binds collapsed into one line and names no single one of them, so Enter
       refuses rather than guessing a workspace. Super-tap is the opposite case —
       not a bind at all, but it *does* have an action (`start_menu`), so it runs.
+- [x] **The tap can be moved as well** — `tap_key = super|ctrl|alt|shift|none`,
+      and F2 on the "Start menu" row captures it. It was the one row that refused
+      a rebind, on the grounds that it is not a bind; but "not a bind" describes
+      what it IS, not a reason it cannot be changed, and a palette that lists a
+      shortcut and then declines to move it is the control panel's old problem in
+      miniature. Its capture is the mirror image of every other one: the modifier
+      press that a chord capture must throw away (or every rebind comes out as
+      "Super") is the only key this one accepts, so `syn_rebind_capture_ignores()`
+      takes the ROW and not just the keysym, and both panels ask it rather than
+      each keeping a line about modifiers.
+      Delete captures "none", because off has to be sayable — otherwise the only
+      way to stop a stray Super opening the menu is to hand-edit synuirc. The
+      menu itself is unaffected: Super+Escape's welcome page, the bar's start
+      button and `synctl dispatch start_menu` all still open it.
+      It rides in `binds.state` with the rebinds, as a diff against the loaded
+      config, so Ctrl+Shift+R puts it back with everything else. In
+      settings.state it would have been the one shortcut "reset every shortcut"
+      did not reset. Arming a capture also disarms the tap in `input.c`, or
+      capturing Super would open the start menu on the release of the very key
+      just captured.
 - [x] **Discoverable without already knowing the key**: it is the second entry
       of the welcome menu (Super+Escape), it lists *itself*, and `--help` and the
       shipped `synuirc` both document it.

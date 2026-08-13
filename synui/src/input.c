@@ -1500,29 +1500,39 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         return;
     }
 
-    /* Super-tap opens the start menu (see syn_server::super_armed). Super is
-     * first and foremost a modifier, so the tap is defined by what did *not*
-     * happen: armed on a bare Super press, disarmed by any other key here and
-     * by any pointer button in server_cursor_button. Only a Super release that
-     * survives both is a tap.
+    /* The modifier tap opens the start menu (see syn_server::tap_armed). Which
+     * modifier is `tap_key` in synuirc — Super by default, and rebindable from
+     * the palette; 0 means no tap at all, and then this whole block is inert.
+     *
+     * That modifier is first and foremost a modifier, so the tap is defined by
+     * what did *not* happen: armed on a bare press of it, disarmed by any other
+     * key here and by any pointer button in server_cursor_button. Only a
+     * release that survives both is a tap.
      *
      * The release is deliberately not swallowed — it falls through to the
      * normal forwarding path below. Returning early here would leave the
-     * focused client holding a Super it never saw released, i.e. a stuck
+     * focused client holding a modifier it never saw released, i.e. a stuck
      * modifier for as long as it keeps focus. */
-    bool is_super = false;
+    uint32_t tap_mod = s->config.tap_mod;
+    bool is_tap_key  = false;
     for (int i = 0; i < nsyms; i++)
-        if (syms[i] == XKB_KEY_Super_L || syms[i] == XKB_KEY_Super_R)
-            is_super = true;
+        if (tap_mod && syn_tap_mod_from_sym(syms[i]) == tap_mod)
+            is_tap_key = true;
 
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        /* A Super pressed while another modifier is already down is someone
-         * building a chord, not tapping. */
-        s->super_armed = is_super &&
-            !(modifiers & (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT |
-                           WLR_MODIFIER_SHIFT));
-    } else if (is_super && s->super_armed) {
-        s->super_armed = 0;
+        /* The tap key pressed while another modifier is already down is someone
+         * building a chord, not tapping. Its own bit is excluded from that test
+         * — xkb has it set by the time this press is reported.
+         *
+         * Not armed at all while a rebind capture is waiting for a key: there
+         * the press IS the answer, and arming would open the start menu on the
+         * release of the very key just captured. */
+        uint32_t others = (WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL |
+                           WLR_MODIFIER_ALT  | WLR_MODIFIER_SHIFT) & ~tap_mod;
+        s->tap_armed = is_tap_key && !(modifiers & others) &&
+                       !s->keys.capturing && !s->ctlpanel.sc_capturing;
+    } else if (is_tap_key && s->tap_armed) {
+        s->tap_armed = 0;
         synui_start_menu_open(s);
     }
 
@@ -2979,9 +2989,9 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
     syn_server_t *s = wl_container_of(listener, s, cursor_button);
     struct wlr_pointer_button_event *event = data;
 
-    /* Super+click (move/resize a window) is Super used as a modifier, so it
-     * must not also open the start menu when Super is finally released. */
-    s->super_armed = 0;
+    /* Super+click (move/resize a window) is the tap key used as a modifier, so
+     * it must not also open the start menu when that key is finally released. */
+    s->tap_armed = 0;
 
     pointer_button(s, event->time_msec, event->button, event->state);
 }
