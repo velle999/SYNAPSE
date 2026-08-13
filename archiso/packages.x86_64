@@ -125,6 +125,15 @@ synfiles
 syn-disks
 syn-edit
 syn-confine
+# The settings app: displays, region, date and time, network, Bluetooth, power,
+# kernels, default applications, and where configuration lives. It was in
+# build-all.sh's component list, in syn-update's COMPONENTS and in the start
+# menu, and NOT on this list — so it was built into the ISO's local repo on
+# every release and never installed into the image. A fresh install had no
+# Settings app at all until the first `syn-update apply` added one, which is
+# the wrong way round: the pane that sets the keyboard layout is wanted before
+# the pane that updates the system.
+syn-settings
 # Dolphin, which is no longer the default and is no longer the only one that
 # can reach synui's KIO service menus — synfiles reads
 # $XDG_DATA_DIRS/kio/servicemenus itself. Still on the ISO: it is a mature file

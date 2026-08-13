@@ -140,6 +140,10 @@ Each lives in its own directory with its own `PKGBUILD`.
 | **`synapse_kmod`** | Kernel module (DKMS). Syscall monitoring and AI scheduling hints, exposed via sysfs. |
 | **`synpkg`** | The package manager — one C binary over `libalpm` covering the Arch repositories, the AUR, Flathub, BlackArch and SynapseOS's own components. CLI, terminal browser (`synpkg tui`) and a quickshell GUI (`synpkg gui`), all reading the same code paths. |
 | **`synfiles`** | The file manager, and what a folder opens in. One C binary — tabs, split view, search, trash, undo, archives, drag-and-drop, properties — plus a quickshell window that only renders what `synfiles --rec` prints. No dependency but libc: file types come from shared-mime-info's data, mounting is delegated to udisks2. |
+| **`syn-settings`** | The settings app. Displays and resolution, keyboard and language, date and time, network, Bluetooth, power and sleep, kernels, default applications, and where configuration actually lives. It reports what the system *reports* — every pane reads the real source (`localectl`, `timedatectl`, `wlr-randr`, `rfkill`, `bootctl`, `/etc/fstab`) rather than a cache of its own — and each row says **which file decided it**, so a setting that came from a fallback does not read like one you chose. The Kernel pane installs, removes and switches kernels on all three bootloaders. `syn-settings gui [pane]`, or `--rec <pane>` for the records the window parses. |
+| **`syn-edit`** | The text editor. One modal engine — press `i` to insert, `Escape` to stop, `:w` to write — driving a terminal editor, a graphical window, and a scripting mode with no terminal at all: `syn-edit run -k 'ggdG'` or `-c '%s/a/b/g'` applies keys and ex commands to a file and prints the result, which is how its own test suite drives it. Syntax highlighting, and it guesses the language from the file. |
+| **`syn-arsenal`** | The BlackArch browser. ~5000 security tools by category, installable from a window or a terminal (`--tui`). `--enable-repo` adds the repository itself — the installer offers that too, and enabling it installs the keyring and nothing else. |
+| **`syn-confine`** | A sandbox launcher: run a command inside a kernel-enforced allowlist (Landlock), with `--rw`/`--ro`/`--rx` paths and outbound TCP denied unless a port is named. Everything not granted is denied, and the policy is inherited across `execve`, so a shell cannot escape it by starting something else. `vibe`'s shell tool runs inside one. `--isolate-net` is the only option that also stops DNS. |
 | **`syn-disks`** | The disk utility. What drives are in the machine, what is on them, how healthy they are, mounting, safe removal, formatting, and partitioning — the table, the free space in it, and making, deleting, growing and wiping partitions. Reads the storage tree straight out of `/sys/class/block`, so it still answers in a rescue shell; changing anything is delegated to udisks2, smartmontools, sfdisk and polkit, which own the authorisation. **Formatting anything that shares a physical disk with `/` is refused, with no override** — the check walks the full stack, so an encrypted container holding a running system is refused even though nothing reports that partition as mounted. Partitioning is guarded by the same code and a narrower rule, because refusing the whole drive would make the feature useless on a one-disk machine: it protects the partitions that matter (`/`, mounted, live swap, a volume unlocked on top, anything `/etc/fstab` expects) and allows the free space around them. It grows a partition but never shrinks one. Right-click a drive in `synfiles` to open it. |
 
 ### Apps
@@ -361,6 +365,53 @@ config:
 xdg-mime default org.kde.dolphin.desktop inode/directory
 ```
 
+### Settings
+
+**SYNAPSE Settings** (`syn-settings`) is the system half of the desktop's
+configuration: displays and resolution, keyboard and language, date and time,
+network, Bluetooth, power and sleep, kernels, default applications, and where
+configuration lives. The control panel (`Super`+`C`) stays what it always was —
+the *compositor's* settings, live, while you watch a window change. This is the
+other half, and it is the one that talks to `localectl`, `timedatectl`,
+`bootctl` and `rfkill`.
+
+Two things shape it:
+
+- **It reports what the system reports.** Every pane reads the real source on
+  open rather than a cache of its own, so a pane cannot be confidently wrong
+  about a machine that changed under it.
+- **Every row says which file decided it.** A default application that came from
+  a system fallback and one you picked yourself read identically everywhere
+  else; here they do not.
+
+The **Kernel** pane installs, removes and switches kernels, on all three
+bootloaders SynapseOS can install (`limine`, `systemd-boot`, GRUB), and it
+distinguishes the three states that look alike from a package list: *installed*,
+*bootable* (an entry exists and an initramfs was built), and *running*.
+
+```bash
+syn-settings gui               # or: gui time, gui kernel, gui apps …
+syn-settings --rec apps        # what that pane reads, as records
+syn-settings set xkb us intl   # one thing, from a script
+```
+
+### Editing text
+
+**`syn-edit`** is the editor: one modal engine — `i` to insert, `Escape` to
+stop, `:w` to write, `:q` to quit — behind three front ends. A terminal editor,
+a graphical window, and a scripting mode with no terminal at all:
+
+```bash
+syn-edit notes.md                        # the terminal editor
+syn-edit gui notes.md                    # the window
+syn-edit run -k 'ggdG' notes.md          # apply keys, print the result
+syn-edit ex -c '%s/foo/bar/g' -w *.c     # ex commands, written back
+```
+
+The third one is not a convenience — it is how the editor's own test suite
+drives it, which is why the keys the window sends and the keys a script sends
+cannot mean different things.
+
 ### Fingerprint unlock
 
 The lock screen (`Super`+`L`) takes a fingerprint beside the password. Both are
@@ -548,6 +599,12 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `synpkg` | The package manager — `search`, `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
 | `synfiles` | The file manager — `list`, `info`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window; `--rec` prints the records the window parses. See [Files](#files) |
+| `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
+| `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
+| `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
+| `syn-arsenal` | Browse and install BlackArch security tooling by category — a window by default, `--tui` in the terminal, `--enable-repo` to add the repository |
+| `syn-confine` | Run a command inside a kernel-enforced allowlist — `syn-confine --ro /usr --rw ~/project -- ./build.sh`. `--print` shows the resolved policy without running anything |
+| `syn-calc` | The calculator behind `Super`+`X`, on the command line — `syn-calc 'sqrt(2) * 100'`, `--funcs` lists what it knows |
 | `synctl` | Talk to the running `synui` compositor over its control socket — `synctl clients`, `workspaces`, `outputs`, `activewindow`, `dispatch <action> [arg]` |
 | `syn-crypt` | Manage LUKS2 disk encryption — `status`, `add-key`, `change-key`, `remove-key`, `backup-header` |
 | `syn-secureboot` | Secure Boot status and key enrollment (checks for real firmware Setup Mode first) |
