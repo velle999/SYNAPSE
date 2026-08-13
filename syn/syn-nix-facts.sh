@@ -88,7 +88,6 @@ fi
 W_MODEL=$(have /var/lib/synapd/models/synapse.gguf)
 W_BLUETOOTH=$(have /usr/bin/bluetoothctl)
 W_PRINTING=$(have /usr/bin/cupsd)
-W_FILEMGR=$(any /usr/bin/synfiles /usr/bin/dolphin /usr/bin/nautilus /usr/bin/thunar)
 W_WINE=$(have /usr/bin/wine)
 W_PHONE=$(have /usr/bin/kdeconnect-cli)
 W_STEAM=$(have /usr/bin/steam)
@@ -135,7 +134,6 @@ cat << FACTS
     model     = $W_MODEL;
     bluetooth = $W_BLUETOOTH;
     printing  = $W_PRINTING;
-    filemgr   = $W_FILEMGR;
     wine      = $W_WINE;
     phone     = $W_PHONE;
     steam     = $W_STEAM;

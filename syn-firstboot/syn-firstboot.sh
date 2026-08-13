@@ -2,6 +2,14 @@
 # syn-firstboot — SynapseOS first boot setup wizard
 # Note: intentionally no set -euo pipefail — failures must be handled gracefully
 
+# The release, read from the file archiso/build.sh stamps from profiledef.sh's
+# `iso_version`. This banner said "SynapseOS 0.1.0" with the number TYPED IN,
+# which is the same bug os-release/issue/motd had before 2026-07-16: a version
+# string not derived from its source of truth is wrong and is believed. Read in
+# a subshell and guarded on ID, exactly as syn-install does it.
+RELEASE=$( . /etc/os-release 2>/dev/null
+           [ "${ID:-}" = synapseos ] && printf '%s' "${VERSION_ID:-}" )
+
 MODEL_DIR="/var/lib/synapd/models"
 MODEL_PATH="$MODEL_DIR/synapse.gguf"
 DONE_FLAG="/var/lib/synapseos/firstboot.done"
@@ -71,7 +79,7 @@ header() {
    `oooooos++++++soooooo`
   `:ssssos++++++++sossss:`
 '
-    echo "  $(bold 'SynapseOS 0.1.0') — Where the kernel thinks."
+    echo "  $(bold "SynapseOS${RELEASE:+ $RELEASE}") — Where the kernel thinks."
     line
     echo ""
 }

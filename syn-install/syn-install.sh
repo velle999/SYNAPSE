@@ -2,7 +2,26 @@
 # syn-install — SynapseOS disk installer
 set -uo pipefail
 
+# This SCRIPT's package version. Every SynapseOS component is 0.1.0-<pkgrel> by
+# convention, so this identifies the installer and says nothing whatever about
+# the release it installs — which is why the header printed "0.1.0-synapse" on
+# a 0.2.8 ISO and looked like a stale image.
 VERSION="0.1.0-synapse"
+
+# What the header PRINTS: the SynapseOS release. archiso/build.sh stamps
+# /etc/os-release from profiledef.sh's `iso_version` at build time (its "OS
+# identity" block, which greps to prove the substitution landed), so VERSION_ID
+# is the number on the media and the one worth quoting in a bug report.
+#
+# Read in a SUBSHELL: os-release defines VERSION itself, and sourcing it here
+# would overwrite the line above. Guarded on ID, or running this script on a
+# plain Arch box would print Arch's version as if it were ours; with no
+# os-release at all — a bare `bash syn-install.sh` in a checkout — it falls
+# back to the script version, which is at least true about the script.
+RELEASE=$( . /etc/os-release 2>/dev/null
+           [ "${ID:-}" = synapseos ] && printf '%s' "${VERSION_ID:-}" )
+RELEASE="${RELEASE:-$VERSION}"
+
 COLS=$(tput cols 2>/dev/null || echo 80)
 
 # ── UI helpers ────────────────────────────────────────────
@@ -37,7 +56,7 @@ header() {
    `oooooos++++++soooooo`
   `:ssssos++++++++sossss:`
 '
-    echo "  $(bold "SynapseOS Installer $VERSION")"
+    echo "  $(bold "SynapseOS $RELEASE Installer")"
     line
     echo ""
 }
@@ -686,6 +705,39 @@ answer() {
     if [ "$__secret" = 1 ]; then read -rs "$__var"; else read -r "$__var"; fi
 }
 
+# pick <question> <key> <var> <default> <valid> [-m sym=raw,...]
+#
+# A numbered menu that REFUSES an answer that is not on it.
+#
+# Every menu in this script used to be `answer` followed by a case whose `*)`
+# arm was the default, which means a typo is indistinguishable from pressing
+# Enter: "33" — one keystroke repeated because the cursor was not visible —
+# selected the default preset and the installer announced it as a choice. A
+# wrong answer that LOOKS accepted is the worst outcome available here, because
+# the next thing it does is partition a disk.
+#
+# Empty still means the default; anything else must be on the list or the
+# question is asked again. <valid> is the space-separated set of RAW values,
+# i.e. what the case statement below the call already matches on.
+pick() {
+    local __q=$1 __key=$2 __var=$3 __def=$4 __valid=$5; shift 5
+    local __ans __v
+    while :; do
+        prompt "$__q"
+        answer "$__key" __ans "$@" || true
+        __ans="${__ans//[[:space:]]/}"
+        __v="${__ans:-$__def}"
+        case " $__valid " in
+            *" $__v "*) printf -v "$__var" '%s' "$__v"; return 0 ;;
+        esac
+        # An unattended run has nobody to ask again — a loop here would spin
+        # forever on a bad key. Name the key and the answers it accepts.
+        [ -z "${ANSWERS[$__key]+set}" ] ||
+            die "config: $__key=$__ans is not a valid answer (expected one of: $__valid)"
+        fail "\"$__ans\" is not one of: $__valid"
+    done
+}
+
 config_report_unused() {
     [ -n "$CONFIG_FILE" ] || return 0
     local k unused=""
@@ -717,7 +769,7 @@ while [ $# -gt 0 ]; do
         --config=*) _CONFIG_ARG="${1#*=}" ;;
         -h|--help)
             cat << USAGE
-syn-install $VERSION — install SynapseOS to disk
+syn-install $VERSION — install SynapseOS $RELEASE to disk
 
   syn-install                    ask every question (the normal way)
   syn-install --config FILE      answer them from an install profile
@@ -894,8 +946,8 @@ if [ "$BOOT_MODE" = "uefi" ] && [ "$NUM_PARTS" -gt 0 ] \
     echo "    2) $(bold 'ERASE') the whole disk — delete every partition and all data"
     echo "    3) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
     echo ""
-    prompt "Install mode [1-3]:"
-    answer install_mode _mode -m alongside=1,erase=2,manual=3
+    pick "Install mode [1-3]:" install_mode _mode 1 "1 2 3" \
+         -m alongside=1,erase=2,manual=3
     case "${_mode:-1}" in
         1) INSTALL_MODE="alongside" ;;
         3) INSTALL_MODE="manual" ;;
@@ -918,8 +970,8 @@ else
     echo "    1) $(bold 'ERASE') the whole disk — delete every partition and all data  (default)"
     echo "    2) $(bold 'ADVANCED') — partition this disk yourself, then pick the partitions"
     echo ""
-    prompt "Install mode [1/2]:"
-    answer install_mode _mode -m erase=1,manual=2
+    pick "Install mode [1/2]:" install_mode _mode 1 "1 2" \
+         -m erase=1,manual=2
     case "${_mode:-1}" in
         2) INSTALL_MODE="manual" ;;
         *) INSTALL_MODE="erase" ;;
@@ -994,8 +1046,8 @@ if [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; then
     echo "    $(bold '4)') f2fs   — built for flash. Good on SD cards and cheap SSDs;"
     echo "                    unusual enough that fewer rescue tools know it."
     echo ""
-    prompt "Filesystem [1-4, default 1]:"
-    answer filesystem _fs -m ext4=1,btrfs=2,xfs=3,f2fs=4
+    pick "Filesystem [1-4, default 1]:" filesystem _fs 1 "1 2 3 4" \
+         -m ext4=1,btrfs=2,xfs=3,f2fs=4
     case "${_fs:-1}" in
         2) ROOT_FS="btrfs" ;;
         3) ROOT_FS="xfs" ;;
@@ -1030,8 +1082,8 @@ if { [ "$INSTALL_MODE" = "erase" ] || [ "$INSTALL_MODE" = "manual" ]; } && [ "$B
     echo "                          partition, so that partition is made much"
     echo "                          larger when snapshots are enabled."
     echo ""
-    prompt "Bootloader [1-3, default 1]:"
-    answer bootloader _bl -m grub=1,systemd-boot=2,limine=3
+    pick "Bootloader [1-3, default 1]:" bootloader _bl 1 "1 2 3" \
+         -m grub=1,systemd-boot=2,limine=3
     case "${_bl:-1}" in
         2) BOOTLOADER="systemd-boot" ;;
         3) BOOTLOADER="limine" ;;
@@ -1775,9 +1827,9 @@ while :; do
     echo "  Every preset except Minimal then asks WHICH AI model to download,"
     echo "  and skipping it is one of the answers."
     echo ""
-    prompt "Choice [1-4, default=2]:"
-    answer preset install_preset -m full=1,standard=2,minimal=3,custom=4 || true
-    INSTALL_PRESET="${install_preset:-2}"
+    pick "Choice [1-4, default=2]:" preset install_preset 2 "1 2 3 4" \
+         -m full=1,standard=2,minimal=3,custom=4
+    INSTALL_PRESET="$install_preset"
 
     case "$INSTALL_PRESET" in
         1)
@@ -1938,22 +1990,18 @@ while :; do
         echo "  Whatever you pick, it can be changed later: 'syn model download',"
         echo "  or Super+C ▸ System ▸ AI model on the desktop."
         echo ""
-        prompt "Choice [1-4, default=1]:"
-        # One line on purpose: config_test.sh recognises an `answer` call site by
-        # what FOLLOWS the variable, and a line continuation is not one of them.
-        answer ai_model model_pick -m mistral-7b=1,mistral=1,phi3=2,phi=2,tiny=3,qwen=3,none=4,no=4,skip=4 || true
-        # ${model_pick:-1}: Enter is the recommendation, so an empty answer and
-        # a typed 1 are the same arm.
-        case "${model_pick:-1}" in
+        pick "Choice [1-4, default=1]:" ai_model model_pick 1 "1 2 3 4" -m mistral-7b=1,mistral=1,phi3=2,phi=2,tiny=3,qwen=3,none=4,no=4,skip=4
+        # Enter is the recommendation, so an empty answer and a typed 1 are the
+        # same arm — pick() has already substituted the default by here.
+        case "$model_pick" in
             1) MODEL_CHOICE=mistral-7b; MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)" ;;
             2) MODEL_CHOICE=phi3;       MODEL_LABEL="Phi-3 Mini 4K (~2.2 GB)" ;;
             3) MODEL_CHOICE=tiny;       MODEL_LABEL="Qwen2 0.5B (~0.4 GB)" ;;
             4) MODEL_CHOICE=none;       WANT_MODEL=0 ;;
-            *)  # A typo, or an ai_model= naming a model that does not exist. A
-                # multi-gigabyte download nobody asked for should say why it
-                # started rather than quietly standing in for the answer.
-                warn "'$model_pick' is not one of 1-4 — taking the recommended model."
-                MODEL_CHOICE=mistral-7b; MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)" ;;
+            # No catch-all arm: pick() cannot return anything else. A typo asks
+            # again, and an ai_model= naming a model that does not exist stops
+            # the install by name rather than standing in for the answer with a
+            # multi-gigabyte download nobody chose.
         esac
         [ "$WANT_MODEL" = 1 ] && success "AI model: $MODEL_LABEL"
     else
@@ -2159,9 +2207,9 @@ echo "    $(bold '2)') KDE Plasma — Full-featured Wayland desktop"
 echo "    $(bold '3)') GNOME      — Clean, modern Wayland desktop"
 echo "    $(bold '4)') TTY only   — No GUI (headless/server)"
 echo ""
-prompt "Choice [1-4, default=1]:"
-answer desktop de_choice -m synui=1,kde=2,gnome=3,tty=4 || true
-DE_CHOICE="${de_choice:-1}"
+pick "Choice [1-4, default=1]:" desktop de_choice 1 "1 2 3 4" \
+     -m synui=1,kde=2,gnome=3,tty=4
+DE_CHOICE="$de_choice"
 
 case "$DE_CHOICE" in
     2)

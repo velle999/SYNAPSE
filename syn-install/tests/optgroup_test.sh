@@ -101,8 +101,12 @@ for g in $groups; do
     check "    set by the Minimal preset" yes \
           "$(grep -qF -- "$g" <<<"$min_body" && echo yes || echo no)"
     if grep -qw -- "$g" <<<"$picker_only"; then
+        # `pick`, not `answer`: the numbered menus re-ask on an answer that is
+        # not on the menu, and the model picker is one of them. Matched on the
+        # key/variable pair rather than the whole call so the question text can
+        # be reworded without failing here.
         check "    offered as a picker rather than a y/n" yes \
-              "$(has 'answer ai_model model_pick')"
+              "$(has 'ai_model model_pick')"
     else
         check "    offered in the Custom questionnaire" yes "$(has "ask_opt $g")"
     fi

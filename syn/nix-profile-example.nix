@@ -82,7 +82,6 @@
                          # key, not this one.
     bluetooth = true;
     printing  = false;
-    filemgr   = true;    # dolphin
     wine      = false;
     phone     = false;   # kdeconnect
     steam     = false;   # + the 32-bit stack and CachyOS Proton;
@@ -94,7 +93,6 @@
     vibe    = true;
     nexus   = false;
     tepris  = false;
-    m2020   = false;     # Samsung M2020 printer driver
     arsenal = true;
   };
 

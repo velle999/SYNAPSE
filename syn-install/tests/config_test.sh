@@ -113,6 +113,13 @@ echo "=== the key vocabulary matches the documented one ==="
 # sentence really did show up here as a key named `is`.
 consumed=$( { grep -ohE '(^|;)[[:space:]]*answer [a-z_0-9]+ [A-Za-z_][A-Za-z_0-9]*([[:space:]]+(-[a-z-]+|\|\||;)|[[:space:]]*$)' "$script" |
                   sed 's/^[;[:space:]]*//' | awk '{print $2}'
+              # pick <question> <key> <var> ... — the numbered menus. Its key is
+              # the field after a QUOTED question, so strip that first; the
+              # `answer` pattern above cannot see these, and without this every
+              # menu key (filesystem, bootloader, preset, desktop, ai_model,
+              # install_mode) reads as documented-but-never-consumed.
+              grep -ohE '^[[:space:]]*pick "[^"]*" [a-z_0-9]+ ' "$script" |
+                  sed -E 's/^[[:space:]]*pick "[^"]*" //' | awk '{print $1}'
               grep -ohE '^[[:space:]]*ask_opt [A-Za-z_0-9]+' "$script" |
                   awk '{print tolower($2)}'
             } | sort -u)
