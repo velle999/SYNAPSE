@@ -32,9 +32,10 @@
  *
  * IT DOES NOT REIMPLEMENT ANYTHING. The listing comes from sf_scan(), the same
  * scan `list` prints; properties from cmd_info(); sizes from cmd_du(); moves
- * from cmd_move(); deletes from cmd_trash(). A browser that walked directories
- * itself would be a second set of answers about symlinks, broken links and
- * sort order, and the two would drift on the first bug fixed in one of them.
+ * from cmd_move(); copies from cmd_copy(); deletes from cmd_trash(). A browser
+ * that walked directories itself would be a second set of answers about
+ * symlinks, broken links and sort order, and the two would drift on the first
+ * bug fixed in one of them.
  *
  * The corollary is that those commands were written to be RUN ONCE and exit —
  * several of them report a bad argument with die(), which is exit(1). Reusing
@@ -49,6 +50,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -135,15 +137,106 @@ static void tty_uncooked(void)
 	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
+static int term_cols(void)
+{
+	struct winsize ws;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 1)
+		return ws.ws_col;
+	return 80;
+}
+
+/* Everything that is not a listing row: 5 of header, a blank, 4 of hints, and
+ * room for the filter line and the prompt. */
+#define TTY_CHROME 13
+
 /* How many rows the listing may use. Derived from the window, so a tall
- * terminal shows more instead of paging at a constant nobody chose; the
- * subtraction is the header, the hint lines and the prompt. */
+ * terminal shows more instead of paging at a constant nobody chose. */
 static size_t tty_page(void)
 {
 	struct winsize ws;
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 12)
-		return (size_t)ws.ws_row - 11;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > TTY_CHROME + 1)
+		return (size_t)ws.ws_row - TTY_CHROME;
 	return PAGE;
+}
+
+/* ── measuring a frame ──────────────────────────────────────────────────── */
+//
+// The redraw moves the cursor up by the height of the last frame, so that
+// number has to be EXACTLY what the terminal did — not what the code meant to
+// print. Counting the printf calls by hand got it wrong three ways: the header
+// emits five newlines and was counted as four, the path is shown in full and
+// WRAPS on a narrow terminal, and so do the hint lines.
+//
+// A miscount does not look like a miscount. The frame simply walks down the
+// screen, one row per keypress, until the terminal scrolls — which is the one
+// thing the cursor-up redraw can never recover from, because the rows it wants
+// to overwrite have gone.
+//
+// So the frame is MEASURED as it is written. Everything inside it goes through
+// say(), which tracks what the cursor actually does: a CSI escape is
+// zero-width, a UTF-8 continuation byte is not a column of its own, and a line
+// longer than the window wraps onto the next one.
+static int g_cols = 80;
+static int g_frame_lines = 0;
+static int g_frame_col = 0;
+
+static void frame_begin(void)
+{
+	g_cols = term_cols();
+	g_frame_lines = 0;
+	g_frame_col = 0;
+}
+
+static void frame_count(const char *s)
+{
+	for (const char *p = s; *p; ) {
+		if (*p == '\033') {                    /* ESC [ ... final byte @-~ */
+			p++;
+			if (*p == '[') {
+				p++;
+				while (*p && !(*p >= '@' && *p <= '~'))
+					p++;
+				if (*p)
+					p++;
+			}
+			continue;
+		}
+		if (*p == '\n') {
+			g_frame_lines++;
+			g_frame_col = 0;
+			p++;
+			continue;
+		}
+		/* One column per codepoint. Wide characters would need wcwidth(); no
+		 * name here is measured, only the fixed furniture and paths, so the
+		 * error would be a wrapped line and not a lost frame. */
+		if ((unsigned char)(*p & 0xc0) != 0x80) {
+			if (g_frame_col >= g_cols) {       /* the terminal wraps here */
+				g_frame_lines++;
+				g_frame_col = 0;
+			}
+			g_frame_col++;
+		}
+		p++;
+	}
+}
+
+/* printf for anything inside a frame. */
+static void say(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void say(const char *fmt, ...)
+{
+	char buf[PATH_MAX + 512];
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof buf, fmt, ap);
+	va_end(ap);
+	frame_count(buf);
+	fputs(buf, stdout);
+}
+
+static int frame_height(void)
+{
+	return g_frame_lines + (g_frame_col ? 1 : 0);
 }
 
 /* ── keys ───────────────────────────────────────────────────────────────── */
@@ -267,20 +360,21 @@ static char *path_join(const char *dir, const char *name)
 
 static void draw_header(const tui_t *t, size_t n, size_t pages)
 {
-	printf("\n%s╭─ SYNAPSE Files ", C_ACCENT());
+	say("\n%s╭─ SYNAPSE Files ", C_ACCENT());
 	for (int i = 0; i < 44; i++)
-		fputs("─", stdout);
-	printf("╮%s\n", C_RESET());
+		say("─");
+	say("╮%s\n", C_RESET());
 
 	/* The path can be longer than the box; it is the one thing here worth
-	 * showing in full, so it wraps rather than being cut. */
-	printf("%s│%s  %s%s%s\n", C_ACCENT(), C_RESET(), C_BOLD(), t->cwd, C_RESET());
-	printf("%s╰", C_ACCENT());
+	 * showing in full, so it wraps rather than being cut — and say() is what
+	 * notices that it wrapped. */
+	say("%s│%s  %s%s%s\n", C_ACCENT(), C_RESET(), C_BOLD(), t->cwd, C_RESET());
+	say("%s╰", C_ACCENT());
 	for (int i = 0; i < 60; i++)
-		fputs("─", stdout);
-	printf("╯%s\n", C_RESET());
+		say("─");
+	say("╯%s\n", C_RESET());
 
-	printf("  %s%zu item%s · sort %s%s · page %zu/%zu%s\n",
+	say("  %s%zu item%s · sort %s%s · page %zu/%zu%s\n",
 	       C_DIM(), n, n == 1 ? "" : "s", sort_name(t->sort),
 	       t->reverse ? " (reversed)" : "",
 	       pages ? t->page + 1 : 1, pages ? pages : 1, C_RESET());
@@ -318,7 +412,7 @@ static void draw_rows(const tui_t *t, sf_entry_t *ents, size_t n,
 		 * looks broken on a terminal whose palette does not match the
 		 * assumptions, and this program has no idea what palette it is on. */
 		bool here = ((long)i == sel);
-		printf("%s%s%s%3zu%s %s%s%-32.32s%s %s%9s  %s%s\n",
+		say("%s%s%s%3zu%s %s%s%-32.32s%s %s%9s  %s%s\n",
 		       here ? C_ACCENT() : "  ", here ? "> " : "",
 		       C_DIM(), i + 1, C_RESET(),
 		       e->is_dir ? C_ACCENT() : "",
@@ -330,7 +424,7 @@ static void draw_rows(const tui_t *t, sf_entry_t *ents, size_t n,
 		free(sz);
 	}
 	if (n == 0)
-		printf("  %sempty%s\n", C_DIM(), C_RESET());
+		say("  %sempty%s\n", C_DIM(), C_RESET());
 }
 
 static void draw_help(void)
@@ -339,9 +433,9 @@ static void draw_help(void)
 	       C_DIM(), C_RESET());
 	printf("  %si <num> info · z <num> size · t <num> trash · e <num> actions%s\n",
 	       C_DIM(), C_RESET());
-	printf("  %sm <num> <path> move · n/p page · a hidden · s sort%s\n",
+	printf("  %sm <num> <path> move · y <num> <path> copy%s\n",
 	       C_DIM(), C_RESET());
-	printf("  %sr reverse · g gui · q quit%s\n",
+	printf("  %sn/p page · a hidden · s sort · r reverse · g gui · q quit%s\n",
 	       C_DIM(), C_RESET());
 }
 
@@ -463,22 +557,31 @@ static char *resolve_here(const tui_t *t, const char *p)
 	return path_join(t->cwd, p);
 }
 
-/* ── moving ─────────────────────────────────────────────────────────────── */
+/* ── moving and copying ─────────────────────────────────────────────────── */
 
-/* THE MOVE ITSELF IS cmd_move(). This does not reimplement it: cmd_move is
- * where the cross-filesystem copy-verify-then-delete lives, where the "is the
- * destination inside the source" check lives, and where the undo journal entry
- * is written. A second mover in this file would be a second set of answers to
- * all three.
+/* THE WORK IS cmd_move() AND cmd_copy(). This does not reimplement either:
+ * between them they hold the cross-filesystem copy-verify-then-delete, the
+ * recursive tree walk, the "is the destination inside the source" check that
+ * stops a copy recursing until the disk fills, and the undo journal entries
+ * that let `synfiles undo` put it all back. A second mover or copier in this
+ * file would be a second set of answers to every one of those.
  *
- * What this DOES do is check the destination first, because cmd_move reports a
- * bad one with die() — and die() is exit(1). In a batch command that is right.
- * In a browser it would tear the whole session down over a typo, so cmd_move is
- * only ever called here with a destination it has already agreed to accept. */
-static void move_entry(tui_t *t, sf_entry_t *e, const char *typed)
+ * The two differ in ONE call. Everything ahead of it — resolving what the user
+ * typed, checking it is a folder that exists, catching "it is already here" —
+ * is the same work, and two copies of that is two places to fix the next thing
+ * found wrong with it.
+ *
+ * What this DOES add is checking the destination first, because both commands
+ * report a bad one with die() — and die() is exit(1). In a batch command that
+ * is right. In a browser it would tear the session down over a typo, so
+ * neither is called here with a destination it has not already agreed to. */
+static void transfer_entry(tui_t *t, sf_entry_t *e, const char *typed,
+                           bool copying)
 {
+	const char *verb = copying ? "copy" : "move";
+
 	if (!typed || !*typed) {
-		warn("move needs somewhere to move to");
+		warn("%s needs somewhere to %s to", verb, verb);
 		return;
 	}
 
@@ -487,35 +590,44 @@ static void move_entry(tui_t *t, sf_entry_t *e, const char *typed)
 
 	struct stat st;
 	if (stat(dest, &st) != 0) {
-		warn("cannot move to %s: %s", dest, strerror(errno));
+		warn("cannot %s to %s: %s", verb, dest, strerror(errno));
 		goto out;
 	}
 	if (!S_ISDIR(st.st_mode)) {
-		/* cmd_move would die() with exactly this, which is the point. */
-		warn("%s is not a folder — move puts things INTO a folder", dest);
+		/* Both commands would die() with exactly this, which is the point. */
+		warn("%s is not a folder — %s puts things INTO a folder", dest, verb);
 		goto out;
 	}
 
-	/* Moving something into the folder it is already in reaches cmd_move as a
-	 * name collision with itself and comes back "conflict: already exists",
-	 * which is a confusing way to say nothing needed doing. */
-	/* realpath(), not sf_resolve(): sf_resolve die()s on failure, and every
+	/* Into the folder it is already in: for a move there is nothing to do, and
+	 * for a copy there is no name left to give the duplicate. Either way it
+	 * reaches the command as a collision with itself and comes back "already
+	 * exists", which is a confusing way to say so.
+	 *
+	 * realpath(), not sf_resolve(): sf_resolve die()s on failure, and every
 	 * die() reachable from here is the browser vanishing under the user. */
 	char *dreal = realpath(dest, NULL);
 	if (dreal && !strcmp(dreal, t->cwd)) {
-		warn("%s is already in this folder", e->name);
+		if (copying)
+			warn("%s is already here — copy it somewhere else, or use "
+			     "`synfiles copy --conflict=rename` for a duplicate", e->name);
+		else
+			warn("%s is already in this folder", e->name);
 		free(dreal);
 		goto out;
 	}
 	free(dreal);
 
 	/* CONFLICT_ERROR is the default and stays the default: it reports the
-	 * collision and moves nothing. Overwriting is not something a browser
+	 * collision and transfers nothing. Overwriting is not something a browser
 	 * should pick on the user's behalf, and --conflict=rename would quietly
 	 * invent a name they did not ask for. */
 	char *argv[] = { src, dest, NULL };
 	printf("\n");
-	cmd_move(2, argv);
+	if (copying)
+		cmd_copy(2, argv);
+	else
+		cmd_move(2, argv);
 
 out:
 	free(dest);
@@ -619,25 +731,22 @@ static int run_keys(tui_t *t)
 		if (drawn > 0)
 			printf("\033[%dA\033[J", drawn);
 
-		int before = 0;
-		draw_header(t, n, pages);          before += 4;
-		if (*filter) {
-			printf("  %sfilter: %s%s\n", C_WARN(), filter, C_RESET());
-			before += 1;
-		}
-		size_t shown = n > (t->page * rows) ? n - (t->page * rows) : 0;
-		if (shown > rows)
-			shown = rows;
+		/* Everything from here to frame_height() is measured, not counted, so
+		 * adding a line below needs no arithmetic kept in step with it. */
+		frame_begin();
+		draw_header(t, n, pages);
+		if (*filter)
+			say("  %sfilter: %s%s\n", C_WARN(), filter, C_RESET());
 		draw_rows(t, ents, n, rows, sel);
-		before += (int)(shown ? shown : 1);
-		printf("\n  %s↑↓ move · → / Enter open · ← up · PgUp/PgDn page%s\n",
-		       C_DIM(), C_RESET());
-		printf("  %si info · z size · m move · t trash · e actions · / filter%s\n",
-		       C_DIM(), C_RESET());
-		printf("  %sc cd · a hidden · s sort · r reverse · g gui · h home · q quit%s\n",
-		       C_DIM(), C_RESET());
-		before += 4;
-		drawn = before;
+		say("\n  %s↑↓ move · → / Enter open · ← up · PgUp/PgDn page%s\n",
+		    C_DIM(), C_RESET());
+		say("  %si info · z size · m move · y copy · t trash · e actions%s\n",
+		    C_DIM(), C_RESET());
+		say("  %s/ filter · c cd · a hidden · s sort · r reverse%s\n",
+		    C_DIM(), C_RESET());
+		say("  %sg gui · h home · q quit%s\n",
+		    C_DIM(), C_RESET());
+		drawn = frame_height();
 
 		int k = read_key();
 		bool redraw_fresh = false;      /* actions scroll; start a new frame */
@@ -726,17 +835,24 @@ static int run_keys(tui_t *t)
 			redraw_fresh = true;
 			break;
 		}
-		case 'm': {
+		case 'm': case 'y': {
 			if (!n)
 				break;
+			/* 'y' for copy, not 'c': 'c' is already cd, and the alternative was
+			 * a shifted 'C' — one key away from the cd prompt, for an operation
+			 * that asks the same question ("to:") and would quietly navigate
+			 * instead of copying. 'y' is what ranger and nnn use for exactly
+			 * this, and it cannot be confused with anything here. */
+			bool copying = (k == 'y');
 			/* The name is in the prompt because the highlighted row is about to
 			 * scroll out of sight behind the answer. */
-			char *label = xasprintf("move %s to:", ents[sel].name);
+			char *label = xasprintf("%s %s to:", copying ? "copy" : "move",
+			                        ents[sel].name);
 			char *p = ask_line(label);
 			free(label);
 			if (p && *p) {
 				tty_cooked();
-				move_entry(t, &ents[sel], p);
+				transfer_entry(t, &ents[sel], p, copying);
 				printf("\n  %spress any key%s", C_DIM(), C_RESET());
 				fflush(stdout);
 				tty_uncooked();
@@ -911,18 +1027,18 @@ int cmd_tui(int argc, char **argv)
 		case 'g':
 			open_gui(t.cwd);
 			break;
-		case 'm': {
+		case 'm': case 'y': {
 			/* "m <row> <destination>" — the row, then where it goes. */
 			char *end = NULL;
 			long num = strtol(rest, &end, 10);
 			if (num < 1 || (size_t)num > n) {
-				printf("  %sm needs a row number and a destination%s\n",
-				       C_WARN(), C_RESET());
+				printf("  %s%c needs a row number and a destination%s\n",
+				       C_WARN(), verb, C_RESET());
 				break;
 			}
 			while (end && *end == ' ')
 				end++;
-			move_entry(&t, &ents[num - 1], end);
+			transfer_entry(&t, &ents[num - 1], end, verb == 'y');
 			break;
 		}
 		case 'i': case 'z': case 't': case 'e': {

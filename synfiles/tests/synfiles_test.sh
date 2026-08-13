@@ -836,6 +836,79 @@ if [ -f "$_t" ]; then
         || ok "tui.c has no mover of its own"
 fi
 
+# ── the tui copies things ───────────────────────────────────────────────────
+#
+# `y`, not `c` — c is cd. Same guards as move, because cmd_copy die()s on a bad
+# destination in exactly the same way, plus one that is copy's alone: a
+# directory copied into its own subtree recurses until the disk fills.
+CP="$T/tuicopy"
+mkdir -p "$CP/dest" "$CP/tree/inner"
+echo payload > "$CP/one.txt"
+echo deep    > "$CP/tree/inner/f.txt"
+echo x       > "$CP/plain"
+
+# Rows sort directories first: 1 dest, 2 tree, 3 one.txt, 4 plain.
+printf 'y 3 dest\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$CP" >/dev/null 2>&1
+[ -f "$CP/dest/one.txt" ] && ok "the tui copies a file into a folder" \
+                          || bad "y did not copy the file"
+[ -f "$CP/one.txt" ] && ok "a copy leaves the original where it was" \
+                     || bad "the original vanished — that is a move, not a copy"
+
+# A copy recurses, and the original tree is untouched.
+printf 'y 2 dest\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$CP" >/dev/null 2>&1
+[ -f "$CP/dest/tree/inner/f.txt" ] && ok "copying a folder takes what is in it" \
+                                   || bad "the nested file did not come along"
+[ -f "$CP/tree/inner/f.txt" ] && ok "the copied folder is left alone" \
+                              || bad "copying a folder consumed the original"
+
+# COPY'S OWN HAZARD: a folder copied into itself, or into its own subtree,
+# recurses forever. cmd_copy refuses on resolved paths; the tui must let it,
+# and must still be running afterwards.
+out=$(printf 'y 2 tree\ny 2 tree/inner\na\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$CP" 2>&1)
+case "$out" in
+    *"inside the source"*) ok "copying a folder into itself is refused" ;;
+    *)                     bad "the self-copy guard did not fire: $out" ;;
+esac
+[ "$(find "$CP/tree" | wc -l)" = 3 ] && ok "a refused self-copy changes nothing" \
+                                     || bad "the tree grew: $(find "$CP/tree" | wc -l) entries"
+
+# The same die() guards as move, and the same discriminating check: the second
+# command only prints if the browser is still alive.
+for badness in "y 3 $CP/plain" "y 3 /nope/nowhere" "y 3" "y"; do
+    out=$(printf '%s\na\nq\n' "$badness" | NO_COLOR=1 "$SYNFILES" tui "$CP" 2>&1)
+    n=$(printf '%s' "$out" | grep -c "items")
+    [ "$n" -ge 2 ] && ok "the tui survives '$badness'" \
+                   || bad "the tui died on '$badness'"
+done
+
+if [ -f "$_t" ]; then
+    grep -q 'cmd_copy(' "$_t" && ok "the tui copies through cmd_copy" \
+                              || bad "the tui does not call cmd_copy"
+fi
+
+# ── the redraw covers exactly what it printed ───────────────────────────────
+#
+# The arrow-key frame is redrawn by moving the cursor UP by the height of the
+# last frame. That height was hand-counted, and was wrong three ways: the
+# header emits five newlines and was counted as four, and both the path and the
+# hint lines WRAP on a narrow terminal. The frame then walked down the screen a
+# row per keypress until the terminal scrolled — and once it has scrolled, the
+# rows the redraw wants are gone.
+#
+# Measured beats counted, so the test is that it is still measured.
+if [ -f "$_t" ]; then
+    grep -q 'drawn = frame_height()' "$_t" \
+        && ok "the frame height is measured, not counted" \
+        || bad "the redraw is back to a hand-counted height"
+    grep -qE '^\s*before \+=' "$_t" \
+        && bad "hand-counted frame arithmetic is back in tui.c" \
+        || ok "no hand-counted line arithmetic remains"
+    # The wrap is the part a line count cannot see.
+    grep -q 'g_frame_col >= g_cols' "$_t" \
+        && ok "the measurement accounts for wrapped lines" \
+        || bad "wrapping is no longer counted — narrow terminals will drift"
+fi
+
 # ── what the tui is allowed to do to a terminal ─────────────────────────────
 #
 # Arrow keys need ICANON and ECHO off, which is a terminal mode change in a
