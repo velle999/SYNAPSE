@@ -26,8 +26,18 @@
 // SynapseOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// No `pragma ComponentBehavior: Bound` here, though qmllint suggests it for
+// every `root.` reached from inside a component. It also stops a delegate
+// seeing `index` and `modelData` unless each is redeclared as a required
+// property — so the pragma trades a class of lint warning for a class of
+// runtime breakage, in the delegates. syn-disks carries the same warnings for
+// the same reason.
+//
+// The two remaining warnings are Process.exited's QProcess::ExitStatus
+// parameter, which QML cannot resolve. synpkg.qml has exactly the same pair.
+// They are why the handlers below take no parameters — see the note there.
+
 import QtQuick
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
@@ -274,20 +284,36 @@ FloatingWindow {
         atomicWrites: true
     }
 
+    // ── Why the exit status travels in the OUTPUT ───────────────────────────
+    //
+    // Quickshell's signal is exited(int, QProcess::ExitStatus), and QML cannot
+    // resolve that second type — so a handler that declares parameters fails to
+    // compile and then simply NEVER RUNS. Silently: no error at load, the
+    // window just sits there. Both handlers here were written that way at
+    // first, which meant the install never started and the finished state never
+    // arrived.
+    //
+    // So the handlers below take no parameters, and each command reports its
+    // own status as a line on stdout that the parser picks out. That also
+    // survives the thing an exit code cannot describe — a process killed
+    // before it ever reported.
+    property bool confOk: false
+
     function startInstall() {
         if (running) return
         page = 6
-        running = true; finished = false; exitCode = -1
+        running = true; finished = false; exitCode = -1; confOk = false
         logModel.clear(); lastLine = "Starting…"
-        // mkdir -p, then the profile, then the run. Three steps rather than one
-        // shell line so a failure to write says WHICH step failed.
         writeProc.running = true
     }
 
     Process {
         id: writeProc
+        // umask BEFORE the redirect, or the file is created with the session's
+        // umask and only then narrowed — a window in which a profile holding a
+        // password is world-readable.
         command: ["sh", "-c",
-                  "mkdir -p \"$(dirname \"$1\")\" && umask 077 && cat > \"$1\"",
+                  "umask 077; mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\" && echo __syn_conf_ok",
                   "sh", root.confPath]
         running: false
         stdinEnabled: true
@@ -295,10 +321,15 @@ FloatingWindow {
             write(root.buildConfig())
             stdinEnabled = false     // EOF, or `cat` never returns
         }
-        onExited: (code) => {
-            if (code !== 0) {
-                root.appendLog("Could not write " + root.confPath + " (exit " + code + ")")
-                root.running = false; root.finished = true; root.exitCode = code
+        stdout: SplitParser {
+            onRead: (data) => { if (data.indexOf("__syn_conf_ok") >= 0) root.confOk = true }
+        }
+        stderr: SplitParser { onRead: (data) => root.appendLog(data) }
+        onExited: {
+            if (!root.confOk) {
+                root.appendLog("Could not write " + root.confPath)
+                root.running = false; root.finished = true; root.exitCode = 1
+                root.lastLine = "Could not write the install profile."
                 return
             }
             root.appendLog("Profile written to " + root.confPath)
@@ -308,17 +339,26 @@ FloatingWindow {
 
     Process {
         id: installProc
-        command: [root.bin, "--config", root.confPath]
+        command: ["sh", "-c", "\"$@\"; echo \"__syn_install_exit=$?\"",
+                  "sh", root.bin, "--config", root.confPath]
         running: false
         // SplitParser, not StdioCollector: a collector fires once, when the
         // stream ENDS, which for a twenty-minute install means a blank window
         // for twenty minutes and then everything at once. This is the half of
         // live progress that lives on the reading side.
-        stdout: SplitParser { onRead: (data) => root.appendLog(data) }
+        stdout: SplitParser {
+            onRead: (data) => {
+                const m = /__syn_install_exit=(\d+)/.exec(data)
+                if (m) { root.exitCode = parseInt(m[1]); return }
+                root.appendLog(data)
+            }
+        }
         stderr: SplitParser { onRead: (data) => root.appendLog(data) }
-        onExited: (code) => {
-            root.running = false; root.finished = true; root.exitCode = code
-            root.lastLine = code === 0 ? "Installation complete." : "Installation failed — see the log."
+        onExited: {
+            root.running = false; root.finished = true
+            root.lastLine = root.exitCode === 0
+                ? "Installation complete."
+                : "Installation failed — see the log."
             // The profile holds the account password and the LUKS passphrase.
             // /run is a tmpfs so it never reached a disk, but it should not sit
             // readable in the live session either.
@@ -337,12 +377,14 @@ FloatingWindow {
         id: btn
         property string text: ""
         property bool primary: false
-        property bool enabled: true
+        // NOT `enabled`: that is QQuickItem's own property, and shadowing it
+        // means the base class's and this one's disagree about the same word.
+        property bool canPress: true
         signal clicked()
         implicitWidth: label.implicitWidth + 34
         implicitHeight: 34
         radius: 6
-        color: !btn.enabled ? Qt.rgba(0.5, 0.5, 0.5, 0.12)
+        color: !btn.canPress ? Qt.rgba(0.5, 0.5, 0.5, 0.12)
              : btn.primary ? (ma.containsMouse ? Qt.lighter(root.cAccent, 1.15) : root.cAccent)
              : (ma.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05))
         border.width: btn.primary ? 0 : 1
@@ -353,15 +395,15 @@ FloatingWindow {
             text: btn.text
             font.pixelSize: 14
             font.bold: btn.primary
-            color: !btn.enabled ? root.cDim
+            color: !btn.canPress ? root.cDim
                  : btn.primary ? (root.isLight ? "#ffffff" : "#0b0f14") : root.cText
         }
         MouseArea {
             id: ma
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: btn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (btn.enabled) btn.clicked()
+            cursorShape: btn.canPress ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (btn.canPress) btn.clicked()
         }
     }
 
@@ -370,15 +412,16 @@ FloatingWindow {
         property string text: ""
         property string subtext: ""
         property bool checked: false
-        property bool enabled: true
+        // See Btn: `enabled` belongs to QQuickItem.
+        property bool selectable: true
         signal picked()
         implicitHeight: 44
         radius: 6
         color: ch.checked ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.14)
-             : cma.containsMouse && ch.enabled ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
+             : cma.containsMouse && ch.selectable ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
         border.width: 1
         border.color: ch.checked ? root.cAccent : root.cLine
-        opacity: ch.enabled ? 1 : 0.45
+        opacity: ch.selectable ? 1 : 0.45
         Row {
             anchors.left: parent.left
             anchors.leftMargin: 12
@@ -411,8 +454,8 @@ FloatingWindow {
             id: cma
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: ch.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (ch.enabled) ch.picked()
+            cursorShape: ch.selectable ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (ch.selectable) ch.picked()
         }
     }
 
@@ -594,7 +637,7 @@ FloatingWindow {
                             text: modelData.dev + "   " + modelData.size
                             subtext: modelData.usable ? modelData.model
                                                       : modelData.model + " — " + modelData.reason
-                            enabled: modelData.usable
+                            selectable: modelData.usable
                             checked: root.aDisk === modelData.dev
                             onPicked: root.aDisk = modelData.dev
                         }
@@ -666,8 +709,8 @@ FloatingWindow {
                         width: 240
                         text: "Snapshots"
                         subtext: "btrfs + limine only"
-                        enabled: root.aFs === "btrfs" && root.aBoot === "limine"
-                        checked: root.aSnapshots && enabled
+                        selectable: root.aFs === "btrfs" && root.aBoot === "limine"
+                        checked: root.aSnapshots && selectable
                         onPicked: root.aSnapshots = !root.aSnapshots
                     }
                     Choice {
@@ -1009,7 +1052,7 @@ FloatingWindow {
                     text: "Next"
                     primary: true
                     visible: root.page < 5
-                    enabled: root.pageProblem(root.page) === ""
+                    canPress: root.pageProblem(root.page) === ""
                     onClicked: root.page++
                 }
                 Btn {
