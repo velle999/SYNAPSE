@@ -154,7 +154,7 @@ static void json_view(ipc_buf_t *b, syn_view_t *v)
      * cleared by the restart that would let us instrument it, so it has to be
      * readable from the *live* compositor:
      *
-     *   alpha 0        — anim_fade_in() zeroes alpha and fades up off the frame
+     *   alpha 0        — anim_window_open() zeroes alpha and fades up off the frame
      *                    tick; a fade that never ticks leaves a window mapped,
      *                    buffered and perfectly transparent.
      *   enabled false  — something disabled the node (fade-out, occlusion).
@@ -167,6 +167,13 @@ static void json_view(ipc_buf_t *b, syn_view_t *v)
         wlr_scene_node_for_each_buffer(view_node(v), count_buffer, &buffers);
     bprintf(b, ",\"alpha\":%.3f", (double)v->alpha);
     bprintf(b, ",\"fade_active\":%s", v->fade_active ? "true" : "false");
+    /* Where the frame is being DRAWN, relative to the "at" above, while an
+     * animation displaces it — the rise of an opening window, the slide of a
+     * desktop leaving. "at" stays the logical geometry throughout, which is
+     * what every other consumer wants and is also why the displacement is
+     * otherwise unobservable: without this, a slide and a teleport produce
+     * identical output here. tests/ws_slide.sh is the reason it exists. */
+    bprintf(b, ",\"anim_offset\":[%d,%d]", v->anim_dx, v->anim_dy);
     bprintf(b, ",\"enabled\":%s",
             (v->mapped && (v->frame || v->scene_tree) && view_node(v)->enabled)
                 ? "true" : "false");

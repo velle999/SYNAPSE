@@ -410,6 +410,18 @@ The CRT filters are off on a fresh install too; turn them on with `Super`+`E`.
 `Tab` on that panel is the second page: rounded corners, drop shadow, backdrop
 blur and translucency, each on a knob you turn while watching the window change.
 
+**Animations** are two settings, not one, under *Windows → Animation* in the
+control panel (`Super`+`C`) or in `synuirc`. A window opening can be `off`,
+`fade` or `rise` (it glides up `anim_rise_px` into place); switching desktop can
+be `off`, `fade` (a cross-fade) or `slide` — both desks move in the direction
+you switched, at full opacity, going up sends the old one off to the left. Each
+has its own length in ms, `0` meaning off, and they share one `anim_curve`
+(`ease-out`, `linear`, `ease-in-out`, `ease-in`) so the desktop decays one way.
+
+A window *closing* is never animated: the client's buffer is gone the moment it
+unmaps. Nothing here ever resizes a window to animate it either — that would
+re-configure the client every frame — so what moves, moves at a fixed size.
+
 Full detail in the wiki: [Cursor Themes](https://github.com/velle999/SYNAPSE/wiki/Cursor-Themes) ·
 [Sound Themes](https://github.com/velle999/SYNAPSE/wiki/Sound-Themes) ·
 [The Desktop](https://github.com/velle999/SYNAPSE/wiki/The-Desktop) ·

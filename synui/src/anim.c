@@ -1,21 +1,37 @@
 /*
  * anim.c — window animations
  *
- * The Hyprland-style polish, on a wlr_scene compositor. wlr_scene gives us
- * exactly one lever — per-buffer opacity (wlr_scene_buffer_set_opacity) — and
- * no per-node shader hook, so what's achievable here is *fades*, done properly:
+ * The Hyprland-style polish, on a wlr_scene compositor. wlr_scene gives us two
+ * free levers and no third: per-buffer opacity
+ * (wlr_scene_buffer_set_opacity), and the POSITION of a scene node — moving one
+ * configures nobody, which is the whole reason a slide is affordable here. What
+ * it does not give us is a per-node shader hook or any way to draw a buffer at
+ * a size the client did not agree to.
  *
- *   - a window fades in when it opens, instead of snapping into existence;
- *   - switching desktop cross-fades: the outgoing windows fade out (and are
- *     only disabled once they're actually invisible), the incoming ones fade in.
+ * So the two events that animate are:
  *
- * Geometry animation (a window gliding to its tiled slot) is deliberately NOT
- * here. Animating a window's *size* means re-configuring the client every frame
- * — a resize storm the client has to keep up with, which is exactly why
- * Hyprland animates a scaled snapshot of the buffer instead. That needs render
- * control wlr_scene doesn't expose. Position-only animation would work, but a
- * tiling reflow almost always changes size too, so it would only ever apply to
- * the cases nobody notices. Fades are the honest subset.
+ *   - a window OPENING: it fades in, and on `rise` glides up into place
+ *     instead of snapping into existence (config.anim_window);
+ *   - switching DESKTOP: the outgoing windows either fade out or slide off the
+ *     way you switched, and are only disabled once they have actually gone;
+ *     the incoming ones arrive the same way (config.anim_workspace).
+ *
+ * Each has its own length, and they share one curve — see syn_anim_*_t in
+ * synui.h for why those are the divisions.
+ *
+ * A window CLOSING is not in that list and cannot be: the client's buffer is
+ * gone the moment it unmaps, and fading what is left would mean holding a
+ * snapshot texture wlr_scene does not hand us.
+ *
+ * SIZE animation (a window growing into its tiled slot) is deliberately NOT
+ * here either. Animating a window's *size* means re-configuring the client
+ * every frame — a resize storm the client has to keep up with, which is exactly
+ * why Hyprland animates a scaled snapshot of the buffer instead. Position-only
+ * animation is what is left, and it is enough for the two events above because
+ * neither of them changes any window's size: an opening window rises at its
+ * final size, and a whole desk slides without a single window resizing. A
+ * tiling reflow does change sizes, which is why gliding to a tiled slot is
+ * still not offered.
  *
  * Everything runs off the per-output frame tick (like dock_tick / cat_tick):
  * anim_tick() advances every running fade and returns true while any is still
@@ -27,6 +43,7 @@
  */
 
 #define _GNU_SOURCE
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
@@ -50,6 +67,30 @@ float anim_ease_out(float t)
     return 1.0f - u * u * u;
 }
 #define ease_out(t) anim_ease_out(t)
+
+/* The other three curves synuirc's `anim_curve` can name. Cubic throughout, so
+ * switching curve changes the *shape* of the decay and not how far anything
+ * travels — every one of these maps 0→0 and 1→1. */
+float anim_curve_apply(int curve, float t)
+{
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+
+    switch (curve) {
+    case ANIM_CURVE_LINEAR:
+        return t;
+    case ANIM_CURVE_EASE_IN:
+        return t * t * t;
+    case ANIM_CURVE_EASE_IN_OUT:
+        /* Standard cubic in-out: the first half is ease-in scaled into [0,0.5],
+         * the second is its mirror. */
+        return t < 0.5f ? 4.0f * t * t * t
+                        : 1.0f - powf(-2.0f * t + 2.0f, 3.0f) / 2.0f;
+    case ANIM_CURVE_EASE_OUT:
+    default:
+        return anim_ease_out(t);
+    }
+}
 
 static double now_secs(void)
 {
@@ -495,56 +536,176 @@ void anim_apply_alpha_all(syn_server_t *s)
     }
 }
 
-/* ── Starting a fade ─────────────────────────────────────── */
-static void fade_to(syn_view_t *view, float to, bool hide_when_done)
+/* ── Starting one ────────────────────────────────────────── */
+/*
+ * The one entry point. Everything an animation can do is here: opacity from →
+ * to, offset from → to, over `ms` milliseconds, and whether the node is
+ * disabled at the end.
+ *
+ * `ms <= 0` is not a special case anybody else has to handle — the end state
+ * is applied on the spot and no animation is armed, which is what makes
+ * "animations off" a duration of zero rather than a mode.
+ */
+static void anim_start(syn_view_t *view, int ms,
+                       float alpha_to,
+                       int dx_from, int dx_to, int dy_from, int dy_to,
+                       bool hide_when_done)
 {
     syn_server_t *s = view->server;
 
     if (!view->mapped) return;
 
-    /* Animations off, or a zero duration: jump straight to the end state. The
-     * rest of the compositor must not have to care which mode it's in. */
-    if (s->config.animation_ms <= 0) {
-        view->alpha = to;
+    if (ms <= 0) {
+        view->alpha       = alpha_to;
         view->fade_active = 0;
+        view->anim_dx     = dx_to;
+        view->anim_dy     = dy_to;
+        view_place_node(view);
         anim_apply_alpha(view);
-        if (hide_when_done && to <= 0.0f)
+        if (hide_when_done && alpha_to <= 0.0f)
             wlr_scene_node_set_enabled(view_node(view), false);
         return;
     }
 
     view->fade_from      = view->alpha;
-    view->fade_to        = to;
+    view->fade_to        = alpha_to;
     view->fade_start     = now_secs();
+    view->fade_dur       = ms / 1000.0;
+    view->fade_curve     = s->config.anim_curve;
     view->fade_active    = 1;
     view->fade_hide_done = hide_when_done ? 1 : 0;
+
+    view->anim_dx_from = dx_from;  view->anim_dx_to = dx_to;
+    view->anim_dy_from = dy_from;  view->anim_dy_to = dy_to;
+
+    /* Start displaced, so the first frame of the animation is the start of it
+     * rather than one frame of the end state. */
+    if (view->anim_dx != dx_from || view->anim_dy != dy_from) {
+        view->anim_dx = dx_from;
+        view->anim_dy = dy_from;
+        view_place_node(view);
+    }
 }
 
-void anim_fade_in(syn_view_t *view)
+/* How far a desktop slides: the width of the monitor the window is on, so two
+ * monitors of different widths each carry their own windows off their own edge
+ * rather than sharing one distance that is wrong for both. */
+static int slide_distance(syn_view_t *view)
 {
+    syn_server_t *s = view->server;
+    struct wlr_box b;
+    syn_output_t *o = view->output ? view->output : server_focused_output(s);
+
+    output_box_of(s, o, &b);
+    return b.width > 0 ? b.width : 1920;
+}
+
+/* ── A window has just mapped ────────────────────────────── */
+void anim_window_open(syn_view_t *view)
+{
+    syn_server_t *s = view->server;
     if (!view->mapped || view->minimized) return;
-    view->alpha = 0.0f;
+
+    int  ms   = s->config.anim_window_ms;
+    int  rise = 0;
+
+    switch (s->config.anim_window) {
+    case ANIM_WINDOW_NONE:
+        ms = 0;
+        break;
+    case ANIM_WINDOW_RISE:
+        rise = s->config.anim_rise_px;
+        break;
+    case ANIM_WINDOW_FADE:
+    default:
+        break;
+    }
+
+    view->alpha = (ms > 0) ? 0.0f : 1.0f;
     anim_apply_alpha(view);
-    fade_to(view, 1.0f, false);
+    /* Rise travels UP into place: it starts +rise BELOW where it belongs. */
+    anim_start(view, ms, 1.0f, 0, 0, rise, 0, false);
 }
 
-/* Fade the window out and only then disable its node — a window that vanishes
- * the instant the desktop changes is the snap we're trying to get rid of. */
-void anim_fade_out_and_hide(syn_view_t *view)
+/* ── The two halves of a desktop switch ──────────────────── */
+/*
+ * hide() only disables the node once the window is actually gone — a window
+ * that vanishes the instant the desktop changes is the snap all of this exists
+ * to remove. show() enables it first, for the same reason in reverse.
+ */
+void anim_workspace_hide(syn_view_t *view, int dir)
 {
+    syn_server_t *s = view->server;
+
     if (!view->mapped) {
         wlr_scene_node_set_enabled(view_node(view), false);
         return;
     }
-    fade_to(view, 0.0f, true);
+
+    int ms = s->config.anim_workspace_ms;
+    int dx = 0;
+    float to = 0.0f;
+
+    switch (s->config.anim_workspace) {
+    case ANIM_WS_NONE:
+        ms = 0;
+        break;
+    case ANIM_WS_SLIDE:
+        /* Switching UP (dir > 0) sends this desk off to the LEFT, the way a
+         * pager reads. The windows keep full opacity: they are leaving, not
+         * dissolving, and a slide that also fades reads as neither. */
+        dx = (dir >= 0) ? -slide_distance(view) : slide_distance(view);
+        to = 1.0f;
+        break;
+    case ANIM_WS_FADE:
+    default:
+        break;
+    }
+
+    anim_start(view, ms, to, 0, dx, 0, 0, true);
 }
 
-/* A window that was faded out and is being shown again (desktop switch back,
- * un-minimize) must start from wherever its alpha was left, not from full. */
+void anim_workspace_show(syn_view_t *view, int dir)
+{
+    syn_server_t *s = view->server;
+    if (!view->mapped || view->minimized) return;
+
+    wlr_scene_node_set_enabled(view_node(view), true);
+
+    int ms = s->config.anim_workspace_ms;
+    int dx = 0;
+
+    switch (s->config.anim_workspace) {
+    case ANIM_WS_NONE:
+        ms = 0;
+        break;
+    case ANIM_WS_SLIDE:
+        /* The mirror of hide(): the incoming desk comes from the side the
+         * outgoing one left towards. */
+        dx = (dir >= 0) ? slide_distance(view) : -slide_distance(view);
+        view->alpha = 1.0f;
+        break;
+    case ANIM_WS_FADE:
+    default:
+        view->alpha = 0.0f;
+        break;
+    }
+
+    anim_apply_alpha(view);
+    anim_start(view, ms, 1.0f, dx, 0, 0, 0, false);
+}
+
+/* A window that was animated out and is being shown again (desktop switch back,
+ * un-minimize) must start from wherever it was left, not from full — and it
+ * must not keep an offset from an animation nobody finished. */
 void anim_reset(syn_view_t *view)
 {
     view->fade_active = 0;
     view->alpha = 1.0f;
+    if (view->anim_dx || view->anim_dy) {
+        view->anim_dx = view->anim_dy = 0;
+        view_place_node(view);
+    }
     if (view->mapped)
         anim_apply_alpha(view);
 }
@@ -555,8 +716,6 @@ void anim_reset(syn_view_t *view)
 bool anim_tick(syn_server_t *s, double now)
 {
     bool running = false;
-    double dur = s->config.animation_ms / 1000.0;
-    if (dur <= 0.0) dur = 0.001;
 
     for (int w = 0; w < WORKSPACE_MAX; w++) {
         syn_view_t *v;
@@ -564,17 +723,31 @@ bool anim_tick(syn_server_t *s, double now)
             if (!v->fade_active) continue;
             if (!v->mapped) { v->fade_active = 0; continue; }
 
+            /* Per-run, so a window opening beside a sliding desk keeps its own
+             * length even if the config changed under both. */
+            double dur = v->fade_dur > 0.0 ? v->fade_dur : 0.001;
+
             float t = (float)((now - v->fade_start) / dur);
             if (t >= 1.0f) {
                 v->alpha       = v->fade_to;
                 v->fade_active = 0;
+                if (v->anim_dx != v->anim_dx_to || v->anim_dy != v->anim_dy_to) {
+                    v->anim_dx = v->anim_dx_to;
+                    v->anim_dy = v->anim_dy_to;
+                    view_place_node(v);
+                }
                 anim_apply_alpha(v);
-                if (v->fade_hide_done && v->fade_to <= 0.0f) {
+                if (v->fade_hide_done) {
                     wlr_scene_node_set_enabled(view_node(v), false);
-                    /* Left at 0 it would be invisible when re-enabled; the show
-                     * path fades it back in from 0 on purpose, but a plain
-                     * enable (minimize restore) must not get a ghost. */
+                    /* Left mid-animation it would come back displaced or
+                     * invisible: the show path starts it from 0 (or from off
+                     * the edge) on purpose, but a plain enable — a minimize
+                     * restore — must not get a ghost or an offset window. */
                     v->alpha = 1.0f;
+                    if (v->anim_dx || v->anim_dy) {
+                        v->anim_dx = v->anim_dy = 0;
+                        view_place_node(v);
+                    }
                     anim_apply_alpha(v);
                 }
                 v->fade_hide_done = 0;
@@ -582,9 +755,17 @@ bool anim_tick(syn_server_t *s, double now)
             }
             if (t < 0.0f) t = 0.0f;
 
-            float e = ease_out(t);
+            float e = anim_curve_apply(v->fade_curve, t);
             v->alpha = v->fade_from + (v->fade_to - v->fade_from) * e;
             anim_apply_alpha(v);
+
+            int dx = v->anim_dx_from + (int)lroundf((v->anim_dx_to - v->anim_dx_from) * e);
+            int dy = v->anim_dy_from + (int)lroundf((v->anim_dy_to - v->anim_dy_from) * e);
+            if (dx != v->anim_dx || dy != v->anim_dy) {
+                v->anim_dx = dx;
+                v->anim_dy = dy;
+                view_place_node(v);
+            }
             running = true;
         }
     }

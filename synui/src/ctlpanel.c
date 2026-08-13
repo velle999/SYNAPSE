@@ -102,12 +102,28 @@ static const char *const ctl_names_phosphor[]  = { "Off", "Green", "Amber", "Blu
  * words that read as config values, which is why the row leans on its help
  * line to say what "sloppy" means rather than spelling it in the value. */
 static const char *const ctl_names_focus_mode[] = { "Click", "Sloppy", "Strict" };
+/* Order matches syn_anim_window_t / syn_anim_ws_t / syn_anim_curve_t. The
+ * lower-cased spellings synuirc takes live in config.c beside the parser, so a
+ * new style needs its display name added HERE and its word THERE. */
+static const char *const ctl_names_anim_window[] = { "Off", "Fade", "Rise" };
+static const char *const ctl_names_anim_ws[]     = { "Off", "Fade", "Slide" };
+/* Hyphenated, not spaced: ctl_persist writes an enum by lower-casing the name
+ * it shows, so "Ease out" would persist as "ease out" and config.c spells it
+ * "ease-out". Same reason cat_breed's "Russian-Blue" carries its hyphen. */
+static const char *const ctl_names_anim_curve[]  = {
+    "Ease-out", "Linear", "Ease-in-out", "Ease-in",
+};
 /* Order matches cat_breed_t in synui.h; the lower-cased spellings synuirc takes
  * live in cat_breed_names[] beside the coats themselves, so a new breed needs
  * its display name added HERE and nowhere else. */
 static const char *const ctl_names_cat_breed[] = {
     "Neon", "Tabby", "Ginger", "Tuxedo", "Siamese",
-    "Calico", "Tortie", "Russian Blue", "Black",
+    /* "Russian-Blue" with the hyphen cat_draw.c spells it with: this row
+     * persists by lower-casing the name below, and "russian blue" is a word
+     * config.c does not know — picking that coat used to survive the session
+     * and be back to Neon at the next login. Found by the every-option walk in
+     * tests/ctlpanel_table_test.c. */
+    "Calico", "Tortie", "Russian-Blue", "Black",
 };
 /* Order matches syn_bar_shell_t. The lower-cased spellings are what config.c's
  * `bar_shell` case parses back and what synui-bar.sh matches on. */
@@ -285,10 +301,37 @@ static const struct ctl_item ctl_items[] = {
       .vmin = CASCADE_STACK_MIN, .vmax = CASCADE_STACK_MAX, .vstep = 1,
       .apply = CTL_APPLY_RELAYOUT,
       .help = "How deep a cascade pile may get once the grid of piles is full" },
-    { CTL_ROW_ANIMATION_MS,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Animation length", NULL,
-      .key = "animation_ms", .off = CFG(animation_ms), .vtype = CTL_VAL_INT,
+    /* ── Animation ────────────────────────────────────────────
+     * Two events, two sets of rows, because they are two tastes: people who
+     * want windows to appear instantly often still want the desk to move, and
+     * the other way round. They shared one length until this section existed.
+     * The curve is shared on purpose — one desktop, one way of decaying. */
+    { CTL_ROW_ANIM_WINDOW,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Window open", NULL,
+      .section = "Animation",
+      .key = "anim_window", .off = CFG(anim_window), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_anim_window), .apply = CTL_APPLY_NONE,
+      .help = "How a window arrives. Closing is not animated: the client's "
+              "buffer is gone the moment it unmaps" },
+    { CTL_ROW_ANIMATION_MS,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Window length", NULL,
+      .key = "anim_window_ms", .off = CFG(anim_window_ms), .vtype = CTL_VAL_INT,
       .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,
-      .help = "0 turns fades off — every one jumps straight to its end state" },
+      .help = "0 jumps straight to the end state. Also times the niri strip slide" },
+    { CTL_ROW_ANIM_RISE_PX,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Rise distance", NULL,
+      .key = "anim_rise_px", .off = CFG(anim_rise_px), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 200, .vstep = 2, .unit = "px", .apply = CTL_APPLY_NONE,
+      .help = "How far a Rise window travels up into place. Ignored by the other styles" },
+    { CTL_ROW_ANIM_WORKSPACE, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktop switch", NULL,
+      .key = "anim_workspace", .off = CFG(anim_workspace), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_anim_ws), .apply = CTL_APPLY_NONE,
+      .help = "Fade cross-fades the two desks; Slide sends them off the way you switched" },
+    { CTL_ROW_ANIM_WORKSPACE_MS, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Desktop length", NULL,
+      .key = "anim_workspace_ms", .off = CFG(anim_workspace_ms), .vtype = CTL_VAL_INT,
+      .vmin = 0, .vmax = 1000, .vstep = 10, .unit = "ms", .apply = CTL_APPLY_NONE,
+      .help = "A slide wants longer than a fade — the eye has to follow it somewhere" },
+    { CTL_ROW_ANIM_CURVE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Easing", NULL,
+      .key = "anim_curve", .off = CFG(anim_curve), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_anim_curve), .apply = CTL_APPLY_NONE,
+      .help = "Shared by both, and by the strip slide: two easings read as two desktops" },
     { CTL_ROW_CLIP_CSD_MARGIN, CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Crop client shadows", NULL,
       .key = "clip_csd_margin", .off = CFG(clip_csd_margin), .vtype = CTL_VAL_BOOL,
       .apply = CTL_APPLY_DECO,
@@ -1290,6 +1333,12 @@ const char *ctlpanel_row_key(int row)
 {
     const struct ctl_item *it = ctl_item(row);
     return (it && it->vtype != CTL_VAL_NONE) ? it->key : NULL;
+}
+
+int ctlpanel_row_options(int row)
+{
+    const struct ctl_item *it = ctl_item(row);
+    return (it && it->vtype == CTL_VAL_ENUM) ? it->nnames : 0;
 }
 
 /* ── Shortcuts column ────────────────────────────────────── */

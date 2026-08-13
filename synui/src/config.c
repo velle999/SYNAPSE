@@ -517,11 +517,44 @@ const char *const syn_focus_mode_names[SYN_FOCUS_MODE_COUNT] = {
     "click", "sloppy", "strict",
 };
 
+/*
+ * Same contract as above, for the animation enums.
+ *
+ * These must equal the control panel's display names LOWER-CASED, character
+ * for character: ctl_persist() writes an enum row to settings.state by folding
+ * the display name's case and nothing else, and the parser below has to accept
+ * what it wrote. A hyphen that is a space on the other side is a setting that
+ * adjusts fine, persists fine, and is silently back to its default at the next
+ * login. tests/ctlpanel_table_test.c walks every option of every enum row for
+ * exactly this reason — one notch of Right is not enough to catch it.
+ */
+const char *const syn_anim_window_names[ANIM_WINDOW_COUNT] = {
+    "off", "fade", "rise",
+};
+const char *const syn_anim_ws_names[ANIM_WS_COUNT] = {
+    "off", "fade", "slide",
+};
+const char *const syn_anim_curve_names[ANIM_CURVE_COUNT] = {
+    "ease-out", "linear", "ease-in-out", "ease-in",
+};
+
 static float clamp01(float v)
 {
     if (v < 0.0f) return 0.0f;
     if (v > 1.0f) return 1.0f;
     return v;
+}
+
+/* An animation length, clamped. 0 = off; the ceiling is there because a
+ * multi-second fade is a broken desktop, not a preference — and because the
+ * control panel's slider has to have an end. Shared by the three duration
+ * keys so they cannot drift apart. */
+static int anim_ms_of(const char *val)
+{
+    int ms = atoi(val);
+    if (ms < 0)    ms = 0;
+    if (ms > 1000) ms = 1000;
+    return ms;
 }
 
 /* Parse "#rrggbb" (or "rrggbb") into RGBA floats; alpha fixed at 1.0.
@@ -859,7 +892,13 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->desktop_icons     = false;   /* opt-in; the menu flips it live, and
                                          deskicons.state remembers the flip */
     cfg->desktop_icon_arrange = SYN_ARRANGE_NAME;
-    cfg->animation_ms    = ANIMATION_MS_DEF;
+    cfg->animation_ms      = ANIMATION_MS_DEF;
+    cfg->anim_window_ms    = ANIMATION_MS_DEF;
+    cfg->anim_workspace_ms = ANIMATION_MS_DEF;
+    cfg->anim_window       = ANIM_WINDOW_FADE;
+    cfg->anim_workspace    = ANIM_WS_FADE;
+    cfg->anim_curve        = ANIM_CURVE_EASE_OUT;
+    cfg->anim_rise_px      = ANIM_RISE_PX_DEF;
     { static const float c[4] = COLOR_TITLEBAR_NORM;    memcpy(cfg->titlebar_color,       c, sizeof(c)); }
     { static const float c[4] = COLOR_TITLEBAR_FOCUS;   memcpy(cfg->titlebar_color_focus, c, sizeof(c)); }
     { static const float c[4] = COLOR_TITLE_TEXT;       memcpy(cfg->titlebar_text,        c, sizeof(c)); }
@@ -1410,13 +1449,49 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "master_factor") == 0)
         cfg->master_factor = strtof(val, NULL);
+    /*
+     * animation_ms is the LEGACY key: it predates there being two events to
+     * time, so it sets both. An existing synuirc keeps meaning what it said,
+     * and a config that names the specific keys after it wins by being later —
+     * the parser is a single pass over the file, so order in the file is the
+     * only precedence rule there has ever been here.
+     */
     else if (strcmp(key, "animation_ms") == 0) {
-        /* 0 = off. Cap it: a multi-second fade is a broken desktop, not a
-         * preference. */
-        int ms = atoi(val);
-        if (ms < 0)   ms = 0;
-        if (ms > 1000) ms = 1000;
-        cfg->animation_ms = ms;
+        int ms = anim_ms_of(val);
+        cfg->animation_ms      = ms;
+        cfg->anim_window_ms    = ms;
+        cfg->anim_workspace_ms = ms;
+    }
+    else if (strcmp(key, "anim_window_ms") == 0)
+        cfg->anim_window_ms = anim_ms_of(val);
+    else if (strcmp(key, "anim_workspace_ms") == 0)
+        cfg->anim_workspace_ms = anim_ms_of(val);
+    else if (strcmp(key, "anim_window") == 0) {
+        for (int i = 0; i < ANIM_WINDOW_COUNT; i++)
+            if (strcmp(val, syn_anim_window_names[i]) == 0) {
+                cfg->anim_window = i;
+                break;
+            }
+    }
+    else if (strcmp(key, "anim_workspace") == 0) {
+        for (int i = 0; i < ANIM_WS_COUNT; i++)
+            if (strcmp(val, syn_anim_ws_names[i]) == 0) {
+                cfg->anim_workspace = i;
+                break;
+            }
+    }
+    else if (strcmp(key, "anim_curve") == 0) {
+        for (int i = 0; i < ANIM_CURVE_COUNT; i++)
+            if (strcmp(val, syn_anim_curve_names[i]) == 0) {
+                cfg->anim_curve = i;
+                break;
+            }
+    }
+    else if (strcmp(key, "anim_rise_px") == 0) {
+        int px = atoi(val);
+        if (px < 0)   px = 0;
+        if (px > 200) px = 200;
+        cfg->anim_rise_px = px;
     }
     else if (strcmp(key, "titlebar_height") == 0) {
         /* 0 disables the titlebar entirely; clamp the rest to something a

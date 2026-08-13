@@ -784,7 +784,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data)
         view_apply_maximized(view->server, view, 1);
 
     foreign_toplevel_map(view);
-    anim_fade_in(view);          /* windows arrive, they don't just appear */
+    anim_window_open(view);      /* windows arrive, they don't just appear */
 
     /* A client that asked for fullscreen before it ever mapped only got the
      * state recorded (see xdg_toplevel_request_fullscreen) — layout_apply just

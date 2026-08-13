@@ -65,7 +65,7 @@ float_gap       = 24
 #             screen by default, so two columns fit side by side); a column
 #             that does not fit entirely on the monitor is not drawn, so the
 #             strip always shows whole windows once it has settled. It SLIDES
-#             to each new scroll position rather than jumping (animation_ms
+#             to each new scroll position rather than jumping (anim_window_ms
 #             below sets how long, 0 turns it off), and while it is moving the
 #             columns are allowed to peek in at the edges the way niri's do —
 #             except where the overhang would spill onto the monitor next door,
@@ -107,10 +107,44 @@ float_gap       = 24
 # border_color_warn  = #ff3524
 
 # ── Animations ─────────────────────────────────────────────
-# Window fade duration in ms: windows fade in when they open, switching desktop
-# cross-fades instead of snapping, and the niri strip slides to its new scroll
-# position instead of jumping. 0 disables animations entirely. Capped at 1000.
-animation_ms = 140
+# Two events animate, and each has its own style and its own length, because
+# "how a window arrives" and "how the desk changes" are separate tastes. Every
+# length is in ms, capped at 1000, and 0 turns that event's animation off — the
+# end state is applied on the spot.
+#
+# anim_window   off    a window is simply there, at full opacity, in place
+#               fade   it fades in as it opens          (the default)
+#               rise   it fades in AND glides up anim_rise_px into place
+#
+# A window CLOSING is never animated: the client's buffer is gone the moment it
+# unmaps, and there is nothing left to fade.
+#
+# anim_window_ms also times the niri strip's slide — that is windows moving.
+anim_window    = fade
+anim_window_ms = 140
+anim_rise_px   = 24
+
+# anim_workspace  off    the desktop is simply the other one now
+#                 fade   outgoing windows fade out, incoming ones fade in
+#                        (the default)
+#                 slide  both desks slide, in the direction you switched: going
+#                        UP sends the old one off to the left. Windows keep
+#                        full opacity — they are leaving, not dissolving.
+#
+# A slide wants longer than a fade; the eye has to follow it somewhere.
+anim_workspace    = fade
+anim_workspace_ms = 140
+
+# How every animation decays, including the niri strip slide. Shared on purpose:
+# two easings on one desktop read as two different desktops.
+#   ease-out (default) | linear | ease-in-out | ease-in
+anim_curve = ease-out
+
+# The key this replaced. Still accepted, and still means what it said — it sets
+# BOTH lengths above. A config that names the specific keys after it wins,
+# because the file is read top to bottom and the last line about a setting is
+# the one that stands.
+# animation_ms = 140
 
 # ── Titlebar ───────────────────────────────────────────────
 # Server-side titlebar: drag it to move the window, double-click it to

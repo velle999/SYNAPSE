@@ -934,6 +934,17 @@ test('niri_slide', niri_slide,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The DESKTOP switch (anim.c): that a slide is observed part-way — the window is
+# drawn away from its logical position — that it arrives, and that a style of
+# `none` never displaces anything. The offset is only visible because
+# `synctl clients` reports it; "at" deliberately does not move during a slide.
+ws_slide = find_program('tests/ws_slide.sh')
+test('ws_slide', ws_slide,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # The fibonacci layout (layout_spiral): five windows laid out by BOTH tilers,
 # asserting the spiral's smallest window beats master-stack's — the claim the
 # layout exists to make — plus the no-overlap invariant its remainder

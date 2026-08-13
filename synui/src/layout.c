@@ -132,9 +132,7 @@ void view_resize(syn_view_t *view, int x, int y, int w, int h)
 
     /* Move the frame; the client surface sits at its content offset *inside*
      * the frame, so the chrome travels with the window for free. */
-    wlr_scene_node_set_position(view_node(view), x, y);
-    if (view->frame)
-        wlr_scene_node_set_position(&view->scene_tree->node, c.x - x, c.y - y);
+    view_place_node(view);
 
     view_update_decorations(view);
 }
@@ -164,14 +162,37 @@ void view_move(syn_view_t *view, int x, int y)
     view->x = x;
     view->y = y;
 
+    view_place_node(view);
+    view_update_decorations(view);
+}
+
+/*
+ * The frame node's position, in one place.
+ *
+ * Logical geometry (view->x/y) plus whatever anim.c is currently displacing the
+ * window by. Everything that moves a window ends here, which is what stops a
+ * reflow landing mid-animation from dropping the offset and teleporting a
+ * sliding desktop back into place — layout_apply runs during a workspace slide
+ * on purpose, to lay the incoming desk out while it is still off-screen.
+ *
+ * The client subtree is positioned in FRAME-LOCAL coordinates (the content
+ * offset inside the border and below the titlebar), so it needs no offset of
+ * its own: it rides the frame. Forgetting that is what leaves a titlebar
+ * behind, which is why there is one function rather than four copies.
+ */
+void view_place_node(syn_view_t *view)
+{
+    if (!view) return;
+
     struct wlr_box c;
     view_content_box(view, &c);
 
-    wlr_scene_node_set_position(view_node(view), x, y);
+    wlr_scene_node_set_position(view_node(view),
+                                view->x + view->anim_dx,
+                                view->y + view->anim_dy);
     if (view->frame)
-        wlr_scene_node_set_position(&view->scene_tree->node, c.x - x, c.y - y);
-
-    view_update_decorations(view);
+        wlr_scene_node_set_position(&view->scene_tree->node,
+                                    c.x - view->x, c.y - view->y);
 }
 
 /* What a layout is called when a HUMAN reads it — the Super+Tab toast, the
@@ -1082,7 +1103,10 @@ static int niri_scroll_to(syn_server_t *s, syn_output_t *o, int idx, int target)
         o->strip_sliding[idx] = 1;
     }
 
-    if (s->config.animation_ms <= 0) {
+    /* The strip is windows moving, so it takes the WINDOW length — a desk that
+     * changes slowly and columns that scroll slowly are separate tastes, and
+     * the strip is the one you are looking straight at while you use it. */
+    if (s->config.anim_window_ms <= 0) {
         o->strip_sliding[idx] = 0;
         o->strip_scroll[idx]  = target;
     }
@@ -1189,7 +1213,7 @@ bool layout_scroll_tick(syn_server_t *s, double now)
 
     /* Animations off: niri_scroll_to already snapped every strip to its target
      * and cleared the flag, so there is nothing in flight to advance. */
-    double dur = s->config.animation_ms / 1000.0;
+    double dur = s->config.anim_window_ms / 1000.0;
     if (dur <= 0.0) return false;
 
     int idx = ws->index;
@@ -1223,7 +1247,9 @@ bool layout_scroll_tick(syn_server_t *s, double now)
             continue;
         }
 
-        o->strip_scroll[idx] = from + (int)((to - from) * anim_ease_out(t));
+        /* The same curve the fades are on — see anim_curve_apply's header. */
+        o->strip_scroll[idx] =
+            from + (int)((to - from) * anim_curve_apply(s->config.anim_curve, t));
 
         struct wlr_box vp;
         int gap;
@@ -1700,12 +1726,19 @@ void workspace_switch(syn_server_t *s, int index)
     syn_workspace_t *cur    = &s->workspaces[s->active_workspace];
     syn_workspace_t *target = &s->workspaces[index];
 
-    /* Cross-fade: the outgoing desktop's windows fade out and are only disabled
-     * once they're actually invisible (anim.c), the incoming ones fade in. */
+    /* Which way the desk moved, for the styles that have a direction. Taken
+     * from the workspace NUMBERS rather than from the bind that got here, so
+     * "go to 5" from 2 and from 8 read as the opposite movements they are. */
+    int dir = (index > s->active_workspace) ? 1 : -1;
+
+    /* The outgoing desktop's windows animate away and are only disabled once
+     * they have actually gone (anim.c); the incoming ones animate in.
+     * config.anim_workspace decides whether that is a cross-fade, a slide, or
+     * nothing at all. */
     syn_view_t *v;
     wl_list_for_each(v, &cur->windows, link)
         if (v->mapped)
-            anim_fade_out_and_hide(v);
+            anim_workspace_hide(v, dir);
     cur->visible = 0;
 
     /* Show the incoming one. */
@@ -1713,10 +1746,8 @@ void workspace_switch(syn_server_t *s, int index)
     target->visible = 1;
     wlr_log(WLR_INFO, "synui: workspace %d", index + 1);
     wl_list_for_each(v, &target->windows, link)
-        if (v->mapped && !v->minimized) {
-            wlr_scene_node_set_enabled(view_node(v), true);
-            anim_fade_in(v);
-        }
+        if (v->mapped && !v->minimized)
+            anim_workspace_show(v, dir);
 
     layout_apply(s, target);
 

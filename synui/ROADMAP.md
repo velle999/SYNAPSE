@@ -588,8 +588,15 @@ security borders, the dock and game mode, and gains the parts worth having.
 - [x] **Animations** (`anim.c`) — windows fade in when they open, and switching
       desktop cross-fades (the outgoing windows fade out and are only disabled
       once actually invisible). Runs off the existing per-output frame tick, like
-      `dock_tick`/`cat_tick`. `animation_ms = 0` disables it; every fade then
+      `dock_tick`/`cat_tick`. A duration of 0 disables it; every animation then
       jumps straight to its end state so nothing else has to care.
+      **Both events are now configurable separately** — `anim_window`
+      (off/fade/rise) on `anim_window_ms`, `anim_workspace` (off/fade/slide) on
+      `anim_workspace_ms`, sharing one `anim_curve`. The styles that MOVE
+      something ride `view->anim_dx/dy`, a draw-time offset on top of the
+      window's logical geometry, so a slide costs no client round trips and
+      nothing else on the system sees the window move. `animation_ms` is still
+      accepted and sets both lengths.
       Fading a window means fading it *whole*: `wlr_scene_node_for_each_buffer`
       covers the client surfaces and the titlebar, while the four border rects
       carry alpha in their colour and are multiplied by `view->alpha` in

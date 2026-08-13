@@ -113,6 +113,59 @@
 
 #define TITLEBAR_HEIGHT_DEF  26   /* synuirc titlebar_height; 0 disables */
 #define ANIMATION_MS_DEF     140   /* synuirc animation_ms; 0 disables */
+#define ANIM_RISE_PX_DEF     24   /* synuirc anim_rise_px; how far Rise travels */
+
+/*
+ * ── What an animation does, per event ────────────────────
+ *
+ * Two events, because they are two different questions: a window arriving is
+ * about that one window, and a desktop switch is about every window at once.
+ * They used to share `animation_ms` and one hard-coded fade, so turning the
+ * desktop switch down also turned window openings down.
+ *
+ * The styles are limited by what wlr_scene can actually do without lying to
+ * clients — see the header of anim.c. Opacity is free, and POSITION is free
+ * (moving a scene node configures nobody). SIZE is not, so there is no "zoom":
+ * animating a window's size means re-configuring the client every frame.
+ */
+/*
+ * Opening only. A window CLOSING cannot be animated here: the client's buffer
+ * is gone the moment it unmaps, and fading what is left would mean holding a
+ * snapshot texture wlr_scene does not hand us. Better an honest three options
+ * than a fourth that quietly does nothing.
+ */
+typedef enum {
+    ANIM_WINDOW_NONE = 0,  /* windows appear at full opacity, in place        */
+    ANIM_WINDOW_FADE,      /* fade in on open                                 */
+    ANIM_WINDOW_RISE,      /* fade, and glide up anim_rise_px into place      */
+    ANIM_WINDOW_COUNT,     /* keep last — the panel steps on it               */
+} syn_anim_window_t;
+
+typedef enum {
+    ANIM_WS_NONE = 0,      /* the desktop is simply the other one now         */
+    ANIM_WS_FADE,          /* outgoing windows fade out, incoming fade in     */
+    ANIM_WS_SLIDE,         /* both desks slide, in the direction you switched */
+    ANIM_WS_COUNT,         /* keep last                                       */
+} syn_anim_ws_t;
+
+/* Shared by both events: an animation system whose halves decay differently
+ * reads as two systems. Order matches ctl_names_anim_curve[] and the spellings
+ * config.c accepts. */
+typedef enum {
+    ANIM_CURVE_EASE_OUT = 0,   /* fast, then settling — the default          */
+    ANIM_CURVE_LINEAR,         /* constant speed                             */
+    ANIM_CURVE_EASE_IN_OUT,    /* eases at both ends                         */
+    ANIM_CURVE_EASE_IN,        /* slow, then arriving fast                   */
+    ANIM_CURVE_COUNT,          /* keep last                                  */
+} syn_anim_curve_t;
+
+/* The synuirc vocabulary for the three enums above, indexed by them. These
+ * spellings are a FORMAT — renaming one turns an existing config line into an
+ * unknown word — and they live in config.c beside the parser that needs them,
+ * exactly like syn_focus_mode_names. */
+extern const char *const syn_anim_window_names[ANIM_WINDOW_COUNT];
+extern const char *const syn_anim_ws_names[ANIM_WS_COUNT];
+extern const char *const syn_anim_curve_names[ANIM_CURVE_COUNT];
 
 /* What the pointer is over, in a window's server-side decorations. Buttons are
  * square, titlebar-height, right-aligned: [ _ ] [ □ ] [ × ]. */
@@ -1407,7 +1460,12 @@ typedef enum {
     CTL_ROW_CORNER_RADIUS,
     CTL_ROW_GAP,
     CTL_ROW_TITLEBAR_HEIGHT,
-    CTL_ROW_ANIMATION_MS,
+    CTL_ROW_ANIMATION_MS,      /* the window half; anim_window_ms            */
+    CTL_ROW_ANIM_WINDOW,
+    CTL_ROW_ANIM_RISE_PX,
+    CTL_ROW_ANIM_WORKSPACE,
+    CTL_ROW_ANIM_WORKSPACE_MS,
+    CTL_ROW_ANIM_CURVE,
     CTL_ROW_MASTER_FACTOR,
     CTL_ROW_CASCADE_STACK, /* windows per pile in LAYOUT_CASCADE */
     CTL_ROW_FOCUS_MODE,
@@ -2598,9 +2656,24 @@ typedef struct {
     /* Server-side titlebar: drag to move, double-click to maximize, and the
      * three buttons. `titlebar_height` of 0 turns it off entirely (windows keep
      * their borders, and Super+drag still moves them). */
-    /* anim.c: fade duration in ms; 0 disables animations entirely (every fade
-     * then jumps straight to its end state). */
-    int   animation_ms;
+    /*
+     * anim.c. `animation_ms` is the LEGACY key and is no longer read by
+     * anything: config.c still accepts it and writes BOTH durations below, so
+     * an existing synuirc keeps working and keeps meaning what it said. Every
+     * consumer reads the specific one, because "how long does a window take to
+     * appear" and "how long does the desk take to change" are separate answers.
+     *
+     * A duration of 0 disables that event's animation outright — the end state
+     * is applied on the spot, and the rest of the compositor never has to care
+     * which mode it is in.
+     */
+    int   animation_ms;        /* legacy alias; sets the two below           */
+    int   anim_window_ms;      /* open/close, and the niri strip slide       */
+    int   anim_workspace_ms;   /* virtual-desktop switch                     */
+    int   anim_window;         /* syn_anim_window_t                          */
+    int   anim_workspace;      /* syn_anim_ws_t                              */
+    int   anim_curve;          /* syn_anim_curve_t, shared by both           */
+    int   anim_rise_px;        /* how far ANIM_WINDOW_RISE travels           */
 
     int   titlebar_height;
 
@@ -3294,6 +3367,24 @@ struct syn_view {
     int    fade_hide_done;   /* disable the node once it reaches alpha 0 */
     float  fade_from, fade_to;
     double fade_start;       /* CLOCK_MONOTONIC secs */
+    /* Per-RUN, not per-config: a window opening while the desk is still
+     * sliding must keep the length and curve it started with, or the two
+     * finish at times neither of them asked for. */
+    double fade_dur;         /* seconds; always > 0 while fade_active */
+    int    fade_curve;       /* syn_anim_curve_t this run decays on   */
+
+    /* anim.c: where the frame is drawn RELATIVE to its logical x/y, while an
+     * animation is displacing it — the rise of an opening window, the slide of
+     * a desktop leaving. The logical geometry never moves: layout, focus,
+     * hit-testing and geom_persist all keep reading view->x/y, and only
+     * view_place_node() adds this. It is the only reason a slide costs no
+     * client round trips (see view_move's header).
+     *
+     * Interpolated on the same clock as the fade above, so one window is only
+     * ever running one animation. */
+    int    anim_dx, anim_dy;
+    int    anim_dx_from, anim_dx_to;
+    int    anim_dy_from, anim_dy_to;
 
     /* theme.c / anim.c: the window's *settled* translucency, driven by focus
      * (config.active_opacity vs inactive_opacity) when config.transparency is on.
@@ -4886,6 +4977,11 @@ bool layout_scroll_tick(syn_server_t *s, double now);
  * never told its own position (xdg cannot be, and X11 gets one configure when
  * the movement settles), so a position-only animation costs no round trips. */
 void view_move(syn_view_t *view, int x, int y);
+/* Put the frame node where the view's logical geometry says it goes, PLUS
+ * whatever anim_dx/anim_dy is currently displacing it by. The single place the
+ * node's position is computed, so an animation's offset cannot be dropped by
+ * the next reflow: view_resize, view_move and anim_tick all end here. */
+void view_place_node(syn_view_t *view);
 /* Move the focused window between columns on a niri desktop: join = 1 pulls it
  * into the column on its left (niri's "consume"), join = 0 pushes it back out
  * into a column of its own ("expel"). Bound to Super+, and Super+. — a no-op,
@@ -5733,6 +5829,10 @@ int  ctlpanel_row_cat(int row);
 /* The synuirc key a row drives, or NULL for a jump-off or a toggle whose state
  * is not a config field. The line between the table-driven rows and the rest. */
 const char *ctlpanel_row_key(int row);
+/* How many options a CTL_VAL_ENUM row has, or 0 for every other kind of row.
+ * Exists for the table test, which has to walk each option and round-trip it —
+ * a spelling the parser rejects can hide behind any option but the first. */
+int  ctlpanel_row_options(int row);
 /* Is this row still at its compiled-in default? Drives the "modified" marker
  * and tells the reset key whether there is anything to undo. */
 int  ctlpanel_row_is_default(syn_server_t *s, int row);
@@ -6308,8 +6408,22 @@ bool anim_tick(syn_server_t *s, double now);
  * niri strip slide (layout.c) and the fades (anim.c) settle identically —
  * two easings on one desktop read as two different desktops. */
 float anim_ease_out(float t);
-void anim_fade_in(syn_view_t *view);
-void anim_fade_out_and_hide(syn_view_t *view);
+/* The curve config.anim_curve names, for `t` in [0,1]. anim_ease_out is the
+ * ANIM_CURVE_EASE_OUT case, kept by name because the niri strip slide hard-uses
+ * it — a strip that decays on a curve the windows are not using reads as two
+ * animation systems, and the two routinely run in the same frame. */
+float anim_curve_apply(int curve, float t);
+
+/* A window has just mapped: config.anim_window decides whether it fades, rises
+ * or is simply there. */
+void anim_window_open(syn_view_t *view);
+/* The two halves of a desktop switch. `dir` is the direction the desk moved in
+ * — +1 for a higher-numbered workspace, -1 for a lower one, 0 when there is no
+ * meaningful direction (an index jump from a pager) — and only ANIM_WS_SLIDE
+ * reads it. hide() disables the node when it finishes, show() re-enables it up
+ * front, so callers never sequence enable/disable around a running animation. */
+void anim_workspace_hide(syn_view_t *view, int dir);
+void anim_workspace_show(syn_view_t *view, int dir);
 void anim_reset(syn_view_t *view);
 void anim_apply_alpha(syn_view_t *view);
 /* Re-assert the glass halo's place under the frame's chrome. Called by the

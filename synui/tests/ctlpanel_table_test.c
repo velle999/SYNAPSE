@@ -437,6 +437,72 @@ static void test_every_row_round_trips(void)
            checked, skipped);
 }
 
+/* ── 3b. EVERY option of every enum row round trips ──────────
+ *
+ * test_every_row_round_trips presses Right once. For an enum that walks one
+ * notch off the default and stops — so an option further down the list can
+ * spell itself in a way the parser does not accept and nothing notices.
+ *
+ * That is not hypothetical. ctl_persist() stores an enum by lower-casing the
+ * name the panel DRAWS, so "Russian Blue" reached settings.state as
+ * "russian blue" while config.c spelled that coat "russian-blue": choosing it
+ * worked all session and was back to Neon at the next login. It was the eighth
+ * option of nine, which is precisely why one notch of Right never saw it.
+ *
+ * So: step each enum row through every one of its options, and after each one
+ * reload the config from disk and require the panel to still show the option
+ * that was chosen. The failure prints the two spellings, because the fix is
+ * always to make one of them match the other.
+ */
+static void test_every_enum_option_round_trips(void)
+{
+    int rows = 0, options = 0;
+
+    for (int row = 0; row < CTL_ROW_COUNT; row++) {
+        if (!select_row(row)) continue;
+        if (!ctlpanel_row_key(row)) continue;
+        if (ctlpanel_row_options(row) <= 0) continue;   /* not an enum */
+
+        int n = ctlpanel_row_options(row);
+
+        /* Right wraps at the end of an enum, so n presses visit every option
+         * and land back where they started. */
+        for (int i = 0; i < n; i++) {
+            ctlpanel_key(&g_s, XKB_KEY_Right, 0);
+
+            char live[64];
+            ctlpanel_row_value(&g_s, row, live, sizeof(live));
+
+            syn_server_t fresh;
+            memset(&fresh, 0, sizeof(fresh));
+            synui_config_load(&fresh.config);
+            fresh.ctlpanel = g_s.ctlpanel;
+
+            char reloaded[64];
+            ctlpanel_row_value(&fresh, row, reloaded, sizeof(reloaded));
+
+            if (strcmp(live, reloaded) != 0) {
+                printf("    row %d (%s, key %s): chose '%s', reloaded as '%s'"
+                       " — the option's name, lower-cased, is not a word"
+                       " config_parse_kv() accepts\n",
+                       row, ctlpanel_row_label(row), ctlpanel_row_key(row),
+                       live, reloaded);
+                assert(0);
+            }
+            options++;
+        }
+
+        /* Put it back, so the next row starts from a config at its defaults
+         * exactly as the round-trip test above requires. */
+        ctlpanel_key(&g_s, XKB_KEY_Delete, 0);
+        assert(ctlpanel_row_is_default(&g_s, row));
+        rows++;
+    }
+
+    printf("  every enum option ........ ok (%d options over %d rows)\n",
+           options, rows);
+}
+
 /* ── 4. Search reaches rows by label and by synuirc key ────── */
 
 static void test_search(void)
@@ -635,6 +701,7 @@ int main(void)
     test_no_category_overflows();
     test_every_category_named();
     test_every_row_round_trips();
+    test_every_enum_option_round_trips();
     test_search();
     test_apply_hooks();
     test_bind_combo_round_trip();
