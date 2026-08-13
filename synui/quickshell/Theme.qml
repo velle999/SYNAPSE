@@ -152,6 +152,62 @@ QtObject {
     readonly property int  panelRadius:   root.squareChrome ? 0
                                                             : BarConfig.cornerRadius
 
+    /*
+     * ── The bar's own shape ──────────────────────────────────
+     *
+     * panelRadius is what the bar's POPUPS use. This is the strip itself, and it
+     * is a separate question because a bar is not a popup: it spans the monitor
+     * and sits against an edge, so "rounded" has to say which corners and
+     * whether it still touches that edge. BarConfig.barShape answers both.
+     *
+     * ALL OF IT IS GATED ON panelRadius > 0, which is the whole contract of the
+     * setting (see syn_bar_shape_t): the shape is what to do WHEN the corners
+     * are on, not a second switch. So a desktop with the slider at zero, and
+     * every retro chrome, keeps the square edge-to-edge strip whatever this row
+     * says — and nothing here needs to know what LUNA or BEVEL are, because
+     * squareChrome already folded that in above.
+     *
+     * Unknown values behave as full-width: `pill` and `ends` are positive tests,
+     * so a settings.state from a newer synui degrades to the shape that has
+     * always worked rather than to a shape this bar cannot draw.
+     */
+    readonly property bool barRounded: root.panelRadius > 0
+    readonly property bool barPill:    root.barRounded
+                                       && BarConfig.barShape === "floating-pill"
+    readonly property bool barEnds:    root.barRounded
+                                       && BarConfig.barShape === "rounded-ends"
+
+    /*
+     * How far the pill floats: off the edge it lives on, and in from both sides.
+     * One number for both so the gap reads as even all the way round.
+     *
+     * It is deliberately NOT the corner radius. The radius is a curve on a shape
+     * and this is the space around it — tying them together would mean a desktop
+     * at radius 2 got a 2px gap (a pill that looks like a rendering mistake) and
+     * one at 48 got a 48px gap (a bar floating in the middle of the screen).
+     */
+    readonly property int  barGap:     root.barPill ? 6 : 0
+
+    /*
+     * The capsule radius. Half the height is what makes the ends semicircular —
+     * the definition of the shape, not a taste — so it follows barHeight rather
+     * than the user's radius, which is about corners and not about being round.
+     *
+     * `ends` takes the desktop's radius instead: that bar still spans the
+     * monitor, and a capsule end on a shape 1900px wide is not a pill, it is a
+     * racetrack. Its TOP pair stays square in Bar.qml — the corners at the
+     * screen edge have nothing to round against.
+     */
+    readonly property int  barRadius:  root.barPill ? Math.round(root.barHeight / 2)
+                                     : root.barEnds ? root.panelRadius
+                                                    : 0
+
+    /* Total height the bar's WINDOW needs, which is the strip plus the gap it
+     * floats by. The exclusive zone is this, not barHeight: a pill that reserved
+     * only its own height would have maximized windows slide under the gap and
+     * up against its underside. */
+    readonly property int  barSpan:    root.barHeight + root.barGap
+
     // Absent, unreadable, or written by a synui too old to export it: not
     // square. That is the modern chrome, which is what all but two of the
     // presets are, and it degrades to exactly the behaviour above.
@@ -160,6 +216,12 @@ QtObject {
     property FileView chromeFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/theme.state"
         watchChanges: true
+        // Synchronous for the same reason BarConfig's uifxFile is: squareChrome
+        // is the other half of "are the corners on", so it too decides whether a
+        // floating pill reserves its gap, and the exclusive zone cannot learn
+        // that a frame later. A retro desktop read asynchronously would come up
+        // holding a gap it does not draw.
+        blockLoading: true
         printErrors: false      // absent until a theme is picked
         onFileChanged: reload()
         onLoaded: {

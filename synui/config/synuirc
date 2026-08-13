@@ -409,6 +409,27 @@ numlock      = on
 # start menu on it — upstream had Hyprland to talk to and never needed one.
 # bar_shell = antiquity
 #
+# What shape the bar is WHEN THE CORNERS ARE ON:
+#
+#   full-width     edge to edge and square, the way it has always been (default)
+#   rounded-ends   still edge to edge, but the two corners facing the desktop
+#                  take `corner_radius`. The pair at the screen edge stays
+#                  square — rounding those cuts two notches out of the corners
+#                  of the screen itself.
+#   floating-pill  lifts off the edge and in from both sides, and closes into a
+#                  capsule. Reserves the gap as well, so maximized windows stop
+#                  below it rather than sliding under the float.
+#
+# NONE OF THEM DO ANYTHING WITH THE CORNERS OFF. At `corner_radius = 0`, and on
+# the retro chromes (Windows 95 and its kin square the whole desktop, slider or
+# no slider), every value here draws the same square strip. So this is a
+# preference for what to do when rounded rather than a switch of its own — set
+# `corner_radius` first, or the row looks broken.
+#
+# Read by synui-bar, NOT by the compositor, and watched: it changes while you
+# are looking at it. Control panel ▸ Desktop ▸ Bar shape writes the same key.
+# bar_shape = floating-pill
+#
 # Pin the bar's icon theme. Empty (the default) means "follow the system icon
 # theme", so a theme switch carries the bar along with GTK and Qt — which is
 # almost always what you want. Set it only to pin something else; it is exported

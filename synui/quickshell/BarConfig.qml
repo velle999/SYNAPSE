@@ -95,12 +95,34 @@ QtObject {
      */
     property int cornerRadius: 12      // config.c's default, for a box with none
 
+    /*
+     * What the bar DOES with that radius: "full-width", "rounded-ends" or
+     * "floating-pill". syn_bar_shape_t's spellings, and like bar_edge it is
+     * parsed by the compositor purely so the key has one spelling — nothing over
+     * there acts on it.
+     *
+     * Held as the raw string rather than parsed to an int here. The bar is the
+     * only reader, Theme turns it into geometry once, and a number would mean a
+     * second copy of the order in syn_bar_shape_names[] — the same drift the
+     * enum's own comment is about. An unknown value falls through every test in
+     * Theme and behaves as full-width, which is what a bar reading a settings
+     * file from a NEWER synui should do.
+     */
+    property string barShape: "full-width"
+
     // Where a popup hanging off the bar starts, given its height. One place
     // rather than a `Theme.barHeight + 2` at each anchor site: a bottom bar's
     // popups have to go UP, and every one of those sites would otherwise be a
     // separate chance to forget.
+    //
+    // barSpan and not barHeight on the top-bar side: the window is measured from
+    // the screen edge, and a floating pill starts a gap's worth in from it, so
+    // its underside is at barSpan. Left as barHeight, every popup on a pilled top
+    // bar overlapped it by exactly the gap. The bottom-bar side needs no such
+    // thing — there the gap is below the strip, so the window's top edge and the
+    // strip's top edge are still the same line.
     function popupY(h) {
-        return root.atBottom ? -h - 2 : Theme.barHeight + 2
+        return root.atBottom ? -h - 2 : Theme.barSpan + 2
     }
 
     // `key = value`, synuirc's language, which is also settings.state's. Only
@@ -142,6 +164,15 @@ QtObject {
         // default and the bar a NaN, which silently paints every panel square.
         const n = parseInt(r, 10)
         if (!isNaN(n)) root.cornerRadius = Math.max(0, Math.min(48, n))
+
+        // Shape. settings.state over synuirc, the same pair and the same order
+        // bar_edge uses — it is the control panel's row and the control panel
+        // writes settings.state. Not uifx.state: the corner SLIDER lives on the
+        // effects page, this is a Desktop row, and reading a file its writer
+        // never touches would only invent a precedence question.
+        const s = root.readKey(settingsFile.text(), "bar_shape")
+                  || root.readKey(synuircFile.text(), "bar_shape")
+        root.barShape = s || "full-width"
     }
 
     property FileView synuircFile: FileView {
@@ -169,15 +200,21 @@ QtObject {
 
     /* The corner slider's own file, and the highest-precedence source for it.
      *
-     * Not blockLoading, unlike the two above: those decide the exclusive zone,
-     * which quickshell sends once per surface and therefore has to be right
-     * before the first configure. A radius is read by panels that do not exist
-     * yet — nothing on screen at startup is drawn with it — so this can arrive a
-     * frame late, and a synchronous read at every bar start would buy nothing.
+     * blockLoading LIKE the two above, which it did not used to be. The old
+     * reasoning was sound and its PREMISE EXPIRED: a radius was read only by
+     * panels that did not exist yet, nothing on screen at startup was drawn with
+     * it, so arriving a frame late cost nothing. bar_shape changed that. The
+     * floating pill lifts the bar off the screen edge, so the exclusive zone now
+     * depends on the radius — zero means the shape does not apply and the strip
+     * reserves its own height, non-zero means it reserves the gap as well — and
+     * the zone is the one value that cannot arrive late (see Bar.qml). Async, a
+     * desktop with the corners off reserved the pill's taller zone for the whole
+     * session, having decided the shape from this property's default.
      */
     property FileView uifxFile: FileView {
         path: Quickshell.env("HOME") + "/.config/synui/uifx.state"
         watchChanges: true
+        blockLoading: true
         printErrors: false      // absent until an effects row is changed
         onFileChanged: reload()
         onLoaded: root.applyGlobals()

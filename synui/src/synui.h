@@ -1542,6 +1542,7 @@ typedef enum {
     CTL_ROW_NEWS_REFRESH,
     CTL_ROW_ABOUT,         /* System ▸ About OS — fetch, in a terminal */
     CTL_ROW_BAR_EDGE,      /* which screen edge synui-bar puts the bar on */
+    CTL_ROW_BAR_SHAPE,     /* full-width / rounded-ends / floating-pill, when rounded */
     CTL_ROW_KEYBINDS,      /* the shortcut palette, which is the rebind editor */
     CTL_ROW_OVERVIEW,      /* mission control (overview.c) */
     CTL_ROW_BAR,           /* Desktop ▸ Bar — is there one at all */
@@ -2455,6 +2456,37 @@ typedef enum {
 
 extern const char *const syn_bar_edge_names[SYN_BAR_EDGE_COUNT];
 
+/*
+ * What SHAPE the bar is, which is the bar's share of `corner_radius`.
+ *
+ * FULL is the strip this project shipped for a year: edge to edge, square, its
+ * accent rule running the whole width. ENDS keeps that strip and rounds the two
+ * corners that face the desktop. PILL detaches it — a margin down both sides and
+ * off the edge it lives on — and closes it into a capsule.
+ *
+ * NONE OF THEM APPLY WITH THE CORNERS OFF. chrome_corner_radius() is 0 for a
+ * radius of 0 and for the retro chromes, and the bar reads the same fact: a
+ * Windows 95 desktop with a floating capsule across the top is the same mistake
+ * as a Windows 95 window with a 12px radius, and gating on the radius means
+ * there is ONE rule rather than a shape row that has to know about chrome. So
+ * this is a preference for what to do WHEN rounded, not an independent switch —
+ * which is also why FULL is the default: it is what a desktop that never turns
+ * the corners on keeps seeing.
+ *
+ * Like bar_edge and bar_shell, the COMPOSITOR NEVER ACTS ON THIS. quickshell
+ * owns the bar; the key is parsed here so one file spells the setting and the
+ * control panel can persist it through settings.state. Order matches
+ * syn_bar_shape_names[].
+ */
+typedef enum {
+    SYN_BAR_SHAPE_FULL = 0,
+    SYN_BAR_SHAPE_ENDS,
+    SYN_BAR_SHAPE_PILL,
+    SYN_BAR_SHAPE_COUNT,    /* keep last */
+} syn_bar_shape_t;
+
+extern const char *const syn_bar_shape_names[SYN_BAR_SHAPE_COUNT];
+
 /* Dock right-click context-menu actions (dock.c / render.c). */
 typedef enum {
     SYN_DOCKACT_PIN = 0,   /* add app_id to the pinned set */
@@ -2977,6 +3009,12 @@ typedef struct {
      * the control panel's enum row. Read by quickshell's BarConfig.qml, never
      * by the compositor — see the enum's comment. */
     int bar_edge;
+
+    /* The bar's shape when the corners are on. A syn_bar_shape_t held as an int,
+     * for the control panel's enum row; read by BarConfig.qml and never by the
+     * compositor — see the enum's comment for why it is gated on the radius
+     * rather than being a switch of its own. */
+    int bar_shape;
 
     /* Icon theme for the bar, exported to quickshell as QS_ICON_THEME. Empty
      * (the default) means "follow the system theme", which is what a theme
@@ -5133,6 +5171,13 @@ void synui_render_dispcfg(syn_server_t *s);
  * surface with an offscreen wlr_buffer backing, then attach/replace it as a
  * scene node's buffer. */
 struct wlr_buffer *create_cairo_buf(int w, int h, cairo_t **cr_out);
+
+/* cairo_rounded_rect() — the cairo half of the corner radius, for the panels
+ * that stroke or fill their own frame in the overlay buffer rather than leaving
+ * it to a scene rect. Declared in its own header because the implementation is
+ * pure cairo and links without a compositor; see cairo_shapes.c for why that
+ * matters. */
+#include "cairo_shapes.h"
 void set_scene_buffer(struct wlr_scene_buffer **node,
                        struct wlr_scene_tree *parent, struct wlr_buffer *buf);
 void cairo_begin(cairo_t *cr);   /* clear to transparent + set default font */

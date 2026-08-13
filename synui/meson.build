@@ -217,6 +217,7 @@ synui_exe = executable('synui',
     'src/config.c',
     'src/settings.c',
     'src/render.c',
+    'src/cairo_shapes.c',
     'src/text.c',
     'src/contrast.c',
     'src/effects.c',
@@ -659,6 +660,20 @@ test('crop', crop_test)
 # their own backgrounds because that is the palette their author shipped, and
 # "correcting" those would repaint seven working themes to fix three. Pure
 # arithmetic, so it links contrast.c alone and needs no compositor.
+# The cairo half of the corner radius: it rounds by r²(4 - π), r <= 0 and NaN
+# degenerate to exactly cairo_rectangle(), and a radius past half the shorter
+# side clamps to the capsule instead of turning the arcs inside out. Pure cairo,
+# so it links cairo_shapes.c alone and needs no compositor — which is the reason
+# that function is its own file. The WIRING (the two right-click menus passing
+# chrome_corner_radius() in) needs a pointer to open a menu with and so cannot be
+# tested here; see the file's header.
+rounded_rect_test = executable('rounded_rect_test',
+  ['tests/rounded_rect_test.c', 'src/cairo_shapes.c'],
+  include_directories : include_directories('src'),
+  dependencies : [cairo, cc.find_library('m', required : false)],
+  build_by_default : false)
+test('rounded_rect', rounded_rect_test)
+
 panel_contrast_test = executable('panel_contrast_test',
   ['tests/panel_contrast_test.c', 'src/contrast.c'],
   include_directories : include_directories('src'),
@@ -965,6 +980,17 @@ test('ws_slide', ws_slide,
 # `square_chrome`, and that the panel's body never repaints either way.
 bar_radius = find_program('tests/bar_radius.sh')
 test('bar_radius', bar_radius,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
+# `bar_shape`: the strip's own shape, where bar_radius covers its popups'. Four
+# captures on one compositor — full-width, rounded-ends, floating-pill, and the
+# pill again at corner_radius = 0, which must come back identical to the first.
+# That last one is the contract the setting is sold on: the shape does nothing
+# with the corners off.
+bar_shape = find_program('tests/bar_shape.sh')
+test('bar_shape', bar_shape,
      args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
      depends : [synui_exe],
      timeout : 180)

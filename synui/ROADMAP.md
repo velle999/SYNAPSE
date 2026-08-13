@@ -998,3 +998,84 @@ window behind it moved.
       and need a seat, a cursor and a real axis event, so the half that offers
       the wheel is verified by reading. Nothing can synthesise a pointer into a
       headless synui — `panel_pointer_test.c` gives that argument at length.
+
+### The bar's own shape, and the borders the radius did not reach  *(done)*
+
+The corner radius reaching "the desktop's own furniture" above stopped one layer
+short in two places, both found the same way — by turning the corners on and
+looking.
+
+- [x] **The two right-click menus kept a square outline.** `panel_chrome_sync()`
+      rounds a panel's *background rect*, and a panel is two layers: that rect,
+      and a cairo buffer of text and lines drawn over it. The desktop and dock
+      menus are the only panels that stroke their own 1px frame into that
+      buffer — they are the two `PANEL_BG` entries, with no accent rule of their
+      own — so the background curved underneath and a 90° border stayed painted
+      on top, at any radius. Both now pass `chrome_corner_radius()` into the same
+      path. The row highlight had the same fault in its other form: a full-width
+      fill on the first and last rows, 3px in from a side the curve has taken
+      away, grows a square nib past the corner. The *content* is clipped to the
+      rounded shape, which catches the separators too; the border is deliberately
+      left outside that clip, because a stroke straddles its path and clipping it
+      to the same path discards the outer half and thins the frame along the
+      curve only.
+- [x] **`cairo_rounded_rect()` is one path, in `src/cairo_shapes.c`.** It was a
+      static in `dock.c`. Its own file rather than a corner of `render.c` so the
+      arithmetic links without a compositor behind it — the clamp is the part
+      worth pinning, and `tests/rounded_rect_test.c` rasterises and counts:
+      corners cut by r²(4 - π), `r <= 0` **and NaN** pixel-identical to
+      `cairo_rectangle()`, and a radius past half the shorter side clamped to the
+      capsule rather than crossing the arc centres over into a bow-tie. NaN is
+      the one that would not fail loudly — every comparison against it is false,
+      so an `r < 0` guard passes it to `cairo_arc()`, which drops the path and
+      draws nothing.
+- [x] **`bar_shape = full-width | rounded-ends | floating-pill`.** The bar's
+      share of the radius, as a Desktop row. `rounded-ends` curves the two
+      corners facing the desktop and leaves the pair at the screen edge square —
+      rounding those cuts two notches out of the corners of the *screen*, which
+      is the same reason `panel_chrome_sync()` skips the overview's full-screen
+      dim. `floating-pill` lifts the strip off that edge and in from both sides
+      and closes it into a capsule: half the bar's height, because that is what
+      makes the ends semicircular, and NOT the user's radius, which is about
+      corners rather than about being round. The gap is a flat 6 for the same
+      reason — tied to the radius, a desktop at 2 gets a pill that looks like a
+      rendering fault and one at 48 gets a bar floating mid-screen.
+- [x] **All of it gated on the corners being on**, which is the whole contract:
+      at `corner_radius = 0`, and on every retro chrome, all three values draw
+      the identical square strip. One rule rather than a shape row that has to
+      know what LUNA and BEVEL are — `squareChrome` already folded that in for
+      the popups. So Windows 95 squares the bar for free.
+- [x] **The exclusive zone is `Theme.barSpan`, and that forced two files to
+      block.** A pill reserves the gap it floats by or maximized windows slide
+      under it. The zone is the one value that cannot arrive late — quickshell
+      sends it once per surface, which is why `BarConfig` already read `bar.json`
+      synchronously — and it now depends on the radius and the chrome. So
+      `uifxFile` and `Theme`'s `chromeFile` are `blockLoading` too. Both had a
+      sound comment saying they need not be, and both comments' *premise* was
+      that nothing on screen at startup was drawn with those values. `bar_shape`
+      ended that. Read async, a desktop with the corners off reserved the pill's
+      taller zone for the whole session.
+- [x] **The accent rule is inset to the curve**, and the first and last modules
+      with it. The rule runs along the edge whose corners curve, so at full width
+      its ends stick out past the background as two tabs — the same thing
+      `render.c` hit on the compositor's panels and solved there with top-only
+      radii. A capsule takes a full half-height out of each end, and the start
+      button sat in it: on a shape with no clip, "clipped" means drawn *over* the
+      corner, hanging off the pill.
+- [x] **`tests/bar_shape.sh`** — four captures on one compositor and one bar.
+      `rounded-ends` carves the bottom corners (58 and 60px) and moves the top
+      row by nothing; `floating-pill` vacates all 1280 columns of the top row and
+      the left edge; and the pill at radius 0 comes back pixel-identical to
+      full-width on every probe, which is the gating contract. No probe knows what
+      colour a bar is — each compares one capture to another at the same pixels —
+      and none goes near the middle, where the clock ticks between captures.
+- [x] **`bar_radius.sh` was passing by luck.** It locates the panel as the only
+      saturated colour on screen, and two things on that rig are saturated and
+      bigger: the bundled wallpaper (a bright emblem, so the "panel" came back as
+      its bounding box and three corners reported a failure the bar never had)
+      and `autostart`, which `config.c` defaults to `kitty`. The second was a
+      RACE — the same code passed or failed on whether kitty won the four seconds
+      before the first capture. Both rigs now write a synuirc, which resets the
+      autostart list as a side effect of existing, and point it at a flat grey
+      wallpaper: unsaturated for this test's locator, bright for the other's
+      bar-or-desktop probes.

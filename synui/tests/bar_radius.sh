@@ -94,6 +94,29 @@ state() {   # state <corner_radius> <square_chrome>
 # the compositor's own panels are covered where they belong.
 printf 'show_at_startup=0\n' > "$CFG/welcome.state"
 
+# A FLAT GREY DESKTOP, AND NO AUTOSTART — both because of how the panel is
+# located below: as the only saturated colour on screen. Two things break that,
+# and both did.
+#
+#   - The bundled wallpaper. It is a bright purple emblem on a starfield, and it
+#     is far bigger than the menu, so the "panel" comes back as the emblem's
+#     bounding box and three of the four corners report a failure the bar never
+#     had. Grey is chosen over black for the OTHER test on this rig: it has to
+#     differ from the bar's own dark background, or "bar or desktop?" cannot be
+#     asked of a pixel. Unsaturated so this test's locator still works, bright so
+#     that one does.
+#   - `autostart`, which config.c defaults to `kitty`. A terminal's border is
+#     saturated too. ANY synuirc resets that list so the file's entries replace
+#     the defaults (config.c, "Config file found"), and this one names none.
+#
+# The autostart half was a RACE — the same code passed or failed on whether kitty
+# won the four seconds before the first capture — which is the worst way for a
+# test to be wrong.
+python3 -c "from PIL import Image
+Image.new('RGB', (64, 64), (128, 128, 128)).save('$TMP/wp.png')" \
+    || fail "could not write the test wallpaper"
+printf 'wallpaper = %s\n' "$TMP/wp.png" > "$CFG/synuirc"
+
 state 0 off
 
 "$SYNUI" >"$LOG" 2>&1 &

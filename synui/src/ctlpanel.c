@@ -137,6 +137,13 @@ static const char *const ctl_names_panel_close[] = { "Clickoff", "Button", "Wind
  * above, and folded to lower case they ARE the synuirc spellings — which is
  * what lets "put it at the bottom" mean one thing across both. */
 static const char *const ctl_names_bar_edge[]    = { "Top", "Bottom" };
+/* Order matches syn_bar_shape_t. Hyphenated for the reason anim_curve's are:
+ * ctl_format lower-cases the DISPLAYED name to persist it, so "Floating pill"
+ * would be written as "floating pill" and syn_bar_shape_names[] spells it
+ * "floating-pill". The hyphen is what keeps the one table honest. */
+static const char *const ctl_names_bar_shape[]   = {
+    "Full-width", "Rounded-ends", "Floating-pill",
+};
 /* Order matches the GAME_OUT_* enum in synui.h, and folded to lower case these
  * ARE the synuirc spellings config.c's `game_output` case parses back. Single
  * words for the reason the whole table is — "Main screen" would be written to
@@ -490,6 +497,16 @@ static const struct ctl_item ctl_items[] = {
       .key = "bar_edge", .off = CFG(bar_edge), .vtype = CTL_VAL_ENUM,
       NAMES(ctl_names_bar_edge), .apply = CTL_APPLY_NONE,
       .help = "Which edge the bar sits on. The bar picks this up live" },
+    /* Watched live by the bar like Bar edge above, and like it applied by
+     * neither the compositor nor a restart. The help line has to say the row
+     * does nothing on its own: it is the bar's share of Window effects ▸ Corner
+     * radius, so on a desktop with the corners off every option here looks
+     * identical, and a row that appears to be ignored is worse than one that
+     * says what it is waiting for. */
+    { CTL_ROW_BAR_SHAPE,     CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Bar shape",        NULL,
+      .key = "bar_shape", .off = CFG(bar_shape), .vtype = CTL_VAL_ENUM,
+      NAMES(ctl_names_bar_shape), .apply = CTL_APPLY_NONE,
+      .help = "Shape when corners are on; needs Window effects \xe2\x96\xb8 Corner radius" },
     { CTL_ROW_WELCOME_AT_STARTUP, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Welcome menu at login", NULL,
       .key = "welcome_at_startup", .off = CFG(welcome_at_startup), .vtype = CTL_VAL_BOOL },
     { CTL_ROW_START_OVERLAY, CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Neural overlay at login", NULL,

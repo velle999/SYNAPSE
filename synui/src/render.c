@@ -6984,11 +6984,37 @@ void synui_render_dockmenu(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
-    /* Border */
+    /*
+     * Border. It follows the corner radius, and that is not symmetry for its own
+     * sake: panel_chrome_sync() rounds the background rect UNDER this buffer, so
+     * a square stroke here draws a 90° outline across a curved background and the
+     * menu reads as square however high the radius goes. The bg is the only thing
+     * the scene-side radius can reach; every frame a panel draws itself has to
+     * come along. Half a pixel in, like the square version, so the 1px line lands
+     * on the pixel rather than across two.
+     */
     set_accent(cr, 0.35);
     cairo_set_line_width(cr, 1);
-    cairo_rectangle(cr, 0.5, 0.5, pw - 1, ph - 1);
+    cairo_rounded_rect(cr, 0.5, 0.5, pw - 1, ph - 1,
+                       chrome_corner_radius(&s->config));
     cairo_stroke(cr);
+
+    /*
+     * The CONTENT is clipped to the same rounded shape; the border above is not.
+     *
+     * The selection highlight is a full-width fill on the first and last rows,
+     * 3px in from a side the curve has already taken away — so at any useful
+     * radius it grows a square nib out past the corner. Clipping is one line
+     * where rounding each fill would be a radius argument at every call site,
+     * and it catches the separators too.
+     *
+     * The border stays OUTSIDE the clip on purpose: a stroke straddles its path,
+     * so clipping it to that same path would discard the outer half and leave
+     * the frame visibly thinner along the curve than down the straights.
+     */
+    cairo_save(cr);
+    cairo_rounded_rect(cr, 0, 0, pw, ph, chrome_corner_radius(&s->config));
+    cairo_clip(cr);
 
     for (int i = 0; i < s->dockmenu.action_count; i++) {
         int iy = 4 + i * item_h;
@@ -7004,6 +7030,7 @@ void synui_render_dockmenu(syn_server_t *s)
         syn_show_text(cr, dockact_label(s->dockmenu.actions[i]));
     }
 
+    cairo_restore(cr);
     cairo_destroy(cr);
     set_scene_buffer(&s->dockmenu_ui.text_buf, s->dockmenu_ui.tree, buf);
 }
@@ -7036,10 +7063,21 @@ void synui_render_deskmenu(syn_server_t *s)
     if (!buf) return;
     cairo_begin(cr);
 
+    /* Rounded for the same reason as the dock menu's, above: this stroke sits in
+     * the overlay buffer on top of a background rect the scene has already
+     * curved, so leaving it square is what kept the desktop's right-click menu
+     * looking 90° with the corners turned on. */
     set_accent(cr, 0.35);
     cairo_set_line_width(cr, 1);
-    cairo_rectangle(cr, 0.5, 0.5, pw - 1, ph - 1);
+    cairo_rounded_rect(cr, 0.5, 0.5, pw - 1, ph - 1,
+                       chrome_corner_radius(&s->config));
     cairo_stroke(cr);
+
+    /* Content clipped to the panel shape, border left outside it — see the dock
+     * menu's copy of this for both halves of why. */
+    cairo_save(cr);
+    cairo_rounded_rect(cr, 0, 0, pw, ph, chrome_corner_radius(&s->config));
+    cairo_clip(cr);
 
     for (int i = 0; i < s->deskmenu.action_count; i++) {
         int iy = deskmenu_row_top(s, i);
@@ -7074,6 +7112,7 @@ void synui_render_deskmenu(syn_server_t *s)
         }
     }
 
+    cairo_restore(cr);
     cairo_destroy(cr);
     set_scene_buffer(&s->deskmenu_ui.text_buf, s->deskmenu_ui.tree, buf);
 }

@@ -67,7 +67,9 @@ PanelWindow {
         left: true
         right: true
     }
-    implicitHeight: Theme.barHeight
+    // The strip, plus the gap a floating pill lifts off the edge by (0 for every
+    // other shape, so this is barHeight unchanged unless the pill is on).
+    implicitHeight: Theme.barSpan
 
     // Reserve the strip so maximized windows stop below it — but an auto-hiding
     // bar must reserve NOTHING, or it hides and leaves its own empty gap behind,
@@ -81,7 +83,14 @@ PanelWindow {
     // landed inside exactly that window and left every auto-hiding bar
     // reserving 28px forever. Do not make `autohide` depend on anything that
     // resolves later than construction.
-    exclusiveZone: bar.autohide ? 0 : Theme.barHeight
+    //
+    // Theme.barSpan and not barHeight: a floating pill reserves the gap it
+    // floats by as well, or a maximized window comes up under the gap with its
+    // titlebar against the pill's underside. This is also why BarConfig's
+    // uifxFile and Theme's chromeFile are blockLoading — the shape, and so this
+    // number, is now decided by the corner radius and the chrome, and BOTH have
+    // to be known here rather than one configure later. See BarConfig.uifxFile.
+    exclusiveZone: bar.autohide ? 0 : Theme.barSpan
 
     // Not focusable: the bar is pointer-driven, and taking keyboard focus here
     // would steal keys from the focused window for no benefit. (synui grants
@@ -111,13 +120,34 @@ PanelWindow {
     // rather than at y=0.
     readonly property int liveHeight:
         Math.max(Theme.barEdgeStrip,
-                 Theme.barHeight + (BarConfig.atBottom ? -content.y : content.y))
+                 Theme.barSpan + (BarConfig.atBottom ? -content.y : content.y))
+
+    // Where the strip sits inside a window that may be taller than it. A
+    // floating pill lifts off the edge it lives on, so the gap is ABOVE it on a
+    // top bar and BELOW it on a bottom one; every other shape has no gap and
+    // this is 0 both ways.
+    readonly property int stripY: BarConfig.atBottom ? 0 : Theme.barGap
+
+    // A floating pill's gap is transparent. Left in the input region it makes
+    // the bar swallow clicks in a band along the screen edge and at both ends
+    // with nothing drawn there — the invisible click-eater the comment above is
+    // about, in its other form. So the region becomes the pill's own rect.
+    //
+    // NOT WHILE AUTO-HIDING, and that is the same reasoning inverted. There the
+    // region is also what the pointer runs into to bring the bar back, and the
+    // strip it runs into is at the screen edge — which, for a pill, is inside
+    // the gap. Trim that away and a revealed pill has a dead band above it:
+    // crossing it drops the hover, the bar hides, the strip re-arms and reveals
+    // it again. That is the flapping the HoverHandler below exists to stop, so
+    // an auto-hiding pill keeps the full-width region: generous, not wrong.
+    readonly property bool maskPill: Theme.barPill && !bar.autohide
 
     mask: Region {
-        x: 0
-        y: BarConfig.atBottom ? Theme.barHeight - bar.liveHeight : 0
-        width: bar.width
-        height: bar.liveHeight
+        x: bar.maskPill ? Theme.barGap : 0
+        y: bar.maskPill ? bar.stripY
+                        : (BarConfig.atBottom ? Theme.barSpan - bar.liveHeight : 0)
+        width:  bar.width - (bar.maskPill ? 2 * Theme.barGap : 0)
+        height: bar.maskPill ? Theme.barHeight : bar.liveHeight
     }
 
     // The hover item is the content's PARENT, not its sibling.
@@ -142,20 +172,50 @@ PanelWindow {
         Item {
             id: content
             width: bar.width
-            height: Theme.barHeight
+            height: Theme.barSpan
             // Hides off the edge it lives on: up from the top, down from the
             // bottom. Sliding a bottom bar upwards would take it across the
             // desktop instead of off it.
+            //
+            // By barSpan, not barHeight: a pill travelling only its own height
+            // would stop with the gap's worth of itself still on screen.
             y: bar.revealed ? 0
-                            : (BarConfig.atBottom ? Theme.barHeight
-                                                  : -Theme.barHeight)
+                            : (BarConfig.atBottom ? Theme.barSpan
+                                                  : -Theme.barSpan)
             Behavior on y {
                 NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic }
             }
 
+            // The strip itself. Inset from the window rather than filling it,
+            // which is what leaves the pill's gap as desktop; at every other
+            // shape barGap is 0 and this is the old anchors.fill exactly.
             Rectangle {
-                anchors.fill: parent
+                x: Theme.barGap
+                y: bar.stripY
+                width: parent.width - 2 * Theme.barGap
+                height: Theme.barHeight
                 color: Theme.bg
+
+                /*
+                 * `ends` still touches the screen edge, so only the pair of
+                 * corners FACING THE DESKTOP curves. Rounding the pair at the
+                 * edge would cut two notches out of the screen's own corners
+                 * with the desktop showing through them — the same reason
+                 * render.c leaves mission control's full-screen dim square.
+                 *
+                 * The pill floats free of the edge and keeps all four, which is
+                 * what makes it a capsule rather than a tab.
+                 *
+                 * Per-corner radii are Qt 6.7+; `radius` is the value they fall
+                 * back to, so a shape that wants all four sets only that. Four
+                 * INDEPENDENT scalar bindings — unlike the anchor pair below,
+                 * there is no half-applied state where Qt reinterprets them.
+                 */
+                radius: Theme.barRadius
+                topLeftRadius:     (Theme.barEnds && !BarConfig.atBottom) ? 0 : Theme.barRadius
+                topRightRadius:    (Theme.barEnds && !BarConfig.atBottom) ? 0 : Theme.barRadius
+                bottomLeftRadius:  (Theme.barEnds &&  BarConfig.atBottom) ? 0 : Theme.barRadius
+                bottomRightRadius: (Theme.barEnds &&  BarConfig.atBottom) ? 0 : Theme.barRadius
 
                 // Right-click anywhere the modules do not claim opens the per-monitor
                 // menu. It sits UNDER the modules, so a module that uses right-click
@@ -198,16 +258,34 @@ PanelWindow {
                 // observed half-applied. Verified with the pattern in
                 // isolation: rule.height across the flip is 2 → 2 here and was
                 // 2 → 28 before.
+                //
+                // INSET TO THE CURVE when the bar is rounded. The rule runs
+                // along the edge facing the desktop, which is exactly the edge
+                // whose corners curve, so at full width its last few pixels
+                // stick out past the background as two little tabs. render.c hit
+                // the identical thing on the compositor's panels and solved it
+                // by rounding the accent's own top corners; here the strip is a
+                // child of a rounded parent with no clip, so the margins are the
+                // version of "let the curve eat its ends" that costs nothing.
+                // barRadius is 0 at full width, where this is the old rule.
                 Rectangle {
-                    anchors { left: parent.left; right: parent.right }
+                    anchors { left: parent.left; right: parent.right
+                              leftMargin: Theme.barRadius
+                              rightMargin: Theme.barRadius }
                     y: BarConfig.atBottom ? 0 : parent.height - height
                     height: Theme.accentHeight
                     color: Theme.magenta
                 }
 
                 // ── Left: start button, then virtual desktops ────
+                // The margins keep the first and last modules off the curve. A
+                // capsule takes a full half-height out of each end, and the
+                // start button sat right in it — clipped on a shape with no
+                // clip means drawn OVER the corner, hanging off the pill.
                 Row {
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    anchors { left: parent.left
+                              leftMargin: Theme.barRadius
+                              verticalCenter: parent.verticalCenter }
                     spacing: 0
 
                     Launcher {
@@ -233,7 +311,11 @@ PanelWindow {
                 Row {
                     anchors {
                         right: parent.right
-                        rightMargin: 6
+                        // 6 is the square bar's breathing room and stays the
+                        // floor; a curve wider than that pushes the tray in
+                        // past it. Not additive — 6 + 14 would leave the right
+                        // side visibly slacker than the left at every radius.
+                        rightMargin: Math.max(6, Theme.barRadius)
                         verticalCenter: parent.verticalCenter
                     }
                     spacing: Theme.moduleGap

@@ -149,11 +149,18 @@
  *   dock_pin = firefox foot ...  (space-separated app_ids/.desktop basenames)
  *   dock_edge = bottom|top|left|right   (left/right draw a vertical column)
  *
- * The bar (quickshell) — a SEPARATE PROCESS, so the compositor parses these two
- * and acts on neither. They live here so each setting has one spelling and the
- * control panel can persist it through settings.state like every other row:
+ * The bar (quickshell) — a SEPARATE PROCESS, so the compositor parses these
+ * three and acts on none of them. They live here so each setting has one
+ * spelling and the control panel can persist it through settings.state like
+ * every other row:
  *   bar_shell = synapse|antiquity   (which QML tree synui-bar starts; next login)
  *   bar_edge  = top|bottom          (BarConfig.qml watches this — it moves live)
+ *   bar_shape = full-width|rounded-ends|floating-pill
+ *     — what the bar does with `corner_radius`. rounded-ends curves the two
+ *       corners facing the desktop; floating-pill also lifts it off the edge and
+ *       insets it from both sides, closing it into a capsule. ALL OF THEM ARE
+ *       NO-OPS WITH THE CORNERS OFF (radius 0, or a retro chrome), so this is
+ *       "what shape when rounded" and not a second switch — see syn_bar_shape_t.
  * Only two edges where the dock has four: the bar is a horizontal row (start
  * button, desktop pills, centred clock, tray) and has no vertical form.
  *
@@ -301,6 +308,15 @@ const char *const syn_bar_shell_names[SYN_BAR_SHELL_COUNT] = {
  * what reads it back. */
 const char *const syn_bar_edge_names[SYN_BAR_EDGE_COUNT] = {
     "top", "bottom",
+};
+
+/* The `bar_shape` spellings, in syn_bar_shape_t order. Hyphenated because the
+ * control panel persists an enum by lower-casing the name it DISPLAYS, so
+ * "Floating pill" would reach this table as "floating pill" and not match —
+ * the same rule ctl_names_anim_curve's "Ease-in-out" follows. Parsed here and
+ * acted on by BarConfig.qml, like the two keys above it. */
+const char *const syn_bar_shape_names[SYN_BAR_SHAPE_COUNT] = {
+    "full-width", "rounded-ends", "floating-pill",
 };
 
 /* ── Keybindings ─────────────────────────────────────────── */
@@ -1116,6 +1132,7 @@ static void config_set_defaults(syn_config_t *cfg)
              "pkill -x quickshell ; pkill -x waybar");
     snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "synui-bar");
     cfg->bar_edge          = SYN_BAR_EDGE_TOP;
+    cfg->bar_shape         = SYN_BAR_SHAPE_FULL;
     cfg->bar_icon_theme[0] = '\0';
 
     cfg->power_enabled = 1;
@@ -1987,6 +2004,19 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
             }
         if (!found)
             wlr_log(WLR_ERROR, "synui: bar_edge: unknown '%s'", val);
+    }
+    /* And again: the bar's shape when the corners are on. Parsed here for one
+     * spelling, applied by BarConfig.qml. */
+    else if (strcmp(key, "bar_shape") == 0) {
+        int found = 0;
+        for (int i = 0; i < SYN_BAR_SHAPE_COUNT; i++)
+            if (strcmp(val, syn_bar_shape_names[i]) == 0) {
+                cfg->bar_shape = i;
+                found = 1;
+                break;
+            }
+        if (!found)
+            wlr_log(WLR_ERROR, "synui: bar_shape: unknown '%s'", val);
     }
     /* Empty means "follow the system icon theme", which is the default and what
      * a theme switch changes. Not validated against the installed themes: the

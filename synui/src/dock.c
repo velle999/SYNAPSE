@@ -285,16 +285,9 @@ void dock_view_unmapped(syn_view_t *v)
 
 /* ── Geometry ────────────────────────────────────────────── */
 
-static void rounded_rect(cairo_t *cr, double x, double y, double w, double h,
-                         double r)
-{
-    cairo_new_sub_path(cr);
-    cairo_arc(cr, x + w - r, y + r,     r, -M_PI_2, 0);
-    cairo_arc(cr, x + w - r, y + h - r, r, 0, M_PI_2);
-    cairo_arc(cr, x + r,     y + h - r, r, M_PI_2, M_PI);
-    cairo_arc(cr, x + r,     y + r,     r, M_PI, 3 * M_PI_2);
-    cairo_close_path(cr);
-}
+/* rounded_rect() used to live here. It is cairo_rounded_rect() in
+ * cairo_shapes.c now, because the right-click menus need the same four arcs to
+ * round their own borders — one path rather than two that can drift. */
 
 /* Fully-shown bar rect for this output's mirror on the current edge. The
  * "run" axis (length) grows with the entry count; the cross axis is the fixed
@@ -476,7 +469,7 @@ static void dock_render_output(syn_output_t *o)
     if (!buf) return;
     cairo_begin(cr);
 
-    rounded_rect(cr, 0, 0, bar_w, bar_h, 16);
+    cairo_rounded_rect(cr, 0, 0, bar_w, bar_h, 16);
     /* Body: the theme's panel surface, the same one render.c fills every other
      * compositor-drawn panel with. This was a literal 0.06/0.06/0.12 — frozen
      * here back when only the ACCENT was theme data, so the dock kept SYNAPSE's
