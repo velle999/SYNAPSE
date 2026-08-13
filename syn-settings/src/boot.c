@@ -1140,6 +1140,11 @@ static int limine_write_default(const char *conf, const char *esc_path)
 		return boot_refuse("that configuration path is too long to write beside");
 	}
 
+	/* From the descriptor being read, for the rename below — see the same
+	 * pair in grub_write_default_saved(). */
+	struct stat st;
+	int have_mode = fstat(fileno(in), &st) == 0;
+
 	FILE *out = fopen(tmp, "we");
 	if (!out) {
 		fclose(in);
@@ -1169,6 +1174,11 @@ static int limine_write_default(const char *conf, const char *esc_path)
 	}
 
 	fclose(in);
+	/* This file is REPLACED by the rename, so the temp file's mode becomes
+	 * limine.conf's — and that mode is the umask's, not the config's. Without
+	 * this the boot menu quietly came back at whatever 0666 & ~umask happens
+	 * to be on the machine running it. */
+	if (ok && have_mode) ok = fchmod(fileno(out), st.st_mode & 07777) == 0;
 	if (ok) ok = fflush(out) == 0 && fsync(fileno(out)) == 0;
 	if (fclose(out) != 0) ok = 0;
 
@@ -1212,6 +1222,12 @@ static int grub_write_default_saved(const char *path)
 		fclose(in);
 		return -1;
 	}
+
+	/* The mode of the file we are ACTUALLY reading, taken from the open
+	 * descriptor. See the fchmod below for why it is not a stat() on the path.
+	 */
+	struct stat st;
+	int have_mode = fstat(fileno(in), &st) == 0;
 
 	/* Read it all first: the file is small, and holding it means the original
 	 * is never open for writing — an interrupted run leaves the temp file and
@@ -1260,16 +1276,29 @@ static int grub_write_default_saved(const char *path)
 		changed = 1;
 	}
 
+	/* Keep whatever mode the original had: the temp file's own mode comes from
+	 * the umask of whoever is running this, which has nothing to do with the
+	 * file being replaced — a 077 umask would hand /etc/default/grub back at
+	 * 0600.
+	 *
+	 * fstat/fchmod ON THE DESCRIPTORS, never stat/chmod on the paths. Checking
+	 * one name and then acting on another is a time-of-check/time-of-use race
+	 * (CodeQL cpp/toctou-race-condition, CWE-367): between the two calls the
+	 * name can come to mean a different file, and the mode would be read from
+	 * one and applied to another. The descriptors cannot be redirected under
+	 * us — `in` is the file that was actually read and `out` is the file that
+	 * is about to be renamed over it. synfiles/src/fileops.c copies a file's
+	 * mode the same way, and this was the one place in the tree that did not.
+	 *
+	 * If the fstat failed, the temp file keeps the umask's mode rather than
+	 * being given a guess. */
+	if (ok && have_mode) ok = fchmod(fileno(out), st.st_mode & 07777) == 0;
+
 	if (ok) ok = fflush(out) == 0 && fsync(fileno(out)) == 0;
 	if (fclose(out) != 0) ok = 0;
 	if (!ok) { unlink(tmp); return -1; }
 
 	if (!changed) { unlink(tmp); return 0; }
-
-	/* Keep whatever mode it had; a fresh temp file is 0600 and this one is
-	 * read by grub-mkconfig. */
-	struct stat st;
-	if (stat(path, &st) == 0) (void)chmod(tmp, st.st_mode & 07777);
 
 	if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
 	(void)save;

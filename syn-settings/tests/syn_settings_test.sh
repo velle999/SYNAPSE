@@ -560,6 +560,20 @@ if [ "$linux_here" = 1 ]; then
     else
         bad "default: default_entry accumulated ($lines then $lines2)"
     fi
+
+    # The mode survives, for the same reason it must in /etc/default/grub: the
+    # file is REPLACED by a rename, so the temp file's mode becomes the boot
+    # menu's, and a temp file's mode is the umask's. Run under umask 077, which
+    # is the case that shows it.
+    chmod 0644 "$bootfx/limidx/boot/limine.conf"
+    ( umask 077
+      SYN_SETTINGS_BOOT_ROOT="$bootfx/limidx" "$BIN" default linux-lts --as-root >/dev/null 2>&1 )
+    mode=$(stat -c %a "$bootfx/limidx/boot/limine.conf")
+    if [ "$mode" = 644 ]; then
+        ok "default: limine.conf keeps its mode through the rewrite"
+    else
+        bad "default: limine.conf came back as $mode, not 644"
+    fi
 fi
 
 # systemd-boot: loader.conf's `default`, and the EFI variable that OVERRIDES
@@ -687,6 +701,31 @@ if [ "$linux_here" = 1 ]; then
         ok "default: setting it twice leaves one GRUB_DEFAULT"
     else
         bad "default: GRUB_DEFAULT accumulated"
+    fi
+
+    # ── the file's MODE survives ────────────────────────────────────────────
+    #
+    # /etc/default/grub is replaced by a rename, so the TEMP file's mode
+    # becomes the config's — and a temp file's mode comes from the umask of
+    # whoever is running this, not from the file being replaced. Under a
+    # restrictive umask that silently hands the config back at 0600.
+    #
+    # Run under `umask 077` on purpose: that is the case where getting it wrong
+    # is visible, and a test at the developer's own 022 would pass either way.
+    # The mode is copied fstat→fchmod, from the descriptor that was actually
+    # read to the one about to be renamed over it — never stat(path) then
+    # chmod(tmp), which is a time-of-check/time-of-use race (CWE-367): between
+    # the two calls the name can come to mean a different file.
+    printf 'GRUB_DEFAULT=0\nGRUB_TIMEOUT=5\n' > "$bootfx/grubw/etc/default/grub"
+    chmod 0640 "$bootfx/grubw/etc/default/grub"
+    ( umask 077
+      SYN_SETTINGS_BOOT_ROOT="$bootfx/grubw" PATH="$bootfx/grubw/bin:$PATH" \
+          "$BIN" default linux --as-root >/dev/null 2>&1 )
+    mode=$(stat -c %a "$bootfx/grubw/etc/default/grub")
+    if [ "$mode" = 640 ]; then
+        ok "default: /etc/default/grub keeps its mode through the rewrite"
+    else
+        bad "default: /etc/default/grub came back as $mode, not 640"
     fi
 
     # A COMMENTED example is not a setting, and turning one into a live line is
