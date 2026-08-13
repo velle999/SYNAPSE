@@ -152,7 +152,7 @@ PopupWindow {
 
     Rectangle {
         anchors.fill: parent
-        radius: Theme.radius
+        radius: Theme.panelRadius
         color: Theme.popupBg
         border.color: Theme.magenta
         border.width: 1

@@ -64,7 +64,11 @@ PanelWindow {
     Rectangle {
         id: card
         anchors.fill: parent
-        radius: 10
+        // Was a fixed 10, from before any of the bar's panels followed the
+        // desktop. It is one of them: a volume card still rounded on a desktop
+        // whose every window and menu has gone square is the same split this
+        // change closes everywhere else.
+        radius: Theme.panelRadius
         color: Theme.popupBg
         border.color: Theme.magenta
         border.width: 1

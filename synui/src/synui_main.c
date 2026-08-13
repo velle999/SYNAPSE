@@ -405,6 +405,13 @@ static void output_frame(struct wl_listener *listener, void *data)
     /* Apply any pending synguard security verdicts to window borders. */
     secfeed_dispatch(output->server);
 
+    /* Keep synui's own panels on the desktop's corner radius. Here rather than
+     * in each of the twenty-nine renderers because the panels' background rects
+     * are created lazily and resized on every render — see panel_chrome_sync(),
+     * which is a no-op for a panel that has never been opened and damages
+     * nothing when the radii already match. */
+    panel_chrome_sync(output->server);
+
     /* Drive the auto-hide dock's slide/hover; keep frames coming mid-slide. */
     struct timespec dnow;
     clock_gettime(CLOCK_MONOTONIC, &dnow);

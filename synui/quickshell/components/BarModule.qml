@@ -153,7 +153,7 @@ Rectangle {
             color: Theme.popupBg
             border.color: Theme.magenta
             border.width: 1
-            radius: Theme.radius
+            radius: Theme.panelRadius
 
             Text {
                 id: tipText

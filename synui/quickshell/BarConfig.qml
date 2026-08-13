@@ -74,6 +74,27 @@ QtObject {
     readonly property bool atBottom: root.edge === "bottom"
     property string edge: "top"
 
+    /* ── The desktop's corner radius ─────────────────────────────────────────
+     *
+     * Global for the same reason the edge is, and read the same way: the bar's
+     * panels are furniture on the same desktop as the compositor's, and
+     * `corner_radius` is one setting for the lot. Without this the bar was the
+     * exception — turning corners on rounded every window, every menu and every
+     * picker, and left the strip across the top of the screen square.
+     *
+     * The RAW setting. Theme.panelRadius is what the panels actually use; it
+     * applies the retro chromes' override on top (see there).
+     *
+     * THREE sources, in synui's own order. uifx.state last-and-winning is not a
+     * detail: the control panel's window-effects page is where the corner slider
+     * lives and uifx.state is what it writes, while settings.state carries the
+     * same key from the settings app. synui_config_load() reads synuirc, then
+     * settings.state, then uifx.state, so a value read in the other order would
+     * disagree with the compositor drawing two inches below — which is the exact
+     * class of bug this whole change is about.
+     */
+    property int cornerRadius: 12      // config.c's default, for a box with none
+
     // Where a popup hanging off the bar starts, given its height. One place
     // rather than a `Theme.barHeight + 2` at each anchor site: a bottom bar's
     // popups have to go UP, and every one of those sites would otherwise be a
@@ -105,11 +126,22 @@ QtObject {
         return ""
     }
 
-    function applyEdge() {
+    function applyGlobals() {
         // settings.state wins where it has the key, synuirc where it does not.
         const v = root.readKey(settingsFile.text(), "bar_edge")
                   || root.readKey(synuircFile.text(), "bar_edge")
         root.edge = (v === "bottom") ? "bottom" : "top"
+
+        // Highest-precedence source first; "" is the only falsy result readKey
+        // can return, so a legitimate "0" still stops the chain.
+        const r = root.readKey(uifxFile.text(), "corner_radius")
+                  || root.readKey(settingsFile.text(), "corner_radius")
+                  || root.readKey(synuircFile.text(), "corner_radius")
+        // config.c clamps to 0..48 and ignores a value it cannot parse; the bar
+        // has to do the same or a typo'd synuirc line gives the compositor its
+        // default and the bar a NaN, which silently paints every panel square.
+        const n = parseInt(r, 10)
+        if (!isNaN(n)) root.cornerRadius = Math.max(0, Math.min(48, n))
     }
 
     property FileView synuircFile: FileView {
@@ -120,8 +152,8 @@ QtObject {
         // surface's first configure.
         blockLoading: true
         onFileChanged: reload()
-        onLoaded: root.applyEdge()
-        onLoadFailed: root.applyEdge()
+        onLoaded: root.applyGlobals()
+        onLoadFailed: root.applyGlobals()
     }
 
     property FileView settingsFile: FileView {
@@ -129,10 +161,27 @@ QtObject {
         watchChanges: true
         blockLoading: true
         onFileChanged: reload()
-        onLoaded: root.applyEdge()
+        onLoaded: root.applyGlobals()
         // Absent is the normal case — settings.state only exists once something
         // on the control panel has been changed.
-        onLoadFailed: root.applyEdge()
+        onLoadFailed: root.applyGlobals()
+    }
+
+    /* The corner slider's own file, and the highest-precedence source for it.
+     *
+     * Not blockLoading, unlike the two above: those decide the exclusive zone,
+     * which quickshell sends once per surface and therefore has to be right
+     * before the first configure. A radius is read by panels that do not exist
+     * yet — nothing on screen at startup is drawn with it — so this can arrive a
+     * frame late, and a synchronous read at every bar start would buy nothing.
+     */
+    property FileView uifxFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/uifx.state"
+        watchChanges: true
+        printErrors: false      // absent until an effects row is changed
+        onFileChanged: reload()
+        onLoaded: root.applyGlobals()
+        onLoadFailed: root.applyGlobals()
     }
 
     function get(output, key) {
@@ -208,6 +257,6 @@ QtObject {
     // and quickshell sends that once per surface.
     Component.onCompleted: {
         root.parse(configFile.text())
-        root.applyEdge()
+        root.applyGlobals()
     }
 }

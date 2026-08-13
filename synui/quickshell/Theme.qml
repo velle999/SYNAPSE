@@ -122,7 +122,52 @@ QtObject {
     readonly property int  accentHeight:  2      // the accent underline
     readonly property int  modulePadH:    9
     readonly property int  moduleGap:     2
+
+    // The CONTROLS: menu rows, workspace pills, tray cells, the mixer's little
+    // adjust chips. Everything that lives INSIDE a panel and is 18-22px tall.
+    // Deliberately not the desktop's radius — these are 4px because at that
+    // height anything more is a lozenge, and `corner_radius = 14` would turn a
+    // row highlight into a capsule while saying nothing about what the user
+    // asked for, which was rounded panels.
     readonly property int  radius:        4
+
+    /*
+     * The SURFACES: the right-click menu, the start menu, the mixer, the module
+     * tooltips, the OSD. These are furniture on the same desktop as synui's own
+     * panels, so they take the same setting the compositor draws its control
+     * panel and its pickers with — see panel_chrome_sync() in render.c, which is
+     * the other half of this. Before it, "rounded corners" moved every window
+     * and every application on the desktop and left the desktop's own furniture
+     * square.
+     *
+     * TWO sources because the fact has two halves with different lifetimes. The
+     * radius is a setting the user can change at any moment (BarConfig reads it
+     * from the three files synui reads it from, in synui's order). Whether the
+     * chrome overrides it to square is a property of the THEME, changing only
+     * when the theme does — so it rides in theme.state, written by theme.c,
+     * which is the one place that knows a Win95 desktop is square whatever the
+     * slider says. Deriving that here would mean a copy of the LUNA/BEVEL table
+     * in QML, wrong the first time a preset changes.
+     */
+    readonly property int  panelRadius:   root.squareChrome ? 0
+                                                            : BarConfig.cornerRadius
+
+    // Absent, unreadable, or written by a synui too old to export it: not
+    // square. That is the modern chrome, which is what all but two of the
+    // presets are, and it degrades to exactly the behaviour above.
+    property bool squareChrome: false
+
+    property FileView chromeFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/theme.state"
+        watchChanges: true
+        printErrors: false      // absent until a theme is picked
+        onFileChanged: reload()
+        onLoaded: {
+            const m = this.text().match(/^\s*square_chrome\s*=\s*(\S+)\s*$/m)
+            root.squareChrome = !!m && m[1] === "on"
+        }
+        onLoadFailed: root.squareChrome = false
+    }
 
     // Module pills are inset from the bar's height so the hover wash reads as a
     // button rather than a full-height stripe. 20 of 28 leaves 4px above and

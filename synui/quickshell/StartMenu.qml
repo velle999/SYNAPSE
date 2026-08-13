@@ -125,7 +125,7 @@ PanelWindow {
         color: Theme.popupBg
         border.color: Theme.magenta
         border.width: 1
-        radius: Theme.radius
+        radius: Theme.panelRadius
 
         // Swallows presses that land on the panel but not on a row. A Rectangle
         // accepts no buttons, and neither does the search box (an Item and a

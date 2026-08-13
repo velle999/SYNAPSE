@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <wlr/types/wlr_damage_ring.h>
 #include <scenefx/types/wlr_scene.h>
@@ -463,6 +464,29 @@ static void theme_state_save(syn_server_t *s)
      * the user never chose. */
     if (s->config.foot_alpha >= 0.0f)
         fprintf(f, "foot_alpha=%.2f\n", s->config.foot_alpha);
+    /*
+     * An EXPORT, not a setting: nothing reads this back into the config, and
+     * theme_state_load_config() ignores it. It is here for the bar.
+     *
+     * The bar rounds its own panels — the right-click menu, the start menu, the
+     * mixer, the tooltips — on the desktop's `corner_radius`, so that turning
+     * corners on moves the whole desktop rather than everything except the one
+     * strip across the top of the screen. That setting is only half the answer:
+     * chrome_corner_radius() forces 0 for the retro chromes, because a Windows
+     * 95 desktop with a 14px-rounded start menu is neither one thing nor the
+     * other. The bar cannot work that half out for itself without a copy of the
+     * LUNA/BEVEL table in QML, which is a table that would be wrong the first
+     * time a preset here changed.
+     *
+     * So the DERIVED fact travels instead of the enum, and the bar's whole share
+     * of the rule is one ternary. It lives in theme.state rather than in
+     * theme.json because it changes exactly when the theme does, and theme.json
+     * is written by synui-apply-theme — which is handed a palette and never
+     * learns which chrome drew it (the Antiquity bar calls that helper directly
+     * with nothing but colours).
+     */
+    fprintf(f, "square_chrome=%s\n",
+            s->config.chrome == SYN_CHROME_FLAT ? "off" : "on");
     fclose(f);
 }
 
@@ -1021,6 +1045,34 @@ void theme_apply_from_config(syn_server_t *s, int push_apps)
     /* Re-sync the terminal's own glass to the restored state: if the last
      * session left transparency off, foot.ini must go back to solid. */
     glass_push(s);
+
+    /*
+     * Bring theme.state's EXPORT up to date — startup only, and only over a
+     * file that is already there.
+     *
+     * `square_chrome` (see theme_state_save) is written when a theme is PICKED,
+     * so a desktop that picked Win95 under an older synui has a theme.state with
+     * no such key, and the bar would round its menus over a square desktop until
+     * the next visit to the theme manager — the kind of half-fix nobody reports
+     * because everything else about the upgrade worked. Re-saving what the
+     * config has already fully resolved (every field theme_apply_ex clobbered is
+     * restored above) writes the key on the first login instead, with identical
+     * content otherwise.
+     *
+     * Not on a reload: push_apps is the startup caller's flag, and Ctrl+Shift+R
+     * has no business writing state files.
+     *
+     * Not when the file is ABSENT, which is a box that has never picked a theme.
+     * It is on the FLAT chrome — exactly what the bar assumes when the key is
+     * missing — so there is nothing to bring up to date, and creating
+     * theme.state here would hand it precedence over settings.state's opacity
+     * keys (synui_config_load reads it last) on a desktop that never asked.
+     */
+    if (push_apps) {
+        char sp[256];
+        if (syn_config_path(sp, sizeof(sp), "theme.state") && access(sp, F_OK) == 0)
+            theme_state_save(s);
+    }
 }
 
 /* ── The panel ───────────────────────────────────────────── */

@@ -5837,6 +5837,20 @@ int  ctlpanel_row_options(int row);
  * and tells the reset key whether there is anything to undo. */
 int  ctlpanel_row_is_default(syn_server_t *s, int row);
 void synui_render_ctlpanel(syn_server_t *s);
+/*
+ * Push the desktop's corner radius onto every panel's own background rect —
+ * the control panel, the task manager, the pickers, the desktop and dock
+ * menus. Windows have been rounded since the scenefx migration and synui's own
+ * furniture never was, so turning corners on rounded every application and left
+ * the compositor square.
+ *
+ * Safe and cheap to call every frame: the rects are created lazily on a panel's
+ * first render (an unopened panel's slot is NULL and is skipped), and
+ * wlr_scene_rect_set_corner_radii() returns without damaging anything when the
+ * radii already match. Calling it per frame is also what makes a radius change
+ * land on panels that are already open.
+ */
+void panel_chrome_sync(syn_server_t *s);
 
 /* ── Theme manager (theme.c) ─────────────────────────────── */
 /* Apply a preset: overwrite the border/titlebar colours + default opacities in

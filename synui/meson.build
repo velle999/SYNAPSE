@@ -945,6 +945,17 @@ test('ws_slide', ws_slide,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The BAR's panels follow corner_radius, and a retro chrome squares them again.
+# Reads rendered pixels (grim + PIL) rather than a property, because the whole
+# bug was a setting that reported itself applied and moved nothing: it asserts
+# the four corners of an open start menu carve at 14, come back square under
+# `square_chrome`, and that the panel's body never repaints either way.
+bar_radius = find_program('tests/bar_radius.sh')
+test('bar_radius', bar_radius,
+     args    : [synui_exe.full_path(), meson.current_source_dir() / 'quickshell'],
+     depends : [synui_exe],
+     timeout : 180)
+
 # The fibonacci layout (layout_spiral): five windows laid out by BOTH tilers,
 # asserting the spiral's smallest window beats master-stack's — the claim the
 # layout exists to make — plus the no-overlap invariant its remainder

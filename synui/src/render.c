@@ -8078,6 +8078,81 @@ void synui_render_overview(syn_server_t *s)
     wlr_scene_node_raise_to_top(&s->overview_ui.thumb_tree->node);
 }
 
+/* ── Panel chrome: the corner radius ─────────────────────── */
+/*
+ * synui's own panels — the control panel, the task manager, the pickers, the
+ * menus — are a background scene rect with cairo text drawn on top. Windows
+ * have had rounded corners since the scenefx migration and these never did, so
+ * turning corners on rounded every application on the desktop and left the
+ * desktop's own furniture square.
+ *
+ * ONE place, rather than a radius call in each of the twenty-nine renderers.
+ * The rects are created lazily on a panel's first render and resized on every
+ * one after that, so a radius applied at creation time would need repeating
+ * anyway; a table of the SLOTS lets this run over all of them whenever it
+ * likes, including before a panel has ever been opened (the slot is NULL and
+ * is skipped) and immediately after the setting changes.
+ *
+ * It is cheap enough to call every frame: 29 pointer tests, and
+ * wlr_scene_rect_set_corner_radii() returns without damaging anything when the
+ * radii already match (fx_corner_radii_eq).
+ *
+ * The accent is the 2px rule across the top of most panels. It gets the radius
+ * on its TOP corners, which is not cosmetic symmetry — a full-width strip over
+ * a rounded background pokes out as two little tabs where the curve has taken
+ * the background away. scenefx's corner shader is a signed distance field with
+ * no clamp to the rect's own height, so a radius taller than the strip simply
+ * eats its ends: the rule fades out exactly where the curve begins.
+ */
+struct panel_chrome { struct wlr_scene_rect **bg, **accent; };
+
+void panel_chrome_sync(syn_server_t *s)
+{
+    if (!s) return;
+
+    /* The window chrome's radius, so "rounded" is one setting for the whole
+     * desktop rather than two that can disagree. chrome_corner_radius() also
+     * forces 0 for the retro themes, which is why this reads it rather than
+     * config.corner_radius: a Windows 95 desktop with rounded panels would be
+     * neither one thing nor the other. */
+    const int r = chrome_corner_radius(&s->config);
+
+#define PANEL_BG(n)     { &s->n##_ui.bg, NULL }
+#define PANEL_FULL(n)   { &s->n##_ui.bg, &s->n##_ui.accent }
+    const struct panel_chrome panels[] = {
+        PANEL_FULL(welcome),  PANEL_FULL(cmdbar),   PANEL_FULL(overlay),
+        PANEL_FULL(dispcfg),  PANEL_FULL(wppick),   PANEL_FULL(power),
+        PANEL_FULL(curpick),  PANEL_FULL(fontpick), PANEL_FULL(emoji),
+        PANEL_FULL(calc),     PANEL_FULL(eq),       PANEL_FULL(taskmgr),
+        PANEL_FULL(news),     PANEL_FULL(filters),  PANEL_FULL(aimodel),
+        PANEL_FULL(widgets),  PANEL_FULL(sound),    PANEL_FULL(clock),
+        PANEL_FULL(cal),      PANEL_FULL(ctlpanel), PANEL_FULL(keys),
+        PANEL_FULL(thememgr), PANEL_FULL(bt),       PANEL_FULL(clip),
+        PANEL_FULL(alttab),
+        /* No accent rule of their own. The two menus are the desktop and dock
+         * right-click menus, which is most of what "the system menus do not
+         * round" was about. */
+        PANEL_BG(deskmenu),   PANEL_BG(dockmenu),   PANEL_BG(crop),
+        /*
+         * NOT overview. Mission control's "panel" is a full-screen dim the
+         * size of the output, so rounding it would cut a transparent notch out
+         * of each corner of the SCREEN — the desktop showing through four
+         * little bites. A background that covers everything has no corners to
+         * round.
+         */
+    };
+#undef PANEL_BG
+#undef PANEL_FULL
+
+    for (size_t i = 0; i < sizeof(panels) / sizeof(panels[0]); i++) {
+        if (*panels[i].bg)
+            wlr_scene_rect_set_corner_radius(*panels[i].bg, r);
+        if (panels[i].accent && *panels[i].accent)
+            wlr_scene_rect_set_corner_radii(*panels[i].accent,
+                                            corner_radii_top(r));
+    }
+}
+
 /* ── Initialize all UI scene trees ───────────────────────── */
 
 void synui_ui_init(syn_server_t *s)

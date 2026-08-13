@@ -900,3 +900,66 @@ else. The launcher moved onto it and the command bar moved off.
       could be told things directly. So the Super tap does not open a start menu
       on this shell; `synui-bar ipc` against it fails rather than doing nothing
       quietly. Documented in `synui-bar.sh` and in the shipped `synuirc`.
+
+### `corner_radius` reaches the desktop's own furniture  *(done)*
+
+Since the scenefx migration `corner_radius` rounded every *window* on the
+desktop — and nothing synui or the bar drew themselves. Turning corners on
+rounded all thirty applications and left the control panel, the task manager,
+the pickers, the desktop and dock menus, the start menu and the bar's popups
+square: the setting appeared to work, and the parts of the desktop that are
+actually ours were the exception.
+
+- [x] **The compositor's panels: `panel_chrome_sync()` (`render.c`), one table,
+      called from `output_frame`.** Not a radius call in each of the twenty-nine
+      renderers, because the panels' background rects are created lazily on first
+      render and resized on every one after — a radius set at creation time would
+      need repeating anyway. Cheap per frame: 29 pointer tests, and
+      `wlr_scene_rect_set_corner_radii()` returns without damaging anything when
+      the radii already match. Running it per frame is also what lands a radius
+      change on panels that are already open.
+      The accent rule gets the radius on its TOP corners only — not cosmetic
+      symmetry: a full-width 2px strip over a rounded background pokes out as two
+      tabs where the curve has taken the background away. scenefx's corner shader
+      is an SDF with no clamp to the rect's own height, so a radius taller than
+      the strip eats its ends and the rule fades out exactly where the curve
+      begins.
+      **Not the overview.** Mission control's "panel" is a full-screen dim the
+      size of the output; rounding it cuts a transparent notch out of each corner
+      of the SCREEN. A background that covers everything has no corners to round.
+- [x] **The bar's panels follow the same setting** — the right-click menu, the
+      start menu, the mixer, the module tooltips and the OSD, all of which now
+      take `Theme.panelRadius`. The controls INSIDE them keep `Theme.radius` (4):
+      they are 18–22px tall, and `corner_radius = 14` on a menu row is a capsule,
+      which is not what anybody asking for rounded panels asked for.
+- [x] **The retro rule travels as a DERIVED fact, not as an enum.**
+      `chrome_corner_radius()` forces 0 for LUNA and BEVEL — a Win95 desktop with
+      a 14px-rounded start menu is neither one thing nor the other — and the bar
+      cannot work that out without a copy of the chrome table in QML, which would
+      be wrong the first time a preset changed. So `theme.state` carries
+      `square_chrome = on|off`, written by `theme.c`, and the bar's whole share of
+      the rule is one ternary.
+      It is in theme.state and not theme.json because theme.json is written by
+      `synui-apply-theme`, which is handed a palette and never learns which
+      chrome drew it (the Antiquity bar calls that helper directly, with nothing
+      but colours). The radius itself has the other lifetime — it changes at any
+      moment — so `BarConfig` reads it from the three files synui reads it from,
+      **in synui's order**: `uifx.state` (the corner slider's own file) over
+      `settings.state` over `synuirc`. Read in any other order the bar disagrees
+      with the compositor drawing two inches below it, which is the whole class
+      of bug this closes.
+- [x] **The export is written on the first login after an upgrade**, not only on
+      the next theme pick — `theme_apply_from_config()` re-saves a theme.state
+      that is already there. A box that picked Win95 under an older synui would
+      otherwise round its bar menus over a square desktop until someone happened
+      to visit the theme manager. It does NOT create the file: no theme.state
+      means a desktop on the FLAT chrome, which is what the bar assumes when the
+      key is missing, and creating it would hand it precedence over
+      `settings.state`'s opacity keys on a desktop that never asked.
+- [x] **`tests/bar_radius.sh`** — headless nested synui + the real bar, three
+      captures of the same open start menu: `corner_radius=0` square,
+      `=14` rounded, `=14` with `square_chrome=on` square again. The 14 is written
+      while everything is running, so it also proves the FileView watch. Asserted
+      on rendered pixels: the diff between the first two is 300+ pixels in four
+      14px corner clusters and nothing else, and the first and third are
+      corner-identical.
