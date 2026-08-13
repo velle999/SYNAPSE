@@ -808,20 +808,35 @@ card: build it with `sudo archiso/build.sh --gpu=rocm`.
 
 **Prerequisites** — an Arch (or Arch-based) host with `archiso`, `base-devel`,
 `meson`, `ninja`, `wlroots0.20`, `scenefx0.5`, `quickshell`, `qemu`, and `ovmf`.
-Budget ~22 GB of free disk with the embedded model, ~9 GB without.
+Budget ~9 GB of free disk, or ~22 GB if you embed a model.
 
 `archiso/build.sh` runs the whole pipeline: builds llama.cpp (pinned at tag
-`b8272`, matching CI), packages every component through its `PKGBUILD` into a
-local pacman repo, fetches the model, and invokes `mkarchiso`.
+`b10241`, matching CI and `synapse-llama`'s `_llama_ref`), packages every
+component through its `PKGBUILD` into a local pacman repo, and invokes
+`mkarchiso`.
 
 ```bash
-sudo archiso/build.sh              # full build, GPU auto-detected
-sudo archiso/build.sh --no-gpu     # CPU-only llama.cpp — use for QEMU-targeted ISOs
-sudo archiso/build.sh --gpu=vulkan # AMD/Intel GPU backend (portable; needs shaderc)
-sudo archiso/build.sh --gpu=cuda   # NVIDIA GPU backend (needs the cuda toolkit)
-sudo archiso/build.sh --no-model   # slim ISO, model downloaded on first boot
+sudo archiso/build.sh              # CPU llama.cpp, no model — what a release ships
 sudo archiso/build.sh --no-clean   # reuse the previous llama.cpp build
+sudo archiso/build.sh --with-model # embed a ~4.1 GB gguf in the image
+sudo archiso/build.sh --gpu=cuda   # NVIDIA backend for the ISO's own llama (needs cuda)
+sudo archiso/build.sh --gpu=vulkan # AMD/Intel backend (portable; needs shaderc)
+sudo archiso/build.sh --llama-only # build and stage llama.cpp, then stop
+sudo archiso/build.sh --jobs 8 --sign
 ```
+
+Two defaults are worth stating because they used to be the other way round:
+
+- **The ISO ships no AI model.** `--with-model` is the opt-in; `--no-model` is
+  still accepted and does nothing. The installer asks which model to download
+  onto the target instead, so the image is ~4 GB smaller. A `.gguf` left in the
+  overlay from an earlier `--with-model` run is *moved* to
+  `archiso/model-cache/` before `mkarchiso` packs the tree — otherwise it would
+  ship regardless of the flag.
+- **The ISO's own llama.cpp is a CPU build**, not an auto-detected one.
+  `--no-gpu` is likewise kept and does nothing. A CUDA-linked build needs
+  `libcuda.so.1` and would fail to start on any machine without an NVIDIA
+  driver, so GPU support reaches installed systems as a *package* instead.
 
 Regardless of the ISO's own backend, a release build **also** packages a GPU
 build into the repo when the host has the toolchain — `synapse-llama-cuda` if
@@ -835,17 +850,34 @@ Package builds run as the `synbuild` user under `/var/tmp`, because they must
 live outside `/home` (mode 0700). A failed package build aborts the run
 immediately rather than resurfacing later as a confusing pacstrap error.
 
-For the inner-loop, skip the ISO entirely:
+For the inner loop, skip the ISO entirely:
 
 ```bash
-bash build-all.sh   # builds every component against llama-staging/usr/
+./build-all.sh              # every component, in dependency order
+./build-all.sh synui        # just one — the usual case
 ```
+
+It builds against the staged llama tree for whichever backend this host runs
+(`llama-staging-cpu`, `-cuda`, `-vulkan`), defaulting to the one already
+installed so a routine rebuild on a GPU box does not quietly try to replace the
+GPU package with a CPU one. Produce a staging tree with
+`sudo archiso/build.sh --gpu=cuda --llama-only`. It asks for `sudo` **up front**
+and then runs unattended.
 
 ### Cutting a release
 
-Bump **`iso_version`** in `archiso/profiledef.sh` and nothing else — in
-particular, leave `SYNAPSEOS_VERSION` in `archiso/build.sh` alone, as it tracks
-the component series rather than the image. Then run `archiso/publish-release.sh`.
+1. Bump **`iso_version`** in `archiso/profiledef.sh` and nothing else — in
+   particular leave `SYNAPSEOS_VERSION` in `archiso/build.sh` alone, as it
+   tracks the component series rather than the image.
+2. Write **`archiso/release-notes/<version>.md`**. `publish-release.sh` prepends
+   it to the download boilerplate; without it the release ships with the
+   boilerplate *only*, and one line of output is the entire warning.
+3. `sudo archiso/build.sh --no-clean`, then check the built image before
+   publishing — `arch/version`, the component versions in
+   `arch/pkglist.x86_64.txt` (an optional package's presence is only witnessed
+   there), and no `libggml-cuda.so` in the squashfs.
+4. `archiso/publish-release.sh <version>` — it splits the ISO into 1900 MiB
+   `.part*` files (GitHub caps assets at 2 GiB) and creates the release.
 
 ---
 
