@@ -166,6 +166,7 @@ synui_exe = executable('synui',
   sources : [
     'src/synui_main.c',
     'src/input.c',
+    'src/spawntoggle.c',
     'src/hit.c',
     'src/constraints.c',
     'src/deco.c',
@@ -879,6 +880,19 @@ test('menu_cats', menu_cats,
 # recording the choice off the tmpfs. Runs the helper itself against a fake
 # systemctl and a scratch SYNUI_AI_ROOT, so it cannot stop the daemon on the
 # machine running the suite.
+# The `spawn_toggle` bind action, driven with real children: the second press of
+# a launcher's key has to close it, a slot whose child died has to open rather
+# than signal a recycled pid, and the close has to reach the whole process group.
+# Links spawntoggle.c alone — it needs no compositor, which is why it is its own
+# file.
+spawn_toggle_test = executable('spawn_toggle_test',
+  ['tests/spawn_toggle_test.c', 'src/spawntoggle.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('spawn_toggle', spawn_toggle_test, timeout : 30)
+
 ai_backend_off = find_program('tests/ai_backend_off.sh')
 test('ai_backend_off', ai_backend_off,
      args    : [meson.current_source_dir() / 'systemd/synui-ai-backend.sh'],

@@ -1368,8 +1368,13 @@ static const char *action_desc(const char *action, const char *arg)
         { "move_output",       "Move window to next output" },
     };
 
-    /* A spawn bind is only meaningful as the thing it spawns. */
-    if (strcmp(action, "spawn") == 0 && arg && *arg) return arg;
+    /* A spawn bind is only meaningful as the thing it spawns — for either
+     * spelling of it. spawn_toggle rows read as the command too rather than as
+     * "<command> (toggle)": the palette is a list of what the keys OPEN, and
+     * the difference between the two is what the key does the second time. */
+    if ((strcmp(action, "spawn") == 0 || strcmp(action, "spawn_toggle") == 0)
+        && arg && *arg)
+        return arg;
 
     for (unsigned i = 0; i < sizeof(tbl) / sizeof(tbl[0]); i++)
         if (strcmp(action, tbl[i].action) == 0) {

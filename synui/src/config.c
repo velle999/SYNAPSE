@@ -545,7 +545,7 @@ static int parse_hex_color(const char *val, float out[4])
  * and the "is this still the shipped pair" test all use these, so the three
  * cannot drift into disagreeing about what "the launcher" is — which would show
  * up as a toggle that silently stops working, not as a build error. */
-#define SYN_BIND_LAUNCHER "spawn rofi -show drun"
+#define SYN_BIND_LAUNCHER "spawn_toggle rofi -show drun"
 #define SYN_BIND_CMDBAR   "cmdbar"
 
 static void seed_default_binds(syn_config_t *cfg)
@@ -558,11 +558,13 @@ static void seed_default_binds(syn_config_t *cfg)
          * roots the bar menu already curates, and it is the plain "start a
          * program" key with nothing clever behind it.
          *
-         * A spawn, not an action — synui does not manage rofi's lifetime. rofi
-         * itself single-instances, so a second press while it is up is a no-op
-         * rather than a second window; this is NOT a toggle and the key will
-         * not close it (Escape does). That is a real difference from every
-         * panel bind below, all of which toggle. */
+         * spawn_toggle, so the key that opens it also puts it away — every
+         * other panel bind below toggles, and this one not toggling was the
+         * odd one out. rofi single-instances, so a second press used to be a
+         * no-op you could not tell from a dropped keypress: the launcher stayed
+         * up and only Escape closed it. Now the second press closes it, and the
+         * lifetime synui has to manage to do that is one pid (see spawn_toggle
+         * in input.c), not rofi's window. */
         { "super+space",     SYN_BIND_LAUNCHER },
         /* The AI command bar, displaced from Super+Space by rofi above. Super+=
          * puts it next to Super+Backspace (ai_ask) — on a US layout `=` is the

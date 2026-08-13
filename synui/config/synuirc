@@ -473,7 +473,8 @@ record_edit = off
 # bind = <mod>+<key> <action> [arg]
 # Mods: super/logo/mod4, shift, ctrl, alt. Keys are XKB keysym names
 # (q, return, space, tab, backspace, f1, ...).
-# Actions: spawn <cmd>, term, cmdbar, overlay, displays, menu, close, quit,
+# Actions: spawn <cmd>, spawn_toggle <cmd>, term, cmdbar, overlay, displays,
+#          menu, close, quit,
 #          layout_cycle, retile, focus_next/prev, alt_tab, alt_tab_prev,
 #          stack_next/prev,
 #          master_shrink/grow, column_consume, column_expel,
@@ -542,6 +543,17 @@ record_edit = off
 # -show drun`. Rebind it to any launcher you like, or to `cmdbar` to put the
 # command bar back where it was.
 #
+# spawn_toggle <cmd> = spawn it, and if the key comes back while it is still
+#   running, close it instead of opening a second one. `spawn` deliberately does
+#   not do this — the second press of the terminal bind is meant to give you a
+#   second terminal — but a launcher is the other case, and rofi on a bare
+#   `spawn` stacked a second rofi behind the first:
+#       bind = super+space spawn_toggle rofi -show drun
+#       tap_action = spawn_toggle rofi -show drun
+#   The child gets its own process group, so the close reaches whatever the
+#   command actually ran. It is a SIGTERM, so a launcher that ignores one
+#   (none do) would stay up.
+#
 # super_space = launcher|cmdbar  (default launcher)
 #   Which of the two answers Super+Space; the other one gets Super+=. Control
 #   panel ▸ Desktop ▸ "Super+Space opens" flips it live and writes it here (well,
@@ -565,7 +577,8 @@ record_edit = off
 #   WHAT the tap opens. tap_key is which key; this is which feature, and it
 #   takes any action a `bind =` line takes — so the tap is not tied to the start
 #   menu:
-#       tap_action = spawn rofi -show drun    the application launcher
+#       tap_action = spawn_toggle rofi -show drun   the launcher, and the same
+#                                                   tap puts it away again
 #       tap_action = cmdbar                   the AI command bar
 #       tap_action = overview                 mission control
 #   Super+/ then F3 on ANY row points the tap at that row — no capture, the row

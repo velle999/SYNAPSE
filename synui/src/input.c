@@ -582,15 +582,11 @@ void synui_child_reset_signals(void)
         signal(sig, SIG_DFL);
 }
 
+/* The fork/exec itself lives in spawntoggle.c, next to the one caller that
+ * needs the pid back. */
 static void spawn(const char *cmd)
 {
-    if (!cmd || !*cmd) return;
-    if (fork() == 0) {
-        setsid();
-        synui_child_reset_signals();
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
-        _exit(1);
-    }
+    synui_spawn_pid(cmd);
 }
 
 /* Public wrapper so dock.c can launch a pinned app's .desktop Exec. */
@@ -661,6 +657,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
 
     if (strcmp(action, "spawn") == 0) {
         spawn(arg);
+    } else if (strcmp(action, "spawn_toggle") == 0) {
+        synui_spawn_toggle(arg);
     } else if (strcmp(action, "term") == 0) {
         /*
          * Default config: fall back through common terminals, so a box whose

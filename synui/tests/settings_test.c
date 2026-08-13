@@ -441,7 +441,7 @@ static void test_super_space_swap(void)
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
     assert(c.super_space == SYN_SUPER_SPACE_LAUNCHER);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
     assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
 
     /* Flipped: they trade places, and NOTHING else moves — the swap must not
@@ -451,13 +451,13 @@ static void test_super_space_swap(void)
     synui_config_load(&c);
     assert(c.super_space == SYN_SUPER_SPACE_CMDBAR);
     assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
 
     /* Back again, from the same load path. */
     write_synuirc("super_space = launcher\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
     assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
 
     /* THE ONE THAT MATTERS: a user bind on either key disarms the swap
@@ -475,7 +475,7 @@ static void test_super_space_swap(void)
                   "super_space = cmdbar\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
     assert(holds(bind_of(&c, XKB_KEY_equal), "term", ""));
 
     printf("  super_space swap ... ok\n");

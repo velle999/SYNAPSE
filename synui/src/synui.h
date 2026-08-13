@@ -6536,6 +6536,16 @@ const syn_icon_entry_t *icon_lookup_desktop_path(const char *path);
 
 /* Launch a shell command (fork/exec); exposed for dock launches. */
 void synui_spawn(const char *cmd);
+
+/* ── spawntoggle.c ───────────────────────────────────────────
+ *
+ * `spawn` is fire-and-forget and right for a terminal: the second press of that
+ * bind is meant to give you a second terminal. A launcher is the other case —
+ * the key that opens it should put it away, the way every panel bind in synui
+ * already does. That is the `spawn_toggle <cmd>` bind action. */
+pid_t synui_spawn_pid(const char *cmd);          /* fork + setsid + sh -c */
+void  synui_spawn_toggle(const char *cmd);       /* open it, or close the one up */
+pid_t synui_spawn_toggle_pid(const char *cmd);   /* live pid for cmd, or 0 */
 /* Call in the child between fork() and exec(): drops synui's blocked signal
  * mask (signalfd blocks SIGINT/SIGTERM/SIGHUP) and its SIG_IGN dispositions,
  * both of which survive exec. Without it, nothing synui launches can be killed
