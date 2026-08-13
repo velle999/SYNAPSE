@@ -139,6 +139,7 @@ FloatingWindow {
         { id: "network",   label: "Network",  blurb: "interfaces, radios, and whether anything is filtering traffic" },
         { id: "bluetooth", label: "Bluetooth", blurb: "the adapter, both kinds of radio block, and what is paired" },
         { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
+        { id: "apps",      label: "Default Apps", blurb: "what opens each kind of file — and whether anybody actually chose it" },
         { id: "kernel",    label: "Kernel",   blurb: "every kernel on offer, which are installed, and which one you booted" },
         { id: "system",    label: "System",   blurb: "identity, and which layer each configuration file comes from" }
     ]
@@ -175,6 +176,31 @@ FloatingWindow {
     // selection change, so a slow `modes` call can never paint DP-2's list
     // under DP-3's name.
     property var modeList: []
+
+    // The applications that could take the selected role. Same shape and same
+    // reason as modeList: a role has a dozen candidates and they belong to the
+    // row you picked, not to every row. Emptied on every selection change, so
+    // a slow lookup can never paint the browser list under "Image Viewer".
+    property var appList: []
+
+    Process {
+        id: appsProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                for (const line of this.text.split("\n")) {
+                    if (line === "") continue
+                    const f = line.split("\t")
+                    out.push({ id: f[0], name: f[1] || f[0],
+                               current: f.length > 2 && f[2] === "current" })
+                }
+                root.appList = out
+                if (out.length === 0)
+                    root.status = "nothing installed offers to handle this"
+            }
+        }
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
+    }
 
     Process {
         id: modesProc
@@ -246,6 +272,12 @@ FloatingWindow {
         const vi = root.cols.indexOf("value")
         root.selValue = vi >= 0 && vi < r.length ? r[vi] : (r[1] || "")
         editField.text = root.selValue
+
+        root.appList = []
+        if (root.actionHas(a, "app")) {
+            appsProc.command = [root.bin, "apps", root.actionArgFor(a, "app")]
+            appsProc.running = true
+        }
 
         root.modeList = []
         if (root.actionHas(a, "mode")) {
@@ -601,6 +633,10 @@ FloatingWindow {
         root.selRow = -1
         root.selAction = ""
         root.modeList = []
+        // And the candidate list with it, for the same reason: a write
+        // triggers a reload, and a list left standing would keep its tick on
+        // the application that was current BEFORE the write.
+        root.appList = []
         readProc.command = [root.bin, "--rec", root.pane]
         readProc.running = true
     }
@@ -612,13 +648,18 @@ FloatingWindow {
     function tone(col, val) {
         const v = (val || "").toLowerCase()
         if (v === "absent" || v === "not installed" || v === "not executable"
-            || v === "failed" || v === "not driven")
+            || v === "failed" || v === "not driven" || v === "none")
             return root.cBad
         if (v === "disabled" || v === "inactive" || v === "unknown"
-            || v === "disconnected" || v === "no")
+            || v === "disconnected" || v === "no"
+            // Nobody chose this: it is whatever mimeinfo.cache listed first,
+            // and it changes the day a package is installed. Not an error,
+            // but not a setting either.
+            || v === "fallback")
             return root.cWarn
         if (v === "enabled" || v === "active" || v === "connected"
-            || v === "executable" || v === "present" || v === "yes")
+            || v === "executable" || v === "present" || v === "yes"
+            || v === "chosen")
             return root.cGood
         return root.cText
     }
@@ -892,6 +933,7 @@ FloatingWindow {
             // leave a gap at others.
             height: root.selRow < 0 ? 0
                   : root.modeList.length > 0 ? Math.max(44, modeFlow.implicitHeight + 18)
+                  : root.appList.length > 0 ? Math.max(44, appFlow.implicitHeight + 18)
                   : 44
             visible: height > 0
             clip: true
@@ -944,7 +986,7 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: ["unit", "mode", "pkg", "device", "boot"]
+                    visible: ["unit", "mode", "pkg", "device", "boot", "app"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
@@ -1065,6 +1107,48 @@ FloatingWindow {
                                             + " to " + modelData.mode + "…")
                     }
                 }
+            }
+
+            // One button per application that could take this role. A dropdown
+            // would hide the count, and the count is the useful part: "nothing
+            // else is installed" and "you have four browsers" are different
+            // answers to "why can't I change this?".
+            Flow {
+                id: appFlow
+                anchors {
+                    left: editLabel.right; leftMargin: 12
+                    right: closeBtn.left; rightMargin: 12
+                    verticalCenter: parent.verticalCenter
+                }
+                spacing: 6
+                visible: root.appList.length > 0
+
+                Repeater {
+                    model: root.appList
+                    delegate: SettingsButton {
+                        required property var modelData
+                        label: modelData.current ? modelData.name + " ✓" : modelData.name
+                        onGo: root.runWrite(
+                            ["set", "app", root.actionArgFor(root.selAction, "app"),
+                             modelData.id],
+                            "setting " + root.selKey + " to " + modelData.name + "…")
+                    }
+                }
+            }
+
+            // Nothing installed claims this role. Said out loud, because an
+            // empty strip beside a row you just clicked reads as a broken
+            // control rather than as an answer.
+            Text {
+                anchors {
+                    left: editLabel.right; leftMargin: 12
+                    verticalCenter: parent.verticalCenter
+                }
+                visible: root.actionHas(root.selAction, "app")
+                         && root.appList.length === 0
+                text: "nothing installed offers to handle this"
+                color: root.cDim
+                font { family: root.uiFont; pixelSize: root.ui(11) }
             }
 
             SettingsButton {

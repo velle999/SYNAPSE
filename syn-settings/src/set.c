@@ -46,6 +46,13 @@ static int sane_value(const char *v)
 
 int do_set(int argc, char **argv)
 {
+	/* Before the argument count and before the general value filter, because
+	 * this one takes a role AND an application and validates the application
+	 * where it is used — a .desktop name is checked by looking for the file,
+	 * which is a stronger test than any character class. */
+	if (argc >= 1 && !strcmp(argv[0], "app"))
+		return do_set_app(argc - 1, argv + 1);
+
 	if (argc < 2) return refuse("set needs a key and a value");
 
 	const char *key = argv[0];

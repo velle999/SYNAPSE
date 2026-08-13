@@ -31,7 +31,7 @@ static void usage(void)
 "usage: syn-settings <command> [args]\n"
 "\n"
 "  gui [pane]        open the settings window (display, region, network,\n"
-"                    bluetooth, power, kernel, system)\n"
+"                    bluetooth, power, apps, kernel, system)\n"
 "\n"
 "  --rec display     connectors: kernel state beside what the compositor drives\n"
 "  --rec region      keyboard, locale, timezone, NTP\n"
@@ -40,16 +40,22 @@ static void usage(void)
 "  --rec network     interfaces, radios, and whether a firewall is up\n"
 "  --rec bluetooth   adapter, radio blocks, and what is paired\n"
 "  --rec kernel      every kernel on offer, which are installed, which runs\n"
+"  --rec apps        the default application for each role, and WHICH file\n"
+"                    decided it — a choice and a fallback read the same\n"
+"                    everywhere else\n"
 "\n"
 "  set keymap <map>          console keymap        (localectl)\n"
 "  set xkb <layout> [var]    desktop layout        (localectl)\n"
 "  set locale <LANG>         system locale         (localectl)\n"
 "  set timezone <zone>       time zone             (timedatectl)\n"
 "  set ntp on|off            network time          (timedatectl)\n"
+"  set app <role> <app>      default application for a role — the app is a\n"
+"                            .desktop NAME, or a command for `terminal`\n"
 "  unit <action> <name>      enable|disable|start|stop|restart (systemctl)\n"
 "  device connect|disconnect <if>   bring an interface up or down (nmcli)\n"
 "  probe <connector>         ask the kernel to re-detect a display (needs root)\n"
 "  modes <connector>         list the modes that output can take\n"
+"  apps <role>               list the applications that could take a role\n"
 "  mode <connector> <mode>   set one, e.g. DP-3 2560x1440@144 (wlr-randr)\n"
 "  pkg install|remove <k>    add or remove a kernel, through synpkg\n"
 "  boot <kernel> [--loader <name>] --confirm\n"
@@ -146,6 +152,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "modes")) return do_modes(rest_argc, rest);
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
+	if (!strcmp(cmd, "apps"))  return do_apps(rest_argc, rest);
 	if (!strcmp(cmd, "boot"))  return do_boot(rest_argc, rest);
 	if (!strcmp(cmd, "default")) return do_default(rest_argc, rest);
 
@@ -159,6 +166,7 @@ int main(int argc, char **argv)
 		if (!strcmp(pane, "network"))   return pane_network();
 		if (!strcmp(pane, "bluetooth")) return pane_bluetooth();
 		if (!strcmp(pane, "kernel"))    return pane_kernel();
+		if (!strcmp(pane, "apps"))      return pane_apps();
 		fprintf(stderr, "syn-settings: unknown pane '%s'\n", pane);
 		return 2;
 	}

@@ -139,6 +139,10 @@ int pane_network(void);
 int pane_bluetooth(void);
 int pane_kernel(void);
 
+/* Which application opens what, and — the part that matters — which layer
+ * decided it. See the header of src/apps.c. */
+int pane_apps(void);
+
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *
  * Deliberately thin. Everything that needs privilege is handed to a systemd
@@ -147,6 +151,15 @@ int pane_kernel(void);
  * as root that localectl would have refused.
  */
 int do_set(int argc, char **argv);
+
+/* `set app <role> <application>` — the default application for a role, written
+ * into the user's own mimeapps.list. `terminal` is the odd one out and goes to
+ * synuirc, because that is the file synui actually reads. */
+int do_set_app(int argc, char **argv);
+
+/* The applications that could take a role, for the one row the GUI is pointed
+ * at — the same shape do_modes uses, and fetched the same way. */
+int do_apps(int argc, char **argv);
 int do_unit(int argc, char **argv);
 
 /* Bring one interface up or down, wired or wireless. */

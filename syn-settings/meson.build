@@ -29,6 +29,7 @@ sources = files(
   'src/mode.c',
   'src/pkg.c',
   'src/boot.c',
+  'src/apps.c',
 )
 
 executable('syn-settings', sources,

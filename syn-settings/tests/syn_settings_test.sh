@@ -50,7 +50,7 @@ check_table() {
 
 echo "syn-settings smoke tests"
 
-for pane in display region network bluetooth power kernel system; do
+for pane in display region network bluetooth power kernel system apps; do
     check_table "$pane"
 done
 
@@ -74,7 +74,7 @@ check_actions() {
         [ "$a" = "-" ] && continue
         for t in $a; do
             case "$t" in
-                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*) ;;
+                set:*|toggle:*|unit:*|probe:*|mode:*|device:*|boot:*|install:*|remove:*|default:*|app:*) ;;
                 *) bad "$pane: unknown action verb '$t'"; return ;;
             esac
             # A verb with an empty argument is the one that looks fine in a
@@ -87,9 +87,127 @@ check_actions() {
     ok "$pane: every action is a known verb with an argument"
 }
 
-for pane in display region network bluetooth power kernel; do
+for pane in display region network bluetooth power kernel apps; do
     check_actions "$pane"
 done
+
+# ── Default applications ────────────────────────────────────────────────────
+#
+# Every write here goes into a SANDBOX $HOME. The rest of this suite is safe
+# because --dry-run is honoured; this part exercises the real writer, so it is
+# safe only because $XDG_CONFIG_HOME points somewhere disposable. A test that
+# ran this against the real one would rewrite the mimeapps.list of whoever ran
+# `meson test`.
+SBOX=$(mktemp -d)
+trap 'rm -rf "$SBOX"' EXIT
+mkdir -p "$SBOX/.config" "$SBOX/bin"
+
+# A stand-in pkill, first on PATH: setting the terminal signals synui to
+# reparse its config, and a test suite must not send signals to the running
+# desktop of the person who typed `meson test`.
+printf '#!/bin/sh\nexit 0\n' > "$SBOX/bin/pkill"
+chmod +x "$SBOX/bin/pkill"
+
+sbox() { env HOME="$SBOX" XDG_CONFIG_HOME="$SBOX/.config" \
+             PATH="$SBOX/bin:$PATH" "$BIN" "$@"; }
+
+# Every role the pane lists must be a role `apps` and `set app` accept. A row
+# offering app:<role> that the writer then rejects is a button that fails only
+# when clicked.
+roles=$("$BIN" --rec apps | tail -n +2 | awk -F'\t' '{print $NF}' | sed 's/^app://')
+bad_role=""
+for r in $roles; do
+    "$BIN" apps "$r" >/dev/null 2>&1 || bad_role="$r"
+done
+[ -z "$bad_role" ] && ok "every role the pane offers is one that apps accepts" \
+                   || bad "role '$bad_role' is listed but not accepted"
+
+# The candidate list is the same three-column shape `modes` uses.
+if "$BIN" apps browser | awk -F'\t' 'NF != 3 { exit 1 }'; then
+    ok "apps <role> lists three fields per candidate"
+else
+    bad "apps <role> produced a row that is not three fields"
+fi
+
+"$BIN" apps nonesuch >/dev/null 2>&1 \
+    && bad "apps accepted an unknown role" \
+    || ok "apps refuses an unknown role"
+
+# The application must EXIST. A default naming something uninstalled reads like
+# a setting and behaves like none: the spec skips such entries, so the old
+# default keeps winning and the pane keeps showing it.
+sbox set app browser definitely-not-installed.desktop >/dev/null 2>&1 \
+    && bad "set app accepted an application that is not installed" \
+    || ok "set app refuses an application that is not installed"
+
+# A NAME, never a path — the same rule that stops synfiles running any Exec=
+# on the system.
+sbox set app browser ../../../etc/passwd >/dev/null 2>&1 \
+    && bad "set app accepted a path" \
+    || ok "set app refuses a path"
+
+sbox set app potato firefox.desktop >/dev/null 2>&1 \
+    && bad "set app accepted an unknown role" \
+    || ok "set app refuses an unknown role"
+
+# The round trip, against whatever this machine actually has: pick the first
+# candidate the binary itself offers, write it, and read it back as CHOSEN
+# from the sandbox file. Skipped rather than failed on a machine with no
+# browser, because "nothing is installed" is a legitimate state here.
+first=$("$BIN" apps browser | head -1 | cut -f1)
+if [ -n "$first" ]; then
+    sbox set app browser "$first" >/dev/null
+    state=$(sbox --rec apps | awk -F'\t' '$NF == "app:browser" { print $3 }')
+    src=$(sbox --rec apps | awk -F'\t' '$NF == "app:browser" { print $5 }')
+    [ "$state" = chosen ] && ok "a written default reads back as chosen" \
+                          || bad "after writing, the browser role reads '$state'"
+    case "$src" in
+        "$SBOX"/*) ok "and names the file it was written to" ;;
+        *) bad "the source reads '$src', not the file just written" ;;
+    esac
+
+    # EVERY type in the role, not just the one reported. A viewer that took
+    # PNG and left JPEG behind is not a setting anybody meant to make.
+    n=$(grep -c "=$first\$" "$SBOX/.config/mimeapps.list" || true)
+    [ "$n" -ge 3 ] && ok "one choice writes every mime type in the role" \
+                   || bad "the role wrote only $n type(s)"
+
+    # Somebody else's data survives. This file has other editors.
+    printf '\n[Added Associations]\nx-scheme-handler/zoom=zoom.desktop;\n' \
+        >> "$SBOX/.config/mimeapps.list"
+    sbox set app browser "$first" >/dev/null
+    grep -q 'x-scheme-handler/zoom=zoom.desktop;' "$SBOX/.config/mimeapps.list" \
+        && ok "an unrelated group survives a write" \
+        || bad "a write dropped another group from the file"
+
+    # Once, ever — or the second run overwrites the pre-syn-settings state
+    # with a post-syn-settings one and the backup is worthless.
+    [ -f "$SBOX/.config/mimeapps.list.pre-syn-settings" ] \
+        && ok "the first write leaves a backup" \
+        || bad "no backup was taken before the first write"
+else
+    skip "no browser installed — round trip not exercised"
+fi
+
+# The terminal is the one role no mimeapps.list decides: synui reads it from
+# synuirc, so writing an x-scheme-handler would be a control that changes a
+# file nothing on this desktop reads.
+if "$BIN" apps terminal | grep -q .; then
+    t=$("$BIN" apps terminal | head -1 | cut -f1)
+    sbox set app terminal "$t" >/dev/null
+    grep -q "^terminal = $t\$" "$SBOX/.config/synui/synuirc" \
+        && ok "the terminal is written to synuirc, not to mimeapps.list" \
+        || bad "synuirc has no terminal line after set app terminal"
+    grep -q "terminal" "$SBOX/.config/mimeapps.list" \
+        && bad "the terminal leaked into mimeapps.list" \
+        || ok "and nowhere else"
+
+    sbox set app terminal not-a-terminal >/dev/null 2>&1 \
+        && bad "set app terminal accepted something unknown" \
+        || ok "set app terminal refuses something it does not know"
+else
+    skip "no terminal emulator installed — terminal role not exercised"
+fi
 
 # An unknown pane must be refused, not silently empty.
 if "$BIN" --rec nonesuch >/dev/null 2>&1; then
@@ -962,6 +1080,24 @@ if [ -f "$QML" ]; then
 
     # Qt.application.font.family is the STARTUP font: as a fallback it freezes
     # the very thing this is fixing.
+    # The comment at the top of check_actions says a verb the QML does not know
+    # renders a dead button. This makes that a test rather than a warning: the
+    # reader and the window are two files, and adding a verb to one of them is
+    # exactly the kind of half-change that looks finished and clicks dead.
+    verbs=$(
+        for pane in display region network bluetooth power kernel apps; do
+            pout=$("$BIN" --rec "$pane") || continue
+            pcol=$(head -1 <<<"$pout" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="action") print i}')
+            [ -n "$pcol" ] || continue
+            tail -n +2 <<<"$pout" | awk -F'\t' -v c="$pcol" '{print $c}'
+        done | tr ' ' '\n' | grep -E '^[a-z]+:' | cut -d: -f1 | sort -u)
+    missing=""
+    for v in $verbs; do
+        grep -q "\"$v\"" "$QML" || missing="$missing $v"
+    done
+    [ -z "$missing" ] && ok "every action verb the reader emits appears in the QML" \
+                      || bad "verb(s) the QML never mentions:$missing"
+
     n=$(grep -c 'Qt.application.font' "$QML" || true)
     [ "$n" = 0 ] && ok "no fallback pins the startup font" \
                  || bad "$n use(s) of Qt.application.font"
