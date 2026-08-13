@@ -136,6 +136,11 @@ bool syn_config_path(char *buf, size_t n, const char *leaf)
 
 void settings_state_set(const char *k, const char *v) { (void)k; (void)v; }
 void settings_state_clear(const char *k)              { (void)k; }
+/* The control panel's CRT and window-effect rows are stored in the Super+E
+ * panels' own state files rather than settings.state, so ctl_persist() reaches
+ * these two. Stubbed: a test must not write the developer's ~/.config. */
+void filters_state_save(syn_server_t *s) { (void)s; }
+void uifx_state_save(syn_server_t *s)    { (void)s; }
 int  settings_state_has(const char *k)                { (void)k; return 0; }
 
 /* ── The bind primitives, RECORDED rather than stubbed ───────

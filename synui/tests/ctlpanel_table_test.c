@@ -126,6 +126,66 @@ void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
  * Stubbed here for the same reason as the loaders above: this test owns no
  * theme.state, and reading the developer's would make the run non-hermetic. */
 void theme_state_load_config(syn_config_t *c) { (void)c; }
+
+/*
+ * The Super+E panels' two state files.
+ *
+ * These are not no-ops, because the rows they own round-trip THROUGH them: the
+ * CRT and window-effect rows are stored in filters.state / uifx.state rather
+ * than settings.state, since both files are read after settings.state and would
+ * otherwise overwrite what this panel had just written (that is how a phosphor
+ * picked here was back to off at the next login).
+ *
+ * Modelled on the contract of the real pair rather than on their file format:
+ * each saver writes every field its file owns, straight from the live config,
+ * and each loader puts all of them back. Holding the fields in memory keeps the
+ * test hermetic — the real savers write the developer's ~/.config — while still
+ * making the round-trip test below a real test of where the row was stored: a
+ * row tagged with the wrong owner is one whose value does not come back.
+ */
+static struct { syn_config_t cfg; int saved; } g_filters_file, g_uifx_file;
+
+void filters_state_save(syn_server_t *s)
+{
+    g_filters_file.cfg = s->config;
+    g_filters_file.saved = 1;
+}
+
+void filters_state_load_config(syn_config_t *c)
+{
+    if (!g_filters_file.saved) return;
+    const syn_config_t *f = &g_filters_file.cfg;
+    c->effects           = f->effects;
+    c->effect_scanline   = f->effect_scanline;
+    c->effect_curvature  = f->effect_curvature;
+    c->effect_aberration = f->effect_aberration;
+    c->effect_glitch     = f->effect_glitch;
+    c->effect_phosphor   = f->effect_phosphor;
+    c->effect_mono       = f->effect_mono;
+    c->effect_bloom      = f->effect_bloom;
+}
+
+void uifx_state_save(syn_server_t *s)
+{
+    g_uifx_file.cfg = s->config;
+    g_uifx_file.saved = 1;
+}
+
+void uifx_state_load_config(syn_config_t *c)
+{
+    if (!g_uifx_file.saved) return;
+    const syn_config_t *u = &g_uifx_file.cfg;
+    c->corner_radius     = u->corner_radius;
+    c->shadow            = u->shadow;
+    c->shadow_blur_sigma = u->shadow_blur_sigma;
+    c->shadow_spread     = u->shadow_spread;
+    c->shadow_offset_y   = u->shadow_offset_y;
+    c->shadow_color[3]   = u->shadow_color[3];
+    c->blur              = u->blur;
+    c->blur_radius       = u->blur_radius;
+    c->blur_passes       = u->blur_passes;
+    c->glass_halo        = u->glass_halo;
+}
 void wallpaper_output_apply(syn_config_t *c, const char *n, const char *t, int m)
 { (void)c; (void)n; (void)t; (void)m; }
 int  lid_action_from_name(const char *n)      { (void)n; return 0; }

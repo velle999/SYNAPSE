@@ -537,6 +537,20 @@ settings_test = executable('settings_test',
   build_by_default : false)
 test('settings', settings_test)
 
+# The state files a config RELOAD must not throw away. Links the REAL readers in
+# filters.c and uifx.c against config.c, with an isolated XDG_CONFIG_HOME
+# carrying a synuirc, a settings.state and a filters.state that deliberately
+# disagree — so a load that skips the last of them cannot land on the right
+# answer by accident. Guards the "Ctrl+Shift+R switched CRT effects on" bug.
+state_reload_test = executable('state_reload_test',
+  ['tests/state_reload_test.c', 'src/config.c', 'src/settings.c',
+   'src/filters.c', 'src/uifx.c', 'src/cat_draw.c', 'src/text.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('state_reload', state_reload_test)
+
 # The control panel's item table against the config parser. Every row that names
 # a synuirc key is adjusted, persisted, reloaded from disk and reset — so a
 # mistyped key or a copied offset fails here rather than as "that setting

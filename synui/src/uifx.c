@@ -79,9 +79,10 @@ static const struct {
 /* Exactly one of *ip / *fp comes back non-NULL. The config fields are a mix of
  * int and float and it is not worth converting them to match: they are parsed
  * from synuirc and consumed by scenefx in the types they already have. */
-static void uifx_field(syn_server_t *s, int row, int **ip, float **fp)
+/* Takes the CONFIG rather than the server so uifx_state_load_config() can run
+ * inside synui_config_load(), where there is no server yet. */
+static void uifx_field(syn_config_t *cfg, int row, int **ip, float **fp)
 {
-    syn_config_t *cfg = &s->config;
     *ip = NULL;
     *fp = NULL;
 
@@ -105,7 +106,7 @@ static void uifx_field(syn_server_t *s, int row, int **ip, float **fp)
 static float uifx_get(syn_server_t *s, int row)
 {
     int *ip; float *fp;
-    uifx_field(s, row, &ip, &fp);
+    uifx_field(&s->config, row, &ip, &fp);
     if (ip) return (float)*ip;
     if (fp) return *fp;
     return 0.0f;
@@ -114,7 +115,7 @@ static float uifx_get(syn_server_t *s, int row)
 static void uifx_set(syn_server_t *s, int row, float v)
 {
     int *ip; float *fp;
-    uifx_field(s, row, &ip, &fp);
+    uifx_field(&s->config, row, &ip, &fp);
     if (ip) *ip = (int)lroundf(v);
     else if (fp) *fp = v;
 }
@@ -416,7 +417,7 @@ void uifx_state_save(syn_server_t *s)
         const char *key = uifx_key(row);
         if (!key) continue;
         int *ip; float *fp;
-        uifx_field(s, row, &ip, &fp);
+        uifx_field(&s->config, row, &ip, &fp);
         if (ip)      fprintf(f, "%s=%d\n", key, *ip);
         else if (fp) fprintf(f, "%s=%.3f\n", key, *fp);
     }
@@ -427,7 +428,14 @@ void uifx_state_save(syn_server_t *s)
     wlr_log(WLR_INFO, "synui: uifx: saved to %s", path);
 }
 
-void uifx_state_load(syn_server_t *s)
+/*
+ * Read from synui_config_load()'s tail, for the reason filters.c spells out at
+ * length: synui_config_reload() replaces s->config wholesale, so anything this
+ * file owns that is only loaded at startup is thrown away by every reload —
+ * SIGHUP, Ctrl+Shift+R, and super+shift+w. The server half is uifx_apply(),
+ * which the reload owes because these values live in the scene graph.
+ */
+void uifx_state_load_config(syn_config_t *cfg)
 {
     char path[256];
     if (!uifx_state_path(path, sizeof(path))) return;
@@ -452,7 +460,11 @@ void uifx_state_load(syn_server_t *s)
             float v = strtof(val, NULL);
             if (v < uifx_rows[row].min) v = uifx_rows[row].min;
             if (v > uifx_rows[row].max) v = uifx_rows[row].max;
-            uifx_set(s, row, v);
+
+            int *ip; float *fp;
+            uifx_field(cfg, row, &ip, &fp);
+            if (ip)      *ip = (int)lroundf(v);
+            else if (fp) *fp = v;
             break;
         }
     }

@@ -1336,6 +1336,8 @@ void synui_config_load(syn_config_t *cfg)
         record_state_load(cfg);
         deskicons_state_load(cfg);
         settings_state_load(cfg);
+        filters_state_load_config(cfg);
+        uifx_state_load_config(cfg);
         theme_state_load_config(cfg);
         binds_state_load(cfg);
         synui_config_apply_launcher_binds(cfg);
@@ -1393,6 +1395,18 @@ void synui_config_load(syn_config_t *cfg)
      * settings.state is the one that can carry ANY key. Same precedent as the
      * others — delete the file to hand control back to synuirc. */
     settings_state_load(cfg);
+
+    /* After settings.state, because that is the order they were read in when
+     * both were loaded at startup — the Super+E panel writes an ABSOLUTE record
+     * of what it can see on screen, so it is the more recent explicit intent of
+     * the two and has to win. Being read HERE rather than from synui_main() is
+     * what stops a config RELOAD resurrecting CRT effects: synuirc ships
+     * `effects = on`, so a reload with filters.state unread turned the shader
+     * back on — reported as Ctrl+Shift+R in the shortcut palette (which resets
+     * binds THROUGH a reload) switching on window effects with an amber tint.
+     * See filters.c. */
+    filters_state_load_config(cfg);
+    uifx_state_load_config(cfg);
 
     /* Last of the state files, which is where it effectively sat before it was
      * one: theme_state_load() used to run after the entire config load, from

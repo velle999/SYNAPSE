@@ -179,6 +179,13 @@ void synui_config_reload(syn_server_t *s)
      * SIGHUP has no business paying it. */
     theme_apply_from_config(s, 0);
 
+    /* The window effects, for the same reason and in the same shape: the config
+     * carries uifx.state again after the load above, but corners, shadow and
+     * blur live in the SCENE GRAPH, so the values have to be pushed back out.
+     * The CRT page needs no partner call — effects.c samples the config every
+     * frame, and the re-tile below damages the outputs anyway. */
+    uifx_apply(s);
+
     /* Re-tile the visible desktop (layout_apply covers every output) with the
      * new gap/border. Hidden desktops re-flow on switch. */
     layout_apply(s, server_active_workspace(s));
@@ -2097,16 +2104,17 @@ int synui_init(syn_server_t *s)
     /* Stamp game mode "off" for waybar's indicator. */
     game_init(s);
 
-    /* Filter strengths tuned in the Super+E panel and saved there, applied over
-     * the config defaults. */
-    filters_state_load(s);
-
-    /* Page two of the same panel: corners, shadow, blur, translucency. The
-     * apply() is owed here and not by the CRT page — the scene took its blur
-     * data from the config back at wlr_scene_create, so a loaded blur_radius
-     * would otherwise sit in the config unpushed until someone opened the panel
-     * and moved something. No windows are mapped yet, so it costs one call. */
-    uifx_state_load(s);
+    /* Both pages of the Super+E panel — CRT strengths and the window effects —
+     * are already IN s->config: synui_config_load() reads filters.state and
+     * uifx.state in its tail, so that a reload keeps them rather than putting
+     * the desktop back on synuirc's `effects = on`.
+     *
+     * What is still owed here is the uifx APPLY, and only that half: the scene
+     * took its blur data from the config back at wlr_scene_create, so a loaded
+     * blur_radius would otherwise sit in the config unpushed until someone
+     * opened the panel and moved something. No windows are mapped yet, so it
+     * costs one call. The CRT page owes nothing — effects.c re-samples the
+     * config every frame. */
     uifx_apply(s);
 
     /* Titlebars-hidden, as last left by Super+Shift+D. Nothing is mapped yet,

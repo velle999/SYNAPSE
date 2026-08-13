@@ -5449,8 +5449,11 @@ int  filters_click(syn_server_t *s, double lx, double ly, uint32_t button,
                  uint32_t time_msec);
 int  filters_scroll(syn_server_t *s, double lx, double ly, double delta);
 /* Persisted strengths (~/.config/synui/filters.state), applied over the config
- * defaults at startup so a look tuned by eye survives a restart. */
-void filters_state_load(syn_server_t *s);
+ * defaults so a look tuned by eye survives a restart. The load takes a CONFIG
+ * and runs inside synui_config_load(), not once at startup — a reload replaces
+ * s->config wholesale, and a state file it does not read is a state file every
+ * reload discards. */
+void filters_state_load_config(syn_config_t *cfg);
 void filters_state_save(syn_server_t *s);
 /* Name/value for one panel row; render.c draws. The return is the row's 0..1
  * fraction for its slider, or -1.0f for the master switch (which has no bar). */
@@ -5474,11 +5477,13 @@ void uifx_adjust(syn_server_t *s, int dir);
 const char *uifx_row_inert(syn_server_t *s, int row);
 /* The same idea for the panel as a whole, drawn under the title, or NULL. */
 const char *uifx_note(syn_server_t *s);
-/* Persisted to ~/.config/synui/uifx.state, over the config defaults at startup. */
-void uifx_state_load(syn_server_t *s);
+/* Persisted to ~/.config/synui/uifx.state, over the config defaults. Loaded in
+ * synui_config_load()'s tail (see filters_state_load_config); uifx_apply() is
+ * the server half, owed by startup and by every reload. */
+void uifx_state_load_config(syn_config_t *cfg);
 void uifx_state_save(syn_server_t *s);
-/* Re-push every window-effect value to the scene graph. Public because startup
- * loads uifx.state after the scene already took the config's blur data. */
+/* Re-push every window-effect value to the scene graph. Public because the
+ * config load reads uifx.state after the scene already took the blur data. */
 void uifx_apply(syn_server_t *s);
 /* Space on this page: toggle the selected row if it is a switch, else the
  * switch that GOVERNS it — which is the one you want when a row is greyed. */

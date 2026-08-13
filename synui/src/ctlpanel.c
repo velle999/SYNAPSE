@@ -130,6 +130,29 @@ static const char *const ctl_names_bar_edge[]    = { "Top", "Bottom" };
  * settings.state as `main screen`. The help line carries the meaning. */
 static const char *const ctl_names_game_output[] = { "Primary", "Focused", "Ask" };
 
+/*
+ * Which file a row is STORED in.
+ *
+ * settings.state is the default and covers nearly everything. The exceptions
+ * are the rows whose field is also owned by a panel with its own state file —
+ * the Super+E pages: filters.state (the CRT strengths) and uifx.state (corners,
+ * shadow, blur). Both of those are read by synui_config_load() AFTER
+ * settings.state, so for those fields a settings.state entry is a value that is
+ * written, read, and then overwritten by the owning file at every load. That is
+ * not theoretical: a phosphor tint picked in this panel read "amber" all session
+ * and was back to off at the next login, because filters.state said off.
+ *
+ * So a row names its owner and this panel writes THAT file, which keeps one
+ * field to one store. The alternative — teaching the load order to prefer
+ * whichever file is newer — makes the answer depend on two mtimes, and the
+ * panels would still be describing the same setting in two vocabularies.
+ */
+typedef enum {
+    CTL_STORE_SETTINGS = 0,   /* settings.state, via `key` */
+    CTL_STORE_FILTERS,        /* filters.state — the CRT page of Super+E */
+    CTL_STORE_UIFX,           /* uifx.state — its window-effects page */
+} syn_ctl_store_t;
+
 struct ctl_item {
     int             row;
     syn_ctl_cat_t   cat;
@@ -158,6 +181,7 @@ struct ctl_item {
     const char *const *names;  /* CTL_VAL_ENUM options */
     int             nnames;
     syn_ctl_apply_t apply;
+    syn_ctl_store_t store;     /* which file holds it; 0 = settings.state */
     const char     *help;      /* one line, drawn in the footer */
 };
 
@@ -193,27 +217,27 @@ static const struct ctl_item ctl_items[] = {
     { CTL_ROW_FILTERS,      CTL_CAT_APPEARANCE, CTL_KIND_PANEL,  "All filters",      "filters"   },
     { CTL_ROW_EFFECT_SCANLINE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Scanlines", NULL,
       .key = "effect_scanline", .off = CFG(effect_scanline), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
     { CTL_ROW_EFFECT_CURVATURE, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Screen curve", NULL,
       .key = "effect_curvature", .off = CFG(effect_curvature), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
     { CTL_ROW_EFFECT_ABERRATION, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Chromatic aberration", NULL,
       .key = "effect_aberration", .off = CFG(effect_aberration), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
     { CTL_ROW_EFFECT_GLITCH, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Glitch on alert", NULL,
       .key = "effect_glitch", .off = CFG(effect_glitch), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
     { CTL_ROW_EFFECT_PHOSPHOR, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor tint", NULL,
       .key = "effect_phosphor", .off = CFG(effect_phosphor), .vtype = CTL_VAL_ENUM,
-      NAMES(ctl_names_phosphor), .apply = CTL_APPLY_REPAINT,
+      NAMES(ctl_names_phosphor), .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
       .help = "Off leaves the picture in colour; the blend below is what applies it" },
     { CTL_ROW_EFFECT_MONO, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor blend", NULL,
       .key = "effect_mono", .off = CFG(effect_mono), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT,
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS,
       .help = "Blend toward the phosphor tint. Bloom only bites once this is up" },
     { CTL_ROW_EFFECT_BLOOM, CTL_CAT_APPEARANCE, CTL_KIND_VALUE, "Phosphor glow", NULL,
       .key = "effect_bloom", .off = CFG(effect_bloom), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT },
+      .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.05f, .apply = CTL_APPLY_REPAINT, .store = CTL_STORE_FILTERS },
 
     /* ── Windows ─────────────────────────────────────────────
      *
@@ -250,7 +274,7 @@ static const struct ctl_item ctl_items[] = {
       .vmin = 0, .vmax = 32, .vstep = 1, .unit = "px", .apply = CTL_APPLY_DECO },
     { CTL_ROW_CORNER_RADIUS,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Corner radius", NULL,
       .key = "corner_radius", .off = CFG(corner_radius), .vtype = CTL_VAL_INT,
-      .vmin = 0, .vmax = 48, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS,
+      .vmin = 0, .vmax = 48, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS, .store = CTL_STORE_UIFX,
       .help = "Forced square while maximized, so nothing pokes past the output" },
     { CTL_ROW_GAP,            CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Tiling gap", NULL,
       .key = "gap", .off = CFG(gap), .vtype = CTL_VAL_INT,
@@ -275,31 +299,31 @@ static const struct ctl_item ctl_items[] = {
 
     { CTL_ROW_SHADOW,         CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Drop shadow", NULL,
       .section = "Shadow", .key = "shadow", .off = CFG(shadow), .vtype = CTL_VAL_BOOL,
-      .apply = CTL_APPLY_SHADOW },
+      .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX },
     { CTL_ROW_SHADOW_SIGMA,   CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow softness", NULL,
       .key = "shadow_blur_sigma", .off = CFG(shadow_blur_sigma), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 80.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW },
+      .vmin = 0.0f, .vmax = 80.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX },
     { CTL_ROW_SHADOW_SPREAD,  CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow spread", NULL,
       .key = "shadow_spread", .off = CFG(shadow_spread), .vtype = CTL_VAL_FLOAT,
-      .vmin = 0.0f, .vmax = 64.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW,
+      .vmin = 0.0f, .vmax = 64.0f, .vstep = 1.0f, .unit = "px", .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX,
       .help = "Solid shadow before the falloff starts — what gives it weight" },
     { CTL_ROW_SHADOW_OFFSET_X, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow offset X", NULL,
       .key = "shadow_offset_x", .off = CFG(shadow_offset_x), .vtype = CTL_VAL_INT,
       .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW },
     { CTL_ROW_SHADOW_OFFSET_Y, CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Shadow offset Y", NULL,
       .key = "shadow_offset_y", .off = CFG(shadow_offset_y), .vtype = CTL_VAL_INT,
-      .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW },
+      .vmin = -64, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_SHADOW, .store = CTL_STORE_UIFX },
 
     { CTL_ROW_BLUR,           CTL_CAT_WINDOWS, CTL_KIND_TOGGLE, "Backdrop blur", NULL,
       .section = "Blur", .key = "blur", .off = CFG(blur), .vtype = CTL_VAL_BOOL,
-      .apply = CTL_APPLY_BLURDATA,
+      .apply = CTL_APPLY_BLURDATA, .store = CTL_STORE_UIFX,
       .help = "Frosts what is behind a translucent window. Opaque ones cost nothing" },
     { CTL_ROW_BLUR_PASSES,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur passes", NULL,
       .key = "blur_passes", .off = CFG(blur_passes), .vtype = CTL_VAL_INT,
-      .vmin = 1, .vmax = 5, .vstep = 1, .apply = CTL_APPLY_BLURDATA },
+      .vmin = 1, .vmax = 5, .vstep = 1, .apply = CTL_APPLY_BLURDATA, .store = CTL_STORE_UIFX },
     { CTL_ROW_BLUR_RADIUS,    CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur radius", NULL,
       .key = "blur_radius", .off = CFG(blur_radius), .vtype = CTL_VAL_INT,
-      .vmin = 1, .vmax = 20, .vstep = 1, .unit = "px", .apply = CTL_APPLY_BLURDATA },
+      .vmin = 1, .vmax = 20, .vstep = 1, .unit = "px", .apply = CTL_APPLY_BLURDATA, .store = CTL_STORE_UIFX },
     { CTL_ROW_BLUR_NOISE,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur noise", NULL,
       .key = "blur_noise", .off = CFG(blur_noise), .vtype = CTL_VAL_FLOAT,
       .vmin = 0.0f, .vmax = 1.0f, .vstep = 0.01f, .apply = CTL_APPLY_BLURDATA },
@@ -314,7 +338,7 @@ static const struct ctl_item ctl_items[] = {
       .vmin = 0.0f, .vmax = 2.0f, .vstep = 0.05f, .apply = CTL_APPLY_BLURDATA },
     { CTL_ROW_GLASS_HALO,     CTL_CAT_WINDOWS, CTL_KIND_VALUE, "Blur halo", NULL,
       .key = "glass_halo", .off = CFG(glass_halo), .vtype = CTL_VAL_INT,
-      .vmin = 0, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS,
+      .vmin = 0, .vmax = 64, .vstep = 1, .unit = "px", .apply = CTL_APPLY_GLASS, .store = CTL_STORE_UIFX,
       .help = "How far the blur reaches past the window. 0 keeps it inside the frame" },
 
     /* Window behaviour, which is what KDE calls this and what most people come
@@ -801,6 +825,36 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
 }
 
 /*
+ * Rows owned by another panel's state file are written THERE, and their
+ * settings.state key is dropped rather than kept in step: both files are read
+ * by synui_config_load() and the owner is read later, so a copy in
+ * settings.state is a value that is quietly discarded at the next load.
+ *
+ * One call stores the row that moved and every sibling in that file, because
+ * both savers write their whole file from the live config. That is also why
+ * this needs no value formatting of its own — the owner already spells its
+ * fields the way it reads them back.
+ *
+ * Returns 1 if the row was stored here, so ctl_persist() can stop.
+ */
+static int ctl_store_write(syn_server_t *s, const struct ctl_item *it)
+{
+    switch (it->store) {
+    case CTL_STORE_FILTERS:
+        if (it->key) settings_state_clear(it->key);
+        filters_state_save(s);
+        return 1;
+    case CTL_STORE_UIFX:
+        if (it->key) settings_state_clear(it->key);
+        uifx_state_save(s);
+        return 1;
+    case CTL_STORE_SETTINGS:
+        return 0;
+    }
+    return 0;
+}
+
+/*
  * Store the change so it is still there next login.
  *
  * A row at its default drops out of settings.state rather than being written as
@@ -811,6 +865,7 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
  */
 static void ctl_persist(syn_server_t *s, const struct ctl_item *it)
 {
+    if (ctl_store_write(s, it)) return;
     if (!it->key) return;
 
     char val[64];
@@ -900,6 +955,13 @@ static int ctl_reset(syn_server_t *s, const struct ctl_item *it)
     ctl_put(s, it, ctl_get(synui_config_defaults(), it));
     ctl_apply(s, it->apply);
     if (it->key) settings_state_clear(it->key);
+
+    /* A row owned by filters.state or uifx.state gets its default WRITTEN
+     * rather than dropped: those files are absolute records of what is on
+     * screen, every key every time, so there is no "absent" for a synuirc line
+     * to show through. Leaving the old value in the owner's file would make
+     * this reset last exactly until the next config load. */
+    ctl_store_write(s, it);
     return 1;
 }
 
@@ -1959,6 +2021,12 @@ static void ctlpanel_activate(syn_server_t *s)
             return;
         }
         s->config.effects = !s->config.effects;
+        /* The one bespoke row of the CRT set, so it needs the store call the
+         * table-driven ones get from ctl_persist(). Without it this toggle was
+         * session-only — and worse than that once filters.state is read on
+         * reload, because then the stale `enabled=` in that file put the shader
+         * back on the next time anything reloaded the config. */
+        filters_state_save(s);
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "CRT effects %s", s->config.effects ? "on" : "off");
         ctlpanel_repaint(s);

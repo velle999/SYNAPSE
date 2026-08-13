@@ -155,9 +155,23 @@ void filters_state_save(syn_server_t *s)
     wlr_log(WLR_INFO, "synui: filters: saved to %s", path);
 }
 
-/* Applied over the config defaults at startup, so a tuned look survives a
- * restart. Absent file is not an error — it just means "never saved". */
-void filters_state_load(syn_server_t *s)
+/*
+ * Applied over the config defaults, so a tuned look survives a restart.
+ * Absent file is not an error — it just means "never saved".
+ *
+ * Takes the CONFIG, not the server, and is read from synui_config_load()'s tail
+ * rather than once from synui_main(). That is the whole difference between a
+ * reload keeping the look and a reload throwing it away: synui_config_reload()
+ * does `s->config = fresh`, so every effect_* field comes back from the sources
+ * synui_config_load() reads and from nowhere else. Loaded from startup only,
+ * this file lost every reload — Ctrl+Shift+R in the shortcut palette put CRT
+ * effects back ON (synuirc ships `effects = on`) in whatever phosphor
+ * settings.state was carrying. Same trap, same fix as theme.state; see theme.c.
+ *
+ * Nothing here needs a server-side apply half: effects.c samples s->config
+ * every frame, and a reload repaints regardless.
+ */
+void filters_state_load_config(syn_config_t *cfg)
 {
     char path[256];
     if (!filters_state_path(path, sizeof(path))) return;
@@ -165,7 +179,6 @@ void filters_state_load(syn_server_t *s)
     FILE *f = fopen(path, "r");
     if (!f) return;
 
-    syn_config_t *cfg = &s->config;
     char line[128];
     while (fgets(line, sizeof(line), f)) {
         line[strcspn(line, "\r\n")] = '\0';

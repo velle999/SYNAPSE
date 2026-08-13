@@ -62,6 +62,10 @@ void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
  * Stubbed here for the same reason as the loaders above: this test owns no
  * theme.state, and reading the developer's would make the run non-hermetic. */
 void theme_state_load_config(syn_config_t *c) { (void)c; }
+/* The Super+E panels' two state files, read from the same tail for the same
+ * reason. Stubbed alongside the rest so the run stays hermetic. */
+void filters_state_load_config(syn_config_t *c) { (void)c; }
+void uifx_state_load_config(syn_config_t *c)    { (void)c; }
 void wallpaper_output_apply(syn_config_t *c, const char *name,
                             const char *tok, int mode)
 { (void)c; (void)name; (void)tok; (void)mode; }
