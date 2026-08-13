@@ -101,23 +101,20 @@ if [ "$LIVE_ISO" = "0" ] && [ -f "$DONE_FLAG" ]; then
     exit 0
 fi
 
-# ── Live ISO — offer install or live session ──────────────
+# ── Live ISO — hand straight to the installer ─────────────
+#
+# This used to draw the header and its own two-item menu, then run syn-install,
+# which cleared the screen and drew the SAME header again a second later: two
+# nearly identical branded screens for a single decision, and slow between them
+# because _bg_setup's DKMS build is running behind both.
+#
+# syn-install owns that menu now (`--live` — install here, install graphically,
+# or try the desktop), so this is a hand-over and draws nothing. Not `exec`:
+# _bg_setup is still running and the wait below is the only thing that reaps
+# it, and .bash_profile starts the desktop when we return, which is exactly
+# what two of the three answers want.
 if [ "$LIVE_ISO" = "1" ]; then
-    header
-    echo "  SynapseOS is running from a live ISO."
-    echo ""
-    echo "  Would you like to install SynapseOS to a disk?"
-    echo ""
-    echo "    $(bold '1)') Install to disk   — permanent installation"
-    echo "    $(bold '2)') Try live session  — continue without installing"
-    echo ""
-    prompt "Choice [1-2]:"
-    read -r install_choice || true
-
-    if [ "${install_choice:-2}" = "1" ]; then
-        /usr/bin/syn-install || echo "syn-install failed"
-    fi
-    # Live session — return to .bash_profile (falls through to shell)
+    /usr/bin/syn-install --live || echo "syn-install failed"
     exit 0
 fi
 

@@ -738,6 +738,46 @@ pick() {
     done
 }
 
+# ── Records, for a front end ──────────────────────────────
+#
+# `syn-install --list-disks` prints one TAB-separated record per whole disk:
+#
+#   dev  bytes  size  model  live  usable  reason
+#
+# It exists so the graphical installer renders a decision this script has
+# already made rather than making its own. A GUI that runs its own lsblk and
+# its own "is this the live USB" test is a second implementation of the only
+# rule here that destroys data if it is wrong — and it would be the copy that
+# nobody's test suite covers. live=1 marks the installer's own media.
+#
+# Above the test seam, so it is reachable from the tests, and printing only:
+# nothing here touches a disk.
+list_disks() {
+    local dev bytes model live usable reason
+    while read -r dev; do
+        [ -n "$dev" ] || continue
+        # zram is TYPE=disk to lsblk and is the compressed swap device the live
+        # session is running on; ram/md are not install targets either. Offering
+        # any of them is offering to install onto memory.
+        case "$dev" in /dev/zram*|/dev/ram*|/dev/md*) continue ;; esac
+        bytes=$(lsblk -bdno SIZE "$dev" 2>/dev/null | head -1)
+        [ -n "$bytes" ] || continue
+        model=$(lsblk -dno MODEL "$dev" 2>/dev/null | head -1)
+        model="${model#"${model%%[![:space:]]*}"}"
+        model="${model%"${model##*[![:space:]]}"}"
+        live=0; usable=1; reason=""
+        if is_live_disk "$dev"; then
+            live=1; usable=0; reason="the installer's own media"
+        elif [ "$bytes" -lt "$MIN_DISK_BYTES" ]; then
+            usable=0
+            reason="$((bytes / 1024 / 1024 / 1024)) GiB — SynapseOS needs at least $((MIN_DISK_BYTES / 1024 / 1024 / 1024)) GiB"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$dev" "$bytes" "$(numfmt --to=iec --suffix=B "$bytes" 2>/dev/null || echo "$bytes")" \
+            "${model:-unknown}" "$live" "$usable" "$reason"
+    done < <(lsblk -dpno NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}')
+}
+
 config_report_unused() {
     [ -n "$CONFIG_FILE" ] || return 0
     local k unused=""
@@ -773,6 +813,10 @@ syn-install $VERSION — install SynapseOS $RELEASE to disk
 
   syn-install                    ask every question (the normal way)
   syn-install --config FILE      answer them from an install profile
+  syn-install --live             open with the live image's menu — install
+                                 here, install graphically, or try the
+                                 desktop. syn-firstboot passes this; you
+                                 would not.
 
 FILE is either key=value lines, or a .nix profile evaluated through
 /usr/share/syn/nix/render.nix (needs nix). Questions the profile leaves
@@ -783,6 +827,15 @@ out are still asked at the machine, so a partial profile is useful.
 
 USAGE
             exit 0 ;;
+        # Set by syn-firstboot on the live image, and by nothing else: it says
+        # "you are the first thing the user sees", which is what turns the
+        # welcome below into a three-way menu.
+        --live)    LIVE_MENU=1 ;;
+        # Records for the graphical front end. Prints and exits — it is a query,
+        # so it runs before the root check below: reading a partition table
+        # needs no privilege and a picker that demands root to LOOK is a picker
+        # people run as root.
+        --list-disks) list_disks; exit 0 ;;
         *) die "unknown option: $1 (try --help)" ;;
     esac
     shift
@@ -795,20 +848,63 @@ done
 # Best-effort unmount of the target area on any unexpected exit.
 trap cleanup EXIT
 
+# ── The live image's ONE menu ─────────────────────────────
+#
+# syn-firstboot used to draw a branded screen offering "1) Install to disk /
+# 2) Try live session", then hand over to this script, which cleared the screen
+# and drew the SAME branding again a second later: two nearly identical screens
+# for one decision, with firstboot's background DKMS build running behind them
+# making the gap between them slow. There is one screen now and this is it.
+#
+# The graphical path is a choice made HERE rather than only on the desktop,
+# because the desktop is what has to start first and starting it is the slow
+# part — asking after the compositor is up would mean paying for it before
+# anyone who wants the text installer can decline it.
+WELCOME_ACK=1
+if [ "${LIVE_MENU:-0}" = 1 ]; then
+    header
+    echo "  SynapseOS is running from the live image."
+    echo ""
+    echo "    $(bold '1)') Install SynapseOS     — right here, in this terminal"
+    echo "    $(bold '2)') Install graphically   — starts the desktop first"
+    echo "    $(bold '3)') Try the live desktop  — look around; install later"
+    echo ""
+    pick "Choice [1-3, default=3]:" live_start _live 3 "1 2 3" \
+         -m text=1,tui=1,gui=2,graphical=2,live=3,desktop=3
+    case "$_live" in
+        2)  # .bash_profile starts the desktop the moment this exits, and the
+            # live session's synuirc autostarts syn-install-gui when this flag
+            # is present. Nothing else creates it, so a plain live session
+            # never gets an installer window it did not ask for.
+            mkdir -p /run/synapseos && : > /run/synapseos/install-gui
+            success "Starting the desktop — the installer opens with it."
+            exit 0 ;;
+        3)  exit 0 ;;
+    esac
+    # Falls through to the text installer. The ENTER-to-continue welcome is
+    # skipped: picking "Install SynapseOS" off the menu above IS that
+    # acknowledgement, and asking for it again is the second screen this whole
+    # block exists to remove. Nothing destructive has moved — the disk plan
+    # still has to be confirmed by typing "yes".
+    WELCOME_ACK=0
+fi
+
 # ── Welcome ───────────────────────────────────────────────
-header
-echo "  This installer will:"
-echo "    1. Partition a disk"
-echo "    2. Install SynapseOS base system"
-echo "    3. Install SynapseOS packages"
-echo "    4. Create user account"
-echo "    5. Choose desktop environment"
-echo "    6. Configure system & bootloader"
-echo ""
-warn "ALL DATA ON THE TARGET DISK WILL BE ERASED"
-echo ""
-prompt "Press ENTER to continue or Ctrl+C to abort..."
-answer press_enter_start _ack --ack
+if [ "$WELCOME_ACK" = 1 ]; then
+    header
+    echo "  This installer will:"
+    echo "    1. Partition a disk"
+    echo "    2. Install SynapseOS base system"
+    echo "    3. Install SynapseOS packages"
+    echo "    4. Create user account"
+    echo "    5. Choose desktop environment"
+    echo "    6. Configure system & bootloader"
+    echo ""
+    warn "ALL DATA ON THE TARGET DISK WILL BE ERASED"
+    echo ""
+    prompt "Press ENTER to continue or Ctrl+C to abort..."
+    answer press_enter_start _ack --ack
+fi
 
 # ── Network pre-flight (before anything destructive) ──────
 header

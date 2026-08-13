@@ -1,18 +1,36 @@
 pkgname=syn-install
 pkgver=0.1.0
-pkgrel=62
+pkgrel=63
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
 # cryptsetup: the optional LUKS2 install path, and syn-crypt afterwards.
 depends=('bash' 'parted' 'e2fsprogs' 'dosfstools' 'arch-install-scripts' 'grub'
          'cryptsetup' 'util-linux')
+# The graphical installer is quickshell rendering one QML file. It is an
+# optdepend rather than a depend because the TEXT installer is the one that
+# must work everywhere — on a headless box, over SSH, and on a machine whose
+# GPU cannot start a compositor, which is exactly when someone is installing.
+optdepends=('quickshell: the graphical installer (syn-install-gui)')
+
+# Local sources land in $srcdir under their BASENAME, so data/ flattens.
 source=("syn-install.sh"
-        "syn-crypt.sh")
+        "syn-crypt.sh"
+        "syn-install-gui.sh"
+        "data/syn-install-gui.qml")
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP')
 
 package() {
     install -Dm755 "$srcdir/syn-install.sh" "$pkgdir/usr/bin/syn-install"
     install -Dm755 "$srcdir/syn-crypt.sh"   "$pkgdir/usr/bin/syn-crypt"
+
+    # The window and its launcher. The QML is data, not a program: it is
+    # rendered by quickshell and has no execute bit for the same reason
+    # syn-disks' and synpkg's do not.
+    install -Dm755 "$srcdir/syn-install-gui.sh" "$pkgdir/usr/bin/syn-install-gui"
+    install -Dm644 "$srcdir/syn-install-gui.qml" \
+        "$pkgdir/usr/share/syn-install/syn-install-gui.qml"
 }

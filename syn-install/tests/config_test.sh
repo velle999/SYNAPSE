@@ -142,7 +142,11 @@ documented=$(awk '
 
 # The two acknowledgements are answered by the PRESENCE of a profile, never by
 # a key, so they are documented in prose rather than as settable keys.
-exempt="press_enter_start press_enter_reboot"
+# live_start is the live image's three-way menu (--live, drawn only when
+# syn-firstboot hands over). A --config run is by definition not that menu —
+# it was started by someone who already chose to install — so the key exists to
+# get pick()'s validation and typeahead handling, not to be preseeded.
+exempt="press_enter_start press_enter_reboot live_start"
 for k in $consumed; do
     grep -qw "$k" <<<"$exempt" && continue
     check "$k is documented in profile-example.nix" yes \
@@ -152,6 +156,28 @@ for k in $documented; do
     check "documented key $k is one the installer reads" yes \
           "$(grep -qxF "$k" <<<"$consumed" && echo yes || echo no)"
 done
+
+echo ""
+echo "=== the graphical installer writes keys this script reads ==="
+#
+# syn-install-gui's whole job is to write one of these profiles, so its key set
+# is the third place the vocabulary lives. A key it emits that nothing consumes
+# is silent: the install completes, the answer is ignored, and the only trace is
+# a line in the unused-key report at the end that nobody is reading, because the
+# window is in front of the terminal.
+#
+# Matched on the literal in each L.push("<key>=…"), which is the one form
+# buildConfig() uses.
+gui="$here/../data/syn-install-gui.qml"
+if [ -f "$gui" ]; then
+    gui_keys=$(grep -ohE '"[a-z_0-9]+=' "$gui" | tr -d '"=' | sort -u)
+    for k in $gui_keys; do
+        check "GUI key $k is one the installer reads" yes \
+              "$(grep -qxF "$k" <<<"$consumed" && echo yes || echo no)"
+    done
+else
+    echo "  (no syn-install-gui.qml — skipped)"
+fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then echo "all checks passed"; else echo "$fails check(s) failed"; exit 1; fi

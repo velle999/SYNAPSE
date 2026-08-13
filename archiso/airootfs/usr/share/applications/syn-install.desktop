@@ -1,0 +1,29 @@
+# "Install SynapseOS" on the live desktop.
+#
+# LIVE IMAGE ONLY, and that is why it lives in the ISO's airootfs rather than in
+# the syn-install package: an installed system would otherwise carry a start-menu
+# entry offering to install the system it is already running.
+#
+# The launcher refuses without a display, without quickshell and without root,
+# each with its own message, so a click that cannot work says why.
+#
+# The basename must equal the app_id the window takes (QS_APP_ID=syn-install in
+# syn-install-gui), or the dock cannot resolve a .desktop for the window and
+# offers no icon and no "New Window". StartupWMClass is ignored here.
+[Desktop Entry]
+Type=Application
+Name=Install SynapseOS
+GenericName=System Installer
+Comment=Install SynapseOS to a disk
+Exec=syn-install-gui
+# An absolute path, not a themed name. Every other SynapseOS app ships its own
+# /usr/share/icons/hicolor/scalable/apps/<name>.svg, but this entry is not
+# shipped by a package at all — it is a live-image file — and a themed name with
+# no icon behind it is a blank tile in the menu. synui owns this file and synui
+# is the live desktop, so it is there by construction.
+Icon=/usr/share/synui/logo.svg
+Terminal=false
+# One main category only — two puts the entry in the menu twice, which
+# desktop-file-validate warns about and the start menu then shows.
+Categories=System;
+Keywords=install;installer;setup;disk;

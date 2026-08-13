@@ -31,6 +31,18 @@ autostart = synui-bar
 # Connect doesn't work" rather than "it isn't running".
 autostart = kdeconnect-indicator
 
+# The graphical installer, and ONLY when it was asked for.
+#
+# --if-requested exits silently unless /run/synapseos/install-gui exists, and
+# the one thing that writes that flag is answering "Install graphically" at the
+# live image's menu (syn-install --live). So a live session someone wanted to
+# look around in never gets an installer window, and the one where they asked
+# for it does not make them find an icon after waiting for the compositor.
+#
+# Live-image-only by construction: this file is the ISO's synuirc, an installed
+# system's is written by syn-install and has no such line.
+autostart = syn-install-gui --if-requested
+
 # Window appearance
 border_width = 2
 gap = 8
