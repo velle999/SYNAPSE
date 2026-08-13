@@ -668,6 +668,24 @@ void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
         wlr_scene_node_raise_to_top(view_node(v));
         i++;
     }
+
+    /* Then put the window the user is actually IN back on top.
+     *
+     * The claim above — that layout_apply never runs on a focus change, so a
+     * card pulled out of its pile stays out — is true of the focus path and
+     * false of everything else. A bar auto-hiding, a window closing, an output
+     * change: any of those reflow the desktop, and the loop above then re-buries
+     * the focused window because list order is not focus order. Raising it last
+     * is what makes focus_view()'s raise survive a retile, and it costs nothing
+     * when it is already on top.
+     *
+     * Guarded exactly like layout_monocle's `top` pick: the focused view can
+     * live on another monitor or another desktop, and floating/fullscreen views
+     * are not part of the cascade the loop above just built. */
+    syn_view_t *f = s->focused_view;
+    if (f && f->workspace == ws && f->output == o &&
+        f->mapped && !f->floating && !f->fullscreen && !f->minimized)
+        wlr_scene_node_raise_to_top(view_node(f));
 }
 
 /* ── MONOCLE layout ──────────────────────────────────────── */

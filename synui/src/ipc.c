@@ -171,6 +171,24 @@ static void json_view(ipc_buf_t *b, syn_view_t *v)
             (v->mapped && (v->frame || v->scene_tree) && view_node(v)->enabled)
                 ? "true" : "false");
     bprintf(b, ",\"buffers\":%d", buffers);
+
+    /* Which window is IN FRONT. Index among window_tree's children: 0 is the
+     * bottom of the stack and the highest number is what the user is looking
+     * at (wlr_scene keeps the list bottom-first — raise_to_top places a node
+     * above children.prev, the tail). -1 means the node is not a direct child
+     * of window_tree, which a mapped view never is.
+     *
+     * Added because nothing else could answer it, and z-order is not cosmetic:
+     * a layout that quietly restacks the desktop reads as "my window keeps
+     * disappearing behind the others" and is invisible to every field above,
+     * exactly as `enabled` was for the wedge. See tests/cascade_focus_top.sh. */
+    int stack = -1, zi = 0;
+    struct wlr_scene_node *nd;
+    wl_list_for_each(nd, &v->server->window_tree->children, link) {
+        if (nd == view_node(v)) { stack = zi; break; }
+        zi++;
+    }
+    bprintf(b, ",\"stack\":%d", stack);
     bputs(b, "}");
 }
 

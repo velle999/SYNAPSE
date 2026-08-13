@@ -920,6 +920,17 @@ test('cascade_grid', cascade_grid,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# Cascade's OTHER half: its arrangement IS its stacking order, so the window the
+# user focused has to survive a reflow it did not ask for. velle, 2026-08-12 —
+# the volume OSD mapping reflowed the desktop and re-buried the focused window
+# twice per keypress.
+cascade_focus_top = find_program('tests/cascade_focus_top.sh')
+test('cascade_focus_top', cascade_focus_top,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # The floating desktop's own tiler (layout_float_arrange): that untouched
 # windows are arranged into an inset grid, that the grid leaves the wallpaper
 # showing rather than filling the screen, that a window the user has placed is

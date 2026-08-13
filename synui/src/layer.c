@@ -87,8 +87,22 @@ void layer_arrange_output(syn_output_t *output)
             output->wlr_output->name, usable.width, usable.height,
             usable.x, usable.y, full.width, full.height);
 
-    /* Re-tile the visible desktop so windows fit the new usable area. */
-    if (!s->shutting_down)
+    /* Re-tile the visible desktop so windows fit the new usable area — but only
+     * when that box actually moved.
+     *
+     * This function runs on every layer-shell map, unmap and geometry commit,
+     * and most of those change nothing: the volume/brightness OSD, the start
+     * menu and the launcher all set exclusionMode=Ignore, so they reserve no
+     * space and the desktop underneath has no reason to reflow at all.
+     *
+     * A redundant reflow is not a free no-op. layout_cascade's arrangement IS
+     * its stacking order, so it raises every window in list order — and the
+     * focused window sits wherever it happens to be in that list, usually not
+     * last. So a volume keypress buried the window you were working in behind
+     * the others: once when the OSD mapped, and again 1.6s later when it
+     * unmapped. Reported 2026-08-12 as "windows in background resetting to
+     * foreground when I change volume". */
+    if (usable_changed && !s->shutting_down)
         layout_apply(s, server_active_workspace(s));
 
     /* The desktop icon grid is sized against that same box, and the bar reserves
