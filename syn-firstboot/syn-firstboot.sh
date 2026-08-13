@@ -87,7 +87,10 @@ header() {
 step()    { echo ""; cyan "  ▶ $*"; echo ""; }
 success() { echo ""; green "  ✓ $*"; echo ""; }
 fail()    { echo ""; red "  ✗ $*"; echo ""; }
-prompt()  { printf "  $(bold "$1") "; }
+# \033[?25h shows the cursor: a console that came up through `quiet splash` can
+# have it turned off, and a question with nothing blinking after it is a
+# question people answer twice. Same reason and same escape as syn-install's.
+prompt()  { printf '\033[?25h'; printf "  $(bold "$1") "; }
 
 # ── Safety net — always land in a shell on error ──────────
 trap 'echo ""; red "  firstboot error — dropping to shell"; echo ""; exit 1' ERR

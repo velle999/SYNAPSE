@@ -84,6 +84,14 @@ prompt() {
         local _typeahead
         read -r -t 0.1 -N 4096 _typeahead 2>/dev/null || true
     fi
+    # Show the cursor. The ISO boots `quiet splash`, and a console that came up
+    # through a splash can have the text cursor turned off — so the question is
+    # drawn with nothing blinking after it and there is no visible answer to
+    # "where does what I type go?". That is not cosmetic: it is how a key gets
+    # pressed twice, and until pick() landed a doubled key silently selected the
+    # default. DECTCEM rather than `tput cnorm`, which needs a terminfo entry
+    # this console may not have.
+    printf '\033[?25h'
     printf "  $(bold "$1") "
 }
 
