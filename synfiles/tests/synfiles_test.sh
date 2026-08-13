@@ -671,11 +671,14 @@ v=$(SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config get text_scale)
 
 # ── tui ─────────────────────────────────────────────────────────────────────
 #
-# Driven by piping commands at it, which is the whole point of it being
-# LINE-ORIENTED: no raw mode, no alternate screen, nothing to restore. A TUI
-# that needed a pty to test is also a TUI that leaves a terminal broken when it
-# is killed, and this is the front-end for a machine whose desktop will not
-# start.
+# Driven by piping commands at it. A pipe is not a terminal, so this drives the
+# LINE PROTOCOL — which is the half that has to keep working unchanged, because
+# it is what scripts use and what a machine whose desktop will not start gets
+# over SSH. The arrow-key half only ever wakes up for a real terminal.
+#
+# The terminal half is checked further down by reading the source, not by
+# driving a pty: a pty harness has to time out to avoid hanging this suite, and
+# a test that can hang is a test that gets disabled.
 TU="$T/tui"
 mkdir -p "$TU/sub"
 echo hi > "$TU/one.txt"
@@ -756,6 +759,82 @@ case "$out" in
     *"ctl?name.txt"*) ok "a control byte in a name is shown as ?" ;;
     *)                bad "the tab in a filename was not neutralised" ;;
 esac
+
+# ── the tui moves things ────────────────────────────────────────────────────
+#
+# The move itself is cmd_move — the tui only picks the arguments. What is worth
+# testing here is the picking: which row, which destination, and above all that
+# a destination the mover would REFUSE does not take the browser down with it.
+MV="$T/tuimove"
+mkdir -p "$MV/dest"
+echo hi > "$MV/one.txt"
+echo yo > "$MV/two.txt"
+echo x  > "$MV/notadir"
+
+# Row 3 is one.txt (dest, notadir, one.txt, two.txt).
+out=$(printf 'm 3 dest\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$MV" 2>&1)
+[ -f "$MV/dest/one.txt" ] && ok "the tui moves a file into a folder" \
+                          || bad "m did not move the file: $out"
+[ -f "$MV/one.txt" ] && bad "the original is still there after a move" \
+                     || ok "the original is gone after a move"
+
+# RELATIVE TO WHAT IS BEING BROWSED, not to where synfiles was launched. The
+# subshell cd is the whole test: realpath() would resolve "dest" against this
+# script's working directory and fail on a folder that is plainly on screen.
+mkdir -p "$MV/rel/inner"
+echo r > "$MV/rel/movable.txt"
+( cd / && printf 'm 2 inner\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$MV/rel" >/dev/null 2>&1 )
+[ -f "$MV/rel/inner/movable.txt" ] \
+    && ok "a relative destination resolves against the browsed folder" \
+    || bad "a relative destination was resolved against the process cwd"
+
+# Same rule for cd, which had the same bug: c <name> on a folder in the listing.
+out=$( cd / && printf 'c inner\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$MV/rel" 2>&1 )
+case "$out" in
+    *"$MV/rel/inner"*) ok "c takes a path relative to the browsed folder" ;;
+    *)                 bad "c did not follow a relative path into the listing" ;;
+esac
+
+# THE ONE THAT MATTERS. cmd_move reports a bad destination with die(), and
+# die() is exit(1) — in a browser that would end the session over a typo. The
+# discriminating part is the SECOND command: it only prints if the loop lived.
+for badness in "m 3 $MV/notadir" "m 3 /nope/nowhere" "m 3" "m"; do
+    out=$(printf '%s\na\nq\n' "$badness" | NO_COLOR=1 "$SYNFILES" tui "$MV" 2>&1)
+    rc=$?
+    case "$out" in
+        *"items"*) ;;
+        *) bad "the tui died on '$badness'"; continue ;;
+    esac
+    # `a` toggles hidden files, so a live loop prints two different counts.
+    n=$(printf '%s' "$out" | grep -c "items")
+    [ "$rc" = 0 ] && [ "$n" -ge 2 ] \
+        && ok "the tui survives '$badness'" \
+        || bad "the tui did not keep going after '$badness' (rc=$rc, $n listings)"
+done
+
+# A collision must not overwrite. cmd_move's default is CONFLICT_ERROR and the
+# tui does not override it — clobbering is not a thing a browser picks for you.
+mkdir -p "$MV/clash/dest"
+echo original > "$MV/clash/dest/f.txt"
+echo NEWER    > "$MV/clash/f.txt"
+printf 'm 2 dest\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$MV/clash" >/dev/null 2>&1
+case "$(cat "$MV/clash/dest/f.txt")" in
+    original) ok "a name collision does not overwrite" ;;
+    *)        bad "the tui overwrote a file it collided with" ;;
+esac
+[ -f "$MV/clash/f.txt" ] && ok "a refused move leaves the original alone" \
+                         || bad "the source vanished on a refused move"
+
+# The tui must not grow a mover of its own — cmd_move is where the
+# cross-filesystem copy-verify-delete and the undo journal entry live.
+_t="$(dirname "$0")/../src/tui.c"
+if [ -f "$_t" ]; then
+    grep -q 'cmd_move(' "$_t" && ok "the tui moves through cmd_move" \
+                              || bad "the tui does not call cmd_move"
+    grep -qE '(^|[^_[:alnum:]])rename\(' "$_t" \
+        && bad "tui.c calls rename() itself instead of using cmd_move" \
+        || ok "tui.c has no mover of its own"
+fi
 
 # ── what the tui is allowed to do to a terminal ─────────────────────────────
 #

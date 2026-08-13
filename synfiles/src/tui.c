@@ -31,10 +31,15 @@
  * mode change — so the list updates in place without an alternate screen.
  *
  * IT DOES NOT REIMPLEMENT ANYTHING. The listing comes from sf_scan(), the same
- * scan `list` prints; properties from cmd_info(); sizes from cmd_du(); deletes
- * from cmd_trash(). A browser that walked directories itself would be a second
- * set of answers about symlinks, broken links and sort order, and the two
- * would drift on the first bug fixed in one of them.
+ * scan `list` prints; properties from cmd_info(); sizes from cmd_du(); moves
+ * from cmd_move(); deletes from cmd_trash(). A browser that walked directories
+ * itself would be a second set of answers about symlinks, broken links and
+ * sort order, and the two would drift on the first bug fixed in one of them.
+ *
+ * The corollary is that those commands were written to be RUN ONCE and exit —
+ * several of them report a bad argument with die(), which is exit(1). Reusing
+ * them from a loop means checking anything they would die over BEFORE calling
+ * them, or a typo ends the session. See move_entry().
  *
  * SynapseOS Project — GPL-2.0-or-later
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -334,7 +339,9 @@ static void draw_help(void)
 	       C_DIM(), C_RESET());
 	printf("  %si <num> info · z <num> size · t <num> trash · e <num> actions%s\n",
 	       C_DIM(), C_RESET());
-	printf("  %sn/p page · a hidden · s sort · r reverse · g gui · q quit%s\n",
+	printf("  %sm <num> <path> move · n/p page · a hidden · s sort%s\n",
+	       C_DIM(), C_RESET());
+	printf("  %sr reverse · g gui · q quit%s\n",
 	       C_DIM(), C_RESET());
 }
 
@@ -434,6 +441,85 @@ static void go(tui_t *t, const char *path)
 
 	snprintf(t->cwd, sizeof t->cwd, "%s", resolved);
 	t->page = 0;
+}
+
+/* A path the user TYPED, made absolute the way the user meant it.
+ *
+ * realpath() resolves a relative path against the PROCESS working directory,
+ * which is wherever synfiles was launched and has nothing to do with the folder
+ * on screen. Typing "alpha" while looking at a folder that plainly contains an
+ * "alpha" then failed with "no such file or directory". Relative means relative
+ * to WHAT IS BEING BROWSED; only a leading "/" is absolute.
+ *
+ * The result is not required to exist — the caller decides what it wants. */
+static char *resolve_here(const tui_t *t, const char *p)
+{
+	while (*p == ' ')
+		p++;
+	if (*p == '/')
+		return xstrdup(p);
+	if (*p == '~' && (p[1] == '\0' || p[1] == '/'))
+		return path_join(home_dir(), p[1] ? p + 2 : "");
+	return path_join(t->cwd, p);
+}
+
+/* ── moving ─────────────────────────────────────────────────────────────── */
+
+/* THE MOVE ITSELF IS cmd_move(). This does not reimplement it: cmd_move is
+ * where the cross-filesystem copy-verify-then-delete lives, where the "is the
+ * destination inside the source" check lives, and where the undo journal entry
+ * is written. A second mover in this file would be a second set of answers to
+ * all three.
+ *
+ * What this DOES do is check the destination first, because cmd_move reports a
+ * bad one with die() — and die() is exit(1). In a batch command that is right.
+ * In a browser it would tear the whole session down over a typo, so cmd_move is
+ * only ever called here with a destination it has already agreed to accept. */
+static void move_entry(tui_t *t, sf_entry_t *e, const char *typed)
+{
+	if (!typed || !*typed) {
+		warn("move needs somewhere to move to");
+		return;
+	}
+
+	char *dest = resolve_here(t, typed);
+	char *src = path_join(t->cwd, e->name);
+
+	struct stat st;
+	if (stat(dest, &st) != 0) {
+		warn("cannot move to %s: %s", dest, strerror(errno));
+		goto out;
+	}
+	if (!S_ISDIR(st.st_mode)) {
+		/* cmd_move would die() with exactly this, which is the point. */
+		warn("%s is not a folder — move puts things INTO a folder", dest);
+		goto out;
+	}
+
+	/* Moving something into the folder it is already in reaches cmd_move as a
+	 * name collision with itself and comes back "conflict: already exists",
+	 * which is a confusing way to say nothing needed doing. */
+	/* realpath(), not sf_resolve(): sf_resolve die()s on failure, and every
+	 * die() reachable from here is the browser vanishing under the user. */
+	char *dreal = realpath(dest, NULL);
+	if (dreal && !strcmp(dreal, t->cwd)) {
+		warn("%s is already in this folder", e->name);
+		free(dreal);
+		goto out;
+	}
+	free(dreal);
+
+	/* CONFLICT_ERROR is the default and stays the default: it reports the
+	 * collision and moves nothing. Overwriting is not something a browser
+	 * should pick on the user's behalf, and --conflict=rename would quietly
+	 * invent a name they did not ask for. */
+	char *argv[] = { src, dest, NULL };
+	printf("\n");
+	cmd_move(2, argv);
+
+out:
+	free(dest);
+	free(src);
 }
 
 /* ── row actions, shared by both input modes ────────────────────────────── */
@@ -546,9 +632,9 @@ static int run_keys(tui_t *t)
 		before += (int)(shown ? shown : 1);
 		printf("\n  %s↑↓ move · → / Enter open · ← up · PgUp/PgDn page%s\n",
 		       C_DIM(), C_RESET());
-		printf("  %si info · z size · t trash · e actions · / filter · c cd%s\n",
+		printf("  %si info · z size · m move · t trash · e actions · / filter%s\n",
 		       C_DIM(), C_RESET());
-		printf("  %sa hidden · s sort · r reverse · g gui · h home · q quit%s\n",
+		printf("  %sc cd · a hidden · s sort · r reverse · g gui · h home · q quit%s\n",
 		       C_DIM(), C_RESET());
 		before += 4;
 		drawn = before;
@@ -630,7 +716,33 @@ static int run_keys(tui_t *t)
 		}
 		case 'c': {
 			char *p = ask_line("cd to:");
-			if (p && *p) { *filter = '\0'; go(t, p); sel = 0; }
+			if (p && *p) {
+				char *abs = resolve_here(t, p);
+				*filter = '\0';
+				go(t, abs);
+				free(abs);
+				sel = 0;
+			}
+			redraw_fresh = true;
+			break;
+		}
+		case 'm': {
+			if (!n)
+				break;
+			/* The name is in the prompt because the highlighted row is about to
+			 * scroll out of sight behind the answer. */
+			char *label = xasprintf("move %s to:", ents[sel].name);
+			char *p = ask_line(label);
+			free(label);
+			if (p && *p) {
+				tty_cooked();
+				move_entry(t, &ents[sel], p);
+				printf("\n  %spress any key%s", C_DIM(), C_RESET());
+				fflush(stdout);
+				tty_uncooked();
+				read_key();
+				printf("\n");
+			}
 			redraw_fresh = true;
 			break;
 		}
@@ -766,11 +878,14 @@ int cmd_tui(int argc, char **argv)
 			*filter = '\0';
 			go(&t, home_dir());
 			break;
-		case 'c':
+		case 'c': {
 			if (!*rest) { printf("  %sc needs a path%s\n", C_WARN(), C_RESET()); break; }
+			char *abs = resolve_here(&t, rest);
 			*filter = '\0';
-			go(&t, rest);
+			go(&t, abs);
+			free(abs);
 			break;
+		}
 		case 'n':
 			if (t.page + 1 < pages) t.page++;
 			break;
@@ -796,27 +911,30 @@ int cmd_tui(int argc, char **argv)
 		case 'g':
 			open_gui(t.cwd);
 			break;
+		case 'm': {
+			/* "m <row> <destination>" — the row, then where it goes. */
+			char *end = NULL;
+			long num = strtol(rest, &end, 10);
+			if (num < 1 || (size_t)num > n) {
+				printf("  %sm needs a row number and a destination%s\n",
+				       C_WARN(), C_RESET());
+				break;
+			}
+			while (end && *end == ' ')
+				end++;
+			move_entry(&t, &ents[num - 1], end);
+			break;
+		}
 		case 'i': case 'z': case 't': case 'e': {
 			long num = strtol(rest, NULL, 10);
 			if (num < 1 || (size_t)num > n) {
 				printf("  %s%c needs a row number%s\n", C_WARN(), verb, C_RESET());
 				break;
 			}
-			char *full = path_join(t.cwd, ents[num - 1].name);
-			char *one[] = { full, NULL };
-			printf("\n");
-			if (verb == 'i')
-				cmd_info(1, one);
-			else if (verb == 'z')
-				cmd_du(1, one);
-			else if (verb == 'e')
-				cmd_actions(1, one);
-			else
-				/* Trash, never delete. cmd_delete is the permanent one and is
-				 * gated behind --yes; a single keystroke in a browser must not
-				 * reach it. */
-				cmd_trash(1, one);
-			free(full);
+			/* THE SAME row_action the arrow loop calls. Two copies of this is
+			 * how the two modes would come to disagree about which key trashes
+			 * and which deletes. */
+			row_action(&t, &ents[num - 1], verb);
 			break;
 		}
 		default:
