@@ -594,6 +594,55 @@ check "serve names an unknown request instead of dying" $?
 printf 'keys l\nquit\n' | "$E" serve "$T/tab.txt" | gq '^S	dcol	'
 check "serve reports the display column" $?
 
+# ── what the WINDOW sends ───────────────────────────────────────────────────
+#
+# The graphical window has no selection, no scroll position and no idea what a
+# word is: clicking, dragging, Shift+Arrow and the scrollbar are all translated
+# into keys the engine already understands. That makes them testable from here,
+# with no window — and it makes them BREAKABLE from here, which is the point.
+# If `NG` or `N|` ever stopped extending a visual selection, nothing in the QML
+# would error; dragging would just stop selecting.
+# Forty lines, each WIDE ENOUGH to hold the columns these tests ask for. The
+# first cut used `seq 1 40`, where line 3 is one character long — `5|` clamped
+# to the end of it and the test read as "the caret does not follow a click"
+# when the truth was that column 5 was not on that line.
+awk 'BEGIN { for (i = 1; i <= 40; i++) printf "line %02d abcdefghij\n", i }' > "$T/nav.txt"
+
+# A click: line N, display column C. Not `:N` — an ex command is not a motion,
+# and the drag below needs one that extends the selection.
+printf 'keys 3G5|\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	col	5$'
+check "NG N| places the caret where a click was" $?
+
+# A drag: v once, then keep moving. The anchor stays put because that is what
+# visual mode does with it.
+printf 'keys 3G\nkeys v\nkeys 5G3|\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	sel_y1	5$'
+check "v then NG N| extends the selection — the drag" $?
+
+# Shift+Arrow is the same trick with a different motion.
+printf 'keys 3G\nkeys v\nkeys <Right>\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	mode	VISUAL$'
+check "an arrow key extends a visual selection — Shift+Arrow" $?
+
+printf 'keys ggVG\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	sel_y1	40$'
+check "ggVG selects the whole file — Select All" $?
+
+# ⚠ THE SCROLLBAR CONTRACT, and it is not obvious in either direction.
+#
+# `view` alone does nothing: the caret is kept on screen by the clamp at the
+# end of this very command, so a scrollbar that only stated a new top would
+# snap straight back to wherever the caret was. The window therefore moves the
+# caret FIRST and states the top second.
+printf 'view 0 5\nview 20 5\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	top	0$'
+check "view alone cannot scroll away from the caret" $?
+
+printf 'view 0 5\nkeys 21G\nview 20 5\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	top	20$'
+check "...but the caret first, then view, does — the scrollbar" $?
+
+# The context menu is registers, and the + register is the desktop clipboard.
+# Tested with a NAMED register: the clipboard one shells out to wl-copy, and a
+# test suite has no business overwriting the clipboard of whoever runs it.
+printf 'keys "ayy\nkeys 3G\nkeys "ap\nquit\n' | "$E" serve "$T/nav.txt" | gq '^S	lines	41$'
+check "a register yank and put — what Copy and Paste send" $?
+
 # ── the run driver itself ───────────────────────────────────────────────────
 
 printf 'a\nb\n' | "$E" run -k 'dd' - | grep -qx 'b'
@@ -657,6 +706,68 @@ python3 -c "print('x' * 200000)" > "$T/long.txt" 2>/dev/null || \
 	awk 'BEGIN{s="";for(i=0;i<200000;i++)s=s "x";print s}' > "$T/long.txt"
 timeout 10 "$E" run -k '$x' "$T/long.txt" >/dev/null 2>&1
 check "a 200k-character line is handled promptly" $?
+
+# ── the window ──────────────────────────────────────────────────────────────
+#
+# Static checks on the QML. They are greps, and they earn their place because
+# the failures they catch are all SILENT: a window that draws, accepts keys,
+# and quietly does one thing less than it did yesterday.
+QML="$(dirname "$0")/../data/syn-edit.qml"
+if [ -f "$QML" ]; then
+    # The window owns no text, and that is the whole architecture. A TextEdit
+    # or TextInput here would be a second editor with a second undo stack.
+    n=$(grep -cE '^\s*(TextEdit|TextArea|TextInput)\s*\{' "$QML" || true)
+    [ "$n" = 0 ] && ok "the window still owns no text" \
+                 || bad "$n text-editing item(s) in the renderer"
+
+    grep -q 'function beginVisual' "$QML" \
+        && ok "selecting goes through the engine's visual mode" \
+        || bad "syn-edit.qml no longer starts visual mode to select"
+
+    # The scrollbar's two-message order is the subtle half — see the serve
+    # tests above. A `view` with no caret move before it silently does nothing.
+    grep -q 'function scrollToLine' "$QML" && grep -q '"G")' "$QML" \
+        && ok "the scrollbar moves the caret before it states the top" \
+        || bad "the scrollbar no longer moves the caret — view alone cannot scroll"
+
+    grep -q 'id: ctxMenu' "$QML" \
+        && ok "there is a context menu" \
+        || bad "syn-edit.qml lost its context menu"
+
+    # Copy means the DESKTOP clipboard, which is the + register.
+    grep -q '"+y' "$QML" \
+        && ok "Copy yanks to the desktop clipboard register" \
+        || bad "the context menu no longer copies to the + register"
+
+    # The Open dialogue lists with synfiles rather than reading a directory
+    # itself, and falls back to :e when synfiles is not installed.
+    grep -q '"synfiles", "--rec", "list"' "$QML" && grep -q 'haveFiles' "$QML" \
+        && ok "Open browses through synfiles, and is probed for" \
+        || bad "the Open dialogue no longer uses synfiles --rec list"
+
+    # See the note in synfiles' suite: this qmllint reports a parse failure
+    # through its EXIT STATUS and prints nothing at all, so the status is the
+    # verdict. syn-edit.qml carries no `pragma ComponentBehavior`, which is the
+    # other thing that makes it exit non-zero in silence — if one is ever added
+    # here, strip it from a copy the way synfiles' suite does.
+    if command -v qmllint >/dev/null 2>&1; then
+        if grep -q '^pragma ComponentBehavior' "$QML"; then
+            sed '/^pragma ComponentBehavior/d' "$QML" > "$T/lint.qml"
+        else
+            cp "$QML" "$T/lint.qml"
+        fi
+        if qmllint "$T/lint.qml" > "$T/lint.txt" 2>&1; then
+            ok "the QML parses cleanly"
+        else
+            bad "qmllint rejects syn-edit.qml — the window will not open"
+            [ -s "$T/lint.txt" ] && sed 's/^/        /' "$T/lint.txt" >&2
+        fi
+    else
+        echo "  skip  qmllint not installed"
+    fi
+else
+    bad "syn-edit.qml not found beside the tests: $QML"
+fi
 
 # ── report ──────────────────────────────────────────────────────────────────
 

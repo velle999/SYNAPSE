@@ -258,6 +258,56 @@ FloatingWindow {
     function sendKeys(k) { root.send("keys " + encodeURIComponent(k)) }
     function sendEx(c)   { root.send("ex " + encodeURIComponent(c)) }
 
+    // The file browser needs a directory reader, and synfiles is it. Probed
+    // rather than assumed: it is an optdepend, and `sh -c 'command -v …'` can
+    // never itself be the thing that is missing.
+    property bool haveFiles: false
+
+    Process {
+        id: filesProbe
+        command: ["sh", "-c", "command -v synfiles >/dev/null 2>&1"]
+        running: true
+        onExited: (code) => root.haveFiles = (code === 0)
+    }
+
+    // ── Selecting, in the engine's own terms ────────────────────────────────
+    //
+    // The mouse and Shift+Arrow both mean "select", and the editor already has
+    // a selection: visual mode. So neither of them is implemented here — they
+    // are translated into the keys a vim user would have pressed, and the
+    // engine decides what a selection IS, what extends it and what cancels it.
+    // A second selection model in this file would disagree with `v` the first
+    // time somebody used both.
+    readonly property bool isVisual: (root.st.mode || "").indexOf("V") === 0
+
+    // Line and display column, 1-based, as the engine's own motions: NG goes
+    // to a line, N| to a display column. In visual mode they EXTEND, which is
+    // exactly what a drag needs and is why this is keys rather than `:N`.
+    function gotoPos(line, dcol) {
+        root.sendKeys(String(Math.max(1, line)) + "G" + String(Math.max(1, dcol)) + "|")
+    }
+
+    // Start a selection if there is not one already. `v` toggles, so sending
+    // it blind would CANCEL the selection half the time.
+    function beginVisual() { if (!root.isVisual) root.sendKeys("v") }
+
+    // The keys Shift turns into a selection. Everything here is a MOTION —
+    // Shift+<motion> means "extend the selection by that motion", and the
+    // motion itself is unchanged, which is why this table holds no behaviour.
+    function motionKey(k) {
+        switch (k) {
+        case Qt.Key_Up:       return "<Up>"
+        case Qt.Key_Down:     return "<Down>"
+        case Qt.Key_Left:     return "<Left>"
+        case Qt.Key_Right:    return "<Right>"
+        case Qt.Key_Home:     return "<Home>"
+        case Qt.Key_End:      return "<End>"
+        case Qt.Key_PageUp:   return "<PageUp>"
+        case Qt.Key_PageDown: return "<PageDown>"
+        }
+        return ""
+    }
+
     // ── Keys ────────────────────────────────────────────────────────────────
     //
     // Translated into the engine's own notation and forwarded. There is
@@ -306,6 +356,23 @@ FloatingWindow {
         : Math.ceil(root.charW)
 
     readonly property int top: parseInt(root.st.top || "0")
+    readonly property int totalLines: Math.max(1, parseInt(root.st.lines || "1"))
+
+    // Put line `t` (0-based) at the top of the view.
+    //
+    // TWO messages, and the order is load-bearing. `view` is applied first and
+    // then serve.c drags the top back to wherever the caret is, on that same
+    // command — so `view` on its own is a no-op unless the caret is already
+    // there. Move the caret first, then state the top; the clamp then finds
+    // the caret inside the window it was asked for and leaves it alone.
+    function scrollToLine(t) {
+        const want = Math.max(0, Math.min(t, root.totalLines - 1))
+        root.sendKeys(String(want + 1) + "G")
+        root.send("view " + want + " " + editorRows())
+    }
+    // The editor's row count, read through a function so this can live up here
+    // with the rest of the engine plumbing rather than inside the layout.
+    function editorRows() { return editor ? editor.rows : 1 }
     readonly property int curLine: parseInt(root.st.line || "1")
     readonly property int curDcol: parseInt(root.st.dcol || "1")
     readonly property bool inserting: root.st.mode === "INSERT" || root.st.mode === "REPLACE"
@@ -369,7 +436,10 @@ FloatingWindow {
                     spacing: 4
 
                     ToolButton { label: "New";  tip: "a new empty buffer";  onTriggered: root.send("new") }
-                    ToolButton { label: "Open"; tip: "type a path (:e)";    onTriggered: root.sendKeys(":e ") }
+                    ToolButton { label: "Open"; tip: root.haveFiles ? "browse for a file"
+                                                                   : "type a path (:e)"
+                                 onTriggered: root.haveFiles ? browser.show()
+                                                             : root.sendKeys(":e ") }
                     ToolButton { label: "Save"; tip: "write this buffer";   onTriggered: root.send("save") }
                     Rectangle { width: 1; height: Math.round(root.ui(20)); color: root.cDim; opacity: 0.4
                                 anchors.verticalCenter: parent.verticalCenter }
@@ -498,6 +568,10 @@ FloatingWindow {
             id: editor
             anchors { top: tabstrip.bottom; bottom: statusbar.top
                       left: sidebar.right; right: parent.right }
+            // Room for the scrollbar, so the last column of a long line never
+            // runs under the handle. Given back when there is nothing to
+            // scroll, because a permanent empty strip is furniture.
+            anchors.rightMargin: vscroll.visible ? vscroll.width + 4 : 0
             clip: true
 
             focus: true
@@ -511,6 +585,32 @@ FloatingWindow {
             Component.onCompleted: root.send("view 0 " + rows)
 
             Keys.onPressed: (event) => {
+                // Shift+<motion> selects. This is the one meaning the window
+                // adds that the engine's key table does not have — and it adds
+                // it by pressing `v` first, not by keeping a selection of its
+                // own. In INSERT mode it deliberately does NOT: `v` is a
+                // letter there, and an editor that jumped out of insert mode
+                // because Shift was held would be worse than one that just
+                // moves the caret.
+                // Ctrl+S saves. The engine has no such binding — it is a
+                // window convention, and the same kind of translation as
+                // Shift+Arrow below: it runs the editor's own write, it does
+                // not implement one.
+                if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S
+                    && !root.inCmd) {
+                    root.send("save")
+                    event.accepted = true
+                    return
+                }
+
+                const motion = root.motionKey(event.key)
+                if (motion !== "" && (event.modifiers & Qt.ShiftModifier)
+                    && !root.inserting && !root.inCmd) {
+                    root.beginVisual()
+                    root.sendKeys(motion)
+                    event.accepted = true
+                    return
+                }
                 const k = root.keyName(event)
                 if (k !== "") {
                     root.sendKeys(k)
@@ -519,23 +619,83 @@ FloatingWindow {
             }
 
             MouseArea {
+                id: textMa
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onClicked: (m) => {
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                // Held, or the press is delivered and the drag that follows is
+                // not: this MouseArea is inside no Flickable, but the window
+                // itself will happily take a drag that started here.
+                preventStealing: true
+
+                // Where a point on screen is, in the engine's coordinates.
+                // Both are 1-based, and the column is a DISPLAY column — the
+                // only kind this window ever handles, because tabs are already
+                // expanded by the time a line arrives.
+                function lineAt(y)  { return root.top + Math.floor(y / root.lineH) + 1 }
+                function colAt(x)   { return Math.max(1, Math.round((x - root.gutterW) / root.charW) + 1) }
+
+                property bool dragging: false
+
+                onPressed: (m) => {
                     editor.forceActiveFocus()
-                    // Clicking moves the cursor by asking the ENGINE to move
-                    // it — as a line number and a column, not by setting a
-                    // position this file keeps. :<n>| is "line n, column c".
-                    const ln = root.top + Math.floor(m.y / root.lineH) + 1
-                    const col = Math.max(1, Math.round((m.x - root.gutterW) / root.charW) + 1)
-                    root.sendEx(String(ln))
-                    root.sendKeys(String(col) + "|")
+                    if (m.button === Qt.RightButton) {
+                        // Right-click INSIDE a selection keeps it — "copy
+                        // these three lines" is the whole reason they are
+                        // selected. Outside one it moves the caret first, the
+                        // way a left click does.
+                        if (!root.isVisual)
+                            root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
+                        ctxMenu.openAt(m.x, m.y)
+                        return
+                    }
+                    // A fresh click drops any selection: press, drag, release
+                    // is one gesture and it starts from nothing. Only when
+                    // there IS one — <Esc> in normal mode is harmless, but in
+                    // INSERT it would throw the user out of insert mode for
+                    // clicking somewhere, which no editor does.
+                    if (root.isVisual) root.sendKeys("<Esc>")
+                    root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
+                    textMa.dragging = true
                 }
+
+                onPositionChanged: (m) => {
+                    if (!textMa.dragging || !pressed) return
+                    // The selection is the ENGINE's: enter visual mode once,
+                    // then keep moving the caret. The anchor stays where the
+                    // press was because that is what visual mode does with it.
+                    root.beginVisual()
+                    root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
+                    // Dragging past the top or bottom edge scrolls, since the
+                    // engine keeps the caret on screen: moving the caret to a
+                    // line outside the view IS the scroll.
+                    edgeScroll.dir = m.y < 0 ? -1 : (m.y > textMa.height ? 1 : 0)
+                    edgeScroll.running = edgeScroll.dir !== 0
+                }
+
+                onReleased: { textMa.dragging = false; edgeScroll.stop() }
+                onCanceled: { textMa.dragging = false; edgeScroll.stop() }
+
+                // A double click takes the word under it, which is `viw` —
+                // the engine's own idea of a word, not a regex written here.
+                onDoubleClicked: (m) => {
+                    if (m.button !== Qt.LeftButton) return
+                    root.gotoPos(textMa.lineAt(m.y), textMa.colAt(m.x))
+                    root.sendKeys("viw")
+                }
+
                 onWheel: (w) => {
                     // Three lines a notch, the usual step, expressed as KEYS
                     // so the engine's own view bookkeeping stays the only copy
                     // of where we are.
                     root.sendKeys(w.angleDelta.y > 0 ? "3<Up>" : "3<Down>")
+                }
+
+                Timer {
+                    id: edgeScroll
+                    property int dir: 0
+                    interval: 60
+                    repeat: true
+                    onTriggered: root.sendKeys(edgeScroll.dir < 0 ? "<Up>" : "<Down>")
                 }
             }
 
@@ -644,6 +804,85 @@ FloatingWindow {
             }
         }
 
+        // ── the scrollbar ───────────────────────────────────────────────────
+        //
+        // Hand-rolled like every other control here, and for one more reason
+        // than usual: there is no Flickable to attach a ScrollBar to. The
+        // window holds one screenful of lines and nothing else, so "where am I
+        // in this file" is a fact about the ENGINE (`top` of `lines`) and the
+        // handle is drawn from those two numbers rather than from a content
+        // height that does not exist.
+        //
+        // ⚠ Scrolling MOVES THE CARET, and that is not a shortcut. The engine
+        // keeps the caret on screen — `view` alone is undone by that clamp on
+        // the very same command, which is why a scrollbar that only sent
+        // `view` would snap straight back. The wheel has always worked this
+        // way here (it sends 3<Up>/3<Down>); the handle now matches it.
+        Item {
+            id: vscroll
+            anchors { top: editor.top; bottom: editor.bottom; right: parent.right
+                      rightMargin: 2 }
+            width: Math.round(root.ui(10))
+            visible: root.totalLines > editor.rows
+
+            readonly property real frac:
+                Math.min(1, editor.rows / Math.max(1, root.totalLines))
+            readonly property real handleH: Math.max(Math.round(root.ui(28)), height * frac)
+            readonly property real span: Math.max(0, height - handleH)
+            readonly property int maxTop: Math.max(0, root.totalLines - editor.rows)
+
+            // Where the top line should be if the handle's top edge is at y.
+            function topFor(y) {
+                if (vscroll.span <= 0) return 0
+                return Math.round(Math.max(0, Math.min(1, y / vscroll.span)) * vscroll.maxTop)
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: root.wash(0.07)
+            }
+
+            // The track. A click pages TOWARD the pointer rather than jumping
+            // to it — under the handle, so a press that lands on the handle
+            // starts a drag instead.
+            MouseArea {
+                anchors.fill: parent
+                onPressed: (m) => {
+                    root.scrollToLine(m.y < handle.y
+                                      ? root.top - editor.rows
+                                      : root.top + editor.rows)
+                }
+            }
+
+            Rectangle {
+                id: handle
+                x: 0
+                width: parent.width
+                height: vscroll.handleH
+                radius: width / 2
+                y: vscroll.maxTop <= 0 ? 0
+                   : vscroll.span * Math.max(0, Math.min(1, root.top / vscroll.maxTop))
+                color: handleMa.pressed ? root.cAccent
+                     : handleMa.containsMouse ? root.wash(0.45) : root.wash(0.28)
+
+                MouseArea {
+                    id: handleMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    // The grab offset, so the handle does not jump its own
+                    // height the moment it is picked up anywhere but the top.
+                    property real grabDy: 0
+                    onPressed: (m) => { handleMa.grabDy = m.y }
+                    onPositionChanged: (m) => {
+                        if (!handleMa.pressed) return
+                        const y = handle.y + m.y - handleMa.grabDy
+                        root.scrollToLine(vscroll.topFor(y))
+                    }
+                }
+            }
+        }
+
         // ── status bar ──────────────────────────────────────────────────────
         Rectangle {
             id: statusbar
@@ -740,6 +979,343 @@ FloatingWindow {
                     width: Math.max(2, Math.round(root.charW / 8))
                     height: root.lineH * 0.8
                     color: root.cAccent
+                }
+            }
+        }
+
+        // ── the context menu ────────────────────────────────────────────────
+        //
+        // Every entry is a KEY SEQUENCE, and that is the whole design of it:
+        // Copy is `"+y`, not a copy implemented here. The + register is the
+        // desktop clipboard already (vim.c shells out to wl-copy/wl-paste), so
+        // Copy in this menu means what Copy means everywhere else on the
+        // desktop — while still being the editor's own yank, with its own idea
+        // of what a line is.
+        //
+        // With no selection the line is the unit, which is what vim does and
+        // what a menu with nothing selected has to pick anyway: `"+yy` beats a
+        // greyed-out Copy.
+        MouseArea {
+            anchors.fill: parent
+            visible: ctxMenu.open
+            acceptedButtons: Qt.AllButtons
+            onPressed: ctxMenu.open = false
+        }
+
+        Rectangle {
+            id: ctxMenu
+            property bool open: false
+            property real rawX: 0
+            property real rawY: 0
+
+            function openAt(x, y) {
+                const p = editor.mapToItem(shell, x, y)
+                ctxMenu.rawX = p.x
+                ctxMenu.rawY = p.y
+                ctxMenu.open = true
+            }
+
+            visible: ctxMenu.open
+            width: Math.round(root.ui(210))
+            height: ctxCol.implicitHeight + 8
+            x: Math.max(4, Math.min(ctxMenu.rawX, parent.width - width - 4))
+            y: Math.max(4, Math.min(ctxMenu.rawY, parent.height - height - 4))
+            radius: 4
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.35) }
+            z: 200
+
+            Column {
+                id: ctxCol
+                anchors { fill: parent; margins: 4 }
+
+                Repeater {
+                    model: {
+                        const sel = root.isVisual
+                        return [
+                            { label: "Cut",   keys: sel ? "\"+d" : "\"+dd", hint: sel ? "" : "line" },
+                            { label: "Copy",  keys: sel ? "\"+y" : "\"+yy", hint: sel ? "" : "line" },
+                            { label: "Paste", keys: "\"+p", hint: "" },
+                            { label: "-", keys: "", hint: "" },
+                            { label: "Select All", keys: "ggVG", hint: "" },
+                            { label: "-", keys: "", hint: "" },
+                            { label: "Undo", keys: "u", hint: "u" },
+                            { label: "Redo", keys: "<C-r>", hint: "Ctrl+R" },
+                            { label: "-", keys: "", hint: "" },
+                            { label: "Find…", keys: "/", hint: "/" },
+                            { label: "Replace…", keys: ":%s/", hint: "" },
+                            { label: "-", keys: "", hint: "" },
+                            { label: "Open…", keys: "", act: "open", hint: "" },
+                            { label: "Save", keys: "", act: "save", hint: "Ctrl+S" }
+                        ]
+                    }
+                    delegate: Item {
+                        id: ctxItem
+                        required property var modelData
+                        width: ctxCol.width
+                        height: ctxItem.modelData.label === "-" ? 5 : Math.round(root.ui(26))
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right
+                                      verticalCenter: parent.verticalCenter }
+                            height: 1
+                            color: root.wash(0.25)
+                            visible: ctxItem.modelData.label === "-"
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            visible: ctxItem.modelData.label !== "-"
+                            color: ctxMa.containsMouse ? root.wash(0.18) : "transparent"
+
+                            Text {
+                                anchors { left: parent.left; leftMargin: 10
+                                          right: ctxHint.left; rightMargin: 6
+                                          verticalCenter: parent.verticalCenter }
+                                elide: Text.ElideRight
+                                text: ctxItem.modelData.label
+                                font.family: root.uiFont
+                                font.pixelSize: root.ui(12)
+                                color: root.cText
+                            }
+                            Text {
+                                id: ctxHint
+                                anchors { right: parent.right; rightMargin: 10
+                                          verticalCenter: parent.verticalCenter }
+                                text: ctxItem.modelData.hint || ""
+                                visible: text !== ""
+                                font.family: root.uiFont
+                                font.pixelSize: root.ui(10)
+                                color: root.cDim
+                            }
+                            MouseArea {
+                                id: ctxMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    ctxMenu.open = false
+                                    editor.forceActiveFocus()
+                                    const m = ctxItem.modelData
+                                    if (m.act === "open")      browser.show()
+                                    else if (m.act === "save") root.send("save")
+                                    else if (m.keys !== "")    root.sendKeys(m.keys)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Open: a file browser ────────────────────────────────────────────
+        //
+        // The Open button used to type `:e ` for you and leave you at a command
+        // line with a path to remember. That is the right thing in the TUI and
+        // the wrong thing in a window with a pointer in it.
+        //
+        // The listing is `synfiles --rec list`, NOT a readdir of this window's
+        // own: synfiles is the file manager, its records are already
+        // percent-encoded (a filename is arbitrary bytes, and this window
+        // decodes exactly one way, in one place), and it already sorts
+        // directories first. A second directory reader here would be a second
+        // set of answers about what is in a folder.
+        //
+        // It is an optdepend, so it is PROBED for — without it the button goes
+        // back to `:e `, which is what it always did. An Open that silently
+        // did nothing would be worse than the command line it replaced.
+        Rectangle {
+            id: browser
+            visible: false
+            anchors.centerIn: parent
+            width: Math.max(0, Math.min(parent.width - 60, Math.round(root.ui(560))))
+            height: Math.max(0, Math.min(parent.height - 60, Math.round(root.ui(420))))
+            radius: 8
+            clip: true
+            color: root.cPanel
+            border { width: 1; color: root.wash(0.4) }
+            z: 300
+
+            property string dir: ""
+            property var rows: []
+            property int sel: 0
+
+            function show() {
+                // Beside the file being edited, which is where the next one
+                // usually is. A [No Name] buffer has no directory, so home.
+                const f = root.st.file || ""
+                const slash = f.lastIndexOf("/")
+                browser.dir = slash > 0 ? f.substring(0, slash)
+                            : (f !== "" && slash === 0) ? "/"
+                            : (Quickshell.env("HOME") || "/")
+                browser.visible = true
+                browser.load()
+                browser.forceActiveFocus()
+            }
+
+            function load() {
+                browser.rows = []
+                browser.sel = 0
+                // -a: this is a text editor. The files people open by hand
+                // that live nowhere else are dotfiles.
+                lsProc.command = ["synfiles", "--rec", "list", "-a", browser.dir]
+                lsProc.running = true
+            }
+
+            function enter(row) {
+                if (!row) return
+                const path = (browser.dir === "/" ? "" : browser.dir) + "/" + row.name
+                if (row.type === "dir") {
+                    browser.dir = path
+                    browser.load()
+                    return
+                }
+                // The engine opens it — the same `open` a command line would
+                // have reached, so a file opened here and a file opened with
+                // :e arrive by exactly one route.
+                root.send("open " + encodeURIComponent(path))
+                browser.visible = false
+                editor.forceActiveFocus()
+            }
+
+            function up() {
+                if (browser.dir === "/" || browser.dir === "") return
+                const slash = browser.dir.lastIndexOf("/")
+                browser.dir = slash > 0 ? browser.dir.substring(0, slash) : "/"
+                browser.load()
+            }
+
+            Process {
+                id: lsProc
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        const out = []
+                        const lines = this.text.split("\n")
+                        // Line 0 is the header naming the columns; the records
+                        // that follow are positional against it.
+                        for (let i = 1; i < lines.length; i++) {
+                            if (lines[i] === "") continue
+                            const f = lines[i].split("\t")
+                            out.push({ name: root.disp(f[0]), type: f[1] || "file" })
+                        }
+                        browser.rows = out
+                    }
+                }
+                stderr: StdioCollector {
+                    onStreamFinished: {
+                        if (this.text) browser.rows = []
+                    }
+                }
+            }
+
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Escape) {
+                    browser.visible = false
+                    editor.forceActiveFocus()
+                } else if (event.key === Qt.Key_Down) {
+                    browser.sel = Math.min(browser.rows.length - 1, browser.sel + 1)
+                } else if (event.key === Qt.Key_Up) {
+                    browser.sel = Math.max(0, browser.sel - 1)
+                } else if (event.key === Qt.Key_Backspace) {
+                    browser.up()
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    browser.enter(browser.rows[browser.sel])
+                } else {
+                    return
+                }
+                event.accepted = true
+            }
+
+            Column {
+                anchors { fill: parent; margins: 12 }
+                spacing: 8
+
+                Text {
+                    width: parent.width
+                    text: browser.dir
+                    elide: Text.ElideLeft
+                    font.family: root.monoFont
+                    font.pixelSize: root.ui(12)
+                    color: root.cText
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: browser.height - Math.round(root.ui(96))
+                    color: "transparent"
+
+                    ListView {
+                        id: browserList
+                        anchors.fill: parent
+                        clip: true
+                        model: browser.rows
+                        currentIndex: browser.sel
+                        // Keeping the keyboard selection on screen is the
+                        // whole reason this is a ListView and not a Column.
+                        onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+
+                        header: Rectangle {
+                            width: browserList.width
+                            height: Math.round(root.ui(24))
+                            color: upMa.containsMouse ? root.wash(0.14) : "transparent"
+                            radius: 3
+                            Text {
+                                anchors { left: parent.left; leftMargin: 8
+                                          verticalCenter: parent.verticalCenter }
+                                text: "../"
+                                font.family: root.monoFont
+                                font.pixelSize: root.ui(12)
+                                color: root.cAccent
+                            }
+                            MouseArea {
+                                id: upMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: browser.up()
+                            }
+                        }
+
+                        delegate: Rectangle {
+                            id: browserRow
+                            required property var modelData
+                            required property int index
+                            width: browserList.width
+                            height: Math.round(root.ui(24))
+                            radius: 3
+                            color: browserRow.index === browser.sel ? root.wash(0.22)
+                                 : rowMa.containsMouse ? root.wash(0.10) : "transparent"
+
+                            Text {
+                                anchors { left: parent.left; leftMargin: 8
+                                          right: parent.right; rightMargin: 8
+                                          verticalCenter: parent.verticalCenter }
+                                text: browserRow.modelData.name
+                                      + (browserRow.modelData.type === "dir" ? "/" : "")
+                                elide: Text.ElideMiddle
+                                font.family: root.monoFont
+                                font.pixelSize: root.ui(12)
+                                color: browserRow.modelData.type === "dir" ? root.cAccent : root.cText
+                            }
+                            MouseArea {
+                                id: rowMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: browser.sel = browserRow.index
+                                onDoubleClicked: browser.enter(browserRow.modelData)
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 8
+                    ToolButton { label: "Open"; tip: "open the highlighted file"
+                                 onTriggered: browser.enter(browser.rows[browser.sel]) }
+                    ToolButton { label: "Cancel"; tip: "Esc"
+                                 onTriggered: { browser.visible = false; editor.forceActiveFocus() } }
                 }
             }
         }

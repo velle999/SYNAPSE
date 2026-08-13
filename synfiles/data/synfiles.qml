@@ -423,7 +423,14 @@ FloatingWindow {
     property bool busy: false
 
     function runOp(args, note) {
-        if (root.busy) return
+        if (root.busy) {
+            // Say so. A menu entry that returns in silence because something
+            // else is still running is indistinguishable from one that is
+            // broken — which is exactly how the xdg-open bug above was
+            // experienced: "Open with … doesn't respond".
+            root.statusLine = "busy — waiting for the last operation to finish"
+            return
+        }
         root.busy = true
         root.statusLine = note
         // Paths cross the process boundary DECODED: argv carries raw bytes and
@@ -1218,19 +1225,20 @@ FloatingWindow {
         root.runOp(args.concat(paths), "running…")
     }
 
+    // Detached for the same reason openFile is: the terminal runs until it is
+    // closed, and on a shared Process the SECOND "Open Terminal Here" silently
+    // did nothing until the first window was gone.
     function openTerminalHere() {
         const dir = root.tab && root.tab.view === "dir"
                     ? root.disp(root.tab.path) : root.homeDir
-        termProc.command = ["sh", "-c",
+        Quickshell.execDetached(["sh", "-c",
             'cd "$1" || exit 1; ' +
             'for t in kitty foot alacritty konsole xterm; do ' +
             '  command -v "$t" >/dev/null 2>&1 && exec "$t"; done; ' +
             'echo "no terminal emulator found" >&2; exit 127',
-            "sh", dir]
-        termProc.running = true
+            "sh", dir])
         root.statusLine = "opened a terminal in " + dir
     }
-    Process { id: termProc }
 
     function createEmptyFile(name) {
         root.creatingFile = false
@@ -1423,10 +1431,20 @@ FloatingWindow {
     // Opening a file is xdg-open's job. Re-deriving "what opens a .kra" from
     // mimeapps.list would be a second, worse implementation of a thing every
     // desktop already agrees on.
-    Process { id: openProc }
+    //
+    // ⚠ execDetached, NOT a Process, and this was a real bug: **xdg-open does
+    // not return until the application it started exits.** Measured — `xdg-open
+    // notes.txt` with Kate as the handler sat there for the full six seconds of
+    // a timeout, and Kate was still running.
+    //
+    // A shared Process then holds that command for the LIFETIME OF THE APP, and
+    // assigning `command` to a running quickshell Process does nothing. So the
+    // second file you opened did nothing at all, and kept doing nothing until
+    // the first application was closed — with no error anywhere, because
+    // nothing had failed. Same shape as the dock's queued launches and the
+    // reason Open in Disks was written this way from the start.
     function openFile(pathEnc) {
-        openProc.command = ["xdg-open", root.disp(pathEnc)]
-        openProc.running = true
+        Quickshell.execDetached(["xdg-open", root.disp(pathEnc)])
         root.statusLine = "opening " + root.disp(root.baseEnc(pathEnc))
     }
 

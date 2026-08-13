@@ -1529,6 +1529,33 @@ if [ -f "$QML" ]; then
         && ok "Format… is offered only where syn-disks understands it" \
         || bad "the Format entry is no longer gated on syn-disks supporting --format"
 
+    # ── launching an app must be DETACHED ───────────────────────────────────
+    #
+    # ⚠ `xdg-open` DOES NOT RETURN until the application it started exits.
+    # Measured: `xdg-open notes.txt` with Kate as the handler ran for the whole
+    # of a six-second timeout and Kate was still up. On a shared quickshell
+    # Process that holds the command for the lifetime of the app, and assigning
+    # `command` to a running Process does nothing — so the second file you
+    # opened did nothing, silently, until the first app was closed. Same for
+    # the terminal, which obviously outlives the click that opened it.
+    #
+    # The rule this pins: an external application is launched with
+    # execDetached, never through a Process object.
+    grep -n '"xdg-open"' "$QML" | grep -qv execDetached \
+        && bad "xdg-open is launched through a Process — it will block until the app exits" \
+        || ok "opening a file is detached from the file manager"
+
+    n=$(grep -cE 'id: (openProc|termProc)' "$QML" || true)
+    [ "$n" = 0 ] && ok "no shared Process is left holding an app launch" \
+                 || bad "$n shared launch Process(es) — the queueing bug is back"
+
+    # And when something else IS holding the operation lock, say so rather than
+    # returning in silence — a menu entry that does nothing looks broken, which
+    # is precisely how the bug above was reported.
+    grep -q 'root.busy) {' "$QML" \
+        && ok "a busy refusal reaches the status line" \
+        || bad "runOp refuses silently again"
+
     # ── it still parses ─────────────────────────────────────────────────────
     #
     # A syntax error in this file is invisible to everything above: the C core

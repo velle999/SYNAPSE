@@ -36,7 +36,7 @@ pkgname=syn-edit
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="SynapseOS text editor: modal editing, syntax highlighting, in a terminal or a window"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -48,7 +48,11 @@ depends=('glibc')
 makedepends=('meson' 'ninja' 'gcc')
 
 optdepends=('quickshell: the graphical window (syn-edit gui)'
-            'wl-clipboard: yank to and put from the desktop clipboard ("+y and "+p)')
+            'wl-clipboard: yank to and put from the desktop clipboard ("+y and "+p)'
+            # The Open button browses with `synfiles --rec list` rather than
+            # reading directories itself. Without it, Open falls back to the
+            # `:e ` command line it always used.
+            'synfiles: the graphical Open dialogue browses folders with it')
 
 source=("syn-edit-0.1.0.tar.gz")
 sha256sums=('SKIP')
