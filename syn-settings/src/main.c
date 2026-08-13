@@ -30,11 +30,13 @@ static void usage(void)
 "\n"
 "usage: syn-settings <command> [args]\n"
 "\n"
-"  gui [pane]        open the settings window (display, region, network,\n"
+"  gui [pane]        open the settings window (display, region, time, network,\n"
 "                    bluetooth, power, apps, kernel, system)\n"
 "\n"
 "  --rec display     connectors: kernel state beside what the compositor drives\n"
-"  --rec region      keyboard, locale, timezone, NTP\n"
+"  --rec region      keyboard layout and locale\n"
+"  --rec time        the system clock — zone, NTP — and how the desktop\n"
+"                    WRITES it: 12/24-hour, seconds, date order\n"
 "  --rec power       sleep-critical units, sleep hooks, last suspend\n"
 "  --rec system      identity, and WHERE configuration actually lives\n"
 "  --rec network     interfaces, radios, and whether a firewall is up\n"
@@ -49,6 +51,10 @@ static void usage(void)
 "  set locale <LANG>         system locale         (localectl)\n"
 "  set timezone <zone>       time zone             (timedatectl)\n"
 "  set ntp on|off            network time          (timedatectl)\n"
+"  set time-format 12|24     how the desktop writes the time\n"
+"  set time-seconds on|off   seconds in the bar clock\n"
+"  set date-format <layout>  the date order — `syn-settings choices\n"
+"                            date-format` lists them, with examples\n"
 "  set app <role> <app>      default application for a role — the app is a\n"
 "                            .desktop NAME, or a command for `terminal`\n"
 "  unit <action> <name>      enable|disable|start|stop|restart (systemctl)\n"
@@ -56,6 +62,8 @@ static void usage(void)
 "  probe <connector>         ask the kernel to re-detect a display (needs root)\n"
 "  modes <connector>         list the modes that output can take\n"
 "  apps <role>               list the applications that could take a role\n"
+"  choices <key>             list what a setting can be set TO, with an\n"
+"                            example of each: time-format, date-format\n"
 "  mode <connector> <mode>   set one, e.g. DP-3 2560x1440@144 (wlr-randr)\n"
 "  pkg install|remove <k>    add or remove a kernel, through synpkg\n"
 "  boot <kernel> [--loader <name>] --confirm\n"
@@ -153,6 +161,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "mode"))  return do_mode(rest_argc, rest);
 	if (!strcmp(cmd, "pkg"))   return do_pkg(rest_argc, rest);
 	if (!strcmp(cmd, "apps"))  return do_apps(rest_argc, rest);
+	if (!strcmp(cmd, "choices")) return do_choices(rest_argc, rest);
 	if (!strcmp(cmd, "boot"))  return do_boot(rest_argc, rest);
 	if (!strcmp(cmd, "default")) return do_default(rest_argc, rest);
 
@@ -161,6 +170,7 @@ int main(int argc, char **argv)
 		const char *pane = rest[0];
 		if (!strcmp(pane, "display")) return pane_display();
 		if (!strcmp(pane, "region"))  return pane_region();
+		if (!strcmp(pane, "time"))    return pane_time();
 		if (!strcmp(pane, "power"))   return pane_power();
 		if (!strcmp(pane, "system"))  return pane_system();
 		if (!strcmp(pane, "network"))   return pane_network();

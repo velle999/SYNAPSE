@@ -135,7 +135,8 @@ FloatingWindow {
     // ── State ───────────────────────────────────────────────────────────────
     readonly property var panes: [
         { id: "display",   label: "Display",  blurb: "connectors as the kernel sees them, beside what the compositor drives" },
-        { id: "region",    label: "Keyboard & Region", blurb: "layout, locale, time zone and whether the clock is actually disciplined" },
+        { id: "region",    label: "Keyboard & Language", blurb: "the console keymap and the xkb layout, which are separate settings that sometimes disagree" },
+        { id: "time",      label: "Date & Time", blurb: "the system clock — and how the desktop writes it: 12- or 24-hour, and which date order" },
         { id: "network",   label: "Network",  blurb: "interfaces, radios, and whether anything is filtering traffic" },
         { id: "bluetooth", label: "Bluetooth", blurb: "the adapter, both kinds of radio block, and what is paired" },
         { id: "power",     label: "Power & Sleep", blurb: "the units a working suspend depends on, and what the last one did" },
@@ -164,9 +165,13 @@ FloatingWindow {
     //
     // The row the editor is pointed at, and what it is allowed to do. Driven
     // entirely by the reader's trailing `action` column — "set:keymap",
-    // "toggle:ntp", "unit:<name>", "probe:<name>" or "-". The GUI knows the
-    // four VERBS and nothing about localectl, so a new editable setting is a
-    // line of C and no QML at all.
+    // "toggle:ntp", "choice:date-format", "unit:<name>", "probe:<name>" or
+    // "-". The GUI knows the VERBS and nothing about localectl, so a new
+    // editable setting is a line of C and no QML at all.
+    //
+    // `choice` is the general form of what `app` and `mode` each do for one
+    // pane: ask the binary what this setting can be, draw a button per answer.
+    // Adding a settings row with a fixed set of options now costs no QML.
     property int selRow: -1
     property string selAction: ""
     property string selKey: ""
@@ -182,6 +187,32 @@ FloatingWindow {
     // row you picked, not to every row. Emptied on every selection change, so
     // a slow lookup can never paint the browser list under "Image Viewer".
     property var appList: []
+
+    // What the selected setting can be set TO. Same shape and same reason as
+    // appList and modeList: the options belong to the row you picked.
+    //
+    // Fetched rather than carried in the table because the date layouts come
+    // from `synui-clock --layouts` — a different package. Hardcoding them here
+    // would be a third copy of a list that already exists twice, and the one
+    // that drifts is always the one furthest from what draws the pixels.
+    property var choiceList: []
+
+    Process {
+        id: choicesProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = []
+                for (const line of this.text.split("\n")) {
+                    if (line === "") continue
+                    const f = line.split("\t")
+                    out.push({ id: f[0], name: f[1] || f[0],
+                               current: f.length > 2 && f[2] === "current" })
+                }
+                root.choiceList = out
+            }
+        }
+        stderr: StdioCollector { onStreamFinished: if (this.text) root.status = this.text.split("\n")[0] }
+    }
 
     Process {
         id: appsProc
@@ -283,6 +314,12 @@ FloatingWindow {
         if (root.actionHas(a, "mode")) {
             modesProc.command = [root.bin, "modes", root.actionArgFor(a, "mode")]
             modesProc.running = true
+        }
+
+        root.choiceList = []
+        if (root.actionHas(a, "choice")) {
+            choicesProc.command = [root.bin, "choices", root.actionArgFor(a, "choice")]
+            choicesProc.running = true
         }
     }
 
@@ -934,6 +971,7 @@ FloatingWindow {
             height: root.selRow < 0 ? 0
                   : root.modeList.length > 0 ? Math.max(44, modeFlow.implicitHeight + 18)
                   : root.appList.length > 0 ? Math.max(44, appFlow.implicitHeight + 18)
+                  : root.choiceList.length > 0 ? Math.max(44, choiceFlow.implicitHeight + 18)
                   : 44
             visible: height > 0
             clip: true
@@ -986,7 +1024,7 @@ FloatingWindow {
                 // has several things you might do to it.
                 SettingsButton {
                     id: applyBtn
-                    visible: ["unit", "mode", "pkg", "device", "boot", "app"]
+                    visible: ["unit", "mode", "pkg", "device", "boot", "app", "choice"]
                              .indexOf(root.actionVerb(root.selAction)) < 0
                     label: {
                         const v = root.actionVerb(root.selAction)
@@ -1134,6 +1172,51 @@ FloatingWindow {
                             "setting " + root.selKey + " to " + modelData.name + "…")
                     }
                 }
+            }
+
+            // What this setting can be set to, one button each, with the
+            // current one ticked. A text field would have been less code and
+            // the wrong control: "dmy" is not a thing anybody knows to type,
+            // and the reader already supplies both the name and a worked
+            // example of what each choice looks like TODAY — which is the only
+            // description of a date order that cannot be misread.
+            Flow {
+                id: choiceFlow
+                anchors {
+                    left: editLabel.right; leftMargin: 12
+                    right: closeBtn.left; rightMargin: 12
+                    verticalCenter: parent.verticalCenter
+                }
+                spacing: 6
+                visible: root.choiceList.length > 0
+
+                Repeater {
+                    model: root.choiceList
+                    delegate: SettingsButton {
+                        required property var modelData
+                        label: modelData.current ? modelData.name + " ✓" : modelData.name
+                        onGo: root.runWrite(
+                            ["set", root.actionArgFor(root.selAction, "choice"),
+                             modelData.id],
+                            "setting " + root.selKey + " to " + modelData.name + "…")
+                    }
+                }
+            }
+
+            // Nothing came back. The desktop clock's layouts come from
+            // synui-clock, so this is what a non-synui session sees — and an
+            // empty strip beside a row you just clicked reads as a broken
+            // control rather than as an answer.
+            Text {
+                anchors {
+                    left: editLabel.right; leftMargin: 12
+                    verticalCenter: parent.verticalCenter
+                }
+                visible: root.actionHas(root.selAction, "choice")
+                         && root.choiceList.length === 0
+                text: "nothing offered this setting a list of choices"
+                color: root.cDim
+                font { family: root.uiFont; pixelSize: root.ui(11) }
             }
 
             // Nothing installed claims this role. Said out loud, because an

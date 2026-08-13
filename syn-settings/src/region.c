@@ -1,6 +1,6 @@
-/* syn-settings — the Keyboard & Region pane.
+/* syn-settings — the Keyboard & Language pane.
  *
- * localectl and timedatectl already own these answers, including the parts
+ * localectl already owns these answers, including the parts
  * that are easy to get subtly wrong: the console keymap and the X11 layout are
  * SEPARATE settings that usually agree and sometimes do not, and the installer
  * has shipped a bug from exactly that confusion before
@@ -63,29 +63,11 @@ int pane_region(void)
 		rec_row("keymap-xkb\tunknown\tlocalectl not installed\t-");
 	}
 
-	/* ── Time ─────────────────────────────────────────────────────────── */
-	if (have_cmd("timedatectl")) {
-		char out[4096] = "";
-		char *argv[] = { (char *)"timedatectl", (char *)"status", NULL };
-		run_capture(argv, out, sizeof out);
-
-		row_or_unknown("timezone", out, "Time zone", "/etc/localtime", "set:timezone");
-		row_or_unknown("clock-local", out, "Local time", "as the system reads it", "-");
-		row_or_unknown("clock-utc", out, "Universal time", "UTC", "-");
-		row_or_unknown("rtc", out, "RTC time", "the hardware clock", "-");
-		/* Two different questions that read almost the same: whether the NTP
-		 * CLIENT is running, and whether the clock has actually been
-		 * disciplined by it. A machine can have the first without the second
-		 * for a long time, and only the second means the clock is right.
-		 * Lynis TIME-3104 asks about the first. */
-		row_or_unknown("ntp-enabled", out, "NTP service",
-		               "is a time client running", "toggle:ntp");
-		row_or_unknown("ntp-synced", out, "System clock synchronized",
-		               "has it actually disciplined the clock", "-");
-	} else {
-		rec_row("timezone\tunknown\ttimedatectl not installed\t-");
-		rec_row("ntp-enabled\tunknown\ttimedatectl not installed\t-");
-	}
+	/* The clock used to be here — timezone, NTP, and nothing at all about how
+	 * the time is WRITTEN. It moved to its own pane (src/time.c) when the
+	 * desktop clock's 12/24-hour and date-layout settings arrived, rather than
+	 * being duplicated: two panes offering the same editable row is how the
+	 * two end up disagreeing about which one won. */
 
 	return 0;
 }

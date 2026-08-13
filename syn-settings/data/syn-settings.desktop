@@ -2,7 +2,7 @@
 Type=Application
 Name=SYNAPSE Settings
 GenericName=System Settings
-Comment=Display, keyboard, region, power and where this system's configuration lives
+Comment=Display, keyboard, date and time, power and where this system's configuration lives
 Exec=syn-settings gui
 # Its own icon, not the theme's generic preferences-system — which on Breeze is
 # the same grey gear every settings-ish app in the menu already wears. A stock

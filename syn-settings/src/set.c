@@ -116,6 +116,13 @@ int do_set(int argc, char **argv)
 		return run_or_show(a);
 	}
 
+	/* The desktop clock's own three. Not a systemd tool and not privileged —
+	 * this is the user's file in the user's config directory — but it goes
+	 * through `set` like everything else so there is one write verb. */
+	if (!strcmp(key, "time-format") || !strcmp(key, "time-seconds") ||
+	    !strcmp(key, "date-format"))
+		return do_set_clock(key, val);
+
 	if (!strcmp(key, "ntp")) {
 		if (strcmp(val, "on") && strcmp(val, "off"))
 			return refuse("ntp takes on or off");
@@ -125,7 +132,7 @@ int do_set(int argc, char **argv)
 	}
 
 	return refuse("unknown key — try keymap, xkb, locale, timezone, ntp, "
-	              "wifi or bluetooth");
+	              "time-format, time-seconds, date-format, wifi or bluetooth");
 }
 
 /* Bring a single interface up or down.

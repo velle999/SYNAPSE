@@ -73,6 +73,46 @@ const char *read_line_file(const char *path, char *buf, size_t cap);
  * as localectl and timedatectl both print. Returns 1 on a hit. */
 int scrape_field(const char *text, const char *key, char *out, size_t cap);
 
+/* Room for a full path built under a search directory, plus a filename. */
+#define PATH_CAP 512
+
+/* ── Editing a configuration file directly ───────────────────────────────────
+ *
+ * For the two settings with no owning tool to hand the change to. See the
+ * heading in src/util.c.
+ */
+
+/* Whole file into a malloc'd buffer, or NULL. Capped at 1 MB — an unbounded
+ * read of whatever happens to sit at a path is how a settings app becomes the
+ * thing that OOM-kills the session. Free it. */
+char *slurp(const char *path);
+
+/* The value of `key` inside `[group]` of desktop-entry INI. 1 on a hit. */
+int ini_get(const char *text, const char *group, const char *key,
+            char *out, size_t cap);
+
+/* getenv(), treating an empty value as unset — which is what the XDG spec
+ * says to do and what plain getenv() does not. */
+const char *env_or(const char *name, const char *fallback);
+
+/* $HOME-relative default for the XDG single-value variables. Returns `buf`. */
+const char *home_sub(const char *sub, char *buf, size_t cap);
+
+/* $XDG_CONFIG_HOME, or its default. */
+void config_home(char *out, size_t cap);
+
+/* Copy `path` to `path.pre-syn-settings`, ONCE ever (O_EXCL). The files this
+ * app edits are hand-edited by real people; a backup that is rewritten on the
+ * second run is not a backup. */
+void backup_once(const char *path);
+
+/* Replace `path` with `text` via a temporary file and rename(), keeping the
+ * existing mode read from the DESCRIPTOR. 0 on success. */
+int write_atomic(const char *path, const char *text);
+
+/* mkdir -p for the parent directory of `path`. */
+void ensure_parent(const char *path);
+
 /* Collapse anything that would break TSV. Tabs and newlines become spaces,
  * because a value that contains one silently invents a column. */
 void tsv_clean(char *s);
@@ -143,6 +183,10 @@ int pane_kernel(void);
  * decided it. See the header of src/apps.c. */
 int pane_apps(void);
 
+/* The system clock beside the DESKTOP clock — what time it is, and how the
+ * bar, the lock screen and the desktop widget write it. See src/time.c. */
+int pane_time(void);
+
 /* ── Writes ─────────────────────────────────────────────────────────────────
  *
  * Deliberately thin. Everything that needs privilege is handed to a systemd
@@ -160,6 +204,17 @@ int do_set_app(int argc, char **argv);
 /* The applications that could take a role, for the one row the GUI is pointed
  * at — the same shape do_modes uses, and fetched the same way. */
 int do_apps(int argc, char **argv);
+
+/* The 12/24-hour, seconds and date-layout knobs, written to the user's own
+ * ~/.config/synui/clock.state. No privilege is involved and none is asked for.
+ * Routed here from do_set(). */
+int do_set_clock(const char *key, const char *val);
+
+/* `choices <key>` — the options a `choice:` row can take, as
+ * `id<TAB>label<TAB>current`. Fetched when a row is picked, like `apps` and
+ * `modes`, because the date layouts come from synui-clock rather than from
+ * anything this package can hardcode. */
+int do_choices(int argc, char **argv);
 int do_unit(int argc, char **argv);
 
 /* Bring one interface up or down, wired or wireless. */

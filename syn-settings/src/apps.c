@@ -62,9 +62,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define MAX_PATHS   64
 #define MAX_CAND    64
-#define PATH_CAP    512
 
 /* ── roles ──────────────────────────────────────────────────────────────────
  *
@@ -156,76 +154,12 @@ static int role_is_terminal(const struct app_role *r)
 	return !strcmp(r->id, "terminal");
 }
 
-/* ── small file and INI helpers ─────────────────────────────────────────── */
-
-/* Whole file into a malloc'd buffer, NULL if it is not there. Capped: these
- * are configuration files, and an unbounded read of whatever happens to sit at
- * a path is how a settings app becomes the thing that OOM-kills the session
- * (reference_unbounded_shell_capture_oom_killed_audio). */
-#define SLURP_CAP (1u << 20)
-
-static char *slurp(const char *path)
-{
-	int fd = open(path, O_RDONLY | O_CLOEXEC);
-	if (fd < 0) return NULL;
-
-	char *buf = malloc(SLURP_CAP);
-	if (!buf) { close(fd); return NULL; }
-
-	size_t used = 0;
-	for (;;) {
-		ssize_t n = read(fd, buf + used, SLURP_CAP - used - 1);
-		if (n <= 0) break;
-		used += (size_t)n;
-		if (used + 1 >= SLURP_CAP) break;
-	}
-	buf[used] = '\0';
-	close(fd);
-	return buf;
-}
-
-/* The value of `key` inside `[group]`, or 0. Desktop-entry INI: a group runs
- * until the next line that starts with '['. */
-static int ini_get(const char *text, const char *group, const char *key,
-                   char *out, size_t cap)
-{
-	if (cap) out[0] = '\0';
-	if (!text) return 0;
-
-	size_t klen = strlen(key);
-	int in_group = 0;
-
-	for (const char *p = text; p && *p; ) {
-		const char *eol = strchr(p, '\n');
-		size_t len = eol ? (size_t)(eol - p) : strlen(p);
-
-		if (len && *p == '[') {
-			char name[128];
-			size_t nl = len - 1;
-			const char *close = memchr(p, ']', len);
-			if (close) nl = (size_t)(close - p) - 1;
-			if (nl >= sizeof name) nl = sizeof name - 1;
-			memcpy(name, p + 1, nl);
-			name[nl] = '\0';
-			in_group = !strcmp(name, group);
-		} else if (in_group && len > klen && !strncmp(p, key, klen)
-		           && p[klen] == '=') {
-			size_t vlen = len - klen - 1;
-			const char *v = p + klen + 1;
-			while (vlen && (v[vlen - 1] == '\r' || v[vlen - 1] == ' '))
-				vlen--;
-			if (vlen >= cap) vlen = cap - 1;
-			memcpy(out, v, vlen);
-			out[vlen] = '\0';
-			return 1;
-		}
-
-		p = eol ? eol + 1 : NULL;
-	}
-	return 0;
-}
-
 /* ── the search path ────────────────────────────────────────────────────── */
+
+/* Every XDG data dir plus the two home ones; 64 is far past any real system.
+ * PATH_CAP lives in the header — util.c's file helpers size their buffers
+ * from it. */
+#define MAX_PATHS 64
 
 struct pathlist {
 	char v[MAX_PATHS][PATH_CAP];
@@ -238,20 +172,6 @@ static void pl_add(struct pathlist *pl, const char *dir, const char *tail)
 	if (snprintf(pl->v[pl->n], PATH_CAP, "%s%s", dir, tail) >= PATH_CAP)
 		return;
 	pl->n++;
-}
-
-static const char *env_or(const char *name, const char *fallback)
-{
-	const char *v = getenv(name);
-	return (v && *v) ? v : fallback;
-}
-
-/* $HOME-relative default for the XDG single-value variables. */
-static const char *home_sub(const char *sub, char *buf, size_t cap)
-{
-	const char *home = env_or("HOME", "/root");
-	snprintf(buf, cap, "%s%s", home, sub);
-	return buf;
 }
 
 /* Every directory that can hold .desktop files, highest priority first. */
@@ -310,17 +230,6 @@ static void mimeapps_files(struct pathlist *pl)
 		}
 		pl_add(pl, bases.v[i], "/mimeapps.list");
 	}
-}
-
-/* $XDG_CONFIG_HOME, or its default. Its own function so the two callers that
- * build a path under it start from a buffer the compiler can prove fits. */
-static void config_home(char *out, size_t cap)
-{
-	const char *ch = getenv("XDG_CONFIG_HOME");
-	if (ch && *ch)
-		snprintf(out, cap, "%s", ch);
-	else
-		home_sub("/.config", out, cap);
 }
 
 /* Where this user's own choices belong. */
@@ -677,103 +586,6 @@ int pane_apps(void)
 }
 
 /* ── writing ────────────────────────────────────────────────────────────── */
-
-/* One-time backup before this app first touches a file it did not create.
- * ~/.config/mimeapps.list and synuirc are both hand-edited by real people;
- * O_EXCL is what makes this happen once, ever, rather than overwriting the
- * pre-syn-settings state with a post-syn-settings one on the second run. */
-static void backup_once(const char *path)
-{
-	char bak[PATH_CAP + 32];
-	if (snprintf(bak, sizeof bak, "%s.pre-syn-settings", path) >= (int)sizeof bak)
-		return;
-
-	int in = open(path, O_RDONLY | O_CLOEXEC);
-	if (in < 0) return;
-
-	int out = open(bak, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-	if (out < 0) { close(in); return; }
-
-	char buf[4096];
-	ssize_t n;
-	while ((n = read(in, buf, sizeof buf)) > 0) {
-		ssize_t off = 0;
-		while (off < n) {
-			ssize_t w = write(out, buf + off, (size_t)(n - off));
-			if (w <= 0) break;
-			off += w;
-		}
-	}
-	close(in);
-	close(out);
-}
-
-static int write_atomic(const char *path, const char *text)
-{
-	char tmp[PATH_CAP + 16];
-	if (snprintf(tmp, sizeof tmp, "%s.new", path) >= (int)sizeof tmp)
-		return 1;
-
-	/* The existing file's mode, copied from the FILE not the path, so a
-	 * replaced file keeps the permissions it had. A fresh one takes 0644
-	 * rather than whatever the umask happens to be
-	 * (reference_temp_rename_takes_the_umask_mode). */
-	mode_t mode = 0644;
-	int old = open(path, O_RDONLY | O_CLOEXEC);
-	if (old >= 0) {
-		struct stat st;
-		if (fstat(old, &st) == 0) mode = st.st_mode & 07777;
-		close(old);
-	}
-
-	int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-	if (fd < 0) {
-		fprintf(stderr, "syn-settings: cannot write %s: %s\n",
-		        tmp, strerror(errno));
-		return 1;
-	}
-	if (fchmod(fd, mode) != 0) { /* best effort; the content matters more */ }
-
-	size_t len = strlen(text), off = 0;
-	while (off < len) {
-		ssize_t w = write(fd, text + off, len - off);
-		if (w <= 0) {
-			close(fd);
-			unlink(tmp);
-			fprintf(stderr, "syn-settings: short write to %s\n", tmp);
-			return 1;
-		}
-		off += (size_t)w;
-	}
-	if (fsync(fd) != 0) { /* tmpfs and some filesystems; not fatal */ }
-	close(fd);
-
-	if (rename(tmp, path) != 0) {
-		unlink(tmp);
-		fprintf(stderr, "syn-settings: cannot replace %s: %s\n",
-		        path, strerror(errno));
-		return 1;
-	}
-	return 0;
-}
-
-/* mkdir -p for the parent of `path`. */
-static void ensure_parent(const char *path)
-{
-	char dir[PATH_CAP];
-	snprintf(dir, sizeof dir, "%s", path);
-	char *slash = strrchr(dir, '/');
-	if (!slash || slash == dir) return;
-	*slash = '\0';
-
-	for (char *p = dir + 1; *p; p++) {
-		if (*p != '/') continue;
-		*p = '\0';
-		mkdir(dir, 0755);
-		*p = '/';
-	}
-	mkdir(dir, 0755);
-}
 
 /* Is `key` one of this role's mime types? */
 static int role_owns(const struct app_role *r, const char *key)
