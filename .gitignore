@@ -9,6 +9,10 @@ archiso/airootfs/var/lib/synapd/models/synapse.gguf
 # regardless of --no-model, as do syn-firstboot and syn-model before they
 # download, so untracking it costs neither the file nor the directory.
 archiso/airootfs/var/lib/synapd/models/manifest.txt
+# Where build.sh parks a gguf when the ISO is not shipping one (the default
+# since 0.2.8). Outside airootfs/ so mkarchiso cannot pack it, and outside
+# build/ so --clean cannot delete a 4 GB download.
+archiso/model-cache/
 
 # ── Vendored / prebuilt llama.cpp (build it locally; see README) ─
 llama.cpp/

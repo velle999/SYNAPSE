@@ -59,11 +59,27 @@
   # full | standard | minimal | custom
   preset = "custom";
 
+  # Which AI model synapd gets, downloaded during the install (the ISO no
+  # longer carries one). Asked on every preset except minimal.
+  #
+  #   mistral-7b   Mistral 7B Instruct Q4_K_M  ~4.1 GB   recommended
+  #   phi3         Phi-3 Mini 4K Instruct Q4   ~2.2 GB   weaker answers
+  #   tiny         Qwen2 0.5B Instruct Q4_K_M  ~0.4 GB   much weaker answers
+  #   none         no model — every AI feature stays inert until
+  #                `syn model download` is run on the installed system
+  #
+  # A smaller model is not just a smaller download: synsh, Chibi, Vibe and the
+  # desktop's AI panel all get worse with it.
+  ai_model = "mistral-7b";
+
   # Read only when preset = "custom". On any other preset these answer nothing
   # and will be listed as unused, which is accurate rather than a warning to
   # silence.
   want = {
-    model     = false;   # the ~4.3 GB gguf
+    model     = false;   # legacy. In a profile written before the picker,
+                         # false still means "no model at all"; where ai_model
+                         # is also set, ai_model wins. New profiles want that
+                         # key, not this one.
     bluetooth = true;
     printing  = false;
     filemgr   = true;    # dolphin

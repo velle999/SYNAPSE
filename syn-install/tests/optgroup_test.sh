@@ -85,6 +85,13 @@ summary=$(sed -n "${header_line},${summary_line}p" "$script")
 # which is where a group has to be consumed by something.
 after=$(tail -n "+${summary_line}" "$script" | grep -vE '^[[:space:]]*#')
 
+# WANT_MODEL is the one group that is not a yes/no in the Custom questionnaire.
+# The model is DOWNLOADED during the install now (the ISO stopped carrying a
+# gguf), so it is a four-way pick — which model, or none — asked on every preset
+# except Minimal rather than only under Custom. It is held to that picker below
+# instead of to ask_opt; every other check in this loop still applies to it.
+picker_only="WANT_MODEL"
+
 for g in $groups; do
     echo ""
     echo "  $g"
@@ -93,7 +100,12 @@ for g in $groups; do
           "$(grep -qF -- "$g" <<<"$full_body" && echo yes || echo no)"
     check "    set by the Minimal preset" yes \
           "$(grep -qF -- "$g" <<<"$min_body" && echo yes || echo no)"
-    check "    offered in the Custom questionnaire" yes "$(has "ask_opt $g")"
+    if grep -qw -- "$g" <<<"$picker_only"; then
+        check "    offered as a picker rather than a y/n" yes \
+              "$(has 'answer ai_model model_pick')"
+    else
+        check "    offered in the Custom questionnaire" yes "$(has "ask_opt $g")"
+    fi
 
     # The summary prints one line per group, naming it inside the $(...) that
     # picks yes/no — so its presence in that slice is the test that the row
@@ -107,6 +119,42 @@ for g in $groups; do
     # only make this test brittle about syntax it does not care about.
     check "    acted on after the selection is confirmed" yes \
           "$(grep -qF -- "$g" <<<"$after" && echo yes || echo no)"
+done
+
+# ── The model picker ────────────────────────────────────────────────────────
+#
+# Two things about it are worth pinning, and neither would fail loudly.
+#
+# First, skipping must stay possible: it was a supported answer when the model
+# was a yes/no, and a picker with no way out would take a 4 GB download from
+# someone who only wanted a desktop.
+#
+# Second — and this is the one that could actually ship broken — the installer
+# hands its choice to `syn-model download <name>` in the target. The names are
+# written down in two components, and a name syn-model does not know does not
+# fail the install: it prints "Unknown model", exits 1, and the installer warns
+# and carries on, so the machine boots with no model and nothing says why.
+echo ""
+echo "=== the model picker ==="
+model_sh="$here/../../syn-model/syn-model.sh"
+
+check "declining the model is still an answer" yes "$(has 'MODEL_CHOICE=none')"
+check "and it is offered at the picker itself" yes "$(has 'none=4')"
+check "the recommended default is marked as such" yes \
+      "$(grep -q 'recommended' <<<"$code" && echo yes || echo no)"
+
+# Every name the picker can produce, minus the sentinel that means "no model".
+model_names=$(grep -oE 'MODEL_CHOICE=[a-z0-9-]+' <<<"$code" |
+              cut -d= -f2 | sort -u | grep -vx none)
+check "the picker names at least three models" yes \
+      "$([ "$(echo "$model_names" | grep -c .)" -ge 3 ] && echo yes || echo no)"
+check "syn-model.sh was found" yes "$([ -f "$model_sh" ] && echo yes || echo no)"
+
+for m in $model_names; do
+    # syn-model's dispatch is a case whose arms are `name|alias)`, so a name it
+    # accepts is one that opens an arm.
+    check "syn-model download accepts '$m'" yes \
+          "$(grep -qE "^[[:space:]]*${m}[|)]" "$model_sh" && echo yes || echo no)"
 done
 
 echo ""

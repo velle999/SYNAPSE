@@ -1697,8 +1697,11 @@ step "Step 4 — Choose What to Install"
 # question twenty minutes into a copy is one you cannot walk away from.
 #
 # The AI model is the single biggest item on the disk by an order of magnitude
-# (~4.3 GB against ~1 GB for every SynapseOS package combined), which is why it
-# is a line of its own rather than folded into a preset's package list.
+# (~4.1 GB against ~1 GB for every SynapseOS package combined), which is why it
+# is a question of its own rather than folded into a preset's package list —
+# and since the ISO stopped carrying a gguf it is also a download of that size
+# rather than a copy off the media, which is the other half of why it is asked
+# on every preset instead of only under Custom.
 
 # ── Choose, then confirm; "no" asks again ─────────────────
 #
@@ -1709,7 +1712,9 @@ step "Step 4 — Choose What to Install"
 # pass cannot inherit an app the first one appended to SEL_APPS.
 while :; do
     # Defaults = Standard.
-    WANT_MODEL=1          # copy the ~4.3 GB gguf off the ISO
+    WANT_MODEL=1          # fetch a gguf — WHICH one is asked below
+    MODEL_CHOICE=mistral-7b
+    MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)"
     WANT_BLUETOOTH=1      # bluez + bluez-utils
     WANT_PRINTING=1       # cups + drivers
     WANT_FILEMGR=1        # dolphin — a SECOND file manager; synfiles is the default
@@ -1760,6 +1765,9 @@ while :; do
     echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine/phone"
     echo "    $(bold '4)') Custom    — pick each item individually"
     echo ""
+    echo "  Every preset except Minimal then asks WHICH AI model to download,"
+    echo "  and skipping it is one of the answers."
+    echo ""
     prompt "Choice [1-4, default=2]:"
     answer preset install_preset -m full=1,standard=2,minimal=3,custom=4 || true
     INSTALL_PRESET="${install_preset:-2}"
@@ -1805,7 +1813,8 @@ while :; do
             ask_opt want_m2020   0 "Samsung M2020 printer driver"
             ask_opt want_arsenal 1 "SYNAPSE Arsenal — browse/install BlackArch security tooling"
             echo ""
-            ask_opt WANT_MODEL      1 "AI model (~4.3 GB) — without it the AI is inert until 'syn model download'"
+            # No "AI model? y/n" here: the model question is asked once for
+            # every preset below, and "None" is one of its answers.
             ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
             ask_opt WANT_PRINTING   1 "Printing (CUPS)"
             ask_opt WANT_FILEMGR    1 "Dolphin as a second file manager (Qt6 + KF6, ~550 MB) — synfiles is installed either way"
@@ -1864,13 +1873,86 @@ while :; do
             ;;
     esac
 
+    # ── Which AI model ────────────────────────────────────
+    #
+    # Asked for every preset that wants one, because it is no longer a copy off
+    # the media: the ISO ships without a gguf (it added ~4 GB to the image for a
+    # model the live session can only run on the CPU), so this is a download of
+    # gigabytes onto the new system and a download that size is a decision, not
+    # something an Enter-through install starts on your behalf.
+    #
+    # The names are syn-model's own — `syn model download <name>` takes exactly
+    # these three — so the pick made here is the pick available afterwards, and
+    # "None" leaves the machine in the same state declining it always did.
+    #
+    # The quality warning is the point of the screen. Size is the only number a
+    # first-time installer has to go on, and read alone it says "smaller is
+    # thriftier"; what it actually costs is every AI feature in the OS at once.
+    if [ "$WANT_MODEL" = 1 ]; then
+        # Pre-picker profiles said `want.model = false`. Honour that as "None",
+        # and read the key ONLY when it is present so nobody at a terminal is
+        # asked the old yes/no question as well as the new one.
+        if [ -n "${ANSWERS[want_model]+set}" ]; then
+            # Consumed either way, so a profile carrying it is not told the key
+            # went unused — but ai_model is the specific answer to the same
+            # question, so where both are written the specific one wins.
+            answer want_model _legacy_model -m yes=y,no=n,true=y,false=n || true
+            if [ -z "${ANSWERS[ai_model]+set}" ]; then
+                case "${_legacy_model,,}" in n|no) WANT_MODEL=0 ;; esac
+            fi
+        fi
+    fi
+
+    if [ "$WANT_MODEL" = 1 ]; then
+        echo ""
+        echo "  $(bold 'Which AI model should this machine run?')"
+        echo ""
+        echo "  synapd loads one model and everything AI in SynapseOS talks to it:"
+        echo "  synsh, the desktop's AI panel, Chibi, Vibe. It is downloaded now,"
+        echo "  over this connection, onto the disk you are installing to."
+        echo ""
+        echo "    $(bold '1)') Mistral 7B Instruct   ~4.1 GB   recommended — what SynapseOS is tuned against"
+        echo "    $(bold '2)') Phi-3 Mini 4K         ~2.2 GB   half the size, and noticeably weaker"
+        echo "    $(bold '3)') Qwen2 0.5B            ~0.4 GB   fits anywhere, answers like it"
+        echo "    $(bold '4)') None                            skip it — nothing else changes"
+        echo ""
+        echo "  A smaller model is not just faster and lighter: it follows"
+        echo "  instructions worse. synsh mistakes what you asked for, Vibe's code"
+        echo "  needs more fixing, Chibi loses the thread. Take the default unless"
+        echo "  the disk or the RAM says otherwise — 7B wants ~6 GB of RAM free."
+        echo ""
+        echo "  Whatever you pick, it can be changed later: 'syn model download',"
+        echo "  or Super+C ▸ System ▸ AI model on the desktop."
+        echo ""
+        prompt "Choice [1-4, default=1]:"
+        # One line on purpose: config_test.sh recognises an `answer` call site by
+        # what FOLLOWS the variable, and a line continuation is not one of them.
+        answer ai_model model_pick -m mistral-7b=1,mistral=1,phi3=2,phi=2,tiny=3,qwen=3,none=4,no=4,skip=4 || true
+        # ${model_pick:-1}: Enter is the recommendation, so an empty answer and
+        # a typed 1 are the same arm.
+        case "${model_pick:-1}" in
+            1) MODEL_CHOICE=mistral-7b; MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)" ;;
+            2) MODEL_CHOICE=phi3;       MODEL_LABEL="Phi-3 Mini 4K (~2.2 GB)" ;;
+            3) MODEL_CHOICE=tiny;       MODEL_LABEL="Qwen2 0.5B (~0.4 GB)" ;;
+            4) MODEL_CHOICE=none;       WANT_MODEL=0 ;;
+            *)  # A typo, or an ai_model= naming a model that does not exist. A
+                # multi-gigabyte download nobody asked for should say why it
+                # started rather than quietly standing in for the answer.
+                warn "'$model_pick' is not one of 1-4 — taking the recommended model."
+                MODEL_CHOICE=mistral-7b; MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)" ;;
+        esac
+        [ "$WANT_MODEL" = 1 ] && success "AI model: $MODEL_LABEL"
+    else
+        MODEL_CHOICE=none
+    fi
+
     # Read the selection back before touching the disk. A picker whose result you
     # only discover afterwards is worse than no picker.
     echo ""
     echo "  $(bold 'Installing:')"
     echo "    Core     : $(echo $SEL_CORE | wc -w) package(s)"
     echo "    Apps     : ${SEL_APPS:-none}"
-    echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo 'yes (~4.3 GB)' || echo 'no')"
+    echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo "$MODEL_LABEL — downloaded during the install" || echo 'none — the AI is inert until "syn model download"')"
     echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
     echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
     echo "    Files    : synfiles$([ "$WANT_FILEMGR" = 1 ] && echo ' + Dolphin' || echo '')"
@@ -2022,27 +2104,6 @@ if [ -n "$SYN_EXTRA" ]; then
 $(( $(echo $SYN_EXTRA | wc -w) - $(echo $missing_extra | wc -w) ))/$(echo $SYN_EXTRA | wc -w) apps"
 else
     success "SynapseOS packages verified: $(echo $SYN_CORE | wc -w) core, no apps selected"
-fi
-
-# Copy AI model if present on live ISO — and if it was asked for. Skipping it
-# is a supported choice (Minimal, or Custom with the model declined), so say
-# how to get it later rather than treating its absence as a problem.
-if [ "$WANT_MODEL" != 1 ]; then
-    echo "  AI model skipped — install it later with: syn model download"
-else
-MODEL_SRC=""
-for f in /run/archiso/airootfs/var/lib/synapd/models/*.gguf \
-         /var/lib/synapd/models/*.gguf; do
-    [ -f "$f" ] && MODEL_SRC="$f" && break
-done
-if [ -n "$MODEL_SRC" ]; then
-    echo "  Copying AI model ($(du -sh "$MODEL_SRC" | cut -f1))..."
-    mkdir -p /mnt/var/lib/synapd/models
-    cp "$MODEL_SRC" /mnt/var/lib/synapd/models/synapse.gguf
-    success "AI model installed"
-else
-    warn "No AI model on live ISO — download later with: syn model download"
-fi
 fi
 
 success "SynapseOS packages installed"
@@ -3581,6 +3642,70 @@ if [ -f /home/syn/.config/fastfetch/config.jsonc ]; then
 fi
 
 arch-chroot /mnt chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
+
+# ── The AI model ─────────────────────────────────────────
+#
+# A DOWNLOAD now, not a copy. The ISO stopped carrying a gguf — it made the
+# image ~4 GB bigger to ship a model the live session can only run on the CPU,
+# which in a VM is slow enough to be worse than not offering it — so the model
+# chosen in step 4 is fetched here, into the target, by the same syn-model the
+# installed system uses later. One downloader, one set of retries, one place
+# where the URL for a name is written down.
+#
+# LAST of the long operations, and that is the whole reason it sits here rather
+# than beside the packages that pulled it in. It is minutes of network; every
+# question this installer asks has been answered by the time it starts, so it
+# is the part you can walk away from instead of one that strands the username
+# prompt behind a progress bar. Still BEFORE the Nix step below, which probes
+# the disk to write facts.nix and would otherwise record a machine with no
+# model on it.
+#
+# Older media DO carry one, and it is Mistral 7B. When that is what was asked
+# for, copy it: it is already local and the network has nothing to add.
+#
+# Skipping is a supported answer (Minimal, or "None" at the picker), and a
+# failed download is a warning rather than a die — it leaves the machine in
+# exactly the state declining the model leaves it in, and that state boots.
+step "AI model"
+
+if [ "$WANT_MODEL" != 1 ] || [ "$MODEL_CHOICE" = none ]; then
+    echo "  AI model skipped — install one later with: syn model download"
+else
+    MODEL_SRC=""
+    if [ "$MODEL_CHOICE" = mistral-7b ]; then
+        for f in /run/archiso/airootfs/var/lib/synapd/models/*.gguf \
+                 /var/lib/synapd/models/*.gguf; do
+            [ -f "$f" ] && MODEL_SRC="$f" && break
+        done
+    fi
+
+    mkdir -p /mnt/var/lib/synapd/models
+    if [ -n "$MODEL_SRC" ]; then
+        echo "  Copying AI model off the live media ($(du -sh "$MODEL_SRC" | cut -f1))..."
+        if cp "$MODEL_SRC" /mnt/var/lib/synapd/models/synapse.gguf; then
+            success "AI model installed"
+        else
+            rm -f /mnt/var/lib/synapd/models/synapse.gguf
+            warn "Could not copy the model to the target — usually no room left.
+  Once the new system is up:  syn model download $MODEL_CHOICE"
+        fi
+    elif [ -x /mnt/usr/bin/syn-model ]; then
+        echo "  Downloading the AI model ($MODEL_CHOICE) — this is the long part of"
+        echo "  the install, and everything else on the disk is already done."
+        echo ""
+        # SYN_MODEL_NO_RESTART: there is no running synapd to restart in here,
+        # and systemctl in a chroot would only print about it.
+        if SYN_MODEL_NO_RESTART=1 arch-chroot /mnt syn-model download "$MODEL_CHOICE" -y; then
+            success "AI model installed"
+        else
+            warn "Model download failed — the install itself is fine, the AI is not.
+  Once the new system is online:  syn model download $MODEL_CHOICE"
+        fi
+    else
+        warn "syn-model is not on the target, so no model was downloaded.
+  It is part of the core set; if it was deselected, the AI stays inert."
+    fi
+fi
 
 # ── Nix ───────────────────────────────────────────────────
 #

@@ -60,8 +60,15 @@ Options:
 
 Models:
   mistral-7b   Mistral 7B Instruct Q4_K_M (~4.1GB) — recommended
-  phi3         Phi-3 Mini 4K Instruct Q4 (~2.2GB) — good balance
-  tiny         Qwen2 0.5B Q4 (~400MB) — fast, lower quality
+  phi3         Phi-3 Mini 4K Instruct Q4 (~2.2GB) — noticeably weaker
+  tiny         Qwen2 0.5B Q4 (~400MB) — fits anywhere, answers like it
+
+A smaller model is not just a smaller download: synsh, Chibi, Vibe and the
+desktop's AI panel all follow instructions worse with one.
+
+Environment:
+  SYN_MODEL_NO_RESTART=1   don't restart synapd afterwards (used by the
+                           installer, which downloads into a chroot)
 
 HELP
 }
@@ -92,6 +99,10 @@ Available models:
   mistral-7b   Mistral 7B Instruct v0.2 Q4_K_M   ~4.1GB   ★★★★★ recommended
   phi3         Phi-3 Mini 4K Instruct Q4          ~2.2GB   ★★★★☆ good balance
   tiny         Qwen2 0.5B Instruct Q4_K_M         ~400MB   ★★★☆☆ fast/low RAM
+
+The stars are the quality of every AI feature in SynapseOS, not just the
+speed of the reply: synsh mistakes what you asked for, Vibe's code needs more
+fixing, Chibi loses the thread.
 
 LIST
 }
@@ -232,6 +243,14 @@ download() {
     echo ""
     echo "✓ Model downloaded and verified: $(human "$(filesize "$MODEL_PATH")")"
     echo ""
+
+    # SYN_MODEL_NO_RESTART is for a download into a system that is not running:
+    # syn-install fetches the model inside an arch-chroot on the target, where
+    # there is no synapd to restart and systemctl would only talk about it.
+    if [ "${SYN_MODEL_NO_RESTART:-0}" = 1 ]; then
+        echo "✓ Model in place — it loads the next time synapd starts."
+        return 0
+    fi
 
     if command -v systemctl &>/dev/null; then
         echo "Restarting synapd..."

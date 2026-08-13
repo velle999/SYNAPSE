@@ -14,16 +14,20 @@
 # The AI daemon starts before the display manager so the compositor
 # can connect to it immediately on first frame.
 #
-# DO NOT re-add var-lib-synapd-models.mount. It came from 0.1.0, when the ISO
-# shipped no model and firstboot downloaded one; it mounted a 6G tmpfs over
-# /var/lib/synapd/models. The ISO has shipped a real 4.3GB synapse.gguf at
-# exactly that path since, so the tmpfs did nothing but HIDE it: on the live
-# media synapd started with no model, `syn status` said "model ✗ not
-# installed", and every AI feature was dead — while the ISO still paid the
-# 4.3GB. Installed systems were unaffected only because syn-install reads
-# around the mount, from /run/archiso/airootfs/var/lib/synapd/models/*.gguf,
-# which is why "the installed system works but the live one doesn't".
+# Since 0.2.8 the ISO ships NO model (build.sh --with-model embeds one), so
+# synapd starts here with nothing to load and runs in shell-assist mode. That
+# is expected on the live media — `syn status` saying "model ✗ not installed"
+# is not a fault to chase. syn-install asks which model to download onto the
+# target.
 #
-# Nothing is lost by its absence: the live root is an overlay (squashfs
-# lower + tmpfs upper), so that directory is already writable in RAM if
-# anything ever does want to drop a model there.
+# DO NOT re-add var-lib-synapd-models.mount, which came from 0.1.0 and mounted
+# a 6G tmpfs over /var/lib/synapd/models. Once the ISO started shipping a real
+# synapse.gguf at exactly that path, the tmpfs did nothing but HIDE it: on the
+# live media every AI feature was dead while the ISO still paid the 4.3GB.
+# Installed systems were unaffected only because syn-install read around the
+# mount, from /run/archiso/airootfs/var/lib/synapd/models/*.gguf — which is why
+# it looked like "the installed system works but the live one doesn't". A
+# --with-model build would walk straight back into that, and it buys nothing
+# either way: the live root is an overlay (squashfs lower + tmpfs upper), so
+# that directory is already writable in RAM if anything wants to drop a model
+# in it.

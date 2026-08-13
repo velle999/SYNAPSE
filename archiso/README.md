@@ -9,18 +9,19 @@ Builds a bootable ISO using [archiso](https://wiki.archlinux.org/title/Archiso).
 sudo pacman -S archiso base-devel git cmake meson ninja qemu ovmf
 
 # Minimum disk space
-# ~22GB with embedded model
-# ~9GB  without
+# ~9GB   default (no model on the image)
+# ~22GB  with --with-model
 ```
 
 ## Quick Build
 
 ```bash
-# Full build (with 7B model embedded)
+# Full build — no AI model on the image (the default since 0.2.8;
+# syn-install asks which model to download onto the target instead)
 sudo ./build.sh
 
-# Without model (faster — model downloaded on first boot)
-sudo ./build.sh --no-model
+# Embed a 7B model in the image (~4.1GB bigger)
+sudo ./build.sh --with-model
 
 # CPU-only llama.cpp (no GPU)
 sudo ./build.sh --no-gpu
@@ -116,7 +117,7 @@ build.sh
   ├── 2. llama.cpp      (git clone + cmake, GPU auto-configured)
   ├── 3. SynapseOS pkgs (makepkg for each component)
   ├── 4. Local repo     (repo-add → synapseos.db)
-  ├── 5. Model download (mistral-7b → synapse-7b-q4_k_m.gguf)
+  ├── 5. Model          (swept off the image; --with-model embeds one)
   ├── 6. mkarchiso      (squashfs + ISO assembly)
   └── 7. Checksums      (sha256, b2sum)
 ```
@@ -134,8 +135,17 @@ build.sh
 
 ## Model
 
-The embedded model is `synapse-7b-q4_k_m.gguf` — currently using
-Mistral-7B-Instruct-v0.2 Q4_K_M as the base.
+**The ISO ships without one.** It was ~4.1GB of an ~8GB image for a model the
+live session can only run on the CPU, which in a VM is slow enough to be worse
+than not offering it — so `syn-install` asks which model to download onto the
+machine it installs (Mistral 7B recommended, Phi-3 Mini and Qwen2 0.5B offered
+with what they cost in quality, and "None" allowed). synapd on the live ISO
+therefore has nothing to load and runs in shell-assist mode only.
+
+`--with-model` puts one back: `synapse.gguf`, currently
+Mistral-7B-Instruct-v0.2 Q4_K_M. A gguf swept off the image is moved to
+`archiso/model-cache/`, not deleted, so turning the flag back on costs no
+download.
 
 For production SynapseOS, this will be a model fine-tuned on:
 - Linux syscall analysis (for synguard)
@@ -148,7 +158,7 @@ See `docs/model-finetuning.md` for the fine-tuning pipeline.
 ## First Boot
 
 After installation, `synapseos-firstboot.service` runs once:
-1. Downloads the model if not embedded (~4.1GB)
+1. Downloads a model if the installer did not (~0.4-4.1GB, your pick)
 2. Builds `synapse_kmod` via DKMS against the installed kernel
 3. Starts `synapd` and verifies the model loads
 4. Switches `synguard` to `audit` mode (safe default)

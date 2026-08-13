@@ -8,7 +8,7 @@
 #   2. Build llama.cpp (with GPU auto-detection)
 #   3. Build all SynapseOS packages via PKGBUILD
 #   4. Set up a local pacman repository
-#   5. Download the AI model (synapse-7b-q4_k_m.gguf)
+#   5. Keep the AI model OFF the image (--with-model embeds one)
 #   6. Run mkarchiso
 #   7. Verify the ISO
 #
@@ -16,7 +16,13 @@
 #   sudo ./build.sh [OPTIONS]
 #
 # Options:
-#   --no-model      Skip model download (build ISO without embedded model)
+#   --with-model    Embed a ~4.1 GB gguf in the image. OFF by default since
+#                   0.2.8: it was the single largest thing on the ISO, and the
+#                   live session can only run it on the CPU — which in a VM is
+#                   slow enough to be worse than not offering it at all. The
+#                   installer asks which model to fetch and downloads it onto
+#                   the target instead, so nothing is lost but the image size.
+#   --no-model      (default; kept for compatibility)
 #   --gpu=TYPE      Build llama.cpp with GPU backend: cuda, rocm, vulkan, or
 #                   auto. Default is CPU-only: a CUDA/ROCm build links the
 #                   shipped libggml against the BUILD HOST's driver stack
@@ -38,8 +44,8 @@
 # Requirements:
 #   - Arch Linux host (or Arch-based)
 #   - archiso package installed
-#   - ~20GB free disk space (with model), ~8GB without
-#   - Internet access (for package downloads and model)
+#   - ~8GB free disk space (~20GB with --with-model)
+#   - Internet access (for package downloads)
 #
 # Output:
 #   out/SynapseOS-0.1.0-YYYYMMDD-x86_64.iso
@@ -69,6 +75,11 @@ LLAMA_DIR="${BUILD_DIR}/llama.cpp"
 # Keep in sync with LLAMA_REF in .github/workflows/build.yml
 LLAMA_REF="b10241"
 MODEL_DIR="${SCRIPT_DIR}/airootfs/var/lib/synapd/models"
+# Where a gguf is parked when the ISO is not shipping one. It has to be OUTSIDE
+# airootfs/: mkarchiso packs that overlay whole, so a model left in MODEL_DIR
+# ships whatever this script decided. Outside the overlay and outside build/
+# (which --clean wipes), so a 4 GB download survives being switched off and on.
+MODEL_CACHE="${SCRIPT_DIR}/model-cache"
 
 # Model to embed — filename must match what synapd.service and syn-model expect
 MODEL_NAME="synapse.gguf"
@@ -76,7 +87,8 @@ MODEL_HF_REPO="TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
 MODEL_HF_FILE="mistral-7b-instruct-v0.2.Q4_K_M.gguf"
 
 JOBS="$(nproc)"
-WITH_MODEL=true
+# The ISO ships no model by default — see --with-model in the header.
+WITH_MODEL=false
 # CPU-only by default — see --gpu note in the header before changing this.
 WITH_GPU=cpu
 CLEAN=true
@@ -139,6 +151,7 @@ have_vulkan_toolchain() {
 # ── Argument parsing ──────────────────────────────────────────
 for arg in "$@"; do
     case "$arg" in
+        --with-model) WITH_MODEL=true ;;
         --no-model)   WITH_MODEL=false ;;
         --no-gpu)     WITH_GPU=cpu ;;
         --gpu=*)      WITH_GPU="${arg#--gpu=}" ;;
@@ -1035,11 +1048,53 @@ else
     warn "No packages in local-repo — ISO will not include SynapseOS binaries"
 fi
 
-# ── Download AI model ─────────────────────────────────────────
-if [[ "$WITH_MODEL" == "true" ]]; then
+# ── The AI model ──────────────────────────────────────────────
+#
+# OFF by default since 0.2.8. The gguf was ~4.1 GB of an ~8 GB image, for a
+# model the live session runs on the CPU — which in a VM (where most people
+# meet the live session) is slow enough that offering it is worse than not.
+# syn-install asks which model to fetch and downloads it onto the target, so
+# the installed system is unchanged and only the download is.
+#
+# The SWEEP is the load-bearing half. mkarchiso packs airootfs/ whole, so a
+# model left over in MODEL_DIR from an earlier --with-model build ships no
+# matter what this flag says — an 8 GB ISO from a run that reported no model.
+# It is MOVED to model-cache/, not deleted: it is a 4 GB download, it is
+# gitignored either way, and --with-model puts it straight back.
+MODEL_PATH="${MODEL_DIR}/${MODEL_NAME}"
+
+if [[ "$WITH_MODEL" != "true" ]]; then
+    step "Keeping the AI model off the image"
+
+    mkdir -p "${MODEL_CACHE}"
+    _parked=0
+    for _m in "${MODEL_DIR}"/*.gguf; do
+        [[ -e "$_m" ]] || continue
+        mv -f "$_m" "${MODEL_CACHE}/$(basename "$_m")"
+        log "parked $(basename "$_m") in model-cache/ (kept, not shipped)"
+        _parked=$((_parked + 1))
+    done
+    # A half-downloaded model does not match *.gguf and would have shipped as
+    # several GB of nothing. It is not worth parking — the download restarts
+    # from scratch anyway.
+    rm -f "${MODEL_DIR}"/*.gguf.tmp
+    # The manifest describes a model that is no longer there; left behind it
+    # tells the live system it has one.
+    rm -f "${MODEL_DIR}/manifest.txt"
+    if (( _parked )); then
+        ok "No model on this ISO — ${_parked} file(s) moved aside (--with-model to embed one)"
+    else
+        ok "No model on this ISO — the installer downloads one onto the target"
+    fi
+else
     step "Downloading AI model"
 
-    MODEL_PATH="${MODEL_DIR}/${MODEL_NAME}"
+    # Put back whatever a previous no-model run parked, rather than spending
+    # 4 GB of bandwidth on a file that is sitting one directory away.
+    if [[ ! -f "${MODEL_PATH}" && -f "${MODEL_CACHE}/${MODEL_NAME}" ]]; then
+        mv -f "${MODEL_CACHE}/${MODEL_NAME}" "${MODEL_PATH}"
+        log "restored ${MODEL_NAME} from model-cache/"
+    fi
 
     if [[ -f "${MODEL_PATH}" ]]; then
         ok "Model already present: $(du -h "${MODEL_PATH}" | cut -f1)"

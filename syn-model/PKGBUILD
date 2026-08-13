@@ -1,6 +1,6 @@
 pkgname=syn-model
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="SynapseOS model manager — download and manage LLM models"
 arch=('any')
 license=('GPL-2.0-or-later')

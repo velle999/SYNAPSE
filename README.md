@@ -678,8 +678,16 @@ Two things worth knowing:
 
 ## The model
 
-ISOs built with `--no-model` are ~4 GB smaller and fetch the model on first boot
-via `syn-firstboot`. You can also drop one in by hand:
+**The ISO ships no model** (since 0.2.8). It was ~4.1 GB of an ~8 GB image, for
+a model the live session can only run on the CPU — slow enough in a VM to be
+worse than not offering it. `syn-install` asks which model to use, recommends
+Mistral 7B, says plainly what a smaller one costs, and lets you decline; it then
+downloads the pick onto the target. `archiso/build.sh --with-model` embeds one
+again, and a parked gguf is kept in `archiso/model-cache/` so switching back
+does not re-download it.
+
+Afterwards the pick is `syn model download <mistral-7b|phi3|tiny>`, or
+Super+C ▸ System ▸ AI model. You can also drop one in by hand:
 
 ```bash
 cp your-model.gguf /var/lib/synapd/models/synapse.gguf

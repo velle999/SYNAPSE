@@ -1,12 +1,13 @@
 
-  SynapseOS 0.2.7 — Where the kernel thinks.
+  SynapseOS 0.2.8 — Where the kernel thinks.
 
   Services:  synapd  synnet  synguard  synapse_kmod
   Shell:     synsh    (type naturally or use shell commands)
   Compositor: synui  (WLR_BACKENDS=drm synui)
 
-  The AI model ships on this media — synapd runs here, on CPU, so it is
-  slow but real. `syn status` shows the model and the daemon.
+  No AI model ships on this media, so synapd here has nothing to load —
+  the live session is the desktop, not the AI. The installer asks which
+  model to download onto the machine it installs.
 
   To install to disk:  syn-install
 
