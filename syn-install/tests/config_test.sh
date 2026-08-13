@@ -187,6 +187,23 @@ if [ -f "$gui" ]; then
         check "GUI key $k is one the installer reads" yes \
               "$(grep -qxF "$k" <<<"$consumed" && echo yes || echo no)"
     done
+
+    # And the other direction, for the questions with no prompt of their own.
+    #
+    # Every ask_opt in this script is a y/n question inside the Custom preset,
+    # and a graphical Custom install has to answer ALL of them: an unanswered
+    # one is `read -r` on the terminal BEHIND the window, so the install stops
+    # dead with nothing on screen saying why. This is the failure the GUI's
+    # header note is about, and the "was it under the custom branch" part is not
+    # checkable from here — but a want_* question the window does not write at
+    # all is, and that is the way a new one gets added.
+    for k in $(grep -ohE '^[[:space:]]*ask_opt [A-Za-z_0-9]+' "$script" |
+                   awk '{print tolower($2)}' | sort -u); do
+        check "Custom question $k is answered by the GUI" yes \
+              "$(grep -qxF "$k" <<<"$gui_keys" && echo yes || echo no)"
+    done
+    check "Custom question customise_core is answered by the GUI" yes \
+          "$(grep -qxF customise_core <<<"$gui_keys" && echo yes || echo no)"
 else
     echo "  (no syn-install-gui.qml — skipped)"
 fi

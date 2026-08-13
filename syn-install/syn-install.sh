@@ -786,6 +786,168 @@ list_disks() {
     done < <(lsblk -dpno NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}')
 }
 
+# ── The region tables, and the records a picker renders ────
+#
+# LOCALE_ROWS is deliberately short. A picker listing all 500 of glibc's locales
+# is not more international, it is unusable — these cover the large majority,
+# and Other takes any locale glibc has.
+#
+# Each row: label|locale|console-keymap|xkb-layout|font-package(s). The font
+# column is the "language pack" part: noto-fonts covers Latin/Greek/Cyrillic and
+# ships as a base, CJK needs noto-fonts-cjk (~130MB, which is why it is not
+# simply always installed), and noto-fonts-extra carries the Indic/Arabic/Hebrew
+# coverage.
+#
+# THE KEYBOARD IS TWO COLUMNS BECAUSE IT IS TWO NAMESPACES, and it used to be
+# one. `KEYMAP=` in vconsole.conf names a file under /usr/share/kbd/keymaps that
+# loadkeys must find; `xkb_layout` in synuirc names a layout in
+# xkeyboard-config's rules that xkbcommon must compile. They overlap enough to
+# look like the same thing and disagree on four of the fifteen rows below:
+#
+#   row                 was      console        XKB
+#   English (UK)        uk       uk.map.gz ok   NO 'uk' layout — it is 'gb'
+#   Japanese            jp106    jp106.map.gz   'jp106' is a MODEL, layout is 'jp'
+#   Português (Brasil)  br       NO br.map.gz   'br' ok  (console is br-abnt2)
+#   Korean              kr       NO kr.map.gz   'kr' ok  (kbd has no Korean map)
+#
+# Measured, not guessed: `xkbcli compile-keymap --layout uk` and `--layout jp106`
+# both exit 1 and produce nothing, and neither br.map.gz nor kr.map.gz exists in
+# kbd at all. Both halves fail SILENTLY — synui logs "failed to compile — using
+# default" to a log nobody reads and hands the user a US desktop layout, and
+# systemd-vconsole-setup fails and leaves the VT on its built-in US map. So a UK
+# or Japanese user got the console they asked for and a US desktop, and a
+# Brazilian or Korean user got the reverse. Which is the same "asked and then
+# ignored" failure the region step swears it exists to prevent.
+#
+# tests/layout_test.sh asserts every cell against both namespaces.
+#
+# THE LABELS ARE ASCII ON PURPOSE. This menu is drawn on the Linux VT, whose
+# font is ter-116n — the Latin-1 Terminus. Cyrillic came out as lookalike
+# rubbish and every CJK/Devanagari/Arabic name came out as a row of boxes, so
+# the entries that most needed to be readable were the only unreadable ones.
+# A Unicode console font does not fix it either: a VT font holds at most 512
+# glyphs, which cannot cover CJK by two orders of magnitude. The native name is
+# a nice touch this screen cannot cash — the locale code carries the meaning.
+#
+# The table lives HERE, above the test seam, because the graphical installer
+# renders it too: `--list-locales` is answered during argument parsing, and a
+# front end with its own copy of these fifteen rows would be a second table to
+# keep right — with the font column, the one that decides whether a Japanese
+# install can draw Japanese, in the copy no test suite reads.
+LOCALE_ROWS="
+English (US)|en_US.UTF-8|us|us|
+English (UK)|en_GB.UTF-8|uk|gb|
+Deutsch|de_DE.UTF-8|de|de|
+Français|fr_FR.UTF-8|fr|fr|
+Español|es_ES.UTF-8|es|es|
+Português (Brasil)|pt_BR.UTF-8|br-abnt2|br|
+Italiano|it_IT.UTF-8|it|it|
+Nederlands|nl_NL.UTF-8|nl|nl|
+Polski|pl_PL.UTF-8|pl|pl|
+Russian|ru_RU.UTF-8|ru|ru|
+Japanese|ja_JP.UTF-8|jp106|jp|noto-fonts-cjk
+Chinese (Simplified)|zh_CN.UTF-8|us|us|noto-fonts-cjk
+Korean|ko_KR.UTF-8|us|kr|noto-fonts-cjk
+Hindi|hi_IN.UTF-8|us|us|noto-fonts-extra
+Arabic|ar_EG.UTF-8|us|us|noto-fonts-extra
+"
+
+# The common zones, with the label that says which one a person means. The
+# timezone step explains the rest; the table is here so `--list-timezones` can
+# put these at the top of the list, ahead of the 600 tzdata names.
+TZ_ROWS="
+America/New_York|US Eastern (EST/EDT)
+America/Chicago|US Central (CST/CDT)
+America/Denver|US Mountain (MST/MDT)
+America/Phoenix|US Arizona (MST, no DST)
+America/Los_Angeles|US Pacific (PST/PDT)
+America/Anchorage|US Alaska
+Pacific/Honolulu|US Hawaii
+America/Toronto|Canada Eastern
+America/Sao_Paulo|Brazil
+Europe/London|UK (GMT/BST)
+Europe/Berlin|Central Europe (CET/CEST)
+Europe/Moscow|Moscow
+Asia/Kolkata|India
+Asia/Shanghai|China
+Asia/Tokyo|Japan
+Australia/Sydney|Australia Eastern
+UTC|UTC — no local time
+"
+
+# `syn-install --list-locales` prints one TAB-separated record per row:
+#
+#   label  locale  console-keymap  xkb-layout  font-package(s)
+#
+# All five columns, including the fonts — a front end that picks a row is
+# answering the same question the menu answers, so it has to be able to pass on
+# the same font pack (see the lang_fonts key in the region step).
+list_locales() {
+    local row
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        printf '%s\n' "${row//|/$'\t'}"
+    done <<<"$LOCALE_ROWS"
+}
+
+# `--list-timezones` — `name  label`, the shortlist first (labelled) and then
+# every zone tzdata ships (label empty), so a picker is not limited to the
+# seventeen common ones. /usr/share/zoneinfo is the same authority the install
+# validates the answer against.
+#
+# The name filter is one regex because every tzdata zone name starts with a
+# capital and everything in that tree that is NOT a zone does not:
+# leapseconds, posixrules, tzdata.zi, the *.tab files, and the posix/ and right/
+# duplicate trees.
+list_timezones() {
+    local row name curated=""
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        printf '%s\t%s\n' "${row%%|*}" "${row#*|}"
+        curated="${curated}${row%%|*}"$'\n'
+    done <<<"$TZ_ROWS"
+
+    [ -d /usr/share/zoneinfo ] || return 0
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        # Already printed with a label above.
+        case $'\n'"$curated" in *$'\n'"$name"$'\n'*) continue ;; esac
+        printf '%s\t\n' "$name"
+    done < <( cd /usr/share/zoneinfo 2>/dev/null &&
+              find . -type f -printf '%P\n' 2>/dev/null |
+              grep -E '^[A-Z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$' | sort )
+}
+
+# `--list-keymaps` — the console keymaps loadkeys can find on this image, which
+# is exactly the check the install itself makes on the answer. Second column is
+# empty: kbd ships no descriptions, and inventing them is how a picker starts
+# disagreeing with the thing that loads the map.
+list_keymaps() {
+    [ -d /usr/share/kbd/keymaps ] || return 0
+    find /usr/share/kbd/keymaps -name '*.map*' -printf '%f\n' 2>/dev/null |
+        sed 's/\.map.*$//' | sort -u | sed 's/$/\t/'
+}
+
+# `--list-xkb-layouts` — `layout  description`, from xkeyboard-config's own
+# rules list, which is where the names xkbcommon accepts are written down. The
+# descriptions are the reason to read base.lst rather than list the symbols
+# directory: "gb — English (UK)" is the answer to the question that made this
+# two columns in the first place.
+list_xkb_layouts() {
+    local lst=/usr/share/X11/xkb/rules/base.lst
+    if [ -f "$lst" ]; then
+        awk '/^! layout/ { f = 1; next }
+             /^!/        { f = 0 }
+             f && NF > 1 { name = $1; $1 = ""; sub(/^[ \t]+/, ""); print name "\t" $0 }' \
+            "$lst"
+        return 0
+    fi
+    # No rules list: the symbols directory is what the install checks against,
+    # and its file names ARE the layout names.
+    [ -d /usr/share/X11/xkb/symbols ] || return 0
+    find /usr/share/X11/xkb/symbols -maxdepth 1 -type f -printf '%f\t\n' 2>/dev/null | sort
+}
+
 config_report_unused() {
     [ -n "$CONFIG_FILE" ] || return 0
     local k unused=""
@@ -844,6 +1006,14 @@ USAGE
         # needs no privilege and a picker that demands root to LOOK is a picker
         # people run as root.
         --list-disks) list_disks; exit 0 ;;
+        # The region pickers, for the same reason and on the same terms: the
+        # tables and the "does this name exist on this image" tests live in one
+        # place, and the window renders what they say. Queries, so they are
+        # answered before the root check too.
+        --list-locales)     list_locales; exit 0 ;;
+        --list-timezones)   list_timezones; exit 0 ;;
+        --list-keymaps)     list_keymaps; exit 0 ;;
+        --list-xkb-layouts) list_xkb_layouts; exit 0 ;;
         *) die "unknown option: $1 (try --help)" ;;
     esac
     shift
@@ -2917,63 +3087,10 @@ echo "  Hostname: synapse"
 # dejavu and terminus. "Installs in English" is a decision; "cannot display
 # your language" is a bug.
 #
-# LOCALE_ROWS is deliberately short. A picker listing all 500 of glibc's locales
-# is not more international, it is unusable — these cover the large majority,
-# and Other takes any locale glibc has.
-#
-# Each row: label|locale|console-keymap|xkb-layout|font-package(s). The font
-# column is the "language pack" part: noto-fonts covers Latin/Greek/Cyrillic and
-# ships as a base, CJK needs noto-fonts-cjk (~130MB, which is why it is not
-# simply always installed), and noto-fonts-extra carries the Indic/Arabic/Hebrew
-# coverage.
-#
-# THE KEYBOARD IS TWO COLUMNS BECAUSE IT IS TWO NAMESPACES, and it used to be
-# one. `KEYMAP=` in vconsole.conf names a file under /usr/share/kbd/keymaps that
-# loadkeys must find; `xkb_layout` in synuirc names a layout in
-# xkeyboard-config's rules that xkbcommon must compile. They overlap enough to
-# look like the same thing and disagree on four of the fifteen rows below:
-#
-#   row                 was      console        XKB
-#   English (UK)        uk       uk.map.gz ok   NO 'uk' layout — it is 'gb'
-#   Japanese            jp106    jp106.map.gz   'jp106' is a MODEL, layout is 'jp'
-#   Português (Brasil)  br       NO br.map.gz   'br' ok  (console is br-abnt2)
-#   Korean              kr       NO kr.map.gz   'kr' ok  (kbd has no Korean map)
-#
-# Measured, not guessed: `xkbcli compile-keymap --layout uk` and `--layout jp106`
-# both exit 1 and produce nothing, and neither br.map.gz nor kr.map.gz exists in
-# kbd at all. Both halves fail SILENTLY — synui logs "failed to compile — using
-# default" to a log nobody reads and hands the user a US desktop layout, and
-# systemd-vconsole-setup fails and leaves the VT on its built-in US map. So a UK
-# or Japanese user got the console they asked for and a US desktop, and a
-# Brazilian or Korean user got the reverse. Which is the same "asked and then
-# ignored" failure the comment further down swears this block exists to prevent.
-#
-# tests/layout_test.sh asserts every cell against both namespaces.
-#
-# THE LABELS ARE ASCII ON PURPOSE. This menu is drawn on the Linux VT, whose
-# font is ter-116n — the Latin-1 Terminus. Cyrillic came out as lookalike
-# rubbish and every CJK/Devanagari/Arabic name came out as a row of boxes, so
-# the entries that most needed to be readable were the only unreadable ones.
-# A Unicode console font does not fix it either: a VT font holds at most 512
-# glyphs, which cannot cover CJK by two orders of magnitude. The native name is
-# a nice touch this screen cannot cash — the locale code carries the meaning.
-LOCALE_ROWS="
-English (US)|en_US.UTF-8|us|us|
-English (UK)|en_GB.UTF-8|uk|gb|
-Deutsch|de_DE.UTF-8|de|de|
-Français|fr_FR.UTF-8|fr|fr|
-Español|es_ES.UTF-8|es|es|
-Português (Brasil)|pt_BR.UTF-8|br-abnt2|br|
-Italiano|it_IT.UTF-8|it|it|
-Nederlands|nl_NL.UTF-8|nl|nl|
-Polski|pl_PL.UTF-8|pl|pl|
-Russian|ru_RU.UTF-8|ru|ru|
-Japanese|ja_JP.UTF-8|jp106|jp|noto-fonts-cjk
-Chinese (Simplified)|zh_CN.UTF-8|us|us|noto-fonts-cjk
-Korean|ko_KR.UTF-8|us|kr|noto-fonts-cjk
-Hindi|hi_IN.UTF-8|us|us|noto-fonts-extra
-Arabic|ar_EG.UTF-8|us|us|noto-fonts-extra
-"
+# LOCALE_ROWS is defined ABOVE the test seam, with the notes that explain every
+# column — the graphical installer renders the same table through
+# `--list-locales`, and that query runs before this point in the script is ever
+# reached. TZ_ROWS below is up there for the same reason.
 
 header
 step "Step 7 — Language & Region"
@@ -3008,6 +3125,29 @@ if [ "$lang_choice" = "0" ]; then
     # No idea what script that is, so cover as much as possible rather than
     # hand someone a system that cannot draw their own alphabet.
     LANG_FONTS="noto-fonts-extra"
+    # ...unless whoever wrote the profile DOES know. The graphical installer
+    # offers the LOCALE_ROWS table through --list-locales and then writes the row
+    # back as locale/keymap/xkb_layout — which is language=other as far as this
+    # branch is concerned, so without this key a Japanese install picked off that
+    # list got noto-fonts-extra: the right locale, the right keyboard, and no
+    # CJK font on the machine. Read only when present, so nobody at a terminal
+    # is asked a question that has no prompt.
+    #
+    # It is a package list that goes to pacman unquoted, so it is checked here
+    # rather than trusted: a name is letters, digits, and the four characters
+    # Arch package names actually use.
+    if [ -n "${ANSWERS[lang_fonts]+set}" ]; then
+        answer lang_fonts _lang_fonts
+        # In a variable, so the space in it is unmistakably part of the pattern.
+        # The hyphen is last, where it is a literal and not a range.
+        _pkglist_re='^[A-Za-z0-9._+@ -]*$'
+        if [[ "$_lang_fonts" =~ $_pkglist_re ]]; then
+            LANG_FONTS="$_lang_fonts"
+        else
+            warn "lang_fonts is not a package list: '$_lang_fonts' — installing
+  noto-fonts-extra instead."
+        fi
+    fi
 else
     row=$(echo "$LOCALE_ROWS" | sed -n "$((lang_choice + 1))p")
     if [ -n "$row" ]; then
@@ -3080,26 +3220,9 @@ arch-chroot /mnt pacman -S --noconfirm --needed $FONT_PKGS 2>&1 | tail -2 \
 # So: a short menu of the common zones, the same shape as the language picker
 # above, plus an Other that still takes any tzdata name. The abbreviations are
 # accepted because they are what people type; the full name is echoed back so
-# the mapping is visible rather than magic.
-TZ_ROWS="
-America/New_York|US Eastern (EST/EDT)
-America/Chicago|US Central (CST/CDT)
-America/Denver|US Mountain (MST/MDT)
-America/Phoenix|US Arizona (MST, no DST)
-America/Los_Angeles|US Pacific (PST/PDT)
-America/Anchorage|US Alaska
-Pacific/Honolulu|US Hawaii
-America/Toronto|Canada Eastern
-America/Sao_Paulo|Brazil
-Europe/London|UK (GMT/BST)
-Europe/Berlin|Central Europe (CET/CEST)
-Europe/Moscow|Moscow
-Asia/Kolkata|India
-Asia/Shanghai|China
-Asia/Tokyo|Japan
-Australia/Sydney|Australia Eastern
-UTC|UTC — no local time
-"
+# the mapping is visible rather than magic. TZ_ROWS itself is defined above the
+# test seam — `--list-timezones` prints it, and that query is answered long
+# before this line runs.
 
 # The abbreviations people type instead of a tzdata name. Deliberately only the
 # unambiguous ones: "IST" is India, Ireland and Israel, so it is not here.

@@ -127,6 +127,14 @@
   keymap     = "us";           # console
   xkb_layout = "us";           # desktop
 
+  # The font pack for that locale, read only when language = "other" — which is
+  # what a profile always is. Latin/Greek/Cyrillic need nothing here
+  # (noto-fonts is installed either way); a CJK locale needs noto-fonts-cjk and
+  # an Indic/Arabic/Hebrew one noto-fonts-extra, or the locale is set correctly
+  # and every glyph on the machine is a box. Left out, it is noto-fonts-extra:
+  # the widest cover for a locale nothing here can identify.
+  # lang_fonts = "noto-fonts-cjk";
+
   # A tzdata name, an abbreviation like CST, or "other" + timezone_name.
   timezone = "America/Chicago";
   # timezone_name = "Europe/Lisbon";

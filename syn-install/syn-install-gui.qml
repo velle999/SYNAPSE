@@ -110,6 +110,35 @@ FloatingWindow {
     property string aLuks: ""
     property string aPreset: "standard"
     property string aModel: "mistral-7b"
+    // ── Custom, and why every one of these has a default ────────────────────
+    //
+    // Custom is the text installer's fourth preset, and it asks nineteen y/n
+    // questions. Every one of them has to be written by this window when the
+    // preset is custom, because a key left out is a question asked at a terminal
+    // nobody is looking at — so these ARE the answers, and their defaults are
+    // Standard's, exactly as `ask_opt`'s defaults are.
+    property bool aChibi: true
+    property bool aVibe: true
+    property bool aNexus: false
+    property bool aTepris: false
+    property bool aArsenal: true
+    property bool aBluetooth: true
+    property bool aPrinting: true
+    property bool aWine: true
+    property bool aPhone: true
+    property bool aSteam: false
+    property bool aBlackarch: true
+    property bool aNix: false
+    // The core daemons sit behind their own gate, the way the text installer
+    // gates them: dropping one is allowed because it was asked for, but it is
+    // not offered in the same list as a block game.
+    property bool aCustomCore: false
+    property bool aCoreSynapd: true
+    property bool aCoreSynui: true
+    property bool aCoreSynsh: true
+    property bool aCoreSynnet: true
+    property bool aCoreGuard: true
+    property bool aCoreUpdate: true
     property string aUser: "syn"
     property string aFullname: ""
     property string aPass: ""
@@ -120,6 +149,16 @@ FloatingWindow {
     property string aXkb: "us"
     property string aTz: "UTC"
     property bool   aGpuInference: true
+
+    // The label of the language row these came from, and the font pack it named.
+    // aLangKnown is what says the pair is trustworthy: a language picked off the
+    // list carries its own font pack (an empty one is a real answer — Latin
+    // needs nothing beyond noto-fonts), while a locale typed by hand carries no
+    // idea of what script it is, so the key is left out and syn-install falls
+    // back to the widest cover it has.
+    property string aLangLabel: "English (US)"
+    property string aFonts: ""
+    property bool   aLangKnown: true
 
     // Facts discovered about the machine, not chosen.
     property bool   hasNvidia: false
@@ -159,6 +198,94 @@ FloatingWindow {
                 for (const d of out) { if (d.usable) { root.aDisk = d.dev; break } }
             }
         }
+    }
+
+    // ── Region records ──────────────────────────────────────────────────────
+    //
+    // Four lists, all of them printed by syn-install for the same reason the
+    // disks are: the answers are a locale table with a font column, and two
+    // keyboard namespaces that disagree, and a second copy of any of that here
+    // would be the copy no test suite reads. `--list-keymaps` and
+    // `--list-xkb-layouts` report what THIS image can actually resolve, which is
+    // the check the install makes on the answer anyway.
+    //
+    // Each list may come back empty — an image without xkeyboard-config, say.
+    // That is not an error: the picker still opens, and the filter box is a text
+    // field, so a name can always be typed. Which is the whole point of the
+    // sheet: it is a helper for a question that never stops accepting a
+    // hand-typed answer.
+    property var locales: []
+    property var timezones: []
+    property var keymaps: []
+    property var xkbLayouts: []
+
+    // A tab-separated record list, parsed into {value, label} plus whatever else
+    // the record carries. `mk` turns the fields of one line into an option.
+    function parseRecords(text, mk, minFields) {
+        const out = []
+        for (const line of text.split("\n")) {
+            if (!line.trim()) continue
+            const f = line.split("\t")
+            if (f.length < minFields) continue
+            out.push(mk(f))
+        }
+        return out
+    }
+
+    Process {
+        command: [root.bin, "--list-locales"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.locales = root.parseRecords(this.text, f => ({
+                // value is the locale: it is what gets written, and what the
+                // filter box should match when someone types "en_GB".
+                value: f[1], label: f[0],
+                keymap: f[2], xkb: f[3], fonts: f.length > 4 ? f[4] : ""
+            }), 4)
+        }
+    }
+    Process {
+        command: [root.bin, "--list-timezones"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.timezones = root.parseRecords(this.text, f => ({
+                value: f[0], label: f[1]
+            }), 1)
+        }
+    }
+    Process {
+        command: [root.bin, "--list-keymaps"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.keymaps = root.parseRecords(this.text, f => ({
+                value: f[0], label: f.length > 1 ? f[1] : ""
+            }), 1)
+        }
+    }
+    Process {
+        command: [root.bin, "--list-xkb-layouts"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.xkbLayouts = root.parseRecords(this.text, f => ({
+                value: f[0], label: f.length > 1 ? f[1] : ""
+            }), 1)
+        }
+    }
+
+    // The description a list gives for a value, for the closed selector's
+    // caption. A binding, so it fills in when the list finishes loading rather
+    // than staying blank because the window drew first.
+    function describe(list, value) {
+        for (const o of list) if (o.value === value) return o.label
+        return ""
+    }
+    function withDescription(list, value) {
+        const d = describe(list, value)
+        if (!d) return value
+        // UTC's label in the table is "UTC — no local time", which appended to
+        // its own name reads "UTC — UTC — no local time".
+        if (d.indexOf(value) === 0) return d
+        return value + "  —  " + d
     }
 
     // The release the ISO says it is. Same source as the text installer's
@@ -208,11 +335,159 @@ FloatingWindow {
         return null
     }
 
+    // ── The picker sheet ────────────────────────────────────────────────────
+    //
+    // One sheet, driven by pickKey, rather than a dropdown per field. Two
+    // reasons, and neither is taste:
+    //
+    // - The lists are 599 timezones and 252 keymaps. A dropdown that drops is a
+    //   list you scroll looking for a name you already know; a sheet with a
+    //   filter box is one you type three letters into. The filter is the helper.
+    // - A popup anchored under its field has to be positioned, and the body
+    //   Rectangle it would live in is `clip: true`. Positioning it means
+    //   mapToItem, whose result must not be BOUND (it does not re-evaluate when
+    //   an ancestor moves — the panel ends up where the field used to be). A
+    //   centred sheet has no geometry to get wrong.
+    //
+    // pickKey is also the open/closed state: "" is closed. One property, so
+    // there is no way for it to be open and pointing at nothing.
+    property string pickKey: ""
+    property string pickTitle: ""
+    property string pickNote: ""
+    property string pickCurrent: ""
+    property string pickFilter: ""
+
+    // Derived from pickKey rather than handed to openPicker, so the sheet shows
+    // the list as it IS and not as it was when the sheet opened. Each list
+    // arrives from its own subprocess: a sheet opened with a copy would be empty
+    // for whichever query had not answered yet, and would stay empty for as long
+    // as it was open.
+    readonly property var pickOptions:
+          pickKey === "language" ? locales
+        : pickKey === "timezone" ? timezones
+        : pickKey === "keymap"   ? keymaps
+        : pickKey === "xkb"      ? xkbLayouts
+        : []
+
+    readonly property var pickFiltered: {
+        const f = pickFilter.trim().toLowerCase()
+        if (!f) return pickOptions
+        const out = []
+        for (const o of pickOptions) {
+            if (o.value.toLowerCase().indexOf(f) >= 0) { out.push(o); continue }
+            if (o.label && o.label.toLowerCase().indexOf(f) >= 0) out.push(o)
+        }
+        return out
+    }
+
+    // Whether the filter text is itself an answer nobody offered. This is the
+    // escape hatch the text installer's "Other" is, kept in the same place a
+    // search box already is: glibc has 500 locales and this list has fifteen.
+    readonly property string pickTyped: {
+        const t = pickFilter.trim()
+        if (!t) return ""
+        for (const o of pickOptions) if (o.value === t) return ""
+        return t
+    }
+
+    function openPicker(key, title, note, current) {
+        pickKey = key; pickTitle = title; pickNote = note
+        pickCurrent = current
+        pickFilter = ""
+    }
+    function closePicker() { pickKey = ""; pickFilter = "" }
+
+    // opt is the whole record when a row was picked, and null when the value was
+    // typed into the filter box — which is exactly the difference between
+    // "picked a language" and "typed a locale", and the reason lang_fonts is
+    // written in one case and not the other.
+    function applyPick(value, opt) {
+        switch (pickKey) {
+        case "language":
+            aLocale = value
+            if (opt) {
+                // A language row answers all four questions at once. That is the
+                // point of it: the keymap/layout pair is where a hand-typed
+                // answer goes wrong, and the four rows where the two namespaces
+                // disagree are already right in this table.
+                aLangLabel = opt.label; aKeymap = opt.keymap
+                aXkb = opt.xkb; aFonts = opt.fonts; aLangKnown = true
+            } else {
+                aLangLabel = ""; aFonts = ""; aLangKnown = false
+            }
+            break
+        case "timezone": aTz = value; break
+        case "keymap":   aKeymap = value; break
+        case "xkb":      aXkb = value; break
+        }
+        closePicker()
+    }
+
     // ── The profile ─────────────────────────────────────────────────────────
     //
     // key=value lines, the format syn-install's config_load reads directly.
     // Read the header note before adding a key: every one here has to be a
     // question this run will actually reach.
+    // The installer's y/n vocabulary. `answer` maps yes->y and no->n, so these
+    // are the words a hand-written profile uses too.
+    function yn(b) { return b ? "yes" : "no" }
+
+    // ── What Custom chose, in words ─────────────────────────────────────────
+    //
+    // For the summary. The word "custom" is not a read-back of nineteen answers,
+    // and the summary is the only page between them and a partitioned disk.
+    function joinPicked(pairs) {
+        const out = []
+        for (const p of pairs) if (p[0]) out.push(p[1])
+        return out.join(", ")
+    }
+    function customApps() {
+        return joinPicked([[aChibi, "Chibi"], [aVibe, "Vibe"], [aNexus, "Nexus Chat"],
+                           [aTepris, "TEPRIS"], [aArsenal, "Arsenal"]])
+    }
+    function customOpts() {
+        return joinPicked([[aBluetooth, "Bluetooth"], [aPrinting, "printing"], [aWine, "Wine"],
+                           [aPhone, "KDE Connect"], [aSteam, "Steam"],
+                           [aBlackarch, "BlackArch repo"], [aNix, "Nix"]])
+    }
+    // The daemons that were turned OFF, because that is the short list and the
+    // one worth reading twice.
+    function customCoreDropped() {
+        return joinPicked([[!aCoreSynapd, "synapd"], [!aCoreSynui, "synui"],
+                           [!aCoreSynsh, "synsh"], [!aCoreSynnet, "synnet"],
+                           [!aCoreGuard, "synguard"], [!aCoreUpdate, "syn-update"]])
+    }
+
+    // The two-column grid. Custom's three lines are NOT here: they are sentences
+    // ("Bluetooth, printing, Wine, KDE Connect, Steam, BlackArch repo, Nix") and
+    // a half-width cell elides them, on the one page whose whole job is to be
+    // read. They get full-width rows of their own below the grid.
+    function summaryRows() {
+        const R = []
+        R.push(["Disk", aDisk + "  (" + (selectedDisk() ? selectedDisk().size : "?") + ")"])
+        R.push(["Mode", aMode])
+        R.push(["Filesystem", aFs + (aEncrypt ? " on LUKS2" : "")])
+        R.push(["Bootloader", aBoot
+                + (aFs === "btrfs" && aBoot === "limine" && aSnapshots ? " + snapshots" : "")])
+        R.push(["Install", aPreset])
+        R.push(["AI model", aPreset === "minimal" ? "none" : aModel])
+        R.push(["Account", aUser + (aFullname ? "  (" + aFullname + ")" : "")])
+        R.push(["Desktop", aDesktop])
+        R.push(["Locale", aLocale + "   keys " + aKeymap + " / " + aXkb])
+        R.push(["Timezone", aTz])
+        return R
+    }
+
+    function customRows() {
+        if (aPreset !== "custom") return []
+        const R = [["Apps", customApps() || "none"], ["Options", customOpts() || "none"]]
+        if (aCustomCore) {
+            const off = customCoreDropped()
+            R.push(["Core", off ? "WITHOUT " + off : "all of it"])
+        }
+        return R
+    }
+
     function buildConfig() {
         const L = []
         L.push("# Written by syn-install-gui. Answers a graphical run; not meant to be kept.")
@@ -234,6 +509,33 @@ FloatingWindow {
         // refuses one under 8 characters, so short_passphrase_ok is never asked.
         if (aEncrypt) L.push("luks_passphrase=" + aLuks)
         L.push("preset=" + aPreset)
+        // Custom is nineteen further questions, and they are asked ONLY under
+        // custom — writing them under any other preset would put them in the
+        // unused-key report. The core six are asked only when the gate is open,
+        // for the same reason.
+        if (aPreset === "custom") {
+            L.push("want_chibi=" + yn(aChibi))
+            L.push("want_vibe=" + yn(aVibe))
+            L.push("want_nexus=" + yn(aNexus))
+            L.push("want_tepris=" + yn(aTepris))
+            L.push("want_arsenal=" + yn(aArsenal))
+            L.push("want_bluetooth=" + yn(aBluetooth))
+            L.push("want_printing=" + yn(aPrinting))
+            L.push("want_wine=" + yn(aWine))
+            L.push("want_phone=" + yn(aPhone))
+            L.push("want_steam=" + yn(aSteam))
+            L.push("want_blackarch=" + yn(aBlackarch))
+            L.push("want_nix=" + yn(aNix))
+            L.push("customise_core=" + yn(aCustomCore))
+            if (aCustomCore) {
+                L.push("core_synapd=" + yn(aCoreSynapd))
+                L.push("core_synui=" + yn(aCoreSynui))
+                L.push("core_synsh=" + yn(aCoreSynsh))
+                L.push("core_synnet=" + yn(aCoreSynnet))
+                L.push("core_guard=" + yn(aCoreGuard))
+                L.push("core_update=" + yn(aCoreUpdate))
+            }
+        }
         // The model question is asked on every preset except minimal.
         if (aPreset !== "minimal") L.push("ai_model=" + aModel)
         L.push("selection_ok=yes")
@@ -245,6 +547,12 @@ FloatingWindow {
         // means whatever that row is on the day it runs.
         L.push("language=other")
         L.push("locale=" + aLocale)
+        // The font pack that goes with the language, and ONLY when the language
+        // came off the table — see aLangKnown. An empty value is a real answer
+        // (Latin needs nothing past noto-fonts); leaving the key out is the
+        // different answer "no idea what script this is", which syn-install
+        // covers with noto-fonts-extra.
+        if (aLangKnown) L.push("lang_fonts=" + aFonts)
         L.push("keymap=" + aKeymap)
         L.push("xkb_layout=" + aXkb)
         L.push("timezone=" + aTz)
@@ -456,6 +764,111 @@ FloatingWindow {
             hoverEnabled: true
             cursorShape: ch.selectable ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: if (ch.selectable) ch.picked()
+        }
+    }
+
+    // A checkbox row. Choice is the 44px card the pages are built from and is
+    // right for four options; nineteen of them is 840 pixels of card, so the
+    // Custom lists get this instead — a square box, one line, 26px.
+    component Check: Rectangle {
+        id: ck
+        property string text: ""
+        property bool checked: false
+        signal toggled()
+        implicitWidth: ckRow.implicitWidth + 6
+        implicitHeight: 26
+        color: ckma.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
+        radius: 4
+        Row {
+            id: ckRow
+            anchors.left: parent.left
+            anchors.leftMargin: 4
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+            Rectangle {
+                width: 14; height: 14; radius: 3
+                anchors.verticalCenter: parent.verticalCenter
+                color: ck.checked ? root.cAccent : "transparent"
+                border.width: ck.checked ? 0 : 1
+                border.color: root.cDim
+                Text {
+                    anchors.centerIn: parent
+                    text: "✓"
+                    visible: ck.checked
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: root.isLight ? "#ffffff" : "#0b0f14"
+                }
+            }
+            Text {
+                text: ck.text
+                color: root.cText
+                font.pixelSize: 13
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+        MouseArea {
+            id: ckma
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ck.toggled()
+        }
+    }
+
+    // A closed selector: what is chosen, and a click that opens the sheet. It
+    // holds no list of its own — the caller passes one to openPicker, so there
+    // is one place a list is turned into a choice.
+    component Selector: Column {
+        id: selr
+        property string label: ""
+        property string caption: ""
+        property string hint: ""
+        signal opened()
+        spacing: 4
+        width: 300
+        Text { text: selr.label; color: root.cDim; font.pixelSize: 12 }
+        Rectangle {
+            width: parent.width
+            height: 32
+            radius: 5
+            color: selma.containsMouse ? Qt.rgba(1, 1, 1, 0.10)
+                 : root.isLight ? "#ffffff" : Qt.rgba(1, 1, 1, 0.05)
+            border.width: 1
+            border.color: selma.containsMouse ? root.cAccent : root.cLine
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 8
+                anchors.right: arrow.left
+                anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                text: selr.caption
+                color: root.cText
+                font.pixelSize: 14
+                elide: Text.ElideRight
+            }
+            Text {
+                id: arrow
+                anchors.right: parent.right
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                text: "▾"
+                color: root.cDim
+                font.pixelSize: 12
+            }
+            MouseArea {
+                id: selma
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: selr.opened()
+            }
+        }
+        Text {
+            text: selr.hint; color: root.cDim; font.pixelSize: 11
+            visible: selr.hint !== ""
+            width: parent.width
+            elide: Text.ElideRight
         }
     }
 
@@ -775,73 +1188,290 @@ FloatingWindow {
             }
 
             // ── 2: Software ─────────────────────────────────────────────────
-            Column {
+            //
+            // The one page that can outgrow the window: Custom opens nineteen
+            // checkboxes below the four presets. Hence the Flickable — and it
+            // costs nothing on the other three presets, where the content is
+            // shorter than the view and the scroll indicator stays hidden.
+            //
+            // (A Flickable takes the pointer grab off its delegates once the
+            // pointer moves far enough — which kills drag-and-drop, and there is
+            // none here. A click that does not travel is still a click.)
+            Flickable {
+                id: swFlick
                 anchors.fill: parent
                 anchors.margins: 24
-                spacing: 14
                 visible: root.page === 2
-                Head {
-                    title: "What should be installed?"
-                    blurb: "The SynapseOS core — the compositor, the daemons and the "
-                         + "applications it is built on — is installed by every choice here."
-                }
+                contentWidth: width
+                contentHeight: swCol.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
+
                 Column {
-                    width: parent.width
-                    spacing: 6
-                    Choice {
-                        width: parent.width; text: "Full"
-                        subtext: "Standard + Steam + Nix + Nexus Chat + TEPRIS"
-                        checked: root.aPreset === "full"
-                        onPicked: root.aPreset = "full"
+                    id: swCol
+                    // swFlick, not `parent`: a Flickable's children are parented
+                    // to its contentItem, whose width is not the view's.
+                    width: swFlick.width
+                    spacing: 14
+
+                    Head {
+                        title: "What should be installed?"
+                        blurb: "The SynapseOS core — the compositor, the daemons and the "
+                             + "applications it is built on — is installed by every choice here."
                     }
-                    Choice {
-                        width: parent.width; text: "Standard"
-                        subtext: "AI model, Bluetooth, printing, Wine, phone, Chibi + Vibe + Arsenal"
-                        checked: root.aPreset === "standard"
-                        onPicked: root.aPreset = "standard"
-                    }
-                    Choice {
-                        width: parent.width; text: "Minimal"
-                        subtext: "core daemons only — no apps, no model, none of the above"
-                        checked: root.aPreset === "minimal"
-                        onPicked: root.aPreset = "minimal"
-                    }
-                }
-                Column {
-                    spacing: 6
-                    visible: root.aPreset !== "minimal"
-                    Text { text: "AI model — downloaded during the install"; color: root.cDim; font.pixelSize: 12 }
-                    Row {
+                    Column {
+                        width: parent.width
                         spacing: 6
                         Choice {
-                            width: 190; text: "Mistral 7B"; subtext: "~4.1 GB — recommended"
-                            checked: root.aModel === "mistral-7b"
-                            onPicked: root.aModel = "mistral-7b"
+                            width: parent.width; text: "Full"
+                            subtext: "Standard + Steam + Nix + Nexus Chat + TEPRIS"
+                            checked: root.aPreset === "full"
+                            onPicked: root.aPreset = "full"
                         }
                         Choice {
-                            width: 170; text: "Phi-3 Mini"; subtext: "~2.2 GB — weaker"
-                            checked: root.aModel === "phi3"
-                            onPicked: root.aModel = "phi3"
+                            width: parent.width; text: "Standard"
+                            subtext: "AI model, Bluetooth, printing, Wine, phone, Chibi + Vibe + Arsenal"
+                            checked: root.aPreset === "standard"
+                            onPicked: root.aPreset = "standard"
                         }
                         Choice {
-                            width: 170; text: "Qwen2 0.5B"; subtext: "~0.4 GB — much weaker"
-                            checked: root.aModel === "tiny"
-                            onPicked: root.aModel = "tiny"
+                            width: parent.width; text: "Minimal"
+                            subtext: "core daemons only — no apps, no model, none of the above"
+                            checked: root.aPreset === "minimal"
+                            onPicked: root.aPreset = "minimal"
                         }
                         Choice {
-                            width: 150; text: "None"; subtext: "AI stays inert"
-                            checked: root.aModel === "none"
-                            onPicked: root.aModel = "none"
+                            width: parent.width; text: "Custom"
+                            subtext: "choose each app and each option below"
+                            checked: root.aPreset === "custom"
+                            onPicked: root.aPreset = "custom"
                         }
                     }
+
+                    // ── Custom ──────────────────────────────────────────────
+                    //
+                    // The same questions the text installer asks under Custom,
+                    // in the same order, with the same defaults. Two columns
+                    // because they are two lists there too: what to install, and
+                    // what to turn on.
+                    Column {
+                        width: parent.width
+                        spacing: 10
+                        visible: root.aPreset === "custom"
+
+                        Rectangle { width: parent.width; height: 1; color: root.cLine }
+
+                        Row {
+                            spacing: 40
+                            Column {
+                                spacing: 2
+                                Text {
+                                    text: "Applications"; color: root.cDim; font.pixelSize: 12
+                                    bottomPadding: 4
+                                }
+                                Check {
+                                    text: "Chibi — voice companion + security sentinel"
+                                    checked: root.aChibi
+                                    onToggled: root.aChibi = !root.aChibi
+                                }
+                                Check {
+                                    text: "Vibe — local AI coding assistant"
+                                    checked: root.aVibe
+                                    onToggled: root.aVibe = !root.aVibe
+                                }
+                                Check {
+                                    text: "Nexus Chat — peer-to-peer chat"
+                                    checked: root.aNexus
+                                    onToggled: root.aNexus = !root.aNexus
+                                }
+                                Check {
+                                    text: "TEPRIS — block game"
+                                    checked: root.aTepris
+                                    onToggled: root.aTepris = !root.aTepris
+                                }
+                                Check {
+                                    text: "SYNAPSE Arsenal — browse BlackArch tooling"
+                                    checked: root.aArsenal
+                                    onToggled: root.aArsenal = !root.aArsenal
+                                }
+                            }
+                            Column {
+                                spacing: 2
+                                Text {
+                                    text: "Options"; color: root.cDim; font.pixelSize: 12
+                                    bottomPadding: 4
+                                }
+                                Check {
+                                    text: "Bluetooth"
+                                    checked: root.aBluetooth
+                                    onToggled: root.aBluetooth = !root.aBluetooth
+                                }
+                                Check {
+                                    text: "Printing (CUPS)"
+                                    checked: root.aPrinting
+                                    onToggled: root.aPrinting = !root.aPrinting
+                                }
+                                Check {
+                                    text: "Wine — run Windows .exe/.msi"
+                                    checked: root.aWine
+                                    onToggled: root.aWine = !root.aWine
+                                }
+                                Check {
+                                    text: "KDE Connect — pair a phone"
+                                    checked: root.aPhone
+                                    onToggled: root.aPhone = !root.aPhone
+                                }
+                                Check {
+                                    text: "Steam + game stack + Proton (~3.1 GB)"
+                                    checked: root.aSteam
+                                    onToggled: root.aSteam = !root.aSteam
+                                }
+                                Check {
+                                    text: "BlackArch repo — ~5000 tools, none installed"
+                                    checked: root.aBlackarch
+                                    onToggled: root.aBlackarch = !root.aBlackarch
+                                }
+                                Check {
+                                    text: "Nix + Home Manager"
+                                    checked: root.aNix
+                                    onToggled: root.aNix = !root.aNix
+                                }
+                            }
+                        }
+
+                        Rectangle { width: parent.width; height: 1; color: root.cLine }
+
+                        // Behind its own gate, exactly as the text installer
+                        // gates it. Dropping a core daemon is allowed — it was
+                        // asked for — but it stops being SynapseOS, so it is not
+                        // in the same list as a block game.
+                        Check {
+                            text: "Customise the core daemons too"
+                            checked: root.aCustomCore
+                            onToggled: root.aCustomCore = !root.aCustomCore
+                        }
+                        Column {
+                            width: parent.width
+                            spacing: 6
+                            visible: root.aCustomCore
+                            Text {
+                                text: "The core daemons are what SynapseOS is. Turning one off "
+                                    + "produces an Arch system with some SynapseOS parts, and the "
+                                    + "AI, security and desktop features will not work as documented. "
+                                    + "The package manager and the file manager stay either way."
+                                color: root.cWarn
+                                font.pixelSize: 11
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                            }
+                            Row {
+                                spacing: 40
+                                Column {
+                                    spacing: 2
+                                    Check {
+                                        text: "synapd — the LLM daemon"
+                                        checked: root.aCoreSynapd
+                                        onToggled: root.aCoreSynapd = !root.aCoreSynapd
+                                    }
+                                    Check {
+                                        text: "synui — the compositor / desktop"
+                                        checked: root.aCoreSynui
+                                        onToggled: root.aCoreSynui = !root.aCoreSynui
+                                    }
+                                    Check {
+                                        text: "synsh — the AI-native shell"
+                                        checked: root.aCoreSynsh
+                                        onToggled: root.aCoreSynsh = !root.aCoreSynsh
+                                    }
+                                }
+                                Column {
+                                    spacing: 2
+                                    Check {
+                                        text: "synnet — network policy daemon"
+                                        checked: root.aCoreSynnet
+                                        onToggled: root.aCoreSynnet = !root.aCoreSynnet
+                                    }
+                                    Check {
+                                        text: "synguard + kernel module"
+                                        checked: root.aCoreGuard
+                                        onToggled: root.aCoreGuard = !root.aCoreGuard
+                                    }
+                                    Check {
+                                        text: "syn-update"
+                                        checked: root.aCoreUpdate
+                                        onToggled: root.aCoreUpdate = !root.aCoreUpdate
+                                    }
+                                }
+                            }
+                            // The one deselection that cannot be undone later,
+                            // said at the moment it is made rather than in a
+                            // summary line: without syn-update the machine has no
+                            // way to receive another SynapseOS package, and
+                            // fixing that means reinstalling.
+                            Text {
+                                text: "syn-update is off: this machine will have no way to receive "
+                                    + "another SynapseOS package. Fixing that later means reinstalling."
+                                color: root.cErr
+                                font.pixelSize: 11
+                                visible: !root.aCoreUpdate
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+
+                    Column {
+                        spacing: 6
+                        visible: root.aPreset !== "minimal"
+                        Text { text: "AI model — downloaded during the install"; color: root.cDim; font.pixelSize: 12 }
+                        Row {
+                            spacing: 6
+                            Choice {
+                                width: 190; text: "Mistral 7B"; subtext: "~4.1 GB — recommended"
+                                checked: root.aModel === "mistral-7b"
+                                onPicked: root.aModel = "mistral-7b"
+                            }
+                            Choice {
+                                width: 170; text: "Phi-3 Mini"; subtext: "~2.2 GB — weaker"
+                                checked: root.aModel === "phi3"
+                                onPicked: root.aModel = "phi3"
+                            }
+                            Choice {
+                                width: 170; text: "Qwen2 0.5B"; subtext: "~0.4 GB — much weaker"
+                                checked: root.aModel === "tiny"
+                                onPicked: root.aModel = "tiny"
+                            }
+                            Choice {
+                                width: 150; text: "None"; subtext: "AI stays inert"
+                                checked: root.aModel === "none"
+                                onPicked: root.aModel = "none"
+                            }
+                        }
+                    }
+                    Choice {
+                        width: 340
+                        visible: root.hasNvidia
+                        text: "NVIDIA GPU inference"
+                        subtext: "the CUDA runtime, ~4.7 GiB"
+                        checked: root.aGpuInference
+                        onPicked: root.aGpuInference = !root.aGpuInference
+                    }
                 }
-                Choice {
-                    width: 340
-                    visible: root.hasNvidia
-                    text: "NVIDIA GPU inference"
-                    subtext: "the CUDA runtime, ~4.7 GiB"
-                    checked: root.aGpuInference
-                    onPicked: root.aGpuInference = !root.aGpuInference
+
+                // There is more page than window under Custom, and a page that
+                // scrolls with nothing saying so is a page whose bottom half does
+                // not exist. Hidden when everything fits.
+                Rectangle {
+                    anchors.right: parent.right
+                    width: 3
+                    radius: 1.5
+                    color: root.cDim
+                    opacity: 0.5
+                    visible: swFlick.contentHeight > swFlick.height
+                    height: Math.max(24, swFlick.height * (swFlick.height / swFlick.contentHeight))
+                    y: swFlick.contentY
+                       + (swFlick.height - height) * (swFlick.contentHeight > swFlick.height
+                          ? swFlick.contentY / (swFlick.contentHeight - swFlick.height) : 0)
                 }
             }
 
@@ -913,34 +1543,57 @@ FloatingWindow {
                 visible: root.page === 4
                 Head {
                     title: "Language, keyboard and time"
-                    blurb: "The console keymap and the desktop layout are separate on purpose: "
-                         + "Swedish is 'sv-latin1' to the console and 'se' to the desktop, and "
-                         + "one answer for both is how four of them ended up wrong."
+                    blurb: "Pick a language and the other three follow it. The console keymap "
+                         + "and the desktop layout are separate on purpose — Swedish is "
+                         + "'sv-latin1' to the console and 'se' to the desktop — so they can be "
+                         + "changed on their own afterwards."
                 }
                 Row {
                     spacing: 18
-                    Field {
-                        label: "Locale"; initial: root.aLocale
-                        hint: "e.g. en_US.UTF-8"
-                        onTextChanged: root.aLocale = text
+                    Selector {
+                        label: "Language"
+                        caption: root.aLangKnown && root.aLangLabel
+                                 ? root.aLangLabel + "  —  " + root.aLocale
+                                 : root.aLocale
+                        hint: root.aLangKnown ? "sets the keyboard and the fonts too"
+                                              : "typed by hand — fonts cover as much as possible"
+                        onOpened: root.openPicker(
+                            "language", "Language",
+                            "Sets the locale, both keyboard names and the font pack. "
+                            + "Any locale glibc has can be typed instead.",
+                            root.aLocale)
                     }
-                    Field {
-                        label: "Timezone"; initial: root.aTz
-                        hint: "a tzdata name, e.g. Europe/Lisbon"
-                        onTextChanged: root.aTz = text
+                    Selector {
+                        label: "Timezone"
+                        caption: root.withDescription(root.timezones, root.aTz)
+                        onOpened: root.openPicker(
+                            "timezone", "Timezone",
+                            "The common zones first, then every name tzdata ships.",
+                            root.aTz)
                     }
                 }
                 Row {
                     spacing: 18
-                    Field {
-                        label: "Console keymap"; initial: root.aKeymap
-                        hint: "loadkeys name, e.g. sv-latin1"
-                        onTextChanged: root.aKeymap = text
+                    Selector {
+                        label: "Console keymap"
+                        caption: root.aKeymap
+                        hint: "loadkeys — the text console and the greeter"
+                        onOpened: root.openPicker(
+                            "keymap", "Console keymap",
+                            "Every keymap this image can load. This one names a file "
+                            + "loadkeys has to find, which is why it is not the same list "
+                            + "as the desktop layout.",
+                            root.aKeymap)
                     }
-                    Field {
-                        label: "Desktop layout"; initial: root.aXkb
-                        hint: "XKB name, e.g. se"
-                        onTextChanged: root.aXkb = text
+                    Selector {
+                        label: "Desktop layout"
+                        caption: root.withDescription(root.xkbLayouts, root.aXkb)
+                        hint: "XKB — the compositor"
+                        onOpened: root.openPicker(
+                            "xkb", "Desktop keyboard layout",
+                            "The layouts xkbcommon can compile. 'uk' is a console keymap "
+                            + "and not a layout here — the layout is 'gb'.",
+                            root.aXkb)
                     }
                 }
             }
@@ -973,29 +1626,63 @@ FloatingWindow {
                     }
                 }
                 Grid {
+                    id: sumGrid
+                    // Explicit, so the cells can be sized from it: a cell width
+                    // derived from a Grid whose own width is derived from its
+                    // cells is a loop.
+                    width: parent.width
                     columns: 2
                     columnSpacing: 24
                     rowSpacing: 6
                     Repeater {
-                        model: [
-                            ["Disk", root.aDisk + "  (" + (root.selectedDisk() ? root.selectedDisk().size : "?") + ")"],
-                            ["Mode", root.aMode],
-                            ["Filesystem", root.aFs + (root.aEncrypt ? " on LUKS2" : "")],
-                            ["Bootloader", root.aBoot + (root.aFs === "btrfs" && root.aBoot === "limine" && root.aSnapshots ? " + snapshots" : "")],
-                            ["Install", root.aPreset],
-                            ["AI model", root.aPreset === "minimal" ? "none" : root.aModel],
-                            ["Account", root.aUser + (root.aFullname ? "  (" + root.aFullname + ")" : "")],
-                            ["Desktop", root.aDesktop],
-                            ["Locale", root.aLocale + "   keys " + root.aKeymap + " / " + root.aXkb],
-                            ["Timezone", root.aTz]
-                        ]
+                        // A function, not a literal, so the row set can depend on
+                        // the answers. The binding still re-evaluates: QML records
+                        // every property the call reads, the same way the
+                        // selectedDisk() call already relied on.
+                        model: root.summaryRows()
                         Row {
+                            width: (sumGrid.width - sumGrid.columnSpacing) / 2
                             spacing: 10
                             Text {
                                 text: modelData[0]; color: root.cDim
                                 font.pixelSize: 13; width: 96
                             }
-                            Text { text: modelData[1]; color: root.cText; font.pixelSize: 13 }
+                            Text {
+                                text: modelData[1]; color: root.cText; font.pixelSize: 13
+                                // A summary that runs off the edge of the panel is
+                                // not a read-back. Half a cell is enough for every
+                                // value here; the ones that need a whole line are
+                                // below.
+                                width: parent.width - 106
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                }
+                // Custom's answers, one full-width line each and wrapped rather
+                // than elided: they are the part of this page that is not
+                // recoverable from a glance at the disk.
+                Column {
+                    width: parent.width
+                    spacing: 6
+                    visible: root.aPreset === "custom"
+                    Rectangle { width: parent.width; height: 1; color: root.cLine }
+                    Repeater {
+                        model: root.customRows()
+                        Row {
+                            width: sumGrid.width
+                            spacing: 10
+                            Text {
+                                text: modelData[0]; color: root.cDim
+                                font.pixelSize: 13; width: 96
+                            }
+                            Text {
+                                text: modelData[1]
+                                color: modelData[1].indexOf("WITHOUT") === 0 ? root.cWarn : root.cText
+                                font.pixelSize: 13
+                                width: parent.width - 106
+                                wrapMode: Text.WordWrap
+                            }
                         }
                     }
                 }
@@ -1124,6 +1811,234 @@ FloatingWindow {
                     text: "Close"
                     visible: root.page === 6 && root.finished
                     onClicked: Qt.quit()
+                }
+            }
+        }
+
+        // ── The picker sheet ────────────────────────────────────────────────
+        //
+        // Last child of the frame, so it is drawn over the body AND the footer:
+        // a sheet the Next button can be clicked through is a sheet that changes
+        // the page underneath it while it is open.
+        Rectangle {
+            id: scrim
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.45)
+            visible: root.pickKey !== ""
+
+            // Closes on a click outside the sheet, and swallows every click that
+            // would otherwise reach the form.
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.closePicker()
+            }
+
+            Rectangle {
+                id: sheet
+                anchors.centerIn: parent
+                width: Math.min(600, parent.width - 48)
+                height: Math.min(460, parent.height - 48)
+                radius: 8
+                color: root.cPanel
+                border.width: 1
+                border.color: root.cLine
+
+                // Declared BEFORE the content, so it sits under it: this one only
+                // stops a click on the sheet's own background from reaching the
+                // scrim's close handler. Declared after, it would swallow the
+                // rows' clicks instead and nothing would ever be selectable.
+                MouseArea { anchors.fill: parent }
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 10
+
+                    Text {
+                        text: root.pickTitle
+                        color: root.cText
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    Text {
+                        text: root.pickNote
+                        color: root.cDim
+                        font.pixelSize: 11
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        visible: root.pickNote !== ""
+                    }
+
+                    // The filter box IS the free-text field. Whatever is typed
+                    // here either narrows the list or becomes the answer through
+                    // the row at the bottom — so the sheet never takes away what
+                    // the text installer's "Other" offers.
+                    Rectangle {
+                        width: parent.width
+                        height: 32
+                        radius: 5
+                        color: root.isLight ? "#ffffff" : Qt.rgba(1, 1, 1, 0.05)
+                        border.width: 1
+                        border.color: filterInput.activeFocus ? root.cAccent : root.cLine
+                        TextInput {
+                            id: filterInput
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: root.cText
+                            font.pixelSize: 14
+                            selectByMouse: true
+                            clip: true
+                            // One direction only. `text: root.pickFilter` as well
+                            // would look tidier and be a lie: assigning text
+                            // below (to clear it) BREAKS that binding, and from
+                            // then on the box and the filter it drives disagree
+                            // whenever anything but typing changes pickFilter.
+                            // The field owns the text; pickFilter follows it.
+                            onTextChanged: root.pickFilter = text
+                            // Opening the sheet is asking for the keyboard: the
+                            // list is 599 rows and the answer is three letters.
+                            Connections {
+                                target: root
+                                function onPickKeyChanged() {
+                                    if (root.pickKey !== "") {
+                                        filterInput.text = ""
+                                        filterInput.forceActiveFocus()
+                                    }
+                                }
+                            }
+                            Keys.onEscapePressed: root.closePicker()
+                            // Enter takes the first row, or the typed value when
+                            // nothing matches — the two things Enter can mean
+                            // here, in the order they are on screen.
+                            Keys.onReturnPressed: {
+                                if (root.pickFiltered.length > 0) {
+                                    const o = root.pickFiltered[0]
+                                    root.applyPick(o.value, o)
+                                } else if (root.pickTyped !== "") {
+                                    root.applyPick(root.pickTyped, null)
+                                }
+                            }
+                            Text {
+                                anchors.fill: parent
+                                verticalAlignment: Text.AlignVCenter
+                                text: "type to filter, or type a name that is not listed"
+                                color: root.cDim
+                                font.pixelSize: 13
+                                visible: filterInput.text === ""
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        // Fills what the title, the note, the filter box and the
+                        // typed-value row leave: `parent.height - y` is the
+                        // remaining space in a Column, and the row below it is
+                        // subtracted only when it is on screen.
+                        height: parent.height - y - (typedRow.visible ? typedRow.height + parent.spacing : 0)
+                        radius: 6
+                        color: root.isLight ? "#ffffff" : Qt.rgba(0, 0, 0, 0.2)
+                        border.width: 1
+                        border.color: root.cLine
+                        clip: true
+
+                        ListView {
+                            id: pickList
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            model: root.pickFiltered
+                            clip: true
+                            // The current answer, in view the moment the sheet
+                            // opens — a picker that opens at the top of 599 rows
+                            // does not show what is already chosen.
+                            Connections {
+                                target: root
+                                function onPickOptionsChanged() {
+                                    for (let i = 0; i < root.pickFiltered.length; i++) {
+                                        if (root.pickFiltered[i].value === root.pickCurrent) {
+                                            pickList.positionViewAtIndex(i, ListView.Center)
+                                            return
+                                        }
+                                    }
+                                    pickList.positionViewAtBeginning()
+                                }
+                            }
+                            delegate: Rectangle {
+                                id: prow
+                                required property var modelData
+                                width: pickList.width
+                                height: 30
+                                radius: 4
+                                color: prow.modelData.value === root.pickCurrent
+                                       ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.16)
+                                       : pma.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                                Row {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 10
+                                    Text {
+                                        text: prow.modelData.value
+                                        color: root.cText
+                                        font.pixelSize: 13
+                                        font.family: "monospace"
+                                    }
+                                    Text {
+                                        text: prow.modelData.label ? prow.modelData.label : ""
+                                        color: root.cDim
+                                        font.pixelSize: 12
+                                    }
+                                }
+                                MouseArea {
+                                    id: pma
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.applyPick(prow.modelData.value, prow.modelData)
+                                }
+                            }
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            width: parent.width - 24
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            text: root.pickOptions.length === 0
+                                  ? "Nothing to list on this image — type the name instead."
+                                  : "Nothing matches — the row below uses what you typed."
+                            color: root.cDim
+                            font.pixelSize: 12
+                            visible: root.pickFiltered.length === 0
+                        }
+                    }
+
+                    Rectangle {
+                        id: typedRow
+                        width: parent.width
+                        height: 32
+                        radius: 6
+                        visible: root.pickTyped !== ""
+                        color: tma.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05)
+                        border.width: 1
+                        border.color: root.cAccent
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Use “" + root.pickTyped + "” as typed"
+                            color: root.cText
+                            font.pixelSize: 13
+                        }
+                        MouseArea {
+                            id: tma
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.applyPick(root.pickTyped, null)
+                        }
+                    }
                 }
             }
         }
