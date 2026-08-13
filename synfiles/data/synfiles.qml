@@ -694,6 +694,18 @@ FloatingWindow {
         }
     }
 
+    // The folder you are standing in, rather than what is selected inside it —
+    // which is what a right-click on the empty space is asking about. Same
+    // panel and the same `info` command; only the path differs, so there is
+    // nothing here that can drift away from the row version above.
+    function openFolderProperties() {
+        if (!root.tab || root.tab.view !== "dir") return
+        root.showProps = true
+        root.propRows = []
+        infoProc.command = [root.bin, "--rec", "info", root.disp(root.tab.path)]
+        infoProc.running = true
+    }
+
     // ── Folder tree ─────────────────────────────────────────────────────────
     //
     // Lazily loaded, one level at a time. Reading a whole home directory tree
@@ -1264,6 +1276,21 @@ FloatingWindow {
         onExited: (code) => root.haveDisks = (code === 0)
     }
 
+    // Format needs a NEWER syn-disks than "Open in Disks" does — `gui
+    // --format` arrived with this entry. Probed for the capability rather
+    // than assumed from the binary being there: an older syn-disks answers
+    // `--format` with "not a block device" and exits, and because the window
+    // is launched detached that lands nowhere at all. A menu entry that does
+    // nothing visible is the failure this file keeps a list of.
+    property bool haveFormat: false
+
+    Process {
+        id: formatProbe
+        command: ["sh", "-c", "syn-disks --help 2>&1 | grep -q -- 'gui --format'"]
+        running: true
+        onExited: (code) => root.haveFormat = (code === 0)
+    }
+
     // ⚠ execDetached, NOT a Process — `syn-disks gui` execs quickshell in the
     // FOREGROUND and lives as long as its window, so a shared Process would
     // queue the next launch behind it and every later one would look dead
@@ -1278,6 +1305,26 @@ FloatingWindow {
         // the moment somebody changes what the field holds.
         Quickshell.execDetached(["syn-disks", "gui", root.disp(vol.device)])
         root.statusLine = "opened " + root.disp(vol.device) + " in Disks"
+    }
+
+    // ── Formatting a stick ──────────────────────────────────────────────────
+    //
+    // The entry is here; the dialogue is syn-disks'. That split is deliberate
+    // and worth defending: what may be formatted is decided by syn-disks'
+    // guard.c and NOTHING re-derives it, the dry run that says what would be
+    // erased is a `--rec` contract this window would have to reimplement, and
+    // the refusal it hands back carries the way out ("it is mounted — unmount
+    // it") which that dialogue already offers a button for. A second format
+    // dialogue in this file would be a second set of those rules to keep in
+    // step, and the first time they disagreed it would be about erasing a
+    // disk.
+    //
+    // So this opens the real one, on the device that was right-clicked. It
+    // asks before it does anything; nothing formats from a menu click here.
+    function formatVolume(vol) {
+        if (!vol || !vol.device) return
+        Quickshell.execDetached(["syn-disks", "gui", "--format", root.disp(vol.device)])
+        root.statusLine = "format " + root.disp(vol.device) + " — asking in Disks"
     }
 
     function openDiskMenu(vol, gx, gy) {
@@ -2240,6 +2287,26 @@ FloatingWindow {
                                 items.push({ label: "-", act: "", on: true })
                                 items.push({ label: "Open in Disks", act: "disks",
                                              on: true })
+                                // Format is offered for REMOVABLE media only.
+                                // syn-disks refuses anything sharing a disk
+                                // with "/" whatever is clicked here, so this
+                                // is not the safety check — the safety check
+                                // is in the binary. It is about what belongs
+                                // in a file manager's menu: erasing the
+                                // machine's second hard disk is a thing to go
+                                // to the disk utility for, and erasing the
+                                // stick you just plugged in is not.
+                                //
+                                // Offered while it is MOUNTED too, which is
+                                // the state opening a stick from here leaves
+                                // it in. syn-disks refuses to format a mounted
+                                // device, but its dialogue says so and offers
+                                // an Unmount button — greying this out would
+                                // hide the way forward behind a menu entry
+                                // that looks broken.
+                                if (v.kind === "removable" && root.haveFormat)
+                                    items.push({ label: "Format…", act: "format",
+                                                 on: true })
                             }
                             return items
                         }
@@ -2286,6 +2353,7 @@ FloatingWindow {
                                         case "pin":      root.pin(v.path); break
                                         case "copypath": root.copyToClipboard(root.disp(v.path)); break
                                         case "disks":    root.openInDisks(v); break
+                                        case "format":   root.formatVolume(v); break
                                         }
                                     }
                                 }
@@ -3223,11 +3291,26 @@ FloatingWindow {
         property string anchorName: ""   // where a Shift range started
         property string renaming: ""     // encoded name being renamed, "" if none
 
+        // Where the KEYBOARD is, which is not the same thing as what is
+        // selected. Ctrl+Arrow moves this without touching the selection, and
+        // a Shift range needs a moving end that is not itself the anchor —
+        // both of which are impossible if "the current row" is only ever
+        // "the row that happens to be selected".
+        property string cursorName: ""
+
+        // The list's row pitch, declared once because three things need it and
+        // they must agree: the delegate's own height, Page Up/Down, and the
+        // rubber band, which has to know where a row IS without a delegate to
+        // ask — off-screen rows have none, and a band that only selects what
+        // was already visible is a band that stops at the fold.
+        readonly property real rowH: Math.max(30, root.iconSize + 10)
+
         function isSelected(name) { return pane.selection.indexOf(name) >= 0 }
 
         function selectOnly(name) {
             pane.selection = [name]
             pane.anchorName = name
+            pane.cursorName = name
         }
 
         function toggleSelect(name) {
@@ -3237,6 +3320,7 @@ FloatingWindow {
             else copy.push(name)
             pane.selection = copy
             pane.anchorName = name
+            pane.cursorName = name
         }
 
         // A Shift range runs over the rows AS DISPLAYED, so it follows the
@@ -3255,6 +3339,10 @@ FloatingWindow {
             const copy = []
             for (let i = lo; i <= hi; i++) copy.push(rows[i].name)
             pane.selection = copy
+            // The anchor is NOT moved: Shift+Down four times and then Shift+Up
+            // has to give back the row it just took, which it cannot do if
+            // every extension re-anchors where it landed.
+            pane.cursorName = name
         }
 
         function selectAll() { pane.selection = pane.shownRows.map(r => r.name) }
@@ -3262,6 +3350,76 @@ FloatingWindow {
         function clearSelection() {
             pane.selection = []
             pane.anchorName = ""
+            pane.cursorName = ""
+        }
+
+        // ── Keyboard navigation ─────────────────────────────────────────────
+        //
+        // The list had no arrow keys at all: every selection came from the
+        // mouse, and Shift+click was the only way to take a range. What makes
+        // that fixable in one place is that both views are laid out by Qt and
+        // both answer indexAt() — so "the row below this one" is arithmetic on
+        // an INDEX into shownRows, and the two views differ only in what one
+        // press of Down is worth.
+        function indexOfName(name) {
+            const rows = pane.shownRows
+            for (let i = 0; i < rows.length; i++)
+                if (rows[i].name === name) return i
+            return -1
+        }
+
+        // A grid's Down is a whole row of icons, and the compact view flows
+        // DOWN its columns instead of across — so the step is asked of the
+        // view rather than assumed. Qt does not publish the column count, but
+        // it does publish the cell size the count is derived from, which is
+        // the same number the layout itself used.
+        function gridSpan() {
+            if (!root.gridView) return 1
+            if (root.compactView)
+                return Math.max(1, Math.floor(fileGrid.height / Math.max(1, fileGrid.cellHeight)))
+            return Math.max(1, Math.floor(fileGrid.width / Math.max(1, fileGrid.cellWidth)))
+        }
+
+        // mode: "select" (plain), "extend" (Shift), "move" (Ctrl — the cursor
+        // travels and the selection stays where it was).
+        function focusIndex(i, mode) {
+            const rows = pane.shownRows
+            if (rows.length === 0) return
+            const c = Math.max(0, Math.min(rows.length - 1, i))
+            const name = rows[c].name
+            if (mode === "extend") {
+                if (!pane.anchorName) pane.anchorName = name
+                pane.selectRange(name)
+            } else if (mode === "move") {
+                pane.cursorName = name
+            } else {
+                pane.selectOnly(name)
+            }
+            // Keeping the cursor on screen is the difference between arrow
+            // keys that work and arrow keys that scroll nothing while the
+            // highlight walks off the bottom of the window.
+            if (root.gridView) fileGrid.positionViewAtIndex(c, GridView.Contain)
+            else               fileList.positionViewAtIndex(c, ListView.Contain)
+        }
+
+        // Where the next move starts FROM. The cursor when there is one, else
+        // the selection, else the top — so the first Down in a folder nobody
+        // has clicked in lands on the first row rather than doing nothing.
+        function cursorIndex() {
+            let i = pane.cursorName ? pane.indexOfName(pane.cursorName) : -1
+            if (i < 0 && pane.selection.length > 0)
+                i = pane.indexOfName(pane.selection[pane.selection.length - 1])
+            return i
+        }
+
+        function moveCursor(delta, mode) {
+            const rows = pane.shownRows
+            if (rows.length === 0) return
+            const from = pane.cursorIndex()
+            // No cursor yet: the first press lands on an end rather than
+            // stepping from an imaginary position outside the list.
+            if (from < 0) { pane.focusIndex(delta > 0 ? 0 : rows.length - 1, mode); return }
+            pane.focusIndex(from + delta, mode)
         }
 
         function selectedRows() {
@@ -3336,6 +3494,9 @@ FloatingWindow {
                 // at once, so it needs exactly one.
                 if (row && pane.tab.view === "dir") pane.renaming = row.name
                 event.accepted = true
+            } else if (event.key === Qt.Key_F5) {
+                pane.reload()
+                event.accepted = true
             } else if (event.key === Qt.Key_F3) {
                 // Dolphin's key for it, which is the one a hand already knows.
                 root.toggleSplit()
@@ -3352,6 +3513,45 @@ FloatingWindow {
             } else if (event.key === Qt.Key_Backspace) {
                 if (pane.tab.view === "dir")
                     pane.navigate(root.parentEnc(pane.tab.path), "dir")
+                event.accepted = true
+            } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Up
+                       || event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                       || event.key === Qt.Key_Home || event.key === Qt.Key_End
+                       || event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) {
+                // Shift extends from the anchor, Ctrl moves the cursor and
+                // leaves the selection alone, neither one selects. Checked
+                // BEFORE the Ctrl block below, or Ctrl+Down would fall into
+                // the shortcut table and do nothing at all.
+                const mode = (event.modifiers & Qt.ShiftModifier) ? "extend"
+                           : (event.modifiers & Qt.ControlModifier) ? "move"
+                           : "select"
+                const span = pane.gridSpan()
+                // A screenful, computed from the view rather than a constant:
+                // Page must move by what is actually on screen, and in the
+                // grid that is a screenful of ROWS, not of icons.
+                //
+                // span is a row of icons across, or in compact a column of
+                // them down — so the other axis is what a page is counted in,
+                // and multiplying the two gives the cells actually on screen
+                // either way.
+                const page = root.gridView
+                    ? span * Math.max(1, Math.floor(
+                          root.compactView ? fileGrid.width / Math.max(1, fileGrid.cellWidth)
+                                           : fileGrid.height / Math.max(1, fileGrid.cellHeight)))
+                    : Math.max(1, Math.floor(fileList.height / Math.max(1, pane.rowH)))
+
+                switch (event.key) {
+                case Qt.Key_Down:  pane.moveCursor(root.compactView ? 1 : span, mode); break
+                case Qt.Key_Up:    pane.moveCursor(root.compactView ? -1 : -span, mode); break
+                // In a list Left/Right have nothing to move through, so they
+                // stay unbound there rather than doing something invented.
+                case Qt.Key_Right: if (root.gridView) pane.moveCursor(root.compactView ? span : 1, mode); break
+                case Qt.Key_Left:  if (root.gridView) pane.moveCursor(root.compactView ? -span : -1, mode); break
+                case Qt.Key_Home:  pane.focusIndex(0, mode); break
+                case Qt.Key_End:   pane.focusIndex(pane.shownRows.length - 1, mode); break
+                case Qt.Key_PageDown: pane.moveCursor(page, mode); break
+                case Qt.Key_PageUp:   pane.moveCursor(-page, mode); break
+                }
                 event.accepted = true
             } else if (event.modifiers & Qt.ControlModifier) {
                 if (event.key === Qt.Key_C)      { root.copySelection(false); event.accepted = true }
@@ -3864,12 +4064,21 @@ FloatingWindow {
                 readonly property bool isRenaming: fileRow.modelData.name === pane.renaming
                 property bool dropHover: false
                 width: ListView.view.width
-                height: Math.max(30, root.iconSize + 10)
+                height: pane.rowH
                 radius: 3
                 color: fileRow.dropHover ? root.wash(0.40)
                      : fileRow.isSelected ? root.wash(0.22)
                      : (rowMa.containsMouse ? root.wash(0.10) : "transparent")
-                border { width: fileRow.dropHover ? 1 : 0; color: root.cAccent }
+                // The keyboard cursor, drawn only when it says something the
+                // highlight does not: with one row selected they are the same
+                // row, and a ring around it is noise.
+                readonly property bool isCursor:
+                    pane.isActive && pane.cursorName === fileRow.modelData.name
+                    && (pane.selection.length > 1 || !fileRow.isSelected)
+                border {
+                    width: (fileRow.dropHover || fileRow.isCursor) ? 1 : 0
+                    color: root.cAccent
+                }
 
                 // Four stages, walked on load failure rather than by
                 // testing for the files first: QML has no way to stat a
@@ -4160,7 +4369,13 @@ FloatingWindow {
                 color: gridCell.dropHover ? root.wash(0.40)
                      : gridCell.isSelected ? root.wash(0.22)
                      : (cellMa.containsMouse ? root.wash(0.10) : "transparent")
-                border { width: gridCell.dropHover ? 1 : 0; color: root.cAccent }
+                readonly property bool isCursor:
+                    pane.isActive && pane.cursorName === gridCell.modelData.name
+                    && (pane.selection.length > 1 || !gridCell.isSelected)
+                border {
+                    width: (gridCell.dropHover || gridCell.isCursor) ? 1 : 0
+                    color: root.cAccent
+                }
 
                 // One box holding whichever icon this row uses, so the
                 // two layouts are expressed once here instead of three
@@ -4396,6 +4611,207 @@ FloatingWindow {
             }
         }
 
+        // ── The empty space: rubber band, and the menu that belongs to it ───
+        //
+        // One MouseArea over BOTH views, on top of them, that hands back every
+        // press landing on a row. That is the whole trick, and it is written
+        // this way for two reasons.
+        //
+        // Under the views it would never see a left press at all: a ListView
+        // is a Flickable, and a Flickable takes the press anywhere in its
+        // bounds — that is how a list is dragged to scroll. Over the views and
+        // greedy, it would swallow the row clicks, the drags and the double
+        // clicks the delegates already implement. Over them and DECLINING is
+        // the only arrangement where both work: `indexAt()` answers whether
+        // this point is a row, and `accepted = false` on a press passes it
+        // down to the delegate exactly as if this were not here.
+        //
+        // The trade is that dragging the empty space no longer flicks the
+        // view. That is the same trade every file manager makes — the wheel
+        // and the scrollbar still scroll, and dragging in the empty space is
+        // how a band is drawn.
+        MouseArea {
+            id: bandMa
+            anchors.fill: root.gridView ? fileGrid : fileList
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            enabled: pane.tab && pane.tab.view !== "about" && pane.renaming === ""
+            // The band is drawn in CONTENT coordinates, so once the view
+            // scrolls under it the rectangle reaches past the top of the view —
+            // over the column headings and the toolbar — unless it is clipped
+            // to the area it is selecting in.
+            clip: true
+            // Not hoverEnabled: rows light up under the pointer from their own
+            // MouseAreas, and an item that accepts hover on top of them would
+            // take that away.
+
+            // The band, in CONTENT coordinates. A band that scrolls with the
+            // view has to be anchored to the content, not to the window: hold
+            // the pointer at the bottom edge, the view scrolls under it, and
+            // the corner the drag started from is metres up the list by then.
+            property bool banding: false
+            property real ax: 0
+            property real ay: 0
+            property real bx: 0
+            property real by: 0
+            // What was selected when the band began, so Ctrl+drag can add to
+            // it rather than replace it.
+            property var baseSel: []
+            property bool additive: false
+
+            readonly property Flickable view: root.gridView ? fileGrid : fileList
+
+            function indexAtPoint(px, py) {
+                return bandMa.view.indexAt(px + bandMa.view.contentX,
+                                           py + bandMa.view.contentY)
+            }
+
+            // Every row the band touches, by SAMPLING the view rather than by
+            // recomputing the layout. Qt already placed these items; asking it
+            // where they are cannot disagree with where they were drawn, which
+            // a second copy of the arithmetic eventually would — and it is the
+            // only way that survives the compact view flowing top-to-bottom.
+            //
+            // The step is half a cell, which guarantees a sample inside every
+            // cell the rectangle overlaps: nothing is ever a whole step
+            // narrower than the gap between samples.
+            function namesInBand() {
+                const rows = pane.shownRows
+                const out = []
+                if (rows.length === 0) return out
+                const x1 = Math.min(bandMa.ax, bandMa.bx), x2 = Math.max(bandMa.ax, bandMa.bx)
+                const y1 = Math.min(bandMa.ay, bandMa.by), y2 = Math.max(bandMa.ay, bandMa.by)
+                const stepX = root.gridView ? Math.max(4, fileGrid.cellWidth / 2)
+                                            : Math.max(4, bandMa.width)
+                const stepY = root.gridView ? Math.max(4, fileGrid.cellHeight / 2)
+                                            : Math.max(4, pane.rowH / 2)
+                const seen = {}
+                for (let y = y1; ; y += stepY) {
+                    const yy = Math.min(y, y2)
+                    for (let x = x1; ; x += stepX) {
+                        const xx = Math.min(x, x2)
+                        const i = bandMa.view.indexAt(xx, yy)
+                        if (i >= 0 && i < rows.length && !seen[i]) {
+                            seen[i] = true
+                            out.push(rows[i].name)
+                        }
+                        if (xx >= x2) break
+                    }
+                    if (yy >= y2) break
+                }
+                return out
+            }
+
+            function applyBand() {
+                const hit = bandMa.namesInBand()
+                if (!bandMa.additive) { pane.selection = hit; return }
+                const copy = bandMa.baseSel.slice()
+                for (const n of hit) if (copy.indexOf(n) < 0) copy.push(n)
+                pane.selection = copy
+            }
+
+            function endBand() {
+                bandMa.banding = false
+                edgeScroll.stop()
+                // Leave the keyboard where the band finished. Without this,
+                // Shift+Down straight after dragging a selection extends from
+                // nothing and collapses the lot to a single row.
+                const sel = pane.selection
+                if (sel.length > 0) {
+                    pane.anchorName = sel[0]
+                    pane.cursorName = sel[sel.length - 1]
+                }
+            }
+
+            onPressed: (mouse) => {
+                pane.claim()
+                if (bandMa.indexAtPoint(mouse.x, mouse.y) >= 0) {
+                    // A row. Everything about rows is the delegate's business.
+                    mouse.accepted = false
+                    return
+                }
+                bandMa.view.forceActiveFocus()
+
+                if (mouse.button === Qt.RightButton) {
+                    // The background menu is the SAME menu with no row in it,
+                    // so there is one menu to style, position and dismiss.
+                    ctxMenu.row = null
+                    const gp = bandMa.mapToItem(ctxMenu.parent, mouse.x, mouse.y)
+                    ctxMenu.rawX = gp.x
+                    ctxMenu.rawY = gp.y
+                    ctxMenu.open = true
+                    return
+                }
+
+                bandMa.additive = (mouse.modifiers & Qt.ControlModifier) !== 0
+                bandMa.baseSel = pane.selection.slice()
+                if (!bandMa.additive) pane.clearSelection()
+                bandMa.ax = mouse.x + bandMa.view.contentX
+                bandMa.ay = mouse.y + bandMa.view.contentY
+                bandMa.bx = bandMa.ax
+                bandMa.by = bandMa.ay
+                bandMa.banding = true
+            }
+
+            onPositionChanged: (mouse) => {
+                if (!bandMa.banding) return
+                bandMa.bx = mouse.x + bandMa.view.contentX
+                bandMa.by = mouse.y + bandMa.view.contentY
+                // Dragging past the edge scrolls, or the band can only ever
+                // select what one screenful holds.
+                //
+                // Along the axis the VIEW scrolls on, which the compact grid
+                // turns on its side: it flows into columns and scrolls
+                // sideways, so there the edge to push against is the right
+                // one, not the bottom.
+                const along = root.compactView ? mouse.x : mouse.y
+                const extent = root.compactView ? bandMa.width : bandMa.height
+                edgeScroll.dir = along < 0 ? -1 : (along > extent ? 1 : 0)
+                edgeScroll.running = edgeScroll.dir !== 0
+                bandMa.applyBand()
+            }
+
+            onReleased: bandMa.endBand()
+            // A grab taken away mid-drag must not leave the band painted over
+            // the view forever.
+            onCanceled: bandMa.endBand()
+
+            Timer {
+                id: edgeScroll
+                property int dir: 0
+                interval: 16
+                repeat: true
+                onTriggered: {
+                    const v = bandMa.view
+                    if (root.compactView) {
+                        const maxX = Math.max(0, v.contentWidth - v.width)
+                        v.contentX = Math.max(0, Math.min(maxX, v.contentX + edgeScroll.dir * 12))
+                        bandMa.bx = (edgeScroll.dir < 0 ? 0 : bandMa.width) + v.contentX
+                        bandMa.applyBand()
+                        if (v.contentX <= 0 || v.contentX >= maxX) edgeScroll.stop()
+                        return
+                    }
+                    const max = Math.max(0, v.contentHeight - v.height)
+                    v.contentY = Math.max(0, Math.min(max, v.contentY + edgeScroll.dir * 12))
+                    // The far corner follows the scroll, so the band keeps
+                    // growing while the pointer is held still outside it.
+                    bandMa.by = (edgeScroll.dir < 0 ? 0 : bandMa.height) + v.contentY
+                    bandMa.applyBand()
+                    if (v.contentY <= 0 || v.contentY >= max) edgeScroll.stop()
+                }
+            }
+
+            Rectangle {
+                visible: bandMa.banding
+                x: Math.min(bandMa.ax, bandMa.bx) - bandMa.view.contentX
+                y: Math.min(bandMa.ay, bandMa.by) - bandMa.view.contentY
+                width: Math.abs(bandMa.bx - bandMa.ax)
+                height: Math.abs(bandMa.by - bandMa.ay)
+                color: Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.15)
+                border { width: 1; color: root.cAccent }
+                radius: 2
+            }
+        }
+
         // ── Context menu ────────────────────────────────────────────────
         // Built from a model rather than hand-placed rows so that what a
         // given entry DOES and whether it is offered at all live in one
@@ -4450,7 +4866,54 @@ FloatingWindow {
                 Repeater {
                     model: {
                         const t = pane.tab
-                        if (!t || !ctxMenu.row) return []
+                        if (!t) return []
+
+                        // ── The empty space ─────────────────────────────
+                        //
+                        // No row means the click was about the FOLDER, and
+                        // that is a different menu rather than a shorter one:
+                        // nothing here acts on a file, and the file menu's own
+                        // entries would all be greyed out.
+                        //
+                        // The create-and-select block used to live at the
+                        // bottom of the file menu with a comment saying it was
+                        // only there because there was no empty-space menu.
+                        // This is that menu; the block moved rather than being
+                        // copied, so New Folder is offered in one place.
+                        //
+                        // State rides in the HINT column, which is already
+                        // drawn and right-aligned — a tick glyph pushed into
+                        // the label would shift every other entry's text.
+                        if (!ctxMenu.row) {
+                            const dir = t.view === "dir"
+                            const bg = [
+                                { label: "New Folder…",     act: "newdir",  on: dir, hint: "Ctrl+N" },
+                                { label: "New Empty File…", act: "newfile", on: dir },
+                                { label: "-", act: "", on: true },
+                                { label: "Paste", act: "paste", hint: "Ctrl+V",
+                                  on: dir && root.clip.paths.length > 0 },
+                                { label: "-", act: "", on: true },
+                                { label: "Select All", act: "selectall", on: true, hint: "Ctrl+A" },
+                                { label: "Invert Selection", act: "invert", on: true },
+                                { label: "-", act: "", on: true },
+                                { label: "Sort by Name",     act: "sort:name",
+                                  on: dir, hint: t.sort === "name"  ? "✓" : "" },
+                                { label: "Sort by Size",     act: "sort:size",
+                                  on: dir, hint: t.sort === "size"  ? "✓" : "" },
+                                { label: "Sort by Modified", act: "sort:mtime",
+                                  on: dir, hint: t.sort === "mtime" ? "✓" : "" },
+                                { label: "Descending",       act: "reverse",
+                                  on: dir, hint: t.reverse ? "✓" : "" },
+                                { label: "Show Hidden Files", act: "hidden",
+                                  on: dir, hint: t.showHidden ? "✓" : "" },
+                                { label: "-", act: "", on: true },
+                                { label: "Refresh", act: "refresh", on: true, hint: "F5" },
+                                { label: "Open Terminal Here", act: "term", on: dir },
+                                { label: "Properties…", act: "folderprops", on: dir }
+                            ]
+                            return bg
+                        }
+
                         const r = ctxMenu.row
                         const n = pane.selection.length
                         const one = n <= 1
@@ -4526,16 +4989,12 @@ FloatingWindow {
                         items.push({ label: root.isPinned(r.full) ? "Remove from Places"
                                                                  : "Add to Places",
                                      act: "pin", on: one && r.type === "dir" })
-                        // The create/select block is about the FOLDER, not the
-                        // file that was clicked, so it belongs after everything
-                        // that is about the file. It lives here only because
-                        // there is no empty-space context menu yet; moving it
-                        // out is what would really shorten this list.
-                        items.push({ label: "-", act: "", on: true })
-                        items.push({ label: "New Folder…", act: "newdir", on: t.view === "dir" })
-                        items.push({ label: "New Empty File…", act: "newfile", on: t.view === "dir" })
-                        items.push({ label: "Select All", act: "selectall", on: true })
-                        items.push({ label: "Invert Selection", act: "invert", on: true })
+                        // The create/select block that used to end this menu is
+                        // GONE from here — it is about the folder, not about
+                        // the file that was clicked, and it now lives in the
+                        // empty-space menu above. Right-clicking a file for
+                        // "New Folder" was thirty-one entries deep and the
+                        // wrong place to look for it.
                         return items
                     }
                     delegate: Item {
@@ -4624,6 +5083,24 @@ FloatingWindow {
                                         pane.selection = inv
                                         break
                                     }
+                                    // ── Empty-space entries ──────────────
+                                    // Everything above needs `r`; these are
+                                    // reached with it null, which is what a
+                                    // background click means.
+                                    case "refresh":     pane.reload(); break
+                                    case "folderprops": root.openFolderProperties(); break
+                                    case "sort:name":
+                                    case "sort:size":
+                                    case "sort:mtime":
+                                    case "reverse":
+                                    case "hidden":
+                                        // The view menu's own handler, not a
+                                        // second copy: sort and hidden are
+                                        // saved settings, and a menu that set
+                                        // them without persisting them would
+                                        // disagree with the View button.
+                                        root.applyViewAction(ctxItem.modelData.act)
+                                        break
                                     }
                                 }
                             }

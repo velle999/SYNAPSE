@@ -492,6 +492,19 @@ FloatingWindow {
         if (d) root.selDisk = "/dev/" + d
         if (s && s !== d) root.selPart = "/dev/" + s
         root.reload()
+
+        // `syn-disks gui --format <device>` — the file manager's Format… entry
+        // arriving with a device already in mind. It opens the same dialogue
+        // the Format button opens, on the device that was named, so nothing
+        // here can erase anything the user has not confirmed in it.
+        //
+        // The SELECT device, not the disk: --format is given a partition (a
+        // stick's filesystem), and formatting the whole drive when asked about
+        // one partition would be the worst possible reading of the request.
+        // It falls back to the disk only when the argument WAS a whole drive,
+        // in which case the two are the same device anyway.
+        if (Quickshell.env("SYN_DISKS_FORMAT"))
+            root.askFormat(root.selPart || root.selDisk)
     }
 
     // ── Small shared shapes ─────────────────────────────────────────────────

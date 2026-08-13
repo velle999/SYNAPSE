@@ -67,6 +67,29 @@ check "--help prints usage" $?
 "$SD" --help | grep -q 'no override'
 check "--help states the format restriction" $?
 
+# ── gui --format, the file manager's entry point ────────────────────────────
+#
+# Nothing here starts a window: every case below fails BEFORE the exec, which
+# is the point — `gui` is the one command that hands control to quickshell, so
+# what can be tested about it is exactly what it refuses to hand over.
+#
+# ⚠ Never add a case that reaches the exec. It would replace this shell.
+# The display is unset for the same reason: with one, the next thing `gui`
+# would do is start a window. It also pins the ORDER — arguments are checked
+# before the environment is, so a mistyped device says so on a headless box.
+out=$(env -u WAYLAND_DISPLAY -u DISPLAY "$SD" gui --format 2>&1)
+[ $? -ne 0 ] && grep -q 'need a device' <<<"$out" \
+    && ok "gui --format with no device is refused" \
+    || bad "gui --format with no device is refused"
+
+out=$(env -u WAYLAND_DISPLAY -u DISPLAY "$SD" gui --format /dev/definitely-not-a-disk 2>&1)
+[ $? -ne 0 ] && grep -q 'not a block device' <<<"$out" \
+    && ok "gui --format on a non-device is refused" \
+    || bad "gui --format on a non-device is refused"
+
+"$SD" --help | grep -q 'gui --format'
+check "--help documents gui --format" $?
+
 # ── the fixture ─────────────────────────────────────────────────────────────
 #
 # nvme1n1  the system disk

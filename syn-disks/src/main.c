@@ -56,6 +56,8 @@ static void usage(FILE *f)
 "\n"
 "Front-ends\n"
 "  gui [device]            the graphical window\n"
+"  gui --format <device>   the window, opened on the format dialogue for that\n"
+"                          device (it still asks before it erases anything)\n"
 "  about                   version, licence, and what works on this machine\n"
 "\n"
 "Options\n"
@@ -92,22 +94,48 @@ static void usage(FILE *f)
  * consumer would. */
 static int cmd_gui(int argc, char **argv)
 {
-	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
-		die("no display — syn-disks gui needs a graphical session");
-	if (!have_cmd("quickshell"))
-		die("quickshell is not installed — synpkg install quickshell");
+	/* --format: open straight into the format dialogue for the device named.
+	 * The file manager's "Format…" is the caller — a menu entry that opened a
+	 * drive list and left the user to find the same device again would be a
+	 * link to the app, not the action it says it is.
+	 *
+	 * It only ASKS. The dialogue still runs the dry run, still shows what
+	 * would be erased, and still refuses through guard.c; there is no path
+	 * here that formats anything without the confirmation the window asks
+	 * for. */
+	bool want_format = false;
+	if (argc > 0 && !strcmp(argv[0], "--format")) {
+		want_format = true;
+		argc--;
+		argv++;
+	}
+	if (want_format && (argc == 0 || !*argv[0]))
+		die("gui --format: need a device to format");
 
 	/* The device to open on travels in the environment; quickshell takes no
 	 * arguments of its own. Resolved to a kernel name first, so that the
 	 * window opens on the right drive whether it was given /dev/sda1,
 	 * /dev/mapper/cryptroot or a by-uuid symlink — and so that a name that
 	 * is not a block device is caught here rather than drawing an empty
-	 * window. */
+	 * window.
+	 *
+	 * Argument checking comes BEFORE the display and quickshell checks: a
+	 * mistyped device is a mistyped device on a headless box too, and putting
+	 * the environment first meant the only thing testable about this command
+	 * depended on the test host having a session. */
+	char *k = NULL;
 	if (argc > 0 && *argv[0]) {
-		char *k = sd_kernel_name(argv[0]);
+		k = sd_kernel_name(argv[0]);
 		if (!k)
 			die("%s: not a block device", argv[0]);
+	}
 
+	if (!getenv("WAYLAND_DISPLAY") && !getenv("DISPLAY"))
+		die("no display — syn-disks gui needs a graphical session");
+	if (!have_cmd("quickshell"))
+		die("quickshell is not installed — synpkg install quickshell");
+
+	if (k) {
 		/* The window is a view of a DRIVE with something highlighted inside
 		 * it, so the argument has to be split into those two things.
 		 *
@@ -125,7 +153,13 @@ static int cmd_gui(int argc, char **argv)
 		setenv("SYN_DISKS_DISK", nb > 0 ? base[0] : k, 1);
 		sd_free_list(base, nb);
 		free(k);
+
+		/* Set only once the name has resolved, so a bad device leaves a
+		 * window that says so rather than one asking to format nothing. */
+		if (want_format)
+			setenv("SYN_DISKS_FORMAT", "1", 1);
 	}
+
 
 	/* The window's Wayland app_id. Without it quickshell names every one of
 	 * its windows "org.quickshell", which is both the generic icon in the

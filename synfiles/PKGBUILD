@@ -22,7 +22,7 @@ pkgname=synfiles
 # component (build-all.sh:123), so bumping pkgver leaves makepkg looking for a
 # tarball nothing creates.
 pkgver=0.1.0
-pkgrel=30
+pkgrel=31
 pkgdesc="SynapseOS file browser: tabs, pinned places, recent files and volumes"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -54,7 +54,10 @@ optdepends=('quickshell: the graphical browser (synfiles gui)'
             # Adds "Open in Disks" to a drive's right-click menu. Probed for at
             # startup, so without it the entry is simply absent rather than
             # present and dead.
-            'syn-disks: the Open in Disks entry on the Devices sidebar')
+            # Format… needs 0.1.0-6 or newer for `gui --format`; optdepends
+            # cannot say so, so the window probes for the flag instead and
+            # simply does not offer the entry against an older one.
+            'syn-disks: Open in Disks, and Format… for removable media')
 
 source=("synfiles-0.1.0.tar.gz")
 sha256sums=('SKIP')

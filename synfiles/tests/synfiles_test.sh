@@ -1452,6 +1452,109 @@ if [ -f "$QML" ]; then
     n=$(grep -c 'Qt.application.font' "$QML" || true)
     [ "$n" = 0 ] && ok "no fallback pins the startup font" \
                  || bad "$n use(s) of Qt.application.font"
+
+    # ── every menu entry does something ─────────────────────────────────────
+    #
+    # The menus are built from models: an entry is a label and an `act`, and
+    # the act is matched in a switch somewhere else in the file. Mistype one
+    # and the entry still draws, still highlights, still closes the menu on
+    # click — and does nothing. This window has shipped that bug more than
+    # once (Rename in icon view, drag-and-drop in the grid), and it is exactly
+    # the kind that no runtime test catches because nothing errors.
+    #
+    # view: and sort: are handled by applyViewAction on their PREFIX, so they
+    # are checked against that instead of against a case label.
+    missing=""
+    for a in $(grep -oE 'act: *"[a-z0-9:_-]+"' "$QML" |
+               sed 's/.*"\(.*\)"/\1/' | sort -u); do
+        case "$a" in
+            view:*|sort:*)
+                grep -q "act.indexOf(\"${a%%:*}:\")" "$QML" && continue ;;
+        esac
+        grep -q "case \"$a\":" "$QML" || missing="$missing $a"
+    done
+    [ -z "$missing" ] && ok "every menu act is handled somewhere" \
+                      || bad "menu act(s) that nothing acts on:$missing"
+
+    # ── the empty-space menu ────────────────────────────────────────────────
+    grep -q 'if (!ctxMenu.row)' "$QML" \
+        && ok "right-clicking the empty space has its own menu" \
+        || bad "synfiles.qml lost the background context menu"
+
+    # It is the SAME menu with no row, not a second one to keep in step.
+    n=$(grep -c 'id: ctxMenu' "$QML" || true)
+    [ "$n" = 1 ] && ok "there is one context menu, not two" \
+                 || bad "$n context menus — the background one was copied, not shared"
+
+    # ── the rubber band hands rows back ─────────────────────────────────────
+    #
+    # The band sits ON TOP of the views so the Flickable cannot take the press
+    # first, which only works because it declines every press that lands on a
+    # row. Without that decline it swallows row clicks, row drags and
+    # double-click-to-open — i.e. the whole view.
+    grep -q 'indexAtPoint' "$QML" && grep -q 'mouse.accepted = false' "$QML" \
+        && ok "the band declines presses that land on a row" \
+        || bad "the band no longer hands row presses back to the delegates"
+
+    # ── keyboard selection ──────────────────────────────────────────────────
+    grep -q 'Qt.Key_Down' "$QML" \
+        && ok "the arrow keys move a cursor" \
+        || bad "synfiles.qml has no arrow-key navigation"
+
+    grep -q '"extend"' "$QML" && grep -q 'cursorName' "$QML" \
+        && ok "Shift extends the selection from the anchor" \
+        || bad "Shift+Arrow no longer extends a range"
+
+    # ── formatting goes through syn-disks ───────────────────────────────────
+    #
+    # ⚠ The one rule for this window and block devices: it does not write to
+    # them. What may be formatted is decided by syn-disks' guard.c, and a
+    # mkfs, dd or wipefs spawned from here would be a second set of rules
+    # about erasing a disk — with no dry run, no refusal text and no
+    # confirmation dialogue behind it.
+    n=$(grep -cE '"(mkfs|mkfs\.[a-z0-9]+|wipefs|dd|sgdisk|parted)"' "$QML" || true)
+    [ "$n" = 0 ] && ok "nothing here writes to a block device itself" \
+                 || bad "$n direct block-device command(s) in the file manager"
+
+    grep -q 'syn-disks", "gui", "--format"' "$QML" \
+        && ok "Format… opens the disk utility's own dialogue" \
+        || bad "the Format entry no longer goes through syn-disks gui --format"
+
+    # syn-disks is an optdepend and `gui --format` is newer than the package
+    # itself, so "the binary exists" is not the question. An older syn-disks
+    # reads --format as a device name and exits — into nothing, since the
+    # window is launched detached. The entry is gated on the FLAG being
+    # there, which is a grep of its own --help.
+    grep -q "haveFormat" "$QML" && grep -q "grep -q -- 'gui --format'" "$QML" \
+        && ok "Format… is offered only where syn-disks understands it" \
+        || bad "the Format entry is no longer gated on syn-disks supporting --format"
+
+    # ── it still parses ─────────────────────────────────────────────────────
+    #
+    # A syntax error in this file is invisible to everything above: the C core
+    # builds, every record test passes, and the only symptom is a window that
+    # does not open. qmllint settles it in a second — but two things about it
+    # have to be handled or the check is worse than none.
+    #
+    # 1. THE VERDICT IS THE EXIT STATUS. This qmllint prints NOTHING on a
+    #    syntax error in this file — not a line, not a position — and simply
+    #    exits non-zero. The first cut of this check read its output and so
+    #    passed happily on a file with `((( ` appended to it.
+    # 2. `pragma ComponentBehavior: Bound` makes it exit non-zero the same
+    #    silent way on any file carrying it, which would have made the check
+    #    fail forever. It is stripped from the COPY being checked: it decides
+    #    what Qt binds inside delegates, not whether the file parses.
+    if command -v qmllint >/dev/null 2>&1; then
+        sed '/^pragma ComponentBehavior/d' "$QML" > "$T/lint.qml"
+        if qmllint "$T/lint.qml" > "$T/lint.txt" 2>&1; then
+            ok "the QML parses cleanly"
+        else
+            bad "qmllint rejects synfiles.qml — the window will not open"
+            [ -s "$T/lint.txt" ] && sed 's/^/        /' "$T/lint.txt" >&2
+        fi
+    else
+        echo "  skip  qmllint not installed"
+    fi
 else
     bad "synfiles.qml not found beside the tests: $QML"
 fi
