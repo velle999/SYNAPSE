@@ -315,6 +315,29 @@ step "Preflight checks"
 
 command -v pacman &>/dev/null || err "pacman not found — must build on Arch Linux"
 
+# ── Packages that must never be INSTALLED on the live ISO ─────
+#
+# Being in the local repo and being in packages.x86_64 are different things —
+# the repo is filled from PACKAGES above so syn-install can pacman -S a package
+# into the TARGET, while packages.x86_64 is what pacstrap puts in the live
+# environment. A package can be required for the former and ruinous in the
+# latter, and nothing but this check says so.
+#
+# Checked in preflight because the damage surfaces NOWHERE NEAR the cause. The
+# entry that broke 0.2.8 killed the build forty minutes in, four mkarchiso steps
+# after the package was installed, with a message about a missing initramfs glob.
+# Two seconds here beats reading that backwards again — see packages.x86_64,
+# where each of these has its reason written out in full.
+declare -A ISO_NEVER_INSTALL=(
+    [limine-mkinitcpio-hook]="its /etc/pacman.d/hooks/90-mkinitcpio-install.hook shadows mkinitcpio's, so NEITHER /boot/vmlinuz-linux NOR the initramfs is built and mkarchiso dies later in _make_boot_on_iso9660. Keep it in the local repo (it is in PACKAGES); syn-install installs it into the target, which does boot limine."
+)
+for _pkg in "${!ISO_NEVER_INSTALL[@]}"; do
+    if grep -qxa -- "${_pkg}" "${SCRIPT_DIR}/packages.x86_64"; then
+        err "packages.x86_64 lists ${_pkg}, which must never be installed on the live ISO: ${ISO_NEVER_INSTALL[$_pkg]}"
+    fi
+done
+unset _pkg
+
 declare -A TOOL_PKG=(
     [mkarchiso]="archiso"
     [makepkg]="pacman"

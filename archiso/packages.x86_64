@@ -245,12 +245,35 @@ grub-btrfs
 inotify-tools
 limine
 limine-snapper-sync
-# Writes limine boot entries for installed kernels. Without it a limine install
-# can add a second kernel and never boot it — mkinitcpio builds the initramfs
-# and nothing writes limine.conf. On the ISO so the local repo carries it: the
-# installer names it for limine installs, and a package syn-install asks for
-# that the repo does not hold fails the install at pacman.
-limine-mkinitcpio-hook
+# limine-mkinitcpio-hook IS DELIBERATELY NOT LISTED HERE, and must never be
+# added back. It writes limine boot entries for installed kernels, which a
+# limine install needs — without it `pacman -S linux-lts` yields a complete,
+# correct, unbootable kernel. syn-install pacman -S's it into the TARGET at
+# install time (syn-install.sh), and it reaches that target through the local
+# repo, which build.sh fills from its own PACKAGES array. Being in the repo and
+# being in this file are separate things; only this file INSTALLS a package into
+# the live ISO. synapse-llama-cuda is in the repo and not here for the same
+# reason (build.sh).
+#
+# Listing it here BREAKS THE BUILD, and not in the place it is listed. The
+# package ships /etc/pacman.d/hooks/90-mkinitcpio-install.hook, the same basename
+# as mkinitcpio's /usr/share/libalpm/hooks/90-mkinitcpio-install.hook, and /etc
+# wins. Identical triggers; the Exec differs:
+#
+#   Arch:   /usr/share/libalpm/scripts/mkinitcpio install
+#   limine: /usr/share/libalpm/scripts/limine-mkinitcpio-install
+#
+# Arch's script does TWO jobs — it copies /usr/lib/modules/$kver/vmlinuz to the
+# path the preset names (/boot/vmlinuz-linux) AND builds the initramfs. Replaced
+# by limine's, which writes limine entries and finds no limine install in a
+# chroot, NEITHER file is ever produced: the pacstrap dir's /boot stays empty
+# with the kernel package installed and every surface reporting success.
+#
+# The build then dies four steps later in mkarchiso's _make_boot_on_iso9660, on
+# `install -- "${pacstrap_dir}/boot/initramfs-"*".img"` — a glob that matches
+# nothing — with nothing in the message pointing back here. That is what broke
+# 0.2.8: the package was added to this file on 2026-08-11 (2c87e69), and the ISO
+# had not been rebuilt since 0.2.6.
 zram-generator
 
 # nix — ONLY so `syn-install --config profile.nix` can evaluate a Nix install
