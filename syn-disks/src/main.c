@@ -164,9 +164,16 @@ static int cmd_gui(int argc, char **argv)
 	/* The window's Wayland app_id. Without it quickshell names every one of
 	 * its windows "org.quickshell", which is both the generic icon in the
 	 * dock and the reason the dock cannot resolve a .desktop for the window
-	 * and so offers no "New Window" either. Set, not overridden, so a caller
-	 * can still choose. */
-	setenv("QS_APP_ID", "syn-disks", 0);
+	 * and so offers no "New Window" either.
+	 *
+	 * OVERWRITTEN, not merely set. This is one process deciding what ITS OWN
+	 * window is called, and no caller has ever had a reason to name it
+	 * something else. An INHERITED value is the real and common accident:
+	 * every one of these apps is a quickshell app that hands its whole
+	 * environment to what it spawns, and synfiles' "Open in Disks" is exactly
+	 * that path — it gave this window synfiles' identity and no dock entry of
+	 * its own. */
+	setenv("QS_APP_ID", "syn-disks", 1);
 
 	const char *qml = SYNDISKS_DATADIR "/syn-disks.qml";
 	if (access(qml, R_OK) != 0 && access("data/syn-disks.qml", R_OK) == 0)

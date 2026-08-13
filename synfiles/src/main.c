@@ -106,9 +106,16 @@ static int cmd_gui(int argc, char **argv)
 	 * "org.quickshell" — so the dock drew quickshell's own generic icon for
 	 * this app, could not resolve a .desktop for it, and therefore offered no
 	 * "New Window" either: synfiles and every other QML app on the system were one
-	 * indistinguishable entry. Set, not overridden, so a caller can still
-	 * choose. */
-	setenv("QS_APP_ID", "synfiles", 0);
+	 * indistinguishable entry.
+	 *
+	 * OVERWRITTEN, not merely set. This is one process deciding what ITS OWN
+	 * window is called, and no caller has ever had a reason to name it
+	 * something else — whereas an INHERITED value is a real and common
+	 * accident, since this app spawns others and hands them its whole
+	 * environment. It was on the causing end of exactly that: xdg-open from
+	 * the file list gave syn-edit a window that claimed to be synfiles, so
+	 * the editor never got its own dock entry. */
+	setenv("QS_APP_ID", "synfiles", 1);
 
 	const char *qml = SYNFILES_DATADIR "/synfiles.qml";
 	if (access(qml, R_OK) != 0 && access("data/synfiles.qml", R_OK) == 0)

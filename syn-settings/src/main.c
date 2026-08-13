@@ -111,12 +111,26 @@ static int cmd_gui(int argc, char **argv)
 	 * trade for a convenience. */
 	if (argc > 0 && *argv[0])
 		setenv("SYNSETTINGS_PANE", argv[0], 1);
+	else
+		/* No pane named means the DEFAULT pane, and saying so takes an
+		 * unsetenv: an inherited SYNSETTINGS_PANE would otherwise decide it.
+		 * Same shape as the QS_APP_ID inheritance below — an
+		 * environment-passed argument is only an argument to the process it
+		 * was set for. */
+		unsetenv("SYNSETTINGS_PANE");
 
 	/* The window's Wayland app_id. Without it quickshell names every window
 	 * it opens "org.quickshell", so the dock cannot tell this app from any
 	 * other QML app on the system, draws quickshell's generic icon, and
-	 * offers no "New Window". Set, not overridden, so a caller can choose. */
-	setenv("QS_APP_ID", "syn-settings", 0);
+	 * offers no "New Window".
+	 *
+	 * OVERWRITTEN, not merely set. This is one process deciding what ITS OWN
+	 * window is called, and no caller has ever had a reason to name it
+	 * something else. An INHERITED value is the real and common accident:
+	 * every one of these apps is a quickshell app that hands its whole
+	 * environment to what it spawns, so launching this one from another gave
+	 * it the OTHER app's identity and no dock entry of its own. */
+	setenv("QS_APP_ID", "syn-settings", 1);
 
 	const char *qml = SYNSETTINGS_DATADIR "/syn-settings.qml";
 	if (access(qml, R_OK) != 0 && access("data/syn-settings.qml", R_OK) == 0)

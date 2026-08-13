@@ -98,14 +98,34 @@ static int cmd_gui_impl(int argc, char **argv)
 		joined[w] = '\0';
 		setenv("SYN_EDIT_OPEN", joined, 1);
 		free(joined);
+	} else {
+		/* No files means an EMPTY editor, and saying so takes an unsetenv:
+		 * an inherited SYN_EDIT_OPEN would otherwise reopen whatever the
+		 * process that spawned us was told to open. Same shape as the
+		 * QS_APP_ID inheritance below — an environment-passed argument is
+		 * only an argument to the process it was set for. */
+		unsetenv("SYN_EDIT_OPEN");
 	}
 
 	/* The window's Wayland app_id. Without it quickshell names every one of
 	 * its windows "org.quickshell", which is both the generic icon in the
 	 * dock and the reason the dock cannot resolve a .desktop for the window —
-	 * and on a miss the dock runs the app_id AS A COMMAND. Set, not
-	 * overridden, so a caller can still choose. */
-	setenv("QS_APP_ID", "syn-edit", 0);
+	 * and on a miss the dock runs the app_id AS A COMMAND.
+	 *
+	 * OVERWRITTEN, not merely set. This is one process deciding what ITS OWN
+	 * window is called, and no caller has ever had a reason to name it
+	 * something else. It used to be setenv(..., 0) — "so a caller can still
+	 * choose" — and the only thing that ever chose was an unrelated parent's
+	 * leftover: synfiles is itself a quickshell app, so `xdg-open notes.txt`
+	 * from its file list ran with QS_APP_ID=synfiles still in the
+	 * environment and THIS window came up claiming to be synfiles.
+	 *
+	 * The dock keys entirely on app_id, so the editor was merged into the
+	 * synfiles entry: no icon of its own appeared, and Close window on the
+	 * dock closed whichever of the two it found first. Reported 2026-08-12 as
+	 * "open a file with edit from files and it doesn't populate in the dock
+	 * and i can't close it from the dock like normal". */
+	setenv("QS_APP_ID", "syn-edit", 1);
 
 	const char *qml = SYNEDIT_DATADIR "/syn-edit.qml";
 	if (access(qml, R_OK) != 0 && access("data/syn-edit.qml", R_OK) == 0)

@@ -95,9 +95,15 @@ static int cmd_gui(int argc, char **argv)
 	 * "org.quickshell" — so the dock drew quickshell's own generic icon for
 	 * this app, could not resolve a .desktop for it, and therefore offered no
 	 * "New Window" either: synpkg and every other QML app on the system were one
-	 * indistinguishable entry. Set, not overridden, so a caller can still
-	 * choose. */
-	setenv("QS_APP_ID", "synpkg", 0);
+	 * indistinguishable entry.
+	 *
+	 * OVERWRITTEN, not merely set. This is one process deciding what ITS OWN
+	 * window is called, and no caller has ever had a reason to name it
+	 * something else. An INHERITED value is the real and common accident:
+	 * every one of these apps is a quickshell app that hands its whole
+	 * environment to what it spawns, so launching this one from another gave
+	 * it the OTHER app's identity and no dock entry of its own. */
+	setenv("QS_APP_ID", "synpkg", 1);
 
 	const char *qml = SYNPKG_DATADIR "/synpkg.qml";
 	if (access(qml, R_OK) != 0 && access("data/synpkg.qml", R_OK) == 0)
