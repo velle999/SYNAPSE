@@ -931,6 +931,17 @@ test('cascade_focus_top', cascade_focus_top,
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
 
+# The same rule for the windows the cascade does NOT arrange. velle, 2026-08-12:
+# double-clicking a titlebar maximized Firefox and put the other two windows in
+# front of it — a maximized window is floating by construction, so the cascade
+# placed nothing for it and then raised every card it did place over the top.
+cascade_maximize_top = find_program('tests/cascade_maximize_top.sh')
+test('cascade_maximize_top', cascade_maximize_top,
+     args    : [synui_exe.full_path(), stubborn_client.full_path(),
+                synctl_exe.full_path()],
+     depends : [synui_exe, stubborn_client, synctl_exe],
+     timeout : 120)
+
 # The floating desktop's own tiler (layout_float_arrange): that untouched
 # windows are arranged into an inset grid, that the grid leaves the wallpaper
 # showing rather than filling the screen, that a window the user has placed is

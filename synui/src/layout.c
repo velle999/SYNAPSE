@@ -532,6 +532,29 @@ void layout_spiral(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
  * including the ones in a short last pile. A pile of two whose cards were
  * bigger than the pile of five beside it would read as two arrangements.
  */
+/* The view behind one of window_tree's children, but only if it is a window
+ * this output's cascade deliberately skipped — floating (which is what a
+ * MAXIMIZED, snapped or Super+F'd window is) or fullscreen. Those are the
+ * windows layout_cascade places nothing for and must therefore not bury.
+ *
+ * Matched against ws->windows rather than read off node.data: every view tags
+ * its node, but nothing guarantees the converse, and a node that is not a view
+ * must never be dereferenced as one.
+ */
+static syn_view_t *cascade_unowned_view(syn_workspace_t *ws, syn_output_t *o,
+                                        struct wlr_scene_node *nd)
+{
+    syn_view_t *v;
+    wl_list_for_each(v, &ws->windows, link) {
+        if (!v->mapped || v->minimized) continue;
+        if (!v->frame && !v->scene_tree) continue;   /* view_node() would be bogus */
+        if (view_node(v) != nd) continue;
+        if (v->output != o) return NULL;
+        return (v->floating || v->fullscreen) ? v : NULL;
+    }
+    return NULL;
+}
+
 void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
 {
     struct wlr_box area;
@@ -669,6 +692,45 @@ void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
         i++;
     }
 
+    /* Then put back everything on this screen the cascade does NOT own.
+     *
+     * The loop above raises every card it placed, and a MAXIMIZED window is not
+     * one of them: view_apply_maximized forces `floating = 1` (it has to, or the
+     * arrangement would drag it straight back into a pile), and every layout
+     * skips floating windows. So nothing ever raised it and every card landed in
+     * front of it. Worse, view_apply_maximized raises the window itself and THEN
+     * calls layout_apply() to reflow what it left behind — so double-clicking a
+     * titlebar buried the very window it had just maximized, in the same call.
+     * velle, 2026-08-12: two cascade cards sitting on top of a maximized Firefox
+     * that was reporting stack 0, the bottom of the desktop.
+     *
+     * This is the same shape as the focused-window bug below — the loop only
+     * knows about the windows it placed — and the same rule answers both: an
+     * arrangement may order the windows it arranges, and nothing else. A window
+     * the user maximized, snapped or floated was put where it is by an explicit
+     * act, and a reflow it is not even part of has no business overruling that.
+     *
+     * Their order among THEMSELVES is preserved rather than re-derived from
+     * ws->windows: list order is not stack order, so rebuilding it there would
+     * be this very bug wearing a different hat. window_tree's children ARE in
+     * stacking order, bottom first, so walking them and re-raising in that order
+     * is a no-op on everything except the cards now wrongly above them.
+     *
+     * Raising while walking that same list is safe only because the walk stops
+     * at whatever was the tail when it started: raise_to_top moves a node to the
+     * tail, so an unbounded walk would meet the nodes it had already moved and
+     * raise them a second time, in the wrong order. `_safe` alone does not cover
+     * this — it protects the cursor, not the bound. An empty list makes prev the
+     * head itself and the body never runs. */
+    struct wl_list *last = s->window_tree->children.prev;
+    struct wlr_scene_node *nd, *tmp;
+    wl_list_for_each_safe(nd, tmp, &s->window_tree->children, link) {
+        int stop = (&nd->link == last);
+        syn_view_t *u = cascade_unowned_view(ws, o, nd);
+        if (u) wlr_scene_node_raise_to_top(view_node(u));
+        if (stop) break;
+    }
+
     /* Then put the window the user is actually IN back on top.
      *
      * The claim above — that layout_apply never runs on a focus change, so a
@@ -679,12 +741,13 @@ void layout_cascade(syn_server_t *s, syn_workspace_t *ws, syn_output_t *o)
      * is what makes focus_view()'s raise survive a retile, and it costs nothing
      * when it is already on top.
      *
-     * Guarded exactly like layout_monocle's `top` pick: the focused view can
-     * live on another monitor or another desktop, and floating/fullscreen views
-     * are not part of the cascade the loop above just built. */
+     * Guarded like layout_monocle's `top` pick — the focused view can live on
+     * another monitor or another desktop — but NOT on `floating`/`fullscreen`
+     * any more. Those were excluded when this only had to defend cards, and
+     * excluding them is what let the pass above hand the top of the stack to
+     * some other floating window instead of the maximized one being focused. */
     syn_view_t *f = s->focused_view;
-    if (f && f->workspace == ws && f->output == o &&
-        f->mapped && !f->floating && !f->fullscreen && !f->minimized)
+    if (f && f->workspace == ws && f->output == o && f->mapped && !f->minimized)
         wlr_scene_node_raise_to_top(view_node(f));
 }
 
