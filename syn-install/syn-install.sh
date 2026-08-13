@@ -1762,9 +1762,14 @@ while :; do
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
-    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, Wine, phone, Steam"
-    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Wine, phone, Chibi + Vibe  (default)"
-    echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/Wine/phone"
+    # Name what DIFFERS, not what they share. Both of these lines used to list
+    # the same six shared items and put the only difference — Steam — at the
+    # far right, past 100 columns, where a terminal cut it off: Full and
+    # Standard read as the same preset. Every line here stays under 80.
+    echo "    $(bold '1)') Full      — Standard + Steam + Nix + Nexus Chat, TEPRIS, M2020"
+    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Wine, phone,"
+    echo "                   Chibi + Vibe + Arsenal        (default)"
+    echo "    $(bold '3)') Minimal   — core daemons only: none of the above"
     echo "    $(bold '4)') Custom    — pick each item individually"
     echo ""
     echo "  Every preset except Minimal then asks WHICH AI model to download,"
