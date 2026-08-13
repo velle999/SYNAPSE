@@ -81,6 +81,15 @@
 /* ── synapd IPC ──────────────────────────────────────────── */
 #define SYNAPD_SOCKET       "/run/synapd/synapd.sock"
 
+/* The inference device synui-ai-backend last set: "gpu", "cpu" or "off", and
+ * absent until something has toggled it (synapd auto-detects, so that reads as
+ * "auto"). In /etc because "off" now MASKS synapd and therefore outlives a
+ * reboot — the record of it has to outlive one too, and the old path was on a
+ * tmpfs. The legacy path is read as a fallback so an upgraded desktop keeps its
+ * label until the next toggle; it can go once no /run copy is left anywhere. */
+#define SYNAPD_BACKEND_STATE        "/etc/synapd/backend"
+#define SYNAPD_BACKEND_STATE_LEGACY "/run/synapd/backend"
+
 /* ── synapse_kmod syscall numbers ────────────────────────── */
 #define NR_AI_CTX_SET       451
 #define NR_AI_CTX_GET       452

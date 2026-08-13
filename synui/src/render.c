@@ -386,12 +386,14 @@ const int synui_welcome_menu_len =
     (int)(sizeof(synui_welcome_menu) / sizeof(synui_welcome_menu[0]));
 
 /* Live AI-backend label for the "AI Backend" row's hint. synui-ai-backend
- * writes "gpu" or "cpu" to /run/synapd/backend when it toggles synapd; if the
- * file is absent (nothing toggled yet) synapd's own default is auto-detect, so
- * show "auto". Kept tiny + best-effort — a read failure just falls back. */
+ * writes "gpu", "cpu" or "off" to SYNAPD_BACKEND_STATE when it toggles synapd;
+ * if the file is absent (nothing toggled yet) synapd's own default is
+ * auto-detect, so show "auto". Kept tiny + best-effort — a read failure just
+ * falls back. */
 static const char *synui_ai_backend_label(void)
 {
-    FILE *f = fopen("/run/synapd/backend", "r");
+    FILE *f = fopen(SYNAPD_BACKEND_STATE, "r");
+    if (!f) f = fopen(SYNAPD_BACKEND_STATE_LEGACY, "r");
     if (!f) return "auto";
     char b[16] = {0};
     size_t n = fread(b, 1, sizeof(b) - 1, f);

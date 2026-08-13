@@ -9,8 +9,9 @@
 #
 #   gpu  → --gpu-layers -1  (auto-detect; offloads to the GPU when present)
 #   cpu  → --gpu-layers 0   (force CPU-only)
-#   off  → synapd.socket AND synapd.service stopped (frees the model's RAM/VRAM;
-#          no inference at all, and nothing can socket-activate it back)
+#   off  → synapd.socket AND synapd.service stopped and MASKED (frees the
+#          model's RAM/VRAM; no inference at all, nothing can socket-activate it
+#          back, and it stays off across a reboot)
 #
 # Needs root (writes /etc/systemd, restarts synapd) — synui.service runs as
 # root, so the menu action has the privilege it needs.
@@ -19,15 +20,40 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -euo pipefail
 
-DROPIN_DIR=/etc/systemd/system/synapd.service.d
+# Every path this script WRITES hangs off one prefix, which is empty in
+# production and a scratch directory under the test harness — one knob, so a
+# test cannot half-redirect itself and stop the real daemon or delete the real
+# desktop's state. The same escape hatch synui's own SYNUI_CONFIG is.
+ROOT="${SYNUI_AI_ROOT:-}"
+
+DROPIN_DIR="$ROOT/etc/systemd/system/synapd.service.d"
 DROPIN="$DROPIN_DIR/backend.conf"
-STATE=/run/synapd/backend
+# /etc, not /run: /run is a tmpfs, so the choice recorded there was gone by the
+# time the desktop came up, and the row read "auto" on a machine its owner had
+# set to off. The state has to be as durable as the thing it describes, and what
+# it describes is now a mask in /etc/systemd.
+STATE="$ROOT/etc/synapd/backend"
+LEGACY_STATE="$ROOT/run/synapd/backend"   # pre-335; read, then removed
+# Not prefixed: these two go INTO the unit file, where they have to be the paths
+# systemd will actually open.
 MODEL=/var/lib/synapd/models/synapse.gguf
 SOCK=/run/synapd/synapd.sock
 
 usage() { echo "usage: synui-ai-backend {gpu|cpu|off|toggle|status}" >&2; exit 2; }
 
-current() { [ -r "$STATE" ] && cat "$STATE" || echo auto; }
+# A masked unit is off whatever any file says, so systemd is asked first: a mask
+# put there by hand must not leave the toggle cycling gpu → cpu → off through a
+# daemon that cannot start. Only then the recorded gpu/cpu choice.
+current() {
+    if [ "$(systemctl is-enabled synapd.service 2>/dev/null || true)" = masked ]; then
+        echo off
+        return
+    fi
+    if [ -r "$STATE" ]; then cat "$STATE"
+    elif [ -r "$LEGACY_STATE" ]; then cat "$LEGACY_STATE"   # pre-335 installs
+    else echo auto
+    fi
+}
 
 apply() {
     local mode=$1 layers
@@ -69,7 +95,13 @@ $exec_line
 EOF
     mkdir -p "$(dirname "$STATE")"
     echo "$mode" > "$STATE"
+    rm -f "$LEGACY_STATE" || true    # one store; see current()
     systemctl daemon-reload
+    # Coming back from 'off' the units are MASKED, and a masked unit refuses to
+    # start — so the unmask is what makes gpu/cpu the inverse of off rather than
+    # a command that reports success while systemd ignores it. Harmless when
+    # nothing is masked.
+    systemctl unmask synapd.socket synapd.service
     # Coming back from 'off' the sockets are stopped too, so start them
     # explicitly. (restart would pull synapd.socket in via Requires=, but saying
     # it here means the two verbs are symmetric and neither depends on that
@@ -110,10 +142,25 @@ EOF
 off_backend() {
     mkdir -p "$(dirname "$STATE")"
     echo off > "$STATE"
+    rm -f "$LEGACY_STATE" || true
     if systemctl is-enabled --quiet synapd-bridge.socket 2>/dev/null; then
         systemctl stop synapd-bridge.socket synapd-bridge.service || true
     fi
     systemctl stop synapd.socket synapd.service
+
+    # And the fourth resurrection path, the one a stop cannot close: the NEXT
+    # BOOT. synapd.service is enabled (multi-user.target.wants), and synguard,
+    # synnet and synui each Wants= it, so a reboot started it again no matter
+    # what had been stopped — reported as "the AI backend toggle didn't stay off
+    # through reboot". `disable` would not have been enough either: enablement
+    # is not what a Wants= from another unit consults.
+    #
+    # Masking is, and it is the only verb that is. The bridge is deliberately
+    # left alone: its service is After= synapd, not Requires= it (see
+    # synapd-bridge.service), so with synapd masked a LAN client reaches a
+    # listener that has nothing to proxy to rather than one that starts the
+    # daemon.
+    systemctl mask synapd.socket synapd.service
     # Say what actually happened, not what was intended. A stop that did not
     # hold looks identical from here unless it is checked — and one resurrection
     # path survives this one: synguard, synnet and synui all carry

@@ -875,6 +875,15 @@ test('menu_cats', menu_cats,
 # Game mode borrows the machine from the desktop; this asserts it gives every
 # piece back, including on the compositor-shutdown path where the external
 # processes it stopped would otherwise stay stopped.
+# "AI backend: off" has to survive a reboot, which means masking the units and
+# recording the choice off the tmpfs. Runs the helper itself against a fake
+# systemctl and a scratch SYNUI_AI_ROOT, so it cannot stop the daemon on the
+# machine running the suite.
+ai_backend_off = find_program('tests/ai_backend_off.sh')
+test('ai_backend_off', ai_backend_off,
+     args    : [meson.current_source_dir() / 'systemd/synui-ai-backend.sh'],
+     timeout : 30)
+
 game_actions = find_program('tests/game_actions.sh')
 test('game_actions', game_actions,
      args    : [meson.current_source_dir() / 'src/game.c',

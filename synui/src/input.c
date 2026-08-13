@@ -1023,7 +1023,7 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         synui_unlock(s);
     } else if (strcmp(action, "ai_backend") == 0) {
         /* Toggle synapd between GPU and CPU inference. The helper owns the
-         * work (rewrite the systemd drop-in, record /run/synapd/backend,
+         * work (rewrite the systemd drop-in, record the backend state,
          * restart synapd); synui just fires it. The welcome-menu "AI Backend"
          * row reflects the new state the next time the menu is opened. */
         spawn("synui-ai-backend toggle");

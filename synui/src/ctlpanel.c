@@ -56,7 +56,7 @@
 #include "synui.h"
 
 /* How long to keep repainting the panel after an AI-backend switch, waiting for
- * the helper to restart synapd and write /run/synapd/backend. Generous: it is a
+ * the helper to restart synapd and write the backend state file. Generous: it is a
  * service restart, and the poll stops early the moment the value changes. */
 #define CTL_BACKEND_POLL_SECS  8.0
 
@@ -1067,7 +1067,8 @@ int ctlpanel_selected_row(syn_server_t *s)
  * file means nothing has toggled it yet, so synapd's own auto-detect stands. */
 static const char *ai_backend_label(void)
 {
-    FILE *f = fopen("/run/synapd/backend", "r");
+    FILE *f = fopen(SYNAPD_BACKEND_STATE, "r");
+    if (!f) f = fopen(SYNAPD_BACKEND_STATE_LEGACY, "r");
     if (!f) return "auto";
     char b[16] = {0};
     size_t n = fread(b, 1, sizeof(b) - 1, f);
