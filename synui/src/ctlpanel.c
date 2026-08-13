@@ -109,9 +109,6 @@ static const char *const ctl_names_cat_breed[] = {
     "Neon", "Tabby", "Ginger", "Tuxedo", "Siamese",
     "Calico", "Tortie", "Russian Blue", "Black",
 };
-/* Order matches syn_super_space_t, and the lower-cased spellings are what
- * config.c's `super_space` case parses back out of settings.state. */
-static const char *const ctl_names_super_space[] = { "Launcher", "Cmdbar" };
 /* Order matches syn_bar_shell_t. The lower-cased spellings are what config.c's
  * `bar_shell` case parses back and what synui-bar.sh matches on. */
 static const char *const ctl_names_bar_shell[]   = { "SYNAPSE", "Antiquity" };
@@ -417,13 +414,12 @@ static const struct ctl_item ctl_items[] = {
 
     { CTL_ROW_LAUNCHER,      CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Start button",     NULL,
       .section = "Shell" },
-    /* Two names, so Enter flips it — CTL_VAL_ENUM wraps modulo nnames, which on
-     * a pair IS a toggle, and it says which one you get instead of "on/off".
-     * The other action always takes Super+=; they move as a pair. */
-    { CTL_ROW_SUPER_SPACE,   CTL_CAT_DESKTOP, CTL_KIND_TOGGLE, "Super+Space opens", NULL,
-      .key = "super_space", .off = CFG(super_space), .vtype = CTL_VAL_ENUM,
-      NAMES(ctl_names_super_space), .apply = CTL_APPLY_BINDS,
-      .help = "Swap the app launcher and the AI command bar; the other gets Super+=" },
+    /* There was a "Super+Space opens" row here (launcher ⇄ command bar). It was
+     * a SECOND way to declare a keybinding, and the Shortcuts category's rebind
+     * (F2) is the first — so the two fought: a chord moved in the palette was
+     * put back by the swap, which re-ran at the end of every config load, after
+     * binds.state. One list of shortcuts, one owner. Rebind Super+Space and
+     * Super+= from Control panel ▸ Shortcuts (or the Super+/ palette) instead. */
     /* Is there a bar at all — the row the Dock switch above has always had and
      * this side of the desktop never did. Bespoke rather than table-driven
      * (.key/.off left zeroed) because flipping the flag is the easy half: the
@@ -815,12 +811,6 @@ static void ctl_apply(syn_server_t *s, syn_ctl_apply_t what)
         ctlpanel_repaint(s);
         break;
 
-    /* No repaint: the bind table is not drawn anywhere except this panel's own
-     * Shortcuts category, which reads it live the next time it is opened. The
-     * keys change under the user's fingers immediately, which is the point. */
-    case CTL_APPLY_BINDS:
-        synui_config_apply_launcher_binds(&s->config);
-        break;
     }
 }
 

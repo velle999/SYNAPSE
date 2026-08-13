@@ -416,7 +416,7 @@ static void test_round_trip(void)
            (unsigned)(sizeof(spread) / sizeof(spread[0])));
 }
 
-/* ── 6. super_space swaps the launcher pair, and only that pair ──────── */
+/* ── 6. Super+Space and Super+= are binds, and ONLY binds ───────────── */
 
 /* The bind table has no lookup helper outside config.c, so find by combo here. */
 static const syn_bind_t *bind_of(const syn_config_t *c, xkb_keysym_t sym)
@@ -432,53 +432,87 @@ static int holds(const syn_bind_t *b, const char *action, const char *arg)
     return b && strcmp(b->action, action) == 0 && strcmp(b->arg, arg) == 0;
 }
 
-static void test_super_space_swap(void)
+/*
+ * There used to be a `super_space = launcher|cmdbar` setting (and a control
+ * panel row) that exchanged these two actions at the END of every config load —
+ * after binds.state, so it put back whatever the shortcuts palette had just
+ * rebound. Two owners of one chord. This pins its removal from both directions:
+ * the key does nothing, and a swap written as ordinary binds STAYS swapped.
+ */
+static void test_launcher_pair_is_just_binds(void)
 {
     syn_config_t c;
 
-    /* Default: the launcher is on Space, the command bar on '='. */
+    /* Shipped: the launcher on Space, the command bar on '='. */
     write_synuirc("");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(c.super_space == SYN_SUPER_SPACE_LAUNCHER);
     assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
     assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
 
-    /* Flipped: they trade places, and NOTHING else moves — the swap must not
-     * quietly drop one of them or leave both on the same key. */
+    /* The dead key moves nothing. Not merely unparsed — if a swap ever comes
+     * back, THIS is the assertion that fails. */
     write_synuirc("super_space = cmdbar\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(c.super_space == SYN_SUPER_SPACE_CMDBAR);
+    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
+
+    /* The supported way to swap them: two binds, and nothing re-seats them. */
+    write_synuirc("bind = super+space cmdbar\n"
+                  "bind = super+equal spawn_toggle rofi -show drun\n");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
     assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
     assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
 
-    /* Back again, from the same load path. */
-    write_synuirc("super_space = launcher\n");
+    /* Same swap with the dead key ALSO asking for the other arrangement: the
+     * binds win, because there is no longer anything to lose to. */
+    write_synuirc("bind = super+space cmdbar\n"
+                  "bind = super+equal spawn_toggle rofi -show drun\n"
+                  "super_space = launcher\n");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
+    assert(holds(bind_of(&c, XKB_KEY_space), "cmdbar", ""));
+    assert(holds(bind_of(&c, XKB_KEY_equal), "spawn_toggle", "rofi -show drun"));
 
-    /* THE ONE THAT MATTERS: a user bind on either key disarms the swap
-     * entirely. Asking for cmdbar-on-Space here must NOT clobber the explicit
-     * `bind =`, and must not half-apply by moving the other key either. */
-    write_synuirc("bind = super+space spawn my-launcher\n"
-                  "super_space = cmdbar\n");
+    printf("  launcher pair is binds ... ok\n");
+}
+
+/*
+ * An upgrade finds `super_space` sitting in settings.state, because the row
+ * that wrote it shipped for weeks. load() remembers every line it reads so the
+ * next save cannot drop one, which would rewrite a dead key forever — so the
+ * obsolete list drops it on the way in instead.
+ */
+static void test_obsolete_key_leaves_settings_state(void)
+{
+    syn_config_t c;
+
+    write_synuirc("");
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn", "my-launcher"));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "cmdbar", ""));
 
-    /* Same when it is the OTHER key that was rebound. */
-    write_synuirc("bind = super+equal term\n"
-                  "super_space = cmdbar\n");
+    /* Written the way the old row wrote it. */
+    settings_state_set("super_space", "cmdbar");
+    assert(settings_state_has("super_space"));
+
     memset(&c, 0, sizeof(c));
     synui_config_load(&c);
-    assert(holds(bind_of(&c, XKB_KEY_space), "spawn_toggle", "rofi -show drun"));
-    assert(holds(bind_of(&c, XKB_KEY_equal), "term", ""));
+    assert(!settings_state_has("super_space"));
 
-    printf("  super_space swap ... ok\n");
+    /* And a live key alongside it is untouched — the drop is by name, not a
+     * "forget the file" fallback. */
+    settings_state_set("gap", "13");
+    settings_state_set("super_space", "cmdbar");
+    memset(&c, 0, sizeof(c));
+    synui_config_load(&c);
+    assert(!settings_state_has("super_space"));
+    assert(settings_state_has("gap"));
+    assert(c.gap == 13);
+    settings_state_clear("gap");
+
+    printf("  obsolete key dropped ... ok\n");
 }
 
 int main(void)
@@ -494,7 +528,8 @@ int main(void)
     test_state_overrides();
     test_state_clear();
     test_round_trip();
-    test_super_space_swap();
+    test_launcher_pair_is_just_binds();
+    test_obsolete_key_leaves_settings_state();
 
     rig_cleanup();
     printf("settings_test: all ok\n");

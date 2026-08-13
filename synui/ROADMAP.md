@@ -718,29 +718,29 @@ else. The launcher moved onto it and the command bar moved off.
       — but its `action_desc()` lookup is a second table that a *new action*
       would still drift from. A `spawn` bind is exempt: it falls through to the
       command string, so the rofi row reads `rofi -show drun`.
-- [x] **The swap is a setting, not a fork in the config.** Control panel ▸
-      Desktop ▸ "Super+Space opens" flips the pair live; `super_space =
-      launcher|cmdbar` in synuirc is the same switch. One setting rather than two
-      binds because the two actions are always a *pair* — never both on one key,
-      never one of them homeless — and asking a user to keep two `bind =` lines
-      consistent is asking them to get it wrong.
-      `CTL_KIND_TOGGLE` + `CTL_VAL_ENUM` over two names: `ctl_adjust()` wraps
-      modulo `nnames`, so on a pair Enter *is* a toggle, and the row says which
-      one you get instead of a meaningless on/off.
-- [x] **It refuses to act on a key you rebound.** `synui_config_apply_launcher_binds()`
-      only ever exchanges the two actions it put there itself: if super+space or
-      super+equal holds anything else, someone said so deliberately in synuirc,
-      and overwriting that is the exact silent regression the setting exists to
-      save people from. The bind wins, the toggle no-ops, and the log says why.
-      It runs **dead last** in `synui_config_load()` — after the seed table,
-      after synuirc's `bind =` lines, after settings.state — because all three
-      write these combos and the setting has to have the last word.
-      `SYN_BIND_LAUNCHER` / `SYN_BIND_CMDBAR` spell the two actions **once**, so
-      the seed table, the swap and the "is this still ours?" test cannot drift
-      into disagreeing — a drift that would present as a toggle that quietly
-      stopped working rather than as a build error.
-      Pinned in `tests/settings_test.c` (`test_super_space_swap`), including both
-      directions and both halves of the rebound case.
+- [x] **The swap was a setting, and that was the mistake — REMOVED (2026-08-12).**
+      Control panel ▸ Desktop ▸ "Super+Space opens" flipped the pair live and
+      `super_space = launcher|cmdbar` in synuirc was the same switch, one setting
+      rather than two `bind =` lines a user has to keep consistent.
+      `synui_config_apply_launcher_binds()` ran **dead last** in
+      `synui_config_load()` — after the seed table, after synuirc, after
+      settings.state — because all three write those combos and the setting had
+      to have the last word.
+      Then Phase S's rebind helper (F2) landed and `binds.state` became a fourth
+      writer of the same two combos, loaded just *before* that call: a chord
+      moved in the palette was silently put back at the next config load, and
+      velle hit exactly that. The guard did not help — it refused only when a key
+      held something OUTSIDE the shipped pair, and swapping the pair by hand is
+      precisely the case it read as "still ours, and the wrong way round".
+      It was the same bug `ctlpanel_shortcuts()` exists to prevent, in the other
+      direction: a second place a keybinding is declared. **The palette owns both
+      chords now.** `super_space` is parsed only to log that it is obsolete;
+      `settings.c` keeps a `g_obsolete[]` list so an upgraded settings.state
+      drops the dead key instead of rewriting it forever.
+      `SYN_BIND_LAUNCHER` / `SYN_BIND_CMDBAR` stay — the seed table and the tests
+      still want the launcher command spelled once.
+      `tests/settings_test.c` pins both halves: the key moves nothing, and a swap
+      written as two `bind =` lines STAYS swapped.
 - [x] **rofi is themed by `synui-apply-theme.sh`**, so it tracks SYNAPSE/Dark/
       XP/95 like everything else. It is the one themed surface that needs **no
       reload signal** — no SIGUSR2 like waybar, no D-Bus nudge like Dolphin, no

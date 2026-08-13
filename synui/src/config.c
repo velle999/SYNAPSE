@@ -540,11 +540,12 @@ static int parse_hex_color(const char *val, float out[4])
     return 1;
 }
 
-/* The two actions the Super+Space / Super+= pair moves between, spelled ONCE.
- * seed_default_binds() below, the swap in synui_config_apply_launcher_binds()
- * and the "is this still the shipped pair" test all use these, so the three
- * cannot drift into disagreeing about what "the launcher" is — which would show
- * up as a toggle that silently stops working, not as a build error. */
+/* The two actions the Super+Space / Super+= pair ships on, spelled ONCE.
+ * There used to be a swap (and a control-panel row) that moved them between the
+ * two keys; it was a second declaration of a keybinding and it fought the
+ * rebind helper, so the shortcuts palette is now the only owner of both chords.
+ * These stay named because seed_default_binds() and the tests both want the
+ * launcher command in exactly one place. */
 #define SYN_BIND_LAUNCHER "spawn_toggle rofi -show drun"
 #define SYN_BIND_CMDBAR   "cmdbar"
 
@@ -778,73 +779,6 @@ static void seed_default_binds(syn_config_t *cfg)
         snprintf(act, sizeof(act), "movews %d", i);
         config_bind(cfg, combo, act);
     }
-}
-
-/* ── The launcher/command-bar swap ───────────────────────── */
-
-static syn_bind_t *bind_find(syn_config_t *cfg, uint32_t mods, xkb_keysym_t sym)
-{
-    for (int i = 0; i < cfg->bind_count; i++)
-        if (cfg->binds[i].mods == mods && cfg->binds[i].sym == sym)
-            return &cfg->binds[i];
-    return NULL;
-}
-
-/* Does this bind still hold one of the two actions the swap owns? `spec` is a
- * seed-table string ("<action> [arg]"), split the same way config_bind splits
- * it so the comparison sees exactly what config_bind stored. */
-static int bind_holds(const syn_bind_t *b, const char *spec)
-{
-    if (!b) return 0;
-    const char *sp = spec;
-    while (*sp && !isspace((unsigned char)*sp)) sp++;
-    size_t alen = (size_t)(sp - spec);
-    while (isspace((unsigned char)*sp)) sp++;
-    return strlen(b->action) == alen && strncmp(b->action, spec, alen) == 0 &&
-           strcmp(b->arg, sp) == 0;
-}
-
-/*
- * Put the launcher and the command bar on the keys `super_space` asks for.
- *
- * Runs at the END of a config load — after seed_default_binds(), after synuirc's
- * own `bind =` lines and after settings.state — because all three can write
- * these two combos and the last word has to be the setting's.
- *
- * REFUSES TO ACT IF EITHER KEY HAS BEEN REBOUND. The swap only ever exchanges
- * two actions it put there itself: if super+space or super+equal holds anything
- * other than the shipped pair, someone said so deliberately in synuirc, and
- * overwriting that is precisely the silent regression this whole setting is
- * supposed to be a convenience for. A user override wins and the toggle becomes
- * a no-op — logged, so it is findable, rather than fighting the config file.
- */
-void synui_config_apply_launcher_binds(syn_config_t *cfg)
-{
-    syn_bind_t *space = bind_find(cfg, WLR_MODIFIER_LOGO, XKB_KEY_space);
-    syn_bind_t *eq    = bind_find(cfg, WLR_MODIFIER_LOGO, XKB_KEY_equal);
-
-    int space_launcher = bind_holds(space, SYN_BIND_LAUNCHER);
-    int space_cmdbar   = bind_holds(space, SYN_BIND_CMDBAR);
-    int eq_launcher    = bind_holds(eq,    SYN_BIND_LAUNCHER);
-    int eq_cmdbar      = bind_holds(eq,    SYN_BIND_CMDBAR);
-
-    if (!((space_launcher && eq_cmdbar) || (space_cmdbar && eq_launcher))) {
-        wlr_log(WLR_INFO, "synui: super_space: super+space / super+equal do not "
-                "hold the shipped launcher pair (rebound in synuirc?) — leaving "
-                "both alone");
-        return;
-    }
-
-    /* Already the way round the setting wants. Not merely an optimisation: the
-     * two config_bind() calls below would be a no-op anyway, but returning here
-     * keeps a load that changes nothing from logging as if it had. */
-    int want_cmdbar_on_space = (cfg->super_space == SYN_SUPER_SPACE_CMDBAR);
-    if (space_cmdbar == want_cmdbar_on_space) return;
-
-    config_bind(cfg, "super+space",
-                want_cmdbar_on_space ? SYN_BIND_CMDBAR   : SYN_BIND_LAUNCHER);
-    config_bind(cfg, "super+equal",
-                want_cmdbar_on_space ? SYN_BIND_LAUNCHER : SYN_BIND_CMDBAR);
 }
 
 /* ── Config-dir paths ────────────────────────────────────── */
@@ -1108,8 +1042,6 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->dock_edge         = SYN_DOCK_EDGE_BOTTOM;
     cfg->dock_pin_count    = 0;
     cfg->launcher_style    = SYN_LAUNCHER_TEXT;
-    /* Super+Space is the app launcher, the way it is everywhere else. */
-    cfg->super_space       = SYN_SUPER_SPACE_LAUNCHER;
     /* A tapped Super opens the start menu, the way it does everywhere else —
      * the default the key is named after. */
     cfg->tap_mod           = WLR_MODIFIER_LOGO;
@@ -1342,7 +1274,6 @@ void synui_config_load(syn_config_t *cfg)
         uifx_state_load_config(cfg);
         theme_state_load_config(cfg);
         binds_state_load(cfg);
-        synui_config_apply_launcher_binds(cfg);
         config_apply_ui_font(cfg);
         return;
     }
@@ -1424,9 +1355,6 @@ void synui_config_load(syn_config_t *cfg)
      * helper's edits. Snapshotting the baseline any earlier would record a
      * synuirc `bind =` line as a user rebind and write it back out forever. */
     binds_state_load(cfg);
-
-    /* Dead last, after every writer of the bind table has had its say. */
-    synui_config_apply_launcher_binds(cfg);
 
     /* Every source has now been read, so this is the final answer for the font
      * rather than one source's guess — which is why it is applied here and
@@ -1908,12 +1836,19 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         snprintf(cfg->bar_stop_cmd, sizeof(cfg->bar_stop_cmd), "%s", val);
     else if (strcmp(key, "bar_start_cmd") == 0)
         snprintf(cfg->bar_start_cmd, sizeof(cfg->bar_start_cmd), "%s", val);
-    /* Which of the two the Super+Space key runs; the other gets Super+=. The
-     * swap itself is applied at the end of the load (the binds this names may
-     * not have been parsed yet when this line is read). */
+    /* OBSOLETE, and kept only to SAY SO. `super_space = launcher|cmdbar` used to
+     * swap the two actions across Super+Space and Super+=; it re-applied at the
+     * end of every config load, which put back any rebind the shortcuts palette
+     * had made — so it is gone and the palette owns both chords. An unknown key
+     * is silently ignored here, and silence is exactly wrong for a key that used
+     * to work: the line stays in synuirc, the desktop stops obeying it, and
+     * nothing says why. An old settings.state never reaches here — settings.c's
+     * obsolete list drops the key on the way in, so the panel's next save writes
+     * the file without it, and only a hand-written synuirc line gets the log. */
     else if (strcmp(key, "super_space") == 0) {
-        if      (strcmp(val, "launcher") == 0) cfg->super_space = SYN_SUPER_SPACE_LAUNCHER;
-        else if (strcmp(val, "cmdbar")   == 0) cfg->super_space = SYN_SUPER_SPACE_CMDBAR;
+        wlr_log(WLR_INFO, "synui: super_space is obsolete and ignored — rebind "
+                "Super+Space / Super+= in the shortcuts palette (Super+/, F2) "
+                "or with `bind =` / `unbind =` lines");
     }
     /* Which modifier, tapped alone, opens the start menu. `none` is a value and
      * not a parse failure — it is how the tap is turned off. Everything else is

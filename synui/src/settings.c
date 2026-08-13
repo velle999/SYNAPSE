@@ -59,6 +59,32 @@ static struct {
 
 static int g_over_n;
 
+/*
+ * Keys this file may still CONTAIN but no longer means anything by.
+ *
+ * A removed setting leaves its line behind in everybody's settings.state, and
+ * because load() remembers every line it reads so the next save does not drop
+ * it, a dead key would otherwise be rewritten forever — and re-logged by the
+ * parser's "obsolete" branch at every login, which reads as a complaint about a
+ * file the user never wrote. Listed here it is dropped on the way in, so the
+ * first row anyone changes writes the file without it.
+ *
+ * Only for keys the parser has stopped acting on. A key that still works must
+ * never appear here: this silently discards the user's value for it.
+ */
+static const char *const g_obsolete[] = {
+    /* Removed with the "Super+Space opens" row: a second way to declare a
+     * keybinding, which put back what the shortcuts palette rebound. */
+    "super_space",
+};
+
+static int settings_key_obsolete(const char *key)
+{
+    for (size_t i = 0; i < sizeof(g_obsolete) / sizeof(g_obsolete[0]); i++)
+        if (strcmp(key, g_obsolete[i]) == 0) return 1;
+    return 0;
+}
+
 static int settings_path(char *buf, size_t n)
 {
     return syn_config_path(buf, n, "settings.state") ? 1 : 0;
@@ -178,6 +204,12 @@ void settings_state_load(syn_config_t *cfg)
         while (*val == ' ' || *val == '\t') val++;
 
         if (!*key || g_over_n >= SETTINGS_MAX) continue;
+
+        if (settings_key_obsolete(key)) {
+            wlr_log(WLR_INFO, "synui: settings.state: dropping obsolete '%s'",
+                    key);
+            continue;
+        }
 
         /* A key too long for the table would be stored truncated and would then
          * match nothing — the row would look un-overridden while its line sat

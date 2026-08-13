@@ -272,10 +272,12 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`1`–`9` | Switch workspace |
 | `Super`+`Shift`+`1`–`9` | Move window to workspace |
 
-`Super`+`Space` and `Super`+`=` swap with one line — `super_space = cmdbar`
-puts the command bar back on Space and moves rofi to `=`. A `bind =` of your
-own on either key wins over the swap, which then becomes a logged no-op rather
-than fighting your config file.
+`Super`+`Space` and `Super`+`=` are ordinary binds like everything else: swap
+them with two `bind =` lines, or move either one live with `F2` in the `Super`+`/`
+palette. (There used to be a `super_space = launcher|cmdbar` setting and a
+control-panel row for this. It re-applied at the end of every config load, which
+put back whatever you had just rebound, so it is gone — the key is ignored with
+a log line.)
 
 Rebind anything with a `bind = <combo> <action> [arg]` line in `synuirc` —
 **whitespace between the combo and the action, no comma**:

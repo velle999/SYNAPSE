@@ -554,12 +554,16 @@ record_edit = off
 #   command actually ran. It is a SIGTERM, so a launcher that ignores one
 #   (none do) would stay up.
 #
-# super_space = launcher|cmdbar  (default launcher)
-#   Which of the two answers Super+Space; the other one gets Super+=. Control
-#   panel ▸ Desktop ▸ "Super+Space opens" flips it live and writes it here (well,
-#   to settings.state). It only ever swaps the two actions IT put on those keys:
-#   if you rebind either combo with a `bind =` line above, the setting stops
-#   touching them and says so in the log. Your bind wins.
+# super_space = launcher|cmdbar  — REMOVED, and ignored with a log line.
+#   It swapped the launcher and the command bar across Super+Space and Super+=,
+#   and it re-applied at the END of every config load — after binds.state — so
+#   it put back whatever the shortcuts palette had just rebound. Two owners of
+#   one chord, and the setting won. Swap them yourself instead — a `bind =` on a
+#   combo that already has one replaces it, so this is the whole swap:
+#       bind = super+space cmdbar
+#       bind = super+equal spawn_toggle rofi -show drun
+#   or move either one live with F2 in the Super+/ palette (Control panel ▸
+#   Shortcuts), which is now the only thing that owns those keys.
 #
 # tap_key = super|ctrl|alt|shift|none  (default super)
 #   The tap's key, and the one shortcut that is not a bind: a
