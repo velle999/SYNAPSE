@@ -976,6 +976,60 @@ n=$("$SYNFILES" --rec actions "$AM/archive.zip" "$AM/a.txt" | tail -n +2 | wc -l
 "$SYNFILES" action >/dev/null 2>&1
 [ $? -eq 1 ] && ok "action with no arguments is an error" || bad "action accepted no arguments"
 
+# ── the launched application must SURVIVE this process ──────────────────────
+# The bug this pins: `Open with Text Editor` did nothing from the GUI while
+# working perfectly from a terminal. cmd_action called setsid() but left the
+# child holding synfiles' own stdout and stderr — which under quickshell are
+# pipes it closes the instant synfiles exits, and synfiles exits immediately by
+# design. The application's first line of startup logging then went into a pipe
+# with no reader and SIGPIPE killed it before it mapped a window: right argv,
+# exit status 0, nothing in any log.
+#
+# So the fixture chatters BEFORE it does its work, and the pipeline's reader is
+# gone before it gets there. `head -n 0` exits at once, which is precisely the
+# closed read end quickshell leaves behind.
+cat > "$T/launch-marker.sh" <<'LM'
+#!/bin/sh
+# Wait for the caller to be gone, then write where a real toolkit writes.
+sleep 1
+echo "starting up" >&2
+echo "starting up"
+: > "$1.launched"
+LM
+chmod +x "$T/launch-marker.sh"
+
+cat > "$A/applications/fixture-launch.desktop" <<DE
+[Desktop Entry]
+Type=Application
+Name=Fixture Launcher
+Exec=$T/launch-marker.sh %F
+DE
+
+rm -f "$AM/a.txt.launched"
+"$SYNFILES" action fixture-launch.desktop -- "$AM/a.txt" 2>&1 | head -n 0
+# Longer than the fixture's own sleep, or this asserts the timing not the fix.
+sleep 3
+[ -f "$AM/a.txt.launched" ] \
+    && ok "a launched application outlives synfiles' closed stdio" \
+    || bad "the launched application was killed with synfiles' pipes"
+rm -f "$AM/a.txt.launched"
+
+# And a missing Exec= must still SAY so. The child reports on a close-on-exec
+# duplicate of the original stderr, which exists only on the failed-exec path —
+# an application that actually started never inherits it. Silence here made an
+# uninstalled helper look identical to a working one.
+cat > "$A/applications/fixture-missing.desktop" <<'DE'
+[Desktop Entry]
+Type=Application
+Name=Not Installed
+Exec=synfiles-no-such-program-exists %F
+DE
+
+"$SYNFILES" action fixture-missing.desktop -- "$AM/a.txt" 2>"$T/launch-err" >/dev/null
+sleep 1
+grep -q 'cannot run synfiles-no-such-program-exists' "$T/launch-err"
+check "an Exec= that is not installed reports instead of failing silently" $?
+
 # ── mime aliases and subclasses ─────────────────────────────────────────────
 # THE bug that hid Mount ISO. globs2 answers application/vnd.efi.iso for *.iso,
 # synui's service menu declares application/x-cd-image, and /usr/share/mime/

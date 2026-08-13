@@ -28,6 +28,8 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -671,15 +673,61 @@ int cmd_action(int argc, char **argv)
 	free(text);
 	free(path);
 
-	/* Detached: the file manager must not sit waiting for GIMP to close. */
+	/* Detached: the file manager must not sit waiting for GIMP to close.
+	 *
+	 * ⚠ And detached from this process's STDIO, which is the harder half.
+	 * setsid() alone is not enough. Launched from the GUI, stdout and stderr
+	 * are pipes owned by quickshell's Process, and quickshell closes its read
+	 * ends as soon as THIS process exits — which is immediately, that being
+	 * the whole point. The application we just started then writes its first
+	 * line of startup chatter into a pipe with no reader and is killed by
+	 * SIGPIPE before it ever maps a window.
+	 *
+	 * That is exactly how "Open with Text Editor" read as a dead menu entry:
+	 * correct argv, exit status 0, nothing in any log, no window. It worked
+	 * perfectly from a terminal, where stderr is a tty that nobody closes.
+	 *
+	 * The rule: a launcher hands its child NOTHING the caller owns. */
+	int errfd = fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 10);
+
 	pid_t pid = fork();
 	if (pid < 0)
 		die("fork: %s", strerror(errno));
 	if (pid == 0) {
 		setsid();
+
+		int null = open("/dev/null", O_RDWR);
+		if (null >= 0) {
+			dup2(null, STDIN_FILENO);
+			dup2(null, STDOUT_FILENO);
+			dup2(null, STDERR_FILENO);
+			if (null > STDERR_FILENO)
+				close(null);
+		}
+
 		execvp(child[0], child);
+
+		/* Reached only when Exec= names something that is not installed.
+		 * errfd is close-on-exec, so it exists ONLY on this path and is
+		 * never inherited by an application that actually started — which
+		 * is the point, since it is the very descriptor the comment above
+		 * says not to pass on. Silence here is how a missing helper used
+		 * to look identical to a working one. */
+		if (errfd >= 0) {
+			char msg[256];
+			int len = snprintf(msg, sizeof msg,
+			                   "synfiles: cannot run %s: %s\n",
+			                   child[0], strerror(errno));
+			if (len > 0 && write(errfd, msg, (size_t)len) < 0) {
+				/* The caller is already gone. Nothing left to
+				 * say, and nowhere left to say it. */
+			}
+		}
 		_exit(127);
 	}
+
+	if (errfd >= 0)
+		close(errfd);
 
 	if (g_out == OUT_REC)
 		rec_row(2, "started", child[0]);
