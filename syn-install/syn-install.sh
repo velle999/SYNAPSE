@@ -1630,8 +1630,9 @@ echo "  Running pacstrap (this may take several minutes)..."
 # dolphin (Qt6 + KF6) and wine + wine-mono used to be on this line, which meant a
 # Minimal install — the VM/small-disk/headless case the presets exist for — paid
 # for the two largest optional dependency trees in the install with no way to say
-# no. They are now WANT_FILEMGR / WANT_WINE in step 4 and are installed in the
-# desktop step below.
+# no. wine is WANT_WINE in step 4 now and is installed below; dolphin is not
+# installed by any preset any more (2026-08-13) — synfiles is THE file manager,
+# and `synpkg install dolphin` is one command for anyone who wants the KDE one.
 # Filesystem tooling for the root that was actually chosen. `base` pulls in
 # e2fsprogs and nothing else, so without this an xfs or btrfs root ships with no
 # fsck and no repair tool on the one machine that will eventually need them —
@@ -1717,7 +1718,6 @@ while :; do
     MODEL_LABEL="Mistral 7B Instruct (~4.1 GB)"
     WANT_BLUETOOTH=1      # bluez + bluez-utils
     WANT_PRINTING=1       # cups + drivers
-    WANT_FILEMGR=1        # dolphin — a SECOND file manager; synfiles is the default
     WANT_WINE=1           # wine + wine-mono
     WANT_PHONE=1          # kdeconnect — pair a phone with the desktop
     # Steam is Full-only, not Standard. It is the only item here that needs a
@@ -1754,16 +1754,17 @@ while :; do
     # after fetch and synpkg: it is THE file manager since 2026-08-10, it
     # depends on nothing but glibc and shared-mime-info, and a desktop where
     # clicking a folder does nothing is not a smaller system but a broken one.
-    # Dolphin is the optional extra below (WANT_FILEMGR), because IT is the one
-    # that costs 550 MB of Qt6 and KF6.
+    # There is no second file manager to choose any more: Dolphin was the
+    # optional extra here (WANT_FILEMGR) and nothing opened it by default.
+    # `synpkg install dolphin` after the fact.
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-edit syn-confine fetch"
     SEL_APPS="chibi vibe syn-arsenal"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
-    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, file manager, Wine, phone, Steam"
-    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, file manager, Wine, phone, Chibi + Vibe  (default)"
-    echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/file manager/Wine/phone"
+    echo "    $(bold '1)') Full      — everything: all apps, AI model, Bluetooth, printing, Wine, phone, Steam"
+    echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Wine, phone, Chibi + Vibe  (default)"
+    echo "    $(bold '3)') Minimal   — core daemons only: no apps, no model, no Bluetooth/printing/Wine/phone"
     echo "    $(bold '4)') Custom    — pick each item individually"
     echo ""
     echo "  Every preset except Minimal then asks WHICH AI model to download,"
@@ -1777,14 +1778,14 @@ while :; do
         1)
             SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 syn-arsenal"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
-            WANT_FILEMGR=1; WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
+            WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1
             success "Full install selected"
             ;;
         3)
             SEL_APPS=""
             WANT_MODEL=0; WANT_BLUETOOTH=0; WANT_PRINTING=0
-            WANT_FILEMGR=0; WANT_WINE=0; WANT_PHONE=0; WANT_STEAM=0
+            WANT_WINE=0; WANT_PHONE=0; WANT_STEAM=0
             WANT_BLACKARCH=0; WANT_NIX=0
             success "Minimal install selected"
             ;;
@@ -1818,7 +1819,6 @@ while :; do
             # every preset below, and "None" is one of its answers.
             ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
             ask_opt WANT_PRINTING   1 "Printing (CUPS)"
-            ask_opt WANT_FILEMGR    1 "Dolphin as a second file manager (Qt6 + KF6, ~550 MB) — synfiles is installed either way"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
             ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) + CachyOS Proton — enables [multilib] and [cachyos] (~3.1 GB)"
@@ -1956,7 +1956,7 @@ while :; do
     echo "    AI model : $([ "$WANT_MODEL" = 1 ] && echo "$MODEL_LABEL — downloaded during the install" || echo 'none — the AI is inert until "syn model download"')"
     echo "    Bluetooth: $([ "$WANT_BLUETOOTH" = 1 ] && echo yes || echo no)"
     echo "    Printing : $([ "$WANT_PRINTING" = 1 ] && echo yes || echo no)"
-    echo "    Files    : synfiles$([ "$WANT_FILEMGR" = 1 ] && echo ' + Dolphin' || echo '')"
+    echo "    Files    : synfiles"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
     echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope + CachyOS Proton, enables multilib and [cachyos])' || echo no)"
@@ -2152,9 +2152,10 @@ DE_CHOICE="${de_choice:-1}"
 
 case "$DE_CHOICE" in
     2)
-        # kde-applications-meta contains dolphin, so KDE gets a file manager
-        # whether or not step 4 asked for one — same shape as bluez arriving
-        # via synui's depends. Declining the file manager here buys nothing.
+        # kde-applications-meta contains dolphin, so choosing Plasma still gets
+        # Dolphin — same shape as bluez arriving via synui's depends. That is
+        # the KDE desktop's own file manager, not a SynapseOS default: nothing
+        # else in the install pulls it in any more.
         echo "  Installing KDE Plasma..."
         arch-chroot /mnt pacman -S --noconfirm \
             plasma-meta sddm kde-applications-meta \
@@ -2189,25 +2190,20 @@ case "$DE_CHOICE" in
         # stays down and synui's panel reports no adapter. That is the whole
         # user-visible effect, and it is what the option promises.
         #
-        # dolphin is the SECOND file manager, chosen in step 4 and installed
-        # here rather than in pacstrap: it drags in Qt6 + KF6, so it is much the
-        # largest optional item in the install and a headless or small-disk box
-        # has no use for it. synui ships the /etc/xdg files that make KDE apps
-        # work outside Plasma (applications.menu, kdeglobals) — see its PKGBUILD.
-        #
-        # Declining it no longer leaves the desktop without a file manager:
-        # synfiles is in SEL_CORE and is the distribution default for
-        # inode/directory. The bar's Files button, the desktop right-click menu
-        # and the ISO mounter all go through synui-open-folder, which finds it
-        # first. Dolphin is here for someone who wants the KDE one as well.
+        # There is no dolphin line here any more (2026-08-13). It was the SECOND
+        # file manager, and nothing opened it: synfiles is in SEL_CORE, is the
+        # distribution default for inode/directory, and is what the bar's Files
+        # button, the desktop right-click menu and the ISO mounter reach through
+        # synui-open-folder. `synpkg install dolphin` afterwards for anyone who
+        # wants the KDE one. synui still ships the /etc/xdg files that make KDE
+        # apps work outside Plasma (applications.menu, kdeglobals) — see its
+        # PKGBUILD — and kdeconnect below is one of those apps.
         DESKTOP_PKGS="greetd greetd-tuigreet quickshell swaybg python wtype"
         [ "$WANT_BLUETOOTH" = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS bluez bluez-utils"
         [ "$WANT_PRINTING"  = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS cups cups-pdf ghostscript nss-mdns"
-        [ "$WANT_FILEMGR"   = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS dolphin"
-        # Phone pairing. Optional for the same reason dolphin is: on a Minimal
-        # install it would drag the whole KF6 tree in on its own, which is
-        # exactly the cost the WANT_FILEMGR split exists to let people decline.
-        # Alongside dolphin it is nearly free — the tree is already paid for.
+        # Phone pairing, and the one thing left that drags the KF6 tree in — on
+        # a Minimal install that is the whole cost, which is why it stays a
+        # question rather than something every install pays for.
         [ "$WANT_PHONE"     = 1 ] && DESKTOP_PKGS="$DESKTOP_PKGS kdeconnect"
         arch-chroot /mnt pacman -S --noconfirm $DESKTOP_PKGS \
             2>&1 || warn "greetd failed to install — boot falls back to getty login"

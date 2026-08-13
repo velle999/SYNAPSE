@@ -343,8 +343,8 @@ build_component synpkg
 # drop that from being default"). It is THE file manager now: in syn-update's
 # COMPONENTS, in syn-install's SEL_CORE, on the ISO, declaring
 # MimeType=inode/directory and shipping the distribution mimeapps.list that
-# makes a folder open in it. Dolphin stays installed and stays working; it is
-# simply not what a folder opens in any more.
+# makes a folder open in it. Dolphin came off the ISO and out of the installer
+# on 2026-08-13; it stays an optdepend and still works if installed.
 build_component synfiles
 
 # syn-settings — the settings app. build_component, not build_script_pkg: it is

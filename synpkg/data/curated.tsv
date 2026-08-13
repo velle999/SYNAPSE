@@ -81,6 +81,7 @@ Games	shattered-pixel-dungeon	repo	Shattered Pixel Dungeon	Dungeon-crawl rogueli
 Games	hedgewars	repo	Hedgewars	Turn-based artillery, in the Worms mould
 Games	armagetronad	repo	Armagetron Advanced	Tron light-cycle arcade racing
 Games	pingus	repo	Pingus	Level-based puzzle game, in the Lemmings mould
+Games	supertux	repo	SuperTux 2	Side-scrolling platformer, in the Super Mario mould
 
 System	htop	repo	htop	Interactive process viewer
 System	btop	repo	btop	Resource monitor with a readable layout
@@ -123,7 +124,6 @@ Terminal	eza	repo	eza	Modern ls
 Terminal	jq	repo	jq	Query and reshape JSON
 Terminal	zoxide	repo	zoxide	Directory jumping that learns
 
-Files	dolphin	repo	Dolphin	KDE's file manager, as a second one — synfiles is the SynapseOS default
 Files	ark	repo	Ark	Archive browser and extractor
 Files	7zip	repo	7-Zip	7z, and the format everything else needs
 Files	unrar	repo	unrar	RAR extraction

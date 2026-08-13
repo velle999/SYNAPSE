@@ -134,18 +134,23 @@ syn-confine
 # the wrong way round: the pane that sets the keyboard layout is wanted before
 # the pane that updates the system.
 syn-settings
-# Dolphin, which is no longer the default and is no longer the only one that
-# can reach synui's KIO service menus — synfiles reads
-# $XDG_DATA_DIRS/kio/servicemenus itself. Still on the ISO: it is a mature file
-# manager, some people want it, and kdeconnect drags most of its tree in
-# regardless. Pulls Qt6 + KF6 (~550MB), which is why synui ships the two
-# /etc/xdg files KDE-outside-Plasma needs to actually work: menus/applications.menu
-# (or every file opens the "Open With" chooser) and kdeglobals (or "Open Terminal"
+# dolphin is NOT here any more, as of 2026-08-13. It stopped being the default
+# on 2026-08-10 and then had no job left: synfiles is THE file manager, and it
+# reads $XDG_DATA_DIRS/kio/servicemenus itself, so synui's service menus (Mount
+# Image, Extract, Crop, Set as Wallpaper, Run with Wine) show up without it.
+# What it still cost is 45 packages and ~160MB installed — baloo, kio-extras,
+# kfilemetadata, poppler, ripgrep-all and the rest of its own tree, measured as
+# dolphin's dependency closure minus kdeconnect's, NOT the ~550MB the whole
+# Qt6+KF6 stack is usually quoted at: kdeconnect below pays for that part and
+# stays. `synpkg install dolphin` is one command for anyone who wants it.
+#
+# The two /etc/xdg files synui ships for KDE-outside-Plasma stay and still
+# matter — kdeconnect below is a KF6 app: menus/applications.menu (or every
+# file opens the "Open With" chooser) and kdeglobals (or "Open Terminal"
 # silently does nothing, KIO's fallback being a konsole we don't ship).
-dolphin
 # Phone pairing: notifications, file transfer, clipboard, remote control.
-# Costs almost nothing on top of dolphin — the KF6 tree is already paid for by
-# the line above — and the parts that would normally need theming work are
+# It carries the KF6 tree on its own now that dolphin is off the image — the
+# parts that would normally need theming work are
 # already SynapseOS's: the phone's notifications go through knotifications to
 # org.freedesktop.Notifications, which synui itself serves and draws, and the
 # indicator is a StatusNotifierItem, which the quickshell bar already hosts.
@@ -174,7 +179,7 @@ wtype
 # here so what the ISO ships is readable rather than inferred.
 wf-recorder
 
-# Printing. SynapseOS shipped Dolphin and Firefox and no way to print from
+# Printing. SynapseOS shipped a desktop and a browser and no way to print from
 # either. cups brings its own web admin UI on localhost:631, so there is no
 # printer-setup GUI to write or ship — the start menu just opens it.
 #

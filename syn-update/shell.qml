@@ -11,7 +11,7 @@ import Quickshell.Io
  * quickshell rather than GTK or a Qt C++ app because it is what the rest of
  * this desktop is already built on (the bar, the start menu, the OSD) and
  * because it costs NOTHING new on the ISO: quickshell and qt6-declarative are
- * both already there, the latter dragged in by Dolphin's Qt6/KF6 stack. A GTK4
+ * both already there, quickshell being the bar itself. A GTK4
  * app would have been a second toolkit for one window, and plain `qml` cannot
  * launch a process at all — Quickshell.Io's Process is the whole reason this
  * can be QML instead of C++.

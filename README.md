@@ -322,8 +322,8 @@ ordinary take, so it is off by default and the panel row says the rate out loud.
 A folder opens in **SYNAPSE Files** (`synfiles`) — the system's own file
 manager, built in the same shape as `synpkg`: a C binary that does the work and
 prints records, and a quickshell window that only renders them. Nothing in the
-QML knows how to stat a file. It replaced Dolphin as the default in August 2026;
-Dolphin is still installed, still works, and is one command away.
+QML knows how to stat a file. It replaced Dolphin as the default in August 2026,
+and Dolphin came off the image entirely shortly after.
 
 Tabs, a split view (`F3`), Icons / Compact / Details, thumbnails, a folder tree,
 pinned places, recent files, mounted volumes with fill meters, search that walks
@@ -358,10 +358,11 @@ synfiles info photo.jpg        # what the properties pane shows
 synfiles undo list             # what Ctrl+Z would reverse
 ```
 
-Prefer Dolphin? One command, and it outranks ours because it lands in your own
-config:
+Prefer Dolphin? Install it and hand it the mimetype — the second command
+outranks ours because it lands in your own config:
 
 ```bash
+synpkg install dolphin
 xdg-mime default org.kde.dolphin.desktop inode/directory
 ```
 
