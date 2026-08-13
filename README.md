@@ -808,14 +808,17 @@ card: build it with `sudo archiso/build.sh --gpu=rocm`.
 
 **Prerequisites** — an Arch (or Arch-based) host with `archiso`, `base-devel`,
 `meson`, `ninja`, `wlroots0.20`, `scenefx0.5`, `quickshell`, `qemu`, and `ovmf`.
-**Budget ~30 GB of free disk**, or ~45 GB if you embed a model. All of it has to
-be free at once, and it goes here: `archiso/work/` is mkarchiso's staging tree
-(~8.6 GB — the whole airootfs, then its squashfs), the ISO it produces is
-~7.6 GiB, `archiso/build/` holds llama.cpp plus a tree per backend (~3.1 GB),
-`airootfs/local-repo` the built packages (~0.45 GB), and package builds want
-~6 GB of `/var/tmp` scratch at their peak — `linux-wallpaperengine` fetches a
-~1.3 GB CEF blob and unpacks it. A model adds its 4.1 GB three times over: the
-overlay, the staging tree, and the image.
+**Budget ~20 GB of free disk**, or ~32 GB if you embed a model. Roughly where it
+goes: `archiso/build/` holds llama.cpp plus a tree per backend (~3.1 GB),
+`archiso/work/` is mkarchiso's staging tree, the ISO it produces is ~4 GB
+without a model, `airootfs/local-repo` the built packages (~0.45 GB), and
+package builds want several GB of `/var/tmp` scratch at their peak —
+`linux-wallpaperengine` fetches a ~1.3 GB CEF blob and unpacks it. That last one
+is transient: packages are built and cleaned up before `mkarchiso` starts, so it
+does not stack with the staging tree.
+
+A model costs its ~4.4 GB three times over — the overlay, the staging tree and
+the image — which is most of the difference between the two numbers.
 
 `archiso/build.sh` runs the whole pipeline: builds llama.cpp (pinned at tag
 `b10241`, matching CI and `synapse-llama`'s `_llama_ref`), packages every
