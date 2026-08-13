@@ -1,6 +1,6 @@
 pkgname=syn-install
 pkgver=0.1.0
-pkgrel=65
+pkgrel=66
 pkgdesc="SynapseOS disk installer"
 arch=('any')
 license=('GPL-2.0-or-later')
@@ -13,11 +13,20 @@ depends=('bash' 'parted' 'e2fsprogs' 'dosfstools' 'arch-install-scripts' 'grub'
 # GPU cannot start a compositor, which is exactly when someone is installing.
 optdepends=('quickshell: the graphical installer (syn-install-gui)')
 
-# Local sources land in $srcdir under their BASENAME, so data/ flattens.
+# FLAT, next to the PKGBUILD. makepkg resolves a local source entry to its
+# BASENAME and looks for it beside the PKGBUILD, so `data/syn-install-gui.qml`
+# fails with "not found in the build directory and is not a URL" — which is
+# exactly how syn-update's first build of this package died. The name::url
+# rename syntax is URL-only, so there is no way to keep the subdirectory.
+# syn/ carries the same scar (nix-flake.nix, nix-home.nix).
+#
+# The tarball-based components (synui, synpkg, syn-disks) are unaffected and do
+# use data/ — their paths live inside the tarball. This one builds in place
+# from local files.
 source=("syn-install.sh"
         "syn-crypt.sh"
         "syn-install-gui.sh"
-        "data/syn-install-gui.qml")
+        "syn-install-gui.qml")
 sha256sums=('SKIP'
             'SKIP'
             'SKIP'

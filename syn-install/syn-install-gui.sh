@@ -13,7 +13,7 @@ set -uo pipefail
 QML=/usr/share/syn-install/syn-install-gui.qml
 # Straight out of a checkout, so the window can be worked on without installing
 # the package first.
-[ -r "$QML" ] || QML="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/data/syn-install-gui.qml"
+[ -r "$QML" ] || QML="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/syn-install-gui.qml"
 
 # ── --if-requested ────────────────────────────────────────
 #

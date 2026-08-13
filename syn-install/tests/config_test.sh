@@ -168,7 +168,7 @@ echo "=== the graphical installer writes keys this script reads ==="
 #
 # Matched on the literal in each L.push("<key>=…"), which is the one form
 # buildConfig() uses.
-gui="$here/../data/syn-install-gui.qml"
+gui="$here/../syn-install-gui.qml"
 if [ -f "$gui" ]; then
     gui_keys=$(grep -ohE '"[a-z_0-9]+=' "$gui" | tr -d '"=' | sort -u)
     for k in $gui_keys; do
