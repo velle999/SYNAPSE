@@ -13,9 +13,10 @@ import ".."
  * disagree the moment a toggle is flipped.
  *
  * synui-clock returns one line: {"text": "12:51:35 PM  2026-07-24",
- * "tooltip": "Friday, July 24 2026\n\n…"}. The time is the part before the
- * double space; the tooltip's first line is the long date, which is nicer here
- * than the ISO one and costs nothing since it is already in the payload.
+ * "tooltip": "Friday, July 24 2026\n\n…", "date": "Friday, July 24 2026"}.
+ * The time is the part of `text` before the double space. The long date comes
+ * from `date` — a key that exists FOR this widget, because the tooltip always
+ * carries a date on purpose and so cannot express the "No date" layout.
  */
 WidgetFrame {
     id: root
@@ -35,7 +36,11 @@ WidgetFrame {
     // Both strings are intrinsically sized — neither is wrapped or given a
     // width — so measuring the card from them is not the loop it looks like.
     cardWidth: Math.max(180, time.implicitWidth + 22, date.implicitWidth + 22)
-    bodyHeight: time.implicitHeight + date.implicitHeight + 2
+    // The date line is not always there — "No date" is one of the layouts the
+    // Date & Time settings offer. An empty Text still reports a full line of
+    // implicitHeight, so measuring it unconditionally left the card carrying a
+    // blank strip under the time for a line that is not drawn.
+    bodyHeight: time.implicitHeight + (date.visible ? date.implicitHeight + 2 : 0)
 
     property string timeText: "--:--:--"
     property string dateText: ""
@@ -72,6 +77,7 @@ WidgetFrame {
         id: date
         anchors { right: parent.right; top: time.bottom; topMargin: 2 }
         text: root.dateText
+        visible: text !== ""
         color: Theme.fgDim
         font.family: Theme.fontFamily
         font.pixelSize: 12
@@ -91,8 +97,14 @@ WidgetFrame {
                     // leaves the whole string as the time, which is correct.
                     const parts = t.split(/\s{2,}/)
                     root.timeText = parts[0] || "--:--:--"
-                    const tip = String(j.tooltip || "").split("\n")[0].trim()
-                    root.dateText = tip || (parts.length > 1 ? parts[1] : "")
+                    // `date` is the widget's own key: the long form when the
+                    // chosen layout has a date, and EMPTY when it does not.
+                    // Reading the tooltip instead — as this did — meant "No
+                    // date" was a setting this widget silently ignored, since
+                    // the tooltip always carries one on purpose.
+                    root.dateText = String(j.date !== undefined
+                                           ? j.date
+                                           : (parts.length > 1 ? parts[1] : ""))
                 } catch (e) {
                     root.timeText = "--:--:--"
                     root.dateText = "clock unavailable"

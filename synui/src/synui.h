@@ -1228,11 +1228,23 @@ typedef struct {
 
 /* ── Clock & Time / Calendar (clock.c) ───────────────────── */
 #define CLOCK_ZONES_MAX    6
-#define CLOCK_SETTING_ROWS 3   /* format, seconds, NTP — see clock_row_label() */
+#define CLOCK_SETTING_ROWS 4   /* format, seconds, date, NTP — clock_row_label() */
+
+/* The date layout is stored as its ID STRING, not as an index.
+ *
+ * synui-clock is the authority on which layouts exist — it is what actually
+ * renders the bar and the desktop widget, and `synui-clock --layouts` is what
+ * syn-settings asks. This panel keeps its own list only so it can cycle, and an
+ * id it has never heard of is DISPLAYED AND PRESERVED rather than reset: an
+ * index would silently become a different layout the moment the lists differ
+ * in length, which is the failure mode a shared enum invites across two
+ * languages and two packages. */
+#define CLOCK_DATE_ID_MAX 24
 
 typedef struct {
     int  fmt24;        /* 0 = 12-hour, 1 = 24-hour (persisted to clock.state) */
     int  seconds;      /* show seconds in the bar clock */
+    char date[CLOCK_DATE_ID_MAX];  /* date layout id: iso, dmy, mdy, … */
     char zones[CLOCK_ZONES_MAX][64];  /* world-clock IANA zone names */
     int  nzones;
     char tz[128];      /* system zone, read from /etc/localtime */

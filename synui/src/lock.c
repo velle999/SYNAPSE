@@ -152,9 +152,20 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     struct tm tm;
     localtime_r(&t, &tm);
 
+    /* The bar's own 12/24-hour setting, not a guess. This was a hardcoded
+     * "%-I:%M" carrying a comment claiming it matched the bar, and it had not
+     * matched it since the Date and Time panel gained the toggle: choosing
+     * 24-hour changed the bar and the desktop widget and nothing on the lock
+     * screen — a stranded toggle of exactly the kind synui-clock exists to
+     * prevent. The date stays long-form here; this is a full-screen panel,
+     * not a bar, and it has room to spell the day out. */
     char hhmm[16], ampm[8], date[64];
-    strftime(hhmm, sizeof(hhmm), "%-I:%M", &tm);   /* 12h, matches the bar */
-    strftime(ampm, sizeof(ampm), "%p", &tm);
+    strftime(hhmm, sizeof(hhmm), s->clock.fmt24 ? "%H:%M" : "%-I:%M", &tm);
+    /* Set explicitly rather than by strftime("") — an empty format returns 0,
+     * which is also strftime's error return, and the standard calls the buffer
+     * contents indeterminate on error. */
+    if (s->clock.fmt24) ampm[0] = '\0';
+    else strftime(ampm, sizeof(ampm), "%p", &tm);
     strftime(date, sizeof(date), "%A, %B %-d", &tm);
 
     double cx = LOCK_PANEL_W / 2.0;
@@ -173,11 +184,13 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 150);
     syn_show_text(cr, hhmm);
 
-    /* AM/PM, small, trailing the clock. */
-    cairo_set_font_size(cr, 30);
-    cairo_set_source_rgba(cr, 0.45, 0.9, 0.85, a);
-    cairo_move_to(cr, cx + te.width / 2 + 12, 150);
-    syn_show_text(cr, ampm);
+    /* AM/PM, small, trailing the clock — nothing at all on a 24-hour clock. */
+    if (ampm[0]) {
+        cairo_set_font_size(cr, 30);
+        cairo_set_source_rgba(cr, 0.45, 0.9, 0.85, a);
+        cairo_move_to(cr, cx + te.width / 2 + 12, 150);
+        syn_show_text(cr, ampm);
+    }
 
     /* Date. */
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL,
@@ -853,6 +866,12 @@ int lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint)
 void synui_lock(syn_server_t *s)
 {
     if (s->locked) return;          /* idempotent: already locked (native or client) */
+
+    /* clock.state has writers outside this process — syn-settings' Date & Time
+     * pane — and the lock panel now renders the 12/24-hour choice rather than
+     * assuming 12. Re-read on engage, not per frame: this runs once per lock,
+     * where a frame callback runs at the refresh rate. */
+    clock_state_load(s);
 
     s->locked        = 1;
     s->nlock.active  = 1;

@@ -48,6 +48,39 @@ static bool clock_state_path(char *buf, size_t n)
     return syn_config_path(buf, n, "clock.state");
 }
 
+/* ── date layouts ─────────────────────────────────────────────
+ *
+ * The list synui-clock renders from, kept here so the panel can cycle. It is a
+ * COPY, deliberately: the two live in one repo and ship in one package, and the
+ * cross-package answer — the one syn-settings uses — comes from
+ * `synui-clock --layouts` so there is exactly one authority outside synui.
+ *
+ * `off` is a real answer. Some people want a clock, not a calendar.
+ */
+static const struct {
+    const char *id;
+    const char *label;
+    const char *fmt;      /* NULL = draw no date at all */
+    const char *lng;      /* the spelled-out form, for this panel's header */
+} g_date_layouts[] = {
+    { "iso",      "ISO 8601",           "%Y-%m-%d",   "%A, %-d %B %Y" },
+    { "dmy",      "Day first",          "%d/%m/%Y",   "%A, %-d %B %Y" },
+    { "mdy",      "Month first",        "%m/%d/%Y",   "%A, %B %-d %Y" },
+    { "dmy-text", "Day first, named",   "%-d %b %Y",  "%A, %-d %B %Y" },
+    { "mdy-text", "Month first, named", "%b %-d, %Y", "%A, %B %-d %Y" },
+    { "locale",   "Follow the locale",  "%x",         "%A, %x"        },
+    { "off",      "No date",            NULL,         "%A, %-d %B %Y" },
+};
+#define CLOCK_DATE_LAYOUTS ((int)(sizeof(g_date_layouts) / sizeof(g_date_layouts[0])))
+
+/* Index of an id, or -1 for one this build has never heard of. */
+static int clock_date_index(const char *id)
+{
+    for (int i = 0; i < CLOCK_DATE_LAYOUTS; i++)
+        if (!strcmp(g_date_layouts[i].id, id)) return i;
+    return -1;
+}
+
 void clock_state_save(syn_server_t *s)
 {
     syn_clock_t *c = &s->clock;
@@ -65,6 +98,7 @@ void clock_state_save(syn_server_t *s)
     }
     fprintf(f, "format=%s\n",  c->fmt24 ? "24" : "12");
     fprintf(f, "seconds=%d\n", c->seconds ? 1 : 0);
+    fprintf(f, "date=%s\n",   c->date[0] ? c->date : "iso");
     fprintf(f, "zones=");
     for (int i = 0; i < c->nzones; i++)
         fprintf(f, "%s%s", i ? "|" : "", c->zones[i]);
@@ -119,6 +153,10 @@ void clock_state_load(syn_server_t *s)
         if      (!strcmp(key, "format"))  c->fmt24   = !strcmp(val, "24");
         else if (!strcmp(key, "seconds")) c->seconds = atoi(val) ? 1 : 0;
         else if (!strcmp(key, "zones"))   clock_set_zones(c, val);
+        /* Stored verbatim. An id from a newer synui-clock than this build
+         * knows about survives being loaded and saved again; only cycling the
+         * row replaces it. */
+        else if (!strcmp(key, "date"))    snprintf(c->date, sizeof(c->date), "%s", val);
     }
     fclose(f);
 }
@@ -185,6 +223,10 @@ void clock_init(syn_server_t *s)
 {
     syn_clock_t *c = &s->clock;
     if (c->nzones == 0) clock_seed_zones(c);
+    /* Must match synui-clock's default, or the bar and the panel disagree
+     * before the panel has ever saved — the same rule clock_seed_zones()
+     * already follows. */
+    if (!c->date[0]) snprintf(c->date, sizeof(c->date), "%s", "iso");
     clock_state_load(s);
 
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
@@ -202,6 +244,11 @@ void clock_finish(syn_server_t *s)
 void clock_show(syn_server_t *s)
 {
     syn_clock_t *c = &s->clock;
+    /* Re-read, every time. clock.state has a SECOND writer now — syn-settings'
+     * Date & Time rows — and this panel used to load the file once at startup.
+     * Opening it later would have shown stale values and, worse, saving from
+     * it would have written those stale values back over somebody's change. */
+    clock_state_load(s);
     c->visible   = 1;
     c->selected  = 0;
     c->status[0] = '\0';
@@ -225,7 +272,7 @@ void clock_toggle(syn_server_t *s)
     else                  clock_show(s);
 }
 
-/* Apply a settings row's toggle. Rows: 0 format, 1 seconds, 2 NTP. */
+/* Apply a settings row's toggle. Rows: 0 format, 1 seconds, 2 date, 3 NTP. */
 static void clock_activate(syn_server_t *s)
 {
     syn_clock_t *c = &s->clock;
@@ -243,6 +290,18 @@ static void clock_activate(syn_server_t *s)
                  "seconds: %s", c->seconds ? "on" : "off");
         break;
     case 2: {
+        /* Cycle. An id this build does not recognise starts the cycle at the
+         * beginning rather than being treated as index 0 and silently
+         * becoming ISO. */
+        int i = clock_date_index(c->date);
+        i = (i < 0) ? 0 : (i + 1) % CLOCK_DATE_LAYOUTS;
+        snprintf(c->date, sizeof(c->date), "%s", g_date_layouts[i].id);
+        clock_state_save(s);
+        snprintf(c->status, sizeof(c->status),
+                 "date layout: %s", g_date_layouts[i].label);
+        break;
+    }
+    case 3: {
         /* timedatectl authenticates via polkit; the agent may prompt. We flip
          * our idea of the state optimistically and re-read after. */
         char cmd[64];
@@ -359,7 +418,8 @@ const char *clock_row_label(int row)
     switch (row) {
     case 0: return "Clock format";
     case 1: return "Show seconds";
-    case 2: return "Sync clock (NTP)";
+    case 2: return "Date layout";
+    case 3: return "Sync clock (NTP)";
     default: return "";
     }
 }
@@ -370,7 +430,23 @@ void clock_row_value(syn_server_t *s, int row, char *out, size_t n)
     switch (row) {
     case 0: snprintf(out, n, "%s", c->fmt24 ? "24-hour" : "12-hour"); break;
     case 1: snprintf(out, n, "%s", c->seconds ? "on" : "off"); break;
-    case 2: snprintf(out, n, "%s", c->ntp ? "on" : "off"); break;
+    case 2: {
+        /* The label AND today in it. "Day first" and "Month first" are the
+         * same words to somebody who has to guess which order they mean; a
+         * worked example is the only description of a date format that
+         * cannot be misread. */
+        int i = clock_date_index(c->date);
+        if (i < 0) { snprintf(out, n, "%s (unknown to this build)", c->date); break; }
+        if (!g_date_layouts[i].fmt) { snprintf(out, n, "%s", g_date_layouts[i].label); break; }
+        time_t now = time(NULL);
+        struct tm tm;
+        localtime_r(&now, &tm);
+        char ex[64];
+        strftime(ex, sizeof(ex), g_date_layouts[i].fmt, &tm);
+        snprintf(out, n, "%s  (%s)", g_date_layouts[i].label, ex);
+        break;
+    }
+    case 3: snprintf(out, n, "%s", c->ntp ? "on" : "off"); break;
     default: out[0] = '\0';
     }
 }
@@ -385,9 +461,14 @@ void clock_local_string(syn_server_t *s, char *out, size_t n)
     time_t now = time(NULL);
     struct tm tm;
     localtime_r(&now, &tm);
+    /* The header spells the date out, in the ORDER the chosen layout implies.
+     * It said "%A, %B %-d %Y" for everyone, so picking Day first left this
+     * panel — the one you picked it on — still reading month first. */
+    int di = clock_date_index(c->date);
+    const char *lng = di < 0 ? "%A, %-d %B %Y" : g_date_layouts[di].lng;
     char t[64], d[64];
     strftime(t, sizeof(t), fmt, &tm);
-    strftime(d, sizeof(d), "%A, %B %-d %Y", &tm);
+    strftime(d, sizeof(d), lng, &tm);
     snprintf(out, n, "%s   %s", t, d);
 }
 
