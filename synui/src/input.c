@@ -3023,6 +3023,24 @@ static void server_cursor_axis(struct wl_listener *listener, void *data)
         return;
     }
 
+    /*
+     * A WINDOWED panel is not modal, so it never reaches the branch above — but
+     * the wheel over its OWN rows is still its own. Without this the control
+     * panel, the calculator's tape and the task manager's process list simply
+     * did not scroll in window mode: the event went straight past them to
+     * whatever client happened to be under the pointer, which usually scrolled
+     * instead. The panel looked frozen and the window behind it moved.
+     *
+     * Offered, not taken: each _scroll() declines a point that is off it — the
+     * same test its _motion() already makes — so falling through to the client
+     * here cannot resurrect the desktop-wide wheel swallowing that the modality
+     * filter (panel_mem_is_modal) exists to stop. The wheel belongs to whatever
+     * is under the pointer, and over a windowed panel that IS the panel.
+     */
+    if (event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
+        panel_pointer_scroll(s, s->cursor->x, s->cursor->y, event->delta))
+        return;
+
     wlr_seat_pointer_notify_axis(s->seat, event->time_msec,
         event->orientation, event->delta, event->delta_discrete, event->source,
         event->relative_direction);

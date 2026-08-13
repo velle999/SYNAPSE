@@ -2573,6 +2573,17 @@ int ctlpanel_click(syn_server_t *s, double lx, double ly, uint32_t button,
 
 int ctlpanel_scroll(syn_server_t *s, double lx, double ly, double delta)
 {
+    /* A windowed panel does not own the pointer: off it, the wheel belongs to
+     * whatever is under the cursor, so take nothing. The same guard
+     * ctlpanel_motion() opens with, and it has to be here too — the modal panel
+     * below deliberately answers the wheel from ANYWHERE on the desktop (see
+     * the `else` at the bottom, which moves the focused column), and a windowed
+     * panel doing that would eat every client's scroll for as long as it was
+     * open. */
+    if (s->ctlpanel.visible && panel_is_windowed(s, SYN_PDRAG_CTLPANEL) &&
+        !hit_in_panel(&s->ctlpanel.hit, lx, ly))
+        return 0;
+
     syn_ctlpanel_t *cp = &s->ctlpanel;
     if (!cp->visible) return 0;
     if (delta == 0) return 1;

@@ -704,6 +704,19 @@ panel_pointer_test = executable('panel_pointer_test',
   build_by_default : false)
 test('panel_pointer', panel_pointer_test)
 
+# The same contract's windowed clause: the wheel over a windowed panel is the
+# panel's, and the wheel anywhere else is the client's. Leaving windowed panels
+# out of panel_pointer_active() took the wheel away from them entirely, so they
+# did not scroll at all in window mode. calc.c is the cheapest of the three
+# panels that HAS a mode; the guard is the same in all three.
+panel_wheel_test = executable('panel_wheel_test',
+  ['tests/panel_wheel_test.c', 'src/calc.c', 'src/panel.c', 'src/hit.c'],
+  include_directories : include_directories('src'),
+  dependencies : [scenefx, cairo, wlroots, wayland, pixman, xkbcommon],
+  c_args : ['-DWLR_USE_UNSTABLE'],
+  build_by_default : false)
+test('panel_wheel', panel_wheel_test)
+
 # The control panel's CHOICE row (System ▸ AI model). Driven by calling
 # ctlpanel_key() with keysyms for the same reason panel_pointer_test calls the
 # pointer handlers: nothing can synthesise input into a headless synui. What it

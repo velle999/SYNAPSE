@@ -694,7 +694,15 @@ int calc_click(syn_server_t *s, double lx, double ly, uint32_t button,
  */
 int calc_scroll(syn_server_t *s, double lx, double ly, double delta)
 {
-    (void)lx; (void)ly;
+    /* A windowed panel does not own the pointer: off it, the wheel belongs to
+     * whatever is under the cursor, so take nothing. The same guard
+     * calc_motion() opens with — a modal panel answers the wheel from anywhere,
+     * and a windowed one that did would eat every client's scroll while it sat
+     * open in the corner. */
+    if (s->calc.visible && panel_is_windowed(s, SYN_PDRAG_CALC) &&
+        !hit_in_panel(&s->calc.hit, lx, ly))
+        return 0;
+
     if (!s->calc.visible) return 0;
     if (delta == 0) return 1;
 

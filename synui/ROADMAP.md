@@ -963,3 +963,38 @@ actually ours were the exception.
       on rendered pixels: the diff between the first two is 300+ pixels in four
       14px corner clusters and nothing else, and the first and third are
       corner-identical.
+
+### A windowed panel gets the wheel back  *(done)*
+
+The control panel, the calculator and the task manager did not scroll AT ALL in
+window mode. The wheel went straight past them to whatever client was under the
+pointer, which usually scrolled instead — so the panel looked frozen and the
+window behind it moved.
+
+- [x] **The cause was one word of the modality filter.** `panel_mem_is_modal()`
+      excludes the three panels that have a window mode from
+      `panel_pointer_active()`, which is right — a windowed panel must not
+      swallow clicks and the stray release for the whole desktop, and that is
+      most of what "forces focus" felt like. But `panel_pointer_active()` is also
+      what gates the WHEEL in `server_cursor_axis()`, so excluding them took the
+      wheel away with everything else. The wheel is now offered to the panels
+      when nothing modal is open, and forwarded to the client only if no panel
+      takes it.
+- [x] **The rule that keeps that honest lives in the panels**, because a modal
+      panel deliberately answers the wheel from ANYWHERE on the desktop —
+      `ctlpanel_scroll()`'s last `else` moves the focused column for exactly that
+      case. A windowed panel doing the same would eat every client's scroll for
+      as long as it sat open in a corner. So all three `_scroll()`s now open with
+      the guard their own `_motion()` already had: windowed, and off the panel,
+      takes nothing.
+      That also fixes an ordering bug nobody had hit yet — with a windowed
+      calculator open, `calc_scroll()` answered 1 from anywhere and it comes
+      SIXTH in `SYN_PANEL_LIST`, so it would have swallowed a modal picker's
+      wheel before the picker was ever asked.
+- [x] **`tests/panel_wheel_test.c`** — modal takes the wheel from off the panel,
+      windowed takes it only over the panel, both answer 0 when shut, and the
+      box test is checked on the exclusive edge. It pins the panels' half only:
+      `panel_pointer_active()`/`panel_pointer_scroll()` are static in `input.c`
+      and need a seat, a cursor and a real axis event, so the half that offers
+      the wheel is verified by reading. Nothing can synthesise a pointer into a
+      headless synui — `panel_pointer_test.c` gives that argument at length.

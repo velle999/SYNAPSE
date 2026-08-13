@@ -629,7 +629,15 @@ int taskmgr_click(syn_server_t *s, double lx, double ly, uint32_t button,
 
 int taskmgr_scroll(syn_server_t *s, double lx, double ly, double delta)
 {
-    (void)lx; (void)ly;
+    /* A windowed panel does not own the pointer: off it, the wheel belongs to
+     * whatever is under the cursor, so take nothing. The same guard
+     * taskmgr_motion() opens with — a modal panel answers the wheel from
+     * anywhere, and a windowed one that did would eat every client's scroll for
+     * as long as the process list was up. */
+    if (s->taskmgr.visible && panel_is_windowed(s, SYN_PDRAG_TASKMGR) &&
+        !hit_in_panel(&s->taskmgr.hit, lx, ly))
+        return 0;
+
     syn_taskmgr_t *t = &s->taskmgr;
     if (!t->visible) return 0;
     if (delta == 0 || t->confirm != TM_CONFIRM_NONE) return 1;
