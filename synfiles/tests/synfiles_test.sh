@@ -757,6 +757,64 @@ case "$out" in
     *)                bad "the tab in a filename was not neutralised" ;;
 esac
 
+# ── what the tui is allowed to do to a terminal ─────────────────────────────
+#
+# Arrow keys need ICANON and ECHO off, which is a terminal mode change in a
+# program whose whole premise was not making one. These check the boundary that
+# makes it safe, by reading the source: a pty harness would have to time out to
+# avoid hanging this suite, and a test that can hang is one that gets disabled.
+TSRC="$(dirname "$0")/../src/tui.c"
+if [ -f "$TSRC" ]; then
+    # THE ONE THAT CAUSED REAL HARM. A TUI killed mid-flight never sends the
+    # disable, the shell underneath reads every pointer movement as typed
+    # input, and it lands in .bash_history as one enormous line.
+    grep -qE '\?100[0-9]|\?101[0-9]' "$TSRC" \
+        && bad "tui.c turns mouse reporting on" \
+        || ok "tui.c never enables mouse reporting"
+
+    # No alternate screen: what you browsed stays in the scrollback.
+    grep -qE '\?1049|\?47[hl]' "$TSRC" \
+        && bad "tui.c switches to the alternate screen" \
+        || ok "tui.c leaves the scrollback alone"
+
+    # ISIG must survive, or Ctrl+C stops working and the only way out of a
+    # wedged browser is another terminal.
+    grep -q 'c_lflag &= (tcflag_t)~(ICANON | ECHO)' "$TSRC" \
+        && ok "only ICANON and ECHO are cleared" \
+        || bad "the termios mask changed — check ISIG is still set"
+
+    # Everything short of SIGKILL has to put the terminal back.
+    grep -q 'atexit(tty_restore)' "$TSRC" \
+        && ok "the restore is wired to atexit" \
+        || bad "nothing restores the terminal at exit"
+    n=$(grep -cE 'signal\(SIG(INT|TERM|HUP|QUIT), tty_signal\)' "$TSRC")
+    [ "$n" = 4 ] && ok "INT, TERM, HUP and QUIT all restore" \
+                 || bad "only $n of the 4 signals restore the terminal"
+
+    # …and die of the signal rather than exiting 0, or a caller cannot tell it
+    # was interrupted.
+    grep -q 'raise(sig)' "$TSRC" \
+        && ok "an interrupted tui dies of its signal" \
+        || bad "the signal handler swallows the signal"
+
+    # The mode change happens ONLY for a terminal. This is what keeps the line
+    # protocol — and every piped test above — working unchanged.
+    grep -q 'if (!isatty(STDIN_FILENO))' "$TSRC" \
+        && ok "the mode change is gated on stdin being a terminal" \
+        || bad "tui.c may change modes on a pipe"
+
+    # A keystroke must not reach the permanent delete. cmd_delete is gated
+    # behind --yes for a reason and one key in a browser is not that.
+    # A CALL, not the word: the line that chooses cmd_trash carries a comment
+    # saying "never cmd_delete", and the first cut of this check matched that
+    # and failed against the very code it was written to protect.
+    grep -q 'cmd_delete(' "$TSRC" \
+        && bad "the tui can reach the permanent delete" \
+        || ok "the tui trashes, never deletes"
+else
+    bad "tui.c not found beside the tests: $TSRC"
+fi
+
 # ── the trash on ANOTHER filesystem ─────────────────────────────────────────
 #
 # The tests below override SYNFILES_TRASH so they can never touch the real one

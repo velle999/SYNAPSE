@@ -1,13 +1,34 @@
 /* tui.c — the terminal file browser.
  *
- * LINE-ORIENTED ON PURPOSE: no ncurses, no alternate screen, no raw mode, no
- * mouse reporting. The same decision synpkg's TUI documents, and it matters
- * more here, not less: this is the front-end someone reaches for over SSH into
- * a machine whose desktop will not start, and a full-screen TUI killed
- * mid-flight never sends the sequences that turn mouse reporting off — the
- * shell underneath then reads every pointer movement as typed input. Nothing
- * in this file changes a terminal mode, so nothing it can do on the way out
- * leaves one broken. Everything here degrades to a scrollback log.
+ * TWO INPUT MODES, and which one runs is decided by whether stdin is a
+ * terminal.
+ *
+ *   PIPED — the original line protocol. `printf '1\nq\n' | synfiles tui` still
+ *   works, which is how this is tested and how it is scripted. Nothing about a
+ *   pipe changes.
+ *
+ *   A TERMINAL — arrow keys, with a highlighted row.
+ *
+ * WHAT IS AND IS NOT DONE TO THE TERMINAL. Arrow keys need each keystroke
+ * delivered without waiting for Enter, so ICANON and ECHO come off. Nothing
+ * else does:
+ *
+ *   - NO mouse reporting. That is the one that caused real harm — a TUI killed
+ *     mid-flight never sends the disable, the shell underneath then reads every
+ *     pointer movement as typed input, and it lands in .bash_history.
+ *   - NO alternate screen. What you browsed stays in the scrollback.
+ *   - ISIG is KEPT, so Ctrl+C still interrupts rather than being swallowed.
+ *   - OPOST is KEPT, so "\n" still carries a carriage return and every plain
+ *     printf in this file goes on working. Full raw mode would have needed
+ *     "\r\n" everywhere, which is a lot of places to get wrong once.
+ *
+ * So the worst a hard kill can leave is a terminal with echo off, which `reset`
+ * fixes and which does not spew anything anywhere. Restoring is wired to
+ * atexit AND to SIGINT/SIGTERM/SIGHUP/SIGQUIT, so everything short of SIGKILL
+ * puts it back.
+ *
+ * Redrawing moves the cursor up and clears below it — cursor movement, not a
+ * mode change — so the list updates in place without an alternate screen.
  *
  * IT DOES NOT REIMPLEMENT ANYTHING. The listing comes from sf_scan(), the same
  * scan `list` prints; properties from cmd_info(); sizes from cmd_du(); deletes
@@ -23,6 +44,9 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +55,163 @@
 #include <unistd.h>
 
 #define PAGE 20
+
+/* ── the terminal ───────────────────────────────────────────────────────── */
+
+static struct termios g_saved;
+static bool g_cbreak = false;
+
+static void tty_restore(void)
+{
+	if (!g_cbreak)
+		return;
+	g_cbreak = false;
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_saved);
+	/* Show the cursor. Nothing here ever hides it — this is insurance against
+	 * a future redraw that does, and against arriving on a terminal some
+	 * earlier program left it hidden on. It is the one sequence this file
+	 * emits that is not a colour or a cursor move, and it only ever turns
+	 * something back ON. */
+	fputs("\033[?25h", stdout);
+	fflush(stdout);
+}
+
+/* Restore, then die of the signal we were sent rather than exiting 0 — a
+ * caller waiting on this process has to be able to tell it was interrupted. */
+static void tty_signal(int sig)
+{
+	tty_restore();
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
+
+static bool tty_cbreak(void)
+{
+	if (!isatty(STDIN_FILENO))
+		return false;
+	if (tcgetattr(STDIN_FILENO, &g_saved) != 0)
+		return false;
+
+	struct termios raw = g_saved;
+	/* ICANON off: a keystroke arrives without Enter. ECHO off: it is not
+	 * printed over the listing. ISIG stays ON so Ctrl+C still works, and the
+	 * output flags are untouched so "\n" still emits a carriage return. */
+	raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+	raw.c_cc[VMIN] = 1;
+	raw.c_cc[VTIME] = 0;
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0)
+		return false;
+
+	g_cbreak = true;
+	atexit(tty_restore);
+	signal(SIGINT, tty_signal);
+	signal(SIGTERM, tty_signal);
+	signal(SIGHUP, tty_signal);
+	signal(SIGQUIT, tty_signal);
+	return true;
+}
+
+/* Run something that writes to the terminal itself — a child process, or a
+ * command that prompts — with the terminal back in its normal state. */
+static void tty_cooked(void)
+{
+	if (g_cbreak)
+		tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_saved);
+}
+
+static void tty_uncooked(void)
+{
+	if (!g_cbreak)
+		return;
+	struct termios raw = g_saved;
+	raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+	raw.c_cc[VMIN] = 1;
+	raw.c_cc[VTIME] = 0;
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+/* How many rows the listing may use. Derived from the window, so a tall
+ * terminal shows more instead of paging at a constant nobody chose; the
+ * subtraction is the header, the hint lines and the prompt. */
+static size_t tty_page(void)
+{
+	struct winsize ws;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 12)
+		return (size_t)ws.ws_row - 11;
+	return PAGE;
+}
+
+/* ── keys ───────────────────────────────────────────────────────────────── */
+
+enum {
+	K_NONE = 0,
+	K_UP = 256, K_DOWN, K_LEFT, K_RIGHT,
+	K_HOME, K_END, K_PGUP, K_PGDN, K_DEL,
+	K_ENTER, K_ESC, K_BACKSPACE
+};
+
+/* One keypress, with escape sequences decoded.
+ *
+ * After ESC the terminal is asked for the rest with a 100ms timeout, which is
+ * what separates a real arrow key from someone pressing Escape: an arrow
+ * arrives as one burst, a bare Escape has nothing behind it. */
+static int read_key(void)
+{
+	unsigned char c;
+	if (read(STDIN_FILENO, &c, 1) != 1)
+		return K_NONE;
+
+	if (c == '\r' || c == '\n')
+		return K_ENTER;
+	if (c == 127 || c == 8)
+		return K_BACKSPACE;
+	if (c != 27)
+		return c;
+
+	struct termios t;
+	if (tcgetattr(STDIN_FILENO, &t) != 0)
+		return K_ESC;
+	struct termios timed = t;
+	timed.c_cc[VMIN] = 0;
+	timed.c_cc[VTIME] = 1;              /* 100ms */
+	tcsetattr(STDIN_FILENO, TCSANOW, &timed);
+
+	unsigned char seq[4] = {0};
+	ssize_t got = read(STDIN_FILENO, seq, 1);
+	int key = K_ESC;
+
+	if (got == 1 && (seq[0] == '[' || seq[0] == 'O')) {
+		if (read(STDIN_FILENO, &seq[1], 1) == 1) {
+			switch (seq[1]) {
+			case 'A': key = K_UP;    break;
+			case 'B': key = K_DOWN;  break;
+			case 'C': key = K_RIGHT; break;
+			case 'D': key = K_LEFT;  break;
+			case 'H': key = K_HOME;  break;
+			case 'F': key = K_END;   break;
+			default:
+				/* ESC [ <digit> ~ — Home/End/PgUp/PgDn/Delete on the
+				 * keyboards that send the numeric form. */
+				if (seq[1] >= '0' && seq[1] <= '9') {
+					unsigned char tilde = 0;
+					if (read(STDIN_FILENO, &tilde, 1) == 1 && tilde == '~') {
+						switch (seq[1]) {
+						case '1': case '7': key = K_HOME; break;
+						case '4': case '8': key = K_END;  break;
+						case '5': key = K_PGUP; break;
+						case '6': key = K_PGDN; break;
+						case '3': key = K_DEL;  break;
+						}
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	tcsetattr(STDIN_FILENO, TCSANOW, &t);
+	return key;
+}
 
 /* ── state ──────────────────────────────────────────────────────────────── */
 
@@ -100,11 +281,14 @@ static void draw_header(const tui_t *t, size_t n, size_t pages)
 	       pages ? t->page + 1 : 1, pages ? pages : 1, C_RESET());
 }
 
-static void draw_rows(const tui_t *t, sf_entry_t *ents, size_t n)
+/* `sel` is the highlighted row, or -1 when nothing is (the piped mode has no
+ * cursor — there is nothing to move it with). */
+static void draw_rows(const tui_t *t, sf_entry_t *ents, size_t n,
+                      size_t page_rows, long sel)
 {
-	size_t start = t->page * PAGE;
+	size_t start = t->page * page_rows;
 
-	for (size_t i = start; i < n && i < start + PAGE; i++) {
+	for (size_t i = start; i < n && i < start + page_rows; i++) {
 		sf_entry_t *e = &ents[i];
 		char *sz = e->is_dir ? xstrdup("") : human_size(e->size);
 
@@ -124,7 +308,13 @@ static void draw_rows(const tui_t *t, sf_entry_t *ents, size_t n)
 			if ((unsigned char)*p < 0x20 || *p == 0x7f)
 				*p = '?';
 
-		printf("  %s%3zu%s %s%s%-32.32s%s %s%9s  %s%s\n",
+		/* The highlight is a ">" and the accent colour, never a reversed
+		 * background: a background colour on a row is the one thing that
+		 * looks broken on a terminal whose palette does not match the
+		 * assumptions, and this program has no idea what palette it is on. */
+		bool here = ((long)i == sel);
+		printf("%s%s%s%3zu%s %s%s%-32.32s%s %s%9s  %s%s\n",
+		       here ? C_ACCENT() : "  ", here ? "> " : "",
 		       C_DIM(), i + 1, C_RESET(),
 		       e->is_dir ? C_ACCENT() : "",
 		       e->broken ? "!" : (e->is_dir ? "/" : (e->is_link ? "@" : " ")),
@@ -194,6 +384,31 @@ static void open_detached(const char *path)
 	printf("  %sopened%s %s\n", C_DIM(), C_RESET(), path);
 }
 
+/* The graphical browser, on this folder. Detached for the same reason opening a
+ * file is: it runs until the user closes it, and this browser has to stay
+ * usable meanwhile. */
+static void open_gui(const char *dir)
+{
+	if (!have_cmd("synfiles")) {
+		warn("synfiles is not on PATH");
+		return;
+	}
+	pid_t pid = fork();
+	if (pid < 0) {
+		warn("cannot fork: %s", strerror(errno));
+		return;
+	}
+	if (pid == 0) {
+		if (fork() != 0)
+			_exit(0);
+		setsid();
+		execlp("synfiles", "synfiles", "gui", dir, (char *)NULL);
+		_exit(127);
+	}
+	waitpid(pid, NULL, 0);
+	printf("  %sopened the window on%s %s\n", C_DIM(), C_RESET(), dir);
+}
+
 /* ── the loop ───────────────────────────────────────────────────────────── */
 
 static void go(tui_t *t, const char *path)
@@ -221,6 +436,221 @@ static void go(tui_t *t, const char *path)
 	t->page = 0;
 }
 
+/* ── row actions, shared by both input modes ────────────────────────────── */
+//
+// Both loops end up here, so a key and a typed command do exactly the same
+// thing. Having each mode call cmd_info/cmd_trash itself is how the two would
+// come to disagree about which one trashes and which one deletes.
+static void row_action(tui_t *t, sf_entry_t *e, char what)
+{
+	char *full = path_join(t->cwd, e->name);
+	char *one[] = { full, NULL };
+
+	/* Every one of these writes to the terminal, and cmd_du keeps printing
+	 * for as long as the walk takes. Hand the terminal back first so the
+	 * output lands normally and Ctrl+C reaches the child. */
+	tty_cooked();
+	printf("\n");
+	switch (what) {
+	case 'i': cmd_info(1, one); break;
+	case 'z': cmd_du(1, one); break;
+	case 'e': cmd_actions(1, one); break;
+	case 't': cmd_trash(1, one); break;   /* never cmd_delete: that is permanent */
+	default: break;
+	}
+	free(full);
+
+	if (g_cbreak) {
+		printf("\n  %spress any key%s", C_DIM(), C_RESET());
+		fflush(stdout);
+		tty_uncooked();
+		read_key();
+		printf("\n");
+	}
+}
+
+/* Ask for a line of text with the terminal in its normal state, so the user
+ * can see what they are typing and use backspace. */
+static char *ask_line(const char *label)
+{
+	static char buf[PATH_MAX];
+	tty_cooked();
+	printf("  %s%s%s ", C_ACCENT(), label, C_RESET());
+	fflush(stdout);
+	if (!fgets(buf, sizeof buf, stdin)) {
+		tty_uncooked();
+		return NULL;
+	}
+	strip_trailing_newline(buf);
+	tty_uncooked();
+	return buf;
+}
+
+/* ── the arrow-key loop ─────────────────────────────────────────────────── */
+
+static int run_keys(tui_t *t)
+{
+	char filter[256] = "";
+	long sel = 0;
+	int drawn = 0;                 /* lines the last frame used */
+
+	for (;;) {
+		sf_sort_set(t->sort, t->reverse, true);
+
+		size_t n = 0;
+		sf_entry_t *ents = sf_scan(t->cwd, t->all, &n);
+		if (!ents) {
+			printf("  %scannot read %s: %s%s\n", C_WARN(), t->cwd,
+			       strerror(errno), C_RESET());
+			return 1;
+		}
+		if (*filter) {
+			size_t keep = 0;
+			for (size_t i = 0; i < n; i++) {
+				if (strcasestr(ents[i].name, filter)) {
+					ents[keep++] = ents[i];
+				} else {
+					free(ents[i].name);
+					free(ents[i].target);
+					free(ents[i].icon);
+				}
+			}
+			n = keep;
+		}
+
+		if (sel >= (long)n)
+			sel = n ? (long)n - 1 : 0;
+		if (sel < 0)
+			sel = 0;
+
+		size_t rows = tty_page();
+		t->page = n ? (size_t)sel / rows : 0;
+		size_t pages = n ? (n + rows - 1) / rows : 1;
+
+		/* Redraw IN PLACE: up over the last frame, then clear from the cursor
+		 * down. Cursor movement and an erase — no alternate screen, so what
+		 * came before is still in the scrollback where it belongs. */
+		if (drawn > 0)
+			printf("\033[%dA\033[J", drawn);
+
+		int before = 0;
+		draw_header(t, n, pages);          before += 4;
+		if (*filter) {
+			printf("  %sfilter: %s%s\n", C_WARN(), filter, C_RESET());
+			before += 1;
+		}
+		size_t shown = n > (t->page * rows) ? n - (t->page * rows) : 0;
+		if (shown > rows)
+			shown = rows;
+		draw_rows(t, ents, n, rows, sel);
+		before += (int)(shown ? shown : 1);
+		printf("\n  %s↑↓ move · → / Enter open · ← up · PgUp/PgDn page%s\n",
+		       C_DIM(), C_RESET());
+		printf("  %si info · z size · t trash · e actions · / filter · c cd%s\n",
+		       C_DIM(), C_RESET());
+		printf("  %sa hidden · s sort · r reverse · g gui · h home · q quit%s\n",
+		       C_DIM(), C_RESET());
+		before += 4;
+		drawn = before;
+
+		int k = read_key();
+		bool redraw_fresh = false;      /* actions scroll; start a new frame */
+
+		switch (k) {
+		case K_NONE: case 'q': case K_ESC:
+			sf_entries_free(ents, n);
+			printf("\n");
+			return 0;
+
+		case K_UP:   if (sel > 0) sel--; break;
+		case K_DOWN: if (sel + 1 < (long)n) sel++; break;
+		case K_PGUP: sel -= (long)rows; if (sel < 0) sel = 0; break;
+		case K_PGDN:
+			sel += (long)rows;
+			if (sel >= (long)n) sel = n ? (long)n - 1 : 0;
+			break;
+		case K_HOME: sel = 0; break;
+		case K_END:  sel = n ? (long)n - 1 : 0; break;
+
+		case K_LEFT: case K_BACKSPACE: {
+			/* Up a level, landing ON the folder just left, which is where the
+			 * eye already is. */
+			char *leaving = xstrdup(sf_basename(t->cwd));
+			char *up = path_join(t->cwd, "..");
+			*filter = '\0';
+			go(t, up);
+			free(up);
+			size_t m = 0;
+			sf_entry_t *back = sf_scan(t->cwd, t->all, &m);
+			if (back) {
+				for (size_t i = 0; i < m; i++)
+					if (!strcmp(back[i].name, leaving)) { sel = (long)i; break; }
+				sf_entries_free(back, m);
+			}
+			free(leaving);
+			break;
+		}
+
+		case K_RIGHT: case K_ENTER:
+			if (!n) break;
+			{
+				char *full = path_join(t->cwd, ents[sel].name);
+				if (ents[sel].is_dir) {
+					*filter = '\0';
+					go(t, full);
+					sel = 0;
+				} else {
+					tty_cooked();
+					open_detached(full);
+					tty_uncooked();
+					redraw_fresh = true;
+				}
+				free(full);
+			}
+			break;
+
+		case 'a': t->all = !t->all; break;
+		case 'r': t->reverse = !t->reverse; break;
+		case 's': t->sort = (sf_sort_t)((t->sort + 1) % 4); break;
+		case 'h': *filter = '\0'; go(t, home_dir()); sel = 0; break;
+
+		case 'i': case 'z': case 't': case 'e':
+			if (n) {
+				row_action(t, &ents[sel], (char)k);
+				redraw_fresh = true;
+			}
+			break;
+
+		case '/': {
+			char *f = ask_line("filter (empty clears):");
+			if (f) snprintf(filter, sizeof filter, "%s", f);
+			sel = 0;
+			redraw_fresh = true;
+			break;
+		}
+		case 'c': {
+			char *p = ask_line("cd to:");
+			if (p && *p) { *filter = '\0'; go(t, p); sel = 0; }
+			redraw_fresh = true;
+			break;
+		}
+		case 'g':
+			tty_cooked();
+			open_gui(t->cwd);
+			tty_uncooked();
+			redraw_fresh = true;
+			break;
+
+		default:
+			break;                    /* an unbound key does nothing, quietly */
+		}
+
+		sf_entries_free(ents, n);
+		if (redraw_fresh)
+			drawn = 0;               /* something else wrote; do not overdraw it */
+	}
+}
+
 int cmd_tui(int argc, char **argv)
 {
 	tui_t t = { .all = false, .reverse = false, .sort = SF_SORT_NAME, .page = 0 };
@@ -230,6 +660,18 @@ int cmd_tui(int argc, char **argv)
 	if (!realpath(start, resolved))
 		die("cannot resolve %s: %s", start, strerror(errno));
 	snprintf(t.cwd, sizeof t.cwd, "%s", resolved);
+
+	/* WHICH LOOP. A terminal gets arrow keys; anything else keeps the line
+	 * protocol exactly as it was, because that is what a pipe can drive and
+	 * what the tests use. tty_cbreak() answers both questions at once: it
+	 * returns false when stdin is not a terminal, and false when the terminal
+	 * will not take the mode change — in which case the line loop is a working
+	 * browser rather than a failure. */
+	if (tty_cbreak()) {
+		int rc = run_keys(&t);
+		tty_restore();
+		return rc;
+	}
 
 	/* A filter, not a search: it narrows what is already on screen. `find` is
 	 * the command that walks a tree, and this browser can call it. */
@@ -271,7 +713,7 @@ int cmd_tui(int argc, char **argv)
 		if (*filter)
 			printf("  %sfilter: %s%s  (/ alone clears it)\n",
 			       C_WARN(), filter, C_RESET());
-		draw_rows(&t, ents, n);
+		draw_rows(&t, ents, n, PAGE, -1);
 		draw_help();
 
 		char *in = tui_prompt("\n  > ");
@@ -352,25 +794,7 @@ int cmd_tui(int argc, char **argv)
 			t.page = 0;
 			break;
 		case 'g':
-			/* The graphical browser, on this folder. Detached for the same
-			 * reason opening a file is: it runs until the user closes it. */
-			{
-				char *self = xasprintf("%s", "synfiles");
-				if (have_cmd(self)) {
-					pid_t pid = fork();
-					if (pid == 0) {
-						if (fork() != 0) _exit(0);
-						setsid();
-						execlp("synfiles", "synfiles", "gui", t.cwd, (char *)NULL);
-						_exit(127);
-					}
-					if (pid > 0) waitpid(pid, NULL, 0);
-					printf("  %sopened the window on%s %s\n", C_DIM(), C_RESET(), t.cwd);
-				} else {
-					warn("synfiles is not on PATH");
-				}
-				free(self);
-			}
+			open_gui(t.cwd);
 			break;
 		case 'i': case 'z': case 't': case 'e': {
 			long num = strtol(rest, NULL, 10);
