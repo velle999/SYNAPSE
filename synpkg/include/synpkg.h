@@ -208,6 +208,16 @@ bool       sp_appstream_present(void);
 void       sp_appstream_free(sp_as_app *apps, size_t count);
 bool       sp_appstream_in(const sp_as_app *a, const char *category);
 
+/* ── settings.c ─────────────────────────────────────────────────────────── */
+/* The stored value for a known key, or its default — never NULL for a key the
+ * table knows. Caller frees. */
+char *sp_setting(const char *key);
+/* yes/true/1 is true; anything else is false. Unknown key -> true, because
+ * every setting today is an opt-OUT and a typo must not silently disable a
+ * pass of the upgrade. */
+bool  sp_setting_bool(const char *key);
+int   cmd_config(int argc, char **argv);
+
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);
 

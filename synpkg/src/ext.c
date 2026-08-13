@@ -90,12 +90,26 @@ int cmd_system(int argc, char **argv)
 	if (!strcmp(sub, "apply") || !strcmp(sub, "status")) {
 		if (!have_cmd("syn-update"))
 			die("syn-update is not installed");
+
 		/* `apply` is deliberately NOT run through the GUI's stdout: it drives
 		 * build-all.sh, which calls `sudo pacman -U` mid-build, and sudo with
 		 * no controlling terminal cannot prompt. The GUI opens a terminal for
-		 * this; here we already have one. */
-		char *child[] = { (char *)"syn-update", (char *)sub, NULL };
-		return run(child, false);
+		 * this; here we already have one.
+		 *
+		 * Any remaining words are component names — `synpkg system apply
+		 * synui` builds that one component. They are passed through unchecked
+		 * on purpose: syn-update owns the component list and refuses an
+		 * unknown name by name, and a second copy of that list here would be
+		 * wrong the first time a component is added. */
+		char **child = xmalloc((size_t)(argc + 2) * sizeof *child);
+		int n = 0;
+		child[n++] = (char *)"syn-update";
+		for (int i = 0; i < argc; i++)
+			child[n++] = argv[i];
+		child[n] = NULL;
+		int rc = run(child, false);
+		free(child);
+		return rc;
 	}
 
 	die("system: unknown subcommand '%s' — try check, apply, status", sub);

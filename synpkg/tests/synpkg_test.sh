@@ -682,6 +682,26 @@ if [ -f "$QML" ]; then
     [ "$n" = 0 ] && ok "every literal family is the deliberate monospace" \
                  || bad "$n literal font family/families are not monospace"
 
+    # ── Nothing in a row may run under the action button ────────────────────
+    #
+    # A Row lays children out left to right and does NOT clip, so a child wider
+    # than the space left draws over whatever is there — which is the Install
+    # button. The package id and the category did exactly that: at 520 px the
+    # rows overflowed by 101-124 px, the button's own footprint, and the row
+    # read "widelands Games" with "Install" printed through it.
+    #
+    # Each item is capped against its own x, which Row has already assigned
+    # from the items before it. Three of them need it; the name has its own cap.
+    n=$(awk '/nameRow\.width - x/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" -ge 3 ] && ok "row items are capped against the space left" \
+                   || bad "only $n row item(s) cap against nameRow.width - x (need 3)"
+
+    # Math.max(0, …) is not decoration: a NEGATIVE width does not clamp, it
+    # defeats clip and paints the item mirrored across its own origin.
+    n=$(awk '/Math\.min\(implicitWidth, nameRow\.width - x\)/ && !/Math\.max\(0,/ { n++ } END { print n + 0 }' "$QML")
+    [ "$n" = 0 ] && ok "every cap is floored at zero" \
+                 || bad "$n cap(s) can go negative"
+
     # ── SynapseOS components on the Updates page ────────────────────────────
     #
     # They were only ever on their own tab, so the one page a person opens to

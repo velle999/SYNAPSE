@@ -33,6 +33,7 @@ sources = files(
   'src/cachyos.c',
   'src/ext.c',
   'src/appstream.c',
+  'src/settings.c',
   'src/about.c',
   'src/tui.c',
 )

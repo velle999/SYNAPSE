@@ -285,6 +285,17 @@ NEW=()
 SKIPPED=()
 BLOCKED=()
 
+# Component names named on the command line: `syn-update apply synui`. Empty
+# means "everything that changed", which is what apply has always done and
+# stays the default.
+SELECT=()
+# What this run actually handed to build-all.sh. The local-repo refresh below
+# publishes from THIS, not from CHANGED+NEW: with a named subset those are no
+# longer the same set, and copying a package that was built but never installed
+# would have the [synapseos] repo advertising a version the machine is not
+# running.
+BUILT=()
+
 # The names build-all.sh will ACCEPT, read from the revision that would run.
 #
 # COMPONENTS is deliberately not scraped out of build-all.sh (see its comment),
@@ -470,6 +481,36 @@ cmd_check() {
     return 0
 }
 
+# Which OTHER components a component depends on, read out of its PKGBUILD
+# rather than kept as a list here.
+#
+# A hand-maintained edge list is wrong the first time a depends= line changes,
+# and the failure is silent in the worst way: a component linked against a
+# library version that is about to be replaced. The real edges today are
+# synui -> scenefx0.5, synnet -> synapd and vibe -> synapd; none of them is
+# written down anywhere in this file, which is the point.
+#
+# build-all.sh does NOT pull these in for you. want() is a plain filter, so a
+# selective run builds exactly what it was asked for and nothing else.
+component_deps() {
+    # TWO statements, and it has to stay that way. `local c=$1 pk="$SRC/$c/…"`
+    # expands every word BEFORE local assigns any of them, so $c is empty there
+    # and pk points at a PKGBUILD that does not exist — the function then
+    # returns nothing, for every component, and the dependency warning below
+    # can never fire. It read correctly under test only because the caller's
+    # loop variable was also named c, so the expansion picked up the global.
+    local c=$1
+    local pk="$SRC/$c/PKGBUILD" dep out=""
+    [ -f "$pk" ] || return 0
+    # depends=( may span lines, so take the whole array and flatten it.
+    for dep in $(awk '/^depends=\(/,/\)/' "$pk" 2>/dev/null | tr -d "'\"" | tr '(),=' '    '); do
+        [ "$dep" = "depends" ] && continue
+        [ "$dep" = "$c" ] && continue
+        case " ${COMPONENTS[*]} " in *" $dep "*) out="$out $dep" ;; esac
+    done
+    printf '%s' "${out# }"
+}
+
 cmd_apply() {
     need_not_root; need_tools; setup_src; fetch_src
 
@@ -498,6 +539,63 @@ cmd_apply() {
         names+=("$1")
     done
 
+    # ── A named subset ────────────────────────────────────────────────────
+    #
+    # `syn-update apply synui` builds synui and leaves the rest alone. This is
+    # what makes a per-row Update button in SYNAPSE Software able to tell the
+    # truth: without it the button says "update synui" and rebuilds everything
+    # that changed.
+    #
+    # It stays ONE invocation with a filtered argument list — the arguments are
+    # a filter, never a sequence, so build-all.sh still walks its own fixed
+    # order. That property is what makes a subset safe at all.
+    if [ ${#SELECT[@]} -gt 0 ]; then
+        local want=() skip=() s found
+        for s in "${SELECT[@]}"; do
+            found=0
+            for e in "${names[@]}"; do
+                [ "$e" = "$s" ] && { want+=("$s"); found=1; break; }
+            done
+            [ "$found" = 1 ] || skip+=("$s")
+        done
+
+        # Asked for something that has nothing to build. Not an error: a GUI
+        # that re-lists after a build will ask for a component that is now
+        # current, and failing there would turn a no-op into a red banner.
+        if [ ${#skip[@]} -gt 0 ]; then
+            say ""
+            info "already current, nothing to build: ${skip[*]}"
+        fi
+        if [ ${#want[@]} -eq 0 ]; then
+            say ""
+            ok "nothing to build"
+            return 0
+        fi
+
+        # THE ONE THING A SUBSET CAN GET WRONG. Building synui while scenefx0.5
+        # is also out of date links it against the scenefx that is about to be
+        # replaced — and it will look like it worked. Say so, name the command
+        # that does it properly, and carry on: this is the user's call, and
+        # refusing would make the button useless in exactly the case where the
+        # whole build is what they wanted to avoid.
+        local d dd s2
+        for s in "${want[@]}"; do
+            for d in $(component_deps "$s"); do
+                for e in "${names[@]}"; do
+                    [ "$e" = "$d" ] || continue
+                    dd=0
+                    for s2 in "${want[@]}"; do [ "$s2" = "$d" ] && dd=1; done
+                    [ "$dd" = 1 ] && continue
+                    warn "$s depends on $d, which is ALSO out of date and is not being built.
+    $s will be built against the $d already installed. To do both:
+        syn-update apply $s $d"
+                done
+            done
+        done
+
+        names=("${want[@]}")
+    fi
+
     say ""
     info "building: ${names[*]}"
     say "${C_DIM}  (build-all.sh orders these itself; arguments are a filter, not a sequence)${C_R}"
@@ -507,6 +605,7 @@ cmd_apply() {
     # skips what was not asked for, so dependencies come out right even though
     # the arguments are unordered. Calling it once per package would build them
     # in the order given, which is exactly the wrong thing.
+    BUILT=("${names[@]}")
     ( cd "$SRC" && ./build-all.sh "${names[@]}" ) || die "build failed — the tree is at $(git -C "$SRC" rev-parse --short HEAD), nothing was rolled back"
 
     refresh_local_repo
@@ -525,15 +624,14 @@ refresh_local_repo() {
     [ -d "$LOCAL_REPO" ] || return 0
     info "refreshing the local [synapseos] repo"
 
-    # NEW as well as CHANGED. A newly installed component that never reaches
-    # /var/cache/synapseos is absent from the [synapseos] repo, so the next
-    # `pacman -Syu` sees a local package no repo advertises — the same drift this
-    # function exists to prevent, just from the other direction.
-    local e c pkg copied=0
-    for e in "${CHANGED[@]}" "${NEW[@]}"; do
-        # shellcheck disable=SC2086
-        set -- $e
-        c=$1
+    # BUILT, not CHANGED+NEW. Those were the same set until `apply <component>`
+    # existed; now a subset run leaves the rest of CHANGED unbuilt, and the tree
+    # still holds their PREVIOUS .pkg.tar.zst from an earlier run. Publishing
+    # those would advertise versions this machine is not running — the exact
+    # drift this function exists to prevent. NEW is covered because it is folded
+    # into BUILT before build-all.sh is called.
+    local c pkg copied=0
+    for c in "${BUILT[@]}"; do
         pkg=$(ls -1t "$SRC/$c/$c"-*.pkg.tar.zst 2>/dev/null | grep -v -- "-debug-" | head -1)
         [ -n "$pkg" ] || continue
         sudo cp -f "$pkg" "$LOCAL_REPO/" && copied=$((copied + 1))
@@ -675,6 +773,10 @@ Usage:
   syn-update check          Fetch and show what would change (default, read-only)
   syn-update apply          Fetch, rebuild the changed components, install them,
                             and install any component the tree has gained since
+  syn-update apply <name>…  Only the components named. build-all.sh still walks
+                            its own order, so the names are a filter and not a
+                            sequence. Warns when a named component depends on
+                            another that is also out of date and was not named.
   syn-update status         Show the source revision and installed versions
   syn-update help           This help
 
@@ -704,9 +806,31 @@ while [ $# -gt 0 ]; do
         --ref)          shift; REPO_REF="${1:-main}" ;;
         -h|--help|help) usage; exit 0 ;;
         check|apply|status) CMD="$1" ;;
-        *)              die "unknown argument: $1 (try: syn-update help)" ;;
+        # Bare words after `apply` are component names. Validated below rather
+        # than here, because COMPONENTS describes the revision that would RUN
+        # and setup_src has not fetched yet at this point.
+        *)  [ "$CMD" = apply ] ||
+                die "unknown argument: $1 (try: syn-update help)"
+            SELECT+=("$1") ;;
     esac
     shift
+done
+
+# A name that is not a component builds nothing and would exit 0 — the same
+# silent no-op that froze syn-arsenal for two releases when it was in
+# build-all.sh's KNOWN= list with no build rule. Refuse it by name instead, and
+# say what the unbuildable ones are rather than pretending they are typos.
+for _s in "${SELECT[@]}"; do
+    if [ -n "${UNSUPPORTED[$_s]:-}" ]; then
+        die "$_s cannot be built on an installed system:
+    ${UNSUPPORTED[$_s]}
+  It moves with an ISO upgrade."
+    fi
+    case " ${COMPONENTS[*]} " in
+        *" $_s "*) ;;
+        *) die "$_s is not a SynapseOS component.
+  Components: ${COMPONENTS[*]}" ;;
+    esac
 done
 
 case "${CMD:-check}" in

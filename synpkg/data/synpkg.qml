@@ -304,6 +304,38 @@ FloatingWindow {
     //
     // The source stays "system", which is what routes the click to syn-update
     // instead of into an ALPM transaction. See act().
+    // ── The one stored preference this window touches ───────────────────────
+    //
+    // Read from and written to the binary, never a file this QML owns. The
+    // optimistic local update is so the checkbox does not lag a subprocess by
+    // a frame; confProc re-reads afterwards, so the binary still has the last
+    // word if the write failed.
+    property bool upgradeSystem: true
+
+    function setUpgradeSystem(on) {
+        root.upgradeSystem = on
+        setConfProc.command = [root.bin, "config", "upgrade_system", on ? "yes" : "no"]
+        setConfProc.running = true
+    }
+
+    Process {
+        id: confProc
+        command: [root.bin, "--tsv", "config"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                for (const r of root.parseTable(this.text))
+                    if (r.key === "upgrade_system")
+                        root.upgradeSystem = r.value !== "no"
+            }
+        }
+    }
+
+    Process {
+        id: setConfProc
+        onExited: confProc.running = true
+    }
+
     function systemRows(table) {
         return table.map(r => root.makeRow(
             r.component, "", true, r.available, "synapseos", 0,
@@ -453,16 +485,19 @@ FloatingWindow {
         // it drives build-all.sh, which calls sudo mid-build, and sudo with no
         // controlling terminal cannot prompt.
         //
-        // THE BUTTON IS PER-ROW, THE ACTION IS NOT. syn-update apply takes no
-        // component name: it collects everything changed and hands the lot to
-        // build-all.sh in one invocation, because splitting that would defeat
-        // build-all.sh's fixed dependency order (synapd has to be rebuilt after
-        // synapse-llama, and so on). velle chose this shape knowing it —
-        // clicking one row rebuilds every component that has changed. The
-        // status line says so, because the button cannot.
+        // ONE component, named. `syn-update apply <name>` filters the build to
+        // what was asked for — the names are a filter and never a sequence, so
+        // build-all.sh still walks its own fixed order and a subset comes out
+        // in the right order anyway. That property is the whole reason a
+        // per-row button can be honest here.
+        //
+        // syn-update warns in the terminal when the named component depends on
+        // another that is ALSO out of date and was not named (synui on
+        // scenefx0.5, synnet and vibe on synapd) — it reads the edges out of
+        // the PKGBUILDs, so this window does not need to know them.
         if (row.source === "system") {
-            root.inTerminal([root.bin, "system", "apply"],
-                            "rebuilding every changed component in a terminal")
+            root.inTerminal([root.bin, "system", "apply", row.name],
+                            "rebuilding " + row.name + " in a terminal")
             return
         }
 
@@ -789,10 +824,53 @@ FloatingWindow {
                 }
                 Text {
                     width: parent.width
-                    text: "repos, AUR and components — in a terminal"
+                    text: root.upgradeSystem ? "repos, AUR and components — in a terminal"
+                                             : "repos and AUR — in a terminal"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                     horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                }
+
+                // ── Whether "Upgrade all" includes the components ───────────
+                //
+                // A component rebuild is minutes of compiling, and wanting the
+                // repositories and the AUR current without it is a reasonable
+                // way to run a machine — velle's case: still use the button,
+                // just not for the SynapseOS half.
+                //
+                // The answer is stored by the BINARY (`synpkg config`), not
+                // here, so `synpkg upgrade` typed into a terminal means the
+                // same thing as the button that runs it. A preference this
+                // window kept privately would make the two disagree, and the
+                // one you would trust is whichever you used last.
+                Rectangle {
+                    width: parent.width; height: 26; radius: 4
+                    color: sysMa.containsMouse ? root.wash(0.12) : "transparent"
+                    border { width: 1; color: root.cDim }
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Rectangle {
+                            width: 12; height: 12; radius: 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: root.upgradeSystem ? root.cAccent : "transparent"
+                            border { width: 1; color: root.upgradeSystem ? root.cAccent : root.cDim }
+                        }
+                        Text {
+                            text: "include SynapseOS"
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: root.cDim
+                            font { family: root.uiFont; pixelSize: root.ui(10) }
+                        }
+                    }
+                    MouseArea {
+                        id: sysMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.setUpgradeSystem(!root.upgradeSystem)
+                    }
                 }
             }
         }
@@ -1408,8 +1486,31 @@ FloatingWindow {
                         spacing: 3
 
                         Row {
+                            id: nameRow
                             spacing: 8
                             width: parent.width
+
+                            // ── Why every child below is capped against its
+                            //    OWN x ────────────────────────────────────
+                            //
+                            // A Row lays children out left to right and does
+                            // NOT clip: a child wider than the space left just
+                            // draws past the end, over whatever is there. What
+                            // is there is the Install button, so the id and the
+                            // category ran underneath it and the row read
+                            // "widelands Games" with "Install" printed through
+                            // the middle of it.
+                            //
+                            // `parent.width - x` is the space actually left at
+                            // the point this item starts, and Row has already
+                            // assigned x from the widths of the items BEFORE
+                            // it — so there is no loop, and the cap adapts to a
+                            // long name, a long badge, or a narrow window
+                            // without any of them knowing about each other.
+                            //
+                            // Math.max(0, …) matters on its own: a negative
+                            // width does not clamp, it defeats clip and paints
+                            // the item mirrored across its own origin.
 
                             // A Flatpak's identity is org.mozilla.firefox and
                             // its name is Firefox. The name goes here; the id
@@ -1424,7 +1525,11 @@ FloatingWindow {
                                 // row read "binutits". The cap is what stops a
                                 // name escaping its column at ANY width; the
                                 // hidden button below is what gives it room.
-                                width: Math.min(implicitWidth, parent.width)
+                                // 0.6 of the row at most, so a long name
+                                // cannot consume the space the badge and the id
+                                // need and push them off the end. Below that it
+                                // is capped by its own content as before.
+                                width: Math.max(0, Math.min(implicitWidth, parent.width * 0.6))
                                 elide: Text.ElideRight
                                 text: pkgRow.modelData.title !== ""
                                       ? pkgRow.modelData.title : pkgRow.modelData.name
@@ -1438,8 +1543,10 @@ FloatingWindow {
                             Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 height: 15
-                                width: badgeText.implicitWidth + 12
+                                width: Math.max(0, Math.min(badgeText.implicitWidth + 12,
+                                                            nameRow.width - x))
                                 radius: 3
+                                clip: true
                                 visible: pkgRow.modelData.repo !== ""
                                 color: Qt.rgba(root.sourceColor(pkgRow.modelData.repo).r,
                                                root.sourceColor(pkgRow.modelData.repo).g,
@@ -1458,14 +1565,19 @@ FloatingWindow {
                                 color: root.cDim
                                 font { family: "monospace"; pixelSize: root.ui(10) }
                                 anchors.verticalCenter: parent.verticalCenter
-                                visible: text !== ""
+                                visible: text !== "" && width > 0
+                                width: Math.max(0, Math.min(implicitWidth, nameRow.width - x))
+                                elide: Text.ElideRight
                             }
                             Text {
                                 text: pkgRow.modelData.extra
                                 color: root.cWarn
                                 font { family: root.uiFont; pixelSize: root.ui(10) }
                                 anchors.verticalCenter: parent.verticalCenter
-                                visible: text !== "" && text !== "update" && text !== "component"
+                                visible: text !== "" && text !== "update"
+                                         && text !== "component" && width > 0
+                                width: Math.max(0, Math.min(implicitWidth, nameRow.width - x))
+                                elide: Text.ElideRight
                             }
                         }
                         Text {

@@ -543,7 +543,18 @@ out:
 
 int cmd_upgrade(int argc, char **argv)
 {
-	bool downgrade = false, refresh = true, use_aur = true, use_system = true;
+	bool downgrade = false, refresh = true;
+
+	/* The SAVED answer is the starting point, and a flag on the command line
+	 * overrides it for this run only.
+	 *
+	 * The button in SYNAPSE Software runs a fixed `synpkg upgrade`, so without
+	 * a stored preference there was no way to say "the repositories and the
+	 * AUR, but not the twenty minutes of compiling" and have it stick. Reading
+	 * it HERE rather than in the window is what keeps the button and the same
+	 * command typed into a terminal meaning the same thing. See settings.c. */
+	bool use_aur = sp_setting_bool("upgrade_aur");
+	bool use_system = sp_setting_bool("upgrade_system");
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--allow-downgrade"))
@@ -582,44 +593,55 @@ int cmd_upgrade(int argc, char **argv)
 		 * later.
 		 */
 		int rc = escalate("upgrade", argc, argv);
-		if (rc != 0 || !use_aur)
+
+		/* A failed repository upgrade stops everything: both passes below
+		 * build against the libraries it was in the middle of replacing. */
+		if (rc != 0)
 			return rc;
 
-		char **out = NULL;
-		size_t n = aur_outdated_names(&out);
+		/* `!use_aur` used to return HERE, which quietly took the SynapseOS
+		 * pass below with it: `upgrade --no-aur` skipped the components too,
+		 * and nothing said so. Two independent switches need two independent
+		 * skips, so this is a branch around the AUR block rather than a
+		 * return out of the function. */
+		if (use_aur) {
+			char **out = NULL;
+			size_t n = aur_outdated_names(&out);
 
-		/* Rebuild only what synpkg installed. "Foreign" also covers every
-		 * locally built SynapseOS package, and the names really do collide —
-		 * davinci-resolve is installed here from Blackmagic's own installer
-		 * and the AUR has one too. Rebuilding that from a PKGBUILD during a
-		 * routine upgrade would replace a hand-managed install with an
-		 * unrelated one. Anything unowned is NAMED rather than skipped in
-		 * silence, so an update nobody applies is still an update you saw. */
-		char **mine = xmalloc((n ? n : 1) * sizeof *mine);
-		size_t nmine = 0, nother = 0;
-		for (size_t i = 0; i < n; i++) {
-			if (aur_have_checkout(out[i])) {
-				mine[nmine++] = out[i];
-			} else {
-				nother++;
-				warn("%s has a newer version in the AUR, but synpkg did not "
-				     "install it — leaving it alone (synpkg aur install %s)",
-				     out[i], out[i]);
+			/* Rebuild only what synpkg installed. "Foreign" also covers every
+			 * locally built SynapseOS package, and the names really do
+			 * collide — davinci-resolve is installed here from Blackmagic's
+			 * own installer and the AUR has one too. Rebuilding that from a
+			 * PKGBUILD during a routine upgrade would replace a hand-managed
+			 * install with an unrelated one. Anything unowned is NAMED rather
+			 * than skipped in silence, so an update nobody applies is still an
+			 * update you saw. */
+			char **mine = xmalloc((n ? n : 1) * sizeof *mine);
+			size_t nmine = 0, nother = 0;
+			for (size_t i = 0; i < n; i++) {
+				if (aur_have_checkout(out[i])) {
+					mine[nmine++] = out[i];
+				} else {
+					nother++;
+					warn("%s has a newer version in the AUR, but synpkg did not "
+					     "install it — leaving it alone (synpkg aur install %s)",
+					     out[i], out[i]);
+				}
 			}
-		}
 
-		if (nmine) {
-			for (size_t i = 0; i < nmine; i++)
-				info("%s has a newer version in the AUR", mine[i]);
-			rc = aur_build_install(mine, nmine);
-		} else if (!nother && g_out == OUT_HUMAN) {
-			printf("%sAUR packages are up to date%s\n", C_OK(), C_RESET());
-		}
+			if (nmine) {
+				for (size_t i = 0; i < nmine; i++)
+					info("%s has a newer version in the AUR", mine[i]);
+				rc = aur_build_install(mine, nmine);
+			} else if (!nother && g_out == OUT_HUMAN) {
+				printf("%sAUR packages are up to date%s\n", C_OK(), C_RESET());
+			}
 
-		free(mine);
-		for (size_t i = 0; i < n; i++)
-			free(out[i]);
-		free(out);
+			free(mine);
+			for (size_t i = 0; i < n; i++)
+				free(out[i]);
+			free(out);
+		}
 
 		/* ── THE THIRD HALF OF AN UPGRADE ────────────────────────────────
 		 *

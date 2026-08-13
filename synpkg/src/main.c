@@ -48,6 +48,8 @@ static void usage(FILE *out)
 "  flatpak categories      browse Flathub by category\n"
 "  flatpak category <name> the applications in one Flathub category\n"
 "  system <check|apply>    SynapseOS's own components, via syn-update\n"
+"                           apply takes component names: system apply synui\n"
+"  config [key [yes|no]]   what upgrade does by default; no arguments lists\n"
 "\n"
 "Front-ends\n"
 "  tui                     browse in the terminal\n"
@@ -175,6 +177,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "aur"))       return cmd_aur(rest_argc, rest);
 	if (!strcmp(cmd, "flatpak"))   return cmd_flatpak(rest_argc, rest);
 	if (!strcmp(cmd, "system"))    return cmd_system(rest_argc, rest);
+	if (!strcmp(cmd, "config"))    return cmd_config(rest_argc, rest);
 	if (!strcmp(cmd, "tui"))       return cmd_tui(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))       return cmd_gui(rest_argc, rest);
 	if (!strcmp(cmd, "about"))     return cmd_about(rest_argc, rest);
