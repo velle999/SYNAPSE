@@ -51,20 +51,39 @@ want, and into `synui`, a wlroots compositor that knows the AI daemon exists.
 ## Quick start
 
 Grab the latest ISO from [Releases](https://github.com/velle999/SYNAPSE/releases/latest)
-and boot it. The default ISO embeds Mistral 7B Instruct (Q4_K_M, ~4.1 GB), so
-the AI is live on first boot with nothing to configure.
+and boot it. The live image asks one question, and it has three answers:
+
+```
+1) Install SynapseOS     — right here, in this terminal
+2) Install graphically   — starts the desktop first
+3) Try the live desktop  — look around; install later
+```
+
+Both installers are the same installer: the window is a form that writes an
+answer file and hands it to `syn-install --config`, so the partition rules and
+the test suite behind them are the one set.
+
+**The ISO carries no AI model** (since 0.2.8) — it was ~4.1 GB of an ~8 GB
+image for something the live session could only run on the CPU. The installer
+asks which model you want and downloads it onto the machine you are installing
+to; Mistral 7B Instruct (Q4_K_M) is the recommendation, and declining is a
+first-class answer. Until then `synapd` runs in shell-assist mode, so `syn
+status` reporting `model ✗ not installed` on live media is expected rather than
+a fault. See [The model](#the-model).
 
 To take it for a spin without touching hardware:
 
 ```bash
 git clone https://github.com/velle999/SYNAPSE.git && cd SYNAPSE
-QEMU_RAM=8G ./archiso/build_scripts/qemu-test.sh   # auto-detects the newest ISO
+./archiso/build_scripts/qemu-test.sh                # auto-detects the newest ISO
+QEMU_RAM=4G ./archiso/build_scripts/qemu-test.sh    # enough for a modelless ISO
 ```
 
 The script uses KVM when available, boots UEFI via OVMF (falling back to BIOS),
-and attaches a persistent 20 GB test disk. Give it 8 GB+ of RAM when the model
-is embedded. Kernel and boot output are mirrored to the serial console —
-`View → serial0` in the QEMU window.
+and attaches a persistent 20 GB test disk. It asks for 8 GB of RAM by default,
+which is what a `--with-model` image wants; a stock ISO runs in 4 GB. Kernel and
+boot output are mirrored to the serial console — `View → serial0` in the QEMU
+window.
 
 When you are ready to install, `syn-install` from the live session offers a
 whole-disk install with optional **LUKS2 full-disk encryption**, or — on UEFI,
@@ -353,10 +372,34 @@ resolution row if it is not.
 
 ```bash
 synfiles gui ~/Downloads       # the window
+synfiles tui ~/Downloads       # the same browser in a terminal
 synfiles find . --name=iso     # or --content=, bounded, never follows a symlink
 synfiles info photo.jpg        # what the properties pane shows
 synfiles undo list             # what Ctrl+Z would reverse
 ```
+
+**In a terminal**, `synfiles tui` is the third front-end, and it is the one to
+reach for over SSH into a machine whose desktop will not start. Arrow keys move
+a highlighted row, `→` or `Enter` opens, `←` goes up — and lands on the folder
+you just left, which is where you were looking. `i` properties, `z` size, `m`
+move, `y` copy, `t` trash, `e` the service menus, `/` filter, `c` cd, `g` opens
+the window on the folder you are in. Moving and copying are `synfiles move` and
+`synfiles copy` underneath, so `Ctrl`+`Z`'s journal records them and `synfiles
+undo` reverses one made from the browser.
+
+It is careful about your terminal, on purpose. It turns off echo and
+line-buffering and **nothing else** — no mouse reporting, no alternate screen —
+and puts them back on exit, on `Ctrl`+`C`, and on `SIGTERM`/`HUP`/`QUIT`. A
+full-screen TUI killed mid-flight never sends the sequence that disables mouse
+reporting, and the shell underneath then reads every pointer movement as typed
+input; there is nothing here that can do that. What you browsed stays in the
+scrollback, and `t` reaches the trash — never `synfiles delete`, which is
+permanent and gated behind `--yes`.
+
+Piping to it still works and is unchanged, which is how it is scripted and
+tested: `printf '1\nq\n' | synfiles tui` drives the line protocol, where the
+same actions are `m 3 ~/dest`, `y 3 ~/dest`, `i 2`, and a bare row number
+opens.
 
 Prefer Dolphin? Install it and hand it the mimetype — the second command
 outranks ours because it lands in your own config:
@@ -596,10 +639,10 @@ Every tool is prefixed `syn` and self-documents with `--help` (or `help`).
 | `syn resolve` | DaVinci Resolve support — `doctor` (what is missing), `setup` (OpenCL runtime + launch environment), `install`, `transcode` (footage the free edition can read), `launch` |
 | `synsh` | Natural-language shell — type plain English or normal commands; `--no-ai` for pure shell, `--intent-check` to test an intent |
 | `syn-model` | Model manager — `download [mistral-7b\|phi3\|tiny]`, `list`, `status`, `remove` |
-| `syn-install` | Install SynapseOS to disk (the live-ISO installer) |
+| `syn-install` | Install SynapseOS to disk (the live-ISO installer). `syn-install-gui` is the same installer as a window — it writes an answer file and runs `syn-install --config`. `--list-disks` prints what either one is allowed to offer |
 | `synpkg` | The package manager — `search`, `install`, `remove`, `upgrade`, `updates`, `installed`, `orphans`, `info`, `status`, `about`. Other sources: `synpkg aur …`, `synpkg flatpak …`, `synpkg arsenal …`, `synpkg system …`. `synpkg tui` browses in the terminal, `synpkg gui [tab]` opens the window |
 | `syn-update` | Update the SynapseOS components on an installed system — `check` (default, read-only), `apply`, `status`. Complements `synpkg upgrade`, which covers Arch; see [Staying up to date](#staying-up-to-date) |
-| `synfiles` | The file manager — `list`, `info`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window; `--rec` prints the records the window parses. See [Files](#files) |
+| `synfiles` | The file manager — `list`, `info`, `find`, `trash`, `copy`, `move`, `rename`, `mkdir`, `compress`, `undo`, `places`, `recent`, `volumes`, `mount`. `synfiles gui [dir]` opens the window, `synfiles tui [dir]` browses in the terminal with arrow keys; `--rec` prints the records the window parses. See [Files](#files) |
 | `syn-settings` | System settings — `gui [pane]` opens the window (display, region, time, network, bluetooth, power, apps, kernel, system); `--rec <pane>` prints what that pane reads; `set keymap/xkb/timezone/…` changes one thing from a script |
 | `syn-edit` | The text editor — `syn-edit file` opens the terminal editor, `gui` the window, and `run -k KEYS` / `ex -c CMD` apply edits with no terminal at all |
 | `syn-disks` | The disk utility — `list`, `info`, `smart`, `mount`, `unmount`, `eject`, `format`, `partition`. `syn-disks gui` opens the window |
