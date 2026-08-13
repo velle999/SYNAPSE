@@ -1766,7 +1766,7 @@ while :; do
     # the same six shared items and put the only difference — Steam — at the
     # far right, past 100 columns, where a terminal cut it off: Full and
     # Standard read as the same preset. Every line here stays under 80.
-    echo "    $(bold '1)') Full      — Standard + Steam + Nix + Nexus Chat, TEPRIS, M2020"
+    echo "    $(bold '1)') Full      — Standard + Steam + Nix + Nexus Chat + TEPRIS"
     echo "    $(bold '2)') Standard  — AI model, Bluetooth, printing, Wine, phone,"
     echo "                   Chibi + Vibe + Arsenal        (default)"
     echo "    $(bold '3)') Minimal   — core daemons only: none of the above"
@@ -1781,7 +1781,15 @@ while :; do
 
     case "$INSTALL_PRESET" in
         1)
-            SEL_APPS="chibi nexus-chat tepris vibe samsung-m2020 syn-arsenal"
+            # samsung-m2020 is NOT here, and cannot be: its EULA forbids
+            # redistribution, so archiso/build.sh deliberately keeps it out of
+            # the ISO's local repo (see the comment there). Naming it in a
+            # preset asked pacman for a target the media does not have, which
+            # loses the WHOLE single transaction below — every SynapseOS
+            # package with it — and is only rescued by the one-at-a-time retry
+            # in the verify step. `syn printer samsung` installs the driver
+            # from Samsung after the install, which is the supported route.
+            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1
@@ -1817,13 +1825,14 @@ while :; do
             ask_opt want_vibe    1 "Vibe — local AI coding assistant"
             ask_opt want_nexus   0 "Nexus Chat — peer-to-peer chat"
             ask_opt want_tepris  0 "TEPRIS — block game"
-            ask_opt want_m2020   0 "Samsung M2020 printer driver"
+            # No M2020 question: the driver is not on the media to install.
+            # `syn printer samsung` fetches it from Samsung afterwards.
             ask_opt want_arsenal 1 "SYNAPSE Arsenal — browse/install BlackArch security tooling"
             echo ""
             # No "AI model? y/n" here: the model question is asked once for
             # every preset below, and "None" is one of its answers.
             ask_opt WANT_BLUETOOTH  1 "Bluetooth support"
-            ask_opt WANT_PRINTING   1 "Printing (CUPS)"
+            ask_opt WANT_PRINTING   1 "Printing (CUPS) — a driver the OS cannot ship: 'syn printer <vendor>'"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
             ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) + CachyOS Proton — enables [multilib] and [cachyos] (~3.1 GB)"
@@ -1835,7 +1844,6 @@ while :; do
             [ "$want_vibe"   = 1 ] && SEL_APPS="$SEL_APPS vibe"
             [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
             [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
-            [ "$want_m2020"  = 1 ] && SEL_APPS="$SEL_APPS samsung-m2020"
             [ "$want_arsenal" = 1 ] && SEL_APPS="$SEL_APPS syn-arsenal"
             SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
 
