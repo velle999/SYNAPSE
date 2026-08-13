@@ -110,12 +110,43 @@ const char *mime_for(const char *name, bool is_dir);
 const char *icon_for(const char *mime, bool is_dir);
 
 /* ── listing.c ──────────────────────────────────────────────────────────── */
+
+/* One directory entry, as the scan found it. Shared with the TUI so that both
+ * front-ends see the same answers about symlinks, broken links and sort order;
+ * a second walk would be a second set of answers. */
+typedef struct {
+	char  *name;      /* raw bytes, as the kernel gave them */
+	char  *target;    /* symlink target, raw bytes; NULL if not a link */
+	bool   is_dir;    /* AFTER following, so a link to a directory sorts as one */
+	bool   is_link;
+	bool   broken;    /* a symlink whose target does not resolve */
+	const char *type;
+	const char *mime;
+	off_t  size;
+	time_t mtime;
+	mode_t mode;
+	char  *icon;      /* only ever set for a .desktop launcher */
+} sf_entry_t;
+
+typedef enum { SF_SORT_NAME, SF_SORT_SIZE, SF_SORT_MTIME, SF_SORT_TYPE } sf_sort_t;
+
+/* Read and sort a directory. NULL (with *count 0) when it cannot be read —
+ * reported rather than fatal, because a browser has to survive a cd into
+ * something unreadable. */
+sf_entry_t  *sf_scan(const char *dir, bool all, size_t *count);
+void      sf_entries_free(sf_entry_t *ents, size_t n);
+void      sf_sort_set(sf_sort_t sort, bool reverse, bool dirs_first);
+sf_sort_t sf_sort_get(void);
+
 int cmd_list(int argc, char **argv);
 int cmd_info(int argc, char **argv);
 /* The recursive size of a folder — what `info`'s st_size is NOT. Streams a
  * running total (bytes, disk, files, dirs, done) because the walk takes as long
  * as it takes and a properties panel must not freeze for it. */
 int cmd_du(int argc, char **argv);
+
+/* ── tui.c ──────────────────────────────────────────────────────────────── */
+int cmd_tui(int argc, char **argv);
 
 /* ── resolution.c — pixel dimensions, for the properties pane ───────────────
  * The one place this program reads a file's CONTENT. Called by `info` only,

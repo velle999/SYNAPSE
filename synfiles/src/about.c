@@ -107,9 +107,12 @@ int cmd_about(int argc, char **argv)
 	free(trash);
 	free(data);
 
-	about_row("Front-ends", "info", "CLI and quickshell",
-	          have_cmd("quickshell") ? "synfiles gui"
-	                                 : "install quickshell for the GUI");
+	/* Three now. The terminal browser needs nothing installed, which is the
+	 * point of naming it here: this row is read on the machine where the GUI
+	 * is the thing that will not start. */
+	about_row("Front-ends", "info", "CLI, terminal and quickshell",
+	          have_cmd("quickshell") ? "synfiles tui · synfiles gui"
+	                                 : "synfiles tui (install quickshell for the GUI)");
 
 	/* A detail beginning https:// is a LINK. The GUI opens it in a browser
 	 * rather than handing it to a shell, which is why "openable" and

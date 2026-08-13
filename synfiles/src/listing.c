@@ -29,24 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
-typedef struct {
-	char  *name;      /* raw bytes, as the kernel gave them */
-	char  *target;    /* symlink target, raw bytes; NULL if not a link */
-	bool   is_dir;    /* AFTER following, so a link to a directory sorts as one */
-	bool   is_link;
-	bool   broken;    /* a symlink whose target does not resolve */
-	const char *type;
-	/* Resolved ONCE at scan time. mime_for() walks ~1500 globs, and calling it
-	 * from inside the qsort comparator would pay that on every comparison —
-	 * O(n log n) glob scans to sort a directory by type. */
-	const char *mime;
-	off_t  size;
-	time_t mtime;
-	mode_t mode;
-	/* Only ever set for a .desktop launcher: the Icon= it names. NULL for
-	 * everything else, which is every other row in a normal directory. */
-	char  *icon;
-} entry_t;
+/* sf_entry_t now lives in synfiles.h — the TUI reads the same rows. */
 
 typedef enum { SORT_NAME, SORT_SIZE, SORT_MTIME, SORT_TYPE } sort_t;
 
@@ -77,7 +60,7 @@ static int name_cmp(const char *a, const char *b)
 
 static int entry_cmp(const void *va, const void *vb)
 {
-	const entry_t *a = va, *b = vb;
+	const sf_entry_t *a = va, *b = vb;
 
 	/* Directories first is not a sort key the user picked — it survives
 	 * every sort mode and every reversal, the way it does in Dolphin. A
@@ -113,7 +96,7 @@ static void emit_header(void)
 	        "icon");
 }
 
-static void emit_entry(const entry_t *e)
+static void emit_entry(const sf_entry_t *e)
 {
 	const char *mime = e->mime;
 	char *name = pct_encode(e->name, false);
@@ -242,50 +225,38 @@ static char *read_link(int dirfd, const char *name)
 	}
 }
 
-int cmd_list(int argc, char **argv)
+/* ── the scan, on its own ────────────────────────────────────────────────────
+ *
+ * Pulled out of cmd_list so the TUI reads a directory through the SAME code
+ * that `list` prints. The alternative — a second walk inside tui.c — is a
+ * second set of answers about symlinks, broken links, .desktop icons and sort
+ * order, and the two would drift on the first bug fixed in one of them.
+ *
+ * Sort options travel through the file-static g_sort/g_reverse/g_dirs_first,
+ * which is what entry_cmp already reads: qsort takes no context argument, and
+ * threading one through qsort_r to avoid three statics would be a bigger change
+ * than the problem deserves in a single-threaded program.
+ *
+ * Returns NULL and sets *n to 0 when the directory cannot be read — a TUI must
+ * be able to survive a cd into something unreadable, so this reports rather
+ * than dying the way cmd_list may.
+ */
+sf_entry_t *sf_scan(const char *dir, bool all, size_t *count)
 {
-	bool all = false;
-	const char *dir = NULL;
-
-	for (int i = 0; i < argc; i++) {
-		const char *a = argv[i];
-		if (!strcmp(a, "--all") || !strcmp(a, "-a"))
-			all = true;
-		else if (!strcmp(a, "--reverse") || !strcmp(a, "-r"))
-			g_reverse = true;
-		else if (!strcmp(a, "--no-dirs-first"))
-			g_dirs_first = false;
-		else if (!strncmp(a, "--sort=", 7)) {
-			const char *s = a + 7;
-			if      (!strcmp(s, "name"))  g_sort = SORT_NAME;
-			else if (!strcmp(s, "size"))  g_sort = SORT_SIZE;
-			else if (!strcmp(s, "mtime")) g_sort = SORT_MTIME;
-			else if (!strcmp(s, "type"))  g_sort = SORT_TYPE;
-			else die("list: unknown sort '%s' — try name, size, mtime, type", s);
-		} else if (a[0] == '-' && a[1]) {
-			die("list: unknown option '%s'", a);
-		} else {
-			dir = a;
-		}
-	}
-
-	if (!dir)
-		dir = ".";
+	*count = 0;
 
 	int dirfd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (dirfd < 0)
-		die("cannot open %s: %s", dir, strerror(errno));
+		return NULL;
 
-	/* fdopendir takes ownership of the fd, but dirfd() hands it back for the
-	 * *at() calls below — closedir() closes it exactly once at the end. */
 	DIR *d = fdopendir(dirfd);
 	if (!d) {
 		close(dirfd);
-		die("cannot read %s: %s", dir, strerror(errno));
+		return NULL;
 	}
 
 	size_t cap = 128, n = 0;
-	entry_t *ents = xmalloc(cap * sizeof *ents);
+	sf_entry_t *ents = xmalloc(cap * sizeof *ents);
 
 	struct dirent *de;
 	while ((de = readdir(d))) {
@@ -298,7 +269,7 @@ int cmd_list(int argc, char **argv)
 		if (fstatat(dirfd, de->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0)
 			continue;   /* vanished between readdir and stat — not an error */
 
-		entry_t e = { 0 };
+		sf_entry_t e = { 0 };
 		e.name = xstrdup(de->d_name);
 		e.is_link = S_ISLNK(st.st_mode);
 
@@ -341,8 +312,66 @@ int cmd_list(int argc, char **argv)
 		}
 		ents[n++] = e;
 	}
+	closedir(d);
 
 	qsort(ents, n, sizeof *ents, entry_cmp);
+	*count = n;
+	return ents;
+}
+
+void sf_entries_free(sf_entry_t *ents, size_t n)
+{
+	for (size_t i = 0; i < n; i++) {
+		free(ents[i].name);
+		free(ents[i].target);
+		free(ents[i].icon);
+	}
+	free(ents);
+}
+
+void sf_sort_set(sf_sort_t sort, bool reverse, bool dirs_first)
+{
+	g_sort = (sort_t)sort;
+	g_reverse = reverse;
+	g_dirs_first = dirs_first;
+}
+
+sf_sort_t sf_sort_get(void) { return (sf_sort_t)g_sort; }
+
+int cmd_list(int argc, char **argv)
+{
+	bool all = false;
+	const char *dir = NULL;
+
+	for (int i = 0; i < argc; i++) {
+		const char *a = argv[i];
+		if (!strcmp(a, "--all") || !strcmp(a, "-a"))
+			all = true;
+		else if (!strcmp(a, "--reverse") || !strcmp(a, "-r"))
+			g_reverse = true;
+		else if (!strcmp(a, "--no-dirs-first"))
+			g_dirs_first = false;
+		else if (!strncmp(a, "--sort=", 7)) {
+			const char *s = a + 7;
+			if      (!strcmp(s, "name"))  g_sort = SORT_NAME;
+			else if (!strcmp(s, "size"))  g_sort = SORT_SIZE;
+			else if (!strcmp(s, "mtime")) g_sort = SORT_MTIME;
+			else if (!strcmp(s, "type"))  g_sort = SORT_TYPE;
+			else die("list: unknown sort '%s' — try name, size, mtime, type", s);
+		} else if (a[0] == '-' && a[1]) {
+			die("list: unknown option '%s'", a);
+		} else {
+			dir = a;
+		}
+	}
+
+	if (!dir)
+		dir = ".";
+
+	size_t n = 0;
+	sf_entry_t *ents = sf_scan(dir, all, &n);
+	if (!ents)
+		die("cannot read %s: %s", dir, strerror(errno));
 
 	if (g_out == OUT_REC)
 		emit_header();
@@ -352,14 +381,7 @@ int cmd_list(int argc, char **argv)
 	if (g_out == OUT_HUMAN && n == 0)
 		printf("%sempty%s\n", C_DIM(), C_RESET());
 
-	for (size_t i = 0; i < n; i++) {
-		free(ents[i].name);
-		free(ents[i].target);
-		free(ents[i].icon);
-	}
-	free(ents);
-	closedir(d);
-
+	sf_entries_free(ents, n);
 	return n ? 0 : 100;
 }
 

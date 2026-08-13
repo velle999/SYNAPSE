@@ -27,6 +27,7 @@ sources = files(
   'src/fileops.c',
   'src/trash.c',
   'src/config.c',
+  'src/tui.c',
   'src/about.c',
   'src/actions.c',
   'src/undo.c',

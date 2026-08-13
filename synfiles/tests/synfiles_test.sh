@@ -669,6 +669,125 @@ SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config set text_scale 10 >/dev/null
 v=$(SYNFILES_CONFIG="$T/textcfg" "$SYNFILES" config get text_scale)
 [ "$v" = 75 ] && ok "text_scale clamps to its minimum" || bad "text_scale went to '$v'"
 
+# ── tui ─────────────────────────────────────────────────────────────────────
+#
+# Driven by piping commands at it, which is the whole point of it being
+# LINE-ORIENTED: no raw mode, no alternate screen, nothing to restore. A TUI
+# that needed a pty to test is also a TUI that leaves a terminal broken when it
+# is killed, and this is the front-end for a machine whose desktop will not
+# start.
+TU="$T/tui"
+mkdir -p "$TU/sub"
+echo hi > "$TU/one.txt"
+echo there > "$TU/two.txt"
+echo x > "$TU/.dotted"
+ln -s one.txt "$TU/alink.txt"
+ln -s nowhere "$TU/dead.txt"
+
+out=$(printf 'q\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"one.txt"*) ok "tui lists the directory" ;;
+    *)           bad "tui printed no listing" ;;
+esac
+case "$out" in
+    *"5 items"*) ok "tui hides dotfiles by default" ;;
+    *)           bad "tui item count is wrong: $(printf '%s' "$out" | grep -o '[0-9]* items')" ;;
+esac
+
+# `a` toggles them, and the count is the observable.
+out=$(printf 'a\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"6 items"*) ok "tui shows dotfiles on 'a'" ;;
+    *)           bad "'a' did not reveal the dotfile" ;;
+esac
+
+# A bare number opens: into a directory, and the header follows.
+out=$(printf '1\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"/sub"*) ok "a number opens a folder" ;;
+    *)        bad "opening row 1 did not enter sub" ;;
+esac
+
+# 'u' comes back up.
+out=$(printf '1\nu\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1 | grep -c "$TU$")
+[ "$out" -ge 2 ] && ok "'u' returns to the parent" || bad "'u' did not go back up"
+
+# The filter narrows the SAME scan rather than re-reading with a glob.
+out=$(printf '/two\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"1 item ·"*) ok "the filter narrows the listing" ;;
+    *)            bad "the filter did not narrow to one row" ;;
+esac
+
+# Sort cycles through four and says which is on, so a keystroke is never silent.
+out=$(printf 's\ns\ns\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1 | grep -c "sort type")
+[ "$out" -ge 1 ] && ok "sort cycles to type" || bad "sort did not reach type"
+
+# Row commands delegate rather than reimplementing: info is cmd_info's output.
+out=$(printf 'i 2\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"mime"*) ok "'i' shows the properties cmd_info prints" ;;
+    *)        bad "'i' printed no info block" ;;
+esac
+
+# Nonsense must not crash or act. A row number out of range is the likeliest
+# typo and has to be refused by NAME, not clamped to some other file.
+out=$(printf '99\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"no row 99"*) ok "an out-of-range row is refused" ;;
+    *)             bad "row 99 was not refused" ;;
+esac
+out=$(printf 'X\nq\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"unrecognised"*) ok "an unknown key says so" ;;
+    *)                bad "an unknown key was swallowed" ;;
+esac
+
+# EOF is a clean exit: the TUI is pipeable, and a pipe ends.
+NO_COLOR=1 "$SYNFILES" tui "$TU" </dev/null >/dev/null 2>&1
+[ $? -eq 0 ] && ok "tui exits 0 on EOF" || bad "tui did not exit cleanly on EOF"
+
+# A control byte in a name is REPLACED for display, never stripped: stripping
+# prints a name that is not the file's, which is the whole reason records are
+# percent-encoded everywhere else.
+printf 'x' > "$TU/$(printf 'ctl\tname.txt')"
+out=$(printf 'q\n' | NO_COLOR=1 "$SYNFILES" tui "$TU" 2>&1)
+case "$out" in
+    *"ctl?name.txt"*) ok "a control byte in a name is shown as ?" ;;
+    *)                bad "the tab in a filename was not neutralised" ;;
+esac
+
+# ── the trash on ANOTHER filesystem ─────────────────────────────────────────
+#
+# The tests below override SYNFILES_TRASH so they can never touch the real one
+# — which also means they never exercise topdir_of(), the code that decides
+# WHICH trash a file belongs in. That gap hid a real bug: a mount made directly
+# under / (a tmpfs /tmp, a separate /home, /boot) resolved to the root
+# filesystem, so trashing a file on one built "//.Trash-$uid" and failed with
+# "Permission denied" on /. Mounts further down were fine, which is why it went
+# unnoticed — a USB stick at /run/media/user/X has a parent that is not "/".
+#
+# Needs a second filesystem to mean anything, so it SKIPS rather than lying
+# when /tmp is on the root device.
+if [ "$(stat -c %d /tmp)" != "$(stat -c %d /)" ]; then
+    vt=$(mktemp -d /tmp/synfiles-vt.XXXXXX)
+    echo payload > "$vt/onvolume.txt"
+    # Deliberately WITHOUT the override: this is the path being tested.
+    ( unset SYNFILES_TRASH; "$SYNFILES" trash "$vt/onvolume.txt" ) >/dev/null 2>&1
+    vtrash="/tmp/.Trash-$(id -u)/files/onvolume.txt"
+    if [ -e "$vtrash" ]; then
+        ok "a file on another filesystem reaches that volume's trash"
+        rm -f "$vtrash" "/tmp/.Trash-$(id -u)/info/onvolume.txt.trashinfo"
+    else
+        bad "trash on a top-level mount did not land in /tmp/.Trash-$(id -u)"
+    fi
+    [ -e "$vt/onvolume.txt" ] && bad "the original survived the volume trash" \
+                             || ok "…and the original is gone from the volume"
+    rm -rf "$vt"
+else
+    ok "skipped: /tmp is on the root filesystem, so there is no volume to test"
+fi
+
 # ── trash, against a fixture ────────────────────────────────────────────────
 # SYNFILES_TRASH is an unconditional override: without it the device check
 # would route a scratch file to a volume trash and these tests could touch the

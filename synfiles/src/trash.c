@@ -62,7 +62,25 @@ static char *topdir_of(const char *path)
 	char *cur = xstrdup(path);
 	for (;;) {
 		char *slash = strrchr(cur, '/');
-		if (!slash || slash == cur) {
+		if (!slash) {
+			free(cur);
+			return xstrdup("/");
+		}
+		if (slash == cur) {
+			/* The parent is "/" ITSELF, and that is not the same thing as
+			 * this being on the root filesystem.
+			 *
+			 * Returning "/" unconditionally here meant every mount made
+			 * DIRECTLY under / — /tmp, /boot, a separate /home — resolved to
+			 * the root filesystem, and trashing a file on one of them tried to
+			 * build //.Trash-$uid and failed with "Permission denied" on /.
+			 * Found by trashing a file in /tmp, which is a tmpfs here.
+			 *
+			 * Mounts further down (/run/media/user/STICK) were never affected:
+			 * their parent is not "/", so the loop above already catches them. */
+			struct stat rs;
+			if (lstat("/", &rs) == 0 && rs.st_dev != dev)
+				return cur;              /* cur IS the mount point */
 			free(cur);
 			return xstrdup("/");
 		}

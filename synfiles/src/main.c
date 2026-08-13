@@ -26,6 +26,7 @@ static void usage(FILE *f)
 "       --no-dirs-first    do not float directories to the top\n"
 "  info <path>             everything a properties pane shows\n"
 "  du <path>               recursive size; prints a running total as it walks\n"
+"  tui [dir]               browse in the terminal\n"
 "  find [dir] --name=GLOB [--content=TEXT] [--limit=N] [--max-depth=N]\n"
 "                          search a tree; never follows symlinks\n"
 "  peek [dir] [--limit=N]  a few previewable files inside each subfolder,\n"
@@ -164,6 +165,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "list"))    return cmd_list(rest_argc, rest);
 	if (!strcmp(cmd, "info"))    return cmd_info(rest_argc, rest);
 	if (!strcmp(cmd, "du"))      return cmd_du(rest_argc, rest);
+	if (!strcmp(cmd, "tui"))     return cmd_tui(rest_argc, rest);
 	if (!strcmp(cmd, "find"))    return cmd_find(rest_argc, rest);
 	if (!strcmp(cmd, "peek"))    return cmd_peek(rest_argc, rest);
 	if (!strcmp(cmd, "places"))  return cmd_places(rest_argc, rest);
