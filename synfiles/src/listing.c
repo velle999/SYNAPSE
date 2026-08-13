@@ -451,3 +451,193 @@ int cmd_info(int argc, char **argv)
 
 	return 0;
 }
+
+/* ── du — what a folder actually holds ───────────────────────────────────────
+ *
+ * `info` reports st_size, and for a directory that is the size of the DIRECTORY
+ * ENTRY — 890 bytes for a tree holding an ISO. It is the correct answer to the
+ * question stat() was asked and the wrong answer to the one a properties pane
+ * is asking, which is "how much is in here".
+ *
+ * WHY THIS IS A SEPARATE COMMAND, AND WHY IT STREAMS
+ *
+ * Walking a large tree takes seconds to minutes, and `info` is what opens the
+ * properties panel — folding the walk into it would freeze the panel on
+ * exactly the folders anyone would ask about. So this is its own command, the
+ * panel starts it after `info` has already drawn, and it prints a running
+ * total that the window renders as it arrives. A number that climbs is also
+ * the only honest progress indicator available here: there is no cheap way to
+ * know the total ahead of time, which is the whole reason this is slow.
+ *
+ * TWO NUMBERS, because they answer different questions and disagree a lot:
+ *   bytes — apparent size, the sum of st_size. What "this folder is 7.2 GB"
+ *           means to a person, and what has to fit when it is copied.
+ *   disk  — st_blocks * 512. What it costs on THIS filesystem, so a tree of
+ *           tiny files reads larger and a sparse file or a btrfs-compressed
+ *           one reads smaller.
+ *
+ * Symlinks are counted as links (lstat, never followed): following them
+ * double-counts anything reachable twice and hangs forever on a cycle.
+ *
+ * Hard links are counted ONCE. A tree with a 4 GB file linked into it twice
+ * does not hold 8 GB, and pacman's cache and any backup tree are full of them.
+ * The seen-set is (dev, ino) and only files with st_nlink > 1 go into it —
+ * putting every inode in it would cost more memory than the walk saves.
+ */
+
+struct du_seen {
+	dev_t dev;
+	ino_t ino;
+	struct du_seen *next;
+};
+
+#define DU_BUCKETS 1024
+
+static bool du_seen_add(struct du_seen **tab, dev_t dev, ino_t ino)
+{
+	size_t h = (size_t)(ino ^ (dev << 8)) % DU_BUCKETS;
+	for (struct du_seen *s = tab[h]; s; s = s->next)
+		if (s->ino == ino && s->dev == dev)
+			return true;                     /* already counted */
+	struct du_seen *n = xmalloc(sizeof *n);
+	n->dev = dev; n->ino = ino; n->next = tab[h];
+	tab[h] = n;
+	return false;
+}
+
+static void du_seen_free(struct du_seen **tab)
+{
+	for (size_t i = 0; i < DU_BUCKETS; i++) {
+		struct du_seen *s = tab[i];
+		while (s) {
+			struct du_seen *n = s->next;
+			free(s);
+			s = n;
+		}
+	}
+}
+
+struct du_acc {
+	long long bytes, disk, files, dirs;
+	struct du_seen **seen;
+	time_t last_report;
+	bool done;
+};
+
+static void du_report(const struct du_acc *a)
+{
+	char *b = xasprintf("%lld", a->bytes);
+	char *d = xasprintf("%lld", a->disk);
+	char *f = xasprintf("%lld", a->files);
+	char *r = xasprintf("%lld", a->dirs);
+
+	if (g_out == OUT_REC) {
+		/* One record per report, five fields, the last saying whether this is
+		 * the final one. A reader that only wants the answer waits for
+		 * done=1; a reader that wants progress draws every row. */
+		rec_row(5, b, d, f, r, a->done ? "1" : "0");
+	} else if (a->done) {
+		printf("%s%-12s%s %lld\n", C_DIM(), "bytes", C_RESET(), a->bytes);
+		printf("%s%-12s%s %lld\n", C_DIM(), "disk",  C_RESET(), a->disk);
+		printf("%s%-12s%s %lld\n", C_DIM(), "files", C_RESET(), a->files);
+		printf("%s%-12s%s %lld\n", C_DIM(), "dirs",  C_RESET(), a->dirs);
+	}
+	fflush(stdout);
+	free(b); free(d); free(f); free(r);
+}
+
+/* Depth-first with an open fd per level, so the walk is immune to a rename
+ * happening underneath it and never builds a path longer than PATH_MAX. */
+static void du_walk(int dirfd, struct du_acc *a)
+{
+	DIR *d = fdopendir(dirfd);
+	if (!d) {
+		close(dirfd);
+		return;
+	}
+
+	struct dirent *e;
+	while ((e = readdir(d))) {
+		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+			continue;
+
+		struct stat st;
+		if (fstatat(dirfd, e->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0)
+			continue;     /* vanished mid-walk, or unreadable: not fatal */
+
+		if (S_ISDIR(st.st_mode)) {
+			a->dirs++;
+			/* The directory's OWN st_size is not added to `bytes`. That
+			 * number is the size of the directory entry — the 890-byte
+			 * answer this command exists to replace — and adding it back
+			 * would be the same mistake, just spread thinner. `disk` does
+			 * count its blocks, because they really are occupied. Both
+			 * choices match what `du -sb` and `du -s` report. */
+			a->disk  += (long long)st.st_blocks * 512;
+			int fd = openat(dirfd, e->d_name,
+			                O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+			if (fd >= 0)
+				du_walk(fd, a);       /* takes ownership of fd */
+			continue;
+		}
+
+		/* Counted once, however many names it has. */
+		if (st.st_nlink > 1 && du_seen_add(a->seen, st.st_dev, st.st_ino))
+			continue;
+
+		a->files++;
+		a->bytes += st.st_size;
+		a->disk  += (long long)st.st_blocks * 512;
+
+		/* Progress, at most once a second. Reporting per file turns a walk of
+		 * a kernel tree into hundreds of thousands of writes and makes the
+		 * reader the bottleneck. */
+		time_t now = time(NULL);
+		if (now != a->last_report) {
+			a->last_report = now;
+			du_report(a);
+		}
+	}
+	closedir(d);      /* closes dirfd */
+}
+
+int cmd_du(int argc, char **argv)
+{
+	if (argc < 1)
+		die("du: need a path");
+	const char *path = argv[0];
+
+	struct stat st;
+	if (lstat(path, &st) != 0)
+		die("cannot stat %s: %s", path, strerror(errno));
+
+	if (g_out == OUT_REC)
+		rec_row(5, "bytes", "disk", "files", "dirs", "done");
+
+	struct du_seen **seen = xmalloc(DU_BUCKETS * sizeof *seen);
+	for (size_t i = 0; i < DU_BUCKETS; i++)
+		seen[i] = NULL;
+
+	struct du_acc a = { 0, 0, 0, 0, seen, time(NULL), false };
+
+	if (S_ISDIR(st.st_mode)) {
+		a.disk  += (long long)st.st_blocks * 512;
+		int fd = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		if (fd < 0)
+			die("cannot read %s: %s", path, strerror(errno));
+		du_walk(fd, &a);
+	} else {
+		/* A plain file is a legitimate argument and answers in one line, so
+		 * the caller does not need to know which it has before asking. */
+		a.files = 1;
+		a.bytes = st.st_size;
+		a.disk  = (long long)st.st_blocks * 512;
+	}
+
+	a.done = true;
+	du_report(&a);
+
+	du_seen_free(seen);
+	free(seen);
+	return 0;
+}

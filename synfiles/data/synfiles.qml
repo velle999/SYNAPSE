@@ -286,6 +286,38 @@ FloatingWindow {
 
     function setActive(i) { root.active = (root.split && i === 1) ? 1 : 0 }
 
+    // Closing a tab, including the LAST one.
+    //
+    // The × used to disappear when a pane was down to one tab and closeTab()
+    // refused it, so the only way out of the last tab was the window's own
+    // close button — which is not where anyone looks, and which made the tab
+    // bar behave differently from every other tabbed application on the
+    // machine. The × is always there now and always closes something.
+    //
+    // WHAT it closes depends on what is left. In a split, the last tab of a
+    // pane closes THAT PANE and keeps the other one's contents — folding the
+    // split is the local answer, and quitting the whole window because half of
+    // it ran out of tabs would be a very expensive surprise. With no split
+    // left, the last tab is the window.
+    function closeTabOrQuit(p, i) {
+        if (p.tabs.length > 1) { p.closeTab(i); return }
+
+        if (!root.split) { Qt.quit(); return }
+
+        if (p === paneB) {
+            // The right pane is already the one being dropped; A keeps what it
+            // has.
+            paneB.discard()
+        } else {
+            // The LEFT pane ran out, so B's contents have to move into A —
+            // the same handover toggleSplit() does, for the same reason.
+            paneA.adopt(paneB)
+            paneB.discard()
+        }
+        root.active = 0
+        root.split = false
+    }
+
     function toggleSplit() {
         if (root.split) {
             // Closing keeps what the ACTIVE pane was showing. Dropping back to
@@ -667,11 +699,73 @@ FloatingWindow {
     property bool showProps: false
     property var propRows: []
 
+    // Closing the panel STOPS the walk. A `du` over a big tree runs for
+    // seconds after the panel is gone otherwise, and its records would then
+    // land in the next folder's row.
+    onShowPropsChanged: if (!root.showProps) root.stopFolderSize()
+
     Process {
         id: infoProc
         stdout: StdioCollector {
             onStreamFinished: root.propRows = root.parseRecords(this.text)
         }
+    }
+
+    // ── How big a FOLDER is ─────────────────────────────────────────────────
+    //
+    // `info` reports st_size, and for a directory that is the size of the
+    // directory entry — which is why the SYNAPSE folder, ISO and all, read
+    // "890 B". The real answer needs a walk of the whole tree, and that takes
+    // seconds on a big one, so it is a second command started after the panel
+    // has already drawn rather than something the panel waits for.
+    //
+    // SplitParser, not StdioCollector: `du` prints a RUNNING total, and a
+    // collector fires once at the end — which would leave the row saying
+    // "calculating…" for the entire walk and then jump straight to the answer,
+    // throwing away the only progress signal there is.
+    property bool duRunning: false
+    property var  duTotal: null      // {bytes, disk, files, dirs, done}
+
+    Process {
+        id: duProc
+        stdout: SplitParser {
+            onRead: (line) => {
+                const f = line.split("\t")
+                if (f.length < 5 || f[0] === "bytes") return   // header
+                root.duTotal = {
+                    bytes: parseInt(f[0]) || 0, disk: parseInt(f[1]) || 0,
+                    files: parseInt(f[2]) || 0, dirs:  parseInt(f[3]) || 0,
+                    done:  f[4] === "1"
+                }
+            }
+        }
+        onExited: root.duRunning = false
+    }
+
+    function startFolderSize(pathEnc) {
+        root.duTotal = null
+        root.duRunning = true
+        duProc.command = [root.bin, "--rec", "du", root.disp(pathEnc)]
+        duProc.running = true
+    }
+
+    // A walk of a large tree must not outlive the panel that asked for it.
+    // Closing properties, or asking about something else, stops the old one —
+    // otherwise two walks race and the row shows whichever reports last.
+    function stopFolderSize() {
+        root.duRunning = false
+        root.duTotal = null
+        duProc.running = false
+    }
+
+    function propValue(key) {
+        for (const r of root.propRows) if (r.key === key) return r.value
+        return ""
+    }
+
+    function fmtCount(n) {
+        // Thousands separators: "375360 files" is a number nobody reads.
+        return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
     }
 
     function openProperties() {
@@ -682,6 +776,8 @@ FloatingWindow {
             root.propRows = []
             infoProc.command = [root.bin, "--rec", "info", root.disp(rows[0].full)]
             infoProc.running = true
+            root.stopFolderSize()
+            if (rows[0].type === "dir") root.startFolderSize(rows[0].full)
         } else {
             // No point running `info` N times to show one number. A
             // multi-selection answers a different question anyway: how much is
@@ -711,6 +807,8 @@ FloatingWindow {
         root.propRows = []
         infoProc.command = [root.bin, "--rec", "info", root.disp(root.tab.path)]
         infoProc.running = true
+        root.stopFolderSize()
+        root.startFolderSize(root.tab.path)
     }
 
     // ── Folder tree ─────────────────────────────────────────────────────────
@@ -2452,9 +2550,19 @@ FloatingWindow {
                                         const v = propRow.modelData.value
                                         if (k === "path" || k === "name" || k === "target")
                                             return root.disp(v)
-                                        if (k === "size")
+                                        if (k === "size") {
+                                            // For a DIRECTORY this is the size
+                                            // of the directory entry, not of
+                                            // what is in it — the number that
+                                            // read "890 B" for a tree holding
+                                            // an ISO. Say which it is; the
+                                            // contents row below is the other.
+                                            const t = root.propValue("type")
                                             return root.fmtSize(parseInt(v || "0"), false)
-                                                 + "  (" + v + " bytes)"
+                                                 + "  (" + v + " bytes"
+                                                 + (t === "dir" ? ", the folder entry itself" : "")
+                                                 + ")"
+                                        }
                                         if (k === "mtime" || k === "atime" || k === "ctime")
                                             return root.fmtTime(parseInt(v || "0"))
                                         // C emits one token a script can split;
@@ -2468,6 +2576,44 @@ FloatingWindow {
                                     font { family: root.uiFont; pixelSize: root.ui(11) }
                                     wrapMode: Text.WrapAnywhere
                                 }
+                            }
+                        }
+
+                        // ── What the folder actually holds ─────────────────
+                        //
+                        // Outside the Repeater because it is not an `info`
+                        // record: it arrives later, from a walk that is still
+                        // running, and it updates while you watch it. A row
+                        // that changes cannot come from a model that was read
+                        // once.
+                        Row {
+                            width: propCol.width
+                            spacing: 10
+                            visible: root.duRunning || root.duTotal !== null
+
+                            Text {
+                                width: 96
+                                text: "contents"
+                                color: root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            }
+                            Text {
+                                width: propCol.width - 106
+                                text: {
+                                    if (root.duTotal === null) return "calculating…"
+                                    const t = root.duTotal
+                                    // The running total is shown as it climbs,
+                                    // with a trailing … so a number that is
+                                    // still growing is never mistaken for the
+                                    // answer.
+                                    return root.fmtSize(t.bytes, false)
+                                         + "  (" + root.fmtCount(t.files) + " files in "
+                                         + root.fmtCount(t.dirs) + " folders)"
+                                         + (t.done ? "" : " …")
+                                }
+                                color: root.cText
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                                wrapMode: Text.WrapAnywhere
                             }
                         }
                     }
@@ -3580,7 +3726,7 @@ FloatingWindow {
                 else if (event.key === Qt.Key_F) { pane.beginSearch();        event.accepted = true }
                 else if (event.key === Qt.Key_L) { root.beginEditPath();      event.accepted = true }
                 else if (event.key === Qt.Key_T) { pane.newTab(pane.tab.path, "dir"); event.accepted = true }
-                else if (event.key === Qt.Key_W) { pane.closeTab(pane.current); event.accepted = true }
+                else if (event.key === Qt.Key_W) { root.closeTabOrQuit(pane, pane.current); event.accepted = true }
                 else if (event.key === Qt.Key_N) { root.creating = true; event.accepted = true }
             }
         }
@@ -3668,13 +3814,14 @@ FloatingWindow {
                             text: "×"
                             color: closeMa.containsMouse ? root.cAccent : root.cDim
                             font { family: root.uiFont; pixelSize: root.ui(14) }
-                            visible: pane.tabs.length > 1
+                            // Always shown. See root.closeTabOrQuit: on the
+                            // last tab this closes the pane, or the window.
                             MouseArea {
                                 id: closeMa
                                 anchors { fill: parent; margins: -4 }
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: { pane.claim(); pane.closeTab(tabBtn.index) }
+                                onClicked: { pane.claim(); root.closeTabOrQuit(pane, tabBtn.index) }
                             }
                         }
                     }

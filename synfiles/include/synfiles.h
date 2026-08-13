@@ -112,6 +112,10 @@ const char *icon_for(const char *mime, bool is_dir);
 /* ── listing.c ──────────────────────────────────────────────────────────── */
 int cmd_list(int argc, char **argv);
 int cmd_info(int argc, char **argv);
+/* The recursive size of a folder — what `info`'s st_size is NOT. Streams a
+ * running total (bytes, disk, files, dirs, done) because the walk takes as long
+ * as it takes and a properties panel must not freeze for it. */
+int cmd_du(int argc, char **argv);
 
 /* ── resolution.c — pixel dimensions, for the properties pane ───────────────
  * The one place this program reads a file's CONTENT. Called by `info` only,

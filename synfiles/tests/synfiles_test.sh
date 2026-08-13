@@ -206,6 +206,58 @@ check "info percent-encodes the name" $?
 "$SYNFILES" info "$T/does-not-exist" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "info on a missing path exits 1" || bad "info on a missing path did not exit 1"
 
+# ── du — what a folder actually holds ───────────────────────────────────────
+#
+# `info` answers with st_size, which for a directory is the size of the
+# directory ENTRY: the SYNAPSE tree, ISO and all, reported 890 bytes. This is
+# the command that answers the question a properties pane is really asking.
+#
+# Checked against coreutils, because that is the number anyone would sanity
+# check against, and the two disagreeing is the whole bug.
+eq() {   # eq <description> <expected> <actual>
+    if [ "$2" = "$3" ]; then ok "$1"
+    else bad "$1 — expected [$2], got [$3]"; fi
+}
+
+mkdir -p "$T/du/a/b"
+head -c 5000 /dev/zero > "$T/du/a/f1"
+head -c 3000 /dev/zero > "$T/du/a/b/f2"
+
+n=$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'NR==1 {print NF}')
+eq "du --rec is five columns" "5" "$n"
+
+eq "du's byte total matches coreutils" \
+   "$(du -sb "$T/du" | cut -f1)" \
+   "$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'END {print $1}')"
+
+eq "du's disk total matches coreutils" \
+   "$(du -s --block-size=1 "$T/du" | cut -f1)" \
+   "$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'END {print $2}')"
+
+eq "du counts the files" "2" \
+   "$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'END {print $3}')"
+
+# A HARD LINK IS ONE FILE. A tree with a 4 GB file linked into it twice does
+# not hold 8 GB, and a pacman cache or any backup tree is full of them. The
+# total must not move when a second name for the same inode appears.
+before=$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'END {print $1}')
+ln "$T/du/a/f1" "$T/du/a/b/f1-again"
+after=$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'END {print $1}')
+eq "a hard link does not change the total" "$before" "$after"
+eq "…and coreutils agrees" "$(du -sb "$T/du" | cut -f1)" "$after"
+
+# The last record says it is the last, so a reader wanting only the answer
+# waits for done=1 rather than guessing which row was final.
+eq "the final record is marked done" "1" \
+   "$("$SYNFILES" --rec du "$T/du" | awk -F'\t' 'END {print $5}')"
+
+# A plain file answers too, so a caller need not know which it has.
+eq "du on a file reports its size" "5000" \
+   "$("$SYNFILES" --rec du "$T/du/a/f1" | awk -F'\t' 'END {print $1}')"
+
+"$SYNFILES" du "$T/does-not-exist" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "du on a missing path exits 1" || bad "du on a missing path did not exit 1"
+
 # ── resolution ──────────────────────────────────────────────────────────────
 #
 # Every fixture here is a HEADER, written by hand, with no pixel data behind
@@ -1609,6 +1661,53 @@ if [ -f "$QML" ]; then
     grep -q 'root.busy) {' "$QML" \
         && ok "a busy refusal reaches the status line" \
         || bad "runOp refuses silently again"
+
+    # ── the last tab still closes something ────────────────────────────────
+    #
+    # The × used to be hidden at one tab (`visible: pane.tabs.length > 1`) and
+    # closeTab() refused it, so the only way out of the last tab was the
+    # window's own close button — which is not where anyone looks, and made the
+    # tab bar behave unlike every other tabbed application on the machine.
+    grep -qE 'visible: pane\.tabs\.length > 1' "$QML" \
+        && bad "the tab × is hidden again when only one tab is open" \
+        || ok "the tab × is shown even on the last tab"
+
+    # What it closes depends on what is left, and the split case is the one
+    # worth pinning: the last tab of ONE pane must fold the split, not quit the
+    # window because half of it ran out of tabs.
+    grep -q 'function closeTabOrQuit' "$QML" \
+        && ok "closing a tab goes through closeTabOrQuit" \
+        || bad "closeTabOrQuit is gone — the last tab probably refuses again"
+    grep -q 'if (!root.split) { Qt.quit(); return }' "$QML" \
+        && ok "the last tab of the last pane quits" \
+        || bad "the last tab no longer quits the window"
+
+    # Ctrl+W is the same action and must not drift back to the refusing one.
+    grep -q 'Key_W) { root.closeTabOrQuit' "$QML" \
+        && ok "Ctrl+W closes the last tab too" \
+        || bad "Ctrl+W still calls the closeTab that refuses"
+
+    # ── a folder's size is its CONTENTS ────────────────────────────────────
+    #
+    # `info` reports st_size, which for a directory is the size of the
+    # directory entry — the SYNAPSE folder, ISO and all, read "890 B". The walk
+    # is a separate command so the panel does not freeze on it.
+    grep -q 'root.startFolderSize' "$QML" \
+        && ok "the properties panel asks for a folder's real size" \
+        || bad "nothing starts the recursive size walk"
+
+    # SplitParser, not StdioCollector: `du` prints a RUNNING total and a
+    # collector fires once at the end, which would leave the row saying
+    # "calculating…" for the whole walk and then jump to the answer.
+    awk '/id: duProc/,/^        }/' "$QML" | grep -q 'SplitParser' \
+        && ok "the running total is read line by line" \
+        || bad "duProc no longer streams — the total cannot update while it runs"
+
+    # A walk over a big tree outliving its panel lands its records in whatever
+    # folder is asked about next.
+    grep -q 'onShowPropsChanged: if (!root.showProps) root.stopFolderSize()' "$QML" \
+        && ok "closing the panel stops the walk" \
+        || bad "the size walk is not stopped when properties closes"
 
     # ── it still parses ─────────────────────────────────────────────────────
     #
