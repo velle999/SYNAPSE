@@ -170,7 +170,19 @@ echo "=== the graphical installer writes keys this script reads ==="
 # buildConfig() uses.
 gui="$here/../syn-install-gui.qml"
 if [ -f "$gui" ]; then
-    gui_keys=$(grep -ohE '"[a-z_0-9]+=' "$gui" | tr -d '"=' | sort -u)
+    # Only the L.push("<key>=…") lines in buildConfig(). Matching every quoted
+    # `word=` in the file swept up the shell sentinels the install chain uses to
+    # report its own status (__syn_install_exit=) and demanded the installer
+    # consume them as settings.
+    # Quoted `key=` literals, but ONLY on the L.push lines of buildConfig().
+    #
+    # Anchoring on `L.push("` alone was too tight and silently dropped the two
+    # confirmations, which are pushed through a ternary
+    # (`L.push(aMode === "erase" ? "confirm_erase=yes" : …)`). Matching every
+    # quoted `word=` in the whole file was too loose and swept up the shell
+    # sentinels the install chain reports its status with
+    # (__syn_install_exit=), demanding the installer consume them as settings.
+    gui_keys=$(grep -E 'L\.push\(' "$gui" | grep -oE '"[a-z_0-9]+=' | tr -d '"=' | sort -u)
     for k in $gui_keys; do
         check "GUI key $k is one the installer reads" yes \
               "$(grep -qxF "$k" <<<"$consumed" && echo yes || echo no)"

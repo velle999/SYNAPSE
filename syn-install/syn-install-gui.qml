@@ -499,6 +499,49 @@ FloatingWindow {
         }
     }
 
+    // A bar that is honest about what it knows — the same one syn-settings and
+    // SYNAPSE Software draw, so the three windows show a wait the same way.
+    //
+    // There is no percentage here and there is not going to be a fake one: an
+    // install is pacstrap, then a package set, then a multi-gigabyte model
+    // download, and the only honest split between those is "still going". The
+    // shuttle says that. What it adds over the log is the quiet stretches — a
+    // long download prints nothing for minutes, and a window with a frozen
+    // last line is where someone decides the installer has hung.
+    component ProgressTrack: Rectangle {
+        id: track
+        property bool active: false
+        height: 3
+        radius: height / 2
+        color: "transparent"
+        clip: true
+
+        Rectangle {
+            id: shuttle
+            visible: track.active
+            width: Math.max(48, track.width * 0.22)
+            height: parent.height
+            radius: parent.radius
+            color: root.cAccent
+            opacity: 0.8
+            x: -width
+        }
+
+        // from/to are read at (re)start, not bound, so a resize must restart it
+        // or the shuttle keeps sweeping the width the window used to have.
+        NumberAnimation {
+            id: shuttleAnim
+            target: shuttle
+            property: "x"
+            from: -shuttle.width
+            to: track.width
+            duration: 1400
+            loops: Animation.Infinite
+            running: shuttle.visible
+        }
+        onWidthChanged: if (shuttle.visible) shuttleAnim.restart()
+    }
+
     component Head: Column {
         id: hd
         property string title: ""
@@ -978,6 +1021,16 @@ FloatingWindow {
                     height: 28
                     radius: 4
                     color: Qt.rgba(1, 1, 1, 0.05)
+                    clip: true
+
+                    // Along the bottom of the status strip, running for as
+                    // long as the install is.
+                    ProgressTrack {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                        active: root.running
+                        visible: active
+                    }
+
                     Text {
                         anchors.left: parent.left
                         anchors.leftMargin: 10

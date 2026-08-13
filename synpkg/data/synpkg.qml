@@ -177,6 +177,63 @@ FloatingWindow {
         return root.readable(Qt.color(root.sourceHue(repo)), root.cBg, 4.5)
     }
 
+    // ── A bar that is honest about what it knows ────────────────────────────
+    //
+    // The same component syn-settings draws, on purpose: the two windows show
+    // the same kind of wait and looking alike is most of what makes a desktop
+    // feel like one system rather than four applications.
+    //
+    // With a percentage it fills to it; without one it runs a shuttle back and
+    // forth, which says "working" without claiming to know how much is left.
+    // The alternative — a bar that creeps to 90% and waits — is a lie the user
+    // finds out about. synpkg has no percentage to give yet: an install is one
+    // libalpm transaction whose output this window collects at the end, so the
+    // shuttle is the truthful state, not a placeholder for a real one.
+    component ProgressTrack: Rectangle {
+        id: track
+        property int pct: -1
+        property bool active: false
+        height: 3
+        radius: height / 2
+        color: "transparent"
+        clip: true
+
+        Rectangle {
+            visible: track.pct >= 0
+            height: parent.height
+            radius: parent.radius
+            width: parent.width * Math.max(0, Math.min(100, track.pct)) / 100
+            color: root.cAccent
+            Behavior on width { NumberAnimation { duration: 200 } }
+        }
+
+        Rectangle {
+            id: shuttle
+            visible: track.active && track.pct < 0
+            width: Math.max(48, track.width * 0.22)
+            height: parent.height
+            radius: parent.radius
+            color: root.cAccent
+            opacity: 0.8
+            x: -width
+        }
+
+        // from/to are read at (re)start, NOT bound — so a window resize has to
+        // restart it, or the shuttle keeps sweeping the width the window used
+        // to have and stops short of the new edge.
+        NumberAnimation {
+            id: shuttleAnim
+            target: shuttle
+            property: "x"
+            from: -shuttle.width
+            to: track.width
+            duration: 1400
+            loops: Animation.Infinite
+            running: shuttle.visible
+        }
+        onWidthChanged: if (shuttle.visible) shuttleAnim.restart()
+    }
+
     readonly property var sections: [
         { id: "updates",   label: "Updates",      kind: "list" },
         { id: "suggested", label: "Suggested",    kind: "list" },
@@ -740,6 +797,26 @@ FloatingWindow {
                                    : (root.statusLine !== "" ? root.statusLine
                                       : (root.section === "about" ? ""
                                          : root.shownRows.length + " items"))
+            }
+
+            // Along the bottom edge of the header, so it reads as the whole
+            // window being busy rather than one control being disabled.
+            //
+            // `busy` is a row action (install, remove, a component rebuild);
+            // `loading` is a list being read. Both are waits the user cannot
+            // do anything during, and until now the only sign of either was a
+            // word in the corner that a person looking at the row they clicked
+            // would never see move.
+            //
+            // NOT shown for the terminal paths — Upgrade all, an AUR build, a
+            // component rebuild — because those hand the work to a terminal
+            // that prints as it goes, and a second, vaguer indicator in a
+            // window behind it would be claiming to track something it is not.
+            ProgressTrack {
+                id: headBar
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                active: root.loading || root.busy !== ""
+                visible: active
             }
         }
 

@@ -702,6 +702,35 @@ if [ -f "$QML" ]; then
     [ "$n" = 0 ] && ok "every cap is floored at zero" \
                  || bad "$n cap(s) can go negative"
 
+    # ── the wait has to look like a wait ────────────────────────────────────
+    #
+    # An install or a list refresh is a wait the user cannot do anything
+    # during, and the only sign of either used to be the word "loading…" in the
+    # far corner — which a person looking at the row they just clicked never
+    # sees change.
+    grep -q 'component ProgressTrack' "$QML" \
+        && ok "the window has a progress track" \
+        || bad "ProgressTrack is gone — a busy window looks idle again"
+
+    # It must cover BOTH waits: a row action (busy) and a list read (loading).
+    grep -q 'active: root.loading || root.busy !== ""' "$QML" \
+        && ok "the track runs for both an action and a load" \
+        || bad "the track no longer follows busy and loading"
+
+    # NO FAKE PERCENTAGE. synpkg collects an install's output at the end, so
+    # there is no progress to report; a bar that creeps to 90% and waits is a
+    # lie the user finds out about. The shuttle is the honest state, and it is
+    # what pct < 0 selects.
+    awk '/component ProgressTrack/,/^    }/' "$QML" | grep -q 'property int pct: -1' \
+        && ok "the track defaults to indeterminate" \
+        || bad "the track no longer defaults to no-percentage"
+
+    # from/to are read at restart, not bound, so a resize has to restart it or
+    # the shuttle sweeps a width the window no longer has.
+    awk '/component ProgressTrack/,/^    }/' "$QML" | grep -q 'onWidthChanged: if (shuttle.visible) shuttleAnim.restart()' \
+        && ok "the shuttle restarts when the window is resized" \
+        || bad "the shuttle will sweep a stale width after a resize"
+
     # ── SynapseOS components on the Updates page ────────────────────────────
     #
     # They were only ever on their own tab, so the one page a person opens to
