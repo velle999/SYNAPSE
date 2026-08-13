@@ -33,6 +33,9 @@
 #include <getopt.h>
 #include <time.h>
 #include <assert.h>
+#include <stdarg.h>
+#include <syslog.h>          /* LOG_ERR/LOG_INFO for the journal sink below */
+#include <systemd/sd-journal.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
 
@@ -536,6 +539,14 @@ static void output_destroy(struct wl_listener *listener, void *data)
 {
     syn_output_t *output = wl_container_of(listener, output, destroy);
     syn_server_t *server = output->server;
+
+    /* Before anything is unhooked: if this head is going away because its sink
+     * did, release the CRTC while we still hold a handle on the output. On DP-3
+     * a CRTC left bound to a dead head is what stops the panel re-enumerating,
+     * and this is the only point in that sequence where the output still
+     * exists. See power_release_dead_head(). */
+    power_release_dead_head(output);
+
     /* Close any layer surfaces (panels/bars) anchored to this output. */
     layer_output_destroy(output);
     effects_output_destroy(output);
@@ -2541,6 +2552,45 @@ static void reap_children(int sig)
     errno = saved_errno;
 }
 
+/* Every wlr_log line, to the journal as well as to stderr.
+ *
+ * wlroots' default logger writes to stderr and nothing else, and the session
+ * compositor is started by greetd with stderr pointing at /dev/tty1 — which
+ * synui itself is painting over. So nothing the compositor has ever logged
+ * could be read back: `journalctl -t synui` was empty and synui did not appear
+ * in SYSLOG_IDENTIFIER at all. That cost a whole DP-3 resume on 2026-08-13,
+ * where the one line written to say whether the sinkless-head fix had fired
+ * went to a console nobody can scroll, and the question had to be settled
+ * afterwards by inspecting `synctl outputs` instead.
+ *
+ * stderr is kept as well as the journal, not replaced by it: on a black screen
+ * or a failed startup, tty1 is sometimes the only thing there is, and a synui
+ * run from a terminal should still behave like any other program.
+ *
+ * DEBUG stays out of the journal. `-d` logs per-frame and would bury every
+ * other unit in the boot; a run started with it has a terminal attached to read
+ * stderr on anyway. INFO and ERROR — which is everything written to explain
+ * itself, this fix included — go to both. */
+static void syn_log_sink(enum wlr_log_importance importance,
+                         const char *fmt, va_list args)
+{
+    char msg[2048];
+    va_list copy;
+    va_copy(copy, args);
+    vsnprintf(msg, sizeof(msg), fmt, copy);
+    va_end(copy);
+
+    if (importance <= WLR_INFO)
+        sd_journal_send("MESSAGE=%s", msg,
+                        "PRIORITY=%i", importance == WLR_ERROR ? LOG_ERR : LOG_INFO,
+                        "SYSLOG_IDENTIFIER=synui",
+                        NULL);
+
+    fprintf(stderr, "%s%s\n",
+            importance == WLR_ERROR ? "[ERROR] " :
+            importance == WLR_INFO  ? "[INFO] "  : "[DEBUG] ", msg);
+}
+
 int main(int argc, char *argv[])
 {
     int debug = 0;
@@ -2573,7 +2623,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    wlr_log_init(debug ? WLR_DEBUG : WLR_INFO, NULL);
+    wlr_log_init(debug ? WLR_DEBUG : WLR_INFO, syn_log_sink);
 
     /*
      * Ignore SIGPIPE: the AI thread writes to the synapd socket, and if

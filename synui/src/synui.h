@@ -5268,6 +5268,11 @@ void power_notify_activity(syn_server_t *s);
 /* Un-dim and un-blank on resume, then re-arm. NOT power_notify_activity():
  * that clears power.locked, which after a sleep-lock is still true. */
 void power_wake_display(syn_server_t *s);
+/* Called from output_destroy() while the wlr_output is still live: if the head
+ * is losing its sink with a CRTC still bound, commit it disabled so the panel
+ * is free to re-enumerate. The sweep in power.c cannot do this — the output has
+ * already left s->outputs by the time any pass runs. */
+void power_release_dead_head(syn_output_t *o);
 /* Re-arm after the config changed (panel edit, config reload). */
 void power_reload(syn_server_t *s);
 /* A laptop lid toggled. `closed` is libinput's switch state, so the lid is

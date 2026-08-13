@@ -355,6 +355,51 @@ static void power_apply_blank(syn_server_t *s)
     }
 }
 
+/* The other half of the sinkless-head fix, and the half that actually reaches
+ * DP-3.
+ *
+ * power_apply_blank() above can only act on outputs that are still in
+ * s->outputs, and the 2026-08-13 resume proved that is not where DP-3 ends up.
+ * wlroots learns "the sink is gone" and destroys the wlr_output from the SAME
+ * udev drm change event that flips sysfs to `disconnected`, so by the time any
+ * sweep pass runs, the output has already left the list — measured with
+ * `synctl outputs`, which walks that exact list (ipc.c) and listed only the two
+ * surviving heads while sysfs still read DP-3 `disconnected/enabled`. A CRTC
+ * stayed bound to a dead head with nothing left holding a handle on it. Adding
+ * more sweep passes cannot close a gap of zero seconds.
+ *
+ * Destroying a wlr_output evidently does NOT release its CRTC — DP-3 read
+ * `enabled` hours after its output was gone, while never-used DP-1 reads
+ * `disabled`, so that field does mean a binding and not merely "was once
+ * enabled". This is the last instant we can do anything about it: wlroots emits
+ * `destroy` before it frees the output, so the handle is still live here.
+ *
+ * Both orderings are covered now — a head that survives long enough to be seen
+ * by a sweep pass is released there, one that is destroyed immediately is
+ * released here.
+ *
+ * The commit may well be refused: the backend has already begun tearing this
+ * connector down, and whether it still accepts a disable at this point is
+ * exactly the thing no measurement has settled. So the outcome is logged either
+ * way — a REJECTED line is the verdict that no fix inside the compositor can
+ * work, and the next place to look is wlroots' own disconnect path. */
+void power_release_dead_head(syn_output_t *o)
+{
+    struct wlr_output *wlr = o ? o->wlr_output : NULL;
+    if (!wlr || !wlr->enabled) return;
+    if (output_sink_present(wlr)) return;
+
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    wlr_output_state_set_enabled(&state, false);
+    bool ok = wlr_output_commit_state(wlr, &state);
+    wlr_output_state_finish(&state);
+
+    wlr_log(WLR_INFO, "synui: power: %s is being destroyed with no sink — "
+            "releasing its CRTC %s", wlr->name,
+            ok ? "succeeded" : "was REJECTED by the backend");
+}
+
 static void power_set_blank(syn_server_t *s, bool off)
 {
     if (off == (bool)s->power.blanked) return;
