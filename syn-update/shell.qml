@@ -99,6 +99,47 @@ ShellRoot {
     // The log pane sits below the surface rather than at a fixed near-black.
     readonly property color cSunken:  mix(cBg, cText, -0.03)
 
+    /* ── the UI font ────────────────────────────────────────
+     * ~/.config/synui/font.state, written by synui-apply-font(1), is the
+     * desktop-wide font setting — deliberately NOT a key in theme.json,
+     * because the font outlives a theme switch. It carries the family AND
+     * the text scale, and an app that honours one without the other still
+     * looks wrong beside its siblings.
+     *
+     * Qt resolves an application's default font ONCE at startup, so BOTH
+     * have to be bindings on every Text: a window that merely inherits the
+     * app font keeps the face it launched with, and the control panel's
+     * font picker appears to do nothing here while Settings and Files
+     * follow it immediately. That is exactly what this window did — it read
+     * font.state nowhere at all — and it is the same gap Arsenal and
+     * Software had before 9ccefbd.
+     *
+     * Only pixelSize is scaled, never a width; the few heights that exist
+     * solely to hold N lines of text are scaled too, or the card clips its
+     * own contents at 150%.
+     */
+    property string uiFont: ""
+    property int    textScale: 100
+    function ui(px) { return Math.max(6, Math.round(px * root.textScale / 100)) }
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/synui/font.state"
+        watchChanges: true
+        // No font.state is the normal case on a box where nobody has picked a
+        // font; a warning per start for an expected miss is how a log becomes
+        // something nobody reads.
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = this.text()
+            const m = t.match(/^\s*family\s*=\s*(.+?)\s*$/m)
+            root.uiFont = m ? m[1] : ""
+            const s = t.match(/^\s*scale\s*=\s*(\d+)\s*$/m)
+            root.textScale = s ? parseInt(s[1]) : 100
+        }
+        onLoadFailed: { root.uiFont = ""; root.textScale = 100 }
+    }
+
     property bool   busy:     false
     property string statusLine: "Checking for updates…"
     property string revision: ""
@@ -271,7 +312,7 @@ ShellRoot {
                 // ── header ─────────────────────────────────
                 Item {
                     width: parent.width
-                    height: 52
+                    height: root.ui(52)
 
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
@@ -281,13 +322,16 @@ ShellRoot {
                             color: root.upToDate ? root.cOk
                                  : ((root.updates.length + root.fresh.length) > 0
                                     ? root.cAccent : root.cText)
-                            font.pixelSize: 21
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(21)
                             font.bold: true
                         }
                         Text {
                             text: root.revision ? "source revision " + root.revision : ""
                             color: root.cDim
-                            font.pixelSize: 12
+                            font.pixelSize: root.ui(12)
+                            // A git hash is not prose: monospace stays literal
+                            // across the suite, but still takes the scale.
                             font.family: "monospace"
                         }
                     }
@@ -297,13 +341,20 @@ ShellRoot {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 8
 
+                        // Controls styles their own font from the application
+                        // font, which is the startup one — so the buttons
+                        // needed the binding as much as the labels did.
                         Button {
                             text: root.busy ? "Checking…" : "Check again"
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(13)
                             enabled: !root.busy
                             onClicked: root.check()
                         }
                         Button {
                             text: "Install updates…"
+                            font.family: root.uiFont
+                            font.pixelSize: root.ui(13)
                             // New components count. Gating Apply on updates
                             // alone left the button dead on a machine whose
                             // only pending work was an install.
@@ -316,7 +367,7 @@ ShellRoot {
                 // ── what will change ───────────────────────
                 Rectangle {
                     width: parent.width
-                    height: Math.min(150, 34 + root.updates.length * 26)
+                    height: Math.min(root.ui(150), root.ui(34) + root.updates.length * root.ui(26))
                     visible: root.updates.length > 0
                     color: root.cPanel
                     radius: 8
@@ -329,7 +380,8 @@ ShellRoot {
 
                         Text {
                             text: "Components to rebuild"
-                            color: root.cDim; font.pixelSize: 11; font.bold: true
+                            color: root.cDim; font.family: root.uiFont
+                            font.pixelSize: root.ui(11); font.bold: true
                         }
                         Repeater {
                             model: root.updates
@@ -337,13 +389,15 @@ ShellRoot {
                                 spacing: 10
                                 Text {
                                     text: modelData.name; color: root.cText
-                                    font.pixelSize: 13; font.family: "monospace"
+                                    font.pixelSize: root.ui(13); font.family: "monospace"
+                                    // A column, not a font size: widths are not
+                                    // scaled anywhere in the suite.
                                     width: 170
                                 }
                                 Text {
                                     text: modelData.from + "  →  " + modelData.to
                                     color: root.cAccent
-                                    font.pixelSize: 13; font.family: "monospace"
+                                    font.pixelSize: root.ui(13); font.family: "monospace"
                                 }
                             }
                         }
@@ -357,7 +411,7 @@ ShellRoot {
                 // before it is applied rather than after.
                 Rectangle {
                     width: parent.width
-                    height: Math.min(150, 34 + root.fresh.length * 26)
+                    height: Math.min(root.ui(150), root.ui(34) + root.fresh.length * root.ui(26))
                     visible: root.fresh.length > 0
                     color: root.cPanel
                     radius: 8
@@ -370,7 +424,8 @@ ShellRoot {
 
                         Text {
                             text: "New components to install"
-                            color: root.cDim; font.pixelSize: 11; font.bold: true
+                            color: root.cDim; font.family: root.uiFont
+                            font.pixelSize: root.ui(11); font.bold: true
                         }
                         Repeater {
                             model: root.fresh
@@ -378,13 +433,13 @@ ShellRoot {
                                 spacing: 10
                                 Text {
                                     text: modelData.name; color: root.cText
-                                    font.pixelSize: 13; font.family: "monospace"
+                                    font.pixelSize: root.ui(13); font.family: "monospace"
                                     width: 170
                                 }
                                 Text {
                                     text: modelData.to + "   (not installed here)"
                                     color: root.cAccent
-                                    font.pixelSize: 13; font.family: "monospace"
+                                    font.pixelSize: root.ui(13); font.family: "monospace"
                                 }
                             }
                         }
@@ -407,11 +462,14 @@ ShellRoot {
 
                         Text {
                             text: "Changes since your installed version"
-                            color: root.cDim; font.pixelSize: 11; font.bold: true
+                            color: root.cDim; font.family: root.uiFont
+                            font.pixelSize: root.ui(11); font.bold: true
                         }
                         ScrollView {
                             width: parent.width
-                            height: parent.height - 22
+                            // The 22 is the heading line above it, so it moves
+                            // with the scale or the list loses its last row.
+                            height: parent.height - root.ui(22)
                             clip: true
                             Column {
                                 spacing: 2
@@ -421,11 +479,12 @@ ShellRoot {
                                         spacing: 10
                                         Text {
                                             text: modelData.hash; color: root.cDim
-                                            font.pixelSize: 12; font.family: "monospace"
+                                            font.pixelSize: root.ui(12); font.family: "monospace"
                                         }
                                         Text {
                                             text: modelData.subject; color: root.cText
-                                            font.pixelSize: 12
+                                            font.family: root.uiFont
+                                            font.pixelSize: root.ui(12)
                                         }
                                     }
                                 }
@@ -437,7 +496,7 @@ ShellRoot {
                 // ── what this tool will NOT update ─────────
                 Rectangle {
                     width: parent.width
-                    height: Math.min(120, 30 + root.blocked.length * 20)
+                    height: Math.min(root.ui(120), root.ui(30) + root.blocked.length * root.ui(20))
                     visible: root.blocked.length > 0
                     color: "transparent"
                     radius: 8
@@ -449,13 +508,15 @@ ShellRoot {
                         spacing: 3
                         Text {
                             text: "Not updated this way — these move with an ISO upgrade"
-                            color: root.cWarn; font.pixelSize: 11; font.bold: true
+                            color: root.cWarn; font.family: root.uiFont
+                            font.pixelSize: root.ui(11); font.bold: true
                         }
                         Repeater {
                             model: root.blocked
                             Text {
                                 text: "• " + modelData.name
-                                color: root.cDim; font.pixelSize: 11
+                                color: root.cDim; font.family: root.uiFont
+                                font.pixelSize: root.ui(11)
                             }
                         }
                     }
@@ -478,7 +539,7 @@ ShellRoot {
                             readOnly: true
                             color: root.cDim
                             background: null
-                            font.pixelSize: 11
+                            font.pixelSize: root.ui(11)
                             font.family: "monospace"
                             wrapMode: TextArea.NoWrap
                         }
