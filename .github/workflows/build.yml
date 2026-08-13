@@ -76,6 +76,24 @@ jobs:
             || { echo "::error::build-all.sh lost the tarball pre-clean guard"; exit 1; }
           echo "ok: anti-nesting guard present"
 
+      # A check on a path NAME followed by an open of the same name. This is
+      # the shape CodeQL flagged in synfiles' du (cpp/toctou-race-condition,
+      # alert #13) — and code scanning only speaks after a push to main, on
+      # code that has already shipped, so the same question is asked here where
+      # it can still be answered in a branch. The scanner is pure awk: no
+      # toolchain, which is why it belongs in this job.
+      #
+      # --self-test first, and it is not ceremony. A pattern-matcher that has
+      # stopped matching passes every file and prints "ok", so the run that
+      # proves nothing looks exactly like the run that proves everything. The
+      # self-test plants two known bugs — including the initializer-brace shape
+      # that the first version of this script scanned straight past — and fails
+      # if either goes unreported.
+      - name: No check-then-use on a path name (TOCTOU)
+        run: |
+          ./tools/check-toctou.sh --self-test
+          ./tools/check-toctou.sh
+
   # ── Real compile of every component on a current Arch toolchain ─
   build:
     runs-on: ubuntu-latest

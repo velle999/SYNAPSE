@@ -78,8 +78,13 @@ static void widgets_state_refresh(syn_server_t *s)
     char path[256];
     if (!syn_config_path(path, sizeof(path), "widgets.state")) return;
 
-    struct stat st;
-    if (stat(path, &st) != 0) {
+    /* OPEN FIRST, THEN ASK THE DESCRIPTOR. stat(path) followed by fopen(path)
+     * resolves the name twice, so the mtime recorded could describe a file
+     * other than the bytes actually read — and this state is written by a
+     * temp-file rename, which swaps the name underneath exactly here. One
+     * open, one fstat, and "is it there" is the open failing. */
+    FILE *f = fopen(path, "r");
+    if (!f) {
         /* Gone: everything is off. Only act on the transition, or a desktop
          * with no file would clear the optimism of the toggle that is about to
          * create one. */
@@ -89,14 +94,14 @@ static void widgets_state_refresh(syn_server_t *s)
         }
         return;
     }
-    if (s->widgets.mtime == (long)st.st_mtime) return;
+
+    struct stat st;
+    if (fstat(fileno(f), &st) != 0) { fclose(f); return; }
+    if (s->widgets.mtime == (long)st.st_mtime) { fclose(f); return; }
     s->widgets.mtime = (long)st.st_mtime;
 
     for (int i = 0; i < WIDGET_ROW_COUNT; i++)
         s->widgets.on[i] = 0;
-
-    FILE *f = fopen(path, "r");
-    if (!f) return;
 
     char line[128];
     while (fgets(line, sizeof(line), f)) {

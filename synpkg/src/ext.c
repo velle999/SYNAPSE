@@ -13,6 +13,8 @@
 #include "synpkg.h"
 
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>          /* open(O_DIRECTORY|O_NOFOLLOW) for the AUR checkout */
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -1289,7 +1291,17 @@ static int aur_install(int argc, char **argv)
 		char *dir = xasprintf("%s/%s", base, pkg);
 		char *url = xasprintf("https://aur.archlinux.org/%s.git", pkg);
 
-		if (access(dir, F_OK) == 0) {
+		/* Opening the checkout IS the does-it-exist test, and the descriptor
+		 * is kept for the build below. access(dir, F_OK) followed by
+		 * chdir(dir) was a check on a name and then a use of the same name,
+		 * with a git clone or pull in between — plenty of window for the name
+		 * to come to mean a different directory, and what runs at the end of
+		 * this loop is makepkg, which executes whatever PKGBUILD it finds in
+		 * the directory it lands in. O_DIRECTORY refuses a plain file where
+		 * the checkout should be, O_NOFOLLOW refuses a symlink pointing out of
+		 * the build root, and the child fchdir()s to THIS descriptor. */
+		int dfd = open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		if (dfd >= 0) {
 			info("updating %s", pkg);
 			char *pull[] = { (char *)"git", (char *)"-C", dir,
 			                 (char *)"pull", (char *)"--ff-only", NULL };
@@ -1301,6 +1313,14 @@ static int aur_install(int argc, char **argv)
 			                  url, dir, NULL };
 			if (run(clone, false) != 0) {
 				warn("could not clone %s — is it in the AUR?", pkg);
+				rc = 1;
+				free(dir);
+				free(url);
+				continue;
+			}
+			dfd = open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+			if (dfd < 0) {
+				warn("%s: %s", dir, strerror(errno));
 				rc = 1;
 				free(dir);
 				free(url);
@@ -1325,6 +1345,7 @@ static int aur_install(int argc, char **argv)
 			if (!confirm("build and install %s?", pkg)) {
 				info("skipped %s", pkg);
 				free(pkgbuild);
+				close(dfd);
 				free(dir);
 				free(url);
 				continue;
@@ -1336,10 +1357,13 @@ static int aur_install(int argc, char **argv)
 		               g_noconfirm ? (char *)"--noconfirm" : (char *)"--needed",
 		               NULL };
 		/* makepkg must run inside the checkout; fork so the cwd change does
-		 * not leak into the rest of the process. */
+		 * not leak into the rest of the process. fchdir(), not chdir(dir):
+		 * the descriptor is the directory this loop already resolved, and it
+		 * cannot be re-pointed by anything that happens to the name.
+		 * O_CLOEXEC does not interfere — fchdir happens before the exec. */
 		pid_t pid = fork();
 		if (pid == 0) {
-			if (chdir(dir) != 0)
+			if (fchdir(dfd) != 0)
 				_exit(1);
 			execvp(mk[0], mk);
 			_exit(127);
@@ -1347,6 +1371,7 @@ static int aur_install(int argc, char **argv)
 		int st = 0;
 		if (pid > 0)
 			waitpid(pid, &st, 0);
+		close(dfd);
 		if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) {
 			warn("build failed for %s", pkg);
 			rc = 1;

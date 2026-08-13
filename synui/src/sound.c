@@ -136,8 +136,13 @@ void sound_state_refresh(syn_server_t *s)
         return;
     }
 
-    struct stat st;
-    if (stat(path, &st) != 0) {
+    /* OPEN FIRST, THEN ASK THE DESCRIPTOR. A stat of the name followed by an
+     * fopen of the same name resolves it twice, and `synui-sound` rewrites
+     * this file by rename — so the mtime cached here would be the old file's
+     * while the settings read are the new one's, and the difference is a
+     * change that never takes effect until the next write. */
+    FILE *f = fopen(path, "r");
+    if (!f) {
         if (snd->mtime != 0 || !snd->loaded) {
             sound_defaults(snd);
             snd->mtime  = 0;
@@ -145,14 +150,14 @@ void sound_state_refresh(syn_server_t *s)
         }
         return;
     }
-    if (snd->loaded && snd->mtime == (long)st.st_mtime) return;
+
+    struct stat st;
+    if (fstat(fileno(f), &st) != 0) { fclose(f); return; }
+    if (snd->loaded && snd->mtime == (long)st.st_mtime) { fclose(f); return; }
 
     sound_defaults(snd);
     snd->mtime  = (long)st.st_mtime;
     snd->loaded = 1;
-
-    FILE *f = fopen(path, "r");
-    if (!f) return;
 
     char line[192];
     while (fgets(line, sizeof(line), f)) {

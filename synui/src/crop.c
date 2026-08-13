@@ -57,6 +57,7 @@
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>          /* AT_EACCESS, for faccessat() on the scan's dirfd */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -284,13 +285,23 @@ static void crop_recent_add(syn_server_t *s, const char *path, time_t mt)
 
 static void crop_recent_scan_dir(syn_server_t *s, const char *dir)
 {
+    /* Open the directory ONCE and ask that descriptor everything else. The
+     * writability probe used to be access(dir, W_OK) before the opendir, which
+     * is a check on a name followed by a use of the same name: two
+     * resolutions, and between them the name can come to mean a different
+     * directory, so the scan would list a tree the probe never approved.
+     * faccessat() on the open descriptor answers about the directory actually
+     * being walked, and fstatat() below does the same for each entry. */
+    DIR *d = opendir(dir);
+    if (!d) return;
+
     /* See the section header: a row whose crop cannot be written is not worth
      * offering. This also quietly skips a Pictures directory on a filesystem
      * mounted read-only, which would fail the same way. */
-    if (access(dir, W_OK) != 0) return;
-
-    DIR *d = opendir(dir);
-    if (!d) return;
+    if (faccessat(dirfd(d), ".", W_OK, AT_EACCESS) != 0) {
+        closedir(d);
+        return;
+    }
 
     struct dirent *e;
     while ((e = readdir(d))) {
@@ -302,7 +313,8 @@ static void crop_recent_scan_dir(syn_server_t *s, const char *dir)
             continue;   /* too long to store — skip rather than truncate */
 
         struct stat st;
-        if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) continue;
+        if (fstatat(dirfd(d), e->d_name, &st, 0) != 0 || !S_ISREG(st.st_mode))
+            continue;
 
         /* The output of a previous crop. Listing it is not wrong — cropping a
          * crop is legitimate — but a folder worked over a few times fills with

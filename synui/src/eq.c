@@ -91,8 +91,11 @@ void eq_state_refresh(syn_server_t *s)
     char path[256];
     if (!eq_state_path(path, sizeof(path))) return;
 
-    struct stat st;
-    if (stat(path, &st) != 0) {
+    /* OPEN FIRST, THEN ASK THE DESCRIPTOR — stat(path) then fopen(path) is one
+     * name resolved twice, and the mtime this cache turns on would belong to
+     * whichever file the name meant first, not to the bands actually read. */
+    FILE *f = fopen(path, "r");
+    if (!f) {
         /* No file yet: the script has never run. Defaults, and a zero mtime so
          * the first real write is seen. */
         if (s->eq.mtime != 0) {
@@ -105,11 +108,10 @@ void eq_state_refresh(syn_server_t *s)
         return;
     }
 
-    if (st.st_mtime == s->eq.mtime) return;
+    struct stat st;
+    if (fstat(fileno(f), &st) != 0) { fclose(f); return; }
+    if (st.st_mtime == s->eq.mtime) { fclose(f); return; }
     s->eq.mtime = st.st_mtime;
-
-    FILE *f = fopen(path, "r");
-    if (!f) return;
 
     char line[256];
     while (fgets(line, sizeof(line), f)) {

@@ -223,11 +223,16 @@ int main(void)
 
 	int fd = open(CANARY, O_CREAT | O_RDWR, 0644);
 	if (fd < 0) { perror("canary"); return 1; }
-	close(fd);
 
+	/* The inode comes from THIS descriptor, not from a second look at the
+	 * name. canary_ino is the identity every verdict below is judged against,
+	 * so a stat() of the name — resolved again, after the close, in a
+	 * world-writable /tmp — could hand the whole test the inode of a file it
+	 * did not create, and it would then pass or fail about that one. */
 	struct stat st;
-	if (stat(CANARY, &st) != 0) { perror("stat"); return 1; }
+	if (fstat(fd, &st) != 0) { perror("fstat"); close(fd); return 1; }
 	canary_ino = st.st_ino;
+	close(fd);
 
 	if (sg_bpf_init() != 0) {
 		printf("\nSKIP: BPF-LSM unavailable here\n");

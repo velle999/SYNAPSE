@@ -629,9 +629,24 @@ int cmd_du(int argc, char **argv)
 		die("du: need a path");
 	const char *path = argv[0];
 
-	struct stat st;
-	if (lstat(path, &st) != 0)
-		die("cannot stat %s: %s", path, strerror(errno));
+	/* THE OPEN IS THE FIRST AND ONLY LOOK AT THIS NAME. There is deliberately
+	 * no lstat() before it: a check on a name followed by an open of the same
+	 * name is two resolutions of one path, and they can answer about two
+	 * different files. That is not hypothetical here — the check did NOT
+	 * follow a symlink and a plain open() DID, so replacing the directory with
+	 * a symlink in between sent the whole walk somewhere else and reported
+	 * that tree's sizes as this one's.
+	 *
+	 * O_DIRECTORY is therefore the "is it a directory" test — it fails with
+	 * ENOTDIR on anything else — O_NOFOLLOW refuses a symlink outright, and
+	 * the directory's own blocks come from fstat() on THIS descriptor.
+	 *
+	 * The recursion already worked this way: fstatat()/openat() relative to
+	 * the parent's descriptor, AT_SYMLINK_NOFOLLOW and O_NOFOLLOW throughout.
+	 * This is the entry point catching up with its own walk. */
+	int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0 && errno != ENOTDIR && errno != ELOOP)
+		die("cannot read %s: %s", path, strerror(errno));
 
 	if (g_out == OUT_REC)
 		rec_row(5, "bytes", "disk", "files", "dirs", "done");
@@ -642,48 +657,26 @@ int cmd_du(int argc, char **argv)
 
 	struct du_acc a = { 0, 0, 0, 0, seen, time(NULL), false };
 
-	/* OPEN FIRST, THEN ASK THE DESCRIPTOR — do not test the name and then open
-	 * it. Those are two resolutions of one path and they can answer about two
-	 * different files: the lstat() above deliberately does NOT follow a
-	 * symlink, so a plain open() that DOES follow one meant that replacing the
-	 * directory with a symlink in between sent the whole walk somewhere else,
-	 * and it reported that tree's sizes as this one's.
-	 *
-	 * O_DIRECTORY is therefore the "is it a directory" test — it fails with
-	 * ENOTDIR on anything else — O_NOFOLLOW refuses the symlink lstat() would
-	 * not have followed either, and the directory's own blocks come from
-	 * fstat() on THIS descriptor rather than from the earlier lstat().
-	 *
-	 * The recursion already worked this way: fstatat()/openat() relative to
-	 * the parent's descriptor, AT_SYMLINK_NOFOLLOW and O_NOFOLLOW throughout.
-	 * This is the entry point catching up with its own walk. */
-	int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
 	if (fd >= 0) {
 		struct stat dst;
 		if (fstat(fd, &dst) == 0)
 			a.disk += (long long)dst.st_blocks * 512;
 		du_walk(fd, &a);              /* takes ownership of fd */
-	} else if (errno == ENOTDIR || errno == ELOOP) {
-		/* Not a directory, or a symlink to one — both answer in one line, so
-		 * the caller does not need to know which it has before asking, and a
-		 * symlink is reported as itself, which is what `list` shows for the
-		 * same name.
+	} else {
+		/* ENOTDIR or ELOOP: not a directory, or a symlink to one — both answer
+		 * in one line, so the caller does not need to know which it has before
+		 * asking, and a symlink is reported as itself, which is what `list`
+		 * shows for the same name.
 		 *
-		 * Asked AGAIN rather than reusing the lstat() above: getting here
-		 * means the open disagreed with that lstat, so those numbers describe
-		 * something this path is no longer. Reporting them would answer about
-		 * a file that is gone — and for a swapped-out directory the answer
-		 * would be its entry size, the meaningless number this command exists
-		 * to replace. There is nothing left to race here: one stat, printed,
-		 * and no use made of it afterwards. */
-		struct stat now;
-		if (lstat(path, &now) == 0)
-			st = now;
+		 * This lstat() is the only one in the command, and nothing is opened
+		 * after it: its numbers are printed and then dropped, so there is no
+		 * second resolution for a swap to slip between. */
+		struct stat st;
+		if (lstat(path, &st) != 0)             /* toctou-ok: printed, not used to open */
+			die("cannot stat %s: %s", path, strerror(errno));
 		a.files = 1;
 		a.bytes = st.st_size;
 		a.disk  = (long long)st.st_blocks * 512;
-	} else {
-		die("cannot read %s: %s", path, strerror(errno));
 	}
 
 	a.done = true;
