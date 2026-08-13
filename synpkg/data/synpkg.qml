@@ -198,7 +198,7 @@ FloatingWindow {
     // What each tab is, in one line, under the title. Half of these are only
     // obvious if you already know the packaging landscape.
     function sectionHint(id) {
-        if (id === "updates")   return "everything with a newer version available"
+        if (id === "updates")   return "everything with a newer version — repositories, the AUR, Flathub and SynapseOS's own components"
         if (id === "suggested") return "the curated SynapseOS software list"
         if (id === "repo")      return "official Arch repositories and SynapseOS's own — signed, binary, managed by pacman"
         if (id === "aur")       return "the Arch User Repository — recipes built from source on this machine"
@@ -297,11 +297,18 @@ FloatingWindow {
             r.source === "flatpak" ? "flathub" : (r.source === "aur" ? "aur" : "repo")))
     }
 
+    // `update`, not `component`. The tag is what decides whether a row gets an
+    // action button at all, and tagging these "component" is what left the
+    // SynapseOS tab listing updates with no way to take them: the pane
+    // reported work to do and offered nothing that did it.
+    //
+    // The source stays "system", which is what routes the click to syn-update
+    // instead of into an ALPM transaction. See act().
     function systemRows(table) {
         return table.map(r => root.makeRow(
             r.component, "", true, r.available, "synapseos", 0,
             (r.installed || "") + "  →  " + (r.available || ""),
-            "component", "system"))
+            "update", "system"))
     }
 
     // ── Backend ─────────────────────────────────────────────────────────────
@@ -440,6 +447,25 @@ FloatingWindow {
     function act(row, verb) {
         if (root.busy !== "") return
 
+        // A SynapseOS component is not an ALPM package and must never reach
+        // the transaction below: `synpkg remove synui` would happily uninstall
+        // the compositor. syn-update owns these, and it needs a terminal —
+        // it drives build-all.sh, which calls sudo mid-build, and sudo with no
+        // controlling terminal cannot prompt.
+        //
+        // THE BUTTON IS PER-ROW, THE ACTION IS NOT. syn-update apply takes no
+        // component name: it collects everything changed and hands the lot to
+        // build-all.sh in one invocation, because splitting that would defeat
+        // build-all.sh's fixed dependency order (synapd has to be rebuilt after
+        // synapse-llama, and so on). velle chose this shape knowing it —
+        // clicking one row rebuilds every component that has changed. The
+        // status line says so, because the button cannot.
+        if (row.source === "system") {
+            root.inTerminal([root.bin, "system", "apply"],
+                            "rebuilding every changed component in a terminal")
+            return
+        }
+
         if (row.source === "aur" && verb !== "remove") {
             root.inTerminal([root.bin, "aur", "install", row.name],
                             "building " + row.name + " in a terminal")
@@ -557,7 +583,17 @@ FloatingWindow {
             runChain([
                 { kind: "updates", tab: "repo",    args: ["updates"],           note: "checking repositories…" },
                 { kind: "updates", tab: "aur",     args: ["aur", "updates"],    note: "checking the AUR…" },
-                { kind: "updates", tab: "flathub", args: ["flatpak", "updates"], note: "checking Flathub…" }
+                { kind: "updates", tab: "flathub", args: ["flatpak", "updates"], note: "checking Flathub…" },
+                // SynapseOS's own components belong on the page called Updates.
+                // They were only ever on their own tab, so the one page a
+                // person opens to answer "is anything out of date?" answered it
+                // wrongly — and the components are the half of this system that
+                // no other updater can see.
+                //
+                // Last in the chain deliberately: it shells out to syn-update,
+                // which fetches from git, so it is the slowest step and the
+                // three fast ones should already be on screen.
+                { kind: "system",  tab: "system",  args: ["system", "check"],   note: "checking SynapseOS components…" }
             ])
         } else if (section === "about") {
             runChain([{ kind: "about", args: ["about"] }])
@@ -753,7 +789,7 @@ FloatingWindow {
                 }
                 Text {
                     width: parent.width
-                    text: "runs in a terminal"
+                    text: "repos, AUR and components — in a terminal"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                     horizontalAlignment: Text.AlignHCenter
@@ -1446,10 +1482,15 @@ FloatingWindow {
                         id: actionBtn
                         anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                         width: 84; height: 26; radius: 4
-                        // A SynapseOS component is not installable from here —
-                        // syn-update owns that, and it needs a terminal.
+                        // Every row that has an action gets this, SynapseOS
+                        // components included — they used to be excluded here
+                        // (`extra !== "component"`), which is what made the
+                        // SynapseOS tab a list of updates with no way to take
+                        // them. The click routes through act(), which sends a
+                        // component to syn-update in a terminal and never into
+                        // an ALPM transaction.
                         //
-                        // AND it goes away when the row is too narrow to hold
+                        // It goes away when the row is too narrow to hold
                         // it. Cascaded onto the portrait monitor (Super+Shift+Y)
                         // this list is about 165 px wide: the button plus its
                         // margins take 104 of that, leaving ~34 px for name,
@@ -1462,8 +1503,7 @@ FloatingWindow {
                         // all" is still there, and a wider window brings it
                         // back. 250 = the 104 it costs plus enough left over
                         // for a package name and a version.
-                        visible: pkgRow.modelData.extra !== "component"
-                                 && pkgRow.width >= 250
+                        visible: pkgRow.width >= 250
                         color: btnMa.containsMouse ? root.wash(0.25) : root.wash(0.12)
                         border { width: 1; color: root.cAccent }
                         opacity: root.busy === "" || root.busy === pkgRow.modelData.name ? 1 : 0.4

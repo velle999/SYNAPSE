@@ -601,6 +601,19 @@ case "$out" in
     *) bad "unexpected --no-aur refusal: $out" ;;
 esac
 
+# `upgrade` is three passes now — repositories, the AUR, then the SynapseOS
+# components — and each of the two optional ones has an off switch. A component
+# rebuild is minutes of compiling, so someone who only wants their repository
+# packages current has to be able to say so.
+out=$("$SYNPKG" upgrade --no-system --definitely-not-a-flag 2>&1 </dev/null || true)
+case "$out" in
+    *"unknown argument '--definitely-not-a-flag'"*)
+        ok "upgrade accepts --no-system and still rejects nonsense" ;;
+    *"unknown argument '--no-system'"*)
+        bad "upgrade does not accept --no-system" ;;
+    *) bad "unexpected upgrade argument handling: $out" ;;
+esac
+
 # THE POINT OF THE FLAG: a package that really is in the AUR must be refused
 # outright under --no-aur rather than built.
 #
@@ -668,6 +681,33 @@ if [ -f "$QML" ]; then
     n=$(awk '/family: *"/ && !/family: *"monospace"/ { n++ } END { print n + 0 }' "$QML")
     [ "$n" = 0 ] && ok "every literal family is the deliberate monospace" \
                  || bad "$n literal font family/families are not monospace"
+
+    # ── SynapseOS components on the Updates page ────────────────────────────
+    #
+    # They were only ever on their own tab, so the one page a person opens to
+    # ask "is anything out of date?" answered it wrongly — and the components
+    # are the half of this system no other updater can see.
+    grep -q '{ kind: "system",  tab: "system",  args: \["system", "check"\]' "$QML" \
+        && ok "the Updates page checks SynapseOS components" \
+        || bad "the Updates chain has no system step"
+
+    # THE GUARD THAT MATTERS. A component row is tagged installed, so without
+    # the source check in act() the button reads "Remove" and the click runs
+    # `synpkg remove synui` — uninstalling the compositor from the Updates
+    # page. The row must reach syn-update and nothing else.
+    grep -q 'if (row.source === "system")' "$QML" \
+        && ok "a component row is routed to syn-update, not into a transaction" \
+        || bad "act() no longer routes system rows away from ALPM"
+
+    # A row with no action button is what the SynapseOS tab used to be: a list
+    # of available updates and no way to take any of them.
+    #
+    # Anchored on the `visible:` BINDING, not on the string anywhere in the
+    # file — the first cut of this check matched the comment that explains why
+    # the condition was removed, and failed against the fix it was written for.
+    grep -qE '^[[:space:]]*visible:.*extra !== "component"' "$QML" \
+        && bad "the action button is still hidden for SynapseOS components" \
+        || ok "SynapseOS components get an action button"
 else
     bad "synpkg.qml not found beside the tests: $QML"
 fi

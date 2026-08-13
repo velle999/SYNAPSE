@@ -543,7 +543,7 @@ out:
 
 int cmd_upgrade(int argc, char **argv)
 {
-	bool downgrade = false, refresh = true, use_aur = true;
+	bool downgrade = false, refresh = true, use_aur = true, use_system = true;
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--allow-downgrade"))
@@ -552,6 +552,11 @@ int cmd_upgrade(int argc, char **argv)
 			refresh = false;
 		else if (!strcmp(argv[i], "--no-aur"))
 			use_aur = false;
+		/* Symmetric with --no-aur, and wanted for the same reason: a
+		 * component rebuild is minutes of compiling, and someone who only
+		 * wants their repository packages current should be able to say so. */
+		else if (!strcmp(argv[i], "--no-system"))
+			use_system = false;
 		else
 			die("upgrade: unknown argument '%s'", argv[i]);
 	}
@@ -615,6 +620,38 @@ int cmd_upgrade(int argc, char **argv)
 		for (size_t i = 0; i < n; i++)
 			free(out[i]);
 		free(out);
+
+		/* ── THE THIRD HALF OF AN UPGRADE ────────────────────────────────
+		 *
+		 * SynapseOS's own components are in no sync database and are not in
+		 * the AUR either, so neither pass above can see them: `upgrade`
+		 * reported the machine current while the compositor, the daemons and
+		 * this program itself sat at whatever revision they were built at.
+		 * The one place that listed them was a tab nobody opens to answer
+		 * "is anything out of date?".
+		 *
+		 * Here, in the UNPRIVILEGED pass, for the same reason the AUR is:
+		 * syn-update refuses to run as root (need_not_root — makepkg will not
+		 * either) and calls sudo itself where it needs it.
+		 *
+		 * LAST, also deliberately: a component is built against the libraries
+		 * on the system, so building it before the repository upgrade would
+		 * link it against versions being replaced minutes later. Same
+		 * argument the AUR pass above makes, one step further along.
+		 *
+		 * Its failure is reported and does not become the exit status of the
+		 * whole upgrade: the repositories and the AUR really were upgraded,
+		 * and returning failure for them would be a lie about what happened. */
+		if (use_system) {
+			if (!have_cmd("syn-update")) {
+				info("syn-update is not installed — SynapseOS components not checked");
+			} else {
+				char *sy[] = { (char *)"syn-update", (char *)"apply", NULL };
+				if (run(sy, false) != 0)
+					warn("SynapseOS components did not finish updating "
+					     "(syn-update apply) — the repository upgrade above was fine");
+			}
+		}
 		return rc;
 	}
 
