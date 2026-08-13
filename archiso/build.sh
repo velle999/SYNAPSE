@@ -243,6 +243,18 @@ PACKAGES=(
     # of having an editor there, and its terminal front-end works with no
     # display at all. Builds offline: meson and libc.
     syn-edit
+    # syn-settings — the settings app. Must be ON the ISO for the same reason
+    # syn-edit must, and one more: it is what a live session reaches for to set
+    # a keyboard layout before installing anything, and it is the Kernel pane
+    # an installed system needs on its first boot.
+    #
+    # It was in build-all.sh's component list and in packages.x86_64 and NOT
+    # here, which is the failure mode this array's comments keep describing
+    # from the other side: packages.x86_64 names what the ISO INSTALLS, this
+    # names what gets BUILT into the local repo it installs from. A package on
+    # one list and not the other fails pacstrap ~15 minutes in with "target not
+    # found". Builds offline: meson and libc.
+    syn-settings
     # samsung-m2020 is deliberately NOT built here. Its EULA forbids
     # redistribution, so the driver cannot ride the ISO or sit in the local
     # repo — `syn printer samsung` installs it on demand instead. The PKGBUILD
