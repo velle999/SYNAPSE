@@ -485,6 +485,21 @@ The overlay is loaded but hidden — **`Shift_R`+`F12`** toggles it.
 > `MANGOHUD=1` only hooks Vulkan. An OpenGL game needs the wrapper, which is the
 > usual reason the overlay "doesn't work".
 
+**CachyOS Proton** comes with the installer's Steam option — `proton-cachyos-slr`,
+Valve's experimental branch plus the CachyOS patch set, built against the same
+Steam Linux Runtime as Valve's own Proton. It installs into
+`/usr/share/steam/compatibilitytools.d/`, so Steam offers it per game under
+*Properties → Compatibility* with nothing to copy into `~/.steam`. Valve's Proton
+stays installed and stays the default; this is an option, not a replacement.
+
+That option also adds CachyOS's `[cachyos]` repository, **appended last** in
+`/etc/pacman.conf` so it can only supply packages no other repository carries.
+SynapseOS is Arch: `core` and `extra` keep every package they share, and nothing
+else on the system starts coming from CachyOS. (Their own `cachyos-repo.sh` does
+the opposite — it inserts the v3/v4 repos *above* `core` and swaps in their
+pacman — which is why the installer adds the repo by hand instead of running it.)
+For Proton outside Steam, `proton-cachyos-native` is in the same repo.
+
 See [Gaming](https://github.com/velle999/SYNAPSE/wiki/Gaming) for the settings,
 the exclusion list, and the fullscreen/monitor traps.
 

@@ -1722,8 +1722,9 @@ while :; do
     WANT_PHONE=1          # kdeconnect — pair a phone with the desktop
     # Steam is Full-only, not Standard. It is the only item here that needs a
     # whole second architecture on the disk ([multilib] plus the lib32 tree,
-    # ~1.5 GB before a single game), so it is opt-in the way the AI model is
-    # rather than something a default Enter-through install pays for.
+    # ~1.5 GB before a single game — plus ~1.6 GB for CachyOS Proton), so it is
+    # opt-in the way the AI model is rather than something a default
+    # Enter-through install pays for.
     WANT_STEAM=0          # steam + the 32-bit stack — see "Installing Steam"
     # BlackArch is a REPOSITORY, not a package set: enabling it installs the
     # keyring and nothing else, so the cost is a database sync rather than
@@ -1820,7 +1821,7 @@ while :; do
             ask_opt WANT_FILEMGR    1 "Dolphin as a second file manager (Qt6 + KF6, ~550 MB) — synfiles is installed either way"
             ask_opt WANT_WINE       1 "Wine — run Windows .exe/.msi (adds wine + wine-mono)"
             ask_opt WANT_PHONE      1 "KDE Connect — pair a phone (notifications, files, clipboard)"
-            ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) — enables [multilib] (~1.5 GB)"
+            ask_opt WANT_STEAM      0 "Steam + game stack (mangohud/gamemode/gamescope) + CachyOS Proton — enables [multilib] and [cachyos] (~3.1 GB)"
             ask_opt WANT_BLACKARCH  1 "BlackArch security repo — ~5000 tools browsable in SYNAPSE Arsenal"
             ask_opt WANT_NIX        0 "Nix + Home Manager — a declarative user environment beside pacman ('syn nix')"
 
@@ -1958,7 +1959,7 @@ while :; do
     echo "    Files    : synfiles$([ "$WANT_FILEMGR" = 1 ] && echo ' + Dolphin' || echo '')"
     echo "    Wine     : $([ "$WANT_WINE" = 1 ] && echo yes || echo no)"
     echo "    Phone    : $([ "$WANT_PHONE" = 1 ] && echo 'yes (KDE Connect)' || echo no)"
-    echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope, enables multilib)' || echo no)"
+    echo "    Steam    : $([ "$WANT_STEAM" = 1 ] && echo 'yes (+ mangohud/gamemode/gamescope + CachyOS Proton, enables multilib and [cachyos])' || echo no)"
     echo "    BlackArch: $([ "$WANT_BLACKARCH" = 1 ] && echo 'yes (repo + keyring only, no tools installed)' || echo no)"
     echo "    Nix      : $([ "$WANT_NIX" = 1 ] && echo 'yes (nix + Home Manager config, nothing built until "syn nix apply")' || echo no)"
     echo ""
@@ -2466,6 +2467,129 @@ if [ "$WANT_STEAM" = 1 ]; then
   overlay, the CPU/GPU governor and 'synui-game-run --gamescope' will
   not. Install later with:
   sudo pacman -S mangohud lib32-mangohud gamemode lib32-gamemode gamescope"
+    fi
+
+    # ── CachyOS Proton ────────────────────────────────────────
+    #
+    # proton-cachyos-slr is the Proton the CachyOS project ships: Valve's
+    # experimental branch plus their patch set, built against the Steam Linux
+    # Runtime exactly the way Valve's own Proton is. It installs into
+    # /usr/share/steam/compatibilitytools.d/proton-cachyos-slr with a
+    # compatibilitytool.vdf, which is the directory Steam scans at start, so it
+    # appears in the per-game compatibility dropdown with no further setup —
+    # nothing has to be copied into ~/.steam.
+    #
+    # The -native build is the same Proton OUTSIDE the runtime container, for
+    # driving Proton without Steam. Wrong default here (Steam's own games run in
+    # the container), and one pacman command away for anyone who wants it.
+    #
+    # This means adding a THIRD-PARTY REPOSITORY to the installed system. Two
+    # rules keep that from turning SynapseOS into CachyOS, and both matter:
+    #
+    #  1. The generic [cachyos] repo only, appended LAST. CachyOS's own
+    #     cachyos-repo.sh inserts [cachyos-v3]/[cachyos-core-v3]/
+    #     [cachyos-extra-v3] ABOVE [core] and installs their build of pacman
+    #     itself — which re-sources the whole system from CachyOS. pacman takes
+    #     the FIRST repo in the file carrying a package name, so appending at the
+    #     end means only names that exist nowhere else — proton-cachyos-* — ever
+    #     come from here. core/extra keep every package they share.
+    #  2. The signing key is PINNED by fingerprint and checked in the keyring
+    #     FILE, before anything imports it. Same reasoning as the BlackArch
+    #     block below: a substituted keyring is the actual risk, and the
+    #     fingerprint is what catches it. Fetching the keyring over TLS is not
+    #     on its own a reason to trust what is inside it.
+    #
+    # Non-fatal throughout, like the rest of this section: Steam without CachyOS
+    # Proton is a working Steam, and Valve's own Proton is still there.
+    step "Installing CachyOS Proton"
+
+    # The CachyOS master key (uid "CachyOS <admin@cachyos.org>").
+    CACHY_FPR="882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    CACHY_MIRROR="https://mirror.cachyos.org/repo/x86_64/cachyos"
+    cachy_ok=0
+
+    # Filenames carry the version, and mirrors keep only the current one — a
+    # pinned URL is a 404 waiting for the next keyring bump. Ask the repo's own
+    # database for the current name instead; the pinned pair upstream's script
+    # uses is the fallback for when the database itself cannot be read.
+    cachy_pkg_url() {
+        local name=$1 fallback=$2 dir
+        dir=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 60 \
+                  "$CACHY_MIRROR/cachyos.db" 2>/dev/null \
+              | tar -tzf - 2>/dev/null | grep -m1 "^${name}-[0-9]") || true
+        # The listing carries both "<pkg>-<ver>/" and "<pkg>-<ver>/desc"; take
+        # the directory component either way rather than trusting which came
+        # first out of the tar.
+        dir=${dir%%/*}
+        if [ -n "$dir" ]; then
+            printf '%s/%s-any.pkg.tar.zst\n' "$CACHY_MIRROR" "$dir"
+        else
+            printf '%s/%s\n' "$CACHY_MIRROR" "$fallback"
+        fi
+    }
+
+    if grep -q '^\[cachyos\]' /mnt/etc/pacman.conf; then
+        cachy_ok=1          # already enabled (a re-run); nothing to add
+    else
+        echo "  Fetching the CachyOS keyring and mirrorlist..."
+        cachy_keyring=$(cachy_pkg_url cachyos-keyring cachyos-keyring-20240331-1-any.pkg.tar.zst)
+        cachy_mirrors=$(cachy_pkg_url cachyos-mirrorlist cachyos-mirrorlist-27-1-any.pkg.tar.zst)
+
+        # -U on a URL, because these two packages are the thing that makes the
+        # repo usable — they cannot come FROM the repo.
+        if arch-chroot /mnt pacman -U --noconfirm --needed \
+                "$cachy_keyring" "$cachy_mirrors" >/dev/null 2>&1; then
+            # Read the fingerprints out of the keyring without importing them.
+            # --show-keys parses the file and touches no keyring of ours, so a
+            # keyring signed by somebody else never reaches pacman's trustdb.
+            if gpg --with-colons --show-keys \
+                   /mnt/usr/share/pacman/keyrings/cachyos.gpg 2>/dev/null \
+               | grep -q "^fpr:::::::::${CACHY_FPR}:"; then
+                echo "  Master key pinned as expected — trusting it..."
+                arch-chroot /mnt pacman-key --populate cachyos >/dev/null 2>&1 || true
+
+                # Appended, so it lands after [core], [extra], [multilib] and
+                # [synapseos]. See rule 1 above — the ORDER is the safety.
+                cat >> /mnt/etc/pacman.conf << 'CACHYEOF'
+
+# CachyOS — deliberately LAST, so it can only supply packages no other
+# repository has (proton-cachyos-*). Do not move it above [core]/[extra].
+[cachyos]
+Include = /etc/pacman.d/cachyos-mirrorlist
+CACHYEOF
+
+                # Usable, not merely present: a configured repo that lists
+                # nothing is exactly the failure this check exists for.
+                arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+                cachy_count=$(arch-chroot /mnt pacman -Sl cachyos 2>/dev/null | wc -l)
+                if [ "${cachy_count:-0}" -gt 0 ]; then
+                    cachy_ok=1
+                    echo "  [cachyos] enabled ($cachy_count packages available)"
+                fi
+            else
+                warn "The CachyOS keyring does not carry the expected master key.
+  Refusing to trust it — the repository was NOT added."
+                arch-chroot /mnt pacman -Rdd --noconfirm \
+                    cachyos-keyring cachyos-mirrorlist >/dev/null 2>&1 || true
+            fi
+        fi
+    fi
+
+    if [ "$cachy_ok" = 1 ]; then
+        echo "  Installing proton-cachyos-slr (~340 MB download)..."
+        if arch-chroot /mnt pacman -S --noconfirm --needed proton-cachyos-slr 2>&1; then
+            success "CachyOS Proton installed — pick it per game in Steam under
+  Properties → Compatibility ('Proton-CachyOS')"
+        else
+            warn "proton-cachyos-slr failed to install. Steam and Valve's own
+  Proton are unaffected. Install later with:
+  sudo pacman -S proton-cachyos-slr"
+        fi
+    else
+        warn "The [cachyos] repository could not be enabled, so CachyOS Proton
+  was skipped. Steam still works with Valve's Proton. To add it later,
+  see https://wiki.cachyos.org/features/optimized_repos/ and then:
+  sudo pacman -S proton-cachyos-slr"
     fi
 fi
 

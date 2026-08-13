@@ -85,7 +85,8 @@
     filemgr   = true;    # dolphin
     wine      = false;
     phone     = false;   # kdeconnect
-    steam     = false;   # + the 32-bit stack, enables multilib
+    steam     = false;   # + the 32-bit stack and CachyOS Proton;
+                         #   enables multilib and [cachyos]
     blackarch = true;    # the repo and keyring, no tools
     nix       = true;    # nix + Home Manager (`syn nix`)
 
