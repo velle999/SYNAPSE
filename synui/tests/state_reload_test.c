@@ -48,6 +48,11 @@ void transparency_set_enabled(syn_server_t *s, int on) { (void)s; (void)on; }
 void transparency_set_opacity(syn_server_t *s, float o) { (void)s; (void)o; }
 void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
 void theme_state_load_config(syn_config_t *c) { (void)c; }
+/* Stubbed for the same reason theme.state is, one line up: its real reader
+ * lives in notif.c, which drags in sd-bus and the scene graph. dnd.state's
+ * reload survival — the property this file exists to guard — is asserted
+ * end to end against a live compositor in tests/dnd.sh instead. */
+void notif_dnd_state_load_config(syn_config_t *c) { (void)c; }
 void wallpaper_state_load(syn_config_t *c)  { (void)c; }
 void cursor_state_load(syn_config_t *c)     { (void)c; }
 void dock_state_load(syn_config_t *c)       { (void)c; }

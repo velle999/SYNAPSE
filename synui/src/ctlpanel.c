@@ -575,6 +575,12 @@ static const struct ctl_item ctl_items[] = {
     /* Sound. Recording audio lives here rather than under Display: what the
      * row decides is which SOUND goes into the file — the screen it captures is
      * settled by the focus, not by a setting. */
+    /* Do Not Disturb sits under Sound, not Desktop, because this is the
+     * category somebody opens when they want the machine to stop making noise.
+     * It is FIRST in it for the same reason. */
+    { CTL_ROW_DND,          CTL_CAT_SOUND, CTL_KIND_TOGGLE, "Do Not Disturb", NULL,
+      .help = "Super+Shift+M anywhere. Hides toasts and mutes the chime; "
+              "critical alerts still come through" },
     { CTL_ROW_SOUNDS,       CTL_CAT_SOUND, CTL_KIND_PANEL,  "Event sounds", "sounds" },
     { CTL_ROW_EQUALIZER,    CTL_CAT_SOUND, CTL_KIND_PANEL,  "Equalizer", "equalizer",
       .help = "10-band system equalizer. Adds an output device while it is on" },
@@ -1258,6 +1264,15 @@ void ctlpanel_row_value(syn_server_t *s, int row, char *buf, size_t n)
     case CTL_ROW_SOUNDS:
         snprintf(buf, n, "%s", sounds_label(s));
         break;
+    case CTL_ROW_DND:
+        /* Say what it is doing to the machine, not just "on". The count is the
+         * part nobody can get from anywhere else — the whole point of the mode
+         * is that those toasts were never drawn. */
+        if (s->config.notif_dnd && s->notifs.missed > 0)
+            snprintf(buf, n, "on \xe2\x80\x94 %d missed", s->notifs.missed);
+        else
+            snprintf(buf, n, "%s", s->config.notif_dnd ? "on" : "off");
+        break;
     case CTL_ROW_RECORD_AUDIO:
         /* Name the source, not just on/off: "on" alone is exactly the ambiguity
          * this setting exists to remove — desktop sound, not the microphone. */
@@ -1379,6 +1394,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "overview",          "Mission control (all windows)" },   /* unbound: Alt+Tab */
         { "keybinds",          "Rebind a shortcut" },
         { "night_light",       "Night light" },
+        { "dnd",               "Do Not Disturb (mute notifications)" },
         { "record",            "Record screen" },
         { "clipboard",         "Clipboard history" },
         { "brightness_up",     "Brightness up" },
@@ -2180,6 +2196,20 @@ static void ctlpanel_activate(syn_server_t *s)
         dock_wake(s);         /* pin or release the bar on the next frame */
         snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
                  "dock auto-hide %s", s->config.dock_autohide ? "on" : "off");
+        ctlpanel_repaint(s);
+        return;
+
+    case CTL_ROW_DND:
+        /* notif_dnd_toggle(), not a flip of the config field: turning it on
+         * also has to clear the cards already on screen and write dnd.state,
+         * and turning it off has to report what was missed. A row that only
+         * set the flag would leave a toast sitting there and forget the choice
+         * at the next login. */
+        notif_dnd_toggle(s);
+        snprintf(s->ctlpanel.status, sizeof(s->ctlpanel.status),
+                 s->config.notif_dnd
+                     ? "notifications are silenced"
+                     : "notifications are back on");
         ctlpanel_repaint(s);
         return;
 

@@ -1422,6 +1422,7 @@ typedef enum {
     CTL_ROW_NIGHTLIGHT,
     CTL_ROW_CLOCK,         /* date & time */
     /* Sound */
+    CTL_ROW_DND,           /* Do Not Disturb: no toast, no chime */
     CTL_ROW_SOUNDS,        /* event sounds: login, device plugged in, … */
     CTL_ROW_EQUALIZER,     /* 10-band system equalizer (eq.c) */
     CTL_ROW_RECORD_AUDIO,  /* Super+Shift+R captures desktop sound too */
@@ -1903,6 +1904,21 @@ typedef struct {
     syn_notif_t items[NOTIF_MAX];
     int         count;
     uint32_t    next_id;   /* ids must never be 0: 0 means "no id" to callers */
+
+    /* How many toasts Do Not Disturb has swallowed since it was switched on.
+     * Runtime only — it is deliberately NOT persisted, because "you missed 12
+     * things" is a fact about this session and a stale count restored at login
+     * would be a lie the user cannot check. Reset every time DND is enabled,
+     * and reported once when it is switched off.
+     *
+     * The DND flag itself lives in syn_config_t, not here: it survives a
+     * restart AND a config reload, and only the config sources are re-read by
+     * synui_config_reload(). See notif_dnd_state_load_config(). */
+    int         missed;
+
+    /* The "Do Not Disturb on/off" toast, kept so toggling twice replaces one
+     * card instead of stacking two. 0 until the first toggle. */
+    uint32_t    dnd_notif_id;
 } syn_notifs_t;
 
 /* ── Clipboard history (clipboard.c) ─────────────────────── */
@@ -2925,6 +2941,21 @@ typedef struct {
      * line (delete it to hand control back). Super+Escape opens the menu
      * either way, so turning this off never strands it. Default 1. */
     int   welcome_at_startup;
+
+    /* Do Not Disturb: no toast is drawn and nothing chimes while this is on.
+     * Toggled by Super+Shift+N, the control panel and `synctl dnd`, each of
+     * which writes dnd.state — which then overrides the synuirc line, the same
+     * precedent as every other state file (delete it to hand control back).
+     *
+     * IN THE CONFIG rather than in syn_notifs_t on purpose. synui_config_reload()
+     * does `s->config = fresh`, so anything a reload must not forget has to be
+     * re-read by synui_config_load(); a flag kept in the server struct would
+     * survive a reload by accident and a flag kept only in the config would be
+     * reset by one. See notif_dnd_state_load_config(), and filters.c for the
+     * bug this shape exists to avoid.
+     *
+     * CRITICAL urgency still gets through — see notif_post(). Default 0. */
+    int   notif_dnd;
 
     /* macOS-style auto-hide dock (dock.c). Mirrored on every output; never
      * reserves an exclusive zone (see syn_output::dock's comment) — hidden
@@ -6044,9 +6075,37 @@ void synui_render_notifs(syn_server_t *s);
 uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
                     const char *body, int urgency, int32_t expire,
                     uint32_t replaces);
+/* The same, with an explicit override of Do Not Disturb. The ONLY caller that
+ * should pass true is the toggle's own confirmation — feedback for the key you
+ * just pressed is not an interruption, and without it turning DND on while it is
+ * already on is indistinguishable from a dead keybinding. Anything else that
+ * wants to be heard through DND should be posting at CRITICAL urgency, which
+ * gets through on its own merits. */
+uint32_t notif_post_ex(syn_server_t *s, const char *app, const char *summary,
+                       const char *body, int urgency, int32_t expire,
+                       uint32_t replaces, bool dnd_bypass);
 /* Dismiss the toast under (lx, ly) in layout coords. Returns 1 if one was hit,
  * so the click is not also delivered to whatever is behind it. */
 int  notif_click(syn_server_t *s, double lx, double ly);
+
+/* ── Do Not Disturb ──────────────────────────────────────────
+ *
+ * On: nothing is drawn and nothing chimes. Notify() still succeeds and still
+ * returns a real id — a client that gets an error or a 0 back decides the
+ * desktop has no notification daemon and starts drawing its own windows, which
+ * is the opposite of quiet.
+ *
+ * CRITICAL urgency is delivered anyway. The spec already singles it out (it may
+ * never auto-expire), synguard's intrusion alerts use it, and a mode that can
+ * silence a security alert is a mode that should not exist. Everything else is
+ * counted and reported once when DND is switched off. */
+void notif_dnd_set(syn_server_t *s, bool on);
+void notif_dnd_toggle(syn_server_t *s);
+static inline bool notif_dnd_on(const syn_server_t *s) { return s->config.notif_dnd != 0; }
+/* Reads dnd.state over the config. Called from synui_config_load(), NOT from
+ * startup, so a config reload does not switch the desktop's ringer back on. */
+void notif_dnd_state_load_config(syn_config_t *cfg);
+void notif_dnd_state_save(syn_server_t *s);
 /* Which toast is under a layout-space point, or -1; stack gets the whole
  * stack's box. render.c owns toast geometry, so it answers this — one
  * definition of where a toast is, rather than two that disagree and eat

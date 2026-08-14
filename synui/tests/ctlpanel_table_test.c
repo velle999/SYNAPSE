@@ -98,6 +98,7 @@ void dock_wake(syn_server_t *s)               { (void)s; }
 void game_toggle(syn_server_t *s)             { (void)s; }
 void launcher_toggle_style(syn_server_t *s)   { (void)s; }
 void nightlight_toggle(syn_server_t *s)       { (void)s; }
+void notif_dnd_toggle(syn_server_t *s)        { (void)s; }
 void record_audio_toggle(syn_server_t *s)     { (void)s; }
 void record_edit_toggle(syn_server_t *s)      { (void)s; }
 void sound_state_refresh(syn_server_t *s)     { (void)s; }
@@ -126,6 +127,7 @@ void theme_load_colors(syn_config_t *c, syn_theme_t t) { c->theme = t; }
  * Stubbed here for the same reason as the loaders above: this test owns no
  * theme.state, and reading the developer's would make the run non-hermetic. */
 void theme_state_load_config(syn_config_t *c) { (void)c; }
+void notif_dnd_state_load_config(syn_config_t *c) { (void)c; }
 
 /*
  * The Super+E panels' two state files.

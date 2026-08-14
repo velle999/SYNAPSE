@@ -118,6 +118,9 @@
  * whether it greets you on login. The menu's "Show At Startup" row toggles it
  * live and writes welcome.state, which then overrides this line:
  *   welcome_at_startup = on|off (default on)
+ *   notif_dnd = on|off (default off) — Do Not Disturb: no toast, no chime.
+ *     Critical urgency still gets through. Super+Shift+N toggles it and writes
+ *     dnd.state, which then overrides this line; delete it to hand control back.
  *
  * Screen recording (record.c, synui-record) — Super+Shift+R. Audio means the
  * default sink's monitor (what you can hear), never the microphone; the control
@@ -686,6 +689,13 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+d",   "decorations_toggle" },
         { "super+n",         "minimize_toggle" },
         { "super+shift+n",   "minimize_restore" },
+        /* Do Not Disturb. M for MUTE — velle's own word for it ("add mute
+         * notifications") — and Shift+M was the free half of a key whose
+         * unshifted form is maximize. N would have been the obvious letter and
+         * is gone twice over: super+n is minimize and super+shift+n is the
+         * restore above, both of which predate there being anything to
+         * silence. */
+        { "super+shift+m",   "dnd" },
         { "super+backspace", "ai_ask" },
         { "super+w",         "wallpaper" },
         { "super+shift+w",   "wallpaper_reload" },
@@ -1082,6 +1092,7 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->cat_breed         = CAT_BREED_NEON;   /* the house cat */
 
     cfg->welcome_at_startup = 1;
+    cfg->notif_dnd = 0;
     cfg->numlock            = 1;
 
     /* Recording sound is opt-in, like every other capture on this desktop. */
@@ -1329,6 +1340,7 @@ void synui_config_load(syn_config_t *cfg)
         filters_state_load_config(cfg);
         uifx_state_load_config(cfg);
         theme_state_load_config(cfg);
+        notif_dnd_state_load_config(cfg);
         binds_state_load(cfg);
         config_apply_ui_font(cfg);
         return;
@@ -1404,6 +1416,13 @@ void synui_config_load(syn_config_t *cfg)
      * startup is what makes a config RELOAD keep the theme instead of resetting
      * the desktop to stock SYNAPSE; see theme.c. */
     theme_state_load_config(cfg);
+
+    /* Here, not from synui_main(), for the reason filters.state and theme.state
+     * are: synui_config_reload() does `s->config = fresh`, so a flag read only
+     * at startup is switched back to whatever synuirc says on every reload.
+     * Ctrl+Shift+R would have turned the ringer back on in the middle of
+     * whatever Do Not Disturb was switched on for. See notif.c. */
+    notif_dnd_state_load_config(cfg);
 
     /* After settings.state and everything above it, because it MEASURES ITSELF
      * against them: binds.state holds only the difference between the bind
@@ -1889,6 +1908,8 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
     }
     else if (strcmp(key, "welcome_at_startup") == 0)
         cfg->welcome_at_startup = strcmp(val, "on") == 0;
+    else if (strcmp(key, "notif_dnd") == 0)
+        cfg->notif_dnd = strcmp(val, "on") == 0;
     else if (strcmp(key, "numlock") == 0)
         cfg->numlock = strcmp(val, "on") == 0;
     else if (strcmp(key, "record_audio") == 0)

@@ -1134,6 +1134,10 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
         calendar_toggle(s);
     } else if (strcmp(action, "night_light") == 0) {
         nightlight_toggle(s);
+    } else if (strcmp(action, "dnd") == 0) {
+        /* Do Not Disturb — no toast, no chime. Its own confirmation is the one
+         * thing that comes through, so the key never looks dead. */
+        notif_dnd_toggle(s);
     } else if (strcmp(action, "record") == 0) {
         /* Record the monitor the user is actually on — same reason screenshot
          * does this above. wf-recorder captures one output and, given no name

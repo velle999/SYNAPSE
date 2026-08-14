@@ -118,6 +118,7 @@ void dock_wake(syn_server_t *s)                      { (void)s; }
 void game_toggle(syn_server_t *s)                    { (void)s; }
 void launcher_toggle_style(syn_server_t *s)          { (void)s; }
 void nightlight_apply(syn_server_t *s)               { (void)s; }
+void notif_dnd_toggle(syn_server_t *s)               { (void)s; }
 void nightlight_toggle(syn_server_t *s)              { (void)s; }
 void cursor_reload(syn_server_t *s)                  { (void)s; }
 void deskicons_reload(syn_server_t *s)               { (void)s; }

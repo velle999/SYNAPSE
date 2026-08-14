@@ -2492,6 +2492,8 @@ static void usage(const char *prog) {
         "                     \xe2\x96\xb8 Sound \xe2\x96\xb8 Record audio)\n"
         "  Super+B            Bluetooth\n"
         "  Super+Shift+B      Night light (blue-light filter)\n"
+        "  Super+Shift+M      Do Not Disturb (mute notifications; critical\n"
+        "                     alerts still come through)\n"
         "  Super+I            Network / Wi-Fi\n"
         "  Super+V            Clipboard history\n"
         "  Super+G            Game mode\n"

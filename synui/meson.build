@@ -1067,6 +1067,12 @@ test('notif', notif_sh,
      depends : [synui_exe],
      timeout : 120)
 
+dnd_sh = find_program('tests/dnd.sh')
+test('dnd', dnd_sh,
+     args    : [synui_exe.full_path(), synctl_exe.full_path()],
+     depends : [synui_exe, synctl_exe],
+     timeout : 120)
+
 overview_sh = find_program('tests/overview.sh')
 test('overview', overview_sh,
      args    : [synui_exe.full_path(), stubborn_client.full_path(),

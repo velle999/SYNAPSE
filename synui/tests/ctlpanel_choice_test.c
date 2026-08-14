@@ -121,6 +121,7 @@ void dock_state_save(syn_server_t *s)                { (void)s; }
 void dock_wake(syn_server_t *s)                      { (void)s; }
 void game_toggle(syn_server_t *s)                    { (void)s; }
 void launcher_toggle_style(syn_server_t *s)          { (void)s; }
+void notif_dnd_toggle(syn_server_t *s)        { (void)s; }
 void nightlight_toggle(syn_server_t *s)              { (void)s; }
 void record_audio_toggle(syn_server_t *s)            { (void)s; }
 void record_edit_toggle(syn_server_t *s)             { (void)s; }

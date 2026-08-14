@@ -25,6 +25,7 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -174,7 +175,41 @@ uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
                     const char *body, int urgency, int32_t expire,
                     uint32_t replaces)
 {
+    return notif_post_ex(s, app, summary, body, urgency, expire, replaces, false);
+}
+
+uint32_t notif_post_ex(syn_server_t *s, const char *app, const char *summary,
+                       const char *body, int urgency, int32_t expire,
+                       uint32_t replaces, bool dnd_bypass)
+{
     syn_notifs_t *n = &s->notifs;
+
+    /* ── Do Not Disturb ──────────────────────────────────────────────────────
+     *
+     * Swallowed here, at the top, so BOTH halves are covered by one rule: no
+     * card is allocated (nothing to draw) and sound_play() below is never
+     * reached (nothing to hear). Suppressing only the draw would leave the
+     * chime, which is the half people actually notice.
+     *
+     * It still returns an id, and a real one. A client that gets 0 or a D-Bus
+     * error back concludes the desktop has no notification daemon, and the
+     * well-behaved ones then fall back to drawing their own window — a mode
+     * meant to stop interruptions would start producing windows that cannot be
+     * dismissed by anything here. The id is drawn from the same counter, so
+     * CloseNotification() on it is a harmless no-op rather than a mismatch.
+     *
+     * CRITICAL goes through. The spec singles it out as the urgency that must
+     * not auto-expire, synguard posts its intrusion alerts at it, and a quiet
+     * mode that can hide a security alert is a bug wearing a feature's name. */
+    if (!dnd_bypass && s->config.notif_dnd && urgency != NOTIF_URGENCY_CRITICAL) {
+        if (n->missed < INT_MAX) n->missed++;
+        wlr_log(WLR_DEBUG, "synui: notif: dnd swallowed '%s' from %s (%d missed)",
+                summary ? summary : "", app ? app : "?", n->missed);
+        if (replaces) return replaces;
+        uint32_t id = ++n->next_id;
+        if (id == 0) id = ++n->next_id;
+        return id;
+    }
 
     /* Find the slot: a replaces_id updates in place (a progress notification
      * re-posts the same id many times a second — appending would flood the
@@ -223,6 +258,103 @@ uint32_t notif_post(syn_server_t *s, const char *app, const char *summary,
     wlr_log(WLR_DEBUG, "synui: notif: #%u from %s: %s", item->id, item->app,
             item->summary);
     return item->id;
+}
+
+/* ── Do Not Disturb ──────────────────────────────────────── */
+
+static bool dnd_state_path(char *buf, size_t n)
+{
+    return syn_config_path(buf, n, "dnd.state");
+}
+
+void notif_dnd_state_save(syn_server_t *s)
+{
+    char path[256];
+    if (!dnd_state_path(path, sizeof(path))) return;
+    syn_config_ensure_dir();
+
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        wlr_log(WLR_ERROR, "synui: notif: cannot write '%s': %s",
+                path, strerror(errno));
+        return;
+    }
+    fprintf(f, "dnd=%d\n", s->config.notif_dnd ? 1 : 0);
+    fclose(f);
+}
+
+/*
+ * Applied over the config, and read from synui_config_load()'s tail rather than
+ * once at startup. That placement is the whole difference between a config
+ * reload keeping the ringer off and a reload switching it back on: reload does
+ * `s->config = fresh`, so notif_dnd comes back from the sources
+ * synui_config_load() reads and from nowhere else. filters.state and theme.state
+ * were each shipped with that bug and fixed the same way; this one would have
+ * been worse, because the failure is silent until something makes a noise in a
+ * meeting.
+ */
+void notif_dnd_state_load_config(syn_config_t *cfg)
+{
+    char path[256];
+    if (!dnd_state_path(path, sizeof(path))) return;
+
+    FILE *f = fopen(path, "r");
+    if (!f) return;   /* never saved — keep whatever synuirc said */
+
+    char line[64];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        if (strcmp(line, "dnd") == 0) cfg->notif_dnd = atoi(eq + 1) ? 1 : 0;
+    }
+    fclose(f);
+}
+
+void notif_dnd_set(syn_server_t *s, bool on)
+{
+    if (!!s->config.notif_dnd == on) return;
+    s->config.notif_dnd = on ? 1 : 0;
+    notif_dnd_state_save(s);
+
+    if (on) {
+        /* "disable popups too": clear what is already on screen. A card left
+         * hanging when the mode is switched on is exactly the interruption
+         * being switched off, and it would sit there for its full expiry.
+         *
+         * Backwards, because notif_remove_at() memmoves the tail down.
+         * Critical toasts stay for the same reason they get through below. */
+        for (int i = s->notifs.count - 1; i >= 0; i--)
+            if (s->notifs.items[i].urgency != NOTIF_URGENCY_CRITICAL)
+                notif_remove_at(s, i, NOTIF_CLOSED_DISMISSED);
+
+        s->notifs.missed = 0;
+        synui_render_notifs(s);
+        notif_arm_timer(s);
+    }
+
+    /* The confirmation BYPASSES the mode it is announcing — posted after the
+     * flag is set, and deliberately allowed through by notif_post()'s dnd_bypass
+     * argument. Feedback for the keybinding that just ran is not an
+     * interruption; without it, pressing the key while DND is already on looks
+     * exactly like pressing a key that does nothing. */
+    char body[96] = "";
+    if (!on && s->notifs.missed > 0)
+        snprintf(body, sizeof(body), "%d notification%s arrived while it was on",
+                 s->notifs.missed, s->notifs.missed == 1 ? "" : "s");
+
+    if (!on) s->notifs.missed = 0;
+
+    s->notifs.dnd_notif_id =
+        notif_post_ex(s, "synui", on ? "Do Not Disturb on" : "Do Not Disturb off",
+                      body, NOTIF_URGENCY_NORMAL, on ? 2000 : -1,
+                      s->notifs.dnd_notif_id, true);
+}
+
+void notif_dnd_toggle(syn_server_t *s)
+{
+    notif_dnd_set(s, !s->config.notif_dnd);
 }
 
 static int method_notify(sd_bus_message *m, void *data, sd_bus_error *e)

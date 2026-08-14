@@ -280,6 +280,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`L` | Lock screen |
 | `Super`+`B` | Bluetooth |
 | `Super`+`Shift`+`B` | Night light (blue-light filter) |
+| `Super`+`Shift`+`M` | Do Not Disturb — hide toasts and mute the chime (critical alerts still come through) |
 | `Super`+`I` | Network / Wi-Fi |
 | `Super`+`V` | Clipboard history |
 | `Super`+`semicolon` | Emoji picker — type to search, `Tab` for categories, `Enter` inserts |
