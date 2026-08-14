@@ -283,7 +283,8 @@ expect "the child sees the grid's size" "9 77" "$size"
 # number itself belongs in a run somebody reads.
 
 seq 1 20000 > "$T/bench.txt"
-if "$ST" bench "$T/bench.txt" --runs=2 | grep -q 'MB/s'; then
+benchout=$("$ST" bench "$T/bench.txt" --runs=2 2>&1)
+if printf '%s' "$benchout" | grep -q 'MB/s'; then
     ok "bench reports a throughput number"
 else
     bad "bench reports a throughput number"
@@ -292,6 +293,85 @@ fi
 rate=$("$ST" bench "$T/bench.txt" --runs=3 | awk '/^best/{print $4}')
 ok "throughput on this machine: ${rate} MB/s"
 
+# ── semantic marks, the scrollback view, and jump-to-prompt ─────────────────
+#
+# OSC 133 is how a shell tells the terminal where its prompts are, when a
+# command started and how it ended. ⚠ IT IS THE STANDARD'S MARKS, NOT OURS,
+# even though we ship the shell at the other end — a terminal that only
+# understands its own shell gets none of this from bash, zsh or a remote ssh
+# session, and a shell that emits something private is useless everywhere else.
+# Owning both ends is worth using to make the marks RELIABLE, not private.
+sess() {
+    python3 -c "
+import sys
+for i in range(1,13):
+    sys.stdout.write('\033]133;A\007\$ \033]133;B\007cmd%d\r\n\033]133;C\007out %d\r\n\033]133;D;%d\007' % (i,i,i%2))
+" 2>/dev/null
+}
+
+if [ -z "$(sess)" ]; then
+    echo "  skip  semantic marks (no python3 to build a session)"
+else
+    r=$(sess | "$ST" --cols=20 --rows=6 dump - --stats 2>&1)
+
+    echo "$r" | grep -q 'commands      12 recorded'
+    check "every command the shell announced is recorded" $?
+
+    # ⚠ THE STATUS IS THE POINT. A terminal that records the timing but loses
+    # whether it worked cannot colour a failed command, which is the single
+    # most useful thing these marks buy.
+    echo "$r" | grep -q 'status 1'
+    check "...with the exit status the shell reported" $?
+
+    # ⚠ AND UNKNOWN IS NOT ZERO. A bare `D` says "finished" and nothing else;
+    # reporting that as 0 is how a failing command comes back looking green.
+    u=$(printf '\033]133;A\007$ \033]133;B\007x\r\n\033]133;C\007\033]133;D\007' \
+        | "$ST" --cols=20 --rows=4 dump - --stats 2>&1)
+    printf '%s' "$u" | grep -q 'status unknown'
+    check "a command that finished without saying how reports unknown, not 0" $?
+
+    # ── the scrollback viewport ─────────────────────────────────────────────
+    for i in $(seq 1 40); do printf 'line %d\r\n' $i; done > "$T/lines"
+
+    # ⚠ The expected line depends on the WINDOW HEIGHT — four rows shows 38..40
+    # plus the cursor's blank row, three rows shows 39..40. Getting that wrong
+    # is a test bug, not a terminal bug, and it is worth stating because the
+    # first version of these two assertions was written against a four-row
+    # window and run against a three-row one.
+    [ "$("$ST" --cols=12 --rows=4 dump - < "$T/lines" | head -1)" = "line 38" ] \
+        && ok "the live view shows the newest lines" \
+        || bad "the live view shows the newest lines"
+
+    [ "$("$ST" --cols=12 --rows=4 --view=10 dump - < "$T/lines" | head -1)" = "line 28" ] \
+        && ok "...and scrolling back shows history" \
+        || bad "...and scrolling back shows history"
+
+    # ⚠ CLAMPED TO WHAT IS KEPT, not to what was ever written. Scrolling past
+    # the oldest retained line must stop, not wrap onto whatever is in the ring.
+    top=$("$ST" --cols=12 --rows=4 --view=99999 dump - < "$T/lines" | head -1)
+    [ "$top" = "line 1" ] \
+        && ok "...and stops at the oldest line still kept" \
+        || bad "...and stops at the oldest line still kept (got '$top')"
+
+    # ── jump-to-prompt ──────────────────────────────────────────────────────
+    #
+    # The thing owning both ends actually buys: the shell SAID where its
+    # prompts are, so this is exact rather than a heuristic over blank lines.
+    j1=$(sess | "$ST" --cols=20 --rows=4 --jump=1 dump - | head -1)
+    j2=$(sess | "$ST" --cols=20 --rows=4 --jump=2 dump - | head -1)
+    [ "$j1" = '$ cmd11' ] && [ "$j2" = '$ cmd10' ] \
+        && ok "jumping back lands each previous prompt at the top" \
+        || bad "jumping back lands each previous prompt at the top ($j1 / $j2)"
+
+    # ⚠ THE CURSOR IS NOT DRAWN OVER HISTORY. It is in a position that does not
+    # exist there, and it would slide around as the view scrolled.
+    live=$(printf 'abc' | "$ST" --cols=8 --rows=2 render - --probe=3,0 2>/dev/null | awk '{print $3}')
+    for i in $(seq 1 30); do printf 'x\r\n'; done \
+        | "$ST" --cols=8 --rows=2 --view=10 render - --probe=0,0 2>/dev/null \
+        | awk '{print $3}' | grep -qv "$live"
+    check "the cursor is not painted over scrollback" $?
+fi
+
 # ── the kitty GRAPHICS protocol ─────────────────────────────────────────────
 #
 # ⚠ NOTHING TO DO WITH THE GPU, despite the name — it is escape sequences for
@@ -299,7 +379,7 @@ ok "throughput on this machine: ${rate} MB/s"
 # the CPU like everything else here. Table stakes, same as the keyboard half.
 #
 # The transport is APC: ESC _ G <control> ; <base64> ESC \.
-gfx() { printf "$1" | "$ST" dump - --stats 2>&1; }
+gfx() { local out; out=$(printf "$1" | "$ST" dump - --stats 2>&1); printf '%s\n' "$out"; }
 
 # A 2x2 image: red, green / blue, white. Small enough to reason about, and
 # every quadrant a different colour so a flipped axis cannot pass.
@@ -369,15 +449,16 @@ else
         || bad "deleting an image stops it being drawn"
 
     # An APC that is not ours is left alone, not guessed at.
-    printf '\033_Xsomething else\033\\\\hello' | "$ST" --cols=20 --rows=2 dump - \
-        | head -1 | grep -q 'hello'
+    other=$(printf '\033_Xsomething else\033\\\\hello' | "$ST" --cols=20 --rows=2 dump -)
+    printf '%s' "$other" | head -1 | grep -q 'hello'
     check "an APC belonging to something else is ignored, not eaten" $?
 
     # ⚠ AN UNTERMINATED SEQUENCE MUST NOT GROW A BUFFER FOREVER. This is the
     # denial-of-service shape of the feature: bytes arriving from the child
     # with no terminator in sight.
-    python3 -c "import sys; sys.stdout.write('\033_G' + 'A'*40000 + '\033\\\\' + 'survived')" \
-        | "$ST" --cols=20 --rows=2 dump - | head -1 | grep -q 'survived'
+    apcout=$(python3 -c "import sys; sys.stdout.write('\033_G' + 'A'*40000 + '\033\\\\' + 'survived')" \
+        | "$ST" --cols=20 --rows=2 dump -)
+    printf '%s' "$apcout" | head -1 | grep -q 'survived'
     check "an over-long APC is dropped and the stream stays in step" $?
 fi
 
@@ -396,11 +477,11 @@ fi
 #
 # ⚠ SMALL CHUNKS ARE HARSHER. A missed mark that happens to be covered because
 # a later chunk redrew the same row passes at 64 KB and fails at 3 bytes.
-dmg() { printf "$1" | "$ST" --cols="${2:-40}" --rows="${3:-12}" \
-            damage-check - --split="${4:-3}" 2>&1; }
+dmg() { local out; out=$(printf "$1" | "$ST" --cols="${2:-40}" --rows="${3:-12}" \
+            damage-check - --split="${4:-3}" 2>&1); printf '%s\n' "$out"; }
 
-echo "$(seq 1 200)" | "$ST" --cols=80 --rows=24 damage-check - --split=7 2>&1 \
-    | grep -q '^identical'
+scrollout=$(echo "$(seq 1 200)" | "$ST" --cols=80 --rows=24 damage-check - --split=7 2>&1)
+printf '%s' "$scrollout" | grep -q '^identical'
 check "scrolling output paints the same pixels either way" $?
 
 # Every kind of mutation, at three bytes a feed. Each of these is a different
@@ -547,7 +628,11 @@ kbd "$(printf '\033[>1u%.0s' $(seq 1 40))\033[?u" >/dev/null 2>&1
 # itself can have.
 FC="$T/cache"
 mkdir -p "$FC"
-fontrun() { XDG_CACHE_HOME="$FC" "$ST" font "$@" 2>&1; }
+# ⚠ CAPTURES, for the reason at the top of this file: a direct
+# `producer | grep -q` dies of SIGPIPE when grep matches and exits early, and
+# under `pipefail` that is 141 for a test that PASSED. ASan is slow enough to
+# lose that race every time.
+fontrun() { local out; out=$(XDG_CACHE_HOME="$FC" "$ST" font "$@" 2>&1); printf '%s\n' "$out"; }
 
 if ! fontrun >/dev/null 2>&1; then
     echo "  skip  font lookup (no font on this machine — see the rule at the top)"

@@ -34,6 +34,51 @@
  * Default prompt: [user@synapse cwd]⚡ or [user@synapse cwd]$
  * The ⚡ shows when AI is connected; $ when in shell-only mode.
  */
+/* ── OSC 133: telling the terminal where things are ─────────────────────────
+ *
+ * The de-facto semantic-prompt standard. Four marks let a terminal do things a
+ * shell cannot ask for any other way:
+ *
+ *   A  a prompt starts here          -> jump-to-previous-prompt
+ *   B  the prompt ends, input begins -> where the typed command starts
+ *   C  the command was submitted     -> output starts here; start the clock
+ *   D  it finished, with its status  -> how long it took, and whether it worked
+ *
+ * ⚠ EMITTED ONLY FOR AN INTERACTIVE SHELL ON A TTY. A script whose stdout is a
+ * pipe must not have escape sequences injected into its output — `synsh -c
+ * 'echo hi' | wc -c` counting the marks would be a bug in every program that
+ * wraps this shell.
+ *
+ * ⚠ AND SYNTTY IS NOT THE ONLY READER. These are the standard's marks, not
+ * ours, so the same shell gets prompt jumping in kitty, WezTerm, iTerm2 and
+ * anything else that reads 133 — and syntty gets them from bash and zsh, which
+ * already emit them. Owning both ends is worth using to make the marks
+ * RELIABLE, not to make them private.
+ */
+static bool marks_wanted(synsh_state_t *s)
+{
+    return s && s->interactive && isatty(STDOUT_FILENO);
+}
+
+void synsh_mark_output_start(synsh_state_t *s)
+{
+    if (marks_wanted(s)) {
+        fputs("\033]133;C\007", stdout);
+        fflush(stdout);
+    }
+}
+
+void synsh_mark_command_done(synsh_state_t *s, int status)
+{
+    if (marks_wanted(s)) {
+        /* The status is ALWAYS sent. A bare `D` means "finished, outcome
+         * unknown", which a terminal must not colour as success — so having
+         * the number, we send it. */
+        printf("\033]133;D;%d\007", status);
+        fflush(stdout);
+    }
+}
+
 void synsh_prompt(synsh_state_t *s, char *buf, size_t len) {
     char *cwd = s->cwd ? s->cwd : "?";
     const char *user = s->user ? s->user : "user";
@@ -86,12 +131,23 @@ void synsh_prompt(synsh_state_t *s, char *buf, size_t len) {
     } while (0)
     #define COL(c) PUT("%s%s%s", np_beg, (c), np_end)
 
+    /* ⚠ BRACKETED AS NON-PRINTING, exactly like the colours above and for the
+     * same reason: readline counts every byte of the prompt as a visible
+     * column unless told otherwise, and an unbracketed OSC 133 mark makes it
+     * think the prompt is nine columns wider than it is — which puts the
+     * cursor in the wrong place on every redraw. The marks are invisible; they
+     * must be declared invisible. */
+    PUT("%s\033]133;A\007%s", np_beg, np_end);
+
     COL(COLOR_BRAND);  PUT("[");
     COL(COLOR_USER);   PUT("%s", user);
     COL(COLOR_DIM);    PUT("@synapse ");
     COL(COLOR_PATH);   PUT("%s", short_cwd);
     COL(COLOR_BRAND);  PUT("]");
     COL(COLOR_RESET);  PUT("%s ", sigil);
+
+    /* B: the prompt ends here and what the person types begins. */
+    PUT("%s\033]133;B\007%s", np_beg, np_end);
 
     #undef COL
     #undef PUT

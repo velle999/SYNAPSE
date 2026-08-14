@@ -29,6 +29,7 @@
 #include "syntty.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 #include <string.h>
 
@@ -132,6 +133,83 @@ size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap)
 	 * sequence queued would send the child half an answer. */
 	vt->reply_len = 0;
 	return n;
+}
+
+/* ── one OSC handler, called from both terminators ──────────────────────────
+ *
+ * An OSC string ends with BEL or with ESC \, and the two paths used to carry
+ * their own copy of what to do with the result. That is the shape every drift
+ * bug in this codebase has had — a rule that exists in two places is a rule
+ * that will shortly exist in one and a half. */
+static void osc_dispatch(st_vt_t *vt)
+{
+	vt->osc[vt->osc_len] = 0;
+	vt->osc_seen++;
+
+	/* Titles: the one OSC stage 1 kept, because a test can assert it. */
+	if (vt->osc_len > 2 && (vt->osc[0] == '0' || vt->osc[0] == '2')
+	    && vt->osc[1] == ';') {
+		snprintf(vt->title, sizeof vt->title, "%s", vt->osc + 2);
+		return;
+	}
+
+	/* ── OSC 133: where the prompt is, and what the command did ─────────────
+	 *
+	 * The de-facto semantic-prompt standard (FinalTerm, then iTerm2, then
+	 * everyone). Four marks:
+	 *
+	 *   A  a prompt starts here
+	 *   B  the prompt ends and what the person types begins
+	 *   C  the command was submitted; output starts here
+	 *   D  the command finished, optionally `D;<exit status>`
+	 *
+	 * ⚠ WE PARSE THE STANDARD, not something of our own, even though we ship
+	 * the shell at the other end. A terminal that only understands its own
+	 * shell's private marks gets none of this from bash, zsh, fish or a remote
+	 * ssh session — all of which already emit 133 — and a shell that emits
+	 * something private is useless in every other terminal. Owning both ends
+	 * is worth using to make the marks RELIABLE, not to make them ours. */
+	if (vt->osc_len >= 5 && !memcmp(vt->osc, "133;", 4)) {
+		char kind = vt->osc[4];
+		switch (kind) {
+		case 'A':
+			vt->g->screen[vt->g->cy].mark = ST_MARK_PROMPT;
+			vt->g->screen[vt->g->cy].dirty = true;
+			break;
+		case 'B':
+			/* The command line begins. Nothing to mark on the grid — the row
+			 * is already the prompt's — but it is where a jump-to-prompt
+			 * wants the cursor to land. */
+			vt->cmd_col = vt->g->cx;
+			break;
+		case 'C':
+			vt->g->screen[vt->g->cy].mark = ST_MARK_OUTPUT;
+			vt->g->screen[vt->g->cy].dirty = true;
+			vt->cmd_start_ns = now_ns();
+			vt->cmd_running = true;
+			break;
+		case 'D': {
+			/* `D` or `D;<status>`. A missing status is not zero — it is
+			 * unknown, and reporting unknown as success is how a failing
+			 * command comes back green. */
+			int status = -1;
+			if (vt->osc_len > 6 && vt->osc[5] == ';')
+				status = (int)strtol(vt->osc + 6, NULL, 10);
+
+			if (vt->cmd_running) {
+				st_cmd_t *c = &vt->cmds[vt->ncmds % ST_MAX_CMDS];
+				c->duration_ns = now_ns() - vt->cmd_start_ns;
+				c->status = status;
+				c->row = vt->g->cy;
+				vt->ncmds++;
+				vt->cmd_running = false;
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	}
 }
 
 static int param(const st_vt_t *vt, int i, int def)
@@ -613,15 +691,7 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 
 		case VT_OSC:
 			if (b == 0x07) {
-				vt->osc[vt->osc_len] = 0;
-				vt->osc_seen++;
-				/* Titles are the one OSC this stage keeps, because a test
-				 * can assert it and because it costs one strcpy. */
-				if (vt->osc_len > 2 &&
-				    (vt->osc[0] == '0' || vt->osc[0] == '2') &&
-				    vt->osc[1] == ';') {
-					snprintf(vt->title, sizeof vt->title, "%s", vt->osc + 2);
-				}
+				osc_dispatch(vt);
 				vt->state = VT_GROUND;
 			} else if (b == 0x1B) {
 				vt->state = VT_OSC_ESC;
@@ -631,11 +701,7 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 			break;
 
 		case VT_OSC_ESC:
-			vt->osc[vt->osc_len] = 0;
-			vt->osc_seen++;
-			if (vt->osc_len > 2 &&
-			    (vt->osc[0] == '0' || vt->osc[0] == '2') && vt->osc[1] == ';')
-				snprintf(vt->title, sizeof vt->title, "%s", vt->osc + 2);
+			osc_dispatch(vt);
 			/* ESC \ ends it; ESC anything-else means the string was
 			 * abandoned and that byte starts a new sequence. */
 			vt->state = VT_GROUND;

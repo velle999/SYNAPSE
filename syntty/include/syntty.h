@@ -152,7 +152,17 @@ typedef struct {
 	 * in doubt, mark it — and the damage-check test exists precisely because
 	 * "when in doubt" is not a guarantee. */
 	bool       dirty;
+
+	/* ── semantic marks (OSC 133) ───────────────────────────────────────────
+	 *
+	 * Where a prompt began, and where a command's output began. Set by the
+	 * shell telling us rather than by us guessing, and carried on the ROW so
+	 * it travels into the scrollback with the text it describes — which is
+	 * the only place jump-to-prompt can look. */
+	uint8_t    mark;
 } st_row_t;
+
+enum { ST_MARK_NONE = 0, ST_MARK_PROMPT = 1, ST_MARK_OUTPUT = 2 };
 
 typedef struct {
 	uint16_t cols, rows;
@@ -183,6 +193,17 @@ typedef struct {
 	uint16_t cx, cy;
 	uint16_t top, bot;       /* scroll region, inclusive */
 	uint16_t cur_style;
+	/* ── the scrollback viewport ────────────────────────────────────────────
+	 *
+	 * How many rows back from the live screen the window is looking. 0 is
+	 * live and is the only state in which the cursor is drawn — a cursor
+	 * painted over history is a cursor in a place it cannot be.
+	 *
+	 * The parser does not care about this: output still lands on the live
+	 * screen while somebody is reading history, exactly as it does in every
+	 * other terminal, and the view snaps back when they type. */
+	uint32_t view;
+
 	bool     wrap_next;      /* the cursor is parked past the last column */
 	bool     autowrap;
 	bool     origin;         /* DECOM: cursor addressing is region-relative */
@@ -243,6 +264,25 @@ void st_dump_scrollback(const st_grid_t *g, FILE *out);
  * are two buffers of differing age, and a row drawn into one is still stale in
  * the other. Whoever owns the buffers owns the bookkeeping; the grid only ever
  * reports what changed since it was last asked. */
+/* ── the scrollback viewport ────────────────────────────────────────────────
+ *
+ * `st_grid_view_row` is what the renderer draws: screen line `y` resolved
+ * through the current scroll offset into either the live screen or the
+ * scrollback. NULL means "above the oldest line we kept", which draws blank.
+ *
+ * Everything else in this program addresses rows by their position on the LIVE
+ * screen. This is the one place that translates, deliberately — a viewport that
+ * leaks into the parser would mean output landing where the reader happens to
+ * be looking. */
+const st_row_t *st_grid_view_row(const st_grid_t *g, int y);
+/* Move the view. Positive is back into history. Returns true if it moved,
+ * which is what tells the caller whether anything needs repainting. */
+bool st_grid_view_scroll(st_grid_t *g, int delta);
+bool st_grid_view_reset(st_grid_t *g);
+/* The row of the nearest prompt mark in `dir` (-1 back, +1 forward), as a view
+ * offset, or -1 if there is none. */
+long st_grid_find_prompt(const st_grid_t *g, int dir);
+
 bool st_grid_row_dirty(const st_grid_t *g, int row);
 void st_grid_clear_dirty(st_grid_t *g);
 /* Mark everything — after a resize, or anything else that invalidates the
@@ -289,6 +329,21 @@ typedef enum {
  * memory" is a denial of service, not a parsing bug. Overlong sequences are
  * dropped and counted. */
 #define VT_APC_MAX    8192
+
+/* How many finished commands are remembered. The questions this answers —
+ * "how long did that take", "did it work" — are about the recent past. */
+#define ST_MAX_CMDS   64
+
+/* One finished command, as the shell reported it.
+ *
+ * ⚠ `status` is -1 for UNKNOWN, which is not the same as 0. A shell that emits
+ * a bare `D` with no status has told us it finished and nothing else, and
+ * reporting that as success is how a failing command comes back green. */
+typedef struct {
+	uint64_t duration_ns;
+	int      status;
+	uint16_t row;
+} st_cmd_t;
 
 /* ── the kitty keyboard protocol ────────────────────────────────────────────
  *
@@ -389,6 +444,17 @@ typedef struct {
 	uint64_t reply_dropped;
 
 	char title[512];
+
+	/* ── what the shell told us about its commands ──────────────────────────
+	 *
+	 * Timing and exit status per command, from the OSC 133 C and D marks. A
+	 * small ring: what this is for is "how long did that take" and "did it
+	 * work", both of which are questions about the recent past. */
+	st_cmd_t cmds[ST_MAX_CMDS];
+	uint32_t ncmds;              /* total ever recorded, not the ring's size */
+	uint64_t cmd_start_ns;
+	uint16_t cmd_col;            /* where the typed command begins on its row */
+	bool     cmd_running;
 } st_vt_t;
 
 void st_vt_init(st_vt_t *vt, st_grid_t *g);

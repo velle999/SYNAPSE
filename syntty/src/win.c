@@ -45,6 +45,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
@@ -971,6 +972,57 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 	char utf8[16];
 	int  n = xkb_state_key_get_utf8(w->xkb_state, code, utf8, sizeof utf8);
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(w->xkb_state, code);
+
+	/* ── the keys the TERMINAL keeps ────────────────────────────────────────
+	 *
+	 * Scrollback and prompt navigation are handled here and NOT sent to the
+	 * child, because they are about the window rather than about the program.
+	 * Shift is what distinguishes them: PageUp belongs to whatever is running,
+	 * Shift+PageUp belongs to the terminal, which is the convention every
+	 * terminal already follows.
+	 *
+	 * Ctrl+Shift+Up/Down jumps between PROMPTS, which is the thing owning both
+	 * ends buys — the shell says where its prompts are, so this is exact
+	 * rather than a heuristic over blank lines. */
+	if (pressed) {
+		bool shift = xkb_state_mod_name_is_active(w->xkb_state,
+			XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0;
+		bool ctl = xkb_state_mod_name_is_active(w->xkb_state,
+			XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0;
+
+		if (shift && (sym == XKB_KEY_Page_Up || sym == XKB_KEY_Page_Down)) {
+			int page = w->g->rows / 2;
+			if (page < 1) page = 1;
+			if (st_grid_view_scroll(w->g,
+			        sym == XKB_KEY_Page_Up ? page : -page))
+				w->dirty = true;
+			return;
+		}
+		if (shift && ctl && (sym == XKB_KEY_Up || sym == XKB_KEY_Down)) {
+			long off = st_grid_find_prompt(w->g,
+			              sym == XKB_KEY_Up ? +1 : -1);
+			if (off >= 0
+			    && st_grid_view_scroll(w->g, (int)(off - (long)w->g->view)))
+				w->dirty = true;
+			return;
+		}
+		if (shift && sym == XKB_KEY_Home) {
+			if (st_grid_view_scroll(w->g, INT_MAX / 2))
+				w->dirty = true;
+			return;
+		}
+		if (shift && sym == XKB_KEY_End) {
+			if (st_grid_view_reset(w->g))
+				w->dirty = true;
+			return;
+		}
+
+		/* ⚠ TYPING SNAPS BACK TO LIVE. Somebody reading history who starts a
+		 * command must see what they are typing — a terminal that leaves the
+		 * view where it was looks like the keyboard has stopped working. */
+		if (st_grid_view_reset(w->g))
+			w->dirty = true;
+	}
 
 	char out[64];
 	int  len = 0;

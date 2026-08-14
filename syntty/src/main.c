@@ -50,6 +50,8 @@ static const char *usage_text =
 "  --no-cursor               render: leave the cursor cell unpainted\n"
 "  --probe=COL,ROW           render: print that cell's background colour\n"
 "  --no-deadline             win: paint on the frame callback, not the deadline\n"
+"  --view=N                  scroll the view N lines back before dumping\n"
+"  --jump=N                  jump back N prompt marks before dumping\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
@@ -64,6 +66,8 @@ typedef struct {
 	bool     no_cursor;
 	const char *probe;
 	bool     no_deadline;
+	int      view;
+	int      jump;      /* prompts to jump back before dumping */
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -108,6 +112,35 @@ static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 	if (vt->title[0])
 		fprintf(stderr, "title         %s\n", vt->title);
 
+	/* ── what the shell told us (OSC 133) ───────────────────────────────────
+	 *
+	 * Printed so the marks can be asserted without a window: which rows are
+	 * prompts, which are output, and what each command did. */
+	if (vt->ncmds) {
+		fprintf(stderr, "commands      %u recorded\n", vt->ncmds);
+		uint32_t first = vt->ncmds > ST_MAX_CMDS ? vt->ncmds - ST_MAX_CMDS : 0;
+		for (uint32_t i = first; i < vt->ncmds; i++) {
+			const st_cmd_t *c = &vt->cmds[i % ST_MAX_CMDS];
+			fprintf(stderr, "  cmd %u       row %u, %.2f ms, status ",
+			        i, c->row, (double)c->duration_ns / 1e6);
+			/* ⚠ UNKNOWN IS NOT ZERO. A shell that emits a bare `D` has said
+			 * it finished and nothing else; printing that as 0 is how a
+			 * failing command comes back looking successful. */
+			if (c->status < 0) fprintf(stderr, "unknown\n");
+			else               fprintf(stderr, "%d\n", c->status);
+		}
+	}
+	{
+		int prompts = 0, outputs = 0;
+		for (int y = 0; y < g->rows; y++) {
+			if (g->screen[y].mark == ST_MARK_PROMPT) prompts++;
+			if (g->screen[y].mark == ST_MARK_OUTPUT) outputs++;
+		}
+		if (prompts || outputs)
+			fprintf(stderr, "marks         %d prompt, %d output (on screen)\n",
+			        prompts, outputs);
+	}
+
 	fprintf(stderr, "kbd flags     %u%s\n", st_vt_kbd_flags(vt),
 	        st_vt_kbd_flags(vt) ? "" : " (legacy encodings)");
 
@@ -144,6 +177,14 @@ static int cmd_dump(const opts_t *o, const char *path)
 	 * the two must produce identical screens — see the split-feed assertions.
 	 * A parser is only stream-safe if something proves it. */
 	st_vt_feed(&vt, buf, len);
+	if (o->view)
+		st_grid_view_scroll(&g, o->view);
+	for (int j = 0; j < o->jump; j++) {
+		long off = st_grid_find_prompt(&g, +1);
+		if (off < 0)
+			break;
+		st_grid_view_scroll(&g, (int)(off - (long)g.view));
+	}
 
 	if (o->with_scrollback)
 		st_dump_scrollback(&g, stdout);
@@ -337,6 +378,8 @@ static int cmd_render(const opts_t *o, const char *path)
 	st_vt_init(&vt, &g);
 	st_vt_feed(&vt, buf, len);
 	free(buf);
+	if (o->view)
+		st_grid_view_scroll(&g, o->view);
 
 	char *err = NULL;
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
@@ -704,7 +747,8 @@ int main(int argc, char **argv)
 		.cols = 80, .rows = 24, .scrollback = 1000,
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
 		.font = NULL, .font_size = 14.0, .out = NULL, .no_cursor = false,
-		.probe = NULL, .no_deadline = false
+		.probe = NULL, .no_deadline = false,
+		.view = 0, .jump = 0
 	};
 	size_t split = 0;
 
@@ -744,6 +788,8 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--no-cursor"))        o.no_cursor = true;
 		else if (!strncmp(a, "--probe=", 8))       o.probe = a + 8;
 		else if (!strcmp(a, "--no-deadline"))      o.no_deadline = true;
+		else if (!strncmp(a, "--view=", 7))        o.view = atoi(a + 7);
+		else if (!strncmp(a, "--jump=", 7))        o.jump = atoi(a + 7);
 		else if (!strcmp(a, "--styled"))           o.styled = true;
 		else if (!strcmp(a, "--scrollback-too"))   o.with_scrollback = true;
 		else if (!strcmp(a, "--stats"))            o.stats = true;

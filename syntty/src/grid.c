@@ -381,6 +381,91 @@ static void dirty_range(st_grid_t *g, int from, int to)
 		g->screen[y].dirty = true;
 }
 
+/* ── the scrollback viewport ────────────────────────────────────────────────
+ *
+ * The scrollback is a ring of `count` rows, oldest first once unwound. With a
+ * view offset of N, screen line 0 shows the row N lines above the live screen's
+ * line 0 — so lines below N come from the live screen, shifted down, and lines
+ * above it come from history.
+ *
+ * ⚠ The offset is bounded by what is actually KEPT, not by what has ever been
+ * written: scrolling back further than the scrollback goes must stop, not wrap
+ * around to something arbitrary. */
+const st_row_t *st_grid_view_row(const st_grid_t *g, int y)
+{
+	if (y < 0 || y >= g->rows)
+		return NULL;
+	if (g->view == 0)
+		return &g->screen[y];
+
+	long want = (long)y - (long)g->view;
+	if (want >= 0)
+		return &g->screen[want];      /* still the live screen, pushed down */
+
+	/* -1 is the newest scrollback row, -2 the one before it. */
+	long back = -want;                /* 1 .. count */
+	if (back > (long)g->count)
+		return NULL;                  /* older than anything we kept */
+
+	uint32_t idx = (g->head + g->limit - (uint32_t)back) % g->limit;
+	return &g->scroll[idx];
+}
+
+bool st_grid_view_scroll(st_grid_t *g, int delta)
+{
+	long v = (long)g->view + delta;
+	if (v < 0)
+		v = 0;
+	if (v > (long)g->count)
+		v = (long)g->count;
+	if ((uint32_t)v == g->view)
+		return false;
+	g->view = (uint32_t)v;
+	st_grid_dirty_all(g);
+	return true;
+}
+
+bool st_grid_view_reset(st_grid_t *g)
+{
+	if (g->view == 0)
+		return false;
+	g->view = 0;
+	st_grid_dirty_all(g);
+	return true;
+}
+
+/* Walk outward from where we are looking until a row carrying a prompt mark
+ * turns up, and return the offset that puts it at the TOP of the window —
+ * which is what "jump to the previous prompt" has to mean, or the thing jumped
+ * to is off the bottom of the screen. */
+long st_grid_find_prompt(const st_grid_t *g, int dir)
+{
+	long limit = (long)g->count + g->rows;
+	for (long off = (long)g->view + dir; off >= 0 && off <= limit; off += dir) {
+		/* The row that would be at the top of the window at this offset. */
+		long want = -off;
+		const st_row_t *r;
+		if (want >= 0)
+			r = &g->screen[0];
+		else {
+			long back = off;
+			if (back > (long)g->count)
+				break;
+			if (back == 0)
+				r = &g->screen[0];
+			else {
+				uint32_t idx = (g->head + g->limit - (uint32_t)back) % g->limit;
+				r = &g->scroll[idx];
+			}
+		}
+		if (r && r->mark == ST_MARK_PROMPT)
+			return off;
+		if (dir < 0 && off == 0)
+			break;
+	}
+	return -1;
+}
+
 bool st_grid_row_dirty(const st_grid_t *g, int row)
 {
 	return row >= 0 && row < g->rows && g->screen[row].dirty;
@@ -799,7 +884,7 @@ static void dump_row(const st_row_t *r, FILE *out)
 void st_dump_text(const st_grid_t *g, FILE *out)
 {
 	for (uint16_t y = 0; y < g->rows; y++)
-		dump_row(&g->screen[y], out);
+		dump_row(st_grid_view_row(g, y), out);
 }
 
 void st_dump_scrollback(const st_grid_t *g, FILE *out)

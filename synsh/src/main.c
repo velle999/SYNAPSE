@@ -145,6 +145,13 @@ static int run_interactive(synsh_state_t *s) {
         /* Add to history */
         synsh_history_add(s, line);
 
+        /* C: the command was submitted, so whatever follows is its OUTPUT and
+         * the clock starts now. Emitted here rather than inside each dispatch
+         * branch below, because every branch is a command as far as the person
+         * who typed it is concerned — an intent, a built-in and an AI
+         * translation all take time and all either work or do not. */
+        synsh_mark_output_start(s);
+
         /* The requests synsh answers exactly (intents.c), before classify.
          *
          * It has to be before: `play` is a real program — sox ships it, and
@@ -159,6 +166,7 @@ static int run_interactive(synsh_state_t *s) {
             int ic = 0;
             if (synsh_intent(s, line, &ic, false)) {
                 s->last_exit = ic;
+                synsh_mark_command_done(s, ic);
                 free(line);
                 continue;
             }
@@ -229,6 +237,12 @@ static int run_interactive(synsh_state_t *s) {
             }
             break;
         }
+
+        /* D: finished, with the status. One place for every branch above, so a
+         * dispatch path added later cannot forget it — the only branch that
+         * does not reach here is the intent one, which returns early and
+         * carries its own. */
+        synsh_mark_command_done(s, s->last_exit);
 
         free(line);
     }

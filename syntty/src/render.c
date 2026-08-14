@@ -233,7 +233,15 @@ static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
 	if (y0 + ch > h)
 		return 0;
 
-	const st_row_t *rw = &g->screen[row];
+	/* Through the viewport, not straight at the live screen — this is the one
+	 * place in the program that knows the reader may be looking at history. */
+	const st_row_t *rw = st_grid_view_row(g, row);
+	if (!rw) {
+		/* Above the oldest line kept: background, not stale pixels. */
+		fill_rect(px, stride_px, 0, y0,
+		          st_font_cell_w(r->font) * g->cols, ch, r->def_bg);
+		return 0;
+	}
 	size_t drawn = 0;
 
 	for (int col = 0; col < g->cols; ) {
@@ -271,7 +279,10 @@ static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
 		if (col + span > g->cols)
 			span = 1;
 
-		bool cursor = r->show_cursor && row == g->cy && col == g->cx;
+		/* ⚠ ONLY WHEN LIVE. A cursor painted over scrollback is a cursor in a
+		 * position it cannot be in, and it moves as the history scrolls. */
+		bool cursor = r->show_cursor && g->view == 0
+		           && row == g->cy && col == g->cx;
 		draw_cell(r, px, stride_px, x0, y0, cw * span, ch,
 		          cell, st_style_get(g, cell->style), cursor);
 		drawn++;
