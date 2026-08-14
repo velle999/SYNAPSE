@@ -16,7 +16,16 @@ cc = meson.get_compiler('c')
 # See the file header in include/syntty.h.
 util_dep = cc.find_library('util')
 
+# Glyphs. freetype rasterises and fontconfig answers "which file is
+# Monospace" — the second one ONCE, on a cold cache, because the answer is
+# written to $XDG_CACHE_HOME/syntty/fonts.v1 and a later start hands the path
+# straight to freetype. That lookup is one of the three things kitty pays 230 ms
+# for; see the file header in src/font.c.
+freetype_dep   = dependency('freetype2')
+fontconfig_dep = dependency('fontconfig')
+
 syntty_sources = files(
+  'src/font.c',
   'src/grid.c',
   'src/main.c',
   'src/pty.c',
@@ -27,7 +36,7 @@ syntty_sources = files(
 syntty = executable('syntty',
   syntty_sources,
   include_directories : include_directories('include'),
-  dependencies : [util_dep],
+  dependencies : [util_dep, freetype_dep, fontconfig_dep],
   install : true)
 
 # ⚠ The suite runs a pty and a benchmark, so it is slower than a pure unit

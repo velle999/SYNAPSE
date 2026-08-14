@@ -63,6 +63,7 @@ void *xmalloc(size_t n);
 void *xcalloc(size_t n, size_t size);
 void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
+char *xasprintf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void  die(const char *fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
 
 /* Monotonic nanoseconds. The benchmark's only clock — CLOCK_MONOTONIC, never
@@ -276,6 +277,55 @@ typedef struct {
 
 void st_vt_init(st_vt_t *vt, st_grid_t *g);
 void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len);
+
+/* ── font.c ─────────────────────────────────────────────────────────────── */
+
+/* A rasterised glyph: 8-bit COVERAGE, not colour.
+ *
+ * Coverage is what makes the atlas worth having. The same 'e' is drawn in
+ * white, in red, on a selected background and dimmed, and if the atlas stored
+ * pixels it would need one entry per combination. Storing how much of each
+ * pixel the glyph covers means render.c blends it against whatever fg and bg
+ * the cell carries, and one rasterisation serves them all.
+ *
+ * `w` is cell_w for a normal glyph and twice that for a wide one, so the blit
+ * loop reads the extent from the glyph rather than re-deriving it. */
+typedef struct {
+	uint8_t *bits;    /* w * h coverage, row-major, owned by the font */
+	uint16_t w, h;
+	uint8_t  cols;    /* 1, or 2 for a double-width glyph */
+} st_glyph_t;
+
+typedef struct st_font st_font_t;
+
+/* Open a font by fontconfig family name ("monospace", "JetBrains Mono", …).
+ * Returns NULL and sets *err to a malloc'd sentence on failure. */
+st_font_t *st_font_open(const char *family, double size_px, char **err);
+void       st_font_close(st_font_t *f);
+
+/* The cell box every row and column is laid out on. Taken from the regular
+ * face and shared by all four, because the grid is one box. */
+int st_font_cell_w(const st_font_t *f);
+int st_font_cell_h(const st_font_t *f);
+int st_font_baseline(const st_font_t *f);
+
+/* Rasterise-or-recall. Never returns NULL: anything with no glyph comes back
+ * as the shared blank box, so the blit loop holds no NULL check. `attrs` is
+ * the ST_* bits — only ST_BOLD and ST_ITALIC pick a face. */
+const st_glyph_t *st_font_glyph(st_font_t *f, uint32_t cp, uint16_t attrs);
+
+/* What the font layer had to do to answer, for `syntty font`. The startup
+ * claim is only a claim until something prints where the milliseconds went. */
+typedef struct {
+	bool     used_fontconfig;   /* false means the cache answered */
+	double   open_ms;           /* everything: lookup, face, ASCII atlas */
+	double   lookup_ms;         /* the path question alone */
+	uint32_t ascii_glyphs;
+	size_t   atlas_bytes;
+	char     path[512];         /* the file actually opened */
+} st_font_stats_t;
+
+const st_font_stats_t *st_font_get_stats(const st_font_t *f);
 
 /* ── pty.c ──────────────────────────────────────────────────────────────── */
 

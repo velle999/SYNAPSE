@@ -57,6 +57,24 @@ char *xstrdup(const char *s)
 	return p;
 }
 
+/* printf into a fresh allocation. Same contract as the rest of this file: it
+ * either returns a string or it does not return. */
+char *xasprintf(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	int n = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+	if (n < 0)
+		die("xasprintf: cannot format");
+
+	char *p = xmalloc((size_t)n + 1);
+	va_start(ap, fmt);
+	vsnprintf(p, (size_t)n + 1, fmt, ap);
+	va_end(ap);
+	return p;
+}
+
 uint64_t now_ns(void)
 {
 	struct timespec ts;

@@ -292,6 +292,90 @@ fi
 rate=$("$ST" bench "$T/bench.txt" --runs=3 | awk '/^best/{print $4}')
 ok "throughput on this machine: ${rate} MB/s"
 
+# ── the font lookup, and the cache that exists to skip it ───────────────────
+#
+# ⚠ THE ONE PART OF THIS FILE THAT NEEDS SOMETHING INSTALLED. The rule at the
+# top says these tests run with no fonts, and that rule is kept by SKIPPING
+# here rather than by failing: a machine with no monospace font is a real
+# machine (a container, a build host), and a suite that goes red on it teaches
+# people to ignore it. What is asserted is the CACHE's behaviour, which is the
+# part with logic in it.
+#
+# XDG_CACHE_HOME is redirected into the temp dir for every one of these. A test
+# suite that writes to the developer's real cache is one that behaves
+# differently the second time it is run, and that is exactly the bug the cache
+# itself can have.
+FC="$T/cache"
+mkdir -p "$FC"
+fontrun() { XDG_CACHE_HOME="$FC" "$ST" font "$@" 2>&1; }
+
+if ! fontrun >/dev/null 2>&1; then
+    echo "  skip  font lookup (no font on this machine — see the rule at the top)"
+else
+    CACHEFILE="$FC/syntty/fonts.v1"
+
+    # COLD then WARM. The claim is that the second start does not ask
+    # fontconfig; if it does, every start pays the lookup and the cache is
+    # decoration. Asserted on which SOURCE answered, not on a duration —
+    # a timing threshold here would be flaky on a loaded machine.
+    rm -rf "$FC"; mkdir -p "$FC"
+    fontrun | grep -q 'via fontconfig'
+    check "the first start asks fontconfig" $?
+
+    fontrun | grep -q 'via cache'
+    check "...and the second start does not" $?
+
+    # The glyphs must be the SAME ones. A cache that answers instantly with a
+    # different font is worse than no cache, and both runs print the file.
+    a=$(fontrun | awk '/^file/{print $2}')
+    rm -rf "$FC"; mkdir -p "$FC"
+    b=$(fontrun | awk '/^file/{print $2}')
+    [ -n "$a" ] && [ "$a" = "$b" ] \
+        && ok "...and answers with the same font the lookup would have" \
+        || bad "...and answers with the same font the lookup would have"
+
+    # ⚠ THE INVALIDATION, which is what makes the cache honest rather than
+    # merely fast. A blindly-trusted cache survives the font being upgraded,
+    # renamed or removed, and the failure lands weeks after the package upgrade
+    # that caused it, looking like a broken terminal.
+    fontrun >/dev/null           # ensure it is warm and valid
+    real=$(fontrun | awk '/^file/{print $2}')
+
+    printf 'syntty-fonts-1\nmonospace\t0\t596428\t1785569937\t%s/gone.ttf\n' "$T" > "$CACHEFILE"
+    fontrun | grep -q 'via fontconfig'
+    check "a cache naming a font that is gone is not believed" $?
+
+    printf 'syntty-fonts-1\nmonospace\t0\t999999\t1785569937\t%s\n' "$real" > "$CACHEFILE"
+    fontrun | grep -q 'via fontconfig'
+    check "a cache whose font changed size is not believed" $?
+
+    echo "not a cache at all" > "$CACHEFILE"
+    fontrun | grep -q 'via fontconfig'
+    check "a cache with the wrong header is not believed" $?
+
+    # ...and having disbelieved it, it must REWRITE it. A cache that is
+    # correctly rejected every time is a cache that never works again.
+    fontrun | grep -q 'via cache'
+    check "...and every rejection repairs the cache" $?
+
+    # A face that loads and rasterises nothing looks identical, from the
+    # outside, to one that works. `font` fails rather than reporting success
+    # with an all-zero atlas — see cmd_font.
+    fontrun | grep -qE '^ink +[1-9]'
+    check "the rasteriser produced actual ink, not an empty atlas" $?
+
+    # The cell box is what the whole grid is laid out on. Zero or negative
+    # would divide by zero in the renderer, far from here.
+    fontrun | awk '/^cell/{split($2,d,"x"); exit !(d[1] > 0 && d[2] > 0)}'
+    check "the cell box has a positive width and height" $?
+
+    # A font nobody has must not silently become a font somebody has WITHOUT
+    # saying so — fontconfig always matches something, so this asserts the
+    # request reached it rather than that it failed.
+    fontrun --font=NoSuchFontExistsAnywhere1234 | grep -q '^file'
+    check "an unknown family still resolves (fontconfig always substitutes)" $?
+fi
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
