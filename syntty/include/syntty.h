@@ -164,6 +164,26 @@ typedef struct {
 
 enum { ST_MARK_NONE = 0, ST_MARK_PROMPT = 1, ST_MARK_OUTPUT = 2 };
 
+/* ── what is highlighted ────────────────────────────────────────────────────
+ *
+ * Two ends, and both are ABSOLUTE LINE NUMBERS rather than screen rows — see
+ * `scrolled` below. A selection kept in screen coordinates slides off the text
+ * it was made on the moment anything prints, and the person watches their
+ * highlight crawl up the window over words they never chose.
+ *
+ * `mode` is what a click COUNT meant, and the expansion is derived rather than
+ * stored: a double-click that becomes a drag keeps snapping to whole words,
+ * which is what it does everywhere else and is impossible if the word
+ * boundaries were resolved once at the click. */
+enum { ST_SEL_CHAR = 0, ST_SEL_WORD = 1, ST_SEL_LINE = 2 };
+
+typedef struct {
+	bool     active;
+	int64_t  a_line, b_line;   /* anchor, and the end being dragged */
+	int      a_col,  b_col;
+	uint8_t  mode;
+} st_sel_t;
+
 typedef struct {
 	uint16_t cols, rows;
 
@@ -174,6 +194,17 @@ typedef struct {
 	 * startup budget before it has drawn anything. */
 	st_row_t *scroll;
 	uint32_t  limit, count, head;
+
+	/* ── the one number that does not wrap ──────────────────────────────────
+	 *
+	 * How many rows have EVER scrolled off, which `count` cannot say once the
+	 * ring is full and it stops growing. It is what gives every line an
+	 * address that stays the same as output arrives, and the selection is
+	 * anchored to it: a person who highlights a filename in the middle of a
+	 * running build must keep that filename highlighted while the build pushes
+	 * it up the screen, not keep the same two screen rows lit up over whatever
+	 * text has since moved into them. */
+	uint64_t  scrolled;
 
 	/* Interned styles. Index 0 is always the default style, so a cleared
 	 * cell is all-zero and a fresh row is one calloc. */
@@ -205,7 +236,14 @@ typedef struct {
 	 * care about. Kept here because the parser is what is told about them. */
 	bool     cursor_visible;   /* DECTCEM, ?25 */
 	bool     bracketed_paste;  /* ?2004 */
-	uint8_t  mouse_mode;       /* 0 off, or 1000 / 1002 / 1003 */
+	/* ⚠ uint16_t, AND THIS WAS A uint8_t FOR A WHOLE RELEASE. The values
+	 * stored here are 1000, 1002 and 1003 — none of which fit in a byte. They
+	 * came back as 232, 234 and 235, still distinct from each other and still
+	 * non-zero, so the test that asserted the modes were "understood rather
+	 * than counted as unknown" passed on every one of them. Nothing compared
+	 * the field against 1000 until the input layer existed, which is exactly
+	 * when it would have started sending the wrong events. */
+	uint16_t mouse_mode;       /* 0 off, or 1000 / 1002 / 1003 */
 	bool     mouse_sgr;        /* ?1006 — extended coordinates */
 
 	/* Recycled full-width row buffers. See row_alloc() in grid.c: the malloc
@@ -233,6 +271,11 @@ typedef struct {
 	bool     wrap_next;      /* the cursor is parked past the last column */
 	bool     autowrap;
 	bool     origin;         /* DECOM: cursor addressing is region-relative */
+
+	/* What the pointer has highlighted. On the grid rather than in the window
+	 * because the renderer has to draw it and the copy has to read it, and
+	 * both already hold this. */
+	st_sel_t sel;
 } st_grid_t;
 
 /* Columns a codepoint occupies: 0, 1 or 2. NOT wcwidth() — see grid.c. */
@@ -323,6 +366,32 @@ long st_grid_find_prompt(const st_grid_t *g, int dir);
  * the line is one line, and pasting it back with a newline in the middle runs
  * half a command. See the definition. */
 char *st_grid_selection_text(const st_grid_t *g, int c0, int r0, int c1, int r1);
+
+/* ── selecting with the pointer ─────────────────────────────────────────────
+ *
+ * The window drives these with VIEW coordinates — the cell under the pointer —
+ * and they store absolute lines, so the highlight stays on its text while the
+ * screen scrolls under it.
+ *
+ * Each of them marks what it changed dirty, including what it stopped
+ * highlighting: a selection that is cleared but not repainted leaves the old
+ * highlight on screen, which is indistinguishable from a selection that is
+ * still there and cannot be copied. */
+void  st_sel_start(st_grid_t *g, int col, int row, int mode);
+void  st_sel_extend(st_grid_t *g, int col, int row);
+void  st_sel_clear(st_grid_t *g);
+bool  st_sel_active(const st_grid_t *g);
+/* The selected span on one visible row, in columns, inclusive. False when this
+ * row has nothing selected — which is most rows, most of the time. */
+bool  st_sel_row_span(const st_grid_t *g, int row, int *from, int *to);
+/* What the selection would copy. NULL when there is none — distinct from an
+ * empty string, which is what selecting a blank line gives. */
+char *st_sel_text(const st_grid_t *g);
+
+/* The absolute line under a visible row, and the visible row of an absolute
+ * line (which may be off-screen in either direction). */
+int64_t st_grid_abs_line(const st_grid_t *g, int row);
+int     st_grid_row_of(const st_grid_t *g, int64_t line);
 
 bool st_grid_row_dirty(const st_grid_t *g, int row);
 void st_grid_clear_dirty(st_grid_t *g);
@@ -665,6 +734,50 @@ void st_pty_set_nonblocking(st_pty_t *p);
  * status. The window's status IS the child's — see the definition. */
 int  st_pty_reap(st_pty_t *p);
 
+/* ── mouse.c: telling the child where the pointer is ────────────────────────
+ *
+ * A program that turns on mouse reporting (?1000, ?1002, ?1003) is asking to
+ * be told about the pointer in escape sequences on its own input, and this is
+ * the encoder for them. It is a PURE FUNCTION, deliberately: the seat, the
+ * compositor and the window are all above it, so every rule below is asserted
+ * by `syntty mouse` on a machine with no display and no person — which is the
+ * only way any of this gets tested, because input is never synthesised on a
+ * live session.
+ *
+ * ⚠ THE THREE MODES ARE NOT INTERCHANGEABLE and the difference is what gets
+ * sent when nothing is pressed. 1000 is buttons only. 1002 adds motion WHILE A
+ * BUTTON IS HELD, which is what a program needs to implement dragging. 1003 is
+ * every motion, which is a packet per pointer step — a program that asked for
+ * 1000 and is handed 1003's traffic gets a flood it never asked for and cannot
+ * turn off. */
+enum { ST_MOUSE_PRESS = 0, ST_MOUSE_RELEASE = 1, ST_MOUSE_MOTION = 2 };
+
+/* The protocol's modifier bits — these ARE the wire values, not our own. */
+enum { ST_MOUSE_SHIFT = 4, ST_MOUSE_ALT = 8, ST_MOUSE_CTRL = 16 };
+
+/* The button numbers as they go on the wire. ⚠ NOT the evdev order: Wayland's
+ * BTN_RIGHT is 0x111 and BTN_MIDDLE is 0x112, so `code - BTN_LEFT` swaps the
+ * middle and right buttons in every event a program receives — a paste landing
+ * on right-click and a context menu on middle-click, from one subtraction. */
+enum {
+	ST_BTN_LEFT = 0, ST_BTN_MIDDLE = 1, ST_BTN_RIGHT = 2,
+	ST_BTN_NONE = 3,           /* motion with nothing held; also legacy release */
+	ST_BTN_WHEEL_UP = 64, ST_BTN_WHEEL_DOWN = 65,
+	ST_BTN_WHEEL_LEFT = 66, ST_BTN_WHEEL_RIGHT = 67,
+};
+
+/* Encode one pointer event, or produce nothing. `col` and `row` are ZERO-BASED
+ * cells; the +1 the wire wants is applied here so no caller has to remember it.
+ *
+ * Returns the byte count, and 0 for "this mode does not report that" — which is
+ * a normal answer, not a failure. When it is 0 and `why` is non-NULL it is set
+ * to a sentence saying which rule declined, because the two reasons a program
+ * sees nothing (the mode does not report it, or the terminal cannot say it) are
+ * different bugs. */
+size_t st_mouse_encode(uint16_t mode, bool sgr, int event, int button,
+                       unsigned mods, int col, int row,
+                       char *out, size_t cap, const char **why);
+
 /* ── win.c ──────────────────────────────────────────────────────────────── */
 
 /* What the window did, for the claim that it starts fast.
@@ -714,6 +827,13 @@ typedef struct {
 	/* Damage tracking's whole claim, as a ratio. `rows_possible` is what a
 	 * full repaint every frame would have cost. */
 	uint64_t rows_painted, rows_possible;
+
+	/* Pointer events handed to the child, and the ones the 1984 encoding
+	 * could not carry (past column 223, from a program that never asked for
+	 * ?1006). The second number is printed whenever it is not zero: a mouse
+	 * that works on the left of the window and stops on the right is a
+	 * memorable bug to be told about rather than to discover. */
+	uint64_t mouse_sent, mouse_dropped;
 } st_win_stats_t;
 
 /* Open a window and run until the child exits or it is closed. Everything it

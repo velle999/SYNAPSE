@@ -373,6 +373,10 @@ static void push_scrollback(st_grid_t *g, st_row_t *r)
 	g->scroll[g->head] = *r;
 	g->head = (g->head + 1) % g->limit;
 	g->count++;
+	/* ⚠ NOT the same number as `count`, which stops growing the moment the
+	 * ring is full. This one never does, and it is what gives a line an
+	 * address that survives the scrollback wrapping around underneath it. */
+	g->scrolled++;
 	r->cells = NULL;
 }
 
@@ -394,6 +398,45 @@ static void dirty_range(st_grid_t *g, int from, int to)
 		g->screen[y].dirty = true;
 }
 
+/* ── addressing a line that is no longer on the screen ──────────────────────
+ *
+ * Every row this program has ever shown has an absolute line number: the top of
+ * the live screen is line `scrolled`, the row above it is `scrolled - 1`, and
+ * those numbers do not change when the screen scrolls or when the scrollback
+ * ring wraps around. Screen rows are a VIEW of that sequence.
+ *
+ * ⚠ THIS IS THE ONE TRANSLATOR. st_grid_view_row is a wrapper over it — the
+ * viewport still does not leak into the parser, and there is still exactly one
+ * piece of code that knows how the ring is wound. */
+static const st_row_t *row_at_line(const st_grid_t *g, int64_t line)
+{
+	int64_t rel = line - (int64_t)g->scrolled;   /* 0 = top of the live screen */
+	if (rel >= 0)
+		return rel < g->rows ? &g->screen[rel] : NULL;
+
+	int64_t back = -rel;                          /* 1 = the newest history row */
+	if (back > (int64_t)g->count || g->limit == 0)
+		return NULL;                              /* older than anything kept */
+	uint32_t idx = (uint32_t)((g->head + g->limit - (uint32_t)back) % g->limit);
+	return &g->scroll[idx];
+}
+
+int64_t st_grid_abs_line(const st_grid_t *g, int row)
+{
+	return (int64_t)g->scrolled + row - (int64_t)g->view;
+}
+
+/* The visible row an absolute line is on. May be outside the window in either
+ * direction, and callers are expected to cope: a selection whose far end has
+ * scrolled off is still a selection. */
+int st_grid_row_of(const st_grid_t *g, int64_t line)
+{
+	int64_t row = line - (int64_t)g->scrolled + (int64_t)g->view;
+	if (row < -1)          return -1;
+	if (row > g->rows)     return g->rows;
+	return (int)row;
+}
+
 /* ── selected text ──────────────────────────────────────────────────────────
  *
  * The text between two cells, in reading order, as UTF-8.
@@ -408,26 +451,25 @@ static void dirty_range(st_grid_t *g, int from, int to)
  * Trailing blanks are trimmed per line, because the cells to the right of the
  * text are padding rather than spaces anybody typed.
  *
- * Coordinates are VIEW coordinates — what the person can see and clicked on —
- * so this resolves them through the scrollback the same way the renderer does. */
-char *st_grid_selection_text(const st_grid_t *g, int c0, int r0, int c1, int r1)
+ * Coordinates here are ABSOLUTE LINES — see st_grid_abs_line. The view-coordinate
+ * form below converts and calls this, so there is one implementation of what a
+ * copy contains rather than two that can disagree. */
+static char *sel_text_lines(const st_grid_t *g, int64_t r0, int c0,
+                            int64_t r1, int c1)
 {
 	/* Normalise: the person may have dragged upwards or right-to-left. */
 	if (r1 < r0 || (r1 == r0 && c1 < c0)) {
-		int t;
-		t = r0; r0 = r1; r1 = t;
-		t = c0; c0 = c1; c1 = t;
+		int64_t tl = r0; r0 = r1; r1 = tl;
+		int     tc = c0; c0 = c1; c1 = tc;
 	}
-	if (r0 < 0) r0 = 0;
-	if (r1 >= g->rows) r1 = g->rows - 1;
 	if (r1 < r0)
 		return xstrdup("");
 
 	size_t cap = 256, len = 0;
 	char *out = xmalloc(cap);
 
-	for (int y = r0; y <= r1; y++) {
-		const st_row_t *row = st_grid_view_row(g, y);
+	for (int64_t y = r0; y <= r1; y++) {
+		const st_row_t *row = row_at_line(g, y);
 		if (!row)
 			continue;
 
@@ -487,6 +529,196 @@ char *st_grid_selection_text(const st_grid_t *g, int c0, int r0, int c1, int r1)
 	return out;
 }
 
+/* The same, addressed the way a caller with a screen in front of it thinks —
+ * by the rows it can see. `dump --select` and the test suite use this. */
+char *st_grid_selection_text(const st_grid_t *g, int c0, int r0, int c1, int r1)
+{
+	if (r0 < 0) r0 = 0;
+	if (r1 < 0) r1 = 0;
+	if (r0 >= g->rows) r0 = g->rows - 1;
+	if (r1 >= g->rows) r1 = g->rows - 1;
+	return sel_text_lines(g, st_grid_abs_line(g, r0), c0,
+	                      st_grid_abs_line(g, r1), c1);
+}
+
+/* ── selecting with the pointer ─────────────────────────────────────────────
+ *
+ * ⚠ THE ENDS ARE ABSOLUTE LINES, NOT SCREEN ROWS, and that is the whole reason
+ * this state is on the grid rather than in the window. Somebody highlights a
+ * filename in a build's output; the build keeps printing; the filename moves up
+ * the screen. A selection stored as "row 12, columns 4 to 27" stays lit on rows
+ * 12 while entirely different text scrolls through them, and what a copy then
+ * produces has nothing to do with what is highlighted.
+ *
+ * What is NOT here, deliberately: dragging past the top of the window does not
+ * scroll the view. The selection can be extended over history by scrolling
+ * first with Shift+PageUp and then dragging, and auto-scroll is a timer plus a
+ * rate curve that nobody has measured yet. Copying works over rows that have
+ * since scrolled out — the ends are absolute and row_at_line reaches into the
+ * scrollback — so the limitation is reaching them with the pointer, not
+ * remembering them. */
+
+/* The characters a double-click treats as part of one word.
+ *
+ * Alphanumerics and underscore, plus the punctuation that occurs INSIDE paths,
+ * URLs and flags — which is the point of the feature: double-clicking
+ * /usr/lib/libfoo.so.1 or https://host/path?a=b must select the whole thing,
+ * and a set of "letters and digits" gives back `so` or `host`. Anything
+ * non-ASCII counts, because this cannot know which scripts have word breaks. */
+static bool word_char(uint32_t cp)
+{
+	if (cp >= 0x80)
+		return true;
+	if ((cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z')
+	    || (cp >= '0' && cp <= '9'))
+		return true;
+	switch (cp) {
+	case '_': case '-': case '.': case '/': case '~': case '?':
+	case '&': case '=': case '%': case '+': case '#': case '@':
+	case ':': case ',':
+		return true;
+	default:
+		return false;
+	}
+}
+
+static uint32_t cell_cp(const st_row_t *row, int col)
+{
+	if (!row || col < 0 || col >= row->len)
+		return 0;
+	return row->cells[col].cp;
+}
+
+/* Widen one end of the selection to a whole word or a whole line. Derived on
+ * every query rather than resolved at the click, so a double-click that turns
+ * into a drag keeps snapping word by word. */
+static void expand(const st_grid_t *g, uint8_t mode, int64_t line,
+                   int *from, int *to)
+{
+	if (mode == ST_SEL_LINE) {
+		*from = 0;
+		*to   = g->cols - 1;
+		return;
+	}
+	if (mode != ST_SEL_WORD)
+		return;
+
+	const st_row_t *row = row_at_line(g, line);
+	if (!row)
+		return;
+	/* A click on whitespace selects that run of whitespace, not the word
+	 * beside it — otherwise a double-click in the gap between two words picks
+	 * one of them, apparently at random. */
+	bool want = word_char(cell_cp(row, *from));
+	while (*from > 0 && word_char(cell_cp(row, *from - 1)) == want)
+		(*from)--;
+	while (*to < g->cols - 1 && word_char(cell_cp(row, *to + 1)) == want)
+		(*to)++;
+}
+
+/* The selection in reading order, with the mode's expansion applied. */
+static bool sel_ordered(const st_grid_t *g, int64_t *l0, int *c0,
+                        int64_t *l1, int *c1)
+{
+	const st_sel_t *s = &g->sel;
+	if (!s->active)
+		return false;
+
+	*l0 = s->a_line; *c0 = s->a_col;
+	*l1 = s->b_line; *c1 = s->b_col;
+	if (*l1 < *l0 || (*l1 == *l0 && *c1 < *c0)) {
+		int64_t tl = *l0; *l0 = *l1; *l1 = tl;
+		int     tc = *c0; *c0 = *c1; *c1 = tc;
+	}
+
+	if (s->mode != ST_SEL_CHAR) {
+		int lo = *c0, hi = *c0;
+		expand(g, s->mode, *l0, &lo, &hi);
+		*c0 = lo;
+		lo = *c1; hi = *c1;
+		expand(g, s->mode, *l1, &lo, &hi);
+		*c1 = hi;
+	}
+	return true;
+}
+
+/* Repaint what the selection covered, what it covers now, or both. Called
+ * before and after every change: a highlight that is removed without being
+ * repainted stays on the screen, and one that is added without being repainted
+ * is invisible until something else happens to dirty that row. */
+static void sel_dirty(st_grid_t *g)
+{
+	int64_t l0, l1;
+	int c0, c1;
+	if (!sel_ordered(g, &l0, &c0, &l1, &c1))
+		return;
+	dirty_range(g, st_grid_row_of(g, l0), st_grid_row_of(g, l1));
+}
+
+void st_sel_start(st_grid_t *g, int col, int row, int mode)
+{
+	sel_dirty(g);
+	if (col < 0) col = 0;
+	if (col >= g->cols) col = g->cols - 1;
+
+	g->sel.active = true;
+	g->sel.mode   = (uint8_t)mode;
+	g->sel.a_line = g->sel.b_line = st_grid_abs_line(g, row);
+	g->sel.a_col  = g->sel.b_col  = col;
+	sel_dirty(g);
+}
+
+void st_sel_extend(st_grid_t *g, int col, int row)
+{
+	if (!g->sel.active)
+		return;
+	if (col < 0) col = 0;
+	if (col >= g->cols) col = g->cols - 1;
+
+	int64_t line = st_grid_abs_line(g, row);
+	if (line == g->sel.b_line && col == g->sel.b_col)
+		return;
+	sel_dirty(g);
+	g->sel.b_line = line;
+	g->sel.b_col  = col;
+	sel_dirty(g);
+}
+
+void st_sel_clear(st_grid_t *g)
+{
+	if (!g->sel.active)
+		return;
+	sel_dirty(g);
+	g->sel.active = false;
+}
+
+bool st_sel_active(const st_grid_t *g) { return g->sel.active; }
+
+bool st_sel_row_span(const st_grid_t *g, int row, int *from, int *to)
+{
+	int64_t l0, l1;
+	int c0, c1;
+	if (!sel_ordered(g, &l0, &c0, &l1, &c1))
+		return false;
+
+	int64_t line = st_grid_abs_line(g, row);
+	if (line < l0 || line > l1)
+		return false;
+
+	*from = (line == l0) ? c0 : 0;
+	*to   = (line == l1) ? c1 : g->cols - 1;
+	return *from <= *to;
+}
+
+char *st_sel_text(const st_grid_t *g)
+{
+	int64_t l0, l1;
+	int c0, c1;
+	if (!sel_ordered(g, &l0, &c0, &l1, &c1))
+		return NULL;      /* ⚠ not "", which is what a blank line copies */
+	return sel_text_lines(g, l0, c0, l1, c1);
+}
+
 /* ── the alternate screen ───────────────────────────────────────────────────
  *
  * A second screen, swapped in whole. Every full-screen program uses it — vim,
@@ -540,8 +772,10 @@ void st_grid_alt_screen(st_grid_t *g, bool enable, bool save_cursor)
 		g->cur_style = g->alt_style;
 	}
 
-	/* The whole surface is different now. */
+	/* The whole surface is different now — including anything that was
+	 * highlighted on it, which was highlighted on the OTHER screen. */
 	g->view = 0;
+	g->sel.active = false;
 	st_grid_dirty_all(g);
 }
 
@@ -559,20 +793,7 @@ const st_row_t *st_grid_view_row(const st_grid_t *g, int y)
 {
 	if (y < 0 || y >= g->rows)
 		return NULL;
-	if (g->view == 0)
-		return &g->screen[y];
-
-	long want = (long)y - (long)g->view;
-	if (want >= 0)
-		return &g->screen[want];      /* still the live screen, pushed down */
-
-	/* -1 is the newest scrollback row, -2 the one before it. */
-	long back = -want;                /* 1 .. count */
-	if (back > (long)g->count)
-		return NULL;                  /* older than anything we kept */
-
-	uint32_t idx = (g->head + g->limit - (uint32_t)back) % g->limit;
-	return &g->scroll[idx];
+	return row_at_line(g, st_grid_abs_line(g, y));
 }
 
 bool st_grid_view_scroll(st_grid_t *g, int delta)
@@ -971,6 +1192,15 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	st_grid_dirty_all(g);
 	if (cols == 0 || rows == 0 || (cols == g->cols && rows == g->rows))
 		return;
+
+	/* ⚠ THE SELECTION DOES NOT SURVIVE A RESIZE, and it is dropped rather than
+	 * adjusted. Shrinking the window discards rows off the TOP of the screen
+	 * without pushing them to the scrollback, so the absolute line every
+	 * highlighted end is pinned to no longer means what it meant — the
+	 * highlight would land on text a few rows away from the one it was made
+	 * on. A selection that quietly moves is worse than one that goes away
+	 * while the person is dragging the window edge. */
+	g->sel.active = false;
 
 	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
 	/* Anchor on the BOTTOM of the old screen: a shell prompt is at the

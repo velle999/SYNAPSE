@@ -69,11 +69,42 @@ presentation_c = custom_target('presentation-time-protocol.c',
   output  : 'presentation-time-protocol.c',
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# cursor-shape-v1: the pointer image, named rather than drawn.
+#
+# ⚠ A CLIENT THAT NEVER SETS A CURSOR DOES NOT GET A DEFAULT ONE — the pointer
+# keeps whatever image the last window asked for, so the terminal inherits an
+# editor's I-beam or a resize arrow and looks stuck. The alternative to this
+# protocol is libwayland-cursor: a theme loaded from disk, an image looked up
+# and a second shm buffer, at startup, for one I-beam.
+#
+# ⚠ AND IT DRAGS THE TABLET PROTOCOL IN WITH IT. cursor-shape has a request
+# taking a zwp_tablet_tool_v2, so the generated code references that interface
+# and will not link without it. Nothing here speaks to a tablet; the 3 KB of
+# generated table is the price of the one request we do send.
+cursor_shape_xml = protocol_dir / 'staging/cursor-shape/cursor-shape-v1.xml'
+tablet_xml       = protocol_dir / 'unstable/tablet/tablet-unstable-v2.xml'
+
+cursor_shape_h = custom_target('cursor-shape-v1-client-protocol.h',
+  input   : cursor_shape_xml,
+  output  : 'cursor-shape-v1-client-protocol.h',
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+cursor_shape_c = custom_target('cursor-shape-v1-protocol.c',
+  input   : cursor_shape_xml,
+  output  : 'cursor-shape-v1-protocol.c',
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
+tablet_c = custom_target('tablet-unstable-v2-protocol.c',
+  input   : tablet_xml,
+  output  : 'tablet-unstable-v2-protocol.c',
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 syntty_sources = files(
   'src/font.c',
   'src/graphics.c',
   'src/grid.c',
   'src/main.c',
+  'src/mouse.c',
   'src/pty.c',
   'src/render.c',
   'src/util.c',
@@ -85,6 +116,7 @@ syntty = executable('syntty',
   syntty_sources,
   xdg_shell_h, xdg_shell_c,
   presentation_h, presentation_c,
+  cursor_shape_h, cursor_shape_c, tablet_c,
   include_directories : include_directories('include'),
   dependencies : [util_dep, freetype_dep, fontconfig_dep,
                   wayland_client_dep, xkbcommon_dep],

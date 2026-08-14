@@ -174,17 +174,25 @@ static void fill_rect(uint32_t *px, int stride, int x, int y, int w, int h,
 static void draw_cell(const st_render_t *r, uint32_t *px, int stride,
                       int x0, int y0, int cw, int ch,
                       const st_cell_t *cell, const st_style_t *st,
-                      bool cursor)
+                      bool cursor, bool selected)
 {
 	uint32_t fg = resolve(r, st->fg, r->def_fg);
 	uint32_t bg = resolve(r, st->bg, r->def_bg);
 	uint16_t at = st->attrs;
 
-	/* REVERSE FIRST, then the cursor. A cell that is already reversed and
-	 * also under the cursor must come back to normal rather than staying
-	 * swapped — two inversions cancel, and a cursor sitting on reversed text
-	 * that stays reversed is invisible. */
+	/* REVERSE FIRST, then the selection, then the cursor. Each is an
+	 * inversion and they cancel in pairs, which is the behaviour to want: a
+	 * cursor sitting on reversed text that stayed reversed would be invisible.
+	 *
+	 * ⚠ THE SELECTION IS AN INVERSION AND NOT A COLOUR, on purpose. A fixed
+	 * highlight colour has to contrast with whatever is under it, and what is
+	 * under it here is arbitrary — a program can paint any of 16 million
+	 * backgrounds. Inverting whatever the cell already is contrasts with it by
+	 * construction, in every theme, without a palette entry anybody has to
+	 * check. See project_synui_pale_theme_legibility for how the other way
+	 * goes. */
 	if (at & ST_REVERSE) { uint32_t t = fg; fg = bg; bg = t; }
+	if (selected)        { uint32_t t = fg; fg = bg; bg = t; }
 	if (cursor)          { uint32_t t = fg; fg = bg; bg = t; }
 
 	if (at & ST_DIM)     fg = mix_half(fg, bg);
@@ -244,6 +252,11 @@ static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
 	}
 	size_t drawn = 0;
 
+	/* The highlighted span on this row, asked once rather than per cell: most
+	 * rows have none, and the answer cannot change halfway across a row. */
+	int sel_from = 0, sel_to = -1;
+	st_sel_row_span(g, row, &sel_from, &sel_to);
+
 	for (int col = 0; col < g->cols; ) {
 		int x0 = col * cw;
 		if (x0 + cw > w)
@@ -284,7 +297,8 @@ static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
 		bool cursor = r->show_cursor && g->view == 0
 		           && row == g->cy && col == g->cx;
 		draw_cell(r, px, stride_px, x0, y0, cw * span, ch,
-		          cell, st_style_get(g, cell->style), cursor);
+		          cell, st_style_get(g, cell->style), cursor,
+		          col >= sel_from && col <= sel_to);
 		drawn++;
 		col += span;
 	}

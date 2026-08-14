@@ -361,6 +361,141 @@ modes=$(printf '\033[?1000h\033[?1006h\033[?2004h\033[?25l' \
 printf '%s' "$modes" | grep -q 'unhandled     0 CSI'
 check "mouse, paste and cursor modes are understood, not counted as unknown" $?
 
+# ⚠ AND THE MODE IS THE NUMBER IT SAYS IT IS. The check above passed for a
+# whole release while the field holding it was a uint8_t: 1000 came back as
+# 232, 234 for 1002, 235 for 1003 — non-zero, distinct from each other, and
+# wrong. Nothing compared the value against 1000 until there was an input layer
+# to send events, which is precisely when it would have started sending the
+# wrong ones. A test that only asks "was it understood?" cannot see this.
+printf '%s' "$modes" | grep -q 'mouse         1000, SGR coordinates'
+check "...and ?1000 is recorded as 1000, not as a truncated byte" $?
+
+m3=$(printf '\033[?1003h' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
+printf '%s' "$m3" | grep -q 'mouse         1003, 1984 coordinates'
+check "...and ?1003 as 1003, with the old coordinates until ?1006 asks" $?
+
+# ── what a pointer event becomes on the child's input ───────────────────────
+#
+# ⚠ THE SEAT IS WHAT CANNOT BE TESTED HERE. There is no pointer in a headless
+# cage and input is never synthesised on a live session, so win.c's plumbing is
+# exercised by a person and nothing else. Every RULE about what should be sent
+# lives in mouse.c behind `syntty mouse`, which is why that subcommand exists.
+mouse() { "$ST" mouse "$@" 2>&1; }
+
+e=$(mouse --mode=1000 press:left@10,5)
+case "$e" in *'ESC[M +&'*) ok "a left click is the 1984 encoding, offset by 32" ;;
+             *) bad "a left click is the 1984 encoding, offset by 32 ($e)" ;; esac
+
+# ⚠ X10 CANNOT SAY WHICH BUTTON CAME UP: every release is button 3. Reporting
+# the real button would be a valid-looking sequence meaning a press of a button
+# that does not exist on most mice.
+e=$(mouse --mode=1000 release:right@10,5)
+case "$e" in *'ESC[M#+&'*) ok "...and a release is button 3, because it cannot say which" ;;
+             *) bad "...and a release is button 3, because it cannot say which ($e)" ;; esac
+
+# The three modes differ ONLY in what motion does, and that is the whole point
+# of keeping them apart: a program that asked for buttons and is sent 1003's
+# motion gets a flood it never wanted and cannot switch off.
+e=$(mouse --mode=1000 move@11,5)
+case "$e" in *'reports buttons only'*) ok "?1000 sends no motion at all, and says why" ;;
+             *) bad "?1000 sends no motion at all, and says why ($e)" ;; esac
+
+e=$(mouse --mode=1002 move@11,5)
+case "$e" in *'only while a button is held'*) ok "?1002 sends no motion with nothing held" ;;
+             *) bad "?1002 sends no motion with nothing held ($e)" ;; esac
+
+e=$(mouse --mode=1002 move:left@11,5)
+case "$e" in *'ESC[M@,&'*) ok "...and motion while dragging carries the button, +32" ;;
+             *) bad "...and motion while dragging carries the button, +32 ($e)" ;; esac
+
+e=$(mouse --mode=1003 move@11,5)
+case "$e" in *'ESC[MC,&'*) ok "?1003 sends motion with nothing held (button 3 + 32)" ;;
+             *) bad "?1003 sends motion with nothing held ($e)" ;; esac
+
+# SGR, which exists because the 1984 encoding puts a coordinate in one byte.
+e=$(mouse --mode=1000 --sgr press:left@10,5)
+case "$e" in *'ESC[<0;11;6M'*) ok "?1006 sends decimal coordinates, one-based" ;;
+             *) bad "?1006 sends decimal coordinates, one-based ($e)" ;; esac
+
+e=$(mouse --mode=1000 --sgr release:middle@10,5)
+case "$e" in *'ESC[<1;11;6m'*) ok "...and its release is a lowercase m that names the button" ;;
+             *) bad "...and its release is a lowercase m that names the button ($e)" ;; esac
+
+# ⚠ THE COLUMN THAT BREAKS EVERYTHING. 32 + col + 1 has to fit in a byte, so
+# the last cell the old encoding can name is 223 — which is an ordinary width
+# on a wide monitor. Wrapping would report a confident click on a completely
+# different cell, so the event is dropped and the reason is said out loud.
+e=$(mouse --mode=1000 press:left@250,5)
+case "$e" in *'beyond column 223'*) ok "past column 223 the old encoding refuses, out loud" ;;
+             *) bad "past column 223 the old encoding refuses, out loud ($e)" ;; esac
+
+e=$(mouse --mode=1000 --sgr press:left@250,5)
+case "$e" in *'ESC[<0;251;6M'*) ok "...and ?1006 carries that column without trouble" ;;
+             *) bad "...and ?1006 carries that column without trouble ($e)" ;; esac
+
+# A wheel notch is a press with no release. Sending one gives every program a
+# button-up for a button that was never down.
+e=$(mouse --mode=1000 wheel:up@3,3)
+case "$e" in *'ESC[M`$$'*) ok "a wheel notch is button 64" ;;
+             *) bad "a wheel notch is button 64 ($e)" ;; esac
+
+e=$(mouse --mode=1000 release:up@3,3)
+case "$e" in *'no release'*) ok "...and it has no release event" ;;
+             *) bad "...and it has no release event ($e)" ;; esac
+
+# Modifiers ride in the button field, as the protocol's own bit values.
+e=$(mouse --mode=1000 --ctrl --shift press:middle@10,5)
+case "$e" in *'ESC[M5+&'*) ok "shift and ctrl are bits in the button field" ;;
+             *) bad "shift and ctrl are bits in the button field ($e)" ;; esac
+
+# With no mode set, nothing is sent whatever happens — a terminal that reports
+# the pointer to a program that never asked types garbage into it.
+e=$(mouse --mode=0 press:left@10,5)
+case "$e" in *'no program asked'*) ok "with no mode set nothing is reported at all" ;;
+             *) bad "with no mode set nothing is reported at all ($e)" ;; esac
+
+# ── selecting with the pointer, without a pointer ───────────────────────────
+selfile="$T/sel.txt"
+printf 'hello /usr/lib/libfoo.so world\r\nsecond line\r\n' > "$selfile"
+
+s=$("$ST" --cols=40 --rows=6 dump "$selfile" --click=0,0 --drag=4,0)
+[ "$s" = "hello" ] && ok "a press and a drag select what lies between them" \
+                   || bad "a press and a drag select what lies between them ('$s')"
+
+# ⚠ A DOUBLE-CLICK MUST TAKE THE WHOLE PATH. A word set of "letters and digits"
+# gives back `so`, which is the version of this feature nobody can use: the
+# reason to double-click in a terminal is almost always a path, a URL or a flag.
+s=$("$ST" --cols=40 --rows=6 dump "$selfile" --click=10,0,word)
+[ "$s" = "/usr/lib/libfoo.so" ] \
+    && ok "a double-click takes the whole path, not the part between the dots" \
+    || bad "a double-click takes the whole path, not the part between the dots ('$s')"
+
+# Clicking in the gap between two words selects the gap, not one of them.
+s=$("$ST" --cols=40 --rows=6 dump "$selfile" --click=5,0,word)
+[ "$s" = "" ] && ok "...and a double-click on whitespace selects the whitespace" \
+              || bad "...and a double-click on whitespace selects the whitespace ('$s')"
+
+s=$("$ST" --cols=40 --rows=6 dump "$selfile" --click=3,0,line)
+[ "$s" = "hello /usr/lib/libfoo.so world" ] \
+    && ok "a triple-click takes the line, trailing padding trimmed" \
+    || bad "a triple-click takes the line, trailing padding trimmed ('$s')"
+
+s=$("$ST" --cols=40 --rows=6 dump "$selfile" --click=6,0 --drag=5,1)
+[ "$s" = "$(printf '/usr/lib/libfoo.so world\nsecond')" ] \
+    && ok "a drag across rows keeps the newline the program really sent" \
+    || bad "a drag across rows keeps the newline the program really sent ('$s')"
+
+# ⚠ THE ONE THE ABSOLUTE ANCHOR EXISTS FOR. Somebody highlights a filename
+# while a build is running; the build keeps printing and pushes it up the
+# window. A selection stored as "row 0, columns 0 to 4" stays lit on row 0 over
+# whatever has since scrolled into it, and copies that instead. Three lines of
+# output arrive here, so a selection kept in screen coordinates comes back
+# empty — the rows it named are blank by then.
+s=$("$ST" --cols=40 --rows=6 dump "$selfile" --click=0,0 --drag=4,0 --scroll-after=3)
+[ "$s" = "hello" ] \
+    && ok "output arriving underneath a selection does not move it" \
+    || bad "output arriving underneath a selection does not move it ('$s')"
+
 # ── selection: what would actually land on the clipboard ────────────────────
 sel=$(printf 'hello world\r\nsecond line\r\n' | "$ST" --cols=20 --rows=4 dump - --select=0,0,4,0)
 [ "$sel" = "hello" ] && ok "a selection inside one line is that text" \
@@ -875,6 +1010,26 @@ else
     [ "$red" = "CC5555" ] \
         && ok "an indexed background reaches the pixels (ESC[41m)" \
         || bad "an indexed background reaches the pixels (ESC[41m, got $red)"
+
+    # ── the highlight, in pixels ────────────────────────────────────────────
+    #
+    # A selection that is remembered and not DRAWN is a selection nobody can
+    # see, and every check above it — the text it copies, the anchor it keeps —
+    # passes on a terminal that highlights nothing at all.
+    #
+    # It is an inversion rather than a colour on purpose: whatever a program
+    # has painted underneath, inverting it contrasts with it by construction,
+    # with no palette entry that has to be checked against every theme.
+    hi=$(printf 'hello' | XDG_CACHE_HOME="$FC" "$ST" --cols=8 --rows=1 render - \
+             --no-cursor --click=0,0 --drag=2,0 --probe=1,0 2>/dev/null | awk '{print $3}')
+    off=$(printf 'hello' | XDG_CACHE_HOME="$FC" "$ST" --cols=8 --rows=1 render - \
+              --no-cursor --click=0,0 --drag=2,0 --probe=4,0 2>/dev/null | awk '{print $3}')
+    [ -n "$hi" ] && [ "$hi" = "$dfl" ] \
+        && bad "a selected cell is drawn differently from an unselected one" \
+        || ok "a selected cell is drawn differently from an unselected one"
+    [ -n "$off" ] && [ "$off" = "$dfl" ] \
+        && ok "...and the cell past the end of the selection is untouched" \
+        || bad "...and the cell past the end of the selection is untouched ($off vs $dfl)"
 
     # 24-bit colour is a different encoding path from the 256 indexed ones,
     # and it is the one that passes the value through untouched.

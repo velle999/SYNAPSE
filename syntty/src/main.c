@@ -36,6 +36,7 @@ static const char *usage_text =
 "  syntty render [FILE]      parse a stream and paint it — see --out\n"
 "  syntty damage-check [F]   prove damage tracking draws the same pixels\n"
 "  syntty win [--] [CMD...]  a WINDOW, running CMD or your shell\n"
+"  syntty mouse EVENT...     what a pointer event becomes on the child's input\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
 "Options, before the subcommand:\n"
@@ -53,6 +54,12 @@ static const char *usage_text =
 "  --view=N                  scroll the view N lines back before dumping\n"
 "  --jump=N                  jump back N prompt marks before dumping\n"
 "  --select=C0,R0,C1,R1      print the text between two cells, as copied\n"
+"  --click=C,R[,word|line]   select as a click would, and print what it copies\n"
+"  --drag=C,R                ...dragged to there before the button came up\n"
+"  --scroll-after=N          ...then N lines of output arrive underneath it\n"
+"\n"
+"mouse: EVENT is press:BUTTON@COL,ROW, release:..., move[:BUTTON]@COL,ROW or\n"
+"wheel:up@COL,ROW; with --mode=1000|1002|1003, --sgr, --shift, --ctrl, --alt.\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
@@ -70,6 +77,13 @@ typedef struct {
 	int      view;
 	int      jump;      /* prompts to jump back before dumping */
 	const char *select; /* "c0,r0,c1,r1" — print that selection as text */
+	/* The pointer, without a pointer: where it was clicked, where it was
+	 * dragged to, and how much output arrived afterwards. The third one is
+	 * what proves a selection is anchored to its TEXT rather than to two
+	 * screen rows — see apply_pointer(). */
+	const char *click;
+	const char *drag;
+	int         scroll_after;
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -97,6 +111,46 @@ static uint8_t *slurp(const char *path, size_t *out_len)
 		fclose(f);
 	*out_len = len;
 	return buf;
+}
+
+/* ── selecting, with no pointer to select with ──────────────────────────────
+ *
+ * `--click=COL,ROW[,word|line]` and `--drag=COL,ROW` drive exactly the calls
+ * win.c makes when somebody presses, drags and releases the left button. The
+ * seat is what cannot be tested here; the selection is the part that can, and
+ * this is how the suite reaches it.
+ *
+ * `--scroll-after=N` then feeds N lines of output from the bottom of the
+ * screen, which is the case an anchored selection exists for: the text the
+ * person highlighted moves up the window, and what they copy must still be
+ * that text rather than whatever has since scrolled into those rows. */
+static void apply_pointer(const opts_t *o, st_vt_t *vt, st_grid_t *g)
+{
+	if (!o->click)
+		return;
+
+	int c = 0, r = 0;
+	char how[16] = "char";
+	if (sscanf(o->click, "%d,%d,%15s", &c, &r, how) < 2)
+		die("--click wants COL,ROW[,word|line]");
+	int mode = !strcmp(how, "word") ? ST_SEL_WORD
+	         : !strcmp(how, "line") ? ST_SEL_LINE : ST_SEL_CHAR;
+
+	st_sel_start(g, c, r, mode);
+	if (o->drag) {
+		int dc = 0, dr = 0;
+		if (sscanf(o->drag, "%d,%d", &dc, &dr) != 2)
+			die("--drag wants COL,ROW");
+		st_sel_extend(g, dc, dr);
+	}
+
+	/* From the LAST row, so each newline scrolls exactly one line rather than
+	 * walking the cursor down first — the count has to mean something. */
+	if (o->scroll_after > 0) {
+		st_vt_feed(vt, (const uint8_t *)"\033[999;1H", 8);
+		for (int i = 0; i < o->scroll_after; i++)
+			st_vt_feed(vt, (const uint8_t *)"\n", 1);
+	}
 }
 
 static void print_stats(const st_vt_t *vt, const st_grid_t *g)
@@ -146,6 +200,15 @@ static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 	fprintf(stderr, "kbd flags     %u%s\n", st_vt_kbd_flags(vt),
 	        st_vt_kbd_flags(vt) ? "" : " (legacy encodings)");
 
+	/* ⚠ THE NUMBER, NOT "on". The mode is stored as 1000, 1002 or 1003, and
+	 * for a whole release the field it lived in was a uint8_t — so it held
+	 * 232, 234 and 235 instead. All three are non-zero and all three are
+	 * distinct, which is everything a test asking "was the mode understood?"
+	 * checks. Printing the value is what makes that visible from outside. */
+	if (g->mouse_mode)
+		fprintf(stderr, "mouse         %u, %s coordinates\n", g->mouse_mode,
+		        g->mouse_sgr ? "SGR" : "1984");
+
 	/* What the parser owes the child. Printed ESCAPED, because the whole
 	 * point of a reply is that it is a control sequence — printing it raw
 	 * would have the enclosing terminal act on it rather than show it, which
@@ -186,6 +249,21 @@ static int cmd_dump(const opts_t *o, const char *path)
 		if (off < 0)
 			break;
 		st_grid_view_scroll(&g, (int)(off - (long)g.view));
+	}
+
+	apply_pointer(o, &vt, &g);
+	if (o->click) {
+		/* What a release would put on the clipboard. NULL means there is no
+		 * selection at all, which is not the same as one that copies nothing
+		 * — a distinction the output has to keep or a test cannot tell a
+		 * cleared selection from an empty line. */
+		char *sel = st_sel_text(&g);
+		puts(sel ? sel : "(no selection)");
+		free(sel);
+		st_vt_free(&vt);
+		st_grid_free(&g);
+		free(buf);
+		return 0;
 	}
 
 	/* The selection is printed INSTEAD of the screen: what it is for is
@@ -399,6 +477,9 @@ static int cmd_render(const opts_t *o, const char *path)
 	free(buf);
 	if (o->view)
 		st_grid_view_scroll(&g, o->view);
+	/* So the highlight can be proved in PIXELS: --click here and --probe on a
+	 * cell inside the selection says what colour it actually came out. */
+	apply_pointer(o, &vt, &g);
 
 	char *err = NULL;
 	st_font_t *f = st_font_open(o->font, o->font_size, &err);
@@ -543,6 +624,20 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 			        (unsigned long long)ws.rows_painted,
 			        (unsigned long long)ws.rows_possible,
 			        100.0 * (double)ws.rows_painted / (double)ws.rows_possible);
+
+		/* ⚠ THE DROPPED COUNT IS PRINTED WHENEVER IT IS NOT ZERO. A program
+		 * using the 1984 encoding cannot be told about a click past column
+		 * 223, so on a wide window its mouse works on the left half and does
+		 * nothing on the right — which looks like the program's bug and is
+		 * ours to report. */
+		if (ws.mouse_sent || ws.mouse_dropped)
+			fprintf(stderr, "mouse         %llu events reported%s",
+			        (unsigned long long)ws.mouse_sent,
+			        ws.mouse_dropped ? "" : "\n");
+		if (ws.mouse_dropped)
+			fprintf(stderr, ", %llu dropped past column 223 "
+			        "(the program never asked for ?1006)\n",
+			        (unsigned long long)ws.mouse_dropped);
 
 		/* ⚠ "not measured" is printed rather than zeros. A compositor with no
 		 * wp_presentation, or one timestamping on a clock that is not ours,
@@ -743,10 +838,123 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 	return rc;
 }
 
+/* ── the pointer, with no pointer ───────────────────────────────────────────
+ *
+ * Mouse support is one testable half and one untestable half. The untestable
+ * half is the seat: a compositor, a person, a real pointer, and input is never
+ * synthesised on a live session — so it is kept as thin as it can be in win.c.
+ * The testable half is every RULE about what should be sent, and this is where
+ * the suite gets at it:
+ *
+ *     syntty mouse --mode=1002 --sgr press:left@10,5 move@11,5 release:left@11,5
+ *
+ * Each event prints as the bytes it would put on the child's input, ESCAPED —
+ * printing them raw would have the terminal running the test act on them,
+ * which is how an assertion "passes" while the enclosing terminal quietly
+ * enters mouse mode. An event a mode does not report prints WHY, because
+ * "nothing was sent" and "nothing should have been sent" are the same output
+ * and very different facts. */
+static int mouse_button(const char *s, int *b)
+{
+	if (!strcmp(s, "left"))        *b = ST_BTN_LEFT;
+	else if (!strcmp(s, "middle")) *b = ST_BTN_MIDDLE;
+	else if (!strcmp(s, "right"))  *b = ST_BTN_RIGHT;
+	else if (!strcmp(s, "none"))   *b = ST_BTN_NONE;
+	else if (!strcmp(s, "up"))     *b = ST_BTN_WHEEL_UP;
+	else if (!strcmp(s, "down"))   *b = ST_BTN_WHEEL_DOWN;
+	else if (s[0] >= '0' && s[0] <= '9') *b = atoi(s);
+	else return 0;
+	return 1;
+}
+
+static int cmd_mouse(int argc, char **argv)
+{
+	uint16_t mode = 1000;
+	bool     sgr  = false;
+	unsigned mods = 0;
+	int      n_events = 0;
+
+	for (int i = 0; i < argc; i++) {
+		const char *a = argv[i];
+
+		if (!strncmp(a, "--mode=", 7))    { mode = (uint16_t)atoi(a + 7); continue; }
+		if (!strcmp(a, "--sgr"))          { sgr = true;  continue; }
+		if (!strcmp(a, "--shift"))        { mods |= ST_MOUSE_SHIFT; continue; }
+		if (!strcmp(a, "--ctrl"))         { mods |= ST_MOUSE_CTRL;  continue; }
+		if (!strcmp(a, "--alt"))          { mods |= ST_MOUSE_ALT;   continue; }
+		if (a[0] == '-')
+			die("mouse: unknown option '%s'", a);
+
+		/* EVENT[:BUTTON]@COL,ROW */
+		char verb[16] = {0}, btn[16] = "left";
+		int  col = 0, row = 0;
+		const char *at = strchr(a, '@');
+		if (!at || sscanf(at + 1, "%d,%d", &col, &row) != 2)
+			die("mouse: '%s' is not EVENT[:BUTTON]@COL,ROW", a);
+
+		size_t head = (size_t)(at - a);
+		const char *colon = memchr(a, ':', head);
+		size_t vlen = colon ? (size_t)(colon - a) : head;
+		if (vlen >= sizeof verb)
+			die("mouse: '%s' is not an event", a);
+		memcpy(verb, a, vlen);
+		if (colon) {
+			size_t blen = head - vlen - 1;
+			if (blen >= sizeof btn)
+				die("mouse: '%s' is not a button", a);
+			memcpy(btn, colon + 1, blen);
+			btn[blen] = '\0';
+		}
+
+		int event, button;
+		if (!strcmp(verb, "press"))        event = ST_MOUSE_PRESS;
+		else if (!strcmp(verb, "release")) event = ST_MOUSE_RELEASE;
+		else if (!strcmp(verb, "move"))    event = ST_MOUSE_MOTION;
+		else if (!strcmp(verb, "wheel"))   event = ST_MOUSE_PRESS;
+		else die("mouse: '%s' is not press, release, move or wheel", verb);
+
+		if (!strcmp(verb, "move") && !colon)
+			strcpy(btn, "none");
+		if (!mouse_button(btn, &button))
+			die("mouse: '%s' is not a button", btn);
+
+		char out[32];
+		const char *why = NULL;
+		size_t len = st_mouse_encode(mode, sgr, event, button, mods, col, row,
+		                             out, sizeof out, &why);
+		printf("%-24s ", a);
+		if (!len) {
+			printf("(nothing — %s)\n", why ? why : "no reason given");
+		} else {
+			for (size_t k = 0; k < len; k++) {
+				unsigned char c = (unsigned char)out[k];
+				if (c == 0x1b)                  fputs("ESC", stdout);
+				else if (c >= 0x20 && c < 0x7f) fputc(c, stdout);
+				else                            printf("\\x%02x", c);
+			}
+			printf("   (%zu bytes)\n", len);
+		}
+		n_events++;
+	}
+
+	if (!n_events) {
+		fprintf(stderr,
+		    "mouse: give it events — press:left@10,5 move@11,5 "
+		    "release:left@11,5\n"
+		    "       options: --mode=1000|1002|1003 --sgr --shift --ctrl --alt\n");
+		return 2;
+	}
+	return 0;
+}
+
 static int cmd_about(void)
 {
 	printf("syntty %s — the SynapseOS terminal\n\n", SYNTTY_VERSION);
-	printf("  stage        2 of 5: pty, parser, grid, glyphs and a window.\n");
+	printf("  built        pty, parser, grid, glyphs, a window, deadline\n");
+	printf("               rendering, damage tracking, the keyboard and\n");
+	printf("               graphics protocols, OSC 133 marks, the alternate\n");
+	printf("               screen, and the pointer.\n");
+	printf("  not yet      the clipboard, a config file, tabs, remote control\n");
 	printf("  cell         %zu bytes\n", sizeof(st_cell_t));
 	printf("  style        %zu bytes, interned\n", sizeof(st_style_t));
 	printf("  renderer     CPU, into wl_shm — nothing here links GL, and that\n");
@@ -767,7 +975,8 @@ int main(int argc, char **argv)
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
 		.font = NULL, .font_size = 14.0, .out = NULL, .no_cursor = false,
 		.probe = NULL, .no_deadline = false,
-		.view = 0, .jump = 0, .select = NULL
+		.view = 0, .jump = 0, .select = NULL,
+		.click = NULL, .drag = NULL, .scroll_after = 0
 	};
 	size_t split = 0;
 
@@ -788,7 +997,8 @@ int main(int argc, char **argv)
 	for (int i = 1; i < argc; i++) {
 		const char *a = argv[i];
 
-		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win"))) {
+		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win")
+		            || !strcmp(cmd, "mouse"))) {
 			child_at = (!strcmp(a, "--")) ? i + 1 : i;
 			break;
 		}
@@ -810,6 +1020,9 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--view=", 7))        o.view = atoi(a + 7);
 		else if (!strncmp(a, "--jump=", 7))        o.jump = atoi(a + 7);
 		else if (!strncmp(a, "--select=", 9))      o.select = a + 9;
+		else if (!strncmp(a, "--click=", 8))       o.click = a + 8;
+		else if (!strncmp(a, "--drag=", 7))        o.drag = a + 7;
+		else if (!strncmp(a, "--scroll-after=", 15)) o.scroll_after = atoi(a + 15);
 		else if (!strcmp(a, "--styled"))           o.styled = true;
 		else if (!strcmp(a, "--scrollback-too"))   o.with_scrollback = true;
 		else if (!strcmp(a, "--stats"))            o.stats = true;
@@ -845,6 +1058,9 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "win"))
 		return child_at ? cmd_win(&o, argc - child_at, argv + child_at)
 		                : cmd_win(&o, 0, NULL);
+	if (!strcmp(cmd, "mouse"))
+		return child_at ? cmd_mouse(argc - child_at, argv + child_at)
+		                : cmd_mouse(0, NULL);
 	if (!strcmp(cmd, "about"))
 		return cmd_about();
 

@@ -53,11 +53,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "xdg-shell-client-protocol.h"
 #include "presentation-time-client-protocol.h"
+#include "cursor-shape-v1-client-protocol.h"
 
 #define NBUFFERS 2
 
@@ -166,6 +168,26 @@ struct win {
 	struct xdg_wm_base   *wm_base;
 	struct wl_seat       *seat;
 	struct wl_keyboard   *kbd;
+	struct wl_pointer    *ptr;
+
+	/* ── the cursor image ───────────────────────────────────────────────────
+	 *
+	 * wp_cursor_shape_v1 names a shape and lets the COMPOSITOR draw it. The
+	 * alternative is libwayland-cursor: load a theme from disk, find the
+	 * "text" image, allocate a shm buffer, attach it to a surface — a file
+	 * search and a second buffer at startup, for an I-beam. This protocol is
+	 * one request.
+	 *
+	 * ⚠ A CLIENT THAT NEVER SETS A CURSOR DOES NOT GET A DEFAULT ONE. The
+	 * pointer keeps whatever image the last surface asked for, so the terminal
+	 * inherits an I-beam from an editor or, worse, a resize arrow — and it
+	 * looks like the compositor is stuck rather than like this program never
+	 * spoke. With no manager announced there is nothing to be done about it,
+	 * and that is stated here rather than left as a mystery. */
+	struct wp_cursor_shape_manager_v1 *shape_mgr;
+	struct wp_cursor_shape_device_v1  *shape_dev;
+	uint32_t enter_serial;
+	bool     cursor_is_text;
 
 	struct wl_surface    *surface;
 	struct xdg_surface   *xdg_surface;
@@ -217,6 +239,33 @@ struct win {
 
 	/* Frames committed whose fate is not yet known. */
 	feedback_ctx_t *outstanding;
+
+	/* ── the pointer ────────────────────────────────────────────────────────
+	 *
+	 * Where it is, in cells, and what is held down. `held` is the button that
+	 * motion is reported WITH — ?1002 sends motion only while something is
+	 * pressed, and the button number goes in the same field.
+	 *
+	 * `clicks` is how many times the same cell has been hit in quick
+	 * succession: one selects characters, two selects words, three selects
+	 * lines. It resets on a different cell as well as on time, because two
+	 * deliberate clicks in different places are not a double-click however
+	 * fast somebody is. */
+	int      ptr_col, ptr_row;
+	unsigned buttons;          /* bit per protocol button, 0..2 */
+	int      held;             /* the lowest button held, or ST_BTN_NONE */
+	bool     selecting;        /* a drag with the left button is under way */
+	uint32_t click_ms;
+	int      clicks, click_col, click_row;
+
+	/* Wheel notches waiting for the frame that completes them. A wheel sends
+	 * axis_discrete on version 5 and up; a touchpad sends only the continuous
+	 * value, which is accumulated into notches so that both end up here. */
+	double   axis_acc[2];
+	int      axis_notch[2];
+
+	uint64_t mouse_sent;       /* events handed to the child */
+	uint64_t mouse_dropped;    /* events the old encoding could not carry */
 
 	/* Where the cursor was when the last frame was painted. Moving it changes
 	 * no CELL, so the grid never reports it — but it changes two rows on
@@ -1117,12 +1166,361 @@ static const struct wl_keyboard_listener kbd_listener = {
 	kbd_keymap, kbd_enter, kbd_leave, kbd_key, kbd_modifiers, kbd_repeat
 };
 
+/* ── the pointer ────────────────────────────────────────────────────────────
+ *
+ * Two jobs, and which one runs is not this program's choice:
+ *
+ *   THE CHILD ASKED  — a program that set ?1000, ?1002 or ?1003 wants the
+ *                      pointer as escape sequences on its input. vim's visual
+ *                      mode, htop's click-to-sort, less's scrolling, and every
+ *                      mouse-driven TUI there is. The events go straight to the
+ *                      pty and the terminal does nothing else with them.
+ *
+ *   NOBODY ASKED     — the pointer belongs to the terminal, and dragging with
+ *                      it highlights text.
+ *
+ * ⚠ SHIFT TAKES IT BACK. Holding shift selects by hand even while a program is
+ * reporting, and every terminal does this because otherwise there is no way to
+ * copy anything out of vim without turning its mouse support off first. The
+ * shift is NOT then reported to the program — sending it a modified click it
+ * cannot see the consequence of is worse than sending nothing.
+ *
+ * ⚠ AND NONE OF THIS IS TESTED BY THE SUITE, because input is never
+ * synthesised on a live session and a headless cage has no pointer. What IS
+ * tested is every rule about what the bytes should be — see mouse.c and
+ * `syntty mouse`. This file is the plumbing that carries them, kept as thin as
+ * it can be for exactly that reason. */
+
+static unsigned mouse_mods(const win_t *w)
+{
+	if (!w->xkb_state)
+		return 0;
+	unsigned m = 0;
+	if (xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_SHIFT,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0)
+		m |= ST_MOUSE_SHIFT;
+	if (xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_ALT,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0)
+		m |= ST_MOUSE_ALT;
+	if (xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_CTRL,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0)
+		m |= ST_MOUSE_CTRL;
+	return m;
+}
+
+static bool shift_held(const win_t *w)
+{
+	return w->xkb_state
+	    && xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_SHIFT,
+	                                    XKB_STATE_MODS_EFFECTIVE) > 0;
+}
+
+/* Is the child driving the pointer right now? */
+static bool mouse_reporting(const win_t *w)
+{
+	return w->g->mouse_mode != 0 && !shift_held(w);
+}
+
+/* Surface pixels to a cell.
+ *
+ * ⚠ CLAMPED, not rejected. The pointer leaves the window constantly while a
+ * button is held — that is what dragging past the edge IS — and the compositor
+ * keeps sending motion because the press took an implicit grab. Both a
+ * selection and a program's drag want the nearest cell; the alternative is a
+ * highlight that stops updating the moment the pointer crosses the edge. */
+static void pointer_cell(win_t *w, wl_fixed_t sx, wl_fixed_t sy)
+{
+	int cw = st_font_cell_w(w->font), ch = st_font_cell_h(w->font);
+	int x = wl_fixed_to_int(sx), y = wl_fixed_to_int(sy);
+	int col = x < 0 ? 0 : x / cw;
+	int row = y < 0 ? 0 : y / ch;
+	if (col > w->g->cols - 1) col = w->g->cols - 1;
+	if (row > w->g->rows - 1) row = w->g->rows - 1;
+	w->ptr_col = col;
+	w->ptr_row = row;
+}
+
+static void mouse_report(win_t *w, int event, int button)
+{
+	char out[32];
+	const char *why = NULL;
+	size_t n = st_mouse_encode(w->g->mouse_mode, w->g->mouse_sgr, event,
+	                           button, mouse_mods(w), w->ptr_col, w->ptr_row,
+	                           out, sizeof out, &why);
+	if (n) {
+		(void)!write(w->pty->fd, out, n);
+		w->mouse_sent++;
+		return;
+	}
+	/* ⚠ ONLY A REAL DROP IS COUNTED. "?1000 does not report motion" is the
+	 * mode working; "column 240 cannot be named" is an event the program
+	 * should have had and did not, and the second is the one worth a number
+	 * somebody can see. */
+	if (event != ST_MOUSE_MOTION && why)
+		w->mouse_dropped++;
+}
+
+/* The I-beam, or the arrow while a program is driving. Re-sent only when it
+ * changes: the compositor is being asked to draw, and asking it to redraw the
+ * same shape on every motion event is a message per pointer step. */
+static void cursor_update(win_t *w)
+{
+	/* Created here rather than where the pointer is bound, because the two
+	 * globals arrive in whatever order the compositor lists them and the
+	 * manager may not have been announced yet when the seat's capabilities
+	 * came in. */
+	if (!w->shape_dev && w->shape_mgr && w->ptr)
+		w->shape_dev = wp_cursor_shape_manager_v1_get_pointer(w->shape_mgr,
+		                                                      w->ptr);
+	if (!w->shape_dev || !w->enter_serial)
+		return;
+	bool text = !mouse_reporting(w);
+	if (text == w->cursor_is_text)
+		return;
+	w->cursor_is_text = text;
+	wp_cursor_shape_device_v1_set_shape(
+		w->shape_dev, w->enter_serial,
+		text ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT
+		     : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT);
+}
+
+static void ptr_enter(void *data, struct wl_pointer *p, uint32_t serial,
+                      struct wl_surface *surf, wl_fixed_t sx, wl_fixed_t sy)
+{
+	(void)p; (void)surf;
+	win_t *w = data;
+	w->enter_serial = serial;
+	/* Force the request: the compositor forgot our shape when the pointer
+	 * left, and whatever it is showing now belongs to another window. */
+	w->cursor_is_text = !w->cursor_is_text;
+	cursor_update(w);
+	pointer_cell(w, sx, sy);
+}
+
+static void ptr_leave(void *d, struct wl_pointer *p, uint32_t serial,
+                      struct wl_surface *surf)
+{
+	(void)p; (void)serial; (void)surf;
+	win_t *w = d;
+	/* The highlight STAYS. Somebody selects a path and moves the pointer to
+	 * another window to paste it; a selection that vanished on the way out
+	 * would make copying between windows impossible. */
+	w->selecting = false;
+	w->buttons   = 0;
+	w->held      = ST_BTN_NONE;
+}
+
+static void ptr_motion(void *data, struct wl_pointer *p, uint32_t time,
+                       wl_fixed_t sx, wl_fixed_t sy)
+{
+	(void)p; (void)time;
+	win_t *w = data;
+	int was_col = w->ptr_col, was_row = w->ptr_row;
+	pointer_cell(w, sx, sy);
+	cursor_update(w);
+
+	/* ⚠ PER CELL, NOT PER PIXEL. A program is told about the grid, so two
+	 * motion events inside one cell say the same thing twice — at 1000 Hz
+	 * that is a thousand identical packets a second for a pointer that has not
+	 * moved anywhere the program can see. */
+	if (w->ptr_col == was_col && w->ptr_row == was_row)
+		return;
+
+	if (mouse_reporting(w)) {
+		mouse_report(w, ST_MOUSE_MOTION, w->held);
+		return;
+	}
+	if (w->selecting) {
+		st_sel_extend(w->g, w->ptr_col, w->ptr_row);
+		w->dirty = true;
+	}
+}
+
+static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
+                       uint32_t time, uint32_t button, uint32_t state)
+{
+	(void)p; (void)serial;
+	win_t *w = data;
+	bool down = state == WL_POINTER_BUTTON_STATE_PRESSED;
+
+	/* ⚠ NOT `button - BTN_LEFT`. BTN_LEFT is 0x110, BTN_RIGHT is 0x111 and
+	 * BTN_MIDDLE is 0x112 — evdev's order, which is not the order the mouse
+	 * protocol numbers them in. Subtracting swaps middle and right in every
+	 * event a program receives, so a paste lands on the context menu and the
+	 * context menu on paste, and it looks like the program's bug. */
+	int b;
+	switch (button) {
+	case BTN_LEFT:   b = ST_BTN_LEFT;   break;
+	case BTN_MIDDLE: b = ST_BTN_MIDDLE; break;
+	case BTN_RIGHT:  b = ST_BTN_RIGHT;  break;
+	default:         return;            /* side buttons: nothing to say yet */
+	}
+
+	if (down)
+		w->buttons |= 1u << b;
+	else
+		w->buttons &= ~(1u << b);
+	w->held = w->buttons ? (w->buttons & 1 ? 0 : (w->buttons & 2 ? 1 : 2))
+	                     : ST_BTN_NONE;
+
+	if (mouse_reporting(w)) {
+		mouse_report(w, down ? ST_MOUSE_PRESS : ST_MOUSE_RELEASE, b);
+		return;
+	}
+
+	if (b != ST_BTN_LEFT) {
+		/* Middle-click pastes the primary selection everywhere else, and
+		 * there is nothing to paste from yet — no wl_data_device has been
+		 * written. Deliberately silent rather than half-done. */
+		return;
+	}
+
+	if (down) {
+		/* One click selects characters, two words, three lines, and a fourth
+		 * starts over. 400 ms is the interval every toolkit uses. */
+		bool same = w->ptr_col == w->click_col && w->ptr_row == w->click_row
+		         && time - w->click_ms < 400;
+		w->clicks    = same ? w->clicks + 1 : 1;
+		w->click_ms  = time;
+		w->click_col = w->ptr_col;
+		w->click_row = w->ptr_row;
+
+		static const int modes[3] = { ST_SEL_CHAR, ST_SEL_WORD, ST_SEL_LINE };
+		st_sel_start(w->g, w->ptr_col, w->ptr_row,
+		             modes[(w->clicks - 1) % 3]);
+		w->selecting = true;
+		w->dirty = true;
+	} else {
+		w->selecting = false;
+		/* ⚠ AND HERE IS WHERE THE CLIPBOARD GOES. The text is available —
+		 * st_sel_text() returns exactly what would be copied — but nothing can
+		 * be handed to another program until there is a wl_data_device, which
+		 * is the next thing on the list. A selection that highlights and
+		 * cannot be pasted is half a feature, and it is half on purpose rather
+		 * than by omission. */
+	}
+}
+
+/* One wheel notch, once the frame that describes it has arrived. */
+static void wheel(win_t *w, int axis, int notches)
+{
+	if (notches == 0)
+		return;
+
+	if (mouse_reporting(w)) {
+		int b = axis == WL_POINTER_AXIS_VERTICAL_SCROLL
+		      ? (notches > 0 ? ST_BTN_WHEEL_DOWN : ST_BTN_WHEEL_UP)
+		      : (notches > 0 ? ST_BTN_WHEEL_RIGHT : ST_BTN_WHEEL_LEFT);
+		int n = notches < 0 ? -notches : notches;
+		/* One event per notch. A program counting notches to scroll by lines
+		 * would otherwise see a single click for a fast flick of the wheel. */
+		for (int i = 0; i < n; i++)
+			mouse_report(w, ST_MOUSE_PRESS, b);
+		return;
+	}
+	if (axis != WL_POINTER_AXIS_VERTICAL_SCROLL)
+		return;
+
+	/* ⚠ ON THE ALTERNATE SCREEN THERE IS NOTHING TO SCROLL. `less`, `man` and
+	 * an editor own the whole screen and keep their own text; the scrollback
+	 * is not theirs and is deliberately not fed while they are running. A
+	 * terminal that scrolls its own view here does nothing visible at all,
+	 * which reads as a broken wheel. Arrow keys are what those programs
+	 * understand, and sending them is what every terminal does. */
+	if (w->g->on_alt) {
+		const char *seq = notches > 0 ? "\033[B" : "\033[A";
+		int n = notches < 0 ? -notches : notches;
+		for (int i = 0; i < n * 3; i++)
+			(void)!write(w->pty->fd, seq, 3);
+		return;
+	}
+
+	if (st_grid_view_scroll(w->g, -notches * 3))
+		w->dirty = true;
+}
+
+/* ⚠ THE VALUE AND THE NOTCH DESCRIBE THE SAME SCROLL. A wheel sends both — a
+ * continuous value AND a discrete count — and adding them scrolls twice as far
+ * as the person asked. The discrete count wins where it exists, and the value
+ * is only accumulated for devices that have no notches at all (a touchpad,
+ * where the scroll is a finger moving). */
+static void ptr_axis(void *data, struct wl_pointer *p, uint32_t time,
+                     uint32_t axis, wl_fixed_t value)
+{
+	(void)p; (void)time;
+	win_t *w = data;
+	if (axis > 1)
+		return;
+	w->axis_acc[axis] += wl_fixed_to_double(value);
+}
+
+static void ptr_axis_discrete(void *data, struct wl_pointer *p, uint32_t axis,
+                              int32_t discrete)
+{
+	(void)p;
+	win_t *w = data;
+	if (axis > 1)
+		return;
+	w->axis_notch[axis] += discrete;
+}
+
+static void ptr_axis_source(void *d, struct wl_pointer *p, uint32_t src)
+{ (void)d; (void)p; (void)src; }
+
+static void ptr_axis_stop(void *d, struct wl_pointer *p, uint32_t t,
+                          uint32_t axis)
+{ (void)d; (void)p; (void)t; (void)axis; }
+
+/* The end of one logical pointer event. Everything above only records; this is
+ * where a scroll actually happens, because a notch and its value arrive as two
+ * separate events and acting on the first one would act twice. */
+static void ptr_frame(void *data, struct wl_pointer *p)
+{
+	(void)p;
+	win_t *w = data;
+	for (int a = 0; a < 2; a++) {
+		int notches = w->axis_notch[a];
+		if (!notches) {
+			/* No discrete count: a continuous device. 15.0 is one wheel
+			 * detent's worth of value, which is the unit libinput reports and
+			 * therefore the honest size of "a notch" here. */
+			while (w->axis_acc[a] >= 15.0)  { notches++; w->axis_acc[a] -= 15.0; }
+			while (w->axis_acc[a] <= -15.0) { notches--; w->axis_acc[a] += 15.0; }
+		} else {
+			w->axis_acc[a] = 0;
+		}
+		w->axis_notch[a] = 0;
+		wheel(w, a, notches);
+	}
+}
+
+static const struct wl_pointer_listener ptr_listener = {
+	/* Designated, unlike the listeners above it: this struct has grown twice
+	 * since version 5 (axis_value120, axis_relative_direction) and positional
+	 * initialisers would silently attach a handler to the wrong member the
+	 * next time wayland-client adds one. */
+	.enter         = ptr_enter,
+	.leave         = ptr_leave,
+	.motion        = ptr_motion,
+	.button        = ptr_button,
+	.axis          = ptr_axis,
+	.frame         = ptr_frame,
+	.axis_source   = ptr_axis_source,
+	.axis_stop     = ptr_axis_stop,
+	.axis_discrete = ptr_axis_discrete,
+};
+
 static void seat_caps(void *data, struct wl_seat *seat, uint32_t caps)
 {
 	win_t *w = data;
 	if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !w->kbd) {
 		w->kbd = wl_seat_get_keyboard(seat);
 		wl_keyboard_add_listener(w->kbd, &kbd_listener, w);
+	}
+	if ((caps & WL_SEAT_CAPABILITY_POINTER) && !w->ptr) {
+		w->ptr  = wl_seat_get_pointer(seat);
+		w->held = ST_BTN_NONE;
+		wl_pointer_add_listener(w->ptr, &ptr_listener, w);
 	}
 }
 static void seat_name(void *d, struct wl_seat *s, const char *n)
@@ -1148,6 +1546,10 @@ static void registry_global(void *data, struct wl_registry *reg, uint32_t name,
 		w->presentation = wl_registry_bind(reg, name, &wp_presentation_interface,
 		                                   version < 1 ? version : 1);
 		wp_presentation_add_listener(w->presentation, &presentation_listener, w);
+	} else if (!strcmp(iface, wp_cursor_shape_manager_v1_interface.name)) {
+		w->shape_mgr = wl_registry_bind(reg, name,
+		                                &wp_cursor_shape_manager_v1_interface,
+		                                version < 1 ? version : 1);
 	} else if (!strcmp(iface, wl_seat_interface.name)) {
 		w->seat = wl_registry_bind(reg, name, &wl_seat_interface,
 		                           version < 5 ? version : 5);
@@ -1171,6 +1573,7 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	w->g = g; w->vt = vt; w->pty = pty; w->font = font; w->ren = ren;
 	w->pool_fd = -1;
 	w->deadline = deadline;
+	w->held = ST_BTN_NONE;   /* 0 is the LEFT button, not "nothing held" */
 	w->t_start = now_ns();
 
 	w->dpy = wl_display_connect(NULL);
@@ -1335,6 +1738,8 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 		stats->refresh_ms    = w->refresh_ns / 1e6;
 		stats->rows_painted  = w->rows_painted;
 		stats->rows_possible = w->rows_possible;
+		stats->mouse_sent    = w->mouse_sent;
+		stats->mouse_dropped = w->mouse_dropped;
 		stats->margin_ms     = (w->paint_cost_ns + w->paint_cost_ns / 2
 		                        + 1000000ull) / 1e6;
 	}
@@ -1360,6 +1765,9 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	if (w->keymap)      xkb_keymap_unref(w->keymap);
 	if (w->xkb)         xkb_context_unref(w->xkb);
 	if (w->kbd)         wl_keyboard_destroy(w->kbd);
+	if (w->shape_dev)   wp_cursor_shape_device_v1_destroy(w->shape_dev);
+	if (w->shape_mgr)   wp_cursor_shape_manager_v1_destroy(w->shape_mgr);
+	if (w->ptr)         wl_pointer_destroy(w->ptr);
 	if (w->seat)        wl_seat_destroy(w->seat);
 	if (w->frame)       wl_callback_destroy(w->frame);
 	if (w->toplevel)    xdg_toplevel_destroy(w->toplevel);
@@ -1375,6 +1783,18 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 }
 
 /* ── what is left ──────────────────────────────────────────────────────────
+ *
+ * THE CLIPBOARD. A selection can be made, drawn and read — st_sel_text()
+ * returns exactly the bytes — and there is still no wl_data_device, so nothing
+ * can be handed to another program and nothing can be pasted in. Middle-click
+ * is therefore deliberately silent rather than half-wired. That is the next
+ * thing, and it is the other half of what a pointer is for.
+ *
+ * AUTO-SCROLL WHILE DRAGGING. Dragging above the top of the window does not
+ * pull the view back through the scrollback. The selection can already reach
+ * those lines — the ends are absolute and the copy walks the ring — so what is
+ * missing is only the pointer gesture, and it is a timer and a rate curve
+ * nobody has measured.
  *
  * Cell-level damage WITHIN a row. A row is the unit here, so changing one
  * character repaints its whole line — 480 cells at 4K rather than one. It is
