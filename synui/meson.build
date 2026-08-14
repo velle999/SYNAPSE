@@ -994,6 +994,18 @@ test('apply_theme_square_chrome', apply_theme_square,
      args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
      timeout : 60)
 
+# Every colour has to be legible on the surface it is actually drawn on, which
+# is not always the one it was picked against. Win95's panel accent was a light
+# blue chosen for a dark panel and shipped on silver at 1.53:1 — the calendar
+# nobody could read — and kitty's bright ANSI half was measured on solid silver
+# while being drawn on silver composited at the glass floor. Numbers in a table,
+# so no compositor is needed.
+theme_contrast = find_program('tests/theme_contrast.py')
+test('theme_contrast', theme_contrast,
+     args    : [meson.current_source_dir() / 'src' / 'theme.c',
+                meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
+     timeout : 60)
+
 # `bar_shape`: the strip's own shape, where bar_radius covers its popups'. Four
 # captures on one compositor — full-width, rounded-ends, floating-pill, and the
 # pill again at corner_radius = 0, which must come back identical to the first.

@@ -164,7 +164,9 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .tb_text       = { 0.50f, 0.50f, 0.52f, 1.0f },
         .tb_text_focus = { 0.90f, 0.90f, 0.92f, 1.0f },
         .active_opacity = 1.0f, .inactive_opacity = 0.94f,
-        .panel_accent  = { 0.24f, 0.49f, 1.00f, 1.0f },  /* restrained blue */
+        /* Restrained, but it sat at 4.40:1 — under the bar by a hair, and the
+         * only dark theme that was. One step up clears it. */
+        .panel_accent  = { 0.302f, 0.537f, 1.000f, 1.0f },  /* #4D89FF: 5.0:1 */
         .scheme = "dark", .accent_r = 61, .accent_g = 125, .accent_b = 255,
         .glyph_r = 61, .glyph_g = 125, .glyph_b = 255,   /* follows the accent */
         .base_r = 30, .base_g = 30, .base_b = 36,
@@ -192,7 +194,10 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .tb_text       = { 0.847f, 0.894f, 0.973f, 1.0f },  /* #D8E4F8 */
         .tb_text_focus = { 1.00f, 1.00f, 1.00f, 1.0f },
         .active_opacity = 1.0f, .inactive_opacity = 1.0f,   /* XP was never glassy */
-        .panel_accent  = { 0.36f, 0.62f, 1.00f, 1.0f },  /* Luna blue, brightened */
+        /* Luna DARKENED, not brightened. Brightening is the wrong direction on
+         * a #ECE9D8 panel — it ran at 2.21:1. Luna's own #316AC5 only reaches
+         * 4.31:1 there, so it is taken down one step. */
+        .panel_accent  = { 0.165f, 0.365f, 0.678f, 1.0f },  /* #2A5DAD on beige: 5.3:1 */
         .scheme = "light", .accent_r = 49, .accent_g = 106, .accent_b = 197,
         .glyph_r = 49, .glyph_g = 106, .glyph_b = 197,   /* follows the accent */
         .base_r = 236, .base_g = 233, .base_b = 216,     /* #ECE9D8 */
@@ -220,7 +225,11 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .tb_text       = { 0.753f, 0.753f, 0.753f, 1.0f },  /* #C0C0C0 */
         .tb_text_focus = { 1.00f, 1.00f, 1.00f, 1.0f },
         .active_opacity = 1.0f, .inactive_opacity = 1.0f,
-        .panel_accent  = { 0.45f, 0.60f, 0.95f, 1.0f },  /* navy, legible on dark */
+        /* The REAL #000080 — and the same value as .accent_* below, which is
+         * what made this wrong: two fields for one colour, and only one of
+         * them got the 95 navy. The old value was a light blue commented
+         * "legible on dark" sitting on a SILVER panel at 1.53:1. */
+        .panel_accent  = { 0.000f, 0.000f, 0.502f, 1.0f },  /* #000080 on silver: 8.8:1 */
         .scheme = "light", .accent_r = 0, .accent_g = 0, .accent_b = 128,
         .glyph_r = 0, .glyph_g = 0, .glyph_b = 128,      /* follows the accent */
         .base_r = 192, .base_g = 192, .base_b = 192,     /* #C0C0C0 */
@@ -336,7 +345,10 @@ static const syn_theme_preset_t theme_presets[SYN_THEME_COUNT] = {
         .tb_text       = { 0.639f, 0.325f, 0.451f, 1.0f },  /* #A35373 */
         .tb_text_focus = { 1.000f, 1.000f, 1.000f, 1.0f },
         .active_opacity = 0.96f, .inactive_opacity = 0.90f,
-        .panel_accent  = { 1.000f, 0.518f, 0.741f, 1.0f },  /* #FF84BD on dark chrome */
+        /* This one said "on dark chrome" on a theme whose scheme is LIGHT:
+         * #FF84BD on its own #FFE9F2 panel is 1.96:1. A deeper pink keeps the
+         * hue and becomes readable. */
+        .panel_accent  = { 0.761f, 0.094f, 0.357f, 1.0f },  /* #C2185B on pink: 5.1:1 */
         .scheme = "light", .accent_r = 255, .accent_g = 106, .accent_b = 170,
         .glyph_r = 214, .glyph_g = 51, .glyph_b = 122,      /* #D6337A */
         .base_r = 255, .base_g = 233, .base_b = 242,        /* #FFE9F2 */
@@ -708,6 +720,22 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
                  p->text_r, p->text_g, p->text_b,
                  s->config.chrome == SYN_CHROME_FLAT ? "off" : "on");
         synui_spawn(cmd);
+
+        /* And the terminal's glass, because the alpha it should run at DEPENDS
+         * on the scheme this just changed.
+         *
+         * synui-glass floors the alpha on a light scheme: a dark terminal over
+         * a wallpaper stays dark, but a light one is dragged DOWN toward its own
+         * dark text, so 95's silver at the shipped 0.70 composites to about
+         * #878787 and every colour on it collapses. The floor was right and it
+         * was never re-applied here — glass_push ran from the opacity slider,
+         * the transparency toggle and startup, none of which is how a scheme
+         * changes. So picking Win95 left the terminal on the DARK theme's 0.70
+         * and its blues and greys measured 1.85–2.31:1.
+         *
+         * It is the same slider value either way; only the floor's answer to it
+         * moves, which is exactly why the push has to happen on this path too. */
+        glass_push(s);
     }
 
     if (save) theme_state_save(s);

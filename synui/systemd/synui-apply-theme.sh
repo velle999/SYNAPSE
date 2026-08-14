@@ -624,29 +624,50 @@ color15 #ffffff"
             # to read as TEXT on a pale surface, so they are darkened instead.
             # color7 ("white") is conventionally a light grey, which on a light
             # background is invisible — here 7 and 15 run dark, and the BRIGHT
-            # half stays more vivid than the normal half rather than lighter,
-            # because lighter is the wrong direction on a pale surface.
+            # half is DEEPER than the normal half rather than lighter, because
+            # lighter is the wrong direction on a pale surface.
             #
-            # Measured against #C0C0C0, the darkest light base any shipped theme
-            # uses (95's silver; XP's beige is paler and only gains contrast).
-            # The normal half clears 4.5:1 there and the bright half 3.5:1. The
-            # first draft of this palette was a set of mid-tones that looked
+            # ⚠ That last sentence was already here and the values did the
+            # opposite: every bright colour shipped LIGHTER than its normal
+            # counterpart, all seven of them. On solid silver they still cleared
+            # the 3.5:1 they were measured at, so nothing looked wrong until the
+            # surface stopped being solid silver.
+            #
+            # WHICH IT NEVER IS. The terminal runs translucent, and synui-glass
+            # floors a light scheme at 0.90 precisely because the wallpaper drags
+            # a pale surface down toward its own dark text. The floor guarantees
+            # ~3.5:1 after compositing for a foreground held at 4.5:1 on the
+            # SOLID surface — and the bright half sat at ~3.6, so it landed at
+            # ~2.9 over a dark wallpaper. Blue and grey were the two anybody
+            # would notice: color12 at 2.98 and color8 at 3.27.
+            #
+            # So both halves are now measured where they are actually drawn:
+            # #C0C0C0 (95's silver, the darkest light base shipped; XP's beige
+            # is paler and only gains) composited at the 0.90 floor over BLACK,
+            # the worst case there is. Normal clears 3.66:1 and bright 4.29:1
+            # there — bright ABOVE normal, which is what "more vivid" has to mean
+            # when the surface is pale.
+            #
+            # color0/color8 is the one pair where bright is not deeper: black has
+            # nowhere to go, and 8 must stay distinguishable from 0.
+            #
+            # An earlier draft of this palette was a set of mid-tones that looked
             # right and put color3 at 2.71:1 on silver — yellow on grey, exactly
             # the pairing that fails.
             ansi="color0  #21222c
-color8  #55555f
+color8  #44444c
 color1  #9a1717
-color9  #b91c1c
+color9  #840606
 color2  #0f5b2b
-color10 #126d34
+color10 #054e20
 color3  #704405
-color11 #865206
+color11 #603900
 color4  #1942b8
-color12 #1d4ed8
+color12 #052d9e
 color5  #84178f
-color13 #9f1bac
+color13 #70077b
 color6  #0a566a
-color14 #0c6780
+color14 #00485b
 color7  #3f3f46
 color15 #18181b"
         fi
