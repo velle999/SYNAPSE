@@ -505,6 +505,10 @@ static float inactive_from_active(float active)
  * on = the slider value. Fire-and-forget, a no-op when foot isn't installed. */
 static void glass_push(syn_server_t *s)
 {
+    /* ~/.config/foot/foot.ini belongs to the seat's desktop, not to a headless
+     * rig that happens to be running the same binary. See synui_owns_seat(). */
+    if (!synui_owns_seat(s)) return;
+
     /* foot gets its own level when one is set. The slider is a poor proxy for it:
      * alpha over foot's near-black background reads much more solid than the same
      * alpha over a light toolkit window, so a comfortable 0.86 desktop left the
@@ -692,6 +696,17 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
     /* Hand the app-side reskin to the helper (safe/merge-y, and a no-op where the
      * tools aren't installed). Firefox transparency is already covered by the
      * compositor's opacity — this only carries the light/dark scheme. */
+    if (push_apps && !synui_owns_seat(s)) {
+        /* A headless or nested synui shares the real desktop's $HOME and
+         * session bus, so this push would land on the seat's Firefox, GTK and
+         * terminal rather than on anything this instance draws. Said out loud
+         * because it is a silent no-op otherwise, and the ONE thing anybody
+         * debugging from a rig would want to know. */
+        wlr_log(WLR_INFO, "synui: no seat (headless/nested) — not pushing the "
+                          "theme to the desktop's apps");
+        push_apps = 0;
+    }
+
     if (push_apps) {
         char cmd[256];
         /* The chrome style travels too, because a window synui does NOT

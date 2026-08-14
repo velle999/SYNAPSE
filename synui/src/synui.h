@@ -6237,6 +6237,29 @@ void synui_render_ctlpanel(syn_server_t *s);
 void panel_chrome_sync(syn_server_t *s);
 
 /* ── Theme manager (theme.c) ─────────────────────────────── */
+
+/*
+ * Whether this synui is the compositor that OWNS the seat.
+ *
+ * Everything synui pushes to the rest of the desktop — synui-apply-theme,
+ * synui-apply-font, synui-glass — writes `$HOME/.config/...` literally, plus
+ * gsettings and kwriteconfig over the session bus. None of that is isolated by
+ * XDG_CONFIG_HOME or by a private HOME (dconf writes travel over the session
+ * bus to a daemon with its own environment), so a HEADLESS or NESTED instance
+ * re-themes the real desktop it was started from. The test suite launches ~20
+ * of those in a burst, each applying the default dark preset on startup; the
+ * visible symptom is Firefox's chrome going dark grey, because its System theme
+ * follows the portal's colour-scheme signal.
+ *
+ * wlr_backend_autocreate() only hands back a session for the DRM backend, so a
+ * NULL one is exactly "this process does not drive a screen anybody is looking
+ * at" — the same fact input.c already reads for VT switching.
+ */
+static inline bool synui_owns_seat(const syn_server_t *s)
+{
+    return s && s->session != NULL;
+}
+
 /* Apply a preset: overwrite the border/titlebar colours + default opacities in
  * cfg, re-decorate every mapped window, repaint, and (for the app colour-scheme)
  * write kdeglobals / GTK / Firefox so Dolphin & co. follow. Persists theme.state

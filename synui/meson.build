@@ -1134,3 +1134,14 @@ test('saver_keys', saver_keys,
      args    : [synui_exe.full_path()],
      depends : [synui_exe],
      timeout : 120)
+
+# A synui with no seat must not push the theme to the desktop's apps.
+# synui-apply-theme writes $HOME and gsettings literally, so every headless
+# instance re-themed the session it was started from — and this suite starts
+# about twenty of them, which is how running the tests turned velle's Firefox
+# chrome dark grey. The rig stubs the helpers, so it is also the seatbelt.
+theme_seat_guard = find_program('tests/theme_seat_guard.sh')
+test('theme_seat_guard', theme_seat_guard,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 60)

@@ -326,8 +326,17 @@ void fontpick_toggle(syn_server_t *s)
  * families would otherwise rewrite kdeglobals, four config files and a rofi
  * theme five hundred times, and SIGUSR1 every open terminal on the way past.
  */
-static void fontpick_push_system(const char *name)
+static void fontpick_push_system(syn_server_t *s, const char *name)
 {
+    /* kdeglobals, the GTK files and every open terminal belong to the seat's
+     * desktop; a headless or nested instance shares $HOME with it and would be
+     * writing over somebody else's session. See synui_owns_seat(). */
+    if (!synui_owns_seat(s)) {
+        wlr_log(WLR_INFO, "synui: no seat (headless/nested) — not pushing the "
+                          "UI font to the desktop's apps");
+        return;
+    }
+
     if (!name) {
         synui_spawn("synui-apply-font --default");
         return;
@@ -372,7 +381,7 @@ static void fontpick_commit(syn_server_t *s)
     if (idx < 0 || idx >= fontpick_total(s)) { fontpick_hide(s); return; }
 
     const char *name = fontpick_name(s, idx);
-    fontpick_push_system(name);
+    fontpick_push_system(s, name);
 
     if (!name) {
         /* The default row. CLEARED from settings.state rather than written as
