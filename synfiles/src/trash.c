@@ -552,6 +552,34 @@ static void empty_cb(const char *trash, const char *topdir, void *vctx)
 	}
 }
 
+/* Counting pass for the estimate: the same walk empty_cb does, without
+ * removing anything. */
+typedef struct { long long *files; long long *bytes; } count_ctx_t;
+
+static void count_cb(const char *trash, const char *topdir, void *vctx)
+{
+	(void)topdir;
+	count_ctx_t *cc = vctx;
+
+	const char *subs[] = { "files", "info" };
+	for (size_t si = 0; si < 2; si++) {
+		char *dir = xasprintf("%s/%s", trash, subs[si]);
+		int fd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		free(dir);
+		if (fd < 0)
+			continue;
+		DIR *d = fdopendir(fd);
+		if (!d) { close(fd); continue; }
+		struct dirent *e;
+		while ((e = readdir(d))) {
+			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+				continue;
+			sf_scan_tree(dirfd(d), e->d_name, cc->files, cc->bytes);
+		}
+		closedir(d);
+	}
+}
+
 static int trash_empty(bool confirmed)
 {
 	if (!confirmed)
@@ -559,10 +587,26 @@ static int trash_empty(bool confirmed)
 		    "  to see what would go:  synfiles trash list\n"
 		    "  to empty it anyway:    synfiles trash empty --yes");
 
-	if (g_out == OUT_REC)
-		rec_row(3, "path", "status", "detail");
+	if (g_out == OUT_REC) {
+		rec_row(4, "path", "status", "detail", "bytes");
+
+		/* How many entries are about to be removed, so the panel can say how
+		 * long is left rather than counting upward towards nothing. Counted in
+		 * ENTRIES for the same reason as delete: the cost is one unlink each,
+		 * whatever they weigh. A readdir walk is far cheaper than the unlinks
+		 * that follow it — on the stick this came from, reading a name is
+		 * cached and free where removing it is 11.7 ms. */
+		long long files = 0, bytes = 0;
+		count_ctx_t cc = { &files, &bytes };
+		each_trash(count_cb, &cc);
+		char fb[32];
+		snprintf(fb, sizeof fb, "%lld", files);
+		rec_row(4, "total", fb, "0", "");
+		fflush(stdout);
+	}
 
 	int n = 0;
+	sf_install_cancel();
 	sf_rm_set_tick(sf_rm_progress_tick);
 	each_trash(empty_cb, &n);
 	sf_rm_set_tick(NULL);

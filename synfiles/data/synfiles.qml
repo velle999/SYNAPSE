@@ -539,17 +539,29 @@ FloatingWindow {
     // Measured in BYTES, because a count of files says nothing about time
     // remaining when one of them is 8 GB. The total comes from a stat-only
     // pre-pass in the C, which is what makes any of this possible.
-    readonly property real opFraction:
-        root.opTotalBytes > 0 ? Math.min(1, root.opBytes / root.opTotalBytes) : 0
+    // MEASURED IN WHICHEVER UNIT DECIDES THE TIME. A copy is bytes: one 8 GB
+    // file is the whole job. A DELETE is entries — one unlink each, whatever
+    // they weigh — so a folder of ten thousand empty files is minutes and no
+    // bytes at all, and a byte-shaped bar would call it finished before it
+    // started. The C says which by sending a byte total of zero.
+    readonly property bool opByBytes: root.opTotalBytes > 0
+    readonly property real opUnitDone:
+        root.opByBytes ? root.opBytes
+                       : (root.opDone + root.opSkipped + root.opFailed)
+    readonly property real opUnitTotal:
+        root.opByBytes ? root.opTotalBytes : root.opTotalFiles
 
-    readonly property real opRate:               // bytes per second
-        root.opElapsed > 0.4 ? root.opBytes / root.opElapsed : 0
+    readonly property real opFraction:
+        root.opUnitTotal > 0 ? Math.min(1, root.opUnitDone / root.opUnitTotal) : 0
+
+    readonly property real opRate:               // bytes/s, or items/s
+        root.opElapsed > 0.4 ? root.opUnitDone / root.opElapsed : 0
 
     function fmtEta() {
         // Nothing to say yet is better than a wild number: the first second of
-        // any copy predicts an eternity or an instant, and neither is true.
-        if (root.opRate <= 0 || root.opTotalBytes <= 0) return ""
-        const left = (root.opTotalBytes - root.opBytes) / root.opRate
+        // any operation predicts an eternity or an instant, and neither is true.
+        if (root.opRate <= 0 || root.opUnitTotal <= 0) return ""
+        const left = (root.opUnitTotal - root.opUnitDone) / root.opRate
         if (!isFinite(left) || left < 0) return ""
         if (left < 5)   return "a moment left"
         if (left < 90)  return Math.round(left) + "s left"
@@ -558,10 +570,15 @@ FloatingWindow {
     }
 
     function opRateLine() {
-        if (root.opTotalBytes <= 0) return ""
-        let s = root.fmtSize(root.opBytes, false) + " of "
-              + root.fmtSize(root.opTotalBytes, false)
-        if (root.opRate > 0) s += "  ·  " + root.fmtSize(root.opRate, false) + "/s"
+        if (root.opUnitTotal <= 0) return ""
+        let s = root.opByBytes
+                ? root.fmtSize(root.opBytes, false) + " of "
+                  + root.fmtSize(root.opTotalBytes, false)
+                : root.opUnitDone + " of " + root.opTotalFiles + " items"
+        if (root.opRate > 0)
+            s += "  ·  " + (root.opByBytes
+                              ? root.fmtSize(root.opRate, false) + "/s"
+                              : Math.round(root.opRate) + "/s")
         const eta = root.fmtEta()
         if (eta) s += "  ·  " + eta
         return s
@@ -3145,7 +3162,7 @@ FloatingWindow {
                     // denominator behind it: copy and move count their bytes
                     // up front, everything else has nothing honest to draw.
                     Rectangle {
-                        visible: root.opTotalBytes > 0
+                        visible: root.opUnitTotal > 0
                         width: parent.width - 4
                         height: root.ui(6)
                         radius: height / 2
@@ -3164,7 +3181,7 @@ FloatingWindow {
                     // count when they are not.
                     Text {
                         width: parent.width - 4
-                        text: root.opTotalBytes > 0
+                        text: root.opUnitTotal > 0
                                 ? Math.round(root.opFraction * 100) + "%  ·  "
                                   + root.opRateLine()
                                 : root.opCountLine()
@@ -3175,7 +3192,10 @@ FloatingWindow {
 
                     Text {
                         width: parent.width - 4
-                        visible: root.opTotalBytes > 0
+                        // Files done, when the bar above is measuring bytes —
+                        // the two answer different questions and only one of
+                        // them fits in the bar.
+                        visible: root.opByBytes
                         text: root.opCountLine() + " of " + root.opTotalFiles
                             + (root.opTotalFiles === 1 ? " item" : " items")
                         color: root.cDim

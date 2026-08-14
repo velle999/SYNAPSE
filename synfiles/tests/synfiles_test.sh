@@ -1299,6 +1299,32 @@ else
     echo "  skip  the copy finished before the cancel landed (exit $cxlrc)"
 fi
 
+# A DELETE is measured in ENTRIES, not bytes. It costs one unlink each whatever
+# they weigh, so a folder of empty files is minutes and no bytes at all — a
+# byte-shaped estimate would call it finished before it started. The byte column
+# is deliberately zero, which is how the GUI knows which unit to draw.
+mkdir -p "$C/eta/d/sub"
+i=0; while [ $i -lt 5 ]; do : > "$C/eta/d/f$i"; : > "$C/eta/d/sub/g$i"; i=$((i+1)); done
+line=$("$SYNFILES" --rec delete --yes "$C/eta/d" | awk -F'\t' '$1=="total"')
+n=$(printf '%s' "$line" | cut -f2)
+b=$(printf '%s' "$line" | cut -f3)
+[ "$n" = 12 ] && ok "delete counts its entries before starting" \
+              || bad "delete totalled $n entries, want 12"
+[ "$b" = 0 ] && ok "...and reports no byte total, so the estimate is in items" \
+             || bad "delete reported a byte total of $b, which would mis-scale the bar"
+
+# Emptying the trash gets the same, from a readdir walk that is far cheaper
+# than the unlinks it is estimating.
+tfx=$(mktemp -d)
+SYNFILES_TRASH="$tfx" mkdir -p "$tfx/files" "$tfx/info"
+mkdir -p "$C/eta/t/folder"
+: > "$C/eta/t/folder/inner"
+SYNFILES_TRASH="$tfx" "$SYNFILES" --rec trash "$C/eta/t/folder" >/dev/null 2>&1
+tn=$(SYNFILES_TRASH="$tfx" "$SYNFILES" --rec trash empty --yes | awk -F'\t' '$1=="total"{print $2}')
+[ "${tn:-0}" -ge 2 ] && ok "emptying the trash counts what it is about to remove" \
+                     || bad "trash empty totalled ${tn:-nothing}, want at least 2"
+rm -rf "$tfx"
+
 # ── collisions ──────────────────────────────────────────────────────────────
 #
 # What the GUI asks BEFORE it pastes, so that "overwrite?" is only asked when

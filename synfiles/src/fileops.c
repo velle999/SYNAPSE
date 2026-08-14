@@ -293,8 +293,8 @@ static long long g_bytes_done;
  * pass over the metadata of a tree that is about to be read in full anyway.
  * That is the price of a percentage, and it is the only honest way to have
  * one. */
-static void scan_tree(int dfd, const char *name, long long *files,
-                      long long *bytes)
+void sf_scan_tree(int dfd, const char *name, long long *files,
+                  long long *bytes)
 {
 	struct stat st;
 	if (fstatat(dfd, name, &st, AT_SYMLINK_NOFOLLOW) != 0)
@@ -310,7 +310,7 @@ static void scan_tree(int dfd, const char *name, long long *files,
 		while ((e = readdir(d))) {
 			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
 				continue;
-			scan_tree(fd, e->d_name, files, bytes);
+			sf_scan_tree(fd, e->d_name, files, bytes);
 		}
 		closedir(d);
 		(*files)++;
@@ -768,7 +768,7 @@ int cmd_copy(int argc, char **argv)
 		long long files = 0, bytes = 0;
 		for (int i = 0; i < a.nsrc; i++) {
 			char *sc = sf_resolve(a.srcs[i]);
-			scan_tree(AT_FDCWD, sc, &files, &bytes);
+			sf_scan_tree(AT_FDCWD, sc, &files, &bytes);
 			free(sc);
 		}
 		char fb[32], bb[32];
@@ -868,7 +868,7 @@ int cmd_move(int argc, char **argv)
 		long long files = 0, bytes = 0;
 		for (int i = 0; i < a.nsrc; i++) {
 			char *sc = sf_resolve(a.srcs[i]);
-			scan_tree(AT_FDCWD, sc, &files, &bytes);
+			sf_scan_tree(AT_FDCWD, sc, &files, &bytes);
 			free(sc);
 		}
 		char fb[32], bb[32];
@@ -1121,10 +1121,29 @@ int cmd_delete(int argc, char **argv)
 		    "  to delete them anyway:              synfiles delete --yes <path>");
 	}
 
-	if (g_out == OUT_REC)
-		rec_row(3, "path", "status", "detail");
+	if (g_out == OUT_REC) {
+		rec_row(4, "path", "status", "detail", "bytes");
+
+		/* Counted in ENTRIES, not bytes, and the byte column is deliberately
+		 * zero. A delete costs one unlink per entry whatever those entries
+		 * weigh — a folder of ten thousand empty files takes minutes and is
+		 * nothing at all in bytes, so a byte-shaped estimate would say it was
+		 * finished before it started. On the USB stick this was reported from,
+		 * an unlink is 11.7 ms; 6417 files is two minutes, and two minutes is
+		 * worth being told about. */
+		long long files = 0, bytes = 0;
+		for (int i = 0; i < n; i++) {
+			char *sc = sf_resolve_parent(paths[i]);
+			if (sc) { sf_scan_tree(AT_FDCWD, sc, &files, &bytes); free(sc); }
+		}
+		char fb[32];
+		snprintf(fb, sizeof fb, "%lld", files);
+		rec_row(4, "total", fb, "0", "");
+		fflush(stdout);
+	}
 
 	tally_t t = { 0, 0, 0 };
+	sf_install_cancel();
 	sf_rm_set_tick(sf_rm_progress_tick);
 	for (int i = 0; i < n; i++) {
 		char *real = sf_resolve(paths[i]);

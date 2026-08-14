@@ -222,6 +222,7 @@ int cmd_action(int argc, char **argv);
 int cmd_copy(int argc, char **argv);
 int cmd_collisions(int argc, char **argv);
 void sf_rm_set_tick(void (*fn)(const char *name));
+void sf_scan_tree(int dfd, const char *name, long long *files, long long *bytes);
 void sf_install_cancel(void);
 bool sf_cancelled(void);
 void sf_rm_progress_tick(const char *name);
