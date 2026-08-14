@@ -246,6 +246,41 @@ typedef enum {
 #define VT_MAX_PARAMS 16
 #define VT_OSC_MAX    2048
 
+/* ── the kitty keyboard protocol ────────────────────────────────────────────
+ *
+ * Not a performance feature and not ours: it is a de-facto standard that
+ * programs now assume, and the design page files it under table stakes — work
+ * that buys zero speed and cannot be skipped, because things break without it.
+ *
+ * What it fixes is genuinely broken in the legacy encoding. `Ctrl+I` and `Tab`
+ * are the same byte. So are `Ctrl+M` and `Enter`, and `Ctrl+[` and `Escape`.
+ * There is no way at all to report a key RELEASE, or `Ctrl+Shift+1`, or which
+ * of two physical keys produced a character. Editors have worked around this
+ * for forty years by guessing from timing.
+ *
+ * It is PROGRESSIVE: a program asks for the enhancements it wants and the
+ * terminal replies with the ones it actually has. A terminal that echoes the
+ * request back — claiming everything — makes programs send encodings it cannot
+ * read, which is worse than admitting to none. */
+enum {
+	KKP_DISAMBIGUATE   = 1u << 0,  /* Ctrl+I is not Tab any more */
+	KKP_REPORT_EVENTS  = 1u << 1,  /* press, repeat and RELEASE */
+	KKP_ALTERNATE_KEYS = 1u << 2,  /* the shifted and base key as well */
+	KKP_ALL_AS_ESCAPES = 1u << 3,  /* every key as a sequence, text included */
+	KKP_ASSOCIATED_TEXT = 1u << 4, /* the text the key produced, alongside it */
+};
+
+/* What THIS terminal implements. The query answers with this mask and never
+ * with what was asked for. */
+#define KKP_SUPPORTED  (KKP_DISAMBIGUATE | KKP_REPORT_EVENTS | \
+                        KKP_ALTERNATE_KEYS | KKP_ALL_AS_ESCAPES | \
+                        KKP_ASSOCIATED_TEXT)
+
+/* Programs PUSH their flags on entry and POP on exit, so one that dies does not
+ * strand the shell in a mode it cannot use. Eight is deeper than any real
+ * nesting (an editor inside a multiplexer inside a shell is three). */
+#define VT_KKP_DEPTH  8
+
 typedef struct {
 	st_grid_t *g;
 
@@ -283,11 +318,35 @@ typedef struct {
 	uint64_t unhandled_esc;
 	uint64_t osc_seen;
 
+	/* The keyboard-protocol stack. Entry 0 is the base state and is always
+	 * zero — legacy encodings — so popping past the bottom lands somewhere
+	 * usable rather than somewhere undefined. */
+	uint8_t  kkp_stack[VT_KKP_DEPTH];
+	int      kkp_depth;
+	uint64_t kkp_overflow;    /* pushes past the stack's depth */
+
+	/* Bytes owed to the child: answers to its questions, written back as
+	 * though typed. The parser holds no file descriptor — see vt_reply — so
+	 * the caller drains this after each feed. */
+	char     reply[128];
+	int      reply_len;
+	uint64_t reply_dropped;
+
 	char title[512];
 } st_vt_t;
 
 void st_vt_init(st_vt_t *vt, st_grid_t *g);
 void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len);
+
+/* The keyboard enhancements in force right now — what the key encoder must
+ * obey. Zero means the legacy encodings, which is the base state and what every
+ * program gets until it asks for more. */
+unsigned st_vt_kbd_flags(const st_vt_t *vt);
+
+/* Take whatever the parser owes the child, and empty the queue. Returns the
+ * number of bytes copied. A caller with no way to write back simply never calls
+ * this, which is correct for `dump`: a file cannot be answered. */
+size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap);
 
 /* ── font.c ─────────────────────────────────────────────────────────────── */
 

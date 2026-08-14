@@ -106,6 +106,27 @@ static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 	        (unsigned long long)vt->osc_seen);
 	if (vt->title[0])
 		fprintf(stderr, "title         %s\n", vt->title);
+
+	fprintf(stderr, "kbd flags     %u%s\n", st_vt_kbd_flags(vt),
+	        st_vt_kbd_flags(vt) ? "" : " (legacy encodings)");
+
+	/* What the parser owes the child. Printed ESCAPED, because the whole
+	 * point of a reply is that it is a control sequence — printing it raw
+	 * would have the enclosing terminal act on it rather than show it, which
+	 * is how a test asserting on this output would appear to pass while the
+	 * terminal running the test quietly changed mode. */
+	char rep[128];
+	size_t rn = st_vt_take_reply((st_vt_t *)vt, rep, sizeof rep);
+	if (rn) {
+		fprintf(stderr, "reply         ");
+		for (size_t i = 0; i < rn; i++) {
+			unsigned char c = (unsigned char)rep[i];
+			if (c == 0x1b)                 fprintf(stderr, "ESC");
+			else if (c >= 0x20 && c < 0x7f) fputc(c, stderr);
+			else                            fprintf(stderr, "\\x%02x", c);
+		}
+		fputc('\n', stderr);
+	}
 }
 
 static int cmd_dump(const opts_t *o, const char *path)

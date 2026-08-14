@@ -703,58 +703,221 @@ static const char *key_sequence(xkb_keysym_t sym)
 	}
 }
 
+/* ── encoding a key the way the program asked for it ────────────────────────
+ *
+ * Two encodings live here and the program chooses between them by pushing
+ * flags (see the kitty keyboard protocol block in syntty.h).
+ *
+ * LEGACY is what every terminal has sent since the seventies, and it is
+ * genuinely ambiguous: Ctrl+I and Tab are both 0x09, Ctrl+M and Enter are both
+ * 0x0D, Ctrl+[ and Escape are both 0x1B. Nothing can report a key RELEASE, or
+ * Ctrl+Shift+1, or which of two physical keys made a character.
+ *
+ * THE PROTOCOL encoding says exactly what happened:
+ *
+ *   CSI unicode-key ; modifiers : event ; text u
+ *
+ * Trailing empty fields are omitted, because a program reading `CSI 97 u`
+ * and one reading `CSI 97 ; 1 : 1 u` must agree, and the short form is what
+ * everything in the wild sends. */
+
+/* 1 + a bitmask, which is the protocol's convention: 1 means "no modifiers",
+ * so a parameter of 0 or an absent one both mean the same thing. */
+static unsigned kkp_mods(struct xkb_state *st)
+{
+	unsigned m = 0;
+	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_SHIFT,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 1;
+	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_ALT,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 2;
+	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_CTRL,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 4;
+	if (xkb_state_mod_name_is_active(st, XKB_MOD_NAME_LOGO,
+	                                 XKB_STATE_MODS_EFFECTIVE) > 0) m |= 8;
+	return m + 1;
+}
+
+/* The keys that keep a legacy CSI shape even under the protocol: arrows, the
+ * navigation block and the function keys. Returns the numeric parameter and
+ * the final byte, or 0 for "not one of these". */
+static uint32_t kkp_functional(xkb_keysym_t sym, char *final)
+{
+	switch (sym) {
+	case XKB_KEY_Up:        *final = 'A'; return 1;
+	case XKB_KEY_Down:      *final = 'B'; return 1;
+	case XKB_KEY_Right:     *final = 'C'; return 1;
+	case XKB_KEY_Left:      *final = 'D'; return 1;
+	case XKB_KEY_Home:      *final = 'H'; return 1;
+	case XKB_KEY_End:       *final = 'F'; return 1;
+	case XKB_KEY_Insert:    *final = '~'; return 2;
+	case XKB_KEY_Delete:    *final = '~'; return 3;
+	case XKB_KEY_Page_Up:   *final = '~'; return 5;
+	case XKB_KEY_Page_Down: *final = '~'; return 6;
+	case XKB_KEY_F1:        *final = 'P'; return 1;
+	case XKB_KEY_F2:        *final = 'Q'; return 1;
+	case XKB_KEY_F3:        *final = 'R'; return 1;
+	case XKB_KEY_F4:        *final = 'S'; return 1;
+	case XKB_KEY_F5:        *final = '~'; return 15;
+	case XKB_KEY_F6:        *final = '~'; return 17;
+	case XKB_KEY_F7:        *final = '~'; return 18;
+	case XKB_KEY_F8:        *final = '~'; return 19;
+	case XKB_KEY_F9:        *final = '~'; return 20;
+	case XKB_KEY_F10:       *final = '~'; return 21;
+	case XKB_KEY_F11:       *final = '~'; return 23;
+	case XKB_KEY_F12:       *final = '~'; return 24;
+	default:                return 0;
+	}
+}
+
+/* The first codepoint of a UTF-8 run.
+ *
+ * The associated-text field is a CODEPOINT, not a byte — sending the first
+ * byte of a multi-byte sequence would report 0xC3 for 'a' with an umlaut, and
+ * the program would render whatever that is instead. xkb hands us UTF-8, so it
+ * has to be decoded back. */
+static uint32_t decode_utf8_first(const char *s, int n)
+{
+	if (n <= 0)
+		return 0;
+	unsigned char c = (unsigned char)s[0];
+	int need;
+	uint32_t cp;
+	if      (c < 0x80) return c;
+	else if ((c & 0xE0) == 0xC0) { need = 1; cp = c & 0x1F; }
+	else if ((c & 0xF0) == 0xE0) { need = 2; cp = c & 0x0F; }
+	else if ((c & 0xF8) == 0xF0) { need = 3; cp = c & 0x07; }
+	else return 0;
+	if (n < need + 1)
+		return 0;
+	for (int i = 1; i <= need; i++) {
+		unsigned char b = (unsigned char)s[i];
+		if ((b & 0xC0) != 0x80)
+			return 0;
+		cp = cp << 6 | (b & 0x3F);
+	}
+	return cp;
+}
+
+/* The protocol's number for a key that is not one of the above. Escape, Enter,
+ * Tab and Backspace have fixed codes; everything else is its own codepoint. */
+static uint32_t kkp_code(xkb_keysym_t sym, const char *utf8, int n)
+{
+	switch (sym) {
+	case XKB_KEY_Escape:    return 27;
+	case XKB_KEY_Return:    return 13;
+	case XKB_KEY_Tab:       return 9;
+	case XKB_KEY_BackSpace: return 127;
+	default: break;
+	}
+	if (sym >= 0x20 && sym < 0x7f)
+		return (uint32_t)sym;
+	/* A key whose keysym is not a character but which produced one — a dead
+	 * key resolving, or a compose sequence finishing. */
+	if (n > 0)
+		return (unsigned char)utf8[0];
+	return 0;
+}
+
 static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
                     uint32_t time, uint32_t key, uint32_t state)
 {
 	(void)k; (void)serial; (void)time;
 	win_t *w = data;
-	if (state != WL_KEYBOARD_KEY_STATE_PRESSED || !w->xkb_state)
+	if (!w->xkb_state)
 		return;
 
-	/* The clock starts HERE, on the press, and the earliest un-drawn press
-	 * wins: if three keys arrive before the next frame, what matters is how
-	 * long the first one waited, not the last. */
-	if (!w->pending_input_ns)
+	unsigned flags = st_vt_kbd_flags(w->vt);
+	bool pressed  = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+
+	/* A RELEASE is only ever reported when the program asked for events. Sent
+	 * unasked, it arrives at a shell as a burst of unrecognised escapes, which
+	 * is how a terminal "types garbage by itself". */
+	if (!pressed && !(flags & KKP_REPORT_EVENTS))
+		return;
+
+	if (pressed && !w->pending_input_ns)
 		w->pending_input_ns = now_ns();
 
 	/* +8: evdev codes and X11 keycodes differ by exactly that, forever, and
 	 * every Wayland client carries this line. */
 	xkb_keycode_t code = key + 8;
-
-	/* The text this key produces, according to the layout and the modifiers
-	 * currently held. Asked of xkb rather than derived from the keysym: a
-	 * dead key, a compose sequence and an AltGr level are all things xkb
-	 * already knows and a switch statement never will. */
 	char utf8[16];
 	int  n = xkb_state_key_get_utf8(w->xkb_state, code, utf8, sizeof utf8);
-
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(w->xkb_state, code);
 
-	/* Ctrl+letter is a control code, and xkb does not fold it for us. */
-	bool ctrl = xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_CTRL,
-	                                         XKB_STATE_MODS_EFFECTIVE) > 0;
-	if (ctrl && sym >= 'a' && sym <= 'z') {
-		char c = (char)(sym - 'a' + 1);
-		(void)!write(w->pty->fd, &c, 1);
-		return;
-	}
-	if (ctrl && sym >= 'A' && sym <= 'Z') {
-		char c = (char)(sym - 'A' + 1);
-		(void)!write(w->pty->fd, &c, 1);
-		return;
+	char out[64];
+	int  len = 0;
+
+	if (flags) {
+		unsigned mods = kkp_mods(w->xkb_state);
+		unsigned evt  = pressed ? 1 : 3;
+
+		char final = 0;
+		uint32_t num = kkp_functional(sym, &final);
+		if (!num) {
+			num   = kkp_code(sym, utf8, n);
+			final = 'u';
+			if (!num)
+				return;         /* a modifier by itself: nothing to report */
+		}
+
+		/* The short forms matter. `CSI A` is what every program expects for an
+		 * unmodified Up, and one that suddenly reads `CSI 1;1A` will not
+		 * recognise it — so the parameters are only spelled out once there is
+		 * something to say. */
+		if (mods == 1 && evt == 1) {
+			if (final == 'u')
+				len = snprintf(out, sizeof out, "\033[%uu", num);
+			else if (final == '~')
+				len = snprintf(out, sizeof out, "\033[%u~", num);
+			else
+				len = snprintf(out, sizeof out, "\033[%c", final);
+		} else if (evt == 1) {
+			len = snprintf(out, sizeof out, "\033[%u;%u%c",
+			               num, mods, final == '~' ? '~' : final);
+		} else {
+			len = snprintf(out, sizeof out, "\033[%u;%u:%u%c",
+			               num, mods, evt, final == '~' ? '~' : final);
+		}
+
+		/* The text the key produced, when it was asked for and there is any.
+		 * It is a THIRD parameter, so the first two have to be spelled out
+		 * even when they are defaults — `CSI 97;;97u` would be ambiguous
+		 * about which field was omitted, and the protocol counts positions.
+		 *
+		 * Only for the `u` form: a functional key produces no text, and there
+		 * is no position for it in the `~` and letter-terminated shapes. */
+		if ((flags & KKP_ASSOCIATED_TEXT) && pressed && n > 0 && final == 'u') {
+			uint32_t cp = decode_utf8_first(utf8, n);
+			if (cp)
+				len = snprintf(out, sizeof out, "\033[%u;%u:%u;%uu",
+				               num, mods, evt, cp);
+		}
+	} else {
+		/* Legacy. Ctrl+letter is a control code and xkb does not fold it. */
+		bool ctrl = xkb_state_mod_name_is_active(w->xkb_state, XKB_MOD_NAME_CTRL,
+		                                         XKB_STATE_MODS_EFFECTIVE) > 0;
+		if (ctrl && ((sym >= 'a' && sym <= 'z') || (sym >= 'A' && sym <= 'Z'))) {
+			out[0] = (char)((sym | 0x20) - 'a' + 1);
+			len = 1;
+		} else {
+			/* A named sequence WINS over the key's own text: several of these
+			 * keys do produce text and it is the wrong text — Escape yields
+			 * \033 and Backspace yields \010, which is BS where every line
+			 * editor wants DEL. */
+			const char *seq = key_sequence(sym);
+			if (seq) {
+				len = (int)strlen(seq);
+				memcpy(out, seq, (size_t)len);
+			} else if (n > 0) {
+				len = n;
+				memcpy(out, utf8, (size_t)n);
+			}
+		}
 	}
 
-	/* A named sequence WINS over the key's own text, because several of these
-	 * keys do produce text and it is the wrong text: Escape yields \033 and
-	 * Backspace yields \010, which is BS where every line editor wants DEL. */
-	const char *seq = key_sequence(sym);
-	if (seq) {
-		(void)!write(w->pty->fd, seq, strlen(seq));
-		return;
-	}
-
-	if (n > 0)
-		(void)!write(w->pty->fd, utf8, (size_t)n);
+	if (len > 0)
+		(void)!write(w->pty->fd, out, (size_t)len);
 }
 
 static void kbd_modifiers(void *data, struct wl_keyboard *k, uint32_t serial,
@@ -940,6 +1103,15 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			}
 			if (eof)
 				break;
+
+			/* Answers the child asked for while we were parsing. Written
+			 * straight back, as though typed — see vt_reply: the parser holds
+			 * no descriptor, so draining is the caller's job and this is the
+			 * only caller that has somewhere to drain to. */
+			char rep[128];
+			size_t rn = st_vt_take_reply(vt, rep, sizeof rep);
+			if (rn)
+				(void)!write(pty->fd, rep, rn);
 		}
 
 		/* The scheduled paint, now that everything readable has been read —

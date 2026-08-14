@@ -292,6 +292,82 @@ fi
 rate=$("$ST" bench "$T/bench.txt" --runs=3 | awk '/^best/{print $4}')
 ok "throughput on this machine: ${rate} MB/s"
 
+# ── the kitty keyboard protocol ─────────────────────────────────────────────
+#
+# Table stakes, not a win: programs assume it now, and it fixes something
+# genuinely broken. In the legacy encoding Ctrl+I IS Tab, Ctrl+M IS Enter and
+# Ctrl+[ IS Escape — the same bytes — and nothing can report a key release at
+# all. Editors have guessed from timing for forty years.
+#
+# Only the PARSER half is testable here: what the program sends the terminal,
+# and what the terminal answers. The other half — turning a real key press into
+# the negotiated encoding — needs a seat and a person, and input is never
+# synthesised in this suite.
+kbd() { printf "$1" | "$ST" dump - --stats 2>&1; }
+
+[ "$(kbd '\033[?u' | awk '/^kbd flags/{print $3}')" = 0 ] \
+    && ok "the base state is the legacy encoding" \
+    || bad "the base state is the legacy encoding"
+
+kbd '\033[?u' | grep -q 'reply *ESC\[?0u'
+check "...and a query is answered, not ignored" $?
+
+[ "$(kbd '\033[>15u\033[?u' | awk '/^kbd flags/{print $3}')" = 15 ] \
+    && ok "a program can push the enhancements it wants" \
+    || bad "a program can push the enhancements it wants"
+
+[ "$(kbd '\033[>15u\033[<1u\033[?u' | awk '/^kbd flags/{print $3}')" = 0 ] \
+    && ok "...and popping returns to what was there before" \
+    || bad "...and popping returns to what was there before"
+
+# ⚠ POPPING AN EMPTY STACK IS A NO-OP, NOT AN ERROR. It is exactly what a
+# program does when it pops on exit having never pushed on entry — or when it
+# is killed and the shell's own reset runs. The base state is the right place
+# to land, and anything else strands the shell in a mode it cannot use.
+[ "$(kbd '\033[<9u\033[?u' | awk '/^kbd flags/{print $3}')" = 0 ] \
+    && ok "popping past the bottom lands on the legacy encoding" \
+    || bad "popping past the bottom lands on the legacy encoding"
+
+# `=` sets: mode 1 replaces, 2 adds bits, 3 clears them.
+[ "$(kbd '\033[>4u\033[=1;2u\033[?u' | awk '/^kbd flags/{print $3}')" = 5 ] \
+    && ok "mode 2 adds bits to what is already set" \
+    || bad "mode 2 adds bits to what is already set"
+
+[ "$(kbd '\033[>5u\033[=4;3u\033[?u' | awk '/^kbd flags/{print $3}')" = 1 ] \
+    && ok "mode 3 clears them" \
+    || bad "mode 3 clears them"
+
+[ "$(kbd '\033[>5u\033[=8;1u\033[?u' | awk '/^kbd flags/{print $3}')" = 8 ] \
+    && ok "mode 1 replaces them outright" \
+    || bad "mode 1 replaces them outright"
+
+# ⚠ THE ANSWER IS WHAT WE IMPLEMENT, NEVER WHAT WAS ASKED FOR. A terminal that
+# echoes the request back claims every enhancement, and the program then sends
+# encodings it will never be able to read — which is worse than admitting to
+# none, because the failure lands in the program's input handling rather than
+# at the negotiation.
+[ "$(kbd '\033[>255u\033[?u' | awk '/^kbd flags/{print $3}')" -le 31 ] \
+    && ok "asking for enhancements we lack does not get them claimed back" \
+    || bad "asking for enhancements we lack does not get them claimed back"
+
+# ⚠ THE PREFIX IS THE WHOLE SEQUENCE. `CSI > 1 u`, `CSI < 1 u` and `CSI = 1 u`
+# are three different operations one byte apart, and this is the same trap that
+# made ESC[>4;2m apply underline and dim to everything — see csi_dispatch.
+[ "$(kbd '\033[>1u\033[>2u\033[?u' | awk '/^kbd flags/{print $3}')" = 2 ] \
+    && ok "a second push stacks rather than merging" \
+    || bad "a second push stacks rather than merging"
+
+# A stack has a bottom AND a top. Pushing past it must not scribble past the
+# array; the overflow is counted so it cannot hide.
+kbd "$(printf '\033[>1u%.0s' $(seq 1 40))\033[?u" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "forty pushes do not run off the end of the stack" \
+             || bad "forty pushes do not run off the end of the stack"
+
+# The reply is bytes owed to the CHILD, so nothing may reach the screen.
+[ -z "$(printf '\033[?u' | "$ST" dump - | tr -d ' \n')" ] \
+    && ok "an answer to the program is not drawn on the screen" \
+    || bad "an answer to the program is not drawn on the screen"
+
 # ── the font lookup, and the cache that exists to skip it ───────────────────
 #
 # ⚠ THE ONE PART OF THIS FILE THAT NEEDS SOMETHING INSTALLED. The rule at the

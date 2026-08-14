@@ -28,6 +28,8 @@
 #define _GNU_SOURCE
 #include "syntty.h"
 
+#include <stdarg.h>
+
 #include <string.h>
 
 int st_char_width(uint32_t cp);
@@ -54,6 +56,65 @@ void st_vt_init(st_vt_t *vt, st_grid_t *g)
  * `ESC[H` homes the cursor and `ESC[0;0H` also homes it, but `ESC[5A` and
  * `ESC[A` both mean one line where zero would mean none. Every caller states
  * its own default rather than sharing one. */
+/* ── talking back to the child ──────────────────────────────────────────────
+ *
+ * A terminal answers questions: "which keyboard enhancements do you support?",
+ * "what are you?", "where is the cursor?". Every answer is bytes written to the
+ * pty, as though the person had typed them.
+ *
+ * ⚠ THE PARSER DOES NOT OWN A FILE DESCRIPTOR, deliberately. It is fed buffers
+ * by whoever has one — `dump` from a file, `run` and the window from a pty —
+ * and giving it an fd would mean the headless paths could no longer parse a
+ * stream without one. So replies are QUEUED here and drained by the caller
+ * after each feed. A caller that never drains loses only the replies, which is
+ * the right failure for `dump`, whose input is a file that cannot be answered.
+ *
+ * The buffer is small and overflow is dropped rather than grown: replies are
+ * tens of bytes, and a stream that generates more than this between drains is
+ * a program spinning on queries, which growing a buffer would turn into
+ * unbounded memory rather than a lost answer. */
+static void vt_reply(st_vt_t *vt, const char *fmt, ...)
+{
+	char tmp[128];
+	va_list ap;
+	va_start(ap, fmt);
+	int n = vsnprintf(tmp, sizeof tmp, fmt, ap);
+	va_end(ap);
+	if (n <= 0)
+		return;
+	if ((size_t)n >= sizeof tmp)
+		n = (int)sizeof tmp - 1;
+
+	if (vt->reply_len + n > (int)sizeof vt->reply) {
+		vt->reply_dropped++;
+		return;
+	}
+	memcpy(vt->reply + vt->reply_len, tmp, (size_t)n);
+	vt->reply_len += n;
+}
+
+/* The enhancements in force right now: the top of the stack. */
+static unsigned vt_kbd_flags(const st_vt_t *vt)
+{
+	return vt->kkp_stack[vt->kkp_depth];
+}
+
+unsigned st_vt_kbd_flags(const st_vt_t *vt)
+{
+	return vt_kbd_flags(vt);
+}
+
+size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap)
+{
+	size_t n = (size_t)vt->reply_len < cap ? (size_t)vt->reply_len : cap;
+	memcpy(out, vt->reply, n);
+	/* Emptied whole, not partially: a caller that could not take all of it has
+	 * a buffer smaller than 128 bytes, and leaving a fragment of an escape
+	 * sequence queued would send the child half an answer. */
+	vt->reply_len = 0;
+	return n;
+}
+
 static int param(const st_vt_t *vt, int i, int def)
 {
 	if (i >= vt->nparams)
@@ -164,8 +225,64 @@ static void csi_dispatch(st_vt_t *vt, uint8_t final)
 	 * falling through to the colour handler applied "4" as underline and "2"
 	 * as dim to everything the program printed afterwards. Only the mode
 	 * setters have a private form this stage understands. */
-	if (vt->priv && final != 'h' && final != 'l') {
+	if (vt->priv && final != 'h' && final != 'l' && final != 'u') {
 		vt->unhandled_csi++;
+		return;
+	}
+
+	/* ── the kitty keyboard protocol's control sequences ────────────────────
+	 *
+	 * Four sequences, told apart ONLY by their private prefix — `CSI > 1 u`
+	 * and `CSI < 1 u` and `CSI = 1 u` are three different operations that
+	 * differ by one byte. This is the same trap as `ESC[>4;2m` above, which is
+	 * why they are handled here, before the switch, rather than under case 'u'
+	 * where the prefix would have to be re-tested.
+	 *
+	 * The protocol is PROGRESSIVE: a program declares which enhancements it
+	 * wants, and a terminal that only understands some of them still says so
+	 * honestly rather than claiming all of them. Programs push their flags on
+	 * entry and pop on exit, so a program that crashes does not leave the
+	 * terminal in a mode the shell cannot use — which is exactly why the stack
+	 * exists and why popping past the bottom must be harmless. */
+	if (final == 'u' && vt->priv) {
+		switch (vt->priv) {
+		case '?':
+			/* Query. The answer is what we ACTUALLY implement, never what was
+			 * asked for: a terminal that echoes the request back claims
+			 * support for enhancements it does not have, and the program then
+			 * sends key encodings it will never be able to read. */
+			vt_reply(vt, "\033[?%uu", (unsigned)(vt_kbd_flags(vt) & KKP_SUPPORTED));
+			break;
+		case '>': {
+			unsigned f = (unsigned)param(vt, 0, 0) & KKP_SUPPORTED;
+			if (vt->kkp_depth < VT_KKP_DEPTH - 1)
+				vt->kkp_stack[++vt->kkp_depth] = (uint8_t)f;
+			else
+				vt->kkp_overflow++;   /* counted, not silently dropped */
+			break;
+		}
+		case '<': {
+			int n = param(vt, 0, 1);
+			/* Popping an empty stack is a no-op, not an error. It is what a
+			 * program does when it pops on exit having failed to push on
+			 * entry, and the base state is the correct place to land. */
+			while (n-- > 0 && vt->kkp_depth > 0)
+				vt->kkp_depth--;
+			break;
+		}
+		case '=': {
+			unsigned f = (unsigned)param(vt, 0, 0) & KKP_SUPPORTED;
+			int mode = param(vt, 1, 1);
+			uint8_t *cur = &vt->kkp_stack[vt->kkp_depth];
+			if      (mode == 1) *cur = (uint8_t)f;
+			else if (mode == 2) *cur |= (uint8_t)f;
+			else if (mode == 3) *cur &= (uint8_t)~f;
+			break;
+		}
+		default:
+			vt->unhandled_csi++;
+			break;
+		}
 		return;
 	}
 
