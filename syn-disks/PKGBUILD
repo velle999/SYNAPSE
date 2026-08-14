@@ -32,7 +32,7 @@ pkgname=syn-disks
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc="SynapseOS disk utility: drives, partitions, health, mounting and formatting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
@@ -51,21 +51,40 @@ depends=('glibc')
 # if it is wrong, makes a drive look blank. It is on every Arch system anyway.
 depends+=('util-linux')
 
+# One per filesystem the Format menu offers. These were optdepends, on the
+# reasoning that syn-disks reports a type it cannot create as unavailable
+# rather than failing at the last step — which it still does, and which is
+# still the right behaviour for a machine somebody has stripped.
+#
+# But that only ever degraded gracefully; it never made formatting WORK. In
+# practice exFAT and NTFS were unavailable on every SynapseOS system, installed
+# and live alike, and XFS on every installed one — the ISO carries xfsprogs for
+# the installer's own use, so nothing pulled it onto the target. A disk utility
+# whose Format menu is half greyed out on a default install is not offering
+# those filesystems, it is listing them.
+#
+# The cost is small and bounded: exfatprogs and ntfsprogs are about a megabyte
+# between them, and the other four are on any Arch system already.
+#
+# ntfsprogs, NOT ntfs-3g. ntfs-3g is the mount helper and ships no mkfs at all;
+# mkfs.ntfs and mkntfs live in ntfsprogs, which Arch splits out. Naming the
+# wrong one is worse than naming none: the optdepend told anyone who looked to
+# install a package that was ALREADY INSTALLED here, and NTFS stayed
+# unavailable with nothing further to try.
+depends+=('e2fsprogs'    # mkfs.ext4
+          'btrfs-progs'  # mkfs.btrfs
+          'xfsprogs'     # mkfs.xfs
+          'dosfstools'   # mkfs.vfat
+          'exfatprogs'   # mkfs.exfat
+          'ntfsprogs')   # mkfs.ntfs / mkntfs
+
 makedepends=('meson' 'ninja' 'gcc')
 
 optdepends=('quickshell: the graphical window (syn-disks gui)'
             'udisks2: mount, unmount and safely remove drives without root'
             'smartmontools: drive health (syn-disks smart)'
             'polkit: authorisation for formatting'
-            # One per filesystem offered, because "Format" listing a type the
-            # machine cannot actually create is a button that fails at the last
-            # step. syn-disks reports each as unavailable instead.
-            'e2fsprogs: format as ext4'
-            'btrfs-progs: format as btrfs'
-            'xfsprogs: format as XFS'
-            'dosfstools: format as FAT'
-            'exfatprogs: format as exFAT'
-            'ntfs-3g: format as NTFS')
+            'ntfs-3g: mount NTFS volumes on a kernel without the ntfs3 driver')
 
 source=("syn-disks-0.1.0.tar.gz")
 sha256sums=('SKIP')
