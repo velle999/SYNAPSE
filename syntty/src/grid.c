@@ -289,6 +289,7 @@ void st_grid_init(st_grid_t *g, uint16_t cols, uint16_t rows, uint32_t limit)
 	g->top = 0;
 	g->bot = (uint16_t)(g->rows - 1);
 	g->autowrap = true;
+	g->cursor_visible = true;
 }
 
 void st_grid_free(st_grid_t *g)
@@ -306,6 +307,18 @@ void st_grid_free(st_grid_t *g)
 	free(g->pool);
 	free(g->styles);
 	free(g->hash);
+
+	/* ⚠ BEFORE THE memset, which is where this was not. The alternate screen
+	 * is the one not currently shown, and `g->rows` is what says how many rows
+	 * it has — zero the struct first and both the pointer and the count are
+	 * gone, so the loop never runs and the whole screen leaks. It read as
+	 * correct code sitting in the wrong place, and only the sanitiser noticed. */
+	if (g->alt) {
+		for (uint16_t y = 0; y < g->rows; y++)
+			free(g->alt[y].cells);
+		free(g->alt);
+	}
+
 	memset(g, 0, sizeof *g);
 }
 
@@ -379,6 +392,157 @@ static void dirty_range(st_grid_t *g, int from, int to)
 	if (to >= g->rows) to = g->rows - 1;
 	for (int y = from; y <= to; y++)
 		g->screen[y].dirty = true;
+}
+
+/* ── selected text ──────────────────────────────────────────────────────────
+ *
+ * The text between two cells, in reading order, as UTF-8.
+ *
+ * ⚠ A SOFT WRAP IS NOT A NEWLINE. When a long line ran past the right edge the
+ * terminal broke it across two rows, but it is ONE line and the person who
+ * copies it wants one line — paste it into a shell and a newline in the middle
+ * runs half a command. The row's `wrapped` flag is what distinguishes the
+ * break the terminal invented from the newline the program actually sent, and
+ * it is the whole reason that flag is kept.
+ *
+ * Trailing blanks are trimmed per line, because the cells to the right of the
+ * text are padding rather than spaces anybody typed.
+ *
+ * Coordinates are VIEW coordinates — what the person can see and clicked on —
+ * so this resolves them through the scrollback the same way the renderer does. */
+char *st_grid_selection_text(const st_grid_t *g, int c0, int r0, int c1, int r1)
+{
+	/* Normalise: the person may have dragged upwards or right-to-left. */
+	if (r1 < r0 || (r1 == r0 && c1 < c0)) {
+		int t;
+		t = r0; r0 = r1; r1 = t;
+		t = c0; c0 = c1; c1 = t;
+	}
+	if (r0 < 0) r0 = 0;
+	if (r1 >= g->rows) r1 = g->rows - 1;
+	if (r1 < r0)
+		return xstrdup("");
+
+	size_t cap = 256, len = 0;
+	char *out = xmalloc(cap);
+
+	for (int y = r0; y <= r1; y++) {
+		const st_row_t *row = st_grid_view_row(g, y);
+		if (!row)
+			continue;
+
+		int from = (y == r0) ? c0 : 0;
+		int to   = (y == r1) ? c1 : g->cols - 1;
+		if (from < 0) from = 0;
+		if (to >= row->len) to = row->len - 1;
+
+		/* Trim the padding on the right of this line's selected span. */
+		int last = from - 1;
+		for (int x = from; x <= to; x++)
+			if (row->cells[x].cp != 0 && row->cells[x].cp != ' ')
+				last = x;
+
+		for (int x = from; x <= last; x++) {
+			uint32_t cp = row->cells[x].cp;
+			if (row->cells[x].width == 0 && cp == 0)
+				continue;             /* the tail of a wide glyph */
+			if (cp == 0)
+				cp = ' ';
+
+			/* UTF-8, four bytes at most, plus room for a newline. */
+			if (len + 8 > cap) {
+				cap *= 2;
+				out = xrealloc(out, cap);
+			}
+			if (cp < 0x80) {
+				out[len++] = (char)cp;
+			} else if (cp < 0x800) {
+				out[len++] = (char)(0xC0 | cp >> 6);
+				out[len++] = (char)(0x80 | (cp & 0x3F));
+			} else if (cp < 0x10000) {
+				out[len++] = (char)(0xE0 | cp >> 12);
+				out[len++] = (char)(0x80 | (cp >> 6 & 0x3F));
+				out[len++] = (char)(0x80 | (cp & 0x3F));
+			} else {
+				out[len++] = (char)(0xF0 | cp >> 18);
+				out[len++] = (char)(0x80 | (cp >> 12 & 0x3F));
+				out[len++] = (char)(0x80 | (cp >> 6 & 0x3F));
+				out[len++] = (char)(0x80 | (cp & 0x3F));
+			}
+		}
+
+		/* ⚠ Only where the terminal did NOT invent the break. */
+		if (y < r1 && !row->wrapped) {
+			if (len + 2 > cap) {
+				cap *= 2;
+				out = xrealloc(out, cap);
+			}
+			out[len++] = '\n';
+		}
+	}
+
+	if (len + 1 > cap)
+		out = xrealloc(out, len + 1);
+	out[len] = '\0';
+	return out;
+}
+
+/* ── the alternate screen ───────────────────────────────────────────────────
+ *
+ * A second screen, swapped in whole. Every full-screen program uses it — vim,
+ * less, htop, man — so that quitting leaves the shell session exactly as it
+ * was.
+ *
+ * ⚠ THE SCROLLBACK IS NOT FED WHILE IT IS SHOWING, which is the whole reason
+ * it exists. st_scroll_up checks `on_alt`: without that, ten minutes in an
+ * editor fills the history with fragments of its redraws and the commands the
+ * person actually ran are gone. The symptom reads as "the scrollback is
+ * broken", not as "the alternate screen is missing", which is why this is
+ * worth a paragraph.
+ *
+ * Allocated LAZILY. A session that never opens a full-screen program never
+ * pays for a second screen, and most of the startup budget this project is
+ * built around is spent on exactly this kind of "just in case". */
+void st_grid_alt_screen(st_grid_t *g, bool enable, bool save_cursor)
+{
+	if (enable == g->on_alt)
+		return;
+
+	if (!g->alt) {
+		g->alt = xcalloc(g->rows, sizeof *g->alt);
+		for (uint16_t y = 0; y < g->rows; y++)
+			g->alt[y] = make_row(g, g->cols);
+	}
+
+	if (enable && save_cursor) {
+		g->alt_cx = g->cx;
+		g->alt_cy = g->cy;
+		g->alt_style = g->cur_style;
+	}
+
+	/* A pointer swap, not a copy: `alt` always holds whichever screen is not
+	 * being shown. */
+	st_row_t *tmp = g->screen;
+	g->screen = g->alt;
+	g->alt = tmp;
+	g->on_alt = enable;
+
+	if (enable) {
+		/* Entering: the program expects a blank screen to draw on, and
+		 * expects it blank EVERY time — a second `vim` that opened onto the
+		 * first one's leftovers would be a memorable bug. */
+		for (uint16_t y = 0; y < g->rows; y++)
+			clear_row(&g->screen[y], g->cols, 0);
+		st_move_to(g, 0, 0);
+	} else if (save_cursor) {
+		g->cx = g->alt_cx < g->cols ? g->alt_cx : 0;
+		g->cy = g->alt_cy < g->rows ? g->alt_cy : 0;
+		g->cur_style = g->alt_style;
+	}
+
+	/* The whole surface is different now. */
+	g->view = 0;
+	st_grid_dirty_all(g);
 }
 
 /* ── the scrollback viewport ────────────────────────────────────────────────
@@ -496,8 +660,13 @@ void st_scroll_up(st_grid_t *g, int n)
 		/* Only the top of the SCREEN feeds the scrollback. A program that
 		 * set a scroll region is managing a pane — its discarded lines are
 		 * not history, and putting them in the scrollback is how a full
-		 * screen application fills it with garbage. */
-		if (g->top == 0)
+		 * screen application fills it with garbage.
+		 *
+		 * ⚠ And NOTHING from the alternate screen does, which is the entire
+		 * reason that screen exists: an editor's redraws are not history
+		 * either. Miss this and ten minutes in vim erases the commands the
+		 * person actually ran — read as "the scrollback is broken". */
+		if (g->top == 0 && !g->on_alt)
 			push_scrollback(g, &going);
 		else
 			row_release(g, going.cells, going.len);

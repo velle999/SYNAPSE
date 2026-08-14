@@ -52,6 +52,7 @@ static const char *usage_text =
 "  --no-deadline             win: paint on the frame callback, not the deadline\n"
 "  --view=N                  scroll the view N lines back before dumping\n"
 "  --jump=N                  jump back N prompt marks before dumping\n"
+"  --select=C0,R0,C1,R1      print the text between two cells, as copied\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
@@ -68,6 +69,7 @@ typedef struct {
 	bool     no_deadline;
 	int      view;
 	int      jump;      /* prompts to jump back before dumping */
+	const char *select; /* "c0,r0,c1,r1" — print that selection as text */
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -184,6 +186,23 @@ static int cmd_dump(const opts_t *o, const char *path)
 		if (off < 0)
 			break;
 		st_grid_view_scroll(&g, (int)(off - (long)g.view));
+	}
+
+	/* The selection is printed INSTEAD of the screen: what it is for is
+	 * asserting exactly what would land on the clipboard, and a screen dump
+	 * around it would have to be stripped off again by every caller. */
+	if (o->select) {
+		int c0 = 0, r0 = 0, c1 = 0, r1 = 0;
+		if (sscanf(o->select, "%d,%d,%d,%d", &c0, &r0, &c1, &r1) != 4)
+			die("--select wants C0,R0,C1,R1");
+		char *sel = st_grid_selection_text(&g, c0, r0, c1, r1);
+		fputs(sel, stdout);
+		fputc('\n', stdout);
+		free(sel);
+		st_vt_free(&vt);
+		st_grid_free(&g);
+		free(buf);
+		return 0;
 	}
 
 	if (o->with_scrollback)
@@ -748,7 +767,7 @@ int main(int argc, char **argv)
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
 		.font = NULL, .font_size = 14.0, .out = NULL, .no_cursor = false,
 		.probe = NULL, .no_deadline = false,
-		.view = 0, .jump = 0
+		.view = 0, .jump = 0, .select = NULL
 	};
 	size_t split = 0;
 
@@ -790,6 +809,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--no-deadline"))      o.no_deadline = true;
 		else if (!strncmp(a, "--view=", 7))        o.view = atoi(a + 7);
 		else if (!strncmp(a, "--jump=", 7))        o.jump = atoi(a + 7);
+		else if (!strncmp(a, "--select=", 9))      o.select = a + 9;
 		else if (!strcmp(a, "--styled"))           o.styled = true;
 		else if (!strcmp(a, "--scrollback-too"))   o.with_scrollback = true;
 		else if (!strcmp(a, "--stats"))            o.stats = true;

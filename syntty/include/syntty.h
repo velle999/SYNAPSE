@@ -182,6 +182,32 @@ typedef struct {
 	uint16_t   *hash;        /* open addressing, indexes into styles */
 	uint32_t    hash_mask;
 
+	/* ── the alternate screen ───────────────────────────────────────────────
+	 *
+	 * Every full-screen program uses it — vim, less, htop, top, man. It is a
+	 * second screen the program draws on, so that when it exits the shell
+	 * session is exactly as it left it.
+	 *
+	 * ⚠ NOTHING SCROLLED OFF THE ALTERNATE SCREEN GOES TO THE SCROLLBACK.
+	 * That is the entire point: without it, ten minutes in vim fills the
+	 * history with fragments of the editor's redraws and the commands the
+	 * person actually ran are gone. A terminal missing this destroys the
+	 * scrollback every time an editor opens, and it looks like the scrollback
+	 * is broken rather than like the alternate screen is missing.
+	 *
+	 * `alt` holds whichever screen is NOT currently shown, so switching is a
+	 * pointer swap rather than a copy. */
+	st_row_t *alt;
+	bool      on_alt;
+	uint16_t  alt_cx, alt_cy, alt_style;   /* the cursor saved across 1049 */
+
+	/* Modes a program turns on that only the renderer and the input layer
+	 * care about. Kept here because the parser is what is told about them. */
+	bool     cursor_visible;   /* DECTCEM, ?25 */
+	bool     bracketed_paste;  /* ?2004 */
+	uint8_t  mouse_mode;       /* 0 off, or 1000 / 1002 / 1003 */
+	bool     mouse_sgr;        /* ?1006 — extended coordinates */
+
 	/* Recycled full-width row buffers. See row_alloc() in grid.c: the malloc
 	 * triple this removes was 73% of the parse time on ordinary output. */
 	st_cell_t **pool;
@@ -215,6 +241,13 @@ int st_char_width(uint32_t cp);
 void st_grid_init(st_grid_t *g, uint16_t cols, uint16_t rows, uint32_t limit);
 void st_grid_free(st_grid_t *g);
 void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows);
+
+/* Switch to or from the alternate screen (DEC modes 1049, 1047, 47).
+ * `save_cursor` is what tells 1049 apart from the older two.
+ *
+ * ⚠ Nothing scrolled off the alternate screen reaches the scrollback — see the
+ * definition. That is what the feature is FOR. */
+void st_grid_alt_screen(st_grid_t *g, bool enable, bool save_cursor);
 
 /* Intern a style, returning its index. Identical styles always return the
  * same index, which is what makes a 16-bit field in the cell enough. */
@@ -282,6 +315,14 @@ bool st_grid_view_reset(st_grid_t *g);
 /* The row of the nearest prompt mark in `dir` (-1 back, +1 forward), as a view
  * offset, or -1 if there is none. */
 long st_grid_find_prompt(const st_grid_t *g, int dir);
+
+/* The text between two cells, in reading order, as a malloc'd UTF-8 string.
+ * Coordinates are VIEW coordinates — what the person can see.
+ *
+ * ⚠ A soft wrap does NOT become a newline: the terminal invented that break,
+ * the line is one line, and pasting it back with a newline in the middle runs
+ * half a command. See the definition. */
+char *st_grid_selection_text(const st_grid_t *g, int c0, int r0, int c1, int r1);
 
 bool st_grid_row_dirty(const st_grid_t *g, int row);
 void st_grid_clear_dirty(st_grid_t *g);

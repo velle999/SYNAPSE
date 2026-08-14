@@ -216,7 +216,12 @@ expect "256-colour and RGB do not leak into the next attribute" "3" \
 # Unhandled sequences are COUNTED. In a stage with no renderer, "drew nothing"
 # and "was never asked" are different bugs and nothing else can tell them apart.
 
-n=$(printf '\033[?1049h\033[>4;2m' | "$ST" dump - --stats 2>&1 >/dev/null \
+#
+# ⚠ THE FIXTURE USES SEQUENCES THAT WILL NEVER BE IMPLEMENTED, on purpose. It
+# used `?1049h` — a real mode — and went red the day the alternate screen
+# landed, which is a stale test rather than a regression. Anything genuinely
+# useful in here becomes a false alarm the moment it is built.
+n=$(printf '\033[?31337h\033[9999Z' | "$ST" dump - --stats 2>&1 >/dev/null \
     | awk '/^unhandled/{print $2}')
 [ -n "$n" ] && [ "$n" -ge 2 ] \
     && ok "what the parser cannot do yet is counted, not ignored ($n)" \
@@ -292,6 +297,98 @@ fi
 
 rate=$("$ST" bench "$T/bench.txt" --runs=3 | awk '/^best/{print $4}')
 ok "throughput on this machine: ${rate} MB/s"
+
+# ── the alternate screen ────────────────────────────────────────────────────
+#
+# ⚠ THE FEATURE THAT LOOKS LIKE A DIFFERENT BUG WHEN IT IS MISSING. Every
+# full-screen program uses it — vim, less, htop, man — and without it their
+# redraws pour into the scrollback, so ten minutes in an editor erases the
+# commands the person actually ran. That reads as "the scrollback is broken",
+# and nobody connects it to the alternate screen.
+
+alt=$(python3 -c "
+import sys
+for i in range(1,6): sys.stdout.write('command %d\r\noutput %d\r\n' % (i,i))
+sys.stdout.write('\033[?1049h')
+for i in range(30): sys.stdout.write('EDITOR JUNK %d\r\n' % i)
+sys.stdout.write('\033[?1049l')
+sys.stdout.write('after\r\n')
+" 2>/dev/null | "$ST" --cols=24 --rows=6 --scrollback-too dump - --stats 2>&1)
+
+if [ -z "$alt" ]; then
+    echo "  skip  the alternate screen (no python3)"
+else
+    printf '%s' "$alt" | grep -q 'EDITOR JUNK' \
+        && bad "a full-screen program's redraws never reach the scrollback" \
+        || ok "a full-screen program's redraws never reach the scrollback"
+
+    printf '%s' "$alt" | grep -q 'command 1' \
+        && ok "...and the real history is still there afterwards" \
+        || bad "...and the real history is still there afterwards"
+
+    # 30 lines of junk would have made it far bigger than this.
+    n=$(printf '%s' "$alt" | awk '/^scrollback/{print $2}')
+    [ -n "$n" ] && [ "$n" -lt 15 ] \
+        && ok "...and the scrollback holds only what was really printed ($n rows)" \
+        || bad "...and the scrollback holds only what was really printed ($n rows)"
+
+    # Entering must give a BLANK screen every time. A second editor opening
+    # onto the first one's leftovers is a memorable bug.
+    blank=$(printf 'x\033[?1049hy\033[?1049l\033[?1049h' \
+            | "$ST" --cols=10 --rows=3 dump - | tr -d ' \n')
+    [ "$blank" = "" ] \
+        && ok "entering the alternate screen always gives a blank one" \
+        || bad "entering the alternate screen always gives a blank one ('$blank')"
+
+    # And leaving restores what the shell had.
+    back=$(printf 'shell text\033[?1049hEDITOR\033[?1049l' \
+           | "$ST" --cols=14 --rows=3 dump - | head -1 | sed -e 's/[[:space:]]*$//')
+    [ "$back" = "shell text" ] \
+        && ok "leaving it restores the session underneath" \
+        || bad "leaving it restores the session underneath (got '$back')"
+
+    # The older forms are still emitted in the wild.
+    back47=$(printf 'shell\033[?47hEDITOR\033[?47l' \
+             | "$ST" --cols=14 --rows=3 dump - | head -1 | sed -e 's/[[:space:]]*$//')
+    [ "$back47" = "shell" ] \
+        && ok "...and so do the older ?47 and ?1047 forms" \
+        || bad "...and so do the older ?47 and ?1047 forms (got '$back47')"
+fi
+
+# ── modes a program turns on that the input layer must obey ─────────────────
+modes=$(printf '\033[?1000h\033[?1006h\033[?2004h\033[?25l' \
+        | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
+printf '%s' "$modes" | grep -q 'unhandled     0 CSI'
+check "mouse, paste and cursor modes are understood, not counted as unknown" $?
+
+# ── selection: what would actually land on the clipboard ────────────────────
+sel=$(printf 'hello world\r\nsecond line\r\n' | "$ST" --cols=20 --rows=4 dump - --select=0,0,4,0)
+[ "$sel" = "hello" ] && ok "a selection inside one line is that text" \
+                     || bad "a selection inside one line is that text (got '$sel')"
+
+sel=$(printf 'hello world\r\nsecond line\r\n' | "$ST" --cols=20 --rows=4 dump - --select=6,0,5,1)
+[ "$sel" = "$(printf 'world\nsecond')" ] \
+    && ok "...and across lines it keeps the newline between them" \
+    || bad "...and across lines it keeps the newline between them (got '$sel')"
+
+# ⚠ THE ONE MOST TERMINALS GET WRONG. A long line the terminal broke across two
+# rows is ONE line. Copy it with a newline in the middle, paste it into a
+# shell, and half a command runs on its own.
+sel=$(printf 'aaaaaaaaaabbbbbbbbbb' | "$ST" --cols=10 --rows=4 dump - --select=0,0,9,1)
+[ "$sel" = "aaaaaaaaaabbbbbbbbbb" ] \
+    && ok "a soft-wrapped line is copied as ONE line, not two" \
+    || bad "a soft-wrapped line is copied as ONE line, not two (got '$sel')"
+
+# Dragging backwards selects the same text as dragging forwards.
+a=$(printf 'hello world' | "$ST" --cols=20 --rows=2 dump - --select=0,0,4,0)
+b=$(printf 'hello world' | "$ST" --cols=20 --rows=2 dump - --select=4,0,0,0)
+[ "$a" = "$b" ] && ok "dragging backwards selects the same text" \
+                || bad "dragging backwards selects the same text"
+
+# Padding to the right of the text is not spaces anybody typed.
+sel=$(printf 'hi' | "$ST" --cols=20 --rows=2 dump - --select=0,0,19,0)
+[ "$sel" = "hi" ] && ok "trailing padding is not copied as spaces" \
+                  || bad "trailing padding is not copied as spaces (got '$sel')"
 
 # ── semantic marks, the scrollback view, and jump-to-prompt ─────────────────
 #

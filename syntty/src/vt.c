@@ -302,7 +302,41 @@ static void set_mode(st_vt_t *vt, bool on)
 			switch (p) {
 			case 6:  g->origin = on; st_move_to(g, 0, 0); break;
 			case 7:  g->autowrap = on; break;
-			case 25: break;   /* cursor visibility: a renderer's business */
+			case 25: g->cursor_visible = on; break;
+
+			/* ── mouse reporting ────────────────────────────────────────────
+			 *
+			 * Three levels, and a program picks one: buttons only, buttons
+			 * plus motion while held, or every motion. They are recorded
+			 * rather than merged because a program that asked for 1000 and is
+			 * sent 1003's motion events gets a flood it never wanted. */
+			case 1000: g->mouse_mode = on ? 1000 : 0; break;
+			case 1002: g->mouse_mode = on ? 1002 : 0; break;
+			case 1003: g->mouse_mode = on ? 1003 : 0; break;
+			/* SGR coordinates. The old encoding put the column in ONE BYTE
+			 * offset by 32, so it breaks silently past column 223 — which is
+			 * an ordinary width on a wide monitor. Programs ask for 1006 to
+			 * get numbers instead. */
+			case 1006: g->mouse_sgr = on; break;
+
+			/* ⚠ BRACKETED PASTE IS A SAFETY FEATURE, not a convenience. With
+			 * it off, pasting three lines into a shell RUNS the first two
+			 * immediately — there is no chance to look at them. With it on,
+			 * the paste arrives wrapped in markers the shell recognises as
+			 * text rather than as typing. */
+			case 2004: g->bracketed_paste = on; break;
+
+			/* ── the alternate screen ───────────────────────────────────────
+			 *
+			 * 1049 is the modern one: switch, and save/restore the cursor with
+			 * it. 47 and 1047 are the older forms that switch only. All three
+			 * are still emitted in the wild by different programs. */
+			case 1049:
+			case 1047:
+			case 47:
+				st_grid_alt_screen(g, on, p == 1049);
+				break;
+
 			default: vt->unhandled_csi++; break;
 			}
 		} else {
