@@ -1000,6 +1000,15 @@ test('apply_theme_square_chrome', apply_theme_square,
      args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
      timeout : 60)
 
+# The same helper's OTHER half: whether it tells the session the desktop is
+# light. It used to say `default` (= no preference) for every light theme, which
+# left Firefox's System theme guessing and made 95's chrome flip to dark grey at
+# random. See the header of the script for the measured portal values.
+apply_theme_scheme = find_program('tests/apply_theme_color_scheme.sh')
+test('apply_theme_color_scheme', apply_theme_scheme,
+     args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
+     timeout : 60)
+
 # The two ways round src/contrast.c, which panel_contrast_test.c already covers.
 # The calendar's day numbers were a hardcoded near-white — 1.31:1 on 95's silver,
 # and a literal is not a rung, so the corrector never saw them. kitty's light

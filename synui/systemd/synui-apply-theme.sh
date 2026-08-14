@@ -80,7 +80,23 @@ for d in /usr/lib/qt6/plugins/styles /usr/lib/qt/plugins/styles \
     done
 done
 
-prefer_dark=0; color_scheme=default
+# A light theme must SAY it is light. `default` is not "light" — in the GNOME
+# schema (and to the xdg-desktop-portal that re-exports it as
+# org.freedesktop.appearance color-scheme) it means literally NO PREFERENCE, and
+# the portal hands out 0 for it.
+#
+# That asymmetry — dark asserted, light left unstated — is what made Firefox
+# "keep losing its theme colour in 95 and switch to a darker grey". Firefox ships
+# the System theme (`default-theme@mozilla.org`) which follows the portal; told
+# "no preference" it falls back to its own heuristic for whether the desktop is
+# dark, and that answer is not stable across launches. Hence intermittent: a
+# light desktop with nothing claiming to be light, and a browser guessing.
+#
+# Nothing else noticed because every OTHER consumer of the scheme is driven by a
+# colour we hand it explicitly (kdeglobals, the GTK theme name, the kitty and
+# rofi palettes). Firefox's chrome is the one that reads the SIGNAL rather than a
+# colour, so it was the only thing that could get this wrong.
+prefer_dark=0; color_scheme=prefer-light
 if [ "$scheme" = dark ]; then prefer_dark=1; color_scheme=prefer-dark; fi
 
 # Black or white ink for a background, whichever carries better. Top level and
