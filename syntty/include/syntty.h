@@ -115,6 +115,16 @@ typedef struct {
 typedef struct {
 	st_cell_t *cells;
 	uint16_t   len;
+	/* An UPPER BOUND on the columns holding anything — never lower than the
+	 * truth. Trimming a row for the scrollback used to scan the whole width
+	 * backwards looking for the last non-blank cell: eighty comparisons per
+	 * line of output, thirty million over a build log. The scan still runs and
+	 * still decides, it just starts here instead of at the end, so a watermark
+	 * that is merely close costs nothing and one that is wrong high costs a
+	 * few comparisons. Under-reporting would truncate real text, which is why
+	 * every operation that could widen a row raises it and none lowers it
+	 * except where the cells are provably blank. */
+	uint16_t   hi;
 	bool       wrapped;   /* the line continues on the next row */
 } st_row_t;
 
@@ -141,6 +151,7 @@ typedef struct {
 	st_cell_t **pool;
 	uint32_t    npool, pool_cap;
 	uint16_t    pool_cols;
+
 
 	/* Cursor and the state the parser owns. */
 	uint16_t cx, cy;

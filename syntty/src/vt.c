@@ -286,7 +286,10 @@ static size_t ascii_run(const uint8_t *p, size_t n)
  * the run fits. */
 static void put_run(st_grid_t *g, const uint8_t *p, size_t n)
 {
-	st_cell_t *cells = g->screen[g->cy].cells + g->cx;
+	st_row_t *row = &g->screen[g->cy];
+	if (g->cx + n > row->hi)
+		row->hi = (uint16_t)(g->cx + n);
+	st_cell_t *cells = row->cells + g->cx;
 	uint16_t style = g->cur_style;
 	for (size_t i = 0; i < n; i++) {
 		cells[i].cp = p[i];

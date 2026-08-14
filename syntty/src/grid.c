@@ -153,18 +153,26 @@ const st_style_t *st_style_get(const st_grid_t *g, uint16_t idx)
 
 /* ── recycling full-width rows ───────────────────────────────────────────────
  *
- * Measured, not guessed. Parsing 2.56 MB of ordinary lines:
+ * Measured, not guessed. Parsing 2.56 MB of ordinary lines, and the order the
+ * two fixes landed in:
  *
- *   no newlines at all        8.4 ms   260 MB/s   the ASCII path alone
- *   newlines, no scrollback  25.6 ms   100 MB/s   + row shuffling
- *   newlines, scrollback     96.1 ms    27 MB/s   + a malloc triple per line
+ *   no newlines at all        8.5 ms   257 MB/s   the ASCII path alone
+ *   newlines, no scrollback  26.3 ms    97 MB/s   + row shuffling
+ *   newlines, scrollback     96.1 ms    27 MB/s   where this started
+ *                            81.4 ms    31 MB/s   after this pool
+ *                            44.5 ms    58 MB/s   after the watermark
  *
  * Every scrolled line was a realloc to trim the row, a free of the row the
  * ring evicted, and a calloc for the row replacing it at the bottom — three
- * allocator round trips per line of output, four hundred thousand times, for
- * 73% of the total. The screen's rows are all exactly `cols` wide and there
- * are only ever `rows` of them in flight, so they can simply be handed back
- * and reused: a memset instead of a calloc, and no free at all.
+ * allocator round trips per line of output, four hundred thousand times. The
+ * screen's rows are all exactly `cols` wide and there are only ever `rows` of
+ * them in flight, so they can simply be handed back and reused: a memset
+ * instead of a calloc, and no free at all.
+ *
+ * ⚠ It was worth 15%, and the watermark on st_row_t was worth 45%. The
+ * allocator was the obvious suspect and the eighty-cell backward scan hidden
+ * inside row_used() was the bigger one — thirty million comparisons over a
+ * build log, invisible in every profile that only counts function calls.
  */
 static st_cell_t *row_alloc(st_grid_t *g, uint16_t cols)
 {
@@ -199,11 +207,33 @@ static void row_release(st_grid_t *g, st_cell_t *cells, uint16_t len)
 	g->pool[g->npool++] = cells;
 }
 
+/* ── what was tried for the TRIMMED rows, and rejected ───────────────────────
+ *
+ * After the watermark below, one malloc/free pair per scrolled line was all
+ * that was left of the scrollback's cost — about 15 ms of the 42 it takes to
+ * parse 2.6 MB. Two ways to remove it were built and measured:
+ *
+ *   size classes of 8 cells   41.9 ms   but 820 KB per 10k lines, up from 353
+ *   size classes of 2 cells   44.0 ms   353 KB, and 1.5% — inside the noise
+ *
+ * Neither is worth it. glibc's tcache already serves same-sized short-lived
+ * allocations about as well as a hand-rolled list can, and the coarse version
+ * bought 6% by spending 2.3x the scrollback memory — a bad trade for a design
+ * whose headline is the memory. A ring arena would be tighter still, since
+ * these rows are allocated and evicted in strict FIFO order, but on this
+ * evidence the ceiling is around 15 ms and the cost is every row's cells
+ * becoming a pointer into one hand-managed buffer.
+ *
+ * Recorded rather than deleted quietly: the next person to look at this
+ * profile will see the same 15 ms and have the same idea.
+ */
+
 static st_row_t make_row(st_grid_t *g, uint16_t cols)
 {
 	st_row_t r;
 	r.cells = row_alloc(g, cols);
 	r.len = cols;
+	r.hi = 0;
 	r.wrapped = false;
 	return r;
 }
@@ -211,6 +241,9 @@ static st_row_t make_row(st_grid_t *g, uint16_t cols)
 static void clear_row(st_row_t *r, uint16_t cols, uint16_t style)
 {
 	memset(r->cells, 0, (size_t)cols * sizeof *r->cells);
+	/* A cleared row holds nothing — unless the clear painted a background,
+	 * in which case every cell of it is meaningful. */
+	r->hi = style ? cols : 0;
 	if (style) {
 		/* A cleared region inherits the current background, which is how
 		 * `clear` on a themed prompt paints the whole screen rather than
@@ -223,7 +256,7 @@ static void clear_row(st_row_t *r, uint16_t cols, uint16_t style)
 
 static uint16_t row_used(const st_row_t *r)
 {
-	uint16_t n = r->len;
+	uint16_t n = r->hi < r->len ? r->hi : r->len;
 	while (n > 0 && r->cells[n - 1].cp == 0 && r->cells[n - 1].style == 0)
 		n--;
 	return n;
@@ -486,6 +519,8 @@ void st_put(st_grid_t *g, uint32_t cp, int width)
 	}
 
 	st_row_t *row = &g->screen[g->cy];
+	if (g->cx + width > row->hi)
+		row->hi = (uint16_t)(g->cx + width);
 	row->cells[g->cx].cp = cp;
 	row->cells[g->cx].style = g->cur_style;
 	row->cells[g->cx].width = (uint8_t)width;
@@ -552,6 +587,10 @@ void st_erase_line(st_grid_t *g, int mode)
 		row->cells[x].width = 0;
 		row->cells[x].style = g->cur_style;
 	}
+	if (g->cur_style)
+		row->hi = g->cols;          /* a painted background is content */
+	else if (mode == 0 && g->cx < row->hi)
+		row->hi = g->cx;            /* everything from here is provably blank */
 	g->wrap_next = false;
 }
 
@@ -564,6 +603,8 @@ void st_erase_chars(st_grid_t *g, int n)
 		row->cells[g->cx + i].width = 0;
 		row->cells[g->cx + i].style = g->cur_style;
 	}
+	if (g->cur_style)
+		row->hi = g->cols;
 	g->wrap_next = false;
 }
 
@@ -598,6 +639,7 @@ void st_insert_chars(st_grid_t *g, int n)
 	st_row_t *row = &g->screen[g->cy];
 	memmove(&row->cells[g->cx + n], &row->cells[g->cx],
 	        (size_t)(g->cols - g->cx - n) * sizeof *row->cells);
+	row->hi = g->cols;
 	for (int i = 0; i < n; i++) {
 		row->cells[g->cx + i].cp = 0;
 		row->cells[g->cx + i].width = 0;
@@ -613,6 +655,7 @@ void st_delete_chars(st_grid_t *g, int n)
 	st_row_t *row = &g->screen[g->cy];
 	memmove(&row->cells[g->cx], &row->cells[g->cx + n],
 	        (size_t)(g->cols - g->cx - n) * sizeof *row->cells);
+	row->hi = g->cols;
 	for (int i = 0; i < n; i++) {
 		uint16_t x = (uint16_t)(g->cols - n + i);
 		row->cells[x].cp = 0;
@@ -645,6 +688,8 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 					memset(&ns[y].cells[ns[y].len], 0,
 					       (size_t)(cols - ns[y].len) * sizeof(st_cell_t));
 				ns[y].len = cols;
+				if (ns[y].hi > cols)
+					ns[y].hi = cols;
 			}
 		} else {
 			ns[y] = make_row(g, cols);
