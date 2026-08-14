@@ -278,17 +278,22 @@ static void register_repos(alpm_handle_t *h)
 	pconf_free_list(repos, nrepos);
 }
 
-static void add_lines(alpm_handle_t *h, const char *directive,
-                      int (*add)(alpm_handle_t *, const char *))
+/* Returns how many values were actually applied, so a caller can tell an
+ * empty directive apart from one pacman-conf failed to answer. */
+static size_t add_lines(alpm_handle_t *h, const char *directive,
+                        int (*add)(alpm_handle_t *, const char *))
 {
 	char *raw = pconf(directive);
-	size_t n = 0;
+	size_t n = 0, applied = 0;
 	char **words = split(raw, '\n', &n);
 	for (size_t i = 0; i < n; i++)
-		if (*words[i])
+		if (*words[i]) {
 			add(h, words[i]);
+			applied++;
+		}
 	free(words);
 	free(raw);
+	return applied;
 }
 
 alpm_handle_t *sp_alpm_init(bool for_write)
@@ -321,6 +326,30 @@ alpm_handle_t *sp_alpm_init(bool for_write)
 	add_lines(h, "IgnoreGroup", alpm_option_add_ignoregroup);
 	add_lines(h, "NoUpgrade",   alpm_option_add_noupgrade);
 	add_lines(h, "NoExtract",   alpm_option_add_noextract);
+
+	/* HookDir is NOT optional decoration. alpm_initialize() seeds only
+	 * /usr/share/libalpm/hooks/; the /etc/pacman.d/hooks/ drop-in dir is added
+	 * by pacman's CLI, not by the library. Omitting it drops every hook a user
+	 * or a package placed there — and because pacman resolves same-named hooks
+	 * by letting the LAST directory win, an /etc drop-in that deliberately
+	 * overrides an Arch hook does not merely go missing: the hook it was
+	 * shadowing runs in its place, silently doing the wrong thing.
+	 *
+	 * That is not hypothetical. limine-mkinitcpio-hook ships
+	 * /etc/pacman.d/hooks/90-mkinitcpio-install.hook to override Arch's hook of
+	 * the same name, so that a kernel upgrade also copies the new kernel into
+	 * the bootloader's entry directory. Upgrading linux-cachyos through synpkg
+	 * ran Arch's hook instead: /boot got the new kernel, limine's pinned copy
+	 * kept the old one, and the same transaction deleted that old kernel's
+	 * module tree. The result boots to a dead initramfs with no warning
+	 * anywhere, because the bootloader's hashes still match its stale files. */
+	if (add_lines(h, "HookDir", alpm_option_add_hookdir) == 0) {
+		/* pacman-conf absent or silent. Falling through with library defaults
+		 * would quietly reintroduce exactly the bug above, so use pacman's own
+		 * default instead of running with fewer hooks than the rest of the
+		 * system assumes will fire. */
+		alpm_option_add_hookdir(h, "/etc/pacman.d/hooks/");
+	}
 
 	char *gpgdir = pconf("GPGDir");
 	if (*gpgdir)

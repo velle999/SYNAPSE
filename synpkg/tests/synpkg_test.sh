@@ -959,6 +959,53 @@ n=$(SYNPKG_MODULES_DIR="$KDIR" "$SYNPKG" --tsv status | tsv_cols)
 [ "$n" = 4 ] && ok "status --tsv still has 4 columns with kernel rows" \
              || bad "status --tsv still has 4 columns with kernel rows (got $n)"
 
+# ── /etc/pacman.d/hooks must not be dropped ─────────────────────────────────
+#
+# alpm_initialize() seeds ONLY /usr/share/libalpm/hooks/. The /etc drop-in dir
+# is added by pacman's CLI, not by the library, so a libalpm frontend that does
+# not add it runs with fewer hooks than every package on the system assumes.
+#
+# The damage is not "some hooks are skipped". pacman resolves same-named hooks
+# by letting the LAST directory win, so an /etc hook written to OVERRIDE an Arch
+# one is replaced by the very hook it was meant to suppress. That shipped:
+# limine's 90-mkinitcpio-install.hook never ran, Arch's ran in its place, and
+# kernel upgrades stopped copying the new kernel into the bootloader's entry
+# directory — leaving limine booting a kernel whose module tree the same
+# upgrade had just deleted. Nothing reported an error at any layer.
+#
+# Asserted against the BINARY, not the source: the source is not what ships, and
+# an undefined symbol is honest evidence the call survived compilation.
+# Captured rather than piped into `grep -q`: this file runs under `pipefail`,
+# and `grep -q` exits the moment it matches, so the producer takes SIGPIPE and
+# the pipeline reports 141 — a PASSING condition read as a failure. It is a race
+# on how much the producer had left to write, which is why the shorter pipelines
+# above get away with it.
+if command -v nm >/dev/null 2>&1; then
+	syms=$(nm -D --undefined-only "$SYNPKG" 2>/dev/null)
+	case "$syms" in
+		*alpm_option_add_hookdir*)
+			check "the binary calls alpm_option_add_hookdir (/etc/pacman.d/hooks)" 0 ;;
+		*)
+			check "the binary calls alpm_option_add_hookdir (/etc/pacman.d/hooks)" 1 ;;
+	esac
+else
+	printf '  skip  nm unavailable — hookdir symbol not checked\n'
+fi
+
+# The fix reads HookDir through pacman-conf, which resolves the DEFAULT even
+# though /etc/pacman.conf ships the line commented out. If that ever stops being
+# true the code falls back to the same path by hand, but silently — so pin the
+# assumption here rather than discover it from another unbootable machine.
+if command -v pacman-conf >/dev/null 2>&1; then
+	hookdir=$(pacman-conf HookDir 2>/dev/null)
+	case "$hookdir" in
+		*/etc/pacman.d/hooks*)
+			check "pacman-conf resolves HookDir even when pacman.conf comments it" 0 ;;
+		*)
+			check "pacman-conf resolves HookDir even when pacman.conf comments it" 1 ;;
+	esac
+fi
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
