@@ -882,6 +882,49 @@ if [ "$linux_here" = 1 ]; then
     unset STUBLOG
 fi
 
+# ── Bluetooth on a machine that has none ────────────────────────────────────
+#
+# THE HANG THAT STOPPED A BUILD. `bluetoothctl show` talks to BlueZ over D-Bus,
+# and on a machine with no adapter — every VM, and plenty of desktops — the
+# service is inactive and that call NEVER RETURNS. It wedged the Bluetooth
+# pane, and through the pane this suite, and through the suite a package build:
+# 934 seconds and rising, zero I/O, stuck on one read.
+#
+# Every box this project is developed on has Bluetooth, which is exactly why
+# the fixture root exists: the case that breaks is the one the hardware here
+# cannot show.
+btfx=$(mktemp -d)
+mkdir -p "$btfx/sys/class"          # no bluetooth subsystem at all
+out=$(SYN_SETTINGS_SYS_ROOT="$btfx" "$BIN" --rec bluetooth 2>/dev/null)
+if printf '%s' "$out" | grep -q 'no adapter'; then
+    ok "bluetooth: no adapter is reported, not asked about"
+else
+    bad "bluetooth: a machine with no adapter did not say so"
+fi
+
+mkdir -p "$btfx/sys/class/bluetooth"   # subsystem present, still no hardware
+out=$(SYN_SETTINGS_SYS_ROOT="$btfx" "$BIN" --rec bluetooth 2>/dev/null)
+printf '%s' "$out" | grep -q 'no adapter' \
+    && ok "bluetooth: an empty subsystem is no adapter either" \
+    || bad "bluetooth: an empty /sys/class/bluetooth was treated as an adapter"
+
+# And the belt to that pair of braces: a command that never answers must be
+# GIVEN UP ON rather than waited for. Posed with an adapter present and a
+# bluetoothctl that sleeps, at a budget short enough to test.
+mkdir -p "$btfx/sys/class/bluetooth/hci0" "$btfx/bin"
+printf '#!/bin/sh\nsleep 3600\n' > "$btfx/bin/bluetoothctl"
+chmod +x "$btfx/bin/bluetoothctl"
+start=$SECONDS
+err=$(SYN_SETTINGS_SYS_ROOT="$btfx" SYN_SETTINGS_CMD_TIMEOUT_MS=400 \
+      PATH="$btfx/bin:$PATH" "$BIN" --rec bluetooth 2>&1 >/dev/null)
+took=$((SECONDS - start))
+if printf '%s' "$err" | grep -q "did not answer" && [ "$took" -lt 10 ]; then
+    ok "a command that never answers is given up on, and says so"
+else
+    bad "a hanging command was waited for (${took}s, stderr: ${err:-none})"
+fi
+rm -rf "$btfx"
+
 # ── A config this pane may not READ ─────────────────────────────────────────
 #
 # THE BUG THESE EXIST FOR. grub-mkconfig writes grub.cfg inside an

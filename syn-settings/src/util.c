@@ -10,6 +10,9 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <poll.h>
+#include <signal.h>
+#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -104,6 +107,12 @@ static int run_capture_impl(char *const argv[], char *out, size_t cap,
 	if (pid < 0) { close(fds[0]); close(fds[1]); return -1; }
 
 	if (pid == 0) {
+		/* Its own process group, so a command that has to be given up on can
+		 * be killed WITH ITS CHILDREN. Killing just the one process leaves a
+		 * grandchild holding the write end of this pipe, which is how a hang
+		 * stops being visible here and turns into a pipe that never closes for
+		 * whoever is reading us. */
+		setpgid(0, 0);
 		close(fds[0]);
 		dup2(fds[1], STDOUT_FILENO);
 		close(fds[1]);
@@ -119,8 +128,56 @@ static int run_capture_impl(char *const argv[], char *out, size_t cap,
 	}
 
 	close(fds[1]);
+
+	/* A DEADLINE ON THE ANSWER.
+	 *
+	 * Every caller of this is asking a QUESTION — `pacman -Q linux`,
+	 * `localectl status`, `bluetoothctl show` — and a question that has not
+	 * been answered in ten seconds is not going to be. Long work does not come
+	 * through here; that is run_or_show_progress, which streams and is
+	 * supposed to take minutes.
+	 *
+	 * Without this, one command that never returns takes everything with it.
+	 * `bluetoothctl show` on a machine whose bluetooth.service is inactive
+	 * blocks on D-Bus for ever — no adapter, nothing to answer — and it wedged
+	 * the Bluetooth pane, and through the pane the test suite, and through the
+	 * suite a package BUILD, which is where it was finally caught: 934 seconds
+	 * and rising, zero I/O, stuck on this read.
+	 *
+	 * Polled rather than made non-blocking, so a command that is slow but
+	 * alive still gets its whole ten seconds.
+	 */
+	/* Ten seconds, overridable ONLY so the suite can prove this works without
+	 * spending ten seconds doing it. Not a user setting: a question that needs
+	 * longer than this is a question this app should not be asking. */
+	int budget_ms = 10000;
+	{
+		const char *ov = getenv("SYN_SETTINGS_CMD_TIMEOUT_MS");
+		if (ov && *ov) {
+			int v = atoi(ov);
+			if (v > 0) budget_ms = v;
+		}
+	}
+	struct timespec t0;
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+
 	size_t used = 0;
+	int timed_out = 0;
 	for (;;) {
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		long elapsed = (now.tv_sec - t0.tv_sec) * 1000
+		             + (now.tv_nsec - t0.tv_nsec) / 1000000;
+		if (elapsed >= budget_ms) { timed_out = 1; break; }
+
+		struct pollfd pfd = { .fd = fds[0], .events = POLLIN, .revents = 0 };
+		int pr = poll(&pfd, 1, (int)(budget_ms - elapsed));
+		if (pr < 0) {
+			if (errno == EINTR) continue;
+			break;
+		}
+		if (pr == 0) { timed_out = 1; break; }
+
 		if (cap == 0 || used + 1 >= cap) {
 			/* Keep draining, or the child blocks on a full pipe and we
 			 * wait on a process that is waiting on us. */
@@ -134,6 +191,20 @@ static int run_capture_impl(char *const argv[], char *out, size_t cap,
 	}
 	if (cap) out[used] = '\0';
 	close(fds[0]);
+
+	if (timed_out) {
+		/* Killed, not abandoned. An orphan still holding the other end of a
+		 * pipe is how this stops being a hang here and becomes somebody
+		 * else's mystery later. */
+		kill(-pid, SIGKILL);      /* the group: the command and anything it started */
+		kill(pid, SIGKILL);       /* and the process itself, if setpgid lost a race */
+		waitpid(pid, NULL, 0);
+		if (!silence_stderr)
+			fprintf(stderr, "syn-settings: %s did not answer within %d seconds "
+			                "— giving up on it\n", argv[0], budget_ms / 1000);
+		if (cap) out[0] = '\0';
+		return -1;
+	}
 
 	int st = 0;
 	if (waitpid(pid, &st, 0) < 0) return -1;

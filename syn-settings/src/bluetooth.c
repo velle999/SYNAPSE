@@ -17,6 +17,7 @@
 #include "synsettings.h"
 
 #include <stdlib.h>
+#include <dirent.h>
 #include <string.h>
 
 static void controller(void)
@@ -96,6 +97,36 @@ static void devices(void)
 		rec_row("device\t-\tnone paired\t-\tnothing has been paired with this adapter\t-");
 }
 
+/* Does this machine have a Bluetooth adapter?
+ *
+ * A directory read, so it cannot block and cannot be wrong about a machine
+ * that has none: /sys/class/bluetooth exists only when the kernel has the
+ * subsystem, and holds an hciN for each adapter. Asking bluetoothctl instead
+ * is what hangs.
+ *
+ * SYN_SETTINGS_SYS_ROOT is for the test suite, which has to be able to pose a
+ * machine without Bluetooth on a developer box that has it — the case this
+ * exists for is the one this project's own hardware cannot show.
+ */
+static int bt_adapter_present(void)
+{
+	const char *root = getenv("SYN_SETTINGS_SYS_ROOT");
+	char path[512];
+	snprintf(path, sizeof path, "%s/sys/class/bluetooth",
+	         (root && *root) ? root : "");
+
+	DIR *d = opendir(path);
+	if (!d)
+		return 0;                       /* no subsystem: no adapter */
+
+	int found = 0;
+	struct dirent *e;
+	while (!found && (e = readdir(d)))
+		if (e->d_name[0] != '.') found = 1;
+	closedir(d);
+	return found;
+}
+
 static void radio(void)
 {
 	char out[4096] = "";
@@ -136,6 +167,25 @@ int pane_bluetooth(void)
 		rec_row("controller\t-\tunknown\t-\tbluez-utils is not installed\t-");
 		return 0;
 	}
+
+	/* IS THERE AN ADAPTER AT ALL? Asked of the kernel, which cannot block.
+	 *
+	 * bluetoothctl talks to BlueZ over D-Bus, and on a machine with no adapter
+	 * — every VM, and plenty of desktops — bluetooth.service is inactive and
+	 * that call never returns. run_capture() now bounds it, so the pane can no
+	 * longer be wedged by it; but ten seconds of nothing, twice, is still a
+	 * pane that looks broken, and asking at all is pointless when the answer
+	 * is knowable for free.
+	 *
+	 * /sys/class/bluetooth is the subsystem itself: absent when the kernel has
+	 * no Bluetooth support, and empty when it has support and no hardware.
+	 * Neither case has anything for bluetoothctl to describe. */
+	if (!bt_adapter_present()) {
+		rec_row("controller\t-\tno adapter\t-\tthis machine has no Bluetooth "
+		        "hardware, so there is nothing to configure\t-");
+		return 0;
+	}
+
 	controller();
 	devices();
 
