@@ -2497,6 +2497,17 @@ typedef struct {
     char status[96];               /* panel footer line */
     syn_hit_t hit;                 /* panel rows, for the pointer */
 
+    /* The panel's preview key while its release is still outstanding, stored as
+     * keycode + 1 so that 0 means "none" without reserving a real keycode.
+     *
+     * `p` is the one key that raises the saver from INSIDE a key press, so it
+     * is the one key whose own release arrives with the saver already up — and
+     * the wake path reads any key while the saver is up as the user arriving.
+     * The preview therefore dismissed itself a few dozen milliseconds after it
+     * appeared, without the user touching anything. Recorded on the press that
+     * raised it and spent by the matching release; see keyboard_handle_key(). */
+    uint32_t preview_key;
+
     /* Everything below is only live while `active`. */
     struct wlr_scene_tree   *tree;
     struct {

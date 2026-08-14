@@ -127,6 +127,7 @@ echo "== the panel's own footer, key by key =="
 
 # ── p previews ─────────────────────────────────────────────
 base=$(count_log "saver: showing")
+dbase=$(count_log "saver: dismissed (input)")
 send -M logo -k z -m logo          # Super+Z: open the panel
 sleep 0.5
 send -k p                          # unmodified: the panel's key, or nobody's
@@ -134,6 +135,33 @@ if wait_count "saver: showing" "$base" "p preview"; then
     pass "p previews the current mode"
 else
     fail "p did nothing — saver_key() is not on input.c's key path"
+fi
+
+# ── …and the preview OUTLIVES the key that asked for it ────
+# `p` is the only key that raises the saver from INSIDE a key press, so it is
+# the only key whose own release arrives with the saver already up — and any key
+# while the saver is up is the wake that dismisses it. pkgrel 354 shipped that
+# way: the preview appeared and vanished in the same breath, with the user not
+# touching anything afterwards.
+#
+# Judged on the DISMISS count and not on the showing count, because a preview
+# that came up and died a frame later still logs exactly one "showing" — which
+# is precisely why the check above passed all along.
+sleep 0.7
+if [ "$(count_log 'saver: dismissed (input)')" -gt "$dbase" ]; then
+    fail "the preview dismissed itself — p's own release was read as a wake"
+else
+    pass "the preview outlives p's own release"
+fi
+
+# The other half of that, or the fix would just be a saver that cannot be shut:
+# a LATER keystroke must still take it down.
+dbase=$(count_log "saver: dismissed (input)")
+send -k a
+if wait_count "saver: dismissed (input)" "$dbase" "a dismisses the preview"; then
+    pass "…and a later keypress still dismisses it"
+else
+    fail "the preview no longer answers the keyboard at all"
 fi
 
 # ── Down/Right/s, as three separable claims ────────────────

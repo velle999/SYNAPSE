@@ -1414,6 +1414,28 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     struct wlr_keyboard_key_event *event = data;
     struct wlr_keyboard *wlr_kb = kb->wlr_keyboard;
 
+    /* The other half of the preview key: the release of the `p` that raised the
+     * saver from the Super+Z panel below. It is the tail of a keystroke the
+     * user has already spent, not the user arriving, so it must not dismiss —
+     * without this the preview lasts about as long as a keypress. Swallowed all
+     * the same: the panel absorbed the press, so no client is waiting on it.
+     * Before saver_ate_event() and before notify_activity(), either of which
+     * would take the saver down. */
+    if (s->saver.preview_key) {
+        if (event->state == WL_KEYBOARD_KEY_STATE_RELEASED &&
+            s->saver.preview_key == event->keycode + 1) {
+            s->saver.preview_key = 0;
+            return;
+        }
+        /* Any other PRESS means that release is never coming — focus moved, the
+         * keyboard went away, or the user hit something else (which takes the
+         * preview down on its own). Disarm, rather than leave a stale keycode
+         * that would one day swallow an unrelated release and strand a key
+         * down inside a client. */
+        if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
+            s->saver.preview_key = 0;
+    }
+
     /* A key that only woke the screensaver is spent waking it. Release events
      * are swallowed too while the saver is still up, so a client cannot see a
      * release whose press it never got. */
@@ -1656,7 +1678,15 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
         for (int i = 0; i < nsyms; i++)
             if (saver_key(s, syms[i], modifiers))
                 absorbed = true;
-        if (absorbed) return;
+        if (absorbed) {
+            /* If the saver is up now it was `p` that raised it: nothing else on
+             * this path shows it, and a saver that had ALREADY been up would
+             * have been dismissed by saver_ate_event() before we got here. Mark
+             * the keycode so the release still to come passes through without
+             * being read as the user arriving. */
+            if (saver_active(s)) s->saver.preview_key = event->keycode + 1;
+            return;
+        }
 
         /* Task manager: same modal contract, except that it also claims bare
          * Shift, since Shift+X is its SIGKILL. Super+… still falls through. */
