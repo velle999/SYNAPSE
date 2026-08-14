@@ -48,6 +48,21 @@ install_data('data/syn-settings.svg',
 install_data('data/syn-settings.desktop',
              install_dir: get_option('datadir') / 'applications')
 
+# meson's default test timeout is THIRTY SECONDS, and this suite spends 21 of
+# them on a fast native box — 130 checks, most of which fork the binary, and a
+# good few of which wait on pacman. That left no margin at all: the first
+# machine slower than this one turns a passing suite into
+#
+#     1/1 syn-settings:syn-settings TIMEOUT 30.00s killed by signal 15 SIGTERM
+#     ==> ERROR: A failure occurred in check().
+#
+# which is a BUILD failure, not a test failure — makepkg aborts, syn-update
+# reports "build failed", and nothing says the suite was still passing when it
+# was killed. That is exactly what a 4-CPU QEMU guest did, 2026-08-13.
+#
+# 300 rather than "off": a suite that genuinely hangs must still fail, and ten
+# times the native runtime is slack enough for a VM without being no limit.
 test('syn-settings', find_program('tests/syn_settings_test.sh'),
      args: [meson.current_build_dir() / 'syn-settings'],
-     workdir: meson.current_source_dir())
+     workdir: meson.current_source_dir(),
+     timeout: 300)

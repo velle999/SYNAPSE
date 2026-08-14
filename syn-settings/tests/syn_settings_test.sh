@@ -959,7 +959,12 @@ if [ "$linux_here" = 1 ]; then
     # Once, and it STAYS: grub-mkconfig's last act truncates the existing file
     # in place, which keeps the mode it already has. Only a file it has to
     # CREATE comes back at 0600.
-    ( umask 077; cat "$bootfx/grubperm/boot/grub/grub.cfg" > "$bootfx/grubperm/boot/grub/grub.cfg" ) 2>/dev/null
+    printf "menuentry 'SynapseOS' \$menuentry_id_option 'gnulinux-simple-x' {\n linux /boot/vmlinuz-linux root=UUID=x\n}\n" \
+        > "$bootfx/grubperm/boot/grub/grub.cfg.new"
+    ( umask 077
+      cat "$bootfx/grubperm/boot/grub/grub.cfg.new" \
+        > "$bootfx/grubperm/boot/grub/grub.cfg" )
+    rm -f "$bootfx/grubperm/boot/grub/grub.cfg.new"
     if [ "$(stat -c %a "$bootfx/grubperm/boot/grub/grub.cfg")" = 644 ]; then
         ok "boot: the widened mode survives a regeneration"
     else
