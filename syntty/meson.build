@@ -50,6 +50,25 @@ xdg_shell_c = custom_target('xdg-shell-protocol.c',
   output  : 'xdg-shell-protocol.c',
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# presentation-time: when a committed frame ACTUALLY reached the screen.
+#
+# Stage 3's measuring rig, and it comes before the thing it measures for the
+# same reason stage 0 did — "it feels faster" is not a number, and latency is
+# the claim on this project's list that nobody, including the incumbents, has
+# ever published a measurement of. This protocol is stable and universal, so
+# the figure it produces is comparable on any compositor rather than only ours.
+presentation_xml = protocol_dir / 'stable/presentation-time/presentation-time.xml'
+
+presentation_h = custom_target('presentation-time-client-protocol.h',
+  input   : presentation_xml,
+  output  : 'presentation-time-client-protocol.h',
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+presentation_c = custom_target('presentation-time-protocol.c',
+  input   : presentation_xml,
+  output  : 'presentation-time-protocol.c',
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 syntty_sources = files(
   'src/font.c',
   'src/grid.c',
@@ -62,7 +81,9 @@ syntty_sources = files(
 )
 
 syntty = executable('syntty',
-  syntty_sources, xdg_shell_h, xdg_shell_c,
+  syntty_sources,
+  xdg_shell_h, xdg_shell_c,
+  presentation_h, presentation_c,
   include_directories : include_directories('include'),
   dependencies : [util_dep, freetype_dep, fontconfig_dep,
                   wayland_client_dep, xkbcommon_dep],

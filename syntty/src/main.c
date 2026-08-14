@@ -443,6 +443,37 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 		        (unsigned long long)ws.frames,
 		        (unsigned long long)ws.skipped);
 		fprintf(stderr, "grid          %zu bytes\n", st_grid_bytes(&g));
+
+		/* ⚠ "not measured" is printed rather than zeros. A compositor with no
+		 * wp_presentation, or one timestamping on a clock that is not ours,
+		 * gives no latency at all — and "0.00 ms" is a spectacular claim to
+		 * make by accident. */
+		if (!ws.have_presentation) {
+			fprintf(stderr, "latency       not measured "
+			        "(no wp_presentation on this compositor, or a clock "
+			        "that is not CLOCK_MONOTONIC)\n");
+		} else {
+			if (ws.discarded)
+				fprintf(stderr, "discarded     %llu frames superseded "
+				        "before being shown\n",
+				        (unsigned long long)ws.discarded);
+			if (ws.commit_n)
+				fprintf(stderr, "commit->photon %.2f ms avg  "
+				        "(%.2f min, %.2f max, n=%llu)\n",
+				        ws.commit_avg, ws.commit_min, ws.commit_max,
+				        (unsigned long long)ws.commit_n);
+			else
+				fprintf(stderr, "commit->photon no frame reached the screen\n");
+
+			if (ws.input_n)
+				fprintf(stderr, "input->photon  %.2f ms avg  "
+				        "(%.2f min, %.2f max, n=%llu) "
+				        "— includes the child's echo\n",
+				        ws.input_avg, ws.input_min, ws.input_max,
+				        (unsigned long long)ws.input_n);
+			else
+				fprintf(stderr, "input->photon  nothing was typed\n");
+		}
 	}
 
 	st_render_free(r);

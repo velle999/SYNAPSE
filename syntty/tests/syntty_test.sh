@@ -562,6 +562,50 @@ else
     [ $rc -ne 0 ] && echo "$out" | grep -qi 'wayland' \
         && ok "with no compositor it says so and exits non-zero" \
         || bad "with no compositor it says so and exits non-zero"
+
+    # ── latency, via wp_presentation ────────────────────────────────────────
+    #
+    # ⚠ WHAT A HEADLESS COMPOSITOR CAN AND CANNOT TELL YOU. Nothing here is
+    # scanned out — there is no display and no refresh cycle — so most frames
+    # come back `discarded` rather than `presented`, and the handful of
+    # commit->photon figures that do arrive are NOT a measurement of a real
+    # display. A number from this environment must never be quoted as one.
+    #
+    # What IS worth asserting here is the machinery: that the protocol was
+    # bound, that the compositor's clock was checked against ours, that
+    # feedback arrives and is accounted for, and — most of all — that a
+    # latency nobody measured is reported as unmeasured instead of as zero.
+    out=$(caged 30 --stats win -- /bin/sh -c 'echo x; sleep 0.4')
+
+    echo "$out" | grep -qE 'commit->photon|discarded'
+    check "wp_presentation is bound and its clock matched ours" $?
+
+    echo "$out" | grep -q 'latency       not measured'
+    if [ $? -eq 0 ]; then
+        bad "wp_presentation is bound and its clock matched ours"
+    fi
+
+    # ⚠ THE ASSERTION THAT MATTERS MOST IN THIS BLOCK. Nothing typed means
+    # nothing to report, and a latency figure invented out of an empty sample
+    # is the single most damaging thing this program could print — it would be
+    # quoted, and it would be a lie. "0.00 ms" must be impossible to reach by
+    # accident.
+    echo "$out" | grep -q 'input->photon  nothing was typed'
+    check "an input latency nobody measured is reported as unmeasured" $?
+
+    echo "$out" | grep -qE 'input->photon +[0-9]' \
+        && bad "...and never as a number" \
+        || ok "...and never as a number"
+
+    # Every committed frame is accounted for: shown, or superseded. A frame
+    # that produced neither event means a leaked feedback object.
+    fr=$(echo "$out" | awk '/^frames/{print $2}')
+    dis=$(echo "$out" | awk '/^discarded/{print $2}')
+    pres=$(echo "$out" | sed -n 's/.*n=\([0-9]*\).*/\1/p' | head -1)
+    : "${dis:=0}" "${pres:=0}"
+    [ -n "$fr" ] && [ "$((dis + pres))" -ge 1 ] && [ "$((dis + pres))" -le "$fr" ] \
+        && ok "every committed frame is accounted for (${pres} shown, ${dis} superseded of ${fr})" \
+        || bad "every committed frame is accounted for (${pres}+${dis} vs ${fr})"
 fi
 
 echo

@@ -409,6 +409,26 @@ typedef struct {
 	uint64_t frames;
 	uint64_t skipped;
 	double   first_frame_ms;
+
+	/* ── latency, from wp_presentation ──────────────────────────────────────
+	 *
+	 * `have_presentation` is false where the compositor does not offer the
+	 * protocol, or offers it on a clock that is not ours. Everything below is
+	 * then zero, and a caller must print nothing rather than print zeros —
+	 * "0.00 ms" and "not measured" are very different claims.
+	 *
+	 * COMMIT->PHOTON needs no input, so the suite measures it every run.
+	 * INPUT->PHOTON needs somebody to type and INCLUDES THE CHILD's round trip
+	 * (a keystroke reaches the shell, which decides what to echo, before there
+	 * is anything to draw) — which is what a person waits for, but is not
+	 * purely the terminal's, so it is labelled wherever it is printed. */
+	bool     have_presentation;
+	uint64_t discarded;        /* frames superseded before ever being shown */
+
+	uint64_t commit_n;
+	double   commit_min, commit_max, commit_avg;
+	uint64_t input_n;
+	double   input_min, input_max, input_avg;
 } st_win_stats_t;
 
 /* Open a window and run until the child exits or it is closed. Everything it

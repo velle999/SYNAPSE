@@ -49,14 +49,84 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "presentation-time-client-protocol.h"
 
 #define NBUFFERS 2
+
+/* ── measuring latency, which nobody publishes ──────────────────────────────
+ *
+ * The design page lists input latency as the third win and marks it "not
+ * measured" for both incumbents, which is the honest state of the art: almost
+ * nobody measures input-to-photon properly, because it needs a timestamp at
+ * each end and almost nobody owns both.
+ *
+ * wp_presentation supplies the far end. It reports, per committed frame, the
+ * time that frame was actually SCANNED OUT — not queued, not composited,
+ * scanned out. Two different numbers come out of it and they answer different
+ * questions:
+ *
+ *   COMMIT -> PHOTON   how long our pixels waited on the compositor and the
+ *                      display. Needs no input, so it can be measured in the
+ *                      test suite on every run.
+ *
+ *   INPUT -> PHOTON    what a person actually feels: from the keystroke to the
+ *                      frame that shows its consequence. Needs somebody to
+ *                      type, so it is recorded when they do and never
+ *                      synthesised.
+ *
+ * ⚠ INPUT -> PHOTON HONESTLY INCLUDES THE CHILD. A keystroke goes to the pty,
+ * the shell decides what to echo, and only then is there anything to draw. That
+ * round trip is part of what the person waits for, so it belongs in the number
+ * — but it means this figure is not purely the terminal's, and comparing it
+ * against a terminal measured without the child would be comparing two
+ * different things. It is labelled accordingly wherever it is printed.
+ *
+ * The clock has to be checked, not assumed: the compositor announces which one
+ * its timestamps are on, and a client that assumes CLOCK_MONOTONIC and gets
+ * something else computes a difference between two unrelated clocks and prints
+ * it with a straight face. */
+typedef struct win win_t;
+
+/* One of these per committed frame, handed to the feedback object and freed by
+ * whichever of `presented` or `discarded` arrives — the protocol guarantees
+ * exactly one of the two, and destroys the object itself afterwards.
+ *
+ * ⚠ EXACTLY ONE OF THE TWO ARRIVES *EVENTUALLY*, WHICH IS NOT THE SAME AS
+ * BEFORE WE EXIT. A frame committed just before the child quits is still in
+ * flight when the loop ends, and neither event will ever come — so the object
+ * and this context leaked, one pair per unfinished frame. LeakSanitizer caught
+ * it and, because it makes the process exit 1, it also broke the assertion
+ * that the child's exit status is the window's: the terminal reported 1 for a
+ * child that had exited 3. Hence the list — teardown reaps whatever is still
+ * outstanding. */
+typedef struct feedback_ctx {
+	win_t   *win;
+	uint64_t commit_ns;   /* our clock, when the frame was committed */
+	uint64_t input_ns;    /* our clock, the keystroke behind it (0 if none) */
+
+	struct wp_presentation_feedback *fb;
+	struct feedback_ctx *prev, *next;
+} feedback_ctx_t;
+
+typedef struct {
+	uint64_t n;
+	double   min_ms, max_ms, sum_ms;
+} latency_stat_t;
+
+static void stat_add(latency_stat_t *s, double ms)
+{
+	if (s->n == 0 || ms < s->min_ms) s->min_ms = ms;
+	if (s->n == 0 || ms > s->max_ms) s->max_ms = ms;
+	s->sum_ms += ms;
+	s->n++;
+}
 
 typedef struct {
 	struct wl_buffer *wl;
@@ -66,7 +136,7 @@ typedef struct {
 	bool              busy;      /* the compositor still has it */
 } buffer_t;
 
-typedef struct {
+struct win {
 	/* Wayland globals. */
 	struct wl_display    *dpy;
 	struct wl_registry   *registry;
@@ -109,7 +179,33 @@ typedef struct {
 	uint64_t t_start;
 	uint64_t t_first_frame;
 	uint64_t frames, skipped;
-} win_t;
+
+	/* Latency. `presentation` is NULL on a compositor that does not offer the
+	 * protocol, and everything here then stays zero rather than guessing. */
+	struct wp_presentation *presentation;
+	bool     clock_ok;        /* the compositor's clock is our clock */
+	uint32_t clock_id;
+	latency_stat_t commit_to_photon;
+	latency_stat_t input_to_photon;
+	uint64_t discarded;       /* frames never shown — composited over, or idle */
+
+	/* The keystroke whose consequence has not yet been drawn. Earliest wins:
+	 * if three keys arrive before the next frame, the number that matters is
+	 * how long the FIRST one waited. */
+	uint64_t pending_input_ns;
+
+	/* Frames committed whose fate is not yet known. */
+	feedback_ctx_t *outstanding;
+};
+
+static void feedback_unlink(feedback_ctx_t *ctx)
+{
+	win_t *w = ctx->win;
+	if (ctx->prev) ctx->prev->next = ctx->next;
+	else           w->outstanding  = ctx->next;
+	if (ctx->next) ctx->next->prev = ctx->prev;
+	ctx->prev = ctx->next = NULL;
+}
 
 /* ── shm ────────────────────────────────────────────────────────────────────
  *
@@ -196,6 +292,74 @@ static buffer_t *buffer_free_one(win_t *w)
 	return NULL;
 }
 
+/* ── presentation feedback ──────────────────────────────────────────────── */
+
+/* The frame reached the screen. `tv_sec_hi/lo` and `tv_nsec` are on the clock
+ * the compositor named in its clock_id event, which is why that is checked
+ * before any of this is believed. */
+static void fb_presented(void *data, struct wp_presentation_feedback *fb,
+                         uint32_t tv_sec_hi, uint32_t tv_sec_lo,
+                         uint32_t tv_nsec, uint32_t refresh,
+                         uint32_t seq_hi, uint32_t seq_lo, uint32_t flags)
+{
+	(void)refresh; (void)seq_hi; (void)seq_lo; (void)flags;
+	feedback_ctx_t *ctx = data;
+	win_t *w = ctx->win;
+
+	if (w->clock_ok) {
+		uint64_t shown = ((uint64_t)tv_sec_hi << 32 | tv_sec_lo) * 1000000000ull
+		               + tv_nsec;
+		/* Guarded rather than trusted. A compositor that reports a time before
+		 * our commit is reporting on a clock we do not share, whatever it said
+		 * its clock_id was, and a negative latency printed as a huge unsigned
+		 * number is the classic way that goes unnoticed. */
+		if (shown > ctx->commit_ns)
+			stat_add(&w->commit_to_photon,
+			         (double)(shown - ctx->commit_ns) / 1e6);
+		if (ctx->input_ns && shown > ctx->input_ns)
+			stat_add(&w->input_to_photon,
+			         (double)(shown - ctx->input_ns) / 1e6);
+	}
+	feedback_unlink(ctx);
+	wp_presentation_feedback_destroy(fb);
+	free(ctx);
+}
+
+/* The content was never shown — superseded by a later commit, or the output
+ * went idle. Counted, not ignored: a run whose frames are mostly discarded is
+ * measuring something other than what it thinks. */
+static void fb_discarded(void *data, struct wp_presentation_feedback *fb)
+{
+	feedback_ctx_t *ctx = data;
+	ctx->win->discarded++;
+	feedback_unlink(ctx);
+	wp_presentation_feedback_destroy(fb);
+	free(ctx);
+}
+
+static void fb_sync_output(void *data, struct wp_presentation_feedback *fb,
+                           struct wl_output *o)
+{ (void)data; (void)fb; (void)o; }
+
+static const struct wp_presentation_feedback_listener feedback_listener = {
+	fb_sync_output, fb_presented, fb_discarded
+};
+
+static void presentation_clock(void *data, struct wp_presentation *p,
+                               uint32_t clk_id)
+{
+	(void)p;
+	win_t *w = data;
+	w->clock_id = clk_id;
+	/* ⚠ CHECKED, NOT ASSUMED. now_ns() is CLOCK_MONOTONIC; a compositor
+	 * timestamping on anything else would have us subtracting two unrelated
+	 * clocks and printing the result as a latency. */
+	w->clock_ok = (clk_id == CLOCK_MONOTONIC);
+}
+static const struct wp_presentation_listener presentation_listener = {
+	presentation_clock
+};
+
 /* ── painting ───────────────────────────────────────────────────────────── */
 
 static void frame_done(void *data, struct wl_callback *cb, uint32_t t);
@@ -219,8 +383,30 @@ static void paint(win_t *w)
 	b->busy = true;
 	w->dirty = false;
 	w->frames++;
+	uint64_t commit_ns = now_ns();
 	if (!w->t_first_frame)
-		w->t_first_frame = now_ns();
+		w->t_first_frame = commit_ns;
+
+	/* Ask to be told when THIS frame reaches the screen, and carry with the
+	 * request the keystroke that caused it. Requested before the attach so the
+	 * feedback belongs to the commit below and not to the one after it. */
+	if (w->presentation) {
+		feedback_ctx_t *ctx = xcalloc(1, sizeof *ctx);
+		ctx->win       = w;
+		ctx->commit_ns = commit_ns;
+		ctx->input_ns  = w->pending_input_ns;
+		w->pending_input_ns = 0;
+
+		struct wp_presentation_feedback *fb =
+			wp_presentation_feedback(w->presentation, w->surface);
+		wp_presentation_feedback_add_listener(fb, &feedback_listener, ctx);
+
+		ctx->fb   = fb;
+		ctx->next = w->outstanding;
+		if (ctx->next)
+			ctx->next->prev = ctx;
+		w->outstanding = ctx;
+	}
 
 	wl_surface_attach(w->surface, b->wl, 0, 0);
 	/* Whole-surface damage. Cell-level damage is the next thing worth doing
@@ -417,6 +603,12 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 	if (state != WL_KEYBOARD_KEY_STATE_PRESSED || !w->xkb_state)
 		return;
 
+	/* The clock starts HERE, on the press, and the earliest un-drawn press
+	 * wins: if three keys arrive before the next frame, what matters is how
+	 * long the first one waited, not the last. */
+	if (!w->pending_input_ns)
+		w->pending_input_ns = now_ns();
+
 	/* +8: evdev codes and X11 keycodes differ by exactly that, forever, and
 	 * every Wayland client carries this line. */
 	xkb_keycode_t code = key + 8;
@@ -502,6 +694,10 @@ static void registry_global(void *data, struct wl_registry *reg, uint32_t name,
 		w->wm_base = wl_registry_bind(reg, name, &xdg_wm_base_interface,
 		                              version < 2 ? version : 2);
 		xdg_wm_base_add_listener(w->wm_base, &wm_base_listener, w);
+	} else if (!strcmp(iface, wp_presentation_interface.name)) {
+		w->presentation = wl_registry_bind(reg, name, &wp_presentation_interface,
+		                                   version < 1 ? version : 1);
+		wp_presentation_add_listener(w->presentation, &presentation_listener, w);
 	} else if (!strcmp(iface, wl_seat_interface.name)) {
 		w->seat = wl_registry_bind(reg, name, &wl_seat_interface,
 		                           version < 5 ? version : 5);
@@ -640,6 +836,19 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 		stats->skipped      = w->skipped;
 		stats->first_frame_ms = w->t_first_frame
 			? (double)(w->t_first_frame - w->t_start) / 1e6 : 0.0;
+
+		stats->have_presentation = w->presentation && w->clock_ok;
+		stats->discarded         = w->discarded;
+		stats->commit_n   = w->commit_to_photon.n;
+		stats->commit_min = w->commit_to_photon.min_ms;
+		stats->commit_max = w->commit_to_photon.max_ms;
+		stats->commit_avg = w->commit_to_photon.n
+			? w->commit_to_photon.sum_ms / (double)w->commit_to_photon.n : 0.0;
+		stats->input_n    = w->input_to_photon.n;
+		stats->input_min  = w->input_to_photon.min_ms;
+		stats->input_max  = w->input_to_photon.max_ms;
+		stats->input_avg  = w->input_to_photon.n
+			? w->input_to_photon.sum_ms / (double)w->input_to_photon.n : 0.0;
 	}
 
 	/* The child's status is what this returns. The loop above ends either
@@ -647,6 +856,16 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	 * closed (it is not, and closing the master is what tells it). Both go
 	 * through the same reap. */
 	int rc = st_pty_reap(pty);
+
+	/* Frames still in flight. Their events will never arrive because we are
+	 * about to disconnect, so the objects are destroyed here — see the note on
+	 * feedback_ctx_t for what leaving them did to the exit status. */
+	for (feedback_ctx_t *ctx = w->outstanding, *nx; ctx; ctx = nx) {
+		nx = ctx->next;
+		wp_presentation_feedback_destroy(ctx->fb);
+		free(ctx);
+	}
+	w->outstanding = NULL;
 
 	pool_destroy(w);
 	if (w->xkb_state)   xkb_state_unref(w->xkb_state);
@@ -658,6 +877,7 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	if (w->toplevel)    xdg_toplevel_destroy(w->toplevel);
 	if (w->xdg_surface) xdg_surface_destroy(w->xdg_surface);
 	if (w->surface)     wl_surface_destroy(w->surface);
+	if (w->presentation) wp_presentation_destroy(w->presentation);
 	if (w->wm_base)     xdg_wm_base_destroy(w->wm_base);
 	if (w->shm)         wl_shm_destroy(w->shm);
 	if (w->compositor)  wl_compositor_destroy(w->compositor);
