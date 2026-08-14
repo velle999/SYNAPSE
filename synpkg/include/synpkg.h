@@ -149,6 +149,12 @@ void   sp_kernel_reboot_check(const sp_kernel *before, size_t n_before);
 /* The same facts as a report, for `status`: which kernels are installed, which
  * one is running, and whether those disagree. */
 void   sp_kernel_status(void);
+/* The THIRD fact, and the one that strands a machine: what the bootloader will
+ * actually load. Bootloaders that stage their own copy of the kernel (limine)
+ * can be left pinned to a release whose modules the last upgrade deleted, with
+ * every hash and filename still looking correct. Reads the release out of each
+ * boot image itself. */
+void   sp_boot_status(void);
 
 /* ── curated.c ──────────────────────────────────────────────────────────── */
 int cmd_suggest(int argc, char **argv);

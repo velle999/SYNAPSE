@@ -1006,6 +1006,90 @@ if command -v pacman-conf >/dev/null 2>&1; then
 	esac
 fi
 
+# ── the kernel staged for boot ──────────────────────────────────────────────
+#
+# Synthetic images, never the machine's own /boot: this suite runs on velle's
+# desktop, in a makepkg chroot and on the ISO builder, and a check that reads
+# whichever kernels happen to be installed passes on one and fails on the next.
+#
+# A bzImage carries "HdrS" at 0x202 and, at 0x20e, a u16 offset (from 0x200) of
+# its version string. 0x301 puts the string at 0x501 and, unlike a rounder
+# value, contains no NUL byte — one less thing for printf and dd to disagree
+# about.
+mk_bzimage() {   # mk_bzimage PATH RELEASE
+	mkdir -p "$(dirname "$1")"
+	dd if=/dev/zero of="$1" bs=4096 count=1 status=none
+	printf 'HdrS'     | dd of="$1" bs=1 seek=514  conv=notrunc status=none
+	printf '\001\003' | dd of="$1" bs=1 seek=526  conv=notrunc status=none
+	printf '%s (tester@synapse) #1 SMP' "$2" \
+	                  | dd of="$1" bs=1 seek=1281 conv=notrunc status=none
+}
+
+BDIR=$(mktemp -d)
+KDIR2=$(mktemp -d)
+MID=0123456789abcdef0123456789abcdef
+# ⚠ Still ONE trap, and it must name EVERY temporary directory — see the note
+# at the earlier trap. This replaces that handler rather than adding to it, so
+# dropping a name here leaks that directory on every run.
+trap 'rm -rf "$STUB" "$LOGDIR" "$KDIR" "$BDIR" "$KDIR2"' EXIT
+
+mkdir -p "$KDIR2/9.9.9-1-fake" && echo linux > "$KDIR2/9.9.9-1-fake/pkgbase"
+mkdir -p "$KDIR2/9.9.9-1-other" && echo linux-other > "$KDIR2/9.9.9-1-other/pkgbase"
+
+brows() {
+	SYNPKG_MODULES_DIR="$KDIR2" SYNPKG_BOOT_DIR="$BDIR" SYNPKG_MACHINE_ID="$MID" \
+		"$SYNPKG" --tsv status 2>/dev/null | grep '^boot	' || true
+}
+
+# The healthy case first, so a later "orphaned" is known to mean something.
+mk_bzimage "$BDIR/vmlinuz-linux" 9.9.9-1-fake
+[ "$(brows | grep -c '	ok$')" = 1 ] \
+	&& ok "a boot image matching its installed kernel reads ok" \
+	|| bad "a boot image matching its installed kernel reads ok"
+
+# THE BUG. The bootloader's private copy is a release nothing installs any more,
+# because the upgrade that replaced it deleted its module tree. Every filename
+# and every hash still looks right; only the image itself gives it away.
+mk_bzimage "$BDIR/$MID/linux/vmlinuz" 7.1.6-1-fake
+brows | grep -q '	orphaned$' \
+	&& ok "a staged kernel with no module tree is reported orphaned" \
+	|| bad "a staged kernel with no module tree is reported orphaned"
+
+# The path must be on the ORPHANED row specifically. Matching it anywhere in the
+# output passes even when orphan detection is gone, because the same path shows
+# up on an ok or stale row — checked by disabling the detection and watching
+# this assertion stay green.
+orphan_row=$(brows | grep '	orphaned$' || true)
+case "$orphan_row" in
+	*"$MID/linux/vmlinuz"*)
+		ok "the orphaned row names the file, not just the package" ;;
+	*)
+		bad "the orphaned row names the file, not just the package" ;;
+esac
+
+# Installed, so not orphaned — but not a release this pkgbase owns. Behind, not
+# fatal, and the two must not be reported as the same thing.
+mk_bzimage "$BDIR/$MID/linux/vmlinuz" 9.9.9-1-other
+brows | grep -q '	stale$' \
+	&& ok "a staged kernel belonging to another package reads stale" \
+	|| bad "a staged kernel belonging to another package reads stale"
+brows | grep -q '	orphaned$' \
+	&& bad "stale is not also reported as orphaned" \
+	|| ok "stale is not also reported as orphaned"
+
+# Not a bzImage. NULL means "no opinion" — a UKI or an arm64 Image must not
+# collect a warning just because this parser cannot read it.
+rm -f "$BDIR/$MID/linux/vmlinuz"
+echo 'not a kernel' > "$BDIR/vmlinuz-linux-other"
+[ "$(brows | grep -c 'vmlinuz-linux-other')" = 0 ] \
+	&& ok "a file that is not a bzImage is passed over, not flagged" \
+	|| bad "a file that is not a bzImage is passed over, not flagged"
+
+n=$(SYNPKG_MODULES_DIR="$KDIR2" SYNPKG_BOOT_DIR="$BDIR" SYNPKG_MACHINE_ID="$MID" \
+	"$SYNPKG" --tsv status | tsv_cols)
+[ "$n" = 4 ] && ok "status --tsv still has 4 columns with boot rows" \
+             || bad "status --tsv still has 4 columns with boot rows (got $n)"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -225,6 +225,196 @@ void sp_kernel_status(void)
 	sp_kernel_free(k, n);
 }
 
+/* ── the kernel STAGED FOR BOOT ─────────────────────────────────────────────
+ *
+ * sp_kernel_status() answers "installed vs running". This answers the third
+ * question, and it is the one that actually strands a machine: what will the
+ * bootloader LOAD next time, and does that kernel still have modules on disk?
+ *
+ * They are not the same file. limine-entry-tool does not boot
+ * /boot/vmlinuz-<pkgbase> — it boots a private copy at
+ * /boot/<machine-id>/<pkgbase>/vmlinuz, pinned in limine.conf by a BLAKE2B hash
+ * OF THAT COPY. Refresh one and not the other and nothing at any layer reports
+ * a problem: the hash still matches its own stale file, so the bootloader loads
+ * it faithfully, while the upgrade that wrote the new kernel deleted the old
+ * one's /usr/lib/modules tree. What boots has no root driver, no crypto and no
+ * console, and dies in the initramfs.
+ *
+ * That is not hypothetical. On 2026-08-13 limine stayed pinned to
+ * 7.1.6-1-cachyos after linux-cachyos moved to 7.1.8-1, because synpkg was not
+ * registering /etc/pacman.d/hooks/ and so ran Arch's mkinitcpio hook in place
+ * of limine's override. The hook bug is fixed; this is the check that would
+ * have caught it BEFORE the reboot instead of after.
+ *
+ * The release is read out of the image itself, never from the filename or the
+ * config comment — those are precisely what went stale while looking right.
+ */
+
+/* Images are located from each kernel's own pkgbase, never by scanning a
+ * directory. A scan would sweep up /boot/<machine-id>/limine_history/, whose
+ * kernels are SUPPOSED to be old: they pair with btrfs snapshot entries that
+ * carry their own matching /usr/lib/modules inside the snapshot. Reporting
+ * those would be a false alarm on every machine with snapshots enabled. */
+static const char *BOOT_ROOTS[] = { "/boot", "/efi", "/boot/efi" };
+
+static char *machine_id(void)
+{
+	const char *env = getenv("SYNPKG_MACHINE_ID");
+	if (env && *env)
+		return xstrdup(env);
+
+	FILE *f = fopen("/etc/machine-id", "re");
+	if (!f)
+		return NULL;
+	char line[64];
+	char *got = fgets(line, sizeof line, f);
+	fclose(f);
+	if (!got)
+		return NULL;
+	strip_trailing_newline(line);
+	return *line ? xstrdup(line) : NULL;
+}
+
+/* The release string baked into an x86 bzImage.
+ *
+ * The setup header carries "HdrS" at 0x202 and, at 0x20e, a u16 holding the
+ * offset of the version string measured from 0x200. This is the same field
+ * file(1) reports; checked against all three kernel images on the development
+ * machine (two cachyos, one arch) before being relied on.
+ *
+ * NULL for anything that is not a bzImage — a UKI, an arm64 Image, a truncated
+ * file — and NULL means "no opinion", never "stale". Guessing here would put a
+ * scary warning on machines that boot perfectly well. */
+static char *image_release(const char *path)
+{
+	FILE *f = fopen(path, "re");
+	if (!f)
+		return NULL;
+
+	char magic[4];
+	unsigned char off[2];
+	if (fseek(f, 0x202, SEEK_SET) != 0 || fread(magic, 1, 4, f) != 4 ||
+	    memcmp(magic, "HdrS", 4) != 0 ||
+	    fseek(f, 0x20e, SEEK_SET) != 0 || fread(off, 1, 2, f) != 2) {
+		fclose(f);
+		return NULL;
+	}
+
+	/* Zero means the field is unused (pre-2.4 images), not offset 0x200. */
+	long at = (long)(off[0] | (off[1] << 8)) + 0x200;
+	char buf[128];
+	size_t got = 0;
+	if (at > 0x200 && fseek(f, at, SEEK_SET) == 0)
+		got = fread(buf, 1, sizeof buf - 1, f);
+	fclose(f);
+	if (got == 0)
+		return NULL;
+
+	/* "7.1.8-1-cachyos (linux-cachyos@cachyos) #1 SMP ..." — the release, then
+	 * the builder and toolchain. The field is NUL-terminated in the file; cut at
+	 * that or at the first space, whichever comes first. */
+	buf[got] = '\0';
+	buf[strcspn(buf, " \t\r\n")] = '\0';
+	return *buf ? xstrdup(buf) : NULL;
+}
+
+/* Does this exact release belong to this pkgbase? Membership rather than
+ * equality, because mid-upgrade a pkgbase can briefly own two module trees and
+ * comparing against only one of them would invent a fault. */
+static bool pkgbase_has_release(const sp_kernel *k, size_t n,
+                                const char *base, const char *release)
+{
+	for (size_t i = 0; i < n; i++)
+		if (!strcmp(k[i].pkgbase, base) && !strcmp(k[i].release, release))
+			return true;
+	return false;
+}
+
+void sp_boot_status(void)
+{
+	sp_kernel *k = NULL;
+	size_t n = sp_kernel_snapshot(&k);
+	if (n == 0) {
+		sp_kernel_free(k, n);
+		return;
+	}
+
+	char *mid = machine_id();
+
+	const char *roots[sizeof BOOT_ROOTS / sizeof BOOT_ROOTS[0]];
+	size_t nroots = 0;
+	const char *override = getenv("SYNPKG_BOOT_DIR");
+	if (override && *override) {
+		roots[nroots++] = override;
+	} else {
+		for (size_t i = 0; i < sizeof BOOT_ROOTS / sizeof BOOT_ROOTS[0]; i++)
+			roots[nroots++] = BOOT_ROOTS[i];
+	}
+
+	for (size_t i = 0; i < n; i++) {
+		/* One pass per pkgbase, not per module tree, or a kernel that owns two
+		 * releases would be reported twice with identical rows. */
+		bool done = false;
+		for (size_t j = 0; j < i && !done; j++)
+			done = !strcmp(k[j].pkgbase, k[i].pkgbase);
+		if (done)
+			continue;
+
+		char *shown = NULL;   /* last release printed, to collapse duplicates */
+
+		for (size_t r = 0; r < nroots; r++) {
+			char *paths[2];
+			size_t np = 0;
+			paths[np++] = xasprintf("%s/vmlinuz-%s", roots[r], k[i].pkgbase);
+			if (mid)
+				paths[np++] = xasprintf("%s/%s/%s/vmlinuz", roots[r], mid,
+				                        k[i].pkgbase);
+
+			for (size_t p = 0; p < np; p++) {
+				char *rel = image_release(paths[p]);
+				if (!rel) {
+					free(paths[p]);
+					continue;
+				}
+
+				/* Orphaned is the fatal one and outranks stale: an image whose
+				 * modules are gone cannot boot, whereas an image merely behind
+				 * the installed package still has a tree to load from. */
+				bool orphan = !has_release(k, n, rel);
+				bool stale  = !pkgbase_has_release(k, n, k[i].pkgbase, rel);
+				const char *state = orphan ? "orphaned" : stale ? "stale" : "ok";
+
+				if (g_out == OUT_TSV) {
+					tsv_row(4, "boot", paths[p], rel, state);
+				} else if (orphan) {
+					printf("%s%-16s%s%-14s %s%s%s\n", C_DIM(), "Boot image",
+					       C_RESET(), k[i].pkgbase, C_WARN(), rel, C_RESET());
+					printf("%s%-16s%s%s\n", C_DIM(), "", C_RESET(), paths[p]);
+					printf("%s%-16s%s%s\n", C_DIM(), "", C_RESET(),
+					       "its modules are NOT installed — this entry cannot "
+					       "boot. Run: sudo limine-mkinitcpio");
+				} else if (stale) {
+					printf("%s%-16s%s%-14s %s%s%s\n", C_DIM(), "Boot image",
+					       C_RESET(), k[i].pkgbase, C_WARN(), rel, C_RESET());
+					printf("%s%-16s%s%s%s\n", C_DIM(), "", C_RESET(), paths[p],
+					       "  — behind the installed kernel");
+				} else if (!shown || strcmp(shown, rel) != 0) {
+					printf("%s%-16s%s%-14s %s%s%s\n", C_DIM(), "Boot image",
+					       C_RESET(), k[i].pkgbase, C_DIM(), rel, C_RESET());
+				}
+
+				free(shown);
+				shown = rel;
+				free(paths[p]);
+			}
+		}
+		free(shown);
+	}
+
+	free(mid);
+	sp_kernel_free(k, n);
+}
+
 /* Ask, on a terminal, defaulting to NO. See the header for why this is not
  * confirm(). */
 static bool ask_reboot(void)

@@ -489,6 +489,7 @@ int cmd_status(int argc, char **argv)
 	 * kernel's package version, and one live read handle at a time is a cheaper
 	 * rule to keep than a shared one threaded through. */
 	sp_kernel_status();
+	sp_boot_status();
 	return 0;
 }
 
