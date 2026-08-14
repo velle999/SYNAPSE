@@ -94,6 +94,27 @@ jobs:
           ./tools/check-toctou.sh --self-test
           ./tools/check-toctou.sh
 
+      # The release bugs that keep coming back: a component in one build list
+      # and not the others, a pkgver a scraper misreads, a KNOWN= name with no
+      # build rule. Every one of them ships quietly and surfaces on velle's
+      # machine as "syn-update keeps offering this" or "the menu row does
+      # nothing", which is a long way from the line that caused it.
+      #
+      # Note what a CI checkout CANNOT answer: the pkgrel gate compares a
+      # working tree against its base, and a fresh clone has no pending edits,
+      # so that check passes trivially here. It is the local pre-commit run
+      # (tools/pre-commit) that catches a missing bump. What runs here is the
+      # at-rest half — the four lists agreeing, and every version field
+      # resolving — which is exactly the half a clean checkout can prove.
+      #
+      # --self-test first, same reason as above: this script's list readers
+      # return empty on a rename, and comparing two empty sets prints "ok" for
+      # every check it has.
+      - name: Component lists agree and every version resolves
+        run: |
+          ./tools/preflight.sh --self-test
+          ./tools/preflight.sh
+
   # ── Real compile of every component on a current Arch toolchain ─
   build:
     runs-on: ubuntu-latest

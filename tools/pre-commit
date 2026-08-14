@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#
+# pre-commit — run tools/preflight.sh over what this commit would actually
+# contain, and refuse the commit if it cannot ship.
+#
+# Install:
+#     ln -sf ../../tools/pre-commit .git/hooks/pre-commit
+#
+# A symlink, so the hook follows the repo instead of going stale as a copy in
+# .git/hooks that nobody remembers editing. .git/hooks is not tracked, so this
+# has to be installed once per clone; that is git's design, not an oversight.
+#
+# Bypass, when you know why:
+#     git commit --no-verify
+#
+# --staged is the mode that matches what git is about to do. The default
+# working-tree mode would gate a component on edits that are not being
+# committed, which reads as a false positive and is how a hook earns itself a
+# permanent --no-verify.
+#
+# SynapseOS Project — GPL-2.0-or-later
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+
+# Nothing staged: git will refuse the commit itself, with a better message.
+git diff --cached --quiet && exit 0
+
+"$root/tools/preflight.sh" --staged || {
+    echo
+    echo "pre-commit: refusing the commit above." >&2
+    echo "Fix the findings, or run 'git commit --no-verify' if you have a reason." >&2
+    exit 1
+}
