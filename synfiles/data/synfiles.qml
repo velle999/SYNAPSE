@@ -431,8 +431,104 @@ FloatingWindow {
     // by simply not pasting.
     property var clip: ({ op: "", paths: [] })
 
+    // ── What the running operation is doing ─────────────────────────────────
+    //
+    // A copy used to say "copying…" once and then nothing at all until it
+    // exited, however many minutes later. Reported as: no dialog, no way to
+    // tell whether it was working, so try again — and the second attempt says
+    // "busy", which is the first sign that anything is happening.
+    //
+    // THE SILENCE HAD TWO HALVES and fixing one changes nothing. This Process
+    // read no stdout, and the ops were run WITHOUT --rec, so the per-file
+    // records the C side already emits were never printed in the first place.
+    // Both are fixed here: runOp passes --rec, and the parser below is a
+    // SplitParser — a StdioCollector hands its text over when the stream ENDS,
+    // which for a long copy is the one moment the progress is worthless.
+    //
+    // It also means a per-file FAILURE is finally visible. report() writes
+    // those to stdout, and nothing read stdout, so a copy could fail on half
+    // its files and the GUI would show the exit code's silence.
+    property string opNote: ""
+    property int    opDone: 0
+    property int    opSkipped: 0
+    property int    opFailed: 0
+    property string opCurrent: ""
+    property string opFirstError: ""
+    // What the last operation DID, kept until the next one starts or the view
+    // moves. Not statusLine: that is cleared by every reload, and an operation
+    // ends by reloading.
+    property string opOutcome: ""
+
+    // The panel appears only once an operation has outlived a blink. A modal
+    // box that flashes for every rename is worse than no box; one that never
+    // appears for a ten-minute copy is what this is fixing.
+    property bool opPanel: false
+    Timer {
+        id: opPanelDelay
+        interval: 500
+        onTriggered: if (root.busy) root.opPanel = true
+    }
+
+    function baseOf(encPath) {
+        const p = root.disp(encPath)
+        const i = p.lastIndexOf("/")
+        return i >= 0 ? p.substring(i + 1) : p
+    }
+
+    function opProgress() {
+        let s = root.opNote
+        if (root.opDone || root.opSkipped || root.opFailed) {
+            s += " — " + root.opDone + " done"
+            if (root.opSkipped) s += ", " + root.opSkipped + " skipped"
+            if (root.opFailed)  s += ", " + root.opFailed + " failed"
+        }
+        return s
+    }
+
+    // The counters the records land in. A plain object, MUTATED — assigning to
+    // the int properties below on every record would re-evaluate the panel's
+    // bindings once per file, and a copy of a hundred thousand small files is
+    // exactly the copy this panel exists for. The visible properties are
+    // refreshed on a timer instead, which is as often as an eye can read them.
+    property var opRaw: ({ done: 0, skipped: 0, failed: 0, current: "" })
+
+    Timer {
+        id: opTick
+        interval: 120
+        repeat: true
+        running: root.busy
+        onTriggered: root.flushOpCounts()
+    }
+
+    function flushOpCounts() {
+        root.opDone    = root.opRaw.done
+        root.opSkipped = root.opRaw.skipped
+        root.opFailed  = root.opRaw.failed
+        root.opCurrent = root.opRaw.current
+        root.statusLine = root.opProgress()
+    }
+
+    function noteOpRecord(line) {
+        const f = line.split("\t")
+        if (f.length < 2) return
+        if (f[0] === "path" && f[1] === "status") return   // the header row
+        const status = f[1]
+        if (status === "done")         root.opRaw.done++
+        else if (status === "skipped") root.opRaw.skipped++
+        else {
+            root.opRaw.failed++
+            if (!root.opFirstError)
+                root.opFirstError = root.baseOf(f[0])
+                                  + " — " + (f[2] ? f[2] : status)
+        }
+        root.opRaw.current = root.baseOf(f[0])
+    }
+
     Process {
         id: opProc
+        stdout: SplitParser {
+            onRead: (line) => root.noteOpRecord(line)
+        }
         stderr: StdioCollector {
             onStreamFinished: {
                 if (this.text) root.statusLine = this.text.split("\n")[0]
@@ -443,6 +539,20 @@ FloatingWindow {
         // handler silently never runs.
         onExited: {
             root.busy = false
+            root.opPanel = false
+            opPanelDelay.stop()
+            root.flushOpCounts()   // the last records arrived after the last tick
+
+            // Say how it ended. A failure used to reach the GUI as an exit
+            // code and nothing else — the pane simply reloaded, and whatever
+            // had not been copied was missing without a word.
+            if (root.opFailed)
+                root.opOutcome = root.opFirstError
+                    ? root.opNote + " — " + root.opFirstError
+                    : root.opNote + " — " + root.opFailed + " failed"
+            else if (root.opDone || root.opSkipped)
+                root.opOutcome = root.opProgress()
+
             root.reloadAll()
             root.refreshUndo()
             placesProc.running = true
@@ -465,10 +575,24 @@ FloatingWindow {
         }
         root.busy = true
         root.statusLine = note
+        root.opNote = note
+        root.opDone = 0
+        root.opSkipped = 0
+        root.opFailed = 0
+        root.opCurrent = ""
+        root.opFirstError = ""
+        root.opOutcome = ""
+        root.opRaw = ({ done: 0, skipped: 0, failed: 0, current: "" })
+        opPanelDelay.restart()
         // Paths cross the process boundary DECODED: argv carries raw bytes and
         // needs no escaping. The encoding exists for the record stream, which
         // is a text format, not for exec().
-        opProc.command = [root.bin].concat(args)
+        //
+        // --rec is what makes the operation SPEAK: one record per file, which
+        // is where the progress above comes from. Without it report() takes
+        // its human branch, which prints nothing at all for a file that
+        // copied successfully.
+        opProc.command = [root.bin, "--rec"].concat(args)
         opProc.running = true
     }
 
@@ -511,24 +635,103 @@ FloatingWindow {
         root.statusLine = (cut ? "cut " : "copied ") + root.describeSelection()
     }
 
+    // ── Paste ───────────────────────────────────────────────────────────────
+    //
+    // Two steps, because the interesting question comes first: does anything
+    // at the destination already have these names?
+    //
+    // This used to paste straight through with --conflict=rename and a comment
+    // saying the GUI had no way to ask. The cost of not asking was not just a
+    // missing dialog: `--conflict=rename` on a folder whose name already
+    // existed did not rename the FOLDER, it merged into the existing one and
+    // renamed the files inside it. So pasting a folder into the folder that
+    // contains it — the ordinary way to duplicate one — appeared to do nothing
+    // and quietly filled the original with `(copy)` duplicates.
+    //
+    // The probe is `collisions`: one stat per source, no traversal. Reading
+    // the destination pane's own rows instead would be cheaper and wrong —
+    // that listing is filtered, so a collision with a hidden file is invisible
+    // in it, and it can be stale.
+    property var  pendingPaste: null    // {op, paths, dest}
+    property var  pasteConflicts: []    // [{name, kind, same}]
+    property bool pasteAsk: false
+
+    readonly property bool pasteHasSame:
+        root.pasteConflicts.some(c => c.same)
+
+    Process {
+        id: collideProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const rows = []
+                for (const line of this.text.split("\n")) {
+                    const f = line.split("\t")
+                    if (f.length < 4 || f[0] === "path") continue
+                    rows.push({ name: root.disp(f[1]), kind: f[2],
+                                same: f[3] === "yes" })
+                }
+                root.pasteConflicts = rows
+                if (rows.length === 0) {
+                    // Nothing to ask about. `error` rather than `rename`: at
+                    // this point a collision can only be one that appeared
+                    // between the probe and the paste, and inventing a new
+                    // name for it silently is exactly the guess this whole
+                    // path exists to stop making.
+                    root.doPaste("error")
+                } else {
+                    root.pasteAsk = true
+                    root.statusLine = rows.length + (rows.length === 1
+                        ? " item already exists here" : " items already exist here")
+                }
+            }
+        }
+    }
+
     function paste() {
         if (!root.tab || root.tab.view !== "dir") return
         if (!root.clip.paths || root.clip.paths.length === 0) return
+        if (root.busy) {
+            root.statusLine = "busy — waiting for the last operation to finish"
+            return
+        }
 
-        const args = [root.clip.op === "cut" ? "move" : "copy"]
-        // rename rather than error: a paste into the folder something was
-        // copied from is the common case, and refusing it there would be
-        // pedantic. Anywhere else a collision is still a real question, but
-        // the GUI has no way to ask one yet, so the non-destructive answer is
-        // the only defensible default.
-        args.push("--conflict=rename")
-        for (const p of root.clip.paths)
-            args.push(root.disp(p))
-        args.push(root.disp(root.tab.path))
+        // Snapshotted: the dialogue is answered later, and by then the
+        // clipboard or the current directory may be something else.
+        root.pendingPaste = ({ op: root.clip.op,
+                               paths: root.clip.paths.slice(),
+                               dest: root.tab.path })
 
-        root.runOp(args, root.clip.op === "cut" ? "moving…" : "copying…")
-        if (root.clip.op === "cut")
+        const args = ["--rec", "collisions"]
+        for (const p of root.pendingPaste.paths) args.push(root.disp(p))
+        args.push(root.disp(root.pendingPaste.dest))
+
+        root.statusLine = "checking the destination…"
+        collideProc.command = [root.bin].concat(args)
+        collideProc.running = true
+    }
+
+    function doPaste(policy) {
+        root.pasteAsk = false
+        const p = root.pendingPaste
+        root.pendingPaste = null
+        if (!p) return
+
+        const n = p.paths.length
+        const what = n === 1 ? root.baseOf(p.paths[0]) : n + " items"
+
+        const args = [p.op === "cut" ? "move" : "copy", "--conflict=" + policy]
+        for (const q of p.paths) args.push(root.disp(q))
+        args.push(root.disp(p.dest))
+
+        root.runOp(args, (p.op === "cut" ? "moving " : "copying ") + what)
+        if (p.op === "cut")
             root.clip = ({ op: "", paths: [] })
+    }
+
+    function cancelPaste() {
+        root.pasteAsk = false
+        root.pendingPaste = null
+        root.statusLine = "paste cancelled"
     }
 
     // ── Rename ──────────────────────────────────────────────────────────────
@@ -2680,6 +2883,150 @@ FloatingWindow {
                 }
             }
 
+            // ── Paste conflict ──────────────────────────────────────────────
+            //
+            // Only ever shown when there is something to decide: `collisions`
+            // has already said these names are taken. Height from the content,
+            // for the reason the trash box above spells out — the text is in
+            // root.ui(), and a constant cannot track a scale.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 420
+                height: pasteCol.implicitHeight + 32
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.cWarn }
+                visible: root.pasteAsk
+                z: 120
+
+                Column {
+                    id: pasteCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 16 }
+                    spacing: 10
+
+                    Text {
+                        text: root.pasteConflicts.length === 1
+                                ? "“" + root.pasteConflicts[0].name + "” already exists here"
+                                : root.pasteConflicts.length + " of these already exist here"
+                        color: root.cWarn
+                        width: parent.width - 4
+                        elide: Text.ElideMiddle
+                        font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
+                    }
+
+                    // WHICH ones. "3 items already exist" and nothing else
+                    // makes the choice a guess about what is about to be
+                    // replaced.
+                    Text {
+                        width: parent.width - 4
+                        visible: root.pasteConflicts.length > 1
+                        text: root.pasteConflicts.slice(0, 6)
+                                  .map(c => "• " + c.name + (c.kind === "dir" ? "/" : ""))
+                                  .join("\n")
+                            + (root.pasteConflicts.length > 6
+                                 ? "\n• …and " + (root.pasteConflicts.length - 6) + " more" : "")
+                        color: root.cText
+                        wrapMode: Text.WordWrap
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    Text {
+                        width: parent.width - 4
+                        text: root.pasteHasSame
+                                ? "This is the folder it came from, so replacing would "
+                                + "delete the original. Keep both, or cancel."
+                                : "Overwriting replaces files; two folders of the same "
+                                + "name are merged, and files inside them collide one "
+                                + "by one."
+                        color: root.cText
+                        wrapMode: Text.WordWrap
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                    }
+
+                    Row {
+                        spacing: 8
+                        ToggleChip {
+                            label: "Cancel"
+                            on: false
+                            onToggled: root.cancelPaste()
+                        }
+                        ToggleChip {
+                            label: "Skip those"
+                            on: false
+                            onToggled: root.doPaste("skip")
+                        }
+                        ToggleChip {
+                            label: "Keep both"
+                            on: true
+                            onToggled: root.doPaste("rename")
+                        }
+                        // NOT OFFERED when a source IS the entry it collides
+                        // with: overwriting there removes the destination and
+                        // then has nothing to copy from. The C refuses it
+                        // outright — this just declines to ask for something
+                        // that can only be answered with an error.
+                        ToggleChip {
+                            label: "Overwrite"
+                            on: false
+                            visible: !root.pasteHasSame
+                            onToggled: root.doPaste("overwrite")
+                        }
+                    }
+                }
+            }
+
+            // ── What the running operation is doing ─────────────────────────
+            //
+            // Appears half a second in, so it never flickers for a rename and
+            // never fails to appear for a copy worth waiting on.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 420
+                height: opCol.implicitHeight + 32
+                radius: 6
+                color: root.cPanel
+                border { width: 1; color: root.cAccent }
+                visible: root.opPanel
+                z: 119
+
+                Column {
+                    id: opCol
+                    anchors { left: parent.left; right: parent.right
+                              top: parent.top; margins: 16 }
+                    spacing: 10
+
+                    Text {
+                        text: root.opNote
+                        color: root.cAccent
+                        width: parent.width - 4
+                        elide: Text.ElideMiddle
+                        font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
+                    }
+
+                    // A COUNT, not a percentage. The total is not known without
+                    // walking the tree first, and a bar that invents its own
+                    // denominator is a worse lie than a number that is simply
+                    // going up.
+                    Text {
+                        width: parent.width - 4
+                        text: root.opDone + " done"
+                            + (root.opSkipped ? ", " + root.opSkipped + " skipped" : "")
+                            + (root.opFailed  ? ", " + root.opFailed  + " failed"  : "")
+                        color: root.opFailed ? root.cWarn : root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                    }
+
+                    Text {
+                        width: parent.width - 4
+                        text: root.opCurrent
+                        color: root.cDim
+                        elide: Text.ElideMiddle
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+                }
+            }
+
             // ── New folder prompt ───────────────────────────────────────────
             //
             // Same fixed-height bug as the trash confirmation above: 96 px
@@ -2798,6 +3145,13 @@ FloatingWindow {
                     width: Math.min(implicitWidth, parent.width * 0.6 - 12)
                     elide: Text.ElideRight
                     text: {
+                        // The OUTCOME outranks "reading…". An operation ends
+                        // by reloading the pane, and reload() clears
+                        // statusLine — so the line saying what just happened,
+                        // including "3 failed", was erased by the refresh that
+                        // followed it, every time. It survives here until
+                        // something the person does replaces it.
+                        if (root.opOutcome) return root.opOutcome
                         if (root.loading) return "reading…"
                         if (root.statusLine) return root.statusLine
                         const n = root.shownRows.length
@@ -2813,7 +3167,9 @@ FloatingWindow {
                         // already looking rather than only in a menu label.
                         return s > 0 ? base + "  ·  " + s + " selected" : base
                     }
-                    color: root.statusLine ? root.cWarn : root.cDim
+                    color: (root.opOutcome && root.opFailed) ? root.cWarn
+                         : root.opOutcome ? root.cAccent
+                         : root.statusLine ? root.cWarn : root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
                 Text {
@@ -3225,6 +3581,8 @@ FloatingWindow {
 
         // The move itself, with no history written — what Back and Forward use.
         function go(pathEnc, view) {
+            // The last operation's outcome is about the folder being left.
+            root.opOutcome = ""
             pane.setTab({ path: pathEnc, view: view || "dir", filter: "", rows: [] })
             // Same argument as switching tabs: these names are about the folder
             // being left behind.
@@ -3670,7 +4028,10 @@ FloatingWindow {
                 else if (row) root.activate(row)
                 event.accepted = true
             } else if (event.key === Qt.Key_Escape) {
-                if (root.showProps) root.showProps = false
+                // The paste question first: it is modal in intent, and Escape
+                // on an open dialogue means "not that", never "deselect".
+                if (root.pasteAsk) root.cancelPaste()
+                else if (root.showProps) root.showProps = false
                 else if (pane.searching) pane.endSearch()
                 else pane.clearSelection()
                 event.accepted = true

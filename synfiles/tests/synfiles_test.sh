@@ -1166,9 +1166,107 @@ m=$(stat -c '%a' "$C/dst/src/a.txt" 2>/dev/null)
 "$SYNFILES" copy --conflict=skip "$C/src" "$C/dst" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "--conflict=skip succeeds" || bad "--conflict=skip returned failure"
 
+# A colliding DIRECTORY is renamed AS A WHOLE, and the existing one is left
+# exactly as it was.
+#
+# This used to assert `dst/src/a (copy).txt` — that a second copy of a folder
+# merged into the first and renamed the files inside it. That is what pasting a
+# folder into the folder that CONTAINS it did: no new folder appeared, and the
+# original filled up with `(copy)` duplicates while the run reported "4 done, 0
+# skipped, 0 failed". The policy is now applied to the directory itself.
 "$SYNFILES" copy --conflict=rename "$C/src" "$C/dst" >/dev/null 2>&1
-[ -f "$C/dst/src/a (copy).txt" ] && ok "--conflict=rename inserts before the extension" \
-                                 || bad "no 'a (copy).txt' was produced"
+[ -f "$C/dst/src (copy)/a.txt" ] && ok "--conflict=rename renames a colliding directory" \
+                                 || bad "no 'src (copy)' directory was produced"
+[ ! -e "$C/dst/src/a (copy).txt" ] && ok "...and leaves the existing directory alone" \
+                                   || bad "the existing directory was merged into"
+
+# The extension rule, on the collision it was written for: a FILE. "a.txt"
+# becomes "a (copy).txt", never "a.txt (copy)".
+mkdir -p "$C/ext"
+echo one > "$C/ext/a.txt"
+"$SYNFILES" copy --conflict=rename "$C/src/a.txt" "$C/ext" >/dev/null 2>&1
+[ -f "$C/ext/a (copy).txt" ] && ok "--conflict=rename inserts before the extension" \
+                             || bad "no 'a (copy).txt' was produced"
+
+# Pasting into the folder something came FROM is the ordinary way to duplicate
+# it, and it must produce a copy rather than walking the source into itself.
+mkdir -p "$C/self/f"
+echo x > "$C/self/f/inner.txt"
+"$SYNFILES" copy --conflict=rename "$C/self/f" "$C/self" >/dev/null 2>&1
+[ -f "$C/self/f (copy)/inner.txt" ] && ok "a folder pasted into its own parent is duplicated" \
+                                    || bad "no 'f (copy)' — the source was merged into itself"
+[ ! -e "$C/self/f/inner (copy).txt" ] && ok "...without polluting the original" \
+                                      || bad "the original folder gained duplicates"
+
+# THE DESTINATION CAN BE THE SOURCE. `copy --conflict=overwrite f.txt .` removed
+# f.txt and then copied from the file it had just deleted — "0 done, 1 failed",
+# and the only copy of the data gone. Unreachable from the GUI only for as long
+# as the GUI never offers an overwrite, which is a promise about a caller.
+mkdir -p "$C/same"
+echo IRREPLACEABLE > "$C/same/f.txt"
+"$SYNFILES" copy --conflict=overwrite "$C/same/f.txt" "$C/same" >/dev/null 2>&1
+[ "$(cat "$C/same/f.txt" 2>/dev/null)" = IRREPLACEABLE ] \
+    && ok "overwriting a file with itself is refused, not performed" \
+    || bad "the file was deleted by being overwritten with itself"
+
+# Worse in move, which has no second copy anywhere: it removed the destination
+# and then had nothing left to rename onto it.
+mkdir -p "$C/samemv"
+echo IRREPLACEABLE > "$C/samemv/f.txt"
+"$SYNFILES" move --conflict=overwrite "$C/samemv/f.txt" "$C/samemv" >/dev/null 2>&1
+[ "$(cat "$C/samemv/f.txt" 2>/dev/null)" = IRREPLACEABLE ] \
+    && ok "moving a file onto itself is refused, not performed" \
+    || bad "the file was deleted by being moved onto itself"
+
+# Merging is what --conflict=overwrite MEANS for two directories, and it still
+# has to work: the colliding file is replaced, everything else survives.
+mkdir -p "$C/mrg/src/x" "$C/mrg/dst/x"
+echo new > "$C/mrg/src/x/f"
+echo old > "$C/mrg/dst/x/f"
+echo keep > "$C/mrg/dst/x/keep"
+"$SYNFILES" copy --conflict=overwrite "$C/mrg/src/x" "$C/mrg/dst" >/dev/null 2>&1
+[ "$(cat "$C/mrg/dst/x/f")" = new ] && [ "$(cat "$C/mrg/dst/x/keep")" = keep ] \
+    && ok "--conflict=overwrite merges two directories" \
+    || bad "the directory merge lost something"
+
+# ── collisions ──────────────────────────────────────────────────────────────
+#
+# What the GUI asks BEFORE it pastes, so that "overwrite?" is only asked when
+# there is something to overwrite. One stat per source, no traversal.
+K="$T/collide"
+mkdir -p "$K/dst/folder" "$K/src/folder"
+echo x > "$K/src/lone.txt"
+echo y > "$K/dst/dup.txt"
+echo z > "$K/src/dup.txt"
+
+out=$("$SYNFILES" collisions "$K/src/folder" "$K/src/lone.txt" "$K/src/dup.txt" "$K/dst")
+grep -q '^folder	dir'   <<<"$out" && ok "collisions reports a colliding directory" \
+                                   || bad "the colliding directory was not reported"
+grep -q '^dup.txt	file' <<<"$out" && ok "collisions reports a colliding file" \
+                                   || bad "the colliding file was not reported"
+grep -q 'lone'          <<<"$out" && bad "a name that does not collide was reported" \
+                                  || ok "collisions stays quiet about names that are free"
+
+# Exit 0 either way: this ANSWERS a question, and a non-zero exit would make
+# "yes, two of them" indistinguishable from "the destination does not exist".
+"$SYNFILES" collisions "$K/src/dup.txt" "$K/dst" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "collisions exits 0 when things collide" \
+             || bad "collisions used its exit status to mean 'found some'"
+"$SYNFILES" collisions "$K/src/lone.txt" "$K/dst" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "collisions exits 0 when nothing collides" \
+             || bad "collisions failed on a clean destination"
+
+# The source can BE the entry it collides with — pasting into the folder it
+# came from. The GUI needs to know, because overwriting there would delete the
+# original, so that button must not be offered.
+out=$("$SYNFILES" --rec collisions "$K/dst/dup.txt" "$K/dst")
+awk -F'\t' '$1!="path" && $4=="yes"' <<<"$out" | grep -q . \
+    && ok "collisions flags a source that IS the destination entry" \
+    || bad "the duplicate-in-place case was not flagged"
+out=$("$SYNFILES" --rec collisions "$K/src/dup.txt" "$K/dst")
+awk -F'\t' '$1!="path" && $4=="no"' <<<"$out" | grep -q . \
+    && ok "...and does not flag an ordinary collision as that" \
+    || bad "an ordinary collision was called same"
 
 "$SYNFILES" copy --conflict=nonsense "$C/src" "$C/dst" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "an unknown conflict policy is refused" || bad "--conflict=nonsense accepted"

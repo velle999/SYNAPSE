@@ -291,10 +291,55 @@ static int copy_tree(int sfd, const char *sname, int dfd, const char *dname,
 		return -1;
 	}
 
-	/* Apply the conflict policy before touching anything. */
+	/* Apply the conflict policy before touching anything.
+	 *
+	 * TWO THINGS THIS GOT WRONG, both of them silent.
+	 *
+	 * A DIRECTORY whose name already existed skipped the policy ENTIRELY and
+	 * merged, whatever the caller had asked for. So pasting a folder into the
+	 * folder that contains it produced no copy at all: it walked the source
+	 * into itself, left `f (copy).txt` scattered through the ORIGINAL, and
+	 * reported "4 done, 0 skipped, 0 failed". From the GUI that reads as a
+	 * paste that did nothing — which is how it was reported. Merging is now
+	 * what --conflict=overwrite MEANS for two directories, and nothing else
+	 * does it.
+	 *
+	 * And the destination entry can BE the source. `copy --conflict=overwrite
+	 * f.txt .` removed f.txt and then copied from the file it had just
+	 * deleted: "0 done, 1 failed", and the only copy of the data gone. That
+	 * was unreachable from the GUI only for as long as the GUI never offered
+	 * an overwrite, which is a promise about a caller — not a guarantee from
+	 * the code doing the deleting.
+	 *
+	 * Same dev+ino, not same path: a hardlink, a bind mount or a symlinked
+	 * parent reaches the same bytes under a name that compares differently.
+	 */
 	char *target = xstrdup(dname);
-	bool exists = faccessat(dfd, target, F_OK, AT_SYMLINK_NOFOLLOW) == 0;
-	if (exists && !S_ISDIR(st.st_mode)) {
+	struct stat dst;
+	bool exists = fstatat(dfd, target, &dst, AT_SYMLINK_NOFOLLOW) == 0;
+	bool same   = exists && dst.st_dev == st.st_dev && dst.st_ino == st.st_ino;
+	bool merge  = false;
+
+	if (exists && same && pol == CONFLICT_OVERWRITE) {
+		/* Refused rather than "overwritten": there is nothing to copy from
+		 * once the destination has been removed, and the destination is the
+		 * source. */
+		report(display, "failed", "source and destination are the same");
+		t->failed++;
+		free(target);
+		return -1;
+	}
+
+	if (exists && !same && pol == CONFLICT_OVERWRITE &&
+	    S_ISDIR(st.st_mode) && S_ISDIR(dst.st_mode)) {
+		/* Merge: cp -r's behaviour, kept because it is genuinely what someone
+		 * pasting a folder over another folder usually means — but only when
+		 * they have said overwrite. Files inside collide individually and get
+		 * this same policy each. */
+		merge = true;
+	}
+
+	if (exists && !merge) {
 		switch (pol) {
 		case CONFLICT_ERROR:
 			report(display, "conflict", "already exists");
@@ -447,6 +492,71 @@ static int finish(tally_t *t)
 	return t->failed ? 1 : 0;
 }
 
+/* Which of these sources already exist at the destination?
+ *
+ * ASKED BEFORE PASTING, and it exists because the alternative is worse. The
+ * GUI cannot offer "overwrite?" without knowing there is something to
+ * overwrite, and the two ways to find out without this are both wrong: read
+ * the destination's own listing, which is filtered (a collision with a hidden
+ * file is invisible) and stale; or paste with --conflict=error and ask
+ * afterwards, which has already copied everything that did not collide.
+ *
+ * A STAT PER SOURCE, no traversal — the question is about the top-level names,
+ * which is exactly the level the person doing the pasting is looking at.
+ *
+ * Exit 0 whether or not anything collides: this ANSWERS a question, and a
+ * non-zero exit would make "yes, two of them" indistinguishable from "the
+ * destination does not exist".
+ */
+int cmd_collisions(int argc, char **argv)
+{
+	args_t a = parse_args(argc, argv, "collisions");
+
+	char *dest = sf_resolve(a.dest);
+	int dfd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (dfd < 0) {
+		if (errno == ENOTDIR)
+			die("collisions: %s is not a directory", a.dest);
+		die("collisions: cannot open %s: %s", dest, strerror(errno));
+	}
+
+	if (g_out == OUT_REC)
+		rec_row(4, "path", "name", "kind", "same");
+
+	for (int i = 0; i < a.nsrc; i++) {
+		char *src = sf_resolve(a.srcs[i]);
+		const char *base = sf_basename(src);
+
+		struct stat dst, s;
+		if (fstatat(dfd, base, &dst, AT_SYMLINK_NOFOLLOW) == 0) {
+			/* "same" means this source IS the entry it collides with — the
+			 * ordinary duplicate-in-place paste. Overwriting there deletes
+			 * the source, so the GUI must not offer it. */
+			bool same = lstat(src, &s) == 0 &&
+			            s.st_dev == dst.st_dev && s.st_ino == dst.st_ino;
+
+			if (g_out == OUT_REC) {
+				char *enc = pct_encode(src, true);
+				char *encname = pct_encode(base, false);
+				rec_row(4, enc, encname,
+				        S_ISDIR(dst.st_mode) ? "dir" : "file",
+				        same ? "yes" : "no");
+				free(encname);
+				free(enc);
+			} else {
+				printf("%s\t%s%s\n", base,
+				       S_ISDIR(dst.st_mode) ? "dir" : "file",
+				       same ? "\tsame" : "");
+			}
+		}
+		free(src);
+	}
+
+	close(dfd);
+	free(dest);
+	return 0;
+}
+
 int cmd_copy(int argc, char **argv)
 {
 	args_t a = parse_args(argc, argv, "copy");
@@ -558,8 +668,27 @@ int cmd_move(int argc, char **argv)
 		/* Asked THROUGH the destination descriptor rather than by path: the
 		 * answer and the action that follows it then refer to the same
 		 * directory even if `dest` is replaced underneath us. */
-		bool exists = faccessat(destfd, sf_basename(src), F_OK,
-		                        AT_SYMLINK_NOFOLLOW) == 0;
+		struct stat dstat, sstat;
+		bool exists = fstatat(destfd, sf_basename(src), &dstat,
+		                      AT_SYMLINK_NOFOLLOW) == 0;
+
+		/* THE DESTINATION ENTRY CAN BE THE SOURCE — moving something into the
+		 * folder it is already in. The overwrite branch below removes the
+		 * destination and then renames the source onto it, so on the same
+		 * inode it deleted the file and then had nothing to move: "0 done, 1
+		 * failed", and the data gone for good. Worse here than in copy, where
+		 * at least the removal happens before a copy that then fails; a move
+		 * has no second copy anywhere. */
+		if (exists && a.pol == CONFLICT_OVERWRITE &&
+		    lstat(src, &sstat) == 0 &&
+		    sstat.st_dev == dstat.st_dev && sstat.st_ino == dstat.st_ino) {
+			report(src, "failed", "source and destination are the same");
+			t.failed++;
+			free(target);
+			free(src);
+			continue;
+		}
+
 		if (exists) {
 			const int dfd = destfd;
 			bool handled = false;

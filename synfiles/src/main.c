@@ -51,6 +51,10 @@ static void usage(FILE *f)
 "  trash empty --yes       permanently remove everything in the trash\n"
 "  copy [--conflict=P] <src>... <dir>\n"
 "  move [--conflict=P] <src>... <dir>\n"
+"                          P is error (default), skip, rename, overwrite\n"
+"  collisions <src>... <dir>\n"
+"                          which of these names the destination already has,\n"
+"                          asked before a paste so overwrite can be offered\n"
 "  rename <path> <newname>\n"
 "  mkdir <path>...\n"
 "  delete --yes <path>...  PERMANENT, no trash, no undo\n"
@@ -175,6 +179,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "mount"))   return cmd_mount(rest_argc, rest);
 	if (!strcmp(cmd, "unmount")) return cmd_unmount(rest_argc, rest);
 	if (!strcmp(cmd, "copy"))    return cmd_copy(rest_argc, rest);
+	if (!strcmp(cmd, "collisions")) return cmd_collisions(rest_argc, rest);
 	if (!strcmp(cmd, "move"))    return cmd_move(rest_argc, rest);
 	if (!strcmp(cmd, "rename"))  return cmd_rename(rest_argc, rest);
 	if (!strcmp(cmd, "mkdir"))   return cmd_mkdir(rest_argc, rest);

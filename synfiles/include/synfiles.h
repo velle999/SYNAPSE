@@ -220,6 +220,7 @@ int cmd_action(int argc, char **argv);
  * and a cross-filesystem move removes the source only after the copy has
  * fully succeeded. See the file header for the reasoning behind each. */
 int cmd_copy(int argc, char **argv);
+int cmd_collisions(int argc, char **argv);
 int cmd_move(int argc, char **argv);
 int cmd_rename(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
