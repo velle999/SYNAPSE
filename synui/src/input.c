@@ -1650,6 +1650,14 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
                 absorbed = true;
         if (absorbed) return;
 
+        /* Screensaver panel: same modal contract as the power panel it sits
+         * beside. Kept in the order SYN_PANEL_LIST uses for the pointer, which
+         * is the closest thing this chain has to a roster. */
+        for (int i = 0; i < nsyms; i++)
+            if (saver_key(s, syms[i], modifiers))
+                absorbed = true;
+        if (absorbed) return;
+
         /* Task manager: same modal contract, except that it also claims bare
          * Shift, since Shift+X is its SIGKILL. Super+… still falls through. */
         for (int i = 0; i < nsyms; i++)

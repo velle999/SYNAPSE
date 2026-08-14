@@ -1079,3 +1079,61 @@ looking.
       autostart list as a side effect of existing, and point it at a flat grey
       wallpaper: unsaturated for this test's locator, bright for the other's
       bar-or-desktop probes.
+
+### The screensaver, and the keys its own footer promised  *(done)*
+
+A screensaver (`saver.c`), a lock screen that follows the theme, and `Super`+`Z`
+to configure both. The saver is a **fifth idle stage** in `power.c`, armed and
+disarmed beside dim/blank/lock/suspend, and **off by default** — `saver_timeout`
+0, which is also what a config predating the feature parses to, so no existing
+install changed behaviour until it was asked to.
+
+- [x] **Five modes** — `blank`, `clock`, `starfield`, `slideshow`, `matrix` —
+      with the vocabulary in `saver_state.c` rather than in the panel, because
+      the parser, the panel and `saver.state` all resolve names through it and a
+      second copy of either table is a second thing to keep in step. Modes are
+      saved as NAMES: the enum will grow, and a saved `3` must not quietly become
+      a different mode after it does.
+- [x] **The lock screen was ~20 hardcoded cairo literals**, all SYNAPSE cyan, so
+      a theme switch reached every panel in the desktop *except the two screens
+      people look at longest*. It runs off `panel_accent` and an ink ladder now,
+      and the greeter inherits it for free — the greeter IS the lock. The ladder
+      is picked from the **measured** luminance of the built background under the
+      panel, not from `lock_bg_dim`: the first version estimated it and guessed
+      low on the cream engravings in `data/wallpapers`.
+- [x] **Input dismissal is swallowed.** `saver_ate_event()` runs in `input.c`
+      BEFORE `notify_activity()` on both the key and the button path. Otherwise
+      the keystroke that wakes the screen also types into whatever had focus,
+      which is the classic screensaver bug.
+- [x] **`screensaver.c` is not this.** It owns the `org.freedesktop.ScreenSaver`
+      D-Bus name so Firefox and mpv can inhibit idle, it has existed for ages,
+      and it draws nothing. The two meet only at `idle_inhibited()`. Reaching for
+      it because of the name costs a cycle every time.
+
+**The panel drew a footer listing five keys and answered none of them.**
+`saver_key()` was there in `saver.c` — Up/Down, Left/Right, `p` preview, `s`
+save, `Esc` close, all complete and all correct — and `input.c`'s key chain
+never called it. The mouse worked, because `saver` HAD been added to
+`SYN_PANEL_LIST`, the one roster the pointer walks. The keyboard path is a
+*fifth* hand-kept walker of that same list, and the comment above
+`SYN_PANEL_LIST` warns in as many words that hand-kept copies are how a panel
+gets added to some of them and not the rest. This is that bug, with the panel
+advertising the keys on screen the whole time.
+
+- [x] **Wired, in the pointer roster's order** so the two lists read the same
+      way down the file. With `saver` added, the only names in the key chain that
+      are not in `SYN_PANEL_LIST` are `bt` and `welcome_menu`, both of which
+      predate the contract and are documented exceptions.
+- [x] **No build could have caught it.** An uncalled non-static function with a
+      prototype and a definition is not a warning. Only pressing the keys sees
+      it — so `tests/saver_keys.sh` presses them, over `virtual-keyboard-v1`
+      into a headless instance, and judges by the two things a dead key path
+      cannot fake: `p` makes `saver_show()` log, and Down-then-Right-then-`s`
+      must write a `saver.state` with the **timeout** moved off 0 and the mode
+      still `clock`. Those two halves are what separate navigation from
+      adjustment — had `Down` been ignored, `Right` would have stepped the MODE
+      instead, and the file says so.
+- [x] **Every check was verified to fail without the fix**, and the `Esc` one
+      separately against a deliberately-dead `Escape`, because it was the one
+      that could pass on a stale log line. It counts occurrences rather than
+      grepping for presence for exactly that reason.

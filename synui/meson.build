@@ -1122,3 +1122,15 @@ test('alttab_scope', alttab_scope,
                 synctl_exe.full_path()],
      depends : [synui_exe, stubborn_client, synctl_exe],
      timeout : 120)
+
+# The Super+Z screensaver panel answers the keyboard. It shipped drawing a
+# footer that advertised five keys and wired none of them: saver_key() existed,
+# complete, and input.c's hand-kept key chain never called it, so the panel took
+# the mouse (it IS in SYN_PANEL_LIST) and ignored every key it told you about.
+# Nothing in a build sees an uncalled non-static function, so the keys have to
+# be pressed. wtype-driven; SKIPs (77) without it.
+saver_keys = find_program('tests/saver_keys.sh')
+test('saver_keys', saver_keys,
+     args    : [synui_exe.full_path()],
+     depends : [synui_exe],
+     timeout : 120)

@@ -589,6 +589,45 @@ not exist on Wayland.
 > leave it running and painting nothing. synui re-runs `synui-wpengine restore`
 > on resume and after a monitor comes back (pkgrel 196).
 
+### Screensaver and lock screen
+
+`Super`+`Z` is the screensaver, and the appearance of the lock and login
+screens, on one panel. Five modes — `blank`, `clock`, `starfield`, `slideshow`
+and `matrix` — and it is **off by default**: with no timeout set, nothing about
+an existing install's idle behaviour changes until you ask it to.
+
+`Up`/`Down` moves between rows, `Left`/`Right` changes the value under the
+cursor, `p` previews the current mode straight away rather than making you wait
+out the timeout, `s` saves, and `Escape` closes. The mouse does the same job —
+hover selects, left click steps a value on, right click steps it back.
+
+The saver is the **fifth idle stage**, so it is armed by the power panel: with
+power saving off (`Super`+`P`) nothing here can fire, and an application holding
+an idle inhibitor — Firefox playing a video, mpv, Steam — holds it off exactly
+as it holds off the screen blanking. The panel says which of those is happening
+rather than showing a countdown that cannot run.
+
+The same settings from `synuirc`:
+
+```ini
+screensaver          = starfield   # or blank / clock / slideshow / matrix, or off
+screensaver_timeout  = 300         # seconds; 0 = never
+screensaver_lock     = on          # lock the session when it is dismissed
+screensaver_dir      = ~/Pictures  # slideshow source (default: the wallpapers)
+screensaver_interval = 30          # slideshow seconds per image
+
+lock_background      = desktop     # or black, or a path to an image
+lock_dim             = 55          # percent
+lock_blur            = 16          # pixels
+lock_accent          = #00e5ff     # naming one stops it following the theme
+```
+
+The lock screen defaults to your **desktop wallpaper, blurred and dimmed**, and
+otherwise follows the desktop theme — the greeter inherits all of it, because
+the greeter *is* the lock screen. A pick in the panel writes
+`~/.config/synui/saver.state`, which overrides those keys the same way
+`wallpaper.state` does; delete it to hand control back to `synuirc`.
+
 ### Gaming
 
 Running a 7B model as a system service means something has to give when a game
