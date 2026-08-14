@@ -353,7 +353,7 @@ static int list_block(void)
 		return 0;
 
 	char *argv[] = { (char *)"lsblk", (char *)"-P", (char *)"-o",
-	                 (char *)"NAME,PATH,LABEL,SIZE,FSTYPE,MOUNTPOINT,RM,TYPE,HOTPLUG,UUID",
+	                 (char *)"NAME,PATH,LABEL,SIZE,FSTYPE,MOUNTPOINT,RM,TYPE,HOTPLUG,UUID,PKNAME",
 	                 NULL };
 	int st = 0;
 	char *out = run_capture(argv, &st, true);
@@ -366,6 +366,30 @@ static int list_block(void)
 	size_t nlines = 0;
 	char **lines = split(out, '\n', &nlines);
 
+	/* Which disks have something else sitting on them.
+	 *
+	 * A whole disk can carry a filesystem signature of its OWN and still be a
+	 * container. A hybrid ISO written to a stick is the case that matters
+	 * here: /dev/sdd reports FSTYPE="iso9660" while the filesystems anyone
+	 * actually mounts are sdd1 and sdd2. Emitting the parent as well would put
+	 * a third, permanently unmounted "SYNAPSEOS_202608" in the sidebar for one
+	 * stick — the same duplicate the automount handling above exists to avoid.
+	 *
+	 * So the question is not "does this disk have a filesystem" but "does
+	 * anything claim it as a parent", which PKNAME answers directly. */
+	char *parents = xstrdup("\n");
+	for (size_t i = 0; i < nlines; i++) {
+		if (!*lines[i])
+			continue;
+		char *pk = kv_val(lines[i], "PKNAME");
+		if (pk && *pk) {
+			char *grown = xasprintf("%s%s\n", parents, pk);
+			free(parents);
+			parents = grown;
+		}
+		free(pk);
+	}
+
 	for (size_t i = 0; i < nlines; i++) {
 		if (!*lines[i])
 			continue;
@@ -373,12 +397,35 @@ static int list_block(void)
 		char *type = kv_val(lines[i], "TYPE");
 		char *fstype = kv_val(lines[i], "FSTYPE");
 		char *mp = kv_val(lines[i], "MOUNTPOINT");
+		char *name = kv_val(lines[i], "NAME");
+
+		/* A whole disk that nothing partitions, but which does have a
+		 * filesystem, IS somewhere to go: `mkfs.vfat /dev/sdX` with no
+		 * partition table is how most cameras and plenty of USB sticks come
+		 * formatted, and udisks2 mounts them at /run/media like any other
+		 * volume. Excluding TYPE="disk" outright hid every one of them from
+		 * the sidebar no matter what was mounted. */
+		bool container = false;
+		if (type && !strcmp(type, "disk") && name && *name) {
+			char *w = xasprintf("\n%s\n", name);
+			container = strstr(parents, w) != NULL;
+			free(w);
+		}
+
+		/* Swap is a filesystem by FSTYPE and a place by nothing else: there
+		 * is no directory to open, and lsblk gives its MOUNTPOINT as the
+		 * literal "[SWAP]", which is not a path. zram0 is the one that shows
+		 * up here — TYPE="disk", nothing partitions it — but a swap PARTITION
+		 * would have satisfied the old test too, so this is checked on fstype
+		 * rather than on the shape of the device carrying it. */
+		bool swap = fstype && !strcmp(fstype, "swap");
 
 		/* A whole disk with no filesystem is a container for the partitions
 		 * that follow it, not somewhere to go. */
-		bool usable = type && (!strcmp(type, "part") || !strcmp(type, "rom")
-		                       || !strcmp(type, "crypt") || !strcmp(type, "lvm"))
-		              && fstype && *fstype;
+		bool usable = type && fstype && *fstype && !swap
+		              && (!strcmp(type, "part") || !strcmp(type, "rom")
+		                  || !strcmp(type, "crypt") || !strcmp(type, "lvm")
+		                  || (!strcmp(type, "disk") && !container));
 
 		char *path = kv_val(lines[i], "PATH");
 
@@ -411,7 +458,6 @@ static int list_block(void)
 			char *size = kv_val(lines[i], "SIZE");
 			char *rm = kv_val(lines[i], "RM");
 			char *hot = kv_val(lines[i], "HOTPLUG");
-			char *name = kv_val(lines[i], "NAME");
 
 			bool removable = (rm && !strcmp(rm, "1")) || (hot && !strcmp(hot, "1"));
 			bool optical = type && !strcmp(type, "rom");
@@ -468,13 +514,14 @@ static int list_block(void)
 
 			free(su); free(st);
 			free(emp); free(label); free(size);
-			free(rm); free(hot); free(name);
+			free(rm); free(hot);
 		}
 
 		free(path);
-		free(type); free(fstype); free(mp);
+		free(type); free(fstype); free(mp); free(name);
 	}
 
+	free(parents);
 	free(lines);
 	free(out);
 	return n;
