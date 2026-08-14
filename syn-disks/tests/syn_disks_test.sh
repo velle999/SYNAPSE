@@ -1497,6 +1497,23 @@ if [ -f "$QML" ]; then
         && ok "a failed operation is offered the same way out as a refusal" \
         || bad "the outcome handler ignores the fix code on a failure"
 
+    # A close is a REQUEST, and it must not be granted in the middle of a write.
+    # `onClosed: Qt.quit()` — which is what this had — tore down the window that
+    # was reporting the operation, and used to take the operation with it.
+    # ⚠ Asserted STATICALLY and on purpose: the real close path needs a
+    # compositor, and the offscreen platform has no window manager to ask.
+    # Exercised for real by calling closed() against a headless copy: with busy
+    # set the window stays and says so, and with it clear the app still exits.
+    grep -A 6 'onClosed: {' "$QML" | grep -q 'root.busy' \
+        && ok "a close request is refused while a disk is being written to" \
+        || bad "the window still quits on a close request mid-operation"
+
+    # ...and it must still close normally. A window that cannot be closed at all
+    # is a worse bug than the one being fixed.
+    grep -A 6 'onClosed: {' "$QML" | grep -q 'Qt.quit()' \
+        && ok "...and closes as usual when nothing is in flight" \
+        || bad "the close handler never quits — the window cannot be closed"
+
     # ...and while a disk is being written to, the window has to LOOK like it.
     # Greying out four buttons and writing ten grey pixels at the bottom is not
     # a sign that a format is in flight, and somebody closed the window part way

@@ -36,7 +36,35 @@ FloatingWindow {
 
     // ShellRoot outlives its window: without this, quickshell stays alive with
     // nothing on screen and every later launch exits 0 having drawn nothing.
-    onClosed: Qt.quit()
+    //
+    // A close is a REQUEST, and while a disk is being written to the answer is
+    // "not yet". Closing this window used to SIGKILL syn-disks and leave the
+    // mkfs it had started dying of SIGPIPE part way through a filesystem; the
+    // binary is now detached so that cannot happen, and this is the second
+    // half — nothing is served by tearing down the window that is reporting an
+    // operation still in flight. The click is not swallowed silently: the
+    // overlay says why, and once the write finishes the next close just works.
+    onClosed: {
+        if (!root.busy) {
+            Qt.quit()
+            return
+        }
+        root.visible = true
+        root.status = "still working — this window will close when the drive "
+                    + "is finished with"
+        closeGuard.restart()
+    }
+
+    // The one thing worse than a window that will not close is a window that
+    // closed and left the process running with nothing on screen: every later
+    // launch would exit 0 having drawn nothing. If the re-show above did not
+    // take, give up on it and go — the write survives this either way, which is
+    // the whole point of the detached runner in the binary.
+    Timer {
+        id: closeGuard
+        interval: 400
+        onTriggered: if (!root.visible) Qt.quit()
+    }
 
     readonly property string bin: Quickshell.env("SYNDISKS_BIN") || "syn-disks"
 
@@ -2244,9 +2272,9 @@ FloatingWindow {
                         // because of it: closing this window used to SIGKILL
                         // syn-disks, and the mkfs it had started then died of
                         // SIGPIPE part way through writing a filesystem.
-                        text: "The drive is being written to. Closing this window "
-                            + "will not stop it — leave the drive plugged in until "
-                            + "this finishes."
+                        text: "The drive is being written to. This window stays "
+                            + "until it finishes, and closing it could not stop "
+                            + "the write in any case — leave the drive plugged in."
                         color: root.cDim
                         font { family: root.uiFont; pixelSize: root.ui(10) }
                     }
