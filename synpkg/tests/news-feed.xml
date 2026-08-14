@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A stand-in for https://archlinux.org/feeds/news/, used by synpkg_test.sh
+  through SYNPKG_NEWS_FILE.
+
+  SYNTHETIC ON PURPOSE, rather than a saved copy of the real feed. The dates
+  here are fixed, so a test can assert "one item is newer than this cutoff" and
+  still mean it in a year. A saved copy would drift out from under the
+  assertions the moment Arch published anything, and the honest fix for that is
+  a test that asserts nothing.
+
+  It also carries the shapes the parser has to survive, which a real feed only
+  sometimes contains: a CDATA payload, escaped HTML inside a description,
+  named and numeric entities, a token with no spaces in it (the wrapper's
+  hard-split path), and an item with no pubDate at all.
+
+  SynapseOS Project — GPL-2.0-or-later
+-->
+<rss version="2.0">
+  <channel>
+    <title>Arch Linux: Recent news updates</title>
+    <link>https://archlinux.org/news/</link>
+
+    <item>
+      <title>gizmo &gt;= 2.0 requires manual intervention</title>
+      <link>https://example.invalid/news/gizmo-2-0/</link>
+      <description>&lt;p&gt;The &lt;code&gt;gizmo&lt;/code&gt; package now ships a file that was previously untracked. Run &lt;code&gt;pacman -Syu --overwrite &apos;/usr/lib/gizmo/*&apos;&lt;/code&gt; once.&lt;/p&gt;&lt;p&gt;A very long unbreakable token follows: /usr/lib/gizmo/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&lt;/p&gt;</description>
+      <pubDate>Tue, 21 Jul 2026 09:30:00 +0000</pubDate>
+    </item>
+
+    <item>
+      <title><![CDATA[Widgets & sprockets: what's changed]]></title>
+      <link>https://example.invalid/news/widgets-and-sprockets/</link>
+      <description>Nothing to do here &#8212; informational only. Congratulations &#127881;</description>
+      <pubDate>Fri, 12 Jun 2026 14:05:00 +0000</pubDate>
+    </item>
+
+    <item>
+      <title>An item with no date at all</title>
+      <link>https://example.invalid/news/undated/</link>
+      <description>A feed is allowed to omit pubDate, and an item with no date must not be treated as brand new.</description>
+    </item>
+
+    <item>
+      <title>doohickey 1.0 dropped from [extra]</title>
+      <link>https://example.invalid/news/doohickey-dropped/</link>
+      <description>&lt;p&gt;The doohickey package has been dropped.&lt;/p&gt;</description>
+      <pubDate>Fri, 31 Oct 2025 23:59:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>

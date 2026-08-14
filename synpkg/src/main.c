@@ -27,8 +27,12 @@ static void usage(FILE *out)
 "  remove <package>...     uninstall, with its unneeded dependencies\n"
 "  upgrade                 refresh and upgrade the whole system, then rebuild\n"
 "                          the AUR packages synpkg installed (--no-aur skips),\n"
-"                          then the SynapseOS components (--no-system skips)\n"
+"                          then the SynapseOS components (--no-system skips).\n"
+"                          Shows Arch news published since your last upgrade\n"
+"                          first, and asks (--no-news skips), and offers a\n"
+"                          reboot if the running kernel was replaced\n"
 "  refresh                 sync the package databases only\n"
+"  news [--all]            Arch news since your last upgrade, or the latest 10\n"
 "  updates                 list what a upgrade would change\n"
 "  installed [--explicit]  what is on this machine\n"
 "  orphans [--remove]      dependencies nothing needs any more\n"
@@ -166,6 +170,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "remove"))    return cmd_remove(rest_argc, rest);
 	if (!strcmp(cmd, "upgrade"))   return cmd_upgrade(rest_argc, rest);
 	if (!strcmp(cmd, "refresh"))   return cmd_refresh(rest_argc, rest);
+	if (!strcmp(cmd, "news"))      return cmd_news(rest_argc, rest);
 	if (!strcmp(cmd, "updates"))   return cmd_updates(rest_argc, rest);
 	if (!strcmp(cmd, "installed")) return cmd_installed(rest_argc, rest);
 	if (!strcmp(cmd, "orphans"))   return cmd_orphans(rest_argc, rest);

@@ -29,6 +29,8 @@ sources = files(
   'src/query.c',
   'src/trans.c',
   'src/curated.c',
+  'src/news.c',
+  'src/kernel.c',
   'src/arsenal.c',
   'src/cachyos.c',
   'src/ext.c',
@@ -73,6 +75,11 @@ install_data('data/synpkg.desktop',
 install_data('data/org.synapseos.synpkg.policy',
              install_dir: get_option('datadir') / 'polkit-1' / 'actions')
 
+# timeout: meson's default is 30 SECONDS, and a test it kills is a FAILED test,
+# which fails the build. This suite already takes ~15s of forks against a real
+# ALPM database on a fast machine; a loaded build box or a slower disk clears 30
+# without anything being wrong. A generous ceiling still catches a genuine hang.
 test('synpkg', find_program('tests/synpkg_test.sh'),
      args: [meson.current_build_dir() / 'synpkg'],
-     workdir: meson.current_source_dir())
+     workdir: meson.current_source_dir(),
+     timeout: 300)

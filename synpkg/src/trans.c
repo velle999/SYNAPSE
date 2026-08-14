@@ -541,6 +541,25 @@ out:
 
 /* ── upgrade ────────────────────────────────────────────────────────────── */
 
+/* Record in pacman.log that this machine has just been fully upgraded.
+ *
+ * `[PACMAN] starting full system upgrade` is written by the pacman COMMAND, not
+ * by libalpm. A program that drives libalpm directly leaves no equivalent
+ * trace — only the individual `upgraded <pkg>` lines, which are indistinguish-
+ * able from a one-package install.
+ *
+ * The news gate reads that line to work out what counts as unread (news.c), so
+ * without this it would forever measure from the last time somebody typed
+ * `pacman -Syu` by hand and replay the same news at every upgrade.
+ *
+ * Logged on the way OUT rather than on the way in, so it records an upgrade
+ * that actually happened: a transaction the user declined at the confirmation
+ * prompt must not mark the news read. */
+static void log_sysupgrade(alpm_handle_t *h)
+{
+	alpm_logaction(h, "SYNPKG", "completed full system upgrade\n");
+}
+
 int cmd_upgrade(int argc, char **argv)
 {
 	bool downgrade = false, refresh = true;
@@ -555,12 +574,15 @@ int cmd_upgrade(int argc, char **argv)
 	 * command typed into a terminal meaning the same thing. See settings.c. */
 	bool use_aur = sp_setting_bool("upgrade_aur");
 	bool use_system = sp_setting_bool("upgrade_system");
+	bool use_news = sp_setting_bool("upgrade_news");
 
 	for (int i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--allow-downgrade"))
 			downgrade = true;
 		else if (!strcmp(argv[i], "--no-refresh"))
 			refresh = false;
+		else if (!strcmp(argv[i], "--no-news"))
+			use_news = false;
 		else if (!strcmp(argv[i], "--no-aur"))
 			use_aur = false;
 		/* Symmetric with --no-aur, and wanted for the same reason: a
@@ -571,6 +593,46 @@ int cmd_upgrade(int argc, char **argv)
 		else
 			die("upgrade: unknown argument '%s'", argv[i]);
 	}
+
+	/* ── WHICH PROCESS IS TALKING TO THE USER ────────────────────────────────
+	 *
+	 * `synpkg upgrade` normally runs unprivileged and re-execs itself through
+	 * pkexec, so cmd_upgrade() runs TWICE — once as you, once as root — and a
+	 * news gate written without thinking about that would print the feed twice
+	 * and ask twice.
+	 *
+	 * But the escalated child is not the only way this runs as root: `sudo
+	 * synpkg upgrade` goes straight down the privileged path, and gating only
+	 * the unprivileged one would leave the news check quietly not applying to
+	 * the way an administrator actually upgrades a machine.
+	 *
+	 * pkexec sets PKEXEC_UID in the environment of what it executes, and it
+	 * clears the environment otherwise — so its presence is a reliable "I am
+	 * the child, my parent already asked". (Verified against the binary rather
+	 * than assumed: pkexec sets PKEXEC_UID, SUDO_UID, SUDO_GID, USER, HOME,
+	 * SHELL and PATH, and nothing else survives.)
+	 */
+	bool front = !is_root() || !getenv("PKEXEC_UID");
+
+	/* BEFORE anything is refreshed, downloaded or escalated. The whole value of
+	 * a news gate is that it comes first: after the transaction the manual step
+	 * it was announcing has already been skipped. */
+	if (front && use_news && !sp_news_gate()) {
+		/* Saying no is a decision, not a failure — the same distinction
+		 * confirm_transaction() makes below. A caller that could not answer at
+		 * all (no terminal, no --noconfirm) is the failure. */
+		info("upgrade cancelled");
+		return confirm_possible() ? 0 : 1;
+	}
+
+	/* The kernel state as it is NOW. Compared against the machine after
+	 * everything has run — see sp_kernel_reboot_check(). Taken in the front
+	 * process so the answer describes the whole upgrade (repositories, AUR and
+	 * SynapseOS components), not just the escalated third of it. */
+	sp_kernel *kbefore = NULL;
+	size_t nkbefore = 0;
+	if (front)
+		nkbefore = sp_kernel_snapshot(&kbefore);
 
 	if (!is_root()) {
 		/* ── THE OTHER HALF OF AN UPGRADE ────────────────────────────────
@@ -596,8 +658,10 @@ int cmd_upgrade(int argc, char **argv)
 
 		/* A failed repository upgrade stops everything: both passes below
 		 * build against the libraries it was in the middle of replacing. */
-		if (rc != 0)
+		if (rc != 0) {
+			sp_kernel_free(kbefore, nkbefore);
 			return rc;
+		}
 
 		/* `!use_aur` used to return HERE, which quietly took the SynapseOS
 		 * pass below with it: `upgrade --no-aur` skipped the components too,
@@ -674,6 +738,12 @@ int cmd_upgrade(int argc, char **argv)
 					     "(syn-update apply) — the repository upgrade above was fine");
 			}
 		}
+
+		/* LAST, after every pass: a SynapseOS component can pull a kernel in
+		 * (synapse_kmod's dkms rebuild is the near case), so asking before this
+		 * point could ask about a machine that then changed again. */
+		sp_kernel_reboot_check(kbefore, nkbefore);
+		sp_kernel_free(kbefore, nkbefore);
 		return rc;
 	}
 
@@ -708,6 +778,11 @@ int cmd_upgrade(int argc, char **argv)
 	if (!alpm_trans_get_add(h) && !alpm_trans_get_remove(h)) {
 		if (g_out == OUT_HUMAN)
 			printf("%severything is up to date%s\n", C_OK(), C_RESET());
+		/* Nothing to install IS a completed full system upgrade: the databases
+		 * were refreshed and the machine came back current. Not marking it
+		 * would leave the news gate measuring from an ever-older upgrade on a
+		 * machine that keeps itself up to date. */
+		log_sysupgrade(h);
 		alpm_trans_release(h);
 		rc = 0;
 		goto out;
@@ -727,11 +802,23 @@ int cmd_upgrade(int argc, char **argv)
 		goto out;
 	}
 
+	log_sysupgrade(h);
 	alpm_trans_release(h);
 	rc = 0;
 	info("system upgraded");
 
 out:
+	/* AFTER the handle is released. sp_kernel_snapshot() opens one of its own,
+	 * and two live handles on the same database — one of them mid-transaction —
+	 * is not a state to find out about during an upgrade.
+	 *
+	 * Unconditional, and self-guarding: a transaction that failed or was
+	 * declined moved no kernel, so the diff is empty and nothing is printed.
+	 * Only reached with a snapshot when `front` — under pkexec this is the
+	 * child, and the parent asks. */
 	sp_alpm_free(h);
+	if (front)
+		sp_kernel_reboot_check(kbefore, nkbefore);
+	sp_kernel_free(kbefore, nkbefore);
 	return rc;
 }

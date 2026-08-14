@@ -48,6 +48,13 @@ static const struct {
 	  "include SynapseOS components in `synpkg upgrade` (minutes of compiling)" },
 	{ "upgrade_aur", "yes",
 	  "rebuild the AUR packages synpkg installed during `synpkg upgrade`" },
+	/* On by default, and it should stay that way for anyone who has not
+	 * deliberately turned it off: the news is the ONLY announcement of a manual
+	 * step, and the cost of the check is one HTTPS request against an upgrade
+	 * that is about to download hundreds of megabytes. */
+	{ "upgrade_news", "yes",
+	  "show Arch news published since your last upgrade, and ask, before "
+	  "`synpkg upgrade` touches anything" },
 };
 static const size_t N_SETTINGS = sizeof SETTINGS / sizeof SETTINGS[0];
 

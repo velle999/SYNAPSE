@@ -761,6 +761,151 @@ else
     bad "synpkg.qml not found beside the tests: $QML"
 fi
 
+# ── the Arch news gate ──────────────────────────────────────────────────────
+#
+# Every check here reads a FIXTURE, never the network. archlinux.org rate-limits
+# — it answered 429 after six requests while this was being written — and a test
+# that needs the internet is a test that fails in the makepkg chroot and then
+# gets deleted. SYNPKG_NEWS_FILE and SYNPKG_PACMAN_LOG exist for exactly this.
+
+FEED="$(dirname "$0")/news-feed.xml"
+LOGDIR=$(mktemp -d)
+KDIR=$(mktemp -d)
+
+# ⚠ ONE trap, naming EVERY temporary directory. `trap ... EXIT` REPLACES the
+# handler; it does not add to it. A second `trap 'rm -rf "$LOGDIR"' EXIT` here
+# silently disarmed the $STUB cleanup installed above, so every run of the suite
+# would have leaked a directory — with nothing failing to say so.
+trap 'rm -rf "$STUB" "$LOGDIR" "$KDIR"' EXIT
+
+printf '[2020-01-01T00:00:00-0500] [PACMAN] starting full system upgrade\n' > "$LOGDIR/ancient.log"
+printf '[2026-07-01T10:00:00-0500] [SYNPKG] completed full system upgrade\n' > "$LOGDIR/jul01.log"
+printf '[2026-08-01T10:00:00-0500] [SYNPKG] completed full system upgrade\n' > "$LOGDIR/aug01.log"
+# The format pacman used before it logged ISO 8601 with a zone.
+printf '[2026-07-01 10:00] [PACMAN] starting full system upgrade\n' > "$LOGDIR/oldfmt.log"
+# A log with no upgrade in it at all — the "cannot tell" case.
+printf '[2026-08-01T10:00:00-0500] [ALPM] upgraded foo (1-1 -> 1-2)\n' > "$LOGDIR/nomarker.log"
+
+export SYNPKG_NEWS_FILE="$FEED"
+
+# Count the rendered date lines: one per item shown.
+news_items() { grep -cE '^  [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true; }
+
+if [ ! -f "$FEED" ]; then
+    bad "the news fixture is missing: $FEED"
+else
+    n=$("$SYNPKG" --no-color news --all 2>/dev/null | news_items)
+    [ "$n" = 3 ] && ok "news --all renders every dated item" \
+                 || bad "news --all renders every dated item (got $n, want 3)"
+
+    # The undated item must NOT be shown as unread. A feed is allowed to omit
+    # pubDate, and treating an undated post as brand new would show it at every
+    # upgrade forever.
+    n=$(SYNPKG_PACMAN_LOG="$LOGDIR/ancient.log" "$SYNPKG" --no-color news 2>/dev/null | news_items)
+    [ "$n" = 3 ] && ok "an undated item is not counted as unread" \
+                 || bad "an undated item is not counted as unread (got $n, want 3)"
+
+    n=$(SYNPKG_PACMAN_LOG="$LOGDIR/jul01.log" "$SYNPKG" --no-color news 2>/dev/null | news_items)
+    [ "$n" = 1 ] && ok "only news newer than the last upgrade is unread" \
+                 || bad "only news newer than the last upgrade is unread (got $n, want 1)"
+
+    SYNPKG_PACMAN_LOG="$LOGDIR/aug01.log" "$SYNPKG" --no-color news >/dev/null 2>&1
+    [ $? -eq 100 ] && ok "nothing unread exits 100" || bad "nothing unread exits 100"
+
+    # pacman's OLD log format. Silently failing to parse it would push the
+    # cutoff to "unknown" and quietly change what the gate does.
+    n=$(SYNPKG_PACMAN_LOG="$LOGDIR/oldfmt.log" "$SYNPKG" --no-color news 2>/dev/null | news_items)
+    [ "$n" = 1 ] && ok "the pre-ISO8601 pacman.log timestamp still parses" \
+                 || bad "the pre-ISO8601 pacman.log timestamp still parses (got $n, want 1)"
+
+    # `[ALPM] transaction started` is logged for every install and every
+    # removal. Matching it would mark the news read when a single package was
+    # installed — wrong in the direction that hides a warning.
+    n=$(SYNPKG_PACMAN_LOG="$LOGDIR/nomarker.log" "$SYNPKG" --no-color news 2>/dev/null | news_items)
+    [ "$n" = 3 ] && ok "an ordinary package upgrade does not mark the news read" \
+                 || bad "an ordinary package upgrade does not mark the news read (got $n, want 3)"
+
+    # Entities, in both spellings, and CDATA. A title rendered as "Widgets &amp;
+    # sprockets" is the visible half of a decoder that is also feeding the body.
+    out=$("$SYNPKG" --no-color news --all 2>/dev/null)
+    printf '%s' "$out" | grep -q 'Widgets & sprockets' \
+        && ok "CDATA and named entities decode in a title" \
+        || bad "CDATA and named entities decode in a title"
+    printf '%s' "$out" | grep -q 'gizmo >= 2.0' \
+        && ok "&gt; decodes in a title" || bad "&gt; decodes in a title"
+    printf '%s' "$out" | grep -q '🎉' \
+        && ok "a numeric entity decodes to UTF-8" || bad "a numeric entity decodes to UTF-8"
+    # Matched on a fragment, not the whole command: the body is WRAPPED, so
+    # "Run pacman -Syu --overwrite …" legitimately spans two lines. The first
+    # version of this check wanted the whole string on one line and failed
+    # against correct output.
+    printf '%s' "$out" | grep -q -- "--overwrite '/usr/lib/gizmo/\*'" \
+        && ok "escaped markup in a description survives tag stripping" \
+        || bad "escaped markup in a description survives tag stripping"
+    printf '%s' "$out" | grep -q '<p>' \
+        && bad "HTML tags are leaking into the rendered body" \
+        || ok "HTML tags are stripped from the body"
+
+    # A token longer than a line has no space to break on. Hard-splitting it is
+    # the difference between a wrapped paragraph and one 100-character line.
+    longest=$(printf '%s' "$out" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
+    [ "$longest" -le 100 ] && ok "an unbreakable token is hard-split, not overflowed" \
+                           || bad "a line ran to $longest characters"
+
+    n=$("$SYNPKG" --tsv news --all 2>/dev/null | tsv_cols)
+    [ "$n" = 4 ] && ok "news --tsv has 4 columns" || bad "news --tsv has 4 columns (got $n)"
+
+    # An unparseable feed must be reported, not treated as "no news".
+    printf 'not xml at all\n' > "$LOGDIR/junk.xml"
+    SYNPKG_NEWS_FILE="$LOGDIR/junk.xml" "$SYNPKG" news >/dev/null 2>&1
+    [ $? -eq 1 ] && ok "an unparseable feed fails rather than reporting no news" \
+                 || bad "an unparseable feed fails rather than reporting no news"
+fi
+
+"$SYNPKG" --tsv config 2>/dev/null | grep -q '^upgrade_news' \
+    && ok "upgrade_news is a listed setting" || bad "upgrade_news is a listed setting"
+
+# ── installed vs running kernel ─────────────────────────────────────────────
+#
+# Against a SYNTHETIC /usr/lib/modules, so the assertions hold on velle's box, in
+# a build chroot and on the ISO alike. The real tree holds whatever that machine
+# happens to have booted.
+
+mkdir -p "$KDIR/9.9.9-fictional" "$KDIR/8.8.8-no-pkgbase" "$KDIR/extramodules-fake"
+echo linux > "$KDIR/9.9.9-fictional/pkgbase"
+
+krows() { SYNPKG_MODULES_DIR="$KDIR" "$SYNPKG" --tsv status 2>/dev/null | grep '^kernel'; }
+
+krows | grep -q '^kernel	linux	' \
+    && ok "a kernel is found through its pkgbase file" \
+    || bad "a kernel is found through its pkgbase file"
+
+# A directory with no pkgbase is not a packaged kernel: dkms leftovers and
+# extramodules directories live here too, and counting them as kernels would
+# report a reboot that is not owed.
+[ "$(krows | wc -l)" = 2 ] \
+    && ok "a modules directory with no pkgbase is not a kernel" \
+    || bad "a modules directory with no pkgbase is not a kernel"
+
+# The running release is absent from the synthetic tree, which is exactly the
+# state a kernel upgrade leaves behind.
+krows | grep -q 'reboot-pending' \
+    && ok "a running kernel that is no longer installed is reported" \
+    || bad "a running kernel that is no longer installed is reported"
+
+mkdir -p "$KDIR/$(uname -r)"
+echo linux > "$KDIR/$(uname -r)/pkgbase"
+krows | grep -q '	running$' \
+    && ok "the running kernel is marked when it is still installed" \
+    || bad "the running kernel is marked when it is still installed"
+krows | grep -q 'reboot-pending' \
+    && bad "a reboot is still reported when the running kernel is installed" \
+    || ok "no reboot is reported when the running kernel is installed"
+
+n=$(SYNPKG_MODULES_DIR="$KDIR" "$SYNPKG" --tsv status | tsv_cols)
+[ "$n" = 4 ] && ok "status --tsv still has 4 columns with kernel rows" \
+             || bad "status --tsv still has 4 columns with kernel rows (got $n)"
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

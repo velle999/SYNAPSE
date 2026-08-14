@@ -484,6 +484,11 @@ int cmd_status(int argc, char **argv)
 
 	free(fp);
 	sp_alpm_free(h);
+
+	/* AFTER the handle is freed: this opens one of its own to resolve each
+	 * kernel's package version, and one live read handle at a time is a cheaper
+	 * rule to keep than a shared one threaded through. */
+	sp_kernel_status();
 	return 0;
 }
 

@@ -123,6 +123,33 @@ int cmd_refresh(int argc, char **argv);
 int escalate(const char *verb, int argc, char **argv);
 bool is_root(void);
 
+/* ── news.c — the Arch Linux news gate ──────────────────────────────────────
+ *
+ * Arch occasionally requires a manual step before an upgrade will succeed, and
+ * archlinux.org/news is the only place it is announced. `pacman -Syu` has never
+ * mentioned this; a graphical Update button makes that gap universal. */
+int cmd_news(int argc, char **argv);
+/* Show what has been published since this machine's last full system upgrade
+ * and ask whether to continue. FALSE means the user said no.
+ *
+ * TRUE when the feed cannot be reached: this is an advisory, and one that can
+ * wedge the updater when a network is down is worse than none. */
+bool sp_news_gate(void);
+
+/* ── kernel.c — "installed" is not "running" ────────────────────────────────
+ *
+ * A kernel upgrade DELETES /usr/lib/modules/<running release>/ while the kernel
+ * itself keeps running from memory, so every module not already loaded silently
+ * stops being loadable. Take a snapshot before a transaction, hand it back
+ * after, and the diff says whether a reboot is owed. */
+typedef struct sp_kernel sp_kernel;
+size_t sp_kernel_snapshot(sp_kernel **out);
+void   sp_kernel_free(sp_kernel *k, size_t n);
+void   sp_kernel_reboot_check(const sp_kernel *before, size_t n_before);
+/* The same facts as a report, for `status`: which kernels are installed, which
+ * one is running, and whether those disagree. */
+void   sp_kernel_status(void);
+
 /* ── curated.c ──────────────────────────────────────────────────────────── */
 int cmd_suggest(int argc, char **argv);
 /* Where the catalogue was resolved from, and how many entries it holds — the
