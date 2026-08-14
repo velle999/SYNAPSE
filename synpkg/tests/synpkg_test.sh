@@ -399,6 +399,59 @@ bad_label=$("$SYNPKG" --tsv arsenal categories |
 [ "$bad_label" = 0 ] && ok "arsenal categories label drops the blackarch- prefix" \
                      || bad "$bad_label arsenal rows have a mislabelled category"
 
+# ── the header is owed even when there is nothing to list ───────────────────
+#
+# ⚠ The header check above passed on the development machine and FAILED on the
+# VM, because it was reading whatever state that machine's pacman.conf happened
+# to be in. With BlackArch configured it listed categories; without, it emitted
+# `disabled 0` — a three-column status record standing in for the pane's
+# four-column header.
+#
+# So the state is a FIXTURE now, not an inheritance. pconf_repo_list shells out
+# to pacman-conf, so a stub on PATH is enough to take the repo away from a
+# machine that has it — and to give this assertion the same verdict everywhere.
+cat > "$STUB/pacman-conf" <<'STUBEOF'
+#!/bin/sh
+# Every repo this machine has, except blackarch.
+# ⚠ `exec a | b` execs only the PIPELINE's subshell and the script carries on
+# to the next line, which silently emitted the list TWICE — with blackarch in
+# the second copy — and looked exactly like the stub not being used at all.
+if [ "$1" = "--repo-list" ]; then
+    /usr/bin/pacman-conf --repo-list | grep -vx blackarch
+    exit 0
+fi
+exec /usr/bin/pacman-conf "$@"
+STUBEOF
+chmod +x "$STUB/pacman-conf"
+
+noba() { PATH="$STUB:$PATH" "$SYNPKG" "$@"; }
+
+hdr=$(noba --tsv arsenal categories | head -1)
+[ "$hdr" = $'category\ttotal\tinstalled\tlabel' ] \
+    && ok "arsenal categories keeps its header with the repo absent" \
+    || bad "arsenal categories header with no repo is '$hdr'"
+
+n=$(noba --tsv arsenal categories | wc -l)
+[ "$n" = 1 ] && ok "...and lists nothing under it" \
+             || bad "arsenal categories emitted $n lines with no repo"
+
+# The listing delegated to arsenal_status for the message and the exit code,
+# which is how the status record ended up in the data. Same defect, and it was
+# only ever caught in `categories`.
+hdr=$(noba --tsv arsenal packages blackarch-fuzzer | head -1)
+[ "$hdr" = $'name\tinstalled\tversion\trepo\tsize\tdescription' ] \
+    && ok "arsenal packages keeps its header with the repo absent" \
+    || bad "arsenal packages header with no repo is '$hdr'"
+
+# The reason is not lost — it is the exit code, and status is what reports it.
+noba --tsv arsenal categories >/dev/null 2>&1
+[ $? = 2 ] && ok "...and the exit code still says the repo is disabled" \
+           || bad "arsenal categories with no repo did not exit 2"
+
+st=$(noba --tsv arsenal status | head -1 | cut -f1)
+[ "$st" = disabled ] && ok "arsenal status still reports the state as a record" \
+                     || bad "arsenal status with no repo said '$st'"
+
 n=$("$SYNPKG" --tsv groups | wc -l)
 [ "$n" -gt 1 ] && ok "groups lists at least one browsable group" \
                || bad "groups listed nothing (got $n lines)"

@@ -44,14 +44,22 @@ static alpm_db_t *blackarch_db(alpm_handle_t *h)
 /* Three distinct states, because the fix differs for each: no repo at all
  * (bootstrap it), a configured repo that was never synced (refresh), and a
  * working repo. Collapsing the middle one into "disabled" sends people to
- * re-run a bootstrap that will tell them it is already enabled. */
-static int arsenal_status(alpm_handle_t *h)
+ * re-run a bootstrap that will tell them it is already enabled.
+ *
+ * `records` is false when a LISTING delegates here for the message and the
+ * exit code. A listing has already written its own header by then, and this
+ * one's is three columns of state — see the comment on emit_category_header.
+ * The state still reaches a caller that wants it: it is the return value, and
+ * `arsenal status` is the command that reports it. */
+static int arsenal_status(alpm_handle_t *h, bool records)
 {
+	bool rows = records && g_out == OUT_TSV;
+
 	alpm_db_t *db = blackarch_db(h);
 	if (!db) {
-		if (g_out == OUT_TSV)
+		if (rows)
 			tsv_row(3, "disabled", "0", "");
-		else
+		else if (g_out != OUT_TSV)
 			printf("BlackArch is %snot enabled%s — run: synpkg arsenal enable-repo\n",
 			       C_WARN(), C_RESET());
 		return 2;
@@ -59,9 +67,9 @@ static int arsenal_status(alpm_handle_t *h)
 
 	int n = alpm_list_count(alpm_db_get_pkgcache(db));
 	if (n == 0) {
-		if (g_out == OUT_TSV)
+		if (rows)
 			tsv_row(3, "unsynced", "0", "");
-		else
+		else if (g_out != OUT_TSV)
 			printf("BlackArch is configured but %snever synced%s — run: synpkg refresh\n",
 			       C_WARN(), C_RESET());
 		return 3;
@@ -74,11 +82,11 @@ static int arsenal_status(alpm_handle_t *h)
 	 * trust. */
 	bool keyring = alpm_db_get_pkg(alpm_get_localdb(h), "blackarch-keyring") != NULL;
 
-	if (g_out == OUT_TSV) {
+	if (rows) {
 		char *c = xasprintf("%d", n);
 		tsv_row(3, "enabled", c, keyring ? "ok" : "missing");
 		free(c);
-	} else {
+	} else if (g_out != OUT_TSV) {
 		printf("BlackArch is %senabled%s — %d packages available.\n",
 		       C_OK(), C_RESET(), n);
 		if (!keyring)
@@ -91,20 +99,38 @@ static int arsenal_status(alpm_handle_t *h)
 
 /* ── categories ─────────────────────────────────────────────────────────── */
 
+/* `label` is what the pane displays, `category` is what `arsenal packages`
+ * takes back. Every group here is "blackarch-<thing>" and the prefix is noise
+ * repeated fifty times down a pane, but stripping it in the GUI would mean the
+ * GUI knowing this source's naming scheme — and it renders the suggestion and
+ * Flathub panes too. Strip it where the names are known instead.
+ *
+ * ⚠ FOUR sources feed one pane, and the pane keys its fields BY HEADER NAME.
+ * This header is therefore owed on every path out of the listing, including
+ * the ones that answer nothing. With BlackArch not configured this used to
+ * emit `disabled 0` as the first line instead — three columns of state where
+ * the pane reads four columns of data, so the pane keyed `total` off a field
+ * that was not there. It rendered acceptably only because the row count was
+ * zero and the empty state took over; any row at all and it would have drawn
+ * blanks, or sent the wrong string back as the category to open.
+ *
+ * An empty table is a complete answer. The reason is not lost: the exit code
+ * carries it, and `arsenal status` is the command that names it. */
+static void emit_category_header(void)
+{
+	if (g_out == OUT_TSV)
+		tsv_row(4, "category", "total", "installed", "label");
+}
+
 static int arsenal_categories(alpm_handle_t *h)
 {
 	alpm_db_t *db = blackarch_db(h);
-	if (!db)
-		return arsenal_status(h);
+	if (!db) {
+		emit_category_header();
+		return arsenal_status(h, false);
+	}
 
-	/* `label` is what the pane displays, `category` is what `arsenal packages`
-	 * takes back. Every group here is "blackarch-<thing>" and the prefix is
-	 * noise repeated fifty times down a pane, but stripping it in the GUI
-	 * would mean the GUI knowing this source's naming scheme — and it renders
-	 * the suggestion and Flathub panes too. Strip it where the names are
-	 * known instead. */
-	if (g_out == OUT_TSV)
-		tsv_row(4, "category", "total", "installed", "label");
+	emit_category_header();
 
 	alpm_db_t *local = alpm_get_localdb(h);
 
@@ -147,8 +173,14 @@ static int arsenal_packages(alpm_handle_t *h, const char *group)
 		die("arsenal: '%s' is not a blackarch category", group);
 
 	alpm_db_t *db = blackarch_db(h);
-	if (!db)
-		return arsenal_status(h);
+	if (!db) {
+		/* Same contract, same reason: the package pane keys its fields by
+		 * name too, and a listing that cannot answer still owes its header.
+		 * Untested until `categories` was caught doing it — they delegated
+		 * to the same place. */
+		emit_pkg_header();
+		return arsenal_status(h, false);
+	}
 
 	alpm_group_t *grp = alpm_db_get_group(db, group);
 	if (!grp) {
@@ -249,7 +281,7 @@ int cmd_arsenal(int argc, char **argv)
 	int rc;
 
 	if (!strcmp(sub, "status"))
-		rc = arsenal_status(h);
+		rc = arsenal_status(h, true);
 	else if (!strcmp(sub, "categories"))
 		rc = arsenal_categories(h);
 	else if (!strcmp(sub, "installed"))
