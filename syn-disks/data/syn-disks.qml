@@ -2196,5 +2196,62 @@ FloatingWindow {
                 font { family: root.uiFont; pixelSize: root.ui(10) }
             }
         }
+
+        // ── Working ─────────────────────────────────────────────────────────
+        //
+        // "I couldn't tell it was doing anything." A format is seconds to
+        // minutes of writing, and the only thing this window changed while it
+        // ran was a ten-pixel grey line at the bottom and some greyed-out
+        // buttons — neither of which reads as "in progress" on a window that
+        // looks idle. Somebody closed it part way through a format, reasonably,
+        // because nothing said not to.
+        //
+        // It is over everything and it takes the mouse: while a disk is being
+        // written to, there is nothing else in here worth clicking.
+        Rectangle {
+            anchors.fill: parent
+            visible: root.busy
+            color: root.isLight ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(0, 0, 0, 0.62)
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 80, 420)
+                height: busyText.implicitHeight + 44
+                color: root.cPanel
+                border { width: 1; color: root.cAccent }
+                radius: 2
+
+                Column {
+                    id: busyText
+                    anchors { left: parent.left; right: parent.right
+                              verticalCenter: parent.verticalCenter
+                              leftMargin: 20; rightMargin: 20 }
+                    spacing: 8
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: root.status !== "" ? root.status : "working…"
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12); bold: true }
+                    }
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        // True as of the detached runner in the binary, and only
+                        // because of it: closing this window used to SIGKILL
+                        // syn-disks, and the mkfs it had started then died of
+                        // SIGPIPE part way through writing a filesystem.
+                        text: "The drive is being written to. Closing this window "
+                            + "will not stop it — leave the drive plugged in until "
+                            + "this finishes."
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(10) }
+                    }
+                }
+            }
+        }
     }
 }

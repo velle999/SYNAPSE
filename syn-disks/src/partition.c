@@ -140,7 +140,9 @@ int pt_plan_do(char *const argv[], const char *script, const char *dev,
 	}
 
 	int st = 0;
-	char *out = run_capture_in(argv, script, &st);
+	/* DETACHED, like format's: sfdisk and dd are writes, and a window close
+	 * must not be able to stop one part way. */
+	char *out = run_capture_detached(argv, script, &st);
 	strip_trailing_newline(out);
 
 	/* The same question format asks after a failed write, for the same device
@@ -473,7 +475,7 @@ int cmd_mkpart(int argc, char **argv)
 			char *mk[10];
 			fs_mkfs_argv(kind, o.label, pdev, mk);
 			int st = 0;
-			char *out = run_capture(mk, &st, false);
+			char *out = run_capture_detached(mk, NULL, &st);
 			strip_trailing_newline(out);
 			if (st != 0) {
 				fprintf(stderr, "%s%s%s\n", C_BAD(),

@@ -597,7 +597,10 @@ int cmd_format(int argc, char **argv)
 	}
 
 	int st = 0;
-	char *out = run_capture(cmd, &st, false);
+	/* DETACHED: this is the write. Closing the window used to kill this
+	 * process, and the mkfs it had started died of SIGPIPE part way through
+	 * a filesystem. */
+	char *out = run_capture_detached(cmd, NULL, &st);
 	strip_trailing_newline(out);
 
 	/* A failure is an answer too, and this one had none: the guard cleared the

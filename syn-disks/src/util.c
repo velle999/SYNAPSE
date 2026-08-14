@@ -308,6 +308,126 @@ char *slurp(const char *path)
 	return text;
 }
 
+/* An anonymous scratch file: created, opened, and unlinked before anything is
+ * written to it, so it has no name for anything to find and the kernel frees it
+ * when the last descriptor closes. Nothing to clean up on any exit path,
+ * including the ones that never come back. */
+static int scratch_fd(void)
+{
+	const char *tmp = getenv("TMPDIR");
+	if (!tmp || !*tmp)
+		tmp = "/tmp";
+	char *path = xasprintf("%s/syn-disks-XXXXXX", tmp);
+	int fd = mkstemp(path);
+	if (fd >= 0)
+		unlink(path);
+	free(path);
+	return fd;
+}
+
+/* Read a scratch file back from the beginning. */
+static char *slurp_fd(int fd)
+{
+	if (lseek(fd, 0, SEEK_SET) == (off_t)-1)
+		return xstrdup("");
+	size_t cap = 8192, len = 0;
+	char *buf = xmalloc(cap);
+	for (;;) {
+		if (len + 1 >= cap) {
+			cap *= 2;
+			buf = xrealloc(buf, cap);
+		}
+		ssize_t n = read(fd, buf + len, cap - len - 1);
+		if (n <= 0)
+			break;
+		len += (size_t)n;
+	}
+	buf[len] = '\0';
+	return buf;
+}
+
+/* run_capture for a tool that is WRITING TO A DISK — and the difference is not
+ * about capturing output at all. It is about whose death can stop it.
+ *
+ * The window runs syn-disks as a child process, and quickshell SIGKILLs its
+ * children when it exits. Closing the window therefore kills syn-disks
+ * instantly, and the mkfs it started — which cannot be killed, being root —
+ * then dies of SIGPIPE the next time it prints a line of progress into a pipe
+ * whose reader has gone. The result is a format ABORTED PART-WAY THROUGH
+ * WRITING A FILESYSTEM, from a window close, with no warning and nothing on
+ * screen that said an operation was in flight. Proven by running the real
+ * window headlessly against a stub: parent killed at the moment of exit, child
+ * SIGPIPE'd in the same second.
+ *
+ * So a destructive tool gets a FILE, not a pipe. A write to a file cannot
+ * SIGPIPE, so nothing upstream — not the window closing, not the session
+ * ending, not this process being killed outright — can interrupt a half-written
+ * filesystem. The tool runs to completion and the disk is left in a state
+ * somebody chose. Output is read back afterwards, which is all this ever did
+ * with it: run_capture never streamed.
+ *
+ * `input`, when given, travels the same way and for the same reason: a script
+ * on a pipe means sfdisk's stdin depends on this process still being alive.
+ *
+ * The one thing this deliberately does NOT do is put the child in its own
+ * session. It does not need to — the child is not the one being signalled —
+ * and pkexec's authorisation is tied to the session it was asked from. */
+char *run_capture_detached(char *const argv[], const char *input, int *status)
+{
+	int outfd = scratch_fd();
+	if (outfd < 0) {
+		if (status) *status = -1;
+		return xstrdup("");
+	}
+	int infd = -1;
+	if (input) {
+		infd = scratch_fd();
+		if (infd < 0) {
+			close(outfd);
+			if (status) *status = -1;
+			return xstrdup("");
+		}
+		for (size_t off = 0, n = strlen(input); off < n; ) {
+			ssize_t w = write(infd, input + off, n - off);
+			if (w <= 0)
+				break;
+			off += (size_t)w;
+		}
+		lseek(infd, 0, SEEK_SET);
+	}
+
+	pid_t pid = fork();
+	if (pid < 0) {
+		close(outfd);
+		if (infd >= 0) close(infd);
+		if (status) *status = -1;
+		return xstrdup("");
+	}
+	if (pid == 0) {
+		if (infd >= 0)
+			dup2(infd, STDIN_FILENO);
+		dup2(outfd, STDOUT_FILENO);
+		dup2(outfd, STDERR_FILENO);
+		if (outfd > STDERR_FILENO)
+			close(outfd);
+		if (infd > STDERR_FILENO)
+			close(infd);
+		execvp(argv[0], argv);
+		_exit(127);
+	}
+
+	int st = 0;
+	waitpid(pid, &st, 0);
+	if (status)
+		*status = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+
+	char *buf = slurp_fd(outfd);
+	close(outfd);
+	if (infd >= 0)
+		close(infd);
+	return buf;
+}
+
 /* execvp, not system(): every argument this program passes to a tool comes
  * from somewhere a user can influence, and a shell in the middle turns a
  * filesystem label into a command line. It is also what lets the test suite

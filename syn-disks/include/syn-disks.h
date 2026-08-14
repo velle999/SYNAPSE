@@ -104,6 +104,16 @@ char  *human_size(unsigned long long bytes);
 bool   have_cmd(const char *name);
 char  *slurp(const char *path);
 char  *run_capture(char *const argv[], int *status, bool quiet_stderr);
+
+/* For a tool that WRITES TO A DISK. Same capture, but the tool's output goes to
+ * an anonymous file rather than to a pipe this process holds — so that killing
+ * this process, or the window that started it, cannot SIGPIPE a mkfs half way
+ * through writing a filesystem. `input`, if given, reaches stdin the same way.
+ *
+ * Every destructive command uses this. See the comment on the definition: a
+ * window close aborting a format mid-write is not hypothetical, it is what this
+ * program did. */
+char  *run_capture_detached(char *const argv[], const char *input, int *status);
 /* Value of KEY="..." in one `lsblk -P` line, anchored on the delimiters so
  * that asking for NAME does not match the NAME inside PKNAME. malloc'd, or
  * NULL. */

@@ -517,6 +517,56 @@ echo 0 > "$S/sdw/ro"
 says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'Input/output error'
 check "...and still quotes what the tool said" $?
 
+# ── KILLING syn-disks must not stop the write ───────────────────────────────
+#
+# The window runs this binary as a child, and quickshell SIGKILLs its children
+# when it exits. So closing the window killed syn-disks instantly, and the mkfs
+# it had started — root, unkillable from here — died of SIGPIPE the next time it
+# printed a line of progress into a pipe whose reader had gone. A format
+# ABORTED PART WAY THROUGH WRITING A FILESYSTEM, from a window close, with
+# nothing on screen that said an operation was in flight.
+#
+# Proven by driving the real window headlessly against a stub: parent killed at
+# the moment of exit, child SIGPIPE'd in the same second. The fix is that a
+# destructive tool writes to a FILE and not to a pipe this process holds, so
+# nothing upstream can interrupt it. This asserts exactly that property: kill
+# the binary mid-format and the tool still reaches the end of its work.
+
+KLOG="$T/killlog"
+cat > "$MKB/mkfs.ext4" <<EOF
+#!/bin/sh
+# Prints progress as mke2fs does — which is what made the pipe fatal.
+i=0
+while [ \$i -lt 6 ]; do
+    echo "Writing inode tables: \$i"
+    echo "tick \$i" >> "$KLOG"
+    sleep 0.4
+    i=\$((i + 1))
+done
+echo "FINISHED" >> "$KLOG"
+EOF
+chmod +x "$MKB/mkfs.ext4"
+
+: > "$KLOG"
+echo 0 > "$S/sdw/ro"
+PATH="$MKB:$PATH" SYN_DISKS_NO_PKEXEC=1 "$SD" format sdw --fs=ext4 --yes >/dev/null 2>&1 &
+victim=$!
+sleep 0.8
+kill -9 "$victim" 2>/dev/null
+wait "$victim" 2>/dev/null
+# Long enough for the tool to finish on its own after its parent is gone.
+sleep 2.5
+
+grep -q FINISHED "$KLOG" \
+    && ok "killing syn-disks mid-format does not stop the write" \
+    || bad "killing syn-disks left the filesystem half written"
+
+# ...and it was genuinely still running when the kill landed, or the assertion
+# above proves nothing: a tool that had already finished would pass it too.
+[ "$(grep -c tick "$KLOG")" -ge 5 ] \
+    && ok "...and the tool ran on past the death of its parent" \
+    || bad "the tool had already finished — the kill proved nothing"
+
 # A format that WORKS says so, and says nothing about a switch. The suite has
 # never had a passing mkfs at all — every format assertion above is a refusal
 # or a dry run, and "it reported a failure correctly" is only half the contract.
@@ -1446,6 +1496,14 @@ if [ -f "$QML" ]; then
     grep -q 'r.fix' "$QML" \
         && ok "a failed operation is offered the same way out as a refusal" \
         || bad "the outcome handler ignores the fix code on a failure"
+
+    # ...and while a disk is being written to, the window has to LOOK like it.
+    # Greying out four buttons and writing ten grey pixels at the bottom is not
+    # a sign that a format is in flight, and somebody closed the window part way
+    # through one because nothing said not to.
+    grep -q 'visible: root.busy' "$QML" \
+        && ok "the window says out loud that a write is in progress" \
+        || bad "nothing in the window marks an operation in flight"
 
     # The bar has to be able to HOLD the answer. It was a fixed 22 pixels with
     # ElideRight, so the reason — however carefully composed — ran off the end
