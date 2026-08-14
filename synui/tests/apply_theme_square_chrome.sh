@@ -6,9 +6,11 @@
 # compositor's radius off changed nothing, because neither was drawing them.
 # synui squares its own chrome already — chrome_corner_radius() returns 0 for
 # every style but FLAT — but Firefox never BINDS xdg-decoration, so it keeps its
-# GTK frame and draws its own corners from the GTK theme's `decoration` node.
-# Measured on a live desktop: Firefox's left edge walked inward one pixel per
-# row for eight rows while an SSD window beside it was square.
+# GTK frame and draws its own corners from the GTK theme's `headerbar.titlebar`
+# node (NOT `decoration`, which is what the first attempt zeroed to no effect —
+# see the note beside that assertion below). Measured on a live desktop:
+# Firefox's left edge walked inward one pixel per row for eight rows while an SSD
+# window beside it was square.
 #
 # So the chrome style now travels to synui-apply-theme, which answers it once in
 # GTK where every self-decorating client reads it. What is asserted here is the
@@ -88,19 +90,38 @@ check "gtk-3.0 gets the decoration rule"        1 \
       "$(count '^decoration, decoration:backdrop { border-radius: 0; }$' "$G3")"
 check "gtk-4.0 gets the window.csd rule"        1 \
       "$(count '^window.csd, window.csd:backdrop { border-radius: 0; }$' "$G4")"
+
+# ⚠ THE ONE THAT MATTERS, and the reason this file is not proof on its own.
+#
+# The first version of this block shipped with only the two rules above and
+# changed nothing: Firefox stayed round. Asking GTK directly — a GtkStyleContext
+# on the same node path, no window mapped — showed why:
+#
+#     decoration          border-radius = 0     ← already working
+#     window.csd          border-radius = 0     ← already working
+#     headerbar.titlebar  border-radius = 8     ← what Firefox actually reads
+#
+# Every assertion here passed the whole time. A test that reads the FILE cannot
+# tell a correct selector from an irrelevant one, so pin the selector that was
+# measured against the live window and treat the rest as shape.
+check "gtk-3.0 gets the headerbar rule Firefox reads" 1 \
+      "$(count '^headerbar.titlebar, headerbar.titlebar:backdrop { border-radius: 0; }$' "$G3")"
+check "gtk-4.0 gets it too"                           1 \
+      "$(count '^headerbar.titlebar, headerbar.titlebar:backdrop { border-radius: 0; }$' "$G4")"
+
 check "the user's own CSS survives"             1 \
       "$(count -F "$MINE" "$G3")"
 
 # ── idempotent ───────────────────────────────────────────────
 run on
 check "a second run does not duplicate the block" 1 "$(blocks "$G3")"
-check "...nor the rules inside it"                2 "$(squares "$G3")"
+check "...nor the rules inside it"                4 "$(squares "$G3")"
 check "...nor the user's CSS"                     1 "$(count -F "$MINE" "$G3")"
 
 # ── omitted is not off ───────────────────────────────────────
 run
 check "omitting the argument leaves the block alone" 1 "$(blocks "$G3")"
-check "...and leaves the rules alone"                2 "$(squares "$G3")"
+check "...and leaves the rules alone"                4 "$(squares "$G3")"
 
 # ── a value that is neither ──────────────────────────────────
 run maybe

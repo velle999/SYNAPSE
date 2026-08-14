@@ -139,21 +139,33 @@ gtk_ini "$HOME/.config/gtk-4.0/settings.ini"
 #
 # Firefox is not one of them. It never BINDS xdg-decoration, so synui's
 # SERVER_SIDE offer is ignored and Firefox keeps its own GTK frame — corners
-# included, drawn from the GTK theme's `decoration` node. Measured on a live
-# desktop: the window's left edge walked inward one pixel per row for eight rows,
-# an ~8px radius, while an SSD window beside it was square. Adwaita rounds; that
-# was Adwaita.
+# included, taken from the GTK theme. Measured on a live desktop: the window's
+# left edge walked inward one pixel per row for eight rows, an ~8px radius, while
+# an SSD window beside it was square. Adwaita rounds; that was Adwaita.
 #
-# Firefox exposes that same value as `ui.titlebarRadius`, but overriding it there
+# ⚠ WHICH GTK NODE, exactly — the first version of this block got it wrong and
+# shipped a fix that changed nothing. It zeroed `decoration` and `window.csd`,
+# and Firefox stayed round. Queried out of GTK itself rather than reasoned about,
+# with a GtkStyleContext on the same node path and no window ever mapped:
+#
+#     decoration          border-radius = 0     ← the block was working
+#     window.csd          border-radius = 0     ← and so was this one
+#     headerbar.titlebar  border-radius = 8     ← THIS is what Firefox reads
+#
+# 8px, which is exactly the radius measured off the live window. Firefox takes
+# its titlebar radius from the HEADERBAR node, not from the window decoration, so
+# the two original selectors were both correct and both irrelevant. Re-probed
+# after adding the headerbar rule: 8 → 0.
+#
+# Firefox exposes the same value as `ui.titlebarRadius`, but overriding it there
 # would fix ONE application. The radius comes from GTK for every client that
 # decorates itself, so it is answered once, in GTK, where GTK apps and Firefox
 # alike read it.
 #
 # A managed block, on the same rule as synui-firefox-glass's user.js: rewrite
-# between the markers and leave anything a user wrote around it alone. Both
-# selectors go in both files — GTK 3 styles the frame through `decoration`, GTK 4
-# through `window.csd`, and a selector that matches no node in one of them costs
-# nothing.
+# between the markers and leave anything a user wrote around it alone. All the
+# selectors go in both files — GTK 3 frames through `decoration`, GTK 4 through
+# `window.csd`, and a selector that matches no node in one of them costs nothing.
 GTKCSS_BEGIN='/* >>> synui-apply-theme BEGIN — managed, do not edit */'
 GTKCSS_END='/* <<< synui-apply-theme END */'
 
@@ -180,9 +192,13 @@ gtk_css() {   # gtk_css <file> <on|off>
             printf '/* The desktop theme is a retro chrome, which is square. Client-side\n'
             printf '   decorated windows draw their own corners from here — Firefox among\n'
             printf '   them: it never binds xdg-decoration, so the frame synui offers it is\n'
-            printf '   never taken and synui cannot square those corners itself. */\n'
+            printf '   never taken and synui cannot square those corners itself.\n'
+            printf '   headerbar.titlebar is the one Firefox actually reads; the other two\n'
+            printf '   were already 0 while the window stayed round. */\n'
             printf 'decoration, decoration:backdrop { border-radius: 0; }\n'
             printf 'window.csd, window.csd:backdrop { border-radius: 0; }\n'
+            printf 'headerbar.titlebar, headerbar.titlebar:backdrop { border-radius: 0; }\n'
+            printf '.titlebar, .titlebar:backdrop { border-radius: 0; }\n'
             printf '%s\n' "$GTKCSS_END"
         } >> "$tmp"
     fi
