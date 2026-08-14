@@ -56,8 +56,10 @@
 #define _GNU_SOURCE
 #include "syn-disks.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/utsname.h>
 
 /* The udisks2 tool, overridable so the test suite can put a fake on PATH and
  * assert the argv rather than mounting something. */
@@ -185,12 +187,14 @@ int cmd_eject(int argc, char **argv)
  * same array — two lists would agree on the day they were written and drift on
  * the day somebody added a filesystem to one of them. */
 static const fs_kind_t FS[] = {
-	{ "ext4",  "mkfs.ext4",  "-L", "Linux, journalled" },
-	{ "btrfs", "mkfs.btrfs", "-L", "Linux, snapshots and compression" },
-	{ "xfs",   "mkfs.xfs",   "-L", "Linux, large files" },
-	{ "vfat",  "mkfs.vfat",  "-n", "reads everywhere; no files over 4GB" },
-	{ "exfat", "mkfs.exfat", "-n", "reads nearly everywhere; large files" },
-	{ "ntfs",  "mkfs.ntfs",  "-L", "Windows" },
+	{ "ext4",  "mkfs.ext4",  "-L", "Linux, journalled",                    "ext4" },
+	{ "btrfs", "mkfs.btrfs", "-L", "Linux, snapshots and compression",     "btrfs" },
+	{ "xfs",   "mkfs.xfs",   "-L", "Linux, large files",                   "xfs" },
+	{ "vfat",  "mkfs.vfat",  "-n", "reads everywhere; no files over 4GB",  "vfat" },
+	{ "exfat", "mkfs.exfat", "-n", "reads nearly everywhere; large files", "exfat" },
+	/* Two drivers read NTFS: ntfs3 (read-write, current) and the old
+	 * read-only ntfs. Either one means the result will mount. */
+	{ "ntfs",  "mkfs.ntfs",  "-L", "Windows",                              "ntfs3 ntfs" },
 };
 static const size_t NFS = sizeof FS / sizeof *FS;
 
@@ -228,6 +232,128 @@ bool fs_label_ok(const char *s)
 			return false;
 	}
 	return true;
+}
+
+/* Is `word` one of the whitespace-separated tokens in `text`? Token-wise and
+ * not strstr: "ntfs" is a substring of "ntfs3", so a substring match would
+ * report the old read-only driver present on every machine that has the new
+ * one, and — worse — the reverse on a machine that has neither. */
+static bool has_token(const char *text, const char *word)
+{
+	if (!text || !word || !*word)
+		return false;
+	size_t n = strlen(word);
+	for (const char *p = text; (p = strstr(p, word)); p += n) {
+		bool left  = (p == text) || isspace((unsigned char)p[-1]);
+		bool right = !p[n] || isspace((unsigned char)p[n]);
+		if (left && right)
+			return true;
+	}
+	return false;
+}
+
+/* /proc/filesystems lists what the kernel can mount RIGHT NOW — built in, or a
+ * module already loaded. Lines are "nodev\text3" or "\text4", so the driver is
+ * the last field; has_token over the whole file is enough and does not care
+ * which. */
+static bool fs_in_proc(const char *drivers)
+{
+	const char *path = getenv("SYN_DISKS_FILESYSTEMS");
+	char *text = slurp(path && *path ? path : "/proc/filesystems");
+	if (!text)
+		return false;
+
+	bool found = false;
+	size_t n = 0;
+	char *copy = xstrdup(drivers);
+	char **drv = split(copy, ' ', &n);
+	for (size_t i = 0; i < n && !found; i++)
+		if (*drv[i])
+			found = has_token(text, drv[i]);
+	free(drv);
+	free(copy);
+	free(text);
+	return found;
+}
+
+/* Not loaded yet is not the same as unavailable: the module may simply never
+ * have been asked for. modules.dep lists every module the running kernel has,
+ * one path per line, so it answers "could this be loaded" without loading it
+ * — which needs root and would be a side effect of describing a plan. */
+static bool fs_module_exists(const char *drivers, bool *tree_missing)
+{
+	*tree_missing = false;
+
+	const char *dir = getenv("SYN_DISKS_MODULES");
+	char *path;
+	if (dir && *dir) {
+		path = xasprintf("%s/modules.dep", dir);
+	} else {
+		struct utsname u;
+		if (uname(&u) != 0)
+			return false;
+		path = xasprintf("/usr/lib/modules/%s/modules.dep", u.release);
+	}
+
+	char *text = slurp(path);
+	free(path);
+	if (!text) {
+		/* The running kernel's module tree is GONE. This is what a kernel
+		 * upgrade with no reboot leaves behind, and it is worth telling
+		 * apart from "this kernel was built without the driver": one is
+		 * fixed by rebooting and the other is not. */
+		*tree_missing = true;
+		return false;
+	}
+
+	bool found = false;
+	size_t n = 0;
+	char *copy = xstrdup(drivers);
+	char **drv = split(copy, ' ', &n);
+	for (size_t i = 0; i < n && !found; i++) {
+		if (!*drv[i])
+			continue;
+		/* "/exfat.ko", so a driver cannot be matched by another whose name
+		 * merely ends the same way (ntfs3 vs ntfs). The suffix varies with
+		 * the kernel's compression — .ko, .ko.zst, .ko.xz — so it is left
+		 * off and the leading slash carries the anchoring. */
+		char *needle = xasprintf("/%s.ko", drv[i]);
+		found = strstr(text, needle) != NULL;
+		free(needle);
+	}
+	free(drv);
+	free(copy);
+	free(text);
+	return found;
+}
+
+bool fs_kernel_can_mount(const fs_kind_t *fs, char **why)
+{
+	if (why)
+		*why = NULL;
+	if (!fs || !fs->kmod || !*fs->kmod)
+		return true;
+
+	if (fs_in_proc(fs->kmod))
+		return true;
+
+	bool tree_missing = false;
+	if (fs_module_exists(fs->kmod, &tree_missing))
+		return true;
+
+	if (why) {
+		if (tree_missing)
+			*why = xasprintf("this kernel can no longer load modules — its "
+			                 "module tree is gone, which is what a kernel "
+			                 "upgrade with no reboot leaves behind. %s will "
+			                 "be created correctly but will not mount here "
+			                 "until you reboot", fs->name);
+		else
+			*why = xasprintf("this kernel cannot mount %s — it will be "
+			                 "created correctly, but nothing here will read "
+			                 "it", fs->name);
+	}
+	return false;
 }
 
 const char *priv_prefix(void)
@@ -366,6 +492,7 @@ int cmd_format(int argc, char **argv)
 	 * shows and what --yes executes cannot drift apart. syn-settings takes
 	 * the same approach for changing the bootloader, for the same reason. */
 	char *cmd[10];
+	char *kwhy = NULL;
 	fs_mkfs_argv(kind, label, dev, cmd);
 
 	if (dry || !yes) {
@@ -384,9 +511,23 @@ int cmd_format(int argc, char **argv)
 				rec_row(2, "blocked", why);
 				free(why);
 			}
+			/* A WARNING and not `blocked`: making a stick for a camera or a
+			 * Windows machine is a perfectly good reason to write a
+			 * filesystem this kernel cannot read. It is here so the mount
+			 * error that follows is not a surprise. */
+			if (!fs_kernel_can_mount(kind, &kwhy)) {
+				rec_row(2, "warn", kwhy);
+				free(kwhy);
+				kwhy = NULL;
+			}
 		} else {
 			printf("would run: %s\n", line);
 			printf("%sthis erases everything on %s%s\n", C_WARN(), dev, C_RESET());
+			if (!fs_kernel_can_mount(kind, &kwhy)) {
+				printf("%swarning: %s%s\n", C_WARN(), kwhy, C_RESET());
+				free(kwhy);
+				kwhy = NULL;
+			}
 		}
 		free(line);
 		free(dev);
@@ -406,6 +547,14 @@ int cmd_format(int argc, char **argv)
 		rec_row(3, dev, st == 0 ? "ok" : "failed", out);
 	} else if (st == 0) {
 		printf("%s is now %s%s\n", dev, fs, label && *label ? " — labelled" : "");
+		/* Said again after the write, not only in the plan: a scripted
+		 * --yes never saw the dry run, and the mount failure it is about to
+		 * hit looks like a bad format rather than a missing driver. */
+		if (!fs_kernel_can_mount(kind, &kwhy)) {
+			printf("%swarning: %s%s\n", C_WARN(), kwhy, C_RESET());
+			free(kwhy);
+			kwhy = NULL;
+		}
 	} else {
 		fprintf(stderr, "%s%s%s\n", C_BAD(), *out ? out : "mkfs refused", C_RESET());
 	}

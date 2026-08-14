@@ -386,6 +386,13 @@ typedef struct {
 	const char *tool;
 	const char *label_flag;
 	const char *note;
+	/* The kernel driver(s) that MOUNT this, space-separated, because the
+	 * name of a filesystem is not the name of its driver: mkfs.ntfs writes
+	 * NTFS and the kernel calls the driver "ntfs3". Having mkfs is not the
+	 * same capability as being able to mount the result — a stick was
+	 * formatted exFAT on a machine with no exfat driver and then would not
+	 * mount, which looked like a bad format. */
+	const char *kmod;
 } fs_kind_t;
 
 const fs_kind_t *fs_all(size_t *n);
@@ -402,6 +409,19 @@ int fs_mkfs_argv(const fs_kind_t *fs, const char *label, const char *dev,
 /* The pkexec this program runs things under, or NULL when it must not use one
  * — a root shell, and the test suite, where there is nothing to ask. */
 const char *priv_prefix(void);
+
+/* Can the RUNNING kernel mount what this would create? Creating and mounting
+ * are two capabilities and only the first is a package dependency: a kernel
+ * upgrade with no reboot deletes the running kernel's module tree, and every
+ * driver that was not already resident becomes unloadable. Formatting still
+ * works perfectly and the result will not mount, here, until a reboot.
+ *
+ * Returns true when it can. On false, *why (when not NULL) is set to a
+ * malloc'd sentence naming which of the two reasons it is — the caller frees.
+ * Never blocks a format: a stick made for a camera or a Windows box does not
+ * care what this kernel can mount. It is a warning, and it is the answer to
+ * the question the mount error is about to raise. */
+bool fs_kernel_can_mount(const fs_kind_t *fs, char **why);
 
 /* ── table.c — the partition table, as geometry ─────────────────────────────
  *

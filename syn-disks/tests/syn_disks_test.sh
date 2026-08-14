@@ -320,6 +320,84 @@ check "...and would run mkfs on exactly that device" $?
 [ $? -eq 0 ] && ok "format ALLOWS an unmounted USB stick" \
              || bad "format ALLOWS an unmounted USB stick"
 
+# ── can the kernel MOUNT what we would create ───────────────────────────────
+#
+# Creating and mounting are two capabilities, and only the first is a package
+# dependency. A stick was formatted exFAT on this machine and then would not
+# mount: a kernel upgrade with no reboot had deleted the running kernel's
+# module tree, so exfat.ko was gone and nothing could load it. Every mkfs was
+# installed, so `about` reported the machine fully capable.
+#
+# Both inputs are fixtures — nothing here reads the real /proc or /usr/lib.
+
+KFS="$T/kfs"; mkdir -p "$KFS/mods" "$KFS/empty"
+: > "$KFS/empty/modules.dep"
+printf 'nodev\tsysfs\nnodev\tproc\n\text4\n\tvfat\n' > "$KFS/procfs"
+printf 'kernel/fs/exfat/exfat.ko.zst:\nkernel/fs/ntfs3/ntfs3.ko.zst:\n' \
+    > "$KFS/mods/modules.dep"
+
+kwarn() {  # prints the number of `warn` rows for --fs=$1
+    SYN_DISKS_FILESYSTEMS="$KFS/procfs" SYN_DISKS_MODULES="${2:-$KFS/mods}" \
+        "$SD" --rec format sdz2 --fs="$1" --dry-run 2>&1 | grep -c '^warn'
+}
+
+[ "$(kwarn ext4)" = 0 ] && ok "no warning for a driver already in /proc/filesystems" \
+                        || bad "no warning for a driver already in /proc/filesystems"
+
+# Not loaded is not unavailable — the module may simply never have been asked
+# for, and asking the kernel to load it needs root and would be a side effect
+# of merely describing a plan.
+[ "$(kwarn exfat)" = 0 ] && ok "no warning for a driver present as a module" \
+                         || bad "no warning for a driver present as a module"
+
+[ "$(kwarn xfs)" = 1 ] && ok "warns when neither /proc nor the module tree has the driver" \
+                       || bad "warns when neither /proc nor the module tree has the driver"
+
+# The filesystem's name is not its driver's name.
+[ "$(kwarn ntfs)" = 0 ] && ok "NTFS counts as mountable via the ntfs3 driver" \
+                        || bad "NTFS counts as mountable via the ntfs3 driver"
+
+# A warning, never a refusal: a stick for a camera or a Windows machine is a
+# good reason to write a filesystem this kernel cannot read.
+"$SD" --rec format sdz2 --fs=xfs --dry-run >/dev/null 2>&1
+[ $? -eq 0 ] && ok "...and an unmountable filesystem is still ALLOWED" \
+             || bad "...and an unmountable filesystem is still ALLOWED"
+
+# ⚠ Token-wise, never strstr: "ntfs" is a substring of "ntfs3". A substring
+# match reports the old read-only driver present on every machine that has the
+# new one, and matches nothing correctly in the other direction either.
+for probe in exfat3 myexfat; do
+    printf '\t%s\n' "$probe" > "$KFS/procfs"
+    [ "$(kwarn exfat "$KFS/empty")" = 1 ] \
+        || bad "'$probe' in /proc/filesystems must not satisfy exfat"
+done
+ok "a driver name is matched as a whole token, not as a substring"
+
+# The suffix follows the kernel's module compression and is not ours to
+# predict; the leading slash is what anchors the name.
+printf 'nodev\tproc\n' > "$KFS/procfs"
+for suf in .ko .ko.zst .ko.xz; do
+    printf 'kernel/fs/exfat/exfat%s:\n' "$suf" > "$KFS/mods/modules.dep"
+    [ "$(kwarn exfat)" = 0 ] || bad "modules.dep entry ending '$suf' must count"
+done
+ok "a module counts however the kernel compressed it"
+
+# The two reasons are fixed by different things — one by a reboot, one not —
+# so they are told apart rather than merged into "unavailable".
+printf 'nodev\tproc\n' > "$KFS/procfs"
+SYN_DISKS_FILESYSTEMS="$KFS/procfs" SYN_DISKS_MODULES="$KFS/no-such-tree" \
+    says "$SD" format sdz2 --fs=exfat -n | grep -q 'reboot'
+check "a missing module TREE says so, and says to reboot" $?
+
+SYN_DISKS_FILESYSTEMS="$KFS/procfs" SYN_DISKS_MODULES="$KFS/empty" \
+    says "$SD" format sdz2 --fs=exfat -n | grep -q 'cannot mount'
+check "a kernel simply without the driver says that instead" $?
+
+# about is the pane somebody reads when wondering why a mount failed.
+SYN_DISKS_FILESYSTEMS="$KFS/procfs" SYN_DISKS_MODULES="$KFS/empty" \
+    says "$SD" --rec about | grep -q '^mount%20exfat	no'
+check "about reports what this kernel can mount, not just what it can create" $?
+
 # ── partitioning ────────────────────────────────────────────────────────────
 #
 # ⚠ Everything below drives a FAKE sfdisk that appends its arguments and its

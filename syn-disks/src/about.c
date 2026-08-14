@@ -12,6 +12,7 @@
 #include "syn-disks.h"
 #include "config.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static void row(const char *key, const char *val, const char *detail)
@@ -58,6 +59,24 @@ int cmd_about(int argc, char **argv)
 	tool_row("mkfs.exfat", "format as exFAT");
 	tool_row("mkfs.ntfs", "format as NTFS");
 	tool_row("mkfs.xfs", "format as XFS");
+
+	/* Creating and mounting are two capabilities, and this pane used to
+	 * report only the first. A machine with every mkfs installed and a kernel
+	 * that had just been upgraded without a reboot read as fully capable,
+	 * formatted a stick exFAT, and then could not mount it. */
+	if (g_out == OUT_HUMAN)
+		printf("\n%sWhat this kernel can mount%s\n", C_BOLD(), C_RESET());
+
+	size_t nfs = 0;
+	const fs_kind_t *all = fs_all(&nfs);
+	for (size_t i = 0; i < nfs; i++) {
+		char *why = NULL;
+		bool ok = fs_kernel_can_mount(&all[i], &why);
+		char *key = xasprintf("mount %s", all[i].name);
+		row(key, ok ? "yes" : "no", ok ? all[i].kmod : why);
+		free(key);
+		free(why);
+	}
 
 	/* Stated here as well as in actions.c, because this is the pane somebody
 	 * reads when they are wondering why it refused. */

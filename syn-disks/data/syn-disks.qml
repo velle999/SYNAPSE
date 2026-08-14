@@ -1355,6 +1355,19 @@ FloatingWindow {
                     color: root.cWarn
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
+                // `warn` is NOT `blocked` and deliberately leaves the button
+                // live: this kernel being unable to mount exFAT is no reason to
+                // stop somebody making a stick for a camera. It is here so the
+                // mount error afterwards is not a mystery — which is exactly
+                // how it was met the first time, as an apparently bad format.
+                Text {
+                    width: fmtCol.width
+                    wrapMode: Text.WordWrap
+                    visible: root.fmtPlan["warn"] !== undefined
+                    text: root.fmtPlan["warn"] || ""
+                    color: root.cWarn
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
+                }
                 Text {
                     width: fmtCol.width
                     wrapMode: Text.WordWrap

@@ -32,7 +32,7 @@ pkgname=syn-disks
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=9
+pkgrel=10
 pkgdesc="SynapseOS disk utility: drives, partitions, health, mounting and formatting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
