@@ -16,6 +16,13 @@
 # Usage: synui-apply-theme <dark|light> <accent_r> <accent_g> <accent_b>
 #                          [glyph_r] [glyph_g] [glyph_b]
 #                          [base_r] [base_g] [base_b] [text_r] [text_g] [text_b]
+#                          [square_chrome]
+#
+# `square_chrome` is on|off and is the retro chromes' rule reaching the toolkits
+# — see the GTK CSS section below for why a Win95 desktop still had rounded
+# Firefox corners without it. OMITTED means "I do not know", which is different
+# from "off": the Antiquity bar calls this helper with nothing but colours, and
+# a caller that does not know the chrome must not undo the caller that did.
 #
 # The glyph triple is the colour for the bar's module glyphs (cpu/mem/net/audio/
 # gamemode). It defaults to the accent — which is what every theme but one wants
@@ -35,6 +42,7 @@ ar=${2:-61} ag=${3:-125} ab=${4:-255}
 gr=${5:-$ar} gg=${6:-$ag} gb=${7:-$ab}
 br=${8:-} bg_=${9:-} bb=${10:-}
 tr=${11:-} tg=${12:-} tb=${13:-}
+square=${14:-}
 
 case "$scheme" in
     dark|light) ;;
@@ -118,6 +126,80 @@ gtk_ini() {
 }
 gtk_ini "$HOME/.config/gtk-3.0/settings.ini"
 gtk_ini "$HOME/.config/gtk-4.0/settings.ini"
+
+# ── GTK 3 / GTK 4 gtk.css: the corners of CLIENT-decorated windows ──────────
+#
+# A Windows 95 desktop had rounded Firefox corners, and turning the compositor's
+# radius off changed nothing — because neither was drawing them.
+#
+# synui already squares its own chrome for the retro styles: chrome_corner_radius()
+# returns 0 for anything that is not SYN_CHROME_FLAT, so the user's corner_radius
+# is overridden rather than overwritten and comes back intact when a modern theme
+# is picked. That covers every window synui decorates.
+#
+# Firefox is not one of them. It never BINDS xdg-decoration, so synui's
+# SERVER_SIDE offer is ignored and Firefox keeps its own GTK frame — corners
+# included, drawn from the GTK theme's `decoration` node. Measured on a live
+# desktop: the window's left edge walked inward one pixel per row for eight rows,
+# an ~8px radius, while an SSD window beside it was square. Adwaita rounds; that
+# was Adwaita.
+#
+# Firefox exposes that same value as `ui.titlebarRadius`, but overriding it there
+# would fix ONE application. The radius comes from GTK for every client that
+# decorates itself, so it is answered once, in GTK, where GTK apps and Firefox
+# alike read it.
+#
+# A managed block, on the same rule as synui-firefox-glass's user.js: rewrite
+# between the markers and leave anything a user wrote around it alone. Both
+# selectors go in both files — GTK 3 styles the frame through `decoration`, GTK 4
+# through `window.csd`, and a selector that matches no node in one of them costs
+# nothing.
+GTKCSS_BEGIN='/* >>> synui-apply-theme BEGIN — managed, do not edit */'
+GTKCSS_END='/* <<< synui-apply-theme END */'
+
+gtk_css() {   # gtk_css <file> <on|off>
+    local f=$1 mode=$2 tmp
+    mkdir -p "$(dirname "$f")" 2>/dev/null || return 0
+    tmp=$(mktemp) || return 0
+
+    if [ -f "$f" ]; then
+        awk -v b="$GTKCSS_BEGIN" -v e="$GTKCSS_END" '
+            $0 == b { skip=1; next }
+            $0 == e { skip=0; next }
+            skip    { next }
+            { print }
+        ' "$f" > "$tmp"
+    fi
+
+    # `off` writes NOTHING back rather than a radius of its own: the rounded
+    # corner is the GTK theme's to draw, and restoring it means getting out of
+    # the way, not guessing what Adwaita's radius is this release.
+    if [ "$mode" = on ]; then
+        {
+            printf '%s\n' "$GTKCSS_BEGIN"
+            printf '/* The desktop theme is a retro chrome, which is square. Client-side\n'
+            printf '   decorated windows draw their own corners from here — Firefox among\n'
+            printf '   them: it never binds xdg-decoration, so the frame synui offers it is\n'
+            printf '   never taken and synui cannot square those corners itself. */\n'
+            printf 'decoration, decoration:backdrop { border-radius: 0; }\n'
+            printf 'window.csd, window.csd:backdrop { border-radius: 0; }\n'
+            printf '%s\n' "$GTKCSS_END"
+        } >> "$tmp"
+    fi
+
+    # An empty file left behind is fine and is not the same as no file: a user
+    # may have had one before us.
+    mv "$tmp" "$f" 2>/dev/null || rm -f "$tmp"
+}
+
+case "$square" in
+    on|off)
+        gtk_css "$HOME/.config/gtk-3.0/gtk.css" "$square"
+        gtk_css "$HOME/.config/gtk-4.0/gtk.css" "$square"
+        ;;
+    "") ;;   # caller does not know the chrome — see the usage note above
+    *)  echo "synui-apply-theme: square_chrome must be on|off (got '$square')" >&2 ;;
+esac
 
 # ── gsettings (the live signal Firefox + GTK apps watch) ────────────────────
 # xdg-desktop-portal serves org.freedesktop.appearance from these, which is what

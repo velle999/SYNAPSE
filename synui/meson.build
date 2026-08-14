@@ -984,6 +984,16 @@ test('bar_radius', bar_radius,
      depends : [synui_exe],
      timeout : 180)
 
+# The other half of that rule, for the windows synui does NOT decorate. Firefox
+# never binds xdg-decoration, so a Win95 desktop kept its rounded corners no
+# matter what corner_radius said; the chrome style now reaches GTK, where every
+# self-decorating client reads its radius. No compositor needed — the helper's
+# job is a file, so the file is what is asserted.
+apply_theme_square = find_program('tests/apply_theme_square_chrome.sh')
+test('apply_theme_square_chrome', apply_theme_square,
+     args    : [meson.current_source_dir() / 'systemd' / 'synui-apply-theme.sh'],
+     timeout : 60)
+
 # `bar_shape`: the strip's own shape, where bar_radius covers its popups'. Four
 # captures on one compositor — full-width, rounded-ends, floating-pill, and the
 # pill again at corner_radius = 0, which must come back identical to the first.

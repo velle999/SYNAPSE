@@ -693,13 +693,20 @@ static void theme_apply_ex(syn_server_t *s, syn_theme_t theme, int save,
      * tools aren't installed). Firefox transparency is already covered by the
      * compositor's opacity — this only carries the light/dark scheme. */
     if (push_apps) {
-        char cmd[224];
+        char cmd[256];
+        /* The chrome style travels too, because a window synui does NOT
+         * decorate draws its own corners: Firefox never binds xdg-decoration,
+         * so a Win95 desktop kept Adwaita's rounded corners on it no matter
+         * what corner_radius said. The helper turns this into a GTK rule; the
+         * same derived fact theme.state carries for the bar (square_chrome),
+         * spelt the same way, so the two cannot disagree about what "retro" is. */
         snprintf(cmd, sizeof(cmd),
-                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d",
+                 "synui-apply-theme %s %d %d %d %d %d %d %d %d %d %d %d %d %s",
                  p->scheme, p->accent_r, p->accent_g, p->accent_b,
                  p->glyph_r, p->glyph_g, p->glyph_b,
                  p->base_r, p->base_g, p->base_b,
-                 p->text_r, p->text_g, p->text_b);
+                 p->text_r, p->text_g, p->text_b,
+                 s->config.chrome == SYN_CHROME_FLAT ? "off" : "on");
         synui_spawn(cmd);
     }
 
