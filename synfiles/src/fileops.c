@@ -196,6 +196,14 @@ static void report(const char *path, const char *status, const char *detail)
 		char *enc = pct_encode(path, true);
 		rec_row(3, enc, status, detail ? detail : "");
 		free(enc);
+		/* FLUSHED, because this is progress. stdout to a pipe is block
+		 * buffered, so without this the GUI receives a copy's per-file
+		 * records in 4 KB lumps — and for any operation smaller than that,
+		 * not until the process exits, which is the one moment progress is
+		 * worth nothing. One small write per file, against an open, a read,
+		 * a write and an fsync. Not flushed for listings, which are read in
+		 * one go and are the hot path. */
+		fflush(stdout);
 	} else if (strcmp(status, "done")) {
 		printf("%s%-9s%s %s%s%s\n", C_WARN(), status, C_RESET(), path,
 		       detail && *detail ? "  — " : "", detail ? detail : "");

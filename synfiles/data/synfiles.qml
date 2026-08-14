@@ -454,6 +454,7 @@ FloatingWindow {
     property int    opFailed: 0
     property string opCurrent: ""
     property string opFirstError: ""
+    property string opError: ""
     // What the last operation DID, kept until the next one starts or the view
     // moves. Not statusLine: that is cleared by every reload, and an operation
     // ends by reloading.
@@ -485,12 +486,23 @@ FloatingWindow {
         return s
     }
 
+    // What the panel says when nothing has been reported yet. "0 done" reads
+    // as stuck, and for `trash empty` — which says nothing at all until it has
+    // finished — it would read that way for the whole operation.
+    function opCountLine() {
+        if (root.opDone || root.opSkipped || root.opFailed)
+            return root.opDone + " done"
+                 + (root.opSkipped ? ", " + root.opSkipped + " skipped" : "")
+                 + (root.opFailed  ? ", " + root.opFailed  + " failed"  : "")
+        return "working…"
+    }
+
     // The counters the records land in. A plain object, MUTATED — assigning to
     // the int properties below on every record would re-evaluate the panel's
     // bindings once per file, and a copy of a hundred thousand small files is
     // exactly the copy this panel exists for. The visible properties are
     // refreshed on a timer instead, which is as often as an eye can read them.
-    property var opRaw: ({ done: 0, skipped: 0, failed: 0, current: "" })
+    property var opRaw: ({ done: 0, skipped: 0, failed: 0, current: "", removed: -1 })
 
     Timer {
         id: opTick
@@ -508,19 +520,41 @@ FloatingWindow {
         root.statusLine = root.opProgress()
     }
 
+    // NOT EVERY OP SPEAKS THE SAME RECORD. copy, move, rename, mkdir, delete,
+    // compress, trash and undo all emit `path status detail` per item — but
+    // `trash empty` emits ONE row at the end, `removed <n>`; mount and unmount
+    // emit `<device> mounted <path>`; and every one of them starts with a
+    // header row whose second field is the literal word "status".
+    //
+    // So this counts by VOCABULARY rather than by position. Anything it does
+    // not recognise is ignored, which is what keeps a header line or a summary
+    // row from being counted as a failed file — emptying the trash reported
+    // "removed — 12" as an error before this, and mounting a disk reported the
+    // header.
     function noteOpRecord(line) {
         const f = line.split("\t")
         if (f.length < 2) return
-        if (f[0] === "path" && f[1] === "status") return   // the header row
         const status = f[1]
-        if (status === "done")         root.opRaw.done++
-        else if (status === "skipped") root.opRaw.skipped++
-        else {
+
+        // `trash empty` says how many it removed, once, at the end.
+        if (f[0] === "removed") {
+            root.opRaw.removed = parseInt(status, 10)
+            return
+        }
+
+        if (status === "done" || status === "mounted" || status === "unmounted")
+            root.opRaw.done++
+        else if (status === "skipped")
+            root.opRaw.skipped++
+        else if (status === "failed" || status === "conflict") {
             root.opRaw.failed++
             if (!root.opFirstError)
                 root.opFirstError = root.baseOf(f[0])
                                   + " — " + (f[2] ? f[2] : status)
+        } else {
+            return          // a header, or a shape this does not count
         }
+
         root.opRaw.current = root.baseOf(f[0])
     }
 
@@ -546,12 +580,21 @@ FloatingWindow {
             // Say how it ended. A failure used to reach the GUI as an exit
             // code and nothing else — the pane simply reloaded, and whatever
             // had not been copied was missing without a word.
-            if (root.opFailed)
+            if (root.opError)
+                root.opOutcome = root.opError
+            else if (root.opFailed)
                 root.opOutcome = root.opFirstError
                     ? root.opNote + " — " + root.opFirstError
                     : root.opNote + " — " + root.opFailed + " failed"
+            else if (root.opRaw.removed >= 0)
+                root.opOutcome = root.opNote + " — " + root.opRaw.removed
+                    + (root.opRaw.removed === 1 ? " item removed" : " items removed")
             else if (root.opDone || root.opSkipped)
                 root.opOutcome = root.opProgress()
+            else
+                // Ops that report nothing per item still have to say they are
+                // over, or the panel simply vanishes and nothing replaces it.
+                root.opOutcome = root.opNote + " — done"
 
             root.reloadAll()
             root.refreshUndo()
@@ -581,8 +624,9 @@ FloatingWindow {
         root.opFailed = 0
         root.opCurrent = ""
         root.opFirstError = ""
+        root.opError = ""
         root.opOutcome = ""
-        root.opRaw = ({ done: 0, skipped: 0, failed: 0, current: "" })
+        root.opRaw = ({ done: 0, skipped: 0, failed: 0, current: "", removed: -1 })
         opPanelDelay.restart()
         // Paths cross the process boundary DECODED: argv carries raw bytes and
         // needs no escaping. The encoding exists for the record stream, which
@@ -3010,9 +3054,7 @@ FloatingWindow {
                     // going up.
                     Text {
                         width: parent.width - 4
-                        text: root.opDone + " done"
-                            + (root.opSkipped ? ", " + root.opSkipped + " skipped" : "")
-                            + (root.opFailed  ? ", " + root.opFailed  + " failed"  : "")
+                        text: root.opCountLine()
                         color: root.opFailed ? root.cWarn : root.cText
                         font { family: root.uiFont; pixelSize: root.ui(12) }
                     }

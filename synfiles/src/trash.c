@@ -540,8 +540,20 @@ static void empty_cb(const char *trash, const char *topdir, void *vctx)
 		while ((e = readdir(d))) {
 			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
 				continue;
-			if (sf_rm_rf(dfd, e->d_name) == 0 && s == 0)
+			if (sf_rm_rf(dfd, e->d_name) == 0 && s == 0) {
 				(*n)++;
+				/* One record per item as it goes. Emptying a trash
+				 * that holds a big folder is minutes of silence
+				 * otherwise, and a panel that says nothing for
+				 * minutes cannot be told from a hang — which is
+				 * exactly how this was reported. */
+				if (g_out == OUT_REC) {
+					char *enc = pct_encode(e->d_name, false);
+					rec_row(3, enc, "done", "removed");
+					free(enc);
+					fflush(stdout);
+				}
+			}
 		}
 		closedir(d);
 		free(dir);
@@ -554,6 +566,9 @@ static int trash_empty(bool confirmed)
 		die("emptying the trash is PERMANENT and cannot be undone.\n"
 		    "  to see what would go:  synfiles trash list\n"
 		    "  to empty it anyway:    synfiles trash empty --yes");
+
+	if (g_out == OUT_REC)
+		rec_row(3, "path", "status", "detail");
 
 	int n = 0;
 	each_trash(empty_cb, &n);
