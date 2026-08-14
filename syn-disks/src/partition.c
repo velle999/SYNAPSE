@@ -143,19 +143,45 @@ int pt_plan_do(char *const argv[], const char *script, const char *dev,
 	char *out = run_capture_in(argv, script, &st);
 	strip_trailing_newline(out);
 
+	/* The same question format asks after a failed write, for the same device
+	 * and the same reason: sfdisk narrates before it dies too, and a stick that
+	 * lied about its write-protect switch lies to both of them. See
+	 * guard_write_protected_now. */
+	const char *fix = "none";
+	char *late = NULL;
+	char *detail = NULL;
+	if (st != 0) {
+		char *k = sd_kernel_name(dev);
+		if (k) {
+			late = guard_write_protected_now(k, &fix);
+			free(k);
+		}
+		char *ordered = reason_first(out);
+		detail = late ? xasprintf("%s · %s", late, ordered) : xstrdup(ordered);
+		free(ordered);
+	}
+
 	if (g_out == OUT_REC) {
 		/* The DEVICE, not argv[0] — which is pkexec, or the sfdisk the test
 		 * suite substituted. A record naming the tool instead of the thing it
 		 * acted on is one the GUI cannot match to a row. */
-		rec_row(3, "device", "status", "detail");
-		rec_row(3, dev, st == 0 ? "ok" : "failed", out);
+		rec_row(4, "device", "status", "detail", "fix");
+		rec_row(4, dev, st == 0 ? "ok" : "failed",
+		        st == 0 ? out : detail, fix);
 	} else if (st == 0) {
 		printf("%s\n", *out ? out : "done");
 	} else {
+		if (late) {
+			fprintf(stderr, "%ssyn-disks: %s — %s.%s\n", C_BAD(), dev, late,
+			        C_RESET());
+			guard_print_fix(dev, fix);
+		}
 		fprintf(stderr, "%s%s%s\n", C_BAD(),
 		        *out ? out : "the tool refused", C_RESET());
 	}
 
+	free(late);
+	free(detail);
 	free(out);
 	return st == 0 ? 0 : 1;
 }

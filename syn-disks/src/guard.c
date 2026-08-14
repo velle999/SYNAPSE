@@ -369,10 +369,7 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 	if (mode == GUARD_READ)
 		return NULL;
 
-	char *ro = sd_attr(kname, "ro");
-	bool readonly = ro && !strcmp(ro, "1");
-	free(ro);
-	if (readonly) {
+	if (guard_readonly_flag(kname)) {
 		/* A way out exists and it is not a flag: almost every device that
 		 * arrives here is a USB stick or an SD card with a physical
 		 * write-protect switch on its body. Saying "read-only" and stopping
@@ -383,6 +380,35 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 	}
 
 	return NULL;
+}
+
+/* The fact, read once and in one place. Two callers ask it for opposite
+ * reasons — one to refuse before a write, one to explain after one — and a
+ * second copy of the sysfs read is how those two would come to disagree. */
+bool guard_readonly_flag(const char *kname)
+{
+	char *ro = sd_attr(kname, "ro");
+	bool readonly = ro && !strcmp(ro, "1");
+	free(ro);
+	return readonly;
+}
+
+char *guard_write_protected_now(const char *kname, const char **fix)
+{
+	if (!guard_readonly_flag(kname))
+		return NULL;
+	if (fix)
+		*fix = "readonly";
+	/* Deliberately NOT the sentence above. Before the write, "the kernel has
+	 * it marked read-only" means the request was never made; after one, the
+	 * device took the request, threw the writes away and told the kernel the
+	 * truth only once it was too late. Reporting the first sentence here
+	 * would read as though something had been checked and skipped. */
+	/* The FACT and no more: where to look is the `fix` code's job, and saying
+	 * it twice on a status bar that holds three lines pushes out the tool's own
+	 * words to repeat something already said. */
+	return xstrdup("the device refused every write; the kernel has now "
+	               "marked it read-only");
 }
 
 void guard_report_refusal(const char *dev, const char *why, const char *fix)

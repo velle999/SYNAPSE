@@ -366,6 +366,57 @@ bool fs_kernel_can_mount(const fs_kind_t *fs, char **why)
 	return false;
 }
 
+/* A tool's output with the line that says WHY moved to the front.
+ *
+ * mkfs tools narrate: a version banner, the geometry, the UUID, the superblock
+ * backups, the group tables, and then — on the last line, where they died —
+ * the reason. A front-end with one line to show puts the banner in it and
+ * elides the rest, which is how "could not format /dev/sde — mke2fs 1.47.4
+ * (6-Mar-2025) · Creating filesystem with 1792000 4k blocks…" came to be the
+ * entire report of a write-protected stick. The banner is not a verdict, and
+ * the verdict was the part that got cut.
+ *
+ * Nothing is dropped, because a tool that puts its reason somewhere else must
+ * still be quoted in full: the last line leads and the rest follows in the
+ * order it was printed. */
+char *reason_first(const char *out)
+{
+	if (!out || !*out)
+		return xstrdup("");
+
+	const char *last = NULL;
+	size_t last_len = 0;
+	for (const char *p = out; *p; ) {
+		const char *nl = strchr(p, '\n');
+		size_t len = nl ? (size_t)(nl - p) : strlen(p);
+		size_t trimmed = len;
+		while (trimmed && (p[trimmed - 1] == ' ' || p[trimmed - 1] == '\t' ||
+		                   p[trimmed - 1] == '\r'))
+			trimmed--;
+		const char *start = p;
+		while (trimmed && (*start == ' ' || *start == '\t')) {
+			start++;
+			trimmed--;
+		}
+		if (trimmed) {
+			last = start;
+			last_len = trimmed;
+		}
+		if (!nl)
+			break;
+		p = nl + 1;
+	}
+
+	/* One line, or none worth naming: it is already in front of itself. */
+	if (!last || (last == out && last_len == strlen(out)))
+		return xstrdup(out);
+
+	char *head = xstrndup(last, last_len);
+	char *all = xasprintf("%s\n%s", head, out);
+	free(head);
+	return all;
+}
+
 const char *priv_prefix(void)
 {
 	/* SYN_DISKS_NO_PKEXEC exists for the test suite and for a root shell,
@@ -549,9 +600,31 @@ int cmd_format(int argc, char **argv)
 	char *out = run_capture(cmd, &st, false);
 	strip_trailing_newline(out);
 
+	/* A failure is an answer too, and this one had none: the guard cleared the
+	 * device, mke2fs wrote nothing, and all the window could quote was the
+	 * chatter of a tool that had already given up.
+	 *
+	 * So ask again, now that a write has been attempted. A stick that reported
+	 * "Write Protect is off" at plug-in and refused every sector is not a
+	 * mystery once the kernel has re-read it — it is a switch on the body, and
+	 * that is the sentence, with the same `readonly` way out the guard would
+	 * have given had the device been honest. */
+	const char *fix = "none";
+	char *late = st == 0 ? NULL : guard_write_protected_now(k, &fix);
+	char *detail = NULL;
+	if (st != 0) {
+		char *ordered = reason_first(out);
+		detail = late ? xasprintf("%s · %s", late, ordered) : xstrdup(ordered);
+		free(ordered);
+	}
+
 	if (g_out == OUT_REC) {
-		rec_row(3, "device", "status", "detail");
-		rec_row(3, dev, st == 0 ? "ok" : "failed", out);
+		/* `fix` is a column of its own and not a sentence inside `detail`: the
+		 * window keys its way out off the CODE, so a failed write can offer
+		 * exactly what a refusal offers. */
+		rec_row(4, "device", "status", "detail", "fix");
+		rec_row(4, dev, st == 0 ? "ok" : "failed",
+		        st == 0 ? out : detail, fix);
 	} else if (st == 0) {
 		printf("%s is now %s%s\n", dev, fs, label && *label ? " — labelled" : "");
 		/* Said again after the write, not only in the plan: a scripted
@@ -563,9 +636,23 @@ int cmd_format(int argc, char **argv)
 			kwhy = NULL;
 		}
 	} else {
+		/* The terminal has room, so the tool is quoted as it printed itself —
+		 * the reordering above is for a one-line status bar, not for a screen
+		 * that can hold all of it. What leads here is our sentence, because
+		 * that is the one the tool could not say. */
+		if (late) {
+			/* Sentence then way out, exactly as a refusal reads — the two
+			 * halves of our answer stay together and the tool's chatter goes
+			 * after both, rather than between them. */
+			fprintf(stderr, "%ssyn-disks: could not format %s — %s.%s\n",
+			        C_BAD(), dev, late, C_RESET());
+			guard_print_fix(dev, fix);
+		}
 		fprintf(stderr, "%s%s%s\n", C_BAD(), *out ? out : "mkfs refused", C_RESET());
 	}
 
+	free(late);
+	free(detail);
 	free(out);
 	free(dev);
 	free(k);

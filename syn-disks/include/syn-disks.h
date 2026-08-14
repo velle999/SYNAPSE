@@ -364,6 +364,21 @@ typedef enum {
 char *guard_why_protected(const char *kname, guard_mode_t mode,
                           const char **fix);
 
+/* `/sys/block/<x>/ro` — the kernel's own answer, read in ONE place. */
+bool guard_readonly_flag(const char *kname);
+
+/* Asked AFTER a write has failed, never before it.
+ *
+ * The read-only flag above is only as honest as the device: a stick whose
+ * Mode Sense answers "Write Protect is off" at plug-in passes every check
+ * there is, refuses every write, and only THEN does the kernel re-read it and
+ * mark it read-only. Before the write there was nothing to find; a second
+ * afterwards the fact exists, and it is the whole answer.
+ *
+ * Returns the sentence (malloc'd) with `fix` set to "readonly", or NULL when
+ * the device is not write-protected and the tool failed for its own reasons. */
+char *guard_write_protected_now(const char *kname, const char **fix);
+
 /* guard_why_protected, reported as a refusal: records under --rec, the house
  * style on stderr otherwise, with the way out where there is one. Returns true
  * when the caller must STOP. */
@@ -377,6 +392,15 @@ void guard_report_refusal(const char *dev, const char *why, const char *fix);
 void guard_print_fix(const char *dev, const char *fix);
 
 /* ── actions.c ──────────────────────────────────────────────────────────── */
+
+/* A failed tool's output with its LAST non-empty line moved to the front, the
+ * rest following in the order it was printed. malloc'd, nothing dropped.
+ *
+ * For the front-end that has one line to show: mkfs and sfdisk both narrate at
+ * length and then fail on the last line, so the first line of their output is
+ * a version banner and the reason is the part an elided label cuts off. */
+char *reason_first(const char *out);
+
 int cmd_mount(int argc, char **argv);
 int cmd_unmount(int argc, char **argv);
 int cmd_eject(int argc, char **argv);

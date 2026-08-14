@@ -179,6 +179,15 @@ mkdisk sdy 120225792 1 1
 mkdisk sdv 14336000 0 1
 echo 1 > "$S/sdv/ro"
 
+# The stick that LIES about that switch — the Generic Flash Disk in the machine
+# this was written on. Its Mode Sense answers "Write Protect is off" at plug-in,
+# so `ro` is 0 and every check there is passes; it then throws away every
+# sector written to it, and only once mke2fs has failed does the kernel re-read
+# it and say "Write Protect is on". Before the write there is nothing to find.
+# The fake mkfs below flips `ro` exactly as the kernel does, which is what makes
+# the after-the-fact answer testable at all.
+mkdisk sdw 14336000 0 1
+
 # The superfloppy: a filesystem written straight onto the drive with no
 # partition table around it, which is how nearly every USB stick and camera
 # card is sold. It is neither partitioned nor empty.
@@ -377,6 +386,140 @@ check "...and the human hint points at the switch on the body" $?
 # The rest of what format inherited by asking rather than copying — swap and
 # fstab — is asserted in the partitioning section below, where the fixtures
 # for both already exist.
+
+# ── a FAILED format is an answer too, and it had none ───────────────────────
+#
+# 2026-08-14, the Generic Flash Disk: the guard cleared it (`ro` was 0, because
+# the stick said so), polkit asked, mke2fs wrote nothing, and the window said
+#
+#   could not format /dev/sde — mke2fs 1.47.4 (6-Mar-2025) · Creating
+#   filesystem with 1792000 4k blocks and 448800 inodes · Filesystem UUID: …
+#
+# — a version banner and some geometry, with the one line that said why cut off
+# by the end of the status bar. Twice, because the first report was unreadable
+# enough to look like nothing had happened.
+#
+# Two things are asserted here and they are separate: that the REASON leads,
+# and that the device is asked again AFTER the write.
+
+MKB="$T/mkbin"; mkdir -p "$MKB"
+cat > "$MKB/mkfs.ext4" <<EOF
+#!/bin/sh
+# mke2fs on a stick that lies: it narrates, fails on its LAST line, and the
+# kernel marks the device read-only a moment later.
+echo "mke2fs 1.47.4 (6-Mar-2025)"
+echo "Creating filesystem with 1792000 4k blocks and 448800 inodes"
+echo "Filesystem UUID: 971feac3-707c-4fd3-ae6f-bae2231b10ac"
+echo "Superblock backups stored on blocks:"
+echo "	32768, 98304, 163840, 229376, 294912, 819200, 884736"
+echo 1 > "$S/sdw/ro"
+echo "mke2fs: Input/output error while writing out and closing file system" >&2
+exit 1
+EOF
+chmod +x "$MKB/mkfs.ext4"
+
+mkfail() { PATH="$MKB:$PATH" SYN_DISKS_NO_PKEXEC=1 "$SD" "$@"; }
+
+echo 0 > "$S/sdw/ro"
+mkfail format sdw --fs=ext4 --yes >/dev/null 2>&1
+[ $? -eq 1 ] && ok "a format the tool refuses exits 1" \
+             || bad "a format the tool refuses exits 1"
+
+# The stick passed the guard on the way in — otherwise the interesting failure
+# never happens and the assertions below would be testing a refusal.
+echo 0 > "$S/sdw/ro"
+mkfail format sdw --fs=ext4 -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "...and it was ALLOWED before the write, as it must be" \
+             || bad "...and it was ALLOWED before the write, as it must be"
+
+echo 0 > "$S/sdw/ro"
+r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null)
+echo "$r" | grep -q 'now%20marked%20it%20read-only'
+check "a device that refuses every write is asked again afterwards" $?
+
+# The same code the guard would have set had the device been honest, so the
+# window offers the same sentence and the same button for both.
+echo 0 > "$S/sdw/ro"
+r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null)
+echo "$r" | awk -F'\t' 'NR > 1 && $4 == "readonly" { found = 1 } END { exit !found }'
+check "...with the readonly fix code beside it" $?
+
+# ⚠ The one that the screenshot was: whatever else the detail holds, it may not
+# OPEN with the tool's version banner. A status bar shows the front of this.
+echo 0 > "$S/sdw/ro"
+r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null \
+    | awk -F'\t' 'NR > 1 { print $3 }')
+case "$r" in
+    mke2fs%201.47.4*) bad "the failure still leads with the tool's banner" ;;
+    *)                ok "the failure leads with the reason, not the banner" ;;
+esac
+
+# Nothing is dropped: a tool that puts its reason somewhere else must still be
+# quoted in full, so the banner is still in there — just not first.
+echo "$r" | grep -q 'mke2fs%201.47.4'
+check "...and the tool's whole output is still there behind it" $?
+
+# A device that fails for its OWN reasons must not be told it is
+# write-protected. `ro` stays 0 here and the sentence must not appear.
+cat > "$MKB/mkfs.ext4" <<'EOF'
+#!/bin/sh
+echo "mke2fs 1.47.4 (6-Mar-2025)"
+echo "mke2fs: No space left on device while setting up superblock" >&2
+exit 1
+EOF
+chmod +x "$MKB/mkfs.ext4"
+echo 0 > "$S/sdw/ro"
+r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null)
+echo "$r" | grep -q 'read-only' \
+    && bad "a failure invents a write-protect switch that is not set" \
+    || ok "a failure with no read-only flag says nothing about a switch"
+
+echo "$r" | grep -q 'No%20space%20left' \
+    && ok "...and still reports what the tool said" \
+    || bad "...and still reports what the tool said"
+
+# The terminal has room for all of it, and gets our sentence FIRST — the tool
+# could not say this one, because by the time the kernel knew, it had exited.
+cat > "$MKB/mkfs.ext4" <<EOF
+#!/bin/sh
+echo "mke2fs 1.47.4 (6-Mar-2025)"
+echo 1 > "$S/sdw/ro"
+echo "mke2fs: Input/output error while writing out and closing file system" >&2
+exit 1
+EOF
+chmod +x "$MKB/mkfs.ext4"
+echo 0 > "$S/sdw/ro"
+says mkfail --no-color format sdw --fs=ext4 --yes | head -1 \
+    | grep -q 'could not format'
+check "the terminal names the failure before quoting the tool" $?
+
+echo 0 > "$S/sdw/ro"
+says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'write-protect switch'
+check "...and points at the switch on the body" $?
+
+echo 0 > "$S/sdw/ro"
+says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'Input/output error'
+check "...and still quotes what the tool said" $?
+
+# A format that WORKS says so, and says nothing about a switch. The suite has
+# never had a passing mkfs at all — every format assertion above is a refusal
+# or a dry run, and "it reported a failure correctly" is only half the contract.
+cat > "$MKB/mkfs.ext4" <<'EOF'
+#!/bin/sh
+echo "mke2fs 1.47.4 (6-Mar-2025)"
+echo "Creating filesystem with 1792000 4k blocks and 448800 inodes"
+echo "done"
+EOF
+chmod +x "$MKB/mkfs.ext4"
+echo 0 > "$S/sdw/ro"
+r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null)
+echo "$r" | awk -F'\t' 'NR > 1 && $2 == "ok" { found = 1 } END { exit !found }'
+check "a format that works reports ok" $?
+
+echo "$r" | awk -F'\t' 'NR > 1 && $4 == "none" { found = 1 } END { exit !found }'
+check "...with no way out to offer, because nothing went wrong" $?
+
+echo 0 > "$S/sdw/ro"
 
 # ── can the kernel MOUNT what we would create ───────────────────────────────
 #
@@ -1279,6 +1422,21 @@ if [ -f "$QML" ]; then
             || bad "the window has no sentence for the '$f' way out"
     done
     ok "every way out the binary names is one the window can explain"
+
+    # ...and it is asked on BOTH sides of the write. A `fix` on a refusal is
+    # answered by the dialogue; a `fix` on a FAILED operation is answered by
+    # nothing at all unless the outcome handler reads the field too, which is
+    # how a write-protected stick got mke2fs's version banner and no hint.
+    grep -q 'r.fix' "$QML" \
+        && ok "a failed operation is offered the same way out as a refusal" \
+        || bad "the outcome handler ignores the fix code on a failure"
+
+    # The bar has to be able to HOLD the answer. It was a fixed 22 pixels with
+    # ElideRight, so the reason — however carefully composed — ran off the end
+    # of it, and what stayed on screen was the first line of the tool's chatter.
+    grep -q 'maximumLineCount' "$QML" \
+        && ok "the status bar can hold more than one line of an answer" \
+        || bad "the status bar elides everything after the first line"
 
     # ONE builder for the dry run and the confirm. The dialogue's whole claim is
     # that what it shows is what it runs, and that claim is only true while both

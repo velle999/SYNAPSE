@@ -445,15 +445,31 @@ FloatingWindow {
         // arrived with its way out already thrown away. Newlines collapse so a
         // one-line bar can hold it; nothing is dropped.
         //
+        // The binary now puts that last line FIRST, because keeping all of it
+        // is not the same as showing any of it: this bar reported a
+        // write-protected stick as "could not format /dev/sde — mke2fs 1.47.4
+        // (6-Mar-2025) · Creating filesystem with 1792000 4k blocks…" and
+        // elided the rest, so the whole detail was kept and none of the reason
+        // was read.
+        //
         // It is prefixed with what was being attempted, because a tool's own
         // words are rarely a verdict — mkfs failing halfway still opens with
         // its version banner, which alone reads like a success.
         const why = root.oneLine((r && r.detail) || root.opErr)
         const what = "could not " + root.opVerb
                    + (root.opTarget !== "" ? " " + root.opTarget : "")
-        root.status = why !== "" ? what + " — " + why
-                    : (code !== 0 ? what + " (exit " + code + ")"
-                                  : what + " — the tool reported nothing")
+        let said = why !== "" ? what + " — " + why
+                 : (code !== 0 ? what + " (exit " + code + ")"
+                               : what + " — the tool reported nothing")
+        // A failure carries a `fix` code exactly as a refusal does, and it is
+        // worth more than the tool's sentence: the switch on the body of a
+        // stick is the answer, and no amount of mke2fs output says so. "none"
+        // is not a way out — it is the absence of one, and printing "there is
+        // nothing that overrides this" after every ordinary failure would be
+        // noise on the one line there is.
+        const hint = (r && r.fix && r.fix !== "none")
+                   ? root.hintFor(r.fix, r.device || root.opTarget) : ""
+        root.status = hint !== "" ? said + "\n" + hint : said
     }
 
     function oneLine(s) {
@@ -697,10 +713,22 @@ FloatingWindow {
     // The way out, from the `fix` FIELD and never from the wording of the
     // sentence beside it. A window that decided whether to offer Unmount by
     // matching prose would stop offering it the day the prose improved.
-    readonly property string fixHint: {
-        switch (root.plan["fix"]) {
+    //
+    // ONE table, asked by two callers: the dialogue that has not acted yet and
+    // the status bar reporting an operation that has. A failed write carries a
+    // `fix` exactly as a refusal does — a stick that lies about its
+    // write-protect switch is only found out afterwards, and the answer is the
+    // same sentence whichever side of the write it arrives on.
+    readonly property string fixHint: root.hintFor(root.plan["fix"], root.fixDev)
+
+    // `dev` is passed in rather than read from the plan: the status bar asks
+    // this about an operation that has already run, and the plan by then
+    // describes whatever dialogue is open — which is not necessarily the device
+    // that just failed.
+    function hintFor(code, dev) {
+        switch (code) {
         case "unmount": return "It is mounted. Unmount it and this becomes possible."
-        case "swapoff": return "Swap is live on it — run: swapoff " + root.fixDev
+        case "swapoff": return "Swap is live on it — run: swapoff " + dev
         case "lock":    return "A volume is unlocked on top of it; lock it first."
         case "fstab":   return "/etc/fstab expects this at the next boot."
         // The switch on the side of the stick, which is the answer nine times
@@ -2128,15 +2156,28 @@ FloatingWindow {
         }
 
         // ── Status ──────────────────────────────────────────────────────────
+        //
+        // It GROWS for an answer that does not fit. A 22-pixel bar with
+        // ElideRight is right for "sde unmounted" and wrong for the only report
+        // a failed format gets: the reason ran off the end of it, and what was
+        // left on screen was a version banner. A bar that can hold three lines
+        // costs nothing when there is one line to say.
         Rectangle {
             id: statusBar
             anchors { left: nav.right; right: parent.right; bottom: parent.bottom }
-            height: 22
+            height: Math.max(22, statusText.implicitHeight + 8)
             color: root.cPanel
 
             Text {
+                id: statusText
                 anchors { left: parent.left; leftMargin: 18; right: parent.right
                           rightMargin: 12; verticalCenter: parent.verticalCenter }
+                // Wrapped and capped: a tool that prints a page of output must
+                // not push the buttons off the window. What is beyond three
+                // lines is beyond reading in a status bar anyway — and the
+                // reason is on the first of them now, not the last.
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
                 elide: Text.ElideRight
                 text: root.status !== "" ? root.status
                     : root.drives.length + " drive" + (root.drives.length === 1 ? "" : "s")
