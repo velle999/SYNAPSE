@@ -217,73 +217,113 @@ static void draw_cell(const st_render_t *r, uint32_t *px, int stride,
 	}
 }
 
-size_t st_render_grid(st_render_t *r, const st_grid_t *g,
-                      uint32_t *px, int stride_px, int w, int h)
+/* Paint one row of cells. Shared by the full and the damaged paths so there is
+ * exactly one place that knows how a row becomes pixels — two implementations
+ * of that would drift, and the whole value of damage tracking rests on the two
+ * producing byte-identical output. */
+static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
+                       uint32_t *px, int stride_px, int w, int h)
 {
 	int cw = st_font_cell_w(r->font);
 	int ch = st_font_cell_h(r->font);
+	int y0 = row * ch;
+	if (y0 + ch > h)
+		return 0;
+
+	const st_row_t *rw = &g->screen[row];
 	size_t drawn = 0;
 
-	/* The window is rarely an exact multiple of the cell box, so there is a
-	 * strip on the right and one along the bottom that no cell covers. Filled
-	 * with the default background: leaving it is how a resized terminal shows
-	 * a band of whatever the compositor last had in that memory. */
+	for (int col = 0; col < g->cols; ) {
+		int x0 = col * cw;
+		if (x0 + cw > w)
+			break;
+
+		static const st_cell_t empty = { 0, 0, 1, 0 };
+		const st_cell_t *cell = (col < rw->len) ? &rw->cells[col] : &empty;
+
+		/* ⚠ `width == 0` MEANS TWO THINGS, and telling them apart is the
+		 * whole of this test.
+		 *
+		 * It is the tail of a double-width glyph — whose head has already
+		 * painted both columns, so drawing it would blank the right half of
+		 * the glyph. It is ALSO every erased cell, because a fresh row is one
+		 * calloc and erase_line writes zeroes.
+		 *
+		 * Skipping on width alone therefore skipped every blank cell on the
+		 * screen, which left them holding whatever was in the buffer: a 10x2
+		 * grid reported 8 cells drawn out of 20, and the untouched 12 came out
+		 * black rather than the background colour. The tail is the case where
+		 * the PREVIOUS cell was a wide head — the same test st_dump_text uses
+		 * in grid.c, deliberately, rather than a second opinion about the same
+		 * invariant. */
+		bool tail = cell->width == 0 && cell->cp == 0
+		         && col > 0 && col - 1 < rw->len
+		         && rw->cells[col - 1].width == 2;
+		if (tail) {
+			col++;
+			continue;
+		}
+
+		int span = cell->width == 2 ? 2 : 1;
+		if (col + span > g->cols)
+			span = 1;
+
+		bool cursor = r->show_cursor && row == g->cy && col == g->cx;
+		draw_cell(r, px, stride_px, x0, y0, cw * span, ch,
+		          cell, st_style_get(g, cell->style), cursor);
+		drawn++;
+		col += span;
+	}
+	return drawn;
+}
+
+/* The strip on the right and along the bottom that no cell covers — the window
+ * is rarely an exact multiple of the cell box. Filled with the default
+ * background: leaving it is how a resized terminal shows a band of whatever the
+ * compositor last had in that memory. */
+static void fill_margins(st_render_t *r, const st_grid_t *g,
+                         uint32_t *px, int stride_px, int w, int h)
+{
+	int cw = st_font_cell_w(r->font), ch = st_font_cell_h(r->font);
 	int used_w = cw * g->cols, used_h = ch * g->rows;
 	if (used_w > w) used_w = w;
 	if (used_h > h) used_h = h;
 	if (used_w < w) fill_rect(px, stride_px, used_w, 0, w - used_w, h, r->def_bg);
 	if (used_h < h) fill_rect(px, stride_px, 0, used_h, used_w, h - used_h, r->def_bg);
+}
 
-	for (int row = 0; row < g->rows; row++) {
-		int y0 = row * ch;
-		if (y0 + ch > h)
-			break;
-		const st_row_t *rw = &g->screen[row];
+size_t st_render_grid(st_render_t *r, const st_grid_t *g,
+                      uint32_t *px, int stride_px, int w, int h)
+{
+	fill_margins(r, g, px, stride_px, w, h);
 
-		for (int col = 0; col < g->cols; ) {
-			int x0 = col * cw;
-			if (x0 + cw > w)
-				break;
+	size_t drawn = 0;
+	for (int row = 0; row < g->rows; row++)
+		drawn += draw_row(r, g, row, px, stride_px, w, h);
+	return drawn;
+}
 
-			/* A row stores only the cells it has: past `len` it is blank, and
-			 * reading there would be reading past the allocation. */
-			static const st_cell_t empty = { 0, 0, 1, 0 };
-			const st_cell_t *cell = (col < rw->len) ? &rw->cells[col] : &empty;
-
-			/* ⚠ `width == 0` MEANS TWO THINGS, and telling them apart is the
-			 * whole of this test.
-			 *
-			 * It is the tail of a double-width glyph — whose head has already
-			 * painted both columns, so drawing it would blank the right half
-			 * of the glyph. It is ALSO every erased cell, because a fresh row
-			 * is one calloc and erase_line writes zeroes.
-			 *
-			 * Skipping on width alone therefore skipped every blank cell on
-			 * the screen, which left them holding whatever was in the buffer:
-			 * a 10x2 grid reported 8 cells drawn out of 20, and the untouched
-			 * 12 came out black rather than the background colour. The tail is
-			 * the case where the PREVIOUS cell was a wide head — which is the
-			 * same test st_dump_text uses in grid.c, deliberately, rather than
-			 * a second opinion about the same invariant. */
-			bool tail = cell->width == 0 && cell->cp == 0
-			         && col > 0 && col - 1 < rw->len
-			         && rw->cells[col - 1].width == 2;
-			if (tail) {
-				col++;
-				continue;
-			}
-
-			int span = cell->width == 2 ? 2 : 1;
-			if (col + span > g->cols)
-				span = 1;
-
-			bool cursor = r->show_cursor && row == g->cy && col == g->cx;
-			draw_cell(r, px, stride_px, x0, y0, cw * span, ch,
-			          cell, st_style_get(g, cell->style), cursor);
-			drawn++;
-			col += span;
-		}
-	}
+/* ── the damaged path ───────────────────────────────────────────────────────
+ *
+ * Paint only the rows the caller names. Everything else in the buffer is left
+ * exactly as it was, which is the entire saving and also the entire risk: a row
+ * that changed and was not named keeps its old pixels, and stale pixels look
+ * like memory corruption rather than like a missed update.
+ *
+ * The margins are NOT repainted here — they never change without a resize, and
+ * a resize marks every row anyway.
+ *
+ * `rows` is one byte per grid row, non-zero meaning "repaint". A byte rather
+ * than a bitmap because the caller has to OR two of these together per frame
+ * (see the double-buffer note in win.c) and bytes make that a memcpy-shaped
+ * loop instead of a bit-twiddling one, for a few dozen bytes. */
+size_t st_render_rows(st_render_t *r, const st_grid_t *g, const uint8_t *rows,
+                      uint32_t *px, int stride_px, int w, int h)
+{
+	size_t drawn = 0;
+	for (int row = 0; row < g->rows; row++)
+		if (rows[row])
+			drawn += draw_row(r, g, row, px, stride_px, w, h);
 	return drawn;
 }
 

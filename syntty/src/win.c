@@ -60,6 +60,11 @@
 
 #define NBUFFERS 2
 
+/* The per-frame damage set lives on the stack, so it needs a bound. A terminal
+ * taller than this on a real display would need a font under two pixels high;
+ * beyond it the paint simply covers the rows it can, rather than overflowing. */
+#define SYN_MAX_ROWS 1024
+
 /* ── measuring latency, which nobody publishes ──────────────────────────────
  *
  * The design page lists input latency as the third win and marks it "not
@@ -134,6 +139,21 @@ typedef struct {
 	size_t            size;
 	int               w, h;
 	bool              busy;      /* the compositor still has it */
+
+	/* ── why damage is PER BUFFER ────────────────────────────────────────────
+	 *
+	 * Two buffers alternate, so the one about to be painted holds what was
+	 * drawn TWO frames ago, not one. A row that changed while the other buffer
+	 * was in front is still stale in this one — repainting only what changed
+	 * since the last frame would leave it showing week-old pixels.
+	 *
+	 * So each buffer carries the rows it still owes, and a row marked dirty by
+	 * the grid is added to the buffer that is NOT being painted. `fresh` is
+	 * false until it has been painted in full at least once, because a buffer
+	 * straight out of mmap contains zeroes rather than a screen. */
+	uint8_t          *pending;   /* one byte per grid row */
+	int               pending_rows;
+	bool              fresh;
 } buffer_t;
 
 struct win {
@@ -196,6 +216,16 @@ struct win {
 
 	/* Frames committed whose fate is not yet known. */
 	feedback_ctx_t *outstanding;
+
+	/* Where the cursor was when the last frame was painted. Moving it changes
+	 * no CELL, so the grid never reports it — but it changes two rows on
+	 * screen, the one it left and the one it arrived at. Left out, the cursor
+	 * smears a trail of itself across the window. */
+	uint16_t last_cx, last_cy;
+
+	/* Rows painted, and rows there were to paint, since the window opened.
+	 * The ratio is the whole claim damage tracking makes. */
+	uint64_t rows_painted, rows_possible;
 
 	/* ── deadline rendering ─────────────────────────────────────────────────
 	 *
@@ -277,6 +307,9 @@ static void pool_destroy(win_t *w)
 			wl_buffer_destroy(w->buf[i].wl);
 		w->buf[i].wl = NULL;
 		w->buf[i].px = NULL;
+		free(w->buf[i].pending);
+		w->buf[i].pending = NULL;
+		w->buf[i].pending_rows = 0;
 	}
 	if (w->pool)     { wl_shm_pool_destroy(w->pool); w->pool = NULL; }
 	if (w->pool_mem) { munmap(w->pool_mem, w->pool_size); w->pool_mem = NULL; }
@@ -317,6 +350,10 @@ static bool pool_create(win_t *w, int width, int height)
 		w->buf[i].w    = width;
 		w->buf[i].h    = height;
 		w->buf[i].busy = false;
+		w->buf[i].fresh = false;
+		free(w->buf[i].pending);
+		w->buf[i].pending_rows = w->g->rows;
+		w->buf[i].pending = xcalloc((size_t)w->g->rows, 1);
 		wl_buffer_add_listener(w->buf[i].wl, &buffer_listener, &w->buf[i]);
 	}
 	return true;
@@ -428,7 +465,63 @@ static void paint(win_t *w)
 	}
 
 	uint64_t t0 = now_ns();
-	st_render_grid(w->ren, w->g, b->px, b->w, b->w, b->h);
+
+	/* ── what actually needs repainting ─────────────────────────────────────
+	 *
+	 * `changed` is what moved on screen SINCE THE LAST FRAME: the rows the
+	 * grid marked, plus the two the cursor touched — moving the cursor changes
+	 * no cell, so the grid never reports it, but it changes the row it left
+	 * and the row it arrived at. Left out, the cursor smears a trail of itself
+	 * across the window.
+	 *
+	 * It is computed once and used twice: to paint this buffer, and to tell
+	 * the OTHER buffer what it has missed. */
+	int nrows = w->g->rows;
+	uint8_t changed[SYN_MAX_ROWS];
+	if (nrows > SYN_MAX_ROWS)
+		nrows = SYN_MAX_ROWS;
+	memset(changed, 0, (size_t)nrows);
+	for (int y = 0; y < nrows; y++)
+		if (st_grid_row_dirty(w->g, y))
+			changed[y] = 1;
+	if (w->last_cy < nrows) changed[w->last_cy] = 1;
+	if (w->g->cy   < nrows) changed[w->g->cy]   = 1;
+
+	/* A buffer straight out of mmap holds zeroes, not a screen — and
+	 * st_render_rows deliberately leaves the margins alone. So a buffer that
+	 * has never been painted in full gets a full paint, once.
+	 *
+	 * ⚠ THE ARRAY IS SIZED HERE, NOT WHERE THE BUFFER IS ALLOCATED. The pool
+	 * is created during configure, and the grid is resized to fit the window
+	 * immediately AFTERWARDS — so a `pending` sized at pool time is sized from
+	 * the OLD row count. The mismatch made `full` true on every single frame
+	 * and nothing ever corrected it: damage tracking reported 100% painted,
+	 * saved nothing, and looked like it was working. */
+	bool full = !b->fresh;
+	if (b->pending_rows != nrows) {
+		free(b->pending);
+		b->pending      = xcalloc((size_t)nrows, 1);
+		b->pending_rows = nrows;
+		full = true;
+	}
+
+	size_t painted = 0;
+	if (full) {
+		st_render_grid(w->ren, w->g, b->px, b->w, b->w, b->h);
+		painted = (size_t)nrows;
+		b->fresh = true;
+		memset(b->pending, 0, (size_t)b->pending_rows);
+	} else {
+		for (int y = 0; y < nrows; y++)
+			if (changed[y])
+				b->pending[y] = 1;
+		st_render_rows(w->ren, w->g, b->pending, b->px, b->w, b->w, b->h);
+		for (int y = 0; y < nrows; y++)
+			painted += b->pending[y] ? 1 : 0;
+	}
+	w->rows_painted  += painted;
+	w->rows_possible += (size_t)nrows;
+
 	b->busy = true;
 	w->dirty = false;
 	w->frames++;
@@ -467,12 +560,46 @@ static void paint(win_t *w)
 	}
 
 	wl_surface_attach(w->surface, b->wl, 0, 0);
-	/* Whole-surface damage. Cell-level damage is the next thing worth doing
-	 * and it is NOT free to get right — see the note at the bottom of this
-	 * file. At 0.38 ms for a full 80x24 repaint there is no pressure yet, and
-	 * a damage rectangle that is subtly wrong leaves stale pixels on screen,
-	 * which is far worse than repainting. */
-	wl_surface_damage_buffer(w->surface, 0, 0, b->w, b->h);
+
+	/* Tell the compositor what changed, as runs of rows rather than one
+	 * rectangle per row: a screen edit is usually contiguous, and a hundred
+	 * one-row rectangles cost more to send and to process than the four they
+	 * collapse into. */
+	int ch = st_font_cell_h(w->font);
+	if (full) {
+		wl_surface_damage_buffer(w->surface, 0, 0, b->w, b->h);
+	} else {
+		for (int y = 0; y < nrows; ) {
+			if (!b->pending[y]) { y++; continue; }
+			int start = y;
+			while (y < nrows && b->pending[y])
+				y++;
+			wl_surface_damage_buffer(w->surface, 0, start * ch,
+			                         b->w, (y - start) * ch);
+		}
+	}
+
+	/* ⚠ THE OTHER BUFFER HAS NOT SEEN THIS FRAME, and it accumulates
+	 * `changed` whether this paint was full or partial. The first version set
+	 * the other buffer's `fresh` to false after a full paint instead, which
+	 * made the two ping-pong full repaints forever: every frame invalidated
+	 * its neighbour, so damage tracking measured 100% painted and saved
+	 * exactly nothing while appearing to work. */
+	for (int i = 0; i < NBUFFERS; i++) {
+		buffer_t *o = &w->buf[i];
+		if (o == b || !o->pending || o->pending_rows != nrows)
+			continue;
+		for (int y = 0; y < nrows; y++)
+			if (changed[y])
+				o->pending[y] = 1;
+	}
+	if (!full)
+		memset(b->pending, 0, (size_t)nrows);
+
+	st_grid_clear_dirty(w->g);
+	w->last_cx = w->g->cx;
+	w->last_cy = w->g->cy;
+
 	wl_surface_commit(w->surface);
 }
 
@@ -1154,6 +1281,8 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 		stats->deadline_used = w->on_time;
 		stats->deadline_late = w->late;
 		stats->refresh_ms    = w->refresh_ns / 1e6;
+		stats->rows_painted  = w->rows_painted;
+		stats->rows_possible = w->rows_possible;
 		stats->margin_ms     = (w->paint_cost_ns + w->paint_cost_ns / 2
 		                        + 1000000ull) / 1e6;
 	}
@@ -1193,20 +1322,15 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	return rc;
 }
 
-/* ── the next thing, recorded rather than done ──────────────────────────────
+/* ── what is left ──────────────────────────────────────────────────────────
  *
- * CELL-LEVEL DAMAGE. Every commit above damages the whole surface, so the
- * compositor re-uploads the entire window for a one-character change. The fix
- * is a per-row dirty flag in the grid — every mutation there already goes
- * through one of about fifteen functions, so there is exactly one place to set
- * it — turned into damage rectangles here.
+ * Cell-level damage WITHIN a row. A row is the unit here, so changing one
+ * character repaints its whole line — 480 cells at 4K rather than one. It is
+ * already enough: an interactive frame costs 0.155 ms at 4K against 10.6 ms
+ * for a full repaint, and the remaining saving is 0.15 ms of a 16.7 ms budget.
  *
- * It is NOT done yet, and the reason is a measurement rather than a shrug: a
- * full 80x24 repaint costs 0.38 ms, which is 2% of a frame. Damage tracking
- * would take that to nearly nothing and save the compositor an upload, which
- * matters most on a large window; but a damage rectangle that is subtly too
- * small leaves stale pixels on screen and looks like memory corruption. It is
- * worth doing with a test that renders the same screen twice — once fully,
- * once by damage — and compares the buffers byte for byte. That test is the
- * hard part, and it is the part worth having.
+ * The reason to stop at rows is not laziness, it is the damage rectangles: a
+ * row is one rectangle, and per-cell damage on a line with edits scattered
+ * across it is a dozen, which the compositor then has to union anyway. The
+ * next real win is not smaller rectangles, it is the ring arena in grid.c.
  */

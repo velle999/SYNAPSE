@@ -228,6 +228,7 @@ static void row_release(st_grid_t *g, st_cell_t *cells, uint16_t len)
  * profile will see the same 15 ms and have the same idea.
  */
 
+/* A fresh row has never been drawn, so it starts dirty. */
 static st_row_t make_row(st_grid_t *g, uint16_t cols)
 {
 	st_row_t r;
@@ -235,6 +236,7 @@ static st_row_t make_row(st_grid_t *g, uint16_t cols)
 	r.len = cols;
 	r.hi = 0;
 	r.wrapped = false;
+	r.dirty = true;
 	return r;
 }
 
@@ -252,6 +254,7 @@ static void clear_row(st_row_t *r, uint16_t cols, uint16_t style)
 			r->cells[i].style = style;
 	}
 	r->wrapped = false;
+	r->dirty   = true;
 }
 
 static uint16_t row_used(const st_row_t *r)
@@ -360,8 +363,43 @@ static void push_scrollback(st_grid_t *g, st_row_t *r)
 	r->cells = NULL;
 }
 
+/* ── damage ─────────────────────────────────────────────────────────────────
+ *
+ * Rows are moved by shuffling st_row_t structs, so a row's dirty flag travels
+ * with its CONTENT — which is not what matters. What matters is its POSITION
+ * on screen: a scroll leaves every row of the region showing something
+ * different from what it showed before, whether or not its cells changed. So
+ * anything that moves rows marks the whole region it touched.
+ *
+ * Over-marking costs one repaint. Under-marking leaves stale pixels that look
+ * like memory corruption, so the bias here is deliberate and one-directional. */
+static void dirty_range(st_grid_t *g, int from, int to)
+{
+	if (from < 0) from = 0;
+	if (to >= g->rows) to = g->rows - 1;
+	for (int y = from; y <= to; y++)
+		g->screen[y].dirty = true;
+}
+
+bool st_grid_row_dirty(const st_grid_t *g, int row)
+{
+	return row >= 0 && row < g->rows && g->screen[row].dirty;
+}
+
+void st_grid_clear_dirty(st_grid_t *g)
+{
+	for (int y = 0; y < g->rows; y++)
+		g->screen[y].dirty = false;
+}
+
+void st_grid_dirty_all(st_grid_t *g)
+{
+	dirty_range(g, 0, g->rows - 1);
+}
+
 void st_scroll_up(st_grid_t *g, int n)
 {
+	dirty_range(g, g->top, g->bot);
 	if (n <= 0)
 		return;
 	int span = g->bot - g->top + 1;
@@ -389,6 +427,7 @@ void st_scroll_up(st_grid_t *g, int n)
 
 void st_scroll_down(st_grid_t *g, int n)
 {
+	dirty_range(g, g->top, g->bot);
 	if (n <= 0)
 		return;
 	int span = g->bot - g->top + 1;
@@ -519,6 +558,7 @@ void st_put(st_grid_t *g, uint32_t cp, int width)
 	}
 
 	st_row_t *row = &g->screen[g->cy];
+	row->dirty = true;
 	if (g->cx + width > row->hi)
 		row->hi = (uint16_t)(g->cx + width);
 	row->cells[g->cx].cp = cp;
@@ -577,6 +617,7 @@ void st_erase_display(st_grid_t *g, int mode)
 void st_erase_line(st_grid_t *g, int mode)
 {
 	st_row_t *row = &g->screen[g->cy];
+	row->dirty = true;
 	uint16_t from = 0, to = g->cols;
 	if (mode == 0)      from = g->cx;
 	else if (mode == 1) to = (uint16_t)(g->cx + 1);
@@ -598,6 +639,7 @@ void st_erase_chars(st_grid_t *g, int n)
 {
 	if (n < 1) n = 1;
 	st_row_t *row = &g->screen[g->cy];
+	row->dirty = true;
 	for (int i = 0; i < n && g->cx + i < g->cols; i++) {
 		row->cells[g->cx + i].cp = 0;
 		row->cells[g->cx + i].width = 0;
@@ -610,6 +652,7 @@ void st_erase_chars(st_grid_t *g, int n)
 
 void st_insert_lines(st_grid_t *g, int n)
 {
+	dirty_range(g, g->cy, g->bot);
 	if (g->cy < g->top || g->cy > g->bot)
 		return;
 	uint16_t saved_top = g->top;
@@ -622,6 +665,7 @@ void st_insert_lines(st_grid_t *g, int n)
 
 void st_delete_lines(st_grid_t *g, int n)
 {
+	dirty_range(g, g->cy, g->bot);
 	if (g->cy < g->top || g->cy > g->bot)
 		return;
 	uint16_t saved_top = g->top;
@@ -637,6 +681,7 @@ void st_insert_chars(st_grid_t *g, int n)
 	if (n < 1) n = 1;
 	if (n > g->cols - g->cx) n = g->cols - g->cx;
 	st_row_t *row = &g->screen[g->cy];
+	row->dirty = true;
 	memmove(&row->cells[g->cx + n], &row->cells[g->cx],
 	        (size_t)(g->cols - g->cx - n) * sizeof *row->cells);
 	row->hi = g->cols;
@@ -653,6 +698,7 @@ void st_delete_chars(st_grid_t *g, int n)
 	if (n < 1) n = 1;
 	if (n > g->cols - g->cx) n = g->cols - g->cx;
 	st_row_t *row = &g->screen[g->cy];
+	row->dirty = true;
 	memmove(&row->cells[g->cx], &row->cells[g->cx + n],
 	        (size_t)(g->cols - g->cx - n) * sizeof *row->cells);
 	row->hi = g->cols;
@@ -667,6 +713,8 @@ void st_delete_chars(st_grid_t *g, int n)
 
 void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 {
+	/* Every row is at a new size or a new place. */
+	st_grid_dirty_all(g);
 	if (cols == 0 || rows == 0 || (cols == g->cols && rows == g->rows))
 		return;
 

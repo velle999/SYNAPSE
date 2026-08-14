@@ -292,6 +292,72 @@ fi
 rate=$("$ST" bench "$T/bench.txt" --runs=3 | awk '/^best/{print $4}')
 ok "throughput on this machine: ${rate} MB/s"
 
+# ── damage tracking draws the SAME PIXELS ───────────────────────────────────
+#
+# ⚠ THE TEST THIS FEATURE WAITED FOR. Damage tracking was recorded as "not
+# done" for a whole stage precisely because it cannot be checked by looking at
+# the finished screen: drawn fully, the screen is right either way. What goes
+# wrong is a row that changed and was NOT marked, which keeps its old pixels —
+# and stale pixels look like memory corruption, not like a missed update.
+#
+# `damage-check` draws the same stream twice: once fed whole and painted
+# entirely, once fed in chunks and painted only where the grid reported damage.
+# Then it compares the two buffers BYTE FOR BYTE. Any mutation site in grid.c
+# that forgets to mark its row fails here and names the cell.
+#
+# ⚠ SMALL CHUNKS ARE HARSHER. A missed mark that happens to be covered because
+# a later chunk redrew the same row passes at 64 KB and fails at 3 bytes.
+dmg() { printf "$1" | "$ST" --cols="${2:-40}" --rows="${3:-12}" \
+            damage-check - --split="${4:-3}" 2>&1; }
+
+echo "$(seq 1 200)" | "$ST" --cols=80 --rows=24 damage-check - --split=7 2>&1 \
+    | grep -q '^identical'
+check "scrolling output paints the same pixels either way" $?
+
+# Every kind of mutation, at three bytes a feed. Each of these is a different
+# family of grid operation, and each is a different place to forget the mark.
+dmg 'plain\r\n\033[31mred\033[0m\r\n\033[2;5H\033[42mjump\033[0m\r\n' | grep -q '^identical'
+check "...and so do cursor jumps and colour changes" $?
+
+dmg '\033[3;10r\033[5;1Hin a scroll region\r\nsecond\r\nthird\r\n' | grep -q '^identical'
+check "...and a scroll region, which moves rows without changing them" $?
+
+dmg 'aaaa\r\n\033[2J\033[1;1Hafter a clear\r\n\033[K\033[1Kboth erases\r\n' | grep -q '^identical'
+check "...and erase-display and erase-line" $?
+
+dmg '\033[3;1Hxxx\033[4L\033[2Minsert and delete lines\r\n' | grep -q '^identical'
+check "...and inserting and deleting whole lines" $?
+
+dmg 'abcdefgh\033[3D\033[4@\033[2Pinsert and delete chars\r\n' | grep -q '^identical'
+check "...and inserting and deleting characters" $?
+
+dmg '\xe6\x97\xa5\xe6\x9c\xac wide\r\n\033[2;3H\xe8\xaa\x9e over it\r\n' | grep -q '^identical'
+check "...and wide glyphs, whose tail column belongs to the head" $?
+
+# ⚠ THE CURSOR IS DAMAGE THE GRID CANNOT REPORT. Moving it changes no cell, so
+# nothing in grid.c marks anything — but it changes two rows on screen, the one
+# it left and the one it arrived at. Left out, the cursor smears a trail of
+# itself down the window, which is the most visible form of this bug.
+printf '\033[1;1Ha\033[5;1H\033[9;1H\033[3;1H' \
+    | "$ST" --cols=20 --rows=12 damage-check - --split=1 2>&1 | grep -q '^identical'
+check "a cursor that only MOVES still repaints the rows it touched" $?
+
+# And it must actually be SAVING something, or it is complexity for nothing.
+#
+# ⚠ The percentage is the LAST field, and reading the wrong one made this pass
+# vacuously: `$6` is the word "possible", `int("possible")` is 0, and 0 is
+# comfortably under any threshold. A test that cannot fail is worse than no
+# test, because it is counted. Hence the emptiness check on `pct` as well —
+# a field that stops being numeric must break this, not satisfy it.
+pct=$(dmg '\033[2;2Ha\033[4;2Hb\033[6;2Hc\033[8;2Hd\033[10;2He' 40 12 2 \
+      | awk '/^repaints/{p=$NF; gsub(/[()%]/,"",p); print p}')
+case "$pct" in
+    ''|*[!0-9.]*) bad "scattered edits repaint a minority of rows (unparsable: '$pct')" ;;
+    *) awk -v p="$pct" 'BEGIN{exit !(p > 0 && p < 60)}' \
+           && ok "scattered edits repaint a minority of rows (${pct}%)" \
+           || bad "scattered edits repaint a minority of rows (${pct}%)" ;;
+esac
+
 # ── the kitty keyboard protocol ─────────────────────────────────────────────
 #
 # Table stakes, not a win: programs assume it now, and it fixes something

@@ -138,6 +138,20 @@ typedef struct {
 	 * except where the cells are provably blank. */
 	uint16_t   hi;
 	bool       wrapped;   /* the line continues on the next row */
+
+	/* ── damage ─────────────────────────────────────────────────────────────
+	 *
+	 * Set by anything that changes what this row LOOKS like; cleared only by
+	 * the renderer, once it has drawn it. It costs nothing — the struct was
+	 * already padded to sixteen bytes and this fits inside that padding.
+	 *
+	 * ⚠ IT IS DELIBERATELY GENEROUS. A row marked dirty that did not change
+	 * costs one repaint of one row. A row that changed and was NOT marked
+	 * leaves stale pixels on the screen, which looks like memory corruption
+	 * and is invisible to every test that only checks the final screen. When
+	 * in doubt, mark it — and the damage-check test exists precisely because
+	 * "when in doubt" is not a guarantee. */
+	bool       dirty;
 } st_row_t;
 
 typedef struct {
@@ -217,6 +231,23 @@ void st_dump_text(const st_grid_t *g, FILE *out);
  * inventing a colour-comparison syntax. */
 void st_dump_styled(const st_grid_t *g, FILE *out);
 void st_dump_scrollback(const st_grid_t *g, FILE *out);
+
+/* ── damage ─────────────────────────────────────────────────────────────────
+ *
+ * Which rows have changed since the renderer last cleared them. The whole
+ * point is that typing one character repaints one row rather than the screen:
+ * at 4K a full repaint is 9.4 ms, which is 56% of a frame, and almost none of
+ * it is work anybody asked for.
+ *
+ * ⚠ THE CALLER CLEARS, NOT THE RENDERER — because with double buffering there
+ * are two buffers of differing age, and a row drawn into one is still stale in
+ * the other. Whoever owns the buffers owns the bookkeeping; the grid only ever
+ * reports what changed since it was last asked. */
+bool st_grid_row_dirty(const st_grid_t *g, int row);
+void st_grid_clear_dirty(st_grid_t *g);
+/* Mark everything — after a resize, or anything else that invalidates the
+ * whole surface. */
+void st_grid_dirty_all(st_grid_t *g);
 
 /* Bytes of grid + scrollback + styles actually held. The memory claim on the
  * design page is only a claim until something prints this. */
@@ -427,6 +458,18 @@ int  st_render_height(const st_render_t *r, const st_grid_t *g);
 size_t st_render_grid(st_render_t *r, const st_grid_t *g,
                       uint32_t *px, int stride_px, int w, int h);
 
+/* Paint ONLY the rows named in `rows` — one byte per grid row, non-zero meaning
+ * repaint. Everything else in the buffer is left untouched, which is both the
+ * saving and the risk: a row that changed and was not named keeps its old
+ * pixels. Margins are not repainted (they change only on a resize, which marks
+ * every row).
+ *
+ * ⚠ It must produce a buffer byte-identical to st_render_grid's for the same
+ * grid. Both go through the same draw_row for exactly that reason, and
+ * `render --damage-check` proves it on a real stream. */
+size_t st_render_rows(st_render_t *r, const st_grid_t *g, const uint8_t *rows,
+                      uint32_t *px, int stride_px, int w, int h);
+
 /* The renderer's golden output. Stage 1 could assert on text because its
  * output was text; a renderer that is only checked for "it returned" passes on
  * an all-black screen. */
@@ -500,6 +543,10 @@ typedef struct {
 	uint64_t deadline_used, deadline_late;
 	double   refresh_ms;      /* the cadence the compositor reported, 0 if none */
 	double   margin_ms;       /* how early of the vblank a paint is aimed */
+
+	/* Damage tracking's whole claim, as a ratio. `rows_possible` is what a
+	 * full repaint every frame would have cost. */
+	uint64_t rows_painted, rows_possible;
 } st_win_stats_t;
 
 /* Open a window and run until the child exits or it is closed. Everything it

@@ -34,6 +34,7 @@ static const char *usage_text =
 "  syntty bench [FILE]       parse throughput, in MB/s\n"
 "  syntty font               the font that would be used, and what it cost\n"
 "  syntty render [FILE]      parse a stream and paint it — see --out\n"
+"  syntty damage-check [F]   prove damage tracking draws the same pixels\n"
 "  syntty win [--] [CMD...]  a WINDOW, running CMD or your shell\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
@@ -467,6 +468,12 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 		        (unsigned long long)ws.frames,
 		        (unsigned long long)ws.skipped);
 		fprintf(stderr, "grid          %zu bytes\n", st_grid_bytes(&g));
+		if (ws.rows_possible)
+			fprintf(stderr, "rows painted  %llu of %llu (%.1f%% — the rest were "
+			        "already right)\n",
+			        (unsigned long long)ws.rows_painted,
+			        (unsigned long long)ws.rows_possible,
+			        100.0 * (double)ws.rows_painted / (double)ws.rows_possible);
 
 		/* ⚠ "not measured" is printed rather than zeros. A compositor with no
 		 * wp_presentation, or one timestamping on a clock that is not ours,
@@ -522,6 +529,146 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 	st_font_close(f);
 	st_grid_free(&g);
 	free(err);
+	return rc;
+}
+
+/* ── does damage tracking draw the same screen? ─────────────────────────────
+ *
+ * THE test for stage 2's last unfinished piece, and the reason it stayed
+ * unfinished: a damage rectangle that is subtly too small leaves stale pixels,
+ * which looks like memory corruption and is invisible to every test that only
+ * checks the final screen — because the final screen, drawn fully, is right.
+ *
+ * So this draws the same stream twice into two buffers:
+ *
+ *   FULL         fed in one go, painted entirely, once.
+ *   INCREMENTAL  fed in chunks, and after each chunk only the rows the grid
+ *                reported as dirty are repainted.
+ *
+ * Then it compares the two buffers BYTE FOR BYTE. Any row the grid failed to
+ * mark shows up as a difference, and the failure names the pixel. A missed
+ * mutation site in grid.c cannot survive this.
+ *
+ * ⚠ The chunk size matters and small is harsher: a mutation whose damage is
+ * only noticed because a later chunk happened to redraw the same row passes at
+ * 64 KB and fails at 7 bytes. */
+static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
+{
+	size_t len = 0;
+	uint8_t *buf = slurp(path, &len);
+	if (len == 0)
+		die("damage-check: nothing to parse");
+	if (chunk == 0)
+		chunk = 64;
+
+	char *err = NULL;
+	st_font_t *f = st_font_open(o->font, o->font_size, &err);
+	if (!f)
+		die("damage-check: %s", err ? err : "no font");
+	st_render_t *r = st_render_new(f);
+	st_render_cursor(r, !o->no_cursor);
+
+	int cw = st_font_cell_w(f), ch = st_font_cell_h(f);
+	int w = cw * o->cols, h = ch * o->rows;
+	size_t npx = (size_t)w * h;
+
+	uint32_t *full = xcalloc(npx, sizeof *full);
+	uint32_t *incr = xcalloc(npx, sizeof *incr);
+	uint8_t  *rows = xcalloc(o->rows, 1);
+
+	/* INCREMENTAL. The first paint is a full one, exactly as the window does
+	 * on its first configure — there is nothing on screen to preserve. */
+	st_grid_t gi;
+	st_vt_t vti;
+	st_grid_init(&gi, o->cols, o->rows, o->scrollback);
+	st_vt_init(&vti, &gi);
+	st_render_grid(r, &gi, incr, w, w, h);
+	st_grid_clear_dirty(&gi);
+
+	uint16_t last_cx = gi.cx, last_cy = gi.cy;
+	size_t   repaints = 0, chunks = 0;
+	uint64_t incr_ns = 0, full_ns = 0;
+
+	for (size_t off = 0; off < len; off += chunk) {
+		size_t n = len - off < chunk ? len - off : chunk;
+		st_vt_feed(&vti, buf + off, n);
+		chunks++;
+
+		memset(rows, 0, o->rows);
+		for (int y = 0; y < o->rows; y++)
+			if (st_grid_row_dirty(&gi, y))
+				rows[y] = 1;
+
+		/* THE CURSOR IS DAMAGE TOO, and the grid does not know it: moving the
+		 * cursor changes no cell, but it changes two rows on screen — the one
+		 * it left and the one it arrived at. Left out, a cursor smears a trail
+		 * of itself across the screen, which is the most visible possible
+		 * version of this bug and the easiest to forget. */
+		if (last_cy < o->rows) rows[last_cy] = 1;
+		if (gi.cy   < o->rows) rows[gi.cy]   = 1;
+		last_cx = gi.cx; last_cy = gi.cy;
+		(void)last_cx;
+
+		for (int y = 0; y < o->rows; y++)
+			repaints += rows[y] ? 1 : 0;
+		uint64_t t0 = now_ns();
+		st_render_rows(r, &gi, rows, incr, w, w, h);
+		incr_ns += now_ns() - t0;
+		st_grid_clear_dirty(&gi);
+	}
+
+	/* FULL, from a clean grid fed in one go. */
+	st_grid_t gf;
+	st_vt_t vtf;
+	st_grid_init(&gf, o->cols, o->rows, o->scrollback);
+	st_vt_init(&vtf, &gf);
+	st_vt_feed(&vtf, buf, len);
+	uint64_t tf = now_ns();
+	st_render_grid(r, &gf, full, w, w, h);
+	full_ns = now_ns() - tf;
+
+	/* Compare. The first difference is reported as a CELL, because "pixel
+	 * 418,233" is not something a person can act on and "row 11, column 52"
+	 * points straight at the escape sequence that did it. */
+	int bad_x = -1, bad_y = -1;
+	for (int y = 0; y < h && bad_y < 0; y++)
+		for (int x = 0; x < w; x++)
+			if (full[(size_t)y * w + x] != incr[(size_t)y * w + x]) {
+				bad_x = x; bad_y = y;
+				break;
+			}
+
+	size_t possible = (size_t)o->rows * chunks;
+	printf("chunks     %zu of %zu bytes\n", chunks, chunk);
+	printf("repaints   %zu rows of a possible %zu (%.1f%%)\n",
+	       repaints, possible,
+	       possible ? 100.0 * (double)repaints / (double)possible : 0.0);
+	/* What one frame costs each way. The incremental total is divided by the
+	 * number of frames it took, so the two numbers are comparable: one full
+	 * repaint against the AVERAGE damaged repaint. */
+	printf("per frame  %.3f ms damaged, %.3f ms full  (%.1fx)\n",
+	       chunks ? (double)incr_ns / (double)chunks / 1e6 : 0.0,
+	       (double)full_ns / 1e6,
+	       (chunks && incr_ns) ?
+	         ((double)full_ns * (double)chunks) / (double)incr_ns : 0.0);
+
+	int rc = 0;
+	if (bad_y >= 0) {
+		printf("MISMATCH   pixel %d,%d = cell %d,%d "
+		       "(full %06X, incremental %06X)\n",
+		       bad_x, bad_y, bad_x / cw, bad_y / ch,
+		       full[(size_t)bad_y * w + bad_x] & 0xFFFFFF,
+		       incr[(size_t)bad_y * w + bad_x] & 0xFFFFFF);
+		printf("           a row changed and was not marked dirty — "
+		       "see the damage note in include/syntty.h\n");
+		rc = 1;
+	} else {
+		printf("identical  damage tracking drew the same %d x %d buffer\n", w, h);
+	}
+
+	free(rows); free(full); free(incr); free(buf); free(err);
+	st_grid_free(&gi); st_grid_free(&gf);
+	st_render_free(r); st_font_close(f);
 	return rc;
 }
 
@@ -618,6 +765,8 @@ int main(int argc, char **argv)
 		return cmd_font(&o);
 	if (!strcmp(cmd, "render"))
 		return cmd_render(&o, file);
+	if (!strcmp(cmd, "damage-check"))
+		return cmd_damage_check(&o, file, split);
 	if (!strcmp(cmd, "win"))
 		return child_at ? cmd_win(&o, argc - child_at, argv + child_at)
 		                : cmd_win(&o, 0, NULL);
