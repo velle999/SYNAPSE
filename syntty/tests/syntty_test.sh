@@ -28,6 +28,15 @@ check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 
+# ⚠ THE DEVELOPER'S OWN CONFIG MUST NOT REACH THESE ASSERTIONS. syntty reads
+# $XDG_CONFIG_HOME/syntty/syntty.conf, so on the machine this is written on a
+# `font_size = 24` would change every cell measurement and a `background =` line
+# would change every probed pixel — and the suite would pass or fail depending
+# on somebody's colour scheme. Pointed at an empty directory here, once, rather
+# than remembering --no-config on ninety invocations.
+export XDG_CONFIG_HOME="$T/xdg-config"
+mkdir -p "$XDG_CONFIG_HOME"
+
 echo "syntty tests — $ST"
 
 # Feed a stream, print the screen with trailing blank lines removed so the
@@ -453,6 +462,104 @@ case "$e" in *'ESC[M5+&'*) ok "shift and ctrl are bits in the button field" ;;
 e=$(mouse --mode=0 press:left@10,5)
 case "$e" in *'no program asked'*) ok "with no mode set nothing is reported at all" ;;
              *) bad "with no mode set nothing is reported at all ($e)" ;; esac
+
+# ── the config file ─────────────────────────────────────────────────────────
+#
+# Flags only is not how anybody runs a terminal: `--font=` on every launch is a
+# shell alias somebody has to write, and it does not survive the compositor
+# starting the terminal for them.
+CONF="$T/syntty.conf"
+cat > "$CONF" <<'EOF'
+font_size = 16
+rows = 30
+scrollback = 5000
+background = #123456
+color1 = #00ff00
+foreground = bright_white
+EOF
+
+c=$("$ST" --config="$CONF" config)
+printf '%s' "$c" | grep -q 'errors       none'
+check "a config with only good lines has no errors" $?
+
+printf '%s' "$c" | grep -q '^rows         30'
+check "...and the values it sets are the ones it says" $?
+
+# ⚠ THE COMMENT CHARACTER AND THE COLOUR PREFIX ARE THE SAME CHARACTER. This
+# was written the obvious way first — strip `#` to the end of the line — and
+# the very first config with a colour in it came back as "no value: background",
+# silently dropping every colour in the file. A comment is a WHOLE LINE here,
+# and there are no trailing comments, because that rule has no exception to
+# forget.
+printf '%s' "$c" | grep -q '^background   #123456'
+check "a colour survives the comment stripping (# is both)" $?
+
+# ⚠ A BROKEN LINE MUST NOT STOP THE TERMINAL. A terminal that refuses to open
+# over a typo in its config cannot be used to fix the typo.
+cat > "$T/bad.conf" <<'EOF'
+rows = 30
+fnt = DejaVu
+font_size = huge
+EOF
+c=$("$ST" --config="$T/bad.conf" config)
+printf '%s' "$c" | grep -q '^rows         30'
+check "a broken line does not stop the good lines around it" $?
+
+# ⚠ AN UNKNOWN KEY IS REPORTED. Silently ignoring `fnt` is how a misspelling
+# becomes half an hour of wondering why the font never changed.
+printf '%s' "$c" | grep -q 'errors       2, first at line 2: unknown setting: fnt'
+check "...and an unknown key is named, with its line number" $?
+
+# A missing file is the normal case, not an error.
+c=$("$ST" --config="$T/does-not-exist.conf" config)
+printf '%s' "$c" | grep -q 'no file (not an error)'
+check "no config file at all is not an error" $?
+
+"$ST" config --example > "$T/example.conf"
+[ -s "$T/example.conf" ] && "$ST" --config="$T/example.conf" config | grep -q 'errors       none'
+check "the example it prints is a config it accepts" $?
+
+# ── and the settings reach the pixels ───────────────────────────────────────
+#
+# A config that parses and changes nothing is the failure every one of the
+# assertions above would still pass on.
+if [ -n "${FC:-}" ] || command -v fc-match >/dev/null 2>&1; then
+    FCC=${FC:-$T/fontcache}
+    bgc=$(printf 'x' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+              --config="$CONF" render - --no-cursor --probe=2,0 2>/dev/null \
+          | awk '{print $3}')
+    [ "$bgc" = "123456" ] \
+        && ok "the configured background is the colour actually painted" \
+        || bad "the configured background is the colour actually painted ($bgc)"
+
+    # A palette entry, which is a different path from the default colours: this
+    # one goes through SGR 41 and the interned style.
+    redc=$(printf '\033[41mA' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+               --config="$CONF" render - --no-cursor --probe=0,0 2>/dev/null \
+           | awk '{print $3}')
+    [ "$redc" = "00FF00" ] \
+        && ok "...and a configured palette entry reaches SGR 41" \
+        || bad "...and a configured palette entry reaches SGR 41 ($redc)"
+
+    # ⚠ --no-config HAS TO WORK, because it is what this suite relies on to be
+    # reproducible on a machine where somebody has a config.
+    offc=$(printf 'x' | XDG_CACHE_HOME="$FCC" "$ST" --cols=4 --rows=1 \
+               --config="$CONF" --no-config render - --no-cursor --probe=2,0 \
+               2>/dev/null | awk '{print $3}')
+    [ "$offc" = "1B1F26" ] \
+        && ok "--no-config ignores the file entirely" \
+        || bad "--no-config ignores the file entirely ($offc)"
+else
+    echo "  skip  the config reaching the pixels (no fontconfig)"
+fi
+
+# ⚠ FLAGS BEAT THE FILE, or a config makes the command line unusable.
+rows_used=$(printf 'a\nb\nc\nd\ne\nf\ng\nh\ni\n' \
+            | "$ST" --config="$CONF" --rows=7 dump - --stats 2>&1 \
+            | awk '/^scrollback/{print $2}')
+[ "$rows_used" = "3" ] \
+    && ok "a flag beats the file (--rows=7 over rows = 30)" \
+    || bad "a flag beats the file (--rows=7 over rows = 30; $rows_used scrolled)"
 
 # ── what a paste becomes on the way to the child ────────────────────────────
 #

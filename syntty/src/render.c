@@ -48,6 +48,7 @@ struct st_render {
 	uint32_t   palette[256];
 	uint32_t   def_fg, def_bg;
 	uint32_t   cursor_fg, cursor_bg;
+	bool       cursor_set;      /* the config named them; otherwise: invert */
 	bool       show_cursor;
 };
 
@@ -103,13 +104,42 @@ st_render_t *st_render_new(st_font_t *f)
 
 void st_render_free(st_render_t *r) { free(r); }
 
+/* ⚠ ST_CFG_UNSET LEAVES ONE ALONE. A config that names a background and not a
+ * foreground must not silently reset the foreground to whatever the caller
+ * happened to have in a variable — and the alternative, a getter for each, is
+ * two more entry points for the same fact. */
 void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg)
 {
-	r->def_fg = fg;
-	r->def_bg = bg;
+	if (fg != ST_CFG_UNSET) r->def_fg = fg;
+	if (bg != ST_CFG_UNSET) r->def_bg = bg;
 }
 
 void st_render_cursor(st_render_t *r, bool on) { r->show_cursor = on; }
+
+void st_render_palette(st_render_t *r, int idx, uint32_t rgb)
+{
+	if (idx >= 0 && idx < 16)
+		r->palette[idx] = rgb & 0xFFFFFFu;
+}
+
+uint32_t st_render_palette_get(const st_render_t *r, int idx)
+{
+	return (idx >= 0 && idx < 256) ? r->palette[idx] : 0;
+}
+
+/* ⚠ BOTH OR NEITHER. A cursor given a background and not a foreground would
+ * draw the cell's own text colour on it, which is invisible whenever the two
+ * happen to match — and they match exactly when somebody has themed both. */
+void st_render_cursor_color(st_render_t *r, uint32_t bg, uint32_t fg)
+{
+	if (bg == ST_CFG_UNSET && fg == ST_CFG_UNSET) {
+		r->cursor_set = false;
+		return;
+	}
+	r->cursor_set = true;
+	r->cursor_bg = bg == ST_CFG_UNSET ? r->def_fg : bg;
+	r->cursor_fg = fg == ST_CFG_UNSET ? r->def_bg : fg;
+}
 
 void st_render_set_gfx(st_render_t *r, const struct st_gfx *g) { r->gfx = g; }
 
@@ -193,7 +223,10 @@ static void draw_cell(const st_render_t *r, uint32_t *px, int stride,
 	 * goes. */
 	if (at & ST_REVERSE) { uint32_t t = fg; fg = bg; bg = t; }
 	if (selected)        { uint32_t t = fg; fg = bg; bg = t; }
-	if (cursor)          { uint32_t t = fg; fg = bg; bg = t; }
+	if (cursor) {
+		if (r->cursor_set) { fg = r->cursor_fg; bg = r->cursor_bg; }
+		else               { uint32_t t = fg; fg = bg; bg = t; }
+	}
 
 	if (at & ST_DIM)     fg = mix_half(fg, bg);
 	if (at & ST_HIDDEN)  fg = bg;

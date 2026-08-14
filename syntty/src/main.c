@@ -38,6 +38,8 @@ static const char *usage_text =
 "  syntty win [--] [CMD...]  a WINDOW, running CMD or your shell\n"
 "  syntty mouse EVENT...     what a pointer event becomes on the child's input\n"
 "  syntty paste TEXT         what pasted text becomes on the way to the child\n"
+"  syntty config             the config file, where it is, and what it says\n"
+"  syntty config --example   a commented config to start from\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
 "Options, before the subcommand:\n"
@@ -58,6 +60,8 @@ static const char *usage_text =
 "  --click=C,R[,word|line]   select as a click would, and print what it copies\n"
 "  --drag=C,R                ...dragged to there before the button came up\n"
 "  --scroll-after=N          ...then N lines of output arrive underneath it\n"
+"  --config=FILE             read that instead of the usual place\n"
+"  --no-config               ignore the config file entirely\n"
 "\n"
 "mouse: EVENT is press:BUTTON@COL,ROW, release:..., move[:BUTTON]@COL,ROW or\n"
 "wheel:up@COL,ROW; with --mode=1000|1002|1003, --sgr, --shift, --ctrl, --alt.\n"
@@ -73,8 +77,11 @@ static const char *usage_text =
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
 typedef struct {
+	/* ⚠ ZERO AND NULL MEAN "NOT GIVEN", not "the default". The config file is
+	 * read after the flags are parsed and fills in only what the command line
+	 * left alone, so every one of these needs a value that cannot be typed. */
 	uint16_t cols, rows;
-	uint32_t scrollback;
+	long     scrollback;   /* -1 unset */
 	bool     styled, with_scrollback, stats;
 	int      runs;
 	const char *font;
@@ -93,6 +100,10 @@ typedef struct {
 	const char *click;
 	const char *drag;
 	int         scroll_after;
+
+	const char *config;      /* --config=FILE, or NULL for the usual place */
+	bool        no_config;   /* ignore the file entirely — what tests use */
+	const st_config_t *cfg;  /* what was read, for whatever paints */
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -264,7 +275,7 @@ static int cmd_dump(const opts_t *o, const char *path)
 
 	st_grid_t g;
 	st_vt_t vt;
-	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vt, &g);
 
 	/* Fed in ONE call here, and in many small ones by the test suite, because
@@ -337,7 +348,7 @@ static int cmd_dump_split(const opts_t *o, const char *path, size_t chunk)
 
 	st_grid_t g;
 	st_vt_t vt;
-	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vt, &g);
 
 	for (size_t off = 0; off < len; off += chunk) {
@@ -367,7 +378,7 @@ static int cmd_run(const opts_t *o, int argc, char **argv)
 
 	st_grid_t g;
 	st_vt_t vt;
-	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vt, &g);
 
 	st_pty_t p;
@@ -403,7 +414,7 @@ static int cmd_bench(const opts_t *o, const char *path)
 	for (int r = 0; r < runs; r++) {
 		st_grid_t g;
 		st_vt_t vt;
-		st_grid_init(&g, o->cols, o->rows, o->scrollback);
+		st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 		st_vt_init(&vt, &g);
 
 		/* The grid is built OUTSIDE the timed section and torn down outside
@@ -486,6 +497,36 @@ static int cmd_font(const opts_t *o)
 	return 0;
 }
 
+/* The colours from the file, onto the renderer.
+ *
+ * ⚠ THE PALETTE GOES FIRST. `foreground = bright_white` is an INDEX into the
+ * sixteen, and the same file may have redefined bright_white two lines earlier
+ * — resolving the foreground before the palette is set would use the built-in
+ * shade and quietly ignore half of somebody's theme. */
+static uint32_t cfg_color(const st_config_t *c, uint32_t v, const st_render_t *r)
+{
+	(void)c;
+	if (v == ST_CFG_UNSET)
+		return ST_CFG_UNSET;
+	if ((v & 0xFF000000u) == ST_COL_INDEXED)
+		return st_render_palette_get(r, (int)(v & 0xFF));
+	return v & 0xFFFFFFu;
+}
+
+static void apply_colors(const opts_t *o, st_render_t *r)
+{
+	const st_config_t *c = o->cfg;
+	if (!c)
+		return;
+	for (int i = 0; i < 16; i++)
+		if (c->palette[i] != ST_CFG_UNSET)
+			st_render_palette(r, i, c->palette[i]);
+
+	st_render_colors(r, cfg_color(c, c->fg, r), cfg_color(c, c->bg, r));
+	st_render_cursor_color(r, cfg_color(c, c->cursor, r),
+	                       cfg_color(c, c->cursor_text, r));
+}
+
 /* Parse a stream and paint it, with no compositor anywhere.
  *
  * The renderer's `dump`. Stage 1 could assert on text because its output was
@@ -500,7 +541,7 @@ static int cmd_render(const opts_t *o, const char *path)
 
 	st_grid_t g;
 	st_vt_t vt;
-	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vt, &g);
 	st_vt_feed(&vt, buf, len);
 	free(buf);
@@ -516,6 +557,7 @@ static int cmd_render(const opts_t *o, const char *path)
 		die("render: %s", err ? err : "no font");
 
 	st_render_t *r = st_render_new(f);
+	apply_colors(o, r);
 	st_render_cursor(r, !o->no_cursor);
 	st_render_set_gfx(r, vt.gfx);
 
@@ -624,10 +666,11 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 
 	st_grid_t g;
 	st_vt_t vt;
-	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vt, &g);
 
 	st_render_t *r = st_render_new(f);
+	apply_colors(o, r);
 	st_render_set_gfx(r, vt.gfx);
 
 	st_pty_t p;
@@ -639,7 +682,7 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 
 	st_win_stats_t ws = {0};
 	int rc = st_win_run(&g, &vt, &p, f, r, vt.title[0] ? vt.title : "syntty",
-	                    !o->no_deadline, &ws);
+	                    !o->no_deadline, o->cfg, &ws);
 
 	if (o->stats) {
 		fprintf(stderr, "first frame   %.2f ms\n", ws.first_frame_ms);
@@ -774,7 +817,7 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 	 * on its first configure — there is nothing on screen to preserve. */
 	st_grid_t gi;
 	st_vt_t vti;
-	st_grid_init(&gi, o->cols, o->rows, o->scrollback);
+	st_grid_init(&gi, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vti, &gi);
 	st_render_grid(r, &gi, incr, w, w, h);
 	st_grid_clear_dirty(&gi);
@@ -814,7 +857,7 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 	/* FULL, from a clean grid fed in one go. */
 	st_grid_t gf;
 	st_vt_t vtf;
-	st_grid_init(&gf, o->cols, o->rows, o->scrollback);
+	st_grid_init(&gf, o->cols, o->rows, (uint32_t)o->scrollback);
 	st_vt_init(&vtf, &gf);
 	st_vt_feed(&vtf, buf, len);
 	uint64_t tf = now_ns();
@@ -1021,14 +1064,87 @@ static int cmd_paste(int argc, char **argv)
 	return 0;
 }
 
+/* ── the config, and where it came from ─────────────────────────────────────
+ *
+ * `syntty config` prints the file it would read, whether it found one, every
+ * setting AS RESOLVED, and anything it could not understand. All four matter:
+ * "it did not work" about a config file is nearly always one of "you wrote it
+ * somewhere else", "you spelled the key differently" or "the flag you are
+ * also passing wins".
+ *
+ * `syntty config --example` writes a commented file to stdout. ⚠ THIS IS HOW
+ * ANYBODY LEARNS THE FILE EXISTS — the compositor this ships beside had a
+ * config nothing installed and nothing documented, and it may as well not have
+ * had one. */
+static int cmd_config(const opts_t *o, int argc, char **argv)
+{
+	for (int i = 0; i < argc; i++) {
+		if (!strcmp(argv[i], "--example")) {
+			st_config_example(stdout);
+			return 0;
+		}
+		die("config: unknown option '%s'", argv[i]);
+	}
+
+	st_config_t c;
+	st_config_defaults(&c);
+	st_config_load(&c, o->config);
+
+	printf("path         %s\n", c.path);
+	printf("status       %s\n", c.found ? "read" : "no file (not an error)");
+
+	printf("font         %s\n", c.font ? c.font : "monospace (default)");
+	if (c.font_size > 0) printf("font_size    %.1f\n", c.font_size);
+	else                 printf("font_size    14.0 (default)\n");
+	if (c.cols > 0)      printf("columns      %d\n", c.cols);
+	else                 printf("columns      80 (default)\n");
+	if (c.rows > 0)      printf("rows         %d\n", c.rows);
+	else                 printf("rows         24 (default)\n");
+	if (c.scrollback >= 0) printf("scrollback   %ld\n", c.scrollback);
+	else                   printf("scrollback   1000 (default)\n");
+	if (c.scroll_lines > 0) printf("scroll_lines %d\n", c.scroll_lines);
+	else                    printf("scroll_lines 3 (default)\n");
+	if (c.deadline >= 0)  printf("deadline     %s\n", c.deadline ? "on" : "off");
+	else                  printf("deadline     on (default)\n");
+
+	/* Colours print as they were WRITTEN — a palette name stays a palette name
+	 * here, because the renderer is what resolves it and this command has no
+	 * renderer. */
+	static const char *const cnames[4] =
+		{ "foreground", "background", "cursor", "cursor_text" };
+	const uint32_t cvals[4] = { c.fg, c.bg, c.cursor, c.cursor_text };
+	for (int i = 0; i < 4; i++) {
+		if (cvals[i] == ST_CFG_UNSET)
+			continue;
+		if ((cvals[i] & 0xFF000000u) == ST_COL_INDEXED)
+			printf("%-12s palette %u\n", cnames[i], cvals[i] & 0xFF);
+		else
+			printf("%-12s #%06X\n", cnames[i], cvals[i] & 0xFFFFFFu);
+	}
+	for (int i = 0; i < 16; i++)
+		if (c.palette[i] != ST_CFG_UNSET)
+			printf("color%-7d #%06X\n", i, c.palette[i]);
+
+	/* ⚠ COUNTED AND NAMED. A config that half-worked and said nothing is the
+	 * failure this whole subcommand exists to prevent. */
+	if (c.errors)
+		printf("errors       %d, first at %s\n", c.errors, c.first_error);
+	else if (c.found)
+		printf("errors       none\n");
+
+	st_config_free(&c);
+	return c.errors ? 1 : 0;
+}
+
 static int cmd_about(void)
 {
 	printf("syntty %s — the SynapseOS terminal\n\n", SYNTTY_VERSION);
 	printf("  built        pty, parser, grid, glyphs, a window, deadline\n");
 	printf("               rendering, damage tracking, the keyboard and\n");
 	printf("               graphics protocols, OSC 133 marks, the alternate\n");
-	printf("               screen, the pointer and the clipboard.\n");
-	printf("  not yet      a config file, tabs, remote control, OSC 8 links\n");
+	printf("               screen, the pointer, the clipboard and a config\n");
+	printf("               file (see `syntty config --example`).\n");
+	printf("  not yet      tabs, remote control, OSC 8 links, notifications\n");
 	printf("  cell         %zu bytes\n", sizeof(st_cell_t));
 	printf("  style        %zu bytes, interned\n", sizeof(st_style_t));
 	printf("  renderer     CPU, into wl_shm — nothing here links GL, and that\n");
@@ -1045,13 +1161,16 @@ static int cmd_about(void)
 int main(int argc, char **argv)
 {
 	opts_t o = {
-		.cols = 80, .rows = 24, .scrollback = 1000,
+		.cols = 0, .rows = 0, .scrollback = -1,
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
-		.font = NULL, .font_size = 14.0, .out = NULL, .no_cursor = false,
+		.font = NULL, .font_size = 0.0, .out = NULL, .no_cursor = false,
 		.probe = NULL, .no_deadline = false,
 		.view = 0, .jump = 0, .select = NULL,
-		.click = NULL, .drag = NULL, .scroll_after = 0
+		.click = NULL, .drag = NULL, .scroll_after = 0,
+		.config = NULL, .no_config = false
 	};
+	st_config_t cfg;
+	st_config_defaults(&cfg);
 	size_t split = 0;
 
 	/* Options are accepted on either side of the subcommand, because that is
@@ -1072,7 +1191,8 @@ int main(int argc, char **argv)
 		const char *a = argv[i];
 
 		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win")
-		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "paste"))) {
+		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "paste")
+		            || !strcmp(cmd, "config"))) {
 			child_at = (!strcmp(a, "--")) ? i + 1 : i;
 			break;
 		}
@@ -1082,7 +1202,7 @@ int main(int argc, char **argv)
 		}
 		if (!strncmp(a, "--cols=", 7))             o.cols = (uint16_t)atoi(a + 7);
 		else if (!strncmp(a, "--rows=", 7))        o.rows = (uint16_t)atoi(a + 7);
-		else if (!strncmp(a, "--scrollback=", 13)) o.scrollback = (uint32_t)atoi(a + 13);
+		else if (!strncmp(a, "--scrollback=", 13)) o.scrollback = atol(a + 13);
 		else if (!strncmp(a, "--runs=", 7))        o.runs = atoi(a + 7);
 		else if (!strncmp(a, "--split=", 8))       split = (size_t)atoi(a + 8);
 		else if (!strncmp(a, "--font=", 7))        o.font = a + 7;
@@ -1094,6 +1214,8 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--view=", 7))        o.view = atoi(a + 7);
 		else if (!strncmp(a, "--jump=", 7))        o.jump = atoi(a + 7);
 		else if (!strncmp(a, "--select=", 9))      o.select = a + 9;
+		else if (!strncmp(a, "--config=", 9))      o.config = a + 9;
+		else if (!strcmp(a, "--no-config"))        o.no_config = true;
 		else if (!strncmp(a, "--click=", 8))       o.click = a + 8;
 		else if (!strncmp(a, "--drag=", 7))        o.drag = a + 7;
 		else if (!strncmp(a, "--scroll-after=", 15)) o.scroll_after = atoi(a + 15);
@@ -1113,8 +1235,37 @@ int main(int argc, char **argv)
 	 * pieces it is built from. */
 	if (!cmd)
 		cmd = "win";
-	if (o.cols < 1)  o.cols = 80;
-	if (o.rows < 1)  o.rows = 24;
+
+	/* ── the file, under the flags ──────────────────────────────────────────
+	 *
+	 * Read AFTER the command line and used only where the command line said
+	 * nothing, so a flag always wins. `--no-config` skips it, which is what the
+	 * test suite passes: a developer's own font or colours must not change what
+	 * an assertion sees.
+	 *
+	 * ⚠ ERRORS ARE PRINTED AND THE TERMINAL STILL STARTS. See config.c: a
+	 * terminal that refuses to open over a typo cannot be used to fix it. */
+	o.cfg = &cfg;
+	if (!o.no_config && strcmp(cmd, "config") != 0) {
+		st_config_load(&cfg, o.config);
+		if (cfg.errors)
+			fprintf(stderr, "syntty: %s: %d problem%s, first at %s\n",
+			        cfg.path, cfg.errors, cfg.errors == 1 ? "" : "s",
+			        cfg.first_error);
+		if (!o.font && cfg.font)        o.font = cfg.font;
+		if (o.font_size <= 0)           o.font_size = cfg.font_size;
+		if (!o.cols && cfg.cols > 0)    o.cols = (uint16_t)cfg.cols;
+		if (!o.rows && cfg.rows > 0)    o.rows = (uint16_t)cfg.rows;
+		if (o.scrollback < 0 && cfg.scrollback >= 0)
+			o.scrollback = cfg.scrollback;
+		if (!o.no_deadline && cfg.deadline == 0)
+			o.no_deadline = true;
+	}
+
+	if (o.cols < 1)         o.cols = 80;
+	if (o.rows < 1)         o.rows = 24;
+	if (o.scrollback < 0)   o.scrollback = 1000;
+	if (o.font_size <= 0)   o.font_size = 14.0;
 
 	if (!strcmp(cmd, "dump"))
 		return split ? cmd_dump_split(&o, file, split) : cmd_dump(&o, file);
@@ -1138,6 +1289,9 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "paste"))
 		return child_at ? cmd_paste(argc - child_at, argv + child_at)
 		                : cmd_paste(0, NULL);
+	if (!strcmp(cmd, "config"))
+		return child_at ? cmd_config(&o, argc - child_at, argv + child_at)
+		                : cmd_config(&o, 0, NULL);
 	if (!strcmp(cmd, "about"))
 		return cmd_about();
 

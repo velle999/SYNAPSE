@@ -265,6 +265,8 @@ struct win {
 	double   axis_acc[2];
 	int      axis_notch[2];
 
+	int      scroll_lines;     /* lines a wheel notch moves — configurable */
+
 	uint64_t mouse_sent;       /* events handed to the child */
 	uint64_t mouse_dropped;    /* events the old encoding could not carry */
 
@@ -1980,12 +1982,12 @@ static void wheel(win_t *w, int axis, int notches)
 	if (w->g->on_alt) {
 		const char *seq = notches > 0 ? "\033[B" : "\033[A";
 		int n = notches < 0 ? -notches : notches;
-		for (int i = 0; i < n * 3; i++)
+		for (int i = 0; i < n * w->scroll_lines; i++)
 			(void)!write(w->pty->fd, seq, 3);
 		return;
 	}
 
-	if (st_grid_view_scroll(w->g, -notches * 3))
+	if (st_grid_view_scroll(w->g, -notches * w->scroll_lines))
 		w->dirty = true;
 }
 
@@ -2123,11 +2125,12 @@ static const struct wl_registry_listener registry_listener = {
 
 int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
                st_render_t *ren, const char *title, bool deadline,
-               st_win_stats_t *stats)
+               const st_config_t *cfg, st_win_stats_t *stats)
 {
 	win_t W = {0};
 	win_t *w = &W;
 	w->g = g; w->vt = vt; w->pty = pty; w->font = font; w->ren = ren;
+	w->scroll_lines = (cfg && cfg->scroll_lines > 0) ? cfg->scroll_lines : 3;
 	w->pool_fd = -1;
 	w->deadline = deadline;
 	w->held = ST_BTN_NONE;   /* 0 is the LEFT button, not "nothing held" */

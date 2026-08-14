@@ -117,6 +117,7 @@ primary_c = custom_target('primary-selection-unstable-v1-protocol.c',
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
 syntty_sources = files(
+  'src/config.c',
   'src/font.c',
   'src/graphics.c',
   'src/grid.c',

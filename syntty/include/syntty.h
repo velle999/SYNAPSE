@@ -725,6 +725,15 @@ void         st_render_free(st_render_t *r);
  * still win; these are what ST_COL_DEFAULT resolves to. */
 void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg);
 void st_render_cursor(st_render_t *r, bool on);
+/* One of the sixteen. Everything from 16 up is built from two formulas every
+ * terminal agrees on and is deliberately not configurable — a theme is the
+ * first sixteen. */
+void     st_render_palette(st_render_t *r, int idx, uint32_t rgb);
+uint32_t st_render_palette_get(const st_render_t *r, int idx);
+/* The cursor's own colours. ⚠ Both ST_CFG_UNSET means INVERT the cell, which
+ * is the default and the only rule that contrasts with whatever a program has
+ * painted underneath it. */
+void st_render_cursor_color(st_render_t *r, uint32_t bg, uint32_t fg);
 /* Images to draw over the cells — the graphics protocol's store, which lives on
  * the parser. NULL for none, which is what a session that never shows an image
  * keeps forever. */
@@ -825,6 +834,63 @@ size_t st_mouse_encode(uint16_t mode, bool sgr, int event, int button,
                        unsigned mods, int col, int row,
                        char *out, size_t cap, const char **why);
 
+/* ── config.c: the file, because flags are not how anybody runs a terminal ──
+ *
+ * `$XDG_CONFIG_HOME/syntty/syntty.conf`, falling back to
+ * `~/.config/syntty/syntty.conf`. `key = value`, `#` to the end of the line,
+ * and nothing else — no sections, no includes, no interpolation. A terminal's
+ * settings are two dozen scalars and every format richer than this one is a
+ * dependency plus a class of errors nobody needs.
+ *
+ * Three rules that are worth more than the format:
+ *
+ * ⚠ A BROKEN LINE NEVER STOPS THE TERMINAL STARTING. It is reported with its
+ * line number and the rest of the file is still read. A terminal that refuses
+ * to open because of a typo is a terminal you cannot open to fix the typo.
+ *
+ * ⚠ AN UNKNOWN KEY IS AN ERROR, SAID OUT LOUD. Silently ignoring one is how a
+ * misspelled setting becomes half an hour of wondering why the font never
+ * changed.
+ *
+ * ⚠ FLAGS BEAT THE FILE. `--font=` on the command line has to win, or a config
+ * makes the flags unusable — and `--no-config` ignores the file entirely, which
+ * is what the test suite uses so that a developer's own settings cannot change
+ * what the assertions see. */
+#define ST_CFG_UNSET 0xFFFFFFFFu
+
+typedef struct {
+	char    *font;             /* NULL: whatever fontconfig calls monospace */
+	double   font_size;        /* 0: the default */
+	int      cols, rows;       /* 0: the default */
+	long     scrollback;       /* -1: the default */
+	int      scroll_lines;     /* lines per wheel notch */
+
+	uint32_t fg, bg;           /* ST_CFG_UNSET, or 0xRRGGBB */
+	uint32_t cursor, cursor_text;
+	uint32_t palette[16];      /* ST_CFG_UNSET where the file said nothing */
+
+	int      deadline;         /* -1 unset, 0 off, 1 on */
+
+	/* What happened while reading it, so `syntty config` can print it and the
+	 * window can complain on startup rather than behaving oddly in silence. */
+	char     path[512];
+	bool     found;
+	int      errors;
+	char     first_error[256];
+} st_config_t;
+
+void st_config_defaults(st_config_t *c);
+void st_config_free(st_config_t *c);
+/* Read one. `path` NULL means the default location. Returns false only when
+ * there was no file at all — which is not an error, it is the normal case. */
+bool st_config_load(st_config_t *c, const char *path);
+/* Where it would look, for `syntty config` and for the help text. */
+const char *st_config_path(char *buf, size_t cap);
+/* A commented example, on stdout. ⚠ Because a config nobody can find is a
+ * config nobody uses — see reference_synui_config_synuirc_ships_nowhere, where
+ * exactly that happened to the compositor this ships beside. */
+void st_config_example(FILE *out);
+
 /* ── paste.c: what pasted text becomes on the way to the child ──────────────
  *
  * ⚠ A PASTE IS NOT TYPING, and treating it as typing is how a clipboard
@@ -913,6 +979,6 @@ typedef struct {
  * the headless paths above share every line of it. */
 int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
                st_render_t *ren, const char *title, bool deadline,
-               st_win_stats_t *stats);
+               const st_config_t *cfg, st_win_stats_t *stats);
 
 #endif /* SYNTTY_H */
