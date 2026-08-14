@@ -1,0 +1,6 @@
+build/
+build-asan/
+pkg/
+src/syntty-0.1.0/
+*.pkg.tar.zst
+syntty-0.1.0.tar.gz

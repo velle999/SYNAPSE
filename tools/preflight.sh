@@ -101,6 +101,17 @@ declare -A UNREGISTERED=(
     # history is a worse place to look for that than a directory. Deleting it
     # is a one-line change whenever that stops being true.
     [scenefx]="retired: the 0.4 fork superseded by scenefx0.5; in no build list and installed nowhere, kept for the ported scene TUs its PKGBUILD documents"
+
+    # NOT YET, rather than retired — the opposite end of the same exemption.
+    # syntty is stage 1 of 5: a pty, a VT parser and a cell grid with no window
+    # at all, driven by three headless subcommands. Shipping it now would put a
+    # package called "the SynapseOS terminal" on every machine and have it open
+    # nothing, which is a worse first impression than not being there.
+    #
+    # It stays out of KNOWN=, COMPONENTS, packages.x86_64 and SEL_ until it
+    # renders. When it does, that is FIVE registrations in one commit and this
+    # line comes out — see reference_buildall_known_is_not_the_build_list.
+    [syntty]="in development: stage 1 of 5 (parser and grid, no renderer), deliberately in no build list until there is a window to ship"
 )
 
 # Paths inside a component that do not reach the package, so editing them

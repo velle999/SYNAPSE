@@ -1,0 +1,75 @@
+# Maintainer: Velle Sinclair <brncomputerhelp@gmail.com>
+#
+# syntty — the SynapseOS terminal.
+#
+# The name is Finnish: `synty` is birth, or origin. Torvalds was Finnish, and
+# the terminal is what gives birth to every process on the machine. The doubled
+# consonant is Finnish orthography and it is also `tty`, sitting inside the
+# name — and it keeps the word clear of Synty Studios, which the single-t
+# spelling would have walked straight into.
+#
+# ⚠ STAGE 1 OF 5: THERE IS NO WINDOW. This package installs a pty, a VT parser
+# and a cell grid, driven by three headless subcommands — `dump`, `run` and
+# `bench`. It is not a terminal you can type into yet and it is deliberately
+# not registered as one: nothing in the ISO, the installer or syn-update points
+# at it, and it does not claim the terminal handle.
+#
+# That ordering is the point. Every claim this program is being built on is a
+# number, and a terminal that draws needs a compositor, a seat and a human to
+# produce one; a terminal that only parses can be measured in CI. The baseline
+# it exists to beat was taken before a line of it was written, with hyperfine
+# inside a headless cage, on the machine it is being written on:
+#
+#                startup      fresh RSS    2.6 MB parsed
+#   kitty        230.3 ms      264 MB        118.6 ms
+#   foot          24.9 ms       21 MB        117.9 ms
+#
+# Two things in that table decide the whole design. Throughput is a DEAD HEAT,
+# so there is no champion to copy and no lead to erode. And of kitty's 264 MB,
+# 188 MB is the graphics stack it maps by creating a GL context — 83.5 MB of
+# libLLVM, 88 MB of nvidia EGL, 15.8 MB of gallium — against 32 MB of kitty's
+# own working set and 5.4 MB of Python. So the single biggest decision here is
+# that this links no GL at all, and it is why the only library dependency below
+# is libutil, for forkpty.
+pkgname=syntty
+# pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
+# "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
+# component, so bumping pkgver leaves makepkg looking for a tarball nothing
+# creates.
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SynapseOS terminal (stage 1: pty, VT parser and cell grid — no window yet)"
+arch=('x86_64')
+url="https://github.com/velle999/SYNAPSE"
+license=('GPL-2.0-or-later')
+
+# libc and libutil, and that is the entire list. No GL, no interpreter, no
+# font stack yet — see the header. When the renderer lands it adds wayland and
+# a rasteriser, and it still will not add GL.
+depends=('glibc')
+
+makedepends=('meson' 'ninja' 'gcc')
+
+source=("syntty-0.1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/syntty-0.1.0"
+    meson setup build --prefix=/usr --buildtype=release
+    meson compile -C build
+}
+
+check() {
+    cd "$srcdir/syntty-0.1.0"
+    # ⚠ The suite must run with no seat, no compositor, no display and no
+    # fonts — that is what stage 1 is for. It forks a real pty and runs real
+    # commands on it, so it is not instantaneous, and meson's DEFAULT 30-second
+    # timeout would report the kill as a build failure. The timeout is stated
+    # in meson.build so a passing suite cannot fail the build.
+    meson test -C build --print-errorlogs
+}
+
+package() {
+    cd "$srcdir/syntty-0.1.0"
+    meson install -C build --destdir="$pkgdir"
+}
