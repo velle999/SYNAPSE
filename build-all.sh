@@ -32,7 +32,7 @@ ONLY=("$@")
 KNOWN=(synapse-llama scenefx0.5 synapd synsh synnet synguard synui synapse_kmod
        syn syn-model syn-install syn-update syn-firstboot nexus-chat tepris
        vibe samsung-m2020 syn-arsenal synpkg synfiles syn-settings syn-disks
-       syn-confine syn-edit limine-mkinitcpio-hook)
+       syn-confine syn-edit limine-mkinitcpio-hook fetch synapse-wallpapers)
 for _c in "${ONLY[@]}"; do
     case " ${KNOWN[*]} " in
         *" $_c "*) ;;
@@ -300,6 +300,22 @@ build_script_pkg syn-firstboot
 # commit from each app's own git repo, so these need network at build time.
 build_script_pkg nexus-chat
 build_script_pkg tepris
+
+# fetch — areofyl/fetch, which is "About OS". Same shape as the two above: a
+# pinned upstream commit plus two local patches applied in prepare(), so it
+# needs network, which is precisely why nexus-chat sets the precedent that
+# network at build time does not disqualify a component from updating. It is in
+# packages.x86_64, so every installed system HAS it; before this rule it was on
+# every machine and updatable on none.
+build_script_pkg fetch
+
+# synapse-wallpapers — our own Wallpaper Engine wallpapers (dendrite + Tux).
+# source=() and the renders are derived from the checkout at build time, so
+# there is nothing to download and nothing to stage. It does NOT need
+# linux-wallpaperengine to build (that is the runtime consumer); the
+# makedepends are python-pillow, librsvg, ffmpeg and adwaita-fonts, all
+# ordinary packages. Order does not matter — nothing depends on it.
+build_script_pkg synapse-wallpapers
 
 # syn-confine BEFORE vibe, which DEPENDS on it — the same rule as scenefx
 # before synui above, and it is load-bearing rather than tidy. vibe's bash tool

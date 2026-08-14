@@ -61,17 +61,27 @@ declare -A EXEMPT_ISO=(
 
 # Directories with a PKGBUILD that are in NEITHER syn-update's COMPONENTS nor
 # its UNSUPPORTED map. Anything here is un-updatable on an installed system and
-# nothing else in the repo records that.
+# nothing else in the repo records that, so an entry needs a reason that
+# survives reading.
 #
-# UNTRIAGED means exactly that: found by this script when it was written, not
-# yet decided. Each is either a missing COMPONENTS entry (a component frozen
-# forever — the bug this repo keeps hitting) or a missing UNSUPPORTED entry
-# with the reason. Resolving one means DELETING its line here, not editing it.
+# This table was seeded with four when the script was written; three were
+# genuine gaps and are gone. fetch and synapse-wallpapers are in COMPONENTS
+# now — both are in packages.x86_64, so they were on every installed machine
+# and updatable on none. limine-snapper-sync is in UNSUPPORTED, where
+# syn-update reports the reason rather than skipping it in silence.
 declare -A UNREGISTERED=(
-    [scenefx]="UNTRIAGED — the 0.4 fork, superseded by scenefx0.5 when synui moved to wlroots 0.20. It is in no list at all: not KNOWN=, not COMPONENTS, not archiso PACKAGES. Almost certainly dead and deletable; confirm nothing still builds against it, then remove the directory."
-    [fetch]="UNTRIAGED — ships on the ISO (archiso PACKAGES) as About OS, but is in no update list, so a fix to it can never reach an installed machine. Git-sourced from a pinned upstream commit with local patches, so it needs network at build time — which may be why. Decide: COMPONENTS, or UNSUPPORTED with that reason."
-    [limine-snapper-sync]="UNTRIAGED — ships on the ISO, not updatable. Its build step fetches plugins and Java dependencies from the network, which is a real reason to leave it out of COMPONENTS, but the reason belongs in UNSUPPORTED where syn-update reports it."
-    [synapse-wallpapers]="UNTRIAGED — ships on the ISO, not updatable. Renders are produced at build time against linux-wallpaperengine, which is itself UNSUPPORTED; if that is the reason, say so in UNSUPPORTED."
+    # RETIRED, not missing. The 0.4 fork, superseded by scenefx0.5 when synui
+    # moved to wlroots 0.20; synui's depends names scenefx0.5 and nothing in
+    # the tree names this one. It is in no list anywhere — not KNOWN=, not
+    # COMPONENTS, not archiso PACKAGES, not packages.x86_64 — and the package
+    # is not installed here, so it ships to nobody and updates for nobody,
+    # which is correct for a retired tree.
+    #
+    # It is kept because it carries real local work (six wlroots 0.19.3 scene
+    # TUs ported onto scenefx's own headers, see its PKGBUILD header), and git
+    # history is a worse place to look for that than a directory. Deleting it
+    # is a one-line change whenever that stops being true.
+    [scenefx]="retired: the 0.4 fork superseded by scenefx0.5; in no build list and installed nowhere, kept for the ported scene TUs its PKGBUILD documents"
 )
 
 # Paths inside a component that do not reach the package, so editing them
