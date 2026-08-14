@@ -272,10 +272,23 @@ typedef enum {
 	VT_OSC_ESC,
 	VT_DCS_IGNORE,
 	VT_DCS_ESC,
+	VT_APC,          /* ESC _ ... ESC \  — the graphics protocol lives here */
+	VT_APC_ESC,
 } vt_state_t;
 
 #define VT_MAX_PARAMS 16
 #define VT_OSC_MAX    2048
+
+/* One APC payload. The graphics protocol chunks its transmissions at 4096
+ * bytes of base64, so this holds a whole chunk with the control data in front
+ * of it and room to spare.
+ *
+ * ⚠ A FIXED BUFFER IS THE POINT. The bytes arriving here come from the CHILD,
+ * which is not trusted: a program that sends an unterminated APC sequence
+ * forever would grow an unbounded buffer, and "the terminal ate all the
+ * memory" is a denial of service, not a parsing bug. Overlong sequences are
+ * dropped and counted. */
+#define VT_APC_MAX    8192
 
 /* ── the kitty keyboard protocol ────────────────────────────────────────────
  *
@@ -327,6 +340,18 @@ typedef struct {
 	char     osc[VT_OSC_MAX];
 	int      osc_len;
 
+	/* The APC payload being collected — the graphics protocol's transport. */
+	char     apc[VT_APC_MAX + 1];
+	int      apc_len;
+	bool     apc_over;        /* this one ran past the buffer */
+	uint64_t apc_dropped;
+
+	/* Images and where they are placed. Opaque here: nothing outside
+	 * graphics.c needs to know what an image is, and the parser only needs to
+	 * hand it bytes. NULL until the first graphics sequence arrives, so a
+	 * session that never shows an image pays nothing for the feature. */
+	struct st_gfx *gfx;
+
 	/* UTF-8 decode state, carried across feeds. */
 	uint32_t utf_cp;
 	int      utf_need;
@@ -368,11 +393,42 @@ typedef struct {
 
 void st_vt_init(st_vt_t *vt, st_grid_t *g);
 void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len);
+/* Release what the parser acquired. Only the image store, and only if a
+ * graphics sequence ever arrived — but a terminal that shows one picture and
+ * exits must not leak it. */
+void st_vt_free(st_vt_t *vt);
 
 /* The keyboard enhancements in force right now — what the key encoder must
  * obey. Zero means the legacy encodings, which is the base state and what every
  * program gets until it asks for more. */
 unsigned st_vt_kbd_flags(const st_vt_t *vt);
+
+/* ── graphics.c: the kitty graphics protocol ────────────────────────────────
+ *
+ * ⚠ NOTHING TO DO WITH THE GPU, despite the name. It is an escape-sequence
+ * protocol for putting an IMAGE on the screen — icat, file previews, plots —
+ * and the pixels are composited on the CPU like everything else here. */
+struct st_gfx;
+
+/* Fed one complete APC payload by the parser. Only sequences beginning `G`
+ * are ours; anything else is left alone. */
+void st_gfx_apc(st_vt_t *vt, const char *payload, size_t len);
+/* Queue a graphics-protocol answer. In APC, not CSI: that is the transport the
+ * program is listening on. */
+void vt_gfx_reply(st_vt_t *vt, uint32_t id, const char *msg);
+void st_gfx_free(struct st_gfx *g);
+
+/* One image, and where on the grid it goes. Borrowed — `rgba` belongs to the
+ * store and is valid until the next graphics sequence. */
+typedef struct {
+	int      col, row;     /* top-left cell */
+	int      cols, rows;   /* cells covered */
+	uint32_t w, h;         /* the image's own pixels */
+	const uint8_t *rgba;
+} st_gfx_place_t;
+
+int      st_gfx_placements(const struct st_gfx *g, st_gfx_place_t *out, int max);
+uint64_t st_gfx_refused(const struct st_gfx *g);
 
 /* Take whatever the parser owes the child, and empty the queue. Returns the
  * number of bytes copied. A caller with no way to write back simply never calls
@@ -446,6 +502,10 @@ void         st_render_free(st_render_t *r);
  * still win; these are what ST_COL_DEFAULT resolves to. */
 void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg);
 void st_render_cursor(st_render_t *r, bool on);
+/* Images to draw over the cells — the graphics protocol's store, which lives on
+ * the parser. NULL for none, which is what a session that never shows an image
+ * keeps forever. */
+void st_render_set_gfx(st_render_t *r, const struct st_gfx *g);
 
 /* The pixel size a grid wants. The window may be any size; anything the cells
  * do not cover is painted with the default background. */

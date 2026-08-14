@@ -71,6 +71,7 @@ presentation_c = custom_target('presentation-time-protocol.c',
 
 syntty_sources = files(
   'src/font.c',
+  'src/graphics.c',
   'src/grid.c',
   'src/main.c',
   'src/pty.c',

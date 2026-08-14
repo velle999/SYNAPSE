@@ -99,9 +99,28 @@ static unsigned vt_kbd_flags(const st_vt_t *vt)
 	return vt->kkp_stack[vt->kkp_depth];
 }
 
+/* The parser owns no memory except the image store, which arrives only if a
+ * program sends a graphics sequence. Callers that build a vt on the stack — all
+ * of them — still have to release that. */
+void st_vt_free(st_vt_t *vt)
+{
+	st_gfx_free(vt->gfx);
+	vt->gfx = NULL;
+}
+
 unsigned st_vt_kbd_flags(const st_vt_t *vt)
 {
 	return vt_kbd_flags(vt);
+}
+
+/* The graphics protocol answers in its own transport — an APC sequence, not a
+ * CSI — because that is what the program is listening for. */
+void vt_gfx_reply(st_vt_t *vt, uint32_t id, const char *msg)
+{
+	if (id)
+		vt_reply(vt, "\033_Gi=%u;%s\033\\", id, msg);
+	else
+		vt_reply(vt, "\033_G;%s\033\\", msg);
 }
 
 size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap)
@@ -466,7 +485,14 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 		/* C0 controls are executed from any state except the string ones —
 		 * a BEL inside an OSC terminates it, and a CR inside a CSI really
 		 * does move the cursor on every terminal worth matching. */
-		if (b < 0x20 && vt->state != VT_OSC && vt->state != VT_DCS_IGNORE) {
+		/* ⚠ THE STATES THAT SWALLOW THEIR OWN CONTROL BYTES must be listed
+		 * here, and APC is one of them. Without it the C0 handler steals the
+		 * ESC that TERMINATES the sequence: the payload accumulates, the
+		 * terminator never arrives, and the collected bytes are silently
+		 * dropped while the parser wanders off into VT_ESC. The symptom is a
+		 * graphics protocol that answers nothing at all. */
+		if (b < 0x20 && vt->state != VT_OSC && vt->state != VT_DCS_IGNORE
+		    && vt->state != VT_APC && vt->state != VT_APC_ESC) {
 			if (b == 0x1B) {
 				vt->state = VT_ESC;
 				vt_reset_params(vt);
@@ -516,7 +542,14 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 		case VT_ESC:
 			if (b == '[') { vt_reset_params(vt); vt->state = VT_CSI_ENTRY; }
 			else if (b == ']') { vt->osc_len = 0; vt->state = VT_OSC; }
-			else if (b == 'P' || b == 'X' || b == '^' || b == '_') {
+			else if (b == '_') {
+				/* APC. Everything else in this family is still swallowed —
+				 * DCS, SOS and PM have no meaning here — but APC is where the
+				 * graphics protocol lives, so it is COLLECTED. */
+				vt->apc_len = 0;
+				vt->apc_over = false;
+				vt->state = VT_APC;
+			} else if (b == 'P' || b == 'X' || b == '^') {
 				vt->state = VT_DCS_IGNORE;
 			} else if (b == '(' || b == ')' || b == '*' || b == '+') {
 				/* Character-set designation. Consumed and ignored: the byte
@@ -608,6 +641,40 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 			vt->state = VT_GROUND;
 			if (b != '\\')
 				i--;
+			break;
+
+		case VT_APC:
+			if (b == 0x1B) {
+				vt->state = VT_APC_ESC;
+				break;
+			}
+			/* Overlong is DROPPED, not truncated-and-parsed: half a control
+			 * string parsed as if whole is how a truncated image id becomes a
+			 * different image id. The sequence is still consumed to its
+			 * terminator so the rest of the stream stays in step. */
+			if (vt->apc_len < VT_APC_MAX)
+				vt->apc[vt->apc_len++] = (char)b;
+			else
+				vt->apc_over = true;
+			break;
+
+		case VT_APC_ESC:
+			if (b == '\\') {
+				if (vt->apc_over) {
+					vt->apc_dropped++;
+				} else {
+					vt->apc[vt->apc_len] = '\0';
+					st_gfx_apc(vt, vt->apc, (size_t)vt->apc_len);
+				}
+				vt->state = VT_GROUND;
+			} else {
+				/* An ESC that was not the terminator is part of the payload —
+				 * put it back and keep collecting. */
+				if (vt->apc_len < VT_APC_MAX)
+					vt->apc[vt->apc_len++] = 0x1B;
+				vt->state = VT_APC;
+				i--;
+			}
 			break;
 
 		case VT_DCS_IGNORE:

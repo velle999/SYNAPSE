@@ -292,6 +292,95 @@ fi
 rate=$("$ST" bench "$T/bench.txt" --runs=3 | awk '/^best/{print $4}')
 ok "throughput on this machine: ${rate} MB/s"
 
+# ── the kitty GRAPHICS protocol ─────────────────────────────────────────────
+#
+# ⚠ NOTHING TO DO WITH THE GPU, despite the name — it is escape sequences for
+# putting an IMAGE on the screen (icat, file previews, plots), composited on
+# the CPU like everything else here. Table stakes, same as the keyboard half.
+#
+# The transport is APC: ESC _ G <control> ; <base64> ESC \.
+gfx() { printf "$1" | "$ST" dump - --stats 2>&1; }
+
+# A 2x2 image: red, green / blue, white. Small enough to reason about, and
+# every quadrant a different colour so a flipped axis cannot pass.
+IMG=$(python3 -c "import base64,sys; sys.stdout.write(base64.b64encode(bytes([255,0,0, 0,255,0, 0,0,255, 255,255,255])).decode())" 2>/dev/null)
+
+if [ -z "$IMG" ]; then
+    echo "  skip  the graphics protocol (no python3 to build a test image)"
+else
+    # THE SUPPORT PROBE. Programs send a=q and decide from the answer whether
+    # to send images at all, so answering it is most of what "supports the
+    # protocol" means in practice.
+    r=$(gfx '\033_Gi=31,s=1,v=1,a=q;AAAA\033\\\\')
+    echo "$r" | grep -q 'ESC_Gi=31;OKESC'
+    check "a graphics query is answered OK" $?
+
+    # ⚠ AND WHAT IS NOT IMPLEMENTED IS REFUSED OUT LOUD. A program told "OK"
+    # for a format we ignore draws nothing and has no way to find out why —
+    # the failure moves from the negotiation, where it is legible, into the
+    # program's own rendering, where it is not.
+    echo "$(gfx '\033_Gi=7,f=100,a=T,s=2,v=2;iVBOR\033\\\\')" | grep -q 'ENOTSUPP'
+    check "...and an unimplemented format is refused, not silently dropped" $?
+
+    echo "$(gfx '\033_Gi=8,f=32,t=f,a=T,s=2,v=2;L3RtcC94\033\\\\')" | grep -q 'ENOTSUPP'
+    check "...as is a transmission medium we do not implement" $?
+
+    # The whole path: transmit, display, and check the PIXELS. Four probes,
+    # one per quadrant — an image that renders at all but transposed passes
+    # every check except this one.
+    img_probe() {  # img_probe <col,row>
+        printf "\033_Ga=T,f=24,s=2,v=2,i=5,c=8,r=4;%s\033\\\\" "$IMG" \
+            | "$ST" --cols=24 --rows=6 render - --no-cursor --probe="$1" 2>/dev/null \
+            | awk '{print $3}'
+    }
+    q1=$(img_probe 1,1); q2=$(img_probe 6,1)
+    q3=$(img_probe 1,3); q4=$(img_probe 6,3)
+    [ "$q1" = FF0000 ] && [ "$q2" = 00FF00 ] && [ "$q3" = 0000FF ] && [ "$q4" = FFFFFF ] \
+        && ok "an image is drawn, scaled to its cells, the right way up" \
+        || bad "an image is drawn, scaled to its cells, the right way up ($q1 $q2 $q3 $q4)"
+
+    # ⚠ CHUNKED TRANSMISSION IS THE NORMAL CASE, not an edge one: senders split
+    # at 4096 bytes of base64, so anything bigger than a thumbnail arrives in
+    # pieces. The geometry rides on the FIRST chunk only.
+    h1=$(printf '%s' "$IMG" | cut -c1-8)
+    h2=$(printf '%s' "$IMG" | cut -c9-)
+    chunked=$(printf "\033_Ga=T,f=24,s=2,v=2,i=9,c=8,r=4,m=1;%s\033\\\\\033_Gm=0;%s\033\\\\" "$h1" "$h2" \
+              | "$ST" --cols=24 --rows=6 render - --no-cursor --probe=1,1 2>/dev/null | awk '{print $3}')
+    [ "$chunked" = FF0000 ] \
+        && ok "an image split across chunks is reassembled" \
+        || bad "an image split across chunks is reassembled (got $chunked)"
+
+    # ⚠ THE CHILD IS NOT TRUSTED. `s=65535,v=65535,f=32` is a 17 GB allocation
+    # request in eleven bytes. A refused image is a visible missing picture; an
+    # unbounded one is a machine that stops.
+    echo "$(gfx '\033_Ga=T,f=32,s=65535,v=65535,i=11;AAAA\033\\\\')" | grep -q 'EINVAL'
+    check "an implausibly large image is refused rather than allocated" $?
+
+    # A payload shorter than the geometry claims must not be believed, or the
+    # blit reads whatever follows it in memory.
+    echo "$(gfx '\033_Ga=T,f=24,s=64,v=64,i=12;AAAA\033\\\\')" | grep -q 'EINVAL'
+    check "a payload shorter than its declared size is refused" $?
+
+    # Deleting removes the placement — the image stops being drawn.
+    after=$(printf "\033_Ga=T,f=24,s=2,v=2,i=5,c=8,r=4;%s\033\\\\\033_Ga=d\033\\\\" "$IMG" \
+            | "$ST" --cols=24 --rows=6 render - --no-cursor --probe=1,1 2>/dev/null | awk '{print $3}')
+    [ "$after" != FF0000 ] \
+        && ok "deleting an image stops it being drawn" \
+        || bad "deleting an image stops it being drawn"
+
+    # An APC that is not ours is left alone, not guessed at.
+    printf '\033_Xsomething else\033\\\\hello' | "$ST" --cols=20 --rows=2 dump - \
+        | head -1 | grep -q 'hello'
+    check "an APC belonging to something else is ignored, not eaten" $?
+
+    # ⚠ AN UNTERMINATED SEQUENCE MUST NOT GROW A BUFFER FOREVER. This is the
+    # denial-of-service shape of the feature: bytes arriving from the child
+    # with no terminator in sight.
+    python3 -c "import sys; sys.stdout.write('\033_G' + 'A'*40000 + '\033\\\\' + 'survived')" \
+        | "$ST" --cols=20 --rows=2 dump - | head -1 | grep -q 'survived'
+    check "an over-long APC is dropped and the stream stays in step" $?
+fi
+
 # ── damage tracking draws the SAME PIXELS ───────────────────────────────────
 #
 # ⚠ THE TEST THIS FEATURE WAITED FOR. Damage tracking was recorded as "not

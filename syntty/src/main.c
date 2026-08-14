@@ -154,6 +154,7 @@ static int cmd_dump(const opts_t *o, const char *path)
 	if (o->stats)
 		print_stats(&vt, &g);
 
+	st_vt_free(&vt);
 	st_grid_free(&g);
 	free(buf);
 	return 0;
@@ -186,6 +187,7 @@ static int cmd_dump_split(const opts_t *o, const char *path, size_t chunk)
 	if (o->stats)
 		print_stats(&vt, &g);
 
+	st_vt_free(&vt);
 	st_grid_free(&g);
 	free(buf);
 	return 0;
@@ -216,6 +218,7 @@ static int cmd_run(const opts_t *o, int argc, char **argv)
 	if (o->stats)
 		print_stats(&vt, &g);
 
+	st_vt_free(&vt);
 	st_grid_free(&g);
 	return rc;
 }
@@ -247,6 +250,7 @@ static int cmd_bench(const opts_t *o, const char *path)
 		if (dt < best)
 			best = dt;
 		total += dt;
+		st_vt_free(&vt);
 		st_grid_free(&g);
 	}
 	free(buf);
@@ -341,6 +345,7 @@ static int cmd_render(const opts_t *o, const char *path)
 
 	st_render_t *r = st_render_new(f);
 	st_render_cursor(r, !o->no_cursor);
+	st_render_set_gfx(r, vt.gfx);
 
 	int w = st_render_width(r, &g), h = st_render_height(r, &g);
 	uint32_t *px = xcalloc((size_t)w * h, sizeof *px);
@@ -415,6 +420,7 @@ static int cmd_render(const opts_t *o, const char *path)
 	free(px);
 	st_render_free(r);
 	st_font_close(f);
+	st_vt_free(&vt);
 	st_grid_free(&g);
 	free(err);
 	return 0;
@@ -450,6 +456,7 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 	st_vt_init(&vt, &g);
 
 	st_render_t *r = st_render_new(f);
+	st_render_set_gfx(r, vt.gfx);
 
 	st_pty_t p;
 	if (!st_pty_spawn(&p, argv, o->cols, o->rows))
@@ -527,6 +534,7 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 
 	st_render_free(r);
 	st_font_close(f);
+	st_vt_free(&vt);
 	st_grid_free(&g);
 	free(err);
 	return rc;
@@ -667,6 +675,7 @@ static int cmd_damage_check(const opts_t *o, const char *path, size_t chunk)
 	}
 
 	free(rows); free(full); free(incr); free(buf); free(err);
+	st_vt_free(&vti); st_vt_free(&vtf);
 	st_grid_free(&gi); st_grid_free(&gf);
 	st_render_free(r); st_font_close(f);
 	return rc;

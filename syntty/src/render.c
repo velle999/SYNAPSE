@@ -44,6 +44,7 @@
 
 struct st_render {
 	st_font_t *font;
+	const struct st_gfx *gfx;   /* images to draw over the cells, or NULL */
 	uint32_t   palette[256];
 	uint32_t   def_fg, def_bg;
 	uint32_t   cursor_fg, cursor_bg;
@@ -109,6 +110,8 @@ void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg)
 }
 
 void st_render_cursor(st_render_t *r, bool on) { r->show_cursor = on; }
+
+void st_render_set_gfx(st_render_t *r, const struct st_gfx *g) { r->gfx = g; }
 
 int  st_render_width (const st_render_t *r, const st_grid_t *g)
 {
@@ -292,6 +295,62 @@ static void fill_margins(st_render_t *r, const st_grid_t *g,
 	if (used_h < h) fill_rect(px, stride_px, 0, used_h, used_w, h - used_h, r->def_bg);
 }
 
+/* ── images, over the top of the cells ──────────────────────────────────────
+ *
+ * The graphics protocol places an image across a rectangle of CELLS, so the
+ * image is scaled to that rectangle. Nearest-neighbour: a terminal image is
+ * usually already the size it wants to be, the sender chose the cell count to
+ * match, and a smoothing filter would cost more than the whole blit for a
+ * difference nobody asked for.
+ *
+ * Drawn AFTER the cells and blended by alpha, because that is what the protocol
+ * means — an image sits on top of the text cell it covers, and a transparent
+ * PNG is expected to show the background through it. */
+static void draw_images(st_render_t *r, const st_grid_t *g,
+                        uint32_t *px, int stride_px, int w, int h)
+{
+	if (!r->gfx)
+		return;
+
+	st_gfx_place_t pl[64];
+	int n = st_gfx_placements(r->gfx, pl, 64);
+	int cw = st_font_cell_w(r->font), ch = st_font_cell_h(r->font);
+
+	for (int i = 0; i < n; i++) {
+		int x0 = pl[i].col * cw, y0 = pl[i].row * ch;
+		int dw = pl[i].cols * cw, dh = pl[i].rows * ch;
+		if (pl[i].w == 0 || pl[i].h == 0)
+			continue;
+
+		for (int y = 0; y < dh; y++) {
+			int dy = y0 + y;
+			if (dy < 0 || dy >= h)
+				continue;
+			uint32_t sy = (uint32_t)((uint64_t)y * pl[i].h / (uint32_t)dh);
+			if (sy >= pl[i].h)
+				sy = pl[i].h - 1;
+			uint32_t *dst = px + (size_t)dy * stride_px;
+
+			for (int x = 0; x < dw; x++) {
+				int dx = x0 + x;
+				if (dx < 0 || dx >= w)
+					continue;
+				uint32_t sx = (uint32_t)((uint64_t)x * pl[i].w / (uint32_t)dw);
+				if (sx >= pl[i].w)
+					sx = pl[i].w - 1;
+
+				const uint8_t *s4 = pl[i].rgba + ((size_t)sy * pl[i].w + sx) * 4;
+				uint8_t a = s4[3];
+				if (a == 0)
+					continue;
+				uint32_t src = (uint32_t)s4[0] << 16 | (uint32_t)s4[1] << 8 | s4[2];
+				dst[dx] = a == 255 ? src : blend(src, dst[dx], a);
+			}
+		}
+	}
+	(void)g;
+}
+
 size_t st_render_grid(st_render_t *r, const st_grid_t *g,
                       uint32_t *px, int stride_px, int w, int h)
 {
@@ -300,6 +359,7 @@ size_t st_render_grid(st_render_t *r, const st_grid_t *g,
 	size_t drawn = 0;
 	for (int row = 0; row < g->rows; row++)
 		drawn += draw_row(r, g, row, px, stride_px, w, h);
+	draw_images(r, g, px, stride_px, w, h);
 	return drawn;
 }
 
@@ -324,6 +384,12 @@ size_t st_render_rows(st_render_t *r, const st_grid_t *g, const uint8_t *rows,
 	for (int row = 0; row < g->rows; row++)
 		if (rows[row])
 			drawn += draw_row(r, g, row, px, stride_px, w, h);
+	/* ⚠ Redrawn WHOLE whenever anything was. An image overlaps cells, so a row
+	 * repainted underneath one wipes the part of it that sat on that row — and
+	 * the image itself is not in the grid, so nothing would ever mark it dirty
+	 * again. Cheap: placements are rare and usually one. */
+	if (drawn)
+		draw_images(r, g, px, stride_px, w, h);
 	return drawn;
 }
 
