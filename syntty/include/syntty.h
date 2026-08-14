@@ -322,10 +322,46 @@ typedef struct {
 	double   lookup_ms;         /* the path question alone */
 	uint32_t ascii_glyphs;
 	size_t   atlas_bytes;
+	uint32_t fallbacks;         /* fonts opened to cover missing glyphs */
 	char     path[512];         /* the file actually opened */
 } st_font_stats_t;
 
 const st_font_stats_t *st_font_get_stats(const st_font_t *f);
+
+/* ── render.c ───────────────────────────────────────────────────────────── */
+
+/* Cells to pixels, on the CPU. The output word is 0x00RRGGBB — wl_shm's
+ * XRGB8888 — so a painted buffer goes to the compositor with no conversion.
+ *
+ * THE BUFFER IS ALWAYS THE CALLER'S. Nothing here allocates one, which is what
+ * lets the same code paint a Wayland buffer, a PPM for the test suite, and a
+ * throwaway for a benchmark. */
+typedef struct st_render st_render_t;
+
+st_render_t *st_render_new(st_font_t *f);
+void         st_render_free(st_render_t *r);
+
+/* Default foreground and background, as 0xRRGGBB. Cells that name a colour
+ * still win; these are what ST_COL_DEFAULT resolves to. */
+void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg);
+void st_render_cursor(st_render_t *r, bool on);
+
+/* The pixel size a grid wants. The window may be any size; anything the cells
+ * do not cover is painted with the default background. */
+int  st_render_width (const st_render_t *r, const st_grid_t *g);
+int  st_render_height(const st_render_t *r, const st_grid_t *g);
+
+/* Paint. `stride_px` is in PIXELS, not bytes — every caller so far has a
+ * pixel-aligned stride, and a byte stride invites one caller to forget the
+ * divide. Returns the number of cells drawn. */
+size_t st_render_grid(st_render_t *r, const st_grid_t *g,
+                      uint32_t *px, int stride_px, int w, int h);
+
+/* The renderer's golden output. Stage 1 could assert on text because its
+ * output was text; a renderer that is only checked for "it returned" passes on
+ * an all-black screen. */
+void st_render_write_ppm(const uint32_t *px, int stride_px, int w, int h,
+                         FILE *out);
 
 /* ── pty.c ──────────────────────────────────────────────────────────────── */
 

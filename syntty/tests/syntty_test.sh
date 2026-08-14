@@ -374,6 +374,123 @@ else
     # request reached it rather than that it failed.
     fontrun --font=NoSuchFontExistsAnywhere1234 | grep -q '^file'
     check "an unknown family still resolves (fontconfig always substitutes)" $?
+
+    # ── the renderer ────────────────────────────────────────────────────────
+    #
+    # Stage 1 could assert on text because its output WAS text. A renderer's
+    # output is pixels, and "it returned without crashing" passes on an
+    # all-black screen — so `render` prints what is actually in the buffer:
+    # the share of pixels that differ from the background, the number of
+    # distinct colours, and (with --probe) the colour of one named cell.
+    #
+    # ⚠ Everything here goes through --probe or those counters rather than
+    # through an image library, because this file may not gain a dependency
+    # that a build host will not have.
+    rend() { XDG_CACHE_HOME="$FC" "$ST" "$@" render - --no-cursor 2>&1; }
+
+    ink() { rend "$@" | awk '/^ink/{print int($2)}'; }
+
+    # The buffer is exactly the cells times the cell box. A renderer that gets
+    # this wrong draws a correct screen into the wrong-sized window, which on
+    # a real compositor is a protocol error rather than a visible bug.
+    cw=$(fontrun | awk '/^cell/{split($2,d,"x"); print d[1]}')
+    chh=$(fontrun | awk '/^cell/{split($2,d,"x"); print d[2]}')
+    got=$(printf 'x' | XDG_CACHE_HOME="$FC" "$ST" --cols=10 --rows=3 render - --no-cursor 2>&1 \
+          | awk '/^size/{print $2}')
+    [ "$got" = "$((cw * 10))x$((chh * 3))" ] \
+        && ok "the buffer is exactly cols x rows of the cell box" \
+        || bad "the buffer is exactly cols x rows of the cell box (got $got)"
+
+    # EVERY cell is painted, including the blank ones. `width == 0` means both
+    # "erased" and "the tail of a wide glyph", and skipping on width alone
+    # skipped every blank cell on the screen — they kept whatever was in the
+    # buffer, which showed up as black rectangles rather than background.
+    n=$(printf 'ab' | XDG_CACHE_HOME="$FC" "$ST" --cols=10 --rows=2 render - --no-cursor 2>&1 \
+        | awk '/^cells/{print $2}')
+    [ "$n" = 20 ] \
+        && ok "every cell is painted, blanks included" \
+        || bad "every cell is painted, blanks included (drew $n of 20)"
+
+    # ...and a WIDE glyph paints two columns from one cell, so its tail is
+    # skipped and the count drops by exactly one per wide character.
+    n=$(printf '\xe6\x97\xa5' | XDG_CACHE_HOME="$FC" "$ST" --cols=10 --rows=1 render - --no-cursor 2>&1 \
+        | awk '/^cells/{print $2}')
+    [ "$n" = 9 ] \
+        && ok "...and a wide glyph's tail column is not painted twice" \
+        || bad "...and a wide glyph's tail column is not painted twice (drew $n of 9)"
+
+    # An empty screen has no ink.
+    #
+    # ⚠ THIS ONE PROVES LESS THAN IT LOOKS. `ink` is measured against the
+    # buffer's first pixel, so a renderer that paints NOTHING AT ALL scores a
+    # perfect 0% here — which is exactly what happened while blank cells were
+    # being skipped. It stays because it catches garbage being painted into
+    # cells nothing asked for; the two cell COUNTS above are what actually
+    # caught that bug, and they are the ones to trust.
+    [ "$(printf '' | ink --cols=20 --rows=4)" = 0 ] \
+        && ok "an empty screen is entirely background" \
+        || bad "an empty screen is entirely background"
+
+    # ...and text has some. Both directions matter: the first check alone
+    # passes on a renderer that draws nothing at all.
+    [ "$(printf 'Hello' | ink --cols=20 --rows=4)" -gt 0 ] \
+        && ok "...and text puts ink on it" \
+        || bad "...and text puts ink on it"
+
+    probe() { XDG_CACHE_HOME="$FC" "$ST" --cols=8 --rows=1 render - --no-cursor \
+                  --probe="$1" 2>/dev/null | awk '{print $3}'; }
+
+    # THE COLOUR SEMANTICS, asserted on named cells. An aggregate check passes
+    # on a screen that reversed the wrong cell.
+    dfl=$(printf 'A' | probe 0,0)
+    rev=$(printf '\033[7mA' | probe 0,0)
+    red=$(printf '\033[41mA' | probe 0,0)
+
+    [ -n "$dfl" ] && [ "$dfl" != "$rev" ] \
+        && ok "reverse video swaps the cell's colours" \
+        || bad "reverse video swaps the cell's colours"
+
+    [ "$red" = "CC5555" ] \
+        && ok "an indexed background reaches the pixels (ESC[41m)" \
+        || bad "an indexed background reaches the pixels (ESC[41m, got $red)"
+
+    # 24-bit colour is a different encoding path from the 256 indexed ones,
+    # and it is the one that passes the value through untouched.
+    tru=$(printf '\033[48;2;18;52;86mA' | probe 0,0)
+    [ "$tru" = "123456" ] \
+        && ok "a 24-bit background reaches the pixels exactly" \
+        || bad "a 24-bit background reaches the pixels exactly (got $tru)"
+
+    # The cursor is drawn, and --no-cursor really turns it off — every
+    # assertion above depends on that flag working.
+    a=$(printf '' | ink --cols=8 --rows=1)
+    b=$(printf '' | XDG_CACHE_HOME="$FC" "$ST" --cols=8 --rows=1 render - 2>&1 | awk '/^ink/{print int($2)}')
+    [ "$a" = 0 ] && [ "$b" -gt 0 ] \
+        && ok "the cursor is drawn, and --no-cursor turns it off" \
+        || bad "the cursor is drawn, and --no-cursor turns it off"
+
+    # A PPM a person can open, and that `cmp` can compare.
+    XDG_CACHE_HOME="$FC" "$ST" --cols=8 --rows=2 render /dev/null --out="$T/r.ppm" >/dev/null 2>&1
+    head -c 2 "$T/r.ppm" | grep -q 'P6'
+    check "--out writes a PPM" $?
+
+    sz=$(stat -c %s "$T/r.ppm" 2>/dev/null)
+    want=$(( cw * 8 * chh * 2 * 3 ))
+    [ -n "$sz" ] && [ "$sz" -gt "$want" ] \
+        && ok "...whose payload is three bytes per pixel" \
+        || bad "...whose payload is three bytes per pixel"
+
+    # ⚠ FALLBACK. The chosen monospace font covers Latin and little else — on
+    # this machine "monospace" is Noto Sans Mono, which has no CJK at all, so
+    # 日本語 rasterised as three empty boxes: correctly SPACED and completely
+    # invisible, which is the worst shape a bug can have. Skipped rather than
+    # failed where no font on the machine covers it, for the same reason as
+    # the rest of this section.
+    if [ "$(printf '\xe6\x97\xa5' | ink --cols=4 --rows=1)" -gt 0 ]; then
+        ok "a glyph the chosen font lacks is drawn from a fallback font"
+    else
+        echo "  skip  fallback (no installed font covers U+65E5)"
+    fi
 fi
 
 echo

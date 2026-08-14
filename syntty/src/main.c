@@ -33,6 +33,7 @@ static const char *usage_text =
 "  syntty run [--] CMD...    run CMD on a pty, print the screen it left behind\n"
 "  syntty bench [FILE]       parse throughput, in MB/s\n"
 "  syntty font               the font that would be used, and what it cost\n"
+"  syntty render [FILE]      parse a stream and paint it — see --out\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
 "Options, before the subcommand:\n"
@@ -43,6 +44,9 @@ static const char *usage_text =
 "  --stats                   what the parser could not handle, and the memory\n"
 "  --runs=N                  bench: passes over the input (default 5)\n"
 "  --font=NAME --font-size=N the font to rasterise (default monospace, 14)\n"
+"  --out=FILE                render: write the painted screen as a PPM\n"
+"  --no-cursor               render: leave the cursor cell unpainted\n"
+"  --probe=COL,ROW           render: print that cell's background colour\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
@@ -53,6 +57,9 @@ typedef struct {
 	int      runs;
 	const char *font;
 	double   font_size;
+	const char *out;
+	bool     no_cursor;
+	const char *probe;
 } opts_t;
 
 /* Read a whole stream into memory. A benchmark has to hold its input: timing a
@@ -283,6 +290,111 @@ static int cmd_font(const opts_t *o)
 	return 0;
 }
 
+/* Parse a stream and paint it, with no compositor anywhere.
+ *
+ * The renderer's `dump`. Stage 1 could assert on text because its output was
+ * text; the moment pixels are involved, "it returned without crashing" passes
+ * on an all-black window. This writes a PPM the suite can measure and a person
+ * can open, which keeps stage 2's output checkable in the same place stage 1's
+ * was — on a machine with no seat and no display. */
+static int cmd_render(const opts_t *o, const char *path)
+{
+	size_t len = 0;
+	uint8_t *buf = slurp(path, &len);
+
+	st_grid_t g;
+	st_vt_t vt;
+	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_vt_init(&vt, &g);
+	st_vt_feed(&vt, buf, len);
+	free(buf);
+
+	char *err = NULL;
+	st_font_t *f = st_font_open(o->font, o->font_size, &err);
+	if (!f)
+		die("render: %s", err ? err : "no font");
+
+	st_render_t *r = st_render_new(f);
+	st_render_cursor(r, !o->no_cursor);
+
+	int w = st_render_width(r, &g), h = st_render_height(r, &g);
+	uint32_t *px = xcalloc((size_t)w * h, sizeof *px);
+
+	int runs = o->runs > 0 ? o->runs : 1;
+	uint64_t best = UINT64_MAX;
+	size_t drawn = 0;
+	for (int i = 0; i < runs; i++) {
+		uint64_t t0 = now_ns();
+		drawn = st_render_grid(r, &g, px, w, w, h);
+		uint64_t dt = now_ns() - t0;
+		if (dt < best) best = dt;
+	}
+
+	if (o->out) {
+		FILE *fp = fopen(o->out, "wb");
+		if (!fp)
+			die("render: cannot write %s", o->out);
+		st_render_write_ppm(px, w, w, h, fp);
+		fclose(fp);
+	}
+
+	/* WHAT IS ACTUALLY IN THE BUFFER, so the suite can assert on pixels
+	 * without an image library and without a screen.
+	 *
+	 * `ink` is the share of pixels that are not the default background — a
+	 * renderer that paints a correctly-sized rectangle of nothing scores zero
+	 * here and passes every other check in this function. `colours` catches
+	 * the opposite failure, where everything is drawn in one colour because
+	 * the style lookup silently resolved to the default. */
+	uint32_t bg0 = px[0];
+	size_t   ink = 0;
+	uint32_t seen[64];
+	int      nseen = 0;
+	for (size_t i = 0; i < (size_t)w * h; i++) {
+		if (px[i] != bg0)
+			ink++;
+		bool have = false;
+		for (int k = 0; k < nseen; k++)
+			if (seen[k] == px[i]) { have = true; break; }
+		if (!have && nseen < 64)
+			seen[nseen++] = px[i];
+	}
+
+	fprintf(stderr, "size     %dx%d px (%ux%u cells of %dx%d)\n",
+	        w, h, g.cols, g.rows, st_font_cell_w(f), st_font_cell_h(f));
+	fprintf(stderr, "cells    %zu drawn\n", drawn);
+	fprintf(stderr, "paint    %.2f ms  (best of %d, whole screen)\n",
+	        (double)best / 1e6, runs);
+	fprintf(stderr, "buffer   %zu bytes\n", (size_t)w * h * 4);
+	fprintf(stderr, "ink      %.2f%% of pixels differ from the background\n",
+	        100.0 * (double)ink / ((double)w * h));
+	fprintf(stderr, "colours  %d distinct%s\n", nseen, nseen >= 64 ? "+" : "");
+
+	/* The colour of one cell, named by grid coordinate. A test that wants to
+	 * know whether `ESC[7m` really swapped the colours has to look at a
+	 * specific cell; anything aggregate would pass on a screen that reversed
+	 * the wrong one. The CORNER pixel is sampled because it is background for
+	 * every glyph in the font — the ink never reaches it. */
+	if (o->probe) {
+		int pc = 0, pr = 0;
+		if (sscanf(o->probe, "%d,%d", &pc, &pr) == 2
+		    && pc >= 0 && pr >= 0
+		    && pc < g.cols && pr < g.rows) {
+			int x = pc * st_font_cell_w(f), y = pr * st_font_cell_h(f);
+			printf("probe %d,%d %06X\n", pc, pr, px[(size_t)y * w + x] & 0xFFFFFF);
+		} else {
+			die("render: --probe wants col,row inside the grid");
+		}
+	}
+
+	free(px);
+	st_render_free(r);
+	st_font_close(f);
+	st_grid_free(&g);
+	free(err);
+	return 0;
+}
+
 static int cmd_about(void)
 {
 	printf("syntty %s — the SynapseOS terminal\n\n", SYNTTY_VERSION);
@@ -304,7 +416,8 @@ int main(int argc, char **argv)
 	opts_t o = {
 		.cols = 80, .rows = 24, .scrollback = 1000,
 		.styled = false, .with_scrollback = false, .stats = false, .runs = 5,
-		.font = NULL, .font_size = 14.0
+		.font = NULL, .font_size = 14.0, .out = NULL, .no_cursor = false,
+		.probe = NULL
 	};
 	size_t split = 0;
 
@@ -340,6 +453,9 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--split=", 8))       split = (size_t)atoi(a + 8);
 		else if (!strncmp(a, "--font=", 7))        o.font = a + 7;
 		else if (!strncmp(a, "--font-size=", 12))  o.font_size = atof(a + 12);
+		else if (!strncmp(a, "--out=", 6))         o.out = a + 6;
+		else if (!strcmp(a, "--no-cursor"))        o.no_cursor = true;
+		else if (!strncmp(a, "--probe=", 8))       o.probe = a + 8;
 		else if (!strcmp(a, "--styled"))           o.styled = true;
 		else if (!strcmp(a, "--scrollback-too"))   o.with_scrollback = true;
 		else if (!strcmp(a, "--stats"))            o.stats = true;
@@ -367,6 +483,8 @@ int main(int argc, char **argv)
 		                : (die("run: need a command"), 1);
 	if (!strcmp(cmd, "font"))
 		return cmd_font(&o);
+	if (!strcmp(cmd, "render"))
+		return cmd_render(&o, file);
 	if (!strcmp(cmd, "about"))
 		return cmd_about();
 

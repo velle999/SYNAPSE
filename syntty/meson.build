@@ -29,6 +29,7 @@ syntty_sources = files(
   'src/grid.c',
   'src/main.c',
   'src/pty.c',
+  'src/render.c',
   'src/util.c',
   'src/vt.c',
 )

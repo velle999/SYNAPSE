@@ -58,6 +58,11 @@
  * may not appear would be paying the startup budget for the uncommon case. */
 enum { FACE_REGULAR, FACE_BOLD, FACE_ITALIC, FACE_BOLDITALIC, FACE_COUNT };
 
+/* How many distinct fallback fonts one session may open. A terminal showing
+ * mixed scripts touches two or three; anything near this bound is drawing the
+ * whole of Unicode, and an unbounded chain would hold a file open per script. */
+#define FALLBACK_MAX 8
+
 #define ASCII_LO 32
 #define ASCII_HI 126
 #define ASCII_N  (ASCII_HI - ASCII_LO + 1)
@@ -101,6 +106,11 @@ struct st_font {
 	/* The blank glyph. Returned for anything that cannot be rasterised, so a
 	 * caller never has to hold a NULL check in the blit loop. */
 	st_glyph_t blank;
+
+	/* Fonts opened only to cover characters the chosen face cannot draw.
+	 * Deduplicated by path — one fallback usually covers a whole script. */
+	struct { char *path; FT_Face face; } fallback[FALLBACK_MAX];
+	int nfallback;
 
 	st_font_stats_t stats;
 };
@@ -248,6 +258,9 @@ static void cache_store(const char *spec, const char *path, int index)
  * Deliberately the only place in this program that touches fontconfig, and
  * deliberately reached only on a cache miss. */
 static char *fc_resolve(const char *spec, int *index_out);
+/* A font that covers ONE character. The fallback path, asked once per distinct
+ * codepoint the chosen face cannot draw. */
+static char *fc_resolve_cp(uint32_t cp);
 
 /* ── faces ─────────────────────────────────────────────────────────────────*/
 
@@ -321,8 +334,8 @@ static bool face_load(st_font_t *f, int which, const char *family)
  * exactly this much room per cell, and a glyph that overflows would otherwise
  * paint into a neighbour that has already been drawn — which shows up as
  * fragments left behind when the neighbour scrolls away. */
-static void raster_into(st_font_t *f, face_t *fa, uint32_t cp, st_glyph_t *out,
-                        uint8_t *bits)
+static bool raster_into(st_font_t *f, FT_Face face, uint32_t cp,
+                        st_glyph_t *out, uint8_t *bits)
 {
 	int cw = f->cell_w, ch = f->cell_h;
 	memset(bits, 0, (size_t)cw * ch * (out->cols > 1 ? 2 : 1));
@@ -331,13 +344,17 @@ static void raster_into(st_font_t *f, face_t *fa, uint32_t cp, st_glyph_t *out,
 	out->w    = cw * (out->cols > 1 ? 2 : 1);
 	out->h    = ch;
 
-	FT_UInt gi = FT_Get_Char_Index(fa->face, cp);
+	/* Returns FALSE when this face has no glyph for the codepoint, which is
+	 * what sends the caller to the fallback chain. A blank box and "this font
+	 * cannot draw it" are different answers and the caller needs both: the
+	 * first is correct for a space, the second is a font problem to solve. */
+	FT_UInt gi = FT_Get_Char_Index(face, cp);
 	if (gi == 0)
-		return;                       /* .notdef — leave the box blank */
-	if (FT_Load_Glyph(fa->face, gi, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL) != 0)
-		return;
+		return false;
+	if (FT_Load_Glyph(face, gi, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL) != 0)
+		return false;
 
-	FT_GlyphSlot s = fa->face->glyph;
+	FT_GlyphSlot s = face->glyph;
 	FT_Bitmap   *b = &s->bitmap;
 
 	int ox = s->bitmap_left;
@@ -359,6 +376,50 @@ static void raster_into(st_font_t *f, face_t *fa, uint32_t cp, st_glyph_t *out,
 				dst[dx] = src[x];
 		}
 	}
+	return true;
+}
+
+/* ── fallback: a font that can draw THIS character ─────────────────────────
+ *
+ * Kept per-font rather than per-face: whether a codepoint exists is a property
+ * of the character, not of whether the text was bold, and asking four times for
+ * the same missing glyph would open four copies of the same fallback file.
+ *
+ * The opened faces are deduplicated by path, because one fallback font
+ * typically covers a whole script — the first CJK character opens Noto Sans CJK
+ * and every other CJK character in the session reuses it. */
+static FT_Face fallback_face(st_font_t *f, uint32_t cp)
+{
+	char *path = fc_resolve_cp(cp);
+	if (!path)
+		return NULL;
+
+	for (int i = 0; i < f->nfallback; i++) {
+		if (strcmp(f->fallback[i].path, path) == 0) {
+			free(path);
+			return f->fallback[i].face;
+		}
+	}
+	if (f->nfallback == FALLBACK_MAX) {
+		/* A session that has opened this many distinct fallback fonts is
+		 * either drawing the whole of Unicode or leaking; either way, stop
+		 * opening files rather than growing without a bound. */
+		free(path);
+		return NULL;
+	}
+
+	FT_Face face = NULL;
+	if (FT_New_Face(f->ft, path, 0, &face) != 0) {
+		free(path);
+		return NULL;
+	}
+	FT_Set_Pixel_Sizes(face, 0, (FT_UInt)(f->size_px + 0.5));
+
+	f->fallback[f->nfallback].path = path;
+	f->fallback[f->nfallback].face = face;
+	f->nfallback++;
+	f->stats.fallbacks = (uint32_t)f->nfallback;
+	return face;
 }
 
 static void face_build_ascii(st_font_t *f, face_t *fa)
@@ -369,7 +430,7 @@ static void face_build_ascii(st_font_t *f, face_t *fa)
 
 	for (int i = 0; i < ASCII_N; i++) {
 		fa->ascii[i].cols = 1;
-		raster_into(f, fa, (uint32_t)(ASCII_LO + i), &fa->ascii[i],
+		raster_into(f, fa->face, (uint32_t)(ASCII_LO + i), &fa->ascii[i],
 		            fa->ascii_bits + (size_t)i * per);
 	}
 }
@@ -530,6 +591,10 @@ void st_font_close(st_font_t *f)
 			free(fa->tab);
 		}
 	}
+	for (int i = 0; i < f->nfallback; i++) {
+		FT_Done_Face(f->fallback[i].face);
+		free(f->fallback[i].path);
+	}
 	FT_Done_FreeType(f->ft);
 	free(f->blank.bits);
 	free(f->family);
@@ -573,7 +638,24 @@ const st_glyph_t *st_font_glyph(st_font_t *f, uint32_t cp, uint16_t attrs)
 	g = tab_insert(fa, cp);
 	g->cols = (uint8_t)cols;
 	uint8_t *bits = xcalloc((size_t)f->cell_w * cols * f->cell_h, 1);
-	raster_into(f, fa, cp, g, bits);
+
+	/* THE FALLBACK CHAIN, and the reason it is not optional.
+	 *
+	 * The chosen monospace font covers Latin and very little else. Noto Sans
+	 * Mono — what "monospace" resolves to on this machine — has no CJK at all,
+	 * so 日本語 rasterised as three empty boxes: correctly SPACED, because the
+	 * width table is independent of the font, and completely invisible. That
+	 * is the worst shape a bug can have, because the layout looks right.
+	 *
+	 * So a codepoint the face cannot draw goes to fontconfig, which is asked
+	 * for a font that covers that exact character. Once per distinct
+	 * codepoint, on the miss — never for ASCII, which the atlas answered long
+	 * before this line. */
+	if (!raster_into(f, fa->face, cp, g, bits)) {
+		FT_Face fb = fallback_face(f, cp);
+		if (fb)
+			raster_into(f, fb, cp, g, bits);
+	}
 	return g;
 }
 
@@ -614,6 +696,55 @@ static char *fc_resolve(const char *spec, int *index_out)
 		*index_out = idx;
 		out = xstrdup((const char *)file);
 	}
+	FcPatternDestroy(m);
+	return out;
+}
+
+/* Which installed font can draw this character?
+ *
+ * fontconfig answers it directly, given a charset holding the one codepoint —
+ * FcFontMatch then returns the best font that COVERS it rather than the best
+ * font by name. Without this the answer is always the requested family, which
+ * is precisely the font already known not to have the glyph. */
+static char *fc_resolve_cp(uint32_t cp)
+{
+	if (!FcInit())
+		return NULL;
+
+	FcCharSet *cs = FcCharSetCreate();
+	if (!cs)
+		return NULL;
+	FcCharSetAddChar(cs, (FcChar32)cp);
+
+	FcPattern *pat = FcPatternCreate();
+	if (!pat) {
+		FcCharSetDestroy(cs);
+		return NULL;
+	}
+	FcPatternAddCharSet(pat, FC_CHARSET, cs);
+	/* Still ask for a monospace one. A terminal that falls back to a
+	 * proportional face draws a grid whose columns no longer line up, which
+	 * looks far more broken than a missing glyph. It is a preference and not a
+	 * requirement — fontconfig will substitute something that covers the
+	 * character over something that is merely monospace, which is the right
+	 * way round. */
+	FcPatternAddInteger(pat, FC_SPACING, FC_MONO);
+	FcConfigSubstitute(NULL, pat, FcMatchPattern);
+	FcDefaultSubstitute(pat);
+
+	FcResult   res = FcResultNoMatch;
+	FcPattern *m   = FcFontMatch(NULL, pat, &res);
+	FcPatternDestroy(pat);
+	FcCharSetDestroy(cs);
+	if (!m || res != FcResultMatch) {
+		if (m) FcPatternDestroy(m);
+		return NULL;
+	}
+
+	FcChar8 *file = NULL;
+	char *out = NULL;
+	if (FcPatternGetString(m, FC_FILE, 0, &file) == FcResultMatch && file)
+		out = xstrdup((const char *)file);
 	FcPatternDestroy(m);
 	return out;
 }
