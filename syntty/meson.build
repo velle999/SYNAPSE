@@ -24,6 +24,32 @@ util_dep = cc.find_library('util')
 freetype_dep   = dependency('freetype2')
 fontconfig_dep = dependency('fontconfig')
 
+# The window. wayland-client and xkbcommon, and NOTHING ELSE — no EGL, no
+# toolkit, no cairo. The buffer render.c paints is already in the format wl_shm
+# wants, so it is handed to the compositor with no conversion and no library in
+# between.
+wayland_client_dep = dependency('wayland-client')
+xkbcommon_dep      = dependency('xkbcommon')
+
+# xdg-shell has no C library: the protocol XML ships with wayland-protocols and
+# every client generates its own glue. Generated at BUILD time rather than
+# checked in, so a wayland-protocols upgrade cannot leave a stale copy behind.
+wl_protocols  = dependency('wayland-protocols')
+wl_scanner    = find_program('wayland-scanner')
+protocol_dir  = wl_protocols.get_variable(pkgconfig : 'pkgdatadir')
+
+xdg_shell_xml = protocol_dir / 'stable/xdg-shell/xdg-shell.xml'
+
+xdg_shell_h = custom_target('xdg-shell-client-protocol.h',
+  input   : xdg_shell_xml,
+  output  : 'xdg-shell-client-protocol.h',
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+xdg_shell_c = custom_target('xdg-shell-protocol.c',
+  input   : xdg_shell_xml,
+  output  : 'xdg-shell-protocol.c',
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 syntty_sources = files(
   'src/font.c',
   'src/grid.c',
@@ -32,12 +58,14 @@ syntty_sources = files(
   'src/render.c',
   'src/util.c',
   'src/vt.c',
+  'src/win.c',
 )
 
 syntty = executable('syntty',
-  syntty_sources,
+  syntty_sources, xdg_shell_h, xdg_shell_c,
   include_directories : include_directories('include'),
-  dependencies : [util_dep, freetype_dep, fontconfig_dep],
+  dependencies : [util_dep, freetype_dep, fontconfig_dep,
+                  wayland_client_dep, xkbcommon_dep],
   install : true)
 
 # ⚠ The suite runs a pty and a benchmark, so it is slower than a pure unit

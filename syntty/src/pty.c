@@ -51,6 +51,19 @@ bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
 	return true;
 }
 
+/* ⚠ Explicit, and NOT the default, because the two readers want opposite
+ * things. st_pty_pump below blocks until the child is done and reads to EIO;
+ * making the fd non-blocking there would turn the first empty read into a
+ * spurious end-of-session. The window's loop is the other way round: it polls
+ * two descriptors and must drain this one until it is empty without ever
+ * blocking, because blocking means not answering the compositor. */
+void st_pty_set_nonblocking(st_pty_t *p)
+{
+	int fl = fcntl(p->fd, F_GETFL, 0);
+	if (fl >= 0)
+		fcntl(p->fd, F_SETFL, fl | O_NONBLOCK);
+}
+
 void st_pty_resize(st_pty_t *p, uint16_t cols, uint16_t rows)
 {
 	struct winsize ws = {
@@ -59,6 +72,31 @@ void st_pty_resize(st_pty_t *p, uint16_t cols, uint16_t rows)
 	ioctl(p->fd, TIOCSWINSZ, &ws);
 	/* SIGWINCH is the kernel's job on TIOCSWINSZ; sending it here as well is
 	 * how a program gets two resizes and redraws twice. */
+}
+
+/* Hang the child up and collect its status.
+ *
+ * Closing the master end is what sends SIGHUP down the pty, which is what
+ * closing a terminal window is SUPPOSED to do — the child gets the same signal
+ * it would get from any other terminal going away, rather than being killed
+ * with something it cannot handle.
+ *
+ * ⚠ The status is the WINDOW's status. A terminal that always exits 0 breaks
+ * every script that runs one, and the failure is silent: the script carries on
+ * as though the command it wrapped had succeeded. */
+int st_pty_reap(st_pty_t *p)
+{
+	if (p->fd >= 0) {
+		close(p->fd);
+		p->fd = -1;
+	}
+	int status = 0;
+	while (waitpid(p->pid, &status, 0) < 0) {
+		if (errno == EINTR)
+			continue;
+		return 0;      /* already reaped, or never ours */
+	}
+	return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
 }
 
 int st_pty_pump(st_pty_t *p, st_vt_t *vt)

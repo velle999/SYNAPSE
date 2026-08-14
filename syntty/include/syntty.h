@@ -2,11 +2,22 @@
  *
  * ── What this is, and what it deliberately is not, yet ─────────────────────
  *
- * Stage 1: a PTY, a VT parser and a cell grid, with NO WINDOW AT ALL. That is
- * not an accident of ordering — it is the only way the claims this program is
- * being built on can be checked. A terminal that draws is a terminal whose
- * numbers need a compositor, a seat and a human; a terminal that only parses
- * can be measured in CI, on a headless machine, in one command.
+ * Stage 2: a PTY, a VT parser, a cell grid, a glyph atlas and a wl_shm window.
+ *
+ * Stage 1 had NO WINDOW AT ALL, which was not an accident of ordering — it is
+ * the only way the claims this program is built on could be checked before
+ * there was anything to look at. That discipline survives the window: every
+ * layer under it still answers on a machine with no seat and no display
+ * (`dump`, `bench`, `font`, `render`), and the window is one more front end
+ * over the same code rather than a place where logic went to hide.
+ *
+ * What stage 2 measured, on the machine this was written on, with hyperfine
+ * inside a headless cage and cage's own 122 ms subtracted:
+ *
+ *              startup        fresh RSS      GL stack mapped
+ *   kitty      230.3 ms       264 MB         188 MB
+ *   foot        24.9 ms        21 MB         none
+ *   syntty       8.6 ms       9.4 MB         none
  *
  * The baseline it exists to beat was measured before a line of this was
  * written, with hyperfine inside a headless cage, on the machine it is being
@@ -377,5 +388,33 @@ bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
  * the parser. Returns the child's exit status. */
 int  st_pty_pump(st_pty_t *p, st_vt_t *vt);
 void st_pty_resize(st_pty_t *p, uint16_t cols, uint16_t rows);
+/* ⚠ Explicit, because the two readers of a pty want opposite things — see the
+ * comment on the definition. st_pty_pump must block; the window's loop must
+ * never. */
+void st_pty_set_nonblocking(st_pty_t *p);
+/* Hang the child up (closing the master sends SIGHUP) and return its exit
+ * status. The window's status IS the child's — see the definition. */
+int  st_pty_reap(st_pty_t *p);
+
+/* ── win.c ──────────────────────────────────────────────────────────────── */
+
+/* What the window did, for the claim that it starts fast.
+ *
+ * `first_frame_ms` is measured from entering st_win_run to the first buffer
+ * committed — it is the number that answers kitty's 230 ms, and it excludes
+ * only the argument parsing above it. `skipped` counts frames dropped because
+ * the compositor still held both buffers, which under a flood is the throttle
+ * working rather than a fault. */
+typedef struct {
+	uint64_t frames;
+	uint64_t skipped;
+	double   first_frame_ms;
+} st_win_stats_t;
+
+/* Open a window and run until the child exits or it is closed. Everything it
+ * needs is built by the caller, so this function owns no terminal state and
+ * the headless paths above share every line of it. */
+int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
+               st_render_t *ren, const char *title, st_win_stats_t *stats);
 
 #endif /* SYNTTY_H */

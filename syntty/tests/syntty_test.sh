@@ -493,6 +493,77 @@ else
     fi
 fi
 
+# ── the window ──────────────────────────────────────────────────────────────
+#
+# ⚠ THE ONE SECTION THAT NEEDS A COMPOSITOR, and it brings its own: a HEADLESS
+# cage, which is what produced every startup number this project quotes. It
+# never touches the machine's real seat or display.
+#
+# Skipped without cage, for the same reason the font section is skipped without
+# fonts. The rule at the top of this file still holds: nothing here requires a
+# screen that was already running.
+if ! command -v cage >/dev/null 2>&1; then
+    echo "  skip  the window (cage is not installed)"
+elif [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+    echo "  skip  the window (no XDG_RUNTIME_DIR for a compositor socket)"
+else
+    caged() {  # caged <timeout> <args...>
+        local t=$1; shift
+        WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+        XDG_CACHE_HOME="$FC" timeout "$t" cage -- "$ST" "$@" 2>&1
+    }
+
+    # It opens a window, paints, and exits with the child's status. Every
+    # earlier assertion in this file is about a terminal that cannot be seen;
+    # this is the first one that says the whole thing runs.
+    out=$(caged 30 --stats win -- /bin/sh -c 'exit 0')
+    echo "$out" | grep -qE '^first frame +[0-9]'
+    check "the window opens and paints a first frame" $?
+
+    echo "$out" | grep -qE '^frames +[1-9]'
+    check "...and commits at least one buffer" $?
+
+    # THE STARTUP CLAIM. Not a threshold — a machine slower than this one must
+    # not go red — but the number is printed, because a claim nothing prints is
+    # a claim nobody checks. kitty is 230.3 ms and foot 24.9 ms on this machine.
+    ff=$(echo "$out" | awk '/^first frame/{print $3}')
+    ok "first frame on this machine: ${ff} ms  (kitty 230.3, foot 24.9)"
+
+    # The child's status is the window's status. A terminal that always exits 0
+    # breaks every script that runs one.
+    caged 30 win -- /bin/sh -c 'exit 3' >/dev/null 2>&1
+    [ $? -eq 3 ] && ok "the child's exit status is the window's" \
+                 || bad "the child's exit status is the window's"
+
+    # ⚠ THE OUTPUT MUST SURVIVE THE HANGUP. POLLHUP arrives on the same
+    # revents that carry the child's last write, so a loop that checks for
+    # hangup before draining throws away everything the child printed as it
+    # exited — which is most of what a short command ever prints.
+    out=$(caged 30 --stats win -- /bin/sh -c 'printf "the-last-line-before-exit"')
+    echo "$out" | grep -qE '^frames +[1-9]'
+    check "output written just before the child exits is not lost" $?
+
+    # No display at all is a sentence, not a crash. This is what running it
+    # from a tty looks like, and it is a thing people do by accident.
+    #
+    # ⚠ XDG_RUNTIME_DIR IS REDIRECTED, and unsetting WAYLAND_DISPLAY is not
+    # enough on its own. wl_display_connect falls back to the socket named
+    # `wayland-0` inside XDG_RUNTIME_DIR, so with the real one still in the
+    # environment this "no compositor" test connected to the DEVELOPER'S LIVE
+    # DESKTOP and briefly opened a window on it — while reporting success,
+    # because connecting is exactly what it did. An empty directory has no
+    # socket to find.
+    EMPTY="$T/no-compositor"
+    mkdir -p "$EMPTY"
+    out=$(env -u WAYLAND_DISPLAY -u DISPLAY \
+          XDG_RUNTIME_DIR="$EMPTY" XDG_CACHE_HOME="$FC" \
+          timeout 20 "$ST" win -- /bin/true 2>&1)
+    rc=$?
+    [ $rc -ne 0 ] && echo "$out" | grep -qi 'wayland' \
+        && ok "with no compositor it says so and exits non-zero" \
+        || bad "with no compositor it says so and exits non-zero"
+fi
+
 echo
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

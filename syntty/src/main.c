@@ -27,13 +27,14 @@
 #define SYNTTY_VERSION "0.1.0"
 
 static const char *usage_text =
-"syntty " SYNTTY_VERSION " — the SynapseOS terminal (stage 1: no window yet)\n"
+"syntty " SYNTTY_VERSION " — the SynapseOS terminal\n"
 "\n"
 "  syntty dump [FILE]        feed a stream through the parser, print the screen\n"
 "  syntty run [--] CMD...    run CMD on a pty, print the screen it left behind\n"
 "  syntty bench [FILE]       parse throughput, in MB/s\n"
 "  syntty font               the font that would be used, and what it cost\n"
 "  syntty render [FILE]      parse a stream and paint it — see --out\n"
+"  syntty win [--] [CMD...]  a WINDOW, running CMD or your shell\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
 "Options, before the subcommand:\n"
@@ -395,13 +396,70 @@ static int cmd_render(const opts_t *o, const char *path)
 	return 0;
 }
 
+/* The terminal, with a window. Stage 2's actual deliverable.
+ *
+ * Everything it needs was already built and tested headlessly: the grid, the
+ * parser, the pty, the font and the renderer. This assembles them, hands them
+ * to win.c and prints what the start cost — which is the number the whole
+ * project is aimed at. kitty spends 230 ms before it can run `true` and foot
+ * spends 25 ms; `first frame` is the comparable figure here. */
+static int cmd_win(const opts_t *o, int argc, char **argv)
+{
+	char *shell_argv[2];
+	if (argc < 1) {
+		/* $SHELL, and /bin/sh when there is none. Exec'd DIRECTLY with no
+		 * shell in the middle — see the header of pty.c. */
+		const char *sh = getenv("SHELL");
+		shell_argv[0] = (char *)(sh && *sh ? sh : "/bin/sh");
+		shell_argv[1] = NULL;
+		argv = shell_argv;
+	}
+
+	char *err = NULL;
+	st_font_t *f = st_font_open(o->font, o->font_size, &err);
+	if (!f)
+		die("%s", err ? err : "no font");
+
+	st_grid_t g;
+	st_vt_t vt;
+	st_grid_init(&g, o->cols, o->rows, o->scrollback);
+	st_vt_init(&vt, &g);
+
+	st_render_t *r = st_render_new(f);
+
+	st_pty_t p;
+	if (!st_pty_spawn(&p, argv, o->cols, o->rows))
+		die("cannot allocate a pty");
+	/* The window's loop polls two descriptors and drains this one to EAGAIN;
+	 * a blocking read here would mean not answering the compositor. */
+	st_pty_set_nonblocking(&p);
+
+	st_win_stats_t ws = {0};
+	int rc = st_win_run(&g, &vt, &p, f, r, vt.title[0] ? vt.title : "syntty", &ws);
+
+	if (o->stats) {
+		fprintf(stderr, "first frame   %.2f ms\n", ws.first_frame_ms);
+		fprintf(stderr, "frames        %llu drawn, %llu skipped\n",
+		        (unsigned long long)ws.frames,
+		        (unsigned long long)ws.skipped);
+		fprintf(stderr, "grid          %zu bytes\n", st_grid_bytes(&g));
+	}
+
+	st_render_free(r);
+	st_font_close(f);
+	st_grid_free(&g);
+	free(err);
+	return rc;
+}
+
 static int cmd_about(void)
 {
 	printf("syntty %s — the SynapseOS terminal\n\n", SYNTTY_VERSION);
-	printf("  stage        1 of 5: pty, parser and grid. No window yet.\n");
+	printf("  stage        2 of 5: pty, parser, grid, glyphs and a window.\n");
 	printf("  cell         %zu bytes\n", sizeof(st_cell_t));
 	printf("  style        %zu bytes, interned\n", sizeof(st_style_t));
-	printf("  renderer     none, deliberately — see include/syntty.h\n");
+	printf("  renderer     CPU, into wl_shm — nothing here links GL, and that\n");
+	printf("               is the decision worth 188 MB of kitty's 264\n");
 	printf("\n");
 	printf("The baseline this is measured against, taken on the machine it was\n");
 	printf("written on with hyperfine inside a headless cage:\n\n");
@@ -438,7 +496,7 @@ int main(int argc, char **argv)
 	for (int i = 1; i < argc; i++) {
 		const char *a = argv[i];
 
-		if (cmd && !strcmp(cmd, "run")) {
+		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win"))) {
 			child_at = (!strcmp(a, "--")) ? i + 1 : i;
 			break;
 		}
@@ -467,10 +525,11 @@ int main(int argc, char **argv)
 		else die("%s: one input at a time (got '%s' as well)", cmd, a);
 	}
 
-	if (!cmd) {
-		fputs(usage_text, stderr);
-		return 2;
-	}
+	/* No subcommand at all means the window, because that is what a terminal
+	 * is for. Every other entry point here exists to test and measure the
+	 * pieces it is built from. */
+	if (!cmd)
+		cmd = "win";
 	if (o.cols < 1)  o.cols = 80;
 	if (o.rows < 1)  o.rows = 24;
 
@@ -485,6 +544,9 @@ int main(int argc, char **argv)
 		return cmd_font(&o);
 	if (!strcmp(cmd, "render"))
 		return cmd_render(&o, file);
+	if (!strcmp(cmd, "win"))
+		return child_at ? cmd_win(&o, argc - child_at, argv + child_at)
+		                : cmd_win(&o, 0, NULL);
 	if (!strcmp(cmd, "about"))
 		return cmd_about();
 
