@@ -303,13 +303,22 @@ ok "throughput on this machine: ${rate} MB/s"
 # and what the terminal answers. The other half — turning a real key press into
 # the negotiated encoding — needs a seat and a person, and input is never
 # synthesised in this suite.
-kbd() { printf "$1" | "$ST" dump - --stats 2>&1; }
+#
+# ⚠ kbd() CAPTURES, and is never piped straight into `grep -q`. That is the
+# trap documented at the top of this file, and it caught this section too: grep
+# -q exits at the first match and closes the pipe, the producer dies of SIGPIPE,
+# and under `pipefail` the pipeline reports 141 for a test that MATCHED. It
+# passes on the ordinary build, where all the output reaches the pipe buffer
+# before grep can act, and fails EVERY time under ASan, which is slow enough to
+# lose the race. One assertion here did exactly that.
+kbd() { local out; out=$(printf "$1" | "$ST" dump - --stats 2>&1); printf '%s\n' "$out"; }
 
 [ "$(kbd '\033[?u' | awk '/^kbd flags/{print $3}')" = 0 ] \
     && ok "the base state is the legacy encoding" \
     || bad "the base state is the legacy encoding"
 
-kbd '\033[?u' | grep -q 'reply *ESC\[?0u'
+r=$(kbd '\033[?u')
+echo "$r" | grep -q 'reply *ESC\[?0u'
 check "...and a query is answered, not ignored" $?
 
 [ "$(kbd '\033[>15u\033[?u' | awk '/^kbd flags/{print $3}')" = 15 ] \
