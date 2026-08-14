@@ -502,7 +502,17 @@ FloatingWindow {
     // bindings once per file, and a copy of a hundred thousand small files is
     // exactly the copy this panel exists for. The visible properties are
     // refreshed on a timer instead, which is as often as an eye can read them.
-    property var opRaw: ({ done: 0, skipped: 0, failed: 0, current: "", removed: -1 })
+    // REAL, not int: QML's int is 32-bit and a copy passes 2 GB routinely.
+    property real opBytes: 0
+    property real opTotalBytes: 0
+    property int  opTotalFiles: 0
+    property real opStart: 0
+    property real opElapsed: 0
+    property bool opCancelling: false
+
+    property var opRaw: ({ done: 0, skipped: 0, failed: 0, current: "",
+                           removed: -1, bytes: 0, totalBytes: 0, totalFiles: 0,
+                           cancelled: false })
 
     Timer {
         id: opTick
@@ -513,11 +523,48 @@ FloatingWindow {
     }
 
     function flushOpCounts() {
-        root.opDone    = root.opRaw.done
-        root.opSkipped = root.opRaw.skipped
-        root.opFailed  = root.opRaw.failed
-        root.opCurrent = root.opRaw.current
+        root.opDone       = root.opRaw.done
+        root.opSkipped    = root.opRaw.skipped
+        root.opFailed     = root.opRaw.failed
+        root.opCurrent    = root.opRaw.current
+        root.opBytes      = root.opRaw.bytes
+        root.opTotalBytes = root.opRaw.totalBytes
+        root.opTotalFiles = root.opRaw.totalFiles
+        if (root.opStart) root.opElapsed = (Date.now() - root.opStart) / 1000
         root.statusLine = root.opProgress()
+    }
+
+    // ── How far along, and how much longer ──────────────────────────────────
+    //
+    // Measured in BYTES, because a count of files says nothing about time
+    // remaining when one of them is 8 GB. The total comes from a stat-only
+    // pre-pass in the C, which is what makes any of this possible.
+    readonly property real opFraction:
+        root.opTotalBytes > 0 ? Math.min(1, root.opBytes / root.opTotalBytes) : 0
+
+    readonly property real opRate:               // bytes per second
+        root.opElapsed > 0.4 ? root.opBytes / root.opElapsed : 0
+
+    function fmtEta() {
+        // Nothing to say yet is better than a wild number: the first second of
+        // any copy predicts an eternity or an instant, and neither is true.
+        if (root.opRate <= 0 || root.opTotalBytes <= 0) return ""
+        const left = (root.opTotalBytes - root.opBytes) / root.opRate
+        if (!isFinite(left) || left < 0) return ""
+        if (left < 5)   return "a moment left"
+        if (left < 90)  return Math.round(left) + "s left"
+        if (left < 3600) return Math.round(left / 60) + " min left"
+        return (left / 3600).toFixed(1) + " hours left"
+    }
+
+    function opRateLine() {
+        if (root.opTotalBytes <= 0) return ""
+        let s = root.fmtSize(root.opBytes, false) + " of "
+              + root.fmtSize(root.opTotalBytes, false)
+        if (root.opRate > 0) s += "  ·  " + root.fmtSize(root.opRate, false) + "/s"
+        const eta = root.fmtEta()
+        if (eta) s += "  ·  " + eta
+        return s
     }
 
     // NOT EVERY OP SPEAKS THE SAME RECORD. copy, move, rename, mkdir, delete,
@@ -536,14 +583,39 @@ FloatingWindow {
         if (f.length < 2) return
         const status = f[1]
 
+        // How much there is, sent once before anything is copied.
+        if (f[0] === "total") {
+            root.opRaw.totalFiles = parseInt(status, 10)
+            root.opRaw.totalBytes = parseFloat(f[2])
+            return
+        }
+
+        // Stopped on request. Not a failure — nobody needs an error about a
+        // thing they asked for.
+        if (f[0] === "cancelled") {
+            root.opRaw.cancelled = true
+            return
+        }
+
+        // Part-way through a single large file. The byte figure on every
+        // record is CUMULATIVE for the whole operation, so this is an
+        // assignment and never an addition.
+        if (status === "progress") {
+            if (f[3]) root.opRaw.bytes = parseFloat(f[3])
+            root.opRaw.current = root.baseOf(f[0])
+            return
+        }
+
         // `trash empty` says how many it removed, once, at the end.
         if (f[0] === "removed") {
             root.opRaw.removed = parseInt(status, 10)
             return
         }
 
-        if (status === "done" || status === "mounted" || status === "unmounted")
+        if (status === "done" || status === "mounted" || status === "unmounted") {
             root.opRaw.done++
+            if (f[3]) root.opRaw.bytes = parseFloat(f[3])
+        }
         else if (status === "skipped")
             root.opRaw.skipped++
         else if (status === "failed" || status === "conflict") {
@@ -580,7 +652,10 @@ FloatingWindow {
             // Say how it ended. A failure used to reach the GUI as an exit
             // code and nothing else — the pane simply reloaded, and whatever
             // had not been copied was missing without a word.
-            if (root.opError)
+            if (root.opRaw.cancelled || root.opCancelling)
+                root.opOutcome = root.opNote + " — cancelled"
+                    + (root.opDone ? " after " + root.opDone + " done" : "")
+            else if (root.opError)
                 root.opOutcome = root.opError
             else if (root.opFailed)
                 root.opOutcome = root.opFirstError
@@ -626,7 +701,15 @@ FloatingWindow {
         root.opFirstError = ""
         root.opError = ""
         root.opOutcome = ""
-        root.opRaw = ({ done: 0, skipped: 0, failed: 0, current: "", removed: -1 })
+        root.opRaw = ({ done: 0, skipped: 0, failed: 0, current: "",
+                        removed: -1, bytes: 0, totalBytes: 0, totalFiles: 0,
+                        cancelled: false })
+        root.opBytes = 0
+        root.opTotalBytes = 0
+        root.opTotalFiles = 0
+        root.opElapsed = 0
+        root.opCancelling = false
+        root.opStart = Date.now()
         opPanelDelay.restart()
         // Paths cross the process boundary DECODED: argv carries raw bytes and
         // needs no escaping. The encoding exists for the record stream, which
@@ -770,6 +853,16 @@ FloatingWindow {
         root.runOp(args, (p.op === "cut" ? "moving " : "copying ") + what)
         if (p.op === "cut")
             root.clip = ({ op: "", paths: [] })
+    }
+
+    // SIGTERM, not a kill: the C finishes the write it is in, removes the
+    // half-written destination file and says it was cancelled. SIGKILL would
+    // leave that fragment on disk looking like a real file of the wrong size.
+    function cancelOp() {
+        if (!root.busy || root.opCancelling) return
+        root.opCancelling = true
+        root.statusLine = "cancelling…"
+        opProc.signal(15)
     }
 
     function cancelPaste() {
@@ -3048,15 +3141,45 @@ FloatingWindow {
                         font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                     }
 
-                    // A COUNT, not a percentage. The total is not known without
-                    // walking the tree first, and a bar that invents its own
-                    // denominator is a worse lie than a number that is simply
-                    // going up.
+                    // THE BAR, and it only exists when there is a real
+                    // denominator behind it: copy and move count their bytes
+                    // up front, everything else has nothing honest to draw.
+                    Rectangle {
+                        visible: root.opTotalBytes > 0
+                        width: parent.width - 4
+                        height: root.ui(6)
+                        radius: height / 2
+                        color: Qt.rgba(root.cText.r, root.cText.g, root.cText.b, 0.15)
+
+                        Rectangle {
+                            width: parent.width * root.opFraction
+                            height: parent.height
+                            radius: parent.radius
+                            color: root.opFailed ? root.cWarn : root.cAccent
+                            Behavior on width { NumberAnimation { duration: 120 } }
+                        }
+                    }
+
+                    // Bytes, rate and estimate when they are known; the plain
+                    // count when they are not.
                     Text {
                         width: parent.width - 4
-                        text: root.opCountLine()
+                        text: root.opTotalBytes > 0
+                                ? Math.round(root.opFraction * 100) + "%  ·  "
+                                  + root.opRateLine()
+                                : root.opCountLine()
                         color: root.opFailed ? root.cWarn : root.cText
+                        elide: Text.ElideRight
                         font { family: root.uiFont; pixelSize: root.ui(12) }
+                    }
+
+                    Text {
+                        width: parent.width - 4
+                        visible: root.opTotalBytes > 0
+                        text: root.opCountLine() + " of " + root.opTotalFiles
+                            + (root.opTotalFiles === 1 ? " item" : " items")
+                        color: root.cDim
+                        font { family: root.uiFont; pixelSize: root.ui(11) }
                     }
 
                     Text {
@@ -3065,6 +3188,19 @@ FloatingWindow {
                         color: root.cDim
                         elide: Text.ElideMiddle
                         font { family: root.uiFont; pixelSize: root.ui(11) }
+                    }
+
+                    // CANCEL. Without it the only way to stop a copy is to
+                    // close the window, and closing the window does not stop
+                    // it — the process is a child of the shell, not of the
+                    // window, and it goes on writing.
+                    Row {
+                        spacing: 8
+                        ToggleChip {
+                            label: root.opCancelling ? "cancelling…" : "Cancel"
+                            on: false
+                            onToggled: root.cancelOp()
+                        }
                     }
                 }
             }

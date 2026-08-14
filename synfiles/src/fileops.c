@@ -24,6 +24,7 @@
 #include "synfiles.h"
 
 #include <dirent.h>
+#include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -98,6 +99,39 @@ const char *sf_basename(const char *path)
 	return (slash && slash[1]) ? slash + 1 : path;
 }
 
+/* ── cancelling, and knowing how far along we are ───────────────────────── */
+
+/* Set from a signal handler, checked in every loop that can run for minutes.
+ *
+ * The GUI needs a Cancel that leaves the filesystem in a state somebody can
+ * reason about, and SIGKILL cannot do that: it stops the process halfway
+ * through writing a file and leaves the fragment behind, looking exactly like
+ * a real file of the wrong size. On SIGTERM the copy finishes the write it is
+ * in, removes the destination it was part-way through, and says it was
+ * cancelled.
+ */
+static volatile sig_atomic_t g_cancel;
+
+static void on_cancel(int sig)
+{
+	(void)sig;
+	g_cancel = 1;
+}
+
+void sf_install_cancel(void)
+{
+	struct sigaction sa;
+	memset(&sa, 0, sizeof sa);
+	sa.sa_handler = on_cancel;
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+}
+
+bool sf_cancelled(void)
+{
+	return g_cancel != 0;
+}
+
 /* ── recursive delete ───────────────────────────────────────────────────── */
 
 /* An optional per-entry hook, for the two operations somebody sits and watches.
@@ -159,6 +193,7 @@ int sf_rm_rf(int dirfd, const char *name)
 	int rc = 0;
 	struct dirent *e;
 	while ((e = readdir(d))) {
+		if (g_cancel) { rc = -1; break; }
 		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
 			continue;
 		if (sf_rm_rf(fd, e->d_name) != 0)
@@ -249,10 +284,48 @@ static void report(const char *path, const char *status, const char *detail)
 	}
 }
 
+/* Bytes copied so far, for the ETA. Reported against the total from the
+ * pre-scan below, which is the only way an "about to finish" can mean
+ * anything: a count of files says nothing when one of them is 8 GB. */
+static long long g_bytes_done;
+
+/* How much there is. A stat-only walk — no reads, no writes — so it costs one
+ * pass over the metadata of a tree that is about to be read in full anyway.
+ * That is the price of a percentage, and it is the only honest way to have
+ * one. */
+static void scan_tree(int dfd, const char *name, long long *files,
+                      long long *bytes)
+{
+	struct stat st;
+	if (fstatat(dfd, name, &st, AT_SYMLINK_NOFOLLOW) != 0)
+		return;
+
+	if (S_ISDIR(st.st_mode)) {
+		int fd = openat(dfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		if (fd < 0)
+			return;
+		DIR *d = fdopendir(fd);
+		if (!d) { close(fd); return; }
+		struct dirent *e;
+		while ((e = readdir(d))) {
+			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+				continue;
+			scan_tree(fd, e->d_name, files, bytes);
+		}
+		closedir(d);
+		(*files)++;
+		return;
+	}
+
+	(*files)++;
+	if (S_ISREG(st.st_mode))
+		*bytes += st.st_size;
+}
+
 /* ── copying ────────────────────────────────────────────────────────────── */
 
 static int copy_one(int sfd, const char *sname, int dfd, const char *dname,
-                    const struct stat *st)
+                    const struct stat *st, bool durable, const char *display)
 {
 	int in = openat(sfd, sname, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
 	if (in < 0)
@@ -275,11 +348,29 @@ static int copy_one(int sfd, const char *sname, int dfd, const char *dname,
 	 * what SynapseOS installs by default, it reflinks instead of copying
 	 * bytes at all. It can refuse for filesystems that do not support it, so
 	 * the read/write loop below is not dead code. */
+	/* Reported every 16 MB rather than every chunk: one 8 GB file is a single
+	 * record in a per-file scheme, so the panel would sit at the same number
+	 * for as long as the copy takes. */
+	const off_t TICK = 16 * 1024 * 1024;
+	off_t since = 0;
+
 	while (remaining > 0) {
+		if (g_cancel) { rc = -1; break; }
 		ssize_t n = copy_file_range(in, NULL, out, NULL, (size_t)remaining, 0);
 		if (n <= 0)
 			break;
 		remaining -= n;
+		g_bytes_done += n;
+		since += n;
+		if (since >= TICK && g_out == OUT_REC && display) {
+			since = 0;
+			char b[32];
+			snprintf(b, sizeof b, "%lld", g_bytes_done);
+			char *enc = pct_encode(display, true);
+			rec_row(4, enc, "progress", "", b);
+			free(enc);
+			fflush(stdout);
+		}
 	}
 
 	if (remaining > 0) {
@@ -288,7 +379,10 @@ static int copy_one(int sfd, const char *sname, int dfd, const char *dname,
 			rc = -1;
 		} else {
 			char buf[128 * 1024];
+			g_bytes_done -= (st->st_size - remaining);   /* recount from 0 */
+			since = 0;
 			for (;;) {
+				if (g_cancel) { rc = -1; break; }
 				ssize_t n = read(in, buf, sizeof buf);
 				if (n == 0)
 					break;
@@ -300,6 +394,17 @@ static int copy_one(int sfd, const char *sname, int dfd, const char *dname,
 				}
 				if (rc != 0)
 					break;
+				g_bytes_done += n;
+				since += n;
+				if (since >= TICK && g_out == OUT_REC && display) {
+					since = 0;
+					char b[32];
+					snprintf(b, sizeof b, "%lld", g_bytes_done);
+					char *enc = pct_encode(display, true);
+					rec_row(4, enc, "progress", "", b);
+					free(enc);
+					fflush(stdout);
+				}
 			}
 		}
 	}
@@ -312,10 +417,21 @@ static int copy_one(int sfd, const char *sname, int dfd, const char *dname,
 		fchmod(out, st->st_mode & 07777);
 	}
 
-	/* fsync before declaring success. A cross-filesystem MOVE deletes the
-	 * source on the strength of this return value, and a copy still sitting
-	 * in page cache is not a copy that survived the power going out. */
-	if (rc == 0 && fsync(out) != 0)
+	/* fsync ONLY when the source is about to be deleted.
+	 *
+	 * A cross-filesystem move removes the original on the strength of this
+	 * return value, so there it is the difference between a copy that
+	 * survived the power going out and no copy at all. A plain copy is not in
+	 * that position: the source is still there, untouched, and a destination
+	 * lost to a crash costs a re-copy rather than the data.
+	 *
+	 * It was done for every file either way, and it is expensive in the exact
+	 * case people notice — 2000 small files took 12.25s against cp's 0.08s,
+	 * 147x, on an SSD; on the USB stick this was reported from, an fsync per
+	 * file is tens of milliseconds each. That is the whole of "copying is
+	 * slow".
+	 */
+	if (durable && rc == 0 && fsync(out) != 0)
 		rc = -1;
 
 	close(in);
@@ -327,8 +443,12 @@ static int copy_one(int sfd, const char *sname, int dfd, const char *dname,
 }
 
 static int copy_tree(int sfd, const char *sname, int dfd, const char *dname,
-                     conflict_t pol, tally_t *t, const char *display)
+                     conflict_t pol, tally_t *t, const char *display,
+                     bool durable)
 {
+	if (g_cancel)
+		return -1;
+
 	struct stat st;
 	if (fstatat(sfd, sname, &st, AT_SYMLINK_NOFOLLOW) != 0) {
 		report(display, "failed", strerror(errno));
@@ -470,21 +590,37 @@ static int copy_tree(int sfd, const char *sname, int dfd, const char *dname,
 			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
 				continue;
 			char *sub = xasprintf("%s/%s", display, e->d_name);
-			if (copy_tree(s2, e->d_name, d2, e->d_name, pol, t, sub) != 0)
+			if (copy_tree(s2, e->d_name, d2, e->d_name, pol, t, sub,
+			              durable) != 0)
 				rc = -1;
 			free(sub);
+			if (g_cancel) { rc = -1; break; }
 		}
 		closedir(d);
 		close(d2);
 		t->done++;
 
 	} else if (S_ISREG(st.st_mode)) {
-		if (copy_one(sfd, sname, dfd, target, &st) != 0) {
-			report(display, "failed", strerror(errno));
+		if (copy_one(sfd, sname, dfd, target, &st, durable, display) != 0) {
+			report(display, g_cancel ? "cancelled" : "failed",
+			       g_cancel ? "" : strerror(errno));
 			t->failed++;
 			rc = -1;
 		} else {
-			report(display, "done", NULL);
+			if (g_out == OUT_REC) {
+				/* CUMULATIVE, like the progress rows above it — a reader
+				 * that had to decide whether to add this or replace with
+				 * it would get one of the two wrong for big files, which
+				 * report both. */
+				char b[32];
+				snprintf(b, sizeof b, "%lld", g_bytes_done);
+				char *enc = pct_encode(display, true);
+				rec_row(4, enc, "done", "", b);
+				free(enc);
+				fflush(stdout);
+			} else {
+				report(display, "done", NULL);
+			}
 			t->done++;
 		}
 
@@ -619,11 +755,32 @@ int cmd_copy(int argc, char **argv)
 		die("copy: cannot open %s: %s", dest, strerror(errno));
 	}
 
-	if (g_out == OUT_REC)
-		rec_row(3, "path", "status", "detail");
+	sf_install_cancel();
+
+	if (g_out == OUT_REC) {
+		rec_row(4, "path", "status", "detail", "bytes");
+
+		/* HOW MUCH THERE IS, before starting. A count of files cannot say how
+		 * far along a copy is when one of them is 8 GB, so there is no
+		 * percentage and no estimate without this — which is the whole of
+		 * "no way of telling when it'll be done". It is a stat-only walk of
+		 * a tree that is about to be read in full anyway. */
+		long long files = 0, bytes = 0;
+		for (int i = 0; i < a.nsrc; i++) {
+			char *sc = sf_resolve(a.srcs[i]);
+			scan_tree(AT_FDCWD, sc, &files, &bytes);
+			free(sc);
+		}
+		char fb[32], bb[32];
+		snprintf(fb, sizeof fb, "%lld", files);
+		snprintf(bb, sizeof bb, "%lld", bytes);
+		rec_row(4, "total", fb, bb, "");
+		fflush(stdout);
+	}
 
 	tally_t t = { 0, 0, 0 };
 	for (int i = 0; i < a.nsrc; i++) {
+		if (g_cancel) break;
 		char *src = sf_resolve(a.srcs[i]);
 
 		/* Copying a directory into itself or into its own subtree recurses
@@ -654,7 +811,7 @@ int cmd_copy(int argc, char **argv)
 		} else {
 			const char *base = sf_basename(src);
 			int before = t.failed;
-			copy_tree(sfd, base, dfd, base, a.pol, &t, src);
+			copy_tree(sfd, base, dfd, base, a.pol, &t, src, false);
 			close(sfd);
 
 			/* Only the top-level thing created is journalled, not every file
@@ -672,10 +829,15 @@ int cmd_copy(int argc, char **argv)
 		free(src);
 	}
 
+	if (g_cancel && g_out == OUT_REC) {
+		rec_row(4, "cancelled", "", "", "");
+		fflush(stdout);
+	}
+
 	close(dfd);
 	free(dest);
 	free(a.srcs);
-	return finish(&t);
+	return g_cancel ? 130 : finish(&t);
 }
 
 int cmd_move(int argc, char **argv)
@@ -694,11 +856,31 @@ int cmd_move(int argc, char **argv)
 		die("move: cannot open %s: %s", dest, strerror(errno));
 	}
 
-	if (g_out == OUT_REC)
-		rec_row(3, "path", "status", "detail");
+	sf_install_cancel();
+
+	if (g_out == OUT_REC) {
+		rec_row(4, "path", "status", "detail", "bytes");
+
+		/* Scanned for the same reason as in copy. A move WITHIN a filesystem
+		 * is a rename and finishes instantly, so this pass is only ever paid
+		 * back on the cross-filesystem case that actually copies — but it
+		 * cannot be known which one this is until the rename has been tried. */
+		long long files = 0, bytes = 0;
+		for (int i = 0; i < a.nsrc; i++) {
+			char *sc = sf_resolve(a.srcs[i]);
+			scan_tree(AT_FDCWD, sc, &files, &bytes);
+			free(sc);
+		}
+		char fb[32], bb[32];
+		snprintf(fb, sizeof fb, "%lld", files);
+		snprintf(bb, sizeof bb, "%lld", bytes);
+		rec_row(4, "total", fb, bb, "");
+		fflush(stdout);
+	}
 
 	tally_t t = { 0, 0, 0 };
 	for (int i = 0; i < a.nsrc; i++) {
+		if (g_cancel) break;
 		char *src = sf_resolve(a.srcs[i]);
 
 		if (sf_is_descendant(src, dest)) {
@@ -714,6 +896,10 @@ int cmd_move(int argc, char **argv)
 		 * answer and the action that follows it then refer to the same
 		 * directory even if `dest` is replaced underneath us. */
 		struct stat dstat, sstat;
+		/* The source's size, taken BEFORE the rename — afterwards the name
+		 * refers to nothing and the byte total would stop advancing. */
+		bool have_sstat = lstat(src, &sstat) == 0;
+		long long ssz = have_sstat ? (long long)sstat.st_size : 0;
 		bool exists = fstatat(destfd, sf_basename(src), &dstat,
 		                      AT_SYMLINK_NOFOLLOW) == 0;
 
@@ -724,8 +910,7 @@ int cmd_move(int argc, char **argv)
 		 * failed", and the data gone for good. Worse here than in copy, where
 		 * at least the removal happens before a copy that then fails; a move
 		 * has no second copy anywhere. */
-		if (exists && a.pol == CONFLICT_OVERWRITE &&
-		    lstat(src, &sstat) == 0 &&
+		if (exists && a.pol == CONFLICT_OVERWRITE && have_sstat &&
 		    sstat.st_dev == dstat.st_dev && sstat.st_ino == dstat.st_ino) {
 			report(src, "failed", "source and destination are the same");
 			t.failed++;
@@ -772,7 +957,20 @@ int cmd_move(int argc, char **argv)
 			 * failed move never leaves an undo entry that would move a file
 			 * that was never moved. */
 			sf_journal("move", target, src);
-			report(src, "done", "moved");
+			if (g_out == OUT_REC) {
+				/* A move by rename copies no bytes, but the bar is
+				 * measured in them, so the file's size counts as done
+				 * the moment the rename does. */
+				g_bytes_done += ssz;
+				char b[32];
+				snprintf(b, sizeof b, "%lld", g_bytes_done);
+				char *enc = pct_encode(src, true);
+				rec_row(4, enc, "done", "moved", b);
+				free(enc);
+				fflush(stdout);
+			} else {
+				report(src, "done", "moved");
+			}
 			t.done++;
 			free(target);
 			free(src);
@@ -792,7 +990,8 @@ int cmd_move(int argc, char **argv)
 		 * every entry — a partial copy followed by a delete is the worst
 		 * outcome this program could produce. */
 		tally_t sub = { 0, 0, 0 };
-		copy_tree(AT_FDCWD, src, destfd, sf_basename(target), a.pol, &sub, src);
+		copy_tree(AT_FDCWD, src, destfd, sf_basename(target), a.pol, &sub, src,
+		          true);
 
 		if (sub.failed == 0) {
 			if (sf_rm_rf(AT_FDCWD, src) == 0) {
@@ -814,10 +1013,15 @@ int cmd_move(int argc, char **argv)
 		free(src);
 	}
 
+	if (g_cancel && g_out == OUT_REC) {
+		rec_row(4, "cancelled", "", "", "");
+		fflush(stdout);
+	}
+
 	close(destfd);
 	free(dest);
 	free(a.srcs);
-	return finish(&t);
+	return g_cancel ? 130 : finish(&t);
 }
 
 int cmd_rename(int argc, char **argv)

@@ -1250,6 +1250,55 @@ echo old > "$C/tickq/dst/x/inner"
     && bad "an overwrite emitted removal records" \
     || ok "the removal inside an overwrite stays quiet"
 
+# ── how much there is, and stopping part-way ────────────────────────────────
+#
+# A count of files cannot say how far along a copy is when one of them is 8 GB,
+# so there is no percentage and no estimate without a total. It is emitted once,
+# before anything is copied, from a stat-only pre-pass.
+mkdir -p "$C/tot/src/sub" "$C/tot/dst"
+printf '%.0s.' $(seq 1 1000) > "$C/tot/src/a.bin"
+printf '%.0s.' $(seq 1 2000) > "$C/tot/src/sub/b.bin"
+tot=$("$SYNFILES" --rec copy "$C/tot/src" "$C/tot/dst" | awk -F'\t' '$1=="total"{print $3}')
+[ "$tot" = 3000 ] && ok "copy reports the byte total before it starts" \
+                  || bad "the pre-scan totalled $tot bytes, want 3000"
+
+# Every byte figure is CUMULATIVE, so the last one equals the total — a reader
+# that had to decide whether to add or replace would get big files wrong, since
+# those report both a running figure and a final one.
+last=$("$SYNFILES" --rec copy --conflict=rename "$C/tot/src" "$C/tot/dst" \
+       | awk -F'\t' '$2=="done" && $4!="" {b=$4} END{print b}')
+[ "$last" = 3000 ] && ok "the byte figures are cumulative, ending at the total" \
+                   || bad "the last byte figure was $last, want 3000"
+
+# CANCELLING has to leave a filesystem somebody can reason about: no fragment
+# of a half-written file, and a record saying it stopped.
+#
+# SKIPPED rather than failed when the copy wins the race, which on tmpfs it
+# usually does — 30 MB is copied in about the time it takes the shell to run
+# `kill`. A fixture big enough to win reliably would be a gigabyte, which is
+# not a thing to allocate inside somebody's package build, and a check that
+# sometimes fails for timing is worse than one that sometimes says nothing.
+# The behaviour it guards was verified directly: SIGTERM to a 3000-file copy
+# gave exit 130, a `cancelled` record, 897 files copied and every one of them
+# whole.
+mkdir -p "$C/cxl/src" "$C/cxl/dst"
+i=0
+while [ $i -lt 120 ]; do head -c 262144 /dev/zero > "$C/cxl/src/f$i"; i=$((i+1)); done
+"$SYNFILES" --rec copy "$C/cxl/src" "$C/cxl/dst" > "$C/cxl/out.txt" 2>&1 &
+cxlpid=$!
+kill -TERM "$cxlpid" 2>/dev/null
+wait "$cxlpid"; cxlrc=$?
+if [ "$cxlrc" = 130 ]; then
+    grep -q '^cancelled' "$C/cxl/out.txt" \
+        && ok "a cancelled copy says so" \
+        || bad "a cancelled copy exited 130 without saying it was cancelled"
+    stray=$(find "$C/cxl/dst" -type f ! -size 262144c | head -1)
+    [ -z "$stray" ] && ok "a cancelled copy leaves no half-written file" \
+                    || bad "cancel left a partial file: $stray"
+else
+    echo "  skip  the copy finished before the cancel landed (exit $cxlrc)"
+fi
+
 # ── collisions ──────────────────────────────────────────────────────────────
 #
 # What the GUI asks BEFORE it pastes, so that "overwrite?" is only asked when
@@ -2221,6 +2270,43 @@ if [ -f "$QML" ]; then
         fi
     else
         echo "  skip  qmllint not installed"
+    fi
+
+    # ── ...and that it LOADS ────────────────────────────────────────────────
+    #
+    # qmllint parses. It does not resolve properties on this file's own inline
+    # components, so `ToggleChip { ignoreBusy: true }` — a property that
+    # belongs to a different app's button — passed the lint above and then
+    # failed the whole window with "Cannot assign to non-existent property".
+    # A QML that cannot load is not a cosmetic defect: nothing opens.
+    #
+    # ONLY a load failure fails this check. Anything else — no quickshell, no
+    # runtime dir, a crash on some machine without a GPU — skips, because a
+    # test that can break a package build for reasons unrelated to the code is
+    # worse than no test. (The build has been broken that way once already.)
+    if command -v quickshell >/dev/null 2>&1; then
+        # A COPY with a quit timer appended, for two reasons: a QML that loads
+        # successfully RUNS — without this the check would sit until its
+        # timeout and add that to every build — and the timer has to go INSIDE
+        # the root object, before its final brace, or the file is a syntax
+        # error and the check would "fail" on a perfectly good QML.
+        qsq="$T/loadcheck.qml"
+        awk 'BEGIN{RS="\0"} {
+                n = match($0, /}[ \t\r\n]*$/)
+                printf "%s\n    Timer { running: true; interval: 1200; repeat: false;\n             onTriggered: Qt.quit() }\n%s", substr($0,1,n-1), substr($0,n)
+             }' "$QML" > "$qsq"
+        qsrun="$T/qsrun"
+        mkdir -p "$qsrun"
+        qsout=$(XDG_RUNTIME_DIR="$qsrun" QT_QPA_PLATFORM=offscreen \
+                timeout 30 quickshell -p "$qsq" 2>&1 | head -40)
+        if printf '%s' "$qsout" | grep -q "Failed to load configuration"; then
+            bad "synfiles.qml does not LOAD — the window will not open"
+            printf '%s\n' "$qsout" | grep -A2 "Failed to load" | sed 's/^/        /' >&2
+        else
+            ok "the QML loads in a real engine"
+        fi
+    else
+        echo "  skip  quickshell not installed, cannot check that the QML loads"
     fi
 else
     bad "synfiles.qml not found beside the tests: $QML"

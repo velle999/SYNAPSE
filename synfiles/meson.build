@@ -56,6 +56,15 @@ install_data('data/synfiles.desktop',
 install_data('data/mimeapps.list',
              install_dir: get_option('datadir') / 'applications')
 
+# meson's default test timeout is THIRTY SECONDS, and a timeout is a BUILD
+# failure inside makepkg's check() — the suite is killed while still passing,
+# and syn-update reports "build failed" with nothing on screen to say the tests
+# were fine. syn-settings shipped exactly that on a slower machine.
+#
+# This suite is 6s natively and now starts a real QML engine, which on a
+# machine without a GPU is not 6s. 300 rather than off: a suite that genuinely
+# hangs must still fail.
 test('synfiles', find_program('tests/synfiles_test.sh'),
      args: [meson.current_build_dir() / 'synfiles'],
-     workdir: meson.current_source_dir())
+     workdir: meson.current_source_dir(),
+     timeout: 300)
