@@ -737,8 +737,19 @@ FloatingWindow {
         // watched mke2fs report "Read-only file system while setting up
         // superblock" and had nothing better to offer than that sentence.
         case "readonly": return "The kernel says this device is write-protected. "
-                              + "Most sticks and cards have a switch on the body — "
-                              + "check that first; no option here overrides it."
+                              + "Many sticks and cards have a switch on the body — "
+                              + "check that first if this one has one; no option "
+                              + "here overrides it."
+        // The same flag, found on the other side of a write, and NOT the same
+        // answer. Nobody flips a switch halfway through a format, and this
+        // stick had none to flip: it took the request, refused every sector,
+        // and the kernel then re-read it as read-only. Saying "check the
+        // switch" to that is an instruction to go looking for a part the
+        // device does not have.
+        case "latched": return "It accepted this and then refused every write, "
+                             + "so the drive has switched itself read-only. That "
+                             + "is a worn or over-reported flash chip, and "
+                             + "nothing in software undoes it."
         case "mktable": return "There is no partition table to put a partition in."
         case "reread":  return "The drive has changed since this was read — refresh it."
         case "none":    return "There is nothing that overrides this."

@@ -397,8 +397,16 @@ char *guard_write_protected_now(const char *kname, const char **fix)
 {
 	if (!guard_readonly_flag(kname))
 		return NULL;
+	/* NOT `readonly`, and the difference is what the sentence at the other end
+	 * has to say. `readonly` means the flag was already set when the device
+	 * arrived, and on a stick that usually means a switch on its body. Nobody
+	 * flips a switch halfway through a format: a device that accepted the
+	 * request and then refused every sector has latched ITSELF read-only, which
+	 * is what these controllers do when a write fails and they cannot recover.
+	 * Sending somebody to look for a switch that is not there is the wrong
+	 * answer twice over — it does not exist, and it would not help. */
 	if (fix)
-		*fix = "readonly";
+		*fix = "latched";
 	/* Deliberately NOT the sentence above. Before the write, "the kernel has
 	 * it marked read-only" means the request was never made; after one, the
 	 * device took the request, threw the writes away and told the kernel the
@@ -448,9 +456,17 @@ void guard_print_fix(const char *dev, const char *fix)
 		fprintf(stderr, "  Remove its line from /etc/fstab first, or this "
 		        "machine will not boot.\n");
 	else if (!strcmp(fix, "readonly"))
-		fprintf(stderr, "  Most sticks and SD cards have a write-protect "
-		        "switch on the body; the kernel says one is set. Check it: "
-		        "blockdev --getro %s\n", dev);
+		fprintf(stderr, "  Many sticks and SD cards have a write-protect "
+		        "switch on the body; if this one does, check it. If it does "
+		        "not, the drive has marked ITSELF read-only and nothing here "
+		        "will clear it: blockdev --getro %s\n", dev);
+	else if (!strcmp(fix, "latched"))
+		fprintf(stderr, "  It accepted the request and then refused every "
+		        "sector, so the drive's controller has switched itself "
+		        "read-only — the usual end of a worn or over-reported flash "
+		        "chip. Nothing in software undoes that. Check the kernel's "
+		        "account of it: journalctl -k | grep -i 'sense\\|write "
+		        "protect'\n");
 	else if (!strcmp(fix, "reread"))
 		fprintf(stderr, "  The layout may have changed since it was read: "
 		        "syn-disks table %s\n", dev);

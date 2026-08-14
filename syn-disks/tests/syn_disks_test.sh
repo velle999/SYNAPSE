@@ -437,12 +437,21 @@ r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null)
 echo "$r" | grep -q 'now%20marked%20it%20read-only'
 check "a device that refuses every write is asked again afterwards" $?
 
-# The same code the guard would have set had the device been honest, so the
-# window offers the same sentence and the same button for both.
+# `latched`, NOT `readonly`, and the distinction is the whole point of having
+# two codes: the flag found BEFORE a write is usually a switch on the body of a
+# stick, and the same flag found after one cannot be — nobody flips a switch
+# halfway through a format. This stick had no switch at all, and "check the
+# write-protect switch" sent its owner looking for a part it does not have.
 echo 0 > "$S/sdw/ro"
 r=$(mkfail --rec format sdw --fs=ext4 --yes 2>/dev/null)
-echo "$r" | awk -F'\t' 'NR > 1 && $4 == "readonly" { found = 1 } END { exit !found }'
-check "...with the readonly fix code beside it" $?
+echo "$r" | awk -F'\t' 'NR > 1 && $4 == "latched" { found = 1 } END { exit !found }'
+check "...with a fix code of its own, not the switch-on-the-body one" $?
+
+# ...and the two never collapse into each other. The pre-write refusal keeps
+# saying `readonly`, or the distinction exists only in the source.
+r=$("$SD" --rec format sdv --fs=ext4 -n 2>/dev/null)
+echo "$r" | grep -q '^fix	readonly$'
+check "...while the flag found BEFORE a write still says readonly" $?
 
 # ⚠ The one that the screenshot was: whatever else the detail holds, it may not
 # OPEN with the tool's version banner. A status bar shows the front of this.
@@ -494,8 +503,15 @@ says mkfail --no-color format sdw --fs=ext4 --yes | head -1 \
 check "the terminal names the failure before quoting the tool" $?
 
 echo 0 > "$S/sdw/ro"
-says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'write-protect switch'
-check "...and points at the switch on the body" $?
+says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'switched itself'
+check "...and says the drive did this to itself, not that a switch is set" $?
+
+# ⚠ It must NOT reach for the switch here. The stick this came from has none,
+# and being told to check one is a dead end dressed up as a way out.
+echo 0 > "$S/sdw/ro"
+says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'switch on the body' \
+    && bad "a latched drive still sends its owner looking for a switch" \
+    || ok "...and does not send its owner looking for a switch that is not there"
 
 echo 0 > "$S/sdw/ro"
 says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'Input/output error'
