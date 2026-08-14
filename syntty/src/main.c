@@ -62,11 +62,16 @@ static const char *usage_text =
 "  --scroll-after=N          ...then N lines of output arrive underneath it\n"
 "  --config=FILE             read that instead of the usual place\n"
 "  --no-config               ignore the config file entirely\n"
+"  --tabs=N                  win: open N tabs at startup, all running CMD\n"
+"  --resize=COLSxROWS        resize the grid after the stream, before dumping\n"
 "\n"
 "mouse: EVENT is press:BUTTON@COL,ROW, release:..., move[:BUTTON]@COL,ROW or\n"
 "wheel:up@COL,ROW; with --mode=1000|1002|1003, --sgr, --shift, --ctrl, --alt.\n"
 "\n"
 "Keys the window keeps — the program running in it never sees these:\n"
+"  Ctrl+Shift+T  a new tab               Ctrl+Shift+W  close this one\n"
+"  Ctrl+Shift+Left/Right      the tab before or after; Ctrl+Shift+1..9 by\n"
+"                             number, and clicking one in the bar\n"
 "  Ctrl+Shift+C  copy the selection      Ctrl+Shift+V  paste the clipboard\n"
 "  Shift+Insert  paste the primary selection, as middle-click does\n"
 "  Shift+PgUp/PgDn/Home/End   the scrollback\n"
@@ -101,6 +106,8 @@ typedef struct {
 	const char *drag;
 	int         scroll_after;
 
+	int      tabs;           /* --tabs=N: open N at startup */
+	const char *resize;      /* --resize=COLSxROWS, applied after the stream */
 	const char *config;      /* --config=FILE, or NULL for the usual place */
 	bool        no_config;   /* ignore the file entirely — what tests use */
 	const st_config_t *cfg;  /* what was read, for whatever paints */
@@ -144,6 +151,21 @@ static uint8_t *slurp(const char *path, size_t *out_len)
  * screen, which is the case an anchored selection exists for: the text the
  * person highlighted moves up the window, and what they copy must still be
  * that text rather than whatever has since scrolled into those rows. */
+/* ⚠ THE ONLY WAY A RESIZE CAN BE TESTED WITHOUT A COMPOSITOR — and until this
+ * existed, nothing tested one at all. A window is resized by the compositor,
+ * so every rule about what happens to the text and to the cursor lived on a
+ * path the suite could not reach; a grow that pushed the content away from the
+ * cursor survived three releases because of it. */
+static void apply_resize(const opts_t *o, st_grid_t *g)
+{
+	if (!o->resize)
+		return;
+	int c = 0, r = 0;
+	if (sscanf(o->resize, "%dx%d", &c, &r) != 2 || c < 1 || r < 1)
+		die("--resize wants COLSxROWS");
+	st_grid_resize(g, (uint16_t)c, (uint16_t)r);
+}
+
 static void apply_pointer(const opts_t *o, st_vt_t *vt, st_grid_t *g)
 {
 	if (!o->click)
@@ -282,6 +304,7 @@ static int cmd_dump(const opts_t *o, const char *path)
 	 * the two must produce identical screens — see the split-feed assertions.
 	 * A parser is only stream-safe if something proves it. */
 	st_vt_feed(&vt, buf, len);
+	apply_resize(o, &g);
 	if (o->view)
 		st_grid_view_scroll(&g, o->view);
 	for (int j = 0; j < o->jump; j++) {
@@ -664,32 +687,35 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 	if (!f)
 		die("%s", err ? err : "no font");
 
-	st_grid_t g;
-	st_vt_t vt;
-	st_grid_init(&g, o->cols, o->rows, (uint32_t)o->scrollback);
-	st_vt_init(&vt, &g);
-
 	st_render_t *r = st_render_new(f);
 	apply_colors(o, r);
-	st_render_set_gfx(r, vt.gfx);
 
-	st_pty_t p;
-	if (!st_pty_spawn(&p, argv, o->cols, o->rows))
-		die("cannot allocate a pty");
-	/* The window's loop polls two descriptors and drains this one to EAGAIN;
-	 * a blocking read here would mean not answering the compositor. */
-	st_pty_set_nonblocking(&p);
+	/* ⚠ THE SESSIONS BELONG TO THE WINDOW NOW, not to this function. With tabs
+	 * there is not one grid and one pty but a set of them that comes and goes
+	 * while the window runs, and the thing that owns their lifetime has to be
+	 * the thing that outlives them. What this hands over is a RECIPE: what a
+	 * tab runs, and the shape it starts in. */
+	st_tab_spec_t spec = {
+		.argv       = argv,
+		.cols       = o->cols,
+		.rows       = o->rows,
+		.scrollback = (uint32_t)o->scrollback,
+		.tabs       = o->tabs,
+	};
 
 	st_win_stats_t ws = {0};
-	int rc = st_win_run(&g, &vt, &p, f, r, vt.title[0] ? vt.title : "syntty",
-	                    !o->no_deadline, o->cfg, &ws);
+	int rc = st_win_run(f, r, &spec, "syntty", !o->no_deadline, o->cfg, &ws);
 
 	if (o->stats) {
 		fprintf(stderr, "first frame   %.2f ms\n", ws.first_frame_ms);
 		fprintf(stderr, "frames        %llu drawn, %llu skipped\n",
 		        (unsigned long long)ws.frames,
 		        (unsigned long long)ws.skipped);
-		fprintf(stderr, "grid          %zu bytes\n", st_grid_bytes(&g));
+		fprintf(stderr, "grid          %ux%u, %zu bytes\n",
+		        ws.cols, ws.rows, ws.grid_bytes);
+		if (ws.tabs_opened > 1)
+			fprintf(stderr, "tabs          %llu opened\n",
+			        (unsigned long long)ws.tabs_opened);
 		if (ws.rows_possible)
 			fprintf(stderr, "rows painted  %llu of %llu (%.1f%% — the rest were "
 			        "already right)\n",
@@ -763,8 +789,6 @@ static int cmd_win(const opts_t *o, int argc, char **argv)
 
 	st_render_free(r);
 	st_font_close(f);
-	st_vt_free(&vt);
-	st_grid_free(&g);
 	free(err);
 	return rc;
 }
@@ -1142,9 +1166,9 @@ static int cmd_about(void)
 	printf("  built        pty, parser, grid, glyphs, a window, deadline\n");
 	printf("               rendering, damage tracking, the keyboard and\n");
 	printf("               graphics protocols, OSC 133 marks, the alternate\n");
-	printf("               screen, the pointer, the clipboard and a config\n");
-	printf("               file (see `syntty config --example`).\n");
-	printf("  not yet      tabs, remote control, OSC 8 links, notifications\n");
+	printf("               screen, the pointer, the clipboard, a config file\n");
+	printf("               (see `syntty config --example`) and tabs.\n");
+	printf("  not yet      splits, remote control, OSC 8 links, notifications\n");
 	printf("  cell         %zu bytes\n", sizeof(st_cell_t));
 	printf("  style        %zu bytes, interned\n", sizeof(st_style_t));
 	printf("  renderer     CPU, into wl_shm — nothing here links GL, and that\n");
@@ -1214,6 +1238,8 @@ int main(int argc, char **argv)
 		else if (!strncmp(a, "--view=", 7))        o.view = atoi(a + 7);
 		else if (!strncmp(a, "--jump=", 7))        o.jump = atoi(a + 7);
 		else if (!strncmp(a, "--select=", 9))      o.select = a + 9;
+		else if (!strncmp(a, "--tabs=", 7))        o.tabs = atoi(a + 7);
+		else if (!strncmp(a, "--resize=", 9))      o.resize = a + 9;
 		else if (!strncmp(a, "--config=", 9))      o.config = a + 9;
 		else if (!strcmp(a, "--no-config"))        o.no_config = true;
 		else if (!strncmp(a, "--click=", 8))       o.click = a + 8;

@@ -103,6 +103,24 @@
  * it with a straight face. */
 typedef struct win win_t;
 
+/* ⚠ A CAP, AND A DELIBERATE ONE. Tabs are navigated by a person: past a couple
+ * of dozen the bar is unreadable and nobody is finding anything in it anyway.
+ * A bound also means the poll set, the bar layout and the tab array are all
+ * fixed-size, and a window cannot be made to allocate without limit by a key
+ * held down. Reaching it is reported rather than silently ignored. */
+#define SYN_MAX_TABS 32
+
+/* One tab: a whole terminal. Everything a session needs except the window, the
+ * font and the renderer, which are the only things tabs share. */
+typedef struct {
+	st_grid_t g;
+	st_vt_t   vt;
+	st_pty_t  pty;
+	bool      first;         /* the one named on the command line */
+	char      label[64];     /* the fallback name — the command */
+	char      shown[128];    /* the title last given to the compositor */
+} tab_t;
+
 /* One of these per committed frame, handed to the feedback object and freed by
  * whichever of `presented` or `discarded` arrives — the protocol guarantees
  * exactly one of the two, and destroys the object itself afterwards.
@@ -158,6 +176,10 @@ typedef struct {
 	uint8_t          *pending;   /* one byte per grid row */
 	int               pending_rows;
 	bool              fresh;
+	/* The tab bar is not a grid row, so `pending` says nothing about it — and
+	 * it is stale in this buffer for exactly the same reason a row is: the
+	 * other buffer was in front when it last changed. */
+	bool              bar_stale;
 } buffer_t;
 
 struct win {
@@ -207,12 +229,66 @@ struct win {
 	struct xkb_keymap  *keymap;
 	struct xkb_state   *xkb_state;
 
-	/* The terminal. */
-	st_grid_t   *g;
-	st_vt_t     *vt;
-	st_pty_t    *pty;
-	st_font_t   *font;
+	/* ── the tabs ───────────────────────────────────────────────────────────
+	 *
+	 * One window, several terminals. Each tab is a whole session — its own
+	 * grid, its own parser, its own pty and its own child — and the ONLY thing
+	 * they share is this window, the font and the renderer.
+	 *
+	 * ⚠ EVERY TAB IS PARSED, NOT ONLY THE VISIBLE ONE. A program in a
+	 * background tab keeps producing output, and a terminal that stopped
+	 * reading it would fill the pty's buffer and BLOCK THAT PROGRAM — a build
+	 * running in another tab would stop making progress whenever it produced a
+	 * few kilobytes, which looks like the build hanging. Only the ACTIVE tab is
+	 * ever drawn; the rest are read, parsed into their own grids, and shown the
+	 * moment somebody switches.
+	 *
+	 * `g`, `vt` and `pty` point INTO the active tab, so every line of code
+	 * written before tabs existed still means what it meant. */
+	tab_t      *tabs[SYN_MAX_TABS];
+	int         ntabs;
+	int         active;
+	st_grid_t  *g;
+	st_vt_t    *vt;
+	st_pty_t   *pty;
+	st_font_t  *font;
 	st_render_t *ren;
+
+	/* What a new tab runs, and how it starts out. */
+	const st_tab_spec_t *spec;
+
+	/* ── the bar ────────────────────────────────────────────────────────────
+	 *
+	 * Height in pixels, and ZERO WHENEVER THERE IS ONE TAB. A row of chrome
+	 * that never changes is a row of the screen the person paid for and cannot
+	 * use; every terminal with tabs hides it at one, and so does this.
+	 *
+	 * `bar_dirty` is set by anything that changes what it SAYS — a new tab, a
+	 * closed one, a switch, a title arriving. It is tracked per buffer as well
+	 * (see buffer_t.bar_stale) for the same reason the rows are. */
+	int      bar_h;
+	bool     bar_dirty;
+	int      tab_x0[SYN_MAX_TABS], tab_x1[SYN_MAX_TABS];
+
+	/* ⚠ THE STATUS THE WINDOW RETURNS IS THE FIRST TAB'S, and it is recorded
+	 * when that tab exits rather than read at the end — by then the tab is
+	 * gone. A script running `syntty win -- make; echo $?` asked about the
+	 * command it named, and opening a second tab must not change the answer. */
+	int      first_status;
+	bool     first_done;
+	uint64_t tabs_opened;
+	/* Bumped whenever a tab is opened or closed. The poll set is built from
+	 * the tab array and then handed to poll(); if a KEYSTROKE opens or closes
+	 * one while those results are being processed, every index after it means
+	 * a different session than it did. Rather than repair the mapping, the
+	 * reads are abandoned for that one iteration — poll is level-triggered, so
+	 * whatever was waiting is still waiting a moment later. */
+	unsigned tab_gen;
+	/* ⚠ TAKEN BEFORE THE GRID IS FREED. The window's memory figure used to be
+	 * read from the caller's grid at the end; there is no such grid now, and
+	 * asking after the last tab closed printed a confident `0 bytes`. */
+	size_t   last_grid_bytes;
+	uint16_t last_cols, last_rows;
 
 	int  win_w, win_h;       /* pixels the compositor asked for */
 	bool dirty;              /* the grid changed since the last paint */
@@ -253,6 +329,7 @@ struct win {
 	 * deliberate clicks in different places are not a double-click however
 	 * fast somebody is. */
 	int      ptr_col, ptr_row;
+	int      ptr_px, ptr_py;   /* surface pixels, for the bar */
 	unsigned buttons;          /* bit per protocol button, 0..2 */
 	int      held;             /* the lowest button held, or ST_BTN_NONE */
 	bool     selecting;        /* a drag with the left button is under way */
@@ -460,9 +537,10 @@ static bool pool_create(win_t *w, int width, int height)
 		w->buf[i].h    = height;
 		w->buf[i].busy = false;
 		w->buf[i].fresh = false;
+		w->buf[i].bar_stale = true;
 		free(w->buf[i].pending);
-		w->buf[i].pending_rows = w->g->rows;
-		w->buf[i].pending = xcalloc((size_t)w->g->rows, 1);
+		w->buf[i].pending_rows = w->g ? w->g->rows : 1;
+		w->buf[i].pending = xcalloc((size_t)w->buf[i].pending_rows, 1);
 		wl_buffer_add_listener(w->buf[i].wl, &buffer_listener, &w->buf[i]);
 	}
 	return true;
@@ -554,6 +632,252 @@ static const struct wp_presentation_listener presentation_listener = {
 	presentation_clock
 };
 
+/* ── tabs ───────────────────────────────────────────────────────────────────
+ *
+ * One window, several terminals, and the tabs share nothing except the window,
+ * the font and the renderer. That is what makes this cheap: a second tab costs
+ * a grid, a parser and a pty — tens of kilobytes — rather than a second process
+ * with a second copy of everything in it.
+ *
+ * ⚠ AND EVERY TAB IS READ, whether or not it is the one on screen. A terminal
+ * that stopped draining a background pty would fill the kernel's buffer and
+ * BLOCK the program writing into it: a build running in another tab would stop
+ * dead every few kilobytes, and it would look like the build had hung rather
+ * than like the terminal had stopped listening. Reading is not the expensive
+ * part — drawing is, and only the active tab is ever drawn. */
+
+static void fit_grid(win_t *w);
+static void tabs_invalidate(win_t *w);
+static void bar_update(win_t *w);
+
+/* The name a tab wears until the program inside it sets a title. */
+static void tab_label(tab_t *t, char *const argv[])
+{
+	const char *cmd = (argv && argv[0]) ? argv[0] : "sh";
+	const char *slash = strrchr(cmd, '/');
+	snprintf(t->label, sizeof t->label, "%s", slash ? slash + 1 : cmd);
+}
+
+/* What the bar and the window title call a tab: what the program says it is,
+ * and the command it was started as until it says anything. */
+static const char *tab_name(const tab_t *t)
+{
+	return t->vt.title[0] ? t->vt.title : t->label;
+}
+
+static tab_t *tab_new(win_t *w)
+{
+	if (w->ntabs >= SYN_MAX_TABS)
+		return NULL;
+
+	/* ⚠ AT THE CURRENT SIZE, not the size the window started at. A tab born
+	 * 80x24 inside a 200x50 window would have its child told 80x24 first and
+	 * resized a moment later; every full-screen program redraws twice and some
+	 * of them wrap their first screen at the wrong width, which is visible and
+	 * looks like a bug in the program. */
+	uint16_t cols = w->g ? w->g->cols : w->spec->cols;
+	uint16_t rows = w->g ? w->g->rows : w->spec->rows;
+
+	tab_t *t = xcalloc(1, sizeof *t);
+	st_grid_init(&t->g, cols, rows, w->spec->scrollback);
+	st_vt_init(&t->vt, &t->g);
+
+	/* ⚠ A SERIAL, NOT A POSITION. `SYNTTY_TAB=2` has to keep meaning the same
+	 * session for as long as it runs; numbering by where a tab sits in the bar
+	 * would renumber every shell behind it the moment somebody closed one. */
+	char serial[24];
+	snprintf(serial, sizeof serial, "%llu",
+	         (unsigned long long)(w->tabs_opened + 1));
+	if (!st_pty_spawn_env(&t->pty, w->spec->argv, cols, rows,
+	                      "SYNTTY_TAB", serial)) {
+		st_vt_free(&t->vt);
+		st_grid_free(&t->g);
+		free(t);
+		return NULL;
+	}
+	/* The window's loop polls; a blocking read here would mean not answering
+	 * the compositor while a child is quiet. */
+	st_pty_set_nonblocking(&t->pty);
+
+	tab_label(t, w->spec->argv);
+	t->first = (w->ntabs == 0);
+	w->tabs[w->ntabs++] = t;
+	w->tabs_opened++;
+	w->tab_gen++;
+	return t;
+}
+
+static void tab_free(tab_t *t)
+{
+	st_vt_free(&t->vt);
+	st_grid_free(&t->g);
+	free(t);
+}
+
+/* Both buffers hold the OTHER tab's pixels, so neither can be repaired by a
+ * partial repaint — there is no row-level relationship between what is there
+ * and what should be. A full paint of both, once, is the only correct answer.
+ *
+ * ⚠ This is not the ping-pong bug that damage tracking had. That one marked the
+ * other buffer stale on EVERY full paint, so the two invalidated each other for
+ * ever; this happens once, when the content genuinely changes wholesale. */
+static void tabs_invalidate(win_t *w)
+{
+	for (int i = 0; i < NBUFFERS; i++)
+		w->buf[i].fresh = false;
+	if (w->g) {
+		st_grid_dirty_all(w->g);
+		w->last_cx = w->g->cx;
+		w->last_cy = w->g->cy;
+	}
+	w->bar_dirty = true;
+	w->dirty = true;
+}
+
+static void tab_activate(win_t *w, int i)
+{
+	if (i < 0 || i >= w->ntabs)
+		return;
+	w->active = i;
+	tab_t *t = w->tabs[i];
+	w->g   = &t->g;
+	w->vt  = &t->vt;
+	w->pty = &t->pty;
+	/* The images belong to the tab's parser, not to the window. Left pointing
+	 * at the old one, a picture from another tab would be composited over this
+	 * one's text. */
+	st_render_set_gfx(w->ren, t->vt.gfx);
+	tabs_invalidate(w);
+}
+
+/* The window's title follows the active tab, and only changes when it has to:
+ * `set_title` on every frame is a message per frame for a string that is the
+ * same, and some compositors animate on it. */
+static void title_update(win_t *w)
+{
+	if (!w->toplevel || w->ntabs == 0)
+		return;
+	tab_t *t = w->tabs[w->active];
+	const char *name = tab_name(t);
+	if (!strcmp(name, t->shown))
+		return;
+	snprintf(t->shown, sizeof t->shown, "%s", name);
+	xdg_toplevel_set_title(w->toplevel, name);
+	w->bar_dirty = true;
+}
+
+static void tab_close(win_t *w, int i)
+{
+	if (i < 0 || i >= w->ntabs)
+		return;
+	tab_t *t = w->tabs[i];
+
+	/* ⚠ RECORDED HERE, NOT READ AT THE END. By the time the window closes this
+	 * tab no longer exists, and the status a script asked about is the status
+	 * of the command it named on the command line. */
+	if (i == w->active) {
+		w->last_grid_bytes = st_grid_bytes(&t->g);
+		w->last_cols = t->g.cols;
+		w->last_rows = t->g.rows;
+	}
+
+	int status = st_pty_reap(&t->pty);
+	if (t->first && !w->first_done) {
+		w->first_status = status;
+		w->first_done = true;
+	}
+	tab_free(t);
+
+	for (int k = i; k + 1 < w->ntabs; k++)
+		w->tabs[k] = w->tabs[k + 1];
+	w->ntabs--;
+	w->tab_gen++;
+
+	if (w->ntabs == 0) {
+		w->g = NULL; w->vt = NULL; w->pty = NULL;
+		w->closed = true;
+		return;
+	}
+
+	int next = w->active;
+	if (i < next)        next--;             /* everything after it shifted */
+	else if (i == next)  next = (i < w->ntabs) ? i : w->ntabs - 1;
+	tab_activate(w, next);
+	bar_update(w);
+	title_update(w);
+}
+
+static void tab_open(win_t *w)
+{
+	if (!tab_new(w))
+		return;                              /* at the cap, or the fork failed */
+	tab_activate(w, w->ntabs - 1);
+	bar_update(w);
+	title_update(w);
+}
+
+static void tab_cycle(win_t *w, int delta)
+{
+	if (w->ntabs < 2)
+		return;
+	int n = (w->active + delta) % w->ntabs;
+	if (n < 0)
+		n += w->ntabs;
+	tab_activate(w, n);
+	title_update(w);
+}
+
+/* ⚠ THE BAR EXISTS ONLY WHEN THERE IS SOMETHING TO CHOOSE. One tab is the
+ * overwhelmingly common case, and a permanent row of chrome saying "1 bash" is
+ * a row of somebody's screen spent on nothing. Appearing and disappearing costs
+ * a resize, which the grid and the child are told about exactly as they are for
+ * any other resize. */
+static void bar_update(win_t *w)
+{
+	int want = w->ntabs > 1 ? st_font_cell_h(w->font) : 0;
+	if (want == w->bar_h)
+		return;
+	w->bar_h = want;
+	st_render_origin(w->ren, want);
+	fit_grid(w);
+	tabs_invalidate(w);
+}
+
+/* Draw it. The active tab is inverted, which is the same trick the selection
+ * uses and for the same reason: it contrasts with whatever the colours are. */
+static void draw_bar(win_t *w, buffer_t *b)
+{
+	if (w->bar_h <= 0 || !b->px)
+		return;
+
+	uint32_t fg, bg;
+	st_render_colors_get(w->ren, &fg, &bg);
+	int cw = st_font_cell_w(w->font);
+	int x = 0;
+
+	for (int i = 0; i < w->ntabs && x < b->w; i++) {
+		char seg[96];
+		snprintf(seg, sizeof seg, " %d %s ", i + 1, tab_name(w->tabs[i]));
+
+		/* At most 24 cells each, so one program with a very long title cannot
+		 * push every other tab off the bar. */
+		int max = 24 * cw;
+		if (x + max > b->w)
+			max = b->w - x;
+
+		bool act = (i == w->active);
+		int nx = st_render_text(w->ren, b->px, b->w, b->w, b->h, x, 0, max,
+		                        seg, act ? bg : fg, act ? fg : bg);
+		w->tab_x0[i] = x;
+		w->tab_x1[i] = nx;
+		x = nx;
+	}
+	/* The rest of the strip, so a closed tab leaves no ghost behind it. */
+	if (x < b->w)
+		st_render_text(w->ren, b->px, b->w, b->w, b->h, x, 0, b->w - x, "",
+		               fg, bg);
+}
+
 /* ── painting ───────────────────────────────────────────────────────────── */
 
 static void frame_done(void *data, struct wl_callback *cb, uint32_t t);
@@ -561,7 +885,7 @@ static const struct wl_callback_listener frame_listener = { frame_done };
 
 static void paint(win_t *w)
 {
-	if (!w->configured || w->win_w <= 0 || w->win_h <= 0)
+	if (!w->configured || w->win_w <= 0 || w->win_h <= 0 || !w->g)
 		return;
 
 	buffer_t *b = buffer_free_one(w);
@@ -619,6 +943,7 @@ static void paint(win_t *w)
 		st_render_grid(w->ren, w->g, b->px, b->w, b->w, b->h);
 		painted = (size_t)nrows;
 		b->fresh = true;
+		b->bar_stale = true;      /* the strip above row 0 was not covered */
 		memset(b->pending, 0, (size_t)b->pending_rows);
 	} else {
 		for (int y = 0; y < nrows; y++)
@@ -630,6 +955,16 @@ static void paint(win_t *w)
 	}
 	w->rows_painted  += painted;
 	w->rows_possible += (size_t)nrows;
+
+	/* The bar, which is not a row and is therefore not in `pending`. Drawn
+	 * when this buffer has never had it, or when what it says has changed
+	 * since this buffer was last in front. */
+	bool bar_drawn = false;
+	if (w->bar_h > 0 && (b->bar_stale || w->bar_dirty)) {
+		draw_bar(w, b);
+		b->bar_stale = false;
+		bar_drawn = true;
+	}
 
 	b->busy = true;
 	w->dirty = false;
@@ -678,12 +1013,19 @@ static void paint(win_t *w)
 	if (full) {
 		wl_surface_damage_buffer(w->surface, 0, 0, b->w, b->h);
 	} else {
+		if (bar_drawn)
+			wl_surface_damage_buffer(w->surface, 0, 0, b->w, w->bar_h);
+		/* ⚠ THE ROWS ARE OFFSET BY THE BAR. A damage rectangle computed from
+		 * the row index alone points a whole cell too high once there is a tab
+		 * bar, so every partial repaint would tell the compositor to refresh
+		 * the wrong strip — the change would appear a row late, or not at
+		 * all. */
 		for (int y = 0; y < nrows; ) {
 			if (!b->pending[y]) { y++; continue; }
 			int start = y;
 			while (y < nrows && b->pending[y])
 				y++;
-			wl_surface_damage_buffer(w->surface, 0, start * ch,
+			wl_surface_damage_buffer(w->surface, 0, w->bar_h + start * ch,
 			                         b->w, (y - start) * ch);
 		}
 	}
@@ -696,12 +1038,17 @@ static void paint(win_t *w)
 	 * exactly nothing while appearing to work. */
 	for (int i = 0; i < NBUFFERS; i++) {
 		buffer_t *o = &w->buf[i];
-		if (o == b || !o->pending || o->pending_rows != nrows)
+		if (o == b)
+			continue;
+		if (bar_drawn)
+			o->bar_stale = true;
+		if (!o->pending || o->pending_rows != nrows)
 			continue;
 		for (int y = 0; y < nrows; y++)
 			if (changed[y])
 				o->pending[y] = 1;
 	}
+	w->bar_dirty = false;
 	if (!full)
 		memset(b->pending, 0, (size_t)nrows);
 
@@ -807,20 +1154,40 @@ static const struct xdg_wm_base_listener wm_base_listener = { wm_base_ping };
  * and SynapseOS ships one. */
 static void fit_grid(win_t *w)
 {
+	if (!w->g)
+		return;
+	/* ⚠ NOT BEFORE THE WINDOW HAS A SIZE. Opening the startup tabs raises the
+	 * bar, which calls this — and at that point the compositor has not
+	 * configured anything, so win_w and win_h are zero and the arithmetic
+	 * below clamps to a ONE BY ONE grid. Every child was then told it had one
+	 * column, wrote its first line into it, and the real configure a moment
+	 * later resized around the wreckage: the terminal came up with the bar
+	 * drawn correctly and the program's first line of output gone. It looked
+	 * like the bar had eaten it. */
+	if (w->win_w <= 0 || w->win_h <= 0)
+		return;
+
 	int cw = st_font_cell_w(w->font), ch = st_font_cell_h(w->font);
-	int cols = w->win_w / cw, rows = w->win_h / ch;
+	int cols = w->win_w / cw;
+	int rows = (w->win_h - w->bar_h) / ch;
 	if (cols < 1) cols = 1;
 	if (rows < 1) rows = 1;
 
 	if (cols == w->g->cols && rows == w->g->rows)
 		return;
 
-	st_grid_resize(w->g, (uint16_t)cols, (uint16_t)rows);
-	/* The CHILD has to be told too, or every full-screen program on the
-	 * other end keeps drawing to the old size. This is the half people
-	 * forget, because the terminal itself looks correct. */
-	if (w->pty)
-		st_pty_resize(w->pty, (uint16_t)cols, (uint16_t)rows);
+	/* ⚠ EVERY TAB, NOT ONLY THE ONE ON SCREEN. A program in a background tab
+	 * that was never told the window changed keeps drawing to the old size,
+	 * and the mess it makes only appears when somebody switches to it — long
+	 * after the resize that caused it, which makes it look like the program's
+	 * fault. */
+	for (int i = 0; i < w->ntabs; i++) {
+		st_grid_resize(&w->tabs[i]->g, (uint16_t)cols, (uint16_t)rows);
+		/* The CHILD has to be told too, or every full-screen program on the
+		 * other end keeps drawing to the old size. This is the half people
+		 * forget, because the terminal itself looks correct. */
+		st_pty_resize(&w->tabs[i]->pty, (uint16_t)cols, (uint16_t)rows);
+	}
 	w->dirty = true;
 }
 
@@ -834,7 +1201,7 @@ static void xdg_surface_configure(void *data, struct xdg_surface *s,
 		/* The compositor left the size to us, which it does for a
 		 * floating window. Ask for what the grid we started with wants. */
 		w->win_w = st_render_width(w->ren, w->g);
-		w->win_h = st_render_height(w->ren, w->g);
+		w->win_h = st_render_height(w->ren, w->g) + w->bar_h;
 	}
 
 	bool resized = !w->buf[0].px
@@ -1064,6 +1431,24 @@ static uint32_t kkp_code(xkb_keysym_t sym, const char *utf8, int n)
 	return 0;
 }
 
+/* ⚠ CTRL+SHIFT+1 IS NOT THE `1` KEYSYM. With shift held, xkb resolves the key
+ * to what the layout puts on that level — `exclam` on a US layout, and
+ * something else again on every other. A binding written against XKB_KEY_1
+ * therefore never fires, and the terminal appears to ignore the key.
+ *
+ * So the SHIFTED symbol is not what a Ctrl+Shift binding should look at: the
+ * unshifted one is, which is level 0 of the key in the layout that is active.
+ * It also makes Ctrl+Shift+C and Ctrl+Shift+c one case instead of two. */
+static xkb_keysym_t base_sym(win_t *w, xkb_keycode_t code)
+{
+	if (!w->keymap || !w->xkb_state)
+		return XKB_KEY_NoSymbol;
+	xkb_layout_index_t layout = xkb_state_key_get_layout(w->xkb_state, code);
+	const xkb_keysym_t *syms = NULL;
+	int n = xkb_keymap_key_get_syms_by_level(w->keymap, code, layout, 0, &syms);
+	return n > 0 ? syms[0] : XKB_KEY_NoSymbol;
+}
+
 static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
                     uint32_t time, uint32_t key, uint32_t state)
 {
@@ -1112,6 +1497,31 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 		bool ctl = xkb_state_mod_name_is_active(w->xkb_state,
 			XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0;
 
+		/* ── tabs ───────────────────────────────────────────────────────────
+		 *
+		 * Ctrl+Shift again, for the same reason copy and paste use it: every
+		 * plain Ctrl combination belongs to the program. `t` opens, `w` closes,
+		 * left and right move, and the digits go straight to a tab.
+		 *
+		 * ⚠ ALL OF THEM ON THE UNSHIFTED SYMBOL — see base_sym above. */
+		xkb_keysym_t bsym = base_sym(w, code);
+		if (ctl && shift) {
+			if (bsym == XKB_KEY_t) { tab_open(w); return; }
+			if (bsym == XKB_KEY_w) { tab_close(w, w->active); return; }
+			if (sym == XKB_KEY_Right || sym == XKB_KEY_Left) {
+				tab_cycle(w, sym == XKB_KEY_Right ? +1 : -1);
+				return;
+			}
+			if (bsym >= XKB_KEY_1 && bsym <= XKB_KEY_9) {
+				int want = (int)(bsym - XKB_KEY_1);
+				if (want < w->ntabs) {
+					tab_activate(w, want);
+					title_update(w);
+				}
+				return;
+			}
+		}
+
 		/* ── copy and paste ─────────────────────────────────────────────────
 		 *
 		 * ⚠ CTRL+SHIFT, BECAUSE CTRL+C IS TAKEN and has been since before any
@@ -1122,7 +1532,7 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 		 *
 		 * Shift+Insert pastes the PRIMARY selection — the X11 binding for the
 		 * middle button, kept for people whose hands know it. */
-		if (ctl && shift && (sym == XKB_KEY_C || sym == XKB_KEY_c)) {
+		if (ctl && shift && bsym == XKB_KEY_c) {
 			char *text = st_sel_text(w->g);
 			if (text && *text)
 				own_clipboard(w, text, strlen(text));
@@ -1130,7 +1540,7 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 				free(text);
 			return;
 		}
-		if (ctl && shift && (sym == XKB_KEY_V || sym == XKB_KEY_v)) {
+		if (ctl && shift && bsym == XKB_KEY_v) {
 			paste_start(w, false);
 			return;
 		}
@@ -1692,12 +2102,13 @@ done:
 	w->paste_len = 0;
 }
 
-/* What the child asked to copy, via OSC 52. Called after every feed. */
-static void take_child_clipboard(win_t *w)
+/* What a child asked to copy, via OSC 52. Called after every feed, for the tab
+ * that produced it — which is not necessarily the visible one. */
+static void take_child_clipboard_of(win_t *w, st_vt_t *vt)
 {
 	size_t len = 0;
 	uint8_t target = ST_CLIP_NONE;
-	char *text = st_vt_take_clipboard(w->vt, &len, &target);
+	char *text = st_vt_take_clipboard(vt, &len, &target);
 	if (!text)
 		return;
 	if (target == ST_CLIP_PRIMARY)
@@ -1770,14 +2181,39 @@ static bool mouse_reporting(const win_t *w)
  * highlight that stops updating the moment the pointer crosses the edge. */
 static void pointer_cell(win_t *w, wl_fixed_t sx, wl_fixed_t sy)
 {
+	if (!w->g)
+		return;
 	int cw = st_font_cell_w(w->font), ch = st_font_cell_h(w->font);
 	int x = wl_fixed_to_int(sx), y = wl_fixed_to_int(sy);
-	int col = x < 0 ? 0 : x / cw;
-	int row = y < 0 ? 0 : y / ch;
+
+	w->ptr_px = x;
+	w->ptr_py = y;
+	/* ⚠ THE BAR IS NOT ROW 0. Every grid coordinate is measured from under it,
+	 * and forgetting the offset puts every click one row above where the
+	 * person pointed — which reads as the terminal selecting the wrong line. */
+	int gy = y - w->bar_h;
+
+	int col = x  < 0 ? 0 : x / cw;
+	int row = gy < 0 ? 0 : gy / ch;
 	if (col > w->g->cols - 1) col = w->g->cols - 1;
 	if (row > w->g->rows - 1) row = w->g->rows - 1;
 	w->ptr_col = col;
 	w->ptr_row = row;
+}
+
+/* Is the pointer on the bar rather than on the terminal? */
+static bool ptr_in_bar(const win_t *w)
+{
+	return w->bar_h > 0 && w->ptr_py >= 0 && w->ptr_py < w->bar_h;
+}
+
+/* Which tab was clicked, or -1. */
+static int bar_tab_at(const win_t *w, int x)
+{
+	for (int i = 0; i < w->ntabs; i++)
+		if (x >= w->tab_x0[i] && x < w->tab_x1[i])
+			return i;
+	return -1;
 }
 
 static void mouse_report(win_t *w, int event, int button)
@@ -1866,6 +2302,8 @@ static void ptr_motion(void *data, struct wl_pointer *p, uint32_t time,
 	if (w->ptr_col == was_col && w->ptr_row == was_row)
 		return;
 
+	if (ptr_in_bar(w))
+		return;
 	if (mouse_reporting(w)) {
 		mouse_report(w, ST_MOUSE_MOTION, w->held);
 		return;
@@ -1910,6 +2348,20 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 
 	w->last_serial = serial;
 	selections_flush(w);
+
+	/* ⚠ A CLICK ON THE BAR IS NOT A CLICK IN THE TERMINAL. Without this it
+	 * would start a selection on row 0 of whatever tab is showing, and a
+	 * middle-click meant for a tab would paste into the shell. */
+	if (ptr_in_bar(w)) {
+		if (down && b == ST_BTN_LEFT) {
+			int i = bar_tab_at(w, w->ptr_px);
+			if (i >= 0 && i != w->active) {
+				tab_activate(w, i);
+				title_update(w);
+			}
+		}
+		return;
+	}
 
 	if (b == ST_BTN_MIDDLE) {
 		/* The habit: highlight somewhere, middle-click here. It pastes the
@@ -2123,13 +2575,13 @@ static const struct wl_registry_listener registry_listener = {
 
 /* ── the loop ───────────────────────────────────────────────────────────── */
 
-int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
-               st_render_t *ren, const char *title, bool deadline,
+int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
+               const char *title, bool deadline,
                const st_config_t *cfg, st_win_stats_t *stats)
 {
 	win_t W = {0};
 	win_t *w = &W;
-	w->g = g; w->vt = vt; w->pty = pty; w->font = font; w->ren = ren;
+	w->font = font; w->ren = ren; w->spec = spec;
 	w->scroll_lines = (cfg && cfg->scroll_lines > 0) ? cfg->scroll_lines : 3;
 	w->pool_fd = -1;
 	w->deadline = deadline;
@@ -2160,6 +2612,27 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	}
 
 	w->xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
+	/* ⚠ THE FIRST TAB IS SPAWNED AFTER THE CONNECTION, NOT BEFORE. A child
+	 * forked first would be left running with nobody reading it when the
+	 * compositor turns out to be missing — the terminal would exit with its
+	 * message and leave a shell attached to a pty nothing owns. */
+	if (!tab_new(w)) {
+		fprintf(stderr, "syntty: cannot allocate a pty\n");
+		wl_display_disconnect(w->dpy);
+		return 1;
+	}
+	tab_activate(w, 0);
+	st_render_origin(w->ren, 0);
+
+	/* More than one asked for on the command line. They are opened before the
+	 * first configure, so the window is sized with the bar already in it rather
+	 * than resizing itself the moment it appears. */
+	for (int i = 1; i < spec->tabs && i < SYN_MAX_TABS; i++)
+		if (!tab_new(w))
+			break;
+	tab_activate(w, 0);
+	bar_update(w);
 
 	/* The data devices need BOTH a manager and a seat, and the two arrive as
 	 * separate globals in whatever order the compositor lists them — so they
@@ -2209,15 +2682,22 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			wl_display_dispatch_pending(w->dpy);
 		wl_display_flush(w->dpy);
 
-		/* Three descriptors at most: the compositor, the child, and — only
-		 * while a paste is in flight — the pipe the other program is writing
-		 * its clipboard into. */
-		struct pollfd fds[3] = {
-			{ .fd = wlfd,      .events = POLLIN },
-			{ .fd = pty->fd,   .events = POLLIN },
+		/* The compositor, the paste in flight, and every tab's child.
+		 *
+		 * ⚠ A NEGATIVE FD IS IGNORED BY poll(), which is what keeps the paste
+		 * slot in the set unconditionally instead of shuffling indices around
+		 * depending on whether one is running. */
+		struct pollfd fds[2 + SYN_MAX_TABS] = {
+			{ .fd = wlfd,        .events = POLLIN },
 			{ .fd = w->paste_fd, .events = POLLIN },
 		};
-		int nfds = w->paste_fd >= 0 ? 3 : 2;
+		int ntabs = w->ntabs;
+		for (int i = 0; i < ntabs; i++) {
+			fds[2 + i].fd     = w->tabs[i]->pty.fd;
+			fds[2 + i].events = POLLIN;
+		}
+		int nfds = 2 + ntabs;
+		unsigned gen = w->tab_gen;
 
 		/* Sleep until the deadline, if one is pending — and keep taking input
 		 * the whole way there, which is the entire trick. -1 means "no paint
@@ -2242,7 +2722,31 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			wl_display_cancel_read(w->dpy);
 		wl_display_dispatch_pending(w->dpy);
 
-		if (fds[1].revents & (POLLIN | POLLHUP)) {
+		if (fds[1].revents & (POLLIN | POLLHUP))
+			paste_pump(w);
+
+		/* ── every tab, back to front ───────────────────────────────────────
+		 *
+		 * ⚠ BACKWARDS, because closing a tab shifts everything after it down
+		 * one and the poll results are indexed by the OLD positions. Walking
+		 * forwards, one child exiting would make the next iteration read the
+		 * wrong tab's descriptor into the wrong tab's parser. */
+		for (int i = ntabs - 1; i >= 0; i--) {
+			/* ⚠ A KEYSTROKE MAY HAVE OPENED OR CLOSED A TAB while these poll
+			 * results sat here — the dispatch above runs the key handlers. The
+			 * indices in `fds` then name different sessions than they did, and
+			 * the honest answer is to read none of them: poll is
+			 * level-triggered and the next round asks again. */
+			if (w->tab_gen != gen)
+				break;
+			if (i >= w->ntabs)
+				continue;                    /* already gone this iteration */
+			if (!(fds[2 + i].revents & (POLLIN | POLLHUP)))
+				continue;
+
+			tab_t *t = w->tabs[i];
+			bool active = (i == w->active);
+
 			/* ⚠ Drained in a loop, not once. Under a flood there is far more
 			 * than one read's worth waiting, and going back to poll() after
 			 * each one turns a megabyte into a syscall storm. The loop stops
@@ -2254,10 +2758,13 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			 * Read until EAGAIN, THEN believe the hangup. */
 			bool eof = false;
 			for (;;) {
-				ssize_t n = read(pty->fd, rbuf, sizeof rbuf);
+				ssize_t n = read(t->pty.fd, rbuf, sizeof rbuf);
 				if (n > 0) {
-					st_vt_feed(vt, rbuf, (size_t)n);
-					w->dirty = true;
+					st_vt_feed(&t->vt, rbuf, (size_t)n);
+					/* Only the visible tab needs drawing; the rest are parsed
+					 * into their own grids and shown when switched to. */
+					if (active)
+						w->dirty = true;
 					continue;
 				}
 				if (n == 0) { eof = true; break; }
@@ -2266,26 +2773,36 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 				eof = true;
 				break;
 			}
-			if (eof)
-				break;
 
 			/* Answers the child asked for while we were parsing. Written
 			 * straight back, as though typed — see vt_reply: the parser holds
 			 * no descriptor, so draining is the caller's job and this is the
 			 * only caller that has somewhere to drain to. */
 			char rep[128];
-			size_t rn = st_vt_take_reply(vt, rep, sizeof rep);
+			size_t rn = st_vt_take_reply(&t->vt, rep, sizeof rep);
 			if (rn)
-				(void)!write(pty->fd, rep, rn);
+				(void)!write(t->pty.fd, rep, rn);
 
 			/* And anything it asked to COPY, via OSC 52 — the only way a
 			 * program on the far end of an ssh session can reach the
-			 * clipboard of the machine somebody is sitting at. */
-			take_child_clipboard(w);
-		}
+			 * clipboard of the machine somebody is sitting at. A background
+			 * tab may do it too: it is the same person's terminal, and a job
+			 * that copies its result when it finishes is the reason to want
+			 * this at all. */
+			take_child_clipboard_of(w, &t->vt);
 
-		if (nfds == 3 && (fds[2].revents & (POLLIN | POLLHUP)))
-			paste_pump(w);
+			if (active)
+				title_update(w);
+
+			/* ⚠ THE TAB CLOSES, THE WINDOW DOES NOT — unless it was the last
+			 * one. A child exiting used to end the whole loop, which is
+			 * exactly right with one tab and would have thrown away three
+			 * other sessions with it. */
+			if (eof)
+				tab_close(w, i);
+		}
+		if (w->closed)
+			break;
 
 		/* The scheduled paint, now that everything readable has been read —
 		 * which is what makes waiting worth anything: a keystroke that arrived
@@ -2331,15 +2848,35 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 		stats->rows_possible = w->rows_possible;
 		stats->mouse_sent    = w->mouse_sent;
 		stats->mouse_dropped = w->mouse_dropped;
+		stats->tabs_opened   = w->tabs_opened;
+		stats->grid_bytes    = w->g ? st_grid_bytes(w->g) : w->last_grid_bytes;
+		stats->cols          = w->g ? w->g->cols : w->last_cols;
+		stats->rows          = w->g ? w->g->rows : w->last_rows;
 		stats->margin_ms     = (w->paint_cost_ns + w->paint_cost_ns / 2
 		                        + 1000000ull) / 1e6;
 	}
 
-	/* The child's status is what this returns. The loop above ends either
-	 * because the pty hung up (the child is gone) or because the window was
-	 * closed (it is not, and closing the master is what tells it). Both go
-	 * through the same reap. */
-	int rc = st_pty_reap(pty);
+	/* ── the status, and the tabs still open ────────────────────────────────
+	 *
+	 * The window ends either because the last tab's child exited or because
+	 * somebody closed the window; in the second case there are still sessions
+	 * running, and closing the pty master is what hangs them up.
+	 *
+	 * ⚠ WHAT IT RETURNS IS THE FIRST TAB'S STATUS. `syntty win -- make` asked
+	 * about make, and opening a second tab to read something while it built
+	 * must not change the answer that lands in $?. */
+	for (int i = w->ntabs - 1; i >= 0; i--) {
+		tab_t *t = w->tabs[i];
+		int st = st_pty_reap(&t->pty);
+		if (t->first && !w->first_done) {
+			w->first_status = st;
+			w->first_done = true;
+		}
+		tab_free(t);
+		w->ntabs--;
+	}
+	w->g = NULL; w->vt = NULL; w->pty = NULL;
+	int rc = w->first_status;
 
 	/* Frames still in flight. Their events will never arrive because we are
 	 * about to disconnect, so the objects are destroyed here — see the note on
@@ -2393,6 +2930,12 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 }
 
 /* ── what is left ──────────────────────────────────────────────────────────
+ *
+ * SPLITS. Tabs are one grid visible at a time; a split is several at once, and
+ * the difference is not the layout — it is that every rule in this file about
+ * "the active tab" becomes a rule about a rectangle, including which one the
+ * keyboard goes to, which one the pointer is over, and how damage is tracked
+ * for four grids sharing one buffer. It is a bigger change than tabs were.
  *
  * AUTO-SCROLL WHILE DRAGGING. Dragging above the top of the window does not
  * pull the view back through the scrollback. The selection can already reach

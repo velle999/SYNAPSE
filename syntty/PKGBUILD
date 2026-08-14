@@ -15,7 +15,7 @@
 # What it has: a pty, a VT parser, a cell grid, a glyph atlas, a wl_shm window,
 # deadline rendering, damage tracking, the kitty keyboard and graphics
 # protocols, OSC 133 marks, the alternate screen, the pointer and the
-# clipboard, and a config file. What it does not have yet: tabs, remote
+# clipboard, a config file and tabs. What it does not have yet: splits, remote
 # control, hyperlinks.
 #
 # That ordering is the point. Every claim this program is being built on is a
@@ -41,7 +41,7 @@ pkgname=syntty
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=16
+pkgrel=17
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

@@ -50,6 +50,14 @@ struct st_render {
 	uint32_t   cursor_fg, cursor_bg;
 	bool       cursor_set;      /* the config named them; otherwise: invert */
 	bool       show_cursor;
+	/* ── where row 0 starts ─────────────────────────────────────────────────
+	 *
+	 * Pixels above the grid that belong to somebody else — the tab bar. It is
+	 * an OFFSET rather than a smaller buffer because every coordinate in this
+	 * file is derived from the grid, and a renderer that thought the window
+	 * began at the top would paint the bar's row of pixels with cell content
+	 * once per frame and the bar would flicker under the text. */
+	int        origin_y;
 };
 
 /* ── the 256 colours ───────────────────────────────────────────────────────
@@ -114,7 +122,16 @@ void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg)
 	if (bg != ST_CFG_UNSET) r->def_bg = bg;
 }
 
+void st_render_colors_get(const st_render_t *r, uint32_t *fg, uint32_t *bg)
+{
+	if (fg) *fg = r->def_fg;
+	if (bg) *bg = r->def_bg;
+}
+
 void st_render_cursor(st_render_t *r, bool on) { r->show_cursor = on; }
+
+void st_render_origin(st_render_t *r, int y) { r->origin_y = y > 0 ? y : 0; }
+int  st_render_origin_get(const st_render_t *r) { return r->origin_y; }
 
 void st_render_palette(st_render_t *r, int idx, uint32_t rgb)
 {
@@ -270,7 +287,7 @@ static size_t draw_row(st_render_t *r, const st_grid_t *g, int row,
 {
 	int cw = st_font_cell_w(r->font);
 	int ch = st_font_cell_h(r->font);
-	int y0 = row * ch;
+	int y0 = r->origin_y + row * ch;
 	if (y0 + ch > h)
 		return 0;
 
@@ -346,11 +363,17 @@ static void fill_margins(st_render_t *r, const st_grid_t *g,
                          uint32_t *px, int stride_px, int w, int h)
 {
 	int cw = st_font_cell_w(r->font), ch = st_font_cell_h(r->font);
-	int used_w = cw * g->cols, used_h = ch * g->rows;
+	int used_w = cw * g->cols;
+	int used_h = r->origin_y + ch * g->rows;
 	if (used_w > w) used_w = w;
 	if (used_h > h) used_h = h;
-	if (used_w < w) fill_rect(px, stride_px, used_w, 0, w - used_w, h, r->def_bg);
-	if (used_h < h) fill_rect(px, stride_px, 0, used_h, used_w, h - used_h, r->def_bg);
+	/* From the origin down: everything above it belongs to whoever draws
+	 * there, and filling it here would erase the tab bar every frame. */
+	if (used_w < w)
+		fill_rect(px, stride_px, used_w, r->origin_y, w - used_w,
+		          h - r->origin_y, r->def_bg);
+	if (used_h < h)
+		fill_rect(px, stride_px, 0, used_h, used_w, h - used_h, r->def_bg);
 }
 
 /* ── images, over the top of the cells ──────────────────────────────────────
@@ -375,7 +398,7 @@ static void draw_images(st_render_t *r, const st_grid_t *g,
 	int cw = st_font_cell_w(r->font), ch = st_font_cell_h(r->font);
 
 	for (int i = 0; i < n; i++) {
-		int x0 = pl[i].col * cw, y0 = pl[i].row * ch;
+		int x0 = pl[i].col * cw, y0 = r->origin_y + pl[i].row * ch;
 		int dw = pl[i].cols * cw, dh = pl[i].rows * ch;
 		if (pl[i].w == 0 || pl[i].h == 0)
 			continue;
@@ -449,6 +472,70 @@ size_t st_render_rows(st_render_t *r, const st_grid_t *g, const uint8_t *rows,
 	if (drawn)
 		draw_images(r, g, px, stride_px, w, h);
 	return drawn;
+}
+
+/* ── text that is not the grid ──────────────────────────────────────────────
+ *
+ * The tab bar. It is drawn with the SAME font and the same glyph atlas as
+ * everything else, which is the point of putting it here rather than in win.c:
+ * a second text path would mean a second set of decisions about coverage,
+ * baselines and wide characters, and they would drift.
+ *
+ * Clipped to `max_w` rather than wrapped, and ⚠ TRUNCATED ON A CODEPOINT
+ * BOUNDARY — cutting a UTF-8 sequence in half produces a byte the decoder
+ * cannot use and a replacement box on the end of every long title. Returns the
+ * x it stopped at, so the caller can lay segments out left to right without
+ * measuring them twice. */
+int st_render_text(st_render_t *r, uint32_t *px, int stride_px, int w, int h,
+                   int x, int y, int max_w, const char *utf8,
+                   uint32_t fg, uint32_t bg)
+{
+	int cw = st_font_cell_w(r->font), ch = st_font_cell_h(r->font);
+	if (y < 0 || y + ch > h || x >= w)
+		return x;
+
+	int end = x + max_w;
+	if (end > w)
+		end = w;
+	if (end > x)
+		fill_rect(px, stride_px, x, y, end - x, ch, bg);
+
+	const unsigned char *p = (const unsigned char *)utf8;
+	while (*p && x + cw <= end) {
+		/* One codepoint, from as many bytes as it takes. */
+		uint32_t cp = *p;
+		int need = 0;
+		if      (cp < 0x80)          { need = 0; }
+		else if ((cp & 0xE0) == 0xC0) { cp &= 0x1F; need = 1; }
+		else if ((cp & 0xF0) == 0xE0) { cp &= 0x0F; need = 2; }
+		else if ((cp & 0xF8) == 0xF0) { cp &= 0x07; need = 3; }
+		else                          { p++; continue; }   /* a stray tail */
+		p++;
+		for (int i = 0; i < need; i++) {
+			if ((*p & 0xC0) != 0x80) { cp = 0; break; }
+			cp = cp << 6 | (*p++ & 0x3F);
+		}
+		if (!cp)
+			continue;
+
+		int span = st_char_width(cp);
+		if (span < 1)
+			continue;
+		if (x + span * cw > end)
+			break;
+
+		const st_glyph_t *gl = st_font_glyph(r->font, cp, 0);
+		int gw = gl->w < span * cw ? gl->w : span * cw;
+		int gh = gl->h < ch ? gl->h : ch;
+		for (int j = 0; j < gh; j++) {
+			const uint8_t *src = gl->bits + (size_t)j * gl->w;
+			uint32_t *dst = px + (size_t)(y + j) * stride_px + x;
+			for (int i = 0; i < gw; i++)
+				dst[i] = blend(fg, bg, src[i]);
+		}
+		x += span * cw;
+	}
+	return x;
 }
 
 /* ── PPM, for the test suite and for a person's eyes ────────────────────────

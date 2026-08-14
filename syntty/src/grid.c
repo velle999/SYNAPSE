@@ -1203,14 +1203,25 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	g->sel.active = false;
 
 	st_row_t *ns = xmalloc((size_t)rows * sizeof *ns);
-	/* Anchor on the BOTTOM of the old screen: a shell prompt is at the
-	 * bottom, and a resize that keeps the top keeps the part nobody is
-	 * looking at and throws away the line being typed on. */
-	int keep = g->rows < rows ? g->rows : rows;
-	int first = g->rows - keep;
+	/* ⚠ SHRINKING DROPS FROM THE TOP, GROWING ADDS AT THE BOTTOM, and the
+	 * CURSOR MOVES WITH THE TEXT either way.
+	 *
+	 * Shrinking keeps the bottom because that is where a shell's prompt is:
+	 * a resize that kept the top would throw away the line being typed on.
+	 *
+	 * Growing used to keep the bottom as well — old content was pushed DOWN by
+	 * the number of rows gained. The cursor was only clamped, not moved, so it
+	 * stayed where it had been while every line of text slid away from it. On a
+	 * tiling compositor, which resizes a window the instant it appears, that is
+	 * every window: the terminal came up with the shell's output sitting at the
+	 * bottom of the screen and the cursor blinking at the top, and whatever was
+	 * typed next overwrote the top while the answers appeared at the bottom.
+	 * It took a screenshot to see; nothing in the suite could resize a grid. */
+	int keep  = g->rows < rows ? g->rows : rows;
+	int first = g->rows - keep;     /* rows dropped off the top; 0 when growing */
 
 	for (int y = 0; y < rows; y++) {
-		int src = y - (rows - keep) + first;
+		int src = y + first;
 		if (src >= first && src < g->rows) {
 			ns[y] = g->screen[src];
 			if (cols != g->cols) {
@@ -1243,6 +1254,10 @@ void st_grid_resize(st_grid_t *g, uint16_t cols, uint16_t rows)
 	g->top = 0;
 	g->bot = (uint16_t)(rows - 1);
 	if (g->cx > cols - 1) g->cx = (uint16_t)(cols - 1);
+	/* The cursor is on a ROW OF TEXT, and that row has just moved. Clamping
+	 * alone leaves it pointing at whatever text happens to be at that index
+	 * now — see the note above the loop. */
+	g->cy = (g->cy > first) ? (uint16_t)(g->cy - first) : 0;
 	if (g->cy > rows - 1) g->cy = (uint16_t)(rows - 1);
 	g->wrap_next = false;
 }

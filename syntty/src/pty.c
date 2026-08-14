@@ -23,7 +23,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
+bool st_pty_spawn_env(st_pty_t *p, char *const argv[], uint16_t cols,
+                      uint16_t rows, const char *name, const char *value)
 {
 	struct winsize ws = {
 		.ws_row = rows, .ws_col = cols, .ws_xpixel = 0, .ws_ypixel = 0
@@ -39,6 +40,8 @@ bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
 		 * job control work in the child; without it every shell started here
 		 * prints "no job control" and Ctrl-C goes to the wrong process. */
 		setenv("TERM", "xterm-256color", 1);
+		if (name && value)
+			setenv(name, value, 1);
 		unsetenv("COLUMNS");
 		unsetenv("LINES");
 		signal(SIGPIPE, SIG_DFL);
@@ -49,6 +52,11 @@ bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
 	p->fd = fd;
 	p->pid = pid;
 	return true;
+}
+
+bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows)
+{
+	return st_pty_spawn_env(p, argv, cols, rows, NULL, NULL);
 }
 
 /* ⚠ Explicit, and NOT the default, because the two readers want opposite

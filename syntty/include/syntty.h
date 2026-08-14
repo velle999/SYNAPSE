@@ -724,6 +724,9 @@ void         st_render_free(st_render_t *r);
 /* Default foreground and background, as 0xRRGGBB. Cells that name a colour
  * still win; these are what ST_COL_DEFAULT resolves to. */
 void st_render_colors(st_render_t *r, uint32_t fg, uint32_t bg);
+/* What they currently are — the tab bar draws itself in the terminal's own
+ * colours rather than carrying a second pair that a theme would not reach. */
+void st_render_colors_get(const st_render_t *r, uint32_t *fg, uint32_t *bg);
 void st_render_cursor(st_render_t *r, bool on);
 /* One of the sixteen. Everything from 16 up is built from two formulas every
  * terminal agrees on and is deliberately not configurable — a theme is the
@@ -743,6 +746,22 @@ void st_render_set_gfx(st_render_t *r, const struct st_gfx *g);
  * do not cover is painted with the default background. */
 int  st_render_width (const st_render_t *r, const st_grid_t *g);
 int  st_render_height(const st_render_t *r, const st_grid_t *g);
+
+/* ── the strip above the grid ───────────────────────────────────────────────
+ *
+ * Pixels at the top of the window that are not cells: the tab bar. Row 0 is
+ * drawn `y` pixels down and nothing here touches anything above it, so the
+ * caller can draw its own chrome there and have it survive every partial
+ * repaint. Zero — no bar — is the normal case and costs nothing. */
+void st_render_origin(st_render_t *r, int y);
+int  st_render_origin_get(const st_render_t *r);
+
+/* Draw a UTF-8 string, in this renderer's font, clipped to `max_w` pixels.
+ * Returns the x it reached. The tab bar is drawn with this rather than with a
+ * second text path of its own — see the definition. */
+int st_render_text(st_render_t *r, uint32_t *px, int stride_px, int w, int h,
+                   int x, int y, int max_w, const char *utf8,
+                   uint32_t fg, uint32_t bg);
 
 /* Paint. `stride_px` is in PIXELS, not bytes — every caller so far has a
  * pixel-aligned stride, and a byte stride invites one caller to forget the
@@ -778,6 +797,11 @@ typedef struct {
 /* forkpty, argv exec'd with no shell in the middle. Returns false and leaves
  * errno set on failure. */
 bool st_pty_spawn(st_pty_t *p, char *const argv[], uint16_t cols, uint16_t rows);
+/* The same, with one more variable in the child's environment. Used for
+ * SYNTTY_TAB, which tells a shell which tab it is running in — a stable serial
+ * that is never reused, not a position that changes whenever a tab closes. */
+bool st_pty_spawn_env(st_pty_t *p, char *const argv[], uint16_t cols,
+                      uint16_t rows, const char *name, const char *value);
 /* Read until the child exits and the pty drains, feeding everything through
  * the parser. Returns the child's exit status. */
 int  st_pty_pump(st_pty_t *p, st_vt_t *vt);
@@ -966,6 +990,17 @@ typedef struct {
 	 * full repaint every frame would have cost. */
 	uint64_t rows_painted, rows_possible;
 
+	/* Tabs opened over the window's life, and what the ACTIVE tab's grid holds
+	 * at the end — the memory claim needs a number and the caller no longer
+	 * has a grid of its own to ask. */
+	uint64_t tabs_opened;
+	size_t   grid_bytes;
+	/* The size the grid ended at. Printed because the tab bar TAKES A ROW from
+	 * it, and a bar that appears without the grid shrinking would overlap the
+	 * top line of whatever is running — visible only as text that scrolls
+	 * underneath the tabs. */
+	uint16_t cols, rows;
+
 	/* Pointer events handed to the child, and the ones the 1984 encoding
 	 * could not carry (past column 223, from a program that never asked for
 	 * ?1006). The second number is printed whenever it is not zero: a mouse
@@ -974,11 +1009,25 @@ typedef struct {
 	uint64_t mouse_sent, mouse_dropped;
 } st_win_stats_t;
 
-/* Open a window and run until the child exits or it is closed. Everything it
- * needs is built by the caller, so this function owns no terminal state and
- * the headless paths above share every line of it. */
-int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
-               st_render_t *ren, const char *title, bool deadline,
-               const st_config_t *cfg, st_win_stats_t *stats);
+/* What a window's tabs run, and the shape a fresh one starts in. One spec, not
+ * one per tab: every tab a person opens with Ctrl+Shift+T runs the same thing
+ * the window was started with, which is what "another one of these" means. */
+typedef struct {
+	char *const *argv;      /* NULL-terminated, exec'd directly */
+	uint16_t     cols, rows;
+	uint32_t     scrollback;
+	int          tabs;      /* how many to open at startup; 0 and 1 mean one */
+} st_tab_spec_t;
+
+/* Open a window and run until the last tab's child exits or it is closed.
+ *
+ * ⚠ THE WINDOW OWNS THE SESSIONS NOW, which it did not before tabs. A grid, a
+ * parser and a pty per tab, created and destroyed here — the caller builds only
+ * the font and the renderer, which are the things tabs share. Everything under
+ * this is still driven headlessly by the subcommands in main.c, which is what
+ * keeps the untestable part small. */
+int st_win_run(st_font_t *font, st_render_t *ren, const st_tab_spec_t *spec,
+               const char *title, bool deadline, const st_config_t *cfg,
+               st_win_stats_t *stats);
 
 #endif /* SYNTTY_H */

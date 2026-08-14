@@ -463,6 +463,36 @@ e=$(mouse --mode=0 press:left@10,5)
 case "$e" in *'no program asked'*) ok "with no mode set nothing is reported at all" ;;
              *) bad "with no mode set nothing is reported at all ($e)" ;; esac
 
+# ── resizing, which nothing could test until there was a way to ─────────────
+#
+# ⚠ A WINDOW IS RESIZED BY THE COMPOSITOR, so every rule about what happens to
+# the text and to the cursor lived on a path this file could not reach — and a
+# bug sat there through three releases. `--resize` applies one to the grid after
+# the stream, which is exactly what fit_grid does when a window changes size.
+grew_screen=$(printf 'one\r\ntwo\r\nthree' | "$ST" --cols=10 --rows=3 dump - --resize=10x6 2>/dev/null)
+grew=$(printf 'one\r\ntwo\r\nthree' | "$ST" --cols=10 --rows=3 dump - --resize=10x6 --stats 2>&1 >/dev/null)
+[ "$(printf '%s' "$grew_screen" | sed -n 1p)" = "one" ] \
+    && ok "growing the grid leaves the text where it was" \
+    || bad "growing the grid leaves the text where it was"
+
+# ⚠ THE ONE THE SCREENSHOT FOUND. Growing used to push the old rows DOWN by the
+# number of rows gained while the cursor was merely clamped — so the cursor
+# stayed at the top and the text slid to the bottom, and on a tiling compositor
+# that is EVERY window: the shell's output sat at the bottom of the screen with
+# the cursor blinking at the top, and the next command overwrote the top while
+# its output appeared at the bottom.
+printf '%s' "$grew" | grep -q '^cursor        5,2'
+check "...and the cursor stays on the line it was on" $?
+
+shrunk_screen=$(printf 'a\r\nb\r\nc\r\nd\r\ne\r\nf' | "$ST" --cols=10 --rows=6 dump - --resize=10x3 2>/dev/null)
+shrunk=$(printf 'a\r\nb\r\nc\r\nd\r\ne\r\nf' | "$ST" --cols=10 --rows=6 dump - --resize=10x3 --stats 2>&1 >/dev/null)
+[ "$(printf '%s' "$shrunk_screen" | sed -n 1p)" = "d" ] \
+    && ok "shrinking keeps the BOTTOM — where a shell's prompt is" \
+    || bad "shrinking keeps the BOTTOM — where a shell's prompt is"
+
+printf '%s' "$shrunk" | grep -q '^cursor        1,2'
+check "...and the cursor follows the text up" $?
+
 # ── the config file ─────────────────────────────────────────────────────────
 #
 # Flags only is not how anybody runs a terminal: `--font=` on every launch is a
@@ -1339,6 +1369,75 @@ else
     [ $rc -ne 0 ] && echo "$out" | grep -qi 'wayland' \
         && ok "with no compositor it says so and exits non-zero" \
         || bad "with no compositor it says so and exits non-zero"
+
+    # ── tabs ────────────────────────────────────────────────────────────────
+    #
+    # ⚠ OPENING ONE IS A KEYSTROKE, WHICH THIS FILE CANNOT MAKE. Ctrl+Shift+T,
+    # the bar, clicking a tab and switching between them all need a person, and
+    # a headless cage has no keyboard at all. `--tabs=N` is not a test hook: it
+    # is how somebody starts a window with several sessions in it, and it is
+    # also the only door the suite has to any of this.
+    #
+    # What is asserted here is everything that does NOT need input: that the
+    # sessions are real and separate, that one exiting does not take the window
+    # with it, that the status is still the first tab's, and that the bar takes
+    # a row from the grid the CHILD is told about.
+    out=$(caged 30 --stats --tabs=3 win -- /bin/sh -c 'exit 0')
+    echo "$out" | grep -q '^tabs          3 opened'
+    check "--tabs=3 opens three sessions in one window" $?
+
+    # ⚠ A TAB EXITING IS NOT THE WINDOW EXITING. Before tabs, any child hanging
+    # up ended the loop — with four sessions open that would throw three of them
+    # away, and the person would lose whatever was running in them.
+    t0=$(date +%s%N)
+    caged 30 --tabs=2 win -- /bin/sh -c \
+        'test "$SYNTTY_TAB" = 1 && exit 3; sleep 1; exit 4' >/dev/null 2>&1
+    rc=$?
+    t1=$(date +%s%N)
+    ms=$(( (t1 - t0) / 1000000 ))
+    [ "$ms" -ge 900 ] \
+        && ok "one tab exiting leaves the window open for the others (${ms} ms)" \
+        || bad "one tab exiting leaves the window open for the others (${ms} ms)"
+
+    # ⚠ AND THE STATUS IS STILL THE FIRST TAB'S. `syntty win -- make` asked
+    # about make; opening a second tab to read something while it built must not
+    # change what lands in $?. Here the first tab exits 3 immediately and the
+    # second exits 4 a second later — the LAST to close is not the answer.
+    [ "$rc" = 3 ] \
+        && ok "...and the window still exits with the FIRST tab's status" \
+        || bad "...and the window still exits with the FIRST tab's status (got $rc)"
+
+    # SYNTTY_TAB is a stable serial, so a shell can say which session it is in.
+    caged 30 --tabs=2 win -- /bin/sh -c "echo \$SYNTTY_TAB >> $T/serials" \
+        >/dev/null 2>&1
+    [ "$(sort -u "$T/serials" 2>/dev/null | tr -d '\n')" = "12" ] \
+        && ok "each tab's child is told which tab it is (SYNTTY_TAB)" \
+        || bad "each tab's child is told which tab it is (got '$(tr -d '\n' < "$T/serials" 2>/dev/null)')"
+
+    # ⚠ THE BAR TAKES A ROW, AND THE CHILD HAS TO BE TOLD. Asked of `stty`
+    # rather than of our own statistics, because what matters is the size the
+    # PROGRAM believes it has: a bar drawn over a grid that still thinks it owns
+    # the whole window puts the top line of every full-screen program underneath
+    # the tabs.
+    caged 30 --tabs=1 win -- /bin/sh -c "sleep 0.4; stty size > $T/size1" \
+        >/dev/null 2>&1
+    # ⚠ BOTH TABS HAVE TO STILL BE OPEN when the size is read. The first
+    # version let tab 2 exit immediately — the bar went away with it, the grid
+    # grew back by a row, and the measurement came out identical to the
+    # one-tab case. The feature was working; the test was measuring a window
+    # that no longer had a bar.
+    caged 30 --tabs=2 win -- /bin/sh -c \
+        "sleep 0.4; test \$SYNTTY_TAB = 1 && stty size > $T/size2; sleep 0.4" \
+        >/dev/null 2>&1
+    r1=$(awk '{print $1}' "$T/size1" 2>/dev/null)
+    r2=$(awk '{print $1}' "$T/size2" 2>/dev/null)
+    if [ -n "$r1" ] && [ -n "$r2" ]; then
+        [ "$r2" = "$((r1 - 1))" ] \
+            && ok "the tab bar costs the child exactly one row ($r1 -> $r2)" \
+            || bad "the tab bar costs the child exactly one row ($r1 -> $r2)"
+    else
+        bad "the tab bar costs the child exactly one row (no size reported)"
+    fi
 
     # ── latency, via wp_presentation ────────────────────────────────────────
     #
