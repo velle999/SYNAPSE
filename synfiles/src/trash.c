@@ -540,20 +540,12 @@ static void empty_cb(const char *trash, const char *topdir, void *vctx)
 		while ((e = readdir(d))) {
 			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
 				continue;
-			if (sf_rm_rf(dfd, e->d_name) == 0 && s == 0) {
+			/* The per-entry records come from sf_rm_set_tick below —
+			 * one for every file inside, not just for the top-level
+			 * item, because a trash holding one big folder is a
+			 * single sf_rm_rf call and used to be minutes of silence. */
+			if (sf_rm_rf(dfd, e->d_name) == 0 && s == 0)
 				(*n)++;
-				/* One record per item as it goes. Emptying a trash
-				 * that holds a big folder is minutes of silence
-				 * otherwise, and a panel that says nothing for
-				 * minutes cannot be told from a hang — which is
-				 * exactly how this was reported. */
-				if (g_out == OUT_REC) {
-					char *enc = pct_encode(e->d_name, false);
-					rec_row(3, enc, "done", "removed");
-					free(enc);
-					fflush(stdout);
-				}
-			}
 		}
 		closedir(d);
 		free(dir);
@@ -571,7 +563,9 @@ static int trash_empty(bool confirmed)
 		rec_row(3, "path", "status", "detail");
 
 	int n = 0;
+	sf_rm_set_tick(sf_rm_progress_tick);
 	each_trash(empty_cb, &n);
+	sf_rm_set_tick(NULL);
 
 	if (g_out == OUT_REC) {
 		char *c = xasprintf("%d", n);

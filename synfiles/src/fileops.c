@@ -100,6 +100,38 @@ const char *sf_basename(const char *path)
 
 /* ── recursive delete ───────────────────────────────────────────────────── */
 
+/* An optional per-entry hook, for the two operations somebody sits and watches.
+ *
+ * Deleting one large folder is ONE call to sf_rm_rf, so both `delete` and
+ * emptying the trash reported nothing at all until the whole tree was gone —
+ * minutes, for a folder like ~/.claude, and from the GUI a silence that long
+ * cannot be told from a hang. That is exactly how it was reported.
+ *
+ * Left NULL for the removals nobody is watching — the one inside an overwrite,
+ * where these records would be counted as files copied.
+ */
+static void (*g_rm_tick)(const char *name);
+
+void sf_rm_set_tick(void (*fn)(const char *name))
+{
+	g_rm_tick = fn;
+}
+
+/* The tick itself: one record per entry actually removed, flushed, for the
+ * same reason report() flushes. */
+void sf_rm_progress_tick(const char *name)
+{
+	if (g_out != OUT_REC)
+		return;
+	/* keep_slash, like report(): the top-level call passes a whole path, and
+	 * a record whose path is spelled differently from every other record's is
+	 * one a reader has to special-case. */
+	char *enc = pct_encode(name, true);
+	rec_row(3, enc, "done", "removed");
+	free(enc);
+	fflush(stdout);
+}
+
 /* Removes `name` under `dirfd`. Directories are emptied depth-first and then
  * rmdir'd. Never descends through a symlink: a link is unlinked as itself. */
 int sf_rm_rf(int dirfd, const char *name)
@@ -108,8 +140,11 @@ int sf_rm_rf(int dirfd, const char *name)
 	if (fstatat(dirfd, name, &st, AT_SYMLINK_NOFOLLOW) != 0)
 		return errno == ENOENT ? 0 : -1;
 
-	if (!S_ISDIR(st.st_mode))
-		return unlinkat(dirfd, name, 0);
+	if (!S_ISDIR(st.st_mode)) {
+		int r = unlinkat(dirfd, name, 0);
+		if (r == 0 && g_rm_tick) g_rm_tick(name);
+		return r;
+	}
 
 	int fd = openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
 	if (fd < 0)
@@ -131,8 +166,10 @@ int sf_rm_rf(int dirfd, const char *name)
 	}
 	closedir(d);
 
-	if (rc == 0)
+	if (rc == 0) {
 		rc = unlinkat(dirfd, name, AT_REMOVEDIR);
+		if (rc == 0 && g_rm_tick) g_rm_tick(name);
+	}
 	return rc;
 }
 
@@ -884,6 +921,7 @@ int cmd_delete(int argc, char **argv)
 		rec_row(3, "path", "status", "detail");
 
 	tally_t t = { 0, 0, 0 };
+	sf_rm_set_tick(sf_rm_progress_tick);
 	for (int i = 0; i < n; i++) {
 		char *real = sf_resolve(paths[i]);
 
@@ -906,5 +944,6 @@ int cmd_delete(int argc, char **argv)
 	}
 
 	free(paths);
+	sf_rm_set_tick(NULL);
 	return finish(&t);
 }

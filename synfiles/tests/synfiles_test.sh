@@ -1229,6 +1229,27 @@ echo keep > "$C/mrg/dst/x/keep"
     && ok "--conflict=overwrite merges two directories" \
     || bad "the directory merge lost something"
 
+# A recursive delete REPORTS AS IT GOES. Deleting one large folder is a single
+# sf_rm_rf call, so `delete` and `trash empty` said nothing at all until the
+# whole tree was gone — minutes for a big folder, and a GUI silence that long
+# cannot be told from a hang.
+mkdir -p "$C/tick/big/sub"
+echo x > "$C/tick/big/f.txt"
+echo y > "$C/tick/big/sub/g.txt"
+n=$("$SYNFILES" --rec delete --yes "$C/tick/big" | grep -c 'removed$')
+[ "$n" -ge 4 ] && ok "a recursive delete reports each entry as it removes it" \
+               || bad "the recursive delete emitted $n progress records, want >= 4"
+
+# ...but the removal inside an OVERWRITE must stay quiet: those records would
+# be counted by the GUI as files copied.
+mkdir -p "$C/tickq/src" "$C/tickq/dst/x"
+echo new > "$C/tickq/src/x"
+echo old > "$C/tickq/dst/x/inner"
+"$SYNFILES" --rec copy --conflict=overwrite "$C/tickq/src/x" "$C/tickq/dst" \
+    | grep -q 'removed$' \
+    && bad "an overwrite emitted removal records" \
+    || ok "the removal inside an overwrite stays quiet"
+
 # ── collisions ──────────────────────────────────────────────────────────────
 #
 # What the GUI asks BEFORE it pastes, so that "overwrite?" is only asked when
