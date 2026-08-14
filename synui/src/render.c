@@ -4682,8 +4682,12 @@ void synui_render_calendar(syn_server_t *s)
     static const char *wd[] = { "Su","Mo","Tu","We","Th","Fr","Sa" };
     cairo_set_font_size(cr, 12);
     for (int i = 0; i < 7; i++) {
-        cairo_set_source_rgba(cr, i == 0 || i == 6 ? 0.72 : 0.55,
-                              0.6, 0.72, 1.0);
+        /* The second literal in this panel, and the same bug as the day numbers
+         * below: a fixed blue-grey that reads as a weekend/weekday distinction
+         * on a near-black panel and as grey-on-grey on silver. The distinction
+         * is worth keeping, so it becomes two RUNGS of the ladder rather than
+         * two constants — which is also the only way it survives a theme flip. */
+        set_ink(cr, i == 0 || i == 6 ? INK_MUTED : INK_LABEL, 1.0);
         cairo_move_to(cr, grid_x + i * cell_w + 13, grid_y);
         syn_show_text(cr, wd[i]);
     }
@@ -4721,8 +4725,22 @@ void synui_render_calendar(syn_server_t *s)
         char ds[8];
         snprintf(ds, sizeof(ds), "%d", day);
         cairo_set_font_size(cr, 14);
-        cairo_set_source_rgba(cr, is_sel ? 0.95 : 0.82, is_sel ? 1.0 : 0.86,
-                              is_sel ? 0.99 : 0.94, 1.0);
+        /* The ink LADDER, not a literal.
+         *
+         * These were a hardcoded near-white — #D1DBEF, and #F2FFFC for the
+         * selected day — from when every panel was the same near-black navy.
+         * On that surface they measure 13.6:1. On 95's #C0C0C0 they measure
+         * **1.31:1**, which is the calendar nobody could read.
+         *
+         * set_ink is a POSITION between the panel and its ink, so it flips with
+         * the theme and is floored by syn_ink_floor(); a literal cannot do
+         * either. Nothing else here was wrong — the accent behind the selected
+         * cell already goes through set_accent() and is corrected — so this one
+         * pair of literals was the whole bug.
+         *
+         * The selected day sits on an accent wash and wants the strongest ink
+         * the panel draws; every other day is ordinary body text. */
+        set_ink(cr, is_sel ? INK_STRONG : INK_BODY, 1.0);
         cairo_move_to(cr, cx + (day < 10 ? 16 : 12), cy + 18);
         syn_show_text(cr, ds);
     }
