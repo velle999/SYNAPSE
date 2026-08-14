@@ -122,6 +122,7 @@ FloatingWindow {
     property bool aNexus: false
     property bool aTepris: false
     property bool aArsenal: true
+    property bool aWpengine: true
     property bool aBluetooth: true
     property bool aPrinting: true
     property bool aWine: true
@@ -443,7 +444,8 @@ FloatingWindow {
     }
     function customApps() {
         return joinPicked([[aChibi, "Chibi"], [aVibe, "Vibe"], [aNexus, "Nexus Chat"],
-                           [aTepris, "TEPRIS"], [aArsenal, "Arsenal"]])
+                           [aTepris, "TEPRIS"], [aArsenal, "Arsenal"],
+                           [aWpengine, "Animated wallpapers"]])
     }
     function customOpts() {
         return joinPicked([[aBluetooth, "Bluetooth"], [aPrinting, "printing"], [aWine, "Wine"],
@@ -519,6 +521,7 @@ FloatingWindow {
             L.push("want_nexus=" + yn(aNexus))
             L.push("want_tepris=" + yn(aTepris))
             L.push("want_arsenal=" + yn(aArsenal))
+            L.push("want_wpengine=" + yn(aWpengine))
             L.push("want_bluetooth=" + yn(aBluetooth))
             L.push("want_printing=" + yn(aPrinting))
             L.push("want_wine=" + yn(aWine))
@@ -1293,6 +1296,15 @@ FloatingWindow {
                                     text: "SYNAPSE Arsenal — browse BlackArch tooling"
                                     checked: root.aArsenal
                                     onToggled: root.aArsenal = !root.aArsenal
+                                }
+                                Check {
+                                    // The renderer and our wallpapers, always
+                                    // together: either alone is a picker that
+                                    // lists rows nothing can play, or a player
+                                    // with nothing to play.
+                                    text: "Animated wallpapers — no Steam needed (~317 MB)"
+                                    checked: root.aWpengine
+                                    onToggled: root.aWpengine = !root.aWpengine
                                 }
                             }
                             Column {

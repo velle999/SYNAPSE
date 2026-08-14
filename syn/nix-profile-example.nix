@@ -94,6 +94,9 @@
     nexus   = false;
     tepris  = false;
     arsenal = true;
+    wpengine = true;     # the SynapseOS animated wallpapers + their renderer
+                         #   (~317 MB); no Steam needed. Off leaves synui's
+                         #   wallpaper picker with no Wallpaper Engine rows.
   };
 
   # Dropping a core daemon stops this being SynapseOS, so it is behind its own

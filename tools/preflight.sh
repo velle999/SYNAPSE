@@ -52,6 +52,25 @@ cd "$(dirname "$0")/.."
 
 # ── Tables ───────────────────────────────────────────────────
 
+# On the ISO but named in neither of syn-install's SEL_CORE / SEL_APPS, with
+# the reason it still reaches an installed system — or why it should not.
+#
+# packages.x86_64 is what the LIVE environment gets; SEL_CORE and SEL_APPS are
+# what the TARGET gets, and nothing makes the two agree. That gap shipped an
+# ISO carrying four Wallpaper Engine wallpapers whose picker found zero of them
+# on every machine installed from it, because linux-wallpaperengine and
+# synapse-wallpapers were in packages.x86_64 and in neither list here.
+declare -A EXEMPT_INSTALLER=(
+    [scenefx0.5]="a hard depends of synui, so pacman installs it with synui — naming it here as well would only be a second place to forget"
+    [synapse-llama]="a hard depends of synapd, same as scenefx0.5 under synui"
+    [limine-mkinitcpio-hook]="installed conditionally, inside the chroot, only on a limine install (syn-install.sh: arch-chroot /mnt pacman -S ... limine-mkinitcpio-hook). It must NOT arrive on a GRUB box — its hook shadows mkinitcpio's"
+    [limine-snapper-sync]="limine + snapper only, chosen by the bootloader branch rather than the app list"
+    # The one package whose absence from the target is the POINT. It ships
+    # /usr/bin/syn-crypt, a disk partitioner; syn-update keeps it out of NEW[]
+    # for the same reason, via its own NEVER_ADD.
+    [syn-install]="the installer itself — it belongs to the ISO, and an installed system is expected not to have it"
+)
+
 # Components build-all.sh builds that are deliberately NOT on the ISO. Being
 # buildable and being shipped are different questions and this is the only
 # place that says which.
@@ -179,10 +198,19 @@ pkgfield_scraped() {
 BASE=HEAD
 MODE=worktree
 SELFTEST=0
+# Skip the pkgrel gate, which is the only check that reads pending edits.
+# For a pathspec commit (`git commit -- <paths>`), which is how this repo
+# commits safely while several sessions share one index, there is no staged set
+# to read and the working tree contains other people's work — so the honest
+# answer is to run everything that describes the repo AT REST and say plainly
+# that the bump was not checked, rather than to pass vacuously or to block on
+# an edit the committer did not make.
+AT_REST=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --staged)    MODE=staged ;;
+        --at-rest)   AT_REST=1 ;;
         --since)     shift; BASE=${1:?--since needs a ref}; MODE=range ;;
         --self-test) SELFTEST=1 ;;
         -h|--help)   sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//;$d'; exit 0 ;;
@@ -415,7 +443,69 @@ check_iso() {
     return 0
 }
 
-# ── Check 4: every version field is readable ─────────────────
+# ── Check 4: the ISO and the installer agree ─────────────────
+#
+# A third and fourth list, after KNOWN= and COMPONENTS: archiso's PACKAGES says
+# what the live ISO carries, syn-install's SEL_CORE/SEL_APPS say what a target
+# gets. They are written by hand, independently, and a package in the first and
+# neither of the second is invisible on every installed machine while working
+# perfectly on the media it came from — which is the hardest kind of gap to
+# see, because testing the ISO does not test it.
+
+check_installer() {
+    local p bad=$FINDINGS
+    local inst=syn-install/syn-install.sh
+    [ -f "$inst" ] || { fail installer "$inst is missing"; return 0; }
+
+    # Every name any SEL_CORE/SEL_APPS assignment mentions, including the
+    # `SEL_APPS="$SEL_APPS foo"` appends the Custom branch is built from.
+    local sel
+    sel=$(grep -oE 'SEL_(CORE|APPS)="[^"]*"' "$inst" \
+          | sed -E 's/^SEL_(CORE|APPS)="//; s/"$//; s/\$SEL_(CORE|APPS)//' \
+          | tr ' ' '\n' | grep -vE '^\$|^$' | sort -u)
+    [ -n "$sel" ] || { fail installer "could not read SEL_CORE/SEL_APPS from $inst"; return 0; }
+
+    # dir -> pkgname, because one disagrees (linux-wallpaperengine-pkg builds
+    # linux-wallpaperengine) and a name check that assumed they matched would
+    # report the working case as broken.
+    declare -A ours=()
+    local d c n
+    for d in */PKGBUILD; do
+        c=${d%/PKGBUILD}
+        ours[$c]=1
+        n=$(pkgfield "$c" pkgname 2>/dev/null || true)
+        [ -n "$n" ] && ours[$n]=1
+    done
+
+    for p in $sel; do
+        [ -n "${ours[$p]:-}" ] || fail installer \
+            "syn-install names '$p', which this repo does not build" \
+            "SEL_CORE/SEL_APPS may only name packages the ISO's local repo carries." \
+            "pacstrap fails the install at this package."
+    done
+
+    # The direction that actually bit: on the ISO, delivered to nobody.
+    for p in "${ISO_PKGS[@]}"; do
+        n=$(pkgfield "$p" pkgname 2>/dev/null || true)
+        n=${n:-$p}
+        has "$p" $sel && continue
+        has "$n" $sel && continue
+        [ -n "${EXEMPT_INSTALLER[$p]:-}" ] && continue
+        [ -n "${EXEMPT_INSTALLER[$n]:-}" ] && continue
+        fail installer \
+            "'$n' is on the ISO but in neither SEL_CORE nor SEL_APPS" \
+            "The live ISO carries it and no install path delivers it, so it works on" \
+            "the media and is missing on every machine installed from that media —" \
+            "which testing the ISO cannot show. Add it to SEL_APPS (or SEL_CORE), or" \
+            "to this script's EXEMPT_INSTALLER with the reason it still arrives."
+    done
+
+    [ "$FINDINGS" -eq "$bad" ] && ok installer \
+        "$(printf '%s\n' $sel | wc -l) installer packages — every ISO package reaches a target"
+    return 0
+}
+
+# ── Check 5: every version field is readable ─────────────────
 
 check_pkgver() {
     local c ver rel scraped bad=$FINDINGS composed=()
@@ -558,8 +648,15 @@ esac
 check_lists
 check_registration
 check_iso
+check_installer
 check_pkgver
-check_pkgrel
+if [ "$AT_REST" -eq 1 ]; then
+    note pkgrel "not checked — no staged set to read (--at-rest)" \
+        "A pathspec commit carries no index, so the bump cannot be verified here." \
+        "Run ./tools/preflight.sh yourself if you edited a component."
+else
+    check_pkgrel
+fi
 
 echo
 if [ "$FINDINGS" -gt 0 ]; then

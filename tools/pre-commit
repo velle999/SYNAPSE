@@ -25,8 +25,24 @@ set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 
-# Nothing staged: git will refuse the commit itself, with a better message.
-git diff --cached --quiet && exit 0
+# Nothing staged is NOT nothing to check. `git commit -- <paths>` commits the
+# named paths straight from the working tree without touching the index, which
+# is how this repo commits safely while several sessions share one — and it
+# would sail past a hook that read only the index and called that clean.
+#
+# It cannot be gated fully either: the working tree holds other sessions' edits,
+# and blocking somebody's commit over a file they did not touch is how a hook
+# earns itself a permanent --no-verify. So the at-rest half runs (the lists, the
+# installer, every version field) and the pkgrel gate says out loud that it was
+# skipped.
+if git diff --cached --quiet; then
+    "$root/tools/preflight.sh" --at-rest || {
+        echo
+        echo "pre-commit: refusing the commit above." >&2
+        exit 1
+    }
+    exit 0
+fi
 
 "$root/tools/preflight.sh" --staged || {
     echo

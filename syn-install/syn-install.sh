@@ -2084,7 +2084,24 @@ while :; do
     # optional extra here (WANT_FILEMGR) and nothing opened it by default.
     # `synpkg install dolphin` after the fact.
     SEL_CORE="synapd synsh synnet synguard synui synapse_kmod syn syn-model syn-firstboot syn-update synpkg synfiles syn-settings syn-disks syn-edit syn-confine fetch"
-    SEL_APPS="chibi vibe syn-arsenal"
+    # linux-wallpaperengine and synapse-wallpapers travel TOGETHER and are never
+    # split. The renderer without our wallpapers is a player with nothing to
+    # play on a box that has no Steam; our wallpapers without the renderer is
+    # worse — synui's picker lists the rows and applying one does nothing,
+    # because wppick scans /usr/share/synapse/wallpapers/431960 whether or not
+    # anything can render what it finds.
+    #
+    # They were on the LIVE ISO (archiso/packages.x86_64) and in neither list
+    # here, so every installed system had a picker that found zero Wallpaper
+    # Engine wallpapers while the media it was installed from shipped four.
+    # packages.x86_64 is what the live environment gets; these two lists are
+    # what the TARGET gets, and nothing makes them agree.
+    #
+    # SEL_APPS, not SEL_CORE: 305 MB of CEF for the renderer plus 12 MB of
+    # video. Minimal is "core daemons only" and stays that way — with neither
+    # installed the picker honestly shows no Wallpaper Engine rows at all,
+    # which is the correct answer there rather than a broken one.
+    SEL_APPS="chibi vibe syn-arsenal linux-wallpaperengine synapse-wallpapers"
 
     echo "  What should be installed alongside the SynapseOS core?"
     echo ""
@@ -2115,7 +2132,7 @@ while :; do
             # package with it — and is only rescued by the one-at-a-time retry
             # in the verify step. `syn printer samsung` installs the driver
             # from Samsung after the install, which is the supported route.
-            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal"
+            SEL_APPS="chibi nexus-chat tepris vibe syn-arsenal linux-wallpaperengine synapse-wallpapers"
             WANT_MODEL=1; WANT_BLUETOOTH=1; WANT_PRINTING=1
             WANT_WINE=1; WANT_PHONE=1; WANT_STEAM=1
             WANT_BLACKARCH=1; WANT_NIX=1
@@ -2154,6 +2171,10 @@ while :; do
             # No M2020 question: the driver is not on the media to install.
             # `syn printer samsung` fetches it from Samsung afterwards.
             ask_opt want_arsenal 1 "SYNAPSE Arsenal — browse/install BlackArch security tooling"
+            # One question for the pair — see the SEL_APPS comment above for why
+            # they are never split. The size is worth naming: it is the second
+            # largest thing on this page after Steam.
+            ask_opt want_wpengine 1 "Animated wallpapers — the SynapseOS Wallpaper Engine set, no Steam needed (~317 MB)"
             echo ""
             # No "AI model? y/n" here: the model question is asked once for
             # every preset below, and "None" is one of its answers.
@@ -2171,6 +2192,7 @@ while :; do
             [ "$want_nexus"  = 1 ] && SEL_APPS="$SEL_APPS nexus-chat"
             [ "$want_tepris" = 1 ] && SEL_APPS="$SEL_APPS tepris"
             [ "$want_arsenal" = 1 ] && SEL_APPS="$SEL_APPS syn-arsenal"
+            [ "$want_wpengine" = 1 ] && SEL_APPS="$SEL_APPS linux-wallpaperengine synapse-wallpapers"
             SEL_APPS=$(echo $SEL_APPS)   # unquoted: collapses the leading space
 
             # Core daemons, offered last and separately. Dropping one is allowed —
