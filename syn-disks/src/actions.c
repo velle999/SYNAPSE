@@ -21,9 +21,19 @@
  * four rules, and the first two have NO OVERRIDE — no --force, no environment
  * variable, no flag combination:
  *
- *   1. NOTHING MOUNTED. Not the target, and not anything else on it. mkfs on a
- *      live filesystem corrupts it while the kernel still has it cached, which
- *      means the damage surfaces minutes later as unrelated I/O errors.
+ *   1. WHATEVER guard.c PROTECTS, asked as GUARD_DESTROY — because that is
+ *      what this is. Nothing mounted (not the target, and not anything else on
+ *      it: mkfs on a live filesystem corrupts it while the kernel still has it
+ *      cached, and the damage surfaces minutes later as unrelated I/O errors),
+ *      no live swap, nothing unlocked on top, nothing /etc/fstab expects, and
+ *      not a device the kernel has marked read-only.
+ *
+ *      That rule is ASKED FOR and not copied. This file used to carry its own
+ *      mount check, and the rules it did not carry were rules format did not
+ *      have: a write-protected stick went through the dry run, the
+ *      confirmation and polkit before mke2fs answered "Read-only file system
+ *      while setting up superblock", which reads like a dead stick and means a
+ *      switch on the side of one.
  *
  *   2. NOTHING ON THE SYSTEM DISK. If the target shares a physical disk with
  *      "/", it is refused outright. This is the rule that matters most and the
@@ -452,24 +462,21 @@ int cmd_format(int argc, char **argv)
 		return 1;
 	}
 
-	char *busy = guard_mounted_under(k);
-	if (busy) {
-		char *why = xasprintf("something on it is mounted at %s", busy);
-		if (g_out == OUT_REC) {
-			/* Records, not stderr. The window's dry run reads stdout; with
-			 * the reason on stderr it saw an empty plan, greyed the button
-			 * out and said nothing — and "unmount it first" was on a second
-			 * line that nothing was reading at all. Opening a stick from
-			 * Files MOUNTS it, so this is the state a user is most likely to
-			 * arrive in. */
-			guard_report_refusal(dev, why, "unmount");
-		} else {
-			fprintf(stderr, "%ssyn-disks: refusing to format %s — %s.%s\n",
-			        C_BAD(), dev, why, C_RESET());
-			guard_print_fix(dev, "unmount");
-		}
-		free(why);
-		free(busy);
+	/* Everything else format refuses, it refuses because guard.c says so.
+	 *
+	 * This used to be a hand-written mount check, and the cost of the second
+	 * implementation was exactly what the guard's own header warns about: the
+	 * rules the copy did not have were rules format did not apply. A stick with
+	 * its write-protect switch set sailed through the dry run, through the
+	 * confirmation and through polkit, and mke2fs said "Read-only file system
+	 * while setting up superblock" — a sentence that reads like a broken stick
+	 * and means a switch on the side of it. The guard had known since the day
+	 * it was written; nothing had asked.
+	 *
+	 * GUARD_DESTROY, because that is what formatting is: mounted, live swap, a
+	 * volume unlocked on top, an fstab entry, and the read-only flag all stop
+	 * it, each with the way out beside it. */
+	if (guard_refuse(k, dev, "format", GUARD_DESTROY)) {
 		free(dev);
 		free(k);
 		return 1;

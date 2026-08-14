@@ -372,8 +372,15 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 	char *ro = sd_attr(kname, "ro");
 	bool readonly = ro && !strcmp(ro, "1");
 	free(ro);
-	if (readonly)
+	if (readonly) {
+		/* A way out exists and it is not a flag: almost every device that
+		 * arrives here is a USB stick or an SD card with a physical
+		 * write-protect switch on its body. Saying "read-only" and stopping
+		 * leaves somebody believing the drive is broken. */
+		if (fix)
+			*fix = "readonly";
 		return xstrdup("the kernel has it marked read-only");
+	}
 
 	return NULL;
 }
@@ -414,6 +421,16 @@ void guard_print_fix(const char *dev, const char *fix)
 	else if (!strcmp(fix, "fstab"))
 		fprintf(stderr, "  Remove its line from /etc/fstab first, or this "
 		        "machine will not boot.\n");
+	else if (!strcmp(fix, "readonly"))
+		fprintf(stderr, "  Most sticks and SD cards have a write-protect "
+		        "switch on the body; the kernel says one is set. Check it: "
+		        "blockdev --getro %s\n", dev);
+	else if (!strcmp(fix, "reread"))
+		fprintf(stderr, "  The layout may have changed since it was read: "
+		        "syn-disks table %s\n", dev);
+	else if (!strcmp(fix, "mktable"))
+		fprintf(stderr, "  Make one first: syn-disks mktable %s "
+		        "--type=gpt --yes\n", dev);
 	else
 		fprintf(stderr, "  There is no flag that overrides this.\n");
 }

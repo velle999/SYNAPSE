@@ -95,12 +95,40 @@ pt_slot_t *pt_layout(const char *disk, size_t *n, const char **label)
 			used[nu].start  = strtoull(s, NULL, 10) * 512ULL;
 			used[nu].bytes  = bytes;
 			used[nu].gap    = false;
+			used[nu].whole  = false;
 			nu++;
 		}
 		free(s);
 		free(num);
 	}
 	sd_free_list(parts, np);
+
+	/* A drive with no partition table and a filesystem written straight onto
+	 * it — the superfloppy layout nearly every USB stick and camera card is
+	 * sold in — has no partitions to lay out and is not empty either.
+	 *
+	 * Derived from the partitions alone, it came out as ONE GAP the size of
+	 * the disk, and the window drew a bar across the whole drive labelled
+	 * "free space" over 6.8GB of somebody's files. That is not a cosmetic
+	 * mistake: the bar is the thing that gets clicked before New…, so the
+	 * picture was an invitation to partition a drive that was entirely full.
+	 *
+	 * Free space is space nothing is using, and this is the opposite. */
+	if (!*ptt && nu == 0) {
+		unsigned long long total = sd_size_bytes(disk);
+		if (total > 0 && lb && lb->fstype && *lb->fstype) {
+			free(used);
+			pt_slot_t *one = xmalloc(sizeof *one);
+			one->kname  = xstrdup(disk);
+			one->number = 0;
+			one->start  = 0;
+			one->bytes  = total;
+			one->gap    = false;
+			one->whole  = true;
+			*n = 1;
+			return one;
+		}
+	}
 
 	/* sd_partitions orders by partition NUMBER, which is the order somebody
 	 * refers to them by and not the order they sit in. Partition 3 routinely
@@ -127,6 +155,7 @@ pt_slot_t *pt_layout(const char *disk, size_t *n, const char **label)
 			out[no].start  = cursor;
 			out[no].bytes  = used[i].start - cursor;
 			out[no].gap    = true;
+			out[no].whole  = false;
 			no++;
 		}
 		out = xrealloc(out, (no + 1) * sizeof *out);
@@ -145,6 +174,7 @@ pt_slot_t *pt_layout(const char *disk, size_t *n, const char **label)
 		out[no].start  = cursor;
 		out[no].bytes  = end - cursor + 1;
 		out[no].gap    = true;
+		out[no].whole  = false;
 		no++;
 	}
 
@@ -253,7 +283,11 @@ int cmd_table(int argc, char **argv)
 			char *why = guard_why_protected(slots[i].kname, GUARD_DESTROY, NULL);
 
 			if (g_out == OUT_REC) {
-				rec_row(9, dev, snum, sstart, sbytes, "partition",
+				/* Its own kind, and not "partition": a front-end that offered
+				 * Delete or Resize on it would be offering an sfdisk edit to a
+				 * drive with no table for sfdisk to edit. */
+				rec_row(9, dev, snum, sstart, sbytes,
+				        slots[i].whole ? "whole" : "partition",
 				        lb && lb->fstype ? lb->fstype : "",
 				        lb && lb->label ? lb->label : "",
 				        mounts, why ? why : "");

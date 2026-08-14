@@ -514,8 +514,8 @@ FloatingWindow {
 
     // ── The dialogues that change something ─────────────────────────────────
     //
-    // Format, and the four partitioning operations, are ONE mechanism with
-    // five bodies. Every one of them works the same way, and the way is the
+    // Format, and the five partitioning operations, are ONE mechanism with
+    // six bodies. Every one of them works the same way, and the way is the
     // whole point: the dialogue does NOT describe the change in its own words.
     // It runs the real command under --dry-run and shows what came back, so
     // what is approved and what then runs are produced by the same code path
@@ -533,7 +533,7 @@ FloatingWindow {
     // "/", and — for partitioning — for anything the guard protects. So the
     // worst a bug here can do is fail to offer something, never destroy
     // something it should not have.
-    property string dlg: ""          // "" | format | add | delete | resize | copy
+    property string dlg: ""          // "" | format | add | delete | resize | copy | table
     property string dlgDev: ""       // the device it is about
     property var plan: ({})
 
@@ -544,6 +544,10 @@ FloatingWindow {
     property string opLabel: ""
     property string opSize: ""       // add/resize; "" on add means the whole gap
     property string copyDst: ""      // copy: the destination partition
+    // mktable. GPT unless somebody says otherwise: a DOS table is for a BIOS
+    // machine or a device with firmware that has never heard of anything else,
+    // and it cannot hold a partition past 2TB.
+    property string opPtType: "gpt"
 
     readonly property var fsChoices: [
         { id: "ext4",  blurb: "Linux, journalled" },
@@ -582,6 +586,7 @@ FloatingWindow {
         case "delete": return ["rmpart", root.dlgDev]
         case "resize": return ["resize", root.dlgDev, "--size=" + root.opSize]
         case "copy":   return ["copypart", root.dlgDev, root.copyDst]
+        case "table":  return ["mktable", root.dlgDev, "--type=" + root.opPtType]
         }
         return []
     }
@@ -593,6 +598,7 @@ FloatingWindow {
         case "delete": return "Delete " + root.dlgDev
         case "resize": return "Grow " + root.dlgDev
         case "copy":   return "Copy " + root.dlgDev
+        case "table":  return "Partition table on " + root.dlgDev
         default:       return ""
         }
     }
@@ -608,6 +614,9 @@ FloatingWindow {
                             + "afterwards, with the tool that belongs to it."
         case "copy":   return "Every byte of " + root.dlgDev + " is written over the partition "
                             + "you choose. Everything on that one is destroyed."
+        case "table":  return "A drive needs one before it can hold partitions. Writing a new "
+                            + "table discards every partition on this drive — and, on a drive "
+                            + "formatted without one, the filesystem written straight onto it."
         default:       return ""
         }
     }
@@ -618,6 +627,7 @@ FloatingWindow {
         case "delete": return "Delete it"
         case "resize": return "Grow it"
         case "copy":   return "Copy over it"
+        case "table":  return "Write the table"
         default:       return ""
         }
     }
@@ -693,6 +703,16 @@ FloatingWindow {
         case "swapoff": return "Swap is live on it — run: swapoff " + root.fixDev
         case "lock":    return "A volume is unlocked on top of it; lock it first."
         case "fstab":   return "/etc/fstab expects this at the next boot."
+        // The switch on the side of the stick, which is the answer nine times
+        // out of ten and is not something software can undo. Said in full
+        // because "read-only" on its own reads as a broken drive: this window
+        // watched mke2fs report "Read-only file system while setting up
+        // superblock" and had nothing better to offer than that sentence.
+        case "readonly": return "The kernel says this device is write-protected. "
+                              + "Most sticks and cards have a switch on the body — "
+                              + "check that first; no option here overrides it."
+        case "mktable": return "There is no partition table to put a partition in."
+        case "reread":  return "The drive has changed since this was read — refresh it."
         case "none":    return "There is nothing that overrides this."
         default:        return ""
         }
@@ -780,6 +800,11 @@ FloatingWindow {
             root.runOp(args.concat(["--yes"]),
                        "copying " + dev + " onto " + root.copyDst + " — this can take a while…",
                        root.copyDst + " now holds a copy of " + dev)
+            break
+        case "table":
+            root.runOp(args.concat(["--yes"]),
+                       "writing a " + root.opPtType + " table on " + dev + "…",
+                       dev + " has a new " + root.opPtType + " table — it is empty")
             break
         }
     }
@@ -1517,7 +1542,8 @@ FloatingWindow {
 
         // ── The dialogue ────────────────────────────────────────────────────
         //
-        // One window for format, add, delete, resize and copy. Each shows the
+        // One window for format, add, delete, resize, copy and the table
+        // itself. Each shows the
         // real dry run at the bottom, and the button is offered only when that
         // dry run came back with a command — so a refusal is a dialogue that
         // explains itself rather than a button that does nothing.
@@ -1612,6 +1638,62 @@ FloatingWindow {
                         for (const c of root.fsChoices) if (c.id === root.opFs) return c.blurb
                         return ""
                     }
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
+                }
+
+                // ── Table type: mktable ─────────────────────────────────────
+                Text {
+                    visible: root.dlg === "table"
+                    text: "Kind of table"
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
+                }
+                Flow {
+                    width: dlgCol.width
+                    spacing: 6
+                    visible: root.dlg === "table"
+                    Repeater {
+                        model: [
+                            { id: "gpt", blurb: "the modern one — any size, up to 128 partitions" },
+                            { id: "dos", blurb: "for old BIOS machines and devices that expect it; "
+                                              + "nothing past 2TB" }
+                        ]
+                        delegate: Rectangle {
+                            id: ptChip
+                            required property var modelData
+                            width: ptText.implicitWidth + 18
+                            height: 24
+                            radius: 4
+                            readonly property bool chosen: ptChip.modelData.id === root.opPtType
+                            color: ptChip.chosen ? root.wash(0.30)
+                                 : ptMa.containsMouse ? root.wash(0.14) : root.wash(0.06)
+                            border { width: 1; color: ptChip.chosen ? root.cAccent : "transparent" }
+
+                            Text {
+                                id: ptText
+                                anchors.centerIn: parent
+                                text: ptChip.modelData.id
+                                color: root.cText
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            }
+                            MouseArea {
+                                id: ptMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { root.opPtType = ptChip.modelData.id; root.planNow() }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    width: dlgCol.width
+                    wrapMode: Text.WordWrap
+                    visible: root.dlg === "table"
+                    text: root.opPtType === "gpt"
+                        ? "the modern one — any size, up to 128 partitions"
+                        : "for old BIOS machines and devices that expect it; nothing past 2TB"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
@@ -1877,6 +1959,18 @@ FloatingWindow {
                     visible: root.plan["fix"] === "unmount"
                     onGo: root.unmountForDialog()
                 }
+                // The other way out with a button on it. Unlike Unmount this
+                // one is destructive, so it does NOT act — it moves this
+                // dialogue onto mktable, where the same dry run, the same
+                // warning and the same confirmation apply. A refusal whose
+                // only remedy was a command line was a dead end in a window:
+                // "Make one first: syn-disks mktable …" is a fine sentence in
+                // a terminal and no help at all to somebody holding a mouse.
+                Btn {
+                    label: "Make a partition table…"
+                    visible: root.plan["fix"] === "mktable"
+                    onGo: root.askDialog("table", root.selDisk)
+                }
                 Btn {
                     label: root.dlgGo
                     danger: true
@@ -1989,6 +2083,18 @@ FloatingWindow {
                           bottom: parent.bottom; bottomMargin: 7 }
                 spacing: 8
 
+                // mktable has existed in the binary since partitioning landed
+                // and had no button, so the one drive shape that needs it most
+                // — a stick formatted with no table at all — could be told
+                // what was wrong and given no way to fix it. It acts on the
+                // DRIVE, so it is enabled whenever one is selected; the guard
+                // refuses the system disk, in the dialogue, in its own words.
+                Btn {
+                    label: "Partition table…"
+                    danger: true
+                    enabled2: root.selDisk !== ""
+                    onGo: root.askDialog("table", root.selDisk)
+                }
                 Btn {
                     label: "New…"
                     danger: true

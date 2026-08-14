@@ -355,7 +355,8 @@ typedef enum {
  * malloc'd. This is the single place the rules live.
  *
  * `fix`, when not NULL, receives a static WORD for the way out — "unmount",
- * "swapoff", "lock", "fstab", or "none" when there is no way out. It is set
+ * "swapoff", "lock", "fstab", "readonly", "mktable", "reread", or "none" when
+ * there is no way out. It is set
  * beside the sentence at each return rather than derived from it: a front-end
  * that decided whether to offer an Unmount button by matching the prose would
  * be re-deriving the rule from a string, and would silently stop offering it
@@ -447,6 +448,12 @@ typedef struct {
 	unsigned long long start;       /* bytes from the start of the disk */
 	unsigned long long bytes;
 	bool  gap;
+	/* A filesystem written over the whole drive, with no partition table
+	 * around it — how nearly every USB stick and camera card arrives. It is
+	 * neither a partition nor free space, and calling it either is a lie a
+	 * user then acts on: "free space" invites a partition into a drive that
+	 * is entirely full of somebody's files. */
+	bool  whole;
 } pt_slot_t;
 
 /* Every partition of `disk` and every usable gap between them, in ON-DISK

@@ -171,6 +171,22 @@ mkpart sdz sdz10 10 2048    900002048
 # reports queue/rotational = 1.
 mkdisk sdy 120225792 1 1
 
+# A stick with its write-protect switch set. The kernel says so in `ro`, and
+# every destructive command has to read it BEFORE it asks polkit for a
+# password: the alternative is what shipped — mke2fs answering "Read-only file
+# system while setting up superblock" after the confirmation, which reads like
+# a dead stick and means a switch on the side of one.
+mkdisk sdv 14336000 0 1
+echo 1 > "$S/sdv/ro"
+
+# The superfloppy: a filesystem written straight onto the drive with no
+# partition table around it, which is how nearly every USB stick and camera
+# card is sold. It is neither partitioned nor empty.
+mkdisk sdx 14336000 0 1
+# ...and a genuinely blank one, so "has a filesystem" and "has nothing" can be
+# told apart. Without this pair, reporting either answer for both passes.
+mkdisk sdu 14336000 0 1
+
 mkdisk loop0 1000 0 0
 mkdisk zram0 1000 0 0
 mkdisk md0   1000 0 0
@@ -328,6 +344,40 @@ check "...and would run mkfs on exactly that device" $?
 [ $? -eq 0 ] && ok "format ALLOWS an unmounted USB stick" \
              || bad "format ALLOWS an unmounted USB stick"
 
+# ── format asks guard.c, and does not carry its own copy of the rules ───────
+#
+# It used to carry a hand-written mount check and nothing else, so every rule
+# guard.c had that the copy did not was a rule format did not apply. The
+# write-protect flag was one of them: the dry run described the mkfs, the
+# dialogue offered the button, polkit asked for a password, and mke2fs then
+# said "Read-only file system while setting up superblock". Every one of those
+# steps had the answer available and none of them looked.
+#
+# ⚠ These fail on a `-n` DRY RUN, which is the point. A refusal that only
+# arrives at --yes is one the window has already offered a button for.
+
+"$SD" format sdv --fs=ext4 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "format refuses a write-protected device" \
+             || bad "format refuses a write-protected device"
+
+says "$SD" --no-color format sdv --fs=ext4 -n | grep -q 'read-only'
+check "...and says the kernel has it marked read-only" $?
+
+# The way out is a physical switch, so the code names it rather than offering
+# a flag: a front-end switching on `readonly` can say where to look.
+# ⚠ Captured first: under pipefail `cmd | grep` reports the REFUSAL's status,
+# which is 1 for every assertion in this file that tests one.
+r=$("$SD" --rec format sdv --fs=ext4 -n 2>/dev/null)
+echo "$r" | grep -q '^fix	readonly$'
+check "...with a fix code a window can act on" $?
+
+says "$SD" --no-color format sdv --fs=ext4 -n | grep -q 'write-protect switch'
+check "...and the human hint points at the switch on the body" $?
+
+# The rest of what format inherited by asking rather than copying — swap and
+# fstab — is asserted in the partitioning section below, where the fixtures
+# for both already exist.
+
 # ── can the kernel MOUNT what we would create ───────────────────────────────
 #
 # Creating and mounting are two capabilities, and only the first is a package
@@ -442,6 +492,9 @@ NAME="sdz2" FSTYPE="ext4" LABEL="spare" UUID="dddd-0002" PARTLABEL="" PARTTYPENA
 NAME="sdz9" FSTYPE="ext4" LABEL="" UUID="dddd-0009" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0009" PTTYPE="gpt" MODEL=""
 NAME="sdz10" FSTYPE="ext4" LABEL="" UUID="dddd-0010" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0010" PTTYPE="gpt" MODEL=""
 NAME="sdy" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="" MODEL="Cruzer Blade"
+NAME="sdx" FSTYPE="exfat" LABEL="CAMERA" UUID="1234-5678" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="" MODEL="Generic Flash Disk"
+NAME="sdu" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="" MODEL="Generic Flash Disk"
+NAME="sdv" FSTYPE="exfat" LABEL="LOCKED" UUID="1234-9999" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="" MODEL="Generic Flash Disk"
 ROWS
 EOF
 chmod +x "$T/bin/lsblk-fake"
@@ -591,6 +644,88 @@ check "...and says where the next boot expects it" $?
 SYN_DISKS_FSTAB="$T/fstab" sdp resize sdz2 --size=150G -n >/dev/null 2>&1
 [ $? -eq 0 ] && ok "an fstab entry does not block a resize" \
              || bad "an fstab entry does not block a resize"
+
+# ── the rules format gained by ASKING for them ──────────────────────────────
+#
+# format carried its own mount check and nothing else, so every rule it did not
+# copy was a rule it did not have. Swap is the one that would have cost a
+# machine: it is not in /proc/self/mounts, so the old check called a live swap
+# partition idle and would have written a filesystem over it. The machine dies
+# at the next page-out, minutes later, looking like unrelated hardware failure.
+
+SYN_DISKS_SWAPS="$T/swaps" "$SD" format sdz2 --fs=ext4 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "format refuses a partition holding live swap" \
+             || bad "format refuses a partition holding live swap"
+
+r=$(SYN_DISKS_SWAPS="$T/swaps" "$SD" --rec format sdz2 --fs=ext4 -n 2>/dev/null)
+echo "$r" | grep -q '^fix	swapoff$'
+check "...and offers the same way out rmpart does" $?
+
+# Through sdp, because a modern fstab names nothing by path and the UUID it
+# matches on comes from lsblk.
+SYN_DISKS_FSTAB="$T/fstab" sdp format sdz2 --fs=ext4 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "format refuses a partition /etc/fstab expects" \
+             || bad "format refuses a partition /etc/fstab expects"
+
+# ...and it is still the guard's OWN sentence, not one format composed. Two
+# implementations of a rule agree on the day they are written; this asserts
+# there is only one left to disagree with.
+a=$("$SD" --rec format sdv --fs=ext4 -n 2>/dev/null | awk -F'\t' '$1 == "refused" {print $2}')
+b=$(sdp --rec table sdv 2>/dev/null | awk -F'\t' 'NR > 1 {print $9}')
+[ -n "$a" ] && [ "$a" = "$b" ] \
+    && ok "format's refusal and the table's protected column are one sentence" \
+    || bad "format's refusal and the table's protected column are one sentence"
+
+# ── the superfloppy: a filesystem with no partition table around it ─────────
+#
+# How nearly every USB stick and camera card is sold. It has no partitions, so
+# a layout derived from the partitions alone came out as ONE GAP the size of
+# the drive — and the window drew a bar across the whole disk labelled "free
+# space" over 6.8GB of somebody's photos. The bar is what gets clicked before
+# New…, so the picture was an invitation to partition a drive that was full.
+
+t=$(sdp --rec table sdx)
+echo "$t" | tail -n +2 | awk -F'\t' '{exit ($5 == "whole" && $6 == "exfat") ? 0 : 1}'
+check "a filesystem written over the whole drive is reported as such" $?
+
+echo "$t" | grep -q '	free	'
+[ $? -ne 0 ] && ok "...and is NOT reported as free space" \
+             || bad "...and is NOT reported as free space"
+
+echo "$t" | tail -n +2 | awk -F'\t' '{exit ($4 == "7340032000") ? 0 : 1}'
+check "...spanning the whole drive, from byte zero" $?
+
+# The discriminating half: a drive with nothing on it at all really is free
+# space, and reporting either answer for both cases would pass a test that only
+# looked at one of them.
+sdp --rec table sdu | tail -n +2 | awk -F'\t' '{exit ($5 == "free") ? 0 : 1}'
+check "a genuinely blank drive is still all free space" $?
+
+# ── mkpart with no table: a refusal that a window can act on ────────────────
+#
+# This went to stderr as prose. The New… dialogue showed the sentence, had no
+# `fix` field to switch on, and so offered no button — the only way out it
+# named was a command line, to somebody holding a mouse.
+
+r=$(sdp --rec mkpart sdx -n 2>/dev/null)
+echo "$r" | grep -q '^refused	'
+check "mkpart on a drive with no partition table refuses in records" $?
+
+echo "$r" | grep -q '^fix	mktable$'
+check "...naming mktable as the way out" $?
+
+echo "$r" | grep -q '^device	/dev/sdx$'
+check "...and the drive it is about" $?
+
+saysp --no-color mkpart sdx -n | grep -q 'syn-disks mktable /dev/sdx'
+check "...while a terminal still gets the command to run" $?
+
+# A drive that cannot be written at all is told so BEFORE it is sent off to
+# make a partition table it also could not write. GUARD_ADD checks nothing but
+# this, and it has to come first or the way out leads to a second refusal.
+r=$(sdp --rec mkpart sdv -n 2>/dev/null)
+echo "$r" | grep -q '^fix	readonly$'
+check "a write-protected drive says so rather than sending you to mktable" $?
 
 # ── mkpart: the case the two-tier design exists for ─────────────────────────
 #
@@ -1122,11 +1257,28 @@ if [ -f "$QML" ]; then
     # that drew on somebody's screen. What CAN be checked is that the two ends
     # still name the same commands — the failure this catches is a verb renamed
     # in C and left behind in QML, which is a dead button and no build error.
-    for verb in mkpart rmpart resize copypart format; do
+    for verb in mkpart rmpart resize copypart format mktable; do
         grep -q "\"$verb\"" "$QML" \
             || bad "the window never names the $verb command"
     done
     ok "every command the window offers is one the binary has"
+
+    # ── every way out has a sentence at both ends ───────────────────────────
+    #
+    # A `fix` code is the contract between the guard and the window: the C side
+    # sets one beside each refusal, and the window turns it into something to
+    # read and — sometimes — a button. A code with no case in fixHint is a
+    # dialogue that refuses and explains nothing, which is the exact state this
+    # window shipped in for mkpart's missing partition table.
+    #
+    # guard_print_fix is the canonical list, because it is what the terminal
+    # already handles. Nothing here can invent a code the CLI does not know.
+    GUARD="$(dirname "$0")/../src/guard.c"
+    for f in $(sed -n 's/.*strcmp(fix, "\([a-z]*\)").*/\1/p' "$GUARD"); do
+        grep -q "case \"$f\":" "$QML" \
+            || bad "the window has no sentence for the '$f' way out"
+    done
+    ok "every way out the binary names is one the window can explain"
 
     # ONE builder for the dry run and the confirm. The dialogue's whole claim is
     # that what it shows is what it runs, and that claim is only true while both

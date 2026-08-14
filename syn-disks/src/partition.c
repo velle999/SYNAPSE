@@ -256,27 +256,39 @@ int cmd_mkpart(int argc, char **argv)
 	size_t n = 0;
 	pt_slot_t *slots = pt_layout(disk, &n, &ptt);
 
-	if (!*ptt) {
-		pt_free_layout(slots, n);
-		fprintf(stderr, "%ssyn-disks: /dev/%s has no partition table%s\n",
-		        C_BAD(), disk, C_RESET());
-		fprintf(stderr, "  Make one first: syn-disks mktable /dev/%s "
-		        "--type=gpt --yes\n", disk);
-		free(disk);
-		return 1;
-	}
-
 	/* GUARD_ADD, and the difference from the other three matters: a new
 	 * partition goes into space nothing is using, so nothing that exists is
 	 * touched and none of the in-use rules are an objection to it. Asking
 	 * with GUARD_MODIFY instead would refuse this on the system drive —
 	 * "/" is on the disk, which is true and, for free space at the far end of
 	 * it, beside the point. On a laptop with one disk that would be every
-	 * partition anybody wanted to make. */
+	 * partition anybody wanted to make.
+	 *
+	 * FIRST, and before the table check below, because "this drive cannot be
+	 * written at all" outranks "it has no table". The other order sends
+	 * somebody who has a write-protect switch set off to run mktable, which
+	 * then refuses for the reason they could have been told first. */
 	char *ddisk = xasprintf("/dev/%s", disk);
 	if (guard_refuse(disk, ddisk, "partition", GUARD_ADD)) {
 		free(ddisk);
 		pt_free_layout(slots, n);
+		free(disk);
+		return 1;
+	}
+
+	/* A REFUSAL IS AN ANSWER, and under --rec it has to arrive as records with
+	 * the way out beside it — the same contract format has kept since the
+	 * window spent a day showing a greyed button and no reason.
+	 *
+	 * This one went to stderr as prose, so the New… dialogue could show the
+	 * sentence and nothing else: no `fix` field meant no button, and the only
+	 * route out of the dialogue was a command line the person is not in. */
+	if (!*ptt) {
+		pt_free_layout(slots, n);
+		char *why = xasprintf("%s has no partition table", ddisk);
+		guard_report_refusal(ddisk, why, "mktable");
+		free(why);
+		free(ddisk);
 		free(disk);
 		return 1;
 	}
@@ -322,19 +334,31 @@ int cmd_mkpart(int argc, char **argv)
 		}
 	}
 
+	/* Records for these two as well, and for the same reason: a front-end
+	 * reading stdout must not have to tell "it refused" apart from "it said
+	 * nothing". Neither has a way out this program can offer, so both say so. */
 	if (!best && o.start) {
 		pt_free_layout(slots, n);
-		fprintf(stderr, "%ssyn-disks: there is no free space at byte %llu of "
-		        "/dev/%s%s\n", C_BAD(), at, disk, C_RESET());
-		fprintf(stderr, "  The layout may have changed since it was read: "
-		        "syn-disks table /dev/%s\n", disk);
+		char *dd = xasprintf("/dev/%s", disk);
+		char *why = xasprintf("there is no free space at byte %llu of %s", at,
+		                      dd);
+		/* Its own code: this is the one refusal here that is not about the
+		 * drive at all. The offset came from a `table` that has since been
+		 * overtaken, and re-reading is both the way out and something a window
+		 * can do by itself. */
+		guard_report_refusal(dd, why, "reread");
+		free(why);
+		free(dd);
 		free(disk);
 		return 1;
 	}
 	if (!best) {
 		pt_free_layout(slots, n);
-		fprintf(stderr, "%ssyn-disks: /dev/%s has no free space%s\n",
-		        C_BAD(), disk, C_RESET());
+		char *dd = xasprintf("/dev/%s", disk);
+		char *why = xasprintf("%s has no free space", dd);
+		guard_report_refusal(dd, why, "none");
+		free(why);
+		free(dd);
 		free(disk);
 		return 1;
 	}
