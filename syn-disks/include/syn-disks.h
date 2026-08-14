@@ -335,6 +335,13 @@ typedef enum {
 	 * fstab one — growing a partition does not change its UUID, so an fstab
 	 * entry naming it still resolves afterwards. */
 	GUARD_MODIFY,
+	/* Nothing is written to it at all, but every byte is READ: the source of
+	 * copypart. The same four in-use rules apply for the same reason — a
+	 * filesystem being written to while it is read is copied in a state it was
+	 * never in, and the result mounts. fstab is no objection to reading, and
+	 * neither is the kernel's read-only flag: a read-only device is a perfectly
+	 * good thing to copy FROM, and that is often exactly why it is read-only. */
+	GUARD_READ,
 	/* A NEW entry in free space, and nothing that exists is touched: mkpart.
 	 * None of the in-use rules apply, and applying them anyway would be the
 	 * end of the feature — the disk holding "/" is protected precisely
@@ -474,6 +481,23 @@ int cmd_mkpart(int argc, char **argv);
 int cmd_rmpart(int argc, char **argv);
 int cmd_resize(int argc, char **argv);
 int cmd_mktable(int argc, char **argv);
+
+/* Describe a command under --dry-run, or run it under --yes — from ONE argv,
+ * so the two can never differ. `script` is written to the tool's stdin (NULL
+ * for a tool that takes none), `tool` is the executable whose absence blocks
+ * it, and `warn` is a sentence that does NOT block it. Returns the exit status
+ * the command should give: 0 done, 1 the tool refused, 2 described but --yes
+ * was missing, 3 the tool is not installed. */
+int pt_plan_do(char *const argv[], const char *script, const char *dev,
+               const char *what, const char *tool, const char *warn,
+               bool yes, bool dry);
+
+/* ── copy.c ─────────────────────────────────────────────────────────────────
+ * DESTRUCTIVE to the destination, which is an existing partition it overwrites
+ * byte for byte. It does not create one: see the file header for why creating
+ * and copying under a single confirmation is a worse failure state than two
+ * commands that each describe themselves. */
+int cmd_copypart(int argc, char **argv);
 
 /* ── about.c ────────────────────────────────────────────────────────────── */
 int cmd_about(int argc, char **argv);

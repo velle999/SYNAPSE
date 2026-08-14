@@ -360,7 +360,15 @@ char *guard_why_protected(const char *kname, guard_mode_t mode,
 
 	/* A drive the kernel has marked read-only cannot be written whatever the
 	 * rules say, and finding that out from sfdisk's error after confirming a
-	 * destructive dialogue is a worse way to learn it. */
+	 * destructive dialogue is a worse way to learn it.
+	 *
+	 * GUARD_READ is exempt, and not as a special case: it writes nothing. A
+	 * read-only device is a perfectly good source to copy FROM, and refusing it
+	 * here would refuse precisely the disk somebody has write-protected in
+	 * order to get the data off it safely. */
+	if (mode == GUARD_READ)
+		return NULL;
+
 	char *ro = sd_attr(kname, "ro");
 	bool readonly = ro && !strcmp(ro, "1");
 	free(ro);

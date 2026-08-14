@@ -27,6 +27,7 @@ sources = files(
   'src/actions.c',
   'src/table.c',
   'src/partition.c',
+  'src/copy.c',
   'src/about.c',
 )
 

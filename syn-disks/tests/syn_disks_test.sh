@@ -55,16 +55,24 @@ echo "syn-disks tests — $SD"
 
 # ── the binary answers ──────────────────────────────────────────────────────
 
-"$SD" --version | grep -q '^syn-disks '
+# ⚠ says(), not a bare pipe, and for a SECOND reason on top of the one at the
+# top of this file: `grep -q` exits at the first match and closes the pipe, and
+# the binary is then killed by SIGPIPE partway through writing the rest. Under
+# pipefail that is status 141 and a FAIL for a program that did exactly the
+# right thing. It passes on an ordinary build — where the whole of --help
+# reaches the pipe buffer before grep can act — and fails EVERY time under
+# ASan, which is slow enough to lose the race. Three assertions here read FAIL
+# on the sanitiser build alone, which is the most misleading place to have one.
+says "$SD" --version | grep -q '^syn-disks '
 check "--version prints a version" $?
 
-"$SD" --help | grep -q 'the SynapseOS disk utility'
+says "$SD" --help | grep -q 'the SynapseOS disk utility'
 check "--help prints usage" $?
 
 "$SD" not-a-command >/dev/null 2>&1
 [ $? -eq 2 ] && ok "unknown command exits 2" || bad "unknown command exits 2"
 
-"$SD" --help | grep -q 'no override'
+says "$SD" --help | grep -q 'no override'
 check "--help states the format restriction" $?
 
 # ── gui --format, the file manager's entry point ────────────────────────────
@@ -87,7 +95,7 @@ out=$(env -u WAYLAND_DISPLAY -u DISPLAY "$SD" gui --format /dev/definitely-not-a
     && ok "gui --format on a non-device is refused" \
     || bad "gui --format on a non-device is refused"
 
-"$SD" --help | grep -q 'gui --format'
+says "$SD" --help | grep -q 'gui --format'
 check "--help documents gui --format" $?
 
 # ── the fixture ─────────────────────────────────────────────────────────────
@@ -431,6 +439,8 @@ NAME="nvme1n1p2" FSTYPE="crypto_LUKS" LABEL="" UUID="cccc-0002" PARTLABEL="" PAR
 NAME="sdz" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="gpt" MODEL="Fixture Disk"
 NAME="sdz1" FSTYPE="ext4" LABEL="data" UUID="dddd-0001" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0001" PTTYPE="gpt" MODEL=""
 NAME="sdz2" FSTYPE="ext4" LABEL="spare" UUID="dddd-0002" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0002" PTTYPE="gpt" MODEL=""
+NAME="sdz9" FSTYPE="ext4" LABEL="" UUID="dddd-0009" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0009" PTTYPE="gpt" MODEL=""
+NAME="sdz10" FSTYPE="ext4" LABEL="" UUID="dddd-0010" PARTLABEL="" PARTTYPENAME="Linux filesystem" PARTTYPE="" PARTUUID="bbbb-0010" PTTYPE="gpt" MODEL=""
 NAME="sdy" FSTYPE="" LABEL="" UUID="" PARTLABEL="" PARTTYPENAME="" PARTTYPE="" PARTUUID="" PTTYPE="" MODEL="Cruzer Blade"
 ROWS
 EOF
@@ -674,6 +684,166 @@ check "...from exactly where it already starts" $?
 sdp resize sdz1 --size=300G --yes >/dev/null 2>&1
 [ $? -eq 1 ] && ok "resize refuses a mounted partition" \
              || bad "resize refuses a mounted partition"
+
+# ── mkpart --start: WHICH free space, not merely how much ───────────────────
+#
+# A front-end that draws the gaps has to be able to act on the one that was
+# clicked. Without this it could only ask for "a partition" and get one in the
+# largest gap — and the dry run would agree with itself all the way, because it
+# would describe the same wrong gap the command was about to use.
+#
+# The offset is in BYTES, as `table` prints it: sysfs counts sectors and this
+# program converts once, at the read.
+
+gapA=$(sdp --rec table sdz | awk -F'\t' '$5 == "free" { print $3; exit }')
+[ -n "$gapA" ] && ok "table names the offset of each gap" \
+               || bad "table names the offset of each gap"
+
+# Gap A is the ~20MB scrap, and it is the one mkpart would never pick on its
+# own. 500002816 rather than 500002048 because the start is still rounded UP to
+# a megabyte — naming a gap does not opt out of alignment.
+saysp mkpart sdz --start="$gapA" -n | grep -q 'start=500002816'
+check "--start puts the partition in the gap that was named, not the largest" $?
+
+saysp mkpart sdz --start="$gapA" -n | grep -q 'size=38912'
+check "...and fills exactly that gap, rounded down to stay inside it" $?
+
+# An offset in no gap at all is refused rather than rounded to the nearest one:
+# a stale offset from a layout that has changed since it was read names free
+# space that is not there any more, and the partition it would produce is one
+# nobody looked at. Byte 0 is inside the first megabyte, which holds the table
+# itself and is never free space.
+sdp mkpart sdz --start=0 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "--start with no free space at that offset is refused" \
+             || bad "--start with no free space at that offset is refused"
+
+saysp mkpart sdz --start=0 -n | grep -q 'syn-disks table'
+check "...and says to re-read the layout" $?
+
+# ── copypart ────────────────────────────────────────────────────────────────
+#
+# ⚠ Drives a FAKE dd that logs its arguments. Nothing here copies a byte.
+#
+# sdz9 and sdz10 are 1MiB each, adjacent, idle and in nothing's fstab — the
+# only pair in the fixture that may legitimately be copied one onto the other.
+
+cat > "$T/bin/dd-fake" <<EOF
+#!/bin/sh
+printf 'argv:%s\n' " \$*" >> "$T/dd.log"
+echo "2048+0 records in"
+echo "2048+0 records out"
+EOF
+chmod +x "$T/bin/dd-fake"
+
+sdc()   { PATH="$T/bin:$PATH" SYN_DISKS_LSBLK=lsblk-fake \
+          SYN_DISKS_DD=dd-fake SYN_DISKS_NO_PKEXEC=1 "$SD" "$@"; }
+saysc() { local out; out=$(sdc "$@" 2>&1); printf '%s\n' "$out"; }
+
+sdc copypart sdz9 sdz10 -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "copypart ALLOWS two idle partitions of the same size" \
+             || bad "copypart ALLOWS two idle partitions of the same size"
+
+# The HUMAN dry run, and not only --rec: `=` is percent-encoded in records, so
+# a grep for 'if=/dev/sdz9' against --rec silently never matches. The command
+# is printed verbatim here.
+saysc copypart sdz9 sdz10 -n | grep -q 'if=/dev/sdz9 of=/dev/sdz10'
+check "...and describes the copy in the direction it was asked for" $?
+
+saysc copypart sdz9 sdz10 -n | grep -q 'conv=fsync'
+check "...with the flush that makes 'done' mean the data is on the disk" $?
+
+# A copy of a MOUNTED filesystem is a copy of one mid-write: it mounts, and it
+# is corrupt. The source is read, not written, and it is still refused.
+sdc copypart sdz1 sdz9 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copypart refuses a MOUNTED source" \
+             || bad "copypart refuses a MOUNTED source"
+
+r=$(sdc --rec copypart sdz1 sdz10 -n 2>/dev/null)
+echo "$r" | grep -q '^fix	unmount$'
+check "...and offers the same way out every other refusal does" $?
+
+sdc copypart sdz9 sdz1 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copypart refuses a mounted DESTINATION" \
+             || bad "copypart refuses a mounted DESTINATION"
+
+sdc copypart nvme1n1p2 sdz9 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copypart refuses to read the partition holding /" \
+             || bad "copypart refuses to read the partition holding /"
+
+# Short by a byte is not a small copy: it is a filesystem whose superblock
+# describes blocks that are not there, and it will mount.
+sdc copypart sdz2 sdz9 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copypart refuses a destination smaller than the source" \
+             || bad "copypart refuses a destination smaller than the source"
+
+saysc copypart sdz2 sdz9 -n | grep -q '1.0 MiB'
+check "...naming both sizes, so the shortfall is visible" $?
+
+r=$(sdc --rec copypart sdz2 sdz9 -n 2>/dev/null)
+echo "$r" | grep -q '^refused	'
+check "...and reports it as records under --rec, not on stderr alone" $?
+
+# Copying a partition over ITSELF zeroes it. The comparison is on kernel names
+# for that reason: /dev/sdz9 and a by-uuid symlink to it are one device.
+sdc copypart sdz9 sdz9 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copypart refuses to copy a partition onto itself" \
+             || bad "copypart refuses to copy a partition onto itself"
+
+# A drive is not a partition. Copying one means copying its table too, which
+# gives two disks the same identity — a different operation, not this one.
+sdc copypart sdz sdz9 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "copypart refuses a whole drive as the source" \
+             || bad "copypart refuses a whole drive as the source"
+
+sdc copypart sdz9 sdz -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "...and as the destination" \
+             || bad "...and as the destination"
+
+# The UUID warning is unconditional and blocks NOTHING: copying a partition and
+# then wiping the original is exactly what replacing a disk looks like. It is
+# here so that a machine booting the wrong one of two identical filesystems is
+# not a mystery afterwards.
+saysc copypart sdz9 sdz10 -n | grep -q 'UUID'
+check "a copy warns that it carries the source's filesystem UUID" $?
+
+r=$(sdc --rec copypart sdz9 sdz10 -n 2>/dev/null)
+echo "$r" | grep -q '^warn	'
+check "...as a warn record, which leaves a front-end's button live" $?
+
+echo "$r" | grep -q '^blocked	'
+[ $? -ne 0 ] && ok "...and not as a blocked one" \
+             || bad "...and not as a blocked one"
+
+# A destination with room to spare is allowed, and told the truth: the
+# filesystem inside the copy still ends where the source's did.
+saysc copypart sdz9 sdz2 -n | grep -q 'still end where'
+check "a larger destination is allowed, and says the filesystem does not grow" $?
+
+# fstab is an objection to DESTROYING something and no objection at all to
+# reading it. The same file, the same partition, opposite answers by role.
+#
+# By UUID, because that is what a real fstab holds — and because a fixture has
+# no device nodes, so a spec naming /dev/sdz9 resolves to nothing here and
+# would have passed this test by matching nobody.
+cat > "$T/fstab-sdz9" <<'EOF'
+UUID=dddd-0009	/srv	ext4	defaults	0 2
+EOF
+
+SYN_DISKS_FSTAB="$T/fstab-sdz9" sdc copypart sdz9 sdz10 -n >/dev/null 2>&1
+[ $? -eq 0 ] && ok "an fstab entry does not stop a partition being COPIED" \
+             || bad "an fstab entry does not stop a partition being COPIED"
+
+SYN_DISKS_FSTAB="$T/fstab-sdz9" sdc copypart sdz10 sdz9 -n >/dev/null 2>&1
+[ $? -eq 1 ] && ok "...and does stop it being overwritten" \
+             || bad "...and does stop it being overwritten"
+
+# The one call in this section that runs all the way through, against the fake.
+: > "$T/dd.log"
+sdc copypart sdz9 sdz10 --yes >/dev/null 2>&1
+check "copypart runs when it is allowed to" $?
+
+grep -q '^argv: if=/dev/sdz9 of=/dev/sdz10 bs=4M conv=fsync$' "$T/dd.log"
+check "...with exactly the arguments the dry run showed" $?
 
 # ── mktable ─────────────────────────────────────────────────────────────────
 
@@ -944,6 +1114,41 @@ if [ -f "$QML" ]; then
     n=$(grep -c 'Qt.application.font' "$QML" || true)
     [ "$n" = 0 ] && ok "no fallback pins the startup font" \
                  || bad "$n use(s) of Qt.application.font"
+
+    # ── the window and the binary describe the same operations ──────────────
+    #
+    # Static checks, because a window cannot be started from here: quickshell
+    # needs a session, and a test suite that opened one would be a test suite
+    # that drew on somebody's screen. What CAN be checked is that the two ends
+    # still name the same commands — the failure this catches is a verb renamed
+    # in C and left behind in QML, which is a dead button and no build error.
+    for verb in mkpart rmpart resize copypart format; do
+        grep -q "\"$verb\"" "$QML" \
+            || bad "the window never names the $verb command"
+    done
+    ok "every command the window offers is one the binary has"
+
+    # ONE builder for the dry run and the confirm. The dialogue's whole claim is
+    # that what it shows is what it runs, and that claim is only true while both
+    # halves come from the same array.
+    n=$(grep -c 'dlgArgs()' "$QML" || true)
+    [ "$n" -ge 3 ] && ok "the dialogue builds its argv in one place" \
+                   || bad "dlgArgs() is used $n time(s) — the plan and the confirm have drifted"
+
+    # The gap is named by OFFSET. An index into the list would be stale the
+    # moment anything else on the drive changed, and would name free space
+    # nobody looked at.
+    grep -qF -- '--start=" + root.selGap' "$QML" \
+        && ok "a new partition names the free space it was pointed at" \
+        || bad "the window does not pass --start"
+
+    # A plan that arrives after the question changed is DROPPED. Probed
+    # headlessly against a stub: without this the copy dialogue opened showing
+    # `rmpart` as the command it was about to run, because the abandoned
+    # dialogue's dry run finished afterwards.
+    grep -q 'planAsked !== root.planStamp()' "$QML" \
+        && ok "a stale dry run cannot land in the dialogue that replaced it" \
+        || bad "nothing stamps the plan against the request it answers"
 else
     bad "syn-disks.qml not found beside the tests: $QML"
 fi

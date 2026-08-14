@@ -186,8 +186,20 @@ FloatingWindow {
     // ── State ───────────────────────────────────────────────────────────────
     property var drives: []
     property var parts: []
+    // `table`: the partitions AND the free space between them, in on-disk
+    // order. A separate reader from `parts` because they answer different
+    // questions — `parts` describes what is ON the drive, nested volumes
+    // included, and this describes the SHAPE of the drive, which is the only
+    // one of the two that knows where a new partition could go. Free space is
+    // stored by nobody and is derived in C; nothing here works it out.
+    property var slots: []
     property string selDisk: ""      // /dev/… of the drive being shown
     property string selPart: ""      // /dev/… of the highlighted row, or ""
+    // The free space selected in the bar, identified by its START OFFSET in
+    // bytes and never by its index: a gap's position in the list changes the
+    // moment anything else on the disk does, and an index kept across a
+    // refresh would name a different piece of the drive than the one clicked.
+    property string selGap: ""
     property bool loading: false
     property string status: ""
     property bool busy: false
@@ -200,8 +212,52 @@ FloatingWindow {
         for (const p of root.parts) if (p.device === dev) return p
         return null
     }
+    // The table row for a device, which exists only for a REAL PARTITION of
+    // this drive. An unlocked volume shows up in `parts` and is not a partition
+    // — sfdisk cannot delete or resize /dev/mapper/cryptroot — so every
+    // partitioning button asks this rather than `parts`.
+    function slotOf(dev) {
+        for (const s of root.slots)
+            if (s.kind === "partition" && s.device === dev) return s
+        return null
+    }
+    function gapAt(start) {
+        for (const s of root.slots)
+            if (s.kind === "free" && s.start === start) return s
+        return null
+    }
     readonly property var drive: root.driveRow(root.selDisk)
     readonly property var part: root.partRow(root.selPart)
+    readonly property var slot: root.slotOf(root.selPart)
+    readonly property var gap: root.gapAt(root.selGap)
+    readonly property var largestGap: {
+        let best = null
+        for (const s of root.slots)
+            if (s.kind === "free" && (!best || root.num(s.bytes) > root.num(best.bytes)))
+                best = s
+        return best
+    }
+    // How far the selected partition could grow: itself, plus the free space
+    // immediately AFTER it and nothing else. Free space elsewhere on the drive
+    // is unreachable without moving the partition, which is a copy of every
+    // byte on it rather than a table edit. The binary works this out for
+    // itself and refuses anything larger; this is only what the field opens on.
+    readonly property real growMax: {
+        if (!root.slot) return 0
+        let hit = false
+        let total = 0
+        for (const s of root.slots) {
+            if (hit) {
+                if (s.kind === "free") total += root.num(s.bytes)
+                break
+            }
+            if (s.kind === "partition" && s.device === root.selPart) {
+                hit = true
+                total = root.num(s.bytes)
+            }
+        }
+        return total
+    }
 
     function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
@@ -265,6 +321,24 @@ FloatingWindow {
         }
     }
 
+    // `table` exits 100 — "nothing to list" — for a drive with no partition
+    // table, which is an ANSWER and not a failure. Nothing is said about it
+    // here: the empty bar and the line under the table already say it, and a
+    // status message would arrive on top of whatever operation just ran.
+    Process {
+        id: tableProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.slots = root.parseRecords(this.text)
+                // The gap is an offset, and after any write the offsets move:
+                // a gap that has been partitioned is not there any more, and
+                // one that has grown starts somewhere else. Dropped unless the
+                // re-read still describes the same free space.
+                if (!root.gapAt(root.selGap)) root.selGap = ""
+            }
+        }
+    }
+
     // Does NOT clear the status line. It is called at the END of every
     // operation to re-read the machine, and clearing here wiped the outcome a
     // few milliseconds after it was written — the success and the mkfs error
@@ -278,19 +352,36 @@ FloatingWindow {
 
     function loadParts() {
         root.parts = []
+        root.slots = []
         root.health = ({})
         root.healthRows = []
         if (!root.selDisk) return
         partsProc.command = [root.bin, "--rec", "parts", root.selDisk]
         partsProc.running = true
+        tableProc.command = [root.bin, "--rec", "table", root.selDisk]
+        tableProc.running = true
     }
 
     function selectDisk(dev) {
         if (root.selDisk === dev) return
         root.selDisk = dev
         root.selPart = ""
+        root.selGap = ""
         root.status = ""
         root.loadParts()
+    }
+
+    // A partition and a piece of free space are the same kind of selection —
+    // the thing the action strip is pointed at — so choosing either drops the
+    // other. Two live selections would leave "Delete" and "New" both lit, and
+    // no way to tell which one a button was about to act on.
+    function selectPart(dev) {
+        root.selPart = dev
+        root.selGap = ""
+    }
+    function selectGap(start) {
+        root.selGap = start
+        root.selPart = ""
     }
 
     // ── Acting ──────────────────────────────────────────────────────────────
@@ -331,7 +422,7 @@ FloatingWindow {
             // broken.
             if (root.replanAfterOp) {
                 root.replanAfterOp = false
-                root.planFormat()
+                root.planNow()
             }
         }
     }
@@ -421,23 +512,38 @@ FloatingWindow {
         smartProc.running = true
     }
 
-    // ── Formatting ──────────────────────────────────────────────────────────
+    // ── The dialogues that change something ─────────────────────────────────
     //
-    // Two steps, and the dialogue does NOT describe the change in its own
-    // words: it runs the real thing under --dry-run and shows what came back,
-    // so what is approved and what then runs are produced by the same code
-    // path and cannot drift apart. syn-settings does the same for changing the
+    // Format, and the four partitioning operations, are ONE mechanism with
+    // five bodies. Every one of them works the same way, and the way is the
+    // whole point: the dialogue does NOT describe the change in its own words.
+    // It runs the real command under --dry-run and shows what came back, so
+    // what is approved and what then runs are produced by the same code path
+    // and cannot drift apart. syn-settings does the same for changing the
     // bootloader, for the same reason.
     //
+    // dlgArgs() is where that guarantee lives: one function builds the argv,
+    // the dry run appends --dry-run to it and the confirm appends --yes. A
+    // second builder for the second half would be a second thing to keep in
+    // step by hand, and the day it drifted the window would show one command
+    // and run another.
+    //
     // The binary refuses without --yes regardless of what this file does, and
-    // refuses outright for a mounted device or anything sharing a disk with
-    // "/" — so the worst a bug here can do is fail to offer something, never
-    // erase something it should not have.
-    property bool fmtOpen: false
-    property string fmtDev: ""
-    property string fmtFs: "ext4"
-    property string fmtLabel: ""
-    property var fmtPlan: ({})
+    // refuses outright for a mounted device, for anything sharing a disk with
+    // "/", and — for partitioning — for anything the guard protects. So the
+    // worst a bug here can do is fail to offer something, never destroy
+    // something it should not have.
+    property string dlg: ""          // "" | format | add | delete | resize | copy
+    property string dlgDev: ""       // the device it is about
+    property var plan: ({})
+
+    // What the bodies collect. Shared across the dialogues that need them
+    // rather than duplicated per kind: "which filesystem" is one question
+    // however it was arrived at.
+    property string opFs: "ext4"
+    property string opLabel: ""
+    property string opSize: ""       // add/resize; "" on add means the whole gap
+    property string copyDst: ""      // copy: the destination partition
 
     readonly property var fsChoices: [
         { id: "ext4",  blurb: "Linux, journalled" },
@@ -445,21 +551,103 @@ FloatingWindow {
         { id: "xfs",   blurb: "Linux, large files" },
         { id: "vfat",  blurb: "reads everywhere; no files over 4GB" },
         { id: "exfat", blurb: "reads nearly everywhere; large files" },
-        { id: "ntfs",  blurb: "Windows" }
+        { id: "ntfs",  blurb: "Windows" },
+        // Only offered when MAKING a partition: an empty partition is a
+        // perfectly good thing to make and then hand to cryptsetup, to LVM or
+        // to an installer. Formatting something to "nothing" is not.
+        { id: "none",  blurb: "no filesystem — an empty partition", addOnly: true }
     ]
+
+    // THE argv. Everything else about a dialogue is presentation.
+    function dlgArgs() {
+        switch (root.dlg) {
+        case "format": {
+            const a = ["format", root.dlgDev, "--fs=" + root.opFs]
+            if (root.opLabel !== "") a.push("--label=" + root.opLabel)
+            return a
+        }
+        case "add": {
+            const a = ["mkpart", root.selDisk]
+            // The gap by OFFSET, so the partition lands in the free space that
+            // was clicked. Without it the binary picks the largest gap, which
+            // is the right default and the wrong answer to a click on a
+            // different one.
+            if (root.selGap !== "") a.push("--start=" + root.selGap)
+            if (root.opSize !== "") a.push("--size=" + root.opSize)
+            if (root.opFs !== "none") a.push("--fs=" + root.opFs)
+            if (root.opFs !== "none" && root.opLabel !== "")
+                a.push("--label=" + root.opLabel)
+            return a
+        }
+        case "delete": return ["rmpart", root.dlgDev]
+        case "resize": return ["resize", root.dlgDev, "--size=" + root.opSize]
+        case "copy":   return ["copypart", root.dlgDev, root.copyDst]
+        }
+        return []
+    }
+
+    readonly property string dlgTitle: {
+        switch (root.dlg) {
+        case "format": return "Erase " + root.dlgDev
+        case "add":    return "New partition on " + root.selDisk
+        case "delete": return "Delete " + root.dlgDev
+        case "resize": return "Grow " + root.dlgDev
+        case "copy":   return "Copy " + root.dlgDev
+        default:       return ""
+        }
+    }
+    readonly property string dlgBlurb: {
+        switch (root.dlg) {
+        case "format": return "Everything on this device will be destroyed. There is no undo."
+        case "add":    return root.gap
+            ? "Into the " + root.human(root.gap.bytes) + " of free space selected below."
+            : "Into the largest free space on this drive."
+        case "delete": return "The partition and everything on it are destroyed. There is no undo."
+        case "resize": return "It grows into the free space that follows it, and nothing else. "
+                            + "The filesystem inside still ends where it does now — grow that "
+                            + "afterwards, with the tool that belongs to it."
+        case "copy":   return "Every byte of " + root.dlgDev + " is written over the partition "
+                            + "you choose. Everything on that one is destroyed."
+        default:       return ""
+        }
+    }
+    readonly property string dlgGo: {
+        switch (root.dlg) {
+        case "format": return "Erase and format"
+        case "add":    return "Create it"
+        case "delete": return "Delete it"
+        case "resize": return "Grow it"
+        case "copy":   return "Copy over it"
+        default:       return ""
+        }
+    }
 
     // The two streams and the exit are THREE events, and their order is not
     // guaranteed. This used to decide inside each handler as it landed, which
     // worked for a plan and failed for a refusal: on a refusal stdout is EMPTY,
-    // so its handler reset fmtPlan to {} — and any time it landed after
+    // so its handler reset the plan to {} — and any time it landed after
     // stderr's, it wiped the reason that had just been recorded. What was left
-    // was a dialogue with no explanation and a Format button that would not
-    // light up, which is the single outcome this dialogue exists to prevent.
+    // was a dialogue with no explanation and a button that would not light up,
+    // which is the single outcome this dialogue exists to prevent.
     //
     // So each event only STORES its text, and resolvePlan() fills the plan in.
     // It never clears one that is already good, so order cannot matter.
     property string planOut: ""
     property string planErr: ""
+    // ⚠ And a FOURTH event, which is the previous dialogue's dry run landing in
+    // this one. There is one plan Process; ask it for a second plan while the
+    // first is still in flight — closing a delete dialogue and opening a copy,
+    // or simply typing another digit into a size — and the old run's streams
+    // finish AFTER the new run has started, into the state the new one cleared.
+    // Probed headlessly and it was not theoretical: the copy dialogue opened
+    // showing `rmpart /dev/sda2` as the command it was about to run.
+    //
+    // So a plan is stamped with the request it answers, and a reply that does
+    // not match the question now being asked is DROPPED rather than shown. Not
+    // matched by prose: it is the argv, which is the same array the confirm
+    // button would run.
+    property string planAsked: ""
+    function planStamp() { return root.dlg + " " + root.dlgArgs().join(" ") }
 
     Process {
         id: planProc
@@ -473,20 +661,23 @@ FloatingWindow {
     }
 
     function resolvePlan(final) {
-        const plan = root.parseFields(root.planOut)
-        // A refusal now arrives as RECORDS, with a `fix` field naming the way
-        // out. It used to come only on stderr, where the plan parser never
-        // looked.
-        if (plan["command"] !== undefined || plan["refused"] !== undefined) {
-            root.fmtPlan = plan
+        // An answer to a question nobody is asking any more.
+        if (root.planAsked !== root.planStamp()) return
+
+        const p = root.parseFields(root.planOut)
+        // A refusal arrives as RECORDS, with a `fix` field naming the way out.
+        // It used to come only on stderr, where the plan parser never looked.
+        if (p["command"] !== undefined || p["refused"] !== undefined) {
+            root.plan = p
             return
         }
         if (root.planErr) {
-            // Something the binary reported on stderr instead — a name that is
-            // not a block device, say. The WHOLE text, not split("\n")[0]:
-            // the second line is the way out, and dropping it is what left
-            // somebody reading "it is mounted" with nothing to do about it.
-            root.fmtPlan = ({ refused: root.planErr.trim() })
+            // Something the binary reported on stderr instead — a size that is
+            // not a size, a partition that is not one. The WHOLE text, not
+            // split("\n")[0]: the second line is the way out, and dropping it
+            // is what left somebody reading "it is mounted" with nothing to do
+            // about it.
+            root.plan = ({ refused: root.planErr.trim() })
             return
         }
         if (final)
@@ -497,56 +688,148 @@ FloatingWindow {
     // sentence beside it. A window that decided whether to offer Unmount by
     // matching prose would stop offering it the day the prose improved.
     readonly property string fixHint: {
-        switch (root.fmtPlan["fix"]) {
+        switch (root.plan["fix"]) {
         case "unmount": return "It is mounted. Unmount it and this becomes possible."
-        case "swapoff": return "Swap is live on it — run: swapoff " + root.fmtDev
+        case "swapoff": return "Swap is live on it — run: swapoff " + root.fixDev
         case "lock":    return "A volume is unlocked on top of it; lock it first."
         case "fstab":   return "/etc/fstab expects this at the next boot."
         case "none":    return "There is nothing that overrides this."
         default:        return ""
         }
     }
+    // The device the REFUSAL is about, which is not always the one the
+    // dialogue is titled after: a copy is refused for its source or for its
+    // destination, and unmounting the wrong one of the two would report
+    // success and leave the dialogue refusing exactly as before.
+    readonly property string fixDev: root.plan["device"] || root.dlgDev
 
     // Unmount, then work the plan out again, so the dialogue that just said
-    // "it is mounted" becomes the dialogue that can format it. Opening a stick
-    // from Files mounts it, which is how most people arrive here — making them
-    // close this, find the partition, unmount it and come back is a round trip
-    // for a state the window already knows about. The binary still decides.
+    // "it is mounted" becomes the dialogue that can act. Opening a stick from
+    // Files mounts it, which is how most people arrive here — making them close
+    // this, find the partition, unmount it and come back is a round trip for a
+    // state the window already knows about. The binary still decides.
     property bool replanAfterOp: false
-    function unmountForFormat() {
-        if (!root.fmtDev || root.busy) return
+    function unmountForDialog() {
+        if (!root.fixDev || root.busy) return
         root.replanAfterOp = true
-        root.runOp(["unmount", root.fmtDev], "unmounting " + root.fmtDev + "…",
-                   root.fmtDev + " unmounted")
+        root.runOp(["unmount", root.fixDev], "unmounting " + root.fixDev + "…",
+                   root.fixDev + " unmounted")
     }
 
-    function askFormat(dev) {
-        root.fmtDev = dev
-        root.fmtLabel = ""
-        root.fmtPlan = ({})
-        root.fmtOpen = true
-        root.planFormat()
+    function askDialog(kind, dev) {
+        root.dlg = kind
+        root.dlgDev = dev
+        root.plan = ({})
+        root.opLabel = ""
+        root.copyDst = ""
+        // Each dialogue opens on the answer that is almost always right, and
+        // the field is the way to disagree with it. An empty size on `add`
+        // means the whole gap, which is what the binary does with no --size.
+        root.opSize = kind === "resize" ? String(Math.floor(root.growMax)) : ""
+        if (kind === "add" && root.opFs === "none") root.opFs = "ext4"
+        if (kind === "copy") root.browseFor(root.selDisk)
+        root.planNow()
     }
 
-    function planFormat() {
-        if (!root.fmtDev) return
-        root.fmtPlan = ({})
+    function planNow() {
+        const args = root.dlgArgs()
+        root.plan = ({})
         root.planOut = ""
         root.planErr = ""
-        const args = [root.bin, "--rec", "format", root.fmtDev,
-                      "--fs=" + root.fmtFs, "--dry-run"]
-        if (root.fmtLabel !== "") args.push("--label=" + root.fmtLabel)
-        planProc.command = args
+        // Nothing is pending, so nothing that arrives may be shown. Set before
+        // every early return below, not only on the way out of the last one.
+        root.planAsked = ""
+        if (args.length === 0) return
+        // Copy has no plan until there is something to copy onto. Running one
+        // anyway would report "need a destination" as though the dialogue were
+        // broken, in the place the command is supposed to appear.
+        if (root.dlg === "copy" && root.copyDst === "") return
+        root.planAsked = root.planStamp()
+        planProc.command = [root.bin, "--rec"].concat(args).concat(["--dry-run"])
         planProc.running = true
     }
 
-    function doFormat() {
-        const args = ["format", root.fmtDev, "--fs=" + root.fmtFs, "--yes"]
-        if (root.fmtLabel !== "") args.push("--label=" + root.fmtLabel)
-        root.fmtOpen = false
-        root.runOp(args, "formatting " + root.fmtDev + "…",
-                   root.fmtDev + " is now " + root.fmtFs
-                   + (root.fmtLabel !== "" ? ", labelled " + root.fmtLabel : ""))
+    function applyNow() {
+        const args = root.dlgArgs()
+        if (args.length === 0) return
+        const kind = root.dlg
+        const dev = root.dlgDev
+        root.dlg = ""
+        switch (kind) {
+        case "format":
+            root.runOp(args.concat(["--yes"]), "formatting " + dev + "…",
+                       dev + " is now " + root.opFs
+                       + (root.opLabel !== "" ? ", labelled " + root.opLabel : ""))
+            break
+        case "add":
+            root.runOp(args.concat(["--yes"]), "making a partition on " + root.selDisk + "…",
+                       "the partition was made on " + root.selDisk)
+            break
+        case "delete":
+            root.runOp(args.concat(["--yes"]), "deleting " + dev + "…",
+                       dev + " is gone")
+            break
+        case "resize":
+            root.runOp(args.concat(["--yes"]), "growing " + dev + "…",
+                       dev + " is bigger — the filesystem inside it is not yet")
+            break
+        case "copy":
+            // No progress to report: dd says nothing until it is finished, and
+            // a copy of a large partition takes minutes. The status line says
+            // what is happening and the window is busy until it is not.
+            root.runOp(args.concat(["--yes"]),
+                       "copying " + dev + " onto " + root.copyDst + " — this can take a while…",
+                       root.copyDst + " now holds a copy of " + dev)
+            break
+        }
+    }
+
+    // Kept only so `syn-disks gui --format` still has the entry point it names.
+    function askFormat(dev) { root.askDialog("format", dev) }
+
+    // ── The copy destination ────────────────────────────────────────────────
+    //
+    // A destination is a partition on any drive in the machine, so this reads
+    // the TABLE of whichever drive is being browsed for one — the same command
+    // the main view uses, for the same reason: it carries `protected`, which is
+    // the guard's own answer about destroying that partition. The list greys
+    // out what cannot be a destination and says why, in the binary's words.
+    property string copyDisk: ""
+    property var dstSlots: []
+
+    Process {
+        id: dstProc
+        stdout: StdioCollector {
+            onStreamFinished: root.dstSlots = root.parseRecords(this.text)
+        }
+    }
+
+    // The ONE way the destination drive changes — opening the dialogue and
+    // clicking a chip both come through here. Driving it from a property
+    // change instead meant re-opening the dialogue on the same drive read
+    // nothing, and showed whatever that drive's table had been the last time.
+    function browseFor(disk) {
+        root.copyDisk = disk
+        root.dstSlots = []
+        if (!disk) return
+        dstProc.command = [root.bin, "--rec", "table", disk]
+        dstProc.running = true
+    }
+
+    // Why this partition cannot be the destination, or "" when it can. The
+    // guard's sentence is used verbatim where there is one; the size is the
+    // only thing checked here, and the binary checks it again.
+    function dstWhyNot(row) {
+        // Its own row FIRST. The source is very often protected as well, and
+        // "it is mounted at /mnt/data" beside the partition somebody just
+        // asked to copy reads as a fault in the destination list rather than
+        // as the reason a thing cannot be copied onto itself.
+        if (row.device === root.dlgDev) return "this is the partition being copied"
+        if (row.protected) return row.protected
+        const src = root.slotOf(root.dlgDev)
+        if (src && root.num(row.bytes) < root.num(src.bytes))
+            return "too small — needs " + root.human(src.bytes)
+        return ""
     }
 
     property bool aboutOpen: false
@@ -823,26 +1106,35 @@ FloatingWindow {
             // given to it.
             clip: true
 
+            // Drawn from `table`, which is the drive's SHAPE: the partitions
+            // and the free space between them, in on-disk order, each with the
+            // offset it actually sits at.
+            //
+            // It used to be derived from `parts` — the partitions summed, and
+            // whatever was left over drawn as one block of "unallocated" at the
+            // END. That is wrong on any drive whose free space is in the
+            // middle, which is every drive somebody has repartitioned, and it
+            // is the picture a user would then click on to put a partition
+            // somewhere. The gaps are where the binary says they are.
             readonly property var slices: {
                 if (!root.drive) return []
                 const total = root.num(root.drive.bytes)
                 if (total <= 0) return []
                 const out = []
-                let covered = 0
-                for (const p of root.parts) {
-                    if (p.depth !== "0") continue
-                    const b = root.num(p.bytes)
+                for (const s of root.slots) {
+                    const b = root.num(s.bytes)
                     if (b <= 0) continue
-                    out.push({ dev: p.device, label: p.label || p.fstype || p.device,
-                               frac: b / total, gap: false })
-                    covered += b
+                    out.push({ dev: s.device, start: s.start,
+                               label: s.kind === "free" ? "free space"
+                                    : (s.label || s.fstype || s.device),
+                               frac: b / total, gap: s.kind === "free" })
                 }
-                // What is left over. On a disk with no partition table this is
-                // the whole bar, which is the honest picture: a drive with
-                // nothing allocated on it.
-                const left = 1 - covered / total
-                if (left > 0.005)
-                    out.push({ dev: "", label: "unallocated", frac: left, gap: true })
+                // A drive with no partition table has no slots at all, and one
+                // unallocated bar is the honest picture of it: nothing is
+                // allocated on it.
+                if (out.length === 0)
+                    out.push({ dev: "", start: "", label: "unallocated",
+                               frac: 1, gap: true })
                 return out
             }
 
@@ -865,11 +1157,19 @@ FloatingWindow {
                                            * slice.modelData.frac)
                         height: barRow.height
                         radius: 2
-                        readonly property bool chosen: slice.modelData.dev !== ""
-                                                       && slice.modelData.dev === root.selPart
-                        color: slice.modelData.gap ? root.wash(0.04)
-                             : slice.chosen ? root.wash(0.38)
-                             : sliceMa.containsMouse ? root.wash(0.22) : root.wash(0.13)
+                        // Free space is SELECTABLE, and by its offset: it is
+                        // the thing "New…" acts on, and a bar that showed the
+                        // gaps but would not let one be picked would be a
+                        // picture of the answer with no way to give it.
+                        readonly property bool chosen: slice.modelData.gap
+                            ? (slice.modelData.start !== ""
+                               && slice.modelData.start === root.selGap)
+                            : (slice.modelData.dev !== ""
+                               && slice.modelData.dev === root.selPart)
+                        color: slice.chosen ? root.wash(0.38)
+                             : slice.modelData.gap
+                               ? (sliceMa.containsMouse ? root.wash(0.10) : root.wash(0.04))
+                               : sliceMa.containsMouse ? root.wash(0.22) : root.wash(0.13)
                         border { width: 1; color: slice.chosen ? root.cAccent : root.wash(0.18) }
                         clip: true
 
@@ -886,9 +1186,15 @@ FloatingWindow {
                             id: sliceMa
                             anchors.fill: parent
                             hoverEnabled: true
-                            enabled: !slice.modelData.gap
+                            // The one unselectable slice is the whole-bar
+                            // stand-in drawn for a drive with no table: there
+                            // is no free space to name until there is a table
+                            // to name it in.
+                            enabled: !slice.modelData.gap || slice.modelData.start !== ""
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.selPart = slice.modelData.dev
+                            onClicked: slice.modelData.gap
+                                     ? root.selectGap(slice.modelData.start)
+                                     : root.selectPart(slice.modelData.dev)
                         }
                     }
                 }
@@ -1053,7 +1359,7 @@ FloatingWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.selPart = pRow.modelData.device
+                    onClicked: root.selectPart(pRow.modelData.device)
                 }
             }
         }
@@ -1209,60 +1515,74 @@ FloatingWindow {
             }
         }
 
-        // ── The format dialogue ─────────────────────────────────────────────
+        // ── The dialogue ────────────────────────────────────────────────────
+        //
+        // One window for format, add, delete, resize and copy. Each shows the
+        // real dry run at the bottom, and the button is offered only when that
+        // dry run came back with a command — so a refusal is a dialogue that
+        // explains itself rather than a button that does nothing.
         MouseArea {
             anchors.fill: parent
-            visible: root.fmtOpen
+            visible: root.dlg !== ""
             z: 129
-            onClicked: root.fmtOpen = false
+            onClicked: root.dlg = ""
         }
         Rectangle {
             anchors.centerIn: parent
             width: 480
-            height: fmtCol.implicitHeight + 76
+            height: Math.min(root.height - 40, dlgCol.implicitHeight + 76)
             radius: 6
             color: root.cPanel
             border { width: 1; color: root.cBad }
-            visible: root.fmtOpen
+            visible: root.dlg !== ""
             z: 130
 
             Column {
-                id: fmtCol
+                id: dlgCol
                 anchors { top: parent.top; left: parent.left; right: parent.right; margins: 18 }
                 spacing: 8
 
                 Text {
-                    text: "Erase " + root.fmtDev
+                    width: dlgCol.width
+                    elide: Text.ElideRight
+                    text: root.dlgTitle
                     color: root.cBad
                     font { family: root.uiFont; pixelSize: root.ui(14); bold: true }
                 }
                 Text {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     wrapMode: Text.WordWrap
-                    text: "Everything on this device will be destroyed. There is no undo."
+                    text: root.dlgBlurb
                     color: root.cText
                     font { family: root.uiFont; pixelSize: root.ui(11) }
                 }
 
                 Item { width: 1; height: 2 }
 
+                // ── Filesystem: format, and a new partition ─────────────────
                 Text {
+                    visible: root.dlg === "format" || root.dlg === "add"
                     text: "Filesystem"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
                 Flow {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     spacing: 6
+                    visible: root.dlg === "format" || root.dlg === "add"
                     Repeater {
                         model: root.fsChoices
                         delegate: Rectangle {
                             id: fsChip
                             required property var modelData
-                            width: fsText.implicitWidth + 18
-                            height: 24
+                            // "no filesystem" is a partition you can make and
+                            // not a filesystem you can write, so the chip is
+                            // not there at all when formatting.
+                            visible: !fsChip.modelData.addOnly || root.dlg === "add"
+                            width: fsChip.visible ? fsText.implicitWidth + 18 : 0
+                            height: fsChip.visible ? 24 : 0
                             radius: 4
-                            readonly property bool chosen: fsChip.modelData.id === root.fmtFs
+                            readonly property bool chosen: fsChip.modelData.id === root.opFs
                             color: fsChip.chosen ? root.wash(0.30)
                                  : fsMa.containsMouse ? root.wash(0.14) : root.wash(0.06)
                             border { width: 1; color: fsChip.chosen ? root.cAccent : "transparent" }
@@ -1279,30 +1599,74 @@ FloatingWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: { root.fmtFs = fsChip.modelData.id; root.planFormat() }
+                                onClicked: { root.opFs = fsChip.modelData.id; root.planNow() }
                             }
                         }
                     }
                 }
                 Text {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     wrapMode: Text.WordWrap
+                    visible: root.dlg === "format" || root.dlg === "add"
                     text: {
-                        for (const c of root.fsChoices) if (c.id === root.fmtFs) return c.blurb
+                        for (const c of root.fsChoices) if (c.id === root.opFs) return c.blurb
                         return ""
                     }
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
 
-                Item { width: 1; height: 2 }
-
+                // ── Size: a new partition, and a resize ─────────────────────
                 Text {
+                    visible: root.dlg === "add" || root.dlg === "resize"
+                    text: root.dlg === "add" ? "Size (blank fills the free space)" : "New size"
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
+                }
+                Rectangle {
+                    visible: root.dlg === "add" || root.dlg === "resize"
+                    width: 240; height: 26; radius: 4
+                    color: root.cBg
+                    border { width: 1; color: sizeField.activeFocus ? root.cAccent : root.wash(0.25) }
+                    clip: true
+
+                    TextInput {
+                        id: sizeField
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.cText
+                        font { family: root.uiFont; pixelSize: root.ui(12) }
+                        selectByMouse: true
+                        // Follows the property rather than owning it: the
+                        // dialogue opens `resize` on the largest size that
+                        // will fit, and a field that only ever wrote to the
+                        // property would open empty and lose that answer.
+                        text: root.opSize
+                        onTextChanged: if (text !== root.opSize) { root.opSize = text; root.planNow() }
+                    }
+                }
+                Text {
+                    width: dlgCol.width
+                    wrapMode: Text.WordWrap
+                    visible: root.dlg === "add" || root.dlg === "resize"
+                    text: "20G, 512MiB or a plain number of bytes. IEC suffixes are powers of "
+                        + "1024; KB, MB and GB are powers of 1000."
+                        + (root.dlg === "resize" && root.growMax > 0
+                           ? " Up to " + root.human(root.growMax) + " here."
+                           : "")
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
+                }
+
+                // ── Label: format, and a new partition being formatted ──────
+                Text {
+                    visible: root.dlg === "format" || (root.dlg === "add" && root.opFs !== "none")
                     text: "Label (optional)"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
                 Rectangle {
+                    visible: root.dlg === "format" || (root.dlg === "add" && root.opFs !== "none")
                     width: 240; height: 26; radius: 4
                     color: root.cBg
                     border { width: 1; color: labelField.activeFocus ? root.cAccent : root.wash(0.25) }
@@ -1317,8 +1681,114 @@ FloatingWindow {
                         selectByMouse: true
                         // The binary is the boundary for what a label may hold;
                         // this only keeps the preview in step with the typing.
-                        onTextChanged: { root.fmtLabel = text; root.planFormat() }
+                        onTextChanged: { root.opLabel = text; root.planNow() }
                     }
+                }
+
+                // ── Destination: copy ───────────────────────────────────────
+                Text {
+                    visible: root.dlg === "copy"
+                    text: "Copy it onto"
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
+                }
+                Flow {
+                    width: dlgCol.width
+                    spacing: 6
+                    visible: root.dlg === "copy"
+                    Repeater {
+                        model: root.drives
+                        delegate: Rectangle {
+                            id: dChip
+                            required property var modelData
+                            width: dChipText.implicitWidth + 18
+                            height: 24
+                            radius: 4
+                            readonly property bool chosen: dChip.modelData.device === root.copyDisk
+                            color: dChip.chosen ? root.wash(0.30)
+                                 : dChipMa.containsMouse ? root.wash(0.14) : root.wash(0.06)
+                            border { width: 1; color: dChip.chosen ? root.cAccent : "transparent" }
+
+                            Text {
+                                id: dChipText
+                                anchors.centerIn: parent
+                                text: dChip.modelData.device
+                                color: root.cText
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            }
+                            MouseArea {
+                                id: dChipMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.browseFor(dChip.modelData.device)
+                            }
+                        }
+                    }
+                }
+                // Every partition of that drive, with the guard's own sentence
+                // beside the ones that cannot be written. Greyed rather than
+                // hidden: "why can I not pick my other disk" is a question the
+                // window should answer, and a missing row answers nothing.
+                Column {
+                    width: dlgCol.width
+                    spacing: 2
+                    visible: root.dlg === "copy"
+
+                    Repeater {
+                        model: root.dstSlots
+                        delegate: Rectangle {
+                            id: dstRow
+                            required property var modelData
+                            visible: dstRow.modelData.kind === "partition"
+                            width: dlgCol.width
+                            height: dstRow.visible ? 26 : 0
+                            radius: 3
+                            readonly property string whyNot: root.dstWhyNot(dstRow.modelData)
+                            readonly property bool chosen: dstRow.modelData.device === root.copyDst
+                            color: dstRow.chosen ? root.wash(0.30)
+                                 : (dstRow.whyNot === "" && dstMa.containsMouse) ? root.wash(0.14)
+                                 : root.wash(0.04)
+                            border { width: 1; color: dstRow.chosen ? root.cAccent : "transparent" }
+
+                            Text {
+                                anchors { left: parent.left; leftMargin: 8
+                                          verticalCenter: parent.verticalCenter }
+                                text: dstRow.modelData.device + "  "
+                                    + root.human(dstRow.modelData.bytes)
+                                color: dstRow.whyNot === "" ? root.cText : root.cDim
+                                font { family: root.uiFont; pixelSize: root.ui(11) }
+                            }
+                            Text {
+                                anchors { right: parent.right; rightMargin: 8
+                                          left: parent.horizontalCenter
+                                          verticalCenter: parent.verticalCenter }
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideRight
+                                text: dstRow.whyNot
+                                color: root.cWarn
+                                font { family: root.uiFont; pixelSize: root.ui(10) }
+                            }
+                            MouseArea {
+                                id: dstMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: dstRow.whyNot === ""
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { root.copyDst = dstRow.modelData.device; root.planNow() }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    width: dlgCol.width
+                    wrapMode: Text.WordWrap
+                    visible: root.dlg === "copy" && root.copyDst === ""
+                    text: "Nothing on this drive can take it. A destination has to be a "
+                        + "partition that already exists and is at least as large — make one "
+                        + "with New… first."
+                    color: root.cDim
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
 
                 Item { width: 1; height: 4 }
@@ -1326,12 +1796,12 @@ FloatingWindow {
                 // What will actually run, produced by the same code path that
                 // would run it. Not a sentence this file composed.
                 Text {
-                    text: root.fmtPlan["refused"] ? "This is not allowed:" : "This will run:"
+                    text: root.plan["refused"] ? "This is not allowed:" : "This will run:"
                     color: root.cDim
                     font { family: root.uiFont; pixelSize: root.ui(10); bold: true }
                 }
                 Rectangle {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     height: planText.implicitHeight + 12
                     radius: 3
                     color: root.cBg
@@ -1340,36 +1810,52 @@ FloatingWindow {
                         id: planText
                         anchors { fill: parent; margins: 6 }
                         wrapMode: Text.WrapAnywhere
-                        text: root.fmtPlan["refused"] ? root.fmtPlan["refused"]
-                            : root.fmtPlan["command"] ? root.fmtPlan["command"]
-                            : "working it out…"
-                        color: root.fmtPlan["refused"] ? root.cBad : root.cText
+                        text: root.plan["refused"] ? root.plan["refused"]
+                            : root.plan["command"] ? root.plan["command"]
+                            : (root.dlg === "copy" && root.copyDst === "")
+                              ? "choose a destination above"
+                              : "working it out…"
+                        color: root.plan["refused"] ? root.cBad : root.cText
                         font { family: "monospace"; pixelSize: root.ui(10) }
                     }
                 }
+                // What it destroys, in the binary's words rather than this
+                // file's. `delete` and `copy` have no other body, and a
+                // dialogue whose only sentence is one the window made up is
+                // the one place this design does not allow.
                 Text {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     wrapMode: Text.WordWrap
-                    visible: root.fmtPlan["blocked"] !== undefined
-                    text: root.fmtPlan["blocked"] || ""
+                    visible: root.plan["destroys"] !== undefined
+                    text: root.plan["destroys"] || ""
+                    color: root.cWarn
+                    font { family: root.uiFont; pixelSize: root.ui(10) }
+                }
+                Text {
+                    width: dlgCol.width
+                    wrapMode: Text.WordWrap
+                    visible: root.plan["blocked"] !== undefined
+                    text: root.plan["blocked"] || ""
                     color: root.cWarn
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
                 // `warn` is NOT `blocked` and deliberately leaves the button
                 // live: this kernel being unable to mount exFAT is no reason to
-                // stop somebody making a stick for a camera. It is here so the
-                // mount error afterwards is not a mystery — which is exactly
-                // how it was met the first time, as an apparently bad format.
+                // stop somebody making a stick for a camera, and a copy
+                // carrying the source's UUID is no reason to stop somebody
+                // replacing a disk. It is here so that what follows is not a
+                // mystery — which is exactly how the first one was met, as an
+                // apparently bad format.
                 Text {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     wrapMode: Text.WordWrap
-                    visible: root.fmtPlan["warn"] !== undefined
-                    text: root.fmtPlan["warn"] || ""
+                    visible: root.plan["warn"] !== undefined
+                    text: root.plan["warn"] || ""
                     color: root.cWarn
                     font { family: root.uiFont; pixelSize: root.ui(10) }
                 }
                 Text {
-                    width: fmtCol.width
+                    width: dlgCol.width
                     wrapMode: Text.WordWrap
                     visible: root.fixHint !== ""
                     text: root.fixHint
@@ -1384,23 +1870,23 @@ FloatingWindow {
 
                 Btn {
                     label: "Cancel"
-                    onGo: root.fmtOpen = false
+                    onGo: root.dlg = ""
                 }
                 Btn {
                     label: "Unmount it"
-                    visible: root.fmtPlan["fix"] === "unmount"
-                    onGo: root.unmountForFormat()
+                    visible: root.plan["fix"] === "unmount"
+                    onGo: root.unmountForDialog()
                 }
                 Btn {
-                    label: "Erase and format"
+                    label: root.dlgGo
                     danger: true
                     // Offered only when the dry run came back with a command
                     // and nothing blocking it. The binary refuses regardless;
                     // this stops the button existing to be pressed.
-                    enabled2: root.fmtPlan["command"] !== undefined
-                              && root.fmtPlan["refused"] === undefined
-                              && root.fmtPlan["blocked"] === undefined
-                    onGo: root.doFormat()
+                    enabled2: root.plan["command"] !== undefined
+                              && root.plan["refused"] === undefined
+                              && root.plan["blocked"] === undefined
+                    onGo: root.applyNow()
                 }
             }
         }
@@ -1409,7 +1895,10 @@ FloatingWindow {
         Rectangle {
             id: actions
             anchors { left: nav.right; right: parent.right; bottom: statusBar.top }
-            height: 44
+            // Two rows of 26px buttons with room to breathe. It was 44 for one
+            // row; a second row added without the height would have been drawn
+            // outside the strip, over the table.
+            height: 74
             color: root.cPanel
 
             Rectangle {
@@ -1418,19 +1907,40 @@ FloatingWindow {
                 color: root.wash(0.25)
             }
 
+            // What the buttons are pointed at — a partition, or a piece of free
+            // space. Naming it is the difference between "Delete" and "delete
+            // WHAT", on a strip where every button is destructive.
             Text {
                 id: selLabel
-                anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                width: Math.min(implicitWidth, 220)
+                anchors { left: parent.left; leftMargin: 18; top: parent.top; topMargin: 8 }
+                width: 200
                 elide: Text.ElideRight
-                text: root.part ? root.part.device : "select a partition"
-                color: root.part ? root.cText : root.cDim
-                font { family: root.uiFont; pixelSize: root.ui(12); bold: root.part !== null }
+                text: root.part ? root.part.device
+                    : root.gap ? "free space · " + root.human(root.gap.bytes)
+                    : "select a partition"
+                color: (root.part || root.gap) ? root.cText : root.cDim
+                font { family: root.uiFont; pixelSize: root.ui(12)
+                       bold: root.part !== null || root.gap !== null }
+            }
+            // The guard's own sentence about the selected partition, from
+            // `table`'s `protected` column — the SAME call the refusal will
+            // make. It is here so that "why is this about to be refused" is
+            // answered before the dialogue is opened, and in the same words.
+            Text {
+                anchors { left: parent.left; leftMargin: 18; top: selLabel.bottom; topMargin: 2 }
+                width: 200
+                elide: Text.ElideRight
+                visible: root.slot !== null && root.slot.protected !== ""
+                text: root.slot ? root.slot.protected : ""
+                color: root.cWarn
+                font { family: root.uiFont; pixelSize: root.ui(9) }
             }
 
+            // Two rows, because they are two different kinds of act: the top
+            // one changes what the machine is DOING with a partition, and the
+            // bottom one changes the partition table itself.
             Row {
-                anchors { left: selLabel.right; leftMargin: 14
-                          verticalCenter: parent.verticalCenter }
+                anchors { left: selLabel.right; leftMargin: 14; top: parent.top; topMargin: 7 }
                 spacing: 8
 
                 Btn {
@@ -1461,7 +1971,52 @@ FloatingWindow {
                     label: "Format…"
                     danger: true
                     enabled2: root.part !== null
-                    onGo: root.askFormat(root.devOf(root.part))
+                    onGo: root.askDialog("format", root.devOf(root.part))
+                }
+            }
+
+            // ⚠ These are enabled for PROTECTED partitions on purpose.
+            //
+            // The guard's answer belongs in the dialogue, where it arrives as a
+            // sentence naming what is in the way and — where there is one — a
+            // button that clears it. A greyed-out Delete says only "no", which
+            // is the state this window spent a day in when a refusal went to a
+            // stream nothing was reading. What IS greyed out here is what has
+            // no meaning at all: deleting nothing, or a new partition on a
+            // drive with no free space.
+            Row {
+                anchors { left: selLabel.right; leftMargin: 14
+                          bottom: parent.bottom; bottomMargin: 7 }
+                spacing: 8
+
+                Btn {
+                    label: "New…"
+                    danger: true
+                    // The selected gap if there is one, and otherwise the
+                    // largest — which is what the binary does when nothing
+                    // names a gap, so the two agree.
+                    enabled2: root.largestGap !== null
+                    onGo: root.askDialog("add", root.selDisk)
+                }
+                Btn {
+                    label: "Delete…"
+                    danger: true
+                    // `slot`, not `part`: an unlocked volume shows in the table
+                    // and is not a partition, and sfdisk cannot delete one.
+                    enabled2: root.slot !== null
+                    onGo: root.askDialog("delete", root.selPart)
+                }
+                Btn {
+                    label: "Resize…"
+                    danger: true
+                    enabled2: root.slot !== null
+                    onGo: root.askDialog("resize", root.selPart)
+                }
+                Btn {
+                    label: "Copy…"
+                    danger: true
+                    enabled2: root.slot !== null
+                    onGo: root.askDialog("copy", root.selPart)
                 }
             }
         }

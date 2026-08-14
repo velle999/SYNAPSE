@@ -37,16 +37,23 @@ static void usage(FILE *f)
 "       --fs=TYPE          ext4, btrfs, xfs, vfat, exfat or ntfs\n"
 "       -n, --dry-run      print the exact command instead of running it\n"
 "\n"
-"Partitioning — all four take --yes and -n, exactly as format does\n"
-"  mkpart <disk> [--size=SIZE] [--fs=TYPE] [--label=NAME] --yes\n"
+"Partitioning — all five take --yes and -n, exactly as format does\n"
+"  mkpart <disk> [--size=SIZE] [--start=BYTES] [--fs=TYPE] [--label=NAME] --yes\n"
 "                          a new partition in the largest free space; all of\n"
-"                          it when --size is left out\n"
+"                          it when --size is left out. --start names WHICH\n"
+"                          free space, by any byte offset inside it, as\n"
+"                          `table` prints them\n"
 "  rmpart <partition> --yes\n"
 "                          DESTROYS one partition and everything on it\n"
 "  resize <partition> --size=SIZE --yes\n"
 "                          GROWS it into the free space that follows. It will\n"
 "                          not shrink one: the filesystem inside would still\n"
 "                          believe it owns the blocks past the new end\n"
+"  copypart <source> <destination> --yes\n"
+"                          copies one partition over another, byte for byte.\n"
+"                          Both must already exist; the destination must be\n"
+"                          at least as large, and everything on it is lost.\n"
+"                          The copy carries the source's filesystem UUID\n"
 "  mktable <disk> --type=gpt|dos --yes\n"
 "                          DESTROYS every partition on the drive at once\n"
 "\n"
@@ -79,6 +86,10 @@ static void usage(FILE *f)
 "volume unlocked on top of it, and anything /etc/fstab expects at the next\n"
 "boot. `table` prints that reason per row, so a front-end never has to work it\n"
 "out for itself. There is no --force for any of it.\n"
+"\n"
+"copypart applies the same rules to its SOURCE, which it only reads: a\n"
+"filesystem copied while something is writing to it is copied in a state it\n"
+"was never in, and the copy mounts.\n"
 "\n"
 "Every field of --rec output is PERCENT-ENCODED, including the ones that look\n"
 "like plain words: a filesystem label is arbitrary bytes and a mount point is\n"
@@ -230,6 +241,7 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "mkpart"))  return cmd_mkpart(rest_argc, rest);
 	if (!strcmp(cmd, "rmpart"))  return cmd_rmpart(rest_argc, rest);
 	if (!strcmp(cmd, "resize"))  return cmd_resize(rest_argc, rest);
+	if (!strcmp(cmd, "copypart")) return cmd_copypart(rest_argc, rest);
 	if (!strcmp(cmd, "mktable")) return cmd_mktable(rest_argc, rest);
 	if (!strcmp(cmd, "about"))   return cmd_about(rest_argc, rest);
 	if (!strcmp(cmd, "gui"))     return cmd_gui(rest_argc, rest);

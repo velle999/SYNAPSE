@@ -18,21 +18,28 @@
 # encrypted container holding a running system is refused even though nothing
 # reports that partition itself as mounted.
 #
-# ⚠ Partitioning (mkpart, rmpart, resize, mktable) is guarded by the same file
-# and a deliberately NARROWER rule, because refusing the whole drive would mean
-# the feature could never do anything on a machine with one disk. It refuses
-# the partitions that matter — anything "/" rests on, anything mounted,
+# ⚠ Partitioning (mkpart, rmpart, resize, copypart, mktable) is guarded by the
+# same file and a deliberately NARROWER rule, because refusing the whole drive
+# would mean the feature could never do anything on a machine with one disk. It
+# refuses the partitions that matter — anything "/" rests on, anything mounted,
 # anything holding live swap, anything with a volume unlocked on top of it,
 # anything /etc/fstab expects at the next boot — and allows the free space
 # around them. There is no --force for any of it, and resize will grow a
 # partition but never shrink one.
+#
+# ⚠ copypart writes one existing partition over another, byte for byte. It does
+# not create the destination: creating and copying under one confirmation means
+# a copy that fails halfway leaves a new partition holding half a filesystem,
+# which is a worse state than either of the two the user chose between. Its
+# SOURCE is guarded too, though nothing is written to it — a filesystem copied
+# while something writes to it is copied in a state it was never in.
 pkgname=syn-disks
 # pkgver stays 0.1.0 and releases move pkgrel. build-all.sh writes
 # "$name-0.1.0.tar.gz" and transforms paths to "$name-0.1.0/" for every
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=10
+pkgrel=11
 pkgdesc="SynapseOS disk utility: drives, partitions, health, mounting and formatting"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"

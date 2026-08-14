@@ -56,6 +56,7 @@ typedef struct {
 	const char *fs;
 	const char *label;
 	const char *type;      /* mktable's gpt|dos */
+	const char *start;     /* mkpart's "put it in THIS gap" */
 	bool  yes;
 	bool  dry;
 } popts_t;
@@ -69,6 +70,7 @@ static void parse_opts(int argc, char **argv, const char *verb, popts_t *o)
 		else if (!strncmp(a, "--fs=", 5))     o->fs = a + 5;
 		else if (!strncmp(a, "--label=", 8))  o->label = a + 8;
 		else if (!strncmp(a, "--type=", 7))   o->type = a + 7;
+		else if (!strncmp(a, "--start=", 8))  o->start = a + 8;
 		else if (!strcmp(a, "--yes"))         o->yes = true;
 		else if (!strcmp(a, "--dry-run") || !strcmp(a, "-n")) o->dry = true;
 		else if (a[0] == '-') die("%s: unknown option '%s'", verb, a);
@@ -89,10 +91,16 @@ static const char *sfdisk_tool(void)
 /* Print it, or run it — and the caller has already built both halves, so the
  * description and the action cannot disagree.
  *
- * Returns the exit status this command should give: 0 done, 1 refused by
- * sfdisk, 2 described but --yes was missing. */
-static int sfdisk_do(char *const argv[], const char *script, const char *dev,
-                     const char *what, bool yes, bool dry)
+ * Shared with copy.c, which is not a table edit at all but needs exactly this:
+ * one command built once, described under --dry-run in the words it will be
+ * run in, and gated behind --yes. A second copy of this loop would be a second
+ * place for the description and the action to drift apart.
+ *
+ * Returns the exit status this command should give: 0 done, 1 refused by the
+ * tool, 2 described but --yes was missing, 3 the tool is not installed. */
+int pt_plan_do(char *const argv[], const char *script, const char *dev,
+               const char *what, const char *tool, const char *warn,
+               bool yes, bool dry)
 {
 	char *line = cmd_display(argv);
 
@@ -103,22 +111,31 @@ static int sfdisk_do(char *const argv[], const char *script, const char *dev,
 			if (script && *script)
 				rec_row(2, "script", script);
 			rec_row(2, "destroys", what);
-			if (!have_cmd(sfdisk_tool()))
-				rec_row(2, "blocked", "sfdisk is not installed");
+			/* A WARNING is not a `blocked`, and the difference is which
+			 * one leaves the front-end's button live. See the format
+			 * dialogue, which has rendered both since the exFAT stick. */
+			if (warn && *warn)
+				rec_row(2, "warn", warn);
+			if (!have_cmd(tool)) {
+				char *b = xasprintf("%s is not installed", tool);
+				rec_row(2, "blocked", b);
+				free(b);
+			}
 		} else {
 			printf("would run: %s\n", line);
 			if (script && *script)
 				printf("  with: %s", script);
 			printf("%s%s%s\n", C_WARN(), what, C_RESET());
+			if (warn && *warn)
+				printf("%swarning: %s%s\n", C_WARN(), warn, C_RESET());
 		}
 		free(line);
 		return dry ? 0 : 2;
 	}
 	free(line);
 
-	if (!have_cmd(sfdisk_tool())) {
-		fprintf(stderr, "syn-disks: sfdisk is not installed — install "
-		        "util-linux to partition from here\n");
+	if (!have_cmd(tool)) {
+		fprintf(stderr, "syn-disks: %s is not installed\n", tool);
 		return 3;
 	}
 
@@ -136,11 +153,26 @@ static int sfdisk_do(char *const argv[], const char *script, const char *dev,
 		printf("%s\n", *out ? out : "done");
 	} else {
 		fprintf(stderr, "%s%s%s\n", C_BAD(),
-		        *out ? out : "sfdisk refused", C_RESET());
+		        *out ? out : "the tool refused", C_RESET());
 	}
 
 	free(out);
 	return st == 0 ? 0 : 1;
+}
+
+/* The four table edits below, all of which speak to sfdisk and none of which
+ * warns about anything the description does not already say. */
+static int sfdisk_do(char *const argv[], const char *script, const char *dev,
+                     const char *what, bool yes, bool dry)
+{
+	int rc = pt_plan_do(argv, script, dev, what, sfdisk_tool(), NULL,
+	                    yes, dry);
+	/* Which package to install is knowledge about sfdisk in particular, so it
+	 * belongs here rather than in the shared runner — where it would have to
+	 * be right about every tool this program might ever drive. */
+	if (rc == 3 && g_out != OUT_REC)
+		fprintf(stderr, "  Install util-linux to partition from here.\n");
+	return rc;
 }
 
 /* The kernel learns about a new partition from udev, which is a moment behind
@@ -255,15 +287,50 @@ int cmd_mkpart(int argc, char **argv)
 		die("mkpart: '%s' is not a size — try 20G, 512MiB or a plain number "
 		    "of bytes", o.size);
 
-	/* The LARGEST gap, not the first one that fits. The first fit on a disk
-	 * that has been repartitioned a few times is routinely a 200MB scrap
-	 * between two old partitions, and "make me a partition" landing there
-	 * instead of in the 800GB at the end is a surprise nobody asked for. */
-	const pt_slot_t *best = NULL;
-	for (size_t i = 0; i < n; i++)
-		if (slots[i].gap && (!best || slots[i].bytes > best->bytes))
-			best = &slots[i];
+	/* --start names WHICH free space, by any byte offset inside it.
+	 *
+	 * Without it a front-end that draws the gaps has no way to act on the one
+	 * that was clicked: it would show three gaps, let somebody pick the middle
+	 * one, and then make the partition in the largest — which is not a
+	 * surprise the dry run can even reveal, because the dry run would describe
+	 * the same wrong gap the command was about to use.
+	 *
+	 * An OFFSET rather than an index: a gap's number changes the moment
+	 * anything else on the disk does, and a stale index is a request to
+	 * partition somewhere nobody looked at. The offset is `table`'s own
+	 * `start` field, and if the layout has changed underneath, it either still
+	 * names free space or it names none and this refuses. */
+	unsigned long long at = 0;
+	if (o.start && !parse_size(o.start, &at))
+		die("mkpart: '%s' is not an offset — it is a number of bytes, as "
+		    "`syn-disks table` prints it", o.start);
 
+	const pt_slot_t *best = NULL;
+	for (size_t i = 0; i < n; i++) {
+		if (!slots[i].gap)
+			continue;
+		if (o.start) {
+			if (at >= slots[i].start && at < slots[i].start + slots[i].bytes)
+				best = &slots[i];
+		} else if (!best || slots[i].bytes > best->bytes) {
+			/* The LARGEST gap, not the first one that fits. The first fit on
+			 * a disk that has been repartitioned a few times is routinely a
+			 * 200MB scrap between two old partitions, and "make me a
+			 * partition" landing there instead of in the 800GB at the end is a
+			 * surprise nobody asked for. */
+			best = &slots[i];
+		}
+	}
+
+	if (!best && o.start) {
+		pt_free_layout(slots, n);
+		fprintf(stderr, "%ssyn-disks: there is no free space at byte %llu of "
+		        "/dev/%s%s\n", C_BAD(), at, disk, C_RESET());
+		fprintf(stderr, "  The layout may have changed since it was read: "
+		        "syn-disks table /dev/%s\n", disk);
+		free(disk);
+		return 1;
+	}
 	if (!best) {
 		pt_free_layout(slots, n);
 		fprintf(stderr, "%ssyn-disks: /dev/%s has no free space%s\n",
@@ -294,8 +361,9 @@ int cmd_mkpart(int argc, char **argv)
 	if (want && size > avail) {
 		char *asked = human_size(want);
 		char *have = human_size(avail);
-		fprintf(stderr, "%ssyn-disks: %s asked for, but the largest free space "
-		        "on /dev/%s is %s%s\n", C_BAD(), asked, disk, have, C_RESET());
+		fprintf(stderr, "%ssyn-disks: %s asked for, but %s free space on "
+		        "/dev/%s is %s%s\n", C_BAD(), asked,
+		        o.start ? "the chosen" : "the largest", disk, have, C_RESET());
 		free(asked);
 		free(have);
 		pt_free_layout(slots, n);
