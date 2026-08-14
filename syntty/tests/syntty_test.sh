@@ -454,6 +454,85 @@ e=$(mouse --mode=0 press:left@10,5)
 case "$e" in *'no program asked'*) ok "with no mode set nothing is reported at all" ;;
              *) bad "with no mode set nothing is reported at all ($e)" ;; esac
 
+# ── what a paste becomes on the way to the child ────────────────────────────
+#
+# ⚠ A PASTE IS NOT TYPING, and a terminal that treats it as typing has turned
+# the clipboard into an execution channel: copy a command off a web page, and
+# the page can append a newline so the shell runs it before it has been read.
+# The rules below are safety, not convenience, and this is the half of
+# copy-and-paste that can be tested without a seat.
+p=$("$ST" paste "$(printf 'ls -la\nrm -rf /tmp/x')")
+[ "$p" = "ls -laCRrm -rf /tmp/x" ] \
+    && ok "a pasted newline becomes CR, which is what Enter sends" \
+    || bad "a pasted newline becomes CR, which is what Enter sends ('$p')"
+
+# ⚠ \r\n IS ONE LINE ENDING. Text that has been near Windows carries both, and
+# sending both submits the line and then an empty one — a two-line paste runs
+# three commands.
+p=$("$ST" paste "$(printf 'a\r\nb')")
+[ "$p" = "aCRb" ] && ok "...and \\r\\n is one line ending, not two" \
+                  || bad "...and \\r\\n is one line ending, not two ('$p')"
+
+p=$("$ST" paste --bracketed "$(printf 'a\nb')")
+[ "$p" = "ESC[200~aCRbESC[201~" ] \
+    && ok "bracketed paste wraps it so the shell knows it was pasted" \
+    || bad "bracketed paste wraps it so the shell knows it was pasted ('$p')"
+
+# ⚠ THE END MARKER CANNOT BE FORGED. A clipboard containing ESC[201~ would
+# close the bracket early and have everything after it treated as typed —
+# which is the whole attack bracketed paste exists to stop. Stripping ESC is
+# what makes it impossible, and it is why the stripping is not optional.
+p=$("$ST" paste --bracketed "$(printf 'safe\033[201~rm -rf /')")
+case "$p" in
+    "ESC[200~safe[201~rm -rf /ESC[201~") ok "a pasted end marker cannot close the bracket early" ;;
+    *) bad "a pasted end marker cannot close the bracket early ('$p')" ;;
+esac
+
+p=$("$ST" paste "$(printf 'a\tb\001c')")
+[ "$p" = "aTABbc" ] \
+    && ok "control bytes are dropped from a paste, tab excepted" \
+    || bad "control bytes are dropped from a paste, tab excepted ('$p')"
+
+# ── OSC 52: the child asking for the clipboard ──────────────────────────────
+#
+# How vim, tmux and anything over ssh copy to the clipboard of the machine the
+# person is sitting at. There is no other channel from the far end of a pty.
+c=$(printf '\033]52;c;aGVsbG8gY2xpcA==\007' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
+printf '%s' "$c" | grep -q 'clipboard     1 set, 10 bytes waiting for the clipboard'
+check "a child can put text on the clipboard (OSC 52)" $?
+
+c=$(printf '\033]52;p;aGk=\007' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
+printf '%s' "$c" | grep -q 'waiting for the primary'
+check "...and can name the primary selection instead" $?
+
+# ⚠ THE READ FORM IS REFUSED, AND THAT IS THE POINT. `52;c;?` asks the terminal
+# to type the clipboard back at whatever is running — which may be a program on
+# the far end of an ssh session, and the clipboard is regularly a password. The
+# terminal cannot tell who is asking, so nobody gets an answer, and the refusal
+# is counted so it is visible that something asked.
+c=$(printf '\033]52;c;?\007' | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
+printf '%s' "$c" | grep -q 'READ request(s) refused'
+check "a child asking to READ the clipboard is refused, out loud" $?
+printf '%s' "$c" | grep -q 'reply  '
+if [ $? = 0 ]; then bad "...and is sent nothing back at all"
+else ok "...and is sent nothing back at all"; fi
+
+# ⚠ AN OVERLONG OSC IS DROPPED WHOLE, NOT TRUNCATED. Keeping the first N bytes
+# is harmless for a window title and dangerous here: half a base64 payload
+# decodes cleanly into DIFFERENT text, and the clipboard would silently hold
+# something nobody copied.
+big=$(python3 -c "print('A'*9000, end='')" 2>/dev/null)
+if [ -z "$big" ]; then
+    echo "  skip  an overlong OSC is dropped whole (no python3)"
+else
+    c=$(printf '\033]52;c;%s\007' "$big" | "$ST" --cols=10 --rows=2 dump - --stats 2>&1)
+    printf '%s' "$c" | grep -q 'dropped for running past'
+    check "an OSC longer than the buffer is dropped whole, not truncated" $?
+    printf '%s' "$c" | grep -q 'clipboard     1 set'
+    if [ $? = 0 ]; then bad "...and sets no clipboard from the part that fitted"
+    else ok "...and sets no clipboard from the part that fitted"; fi
+fi
+
 # ── selecting with the pointer, without a pointer ───────────────────────────
 selfile="$T/sel.txt"
 printf 'hello /usr/lib/libfoo.so world\r\nsecond line\r\n' > "$selfile"
@@ -1090,6 +1169,20 @@ else
         XDG_CACHE_HOME="$FC" timeout "$t" cage -- "$ST" "$@" 2>&1
     }
 
+    # ⚠ WHAT THIS SECTION CANNOT TEST, STATED SO NOBODY ASSUMES IT WAS.
+    #
+    # THE CLIPBOARD ROUND TRIP. Taking a selection needs a SERIAL from a real
+    # input event — the compositor uses it to check that the client claiming
+    # the clipboard was the one being used, which is what stops a background
+    # window taking it. A headless cage has no keyboard and no pointer, so no
+    # serial ever exists there and the claim never happens. Everything up to
+    # that point is asserted above (`syntty paste`, OSC 52 through --stats);
+    # the handover itself was verified by hand on a real compositor, against
+    # wl-paste in another process, and there is no way to automate it here.
+    #
+    # PASTING likewise: it starts with somebody pressing Ctrl+Shift+V, and
+    # input is never synthesised on a live session.
+    #
     # It opens a window, paints, and exits with the child's status. Every
     # earlier assertion in this file is about a terminal that cannot be seen;
     # this is the first one that says the whole thing runs.

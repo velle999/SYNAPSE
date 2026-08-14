@@ -427,7 +427,12 @@ typedef enum {
 } vt_state_t;
 
 #define VT_MAX_PARAMS 16
-#define VT_OSC_MAX    2048
+/* ⚠ THIS IS THE CLIPBOARD'S CEILING TOO. OSC 52 carries what a program wants
+ * put on the clipboard as base64 inside an OSC string, so the biggest copy a
+ * child can make is three quarters of this. 8 KB is ~6 KB of text — a
+ * generous paragraph and nowhere near enough to be a memory attack from a
+ * process that only has to keep typing. */
+#define VT_OSC_MAX    8192
 
 /* One APC payload. The graphics protocol chunks its transmissions at 4096
  * bytes of base64, so this holds a whole chunk with the control data in front
@@ -504,6 +509,14 @@ typedef struct {
 
 	char     osc[VT_OSC_MAX];
 	int      osc_len;
+	/* ⚠ AN OVERLONG OSC IS DROPPED WHOLE, NOT TRUNCATED. It used to keep the
+	 * first 2047 bytes and dispatch them as if they were the message, which is
+	 * harmless for a window title and dangerous for OSC 52: half a base64
+	 * payload decodes cleanly into different text, and the clipboard would
+	 * silently hold a prefix of what was copied. Same rule the graphics
+	 * protocol already followed for its own control strings. */
+	bool     osc_over;
+	uint64_t osc_dropped;
 
 	/* The APC payload being collected — the graphics protocol's transport. */
 	char     apc[VT_APC_MAX + 1];
@@ -555,6 +568,26 @@ typedef struct {
 
 	char title[512];
 
+	/* ── OSC 52: what the child asked to put on the clipboard ───────────────
+	 *
+	 * `ESC ] 52 ; c ; <base64> BEL`, and it is how `tmux`, `vim` and anything
+	 * over ssh copy to the clipboard of the machine a person is sitting at.
+	 * Held here until the window takes it — the parser owns no seat and no
+	 * data device, the same way it owns no file descriptor for its replies.
+	 *
+	 * ⚠ THE READ FORM IS REFUSED, AND THAT IS A SECURITY DECISION, not an
+	 * unimplemented corner. `ESC ] 52 ; c ; ? BEL` asks the terminal to send
+	 * the clipboard back as input — which means anything running on this pty
+	 * can read it, including a program on the far end of an ssh session and
+	 * including whatever was copied out of a password manager. The terminal
+	 * cannot tell which program is asking or why. Refusals are counted so it
+	 * is visible that something asked. */
+	char    *clip;             /* NULL until a child sets one */
+	size_t   clip_len;
+	uint8_t  clip_target;      /* ST_CLIP_* */
+	uint64_t clip_sets;
+	uint64_t clip_reads_refused;
+
 	/* ── what the shell told us about its commands ──────────────────────────
 	 *
 	 * Timing and exit status per command, from the OSC 133 C and D marks. A
@@ -578,6 +611,20 @@ void st_vt_free(st_vt_t *vt);
  * obey. Zero means the legacy encodings, which is the base state and what every
  * program gets until it asks for more. */
 unsigned st_vt_kbd_flags(const st_vt_t *vt);
+
+/* Which selection an OSC 52 sequence named. `c` is the clipboard, `p` and `s`
+ * the primary — the middle-click one. */
+enum { ST_CLIP_NONE = 0, ST_CLIP_CLIPBOARD = 1, ST_CLIP_PRIMARY = 2 };
+
+/* Take what the child asked to copy, and forget it here. Returns NULL when
+ * there is nothing waiting; otherwise the caller owns the buffer and frees it.
+ * A caller with nowhere to put a clipboard simply never calls this, which is
+ * right for `dump`: a file has no seat. */
+char *st_vt_take_clipboard(st_vt_t *vt, size_t *len, uint8_t *target);
+
+/* base64, shared. The graphics protocol's payloads and OSC 52's clipboard are
+ * the same encoding, and two decoders would be two sets of edge cases. */
+size_t st_b64_decode(const char *in, size_t len, uint8_t *out, size_t cap);
 
 /* ── graphics.c: the kitty graphics protocol ────────────────────────────────
  *
@@ -777,6 +824,31 @@ enum {
 size_t st_mouse_encode(uint16_t mode, bool sgr, int event, int button,
                        unsigned mods, int col, int row,
                        char *out, size_t cap, const char **why);
+
+/* ── paste.c: what pasted text becomes on the way to the child ──────────────
+ *
+ * ⚠ A PASTE IS NOT TYPING, and treating it as typing is how a clipboard
+ * becomes an execution channel. Three rules, all of them safety rather than
+ * convenience, and all of them testable with no seat (`syntty paste`):
+ *
+ *   NEWLINES BECOME CARRIAGE RETURNS. The Enter key sends \r; a text file's
+ *   line ending is \n. Paste \n into a shell and readline does not see a
+ *   submitted line — the command sits there, or half of it runs.
+ *
+ *   CONTROL BYTES ARE DROPPED, tab excepted. The clipboard is text somebody
+ *   copied off a web page, and an ESC in it is a control sequence the terminal
+ *   would obey — one that can switch modes, redraw the screen, or, with
+ *   bracketed paste off, be read by the shell as keys.
+ *
+ *   THE END MARKER CANNOT BE FORGED. With bracketed paste on, the payload is
+ *   wrapped in ESC[200~ and ESC[201~ so the shell knows it is text; a clipboard
+ *   containing ESC[201~ would otherwise close the bracket early and have
+ *   everything after it treated as typed. Stripping ESC is what makes that
+ *   impossible, and it is why the stripping is not optional.
+ *
+ * Returns a malloc'd buffer the caller frees; `*out_len` is its length. */
+char *st_paste_encode(const char *text, size_t len, bool bracketed,
+                      size_t *out_len);
 
 /* ── win.c ──────────────────────────────────────────────────────────────── */
 

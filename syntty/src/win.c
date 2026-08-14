@@ -60,6 +60,7 @@
 #include "xdg-shell-client-protocol.h"
 #include "presentation-time-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
+#include "primary-selection-unstable-v1-client-protocol.h"
 
 #define NBUFFERS 2
 
@@ -267,6 +268,55 @@ struct win {
 	uint64_t mouse_sent;       /* events handed to the child */
 	uint64_t mouse_dropped;    /* events the old encoding could not carry */
 
+	/* ── the clipboard, and the OTHER clipboard ─────────────────────────────
+	 *
+	 * Two selections, and they are not the same thing. THE CLIPBOARD is what
+	 * Ctrl+Shift+C fills and Ctrl+Shift+V pastes. THE PRIMARY is filled merely
+	 * by highlighting and pasted by the middle button — a habit thirty years
+	 * old, and a terminal without it feels broken in a way people struggle to
+	 * name.
+	 *
+	 * `*_text` is what WE offer, when we own a selection; `*_offer` is what
+	 * somebody else is offering. Owning means holding the bytes until another
+	 * program asks for them, which is why the text is kept rather than the
+	 * grid coordinates: the selection it came from may be long gone. */
+	struct wl_data_device_manager *dd_mgr;
+	struct wl_data_device         *data_dev;
+	struct wl_data_source         *clip_source;
+	struct wl_data_offer          *clip_offer;   /* the selection itself */
+	struct wl_data_offer          *clip_pending; /* announced, not yet claimed */
+	int                            clip_offer_mime;   /* index, -1 for none */
+	int                            clip_pending_mime;
+
+	struct zwp_primary_selection_device_manager_v1 *ps_mgr;
+	struct zwp_primary_selection_device_v1         *ps_dev;
+	struct zwp_primary_selection_source_v1         *prim_source;
+	struct zwp_primary_selection_offer_v1          *prim_offer;
+	struct zwp_primary_selection_offer_v1          *prim_pending;
+	int                                             prim_offer_mime;
+	int                                             prim_pending_mime;
+
+	char  *clip_text;   size_t clip_text_len;
+	char  *prim_text;   size_t prim_text_len;
+	/* Text held that we have not been able to CLAIM yet — see
+	 * selections_flush(): taking a selection needs a serial from a real input
+	 * event, and a child can copy before anybody has touched the window. */
+	bool   clip_want, prim_want;
+
+	/* ⚠ A SELECTION CANNOT BE SET WITHOUT A SERIAL from a real input event.
+	 * The compositor uses it to check that a client taking the clipboard was
+	 * actually being used by the person at the time, which is what stops a
+	 * background window stealing it. */
+	uint32_t last_serial;
+
+	/* A paste in flight: the read end of a pipe the other program is writing
+	 * to, plus what has arrived. In the poll loop rather than read inline —
+	 * see the note on paste_start(). */
+	int      paste_fd;
+	char    *paste_buf;
+	size_t   paste_len, paste_cap;
+	uint64_t paste_too_big;
+
 	/* Where the cursor was when the last frame was painted. Moving it changes
 	 * no CELL, so the grid never reports it — but it changes two rows on
 	 * screen, the one it left and the one it arrived at. Left out, the cursor
@@ -295,6 +345,13 @@ struct win {
 	uint64_t late;            /* paints that missed their own deadline */
 	uint64_t on_time;
 };
+
+/* Copy and paste, defined with the rest of the selection plumbing further
+ * down. Declared here because the KEYBOARD is the first thing that needs them
+ * and it comes first in this file. */
+static void own_clipboard(win_t *w, char *text, size_t len);
+static void paste_start(win_t *w, bool primary);
+static void selections_flush(win_t *w);
 
 /* The next vblank at or after `now`, or 0 when there is nothing to predict
  * from — no presented event yet, or a compositor that reported refresh 0
@@ -844,9 +901,19 @@ static void kbd_keymap(void *data, struct wl_keyboard *k, uint32_t format,
 	w->xkb_state = xkb_state_new(km);
 }
 
+/* ⚠ THIS SERIAL COUNTS TOO, and it is the only one a window gets before
+ * anybody has typed into it. A program that copies something as it starts —
+ * a script, a shell printing a token — would otherwise have to wait for a
+ * keystroke before the clipboard could be claimed. Gaining keyboard focus is
+ * a legitimate input event and the compositor accepts its serial. */
 static void kbd_enter(void *d, struct wl_keyboard *k, uint32_t s,
                       struct wl_surface *surf, struct wl_array *keys)
-{ (void)d; (void)k; (void)s; (void)surf; (void)keys; }
+{
+	(void)k; (void)surf; (void)keys;
+	win_t *w = d;
+	w->last_serial = s;
+	selections_flush(w);
+}
 
 static void kbd_leave(void *d, struct wl_keyboard *k, uint32_t s,
                       struct wl_surface *surf)
@@ -998,10 +1065,14 @@ static uint32_t kkp_code(xkb_keysym_t sym, const char *utf8, int n)
 static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
                     uint32_t time, uint32_t key, uint32_t state)
 {
-	(void)k; (void)serial; (void)time;
+	(void)k; (void)time;
 	win_t *w = data;
 	if (!w->xkb_state)
 		return;
+	w->last_serial = serial;
+	/* A selection the child asked for before there was a serial to claim it
+	 * with. This keystroke is the first legitimate chance. */
+	selections_flush(w);
 
 	unsigned flags = st_vt_kbd_flags(w->vt);
 	bool pressed  = state == WL_KEYBOARD_KEY_STATE_PRESSED;
@@ -1038,6 +1109,33 @@ static void kbd_key(void *data, struct wl_keyboard *k, uint32_t serial,
 			XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0;
 		bool ctl = xkb_state_mod_name_is_active(w->xkb_state,
 			XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0;
+
+		/* ── copy and paste ─────────────────────────────────────────────────
+		 *
+		 * ⚠ CTRL+SHIFT, BECAUSE CTRL+C IS TAKEN and has been since before any
+		 * of this. Ctrl+C interrupts the running program; a terminal that
+		 * bound it to copy would take away the one key everybody uses to stop
+		 * something. Every terminal that has this uses Ctrl+Shift for the
+		 * same reason.
+		 *
+		 * Shift+Insert pastes the PRIMARY selection — the X11 binding for the
+		 * middle button, kept for people whose hands know it. */
+		if (ctl && shift && (sym == XKB_KEY_C || sym == XKB_KEY_c)) {
+			char *text = st_sel_text(w->g);
+			if (text && *text)
+				own_clipboard(w, text, strlen(text));
+			else
+				free(text);
+			return;
+		}
+		if (ctl && shift && (sym == XKB_KEY_V || sym == XKB_KEY_v)) {
+			paste_start(w, false);
+			return;
+		}
+		if (shift && sym == XKB_KEY_Insert) {
+			paste_start(w, true);
+			return;
+		}
 
 		if (shift && (sym == XKB_KEY_Page_Up || sym == XKB_KEY_Page_Down)) {
 			int page = w->g->rows / 2;
@@ -1165,6 +1263,446 @@ static void kbd_repeat(void *d, struct wl_keyboard *k, int32_t rate,
 static const struct wl_keyboard_listener kbd_listener = {
 	kbd_keymap, kbd_enter, kbd_leave, kbd_key, kbd_modifiers, kbd_repeat
 };
+
+/* ── the clipboard, and the other clipboard ─────────────────────────────────
+ *
+ * On Wayland a clipboard is not storage — it is an OFFER. The program that
+ * copied keeps the bytes and hands them over, through a pipe, each time
+ * somebody pastes. That has two consequences worth stating: the text has to be
+ * held here for as long as we own the selection, and pasting is asynchronous —
+ * a request goes out and the answer arrives on a file descriptor later.
+ *
+ * ⚠ WHICH IS WHY THE READ IS IN THE POLL LOOP. The obvious implementation asks
+ * for the data and read()s until EOF right there, and it deadlocks the first
+ * time somebody pastes text this same process owns: we would be waiting for a
+ * writer that is us, on a thread that is blocked waiting. (That self-paste is
+ * short-circuited below as well, because the round trip is pointless — but the
+ * general case still must not block, or a slow or malicious source hangs the
+ * terminal.) */
+
+/* Offered in order of preference. The first three are what modern programs
+ * publish; the last two are X11 names that survive in the wild through XWayland
+ * and older toolkits, and a terminal that only understands the modern ones
+ * cannot paste out of half the applications on the machine. */
+static const char *const TEXT_MIMES[] = {
+	"text/plain;charset=utf-8",
+	"text/plain",
+	"UTF8_STRING",
+	"TEXT",
+	"STRING",
+};
+#define N_TEXT_MIMES ((int)(sizeof TEXT_MIMES / sizeof TEXT_MIMES[0]))
+
+static int mime_rank(const char *mime)
+{
+	for (int i = 0; i < N_TEXT_MIMES; i++)
+		if (!strcmp(mime, TEXT_MIMES[i]))
+			return i;
+	return -1;
+}
+
+/* Hand our text to whoever asked for it.
+ *
+ * ⚠ WITH A DEADLINE, AND WITHOUT BLOCKING FOREVER. The receiver may take the
+ * data slowly, or never; a pipe holds 64 KB and then stops accepting. A plain
+ * write() of a large selection to a receiver that has gone away would hang the
+ * terminal with no way out, so this waits for writability in bounded steps and
+ * gives up rather than becoming unresponsive. */
+static void send_text(const char *text, size_t len, int fd)
+{
+	size_t off = 0;
+	while (off < len) {
+		struct pollfd p = { .fd = fd, .events = POLLOUT };
+		if (poll(&p, 1, 200) <= 0)
+			break;                       /* gone, or not taking it: give up */
+		ssize_t n = write(fd, text + off, len - off);
+		if (n > 0) {
+			off += (size_t)n;
+			continue;
+		}
+		if (n < 0 && (errno == EINTR || errno == EAGAIN))
+			continue;
+		break;
+	}
+	close(fd);
+}
+
+static void clip_send(void *data, struct wl_data_source *src, const char *mime,
+                      int fd)
+{
+	(void)src; (void)mime;
+	win_t *w = data;
+	send_text(w->clip_text ? w->clip_text : "", w->clip_text_len, fd);
+}
+
+/* Somebody else took the clipboard. Our bytes are no longer anybody's, and
+ * holding them would mean pasting stale text on the next Ctrl+Shift+V. */
+static void clip_cancelled(void *data, struct wl_data_source *src)
+{
+	win_t *w = data;
+	wl_data_source_destroy(src);
+	if (w->clip_source == src)
+		w->clip_source = NULL;
+	free(w->clip_text);
+	w->clip_text = NULL;
+	w->clip_text_len = 0;
+	w->clip_want = false;
+}
+
+static void clip_target(void *d, struct wl_data_source *s, const char *m)
+{ (void)d; (void)s; (void)m; }
+static void clip_dnd_drop(void *d, struct wl_data_source *s) { (void)d; (void)s; }
+static void clip_dnd_finished(void *d, struct wl_data_source *s) { (void)d; (void)s; }
+static void clip_action(void *d, struct wl_data_source *s, uint32_t a)
+{ (void)d; (void)s; (void)a; }
+
+static const struct wl_data_source_listener clip_source_listener = {
+	.target = clip_target,
+	.send = clip_send,
+	.cancelled = clip_cancelled,
+	.dnd_drop_performed = clip_dnd_drop,
+	.dnd_finished = clip_dnd_finished,
+	.action = clip_action,
+};
+
+static void prim_send(void *data, struct zwp_primary_selection_source_v1 *src,
+                      const char *mime, int fd)
+{
+	(void)src; (void)mime;
+	win_t *w = data;
+	send_text(w->prim_text ? w->prim_text : "", w->prim_text_len, fd);
+}
+
+static void prim_cancelled(void *data,
+                           struct zwp_primary_selection_source_v1 *src)
+{
+	win_t *w = data;
+	zwp_primary_selection_source_v1_destroy(src);
+	if (w->prim_source == src)
+		w->prim_source = NULL;
+	free(w->prim_text);
+	w->prim_text = NULL;
+	w->prim_text_len = 0;
+	w->prim_want = false;
+}
+
+static const struct zwp_primary_selection_source_v1_listener prim_source_listener = {
+	.send = prim_send,
+	.cancelled = prim_cancelled,
+};
+
+/* ── taking a selection ─────────────────────────────────────────────────────
+ *
+ * ⚠ IT CANNOT BE DONE WITHOUT A SERIAL FROM A REAL INPUT EVENT. The compositor
+ * uses it to check that the client claiming the clipboard was the one the
+ * person was using at the time — otherwise any background window could take
+ * the clipboard whenever it liked.
+ *
+ * Which leaves a case that is easy to drop on the floor: a child sends OSC 52
+ * before anybody has touched this window — a script, or output arriving as it
+ * starts. There is no serial to use, and throwing the text away means a copy
+ * that silently did nothing. So the text is KEPT and the selection is claimed
+ * at the next keystroke or click, which is the first moment it legitimately
+ * can be. */
+static void selections_flush(win_t *w)
+{
+	if (!w->last_serial)
+		return;
+
+	if (w->clip_want && w->dd_mgr && w->data_dev) {
+		if (w->clip_source)
+			wl_data_source_destroy(w->clip_source);
+		w->clip_source = wl_data_device_manager_create_data_source(w->dd_mgr);
+		wl_data_source_add_listener(w->clip_source, &clip_source_listener, w);
+		for (int i = 0; i < N_TEXT_MIMES; i++)
+			wl_data_source_offer(w->clip_source, TEXT_MIMES[i]);
+		wl_data_device_set_selection(w->data_dev, w->clip_source,
+		                             w->last_serial);
+		w->clip_want = false;
+	}
+
+	if (w->prim_want && w->ps_mgr && w->ps_dev) {
+		if (w->prim_source)
+			zwp_primary_selection_source_v1_destroy(w->prim_source);
+		w->prim_source =
+			zwp_primary_selection_device_manager_v1_create_source(w->ps_mgr);
+		zwp_primary_selection_source_v1_add_listener(w->prim_source,
+		                                             &prim_source_listener, w);
+		for (int i = 0; i < N_TEXT_MIMES; i++)
+			zwp_primary_selection_source_v1_offer(w->prim_source,
+			                                      TEXT_MIMES[i]);
+		zwp_primary_selection_device_v1_set_selection(w->ps_dev,
+		                                              w->prim_source,
+		                                              w->last_serial);
+		w->prim_want = false;
+	}
+}
+
+/* Take ownership of a selection. `text` is consumed either way. */
+static void own_clipboard(win_t *w, char *text, size_t len)
+{
+	free(w->clip_text);
+	w->clip_text = text;
+	w->clip_text_len = len;
+	w->clip_want = true;
+	selections_flush(w);
+}
+
+static void own_primary(win_t *w, char *text, size_t len)
+{
+	free(w->prim_text);
+	w->prim_text = text;
+	w->prim_text_len = len;
+	w->prim_want = true;
+	selections_flush(w);
+}
+
+/* ── receiving ──────────────────────────────────────────────────────────── */
+
+/* ⚠ AN OFFER IS ANNOUNCED BEFORE ANYONE SAYS WHAT IT IS FOR, and it may never
+ * become the selection at all — a drag-and-drop offer arrives the same way. So
+ * there are two slots: the one just announced, and the one that is actually the
+ * clipboard. Overwriting a single slot leaks the old proxy, which is exactly
+ * what LeakSanitizer caught here: 96 bytes, once per selection change, on a
+ * terminal that is otherwise clean. */
+static void offer_mime(void *data, struct wl_data_offer *offer,
+                       const char *mime)
+{
+	win_t *w = data;
+	if (offer != w->clip_pending)
+		return;
+	int rank = mime_rank(mime);
+	if (rank >= 0 && (w->clip_pending_mime < 0 || rank < w->clip_pending_mime))
+		w->clip_pending_mime = rank;
+}
+static void offer_source_actions(void *d, struct wl_data_offer *o, uint32_t a)
+{ (void)d; (void)o; (void)a; }
+static void offer_action(void *d, struct wl_data_offer *o, uint32_t a)
+{ (void)d; (void)o; (void)a; }
+static const struct wl_data_offer_listener offer_listener = {
+	.offer = offer_mime,
+	.source_actions = offer_source_actions,
+	.action = offer_action,
+};
+
+static void prim_offer_mime(void *data,
+                            struct zwp_primary_selection_offer_v1 *offer,
+                            const char *mime)
+{
+	win_t *w = data;
+	if (offer != w->prim_pending)
+		return;
+	int rank = mime_rank(mime);
+	if (rank >= 0 && (w->prim_pending_mime < 0 || rank < w->prim_pending_mime))
+		w->prim_pending_mime = rank;
+}
+static const struct zwp_primary_selection_offer_v1_listener prim_offer_listener = {
+	.offer = prim_offer_mime,
+};
+
+/* A new offer exists. ⚠ The mime types arrive as SEPARATE EVENTS afterwards,
+ * so nothing can be decided here — the listener is attached and the answer to
+ * "is there any text in it?" is only complete when `selection` arrives. */
+static void dd_data_offer(void *data, struct wl_data_device *dd,
+                          struct wl_data_offer *offer)
+{
+	(void)dd;
+	win_t *w = data;
+	/* One that was announced and never claimed by a selection: a drag we do
+	 * not take part in, or an offer the compositor superseded. */
+	if (w->clip_pending)
+		wl_data_offer_destroy(w->clip_pending);
+	w->clip_pending = offer;
+	w->clip_pending_mime = -1;
+	wl_data_offer_add_listener(offer, &offer_listener, w);
+}
+
+static void dd_selection(void *data, struct wl_data_device *dd,
+                         struct wl_data_offer *offer)
+{
+	(void)dd;
+	win_t *w = data;
+
+	/* Whatever the clipboard WAS is now over, whether or not there is a
+	 * replacement — this is the only event that says so. */
+	if (w->clip_offer && w->clip_offer != offer)
+		wl_data_offer_destroy(w->clip_offer);
+	w->clip_offer = NULL;
+	w->clip_offer_mime = -1;
+
+	if (offer && offer == w->clip_pending) {
+		w->clip_offer = offer;
+		w->clip_offer_mime = w->clip_pending_mime;
+		w->clip_pending = NULL;
+	} else if (w->clip_pending) {
+		wl_data_offer_destroy(w->clip_pending);
+		w->clip_pending = NULL;
+	}
+}
+
+static void dd_enter(void *d, struct wl_data_device *dd, uint32_t s,
+                     struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y,
+                     struct wl_data_offer *o)
+{ (void)d; (void)dd; (void)s; (void)surf; (void)x; (void)y; (void)o; }
+static void dd_leave(void *d, struct wl_data_device *dd) { (void)d; (void)dd; }
+static void dd_motion(void *d, struct wl_data_device *dd, uint32_t t,
+                      wl_fixed_t x, wl_fixed_t y)
+{ (void)d; (void)dd; (void)t; (void)x; (void)y; }
+static void dd_drop(void *d, struct wl_data_device *dd) { (void)d; (void)dd; }
+
+static const struct wl_data_device_listener data_device_listener = {
+	.data_offer = dd_data_offer,
+	.enter = dd_enter,
+	.leave = dd_leave,
+	.motion = dd_motion,
+	.drop = dd_drop,
+	.selection = dd_selection,
+};
+
+static void psd_data_offer(void *data,
+                           struct zwp_primary_selection_device_v1 *dev,
+                           struct zwp_primary_selection_offer_v1 *offer)
+{
+	(void)dev;
+	win_t *w = data;
+	if (w->prim_pending)
+		zwp_primary_selection_offer_v1_destroy(w->prim_pending);
+	w->prim_pending = offer;
+	w->prim_pending_mime = -1;
+	zwp_primary_selection_offer_v1_add_listener(offer, &prim_offer_listener, w);
+}
+
+static void psd_selection(void *data,
+                          struct zwp_primary_selection_device_v1 *dev,
+                          struct zwp_primary_selection_offer_v1 *offer)
+{
+	(void)dev;
+	win_t *w = data;
+
+	if (w->prim_offer && w->prim_offer != offer)
+		zwp_primary_selection_offer_v1_destroy(w->prim_offer);
+	w->prim_offer = NULL;
+	w->prim_offer_mime = -1;
+
+	if (offer && offer == w->prim_pending) {
+		w->prim_offer = offer;
+		w->prim_offer_mime = w->prim_pending_mime;
+		w->prim_pending = NULL;
+	} else if (w->prim_pending) {
+		zwp_primary_selection_offer_v1_destroy(w->prim_pending);
+		w->prim_pending = NULL;
+	}
+}
+
+static const struct zwp_primary_selection_device_v1_listener ps_device_listener = {
+	.data_offer = psd_data_offer,
+	.selection = psd_selection,
+};
+
+/* Everything a paste ends in: the transform, then the pty. */
+static void paste_finish(win_t *w, const char *text, size_t len)
+{
+	size_t n = 0;
+	char *out = st_paste_encode(text, len, w->g->bracketed_paste, &n);
+	if (n)
+		(void)!write(w->pty->fd, out, n);
+	free(out);
+	/* Somebody pasting is somebody working at the bottom of the buffer. */
+	if (st_grid_view_reset(w->g))
+		w->dirty = true;
+}
+
+/* Ask for a selection, or answer it immediately when it is ours.
+ *
+ * ⚠ THE SHORT CIRCUIT IS NOT AN OPTIMISATION. Asking the compositor for text
+ * this process is offering means we must write to a pipe and read from it in
+ * the same loop, and the write side is a callback that cannot run while we are
+ * blocked in the read. Answering from our own copy avoids the whole question. */
+static void paste_start(win_t *w, bool primary)
+{
+	if (primary && w->prim_text) {
+		paste_finish(w, w->prim_text, w->prim_text_len);
+		return;
+	}
+	if (!primary && w->clip_text) {
+		paste_finish(w, w->clip_text, w->clip_text_len);
+		return;
+	}
+	if (w->paste_fd >= 0)
+		return;      /* one at a time; the second press is simply ignored */
+
+	int mime = primary ? w->prim_offer_mime : w->clip_offer_mime;
+	if (mime < 0)
+		return;      /* nothing offered that is text */
+
+	int fds[2];
+	if (pipe2(fds, O_CLOEXEC) != 0)
+		return;
+
+	if (primary)
+		zwp_primary_selection_offer_v1_receive(w->prim_offer,
+		                                       TEXT_MIMES[mime], fds[1]);
+	else
+		wl_data_offer_receive(w->clip_offer, TEXT_MIMES[mime], fds[1]);
+	/* ⚠ OUR END OF THE WRITE SIDE MUST GO. The compositor duplicated the
+	 * descriptor for the other program; if this copy stays open there is still
+	 * a writer, EOF never arrives, and the paste hangs waiting for the end of
+	 * something that finished. */
+	close(fds[1]);
+	wl_display_flush(w->dpy);
+
+	w->paste_fd  = fds[0];
+	w->paste_len = 0;
+}
+
+/* The paste's read end became readable. Called from the loop. */
+static void paste_pump(win_t *w)
+{
+	for (;;) {
+		if (w->paste_len + 4096 > w->paste_cap) {
+			/* ⚠ REFUSED WHOLE RATHER THAN TRUNCATED. Half a pasted command is
+			 * a command that runs and does something else; four megabytes is
+			 * already far past anything anybody meant to paste into a
+			 * terminal. */
+			if (w->paste_cap >= 4u * 1024 * 1024) {
+				w->paste_too_big++;
+				goto done;
+			}
+			w->paste_cap = w->paste_cap ? w->paste_cap * 2 : 8192;
+			w->paste_buf = xrealloc(w->paste_buf, w->paste_cap);
+		}
+		ssize_t n = read(w->paste_fd, w->paste_buf + w->paste_len,
+		                 w->paste_cap - w->paste_len);
+		if (n > 0) {
+			w->paste_len += (size_t)n;
+			continue;
+		}
+		if (n < 0 && errno == EINTR)
+			continue;
+		if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+			return;        /* more to come; the loop will call again */
+		break;             /* 0 = the other program has finished */
+	}
+	paste_finish(w, w->paste_buf, w->paste_len);
+done:
+	close(w->paste_fd);
+	w->paste_fd = -1;
+	w->paste_len = 0;
+}
+
+/* What the child asked to copy, via OSC 52. Called after every feed. */
+static void take_child_clipboard(win_t *w)
+{
+	size_t len = 0;
+	uint8_t target = ST_CLIP_NONE;
+	char *text = st_vt_take_clipboard(w->vt, &len, &target);
+	if (!text)
+		return;
+	if (target == ST_CLIP_PRIMARY)
+		own_primary(w, text, len);
+	else
+		own_clipboard(w, text, len);
+}
 
 /* ── the pointer ────────────────────────────────────────────────────────────
  *
@@ -1339,7 +1877,7 @@ static void ptr_motion(void *data, struct wl_pointer *p, uint32_t time,
 static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
                        uint32_t time, uint32_t button, uint32_t state)
 {
-	(void)p; (void)serial;
+	(void)p;
 	win_t *w = data;
 	bool down = state == WL_POINTER_BUTTON_STATE_PRESSED;
 
@@ -1368,12 +1906,20 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 		return;
 	}
 
-	if (b != ST_BTN_LEFT) {
-		/* Middle-click pastes the primary selection everywhere else, and
-		 * there is nothing to paste from yet — no wl_data_device has been
-		 * written. Deliberately silent rather than half-done. */
+	w->last_serial = serial;
+	selections_flush(w);
+
+	if (b == ST_BTN_MIDDLE) {
+		/* The habit: highlight somewhere, middle-click here. It pastes the
+		 * PRIMARY selection, which is a different one from the clipboard and
+		 * is filled by highlighting alone. On the press, not the release —
+		 * that is where every other program does it. */
+		if (down)
+			paste_start(w, true);
 		return;
 	}
+	if (b != ST_BTN_LEFT)
+		return;
 
 	if (down) {
 		/* One click selects characters, two words, three lines, and a fourth
@@ -1390,14 +1936,18 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 		             modes[(w->clicks - 1) % 3]);
 		w->selecting = true;
 		w->dirty = true;
-	} else {
+	} else if (w->selecting) {
 		w->selecting = false;
-		/* ⚠ AND HERE IS WHERE THE CLIPBOARD GOES. The text is available —
-		 * st_sel_text() returns exactly what would be copied — but nothing can
-		 * be handed to another program until there is a wl_data_device, which
-		 * is the next thing on the list. A selection that highlights and
-		 * cannot be pasted is half a feature, and it is half on purpose rather
-		 * than by omission. */
+		/* ⚠ THE PRIMARY, NOT THE CLIPBOARD. Highlighting fills the middle-
+		 * click selection and nothing else: a terminal that put every drag on
+		 * the clipboard would destroy whatever the person had copied five
+		 * minutes ago, every time they highlighted a word to read it.
+		 * Ctrl+Shift+C is what fills the clipboard, deliberately. */
+		char *text = st_sel_text(w->g);
+		if (text && *text)
+			own_primary(w, text, strlen(text));
+		else
+			free(text);
 	}
 }
 
@@ -1546,6 +2096,13 @@ static void registry_global(void *data, struct wl_registry *reg, uint32_t name,
 		w->presentation = wl_registry_bind(reg, name, &wp_presentation_interface,
 		                                   version < 1 ? version : 1);
 		wp_presentation_add_listener(w->presentation, &presentation_listener, w);
+	} else if (!strcmp(iface, wl_data_device_manager_interface.name)) {
+		w->dd_mgr = wl_registry_bind(reg, name, &wl_data_device_manager_interface,
+		                             version < 3 ? version : 3);
+	} else if (!strcmp(iface,
+	                   zwp_primary_selection_device_manager_v1_interface.name)) {
+		w->ps_mgr = wl_registry_bind(
+			reg, name, &zwp_primary_selection_device_manager_v1_interface, 1);
 	} else if (!strcmp(iface, wp_cursor_shape_manager_v1_interface.name)) {
 		w->shape_mgr = wl_registry_bind(reg, name,
 		                                &wp_cursor_shape_manager_v1_interface,
@@ -1574,6 +2131,9 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	w->pool_fd = -1;
 	w->deadline = deadline;
 	w->held = ST_BTN_NONE;   /* 0 is the LEFT button, not "nothing held" */
+	w->paste_fd = -1;        /* 0 is stdin */
+	w->clip_offer_mime = w->clip_pending_mime = -1;
+	w->prim_offer_mime = w->prim_pending_mime = -1;
 	w->t_start = now_ns();
 
 	w->dpy = wl_display_connect(NULL);
@@ -1597,6 +2157,21 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	}
 
 	w->xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
+	/* The data devices need BOTH a manager and a seat, and the two arrive as
+	 * separate globals in whatever order the compositor lists them — so they
+	 * are created here, after the registry roundtrip, rather than in whichever
+	 * handler happened to run second. */
+	if (w->seat && w->dd_mgr) {
+		w->data_dev = wl_data_device_manager_get_data_device(w->dd_mgr, w->seat);
+		wl_data_device_add_listener(w->data_dev, &data_device_listener, w);
+	}
+	if (w->seat && w->ps_mgr) {
+		w->ps_dev = zwp_primary_selection_device_manager_v1_get_device(
+			w->ps_mgr, w->seat);
+		zwp_primary_selection_device_v1_add_listener(w->ps_dev,
+		                                             &ps_device_listener, w);
+	}
 
 	w->surface     = wl_compositor_create_surface(w->compositor);
 	w->xdg_surface = xdg_wm_base_get_xdg_surface(w->wm_base, w->surface);
@@ -1631,10 +2206,15 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			wl_display_dispatch_pending(w->dpy);
 		wl_display_flush(w->dpy);
 
-		struct pollfd fds[2] = {
+		/* Three descriptors at most: the compositor, the child, and — only
+		 * while a paste is in flight — the pipe the other program is writing
+		 * its clipboard into. */
+		struct pollfd fds[3] = {
 			{ .fd = wlfd,      .events = POLLIN },
 			{ .fd = pty->fd,   .events = POLLIN },
+			{ .fd = w->paste_fd, .events = POLLIN },
 		};
+		int nfds = w->paste_fd >= 0 ? 3 : 2;
 
 		/* Sleep until the deadline, if one is pending — and keep taking input
 		 * the whole way there, which is the entire trick. -1 means "no paint
@@ -1646,7 +2226,7 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 				? (int)((w->paint_due_ns - now + 999999) / 1000000) : 0;
 		}
 
-		if (poll(fds, 2, timeout) < 0) {
+		if (poll(fds, (nfds_t)nfds, timeout) < 0) {
 			wl_display_cancel_read(w->dpy);
 			if (errno == EINTR)
 				continue;
@@ -1694,7 +2274,15 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 			size_t rn = st_vt_take_reply(vt, rep, sizeof rep);
 			if (rn)
 				(void)!write(pty->fd, rep, rn);
+
+			/* And anything it asked to COPY, via OSC 52 — the only way a
+			 * program on the far end of an ssh session can reach the
+			 * clipboard of the machine somebody is sitting at. */
+			take_child_clipboard(w);
 		}
+
+		if (nfds == 3 && (fds[2].revents & (POLLIN | POLLHUP)))
+			paste_pump(w);
 
 		/* The scheduled paint, now that everything readable has been read —
 		 * which is what makes waiting worth anything: a keystroke that arrived
@@ -1764,6 +2352,25 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 	if (w->xkb_state)   xkb_state_unref(w->xkb_state);
 	if (w->keymap)      xkb_keymap_unref(w->keymap);
 	if (w->xkb)         xkb_context_unref(w->xkb);
+	/* The clipboard goes with the window. Wayland has no persistent clipboard
+	 * daemon: a selection is an offer from a live process, so closing this one
+	 * takes back whatever it was offering — which is why pasting from a
+	 * terminal you have just closed gives nothing, in every Wayland terminal. */
+	if (w->paste_fd >= 0) close(w->paste_fd);
+	free(w->paste_buf);
+	if (w->clip_source) wl_data_source_destroy(w->clip_source);
+	if (w->prim_source) zwp_primary_selection_source_v1_destroy(w->prim_source);
+	if (w->clip_offer)   wl_data_offer_destroy(w->clip_offer);
+	if (w->clip_pending) wl_data_offer_destroy(w->clip_pending);
+	if (w->prim_offer)   zwp_primary_selection_offer_v1_destroy(w->prim_offer);
+	if (w->prim_pending) zwp_primary_selection_offer_v1_destroy(w->prim_pending);
+	free(w->clip_text);
+	free(w->prim_text);
+	if (w->data_dev)    wl_data_device_destroy(w->data_dev);
+	if (w->ps_dev)      zwp_primary_selection_device_v1_destroy(w->ps_dev);
+	if (w->dd_mgr)      wl_data_device_manager_destroy(w->dd_mgr);
+	if (w->ps_mgr)      zwp_primary_selection_device_manager_v1_destroy(w->ps_mgr);
+
 	if (w->kbd)         wl_keyboard_destroy(w->kbd);
 	if (w->shape_dev)   wp_cursor_shape_device_v1_destroy(w->shape_dev);
 	if (w->shape_mgr)   wp_cursor_shape_manager_v1_destroy(w->shape_mgr);
@@ -1783,12 +2390,6 @@ int st_win_run(st_grid_t *g, st_vt_t *vt, st_pty_t *pty, st_font_t *font,
 }
 
 /* ── what is left ──────────────────────────────────────────────────────────
- *
- * THE CLIPBOARD. A selection can be made, drawn and read — st_sel_text()
- * returns exactly the bytes — and there is still no wl_data_device, so nothing
- * can be handed to another program and nothing can be pasted in. Middle-click
- * is therefore deliberately silent rather than half-wired. That is the next
- * thing, and it is the other half of what a pointer is for.
  *
  * AUTO-SCROLL WHILE DRAGGING. Dragging above the top of the window does not
  * pull the view back through the scrollback. The selection can already reach

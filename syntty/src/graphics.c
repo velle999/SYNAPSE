@@ -105,7 +105,7 @@ static const int8_t b64tab[256] = {
 	['8']=60,['9']=61,['+']=62,['/']=63,
 };
 
-static size_t b64_decode(const char *in, size_t len, uint8_t *out, size_t cap)
+size_t st_b64_decode(const char *in, size_t len, uint8_t *out, size_t cap)
 {
 	uint32_t acc = 0;
 	int      bits = 0;
@@ -376,7 +376,7 @@ void st_gfx_apc(st_vt_t *vt, const char *payload, size_t len)
 				g->pending_cap = want * 2;
 				g->pending = xrealloc(g->pending, g->pending_cap);
 			}
-			g->pending_len += b64_decode(data, data_len,
+			g->pending_len += st_b64_decode(data, data_len,
 			                             g->pending + g->pending_len,
 			                             g->pending_cap - g->pending_len);
 		}

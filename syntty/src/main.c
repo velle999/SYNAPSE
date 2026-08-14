@@ -37,6 +37,7 @@ static const char *usage_text =
 "  syntty damage-check [F]   prove damage tracking draws the same pixels\n"
 "  syntty win [--] [CMD...]  a WINDOW, running CMD or your shell\n"
 "  syntty mouse EVENT...     what a pointer event becomes on the child's input\n"
+"  syntty paste TEXT         what pasted text becomes on the way to the child\n"
 "  syntty about              what this is and what it can do yet\n"
 "\n"
 "Options, before the subcommand:\n"
@@ -60,6 +61,14 @@ static const char *usage_text =
 "\n"
 "mouse: EVENT is press:BUTTON@COL,ROW, release:..., move[:BUTTON]@COL,ROW or\n"
 "wheel:up@COL,ROW; with --mode=1000|1002|1003, --sgr, --shift, --ctrl, --alt.\n"
+"\n"
+"Keys the window keeps — the program running in it never sees these:\n"
+"  Ctrl+Shift+C  copy the selection      Ctrl+Shift+V  paste the clipboard\n"
+"  Shift+Insert  paste the primary selection, as middle-click does\n"
+"  Shift+PgUp/PgDn/Home/End   the scrollback\n"
+"  Ctrl+Shift+Up/Down         jump to the previous or next prompt\n"
+"  drag to select; double-click a word, triple-click a line; shift-drag\n"
+"  selects even while a program is reading the mouse\n"
 "\n"
 "With no FILE, or with '-', the stream is read from standard input.\n";
 
@@ -208,6 +217,26 @@ static void print_stats(const st_vt_t *vt, const st_grid_t *g)
 	if (g->mouse_mode)
 		fprintf(stderr, "mouse         %u, %s coordinates\n", g->mouse_mode,
 		        g->mouse_sgr ? "SGR" : "1984");
+
+	/* ── OSC 52, the clipboard the child asked for ──────────────────────────
+	 *
+	 * Printed as a LENGTH and never as the text. A stats line is written to a
+	 * terminal, and echoing whatever a program just copied — which is
+	 * regularly a password — onto somebody's screen is not a diagnostic. */
+	if (vt->clip_sets)
+		fprintf(stderr, "clipboard     %llu set, %zu bytes waiting for the %s\n",
+		        (unsigned long long)vt->clip_sets, vt->clip_len,
+		        vt->clip_target == ST_CLIP_PRIMARY ? "primary" : "clipboard");
+	/* ⚠ ALWAYS SAID OUT LOUD. A program asking to READ the clipboard is
+	 * asking the terminal to type its contents back at it, and the refusal is
+	 * the security decision this program makes on the person's behalf. */
+	if (vt->clip_reads_refused)
+		fprintf(stderr, "clipboard     %llu READ request(s) refused — a program "
+		        "cannot be allowed to read what was copied\n",
+		        (unsigned long long)vt->clip_reads_refused);
+	if (vt->osc_dropped)
+		fprintf(stderr, "osc           %llu dropped for running past %d bytes\n",
+		        (unsigned long long)vt->osc_dropped, VT_OSC_MAX);
 
 	/* What the parser owes the child. Printed ESCAPED, because the whole
 	 * point of a reply is that it is a control sequence — printing it raw
@@ -947,14 +976,59 @@ static int cmd_mouse(int argc, char **argv)
 	return 0;
 }
 
+/* ── what a paste becomes, with no clipboard ────────────────────────────────
+ *
+ * The other half that can be tested. Getting text out of another program is
+ * Wayland plumbing and a person pressing keys; what happens to the bytes
+ * afterwards is a pure function, and it is the half where a mistake runs
+ * somebody's command for them.
+ *
+ *     syntty paste --bracketed "$(printf 'ls\nrm -rf /')"
+ *
+ * Printed ESCAPED, for the same reason every other control sequence in this
+ * program is: printing it raw would have the terminal running the test act on
+ * it. */
+static int cmd_paste(int argc, char **argv)
+{
+	bool bracketed = false;
+	const char *text = NULL;
+
+	for (int i = 0; i < argc; i++) {
+		if (!strcmp(argv[i], "--bracketed")) { bracketed = true; continue; }
+		if (argv[i][0] == '-' && argv[i][1])
+			die("paste: unknown option '%s'", argv[i]);
+		if (text)
+			die("paste: one text at a time");
+		text = argv[i];
+	}
+	if (!text) {
+		fprintf(stderr, "paste: give it text — syntty paste [--bracketed] TEXT\n");
+		return 2;
+	}
+
+	size_t n = 0;
+	char *out = st_paste_encode(text, strlen(text), bracketed, &n);
+	for (size_t i = 0; i < n; i++) {
+		unsigned char c = (unsigned char)out[i];
+		if (c == 0x1b)                  fputs("ESC", stdout);
+		else if (c == '\r')             fputs("CR", stdout);
+		else if (c == '\t')             fputs("TAB", stdout);
+		else if (c >= 0x20 && c < 0x7f) fputc(c, stdout);
+		else                            printf("\\x%02x", c);
+	}
+	printf("\n");
+	free(out);
+	return 0;
+}
+
 static int cmd_about(void)
 {
 	printf("syntty %s — the SynapseOS terminal\n\n", SYNTTY_VERSION);
 	printf("  built        pty, parser, grid, glyphs, a window, deadline\n");
 	printf("               rendering, damage tracking, the keyboard and\n");
 	printf("               graphics protocols, OSC 133 marks, the alternate\n");
-	printf("               screen, and the pointer.\n");
-	printf("  not yet      the clipboard, a config file, tabs, remote control\n");
+	printf("               screen, the pointer and the clipboard.\n");
+	printf("  not yet      a config file, tabs, remote control, OSC 8 links\n");
 	printf("  cell         %zu bytes\n", sizeof(st_cell_t));
 	printf("  style        %zu bytes, interned\n", sizeof(st_style_t));
 	printf("  renderer     CPU, into wl_shm — nothing here links GL, and that\n");
@@ -998,7 +1072,7 @@ int main(int argc, char **argv)
 		const char *a = argv[i];
 
 		if (cmd && (!strcmp(cmd, "run") || !strcmp(cmd, "win")
-		            || !strcmp(cmd, "mouse"))) {
+		            || !strcmp(cmd, "mouse") || !strcmp(cmd, "paste"))) {
 			child_at = (!strcmp(a, "--")) ? i + 1 : i;
 			break;
 		}
@@ -1061,6 +1135,9 @@ int main(int argc, char **argv)
 	if (!strcmp(cmd, "mouse"))
 		return child_at ? cmd_mouse(argc - child_at, argv + child_at)
 		                : cmd_mouse(0, NULL);
+	if (!strcmp(cmd, "paste"))
+		return child_at ? cmd_paste(argc - child_at, argv + child_at)
+		                : cmd_paste(0, NULL);
 	if (!strcmp(cmd, "about"))
 		return cmd_about();
 

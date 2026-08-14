@@ -107,6 +107,13 @@ void st_vt_free(st_vt_t *vt)
 {
 	st_gfx_free(vt->gfx);
 	vt->gfx = NULL;
+	/* Whatever the child last asked to copy and nobody took. A terminal that
+	 * shows one OSC 52 and exits must not leak it — the same rule the image
+	 * store above is here for. */
+	free(vt->clip);
+	vt->clip = NULL;
+	vt->clip_len = 0;
+	vt->clip_target = ST_CLIP_NONE;
 }
 
 unsigned st_vt_kbd_flags(const st_vt_t *vt)
@@ -135,6 +142,76 @@ size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap)
 	return n;
 }
 
+/* ── OSC 52: the child asks for the clipboard ───────────────────────────────
+ *
+ *     ESC ] 52 ; <selection> ; <base64>  BEL
+ *
+ * This is how vim's `"+y`, tmux's copy mode and anything running over ssh put
+ * text on the clipboard of the machine the person is actually sitting at —
+ * there is no other channel from the far end of a pty to a local seat.
+ *
+ * ⚠ THE READ FORM IS REFUSED. `52;c;?` asks the terminal to send the clipboard
+ * back as though typed, and the terminal has no idea who is asking: a program
+ * on the far end of an ssh session, a script, anything sharing the pty. The
+ * clipboard holds whatever was last copied, which is regularly a password or a
+ * token. It is counted rather than ignored, so `--stats` can say that
+ * something asked. */
+static void osc52(st_vt_t *vt, const char *arg, int len)
+{
+	uint8_t target = ST_CLIP_CLIPBOARD;
+	int i = 0;
+	for (; i < len && arg[i] != ';'; i++) {
+		/* The selection field is a set of letters. `c` is the clipboard; `p`
+		 * and `s` are the primary — the one middle-click pastes. An empty
+		 * field means the clipboard, which is what the spec says. */
+		if (arg[i] == 'p' || arg[i] == 's')
+			target = ST_CLIP_PRIMARY;
+	}
+	if (i >= len)
+		return;                    /* no payload field at all */
+
+	const char *b64 = arg + i + 1;
+	int b64_len = len - i - 1;
+
+	if (b64_len == 1 && b64[0] == '?') {
+		vt->clip_reads_refused++;
+		return;                    /* see the block above — never answered */
+	}
+
+	free(vt->clip);
+	vt->clip = NULL;
+	vt->clip_len = 0;
+	vt->clip_target = target;
+	vt->clip_sets++;
+
+	if (b64_len <= 0)
+		return;                    /* an empty payload clears the selection */
+
+	/* 3 bytes out per 4 in, and the OSC buffer already bounds the input — the
+	 * child cannot make this arbitrarily large by sending more. */
+	size_t cap = (size_t)b64_len / 4 * 3 + 4;
+	uint8_t *buf = xmalloc(cap);
+	size_t n = st_b64_decode(b64, (size_t)b64_len, buf, cap);
+	vt->clip = (char *)buf;
+	vt->clip_len = n;
+}
+
+char *st_vt_take_clipboard(st_vt_t *vt, size_t *len, uint8_t *target)
+{
+	if (!vt->clip_target)
+		return NULL;
+	char *out = vt->clip;
+	if (len)    *len = vt->clip_len;
+	if (target) *target = vt->clip_target;
+	vt->clip = NULL;
+	vt->clip_len = 0;
+	vt->clip_target = ST_CLIP_NONE;
+	/* ⚠ An empty clipboard is still an answer — "the child cleared it" — so a
+	 * NULL buffer with a target is handed back as an empty string rather than
+	 * as "nothing happened". */
+	return out ? out : xstrdup("");
+}
+
 /* ── one OSC handler, called from both terminators ──────────────────────────
  *
  * An OSC string ends with BEL or with ESC \, and the two paths used to carry
@@ -143,8 +220,25 @@ size_t st_vt_take_reply(st_vt_t *vt, char *out, size_t cap)
  * that will shortly exist in one and a half. */
 static void osc_dispatch(st_vt_t *vt)
 {
+	/* ⚠ DROPPED WHOLE, NOT TRUNCATED. This used to dispatch the first
+	 * VT_OSC_MAX bytes of an overlong string as though that were the message.
+	 * For a window title it is cosmetic; for OSC 52 it means half a base64
+	 * payload decoding cleanly into DIFFERENT text and landing on the
+	 * clipboard, which is the kind of wrong nobody would ever suspect. */
+	if (vt->osc_over) {
+		vt->osc_over = false;
+		vt->osc_len = 0;
+		vt->osc_dropped++;
+		return;
+	}
+
 	vt->osc[vt->osc_len] = 0;
 	vt->osc_seen++;
+
+	if (vt->osc_len >= 4 && !memcmp(vt->osc, "52;", 3)) {
+		osc52(vt, vt->osc + 3, vt->osc_len - 3);
+		return;
+	}
 
 	/* Titles: the one OSC stage 1 kept, because a test can assert it. */
 	if (vt->osc_len > 2 && (vt->osc[0] == '0' || vt->osc[0] == '2')
@@ -653,7 +747,11 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 
 		case VT_ESC:
 			if (b == '[') { vt_reset_params(vt); vt->state = VT_CSI_ENTRY; }
-			else if (b == ']') { vt->osc_len = 0; vt->state = VT_OSC; }
+			else if (b == ']') {
+				vt->osc_len = 0;
+				vt->osc_over = false;
+				vt->state = VT_OSC;
+			}
 			else if (b == '_') {
 				/* APC. Everything else in this family is still swallowed —
 				 * DCS, SOS and PM have no meaning here — but APC is where the
@@ -731,6 +829,12 @@ void st_vt_feed(st_vt_t *vt, const uint8_t *buf, size_t len)
 				vt->state = VT_OSC_ESC;
 			} else if (vt->osc_len < VT_OSC_MAX - 1) {
 				vt->osc[vt->osc_len++] = (char)b;
+			} else {
+				/* Past the buffer. The rest of the string is still consumed —
+				 * the terminator has to be found or the parser would treat the
+				 * remainder as text — but the whole sequence is discarded when
+				 * it arrives. */
+				vt->osc_over = true;
 			}
 			break;
 

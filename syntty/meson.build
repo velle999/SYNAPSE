@@ -99,12 +99,30 @@ tablet_c = custom_target('tablet-unstable-v2-protocol.c',
   output  : 'tablet-unstable-v2-protocol.c',
   command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+# primary-selection: the middle-click clipboard, which is a SEPARATE selection
+# from the Ctrl+C one and always has been. Highlighting text fills it and
+# middle-click pastes it; a terminal without it breaks a habit every X11 and
+# Wayland user has had for thirty years. The ordinary clipboard needs no extra
+# protocol — wl_data_device is in wayland-client itself.
+primary_xml = protocol_dir / 'unstable/primary-selection/primary-selection-unstable-v1.xml'
+
+primary_h = custom_target('primary-selection-unstable-v1-client-protocol.h',
+  input   : primary_xml,
+  output  : 'primary-selection-unstable-v1-client-protocol.h',
+  command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+primary_c = custom_target('primary-selection-unstable-v1-protocol.c',
+  input   : primary_xml,
+  output  : 'primary-selection-unstable-v1-protocol.c',
+  command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 syntty_sources = files(
   'src/font.c',
   'src/graphics.c',
   'src/grid.c',
   'src/main.c',
   'src/mouse.c',
+  'src/paste.c',
   'src/pty.c',
   'src/render.c',
   'src/util.c',
@@ -117,6 +135,7 @@ syntty = executable('syntty',
   xdg_shell_h, xdg_shell_c,
   presentation_h, presentation_c,
   cursor_shape_h, cursor_shape_c, tablet_c,
+  primary_h, primary_c,
   include_directories : include_directories('include'),
   dependencies : [util_dep, freetype_dep, fontconfig_dep,
                   wayland_client_dep, xkbcommon_dep],

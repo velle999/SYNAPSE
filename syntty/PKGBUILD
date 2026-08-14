@@ -14,8 +14,8 @@
 # commit and belongs with a decision to ship it, not with the code landing.
 # What it has: a pty, a VT parser, a cell grid, a glyph atlas, a wl_shm window,
 # deadline rendering, damage tracking, the kitty keyboard and graphics
-# protocols, OSC 133 marks, the alternate screen and the pointer. What it does
-# not have yet: the clipboard, a config file, tabs.
+# protocols, OSC 133 marks, the alternate screen, the pointer and the
+# clipboard. What it does not have yet: a config file, tabs.
 #
 # That ordering is the point. Every claim this program is being built on is a
 # number, and a terminal that draws needs a compositor, a seat and a human to
@@ -40,7 +40,7 @@ pkgname=syntty
 # component, so bumping pkgver leaves makepkg looking for a tarball nothing
 # creates.
 pkgver=0.1.0
-pkgrel=14
+pkgrel=15
 pkgdesc="SynapseOS terminal — a Wayland terminal that links no GL"
 arch=('x86_64')
 url="https://github.com/velle999/SYNAPSE"
