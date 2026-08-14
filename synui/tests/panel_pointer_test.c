@@ -56,6 +56,11 @@ void synui_spawn(const char *cmd)         { (void)cmd; }
 void synui_lock(syn_server_t *s)          { (void)s; }
 void synui_render_power(syn_server_t *s)  { (void)s; rendered++; }
 void logind_lid_update(syn_server_t *s)   { (void)s; }
+/* The screensaver is an idle STAGE (power.c arms it) but it draws, so the whole
+ * of saver.c is a compositor dependency this test has no use for. */
+void saver_show(syn_server_t *s)              { (void)s; }
+void saver_dismiss(syn_server_t *s, bool by_input) { (void)s; (void)by_input; }
+bool saver_active(syn_server_t *s)            { (void)s; return false; }
 void ctlpanel_child_closed(syn_server_t *s, const char *action)
 {
     (void)s; (void)action;

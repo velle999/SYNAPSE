@@ -568,6 +568,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
         matrix_output_destroy(output);
         dock_output_destroy(output);
         lock_output_destroy(output);   /* drop the pane before its wlr_output frees */
+        saver_output_destroy(output);  /* ...and the saver's, for the same reason */
         /* The Workshop wallpaper engine gets no say in this: synui is about to
          * close its layer surface for this output, and it has no code that can
          * ever build another one. Remember that it happened, so the connector
@@ -699,6 +700,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
      * suspend/resume cycle wakes to the lock's black backstop: still locked,
      * still takes the password, but paints nothing. */
     lock_output_create(output);
+    saver_output_create(output);
 
     /* Same class of problem one layer up: a connector recreated by a
      * suspend/resume leaves linux-wallpaperengine with a dead layer surface it
@@ -2101,6 +2103,7 @@ int synui_init(syn_server_t *s)
 
     /* Idle stages: needs the scene (dim overlay) and the loaded config. */
     power_init(s);
+    saver_init(s);
 
     /* Task manager: creates its poll timer (disarmed) and probes for a GPU. */
     taskmgr_init(s);
@@ -2355,6 +2358,7 @@ void synui_destroy(syn_server_t *s)
     wl_list_remove(&s->drag_destroy.link);   /* wl_list_init'd when idle */
     wl_list_remove(&s->gamma_set.link);
 
+    saver_finish(s);
     power_finish(s);
     taskmgr_finish(s);
     news_finish(s);

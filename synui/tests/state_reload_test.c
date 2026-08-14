@@ -114,7 +114,7 @@ static void rig_up(void)
 static void rig_down(void)
 {
     const char *names[] = { "synuirc", "settings.state", "filters.state",
-                            "uifx.state" };
+                            "uifx.state", "saver.state" };
     char path[512];
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
         snprintf(path, sizeof(path), "%s/synui/%s", g_dir, names[i]);
@@ -224,6 +224,92 @@ static void test_absent_files_leave_the_rc_alone(void)
     printf("  absent state files ............. ok\n");
 }
 
+/* ── 4. saver.state ──────────────────────────────────────────
+ *
+ * The screensaver and the lock-screen appearance live in syn_config_t, so they
+ * lose to a reload the same way filters.state did — and this one is worse than
+ * a cosmetic reset: a saver_timeout that comes back as 0 means the screensaver
+ * silently stops appearing, and a lock_bg that comes back as the default means
+ * a locked machine shows a wallpaper the user turned off.
+ *
+ * Same rig discipline as the two above: synuirc says something DIFFERENT from
+ * saver.state on every field, so a load that skips the state file cannot
+ * accidentally produce the right answer.
+ */
+static void test_saver_state_survives_a_load(void)
+{
+    write_file("synuirc",
+               "screensaver = starfield\n"
+               "screensaver_timeout = 60\n"
+               "screensaver_lock = off\n"
+               "lock_background = black\n"
+               "lock_dim = 10\n"
+               "lock_blur = 4\n");
+    write_file("saver.state",
+               "mode=slideshow\n"
+               "timeout=300\n"
+               "lock=1\n"
+               "interval=45\n"
+               "lock_bg=desktop\n"
+               "lock_dim=70\n"
+               "lock_blur=24\n"
+               "lock_follow=0\n");
+
+    syn_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    synui_config_load(&cfg);
+
+    if (cfg.saver_timeout == 60) {
+        printf("    saver_timeout is still the rc's 60 — saver.state was not "
+               "read, so every Super+Z choice dies on the next reload\n");
+        assert(0);
+    }
+
+    assert(cfg.saver_mode == SYN_SAVER_SLIDESHOW);
+    assert(cfg.saver_timeout == 300);
+    assert(cfg.saver_lock == 1);
+    assert(cfg.saver_interval == 45);
+    assert(cfg.lock_bg == SYN_LOCK_BG_DESKTOP);
+    assert(cfg.lock_bg_dim == 70);
+    assert(cfg.lock_bg_blur == 24);
+    assert(cfg.lock_theme_follow == 0);
+
+    printf("  saver.state survives a load .... ok\n");
+}
+
+/* ── 5. Out-of-range values are refused, not clamped silently into nonsense ──
+ *
+ * A hand-edited saver.state is the case here. The rule the readers follow is
+ * that a value they cannot honour leaves the previous one standing rather than
+ * becoming 0 — an interval of 0 would spin the slideshow at the frame rate, and
+ * a mode index that no longer exists would select whatever now sits at that
+ * slot. That last one is why modes are stored as NAMES.
+ */
+static void test_bad_saver_state_leaves_the_rc_alone(void)
+{
+    write_file("synuirc",
+               "screensaver = clock\n"
+               "screensaver_timeout = 120\n"
+               "screensaver_interval = 30\n"
+               "lock_dim = 40\n");
+    write_file("saver.state",
+               "mode=nosuchmode\n"       /* unknown name */
+               "interval=99999\n"        /* out of range */
+               "lock_bg=nosuchbg\n"      /* unknown name */
+               "lock_dim=999\n");        /* clamped, not wrapped */
+
+    syn_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    synui_config_load(&cfg);
+
+    assert(cfg.saver_mode == SYN_SAVER_CLOCK);     /* rc stands */
+    assert(cfg.saver_interval == 30);              /* rc stands */
+    assert(cfg.lock_bg_dim == 100);                /* clamped to the maximum */
+    assert(cfg.saver_timeout == 120);              /* untouched key */
+
+    printf("  bad saver.state values ......... ok\n");
+}
+
 int main(void)
 {
     printf("state reload test\n");
@@ -232,6 +318,8 @@ int main(void)
     test_filters_state_survives_a_load();
     test_uifx_state_survives_a_load();
     test_absent_files_leave_the_rc_alone();
+    test_saver_state_survives_a_load();
+    test_bad_saver_state_leaves_the_rc_alone();
 
     rig_down();
     printf("all state reload tests passed\n");

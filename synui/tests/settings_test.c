@@ -48,6 +48,14 @@ void wallpaper_state_load(syn_config_t *c)    { (void)c; }
 void cursor_state_load(syn_config_t *c)       { (void)c; }
 void dock_state_load(syn_config_t *c)         { (void)c; }
 void power_state_load(syn_config_t *c)        { (void)c; }
+void saver_state_load(syn_config_t *c)        { (void)c; }
+/* Named-value parsers, not readers: config.c resolves the `screensaver` and
+ * `lock_background` keys against saver.c's own spellings rather than keeping a
+ * second copy of either list. Answering -1 is what an unknown name gets, which
+ * leaves the config default standing — exactly what a test that never sets
+ * those keys wants. */
+int  saver_mode_from_name(const char *n)      { (void)n; return -1; }
+int  lock_bg_from_name(const char *n)         { (void)n; return -1; }
 void welcome_state_load(syn_config_t *c)      { (void)c; }
 void launcher_state_load(syn_config_t *c)     { (void)c; }
 void record_state_load(syn_config_t *c) { (void)c; }

@@ -208,6 +208,8 @@ synui_exe = executable('synui',
     'src/gpu.c',
     'src/taskmgr.c',
     'src/news.c',
+    'src/saver.c',
+    'src/saver_state.c',
     'src/screensaver.c',
     'src/session.c',
     'src/lock.c',
@@ -545,8 +547,12 @@ test('settings', settings_test)
 # disagree — so a load that skips the last of them cannot land on the right
 # answer by accident. Guards the "Ctrl+Shift+R switched CRT effects on" bug.
 state_reload_test = executable('state_reload_test',
+  # saver_state.c is linked for the same reason filters.c and uifx.c are: it is
+  # the REAL saver.state reader, and a stub here would let the exact regression
+  # this test exists to catch (a .state file dropped by a config reload) pass.
   ['tests/state_reload_test.c', 'src/config.c', 'src/settings.c',
-   'src/filters.c', 'src/uifx.c', 'src/cat_draw.c', 'src/text.c'],
+   'src/filters.c', 'src/uifx.c', 'src/cat_draw.c', 'src/text.c',
+   'src/saver_state.c'],
   include_directories : include_directories('src'),
   dependencies : [scenefx, cairo, fontconfig, wlroots, wayland, pixman, xkbcommon],
   c_args : ['-DWLR_USE_UNSTABLE'],

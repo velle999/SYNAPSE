@@ -1433,6 +1433,7 @@ typedef enum {
     CTL_ROW_PRINTERS,
     /* Power */
     CTL_ROW_POWER,
+    CTL_ROW_SAVER,
     CTL_ROW_GAME,
     CTL_ROW_LOCK,
     CTL_ROW_LOCK_FPRINT,
@@ -2139,6 +2140,11 @@ typedef struct {
      * its own timeout and fires at most once per idle period; activity
      * disarms, reverses what fired, and rearms. */
     struct wl_event_source *t_dim, *t_blank, *t_lock, *t_suspend;
+    /* The screensaver stage. Its timeout lives in config.saver_timeout with the
+     * rest of the saver's settings rather than beside power_dim, so the Super+Z
+     * panel edits one block — but it is armed and disarmed by power.c with the
+     * four above, because it IS one of them. */
+    struct wl_event_source *t_saver;
     int dimmed;
     int blanked;
 
@@ -2411,6 +2417,134 @@ typedef struct {
     syn_wallpaper_mode_t  mode;
     syn_wallpaper_src_t   src;
 } syn_wp_output_t;
+
+/* ── Screensaver (saver.c) ───────────────────────────────────
+ *
+ * NOT screensaver.c, which owns the org.freedesktop.ScreenSaver D-Bus name so
+ * apps can *inhibit* idle. This is the thing that actually draws. The two meet
+ * only at idle_inhibited(): an app holding a D-Bus inhibit stops this from ever
+ * showing, which is the whole point of that file.
+ */
+typedef enum {
+    SYN_SAVER_BLANK = 0,      /* flat black — the old behaviour, kept nameable */
+    SYN_SAVER_CLOCK,          /* a drifting clock; cairo, no GPU needed */
+    SYN_SAVER_STARFIELD,      /* flight through starfield; cairo */
+    SYN_SAVER_SLIDESHOW,      /* wallpapers, crossfaded */
+    SYN_SAVER_MATRIX,         /* the matrix.c kanji rain, full screen */
+    SYN_SAVER_MODE_COUNT,     /* keep last — the Super+Z panel cycles on it */
+} syn_saver_mode_t;
+
+/* Names for the panel, the config parser and saver.state, indexed by
+ * syn_saver_mode_t. Defined in saver.c; keep in step with the enum above.
+ * Names, not indices, in the state file, for the reason the lid actions are:
+ * the enum will grow and a saved 3 must not become a different mode after it
+ * does. */
+extern const char *const syn_saver_mode_names[SYN_SAVER_MODE_COUNT];
+int saver_mode_from_name(const char *name);
+
+/* What the lock screen and greeter draw BEHIND the clock panel. DESKTOP is the
+ * default: whatever wallpaper the desktop is showing, dimmed and blurred so the
+ * panel stays readable over a busy photo. BLACK is what the lock did before
+ * this existed and is still the right answer on a slow machine — the blur is a
+ * per-lock cost, not a per-frame one, but the decode is not free.
+ *
+ * The MATRIX and Workshop wallpaper backends have no still frame to grab, so
+ * DESKTOP falls back to BLACK on an output showing one. See lock_bg_surface(). */
+typedef enum {
+    SYN_LOCK_BG_DESKTOP = 0,
+    SYN_LOCK_BG_BLACK,
+    SYN_LOCK_BG_IMAGE,        /* lock_bg_image, a path of its own */
+    SYN_LOCK_BG_COUNT,
+} syn_lock_bg_t;
+
+extern const char *const syn_lock_bg_names[SYN_LOCK_BG_COUNT];
+int lock_bg_from_name(const char *name);
+
+/* Rows in the Super+Z screensaver panel. */
+typedef enum {
+    SAVER_ROW_MODE = 0,
+    SAVER_ROW_TIMEOUT,
+    SAVER_ROW_LOCK,
+    SAVER_ROW_INTERVAL,     /* slideshow seconds per image */
+    SAVER_ROW_LOCK_BG,      /* lock/greeter background source */
+    SAVER_ROW_LOCK_DIM,
+    SAVER_ROW_LOCK_BLUR,
+    SAVER_ROW_LOCK_THEME,   /* follow the desktop theme, or not */
+    SAVER_ROW_COUNT,
+} syn_saver_row_t;
+
+/* How many outputs the saver can paint at once. Same bound as the lock's
+ * panes, and for the same reason: past this the backstop keeps the screen
+ * black, which is a safe degradation rather than a crash. */
+#define SYN_SAVER_PANE_MAX 8
+
+/* One star in the SYN_SAVER_STARFIELD mode. z is depth; a star that flies past
+ * the viewer is respawned at the back rather than reallocated. */
+typedef struct {
+    float x, y, z;    /* x/y in [-1,1] at z=1; z in (0,1] */
+    float pz;         /* previous z, so the streak has a length */
+} syn_star_t;
+
+#define SYN_SAVER_STARS 320
+
+/* Live screensaver state. `active` is the saver being ON SCREEN, which is a
+ * different thing from the stage being armed — see saver.c. */
+typedef struct {
+    int  active;
+    int  visible;                  /* the Super+Z settings panel is open */
+    int  selected;                 /* syn_saver_row_t, in the panel */
+    int  dirty;                    /* unsaved panel edits */
+    char status[96];               /* panel footer line */
+    syn_hit_t hit;                 /* panel rows, for the pointer */
+
+    /* Everything below is only live while `active`. */
+    struct wlr_scene_tree   *tree;
+    struct {
+        struct wlr_output       *output;
+        struct wlr_scene_buffer *buf;
+    } pane[SYN_SAVER_PANE_MAX];
+    int  npane;
+
+    struct wl_event_source *t_frame;   /* animation tick */
+    uint32_t start_ms;                 /* when the saver came up */
+    uint32_t last_frame_ms;
+
+    /* Repaint gating. The tick runs at 30 Hz because the starfield needs it,
+     * but a full-screen cairo buffer is ~33 MB on a 4K panel and reallocating
+     * one thirty times a second — for a CLOCK whose pixels change once a
+     * minute — is about a gigabyte a second of memory traffic on a machine
+     * that is supposed to be idling. lock.c makes the same point about its own
+     * panel and solves it the same way.
+     *
+     * `drawn_min` is the minute the current buffer was painted for; -1 forces
+     * the next tick to paint. `repaint` is a one-shot for everything else that
+     * invalidates it (a new slide, an output arriving). */
+    int      drawn_min;
+    int      repaint;
+
+    /* Whether the session was already locked when the saver came up. A saver
+     * that draws over the LOCK screen must not unlock anything when it is
+     * dismissed, and must not re-lock on the way out either. */
+    int  over_lock;
+
+    /* SLIDESHOW: the image list, rebuilt on show so a wallpaper added since
+     * last time is picked up. Paths only; the decode is cached one at a time,
+     * because a full-screen decode is megabytes and a slideshow that held ten
+     * of them would cost more resident memory than the compositor. */
+    char   (*slides)[256];
+    int      nslides;
+    int      slide;                /* index of the image showing now */
+    uint32_t slide_started_ms;
+    cairo_surface_t *slide_surf;   /* the image showing now */
+    cairo_surface_t *slide_prev;   /* the one crossfading out */
+
+    /* STARFIELD */
+    syn_star_t stars[SYN_SAVER_STARS];
+
+    /* CLOCK: the drift, in layout coordinates, so the glyphs do not sit on the
+     * same pixels for hours. Burn-in is not hypothetical on the OLED. */
+    double drift_x, drift_y, drift_dx, drift_dy;
+} syn_saver_t;
 
 /* Which screen edge the dock lives on (dock.c). BOTTOM/TOP render a
  * horizontal bar; LEFT/RIGHT render a vertical column. Set in synuirc
@@ -2915,6 +3049,46 @@ typedef struct {
      * state a setup that never asked for per-monitor wallpapers can be in. */
     syn_wp_output_t       wallpaper_out[SYN_WP_PEROUT_MAX];
     int                   wallpaper_out_n;
+
+    /* ── Screensaver (saver.c) ────────────────────────────────
+     *
+     * `saver_timeout` is an idle stage like the four in power.c and is armed
+     * by the same code, but it lives here rather than beside power_dim so the
+     * saver's settings read as one block. 0 = never, which is also what a
+     * config that predates this feature parses to — the saver is opt-in, and
+     * an existing install's idle behaviour is unchanged until it is asked for.
+     */
+    int   saver_timeout;
+    syn_saver_mode_t saver_mode;
+
+    /* Lock the session when the saver is dismissed. Off by default: a
+     * screensaver that demands a password is a different feature from one that
+     * shows a clock, and turning the first on by surprise is how somebody gets
+     * locked out of their own desktop. The lock STAGE (power_lock) is
+     * unaffected and still fires on its own timeout. */
+    int   saver_lock;
+
+    /* SLIDESHOW source. Empty = the wallpapers the Super+W picker offers, which
+     * is what makes the mode work with no configuration at all. */
+    char  saver_dir[256];
+    int   saver_interval;      /* seconds per image; clamped in saver.c */
+
+    /* ── Lock / greeter appearance (lock.c) ───────────────────
+     *
+     * The lock screen and the greeter are the same drawing (see greeter.c), so
+     * these style both. Before this they were ~20 hardcoded cairo literals, and
+     * a theme switch reskinned every panel in the desktop except the two
+     * screens people look at longest. */
+    syn_lock_bg_t lock_bg;
+    char  lock_bg_image[256];  /* used when lock_bg == SYN_LOCK_BG_IMAGE */
+    int   lock_bg_dim;         /* 0..100% darkening over the background */
+    int   lock_bg_blur;        /* box-blur radius in px; 0 = none */
+
+    /* Follow the desktop theme's accent/ink (default), or use lock_accent. A
+     * custom accent is kept as its own field rather than overwriting
+     * panel_accent, so switching back to "follow" needs nothing restored. */
+    int   lock_theme_follow;
+    float lock_accent[4];
 
     /* Cursor theme (cursor.c). Empty name = whatever XCURSOR_THEME says, which
      * is what synui did unconditionally before this existed. The size is pinned
@@ -3808,8 +3982,28 @@ struct syn_server {
         struct {
             struct wlr_output       *output;
             struct wlr_scene_buffer *buf;
+            /* The wallpaper behind the panel, sized to this output and already
+             * dimmed and blurred. Built once per lock, not per frame: the blur
+             * is the expensive part and the picture does not move. NULL when
+             * the background is plain black, which is also the fallback
+             * whenever a decode or an allocation fails. */
+            struct wlr_scene_buffer *bg;
         } pane[8];              /* one clock panel centred on each output */
         int      npane;
+
+        /* MEASURED relative luminance of the background, under the area the
+         * clock panel covers, after the blur and the dim. The ink ladder in
+         * lock.c runs from this.
+         *
+         * Measured rather than assumed: the first version estimated it from
+         * lock_bg_dim alone ("a middling wallpaper is 0.35"), and on the cream
+         * engravings in data/wallpapers that guess came out low, so the date
+         * row was picked for a darker surface than it was actually drawn on.
+         * The background is built once per lock and the panel is a fixed rect,
+         * so the true number costs one pass over a few hundred kB — at lock
+         * time, not per frame. 0 (black) until a background is built, which is
+         * also the right answer when there isn't one. */
+        double   bg_lum;
     } nlock;
 
     /* Idle inhibits held over D-Bus (org.freedesktop.ScreenSaver — screensaver.c).
@@ -4133,6 +4327,20 @@ struct syn_server {
     } power_ui;
 
     syn_power_t     power;
+
+    /* Screensaver settings panel (Super+Z). The saver's own full-screen
+     * drawing does NOT live here — it builds its tree on show and destroys it
+     * on dismiss, the way the lock does, because a saver that is off should
+     * cost no scene nodes at all. */
+    struct {
+        struct wlr_scene_tree   *tree;
+        struct wlr_scene_rect   *bg;
+        struct wlr_scene_rect   *accent;
+        struct wlr_scene_buffer *text_buf;
+    } saver_ui;
+
+    syn_saver_t     saver;
+
     syn_game_t      game;
 
     /* CRT filter panel (Super+E) — sliders for the effects.c strengths. */
@@ -4852,6 +5060,12 @@ void synui_unlock(syn_server_t *s);
 int  lock_handle_key(syn_server_t *s, xkb_keysym_t sym, uint32_t codepoint);
 void lock_notify_activity(syn_server_t *s);      /* brighten + reset the fade */
 void lock_render(syn_server_t *s);               /* repaint panes (greeter reuses) */
+
+/* Rebuild the lock/greeter background from the current settings. Called when
+ * the lock engages, and again by the Super+Z panel whenever a background row
+ * changes so the effect can be seen on the next lock without a restart. Cheap
+ * and safe to call while unlocked: it does nothing when there is no lock up. */
+void lock_bg_invalidate(syn_server_t *s);
 void lock_output_destroy(syn_output_t *o);       /* drop a dying output's lock pane (output_destroy) */
 void lock_output_create(syn_output_t *o);        /* pane for an output arriving mid-lock (server_new_output) */
 
@@ -5289,6 +5503,23 @@ void wallpaper_output_apply(syn_config_t *cfg, const char *name,
 /* syn_wallpaper_mode_t for a mode name, or -1 if it is not one. */
 int  wallpaper_mode_from_name(const char *name);
 
+/* Decode a PNG/JPEG into an image surface, ~ expanded. NULL on any failure —
+ * every caller has a fallback, and the failure is logged here so none of them
+ * has to. Shared with lock.c (the lock background) and saver.c (the slideshow)
+ * so there is exactly one decoder in the tree. */
+cairo_surface_t *wallpaper_decode(const char *path);
+
+/* Paint `src` into a dst_w × dst_h box at the origin of `cr`, framed by
+ * `mode`. Shared for the same reason. */
+void wallpaper_paint_box(cairo_t *cr, cairo_surface_t *src,
+                         int dst_w, int dst_h, syn_wallpaper_mode_t mode);
+
+/* Box-blur an ARGB32 image surface in place, `radius` px, three passes (which
+ * approximates a Gaussian closely enough for a background nobody is reading).
+ * A no-op for radius <= 0 or a non-image surface. Used by the lock background;
+ * this is a once-per-lock cost, not a per-frame one. */
+void syn_surface_blur(cairo_surface_t *surf, int radius);
+
 /* ── Power saving (power.c) ──────────────────────────────── */
 /* Create the idle timers and arm them from the current config. */
 void power_init(syn_server_t *s);
@@ -5459,6 +5690,58 @@ int  power_motion(syn_server_t *s, double lx, double ly);
 int  power_click(syn_server_t *s, double lx, double ly, uint32_t button,
                  uint32_t time_msec);
 int  power_scroll(syn_server_t *s, double lx, double ly, double delta);
+
+/* ── Screensaver (saver.c) ───────────────────────────────────
+ *
+ * Two halves that share a file: the saver itself (saver_show/saver_dismiss,
+ * driven by the idle stage in power.c) and its Super+Z settings panel, which
+ * follows the same contract as every other panel here. */
+void saver_init(syn_server_t *s);
+void saver_finish(syn_server_t *s);
+
+/* Put the saver on screen. A no-op when the mode is BLANK (there is nothing to
+ * draw that the blank stage does not already do), when it is already up, or
+ * when no output can take it. */
+void saver_show(syn_server_t *s);
+
+/* Take it down. `by_input` distinguishes the user dismissing it — which is what
+ * arms saver_lock — from a teardown (mode change, output loss, shutdown),
+ * which must not lock anybody out. */
+void saver_dismiss(syn_server_t *s, bool by_input);
+
+/* True while the saver is drawing. power.c asks so a second stage firing
+ * underneath it does not fight it for the screen. */
+bool saver_active(syn_server_t *s);
+
+/* True while the MATRIX mode is the thing on screen. matrix.c asks so it knows
+ * whether the rain it is rendering is a wallpaper (bottom of wallpaper_tree) or
+ * a screensaver (top of the saver's tree). */
+bool saver_wants_matrix(syn_server_t *s);
+
+/* An output appearing or going away while the saver is up, mirroring
+ * lock_output_create/destroy. Suspend/resume on the NVIDIA box destroys and
+ * recreates connectors, so neither is hypothetical. */
+void saver_output_create(syn_output_t *o);
+void saver_output_destroy(syn_output_t *o);
+
+/* The settings panel. */
+void saver_show_panel(syn_server_t *s);
+void saver_hide(syn_server_t *s);
+void saver_toggle(syn_server_t *s);
+int  saver_key(syn_server_t *s, xkb_keysym_t sym, uint32_t mods);
+int  saver_motion(syn_server_t *s, double lx, double ly);
+int  saver_click(syn_server_t *s, double lx, double ly, uint32_t button,
+                 uint32_t time_msec);
+int  saver_scroll(syn_server_t *s, double lx, double ly, double delta);
+
+/* Name/value for one panel row; render.c draws, saver.c owns the vocabulary.
+ * Returns true when the row is inert (a "never" timeout, a slideshow interval
+ * on a non-slideshow mode), so the renderer can grey it without knowing why. */
+int  saver_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
+                      char *value, size_t vn);
+
+void saver_state_save(syn_server_t *s);
+void saver_state_load(syn_config_t *cfg);
 
 /* ── Clock & Time settings + calendar (clock.c) ──────────── */
 void clock_init(syn_server_t *s);
@@ -5636,6 +5919,7 @@ float filters_row_value(syn_server_t *s, int row, char *buf, size_t n);
 void synui_render_filters(syn_server_t *s);
 void synui_render_aimodel(syn_server_t *s);
 void synui_render_power(syn_server_t *s);
+void synui_render_saver(syn_server_t *s);   /* the Super+Z settings panel */
 
 /* ── Window-effect page of that panel (uifx.c) ───────────── */
 /* Same shape as the filters rows above, so render.c draws both with one loop:
@@ -6171,6 +6455,10 @@ int power_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
 void matrix_init(syn_server_t *s);                /* compile shader, load atlas (no-op on non-GLES2) */
 void matrix_finish(syn_server_t *s);
 bool matrix_active(syn_server_t *s);              /* SOME output selects matrix AND it initialized */
+/* Can the rain actually draw? Stronger than matrix_active: the shader and atlas
+ * are built on the FIRST FRAME, so "initialized" does not yet mean "works".
+ * Anything picking a mode in advance (saver.c) has to ask this one. */
+bool matrix_usable(syn_server_t *s);
 bool matrix_output_active(syn_output_t *o);       /* ...and specifically this one does */
 bool matrix_output_frame(syn_output_t *o);        /* render one frame; true = keep animating */
 void matrix_output_destroy(syn_output_t *o);      /* drop this output's buffer + swapchain */

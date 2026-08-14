@@ -39,6 +39,12 @@
 
 #include "synui.h"
 
+/* The screensaver is an idle STAGE (power.c arms it) but it draws, so the whole
+ * of saver.c is a compositor dependency this test has no use for. */
+void saver_show(syn_server_t *s)              { (void)s; }
+void saver_dismiss(syn_server_t *s, bool by_input) { (void)s; (void)by_input; }
+bool saver_active(syn_server_t *s)            { (void)s; return false; }
+
 /* ── The compositor, stubbed ─────────────────────────────── */
 
 static int spawned_suspend, locked, rendered;

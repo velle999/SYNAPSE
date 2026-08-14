@@ -275,6 +275,7 @@ Defaults (override in `~/.config/synui/synuirc` or `/etc/synui/synuirc`):
 | `Super`+`Shift`+`D` | Show/hide titlebars |
 | `Super`+`O` / `Super`+`Shift`+`O` | Move window to next / previous monitor |
 | `Super`+`P` | Power saving panel |
+| `Super`+`Z` | Screensaver and lock-screen appearance |
 | `Ctrl`+`Alt`+`Delete` | Task manager (processes, CPU/RAM/GPU) |
 | `Super`+`G` | Game mode |
 | `Super`+`L` | Lock screen |

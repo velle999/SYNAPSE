@@ -435,6 +435,16 @@ static int power_blank_cb(void *data)
     return 0;
 }
 
+/* The screensaver stage. Unlike the four around it this one hands off to
+ * another file entirely — saver.c owns the drawing, the animation timer and the
+ * teardown; power.c only decides WHEN. */
+static int power_saver_cb(void *data)
+{
+    syn_server_t *s = data;
+    saver_show(s);
+    return 0;
+}
+
 static int power_lock_cb(void *data)
 {
     syn_server_t *s = data;
@@ -467,6 +477,7 @@ static void power_disarm(syn_server_t *s)
 {
     if (s->power.t_dim)     wl_event_source_timer_update(s->power.t_dim, 0);
     if (s->power.t_blank)   wl_event_source_timer_update(s->power.t_blank, 0);
+    if (s->power.t_saver)   wl_event_source_timer_update(s->power.t_saver, 0);
     if (s->power.t_lock)    wl_event_source_timer_update(s->power.t_lock, 0);
     if (s->power.t_suspend) wl_event_source_timer_update(s->power.t_suspend, 0);
 }
@@ -489,6 +500,7 @@ static void power_arm(syn_server_t *s)
     struct { struct wl_event_source *src; int secs; } stage[] = {
         { s->power.t_dim,     s->config.power_dim     },
         { s->power.t_blank,   s->config.power_blank   },
+        { s->power.t_saver,   s->config.saver_timeout },
         { s->power.t_lock,    s->config.power_lock    },
         { s->power.t_suspend, s->config.power_suspend },
     };
@@ -508,7 +520,8 @@ void power_notify_activity(syn_server_t *s)
 {
     /* Whether any stage has actually fired. If one has, its one-shot timer is
      * spent and we must rearm now, throttle or no throttle. */
-    bool fired = s->power.dimmed || s->power.blanked || s->power.locked;
+    bool fired = s->power.dimmed || s->power.blanked || s->power.locked ||
+                 saver_active(s);
 
     /* Undo the reversible stages. Lock is not reversible from here (only the
      * user can dismiss swaylock), but clearing the flag lets a later idle
@@ -516,6 +529,16 @@ void power_notify_activity(syn_server_t *s)
     power_set_dim(s, false);
     power_set_blank(s, false);
     s->power.locked = 0;
+
+    /* The screensaver comes down on any activity, like the dim does.
+     *
+     * `by_input` is false here even though this IS the input path: the LOCK on
+     * dismissal is armed by input.c's saver_ate_event(), which runs first and
+     * has already taken the saver down by the time this is reached. Passing
+     * true here as well would lock twice — and worse, would lock on the
+     * activity that screensaver.c's SimulateUserActivity() forges, which is a
+     * program saying "the user is here", not a user arriving. */
+    if (saver_active(s)) saver_dismiss(s, false);
 
     /* This runs on every input event, and power_arm() is four
      * timerfd_settime() calls — a 1 kHz mouse would make four thousand
@@ -755,6 +778,7 @@ void power_init(syn_server_t *s)
 {
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
     s->power.t_dim     = wl_event_loop_add_timer(loop, power_dim_cb,     s);
+    s->power.t_saver   = wl_event_loop_add_timer(loop, power_saver_cb,   s);
     s->power.t_blank   = wl_event_loop_add_timer(loop, power_blank_cb,   s);
     s->power.t_lock    = wl_event_loop_add_timer(loop, power_lock_cb,    s);
     s->power.t_suspend = wl_event_loop_add_timer(loop, power_suspend_cb, s);
@@ -765,11 +789,12 @@ void power_init(syn_server_t *s)
 void power_finish(syn_server_t *s)
 {
     if (s->power.t_dim)     wl_event_source_remove(s->power.t_dim);
+    if (s->power.t_saver)   wl_event_source_remove(s->power.t_saver);
     if (s->power.t_blank)   wl_event_source_remove(s->power.t_blank);
     if (s->power.t_lock)    wl_event_source_remove(s->power.t_lock);
     if (s->power.t_suspend) wl_event_source_remove(s->power.t_suspend);
     if (s->power.t_sinksweep) wl_event_source_remove(s->power.t_sinksweep);
-    s->power.t_dim = s->power.t_blank = NULL;
+    s->power.t_dim = s->power.t_blank = s->power.t_saver = NULL;
     s->power.t_lock = s->power.t_suspend = NULL;
     s->power.t_sinksweep = NULL;
     s->power.sink_sweeps = 0;

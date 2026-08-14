@@ -80,6 +80,30 @@ static inline void notify_activity(syn_server_t *s)
     power_notify_activity(s);
 }
 
+/*
+ * Was this event only ever going to wake the screensaver?
+ *
+ * ANY input takes the saver down, and the input that took it down must not also
+ * reach whatever is underneath. That is the classic screensaver bug: you nudge
+ * a machine awake with the space bar and the space bar lands in the editor that
+ * had focus, or the click that dismissed it activates a button you could not
+ * see. So the wake is a keystroke you SPEND.
+ *
+ * Asked BEFORE notify_activity(), because power_notify_activity() is what
+ * dismisses the saver — by the time that has run, saver_active() is false and
+ * there is nothing left to detect.
+ *
+ * Motion is deliberately not routed through this: moving the mouse should wake
+ * the screen and still move the cursor, exactly as it does over the lock.
+ */
+static inline bool saver_ate_event(syn_server_t *s)
+{
+    if (!saver_active(s)) return false;
+    saver_dismiss(s, true);
+    notify_activity(s);      /* still an activity event: rearm the stages */
+    return true;
+}
+
 /* ── Focus ───────────────────────────────────────────────── */
 /*
  * Focus follows the pointer, when focus_mode says so.
@@ -996,6 +1020,8 @@ void synui_binding_execute(syn_server_t *s, const char *action, const char *arg)
             sound_play(s, SOUND_EVT_VOLUME);
     } else if (strcmp(action, "power") == 0) {
         power_toggle(s);
+    } else if (strcmp(action, "saver") == 0) {
+        saver_toggle(s);
     } else if (strcmp(action, "taskmgr") == 0) {
         taskmgr_toggle(s);
     } else if (strcmp(action, "aimodel") == 0) {
@@ -1387,6 +1413,11 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
     syn_server_t *s = kb->server;
     struct wlr_keyboard_key_event *event = data;
     struct wlr_keyboard *wlr_kb = kb->wlr_keyboard;
+
+    /* A key that only woke the screensaver is spent waking it. Release events
+     * are swallowed too while the saver is still up, so a client cannot see a
+     * release whose press it never got. */
+    if (saver_ate_event(s)) return;
 
     notify_activity(s);
 
@@ -2311,6 +2342,7 @@ void pointer_rebase(syn_server_t *s)
     X(eq,       eq)       \
     X(crop,     crop)     \
     X(power,    power)    \
+    X(saver,    saver)    \
     X(taskmgr,  taskmgr)  \
     X(news,     news)     \
     X(filters,  filters)  \
@@ -2596,6 +2628,10 @@ static bool seat_button_is_down(struct wlr_seat *seat, uint32_t button)
 static void pointer_button(syn_server_t *s, uint32_t time_msec,
                            uint32_t button, enum wl_pointer_button_state state)
 {
+    /* Same as the key path: the click that dismisses the saver must not also
+     * press whatever was underneath it. */
+    if (saver_ate_event(s)) return;
+
     notify_activity(s);
 
     /* A click is the user saying where they are. If this one opens a panel, it

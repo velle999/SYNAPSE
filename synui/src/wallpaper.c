@@ -72,7 +72,12 @@ static cairo_surface_t *decode_png(const char *path)
 
 /* ── Format detection + top-level decode ────────────────────── */
 
-static cairo_surface_t *wallpaper_decode(const char *path)
+/* Non-static since the lock background (lock.c) and the screensaver slideshow
+ * (saver.c) both want a wallpaper decoded exactly the way the desktop decodes
+ * one. A second decoder in either place would be a second set of format quirks
+ * to keep in step — and the JPEG path already lives in imgdec.c for that same
+ * reason. */
+cairo_surface_t *wallpaper_decode(const char *path)
 {
     char *resolved = wallpaper_expand_path(path);
     if (!resolved) return NULL;
@@ -116,9 +121,12 @@ const char *const syn_wallpaper_mode_names[SYN_WALLPAPER_MODE_COUNT] = {
     [SYN_WALLPAPER_TILE]    = "tile",
 };
 
-static void wallpaper_paint_box(cairo_t *cr, cairo_surface_t *src,
-                                 int dst_w, int dst_h,
-                                 syn_wallpaper_mode_t mode)
+/* Non-static for the same reason wallpaper_decode is: the lock background and
+ * the saver slideshow must scale a picture the way the desktop does, or the
+ * same wallpaper is framed differently on the lock screen than behind it. */
+void wallpaper_paint_box(cairo_t *cr, cairo_surface_t *src,
+                         int dst_w, int dst_h,
+                         syn_wallpaper_mode_t mode)
 {
     int sw = cairo_image_surface_get_width(src);
     int sh = cairo_image_surface_get_height(src);

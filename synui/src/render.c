@@ -367,6 +367,7 @@ const syn_welcome_entry_t synui_welcome_menu[] = {
     { "Display Settings", "Super+D",       "displays"  },
     { "Wallpaper",        "Super+W",       "wallpaper" },
     { "Power Saving",     "Super+P",       "power"     },
+    { "Screensaver",      "Super+Z",       "saver"     },
     { "Task Manager",     "Ctrl+Alt+Del",  "taskmgr"   },
     /* Here and NOT in the control panel. The control panel is for settings, and
      * a calculator has none — it was listed there when it was written, which
@@ -1543,6 +1544,129 @@ void synui_render_power(syn_server_t *s)
 
     cairo_destroy(cr);
     set_scene_buffer(&s->power_ui.text_buf, s->power_ui.tree, buf);
+}
+
+/* ── Screensaver panel (saver.c) ─────────────────────────── */
+
+void synui_render_saver(syn_server_t *s)
+{
+    syn_saver_t *v = &s->saver;
+
+    if (!v->visible) {
+        wlr_scene_node_set_enabled(&s->saver_ui.tree->node, false);
+        hit_clear(&v->hit);
+        return;
+    }
+
+    struct wlr_box ob;
+    get_output_box(s, &ob);
+
+    const int row_h = 30, top = 66, pad = 18;
+    int pw = 560;
+    int ph = top + SAVER_ROW_COUNT * row_h + 96;
+    int px = ob.x + (ob.width - pw) / 2, py = ob.y + (ob.height - ph) / 2;
+
+    wlr_scene_node_set_position(&s->saver_ui.tree->node, px, py);
+    wlr_scene_node_set_enabled(&s->saver_ui.tree->node, true);
+    wlr_scene_node_raise_to_top(&s->saver_ui.tree->node);
+
+    hit_set_panel(&v->hit, px, py, pw, ph);
+    hit_set_rows(&v->hit, 12, top - 16, pw - 24, row_h, SAVER_ROW_COUNT);
+
+    float bg_color[4];
+    panel_bg_color(bg_color, 0.94f);
+    float accent[4] = { g_panel_accent[0], g_panel_accent[1],
+                        g_panel_accent[2], 1.0f };
+    if (!s->saver_ui.bg)
+        s->saver_ui.bg = wlr_scene_rect_create(s->saver_ui.tree,
+                                               pw, ph, bg_color);
+    wlr_scene_rect_set_color(s->saver_ui.bg, bg_color);
+    if (!s->saver_ui.accent)
+        s->saver_ui.accent = wlr_scene_rect_create(s->saver_ui.tree,
+                                                   pw, 2, accent);
+    else
+        wlr_scene_rect_set_color(s->saver_ui.accent, accent);
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(pw, ph, &cr);
+    if (!buf) return;
+    cairo_begin(cr);
+
+    cairo_set_font_size(cr, 15);
+    set_accent(cr, 1.0);
+    cairo_move_to(cr, 18, 30);
+    syn_show_text(cr, "SCREENSAVER");
+
+    /* An inhibitor beats the timeout exactly as it beats the power stages, and
+     * a saver that never appears because Firefox is playing a video is the
+     * first thing anybody would report as broken. Say so where it cannot be
+     * missed, rather than letting the panel imply the countdown is running. */
+    cairo_set_font_size(cr, 12);
+    if (idle_inhibited(s)) {
+        cairo_set_source_rgba(cr, 0.95, 0.75, 0.25, 1.0);
+        cairo_move_to(cr, 18, 50);
+        syn_show_text(cr, "idle inhibited (media playing) \xc2\xb7 saver held");
+    } else if (!s->config.power_enabled) {
+        /* The saver is armed by power.c, so the master switch on the OTHER
+         * panel silently governs this one. Without this line the timeout row
+         * would read as active while nothing could ever fire. */
+        cairo_set_source_rgba(cr, 0.75, 0.45, 0.45, 1.0);
+        cairo_move_to(cr, 18, 50);
+        syn_show_text(cr, "power saving is off (Super+P) \xc2\xb7 saver disabled");
+    } else if (s->config.saver_timeout <= 0) {
+        set_ink(cr, INK_DIM, 0.9);
+        cairo_move_to(cr, 18, 50);
+        syn_show_text(cr, "no timeout set \xc2\xb7 p previews the current mode");
+    }
+
+    set_ink(cr, INK_RULE, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 18, 58);
+    cairo_line_to(cr, pw - 18, 58);
+    cairo_stroke(cr);
+
+    for (int i = 0; i < SAVER_ROW_COUNT; i++) {
+        int sel = (i == v->selected);
+        int ry = top + i * row_h;
+
+        if (sel) {
+            set_accent(cr, 0.35);
+            cairo_rectangle(cr, 12, ry - 16, pw - 24, row_h - 4);
+            cairo_fill(cr);
+        }
+
+        char name[48], value[48];
+        int off = saver_panel_rows(s, i, name, sizeof(name),
+                                   value, sizeof(value));
+
+        cairo_set_font_size(cr, 14);
+        set_ink(cr, sel ? INK_STRONG : INK_BODY, 1.0);
+        cairo_move_to(cr, pad + 8, ry + 4);
+        syn_show_text(cr, name);
+
+        if (off) set_ink(cr, INK_DIM, 1.0);
+        else     set_accent(cr, 1.0);
+        cairo_move_to(cr, 340, ry + 4);
+        syn_show_text(cr, value);
+    }
+
+    if (v->status[0]) {
+        cairo_set_font_size(cr, 12);
+        set_accent(cr, 0.9);
+        cairo_move_to(cr, 18, ph - 56);
+        syn_show_text(cr, v->status);
+    }
+
+    cairo_set_font_size(cr, 12);
+    set_ink(cr, INK_DIM, 0.9);
+    cairo_move_to(cr, 18, ph - 34);
+    syn_show_text(cr, "Up/Down select \xc2\xb7 Left/Right adjust \xc2\xb7 p preview");
+    cairo_move_to(cr, 18, ph - 16);
+    syn_show_text(cr, v->dirty ? "s save (unsaved changes) \xc2\xb7 Esc close"
+                               : "s save \xc2\xb7 Esc close");
+
+    cairo_destroy(cr);
+    set_scene_buffer(&s->saver_ui.text_buf, s->saver_ui.tree, buf);
 }
 
 /* ── CRT filter panel (filters.c) ────────────────────────── */
@@ -8230,6 +8354,7 @@ void synui_ui_init(syn_server_t *s)
      * can be raised above every window without dragging the panel with it. */
     s->power_ui.dim_tree = wlr_scene_tree_create(&s->scene->tree);
     wlr_scene_node_set_enabled(&s->power_ui.dim_tree->node, true);
+    s->saver_ui.tree   = wlr_scene_tree_create(&s->scene->tree);
     s->taskmgr_ui.tree = wlr_scene_tree_create(&s->scene->tree);
     s->news_ui.tree    = wlr_scene_tree_create(&s->scene->tree);
     s->filters_ui.tree = wlr_scene_tree_create(&s->scene->tree);

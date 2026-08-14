@@ -48,6 +48,7 @@
 #include <wlr/util/log.h>
 
 #include "synui.h"
+#include "contrast.h"   /* syn_ink_floor / CONTRAST_TARGET — see the palette below */
 
 /* Panel drawn on each output, centred. Fixed-size (not the whole output) so a
  * redraw allocates a ~kB buffer, not a full framebuffer, 30 times a second
@@ -67,15 +68,227 @@ static uint32_t lock_now_ms(void)
     return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
+/* ── Palette ─────────────────────────────────────────────────
+ *
+ * Every colour on this screen used to be a cairo literal — about twenty of
+ * them, all some shade of the SYNAPSE cyan. That made the lock screen and the
+ * greeter the two surfaces in the desktop that a theme switch did not reach,
+ * which is backwards: they are the screens people look at longest, and the
+ * first thing anyone sees at boot.
+ *
+ * They are also drawn over a background that is now a PHOTOGRAPH rather than
+ * flat black, so a fixed ink colour is not merely off-theme, it is a legibility
+ * bug — light text on a pale wallpaper. The dim/blur settings exist to keep the
+ * background dark enough for the ink below, and lock_ink() takes the same
+ * "position between surface and ink" approach the panels use, clamped by
+ * contrast.c so the lower rungs cannot collapse on a pale background.
+ *
+ * See project-synui-pale-theme-legibility: a literal is not a rung.
+ */
+
+/* The accent: the theme's, or the lock's own if it has been given one. */
+static void lock_accent_rgb(syn_server_t *s, double out[3])
+{
+    const float *a = s->config.lock_theme_follow ? s->config.panel_accent
+                                                 : s->config.lock_accent;
+    for (int i = 0; i < 3; i++) out[i] = a[i];
+}
+
+static void lock_set_accent(syn_server_t *s, cairo_t *cr, double alpha)
+{
+    double a[3];
+    lock_accent_rgb(s, a);
+    cairo_set_source_rgba(cr, a[0], a[1], a[2], alpha);
+}
+
+/* Ink at `level`, 0 = the background, 1 = full-strength text.
+ *
+ * The lock panel is drawn over the background rather than over a panel surface,
+ * so the "surface" this ladder runs from is what the background actually looks
+ * like after dimming — near-black by construction, since lock_bg_dim defaults
+ * to darkening whatever wallpaper is behind it. Ink is therefore near-white and
+ * the ladder is a straight fade, with syn_ink_floor() keeping the low rungs
+ * legible if someone dials the dim down to nothing over a bright picture. */
+static void lock_set_ink(syn_server_t *s, cairo_t *cr, double level, double alpha)
+{
+    /* The luminance actually measured off the built background, under the
+     * panel. See nlock.bg_lum — the earlier version guessed this from
+     * lock_bg_dim and guessed low on a pale wallpaper. */
+    double bg_lum = s->nlock.bg_lum;
+
+    const float bg[3]  = { (float)bg_lum, (float)bg_lum, (float)bg_lum };
+    const float ink[3] = { 0.93f, 0.98f, 1.0f };
+
+    double floor_lvl = syn_ink_floor(bg, ink, CONTRAST_TARGET);
+    if (level > 0.0 && level < floor_lvl) level = floor_lvl;
+
+    cairo_set_source_rgba(cr,
+                          bg[0] + (ink[0] - bg[0]) * level,
+                          bg[1] + (ink[1] - bg[1]) * level,
+                          bg[2] + (ink[2] - bg[2]) * level, alpha);
+}
+
+/* ── Background ──────────────────────────────────────────────
+ *
+ * The picture behind the clock panel. Built once when the lock engages: the
+ * decode is megabytes and the blur is a multi-pass filter over the whole
+ * output, neither of which belongs on the 30 Hz fade tick.
+ */
+
+/* Which image this output should show behind the lock, or NULL for plain black.
+ * Returns a path into the config, valid until the config changes. */
+static const char *lock_bg_path(syn_server_t *s, struct wlr_output *wo)
+{
+    switch (s->config.lock_bg) {
+    case SYN_LOCK_BG_BLACK:
+        return NULL;
+    case SYN_LOCK_BG_IMAGE:
+        return s->config.lock_bg_image[0] ? s->config.lock_bg_image : NULL;
+    case SYN_LOCK_BG_DESKTOP:
+    default: {
+        /* Whatever this monitor's wallpaper is — including a per-output
+         * override, so a two-screen setup locks to the two pictures it was
+         * already showing. */
+        syn_wallpaper_src_t src;
+        const char *path = NULL;
+        wallpaper_effective(&s->config, wo->name, &src, &path, NULL);
+
+        /* MATRIX has no still frame to grab, and a Workshop wallpaper is
+         * another process's layer surface we cannot read at all. Both fall
+         * back to black rather than to a stale or wrong picture. */
+        if (src != SYN_WP_SRC_IMAGE) return NULL;
+        return (path && *path) ? path : NULL;
+    }
+    }
+}
+
+/* Build one output's background buffer. NULL-safe throughout: every failure
+ * path leaves pane[i].bg NULL, and the black backstop under it is what shows. */
+static void lock_bg_build_pane(syn_server_t *s, int i)
+{
+    struct wlr_output *wo = s->nlock.pane[i].output;
+    if (!wo) return;
+
+    struct wlr_box box;
+    wlr_output_layout_get_box(s->output_layout, wo, &box);
+    if (box.width <= 0 || box.height <= 0) return;
+
+    const char *path = lock_bg_path(s, wo);
+    if (!path) return;                       /* black, by choice or by fallback */
+
+    cairo_surface_t *img = wallpaper_decode(path);
+    if (!img) return;                        /* wallpaper_decode logged it */
+
+    cairo_t *cr;
+    struct wlr_buffer *buf = create_cairo_buf(box.width, box.height, &cr);
+    if (!buf) { cairo_surface_destroy(img); return; }
+    cairo_begin(cr);
+
+    /* Scale it the way the desktop scales it, so the lock shows the same
+     * framing as the screen it just covered. */
+    wallpaper_paint_box(cr, img, box.width, box.height, SYN_WALLPAPER_FILL);
+    cairo_surface_destroy(img);
+
+    /* Blur BEFORE dimming: blurring the dimmed image gives the same result
+     * (both are linear), but dimming first means the blur runs over darker
+     * pixels and any clipping happens twice. Flush so the blur sees the paint. */
+    if (s->config.lock_bg_blur > 0) {
+        cairo_surface_t *target = cairo_get_target(cr);
+        syn_surface_blur(target, s->config.lock_bg_blur);
+    }
+
+    if (s->config.lock_bg_dim > 0) {
+        cairo_set_source_rgba(cr, 0, 0, 0, s->config.lock_bg_dim / 100.0);
+        cairo_paint(cr);
+    }
+
+    /* Measure what the ink will actually sit on, before the cairo_t goes.
+     *
+     * Only the panel's own rect matters — a wallpaper can be black at the edges
+     * and white in the middle, and it is the middle the clock is drawn over.
+     * Whichever pane measures LIGHTEST wins, because one ladder is shared by
+     * every output and the safe choice is the one that stays legible on the
+     * brightest of them. */
+    {
+        cairo_surface_t *tgt = cairo_get_target(cr);
+        cairo_surface_flush(tgt);
+        const unsigned char *px = cairo_image_surface_get_data(tgt);
+        int stride = cairo_image_surface_get_stride(tgt);
+
+        if (px) {
+            int x0 = (box.width  - LOCK_PANEL_W) / 2;
+            int y0 = (box.height - LOCK_PANEL_H) / 2;
+            if (x0 < 0) x0 = 0;
+            if (y0 < 0) y0 = 0;
+            int x1 = x0 + LOCK_PANEL_W; if (x1 > box.width)  x1 = box.width;
+            int y1 = y0 + LOCK_PANEL_H; if (y1 > box.height) y1 = box.height;
+
+            /* Every 4th pixel each way: 16x fewer samples for a mean that is
+             * indistinguishable at this precision. */
+            double sum = 0; long n = 0;
+            for (int y = y0; y < y1; y += 4) {
+                const unsigned char *row = px + (size_t)y * stride;
+                for (int x = x0; x < x1; x += 4) {
+                    /* Premultiplied ARGB32, little-endian: B,G,R,A. The buffer
+                     * is opaque here (the wallpaper was painted over the whole
+                     * rect), so premultiplied equals straight. */
+                    sum += syn_rel_luminance(row[x * 4 + 2] / 255.0,
+                                             row[x * 4 + 1] / 255.0,
+                                             row[x * 4 + 0] / 255.0);
+                    n++;
+                }
+            }
+            if (n > 0) {
+                double lum = sum / n;
+                if (lum > s->nlock.bg_lum) s->nlock.bg_lum = lum;
+            }
+        }
+    }
+
+    cairo_destroy(cr);
+
+    set_scene_buffer(&s->nlock.pane[i].bg, s->nlock.tree, buf);
+    if (s->nlock.pane[i].bg) {
+        wlr_scene_node_set_position(&s->nlock.pane[i].bg->node, box.x, box.y);
+
+        /* Above the black backstop, below every clock panel. On the first
+         * build the panels do not exist yet and lock_render puts them on top
+         * naturally; on a REBUILD (the Super+Z panel changing a row while the
+         * screen is locked) this node is new and therefore topmost, so the
+         * panels have to be lifted back over it. */
+        for (int j = 0; j < s->nlock.npane; j++)
+            if (s->nlock.pane[j].buf)
+                wlr_scene_node_raise_to_top(&s->nlock.pane[j].buf->node);
+    }
+}
+
+void lock_bg_invalidate(syn_server_t *s)
+{
+    if (!s->nlock.active || !s->nlock.tree) return;
+
+    /* Recomputed from scratch below — it is a running maximum over the panes,
+     * so it has to start at black or a previous, brighter wallpaper would go
+     * on setting the ink ladder after it was replaced. */
+    s->nlock.bg_lum = 0.0;
+
+    for (int i = 0; i < s->nlock.npane; i++) {
+        if (s->nlock.pane[i].bg) {
+            wlr_scene_node_destroy(&s->nlock.pane[i].bg->node);
+            s->nlock.pane[i].bg = NULL;
+        }
+        lock_bg_build_pane(s, i);
+    }
+}
+
 /* ── Drawing ─────────────────────────────────────────────── */
 
 /* Draw one "label: " prefix, set its colour by focus, and hand back the pen
  * advance so the caller can place the value right after it. */
-static double lock_field_label(cairo_t *cr, double x, double y,
+static double lock_field_label(syn_server_t *s, cairo_t *cr, double x, double y,
                                const char *lab, int focused, double a)
 {
-    if (focused) cairo_set_source_rgba(cr, 0.45, 0.90, 0.85, a);   /* accent cyan */
-    else         cairo_set_source_rgba(cr, 0.38, 0.50, 0.55, a);   /* dim */
+    if (focused) lock_set_accent(s, cr, a);
+    else         lock_set_ink(s, cr, 0.45, a);
     cairo_move_to(cr, x, y);
     syn_show_text(cr, lab);
     cairo_text_extents_t te;
@@ -98,9 +311,8 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     cairo_text_extents_t te;
 
     /* ── user row ── */
-    double adv = lock_field_label(cr, lx, y_user, "user: ", editing_user, a);
-    if (editing_user) cairo_set_source_rgba(cr, 0.90, 0.98, 1.0, a);
-    else              cairo_set_source_rgba(cr, 0.60, 0.68, 0.75, a);
+    double adv = lock_field_label(s, cr, lx, y_user, "user: ", editing_user, a);
+    lock_set_ink(s, cr, editing_user ? 0.97 : 0.62, a);
     cairo_move_to(cr, lx + adv, y_user);
     syn_show_text(cr, s->greetd.user);
     if (editing_user) {              /* a caret marks the focused, editable field */
@@ -110,31 +322,37 @@ static void lock_draw_greeter_fields(syn_server_t *s, cairo_t *cr, double cx, do
     }
 
     /* ── pass row ── */
-    adv = lock_field_label(cr, lx, y_pass, "pass: ", !editing_user, a);
+    adv = lock_field_label(s, cr, lx, y_pass, "pass: ", !editing_user, a);
     int dots = s->nlock.pw_len;
     if (dots > 24) dots = 24;
     if (dots > 0) {
         double r = 4, gap = 15, dx = lx + adv + 6;
-        cairo_set_source_rgba(cr, 0.75, 0.85, 0.92, a);
+        lock_set_ink(s, cr, 0.82, a);
         for (int i = 0; i < dots; i++) {
             cairo_arc(cr, dx + i * gap, y_pass - 7, r, 0, 2 * 3.14159265);
             cairo_fill(cr);
         }
     } else if (!editing_user) {       /* focused and empty: show the caret here */
-        cairo_set_source_rgba(cr, 0.75, 0.85, 0.92, a);
+        lock_set_ink(s, cr, 0.82, a);
         cairo_move_to(cr, lx + adv, y_pass);
         syn_show_text(cr, "_");
     }
 
-    /* ── status line ── */
+    /* ── status line ──
+     *
+     * A rejection stays RED rather than becoming the accent. It is the one
+     * colour on this screen that is not decoration: "wrong password" has to
+     * read as wrong under every theme, and a theme whose accent happens to be
+     * green would otherwise print a failure in the colour of success. */
     const char *msg = NULL;
-    double mr = 0, mg = 0, mb = 0;
-    if (s->nlock.failed)     { msg = "Wrong password"; mr = 1.0;  mg = 0.36; mb = 0.42; }
-    else if (s->nlock.busy)  { msg = "Checking\xe2\x80\xa6"; mr = 0.45; mg = 0.9; mb = 0.85; }
+    int failed = 0;
+    if (s->nlock.failed)     { msg = "Wrong password"; failed = 1; }
+    else if (s->nlock.busy)  { msg = "Checking\xe2\x80\xa6"; }
     if (msg) {
         cairo_set_font_size(cr, 16);
         syn_text_extents(cr, msg, &te);
-        cairo_set_source_rgba(cr, mr, mg, mb, a);
+        if (failed) cairo_set_source_rgba(cr, 1.0, 0.36, 0.42, a);
+        else        lock_set_accent(s, cr, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 332);
         syn_show_text(cr, msg);
     }
@@ -176,18 +394,20 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
     cairo_set_font_size(cr, 120);
     cairo_text_extents_t te;
     syn_text_extents(cr, hhmm, &te);
-    /* A soft cyan glow, then the glyphs — the SYNAPSE accent. */
-    cairo_set_source_rgba(cr, 0.02, 0.85, 0.75, 0.18 * a);
+    /* A soft glow in the accent, then the glyphs. Was the SYNAPSE cyan as a
+     * literal; it is the theme's accent now, so a theme switch reaches the
+     * lock screen like it reaches every panel. */
+    lock_set_accent(s, cr, 0.18 * a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing + 2, 150 + 2);
     syn_show_text(cr, hhmm);
-    cairo_set_source_rgba(cr, 0.85, 0.98, 1.0, a);
+    lock_set_ink(s, cr, 0.97, a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 150);
     syn_show_text(cr, hhmm);
 
     /* AM/PM, small, trailing the clock — nothing at all on a 24-hour clock. */
     if (ampm[0]) {
         cairo_set_font_size(cr, 30);
-        cairo_set_source_rgba(cr, 0.45, 0.9, 0.85, a);
+        lock_set_accent(s, cr, a);
         cairo_move_to(cr, cx + te.width / 2 + 12, 150);
         syn_show_text(cr, ampm);
     }
@@ -197,7 +417,7 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
                            CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 24);
     syn_text_extents(cr, date, &te);
-    cairo_set_source_rgba(cr, 0.62, 0.72, 0.80, a);
+    lock_set_ink(s, cr, 0.66, a);
     cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 205);
     syn_show_text(cr, date);
 
@@ -221,7 +441,7 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
         const char *msg = "Checking\xe2\x80\xa6";
         cairo_set_font_size(cr, 18);
         syn_text_extents(cr, msg, &te);
-        cairo_set_source_rgba(cr, 0.45, 0.9, 0.85, a);
+        lock_set_accent(s, cr, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 275);
         syn_show_text(cr, msg);
     } else if (s->nlock.pw_len > 0) {
@@ -231,7 +451,7 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
         double r = 5, gap = 18;
         double total = (dots - 1) * gap;
         double x = cx - total / 2;
-        cairo_set_source_rgba(cr, 0.75, 0.85, 0.92, a);
+        lock_set_ink(s, cr, 0.82, a);
         for (int i = 0; i < dots; i++) {
             cairo_arc(cr, x + i * gap, 268, r, 0, 2 * 3.14159265);
             cairo_fill(cr);
@@ -248,7 +468,7 @@ static void lock_draw_panel(syn_server_t *s, cairo_t *cr)
                                CAIRO_FONT_WEIGHT_NORMAL);
         cairo_set_font_size(cr, 15);
         syn_text_extents(cr, s->nlock.fp_msg, &te);
-        cairo_set_source_rgba(cr, 0.55, 0.68, 0.76, a);
+        lock_set_ink(s, cr, 0.58, a);
         cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, 312);
         syn_show_text(cr, s->nlock.fp_msg);
     }
@@ -308,6 +528,10 @@ void lock_output_destroy(syn_output_t *o)
             wlr_scene_node_destroy(&s->nlock.pane[i].buf->node);
             s->nlock.pane[i].buf = NULL;
         }
+        if (s->nlock.pane[i].bg) {
+            wlr_scene_node_destroy(&s->nlock.pane[i].bg->node);
+            s->nlock.pane[i].bg = NULL;
+        }
         s->nlock.pane[i].output = NULL;
     }
 }
@@ -336,6 +560,10 @@ void lock_output_create(syn_output_t *o)
     }
     s->nlock.pane[slot].output = o->wlr_output;
     s->nlock.pane[slot].buf    = NULL;
+    s->nlock.pane[slot].bg     = NULL;
+    /* A monitor that appears mid-lock needs its background built too, or the
+     * screen that comes back after a resume is the only black one. */
+    lock_bg_build_pane(s, slot);
     lock_render(s);
 }
 
@@ -915,8 +1143,14 @@ void synui_lock(syn_server_t *s)
             break;
         s->nlock.pane[s->nlock.npane].output = o->wlr_output;
         s->nlock.pane[s->nlock.npane].buf    = NULL;
+        s->nlock.pane[s->nlock.npane].bg     = NULL;
         s->nlock.npane++;
     }
+
+    /* The wallpaper behind the panel. Built here, once, while the panes are
+     * known and before lock_render draws over it — a decode plus a blur per
+     * output, which is why it is not on any timer. */
+    lock_bg_invalidate(s);
 
     struct wl_event_loop *loop = wl_display_get_event_loop(s->display);
     s->nlock.t_clock = wl_event_loop_add_timer(loop, lock_clock_cb, s);
@@ -955,7 +1189,10 @@ void synui_unlock(syn_server_t *s)
         wlr_scene_node_destroy(&s->nlock.tree->node);   /* takes the panes with it */
         s->nlock.tree = NULL;
     }
-    for (int i = 0; i < s->nlock.npane; i++) s->nlock.pane[i].buf = NULL;
+    for (int i = 0; i < s->nlock.npane; i++) {
+        s->nlock.pane[i].buf = NULL;
+        s->nlock.pane[i].bg  = NULL;   /* destroyed with the tree above */
+    }
     s->nlock.npane = 0;
 
     explicit_bzero(s->nlock.pw, sizeof(s->nlock.pw));

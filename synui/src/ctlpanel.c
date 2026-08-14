@@ -598,6 +598,8 @@ static const struct ctl_item ctl_items[] = {
     /* Power */
     { CTL_ROW_POWER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Power saving", "power",
       .section = "Power", .help = "Idle timeouts for dim, blank, lock and suspend" },
+    { CTL_ROW_SAVER, CTL_CAT_POWER, CTL_KIND_PANEL,  "Screensaver",  "saver",
+      .help = "What the screen shows when idle, and how the lock screen looks" },
     { CTL_ROW_LOCK,  CTL_CAT_POWER, CTL_KIND_ACTION, "Lock screen",  "lock"  },
     /* No .apply: nothing to re-run, because the reader is started by the NEXT
      * lock. Turning it off while a lock screen is up is not a case that exists —
@@ -1431,6 +1433,7 @@ static const char *action_desc(const char *action, const char *arg)
         { "sounds",            "Event sounds" },
         { "effects_toggle",    "CRT effects on/off" },
         { "power",             "Power saving panel" },
+        { "saver",             "Screensaver + lock screen" },
         { "taskmgr",           "Task manager" },
         { "aimodel",           "AI model" },
         { "network",           "Network / Wi-Fi" },
@@ -1880,6 +1883,7 @@ static int ctl_child_is_up(syn_server_t *s, const char *action)
     if (strcmp(action, "sounds") == 0)    return s->sound.visible;
     if (strcmp(action, "bluetooth") == 0) return s->bt.visible;
     if (strcmp(action, "power") == 0)     return s->power.visible;
+    if (strcmp(action, "saver") == 0)     return s->saver.visible;
     if (strcmp(action, "taskmgr") == 0)   return s->taskmgr.visible;
     if (strcmp(action, "aimodel") == 0)   return s->aimodel.visible;
     if (strcmp(action, "news") == 0)      return s->news.visible;

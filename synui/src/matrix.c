@@ -64,6 +64,15 @@ struct syn_matrix {
     double     start;    /* CLOCK_MONOTONIC secs at init; t = now - start */
     int        gl_ready; /* fx_renderer hides its EGL context; capture dpy/ctx +
                           * build program/atlas lazily on the first frame. */
+    /* Sticky: the deferred setup above failed and will fail again. Without it
+     * every frame retried the same shader compile and logged the same three
+     * errors at the refresh rate, and — worse — matrix_usable() had no way to
+     * tell a caller that the rain is never going to appear. The SCREENSAVER
+     * needs that answer: it falls back to drawing the clock, because a saver
+     * showing a black screen because the GPU said no reads as a broken
+     * machine. Not cleared on its own; nothing that failed here recovers
+     * without a restart. */
+    int        gl_failed;
 };
 
 static double now_secs(void)
@@ -383,10 +392,25 @@ bool matrix_active(syn_server_t *s)
     return false;
 }
 
+/* Can the rain actually be drawn? NOT the same question as `s->matrix != NULL`:
+ * matrix_init only ARMS the backend, and the shader and atlas are built on the
+ * first frame, so a missing atlas or a shader that will not compile is not
+ * known until then. Callers choosing a mode ahead of time (saver.c) must ask
+ * this, or they select a mode that renders nothing. */
+bool matrix_usable(syn_server_t *s)
+{
+    return s->matrix && !s->matrix->gl_failed;
+}
+
 bool matrix_output_active(syn_output_t *o)
 {
     syn_server_t *s = o->server;
     if (!s->matrix) return false;
+
+    /* The screensaver drives EVERY output when it is the matrix mode, whatever
+     * each one's wallpaper says — a saver that covered only the monitor whose
+     * wallpaper happened to be the rain would be a strange thing to ship. */
+    if (saver_wants_matrix(s)) return true;
 
     syn_wallpaper_src_t src;
     wallpaper_effective(&s->config, o->wlr_output->name, &src, NULL, NULL);
@@ -418,6 +442,9 @@ bool matrix_output_frame(syn_output_t *o)
         matrix_output_destroy(o);
         return false;
     }
+
+    /* Already known to be impossible — do not retry the compile once a frame. */
+    if (m->gl_failed) return false;
 
     /* Rotated outputs need no special handling: we render offscreen into a
      * scene buffer sized to the *transformed* resolution (so a portrait
@@ -481,6 +508,7 @@ bool matrix_output_frame(syn_output_t *o)
         if (!ok) {
             wlr_log(WLR_ERROR, "matrix: could not capture fx EGL context / "
                     "build shader — animated wallpaper off");
+            m->gl_failed = 1;
             wlr_buffer_unlock(dst);
             return false;
         }
@@ -520,21 +548,36 @@ bool matrix_output_frame(syn_output_t *o)
 
     mx_restore(&saved);
 
-    /* Hand the freshly-rendered buffer to the scene node (a sibling of the
-     * static wallpaper under wallpaper_tree). The node takes its own lock, so
-     * release our acquire lock — the swapchain reclaims the buffer once the
-     * node drops it on the next frame's set_buffer. */
+    /* Where the buffer hangs is the ONLY thing that differs between the rain's
+     * two jobs. As the wallpaper it is a sibling of the static wallpaper under
+     * wallpaper_tree, lowered under every window. As the screensaver it belongs
+     * to the saver's own tree, raised over all of them. Same shader, same
+     * swapchain, same buffer — so this is the one place that has to know which
+     * job it is doing.
+     *
+     * The node is REPARENTED rather than rebuilt when the job changes: the
+     * saver coming up must not cost a swapchain teardown, and a node left under
+     * wallpaper_tree would draw the rain underneath the windows the saver is
+     * supposed to be covering. */
+    bool as_saver = saver_wants_matrix(s);
+    struct wlr_scene_tree *parent = as_saver ? s->saver.tree : s->wallpaper_tree;
+
+    /* The node takes its own lock, so release our acquire lock — the swapchain
+     * reclaims the buffer once the node drops it on the next set_buffer. */
     if (!o->matrix_buf) {
-        o->matrix_buf = wlr_scene_buffer_create(s->wallpaper_tree, dst);
+        o->matrix_buf = wlr_scene_buffer_create(parent, dst);
     } else {
         wlr_scene_buffer_set_buffer(o->matrix_buf, dst);
+        if (o->matrix_buf->node.parent != parent)
+            wlr_scene_node_reparent(&o->matrix_buf->node, parent);
     }
     wlr_buffer_unlock(dst);
     if (!o->matrix_buf) return false;
 
     wlr_scene_buffer_set_dest_size(o->matrix_buf, box.width, box.height);
     wlr_scene_node_set_position(&o->matrix_buf->node, box.x, box.y);
-    wlr_scene_node_lower_to_bottom(&o->matrix_buf->node);
+    if (as_saver) wlr_scene_node_raise_to_top(&o->matrix_buf->node);
+    else          wlr_scene_node_lower_to_bottom(&o->matrix_buf->node);
 
     return true;   /* keep animating: caller schedules the next frame */
 }

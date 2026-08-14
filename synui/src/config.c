@@ -701,6 +701,10 @@ static void seed_default_binds(syn_config_t *cfg)
         { "super+shift+w",   "wallpaper_reload" },
         { "super+e",         "filters" },
         { "super+p",         "power" },
+        /* The screensaver panel. Z for zzz — the only mnemonic anybody guesses
+         * for a screensaver, and one of the few unbound letters left: S is the
+         * sound picker, Shift+S the region screenshot. */
+        { "super+z",         "saver" },
         /* Cursor theme picker. "pointer" rather than "cursor" because super+c is
          * the control panel and super+shift+c is cat mode — C was gone twice
          * over before this feature existed. */
@@ -1064,6 +1068,32 @@ static void config_set_defaults(syn_config_t *cfg)
     cfg->wallpaper_src  = SYN_WP_SRC_IMAGE;
     cfg->wallpaper_out_n = 0;   /* every monitor follows the keys above */
 
+    /* Screensaver (saver.c). OFF by default — saver_timeout 0 — so an existing
+     * install's idle behaviour is exactly what it was until the saver is asked
+     * for. The MODE still defaults to something worth looking at, so turning it
+     * on is one keypress in the Super+Z panel rather than two. */
+    cfg->saver_timeout  = 0;
+    cfg->saver_mode     = SYN_SAVER_CLOCK;
+    cfg->saver_lock     = 0;
+    cfg->saver_dir[0]   = '\0';   /* empty = the wallpapers the picker offers */
+    cfg->saver_interval = 30;
+
+    /* Lock / greeter appearance. DESKTOP is the default: the lock shows the
+     * wallpaper it just covered, dimmed enough to read a password over. 55% and
+     * a 16px blur were picked by looking at the bundled wallpaper and the
+     * photos in ~/Pictures/Wallpapers — dark enough for the ink ladder in
+     * lock.c, light enough that the picture is still recognisably there. */
+    cfg->lock_bg           = SYN_LOCK_BG_DESKTOP;
+    cfg->lock_bg_image[0]  = '\0';
+    cfg->lock_bg_dim       = 55;
+    cfg->lock_bg_blur      = 16;
+    cfg->lock_theme_follow = 1;
+    /* Only consulted when lock_theme_follow is off; seeded with the SYNAPSE
+     * cyan the lock screen was hardcoded to before it was themeable, so
+     * switching to "custom" lands on the old look rather than on black. */
+    cfg->lock_accent[0] = 0.45f; cfg->lock_accent[1] = 0.90f;
+    cfg->lock_accent[2] = 0.85f; cfg->lock_accent[3] = 1.0f;
+
     /* Empty theme = inherit XCURSOR_THEME, which is exactly what synui did
      * before cursor.c existed, so an untouched system behaves identically.
      * 24 matches the size the compositor was previously hardcoded to. */
@@ -1332,6 +1362,7 @@ void synui_config_load(syn_config_t *cfg)
         cursor_state_load(cfg);
         dock_state_load(cfg);
         power_state_load(cfg);
+        saver_state_load(cfg);
         welcome_state_load(cfg);
         launcher_state_load(cfg);
         record_state_load(cfg);
@@ -1386,6 +1417,7 @@ void synui_config_load(syn_config_t *cfg)
     cursor_state_load(cfg);
     dock_state_load(cfg);
     power_state_load(cfg);
+    saver_state_load(cfg);
     welcome_state_load(cfg);
     launcher_state_load(cfg);
     record_state_load(cfg);
@@ -1766,6 +1798,61 @@ void config_parse_kv(syn_config_t *cfg, const char *key, char *val)
         if (cfg->accel_speed < -1.0f) cfg->accel_speed = -1.0f;
         if (cfg->accel_speed >  1.0f) cfg->accel_speed =  1.0f;
         cfg->accel_speed_set = 1;
+    }
+    /* ── Screensaver + lock appearance (saver.c / lock.c) ── */
+    else if (strcmp(key, "screensaver") == 0) {
+        /* A mode name, or `off`. `off` is spelled as its own word rather than
+         * as `blank` because the two differ: blank is a mode that draws black,
+         * off means no saver stage at all. */
+        if (strcmp(val, "off") == 0) {
+            cfg->saver_timeout = 0;
+        } else {
+            int m = saver_mode_from_name(val);
+            if (m >= 0) cfg->saver_mode = m;
+            else wlr_log(WLR_ERROR, "synui: config: unknown screensaver '%s'", val);
+        }
+    }
+    else if (strcmp(key, "screensaver_timeout") == 0) {
+        int v = atoi(val);
+        cfg->saver_timeout = v < 0 ? 0 : v;
+    }
+    else if (strcmp(key, "screensaver_lock") == 0)
+        cfg->saver_lock = strcmp(val, "on") == 0;
+    else if (strcmp(key, "screensaver_dir") == 0)
+        snprintf(cfg->saver_dir, sizeof(cfg->saver_dir), "%s", val);
+    else if (strcmp(key, "screensaver_interval") == 0) {
+        int v = atoi(val);
+        if (v >= 5 && v <= 600) cfg->saver_interval = v;
+        else wlr_log(WLR_ERROR, "synui: config: screensaver_interval %d out of "
+                     "range (5-600)", v);
+    }
+    else if (strcmp(key, "lock_background") == 0) {
+        int b = lock_bg_from_name(val);
+        if (b >= 0) {
+            cfg->lock_bg = b;
+        } else {
+            /* Anything that is not one of the three names is taken as a path,
+             * which is the spelling people reach for first. */
+            cfg->lock_bg = SYN_LOCK_BG_IMAGE;
+            snprintf(cfg->lock_bg_image, sizeof(cfg->lock_bg_image), "%s", val);
+        }
+    }
+    else if (strcmp(key, "lock_dim") == 0) {
+        int v = atoi(val);
+        cfg->lock_bg_dim = v < 0 ? 0 : (v > 100 ? 100 : v);
+    }
+    else if (strcmp(key, "lock_blur") == 0) {
+        int v = atoi(val);
+        cfg->lock_bg_blur = v < 0 ? 0 : (v > 64 ? 64 : v);
+    }
+    else if (strcmp(key, "lock_accent") == 0) {
+        /* A colour here means "do not follow the theme" — naming one and then
+         * having it ignored because a separate flag was left on is exactly the
+         * kind of stranded setting this tree keeps finding. */
+        if (parse_hex_color(val, cfg->lock_accent))
+            cfg->lock_theme_follow = 0;
+        else
+            wlr_log(WLR_ERROR, "synui: config: bad lock_accent '%s'", val);
     }
     else if (strcmp(key, "wallpaper") == 0) {
         /* Built-in keywords select a bundled wallpaper; anything else is
