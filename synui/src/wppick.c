@@ -626,13 +626,14 @@ static int wp_cmp(const void *a, const void *b)
     return strcasecmp((const char *)a, (const char *)b);
 }
 
-static void wppick_scan_dir(syn_server_t *s, const char *dir)
+static void wppick_scan_dir(char (*out)[256], int *count, int max,
+                            const char *dir)
 {
     DIR *d = opendir(dir);
     if (!d) return;
 
     struct dirent *e;
-    while ((e = readdir(d)) && s->wppick.found_count < WPPICK_FOUND_MAX) {
+    while ((e = readdir(d)) && *count < max) {
         if (e->d_name[0] == '.') continue;
         if (!wp_is_image(e->d_name)) continue;
 
@@ -647,21 +648,23 @@ static void wppick_scan_dir(syn_server_t *s, const char *dir)
          * under its filename would just be a duplicate row. */
         if (strcmp(path, SYNUI_DATADIR "/wallpaper.png") == 0) continue;
 
-        for (int i = 0; i < s->wppick.found_count; i++)
-            if (strcmp(s->wppick.found[i], path) == 0) goto next;
+        for (int i = 0; i < *count; i++)
+            if (strcmp(out[i], path) == 0) goto next;
 
-        snprintf(s->wppick.found[s->wppick.found_count++],
-                 sizeof(s->wppick.found[0]), "%s", path);
+        snprintf(out[(*count)++], sizeof(out[0]), "%s", path);
     next:
         ;
     }
     closedir(d);
 }
 
-/* Where people actually keep wallpapers. Scanned in order, deduped by path. */
-void wppick_scan(syn_server_t *s)
+/* Where people actually keep wallpapers. Scanned in order, deduped by path.
+ * Writes into the caller's array so the saver panel's "Lock image" row can
+ * offer exactly the same pictures without borrowing (and clobbering) the
+ * picker's own list, which stays live for as long as its panel is open. */
+int wppick_scan_into(char (*out)[256], int max)
 {
-    s->wppick.found_count = 0;
+    int count = 0;
 
     const char *home = getenv("HOME");
     if (home && *home) {
@@ -675,19 +678,24 @@ void wppick_scan(syn_server_t *s)
         for (size_t i = 0; i < sizeof(rel) / sizeof(rel[0]); i++) {
             char dir[256];
             if (snprintf(dir, sizeof(dir), "%s%s", home, rel[i]) < (int)sizeof(dir))
-                wppick_scan_dir(s, dir);
+                wppick_scan_dir(out, &count, max, dir);
         }
     }
 
-    wppick_scan_dir(s, "/usr/share/backgrounds");
-    wppick_scan_dir(s, "/usr/share/wallpapers");
+    wppick_scan_dir(out, &count, max, "/usr/share/backgrounds");
+    wppick_scan_dir(out, &count, max, "/usr/share/wallpapers");
 
     /* Stable, predictable order — readdir's is neither, and a list that
      * reshuffles between openings is miserable to use. */
-    qsort(s->wppick.found, (size_t)s->wppick.found_count,
-          sizeof(s->wppick.found[0]), wp_cmp);
+    qsort(out, (size_t)count, sizeof(out[0]), wp_cmp);
 
-    wlr_log(WLR_INFO, "synui: wppick: %d image(s) found", s->wppick.found_count);
+    wlr_log(WLR_INFO, "synui: wppick: %d image(s) found", count);
+    return count;
+}
+
+void wppick_scan(syn_server_t *s)
+{
+    s->wppick.found_count = wppick_scan_into(s->wppick.found, WPPICK_FOUND_MAX);
 }
 
 /* ── Browse: Steam Workshop (Wallpaper Engine) ───────────── */

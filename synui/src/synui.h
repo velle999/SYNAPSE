@@ -2467,6 +2467,7 @@ typedef enum {
     SAVER_ROW_LOCK,
     SAVER_ROW_INTERVAL,     /* slideshow seconds per image */
     SAVER_ROW_LOCK_BG,      /* lock/greeter background source */
+    SAVER_ROW_LOCK_IMAGE,   /* which picture, when that source is "image" */
     SAVER_ROW_LOCK_DIM,
     SAVER_ROW_LOCK_BLUR,
     SAVER_ROW_LOCK_THEME,   /* follow the desktop theme, or not */
@@ -2548,6 +2549,13 @@ typedef struct {
     uint32_t slide_started_ms;
     cairo_surface_t *slide_surf;   /* the image showing now */
     cairo_surface_t *slide_prev;   /* the one crossfading out */
+
+    /* The pictures the "Lock image" row steps through — the same scan the
+     * Super+W picker browses with. Built on first use and dropped when the
+     * panel closes, so a picture added since last time is picked up, and a
+     * visit that never touches the row never stats a directory. */
+    char   (*lock_imgs)[256];
+    int      nlock_imgs;
 
     /* STARFIELD */
     syn_star_t stars[SYN_SAVER_STARS];
@@ -6484,6 +6492,10 @@ extern const int wppick_option_count;
 void wppick_show(syn_server_t *s);
 /* Rescan the wallpaper directories into s->wppick.found[] (the "browse" list). */
 void wppick_scan(syn_server_t *s);
+/* The same scan, into a caller's array — the saver panel's "Lock image" row
+ * walks the identical list, and where wallpapers live belongs in one place.
+ * Returns how many paths were written; the result is sorted and deduped. */
+int  wppick_scan_into(char (*out)[256], int max);
 /* Rows in the panel: the built-in options, then every image the scan found. */
 int  wppick_total(syn_server_t *s);
 /* Label + subtitle for one row; wppick.c owns the text, render.c draws it. */

@@ -201,6 +201,31 @@ static void saver_drop_slides(syn_saver_t *sv)
     if (sv->slide_prev) { cairo_surface_destroy(sv->slide_prev); sv->slide_prev = NULL; }
 }
 
+/* ── Lock background image list ──────────────────────────── */
+
+/* The pictures the panel's "Lock image" row walks, built on first use. The
+ * same scan the Super+W picker browses with, so the two lists cannot drift —
+ * into our own array rather than the picker's, which is live for as long as
+ * its panel is open. False when there is nothing to offer. */
+static bool saver_lock_imgs(syn_server_t *s)
+{
+    syn_saver_t *sv = &s->saver;
+
+    if (!sv->lock_imgs) {
+        sv->lock_imgs = calloc(WPPICK_FOUND_MAX, sizeof(sv->lock_imgs[0]));
+        if (!sv->lock_imgs) return false;
+        sv->nlock_imgs = wppick_scan_into(sv->lock_imgs, WPPICK_FOUND_MAX);
+    }
+    return sv->nlock_imgs > 0;
+}
+
+static void saver_drop_lock_imgs(syn_saver_t *sv)
+{
+    free(sv->lock_imgs);
+    sv->lock_imgs  = NULL;
+    sv->nlock_imgs = 0;
+}
+
 /* Move to the next image, keeping the outgoing one for the crossfade. Only one
  * decoded image plus the one fading out is ever held: a full-screen decode is
  * megabytes, and a slideshow holding ten would cost more resident memory than
@@ -800,6 +825,7 @@ void saver_finish(syn_server_t *s)
     saver_dismiss(s, false);
     free(s->saver.slides);
     s->saver.slides = NULL;
+    saver_drop_lock_imgs(&s->saver);
 }
 
 /* ── Settings panel (Super+Z) ────────────────────────────── */
@@ -812,11 +838,59 @@ static const char *saver_row_label(int row)
     case SAVER_ROW_LOCK:       return "Lock on wake";
     case SAVER_ROW_INTERVAL:   return "Slide interval";
     case SAVER_ROW_LOCK_BG:    return "Lock background";
+    case SAVER_ROW_LOCK_IMAGE: return "Lock image";
     case SAVER_ROW_LOCK_DIM:   return "Lock dim";
     case SAVER_ROW_LOCK_BLUR:  return "Lock blur";
     case SAVER_ROW_LOCK_THEME: return "Lock colours";
     default:                   return "?";
     }
+}
+
+/* ── The lock background's own picture ───────────────────────
+ *
+ * `lock_background = image` used to be a source with no way to name the image
+ * short of editing synuirc — the panel offered the option and then said
+ * nothing, and an empty lock_bg_image locks to plain black, so choosing it
+ * looked like it had done nothing at all. The row below walks the pictures
+ * saver_lock_imgs() found.
+ */
+
+/* Step to the next (dir > 0) or previous picture, wrapping. A path set from
+ * synuirc that is not in the list simply is not found — start at one end
+ * rather than refusing to move, which would strand the row. */
+static bool saver_lock_image_step(syn_server_t *s, int dir)
+{
+    syn_saver_t *sv = &s->saver;
+    if (!saver_lock_imgs(s)) return false;
+
+    int cur = -1;
+    for (int i = 0; i < sv->nlock_imgs; i++)
+        if (strcmp(sv->lock_imgs[i], s->config.lock_bg_image) == 0) { cur = i; break; }
+
+    int next = cur < 0 ? (dir > 0 ? 0 : sv->nlock_imgs - 1)
+                       : (cur + dir + sv->nlock_imgs) % sv->nlock_imgs;
+
+    snprintf(s->config.lock_bg_image, sizeof(s->config.lock_bg_image),
+             "%s", sv->lock_imgs[next]);
+    lock_bg_invalidate(s);
+    return true;
+}
+
+/* The file name, cut to what the value column can hold — these are paths and
+ * the column is about 200px of a 560px panel. Cut on a UTF-8 lead byte: half a
+ * sequence draws as a replacement glyph, which looks like a broken file name
+ * rather than a truncated one. */
+static void saver_image_label(const char *path, char *buf, size_t n)
+{
+    if (!path || !*path) { snprintf(buf, n, "none"); return; }
+
+    const char *slash = strrchr(path, '/');
+    const char *base  = slash ? slash + 1 : path;
+
+    size_t keep = 22;
+    if (strlen(base) <= keep) { snprintf(buf, n, "%s", base); return; }
+    while (keep > 0 && ((unsigned char)base[keep] & 0xC0) == 0x80) keep--;
+    snprintf(buf, n, "%.*s\xe2\x80\xa6", (int)keep, base);
 }
 
 /* The same ladder power.c steps its timeouts along, minus the hours: a
@@ -860,6 +934,12 @@ int saver_panel_rows(syn_server_t *s, int row, char *name, size_t nn,
     case SAVER_ROW_LOCK_BG:
         snprintf(value, vn, "%s", syn_lock_bg_names[c->lock_bg]);
         return c->lock_bg == SYN_LOCK_BG_BLACK;
+    case SAVER_ROW_LOCK_IMAGE:
+        saver_image_label(c->lock_bg_image, value, vn);
+        /* Dim unless it is the picture the lock will actually use — but always
+         * listed, because a source called "image" with no way to name one is
+         * how this ended up looking broken. */
+        return c->lock_bg != SYN_LOCK_BG_IMAGE;
     case SAVER_ROW_LOCK_DIM:
         snprintf(value, vn, "%d%%", c->lock_bg_dim);
         return c->lock_bg == SYN_LOCK_BG_BLACK;
@@ -883,6 +963,10 @@ static void saver_adjust(syn_server_t *s, int dir)
     syn_config_t *c = &s->config;
     syn_saver_t *sv = &s->saver;
     char v[40];
+
+    /* Overrides the usual "row: value" footer when the step has something to
+     * say that the value alone does not. */
+    const char *note = NULL;
 
     switch (sv->selected) {
     case SAVER_ROW_MODE: {
@@ -925,9 +1009,28 @@ static void saver_adjust(syn_server_t *s, int dir)
         int next = (c->lock_bg + dir) % SYN_LOCK_BG_COUNT;
         if (next < 0) next += SYN_LOCK_BG_COUNT;
         c->lock_bg = next;
+        /* "image" with no image is a black lock screen and no clue why, so
+         * landing on it with nothing named picks the first picture rather than
+         * leaving the choice looking like it did nothing. */
+        if (next == SYN_LOCK_BG_IMAGE && !c->lock_bg_image[0] &&
+            !saver_lock_image_step(s, +1))
+            note = "Lock background: image \xc2\xb7 no pictures found to use";
         lock_bg_invalidate(s);
         break;
     }
+    case SAVER_ROW_LOCK_IMAGE:
+        if (!saver_lock_image_step(s, dir)) {
+            /* Nothing changed, so nothing to mark dirty or restate. */
+            snprintf(sv->status, sizeof(sv->status),
+                     "No pictures in ~/Pictures or /usr/share/backgrounds");
+            return;
+        }
+        /* Picking a picture is also how you say you want one. */
+        if (c->lock_bg != SYN_LOCK_BG_IMAGE) {
+            c->lock_bg = SYN_LOCK_BG_IMAGE;
+            lock_bg_invalidate(s);
+        }
+        break;
     case SAVER_ROW_LOCK_DIM: {
         int next = c->lock_bg_dim + dir * 5;
         if (next < 0) next = 0;
@@ -956,11 +1059,13 @@ static void saver_adjust(syn_server_t *s, int dir)
     sv->dirty = 1;
 
     /* Name and value together must fit the status line; both are short by
-     * construction (the longest is "Lock background: desktop"), so the buffers
-     * are sized to make that obvious rather than to be defended at runtime. */
+     * construction (the longest value is a file name, and saver_image_label
+     * cuts those to 22 characters), so the buffers are sized to make that
+     * obvious rather than to be defended at runtime. */
     char nm[40];
     saver_panel_rows(s, sv->selected, nm, sizeof(nm), v, sizeof(v));
-    snprintf(sv->status, sizeof(sv->status), "%s: %s", nm, v);
+    if (note) snprintf(sv->status, sizeof(sv->status), "%s", note);
+    else      snprintf(sv->status, sizeof(sv->status), "%s: %s", nm, v);
 }
 
 void saver_show_panel(syn_server_t *s)
@@ -974,6 +1079,9 @@ void saver_show_panel(syn_server_t *s)
 void saver_hide(syn_server_t *s)
 {
     s->saver.visible = 0;
+    /* Dropped with the panel, so the next opening rescans and a picture added
+     * since is offered without a restart. */
+    saver_drop_lock_imgs(&s->saver);
     synui_render_saver(s);
     ctlpanel_child_closed(s, "saver");
 }

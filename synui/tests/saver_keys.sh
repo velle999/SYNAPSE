@@ -60,6 +60,13 @@ chmod 700 "$TMP"
 LOG="$TMP/synui.log"
 : > "$TMP/synuirc"
 
+# A picture for the "Lock image" row to find. HOME is $TMP, so this is the only
+# wallpaper directory that exists here — /usr/share/backgrounds is scanned too
+# and is populated on a SynapseOS machine, which is exactly why the row must not
+# be judged by WHICH file it picks. Never decoded: picking only records a path.
+mkdir -p "$TMP/Pictures/Wallpapers"
+: > "$TMP/Pictures/Wallpapers/lockpic.png"
+
 export XDG_RUNTIME_DIR="$TMP" HOME="$TMP" XDG_CONFIG_HOME="$TMP"
 export SYNUI_CONFIG="$TMP/synuirc"
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1
@@ -194,6 +201,39 @@ else
     else
         fail "mode is '$mode', not clock — Right hit row 0, so Down was ignored"
     fi
+fi
+
+# ── the Lock image row names a picture ─────────────────────
+# `lock_background = image` was a source with no way to name the image: the row
+# offered it, an empty lock_bg_image locks to plain black, and the panel said
+# nothing about either. The panel is still open on row 1 (s does not close it),
+# so four Downs land on Lock image (Mode, Timeout, Lock on wake, Slide interval,
+# Lock background, Lock image).
+#
+# Judged on lock_bg_image being NON-EMPTY, never on which file: this machine's
+# /usr/share/backgrounds is in the same list and a VM's is not.
+send -k Down; sleep 0.15
+send -k Down; sleep 0.15
+send -k Down; sleep 0.15
+send -k Down; sleep 0.15
+send -k Right                      # pick the first picture
+sleep 0.2
+send -k s
+sleep 0.5
+
+img=$(sed -n 's/^lock_bg_image=//p' "$STATE")
+bg=$(sed -n 's/^lock_bg=//p' "$STATE")
+if [ -n "$img" ]; then
+    pass "Lock image named a picture ($img)"
+else
+    fail "lock_bg_image is unset — the Lock image row picked nothing"
+fi
+# The discriminating half: one Down short and Right would have stepped the Lock
+# BACKGROUND row instead, leaving lock_bg on something other than image.
+if [ "$bg" = "image" ]; then
+    pass "…and the lock background followed the pick (lock_bg=image)"
+else
+    fail "lock_bg is '$bg', not image — Right hit the wrong row"
 fi
 
 # ── Esc closes ─────────────────────────────────────────────

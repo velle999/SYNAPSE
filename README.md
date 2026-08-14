@@ -624,7 +624,12 @@ lock_accent          = #00e5ff     # naming one stops it following the theme
 
 The lock screen defaults to your **desktop wallpaper, blurred and dimmed**, and
 otherwise follows the desktop theme — the greeter inherits all of it, because
-the greeter *is* the lock screen. A pick in the panel writes
+the greeter *is* the lock screen. Setting `lock_background` to `image` means the
+picture on the panel's **Lock image** row, which `Left`/`Right` walks through the
+same wallpapers `Super`+`W` browses (`~/Pictures`, `~/Pictures/Wallpapers`,
+`/usr/share/backgrounds`, …); picking one there also switches the background to
+`image`, and choosing `image` with nothing named yet takes the first picture
+rather than locking to a black screen. A pick in the panel writes
 `~/.config/synui/saver.state`, which overrides those keys the same way
 `wallpaper.state` does; delete it to hand control back to `synuirc`.
 
