@@ -214,6 +214,17 @@ FloatingWindow {
 
     // ── Loading ─────────────────────────────────────────────────────────────
 
+    // The re-read runs at the END of every operation, so nothing in it may
+    // overwrite what the operation just reported: ejecting the only removable
+    // drive makes it VANISH from the list, and "no drives reported" landing on
+    // top of "safe to unplug" turns a success into what reads like a fault.
+    // These speak only into an empty bar — a manual refresh and picking a drive
+    // both clear it first, so the reader still gets its say when it is the only
+    // thing that has happened.
+    function say(s) {
+        if (root.status === "") root.status = s
+    }
+
     Process {
         id: listProc
         stdout: StdioCollector {
@@ -221,7 +232,7 @@ FloatingWindow {
                 root.drives = root.parseRecords(this.text)
                 root.loading = false
                 if (root.drives.length === 0) {
-                    root.status = "no drives reported"
+                    root.say("no drives reported")
                     return
                 }
                 // Keep the current selection across a refresh when the drive is
@@ -233,7 +244,7 @@ FloatingWindow {
             }
         }
         stderr: StdioCollector {
-            onStreamFinished: if (this.text) root.status = this.text.split("\n")[0]
+            onStreamFinished: if (this.text) root.say(root.oneLine(this.text))
         }
     }
 
@@ -250,13 +261,17 @@ FloatingWindow {
             }
         }
         stderr: StdioCollector {
-            onStreamFinished: if (this.text) root.status = this.text.split("\n")[0]
+            onStreamFinished: if (this.text) root.say(root.oneLine(this.text))
         }
     }
 
+    // Does NOT clear the status line. It is called at the END of every
+    // operation to re-read the machine, and clearing here wiped the outcome a
+    // few milliseconds after it was written — the success and the mkfs error
+    // alike. Clearing belongs to the things that mean "new context": picking a
+    // different drive, or asking for a refresh by hand.
     function reload() {
         root.loading = true
-        root.status = ""
         listProc.command = [root.bin, "--rec", "list"]
         listProc.running = true
     }
@@ -284,21 +299,31 @@ FloatingWindow {
     // truth for what the system now says, and believing our own report over a
     // re-read is how a disk utility starts showing a filesystem mounted
     // somewhere the kernel never mounted it.
+    // The same three-event trap as the plan below, and it bit here too: the
+    // handlers decided as they landed, and then onExited called reload() —
+    // which cleared the status line. A format that WORKED and a format that
+    // FAILED both ended with an empty status bar and a list that redrew
+    // identically, so the only way to tell them apart was the journal. Two
+    // real formats were run on the same stick because the first gave no sign
+    // it had happened.
+    //
+    // So: the streams only STORE, resolveOp() is the one place the outcome is
+    // decided, and reload() no longer speaks for the operation.
+    property string opOut: ""
+    property string opErr: ""
+    property string opDone: ""      // what to say when the tool says "ok"
+    // Taken from the argv, so the failure names the tool's OWN verb rather
+    // than a second copy of it kept in step by hand.
+    property string opVerb: ""
+    property string opTarget: ""
+
     Process {
         id: actProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const f = root.parseRecords(this.text)
-                if (f.length > 0 && f[0].detail) root.status = f[0].detail
-            }
-        }
-        stderr: StdioCollector {
-            onStreamFinished: if (this.text) root.status = this.text.split("\n")[0]
-        }
+        stdout: StdioCollector { onStreamFinished: root.opOut = this.text }
+        stderr: StdioCollector { onStreamFinished: root.opErr = this.text }
         onExited: (code) => {
             root.busy = false
-            if (code !== 0 && root.status === "")
-                root.status = "refused (exit " + code + ")"
+            root.resolveOp(code)
             root.reload()
             // Chained off the real exit, never off a timer: a re-plan run
             // while the unmount was still in flight would read the OLD state
@@ -311,10 +336,48 @@ FloatingWindow {
         }
     }
 
-    function runOp(args, note) {
+    // A refusal is an answer, and so is a success. Every branch here ends with
+    // root.status holding a sentence — there is no path that leaves it empty,
+    // because empty is exactly what "it did nothing" looks like.
+    function resolveOp(code) {
+        const f = root.parseRecords(root.opOut)
+        const r = f.length > 0 ? f[0] : null
+        if (r && r.status === "ok") {
+            // mkfs's own chatter is a version banner and "Done." — nothing a
+            // user needs. The tool's verdict is the `status` field; the
+            // sentence is ours, and the re-read below is what confirms it.
+            root.status = root.opDone !== "" ? root.opDone : "done"
+            return
+        }
+        // Failed. Keep the WHOLE detail: mkfs puts its reason on the last line
+        // as often as the first, and picking one line is how "it is mounted"
+        // arrived with its way out already thrown away. Newlines collapse so a
+        // one-line bar can hold it; nothing is dropped.
+        //
+        // It is prefixed with what was being attempted, because a tool's own
+        // words are rarely a verdict — mkfs failing halfway still opens with
+        // its version banner, which alone reads like a success.
+        const why = root.oneLine((r && r.detail) || root.opErr)
+        const what = "could not " + root.opVerb
+                   + (root.opTarget !== "" ? " " + root.opTarget : "")
+        root.status = why !== "" ? what + " — " + why
+                    : (code !== 0 ? what + " (exit " + code + ")"
+                                  : what + " — the tool reported nothing")
+    }
+
+    function oneLine(s) {
+        return (s || "").replace(/\s*\n+\s*/g, " · ").trim()
+    }
+
+    function runOp(args, note, done) {
         if (root.busy) return
         root.busy = true
         root.status = note
+        root.opOut = ""
+        root.opErr = ""
+        root.opDone = done || ""
+        root.opVerb = args[0] || "do that"
+        root.opTarget = (args.length > 1 && args[1].indexOf("-") !== 0) ? args[1] : ""
         actProc.command = [root.bin, "--rec"].concat(args)
         actProc.running = true
     }
@@ -339,13 +402,16 @@ FloatingWindow {
             }
         }
         stderr: StdioCollector {
-            onStreamFinished: if (this.text) root.status = this.text.split("\n")[0]
+            onStreamFinished: if (this.text) root.status = root.oneLine(this.text)
         }
         onExited: root.healthBusy = false
     }
 
     function readHealth(elevate) {
         if (!root.selDisk || root.healthBusy) return
+        // Pressing Health is its own request, so it may take the bar over — and
+        // it clears first so smartctl's complaint has somewhere to land.
+        root.status = ""
         root.healthBusy = true
         root.healthRows = []
         root.health = ({})
@@ -450,7 +516,8 @@ FloatingWindow {
     function unmountForFormat() {
         if (!root.fmtDev || root.busy) return
         root.replanAfterOp = true
-        root.runOp(["unmount", root.fmtDev], "unmounting " + root.fmtDev)
+        root.runOp(["unmount", root.fmtDev], "unmounting " + root.fmtDev + "…",
+                   root.fmtDev + " unmounted")
     }
 
     function askFormat(dev) {
@@ -477,7 +544,9 @@ FloatingWindow {
         const args = ["format", root.fmtDev, "--fs=" + root.fmtFs, "--yes"]
         if (root.fmtLabel !== "") args.push("--label=" + root.fmtLabel)
         root.fmtOpen = false
-        root.runOp(args, "formatting " + root.fmtDev + "…")
+        root.runOp(args, "formatting " + root.fmtDev + "…",
+                   root.fmtDev + " is now " + root.fmtFs
+                   + (root.fmtLabel !== "" ? ", labelled " + root.fmtLabel : ""))
     }
 
     property bool aboutOpen: false
@@ -729,7 +798,9 @@ FloatingWindow {
                 id: refreshBtn
                 anchors { right: parent.right; rightMargin: 18; verticalCenter: parent.verticalCenter }
                 label: root.loading ? "reading…" : "Refresh"
-                onGo: root.reload()
+                // Asking by hand IS the new context, so this is one of the two
+                // places allowed to drop the last message.
+                onGo: { root.status = ""; root.reload() }
             }
         }
 
@@ -1353,13 +1424,15 @@ FloatingWindow {
                     label: "Mount"
                     enabled2: root.part !== null && root.part.mounts === ""
                     onGo: root.runOp(["mount", root.devOf(root.part)],
-                                     "mounting " + root.part.device + "…")
+                                     "mounting " + root.part.device + "…",
+                                     root.part.device + " mounted")
                 }
                 Btn {
                     label: "Unmount"
                     enabled2: root.part !== null && root.part.mounts !== ""
                     onGo: root.runOp(["unmount", root.devOf(root.part)],
-                                     "unmounting " + root.part.device + "…")
+                                     "unmounting " + root.part.device + "…",
+                                     root.part.device + " unmounted")
                 }
                 Btn {
                     label: "Eject drive"
@@ -1368,7 +1441,8 @@ FloatingWindow {
                     // as a bug. It is not offered.
                     enabled2: root.drive !== null && root.drive.system !== "system"
                     onGo: root.runOp(["eject", root.devOf(root.drive)],
-                                     "powering down " + root.drive.device + "…")
+                                     "powering down " + root.drive.device + "…",
+                                     root.drive.device + " is safe to unplug")
                 }
                 Btn {
                     label: "Format…"
