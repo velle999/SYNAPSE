@@ -101,6 +101,53 @@ def check_calendar(path):
     else:
         bad('only %d set_ink call(s) in the calendar, expected 3' % n_ink)
 
+# -- 1b. the same bug, everywhere else in render.c ---------------------------
+# The calendar was not special; it was just the one somebody looked at. Sixty
+# more literals were drawn straight onto the panel from when every panel was
+# the same near-black navy — the AI model pane's whole ABOUT block measured
+# 1.03:1 on silver, which is text that is not there at all.
+#
+# So the check is the general one: EVERY cairo_set_source_rgba literal in
+# render.c has to clear the bar on the darkest pale surface any preset ships,
+# or be marked as drawn on a plate of its own. set_ink() (a rung, floored per
+# theme) and set_hue() (a literal run through the corrector) are the two ways
+# to be a colour on the panel; a bare literal is neither.
+#
+# The exemption is a COMMENT, `own plate`, on the line or just above it —
+# line numbers drift and function names are too coarse (the Alt+Tab card's
+# footer is on the panel while its tile labels are not). It has to say where
+# it is drawn, which is the fact that makes it exempt.
+SILVER_SURFACE = hexrgb('c0c0c0')     # 95's, the darkest light base shipped
+LITERAL_FLOOR = 4.0                   # matches render.c's INK_TEXT_MIN
+
+def check_render_literals(path):
+    print('every panel literal in render.c is legible on 95 silver')
+    lines = open(path, encoding='utf-8').read().split('\n')
+    lit = re.compile(r'cairo_set_source_rgba\s*\(\s*cr\s*,\s*'
+                     r'([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,')
+    offenders = []
+    checked = 0
+    for i, line in enumerate(lines):
+        m = lit.search(line)
+        if not m:
+            continue
+        rgb = [float(m.group(k)) for k in (1, 2, 3)]
+        checked += 1
+        if contrast(rgb, SILVER_SURFACE) >= LITERAL_FLOOR:
+            continue
+        # The marker may sit on the line or in the few lines above it, so one
+        # comment can cover an if/else chain that sets three of them.
+        near = '\n'.join(lines[max(0, i - 4):i + 1])
+        if 'own plate' in near:
+            continue
+        offenders.append((i + 1, line.strip()[:64],
+                          contrast(rgb, SILVER_SURFACE)))
+    if offenders:
+        for ln, text, c in offenders:
+            bad('render.c:%d  %5.2f:1  %s' % (ln, c, text))
+    else:
+        ok('%d literal(s), all either legible or marked "own plate"' % checked)
+
 # -- 2. kitty's light sixteen, where they are actually drawn ------------------
 # #C0C0C0 is the darkest light base any shipped preset uses (95's silver; XP's
 # beige and bubblegum's pink are paler and only gain contrast). 0.90 is
@@ -153,6 +200,8 @@ def main():
         print('usage: theme_contrast.py <src/render.c> <systemd/synui-apply-theme.sh>')
         return 2
     check_calendar(sys.argv[1])
+    print()
+    check_render_literals(sys.argv[1])
     print()
     check_kitty(sys.argv[2])
     print()
