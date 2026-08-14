@@ -444,13 +444,38 @@ const fs_kind_t *fs_find(const char *name);
 bool fs_label_ok(const char *s);
 /* Build the mkfs argv for a device, pkexec prefix and all. Returns the number
  * of arguments written into `out` (which must hold at least 10). The strings
- * are borrowed from the arguments and from static tables; only `out` itself is
- * the caller's. */
+ * are borrowed — from the arguments, from static tables, and from the
+ * process-lifetime cache behind the ownership flags below. Only `out` itself
+ * is the caller's, and there is nothing in it to free. */
 int fs_mkfs_argv(const fs_kind_t *fs, const char *label, const char *dev,
                  char **out);
 /* The pkexec this program runs things under, or NULL when it must not use one
  * — a root shell, and the test suite, where there is nothing to ask. */
 const char *priv_prefix(void);
+
+/* ── who owns the filesystem fs_mkfs_argv is about to create ────────────────
+ *
+ * mkfs runs as root, so without this the root directory of the new filesystem
+ * belongs to root and the person who formatted the stick cannot write to it.
+ * fs_mkfs_argv already puts the right flag in the command line for the three
+ * filesystems that store ownership (ext4, btrfs, xfs); two of those flags name
+ * a scratch file that has to exist before the command runs.
+ *
+ * So a REAL format is prepare → run → cleanup, and a dry run is neither: the
+ * paths are decided when the argv is built, so --dry-run still prints the exact
+ * command, and describing an operation leaves nothing on disk. Both calls are
+ * no-ops for the filesystems that need no scratch file, so a caller does not
+ * have to know which is which. Failure to prepare is not fatal and never
+ * silent: it says so on stderr and the filesystem comes out owned by root.
+ *
+ * vfat, exfat and ntfs store no ownership at all — the mount options decide it
+ * and udisks already mounts them as the user. Nothing is done for them. */
+void fs_owner_prepare(const fs_kind_t *fs);
+void fs_owner_cleanup(const fs_kind_t *fs);
+/* Who that is: the person who asked, not the process that writes. 0 when there
+ * is nobody to hand it to, which is how the callers above spot "do nothing". */
+uid_t fs_owner_uid(void);
+gid_t fs_owner_gid(void);
 
 /* Can the RUNNING kernel mount what this would create? Creating and mounting
  * are two capabilities and only the first is a package dependency: a kernel

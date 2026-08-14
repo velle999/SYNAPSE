@@ -475,8 +475,13 @@ int cmd_mkpart(int argc, char **argv)
 			char *mk[10];
 			fs_mkfs_argv(kind, o.label, pdev, mk);
 			int st = 0;
+			/* The same three lines as format's, for the same reason: a
+			 * partition made here and formatted here is one somebody is
+			 * about to write to, and it would arrive owned by root. */
+			fs_owner_prepare(kind);
 			char *out = run_capture_detached(mk, NULL, &st);
 			strip_trailing_newline(out);
+			fs_owner_cleanup(kind);
 			if (st != 0) {
 				fprintf(stderr, "%s%s%s\n", C_BAD(),
 				        *out ? out : "mkfs refused", C_RESET());

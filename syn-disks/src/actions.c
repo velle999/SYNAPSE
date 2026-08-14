@@ -67,9 +67,14 @@
 #include "syn-disks.h"
 
 #include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
 /* The udisks2 tool, overridable so the test suite can put a fake on PATH and
  * assert the argv rather than mounting something. */
@@ -427,6 +432,201 @@ const char *priv_prefix(void)
 	return (pkexec && *pkexec) ? pkexec : "pkexec";
 }
 
+/* ── who owns the new filesystem ─────────────────────────────────────────────
+ *
+ * mkfs runs as root, so the root directory of the filesystem it creates is
+ * owned by root — and a stick formatted ext4 through this program then mounted
+ * on the desktop is one the person who formatted it cannot write to. On a
+ * removable drive that is never what was meant. udisks2 has an option for
+ * exactly this (`take-ownership`), and syn-disks does not use udisks to format,
+ * so it has to arrange the same thing itself.
+ *
+ * ⚠ It is arranged AT CREATION and not by a chown afterwards. A chown means a
+ * second privileged step — mount the new filesystem somewhere, change the
+ * owner, unmount — which is a second polkit prompt and a root helper that
+ * takes a device path from an unprivileged caller. Every one of these three
+ * filesystems can be told at mkfs time instead, so none of that is needed:
+ *
+ *   ext4    -E root_owner=UID:GID
+ *   btrfs   --rootdir DIR    the root inode inherits DIR's owner
+ *   xfs     -p PROTOFILE     whose first entry is the root directory
+ *
+ * vfat, exfat and ntfs store no ownership at all — the mount options decide,
+ * and udisks already mounts them as the user. There is nothing to do for them
+ * and nothing is done.
+ */
+uid_t fs_owner_uid(void)
+{
+	/* The person who asked, not the process that writes. Under pkexec the
+	 * mkfs runs as root and this program does not; run directly as root there
+	 * is nobody else to be, unless sudo says who it was. */
+	uid_t me = getuid();
+	if (me != 0)
+		return me;
+	const char *s = getenv("SUDO_UID");
+	if (!s || !*s)
+		s = getenv("PKEXEC_UID");
+	if (s && *s) {
+		long v = strtol(s, NULL, 10);
+		if (v > 0 && v < 0x7FFFFFFF)
+			return (uid_t)v;
+	}
+	return 0;
+}
+
+gid_t fs_owner_gid(void)
+{
+	uid_t me = getuid();
+	if (me != 0)
+		return getgid();
+	const char *s = getenv("SUDO_GID");
+	if (s && *s) {
+		long v = strtol(s, NULL, 10);
+		if (v > 0 && v < 0x7FFFFFFF)
+			return (gid_t)v;
+	}
+	/* pkexec exports no GID. The user's primary group is the right answer and
+	 * it is one lookup away; falling back to the uid would be a guess that is
+	 * right on this distribution and wrong on others. */
+	uid_t u = fs_owner_uid();
+	if (u != 0) {
+		struct passwd *pw = getpwuid(u);
+		if (pw)
+			return pw->pw_gid;
+	}
+	return 0;
+}
+
+/* The scratch files two of the three need. Owned by the caller, inside the
+ * user's own runtime directory rather than /tmp: the path has to be known
+ * BEFORE the command is built so that what --dry-run prints is exactly what
+ * runs, and a predictable name in a world-writable directory is a symlink
+ * waiting to happen. $XDG_RUNTIME_DIR is 0700 and nobody else can reach it.
+ *
+ * ⚠ The PID is in the name, and it is not decoration. Two sticks formatted at
+ * once is two of these processes, and with one fixed name the first to finish
+ * would delete the second's protofile out from under a running mkfs.xfs — a
+ * format that fails for no reason the person who started it could ever see.
+ * The same process builds the argv and does the write, so the dry run still
+ * prints exactly the path the real run uses.
+ *
+ * COMPUTED ONCE AND KEPT. The result goes into an argv that outlives every
+ * caller, so returning an allocation the caller must not free is a leak by
+ * design — and a leak by design is indistinguishable, to LeakSanitizer, from
+ * the other kind: the sanitiser build reported it, exited 1 instead of the
+ * status the command meant, and eighteen assertions that had nothing to do
+ * with ownership failed at once. Caching is the honest fix rather than a
+ * suppression. There are two leaves and the answer never changes, so this
+ * also guarantees the path in the argv and the path prepare() writes are the
+ * same string and cannot drift. */
+static char *owner_scratch(const char *leaf)
+{
+	static char *cache[2];
+	int slot = !strcmp(leaf, "rootdir") ? 0 : 1;
+	if (cache[slot])
+		return cache[slot];
+
+	const char *base = getenv("XDG_RUNTIME_DIR");
+	if (!base || !*base)
+		return NULL;
+	cache[slot] = xasprintf("%s/syn-disks-%s.%ld", base, leaf, (long)getpid());
+	return cache[slot];
+}
+
+/* Empty a directory we made, one level deep, and remove it.
+ *
+ * Deliberately NOT a recursive delete. Nothing puts anything in this directory
+ * — it exists to be empty — so one level is all that can ever be there, and a
+ * recursive unlink driven by a path from the environment is a much larger
+ * thing to have in a program that also formats disks. A subdirectory that
+ * somehow exists makes this fail, which is the safe direction: the caller
+ * treats "could not empty it" as "do not hand it to mkfs". */
+static bool scratch_dir_clear(const char *dir)
+{
+	DIR *d = opendir(dir);
+	if (d) {
+		struct dirent *e;
+		while ((e = readdir(d))) {
+			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+				continue;
+			char *p = xasprintf("%s/%s", dir, e->d_name);
+			unlink(p);
+			free(p);
+		}
+		closedir(d);
+	}
+	return rmdir(dir) == 0 || errno == ENOENT;
+}
+
+/* Put the scratch files where the argv already says they will be.
+ *
+ * Called only on the real run, never on a dry run: describing an operation
+ * must not leave anything behind. The PATHS are decided when the command is
+ * built, so the dry run still prints exactly what will execute — it is the
+ * contents that arrive later. */
+void fs_owner_prepare(const fs_kind_t *fs)
+{
+	uid_t owner = fs_owner_uid();
+	if (owner == 0)
+		return;
+
+	if (!strcmp(fs->name, "btrfs")) {
+		const char *dir = owner_scratch("rootdir");
+		if (!dir)
+			return;
+		/* EMPTY, and made FRESH: --rootdir copies whatever is in the directory
+		 * into the new filesystem, so a leftover file from a killed format
+		 * would be written onto somebody's stick without a word.
+		 *
+		 * The PID in the name is what actually rules that out — the directory
+		 * belongs to this run and no other. This is the second lock on the
+		 * same door, for the one case the first does not cover: a PID that
+		 * came round again onto the leavings of a format that was killed.
+		 *
+		 * It is `scratch_dir_clear` and not `rmdir`, which was the first
+		 * version and was wrong: rmdir removes EMPTY directories only, so a
+		 * stale file inside made it fail, the mkdir that followed returned
+		 * EEXIST, and the directory reached mkfs exactly as it stood. Hence
+		 * also the bare `!= 0` below — tolerating EEXIST here is what turned
+		 * a failure to make the directory fresh into silence. */
+		scratch_dir_clear(dir);
+		if (mkdir(dir, 0755) != 0)
+			fprintf(stderr, "syn-disks: cannot make %s fresh (%s) — the new "
+			        "filesystem may be owned by root, and anything left in "
+			        "that directory will be copied onto the device\n",
+			        dir, strerror(errno));
+	} else if (!strcmp(fs->name, "xfs")) {
+		const char *path = owner_scratch("proto");
+		if (!path)
+			return;
+		FILE *f = fopen(path, "w");
+		if (f) {
+			/* The xfs protofile: a boot-block name nobody uses, a size line,
+			 * then the ROOT DIRECTORY's own mode, uid and gid, then the end
+			 * marker. Three lines of it exist to carry the third. */
+			fprintf(f, "dummy\n0 0\nd--755 %u %u\n$\n",
+			        (unsigned)owner, (unsigned)fs_owner_gid());
+			fclose(f);
+		} else {
+			fprintf(stderr, "syn-disks: cannot write %s — the new filesystem "
+			        "will be owned by root\n", path);
+		}
+	}
+}
+
+void fs_owner_cleanup(const fs_kind_t *fs)
+{
+	if (!strcmp(fs->name, "btrfs")) {
+		const char *dir = owner_scratch("rootdir");
+		/* Emptied, not merely rmdir'd, for the same reason as above: a
+		 * directory this leaves behind is one the NEXT format inherits. */
+		if (dir) scratch_dir_clear(dir);
+	} else if (!strcmp(fs->name, "xfs")) {
+		const char *path = owner_scratch("proto");
+		if (path) unlink(path);
+	}
+}
+
 int fs_mkfs_argv(const fs_kind_t *fs, const char *label, const char *dev,
                  char **out)
 {
@@ -438,6 +638,35 @@ int fs_mkfs_argv(const fs_kind_t *fs, const char *label, const char *dev,
 	if (label && *label) {
 		out[n++] = (char *)fs->label_flag;
 		out[n++] = (char *)label;
+	}
+
+	/* The owner flags. Every string here outlives this function and none of
+	 * them is the caller's to free — they are process-lifetime and computed
+	 * once, exactly like the static table entries beside them, so `out` stays
+	 * a plain borrowed argv with nothing to remember about it. */
+	uid_t owner = fs_owner_uid();
+	if (owner != 0) {
+		if (!strcmp(fs->name, "ext4")) {
+			static char *root_owner;
+			if (!root_owner)
+				root_owner = xasprintf("root_owner=%u:%u",
+				                       (unsigned)owner,
+				                       (unsigned)fs_owner_gid());
+			out[n++] = (char *)"-E";
+			out[n++] = root_owner;
+		} else if (!strcmp(fs->name, "btrfs")) {
+			char *dir = owner_scratch("rootdir");
+			if (dir) {
+				out[n++] = (char *)"--rootdir";
+				out[n++] = dir;
+			}
+		} else if (!strcmp(fs->name, "xfs")) {
+			char *proto = owner_scratch("proto");
+			if (proto) {
+				out[n++] = (char *)"-p";
+				out[n++] = proto;
+			}
+		}
 	}
 	/* mkfs.ntfs on a large disk spends an hour zeroing unless told not to,
 	 * and mkfs.vfat refuses a whole device that has no partition table unless
@@ -597,11 +826,17 @@ int cmd_format(int argc, char **argv)
 	}
 
 	int st = 0;
+	/* The scratch file two of the three ownership flags name. Only here, on
+	 * the path that actually writes — the dry run above returned already. */
+	fs_owner_prepare(kind);
 	/* DETACHED: this is the write. Closing the window used to kill this
 	 * process, and the mkfs it had started died of SIGPIPE part way through
 	 * a filesystem. */
 	char *out = run_capture_detached(cmd, NULL, &st);
 	strip_trailing_newline(out);
+	/* After the write and before anything is reported: run_capture_detached
+	 * has waited, so mkfs has read whatever it was going to read. */
+	fs_owner_cleanup(kind);
 
 	/* A failure is an answer too, and this one had none: the guard cleared the
 	 * device, mke2fs wrote nothing, and all the window could quote was the

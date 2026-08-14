@@ -517,6 +517,144 @@ echo 0 > "$S/sdw/ro"
 says mkfail --no-color format sdw --fs=ext4 --yes | grep -q 'Input/output error'
 check "...and still quotes what the tool said" $?
 
+# ── the new filesystem belongs to the person who formatted it ───────────────
+#
+# mkfs runs as root, so without this the root directory of a freshly formatted
+# stick belongs to root and the person who formatted it cannot write to it.
+# udisks2 has an option for exactly this (`take-ownership`) and this program
+# does not format through udisks, so it arranges the same thing itself — AT
+# CREATION, because a chown afterwards would mean a second privileged step:
+# mount the new filesystem, change the owner, unmount.
+#
+# Only three of the six store ownership at all. vfat, exfat and ntfs keep none
+# on disk — the mount options decide — so for those the right behaviour is to
+# add nothing, and that is asserted here too. A flag that appeared for them
+# would make mkfs.vfat refuse the command outright.
+#
+# ⚠ Run as root with nothing saying who asked, there is nobody to hand the
+# filesystem to and the flags are correctly absent. That is a real case (a
+# rescue shell), not a failure, so it is skipped rather than asserted.
+
+OWN_UID=$(id -u); OWN_GID=$(id -g)
+if [ "$OWN_UID" = 0 ]; then
+    echo "  skip  filesystem ownership (running as root: nobody to hand it to)"
+else
+    # A runtime dir of our own. The scratch paths live under $XDG_RUNTIME_DIR
+    # rather than /tmp — the path is in a command line that root then runs, and
+    # a predictable name in a world-writable directory is a symlink waiting to
+    # happen — so the test must control it to know what to look for.
+    RT="$T/runtime"; mkdir -p "$RT"
+    owns() { XDG_RUNTIME_DIR="$RT" SYN_DISKS_NO_PKEXEC=1 "$SD" "$@"; }
+
+    says owns format sdz2 --fs=ext4 -n | grep -q -- "-E root_owner=$OWN_UID:$OWN_GID"
+    check "ext4 is created owned by the user, not by root" $?
+
+    says owns format sdz2 --fs=btrfs -n | grep -qE -- "--rootdir $RT/syn-disks-rootdir\.[0-9]+"
+    check "btrfs is created owned by the user, not by root" $?
+
+    says owns format sdz2 --fs=xfs -n | grep -qE -- "-p $RT/syn-disks-proto\.[0-9]+"
+    check "xfs is created owned by the user, not by root" $?
+
+    # ⚠ The scratch paths carry the PID. Two sticks formatted at once is two of
+    # these processes, and with one fixed name the first to finish would delete
+    # the second's protofile out from under a running mkfs.xfs.
+    a=$(says owns format sdz2 --fs=xfs -n | grep -o 'syn-disks-proto\.[0-9]*')
+    b=$(says owns format sdz2 --fs=xfs -n | grep -o 'syn-disks-proto\.[0-9]*')
+    [ -n "$a" ] && [ "$a" != "$b" ] \
+        && ok "two formats at once do not share a scratch file" \
+        || bad "two formats at once do not share a scratch file"
+
+    for f in vfat exfat ntfs; do
+        says owns format sdz2 --fs=$f -n | grep -qE 'root_owner|--rootdir|-p /' \
+            && bad "$f is left alone (it stores no ownership)"
+    done
+    ok "vfat, exfat and ntfs are left alone — they store no ownership"
+
+    # A DRY RUN MUST LEAVE NOTHING BEHIND. Describing an operation is not doing
+    # it, and the paths are decided when the command is built precisely so that
+    # what --dry-run prints is what --yes runs.
+    [ -z "$(ls -A "$RT")" ] && ok "a dry run writes no scratch file" \
+                            || bad "a dry run writes no scratch file"
+
+    # ── and the scratch file is really there WHEN mkfs runs ─────────────────
+    #
+    # The flag naming a file that does not exist is worse than no flag at all:
+    # mkfs.xfs fails outright rather than quietly making a root-owned
+    # filesystem. So this asserts the lifecycle from inside — the fake mkfs
+    # records what it could see at the moment it was called — and not merely
+    # that prepare() was reached.
+    cat > "$MKB/mkfs.xfs" <<EOF
+#!/bin/sh
+# Records the protofile as it stood while mkfs was running.
+while [ \$# -gt 0 ]; do
+    if [ "\$1" = -p ]; then cp "\$2" "$T/seen-proto" 2>/dev/null; fi
+    shift
+done
+exit 0
+EOF
+    chmod +x "$MKB/mkfs.xfs"
+
+    rm -f "$T/seen-proto"
+    PATH="$MKB:$PATH" owns format sdz2 --fs=xfs --yes >/dev/null 2>&1
+    [ -f "$T/seen-proto" ] && ok "the protofile exists while mkfs is running" \
+                           || bad "the protofile exists while mkfs is running"
+
+    # The xfs protofile's third line is the ROOT DIRECTORY's own mode, uid and
+    # gid. The other lines are a boot-block name nobody uses and a size; they
+    # exist to carry this one.
+    grep -q "^d--755 $OWN_UID $OWN_GID\$" "$T/seen-proto" 2>/dev/null
+    check "...and names the user as the owner of the root directory" $?
+
+    # CLEANED UP AFTERWARDS. It is a file in the user's runtime directory named
+    # after this program; leaving one behind per format is litter that nothing
+    # else will ever collect.
+    [ -z "$(ls -A "$RT")" ] && ok "...and is removed once the write is done" \
+                            || bad "...and is removed once the write is done"
+
+    # btrfs's --rootdir is a directory whose CONTENTS are copied into the new
+    # filesystem, so what matters is that mkfs is handed an EMPTY one.
+    cat > "$MKB/mkfs.btrfs" <<EOF
+#!/bin/sh
+while [ \$# -gt 0 ]; do
+    if [ "\$1" = --rootdir ]; then
+        ls -A "\$2" > "$T/seen-rootdir" 2>/dev/null
+        # Something inside it afterwards, so the cleanup asserted below runs
+        # against a directory that is NOT empty. mkfs.btrfs itself leaves
+        # nothing there; this stands in for a format killed halfway.
+        echo stale > "\$2/leftover"
+    fi
+    shift
+done
+exit 0
+EOF
+    chmod +x "$MKB/mkfs.btrfs"
+
+    rm -f "$T/seen-rootdir"
+    PATH="$MKB:$PATH" owns format sdz2 --fs=btrfs --yes >/dev/null 2>&1
+    [ -f "$T/seen-rootdir" ] && [ ! -s "$T/seen-rootdir" ] \
+        && ok "btrfs is handed an EMPTY directory, never a stale one" \
+        || bad "btrfs is handed an EMPTY directory, never a stale one"
+
+    # ⚠ THE REGRESSION TEST of the pair. `rmdir` removes empty directories
+    # only, so the first version of this left the directory behind the moment
+    # anything was inside it — and a directory left behind is the one the next
+    # format inherits. Reverting the cleanup to a bare rmdir() fails here and
+    # nowhere else in this file.
+    [ -z "$(ls -A "$RT")" ] \
+        && ok "...and a directory with something in it is still cleaned up" \
+        || bad "...and a directory with something in it is still cleaned up"
+
+    # ⚠ NOT FATAL. With no runtime directory there is nowhere to put the
+    # scratch file, and the answer is a filesystem owned by root — not a
+    # refusal to format. ext4 needs no scratch file and is unaffected.
+    r=$(env -u XDG_RUNTIME_DIR SYN_DISKS_NO_PKEXEC=1 "$SD" format sdz2 --fs=xfs -n 2>&1)
+    [ $? -eq 0 ] && ok "with no runtime dir the format still goes ahead" \
+                 || bad "with no runtime dir the format still goes ahead"
+    echo "$r" | grep -q -- '-p ' \
+        && bad "...naming no protofile it cannot write" \
+        || ok "...naming no protofile it cannot write"
+fi
+
 # ── KILLING syn-disks must not stop the write ───────────────────────────────
 #
 # The window runs this binary as a child, and quickshell SIGKILLs its children
